@@ -1,0 +1,315 @@
+//! film_lib — the launch film's shared foundation.
+//!
+//! Everything the film's element experiments agree on lives here: the palette,
+//! the clock discipline, the deterministic RNG, the easing curves, the render
+//! harness and the contact-sheet writer. An experiment file should contain
+//! *content*, never plumbing.
+//!
+//! **The house rules, inherited from the graph (§3, §4.6):**
+//! - No number in a caption is typed by a human; anything printed is measured.
+//! - Every experiment renders through vieww's own rasterizer — nothing in post.
+//! - Determinism: `t` in `[0, 1]` sampled by the harness; RNG seeded per
+//!   experiment; two runs of the same experiment are byte-identical.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use vieww_foundation::{Color, Size};
+use vieww_paint::native::NativeRenderer;
+use vieww_render::FrameDriver;
+use vieww_widget::WidgetNode;
+
+pub const CANVAS_W: f32 = 1280.0;
+pub const CANVAS_H: f32 = 720.0;
+pub const CANVAS: Size = Size::new(CANVAS_W, CANVAS_H);
+
+// ── The palette — from the author's own reference sheets ───────────────────
+//
+// sheet-bx / sheet-vf read as: near-black grounds, off-white ink, an electric
+// violet accent, deep purple / magenta / cyan nebula tones. These constants
+// are the film's; scenes may vary them, experiments should not.
+
+pub const BG: Color = Color::rgb(10, 10, 12);
+pub const BG_DEEP: Color = Color::rgb(6, 6, 9);
+pub const SURFACE: Color = Color::rgb(18, 18, 22);
+pub const INK: Color = Color::rgb(240, 240, 242);
+pub const MUTED: Color = Color::rgb(139, 148, 158);
+pub const FAINT: Color = Color::rgb(90, 98, 110);
+
+pub const VIOLET: Color = Color::rgb(139, 92, 246);
+pub const VIOLET_SOFT: Color = Color::rgb(167, 139, 250);
+pub const VIOLET_DEEP: Color = Color::rgb(76, 29, 149);
+pub const MAGENTA: Color = Color::rgb(190, 24, 93);
+pub const CYAN: Color = Color::rgb(14, 165, 233);
+pub const CYAN_SOFT: Color = Color::rgb(103, 232, 249);
+pub const MINT: Color = Color::rgb(52, 211, 153);
+pub const AMBER: Color = Color::rgb(245, 158, 11);
+pub const RED: Color = Color::rgb(248, 81, 73);
+
+pub fn alpha(c: Color, a: f32) -> Color {
+    Color::rgba(c.r, c.g, c.b, (a * 255.0).clamp(0.0, 255.0) as u8)
+}
+
+pub fn mix(a: Color, b: Color, t: f32) -> Color {
+    a.lerp(b, t.clamp(0.0, 1.0))
+}
+
+/// Lighten toward white (a "tint").
+pub fn tint(c: Color, t: f32) -> Color {
+    mix(c, Color::WHITE, t)
+}
+
+/// Darken toward black (a "shade").
+pub fn shade(c: Color, t: f32) -> Color {
+    mix(c, Color::BLACK, t)
+}
+
+/// Multiply a color's channels by a scalar — the Lambert term's friend.
+pub fn scaled(c: Color, k: f32) -> Color {
+    Color::rgb(
+        (c.r as f32 * k).clamp(0.0, 255.0) as u8,
+        (c.g as f32 * k).clamp(0.0, 255.0) as u8,
+        (c.b as f32 * k).clamp(0.0, 255.0) as u8,
+    )
+}
+
+// ── The clock ───────────────────────────────────────────────────────────────
+//
+// Experiments are pure functions of `t` in `[0, 1]` over a scene duration.
+// The harness owns the mapping to wall-clock film time; nothing inside an
+// experiment may consult the real clock — determinism is the film's spine.
+
+/// The wait's cadence: a 24 Hz clock sampled inside a 60 Hz render.
+/// Returns the *held* 24 Hz value for film-time `t` (seconds) — the judder
+/// is real 2-3-2-3 hold pattern, not a rate change.
+pub fn held_24_in_60(t: f32) -> f32 {
+    let step = (t * 24.0).floor() / 24.0;
+    (step * 60.0).round() / 60.0
+}
+
+// ── Deterministic RNG ───────────────────────────────────────────────────────
+//
+/// xorshift64* — tiny, seedable, reproducible. The film's noise never comes
+/// from the machine's entropy; grain re-renders to the byte.
+#[derive(Clone)]
+pub struct Rng {
+    state: u64,
+}
+
+impl Rng {
+    pub fn new(seed: u64) -> Self {
+        Self {
+            state: seed | 1,
+        }
+    }
+
+    pub fn u64(&mut self) -> u64 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        x.wrapping_mul(0x2545F4914F6CDD1D)
+    }
+
+    /// Uniform in `[0, 1)`.
+    pub fn f01(&mut self) -> f32 {
+        (self.u64() >> 11) as f32 / (1u64 << 53) as f32
+    }
+
+    /// Uniform in `[-1, 1]`.
+    pub fn sym(&mut self) -> f32 {
+        self.f01() * 2.0 - 1.0
+    }
+}
+
+// ── Easing ──────────────────────────────────────────────────────────────────
+
+pub fn clamp01(t: f32) -> f32 {
+    t.clamp(0.0, 1.0)
+}
+
+pub fn smoothstep(t: f32) -> f32 {
+    let t = clamp01(t);
+    t * t * (3.0 - 2.0 * t)
+}
+
+pub fn ease_out_cubic(t: f32) -> f32 {
+    let t = clamp01(t);
+    1.0 - (1.0 - t).powi(3)
+}
+
+pub fn ease_out_expo(t: f32) -> f32 {
+    let t = clamp01(t);
+    if t >= 1.0 { 1.0 } else { 1.0 - 2.0f32.powf(-10.0 * t) }
+}
+
+pub fn ease_in_out(t: f32) -> f32 {
+    let t = clamp01(t);
+    if t < 0.5 { 2.0 * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(2) / 2.0 }
+}
+
+pub fn ease_out_back(t: f32) -> f32 {
+    let t = clamp01(t);
+    let c1 = 1.70158;
+    let c3 = c1 + 1.0;
+    1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
+}
+
+/// An *analytic* underdamped spring settle — for when a closed form beats a
+/// ticker (scrub windows, dash-phase ramps). The real `SpringAnimation` is
+/// used wherever interruptibility matters; this is its scrub-safe shadow.
+pub fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
+    let t = clamp01(t);
+    let decay = (-zeta * omega * t).exp();
+    1.0 - decay * ((1.0 - zeta * zeta).sqrt() * omega * t).cos()
+}
+
+/// Triangle window in `[0, 1]` — the ripple envelope.
+pub fn tri(t: f32) -> f32 {
+    let t = t.fract();
+    if t < 0.5 { t * 2.0 } else { 2.0 - t * 2.0 }
+}
+
+// ── The render harness ──────────────────────────────────────────────────────
+
+/// One experiment in the registry.
+pub struct Experiment {
+    pub name: &'static str,
+    /// Film-time seconds this experiment spans.
+    pub seconds: f32,
+    /// Frames to render (harness samples `t = i / (frames - 1)`).
+    pub frames: usize,
+    /// `t` in `[0, 1]` → the frame's widget tree.
+    pub build: fn(f32) -> WidgetNode,
+}
+
+/// The measured outcome of one rendered experiment — printed, never guessed.
+#[derive(Default)]
+pub struct Receipt {
+    pub frames: usize,
+    pub shapes: u64,
+    pub glyph_runs: u64,
+    pub layers: u64,
+    pub render_ms_total: f64,
+    pub render_ms_worst: f64,
+}
+
+impl Receipt {
+    pub fn print(&self, name: &str) {
+        println!("  {name}");
+        println!(
+            "    frames {}/{} · shapes {} (mean {:.1}) · glyph_runs {} · layers {}",
+            self.frames,
+            self.frames,
+            self.shapes,
+            self.shapes as f64 / self.frames.max(1) as f64,
+            self.glyph_runs,
+            self.layers
+        );
+        println!(
+            "    render mean {:.2} ms · worst {:.2} ms",
+            self.render_ms_total / self.frames.max(1) as f64,
+            self.render_ms_worst
+        );
+    }
+
+    pub fn save(&self, dir: &Path) -> std::io::Result<()> {
+        std::fs::write(
+            dir.join("metrics.txt"),
+            format!(
+                "frames={}\nshapes={}\nglyph_runs={}\nlayers={}\nrender_mean_ms={:.3}\nrender_worst_ms={:.3}\n",
+                self.frames, self.shapes, self.glyph_runs, self.layers,
+                self.render_ms_total / self.frames.max(1) as f64,
+                self.render_ms_worst,
+            ),
+        )
+    }
+}
+
+/// Render one experiment end-to-end: frames → PNGs → metrics.
+/// Returns the receipt; the caller owns contact-sheet assembly (ffmpeg).
+pub fn render(experiment: &Experiment, out_dir: &Path) -> Result<Receipt, Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(out_dir)?;
+
+    let mut driver = FrameDriver::new(CANVAS);
+    // The film renders text; the default font store is embedded-only subsets.
+    // This one line is the difference between legible captions and a panic.
+    driver.use_system_fonts();
+    let mut renderer = NativeRenderer::new();
+
+    let mut receipt = Receipt {
+        frames: experiment.frames,
+        ..Receipt::default()
+    };
+
+    for i in 0..experiment.frames {
+        let t = if experiment.frames > 1 {
+            i as f32 / (experiment.frames - 1) as f32
+        } else {
+            0.0
+        };
+
+        driver.set_root((experiment.build)(t));
+        driver.draw_frame_at(Duration::from_secs_f64((t * experiment.seconds) as f64));
+
+        // Command-stream dump for seam hunting (first frame only).
+        if i == 0 && std::env::var("FILM_DUMP_CMDS").is_ok() {
+            let limit = std::env::var("FILM_DUMP_CMDS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(40);
+            for (ci, cmd) in driver.scene().commands().iter().take(limit).enumerate() {
+                let text = format!("{cmd:?}");
+                let short = if text.len() > 700 {
+                    format!("{} ...", &text[..700])
+                } else {
+                    text
+                };
+                println!("  cmd[{ci:03}] {short}");
+            }
+            println!("  total commands: {}", driver.scene().commands().len());
+        }
+
+        let start = std::time::Instant::now();
+        let (pixels, report) = renderer.render_to_pixels(driver.scene(), CANVAS_W as u32, CANVAS_H as u32, BG)?;
+        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+        receipt.render_ms_total += elapsed;
+        receipt.render_ms_worst = receipt.render_ms_worst.max(elapsed);
+        receipt.shapes += report.shapes as u64;
+        receipt.glyph_runs += report.glyph_runs as u64;
+        receipt.layers += report.layers as u64;
+
+        let image = image::RgbaImage::from_raw(CANVAS_W as u32, CANVAS_H as u32, pixels.data().to_vec())
+            .ok_or("invalid RGBA frame dimensions")?;
+        image.save(out_dir.join(format!("frame_{i:03}.png")))?;
+    }
+
+    receipt.save(out_dir)?;
+    Ok(receipt)
+}
+
+/// Assemble the contact sheet with ffmpeg — the house convention
+/// (`fps=10, scale=480:-1, tile=4x4`), straight from the collaboration
+/// protocol. Runs ffmpeg as a subprocess; ignores failure (the frames are
+/// the artifact, the sheet is the review aid).
+pub fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
+    let sheet = out_dir.join("sheet.png");
+    let frames = out_dir.join("frame_%03d.png");
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-framerate", "10"])
+        .arg("-i").arg(&frames)
+        .arg("-vf").arg(format!("scale=480:-1,tile={tile}"))
+        .arg("-frames:v").arg("1")
+        .arg(&sheet)
+        .status();
+    match status {
+        Ok(s) if s.success() => Some(sheet),
+        _ => None,
+    }
+}
+
+/// Where experiment output lives: /home/z/my-project/download/film_lab/<name>.
+pub fn out_root() -> PathBuf {
+    PathBuf::from("/home/z/my-project/download/film_lab")
+}
