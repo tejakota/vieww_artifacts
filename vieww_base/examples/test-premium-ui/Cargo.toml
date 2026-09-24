@@ -1,0 +1,23 @@
+[package]
+name = "test-premium-ui"
+description = "Visual integration test for Vieww's premium UI surface: layout, typography, effects, controls, vectors, charts and motion."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+gif = "0.14"
+# PNG output only. The default formats pull in AVIF/EXR decoding (rav1e, exr,
+# pulp) and, through pulp, `paste` — unmaintained, RUSTSEC-2024-0436, which
+# failed `cargo deny` for the whole workspace on behalf of two screenshot writers.
+image = { version = "0.25", default-features = false, features = ["png"] }
+vieww = { workspace = true, features = ["native"] }
+vieww-foundation.workspace = true
+vieww-paint = { workspace = true, features = ["native"] }
+vieww-render.workspace = true
+vieww-widget.workspace = true
+
+[lints]
+workspace = true

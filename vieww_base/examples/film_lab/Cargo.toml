@@ -1,0 +1,22 @@
+[package]
+name = "film_lab"
+description = "vieww launch film — element experiments: the berserk lab. Every experiment renders itself, audits its own shapes, and writes a contact sheet."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# PNG output only (see test-premium-ui's note on default features).
+image = { version = "0.25", default-features = false, features = ["png"] }
+vieww = { workspace = true, features = ["native"] }
+vieww-animation.workspace = true
+vieww-foundation.workspace = true
+vieww-paint = { workspace = true, features = ["native"] }
+vieww-render.workspace = true
+vieww-widget.workspace = true
+vieww-effects.workspace = true
+
+[lints]
+workspace = true

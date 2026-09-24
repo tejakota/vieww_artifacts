@@ -15,6 +15,8 @@ clarity · `TRAP` behaves correctly and is easy to get wrong.
 ---
 
 ## U-01 · `Sketch::Layer` cannot carry a blend mode
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `Sketch::Layer` carries a `blend` field, `Sketchbook::blended_layer` records it, and `RenderPainting::replay` (`vieww-render/src/objects/painting.rs`) now passes it to both `push_layer` and `push_filtered_layer` instead of hard-coding `Normal`. The widget form stays for addressable beats, exactly as the silver lining suggested. Test: `a_blended_layer_records_its_mode`.
+
 **Status:** WORKAROUND · **Found by:** T-00b compositing, X-05 light
 
 `RenderPainting::replay` hard-codes `BlendMode::Normal` for every
@@ -45,6 +47,8 @@ addressable.
 ---
 
 ## U-02 · `vieww_effects::Blend` silently does nothing
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `vieww_effects::Blend::build` now routes the foreground through `Opacity::new(1.0).blend(mode)` over the background in a `Stack`, via a `From` conversion onto foundation's modes — the one way the tree reaches a blend mode, rather than a second silent one. The "degrades to plain stacking" doc comment is gone with the behaviour it described. Test: `every_effect_mode_lands_on_its_foundation_twin`.
+
 **Status:** BLOCKER (as documented) · **Found by:** T-00b compositing
 
 ```rust
@@ -72,6 +76,8 @@ to blend, one of which is a no-op, is worse than one way.
 ---
 
 ## U-03 · No public text-to-path
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `vieww_paint::outline_glyph(face_bytes, face_index, glyph_id, variations)` and `units_per_em` are public, re-exported at the crate root behind the `native` feature — the door onto the same extraction layer the rasterizer already uses, with the scale-then-translate recipe in its docs. The film's sixty-line `ttf-parser` re-parse can collapse onto it. Test: `a_non_font_reports_none_rather_than_a_default`.
+
 **Status:** WORKAROUND (external parse) · **Found by:** X-03 wordmark
 
 The framework can *draw* text and cannot *hand you its shape*. Outlines are
@@ -101,6 +107,8 @@ door, not an implementation. **Highest-value single change in this file.**
 ---
 
 ## U-04 · `Transform` is 2×3 — there is no 3D anywhere
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `vieww_foundation::Transform3` exists — perspective projection with `project_rect`, finite-guarded, doctested — implemented despite "not required", so the honesty ledger can say the projection is framework arithmetic either way. The stronger phrasing in this entry stands: no external engine, and now the perspective door is a first-class path.
+
 **Status:** WORKAROUND · **Found by:** P-01 unfold, X-02 avatar, X-07 knot
 
 `Transform` is `a b c d tx ty` and `Sketch::Transformed` takes that same affine.
@@ -126,6 +134,8 @@ has it".
 ---
 
 ## U-05 · Abutting fills leave hairline seams
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `Sketchbook::mesh` applies the bleed itself (plus a `debug_assert!` on empty grids), so the conflation wireframe cannot be re-derived per call site. The artifact itself is now also named where it bites: the blur edge-clamp work under U-15 documents the coverage-based-compositing family it belongs to.
+
 **Status:** TRAP · **Found by:** X-01 ocean
 
 Two paths that share an edge do not meet. Each is anti-aliased against what is
@@ -150,6 +160,8 @@ on it first.
 ---
 
 ## U-06 · Blurred layers are priced per layer, and it is easy to buy eleven
+> **Status → NOTED in `vieww_base`, 2026-09-24.** Not implemented: `SceneReport` is the bench's instrument, and surfacing `filtered_layers` in `PerformanceOverlay` is a framework-side convenience that did not make this pass. The receipts culture that found the 9x stays the real guard; the number is one PR away.
+
 **Status:** TRAP · **Found by:** X-05 light
 
 `Sketch::Layer` with `blur > 0` costs one offscreen buffer and one kernel pass.
@@ -168,6 +180,8 @@ frame, would turn an invisible 9× into a visible number.
 ---
 
 ## U-07 · `Camera`-shaped footgun: a heading is not an orbit
+> **Status → N/A in `vieww_base`, 2026-09-24.** Film-side, not framework: the bench's own `Camera::orbit` already fixed it. Kept for the warning it carries into any future `Transform3` — which now exists (U-04) and does not repeat the mistake.
+
 **Status:** TRAP (in the film's own code) · **Found by:** X-02 avatar
 
 Not a framework defect — a `proj.rs` defect — recorded because it cost two full
@@ -183,6 +197,8 @@ same confusion is waiting in any `Transform3` that ever gets added.
 ---
 
 ## U-08 · Gradient stops are not sorted, and a rotating phase folds the ramp
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `Gradient::with_stops`'s doc carries the sentence — "an animated phase must re-sort; wrapping offsets is the common case" — and the U-17 assert makes the out-of-order frame a panic in debug rather than a one-frame flicker nobody can see in a still.
+
 **Status:** TRAP · **Found by:** X-06 chrome
 
 `Gradient::with_stops` keeps stops in the order given — deliberately, and the
@@ -200,6 +216,8 @@ per stop per cycle, which is the hardest class of bug to see in a still.
 ---
 
 ## U-09 · Font assets ship as placeholders through the HTML browser export
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `register_embedded` (`vieww-text/src/font.rs`) parses every embedded face before it is registered and panics naming the files if none parsed — the blank screen is now a message that says which asset is corrupt. The real binaries are restored: DejaVu subsets for the five Latin faces, and `scripts/make_test_fonts.py` — the repository's own recipe, which this environment could run — for the CJK face, the VF fixture, the emoji subset and the COLRv0 face. Test: the embedded-only suite (`103/103`) now actually draws.
+
 **Status:** PAPERCUT (tooling, not framework) · **Found by:** the first render
 
 `crates/vieww-text/assets/*.ttf` arrived as 250-byte notes —
@@ -220,6 +238,8 @@ file.
 ---
 
 ## U-10 · A sweep gradient seams unless its ramp is a palindrome
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `Gradient::with_stops_mirrored` builds the palindrome (non-decreasing by construction), and the sweep docs name the same-ray discontinuity and the two-sharp-edges problem explicitly.
+
 **Status:** TRAP · **Found by:** X-06 chrome
 
 A sweep gradient's start and end angles are **the same ray**. Unless the first
@@ -240,6 +260,8 @@ sharp edges and no signposts for either.
 ---
 
 ## U-11 · A painter cannot read what has already been painted
+> **Status → FIXED in `vieww_base`, 2026-09-24.** (As documentation, which is what the entry asked for first.) The transform-outside/clip-inside pattern — a window onto the source that flies away with the window still attached — is documented on `Sketchbook` with the N-redraws cost spelled out, so every shatter, wipe and split-screen does not re-derive it.
+
 **Status:** WORKAROUND · **Found by:** X-08 shatter
 
 `Filtered::with_backdrop` reads the real destination pixels beneath a widget —
@@ -276,6 +298,8 @@ tree demonstrates.
 ---
 
 ## U-12 · `Shadow` is rounded rectangles only
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `Sketchbook::path_shadow` performs the blurred-translated-fill construction as one call. Test: `a_path_shadow_is_a_blurred_translated_fill`.
+
 **Status:** WORKAROUND · **Found by:** X-06 chrome
 
 `Sketch::Shadow` takes `rect` and `radius`, because `Command::DrawShadow` does.
@@ -295,6 +319,8 @@ pattern is not re-derived at every call site.
 ---
 
 ## U-13 · `Path` has no boolean operations
+> **Status → NO CHANGE in `vieww_base`, 2026-09-24.** Recorded as not-a-defect, and left that way: Sutherland–Hodgman and marching squares stay in the example where they belong, and this note is the signpost that stops the next afternoon being spent looking for `Path::intersect`.
+
 **Status:** NOT A DEFECT — recorded so the film stops looking for them
 
 No union, intersection or difference. `Path::extend` concatenates and
@@ -314,6 +340,8 @@ does not spend an afternoon looking for `Path::intersect`.
 ---
 
 ## U-14 · Blur is isotropic — there is no directional blur
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `ImageFilter::blur_angle` + `ImageFilter::directional_blur(sigma, angle)` exist, with a directed box pass in both the foundation kernel (`directional_blur_rgba`) and the native renderer's Premul path — edge-clamped like U-15 so a motion blur cannot re-grow the rim bug. Whether the film wants motion blur at all remains the taste decision this entry says it is. Tests: `a_directional_blur_spreads_along_its_ray_and_not_across_it`, `a_directional_blur_smears_along_its_ray_through_the_renderer`.
+
 **Status:** GAP · **Found by:** X-08 shatter
 
 `ImageFilter::blur(sigma)` is a symmetric Gaussian. There is no angle and no
@@ -332,6 +360,8 @@ motion blur at all — which is a taste decision, not a technical one.
 ---
 
 ## U-15 · **Blur is zero-padded at the layer boundary — every blurred surface darkens at its own edges**
+> **Status → FIXED in `vieww_base`, 2026-09-24.** Both box-blur kernels now clamp to edge — `vieww-foundation/src/filter.rs`'s `blur_rgba` **and** the native renderer's own Premul passes in `vieww-paint/src/native/effects.rs`, which is the path every blurred surface in the product actually takes (the entry's file pointer named only the first). A uniform full-bleed field is now a fixed point of the blur, asserted at the renderer, not just the kernel: `a_full_bleed_blurred_layer_stays_solid_to_the_frame_corners` — the 100/255 edges and 39/255 corners of the original probe now render 255/255 to the corners.
+
 **Status:** DEFECT · **Found by:** the breaker's edge-padding probe · **Severity: highest in this file**
 
 Blur a field that extends 400 pixels past the target on all four sides — a field
@@ -378,6 +408,8 @@ every pixel is still the same value. Three lines, and it belongs in
 ---
 
 ## U-16 · `NaN` produces corrupt geometry; infinity produces nothing. Neither says anything.
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `debug_assert!(is_finite)` on `move_to`, `line_to`, `quad_to` and `cubic_to` in `vieww-foundation/src/path.rs` — NaN and ±inf both fail loudly in development, at the verb that received them, at no release cost.
+
 **Status:** TRAP · **Found by:** the breaker
 
 Two adjacent cases, two different silent behaviours:
@@ -400,6 +432,8 @@ development build at a cost of nothing in release.
 ---
 
 ## U-17 · Reversed gradient stops fail silently, and the failure looks intentional
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `debug_assert!` that stops are non-decreasing, with a message that keeps the entry's own philosophy ("a mistake worth seeing") and makes it actually visible: in a panic, not a flat purple rectangle.
+
 **Status:** TRAP · **Found by:** the breaker
 
 `with_stops(&[(1.0, purple), (0.5, green), (0.0, red)])` renders a **flat purple
@@ -420,6 +454,8 @@ the mistake actually visible — in a panic message rather than in a rectangle.
 ---
 
 ## U-18 · Sub-pixel strokes vanish rather than clamping to a hairline
+> **Status → OPEN in `vieww_base`, 2026-09-24.** Deliberately not implemented, with the analysis that stopped it: the entry's suggested ink-preserving clamp (one pixel wide, alpha scaled by the device width) is mathematically equivalent to what the coverage-based rasterizer already produces at 8-bit coverage — a 0.01px stroke at full alpha and a 1px stroke at 1% alpha land within a quantisation step of each other. What the complaint actually asks for is a minimum-visibility *policy* (bloom the ink on the way down), which is the same class of taste decision as U-14's motion blur. Recorded here so the next pass starts from the analysis, not the surprise.
+
 **Status:** GAP · **Found by:** the breaker
 
 Fifty thousand strokes at 0.01px wide render as very nearly nothing. That is
@@ -436,6 +472,8 @@ total ink.
 ---
 
 ## U-19 · An invisible layer still costs the full recording
+> **Status → FIXED in `vieww_base`, 2026-09-24.** `Painter::paint`'s doc now says it: "an invisible painter is not a free painter; skip the work in `paint`, not with `alpha`" — with the 41.8ms-for-one-shape receipt quoted beside it.
+
 **Status:** PAPERCUT · **Found by:** the breaker
 
 `alpha: 0.0` over 100,000 primitives: the rasterizer correctly skips it —
@@ -472,6 +510,8 @@ this file is short and specific rather than long and vague.
 ---
 
 ## U-20 · Marching squares' chaining pass is not optional (a correction)
+> **Status → NOTED in `vieww_base`, 2026-09-24.** `SceneReport` is the bench's instrument, so the open-subpath-fill counter belongs there with it. The general property this entry names — `fill` on an open subpath is silent — is now documented in the U-13/U-11 family, so the symptom at least points at the cause in the docs.
+
 **Status:** NOT A DEFECT — a mistake of mine, recorded because the failure is instructive
 
 The hero frame tried to skip the segment-chaining half of marching squares, on
