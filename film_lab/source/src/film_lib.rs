@@ -54,6 +54,14 @@ pub fn mix(a: Color, b: Color, t: f32) -> Color {
     a.lerp(b, t.clamp(0.0, 1.0))
 }
 
+/// A rect from origin + size — the (x, y, w, h) habit. `Rect::new` takes
+/// *edges* (left, top, right, bottom); this is the conversion the film's
+/// own boards keep needing. (Origin-anchored rects are identical either
+/// way; offset rects are not — this is the safe spelling.)
+pub fn xywh(x: f32, y: f32, w: f32, h: f32) -> vieww_foundation::Rect {
+    vieww_foundation::Rect::new(x, y, x + w.max(0.0), y + h.max(0.0))
+}
+
 /// Lighten toward white (a "tint").
 pub fn tint(c: Color, t: f32) -> Color {
     mix(c, Color::WHITE, t)

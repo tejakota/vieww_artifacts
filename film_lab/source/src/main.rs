@@ -24,15 +24,34 @@
 //!   widget props (Chip/LinearProgress/LineChart/Badge) + CI timeline E-19
 //! - `aurora`  — light as material: sweep-cone, Screen-blended ribbons,
 //!   E-21 crafted degradation (FilterChain ramp + grain + dust)
+//! - `spring`  — E-03/E-04: the wordmark drops on an underdamped spring,
+//!   the underline overshoots on a stiffer one — the springs drawn as
+//!   their own receipt
+//! - `scrub`   — E-08/E-09: ten writes, one rebuild — scheduler coalescing
+//!   made visible; build_count() badge, writes-vs-rebuilds ratio live
+//! - `damage`  — E-10: one region lights — a mock studio surface, four
+//!   edits, the PerformanceOverlay strip with damage area measured
+//! - `rackfocus` — E-16: the blur ramp between buffer and preview — the
+//!   focus pull as cinematography, focal bar printed live
+//! - `morph`   — E-06: say → rust, state held — the language switch with
+//!   the session clock never rebuilding through the morph
+//! - `endcard` — E-15: the end card + the sting — wordmark, install line,
+//!   manifest line, one accent firing, the hold
 
 mod exp_aurora;
 mod exp_circuit;
+mod exp_damage;
+mod exp_endcard;
 mod exp_globe;
 mod exp_kinetic;
 mod exp_light;
 mod exp_mesh;
+mod exp_morph;
 mod exp_ocean;
+mod exp_rackfocus;
 mod exp_receipts;
+mod exp_scrub;
+mod exp_spring;
 mod film_lib;
 mod three_d;
 
@@ -87,6 +106,42 @@ fn registry() -> Vec<Experiment> {
             seconds: exp_aurora::SECONDS,
             frames: 16,
             build: exp_aurora::frame,
+        },
+        Experiment {
+            name: "spring",
+            seconds: exp_spring::SECONDS,
+            frames: 16,
+            build: exp_spring::frame,
+        },
+        Experiment {
+            name: "scrub",
+            seconds: exp_scrub::SECONDS,
+            frames: 16,
+            build: exp_scrub::frame,
+        },
+        Experiment {
+            name: "damage",
+            seconds: exp_damage::SECONDS,
+            frames: 16,
+            build: exp_damage::frame,
+        },
+        Experiment {
+            name: "rackfocus",
+            seconds: exp_rackfocus::SECONDS,
+            frames: 16,
+            build: exp_rackfocus::frame,
+        },
+        Experiment {
+            name: "morph",
+            seconds: exp_morph::SECONDS,
+            frames: 16,
+            build: exp_morph::frame,
+        },
+        Experiment {
+            name: "endcard",
+            seconds: exp_endcard::SECONDS,
+            frames: 16,
+            build: exp_endcard::frame,
         },
     ]
 }

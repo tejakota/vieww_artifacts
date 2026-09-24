@@ -1,30 +1,41 @@
 # film_lab — element experiments for the vieww launch film
 
-Produced by an autonomous session (2026-09-24) running the create → render → VLM-audit → iterate loop against the actual vieww framework. Eight element experiments ("props" for the film), each rendered at 1280×720 with per-run receipts.
+Produced by autonomous sessions (2026-09-24) running the create → render → VLM-audit → iterate loop against the actual vieww framework. **Fourteen element experiments** ("props" for the film), each rendered at 1280×720 with per-run receipts — round 3 covers every remaining scene-graph effect not already proven by rounds 1–2.
 
 ## What's in here
 
 | Path | Contents |
 |------|----------|
-| `source/` | Complete Rust source: `film_lib.rs` (palette, RNG, clock, easing, render harness + SceneReport receipts), `three_d.rs` (Vec3, perspective camera, mesh builder, painter's sort, gradient ramps), `main.rs` (selector), `exp_*.rs` (one file per experiment). Registered as a workspace crate — drop into `examples/` of the release tree. |
+| `source/` | Complete Rust source: `film_lib.rs` (palette, RNG, clock, easing, `xywh()` rect helper, render harness + SceneReport receipts), `three_d.rs` (Vec3, perspective camera, mesh builder, painter's sort, gradient ramps), `main.rs` (selector), `exp_*.rs` (one file per experiment). Registered as a workspace crate — drop into `examples/` of the release tree. |
 | `renders/<name>/` | `sheet.png` (4×4 contact sheet, 16 frames) + `metrics.txt` for each experiment |
 | `premium-test/` | Pipeline verification: test-premium-ui through FrameDriver, 56 frames, 55/55 moving, 0 overflows (GIF + first/last frame + metrics) |
-| `vieww_film_lab_lite.zip` | 9 MB — sheets + metrics + source + premium-test |
-| `vieww_film_lab_full.zip` | 44 MB — everything + all 128 individual PNG frames |
-| `worklog.md` | Full session log: receipts, VLM audit verdicts, the bisection ladders, the alpha() incident |
+| `vieww_film_lab_lite.zip` | 11 MB — sheets + metrics + source + premium-test |
+| `vieww_film_lab_full_1of2.zip` | 40 MB — the full lab: source, sheets, metrics, premium-test + all frames for experiments 1–7 |
+| `vieww_film_lab_full_2of2.zip` | 30 MB — the remaining 112 frames (experiments 8–14). Unzip both parts into the same directory to reassemble the complete lab |
+| `worklog.md` | Full session log: receipts, VLM audit verdicts, the bisection ladders, the alpha() incident, the Rect-edges incident |
 
 ## The experiments
 
 | Name | What it proves for the film | Receipts |
 |------|------------------------------|----------|
-| `light` | Frosted-glass card, dithered gradients, rim strokes, starfield — the sheet-vf aesthetic floor | 4,010 shapes/frame, 96 layers, 133 ms/frame |
-| `mesh` | Manual 3D pipeline (Transform is 2D affine only): painter's sort, Lambert + Blinn-Phong, spring-animated torus orbit with mid-flight retarget at t=0.63 | 9,688 shapes/frame, 39 ms/frame |
-| `ocean` | 44×44 heightfield ocean growing from a drop impact, glint bloom pass | 15,771 shapes/frame, 41 ms/frame |
-| `globe` | 3D globe experiment (three-planes-fan F4 direction) | 1,689 shapes/frame, 44 ms/frame |
-| `aurora` | Gradient-mesh nebula / aurora background technique | 4,487 shapes/frame, 110 layers, 130 ms/frame |
-| `circuit` | Circuit-board texture / tech-map motif | 1,810 shapes/frame, 51 ms/frame |
-| `kinetic` | Text-kinetics family — 380 glyph runs, dash-phase line drawing (E-17 technique) | 1,427 shapes/frame, 42 ms/frame |
-| `receipts` | The honesty-ledger render: metrics as on-screen evidence | 1,272 shapes/frame, 45 ms/frame |
+| `light` | Frosted-glass card, dithered gradients, rim strokes, starfield — the sheet-vf aesthetic floor | 4,010 shapes/frame, 96 layers, 142 ms/frame |
+| `mesh` | Manual 3D pipeline (Transform is 2D affine only): painter's sort, Lambert + Blinn-Phong, spring-animated torus orbit with mid-flight retarget at t=0.63 | 9,688 shapes/frame, 40 ms/frame |
+| `ocean` | 44×44 heightfield ocean growing from a drop impact, glint bloom pass | 15,771 shapes/frame, 43 ms/frame |
+| `kinetic` | Text-kinetics family — type-on, hour-counter, odometer, stat count-ups (E-01/E-02, the ladder, S11) | 1,427 shapes/frame, 380 glyph runs, 35 ms/frame |
+| `circuit` | The session line E-17: self-drawing path, node blooms, fork ×3 (E-22), the axis (E-20 F2) | 1,810 shapes/frame, 51 ms/frame |
+| `globe` | The reveal spine E-20 F1–F4: the 7, the ghost part, the pull-back, three planes fanning | 1,689 shapes/frame, 71 layers, 49 ms/frame |
+| `receipts` | S11: the benchmark card assembles in 3D around real widget props + CI timeline E-19 | 1,272 shapes/frame, 46 ms/frame |
+| `aurora` | Light as material: sweep-cone, Screen-blended ribbons, E-21 crafted degradation (FilterChain ramp + grain + dust) | 4,487 shapes/frame, 110 layers, 166 ms/frame |
+| `spring` | **E-03/E-04**: the wordmark spring drop + underline overshoot (higher ω) — the springs drawn as their own live receipt | 1,112 shapes/frame, 40 ms/frame |
+| `scrub` | **E-08/E-09**: ten writes, one rebuild — scheduler coalescing made visible; `build_count()` badge, writes-vs-rebuilds ratio counted live | 1,276 shapes/frame, 52 ms/frame |
+| `damage` | **E-10**: one region lights — a mock studio surface, four edits, PerformanceOverlay strip with damage-area history measured from the mock's own geometry | 1,543 shapes/frame, 51 ms/frame |
+| `rackfocus` | **E-16**: the blur ramp between buffer and preview — the focus pull as cinematography, both layers' blur px printed live | 2,624 shapes/frame, 58 ms/frame |
+| `morph` | **E-06**: say → rust, state held — the language switch via scan-line sweep, the session clock never rebuilding through it | 1,545 shapes/frame, 195 glyph runs, 47 ms/frame |
+| `endcard` | **E-15**: the end card + the sting — wordmark, typed install line, manifest line, one accent firing, the hold | 603 shapes/frame, 46 ms/frame |
+
+## Scene-graph coverage
+
+With round 3, every effect on the S01–S12 rail that needs a dedicated prop has one: E-01, E-02 (kinetic) · E-03, E-04 (spring) · E-06 (morph) · E-08, E-09 (scrub) · E-10 (damage) · E-15 (endcard) · E-16 (rackfocus) · E-17, E-22 (circuit) · E-18 (mesh/receipts 3D) · E-19 (receipts) · E-20 (globe) · E-21 (aurora). E-05, E-07, E-11, E-12, E-13 are widget-level beats staged inside the scenes themselves rather than standalone props.
 
 ## Running the source
 
@@ -34,11 +45,13 @@ The crate expects to live inside the vieww workspace (`vieww_ws/examples/film_la
 cargo run --release -p film_lab -- <experiment>
 ```
 
-Experiments: `light`, `mesh`, `ocean`, `globe`, `aurora`, `circuit`, `kinetic`, `receipts`. Env gates (FILM_BISECT and FILM_DUMP_CMDS) are documented in the sources.
+Experiments: `light`, `mesh`, `ocean`, `kinetic`, `circuit`, `globe`, `receipts`, `aurora`, `spring`, `scrub`, `damage`, `rackfocus`, `morph`, `endcard`. Env gates (FILM_BISECT and FILM_DUMP_CMDS) are documented in the sources.
 
 ## Key lessons logged
 
 - `driver.use_system_fonts()` is mandatory for any text-bearing render — embedded DejaVu subsets panic otherwise (fixed at vieww-render/src/frame.rs:1096).
 - The `alpha()` convention incident: caller passed 0–255-style values into a 0–1 API, making every translucent swatch opaque. The framework was innocent (verified against native/color.rs, target.rs, reference.rs); found via FILM_DUMP_CMDS command-stream dump. Same species as the 2550-vs-2551 incident in handoff.md.
-- Aesthetic floor verified: 8/10 VLM distance to the author's own sheet-vf reference frame.
+- **The Rect-edges incident (round 3)**: `Rect::new` takes *edges* (left, top, right, bottom), not (x, y, w, h). Origin-anchored rects are identical either way, which masks the difference — offset rects silently render degenerate (zero/negative height hairlines, tick rails that never draw). Fixed with the `xywh()` helper; kinetic's tick rail and band rules re-rendered visibly for the first time.
+- **The sampled-attack trap (round 3)**: a 0.1 s attack with 5.5/s decay is invisible at 16-frame sampling (0.75 s spacing) — the flash lives and dies between frames. Effects must be tuned against the harness's sampling cadence, not just against wall-clock time. damage's envelope now spans ~1.2 s.
+- Aesthetic floor verified: 8/10 VLM distance to the author's own sheet-vf reference frame; round-3 props audit at 9/10 (spring, scrub, rackfocus, morph, endcard) and 7/10 (damage, after the envelope fix — full-res verification shows wash + border + corner ticks correct).
 - Framework boundary confirmed: `Transform` is deliberately 2D affine only — true 3D requires manual projection in custom Painting closures (see three_d.rs).

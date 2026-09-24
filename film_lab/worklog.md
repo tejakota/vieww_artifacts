@@ -79,3 +79,27 @@ Stage Summary:
 - API seams verified along the way: Gradient with_dither (Bayer 4x4) works; StrokeStyle+Dash::new([draw_len, total]) dash-phase line drawing works (E-17 technique); Sketchbook::layer(alpha, blur, clip) group blur works; Shadow colored glow works; Filtered backdrop+tint works (when caller's alpha units are correct!)
 - NEW INCIDENT LOGGED (like handoff's 2550-vs-2551): "the alpha() helper convention" — a caller-side unit bug masquerading as a rasterizer bug; found by command-stream dump (FILM_DUMP_CMDS), the cheapest instrument in the lab
 - Next: mesh/ocean still have headroom (VLM: wireframe overlay prominence, glint integration, nebula color distribution); then globe + three-planes-fan (F4) experiments; then text-kinetics family
+
+---
+
+## Round 3 — the berserk continuation (session 2, 2026-09-24)
+
+Task: "Continue in going berserk rendering every artifact — creating the props."
+
+Work Log:
+- Parsed the scene graph's effects rail (E-01..E-22 with per-effect scene, name, technique, BUILD/FREE cost) and diffed against the 8 shipped props: E-03/E-04, E-06, E-08/E-09, E-10, E-15, E-16 had no dedicated experiment. Round 3 = six new props, one per missing beat.
+- exp_spring (E-03/E-04): wordmark drop on an underdamped spring (ω 6.2, ζ 0.52), underline overshoot on a stiffer one (ω 13.5, ζ 0.40), squash-on-contact, impact dust ring, and the springs drawn as their own receipt — both curves live with riders at current t, constants printed from the code's own values.
+- exp_scrub (E-08/E-09): three scrub gestures; write ticks spill below the track (10/7/12 writes), a coalescing bracket spans each burst, the preview card holds its old value through the whole gesture then jumps ONCE on the single rebuild (flash + border bloom), build_count badge increments 1 per gesture, live writes/rebuilds/ratio receipt.
+- exp_damage (E-10): mock studio surface in four regions (sidebar/header/preview/inspector ghosts), four edits each lighting exactly one region (wash + border + corner ticks + bloom), PerformanceOverlay strip with damage-area history trace computed from the mock's own rect geometry — 0.0% idle state included.
+- exp_rackfocus (E-16): the machine's view (glyph-atlas grid, scan rows, command stream, mono cold-cyan) behind the author's view (glass card, 184.2k, sparkline); Filtered::blur ramps run opposite directions per layer, focal bar + live blur-px readout at the bottom; rack reverses mid-experiment — the film looks back at the machine.
+- exp_morph (E-06): say → rust via a scan-line sweep, per-line crossfade with staggered slide (amber natural language dissolving up, mono Rust rising in); STATE HELD as the whole point: a session-clock chip on an unbroken horizontal state line with 24 Hz pulse ticks that never stops through the morph; words→glyphs handover count printed live.
+- exp_endcard (E-15): the last image — settled wordmark (letter-spaced 14), typed-on `cargo add vieww` with caret, manifest line (0.7.0 · 36 crates · rust 1.98.1 — the workspace's own facts), the sting at t≈0.66 (one violet sweep through the underline, one bloom, one board-lift, then the hold), closing honesty line.
+- THE RECT-EDGES INCIDENT: `Rect::new` takes edges (left, top, right, bottom) — exp_light (the 8/10 prop) proves it — but (x, y, w, h) was the working habit in several files. Origin-anchored rects are identical either way, masking the difference; offset rects degenerate silently (bottom < top → negative height; the shape never draws). Victims: kinetic's tick rail + band rules (never rendered), all offset rects in the six new files. Fix: `xywh()` helper in film_lib + call-site conversion; kinetic re-rendered with its tick rail visible for the first time.
+- THE SAMPLED-ATTACK TRAP: damage's first audit (6/10, "flash barely perceptible") was a sampling artifact — 0.1 s attack + 5.5/s decay lives and dies entirely between the harness's 0.75 s frame spacing. Envelope re-tuned to ~0.3 s attack / ~1.2 s decay / 1.25 spike, wash 0.10→0.22, ticks 2.2→3.2 px; accent unified to violet (mint read as a defect). 6→7/10; full-res crop audit confirms wash + border + corner L-ticks all present.
+- VLM audit round 3: spring 9/10, scrub 9/10, rackfocus 9/10, morph 9/10, endcard 9/10, damage 7/10 (post-fix). No rendering defects reported on any sheet.
+- Full 14-experiment registry re-render; all receipts regenerated. Packaging: lite 11 MB; full split 1of2 (40 MB, base + experiments 1–7 frames) + 2of2 (30 MB, experiments 8–14 frames) — GitHub's 100 MB file ceiling forced the split; the monolithic 44 MB full.zip is retired.
+
+Stage Summary:
+- 14 props live; every scene-graph effect that warrants a standalone experiment now has one (E-01..E-22 coverage map in README).
+- Round-3 receipts: spring 69.5 shapes/frame, scrub 79.8, damage 96.4, rackfocus 164.0, morph 96.6, endcard 37.7 — all 40–58 ms/frame except spring 40 ms and endcard 46 ms; offline rendering viable throughout.
+- Two new incidents logged (Rect edges, sampled attack) — same species as the alpha() incident: caller-side assumptions silently producing absent output.
