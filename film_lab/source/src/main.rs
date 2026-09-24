@@ -75,6 +75,11 @@ mod exp_scrub;
 mod exp_shatter;
 mod exp_spring;
 mod exp_wordmark;
+mod exp_ghosts;
+mod exp_settle;
+mod exp_dolly;
+mod exp_currents;
+mod exp_probe;
 mod film_lib;
 mod three_d;
 
@@ -82,126 +87,37 @@ use film_lib::{contact_sheet, out_root, render_with, Experiment};
 
 fn registry() -> Vec<Experiment> {
     vec![
+        Experiment::plain("light", exp_light::SECONDS, 16, exp_light::frame),
+        Experiment::plain("mesh", exp_mesh::SECONDS, 16, exp_mesh::frame),
+        Experiment::plain("ocean", exp_ocean::SECONDS, 16, exp_ocean::frame),
+        Experiment::plain("kinetic", exp_kinetic::SECONDS, 16, exp_kinetic::frame),
+        Experiment::plain("circuit", exp_circuit::SECONDS, 16, exp_circuit::frame),
+        Experiment::plain("globe", exp_globe::SECONDS, 16, exp_globe::frame),
+        Experiment::plain("receipts", exp_receipts::SECONDS, 16, exp_receipts::frame),
+        Experiment::plain("aurora", exp_aurora::SECONDS, 16, exp_aurora::frame),
+        Experiment::plain("spring", exp_spring::SECONDS, 16, exp_spring::frame),
+        Experiment::plain("scrub", exp_scrub::SECONDS, 16, exp_scrub::frame),
+        Experiment::plain("damage", exp_damage::SECONDS, 16, exp_damage::frame),
+        Experiment::plain("rackfocus", exp_rackfocus::SECONDS, 16, exp_rackfocus::frame),
+        Experiment::plain("morph", exp_morph::SECONDS, 16, exp_morph::frame),
+        Experiment::plain("endcard", exp_endcard::SECONDS, 16, exp_endcard::frame),
+        Experiment::plain("beams", exp_beams::SECONDS, 16, exp_beams::frame),
+        Experiment::plain("liquid", exp_liquid::SECONDS, 16, exp_liquid::frame),
+        Experiment::plain("unfold", exp_unfold::SECONDS, 16, exp_unfold::frame),
+        Experiment::plain("shatter", exp_shatter::SECONDS, 16, exp_shatter::frame),
+        Experiment::plain("wordmark", exp_wordmark::SECONDS, 16, exp_wordmark::frame),
+        Experiment::plain("ghosts", exp_ghosts::SECONDS, 16, exp_ghosts::frame),
+        Experiment::plain("settle", exp_settle::SECONDS, 16, exp_settle::frame),
+        Experiment::plain("dolly", exp_dolly::SECONDS, 16, exp_dolly::frame),
+        Experiment::plain("currents", exp_currents::SECONDS, 16, exp_currents::frame),
         Experiment {
-            name: "light",
-            seconds: exp_light::SECONDS,
+            name: "probe",
+            seconds: exp_probe::SECONDS,
             frames: 16,
-            build: exp_light::frame,
+            build: exp_probe::frame,
+            probe: Some(exp_probe::probe),
         },
-        Experiment {
-            name: "mesh",
-            seconds: exp_mesh::SECONDS,
-            frames: 16,
-            build: exp_mesh::frame,
-        },
-        Experiment {
-            name: "ocean",
-            seconds: exp_ocean::SECONDS,
-            frames: 16,
-            build: exp_ocean::frame,
-        },
-        Experiment {
-            name: "kinetic",
-            seconds: exp_kinetic::SECONDS,
-            frames: 16,
-            build: exp_kinetic::frame,
-        },
-        Experiment {
-            name: "circuit",
-            seconds: exp_circuit::SECONDS,
-            frames: 16,
-            build: exp_circuit::frame,
-        },
-        Experiment {
-            name: "globe",
-            seconds: exp_globe::SECONDS,
-            frames: 16,
-            build: exp_globe::frame,
-        },
-        Experiment {
-            name: "receipts",
-            seconds: exp_receipts::SECONDS,
-            frames: 16,
-            build: exp_receipts::frame,
-        },
-        Experiment {
-            name: "aurora",
-            seconds: exp_aurora::SECONDS,
-            frames: 16,
-            build: exp_aurora::frame,
-        },
-        Experiment {
-            name: "spring",
-            seconds: exp_spring::SECONDS,
-            frames: 16,
-            build: exp_spring::frame,
-        },
-        Experiment {
-            name: "scrub",
-            seconds: exp_scrub::SECONDS,
-            frames: 16,
-            build: exp_scrub::frame,
-        },
-        Experiment {
-            name: "damage",
-            seconds: exp_damage::SECONDS,
-            frames: 16,
-            build: exp_damage::frame,
-        },
-        Experiment {
-            name: "rackfocus",
-            seconds: exp_rackfocus::SECONDS,
-            frames: 16,
-            build: exp_rackfocus::frame,
-        },
-        Experiment {
-            name: "morph",
-            seconds: exp_morph::SECONDS,
-            frames: 16,
-            build: exp_morph::frame,
-        },
-        Experiment {
-            name: "endcard",
-            seconds: exp_endcard::SECONDS,
-            frames: 16,
-            build: exp_endcard::frame,
-        },
-        Experiment {
-            name: "beams",
-            seconds: exp_beams::SECONDS,
-            frames: 16,
-            build: exp_beams::frame,
-        },
-        Experiment {
-            name: "liquid",
-            seconds: exp_liquid::SECONDS,
-            frames: 16,
-            build: exp_liquid::frame,
-        },
-        Experiment {
-            name: "unfold",
-            seconds: exp_unfold::SECONDS,
-            frames: 16,
-            build: exp_unfold::frame,
-        },
-        Experiment {
-            name: "shatter",
-            seconds: exp_shatter::SECONDS,
-            frames: 16,
-            build: exp_shatter::frame,
-        },
-        Experiment {
-            name: "wordmark",
-            seconds: exp_wordmark::SECONDS,
-            frames: 16,
-            build: exp_wordmark::frame,
-        },
-        Experiment {
-            name: "hero",
-            seconds: exp_hero::SECONDS,
-            frames: 8,
-            build: exp_hero::frame,
-        },
+        Experiment::plain("hero", exp_hero::SECONDS, 8, exp_hero::frame),
     ]
 }
 

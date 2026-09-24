@@ -190,6 +190,30 @@ pub struct Experiment {
     pub frames: usize,
     /// `t` in `[0, 1]` → the frame's widget tree.
     pub build: fn(f32) -> WidgetNode,
+    /// Optional pixel probe, run once on the **last** rendered frame — the
+    /// instrument plates' door onto the actual output buffer, so a receipt
+    /// can state measured pixel facts (the U-15 corner probes) rather than
+    /// geometry it was told. Returns printed lines; every number in them
+    /// was read out of the rasterizer's own output.
+    pub probe: Option<fn(&image::RgbaImage) -> Vec<String>>,
+}
+
+impl Experiment {
+    /// The usual spelling — no probe.
+    pub const fn plain(
+        name: &'static str,
+        seconds: f32,
+        frames: usize,
+        build: fn(f32) -> WidgetNode,
+    ) -> Self {
+        Self {
+            name,
+            seconds,
+            frames,
+            build,
+            probe: None,
+        }
+    }
 }
 
 /// The measured outcome of one rendered experiment — printed, never guessed.
@@ -199,6 +223,14 @@ pub struct Receipt {
     pub shapes: u64,
     pub glyph_runs: u64,
     pub layers: u64,
+    /// Blurred (filtered) layers — U-06's number, the one the guard
+    /// asserts and the receipts now carry.
+    pub filtered_layers: u64,
+    /// Fills whose path carried open subpaths — the silent-petal census.
+    pub open_subpath_fills: u64,
+    /// Lines read out of the output buffer by the experiment's probe, if
+    /// it has one — measured pixel facts.
+    pub probe_lines: Vec<String>,
     pub render_ms_total: f64,
     pub render_ms_worst: f64,
 }
@@ -216,6 +248,13 @@ impl Receipt {
             self.layers
         );
         println!(
+            "    filtered {} · open_subpath_fills {}",
+            self.filtered_layers, self.open_subpath_fills
+        );
+        for line in &self.probe_lines {
+            println!("    probe: {line}");
+        }
+        println!(
             "    render mean {:.2} ms · worst {:.2} ms",
             self.render_ms_total / self.frames.max(1) as f64,
             self.render_ms_worst
@@ -223,15 +262,17 @@ impl Receipt {
     }
 
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
-        std::fs::write(
-            dir.join("metrics.txt"),
-            format!(
-                "frames={}\nshapes={}\nglyph_runs={}\nlayers={}\nrender_mean_ms={:.3}\nrender_worst_ms={:.3}\n",
-                self.frames, self.shapes, self.glyph_runs, self.layers,
-                self.render_ms_total / self.frames.max(1) as f64,
-                self.render_ms_worst,
-            ),
-        )
+        let mut body = format!(
+            "frames={}\nshapes={}\nglyph_runs={}\nlayers={}\nfiltered_layers={}\nopen_subpath_fills={}\nrender_mean_ms={:.3}\nrender_worst_ms={:.3}\n",
+            self.frames, self.shapes, self.glyph_runs, self.layers,
+            self.filtered_layers, self.open_subpath_fills,
+            self.render_ms_total / self.frames.max(1) as f64,
+            self.render_ms_worst,
+        );
+        for line in &self.probe_lines {
+            body.push_str(&format!("probe={line}\n"));
+        }
+        std::fs::write(dir.join("metrics.txt"), body)
     }
 }
 
@@ -255,6 +296,11 @@ pub fn render_with(
     // This one line is the difference between legible captions and a panic.
     driver.use_system_fonts();
     let mut renderer = NativeRenderer::new();
+    // The U-06 discipline, demonstrated where it lives: a frame that wants
+    // more than 32 blurred layers is a bug in the grouping, not an ambition
+    // — the guard fires named in debug builds, and the receipt carries the
+    // number in every build.
+    renderer.guard_filtered_layers_below(32);
 
     let mut receipt = Receipt {
         frames: experiment.frames,
@@ -302,6 +348,8 @@ pub fn render_with(
         receipt.shapes += report.shapes as u64;
         receipt.glyph_runs += report.glyph_runs as u64;
         receipt.layers += report.layers as u64;
+        receipt.filtered_layers += report.filtered_layers as u64;
+        receipt.open_subpath_fills += report.open_subpath_fills as u64;
 
         let image = image::RgbaImage::from_raw(
             canvas.width as u32,
@@ -310,6 +358,14 @@ pub fn render_with(
         )
             .ok_or("invalid RGBA frame dimensions")?;
         image.save(out_dir.join(format!("frame_{i:03}.png")))?;
+
+        // The pixel probe, on the last frame only — one read of the real
+        // output buffer, so a receipt's pixel facts are measurements.
+        if i + 1 == experiment.frames {
+            if let Some(probe) = experiment.probe {
+                receipt.probe_lines = probe(&image);
+            }
+        }
     }
 
     receipt.save(out_dir)?;

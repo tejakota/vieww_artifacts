@@ -1,18 +1,18 @@
 # film_lab — element experiments for the vieww launch film
 
-Produced by autonomous sessions (2026-09-24/25) running the create → render → VLM-audit → iterate loop against the actual vieww framework. **Twenty element experiments** ("props" for the film), each rendered with per-run receipts — round 3 covered every scene-graph effect, and **round 4 demonstrates the todo-upgrades doors in use: the U-01/U-03/U-04/U-08/U-10/U-11/U-13/U-14/U-20 capabilities, each exercised by a plate built on it, capped by the 1920×1080 hero frame**.
+Produced by autonomous sessions (2026-09-24/25) running the create → render → VLM-audit → iterate loop against the actual vieww framework. **Twenty-five element experiments** ("props" for the film), each rendered with per-run receipts — round 3 covered every scene-graph effect, round 4 demonstrated the todo-upgrades doors in use, and **round 5 closes the two remaining framework notes (U-06's guard, U-20's counter), catches U-22 with the new census, and adds the pixel probe: measured pixel facts in receipts (U-15's blur fixed point, U-18's hairline floor, the chord closure's silence)**.
 
 ## What's in here
 
 | Path | Contents |
 |------|----------|
-| `source/` | Complete Rust source: `film_lib.rs` (palette, RNG, clock, easing, `xywh()` rect helper, render harness + SceneReport receipts), `three_d.rs` (Vec3, perspective camera, mesh builder, painter's sort, gradient ramps), `main.rs` (selector), `exp_*.rs` (one file per experiment). Registered as a workspace crate — drop into `examples/` of the release tree. |
+| `source/` | Complete Rust source: `film_lib.rs` (palette, RNG, clock, easing, `xywh()` rect helper, render harness + SceneReport receipts + the pixel-probe hook), `three_d.rs` (Vec3, perspective camera, mesh builder, painter's sort, gradient ramps), `main.rs` (selector), `exp_*.rs` (one file per experiment). Registered as a workspace crate — drop into `examples/` of the release tree. |
 | `renders/<name>/` | `sheet.png` (4×4 contact sheet, 16 frames) + `metrics.txt` for each experiment |
 | `premium-test/` | Pipeline verification: test-premium-ui through FrameDriver, 56 frames, 55/55 moving, 0 overflows (GIF + first/last frame + metrics) |
-| `vieww_film_lab_lite.zip` | 13 MB — sheets + metrics + source + premium-test |
-| `vieww_film_lab_full_1of2.zip` | 58 MB — the full lab: source, sheets, metrics, premium-test + all frames for experiments 1–10 |
-| `vieww_film_lab_full_2of2.zip` | 45 MB — experiments 11–20 (frames + sheets + metrics, self-sufficient). Unzip both parts into the same directory to reassemble the complete lab |
-| `worklog.md` | Full session log: receipts, VLM audit verdicts, the bisection ladders, the alpha() incident, the Rect-edges incident |
+| `vieww_film_lab_lite.zip` | ~14 MB — sheets + metrics + source + premium-test |
+| `vieww_film_lab_full_1of2.zip` | ~58 MB — the full lab: source, sheets, metrics, premium-test + all frames for experiments 1–13 |
+| `vieww_film_lab_full_2of2.zip` | ~46 MB — experiments 14–25 (frames + sheets + metrics, self-sufficient). Unzip both parts into the same directory to reassemble the complete lab |
+| `worklog.md` | Full session log: receipts, VLM audit verdicts, the bisection ladders, the alpha() incident, the Rect-edges incident, the U-22 census catch |
 
 ## The experiments
 
@@ -37,6 +37,11 @@ Produced by autonomous sessions (2026-09-24/25) running the create → render �
 | `unfold` | **P-01 / U-04**: three planes fan out of a spine through `Transform3::project_rect` (the E-20 F4 beat) — tree glyphs projected pointwise, floor grid in 3D, behind-camera drops counted | 4,545 shapes/frame, 57 layers, 36 ms/frame |
 | `shatter` | **X-08 / U-11/U-14**: 64 Voronoi shards, each a flying window onto the source; the fastest decile through `Filtered::with_blur_angle` (motion blur along the velocity vector) | 15,696 shapes/frame, 796 layers, 48 ms/frame |
 | `wordmark` | **X-03 / U-03**: "vieww" as real glyph outlines (the public door) — scan-reveal skeleton, phase-advancing re-sorted chrome (U-08), Plus glint (U-01), mirrored reflection, the U-10 dial | 1,356 shapes/frame, 50 layers, 30 ms/frame |
+| `ghosts` | **E-24 / U-14+U-06**: motion persistence — a courier's lissajous, 56 ghosts evaluated not remembered, four direction-bucketed `Filtered::with_blur_angle` groups; the receipt prints the filtered-layer count the buckets actually paid | 176 shapes/frame, 96 layers, 97 ms/frame · 9/10 audit |
+| `settle` | **Text-kinetics II**: scramble-to-settle — 14 Hz deterministic churn, per-glyph `spring_out` pops, dash-phase underline, the typed motto; the settle timeline drawn as its own instrument | 32 shapes/frame, 567 glyph runs, 25 ms/frame · 8/10 audit |
+| `dolly` | **The vertigo / U-04**: camera retreats 11→36 while FOV narrows 60°→20° — the subject pinned at **114.5 px, 0.1% drift, measured through the drawing projection**; dunes, pylons, parallax dust, distance-riding fog | 1,890 shapes/frame, 46 ms/frame · 8/10 audit |
+| `currents` | **The river / E-17**: a curl-noise field made visible — 168 streamlines integrated once (RK2 + arc-length tables), then pure phase: each line's dash marching downstream at its own speed, 36 tracers riding the same tables | 459 shapes/frame, 55 ms/frame · 8/10 audit |
+| `probe` | **The instrument panel**: U-15's full-bleed σ24 wash with corners read from the output buffer (**max Δch 1**), the open-subpath petal clock (census 15, chord closure pixel-exact), U-18's hairline ladder with rung ink measured (218→26/255) | 29 shapes/frame, 44 ms/frame · 7.5/10 audit |
 | `hero` | **The budget plate**: the worst frame at true master resolution — grid, shafts, dust, a 3,200-quad tube knot, the liquid mass, the outline wordmark, a genuine backdrop-blur caption | **1920×1080 · 4,703 shapes · 129 layers · 149 ms mean, 171 ms worst** |
 
 ## Scene-graph coverage

@@ -1,0 +1,11 @@
+frames=16
+shapes=465
+glyph_runs=208
+layers=31
+filtered_layers=31
+open_subpath_fills=15
+render_mean_ms=43.602
+render_worst_ms=47.499
+probe=U-15 corners (31,22,53) (32,23,54) (31,22,53) (30,21,52) · max Δch 1
+probe=petal ink: closed (212,205,230) · open (212,205,230) — the census counted the difference
+probe=U-18 rung ink (g): 2.00→218 1.00→122 0.50→74 0.25→26 0.12→26 0.06→26 0.03→26

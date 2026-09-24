@@ -131,3 +131,30 @@ Stage Summary:
 - vieww_base updated in-repo: `Filtered::with_blur_angle` (the U-14 widget door) synced into the framework source.
 - The hero receipt: **1920×1080 · 4,703 shapes · 129 layers · 149 ms mean, 171 ms worst** — "nothing in the film is limited by the renderer" now has this session's own number.
 - New incidents logged (display-pipeline ghost, baseline bake, collapsed Positioned) — the species is stable: hidden constants and layout assumptions, all caller-side, all found by the create-render-audit loop.
+
+---
+
+## Round 5 — the instrument round (session 4, 2026-09-25)
+
+Task: "Let's hard hit another round" — plus push with a fresh PAT.
+
+Work Log:
+- Framework doors closed this round (both were the file's own "one PR away" notes):
+  - **U-06 FIXED** — `NativeRenderer::guard_filtered_layers_below(limit)`: opt-in `debug_assert` at the tail of the core render walk (`render_in_place`, where every entry point pays the same check). The entry's "or" branch, taken. Fires named in debug; compiles out of release; the harness sets it at 32. First placement attempt landed in `render_retained_in_place`'s tail (the should_panic test caught it — the test earned its keep on day one); moved to the core walk.
+  - **U-20's counter FIXED** — `SceneReport::open_subpath_fills` + `Path::open_subpaths()`: the silent-petal census, counted at the `FillPath` verb. The receipts print it for all 25 experiments.
+- **U-22, the census's first catch**: ghosts' debut render came back `open_subpath_fills = 2502` — every `book.circle` in the scene. `Path::arc` built a full-turn disc as move_to + 4 quarter-cubics with no `close()`: pixel-correct all along (zero-length chord), but a census that flags every disc is noise that hides the petal. Fix: `Path::arc` closes full-turn sweeps; partial arcs stay open (stroke callers must not grow closing edges). Ghosts' census went 2502 → 0 with byte-identical shape counts. Same species as the alpha() incident: a new instrument lighting up on a mistake nobody had asked about before there was a counter.
+- Harness upgrades: `Receipt` carries `filtered_layers` + `open_subpath_fills`; `Experiment::probe` — a pixel probe run on the last rendered frame, reading the RGBA buffer directly (measured pixel facts, not geometry claims). Registry migrated to `Experiment::plain`.
+- Five new plates:
+  - exp_ghosts (E-24): a courier flies a closed-form lissajous; 56 ghosts evaluated (not remembered) at P(s − k·dt); the trail drawn as FOUR direction buckets — four `Filtered::with_blur_angle` widgets blurring along the bucket's motion axis (U-14) with Plus ghosts inside (U-01) — the U-06 economy in its own receipt: 4+1 filtered layers for 56 ghosts. Audit 4/10 → trail/bloom/contrast pass → **9/10**.
+  - exp_settle (text-kinetics II): scramble-to-settle — each glyph churns a 14 Hz deterministic pool index, settles on its own jittered clock with a `spring_out` font-size pop; underline strokes in by dash phase once quiet; the motto types on with a blinking caret. Receipt: settle-wave front, cycles burned, settle timeline instrument. 8/10.
+  - exp_dolly (the vertigo): camera retreats 11→36 while FOV narrows 60°→20° in exact compensation — the subject's projected height measured through the same `Camera::project` that draws it: **114.50 → 114.42 px (0.1% drift)** across a 3.3× retreat. Dunes, pylons, dust with free parallax, fog riding camera distance, the Plus glow pinned behind the subject (the vertigo's tell: it never changes size). 1,890 shapes/frame, 46 ms. 8/10.
+  - exp_currents (the river): curl-noise field (divergence-free by construction), 168 streamlines integrated once (RK2, 110 steps, arc-length tables), every frame pure phase — each line's `Dash` marching downstream at its own speed (E-17's grammar, continuous); 36 tracers looked up in the same tables at the same march. One Plus group for the river, one for the tracers. 459 shapes/frame, 55 ms. 8/10.
+  - exp_probe (the instrument panel): three instruments, every number read out of the output buffer by the pixel probe — (a) U-15's full-bleed σ24 wash, four corners **max Δch = 1** (the blur's fixed point, in pixels); (b) the petal clock, 6 petals with one deliberately missing its `close()` — census counts 15/15 live frames, probe reads identical ink at open and closed centroids (the chord closure is pixel-exact: the silence is literal); (c) U-18's hairline ladder 2.00→0.03 px, rung ink measured **218 / 122 / 74 / 26 / 26 / 26 / 26** — sub-quarter-pixel strokes land identically at ~1/64 coverage; the vanishing is measured, not argued (status appended to U-18). Playhead sweeps the ladder's right side (never on probed pixels — the receipts stayed byte-stable through the addition). 7.5/10.
+- VLM audit round 5: ghosts 9/10, settle 8/10, dolly 8/10, currents 8/10, probe 7.5/10 (instrument plates are evidence, not cinema — the floor is honest).
+- Full 25-experiment registry re-render: every experiment's `open_subpath_fills` = 0 except probe's deliberate 15; `filtered_layers` now visible across the whole library (aurora 110/16 frames ≈ 6.9/frame, light 5/frame, hero 36/8 = 4.5/frame — all comfortably under the guard).
+- Tests: vieww-foundation 515 pass (5 new: open-subpath census ×3, disc-close ×2), vieww-paint (native) 235 pass (3 new: census chord-closure, guard quiet, guard fires).
+
+Stage Summary:
+- 25 props live; the two "one PR away" framework notes are closed, and the new instrument caught its own first bug (U-22) on its first plate — the receipts culture, compounding.
+- The probe: measured pixel facts in receipts — U-15's fixed point (Δch 1), U-18's floor (26/255), the chord closure's pixel-exact silence.
+- Round-5 receipts: ghosts 176 shapes/frame 97 ms (bloom is the cost, counted), settle 32 shapes/frame 25 ms, dolly 1,890 shapes/frame 46 ms, currents 459 shapes/frame 55 ms, probe 29 shapes/frame 44 ms. Hero re-measured at 4,703 shapes, 153 ms mean — the budget line holds.

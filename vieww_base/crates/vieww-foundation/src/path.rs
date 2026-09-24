@@ -167,6 +167,49 @@ impl Path {
         self
     }
 
+    /// How many subpaths carry geometry but no `close()` — the ones a `fill`
+    /// will silently close along the straight chord, and the ones
+    /// [`SceneReport::open_subpath_fills`](vieww_paint::native::SceneReport)
+    /// counts at replay.
+    ///
+    /// A subpath counts when it has at least one drawing verb (`line_to` /
+    /// `cubic_to`) after its `move_to` and no `Close` before the next
+    /// `move_to` or the end of the path. A bare `move_to` does not count:
+    /// it has no ink to close, and every stroked path in the wild ends in
+    /// one verb that would otherwise inflate the number into noise.
+    ///
+    /// The classic use is the 99%-correct path — five closed petals and a
+    /// sixth missing its `close()` — which renders as five petals and a
+    /// silence. `open_subpaths() > 0` on a path you are about to *fill* is
+    /// the silence made countable, before the frame ships it.
+    #[must_use]
+    pub fn open_subpaths(&self) -> usize {
+        let mut open = 0usize;
+        // Has the current subpath drawn anything since its `move_to`?
+        let mut inked = false;
+        for verb in self.verbs.iter() {
+            match verb {
+                PathVerb::MoveTo(_) => {
+                    if inked {
+                        open += 1;
+                    }
+                    inked = false;
+                }
+                PathVerb::LineTo(_) | PathVerb::CubicTo(..) => inked = true,
+                // `close()` settles the subpath — inked or not, the next
+                // `move_to` starts from a clean slate. A `close()` on a
+                // subpath with no geometry closed nothing, and counts
+                // nothing.
+                PathVerb::Close => inked = false,
+            }
+        }
+        // The final subpath has no following `move_to` to settle it.
+        if inked {
+            open += 1;
+        }
+        open
+    }
+
     /// A rectangle as a path.
     #[must_use]
     pub fn rect(rect: Rect) -> Self {
@@ -278,6 +321,18 @@ impl Path {
     pub fn arc(center: Offset, radius: f32, start: f32, sweep: f32) -> Self {
         let mut path = Self::new();
         path.append_arc(center, radius, start, sweep, true);
+        // A full turn closes. The last cubic lands exactly on the `move_to`,
+        // so an open subpath there fills identically — the closing chord is
+        // zero-length — and that is the trap: every disc in every scene was
+        // an "open subpath fill" that `SceneReport::open_subpath_fills` (the
+        // silent-petal census) dutifully counted, 2,502 of them on the
+        // census's own first plate. A counter that flags every circle is
+        // noise that hides the petal it exists to find, so the disc closes
+        // and partial sweeps stay open — their callers stroke them, and a
+        // stroke must not grow a closing edge it never asked for.
+        if sweep.abs() >= TURN {
+            path.close();
+        }
         path
     }
 
@@ -963,6 +1018,61 @@ mod tests {
         let bounds = triangle.stroke_outline(2.0).bounds();
         // radius 1 all around the shape's own bounds (2,2)-(12,12).
         assert_eq!(bounds, Rect::new(1.0, 1.0, 13.0, 13.0));
+    }
+
+    #[test]
+    fn open_subpaths_counts_the_silent_petals() {
+        // Five closed petals, a sixth missing its `close()`: the fill
+        // renders five petals and a silence, and the counter is the silence.
+        let mut path = Path::new();
+        for i in 0..6 {
+            let x = i as f32 * 10.0;
+            path.move_to(Offset::new(x + 5.0, 0.0));
+            path.line_to(Offset::new(x + 10.0, 8.0));
+            path.line_to(Offset::new(x, 8.0));
+            if i < 5 {
+                path.close();
+            }
+        }
+        assert_eq!(path.open_subpaths(), 1, "the sixth petal is the open one");
+    }
+
+    #[test]
+    fn a_bare_move_to_is_not_an_open_subpath() {
+        // No ink after the `move_to` means nothing to close; counting it
+        // would inflate the number on every stroked polyline in the wild,
+        // which end in exactly that verb.
+        let mut path = Path::new();
+        path.move_to(Offset::new(0.0, 0.0));
+        path.line_to(Offset::new(10.0, 0.0));
+        path.move_to(Offset::new(20.0, 0.0)); // bare: nothing follows
+        assert_eq!(path.open_subpaths(), 1);
+    }
+
+    #[test]
+    fn a_fully_closed_path_counts_no_open_subpaths() {
+        let closed = Path::rect(Rect::new(0.0, 0.0, 10.0, 10.0));
+        assert_eq!(closed.open_subpaths(), 0);
+    }
+
+    #[test]
+    fn a_full_turn_disc_closes_itself_for_the_census() {
+        // The silent-petal census's first catch: every disc in every scene
+        // was an open subpath (the closing chord is zero-length, so the fill
+        // was always right — the *count* was wrong, drowning the real
+        // open petals in noise). A full turn now closes.
+        let disc = Path::arc(Offset::new(20.0, 20.0), 8.0, 0.0, std::f32::consts::TAU);
+        assert_eq!(disc.open_subpaths(), 0, "a disc is a closed shape");
+    }
+
+    #[test]
+    fn a_partial_arc_stays_open_for_the_stroke_it_was_asked_for() {
+        // Partial sweeps are stroke material: closing one would grow a
+        // closing edge the caller never asked for. The census counts them,
+        // which is also correct — a *filled* partial arc is exactly the
+        // chord-bitten pie slice the census exists to flag.
+        let arc = Path::arc(Offset::new(20.0, 20.0), 8.0, 0.0, std::f32::consts::FRAC_PI_2);
+        assert_eq!(arc.open_subpaths(), 1);
     }
 
     #[test]

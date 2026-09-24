@@ -122,6 +122,13 @@ pub struct SceneReport {
     pub skipped_commands: usize,
     pub filtered_layers: usize,
     pub shapes: usize,
+    /// `fill` commands whose path carried open subpaths — the 99%-correct
+    /// path, counted. A fill closes an open subpath along the straight chord
+    /// through its endpoints, so five closed petals and a sixth missing its
+    /// `close()` renders as five petals and a silence (see `Path`'s docs);
+    /// this is the silence, made a number. Strokes on open subpaths are
+    /// legitimate — the counter only ticks on fills.
+    pub open_subpath_fills: usize,
     pub images: usize,
     pub glyph_runs: usize,
     pub glyphs: usize,
@@ -178,6 +185,9 @@ pub struct NativeRenderer {
     /// render entry point; `apply` reads it, so a glyph run inside a layer
     /// can fall back to gray by one further `stack.is_empty()` test.
     lcd_frame: bool,
+    /// U-06's opt-in ceiling on `filtered_layers` per frame — `None` is no
+    /// guard. See [`Self::guard_filtered_layers_below`].
+    filtered_layer_guard: Option<usize>,
 }
 
 impl fmt::Debug for NativeRenderer {
@@ -227,6 +237,7 @@ impl NativeRenderer {
             pipeline: ColorPipeline::GammaSpace,
             aa: AaMode::Gray,
             lcd_frame: false,
+            filtered_layer_guard: None,
         }
     }
 
@@ -253,6 +264,7 @@ impl NativeRenderer {
             pipeline: ColorPipeline::GammaSpace,
             aa: AaMode::Gray,
             lcd_frame: false,
+            filtered_layer_guard: None,
         }
     }
 
@@ -276,6 +288,7 @@ impl NativeRenderer {
             pipeline,
             aa: AaMode::Gray,
             lcd_frame: false,
+            filtered_layer_guard: None,
         }
     }
 
@@ -299,6 +312,7 @@ impl NativeRenderer {
             pipeline: ColorPipeline::GammaSpace,
             aa: mode,
             lcd_frame: false,
+            filtered_layer_guard: None,
         }
     }
 
@@ -312,6 +326,27 @@ impl NativeRenderer {
     #[must_use]
     pub fn aa_mode(&self) -> AaMode {
         self.aa
+    }
+
+    /// Opt in to a `debug_assert` that fails when a frame pushes more than
+    /// `limit` filtered (blurred) layers — todo-upgrades U-06's "one PR away".
+    ///
+    /// A blurred layer costs one offscreen buffer and one kernel pass *per
+    /// layer*: wrapping each of eleven light shafts in its own blur is 9× the
+    /// cost of blurring the group once, and nothing in the API warns you,
+    /// because the expensive version and the cheap version look identical at
+    /// the call site. [`SceneReport::filtered_layers`] has always carried the
+    /// number; this guard is the number asserting itself, so the 9× is a
+    /// panic in development rather than a frame-rate regression in the field.
+    ///
+    /// Off by default — a guard nobody asked for would fire on legitimate
+    /// frames. Turn it on where you want the discipline: the film lab's
+    /// render harness sets it, and the receipts print the count alongside.
+    /// It compiles to nothing in release (it is a `debug_assert`), so a
+    /// shipped build pays only the `Option` check.
+    pub fn guard_filtered_layers_below(&mut self, limit: usize) -> &mut Self {
+        self.filtered_layer_guard = Some(limit);
+        self
     }
 
     /// Whether `base` as a frame background admits the LCD path this frame —
@@ -465,6 +500,22 @@ impl NativeRenderer {
             return Err(RendererError::Render(format!(
                 "{unclosed} unclosed PushLayer command(s)"
             )));
+        }
+
+        // U-06: the number asserting itself. An opt-in debug guard, so the
+        // eleven-blurred-layers frame is a named panic in development rather
+        // than a silent 9× — the group form is the fix the message points
+        // at. Here, at the tail of the core walk, every entry point that
+        // rasterizes a scene pays the same check.
+        if let Some(limit) = self.filtered_layer_guard {
+            debug_assert!(
+                report.filtered_layers <= limit,
+                "this frame pushed {} filtered layers, above the guarded {} — \
+                 a blurred layer is priced per layer (U-06): group the surfaces \
+                 under one blur instead of one each",
+                report.filtered_layers,
+                limit
+            );
         }
         Ok(report)
     }
@@ -766,6 +817,11 @@ impl NativeRenderer {
                     surface,
                 );
                 report.shapes += 1;
+                // The open-subpath census — counted at the verb that would
+                // have to close them. One iteration over the verbs, no
+                // allocation; a well-formed path reads a zero and pays only
+                // the scan.
+                report.open_subpath_fills += path.open_subpaths();
                 if !clip.shapes().is_empty() {
                     report.clips += 1;
                 }
@@ -1776,6 +1832,88 @@ mod tests {
             got, expected,
             "offscreen target should be grown by the blur's reach exactly once, not twice"
         );
+    }
+
+    /// The open-subpath census: a fill whose path carries one open subpath
+    /// is counted, and still renders (the fill closes it along the chord —
+    /// the *silence* in the count is the symptom, not a rasterization
+    /// failure).
+    #[test]
+    fn an_open_subpath_fill_is_counted_and_chord_closed() {
+        // Three closed petals and one missing its `close()`.
+        let mut path = Path::new();
+        for i in 0..4 {
+            let x = i as f32 * 30.0;
+            path.move_to(vieww_foundation::Offset::new(x + 10.0, 10.0));
+            path.line_to(vieww_foundation::Offset::new(x + 20.0, 50.0));
+            path.line_to(vieww_foundation::Offset::new(x, 50.0));
+            if i < 3 {
+                path.close();
+            }
+        }
+        let mut scene = Scene::new();
+        scene.fill_path(&path, Color::WHITE.into());
+
+        let mut renderer = NativeRenderer::new();
+        let (pixels, report) = renderer
+            .render_to_pixels(&scene, 130, 60, Color::TRANSPARENT)
+            .expect("render");
+
+        assert_eq!(report.shapes, 1, "one fill command");
+        assert_eq!(
+            report.open_subpath_fills, 1,
+            "the fourth petal is the open one, and the count says so"
+        );
+        // The chord through the open petal's endpoints is a horizontal line
+        // at y = 50 — inside it, the fill still landed.
+        assert_eq!(
+            pixels.pixel(100, 30),
+            Color::WHITE,
+            "the open petal renders closed along the chord, not empty"
+        );
+    }
+
+    /// A guard set above the frame's filtered-layer count stays quiet and
+    /// changes nothing — it is a ceiling, not a quota.
+    #[test]
+    fn a_guard_above_the_filtered_layer_count_stays_quiet() {
+        let content = Rect::new(10.0, 10.0, 60.0, 40.0);
+        let mut scene = Scene::new();
+        scene.push_filtered_layer(content, 1.0, BlendMode::Normal, ImageFilter::blur(2.0));
+        scene.fill_path(&Path::rect(content), Color::WHITE.into());
+        scene.pop_layer();
+
+        let mut renderer = NativeRenderer::new();
+        renderer.guard_filtered_layers_below(4);
+        let (_, report) = renderer
+            .render_to_pixels(&scene, 100, 100, Color::TRANSPARENT)
+            .expect("render");
+        assert_eq!(report.filtered_layers, 1);
+    }
+
+    /// The guard's whole point: a frame that pushes more blurred layers than
+    /// the ceiling fails *named*, at the seam where the number is known —
+    /// not as a frame-rate regression nobody can attribute. Debug builds
+    /// only; the assertion is a `debug_assert`.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "filtered layers, above the guarded")]
+    fn the_filtered_layer_guard_fires_above_its_limit() {
+        let one = Rect::new(10.0, 10.0, 30.0, 20.0);
+        let two = Rect::new(60.0, 10.0, 30.0, 20.0);
+        let mut scene = Scene::new();
+        // Two separate blurred layers — the "one per shaft" shape U-06
+        // describes, priced twice.
+        scene.push_filtered_layer(one, 1.0, BlendMode::Normal, ImageFilter::blur(2.0));
+        scene.fill_path(&Path::rect(one), Color::WHITE.into());
+        scene.pop_layer();
+        scene.push_filtered_layer(two, 1.0, BlendMode::Normal, ImageFilter::blur(2.0));
+        scene.fill_path(&Path::rect(two), Color::WHITE.into());
+        scene.pop_layer();
+
+        let mut renderer = NativeRenderer::new();
+        renderer.guard_filtered_layers_below(1);
+        let _ = renderer.render_to_pixels(&scene, 100, 100, Color::TRANSPARENT);
     }
 
     /// Identity colour matrix — `is_noop()` is still `false` (it checks

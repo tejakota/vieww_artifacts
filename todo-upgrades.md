@@ -160,7 +160,7 @@ on it first.
 ---
 
 ## U-06 · Blurred layers are priced per layer, and it is easy to buy eleven
-> **Status → NOTED in `vieww_base`, 2026-09-24.** Not implemented: `SceneReport` is the bench's instrument, and surfacing `filtered_layers` in `PerformanceOverlay` is a framework-side convenience that did not make this pass. The receipts culture that found the 9x stays the real guard; the number is one PR away.
+> **Status → FIXED in `vieww_base`, 2026-09-25.** `NativeRenderer::guard_filtered_layers_below(limit)` — the entry's own "or" branch: an opt-in `debug_assert` at the tail of the core render walk, so a frame that pushes more blurred layers than the ceiling fails *named*, at the seam where the number is known, instead of as a frame-rate regression nobody can attribute. Off by default (a guard nobody asked for would fire on legitimate frames); compiles out of release; the film lab's harness sets it at 32 and the receipts now print the count in every build. Tests: `a_guard_above_the_filtered_layer_count_stays_quiet`, `the_filtered_layer_guard_fires_above_its_limit`.
 
 **Status:** TRAP · **Found by:** X-05 light
 
@@ -454,7 +454,7 @@ the mistake actually visible — in a panic message rather than in a rectangle.
 ---
 
 ## U-18 · Sub-pixel strokes vanish rather than clamping to a hairline
-> **Status → OPEN in `vieww_base`, 2026-09-24.** Deliberately not implemented, with the analysis that stopped it: the entry's suggested ink-preserving clamp (one pixel wide, alpha scaled by the device width) is mathematically equivalent to what the coverage-based rasterizer already produces at 8-bit coverage — a 0.01px stroke at full alpha and a 1px stroke at 1% alpha land within a quantisation step of each other. What the complaint actually asks for is a minimum-visibility *policy* (bloom the ink on the way down), which is the same class of taste decision as U-14's motion blur. Recorded here so the next pass starts from the analysis, not the surprise.
+> **Status → OPEN in `vieww_base`, 2026-09-25 (probe evidence appended).** Deliberately not implemented, with the analysis that stopped it: the entry's suggested ink-preserving clamp (one pixel wide, alpha scaled by the device width) is mathematically equivalent to what the coverage-based rasterizer already produces at 8-bit coverage — a 0.01px stroke at full alpha and a 1px stroke at 1% alpha land within a quantisation step of each other. What the complaint actually asks for is a minimum-visibility *policy* (bloom the ink on the way down), which is the same class of taste decision as U-14's motion blur. **Now measured, not argued:** the probe plate's hairline ladder reads the ink of each rung out of the output buffer — `2.00px→218, 1.00→122, 0.50→74, then 0.25/0.12/0.06/0.03 all land identically at 26/255` (≈1/64 coverage, sub-proportional below half a pixel). The vanishing is real, the floor is real, and the entry's analysis holds: the clamp would change the number without changing the picture. Recorded here so the next pass starts from the measurement, not the surprise.
 
 **Status:** GAP · **Found by:** the breaker
 
@@ -510,7 +510,7 @@ this file is short and specific rather than long and vague.
 ---
 
 ## U-20 · Marching squares' chaining pass is not optional (a correction)
-> **Status → NOTED in `vieww_base`, 2026-09-24.** `SceneReport` is the bench's instrument, so the open-subpath-fill counter belongs there with it. The general property this entry names — `fill` on an open subpath is silent — is now documented in the U-13/U-11 family, so the symptom at least points at the cause in the docs.
+> **Status → FIXED in `vieww_base`, 2026-09-25.** `SceneReport::open_subpath_fills` exists and counts at replay — `Path::open_subpaths()` (foundation) counts the subpaths, the `FillPath` arm of the core walk increments the counter, and the number prints in the film receipts. The census's first working day found two things: a plate's own deliberately-open petal (counted, and probe-verified to render chord-closed — the silence is that you cannot tell from the pixels), and U-22, every disc in every scene, which the counter's noise exposed and the fix retired. Test: `an_open_subpath_fill_is_counted_and_chord_closed`.
 
 **Status:** NOT A DEFECT — a mistake of mine, recorded because the failure is instructive
 
@@ -575,6 +575,35 @@ film is limited by the renderer. The constraint is taste, which is the good kind
 composition family, this session's own numbers: 1920×1080, 4,703 shapes,
 129 layers, 149 ms mean / 171 ms worst. The budget holds.*
 
+
+---
+
+## U-22 · Every disc was an open subpath — the census's first catch
+
+> **Status → FIXED in `vieww_base`, 2026-09-25.** `Path::arc` closes a
+> full-turn sweep (partial sweeps stay open — their callers stroke them, and
+> a stroke must not grow a closing edge it never asked for). Ghosts' census
+> went 2,502 → 0 with byte-identical shape counts. Tests:
+> `a_full_turn_disc_closes_itself_for_the_census`,
+> `a_partial_arc_stays_open_for_the_stroke_it_was_asked_for`.
+
+**Status:** FOUND BY THE NEW INSTRUMENT · **Found by:** `SceneReport::open_subpath_fills`, first working day
+
+The open-subpath census (U-20) ran on its own debut plate and came back
+`open_subpath_fills = 2,502` for sixteen frames of a comet trail that
+contains no petals, no marching-squares segments, nothing anyone would call
+an open subpath. Every one of them was a `book.circle`: `Path::arc` builds a
+full-turn disc as `move_to` + four quarter-cubics and **no `close()`**. The
+last cubic lands exactly on the `move_to`, so the closing chord is
+zero-length and the fill has always been pixel-correct — the *count* was
+wrong, and a census that flags every disc in every scene is noise that hides
+the petal it exists to find.
+
+The incident is the same shape as the alpha-units incident and the
+2,550-vs-2,551 incident before it: an instrument built to catch one class of
+mistake lights up on a different one first. The instrument was right every
+time — the discs *were* open subpaths; nobody had ever asked the question
+before there was a counter to answer it.
 
 *This file is appended to as the bench finds things. Entries are never deleted —
 a downgraded finding gets its status changed and a note, so the reasoning
