@@ -37,25 +37,48 @@
 //!   the session clock never rebuilding through the morph
 //! - `endcard` — E-15: the end card + the sting — wordmark, install line,
 //!   manifest line, one accent firing, the hold
+//! - `wordmark` — X-03: the mark as real glyph outlines (U-03 door) —
+//!   stroke-on scan reveal, phase-advancing chrome (U-08 re-sort), a
+//!   Plus-blended glint (U-01), a mirrored reflection; U-10 dial in the
+//!   receipt
+//! - `shatter` — X-08: the card breaks — 64 Voronoi shards, each a window
+//!   onto the artwork (U-11 transform-outside/clip-inside), the fastest
+//!   decile through `Filtered::with_blur_angle` (U-14), Plus dust
+//! - `beams` — X-05: eleven volumetric shafts and 6,000 dust motes through
+//!   one Plus-blended blurred group (U-01 economy, U-06 pricing)
+//! - `liquid` — U-13's marching squares: six metaballs and a falling drop
+//!   contoured, chained into closed loops (U-20), glass-filled
+//! - `unfold` — P-01: three planes fan out of a spine through
+//!   `Transform3::project_rect` (U-04) — the E-20 F4 beat, tree glyphs
+//!   projected pointwise, behind-camera drops counted
+//! - `hero` — the worst frame at 1920×1080: grid, shafts, dust, a 3,200-
+//!   quad knot, the liquid mass, the outline wordmark, a backdrop-blurred
+//!   caption — the budget receipt at master resolution
 
 mod exp_aurora;
+mod exp_beams;
 mod exp_circuit;
 mod exp_damage;
 mod exp_endcard;
 mod exp_globe;
+mod exp_hero;
 mod exp_kinetic;
+mod exp_liquid;
 mod exp_light;
 mod exp_mesh;
 mod exp_morph;
 mod exp_ocean;
 mod exp_rackfocus;
+mod exp_unfold;
 mod exp_receipts;
 mod exp_scrub;
+mod exp_shatter;
 mod exp_spring;
+mod exp_wordmark;
 mod film_lib;
 mod three_d;
 
-use film_lib::{contact_sheet, out_root, render, Experiment};
+use film_lib::{contact_sheet, out_root, render_with, Experiment};
 
 fn registry() -> Vec<Experiment> {
     vec![
@@ -143,6 +166,42 @@ fn registry() -> Vec<Experiment> {
             frames: 16,
             build: exp_endcard::frame,
         },
+        Experiment {
+            name: "beams",
+            seconds: exp_beams::SECONDS,
+            frames: 16,
+            build: exp_beams::frame,
+        },
+        Experiment {
+            name: "liquid",
+            seconds: exp_liquid::SECONDS,
+            frames: 16,
+            build: exp_liquid::frame,
+        },
+        Experiment {
+            name: "unfold",
+            seconds: exp_unfold::SECONDS,
+            frames: 16,
+            build: exp_unfold::frame,
+        },
+        Experiment {
+            name: "shatter",
+            seconds: exp_shatter::SECONDS,
+            frames: 16,
+            build: exp_shatter::frame,
+        },
+        Experiment {
+            name: "wordmark",
+            seconds: exp_wordmark::SECONDS,
+            frames: 16,
+            build: exp_wordmark::frame,
+        },
+        Experiment {
+            name: "hero",
+            seconds: exp_hero::SECONDS,
+            frames: 8,
+            build: exp_hero::frame,
+        },
     ]
 }
 
@@ -165,10 +224,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for experiment in &experiments {
         let dir = root.join(experiment.name);
         println!("\n▶ {}", experiment.name);
-        match render(experiment, &dir) {
+        // The hero frame renders at true master resolution — the budget
+        // receipt is the point; everything else stays at lab standard.
+        let canvas = if experiment.name == "hero" {
+            vieww_foundation::Size::new(1920.0, 1080.0)
+        } else {
+            film_lib::CANVAS
+        };
+        match render_with(experiment, &dir, canvas) {
             Ok(receipt) => {
                 receipt.print(experiment.name);
-                match contact_sheet(&dir, "4x4") {
+                let tile = if experiment.name == "hero" { "4x2" } else { "4x4" };
+                match contact_sheet(&dir, tile) {
                     Some(sheet) => println!("    sheet: {}", sheet.display()),
                     None => println!("    sheet: FAILED (ffmpeg)"),
                 }

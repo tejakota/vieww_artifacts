@@ -532,6 +532,30 @@ open. One integer, and it turns a blank frame into a number that says why.
 
 ---
 
+---
+
+## U-21 · `Filtered` never exposed the blur angle the filter already carried
+**Status:** FIXED (round 4, in `vieww_base`) · **Found by:** the shatter plate, X-08
+
+`ImageFilter` grew `blur_angle` with the directional kernel (U-14), and the
+rasterizer honours it — `reference.rs` passes it to `effects::blur`. The
+widget tree could not reach it: `Filtered::with_blur(sigma)` set `blur_sigma`
+and nothing set the angle. The capability existed end-to-end except for the
+last inch, which is the most vieww-shaped way for a feature to be missing.
+
+**The fix, six lines.** `Filtered::with_blur_angle(angle)` delegating to
+`ImageFilter::with_blur_angle`, with the doc the seam deserved. The shatter
+plate's fastest decile rides it: sigma from the shard's measured per-frame
+speed, angle from `atan2(v)`, edge-clamped (U-15) so it does not darken at
+its own buffer bounds.
+
+**The receipt.** `exp_shatter` prints the blurred-decile count, the mean
+speed, and the sigma range actually used this frame; the speed histogram
+draws the decile in violet. A capability is not done until a plate has
+exercised it in a render and the audit has looked at the result.
+
+---
+
 ## Budget, measured — the hero frame
 
 The worst frame the film could plausibly ask for, at true master resolution:
@@ -546,6 +570,10 @@ caption panel through a genuine backdrop blur.
 
 **A 10,800-frame master of frames like this one is 41 minutes.** Nothing in the
 film is limited by the renderer. The constraint is taste, which is the good kind.
+
+*Round 4's hero plate rebuilt this frame and measured it again — same
+composition family, this session's own numbers: 1920×1080, 4,703 shapes,
+129 layers, 149 ms mean / 171 ms worst. The budget holds.*
 
 
 *This file is appended to as the bench finds things. Entries are never deleted —

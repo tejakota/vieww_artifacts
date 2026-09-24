@@ -238,9 +238,19 @@ impl Receipt {
 /// Render one experiment end-to-end: frames → PNGs → metrics.
 /// Returns the receipt; the caller owns contact-sheet assembly (ffmpeg).
 pub fn render(experiment: &Experiment, out_dir: &Path) -> Result<Receipt, Box<dyn std::error::Error>> {
+    render_with(experiment, out_dir, CANVAS)
+}
+
+/// Render at a chosen canvas size — the hero frame's 1920×1080 path; every
+/// other experiment goes through [`render`] at the lab standard.
+pub fn render_with(
+    experiment: &Experiment,
+    out_dir: &Path,
+    canvas: Size,
+) -> Result<Receipt, Box<dyn std::error::Error>> {
     std::fs::create_dir_all(out_dir)?;
 
-    let mut driver = FrameDriver::new(CANVAS);
+    let mut driver = FrameDriver::new(canvas);
     // The film renders text; the default font store is embedded-only subsets.
     // This one line is the difference between legible captions and a panic.
     driver.use_system_fonts();
@@ -280,7 +290,12 @@ pub fn render(experiment: &Experiment, out_dir: &Path) -> Result<Receipt, Box<dy
         }
 
         let start = std::time::Instant::now();
-        let (pixels, report) = renderer.render_to_pixels(driver.scene(), CANVAS_W as u32, CANVAS_H as u32, BG)?;
+        let (pixels, report) = renderer.render_to_pixels(
+            driver.scene(),
+            canvas.width as u32,
+            canvas.height as u32,
+            BG,
+        )?;
         let elapsed = start.elapsed().as_secs_f64() * 1000.0;
         receipt.render_ms_total += elapsed;
         receipt.render_ms_worst = receipt.render_ms_worst.max(elapsed);
@@ -288,7 +303,11 @@ pub fn render(experiment: &Experiment, out_dir: &Path) -> Result<Receipt, Box<dy
         receipt.glyph_runs += report.glyph_runs as u64;
         receipt.layers += report.layers as u64;
 
-        let image = image::RgbaImage::from_raw(CANVAS_W as u32, CANVAS_H as u32, pixels.data().to_vec())
+        let image = image::RgbaImage::from_raw(
+            canvas.width as u32,
+            canvas.height as u32,
+            pixels.data().to_vec(),
+        )
             .ok_or("invalid RGBA frame dimensions")?;
         image.save(out_dir.join(format!("frame_{i:03}.png")))?;
     }

@@ -148,6 +148,21 @@ impl Filtered {
         self
     }
 
+    /// Point an existing blur along `angle` — a **motion** blur (todo-upgrades
+    /// U-14, the widget-side door).
+    ///
+    /// `angle` is radians, `0.0` horizontal, clockwise in Y-down screen
+    /// space; pass the direction of travel. `with_blur(sigma)` says how far
+    /// the smear reaches along that ray — roughly `3σ`. The rasterizer has
+    /// honoured the angle since the filter struct grew `blur_angle`; this
+    /// method is the one line the widget tree needed to reach it, so a shard
+    /// travelling three hundred pixels a frame does not have to render crisp.
+    #[must_use]
+    pub const fn with_blur_angle(mut self, angle: f32) -> Self {
+        self.filter = self.filter.with_blur_angle(angle);
+        self
+    }
+
     /// Switch this filter from filtering the group's own content to
     /// filtering the real backdrop behind it — CSS's `backdrop-filter`. See
     /// this type's own "`filter` versus `backdrop-filter`" doc section.

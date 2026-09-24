@@ -2,5 +2,5 @@ frames=16
 shapes=9688
 glyph_runs=0
 layers=21
-render_mean_ms=40.439
-render_worst_ms=64.635
+render_mean_ms=41.779
+render_worst_ms=69.160

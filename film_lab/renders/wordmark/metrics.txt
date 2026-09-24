@@ -1,0 +1,6 @@
+frames=16
+shapes=1356
+glyph_runs=96
+layers=50
+render_mean_ms=30.368
+render_worst_ms=35.591
