@@ -17,6 +17,7 @@ vieww-paint = { workspace = true, features = ["native"] }
 vieww-render.workspace = true
 vieww-widget.workspace = true
 vieww-effects.workspace = true
+vieww-text.workspace = true
 
 [lints]
 workspace = true

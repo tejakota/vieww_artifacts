@@ -1,0 +1,13 @@
+frames=20
+shapes=11087
+glyph_runs=380
+layers=118
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=2.249
+build_worst_ms=4.733
+render_mean_ms=23.698
+render_worst_ms=26.883
+probe=probe: 6 bright bands read from the raster's screen strip
+probe=probe: band spacing 50.4 px (mean of 5) · λL/d = 46.4 px
+gif=anim.gif,640x360,12fps,445663

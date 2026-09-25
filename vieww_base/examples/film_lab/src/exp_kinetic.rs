@@ -32,7 +32,7 @@ use vieww_widget::prelude::*;
 use vieww_widget::{Opacity, Painting, PaintWith};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, spring_out, tint, BG_DEEP, CANVAS, FAINT, INK, MUTED, Rng, VIOLET,
+    alpha, clamp01, mix, spring_out, tint, xywh, BG_DEEP, CANVAS, FAINT, INK, MUTED, Rng, VIOLET,
     VIOLET_SOFT,
 };
 
@@ -278,7 +278,7 @@ fn band_counter(t: f32) -> WidgetNode {
                             let x = i as f32 / 23.0 * 964.0;
                             let tall = i % 6 == 0;
                             book.rect(
-                                Rect::new(x, if tall { 0.0 } else { 2.5 }, 2.0, if tall { 10.0 } else { 5.0 }),
+                                xywh(x, if tall { 0.0 } else { 2.5 }, 2.0, if tall { 10.0 } else { 5.0 }),
                                 alpha(FAINT, 0.4),
                             );
                         }
@@ -581,7 +581,7 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // Band rules — the board's grid, barely there.
             for y in [204.0, 342.0, 486.0] {
-                book.rect(Rect::new(X, y, w - 2.0 * X, 1.0), alpha(Color::WHITE, 0.05));
+                book.rect(xywh(X, y, w - 2.0 * X, 1.0), alpha(Color::WHITE, 0.05));
             }
 
             // The vignette.

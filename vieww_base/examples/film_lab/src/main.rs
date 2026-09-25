@@ -8,7 +8,11 @@
 //! Each experiment renders a deterministic frame sequence through vieww's
 //! own rasterizer (no display, no GPU), writes PNGs + a metrics receipt
 //! (shapes counted by the renderer — no number typed by a human), and
-//! assembles a 4x4 @ 10fps contact sheet with ffmpeg for visual audit.
+//! assembles the full receipt set with ffmpeg: a 4x4 @ 10fps contact sheet
+//! for visual audit plus a palette-optimised `anim.gif` loop — the motion
+//! receipt (GIF over mp4: loops inline in browsers/GitHub with no codec,
+//! and measurably the smaller carrier at the lab's flat-colour content).
+//! Every render therefore ships anim.gif + sheet.png + metrics.txt.
 //!
 //! The experiments:
 //! - `light`   — the calibration: "Light." recreated from the author's sheet
@@ -24,70 +28,279 @@
 //!   widget props (Chip/LinearProgress/LineChart/Badge) + CI timeline E-19
 //! - `aurora`  — light as material: sweep-cone, Screen-blended ribbons,
 //!   E-21 crafted degradation (FilterChain ramp + grain + dust)
+//! - `spring`  — E-03/E-04: the wordmark drops on an underdamped spring,
+//!   the underline overshoots on a stiffer one — the springs drawn as
+//!   their own receipt
+//! - `scrub`   — E-08/E-09: ten writes, one rebuild — scheduler coalescing
+//!   made visible; build_count() badge, writes-vs-rebuilds ratio live
+//! - `damage`  — E-10: one region lights — a mock studio surface, four
+//!   edits, the PerformanceOverlay strip with damage area measured
+//! - `rackfocus` — E-16: the blur ramp between buffer and preview — the
+//!   focus pull as cinematography, focal bar printed live
+//! - `morph`   — E-06: say → rust, state held — the language switch with
+//!   the session clock never rebuilding through the morph
+//! - `endcard` — E-15: the end card + the sting — wordmark, install line,
+//!   manifest line, one accent firing, the hold
+//! - `wordmark` — X-03: the mark as real glyph outlines (U-03 door) —
+//!   stroke-on scan reveal, phase-advancing chrome (U-08 re-sort), a
+//!   Plus-blended glint (U-01), a mirrored reflection; U-10 dial in the
+//!   receipt
+//! - `shatter` — X-08: the card breaks — 64 Voronoi shards, each a window
+//!   onto the artwork (U-11 transform-outside/clip-inside), the fastest
+//!   decile through `Filtered::with_blur_angle` (U-14), Plus dust
+//! - `beams` — X-05: eleven volumetric shafts and 6,000 dust motes through
+//!   one Plus-blended blurred group (U-01 economy, U-06 pricing)
+//! - `liquid` — U-13's marching squares: six metaballs and a falling drop
+//!   contoured, chained into closed loops (U-20), glass-filled
+//! - `unfold` — P-01: three planes fan out of a spine through
+//!   `Transform3::project_rect` (U-04) — the E-20 F4 beat, tree glyphs
+//!   projected pointwise, behind-camera drops counted
+//! - `hero` — the worst frame at 1920×1080: grid, shafts, dust, a 3,200-
+//!   quad knot, the liquid mass, the outline wordmark, a backdrop-blurred
+//!   caption — the budget receipt at master resolution
+//!
+//! Round 6 — the berserk spectrum, one plate per tolerance axis:
+//! - `avatar` — a single line becomes a 3D bust (lathe + orbiting light)
+//! - `fadeaway` — the text release: chroma split → blur → shard dust
+//! - `sea` — a drop becomes an entire ocean (one surface, scale reveal)
+//! - `tesseract` — a hypercube rotating through the 4th direction
+//! - `blackhole` — Doppler-boosted disk, lensed stars, photon ring
+//! - `galaxy` — 60,000 stars: the shape-count record (60,527/frame)
+//! - `forest` — the recursion: seed → canopy, apical + phototropic
+//! - `city` — ten thousand hash-addressed windows, lit fraction measured
+//! - `typo` — the sentence becomes weather; condenses into one drop
+//! - `mandel` — the count ceiling as art: 57,602 rects per frame
+//! - `hero4k` — the hero tree rasterised at 3840×2160
+//!
+//! Round 7 — the deep axes, the dimensions rounds 3–6 never measured:
+//! - `han` — the script axis: CJK through the shaper (一画开天)
+//! - `megapath` — the single-path axis: one ~35,000-segment line
+//! - `longplay` — the endurance axis: 256 frames, RSS time series
+//! - `swarm` — the simulation axis: 3,000 boids, sim-vs-raster split
+//! - `blendmatrix` — the blend-mode axis: all 15 cinematic modes
+//! - `filterstack` — the compositor-depth axis: nested filtered groups
+//! - `shadowplay` — the blur economy at the U-06 guard (30 of 32)
+//! - `prism` — the gradient axis: 256-stop animated re-sorted ramps
+//!
+//! Round 9 — the law machines, the laws of nature run as machines:
+//! - `quantum` — the probability axis: the double-slit, Born rule, watched
+//! - `smoke` — the fluid axis: Navier–Stokes, the vortex street, Strouhal
+//! - `threebody` — the chaos axis: the figure-eight, run twice, δ = 1e-5
+//! - `turing` — the morphogenesis axis: Gray–Scott, the regime tour
+//! - `galton` — the central-limit axis: the bean machine, σ measured
+//! - `caustics` — the refraction axis: Snell's rays, the envelope measured
+//! - `ising` — the criticality axis: the magnet annealed through T_c
+//! - `crystal` — the aperiodicity axis: five waves, C10 measured
+//! - `neural` — the learning axis: two spirals, the replayed mind
+//! - `truss` — the statics axis: method of joints, force as colour
+//! - `cellauto` — the computation axis: Rules 30/110 and Life
+//! - `collider` — the particle axis: the event, replayed, r = pT/qB
+//!
+//! Round 8 — the wonder engines, the machines the lab imagined:
+//! - `eclipse` — the narrative axis: totality, as a documented light sequence
+//! - `cymatics` — the frequency axis: 7,000 grains descending to Chladni nodes
+//! - `harmony` — the phase axis: 32 pendulums, integer cycle ladder
+//! - `fourier` — the synthesis axis: the avatar line as a choir of circles
+//! - `startrail` — the exposure axis: time folded into arcs, Plus-accumulated
+//! - `bubble` — the optics axis: thin-film interference colours from physics
+//! - `orrery` — the mechanism axis: gear ratios that ARE the astronomy
+//! - `storm` — the weather axis: supercell + recursive lightning trees
+//! - `kaleido` — the symmetry axis: D12, the mirror measured from the raster
+//! - `ink` — the diffusion axis: one drop becomes a nebula, then dilutes
 
 mod exp_aurora;
+mod exp_beams;
 mod exp_circuit;
+mod exp_damage;
+mod exp_endcard;
 mod exp_globe;
+mod exp_hero;
 mod exp_kinetic;
+mod exp_liquid;
 mod exp_light;
 mod exp_mesh;
+mod exp_morph;
 mod exp_ocean;
+mod exp_rackfocus;
+mod exp_unfold;
 mod exp_receipts;
+mod exp_scrub;
+mod exp_shatter;
+mod exp_spring;
+mod exp_wordmark;
+mod exp_ghosts;
+mod exp_settle;
+mod exp_dolly;
+mod exp_currents;
+mod exp_probe;
+mod exp_avatar;
+mod exp_fadeaway;
+mod exp_sea;
+mod exp_tesseract;
+mod exp_blackhole;
+mod exp_galaxy;
+mod exp_forest;
+mod exp_city;
+mod exp_typo;
+mod exp_mandel;
+mod exp_hero4k;
+mod exp_han;
+mod exp_megapath;
+mod exp_longplay;
+mod exp_swarm;
+mod exp_blendmatrix;
+mod exp_filterstack;
+mod exp_shadowplay;
+mod exp_prism;
+mod exp_eclipse;
+mod exp_cymatics;
+mod exp_harmony;
+mod exp_fourier;
+mod exp_startrail;
+mod exp_bubble;
+mod exp_orrery;
+mod exp_storm;
+mod exp_kaleido;
+mod exp_ink;
+// ── Round 9: the law machines ──
+mod exp_quantum;
+mod exp_smoke;
+mod exp_threebody;
+mod exp_turing;
+mod exp_galton;
+mod exp_caustics;
+mod exp_ising;
+mod exp_crystal;
+mod exp_neural;
+mod exp_truss;
+mod exp_cellauto;
+mod exp_collider;
 mod film_lib;
 mod three_d;
 
-use film_lib::{contact_sheet, out_root, render, Experiment};
+use film_lib::{anim_gif_strided, contact_sheet_strided, out_root, render_with, Experiment};
 
 fn registry() -> Vec<Experiment> {
     vec![
+        Experiment::plain("light", exp_light::SECONDS, 16, exp_light::frame),
+        Experiment::plain("mesh", exp_mesh::SECONDS, 16, exp_mesh::frame),
+        Experiment::plain("ocean", exp_ocean::SECONDS, 16, exp_ocean::frame),
+        Experiment::plain("kinetic", exp_kinetic::SECONDS, 16, exp_kinetic::frame),
+        Experiment::plain("circuit", exp_circuit::SECONDS, 16, exp_circuit::frame),
+        Experiment::plain("globe", exp_globe::SECONDS, 16, exp_globe::frame),
+        Experiment::plain("receipts", exp_receipts::SECONDS, 16, exp_receipts::frame),
+        Experiment::plain("aurora", exp_aurora::SECONDS, 16, exp_aurora::frame),
+        Experiment::plain("spring", exp_spring::SECONDS, 16, exp_spring::frame),
+        Experiment::plain("scrub", exp_scrub::SECONDS, 16, exp_scrub::frame),
+        Experiment::plain("damage", exp_damage::SECONDS, 16, exp_damage::frame),
+        Experiment::plain("rackfocus", exp_rackfocus::SECONDS, 16, exp_rackfocus::frame),
+        Experiment::plain("morph", exp_morph::SECONDS, 16, exp_morph::frame),
+        Experiment::plain("endcard", exp_endcard::SECONDS, 16, exp_endcard::frame),
+        Experiment::plain("beams", exp_beams::SECONDS, 16, exp_beams::frame),
+        Experiment::plain("liquid", exp_liquid::SECONDS, 16, exp_liquid::frame),
+        Experiment::plain("unfold", exp_unfold::SECONDS, 16, exp_unfold::frame),
+        Experiment::plain("shatter", exp_shatter::SECONDS, 16, exp_shatter::frame),
+        Experiment::plain("wordmark", exp_wordmark::SECONDS, 16, exp_wordmark::frame),
+        Experiment::plain("ghosts", exp_ghosts::SECONDS, 16, exp_ghosts::frame),
+        Experiment::plain("settle", exp_settle::SECONDS, 16, exp_settle::frame),
+        Experiment::plain("dolly", exp_dolly::SECONDS, 16, exp_dolly::frame),
+        Experiment::plain("currents", exp_currents::SECONDS, 16, exp_currents::frame),
         Experiment {
-            name: "light",
-            seconds: exp_light::SECONDS,
+            name: "probe",
+            seconds: exp_probe::SECONDS,
             frames: 16,
-            build: exp_light::frame,
+            build: exp_probe::frame,
+            probe: Some(exp_probe::probe),
+            frame_hook: None,
         },
+        Experiment::plain("hero", exp_hero::SECONDS, 8, exp_hero::frame),
+        // ── Round 6: the berserk spectrum — ten new plates + the 4K hero ──
+        Experiment::plain("avatar", exp_avatar::SECONDS, 16, exp_avatar::frame),
+        Experiment::plain("fadeaway", exp_fadeaway::SECONDS, 32, exp_fadeaway::frame),
+        Experiment::plain("sea", exp_sea::SECONDS, 16, exp_sea::frame),
+        Experiment::plain("tesseract", exp_tesseract::SECONDS, 16, exp_tesseract::frame),
+        Experiment::plain("blackhole", exp_blackhole::SECONDS, 16, exp_blackhole::frame),
+        Experiment::plain("galaxy", exp_galaxy::SECONDS, 16, exp_galaxy::frame),
+        Experiment::plain("forest", exp_forest::SECONDS, 16, exp_forest::frame),
+        Experiment::plain("city", exp_city::SECONDS, 16, exp_city::frame),
+        Experiment::plain("typo", exp_typo::SECONDS, 24, exp_typo::frame),
+        Experiment::plain("mandel", exp_mandel::SECONDS, 16, exp_mandel::frame),
+        Experiment::plain("hero4k", exp_hero4k::SECONDS, 2, exp_hero4k::frame),
+        // ── Round 7: the deep axes — eight new plates, one per dimension ──
         Experiment {
-            name: "mesh",
-            seconds: exp_mesh::SECONDS,
-            frames: 16,
-            build: exp_mesh::frame,
+            name: "han",
+            seconds: exp_han::SECONDS,
+            frames: 24,
+            build: exp_han::frame,
+            probe: Some(exp_han::probe),
+            frame_hook: None,
         },
+        Experiment::plain("megapath", exp_megapath::SECONDS, 16, exp_megapath::frame),
         Experiment {
-            name: "ocean",
-            seconds: exp_ocean::SECONDS,
-            frames: 16,
-            build: exp_ocean::frame,
+            name: "longplay",
+            seconds: exp_longplay::SECONDS,
+            frames: 256,
+            build: exp_longplay::frame,
+            probe: Some(exp_longplay::probe),
+            frame_hook: Some(exp_longplay::frame_hook),
         },
+        Experiment::plain("swarm", exp_swarm::SECONDS, 16, exp_swarm::frame),
+        Experiment::plain("blendmatrix", exp_blendmatrix::SECONDS, 16, exp_blendmatrix::frame),
+        Experiment::plain("filterstack", exp_filterstack::SECONDS, 16, exp_filterstack::frame),
+        Experiment::plain("shadowplay", exp_shadowplay::SECONDS, 16, exp_shadowplay::frame),
+        Experiment::plain("prism", exp_prism::SECONDS, 16, exp_prism::frame),
+        // ── Round 8: the wonder engines — ten new plates, one per axis ──
+        Experiment::plain("eclipse", exp_eclipse::SECONDS, 24, exp_eclipse::frame),
+        Experiment::plain("cymatics", exp_cymatics::SECONDS, 24, exp_cymatics::frame),
+        Experiment::plain("harmony", exp_harmony::SECONDS, 32, exp_harmony::frame),
+        Experiment::plain("fourier", exp_fourier::SECONDS, 32, exp_fourier::frame),
         Experiment {
-            name: "kinetic",
-            seconds: exp_kinetic::SECONDS,
+            name: "startrail",
+            seconds: exp_startrail::SECONDS,
             frames: 16,
-            build: exp_kinetic::frame,
+            build: exp_startrail::frame,
+            probe: Some(exp_startrail::probe),
+            frame_hook: None,
         },
+        Experiment::plain("bubble", exp_bubble::SECONDS, 16, exp_bubble::frame),
+        Experiment::plain("orrery", exp_orrery::SECONDS, 16, exp_orrery::frame),
+        Experiment::plain("storm", exp_storm::SECONDS, 16, exp_storm::frame),
         Experiment {
-            name: "circuit",
-            seconds: exp_circuit::SECONDS,
+            name: "kaleido",
+            seconds: exp_kaleido::SECONDS,
             frames: 16,
-            build: exp_circuit::frame,
+            build: exp_kaleido::frame,
+            probe: Some(exp_kaleido::probe),
+            frame_hook: None,
         },
+        Experiment::plain("ink", exp_ink::SECONDS, 24, exp_ink::frame),
+        // ── Round 9: the law machines — twelve new plates, one per law ──
         Experiment {
-            name: "globe",
-            seconds: exp_globe::SECONDS,
-            frames: 16,
-            build: exp_globe::frame,
+            name: "quantum",
+            seconds: exp_quantum::SECONDS,
+            frames: 20,
+            build: exp_quantum::frame,
+            probe: Some(exp_quantum::probe),
+            frame_hook: None,
         },
+        Experiment::plain("smoke", exp_smoke::SECONDS, 20, exp_smoke::frame),
+        Experiment::plain("threebody", exp_threebody::SECONDS, 24, exp_threebody::frame),
+        Experiment::plain("turing", exp_turing::SECONDS, 20, exp_turing::frame),
+        Experiment::plain("galton", exp_galton::SECONDS, 20, exp_galton::frame),
+        Experiment::plain("caustics", exp_caustics::SECONDS, 20, exp_caustics::frame),
+        Experiment::plain("ising", exp_ising::SECONDS, 20, exp_ising::frame),
         Experiment {
-            name: "receipts",
-            seconds: exp_receipts::SECONDS,
+            name: "crystal",
+            seconds: exp_crystal::SECONDS,
             frames: 16,
-            build: exp_receipts::frame,
+            build: exp_crystal::frame,
+            probe: Some(exp_crystal::probe),
+            frame_hook: None,
         },
-        Experiment {
-            name: "aurora",
-            seconds: exp_aurora::SECONDS,
-            frames: 16,
-            build: exp_aurora::frame,
-        },
+        Experiment::plain("neural", exp_neural::SECONDS, 20, exp_neural::frame),
+        Experiment::plain("truss", exp_truss::SECONDS, 20, exp_truss::frame),
+        Experiment::plain("cellauto", exp_cellauto::SECONDS, 20, exp_cellauto::frame),
+        Experiment::plain("collider", exp_collider::SECONDS, 20, exp_collider::frame),
     ]
 }
 
@@ -110,12 +323,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for experiment in &experiments {
         let dir = root.join(experiment.name);
         println!("\n▶ {}", experiment.name);
-        match render(experiment, &dir) {
+        // The hero frame renders at true master resolution — the budget
+        // receipt is the point; everything else stays at lab standard.
+        let canvas = if experiment.name == "hero" {
+            vieww_foundation::Size::new(1920.0, 1080.0)
+        } else if experiment.name == "hero4k" {
+            vieww_foundation::Size::new(3840.0, 2160.0)
+        } else {
+            film_lib::CANVAS
+        };
+        match render_with(experiment, &dir, canvas) {
             Ok(receipt) => {
                 receipt.print(experiment.name);
-                match contact_sheet(&dir, "4x4") {
+                let tile = match experiment.name.as_ref() {
+                    "hero" | "hero4k" => "4x2",
+                    "fadeaway" => "4x8",
+                    "typo" | "han" => "4x6",
+                    _ => "4x4",
+                };
+                // The endurance plate samples its sheet (256 frames,
+                // every 16th — the sheet stays the 16-cell audit surface;
+                // the GIF below decimates less, stride 4).
+                let sheet_stride = if experiment.name == "longplay" { 16 } else { 1 };
+                match contact_sheet_strided(&dir, tile, sheet_stride) {
                     Some(sheet) => println!("    sheet: {}", sheet.display()),
                     None => println!("    sheet: FAILED (ffmpeg)"),
+                }
+                // The third artifact: the motion receipt. Cadence is
+                // per-plate (a 2-frame 4K receipt is a slow A/B flip,
+                // not a blink) — the recipe itself is one house line.
+                let (gif_fps, gif_stride) = match experiment.name.as_ref() {
+                    "hero" => (6, 1),
+                    "hero4k" => (2, 1),
+                    "longplay" => (12, 4),
+                    _ => (12, 1),
+                };
+                match anim_gif_strided(&dir, gif_fps, 640, gif_stride) {
+                    Some(g) => println!("    gif: {}", g.display()),
+                    None => println!("    gif: FAILED (ffmpeg)"),
                 }
             }
             Err(e) => {
