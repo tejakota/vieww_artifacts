@@ -196,10 +196,16 @@ pub struct Experiment {
     /// geometry it was told. Returns printed lines; every number in them
     /// was read out of the rasterizer's own output.
     pub probe: Option<fn(&image::RgbaImage) -> Vec<String>>,
+    /// Optional per-frame hook — the endurance instrument (round 7): called
+    /// after every frame with the receipt, the frame index, and the measured
+    /// build/raster split, so a plate can record a *time series* (RSS, drift)
+    /// rather than only a summary. The series lands in metrics.txt as
+    /// `series=` lines — the receipt is allowed to be a curve.
+    pub frame_hook: Option<fn(&mut Receipt, usize, f64, f64)>,
 }
 
 impl Experiment {
-    /// The usual spelling — no probe.
+    /// The usual spelling — no probe, no series.
     pub const fn plain(
         name: &'static str,
         seconds: f32,
@@ -212,8 +218,31 @@ impl Experiment {
             frames,
             build,
             probe: None,
+            frame_hook: None,
         }
     }
+}
+
+/// Resident set size in KiB, read from the kernel — the endurance axis'
+/// ground truth. `0` off Linux (the bench is Linux; the number is honest
+/// about its own absence rather than about someone else's kernel).
+#[must_use]
+pub fn rss_kib() -> u64 {
+    let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
+        return 0;
+    };
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("VmRSS:") {
+            let kb: u64 = rest
+                .trim()
+                .trim_end_matches("kB")
+                .trim()
+                .parse()
+                .unwrap_or(0);
+            return kb;
+        }
+    }
+    0
 }
 
 /// The measured outcome of one rendered experiment — printed, never guessed.
@@ -231,6 +260,14 @@ pub struct Receipt {
     /// Lines read out of the output buffer by the experiment's probe, if
     /// it has one — measured pixel facts.
     pub probe_lines: Vec<String>,
+    /// The time series — round 7's endurance instrument. Written to
+    /// metrics.txt as `series=` lines, after the summary fields.
+    pub series: Vec<String>,
+    /// Tree construction + layout (set_root + draw_frame_at), split from
+    /// the raster — the simulation axis asked where the frame budget
+    /// actually goes, and "build" was the half nobody had measured.
+    pub build_ms_total: f64,
+    pub build_ms_worst: f64,
     pub render_ms_total: f64,
     pub render_ms_worst: f64,
 }
@@ -251,6 +288,11 @@ impl Receipt {
             "    filtered {} · open_subpath_fills {}",
             self.filtered_layers, self.open_subpath_fills
         );
+        println!(
+            "    build mean {:.2} ms · worst {:.2} ms",
+            self.build_ms_total / self.frames.max(1) as f64,
+            self.build_ms_worst
+        );
         for line in &self.probe_lines {
             println!("    probe: {line}");
         }
@@ -263,14 +305,19 @@ impl Receipt {
 
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         let mut body = format!(
-            "frames={}\nshapes={}\nglyph_runs={}\nlayers={}\nfiltered_layers={}\nopen_subpath_fills={}\nrender_mean_ms={:.3}\nrender_worst_ms={:.3}\n",
+            "frames={}\nshapes={}\nglyph_runs={}\nlayers={}\nfiltered_layers={}\nopen_subpath_fills={}\nbuild_mean_ms={:.3}\nbuild_worst_ms={:.3}\nrender_mean_ms={:.3}\nrender_worst_ms={:.3}\n",
             self.frames, self.shapes, self.glyph_runs, self.layers,
             self.filtered_layers, self.open_subpath_fills,
+            self.build_ms_total / self.frames.max(1) as f64,
+            self.build_ms_worst,
             self.render_ms_total / self.frames.max(1) as f64,
             self.render_ms_worst,
         );
         for line in &self.probe_lines {
             body.push_str(&format!("probe={line}\n"));
+        }
+        for line in &self.series {
+            body.push_str(&format!("series={line}\n"));
         }
         std::fs::write(dir.join("metrics.txt"), body)
     }
@@ -314,8 +361,15 @@ pub fn render_with(
             0.0
         };
 
+        // The budget split, measured where it happens: tree construction +
+        // layout on one stopwatch, rasterisation on the other. Round 7's
+        // simulation axis asked the question; every plate gets the answer.
+        let build_start = std::time::Instant::now();
         driver.set_root((experiment.build)(t));
         driver.draw_frame_at(Duration::from_secs_f64((t * experiment.seconds) as f64));
+        let build_elapsed = build_start.elapsed().as_secs_f64() * 1000.0;
+        receipt.build_ms_total += build_elapsed;
+        receipt.build_ms_worst = receipt.build_ms_worst.max(build_elapsed);
 
         // Command-stream dump for seam hunting (first frame only).
         if i == 0 && std::env::var("FILM_DUMP_CMDS").is_ok() {
@@ -345,6 +399,11 @@ pub fn render_with(
         let elapsed = start.elapsed().as_secs_f64() * 1000.0;
         receipt.render_ms_total += elapsed;
         receipt.render_ms_worst = receipt.render_ms_worst.max(elapsed);
+
+        // The endurance instrument: the plate may want a per-frame record.
+        if let Some(hook) = experiment.frame_hook {
+            hook(&mut receipt, i, build_elapsed, elapsed);
+        }
         receipt.shapes += report.shapes as u64;
         receipt.glyph_runs += report.glyph_runs as u64;
         receipt.layers += report.layers as u64;
@@ -377,8 +436,40 @@ pub fn render_with(
 /// protocol. Runs ffmpeg as a subprocess; ignores failure (the frames are
 /// the artifact, the sheet is the review aid).
 pub fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
+    contact_sheet_strided(out_dir, tile, 1)
+}
+
+/// The strided sheet — round 7's endurance axis: a 256-frame run still
+/// audits as a 4×4 grid, sampled every `stride` frames so the sheet stays
+/// the review surface it always was.
+///
+/// **The hardlink detour, and why:** reading 256 full-res PNGs through a
+/// `select` filter was SIGKILLed on this 4 GB bench — the page cache for
+/// ~380 MB of inputs plus the filter's own buffers crossed the cgroup
+/// ceiling mid-graph (the hero4k memory lesson, wearing ffmpeg's coat).
+/// The fix is the same discipline the OOM finding prescribed for the
+/// master: **chunk the pass**. The strided subset is hardlinked into a
+/// temp dir (no data duplicated, no cache doubled) and the ordinary
+/// one-pass recipe runs on that.
+pub fn contact_sheet_strided(out_dir: &Path, tile: &str, stride: usize) -> Option<PathBuf> {
     let sheet = out_dir.join("sheet.png");
-    let frames = out_dir.join("frame_%03d.png");
+    if stride <= 1 {
+        let frames = out_dir.join("frame_%03d.png");
+        let status = std::process::Command::new("ffmpeg")
+            .args(["-y", "-loglevel", "error", "-framerate", "10"])
+            .arg("-i").arg(&frames)
+            .arg("-vf").arg(format!("scale=480:-1,tile={tile}"))
+            .arg("-frames:v").arg("1")
+            .arg(&sheet)
+            .status();
+        return matches!(status, Ok(s) if s.success()).then_some(sheet);
+    }
+
+    let tmp = out_dir.join("_stride_tmp");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).ok()?;
+    let selected = hardlink_strided(out_dir, &tmp, stride)?;
+    let frames = tmp.join("frame_%03d.png");
     let status = std::process::Command::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-framerate", "10"])
         .arg("-i").arg(&frames)
@@ -386,10 +477,45 @@ pub fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
         .arg("-frames:v").arg("1")
         .arg(&sheet)
         .status();
+    let _ = std::fs::remove_dir_all(&tmp);
     match status {
-        Ok(s) if s.success() => Some(sheet),
+        Ok(s) if s.success() => {
+            let _ = selected;
+            Some(sheet)
+        }
         _ => None,
     }
+}
+
+/// Hardlink every `stride`-th frame into `tmp` as a contiguous sequence.
+/// Returns how many frames were linked. (A hardlink is a directory entry,
+/// not a copy: no extra page cache, no extra disk — the OOM lesson,
+/// applied as plumbing.)
+fn hardlink_strided(out_dir: &Path, tmp: &Path, stride: usize) -> Option<usize> {
+    let mut names: Vec<String> = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(out_dir) {
+        for entry in rd.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with("frame_") && name.ends_with(".png") {
+                    names.push(name.to_string());
+                }
+            }
+        }
+    }
+    names.sort();
+    let mut n = 0usize;
+    for name in names.iter().step_by(stride) {
+        let src = out_dir.join(name);
+        let dst = tmp.join(format!("frame_{n:03}.png"));
+        if std::fs::hard_link(&src, &dst).is_err() {
+            // A filesystem without hardlinks (or a stale entry): copy.
+            if std::fs::copy(&src, &dst).is_err() {
+                return None;
+            }
+        }
+        n += 1;
+    }
+    (n > 0).then_some(n)
 }
 
 /// Assemble the palette-optimised loop with ffmpeg — the third artifact.
@@ -413,40 +539,86 @@ pub fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
 /// guessed. The mirror of this for already-rendered frame dirs is
 /// `film_lab/tools/make_gifs.sh`.
 pub fn anim_gif(out_dir: &Path, fps: u32, width: u32) -> Option<PathBuf> {
+    anim_gif_strided(out_dir, fps, width, 1)
+}
+
+/// The strided GIF — the endurance plate's motion receipt: 256 rendered
+/// frames become a 64-frame loop (stride 4), and the metrics say so, so
+/// nobody mistakes the decimation for the render. Same house recipe
+/// otherwise; the strided subset rides the same hardlink detour the
+/// strided sheet does (the cgroup OOM, avoided rather than met).
+pub fn anim_gif_strided(out_dir: &Path, fps: u32, width: u32, stride: usize) -> Option<PathBuf> {
     let gif = out_dir.join("anim.gif");
-    let frames = out_dir.join("frame_%03d.png");
-    let vf = format!(
-        "scale={width}:-1:flags=lanczos,split[a][b];\
-         [a]palettegen=stats_mode=full[p];\
-         [b][p]paletteuse=dither=floyd_steinberg:diff_mode=rectangle"
-    );
+    let src_dir;
+    let tmp;
+    if stride <= 1 {
+        src_dir = out_dir.to_path_buf();
+        tmp = None;
+    } else {
+        let t = out_dir.join("_stride_tmp");
+        let _ = std::fs::remove_dir_all(&t);
+        std::fs::create_dir_all(&t).ok()?;
+        hardlink_strided(out_dir, &t, stride)?;
+        tmp = Some(t.clone());
+        src_dir = t;
+    }
+    let frames = src_dir.join("frame_%03d.png");
+    // TWO passes, deliberately: the one-pass `split` graph parks every
+    // frame in a queue behind the palette, and on this 4 GB bench that
+    // queue is what the OOM-killer found (measured: 64 frames died in
+    // the split graph; both halves run clean as separate processes).
+    // Palette first, then the frames through it, one at a time.
+    let palette = out_dir.join("palette.png");
     let status = std::process::Command::new("ffmpeg")
         .args(["-y", "-loglevel", "error"])
         .arg("-framerate").arg(fps.to_string())
         .arg("-i").arg(&frames)
-        .arg("-vf").arg(&vf)
-        .arg("-loop").arg("0")
-        .arg(&gif)
+        .arg("-vf").arg(format!(
+            "scale={width}:-1:flags=lanczos,palettegen=stats_mode=full"))
+        .arg(&palette)
         .status();
     if !matches!(status, Ok(s) if s.success()) {
         return None;
     }
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error"])
+        .arg("-framerate").arg(fps.to_string())
+        .arg("-i").arg(&frames)
+        .arg("-i").arg(&palette)
+        .arg("-lavfi").arg(format!(
+            "scale={width}:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=floyd_steinberg:diff_mode=rectangle"))
+        .arg("-loop").arg("0")
+        .arg(&gif)
+        .status();
+    let _ = std::fs::remove_file(&palette);
+    if let Some(t) = tmp {
+        let _ = std::fs::remove_dir_all(&t);
+    }
+    if !matches!(status, Ok(s) if s.success()) {
+        return None;
+    }
 
-    // The receipt line — every number measured, none typed (§4.5).
+    // The receipt line — every number measured, none typed (§4.5). The
+    // stride rides its own line so the `gif=` format stays stable for the
+    // tools that parse it.
     if let (Ok((fw, fh)), Ok(bytes)) = (
         image::image_dimensions(out_dir.join("frame_000.png")),
         std::fs::metadata(&gif).map(|m| m.len()),
     ) {
         let h = (width as f32 * fh as f32 / fw as f32).round() as u32;
         let line = format!("gif=anim.gif,{width}x{h},{fps}fps,{bytes}\n");
+        let mut extra = String::new();
+        if stride > 1 {
+            extra.push_str(&format!("gif_stride={stride}\n"));
+        }
         let metrics = out_dir.join("metrics.txt");
         if let Ok(body) = std::fs::read_to_string(&metrics) {
             let stripped: String = body
                 .lines()
-                .filter(|l| !l.starts_with("gif="))
+                .filter(|l| !l.starts_with("gif=") && !l.starts_with("gif_stride="))
                 .map(|l| format!("{l}\n"))
                 .collect();
-            let _ = std::fs::write(&metrics, format!("{stripped}{line}"));
+            let _ = std::fs::write(&metrics, format!("{stripped}{line}{extra}"));
         }
     }
     Some(gif)

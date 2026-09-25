@@ -1,0 +1,11 @@
+frames=16
+shapes=9632
+glyph_runs=368
+layers=272
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=1.608
+build_worst_ms=12.435
+render_mean_ms=34.837
+render_worst_ms=54.689
+gif=anim.gif,640x360,12fps,740063

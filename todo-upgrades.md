@@ -618,3 +618,36 @@ before there was a counter to answer it.
 *This file is appended to as the bench finds things. Entries are never deleted —
 a downgraded finding gets its status changed and a note, so the reasoning
 survives.*
+
+---
+
+## U-23 · `Gradient::with_stops` silently truncates at eight stops
+**Status:** OPEN in `vieww_base`, 2026-09-25 · **Found by:** the prism plate, the gradient axis
+
+`MAX_GRADIENT_STOPS` is 8 — a deliberate fixed capacity (`Copy` gradient,
+stack stops, the doc comment says eight is past any designer's ramp). The
+defect is not the number; it is the **silence**. `with_stops` does
+`.take(MAX_GRADIENT_STOPS)` and returns, so a 256-stop spectrum — exactly
+what a data-driven ramp wants to be — renders as the first eight stops
+and then runs flat. The prism plate's first screen was a uniform orange
+panel: the sorted first eight offsets of a rainbow are all red-orange.
+No assert (the non-decreasing assert fires on *order*, never on
+*count*), no warning, and the result looks intentional — the exact
+species U-17 was written about: a failure that looks like a decision.
+
+Pixel-verified before the workaround: `(239,136,92)` at five sample
+positions across the whole screen band, identical top to bottom. The
+plate now draws its stop field as 256 flat rects (one per stop, at the
+stop's own offset — the re-sort animation becomes the rects breathing),
+with the 8-stop gradient the framework can carry drawn beneath.
+
+The candidates, for whenever the framework wants one of them:
+- a `debug_assert!` on truncation, mirroring U-16/U-17's philosophy
+  (fail loudly in development at the verb that received the data);
+- or a `with_many_stops` that returns `Option`/`Result`, or a heap
+  variant behind a feature, keeping the `Copy` type honest for the
+  eight-stop world it was sized for.
+
+Either closes the door; the point of this entry is that the door was
+open and nobody had walked a 256-stop ramp through it before the
+gradient axis existed to try.

@@ -71,6 +71,16 @@
 //! - `typo` — the sentence becomes weather; condenses into one drop
 //! - `mandel` — the count ceiling as art: 57,602 rects per frame
 //! - `hero4k` — the hero tree rasterised at 3840×2160
+//!
+//! Round 7 — the deep axes, the dimensions rounds 3–6 never measured:
+//! - `han` — the script axis: CJK through the shaper (一画开天)
+//! - `megapath` — the single-path axis: one ~35,000-segment line
+//! - `longplay` — the endurance axis: 256 frames, RSS time series
+//! - `swarm` — the simulation axis: 3,000 boids, sim-vs-raster split
+//! - `blendmatrix` — the blend-mode axis: all 15 cinematic modes
+//! - `filterstack` — the compositor-depth axis: nested filtered groups
+//! - `shadowplay` — the blur economy at the U-06 guard (30 of 32)
+//! - `prism` — the gradient axis: 256-stop animated re-sorted ramps
 
 mod exp_aurora;
 mod exp_beams;
@@ -108,10 +118,18 @@ mod exp_city;
 mod exp_typo;
 mod exp_mandel;
 mod exp_hero4k;
+mod exp_han;
+mod exp_megapath;
+mod exp_longplay;
+mod exp_swarm;
+mod exp_blendmatrix;
+mod exp_filterstack;
+mod exp_shadowplay;
+mod exp_prism;
 mod film_lib;
 mod three_d;
 
-use film_lib::{anim_gif, contact_sheet, out_root, render_with, Experiment};
+use film_lib::{anim_gif_strided, contact_sheet_strided, out_root, render_with, Experiment};
 
 fn registry() -> Vec<Experiment> {
     vec![
@@ -144,6 +162,7 @@ fn registry() -> Vec<Experiment> {
             frames: 16,
             build: exp_probe::frame,
             probe: Some(exp_probe::probe),
+            frame_hook: None,
         },
         Experiment::plain("hero", exp_hero::SECONDS, 8, exp_hero::frame),
         // ── Round 6: the berserk spectrum — ten new plates + the 4K hero ──
@@ -158,6 +177,29 @@ fn registry() -> Vec<Experiment> {
         Experiment::plain("typo", exp_typo::SECONDS, 24, exp_typo::frame),
         Experiment::plain("mandel", exp_mandel::SECONDS, 16, exp_mandel::frame),
         Experiment::plain("hero4k", exp_hero4k::SECONDS, 2, exp_hero4k::frame),
+        // ── Round 7: the deep axes — eight new plates, one per dimension ──
+        Experiment {
+            name: "han",
+            seconds: exp_han::SECONDS,
+            frames: 24,
+            build: exp_han::frame,
+            probe: Some(exp_han::probe),
+            frame_hook: None,
+        },
+        Experiment::plain("megapath", exp_megapath::SECONDS, 16, exp_megapath::frame),
+        Experiment {
+            name: "longplay",
+            seconds: exp_longplay::SECONDS,
+            frames: 256,
+            build: exp_longplay::frame,
+            probe: Some(exp_longplay::probe),
+            frame_hook: Some(exp_longplay::frame_hook),
+        },
+        Experiment::plain("swarm", exp_swarm::SECONDS, 16, exp_swarm::frame),
+        Experiment::plain("blendmatrix", exp_blendmatrix::SECONDS, 16, exp_blendmatrix::frame),
+        Experiment::plain("filterstack", exp_filterstack::SECONDS, 16, exp_filterstack::frame),
+        Experiment::plain("shadowplay", exp_shadowplay::SECONDS, 16, exp_shadowplay::frame),
+        Experiment::plain("prism", exp_prism::SECONDS, 16, exp_prism::frame),
     ]
 }
 
@@ -195,22 +237,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let tile = match experiment.name.as_ref() {
                     "hero" | "hero4k" => "4x2",
                     "fadeaway" => "4x8",
-                    "typo" => "4x6",
+                    "typo" | "han" => "4x6",
                     _ => "4x4",
                 };
-                match contact_sheet(&dir, tile) {
+                // The endurance plate samples its sheet (256 frames,
+                // every 16th — the sheet stays the 16-cell audit surface;
+                // the GIF below decimates less, stride 4).
+                let sheet_stride = if experiment.name == "longplay" { 16 } else { 1 };
+                match contact_sheet_strided(&dir, tile, sheet_stride) {
                     Some(sheet) => println!("    sheet: {}", sheet.display()),
                     None => println!("    sheet: FAILED (ffmpeg)"),
                 }
                 // The third artifact: the motion receipt. Cadence is
                 // per-plate (a 2-frame 4K receipt is a slow A/B flip,
                 // not a blink) — the recipe itself is one house line.
-                let gif_fps = match experiment.name.as_ref() {
-                    "hero" => 6,
-                    "hero4k" => 2,
-                    _ => 12,
+                let (gif_fps, gif_stride) = match experiment.name.as_ref() {
+                    "hero" => (6, 1),
+                    "hero4k" => (2, 1),
+                    "longplay" => (12, 4),
+                    _ => (12, 1),
                 };
-                match anim_gif(&dir, gif_fps, 640) {
+                match anim_gif_strided(&dir, gif_fps, 640, gif_stride) {
                     Some(g) => println!("    gif: {}", g.display()),
                     None => println!("    gif: FAILED (ffmpeg)"),
                 }

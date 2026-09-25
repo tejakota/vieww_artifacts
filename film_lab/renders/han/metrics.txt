@@ -1,0 +1,15 @@
+frames=24
+shapes=545
+glyph_runs=2578
+layers=39
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=1.987
+build_worst_ms=17.600
+render_mean_ms=43.107
+render_worst_ms=69.138
+probe=title ink/cell: 一 0.071 · 画 0.301 · 开 0.219 · 天 0.186
+probe=ink variance σ2 0.00680 (tofu ≈ uniform, calligraphy ≠)
+probe=verdict: glyphs
+probe=seal red pixels 4767 (stamp present)
+gif=anim.gif,640x360,12fps,1205026

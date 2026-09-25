@@ -1,0 +1,31 @@
+frames=256
+shapes=95777
+glyph_runs=1280
+layers=0
+filtered_layers=0
+open_subpath_fills=1024
+build_mean_ms=0.605
+build_worst_ms=3.431
+render_mean_ms=25.572
+render_worst_ms=34.007
+probe=lamp peak channel 213/255 (the light never sleeps)
+probe=sea mean G 7/255
+probe=vignette centre G 12 vs corner G 3 (Δ9)
+series=f000 rss=37448KiB build=3.4ms raster=34.0ms
+series=f016 rss=38440KiB build=0.5ms raster=25.9ms
+series=f032 rss=38536KiB build=0.6ms raster=25.0ms
+series=f048 rss=38536KiB build=0.6ms raster=26.0ms
+series=f064 rss=38668KiB build=0.6ms raster=25.7ms
+series=f080 rss=38572KiB build=0.6ms raster=25.1ms
+series=f096 rss=38668KiB build=0.6ms raster=24.7ms
+series=f112 rss=38668KiB build=0.6ms raster=24.8ms
+series=f128 rss=38764KiB build=0.6ms raster=25.0ms
+series=f144 rss=38764KiB build=0.6ms raster=24.7ms
+series=f160 rss=38860KiB build=0.6ms raster=25.0ms
+series=f176 rss=38860KiB build=0.6ms raster=26.0ms
+series=f192 rss=38876KiB build=0.6ms raster=27.1ms
+series=f208 rss=39040KiB build=0.6ms raster=25.2ms
+series=f224 rss=39052KiB build=0.7ms raster=25.5ms
+series=f240 rss=39148KiB build=0.6ms raster=25.6ms
+gif=anim.gif,640x360,12fps,682719
+gif_stride=4
