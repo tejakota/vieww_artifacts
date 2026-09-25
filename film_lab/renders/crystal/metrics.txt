@@ -1,0 +1,15 @@
+frames=16
+shapes=230784
+glyph_runs=144
+layers=16
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=11.230
+build_worst_ms=16.739
+render_mean_ms=45.034
+render_worst_ms=51.385
+probe=probe r=170: corr(36.0°) = 0.974 · corr(36°+3.4°) = 0.898 · corr(60.0°) = 0.410
+probe=probe r=240: corr(36.0°) = 0.831 · corr(36°+3.4°) = 0.753 · corr(60.0°) = 0.287
+probe=probe r=310: corr(36.0°) = 0.743 · corr(36°+3.4°) = 0.592 · corr(60.0°) = 0.421
+probe=ten-fold high, six-fold low: the class crystallography forbids — read from the raster
+gif=anim.gif,640x360,12fps,449845
