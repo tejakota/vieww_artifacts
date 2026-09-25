@@ -81,6 +81,18 @@
 //! - `filterstack` — the compositor-depth axis: nested filtered groups
 //! - `shadowplay` — the blur economy at the U-06 guard (30 of 32)
 //! - `prism` — the gradient axis: 256-stop animated re-sorted ramps
+//!
+//! Round 8 — the wonder engines, the machines the lab imagined:
+//! - `eclipse` — the narrative axis: totality, as a documented light sequence
+//! - `cymatics` — the frequency axis: 7,000 grains descending to Chladni nodes
+//! - `harmony` — the phase axis: 32 pendulums, integer cycle ladder
+//! - `fourier` — the synthesis axis: the avatar line as a choir of circles
+//! - `startrail` — the exposure axis: time folded into arcs, Plus-accumulated
+//! - `bubble` — the optics axis: thin-film interference colours from physics
+//! - `orrery` — the mechanism axis: gear ratios that ARE the astronomy
+//! - `storm` — the weather axis: supercell + recursive lightning trees
+//! - `kaleido` — the symmetry axis: D12, the mirror measured from the raster
+//! - `ink` — the diffusion axis: one drop becomes a nebula, then dilutes
 
 mod exp_aurora;
 mod exp_beams;
@@ -126,6 +138,16 @@ mod exp_blendmatrix;
 mod exp_filterstack;
 mod exp_shadowplay;
 mod exp_prism;
+mod exp_eclipse;
+mod exp_cymatics;
+mod exp_harmony;
+mod exp_fourier;
+mod exp_startrail;
+mod exp_bubble;
+mod exp_orrery;
+mod exp_storm;
+mod exp_kaleido;
+mod exp_ink;
 mod film_lib;
 mod three_d;
 
@@ -200,6 +222,31 @@ fn registry() -> Vec<Experiment> {
         Experiment::plain("filterstack", exp_filterstack::SECONDS, 16, exp_filterstack::frame),
         Experiment::plain("shadowplay", exp_shadowplay::SECONDS, 16, exp_shadowplay::frame),
         Experiment::plain("prism", exp_prism::SECONDS, 16, exp_prism::frame),
+        // ── Round 8: the wonder engines — ten new plates, one per axis ──
+        Experiment::plain("eclipse", exp_eclipse::SECONDS, 24, exp_eclipse::frame),
+        Experiment::plain("cymatics", exp_cymatics::SECONDS, 24, exp_cymatics::frame),
+        Experiment::plain("harmony", exp_harmony::SECONDS, 32, exp_harmony::frame),
+        Experiment::plain("fourier", exp_fourier::SECONDS, 32, exp_fourier::frame),
+        Experiment {
+            name: "startrail",
+            seconds: exp_startrail::SECONDS,
+            frames: 16,
+            build: exp_startrail::frame,
+            probe: Some(exp_startrail::probe),
+            frame_hook: None,
+        },
+        Experiment::plain("bubble", exp_bubble::SECONDS, 16, exp_bubble::frame),
+        Experiment::plain("orrery", exp_orrery::SECONDS, 16, exp_orrery::frame),
+        Experiment::plain("storm", exp_storm::SECONDS, 16, exp_storm::frame),
+        Experiment {
+            name: "kaleido",
+            seconds: exp_kaleido::SECONDS,
+            frames: 16,
+            build: exp_kaleido::frame,
+            probe: Some(exp_kaleido::probe),
+            frame_hook: None,
+        },
+        Experiment::plain("ink", exp_ink::SECONDS, 24, exp_ink::frame),
     ]
 }
 

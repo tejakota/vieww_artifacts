@@ -1,0 +1,15 @@
+frames=16
+shapes=20832
+glyph_runs=80
+layers=208
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=13.031
+build_worst_ms=15.535
+render_mean_ms=160.074
+render_worst_ms=170.508
+probe=mirror residual r=200: mean |ΔR| 3.39 |ΔG| 4.19 |ΔB| 6.45 (bilinear-mirrored, 225 px)
+probe=mirror residual r=240: mean |ΔR| 2.35 |ΔG| 2.84 |ΔB| 4.40 (bilinear-mirrored, 225 px)
+probe=mirror residual r=280: mean |ΔR| 3.54 |ΔG| 4.31 |ΔB| 6.65 (bilinear-mirrored, 225 px)
+probe=residual = AA + bilinear smoothing only — the fold itself is exact by construction
+gif=anim.gif,640x360,12fps,1213743

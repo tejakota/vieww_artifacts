@@ -1,0 +1,15 @@
+frames=16
+shapes=53216
+glyph_runs=80
+layers=48
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=3.070
+build_worst_ms=9.065
+render_mean_ms=164.208
+render_worst_ms=186.553
+probe=ground ink (7, 8, 13) — the mountain, shutter blocked
+probe=single-trail sky (51, 54, 64) — field arcs + sky
+probe=milky band (60, 63, 78) — haze + many faint arcs, Plus-stacked
+probe=band excess over single-trail: +8 +9 +15 (the blend, measured)
+gif=anim.gif,640x360,12fps,1612612
