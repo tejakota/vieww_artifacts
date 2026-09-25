@@ -1,0 +1,12 @@
+[toolchain]
+# Pinned, for the same reason Vieww pins its own: the viewer member compiles
+# Vieww's dependency tree, and "whatever rustup resolved this morning" is not
+# a build input anyone can reproduce. The foundation crates alone build on
+# 1.89 (their `rust-version`); 1.98.1 is what this Vieww integration was
+# developed and tested against, and what `vieww-develop/rust-toolchain.toml`
+# itself asks for.
+#
+# A `rustup`-managed cargo auto-installs this when invoked inside the
+# workspace; a system cargo ignores the file entirely and simply needs to be
+# new enough for the crates being built.
+channel = "1.98.1"

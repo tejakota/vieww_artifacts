@@ -1,0 +1,16 @@
+[package]
+name = "vavlt-engine"
+description = "What the app does with the files, and the rules it does it under. No UI, no platform."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vavlt-core.workspace = true
+vavlt-codecs.workspace = true
+anyhow.workspace = true
+blake3.workspace = true
+log.workspace = true
+# Thumbnails. The hosts hand over bytes; decoding and downscaling them is the
+# same work on both, so it lives here rather than twice.
+image.workspace = true

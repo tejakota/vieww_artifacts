@@ -1,0 +1,11 @@
+[package]
+name = "three-vieww"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Minimal adapter boundary for rendering .3 content inside Vieww"
+
+[dependencies]
+three-core.workspace = true

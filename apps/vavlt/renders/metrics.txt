@@ -1,0 +1,7 @@
+app=vavlt
+what=consent-first photo/video vault engine, one vieww UI across desktop/android/ios
+source=design/mockup.html + design/mockup-cinematic.html, 8 screens each
+screens=8 cinematic set, captured at 2x (824x1830), redesign set also captured
+sheet=sheet.png,1264x1608,8 screens
+frames=120 at 10fps (1.1s hold + 0.4s crossfade per screen, seamless loop)
+gif=anim.gif,412,915,10fps,4549104

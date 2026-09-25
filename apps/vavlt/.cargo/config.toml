@@ -1,0 +1,26 @@
+# Android needs the NDK's linker, and cargo will not find it on its own.
+#
+# **This file cannot be inherited.** `vavlt` depends on `vieww` by path, and
+# cargo reads `.cargo/config.toml` from the directory it is *invoked* in and its
+# ancestors — never from a path dependency's workspace. So `vieww`'s copy of
+# this configuration does nothing for a build run from here, and without it an
+# Android build fails with:
+#
+#     /usr/bin/x86_64-linux-gnu-ld.bfd: cannot find -llog
+#     /usr/bin/x86_64-linux-gnu-ld.bfd: cannot find -lunwind
+#     /usr/bin/x86_64-linux-gnu-ld.bfd: cannot find -landroid
+#
+# Which names nothing Android at all: those are the NDK's sysroot libraries, and
+# the host linker reports them as missing rather than as wrong-toolchain. It
+# reads like a broken system rather than an unconfigured build, which is why
+# this file has a comment longer than it is.
+#
+# The shims live in `ci/` and take their architecture as an argument; see
+# `ci/ndk-clang.sh` for what they do and `BUILD.md` for the environment they
+# need.
+
+[target.aarch64-linux-android]
+linker = "ci/ndk-clang-aarch64.sh"
+
+[target.x86_64-linux-android]
+linker = "ci/ndk-clang-x86_64.sh"

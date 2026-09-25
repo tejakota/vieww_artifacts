@@ -1,0 +1,20 @@
+[package]
+name = "vavlt-app"
+description = "The vavlt interface: every screen, in vieww, with no platform in it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vavlt-core.workspace = true
+vavlt-engine.workspace = true
+vieww.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+# The screenshot harness and the layout tests drive the real tree through the
+# real GPU backend. `vieww` already carries the `gpu` feature from the
+# workspace, so this names no new dependency — it only makes the PNG encoder
+# reachable from `tests/`.
+image.workspace = true
+anyhow.workspace = true

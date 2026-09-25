@@ -1,0 +1,23 @@
+[package]
+name = "vavlt-codecs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# rav1e pulls a large build; enable once the base harness is green.
+avif = ["dep:ravif", "dep:rgb", "dep:image"]
+
+[dependencies]
+vavlt-core.workspace = true
+anyhow.workspace = true
+zstd.workspace = true
+oxipng.workspace = true
+lepton_jpeg.workspace = true
+
+# `asm` is off because it needs nasm on the build host. Ratios are unaffected;
+# desktop AVIF *timings* under this build are not representative.
+ravif = { version = "0.11", optional = true, default-features = false }
+rgb = { version = "0.8", optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = ["jpeg", "png"] }

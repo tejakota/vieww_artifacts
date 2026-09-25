@@ -1,0 +1,7 @@
+app=snapsearch
+what=semantic photo search (CLIP / local appearance encoder) built on vieww
+source=README + src/{theme,concept,photo,screens}.rs — colours and strings from the source
+screens=5 app screens, 414x896, captured at 2x (masonry 2-col, frosted sheet, badges)
+sheet=sheet.png,1812x1009,5 screens
+frames=95 at 10fps (1.3s hold + 0.6s crossfade per screen, seamless loop)
+gif=anim.gif,414,896,10fps,3837383

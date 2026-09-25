@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vault — photo-forward redesign</title>
+<style>
+/* ===================================================================
+   Adwaita tokens. Identical values to crates/app/src/theme.rs, so what
+   is agreed here transfers as numbers rather than as an impression.
+   =================================================================== */
+:root {
+  --window:#242424; --view:#1e1e1e; --headerbar:#303030; --card:#303030;
+  --fg:#ffffff; --fg-2:rgba(255,255,255,.80); --dim:rgba(255,255,255,.55);
+  --line:rgba(255,255,255,.10); --line-strong:rgba(255,255,255,.16);
+  --hover:rgba(255,255,255,.07);
+  --btn:rgba(255,255,255,.10); --btn-active:rgba(255,255,255,.21);
+  --accent:#3584e4; --accent-fg:#fff; --accent-txt:#78aeed; --accent-tint:rgba(53,132,228,.16);
+  --destructive:#c01c28; --destructive-txt:#ff7b63; --destructive-tint:rgba(255,123,99,.13);
+  --warning-txt:#f8e45c; --warning-tint:rgba(248,228,92,.12);
+  --success-txt:#8ff0a4;
+  /* NEW: elevation. The old build had none — cards were a 6% lightness
+     step on the window and barely separated in dark. */
+  --lift-1:0 1px 2px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.04);
+  --lift-2:0 4px 14px rgba(0,0,0,.36), 0 0 0 1px rgba(255,255,255,.05);
+  --scrim:linear-gradient(180deg,rgba(36,36,36,0) 0%,rgba(36,36,36,.55) 42%,rgba(36,36,36,.94) 78%,#242424 100%);
+}
+.light {
+  --window:#fafafa; --view:#fff; --headerbar:#ebebeb; --card:#fff;
+  --fg:#1e1e1e; --fg-2:rgba(30,30,30,.82); --dim:rgba(30,30,30,.60);
+  --line:rgba(0,0,0,.10); --line-strong:rgba(0,0,0,.16); --hover:rgba(0,0,0,.05);
+  --btn:#fff; --btn-active:#e2e2e2;
+  --accent-txt:#1c71d8; --accent-tint:rgba(53,132,228,.12);
+  --destructive-txt:#c01c28; --destructive-tint:rgba(192,28,40,.10);
+  --warning-txt:#9c6e03; --warning-tint:rgba(156,110,3,.10); --success-txt:#16803c;
+  --lift-1:0 1px 2px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.05);
+  --lift-2:0 6px 18px rgba(0,0,0,.13), 0 0 0 1px rgba(0,0,0,.06);
+  --scrim:linear-gradient(180deg,rgba(250,250,250,0) 0%,rgba(250,250,250,.5) 42%,rgba(250,250,250,.93) 78%,#fafafa 100%);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#111;color:#eee;
+  font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:28px 20px 60px;
+}
+h1{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.sub{color:#999;font-size:13.5px;max-width:74ch;margin:8px 0 22px}
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:26px;flex-wrap:wrap}
+button.t{
+  background:#222;color:#ddd;border:1px solid #333;border-radius:8px;
+  padding:8px 14px;font:inherit;font-size:13px;cursor:pointer
+}
+button.t[aria-pressed="true"]{background:#3584e4;border-color:#3584e4;color:#fff}
+.rail{display:flex;gap:22px;overflow-x:auto;padding-bottom:22px;align-items:flex-start}
+figure{flex:0 0 auto}
+figcaption{color:#8b8b8b;font-size:12px;margin-top:9px;max-width:412px}
+figcaption b{color:#ddd;font-weight:600;display:block;margin-bottom:3px;font-size:12.5px}
+
+/* ---- the phone ---- */
+.phone{
+  width:412px;height:915px;background:var(--window);color:var(--fg);
+  border-radius:26px;overflow:hidden;position:relative;
+  box-shadow:0 18px 48px rgba(0,0,0,.5);
+  display:flex;flex-direction:column;
+  font-size:16px;
+}
+.scroll{flex:1;overflow:hidden;position:relative}
+
+/* ---- chrome ---- */
+.topbar{
+  height:60px;display:flex;align-items:center;gap:8px;
+  padding:0 20px;flex:0 0 auto;z-index:5
+}
+.topbar.over{position:absolute;top:0;left:0;right:0;padding-left:6px}
+.topbar .title{font-size:17px;font-weight:700;flex:1;
+  /* over imagery the title needs its own contrast, not the scrim's */
+  text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.phone:not(.dark) .topbar.over .title{text-shadow:0 1px 3px rgba(255,255,255,.6)}
+.iconbtn{
+  width:48px;height:48px;border-radius:24px;display:grid;place-items:center;
+  color:var(--fg);flex:0 0 auto
+}
+.tabbar{
+  height:66px;background:var(--headerbar);border-top:1px solid var(--line);
+  display:flex;flex:0 0 auto
+}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--dim)}
+.tab.on{color:var(--accent-txt)}
+.tab span{font-size:12.5px;font-weight:400;letter-spacing:.2px}
+.tab.on span{font-weight:700}
+
+.body{padding:0 20px 34px;display:flex;flex-direction:column;gap:22px}
+.actionbar{
+  background:var(--headerbar);border-top:1px solid var(--line);
+  padding:14px 20px;display:flex;flex-direction:column;gap:8px;flex:0 0 auto
+}
+
+/* ---- type ---- */
+.eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.4px;color:var(--dim);text-transform:lowercase}
+.hero{font-size:56px;font-weight:600;letter-spacing:.4px;line-height:1.05}
+.hero.small{font-size:44px}
+.hero.deep{color:var(--destructive-txt)}
+.figure{font-size:30px;font-weight:600;letter-spacing:.4px}
+.title{font-size:24px;font-weight:700;line-height:1.2}
+.group{font-size:17px;font-weight:700}
+.body-t{font-size:16px;line-height:1.35}
+.desc{font-size:14px;color:var(--dim);line-height:1.4}
+.sec{font-size:14px;color:var(--fg-2);line-height:1.4}
+.meta{font-size:12.5px;color:var(--dim);font-weight:700;letter-spacing:.2px}
+
+/* ---- surfaces ---- */
+.card{background:var(--card);border-radius:18px;box-shadow:var(--lift-1)}
+.card.pad{padding:14px 20px}
+.tinted{border-radius:18px;padding:14px}
+.divider{height:1px;background:var(--line)}
+.btn{
+  height:58px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  font-size:16px;font-weight:700;
+}
+.btn.suggested{background:var(--accent);color:var(--accent-fg);box-shadow:var(--lift-1)}
+.btn.destr{background:var(--destructive);color:#fff;box-shadow:var(--lift-1)}
+.btn.regular{background:var(--btn);border:1px solid var(--line);color:var(--fg)}
+.btn.flat{color:var(--fg)}
+.chip{
+  height:28px;border-radius:14px;padding:0 11px;display:inline-flex;align-items:center;
+  font-size:12.5px;font-weight:700;letter-spacing:.2px;gap:5px
+}
+
+/* ---- NEW: the cover band ---- */
+.cover{position:relative;flex:0 0 auto;overflow:hidden}
+/* Five columns of near-square cells rather than six tall stripes. The old
+   arrangement made a 300px band out of 6x2 cells at 68x149 — which reads as a
+   colour test card, seams and all, not as somebody's camera roll. */
+.cover .tiles{display:grid;grid-template-columns:repeat(5,1fr);grid-auto-rows:1fr;gap:0;height:100%}
+.cover .tiles i{display:block}
+.cover .veil{position:absolute;inset:0;background:var(--scrim)}
+/* A second, harder wash under the text only. The gradient alone has to be
+   gentle enough not to grey out the photographs, which leaves it too weak
+   under a 44px figure sitting on a pale one. */
+.cover .content{
+  position:absolute;left:0;right:0;bottom:0;padding:0 20px 16px;
+  background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.28) 45%,rgba(0,0,0,.42));
+}
+.light .cover .content{background:linear-gradient(180deg,rgba(250,250,250,0),rgba(250,250,250,.5) 45%,rgba(250,250,250,.75))}
+.cover .content .desc{color:var(--fg-2)}
+
+/* ---- the same band with nothing in it ----
+   The app declares no media permission, so before a pick it has no photographs
+   to show and must not invent any. Ghost tiles: outlined, not filled, because a
+   grid of filled grey rounded rectangles is the universal skeleton-loader
+   idiom and read as "still loading" rather than as "this is where they go". */
+.cover.ghost .tiles{
+  /* Square-ish, and clear of the top bar. Rows sized rather than shared out of
+     the band's height, or three rows of a 300px band come out portrait and the
+     "these are photo slots" reading goes with them. */
+  gap:7px;padding:66px 20px 0;grid-auto-rows:66px;align-content:start
+}
+.cover.ghost .tiles i{
+  border-radius:10px;background:transparent;
+  border:1.5px solid var(--line-strong)
+}
+.cover.ghost .tiles i.lit{border-color:var(--accent);background:var(--accent-tint)}
+.cover.ghost .veil{background:linear-gradient(180deg,rgba(36,36,36,0) 30%,var(--window) 92%)}
+.light .cover.ghost .veil{background:linear-gradient(180deg,rgba(250,250,250,0) 30%,var(--window) 92%)}
+
+/* ---- NEW: the meter that anchors a figure ---- */
+.meter{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;margin-top:10px}
+.meter i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.meter.deep i{background:var(--destructive)}
+
+/* ---- photo grid ---- */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid.bleed{grid-template-columns:repeat(3,1fr);gap:3px}
+.cell{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden}
+.grid.bleed .cell{border-radius:0}
+.cell.out{opacity:.3}
+.cell .veil{position:absolute;inset:0;background:rgba(36,36,36,.55)}
+.badge{
+  position:absolute;left:5px;bottom:5px;height:22px;border-radius:11px;padding:0 8px;
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:12.5px;font-weight:700;color:#fff;background:var(--accent)
+}
+.badge.fail{background:var(--destructive)}
+.badge.skip{background:rgba(0,0,0,.55)}
+.badge.unq{background:var(--warning-txt);color:var(--window)}
+.mark{
+  position:absolute;right:5px;top:5px;width:24px;height:24px;border-radius:12px;
+  background:rgba(0,0,0,.66);display:grid;place-items:center;color:#fff
+}
+
+/* photographic swatches, so "photo-forward" is legible in a mockup */
+.p1{background:linear-gradient(160deg,#f7b733,#fc4a1a 55%,#2b1055)}
+.p2{background:linear-gradient(200deg,#43cea2,#185a9d)}
+.p3{background:linear-gradient(140deg,#ffd6a5,#ff8fab 60%,#6a4c93)}
+.p4{background:linear-gradient(180deg,#243b55,#141e30)}
+.p5{background:linear-gradient(150deg,#c9d6ff,#e2e2e2 60%,#7f8c9b)}
+.p6{background:linear-gradient(170deg,#f9d423,#e65c00)}
+.p7{background:linear-gradient(190deg,#8e9eab,#eef2f3)}
+.p8{background:linear-gradient(155deg,#654ea3,#eaafc8)}
+.p9{background:linear-gradient(175deg,#3a1c71,#d76d77 55%,#ffaf7b)}
+
+.row{display:flex;align-items:center;gap:14px;padding:14px 0}
+.row .lines{flex:1;display:flex;flex-direction:column;gap:3px}
+.switch{width:54px;height:33px;border-radius:17px;background:var(--btn);border:1px solid var(--line-strong);position:relative;flex:0 0 auto}
+.switch i{position:absolute;top:3px;left:3px;width:27px;height:27px;border-radius:14px;background:var(--fg);opacity:.75}
+.switch.on{background:var(--destructive);border-color:transparent}
+.switch.on i{left:auto;right:3px;background:#fff;opacity:1}
+
+/* ---- tier control ---- */
+.tier{height:78px;border-radius:18px;background:var(--btn);display:flex;position:relative;overflow:hidden;box-shadow:var(--lift-1)}
+.tier .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 4px);border-radius:14px;background:var(--accent)}
+.tier.deep .thumb{left:auto;right:3px;background:var(--destructive)}
+.tier .opt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;color:var(--fg-2)}
+.tier .opt.on{color:#fff}
+.tier .opt b{font-size:16px;font-weight:700}
+.tier .opt s{font-size:14px;text-decoration:none;letter-spacing:.4px;opacity:.9}
+
+/* ---- tallies ---- */
+.tallies{display:flex;gap:8px}
+.tally{flex:1;background:var(--card);border-radius:14px;padding:12px 10px;box-shadow:var(--lift-1)}
+.tally .n{font-size:26px;font-weight:600;letter-spacing:.4px;display:flex;align-items:center;gap:6px}
+.tally .l{font-size:12.5px;color:var(--dim);line-height:1.3;margin-top:3px}
+
+.stack{display:flex;flex-direction:column;gap:22px}
+.hstack{display:flex;align-items:center;gap:8px}
+.note{display:flex;gap:12px;align-items:flex-start}
+svg{display:block}
+</style>
+</head>
+<body>
+
+<h1>Vault — photo-forward redesign</h1>
+<p class="sub">
+  Same Adwaita tokens as <code>crates/app/src/theme.rs</code>, so anything agreed here transfers as numbers.
+  Three changes: <b>the photographs became the surface</b> rather than a section; <b>cards got elevation</b>
+  (they were a 6% lightness step and barely separated in dark); and <b>the icons are the real drawn set</b>,
+  not the tick / chevron / plus placeholders.
+</p>
+
+<div class="bar">
+  <button class="t" id="theme" aria-pressed="true">Dark</button>
+  <button class="t" id="cmp" aria-pressed="false">Show what it replaces</button>
+</div>
+
+<div class="rail" id="rail"></div>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * Icons — the same 14 shapes drawn in crates/app/src/ui/icons.rs,
+ * one stroke weight (1.9 on a 24 grid), one corner radius.
+ * ------------------------------------------------------------------ */
+const S = 'fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"';
+const I = {
+  vault:  `<rect x="3" y="4" width="18" height="16" rx="3" ${S}/><circle cx="11" cy="12" r="3.6" ${S}/><circle cx="11" cy="12" r="1" fill="currentColor"/><path d="M13.6 14.6 15.6 16.6" ${S}/>`,
+  clock:  `<circle cx="12" cy="12" r="8.4" ${S}/><path d="M12 12V7.4M12 12l3.4 1.6" ${S}/>`,
+  sliders:`<path d="M3.5 7h17M3.5 17h17" ${S}/><circle cx="9" cy="7" r="2.6" fill="currentColor"/><circle cx="15.5" cy="17" r="2.6" fill="currentColor"/>`,
+  check:  `<path d="M4.8 12.6 9.6 17.4 19.2 6.8" ${S}/>`,
+  cross:  `<path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" ${S}/>`,
+  lock:   `<rect x="5" y="10.5" width="14" height="9.5" rx="2.4" ${S}/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" ${S}/><circle cx="12" cy="15" r="1.3" fill="currentColor"/>`,
+  shield: `<path d="M12 3.2 19.8 6.4v5.6c0 4.4-3.2 7.4-7.8 8.8-4.6-1.4-7.8-4.4-7.8-8.8V6.4Z" ${S}/>`,
+  photo:  `<rect x="3" y="5" width="18" height="14" rx="2.6" ${S}/><circle cx="8.6" cy="9.6" r="1.5" fill="currentColor"/><path d="m5.4 16.2 5-5 3.6 3.6 2.4-2.4 2.2 2.2" ${S}/>`,
+  export: `<path d="M12 3.6v10.8M12 14.6 7.6 10.2M12 14.6l4.4-4.4M4.4 18.9h15.2" ${S}/>`,
+  back:   `<path d="M15 5.4 8.4 12 15 18.6" ${S}/>`,
+  forward:`<path d="M9 5.4 15.6 12 9 18.6" ${S}/>`,
+  contrast:`<circle cx="12" cy="12" r="8.4" ${S}/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor"/>`,
+  info:   `<circle cx="12" cy="12" r="8.4" ${S}/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/><path d="M12 11.5V17" ${S}/>`,
+  grid:   `<rect x="3.6" y="3.6" width="7.6" height="7.6" rx="2" ${S}/><rect x="12.8" y="3.6" width="7.6" height="7.6" rx="2" ${S}/><rect x="3.6" y="12.8" width="7.6" height="7.6" rx="2" ${S}/><rect x="12.8" y="12.8" width="7.6" height="7.6" rx="2" ${S}/>`,
+  restore:`<path d="M6.4 11.4V6.4h5" ${S}/><path d="M6.6 6.9a8 8 0 1 1-2.2 6.3" ${S}/>`,
+};
+const ic = (n, s = 22) =>
+  `<svg width="${s}" height="${s}" viewBox="0 0 24 24">${I[n]}</svg>`;
+
+/* photographic swatch classes, cycled so a grid looks like a camera roll */
+const P = ['p1','p2','p3','p4','p5','p6','p7','p8','p9'];
+const swatch = i => P[i % P.length];
+
+const tabbar = on => `
+  <div class="tabbar">
+    ${[['vault','Vault'],['clock','Activity'],['sliders','Settings']].map(([k,l],i)=>
+      `<div class="tab${i===on?' on':''}">${ic(k,21)}<span>${l}</span></div>`).join('')}
+  </div>`;
+
+const topbar = (title, {back=false, trail=null, over=false} = {}) => `
+  <div class="topbar${over?' over':''}">
+    ${back?`<div class="iconbtn">${ic('back')}</div>`:''}
+    <div class="title">${title}</div>
+    ${trail?`<div class="iconbtn" style="color:var(--dim)">${ic(trail)}</div>`:''}
+  </div>`;
+
+/* The cover band: photographs, a scrim, and the figure over them. */
+const cover = (h, inner, offset = 0) => `
+  <div class="cover" style="height:${h}px">
+    <div class="tiles">${Array.from({length:15},(_,i)=>
+      `<i class="${swatch(i+offset)}"></i>`).join('')}</div>
+    <div class="veil"></div>
+    <div class="content">${inner}</div>
+  </div>`;
+
+/* The same band, before there is anything to put in it. */
+const ghost = (h, inner) => `
+  <div class="cover ghost" style="height:${h}px">
+    <div class="tiles">${Array.from({length:15},(_,i)=>
+      `<i class="${[0,7,11].includes(i)?'lit':''}"></i>`).join('')}</div>
+    <div class="veil"></div>
+    <div class="content">${inner}</div>
+  </div>`;
+
+const cellsHTML = (n, opts = {}) => Array.from({length:n},(_,i)=>{
+  const st = opts.states?.[i];
+  const out = opts.out?.includes(i);
+  const lock = opts.locked?.includes(i);
+  let badge='';
+  if (st === 'ok')   badge = `<div class="badge">−${18+i*3}%</div>`;
+  if (st === 'fail') badge = `<div class="badge fail">${ic('cross',13)}failed</div>`;
+  if (st === 'skip') badge = `<div class="badge skip">skipped</div>`;
+  if (st === 'unq')  badge = `<div class="badge unq">unqualified</div>`;
+  return `<div class="cell ${swatch(i)}${out?' out':''}">
+    ${st==='work'?'<div class="veil"></div>':''}
+    ${badge}
+    ${out?`<div class="mark">${ic('cross',15)}</div>`:''}
+    ${lock?`<div class="mark" style="color:var(--warning-txt)">${ic('lock',14)}</div>`:''}
+  </div>`;}).join('');
+
+/* ================================================================== *
+ * The screens
+ * ================================================================== */
+
+/* 1 — Home, nothing picked.
+   The app declares no media permission, so it CANNOT show the user's
+   photographs before they pick. A mosaic of empty tiles is the honest
+   photo-forward answer: it is visibly a diagram, not a fake camera roll. */
+const home_empty = `
+<div class="phone">
+  ${topbar('Vault',{trail:'contrast',over:true})}
+  <div class="scroll" style="display:flex;flex-direction:column">
+    ${ghost(360, `
+      <div class="title">Get space back<br>without losing anything</div>`)}
+    <div class="body" style="padding-top:6px">
+      <div class="desc">Pick some photos. Vault shows you exactly what it can save on those
+        files, and does nothing at all until you say so.</div>
+      <div class="btn suggested">${ic('photo',20)}Choose photos</div>
+      <div class="note">
+        <span style="color:var(--dim);flex:0 0 auto;margin-top:1px">${ic('shield',19)}</span>
+        <div class="desc">Vault declares no media permission and no network permission, on any
+          platform. It cannot see a photo you did not hand it, and it cannot send one anywhere.</div>
+      </div>
+      <div class="note">
+        <span style="color:var(--dim);flex:0 0 auto;margin-top:1px">${ic('info',19)}</span>
+        <div class="desc">This build measures and verifies, but does not store yet: nothing is
+          written, moved or deleted. Every saving shown was proven by encoding your file and
+          decoding it back.</div>
+      </div>
+    </div>
+  </div>
+  ${tabbar(0)}
+</div>`;
+
+/* 2 — Home, after a run. Now their photographs exist, so they lead. */
+const home_run = `
+<div class="phone">
+  ${topbar('Vault',{trail:'contrast',over:true})}
+  <div class="scroll" style="display:flex;flex-direction:column">
+    ${cover(300, `
+      <div class="eyebrow">proven saving</div>
+      <div class="hero">15.1 MB</div>
+      <div class="meter"><i style="width:19%"></i></div>
+      <div class="desc" style="margin-top:8px">of 78.6 MB measured · 9 files ·
+        your originals are still on this device</div>`)}
+    <div class="body" style="padding-top:4px">
+      <div class="btn suggested">${ic('photo',20)}Choose photos</div>
+      <div class="card">
+        <div class="row" style="padding:14px 20px">
+          <div class="lines"><div class="body-t">10 photos waiting</div>
+            <div class="desc">Picked, and not yet opened.</div></div>
+          <span style="color:var(--dim)">${ic('forward',20)}</span>
+        </div>
+        <div class="divider" style="margin:0 20px"></div>
+        <div class="row" style="padding:14px 20px">
+          <div class="lines"><div class="body-t">See the last run</div></div>
+          <span style="color:var(--dim)">${ic('forward',20)}</span>
+        </div>
+      </div>
+      <div class="note">
+        <span style="color:var(--dim);flex:0 0 auto;margin-top:1px">${ic('info',19)}</span>
+        <div class="desc">Nothing is written, moved or deleted yet. Every saving shown was
+          proven by encoding your file and decoding it back.</div>
+      </div>
+    </div>
+  </div>
+  ${tabbar(0)}
+</div>`;
+
+/* 3 — Plan, Move. Figure over the photographs it is about, then the
+   choice that changes it, then the photographs full size. Permissions
+   and arithmetic live below the fold, where they were always read. */
+const plan_move = `
+<div class="phone">
+  ${topbar('Plan',{back:true,over:true})}
+  <div class="scroll" style="display:flex;flex-direction:column">
+    ${cover(268, `
+      <div class="eyebrow">you would get back</div>
+      <div class="hero small">32.9 MB</div>
+      <div class="meter"><i style="width:28%"></i></div>
+      <div class="desc" style="margin-top:8px">10 photos · 117.6 MB · 1 left out</div>`)}
+    <div class="body" style="padding-top:16px">
+      <div class="tier">
+        <div class="thumb"></div>
+        <div class="opt on"><b>Move</b><s>32.9 MB</s></div>
+        <div class="opt"><b>Deep Move</b><s>58.7 MB</s></div>
+      </div>
+      <div class="desc" style="margin-top:-10px">Byte-exact. Every original stays
+        reconstructable from the vault copy, and the app proves it by decoding each result
+        and comparing.</div>
+      <div class="hstack">
+        <div class="group" style="flex:1">These photos</div>
+        <div class="desc">Tap one to leave it out</div>
+      </div>
+      <div class="grid">${cellsHTML(9,{out:[6],locked:[3]})}</div>
+      <div class="group">Permissions</div>
+      <div class="card">
+        <div class="row" style="padding:14px 20px">
+          <span style="color:var(--success-txt);flex:0 0 auto;align-self:flex-start;margin-top:2px">${ic('check',20)}</span>
+          <div class="lines">
+            <div class="body-t">Reading these files — granted by the picker</div>
+            <div class="desc">These 11 files and nothing else. Vault declares no media permission.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="actionbar">
+    <div class="btn suggested">Move 10 photos</div>
+    <div class="desc">Encodes each photo and verifies it byte for byte. Your originals are not touched.</div>
+  </div>
+</div>`;
+
+/* 4 — Plan, Deep Move. The consequence is carried by colour on the
+   figure, the meter, the selection and the commit button at once. */
+const plan_deep = `
+<div class="phone">
+  ${topbar('Plan',{back:true,over:true})}
+  <div class="scroll" style="display:flex;flex-direction:column">
+    ${cover(268, `
+      <div class="eyebrow">you would get back</div>
+      <div class="hero small deep">58.7 MB</div>
+      <div class="meter deep"><i style="width:50%"></i></div>
+      <div class="desc" style="margin-top:8px">10 photos · 117.6 MB · 1 left out</div>`)}
+    <div class="body" style="padding-top:16px">
+      <div class="tier deep">
+        <div class="thumb"></div>
+        <div class="opt"><b>Move</b><s>32.9 MB</s></div>
+        <div class="opt on"><b>Deep Move</b><s>58.7 MB</s></div>
+      </div>
+      <div class="tinted" style="background:var(--destructive-tint);margin-top:-10px">
+        <div class="desc" style="color:var(--destructive-txt)">Smaller, and not reversible once
+          the 14-day window closes. A photo is only re-encoded if it scores SSIMULACRA2 at or
+          above 90 against your original.</div>
+      </div>
+      <div class="group">Permissions</div>
+      <div class="card">
+        <div class="row" style="padding:14px 20px">
+          <span style="color:var(--success-txt);flex:0 0 auto;align-self:flex-start;margin-top:2px">${ic('check',20)}</span>
+          <div class="lines">
+            <div class="body-t">Reading these files — granted by the picker</div>
+            <div class="desc">These 11 files and nothing else.</div>
+          </div>
+        </div>
+        <div class="divider" style="margin:0 20px"></div>
+        <div class="row" style="padding:14px 20px">
+          <span style="color:var(--destructive-txt);flex:0 0 auto;align-self:flex-start;margin-top:2px">${ic('lock',20)}</span>
+          <div class="lines">
+            <div class="body-t">Delete originals later</div>
+            <div class="desc">Marks them eligible after 14 days. Nothing is deleted by this run.</div>
+          </div>
+          <div class="switch on"><i></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="actionbar">
+    <div class="btn destr">Deep Move 10 photos</div>
+    <div class="desc">Re-encodes each photo and scores it. Anything below the floor is kept
+      losslessly instead. Your originals are not touched by this run.</div>
+  </div>
+</div>`;
+
+/* 5 — Working. The grid IS the progress bar, so it gets the whole
+   screen: edge to edge, no gutter, no card. The count rides over it. */
+const working = `
+<div class="phone">
+  ${topbar('Working',{over:true})}
+  <div class="scroll" style="display:flex;flex-direction:column">
+    <div style="padding:56px 20px 14px">
+      <div class="hstack">
+        <div class="figure" style="flex:0 0 auto">5 / 10</div>
+        <div class="desc" style="flex:1;text-align:right">IMG_1204.jpg</div>
+      </div>
+      <div class="meter" style="height:3px"><i style="width:50%"></i></div>
+    </div>
+    <div class="grid bleed">${cellsHTML(12,{states:['ok','ok','ok','skip','ok','work','work','work','work','work','work','work']})}</div>
+    <div class="body" style="padding-top:18px">
+      <div class="note">
+        <span style="color:var(--dim);flex:0 0 auto;margin-top:1px">${ic('shield',19)}</span>
+        <div class="desc">Each photo is encoded, then decoded again and compared byte for byte.
+          One that cannot prove its roundtrip is reported as failed, not as saved.</div>
+      </div>
+    </div>
+  </div>
+  <div class="actionbar"><div class="btn flat">Stop</div></div>
+</div>`;
+
+/* 6 — Outcome. The three tallies get shapes as well as colours, so the
+   distinction survives the most common form of colour blindness. */
+const outcome = `
+<div class="phone">
+  ${topbar('What changed',{back:true,over:true})}
+  <div class="scroll" style="display:flex;flex-direction:column">
+    ${cover(280, `
+      <div class="eyebrow">measured, net of vault overhead</div>
+      <div class="hero small">15.1 MB</div>
+      <div class="meter"><i style="width:19%"></i></div>
+      <div class="desc" style="margin-top:8px">78.6 MB → 63.5 MB · 19% of what you handed over</div>`)}
+    <div class="body" style="padding-top:16px">
+      <div class="tallies">
+        <div class="tally"><div class="n" style="color:var(--success-txt)">${ic('check',20)}7</div>
+          <div class="l">proven by decode + compare</div></div>
+        <div class="tally"><div class="n" style="color:var(--warning-txt)">${ic('info',20)}1</div>
+          <div class="l">unqualified — not counted</div></div>
+        <div class="tally"><div class="n" style="color:var(--destructive-txt)">${ic('cross',20)}1</div>
+          <div class="l">failed, originals untouched</div></div>
+      </div>
+      <div class="hstack">
+        <div class="group" style="flex:1">Every photo</div>
+        <div class="desc">Tap for its proof</div>
+      </div>
+      <div class="grid">${cellsHTML(9,{states:['ok','ok','ok','skip','ok','fail','ok','ok','unq']})}</div>
+    </div>
+  </div>
+  <div class="actionbar">
+    <div class="btn suggested">Done</div>
+    <div class="btn flat">${ic('restore',20)}Restore everything</div>
+  </div>
+</div>`;
+
+/* 7 — One photograph's proof. Full-bleed to the top edge: this screen
+   exists to show you the picture and what was checked against it. */
+const photo_proof = `
+<div class="phone">
+  ${topbar('',{back:true,over:true})}
+  <div class="scroll" style="display:flex;flex-direction:column">
+    <div class="cover" style="height:340px">
+      <div class="p6" style="height:100%"></div>
+      <div class="veil"></div>
+      <div class="content">
+        <div class="title" style="margin-bottom:8px">IMG_1205.jpg</div>
+        <div class="hstack">
+          <span class="chip" style="background:var(--destructive-tint);color:var(--destructive-txt)">
+            ${ic('cross',14)}failed</span>
+          <span class="chip" style="background:var(--hover);color:var(--dim)">JPEG</span>
+        </div>
+      </div>
+    </div>
+    <div class="body" style="padding-top:16px">
+      <div class="card pad" style="display:flex;flex-direction:column;gap:12px">
+        <div class="hstack"><div class="desc" style="flex:1">before</div>
+          <div style="letter-spacing:.4px;font-weight:600">11.9 MB</div></div>
+        <div class="divider"></div>
+        <div class="hstack"><div class="desc" style="flex:1">after</div>
+          <div style="letter-spacing:.4px;font-weight:600">9.5 MB</div></div>
+        <div class="divider"></div>
+        <div class="hstack"><div class="desc" style="flex:1">saved</div>
+          <div style="letter-spacing:.4px;font-weight:600;color:var(--destructive-txt)">not counted</div></div>
+      </div>
+      <div class="group">What was checked</div>
+      <div class="sec">Your original is untouched and remains the only copy. The failure is
+        logged as loudly as a success — see Activity.</div>
+      <div class="tinted" style="background:var(--warning-tint)">
+        <div class="desc" style="color:var(--warning-txt)">lepton: unsupported progressive scan</div>
+      </div>
+    </div>
+  </div>
+  <div class="actionbar"><div class="btn flat">Back to the run</div></div>
+</div>`;
+
+/* 8 — Activity. Unchanged in structure; it gains the real icons, the
+   elevation, and a chain that looks like one. */
+const activity = `
+<div class="phone">
+  ${topbar('Activity')}
+  <div class="scroll"><div class="body" style="padding-top:0;gap:0">
+    ${[
+      ['run','Run finished','7 proven · 1 unqualified · 1 failed · 15.1 MB saved, net','f25529228ff6190c7f5de376','var(--line-strong)'],
+      ['fail','Failed: IMG_1205.jpg','lepton: unsupported progressive scan','844ffd8d98b25d5fb05dea1b','var(--destructive)'],
+      ['skip','Skipped: IMG_1203.dng','RAW is never re-encoded, in any tier','25c632c2f7293349549f76ce','var(--warning-txt)'],
+      ['grant','Transform granted — 10 files','Move · plan 45adc24036f1969c34db6f55','baee2e652a18f9144429fe35','var(--accent)'],
+    ].map(([k,t,d,h,c])=>`
+      <div style="display:flex;gap:14px;padding:14px 0">
+        <div style="width:3px;border-radius:2px;background:${c};flex:0 0 auto"></div>
+        <div class="lines" style="flex:1">
+          <div class="hstack"><div class="body-t" style="flex:1;font-weight:700${k==='fail'?';color:var(--destructive-txt)':''}">${t}</div>
+            <div class="meta" style="font-weight:400">07:19</div></div>
+          <div class="sec">${d}</div>
+          <div class="meta" style="font-weight:400;opacity:.75;letter-spacing:.6px">${h}</div>
+        </div>
+      </div>`).join('<div class="divider"></div>')}
+    <div style="height:22px"></div>
+    <div class="btn regular">${ic('export',20)}Export the log</div>
+    <div style="height:14px"></div>
+    <div class="desc">The log does not survive uninstalling the app. That is deliberate, and it
+      is why export exists.</div>
+  </div></div>
+  ${tabbar(1)}
+</div>`;
+
+/* ---- what it replaces, for comparison ---- */
+const old_home = `
+<div class="phone">
+  ${topbar('Vault',{trail:'contrast'})}
+  <div class="scroll"><div class="body" style="padding-top:22px">
+    <div class="title">Get space back<br>without losing anything</div>
+    <div class="desc">Pick some photos. Vault shows you exactly what it can save on those
+      files, and does nothing at all until you say so.</div>
+    <div class="btn suggested" style="box-shadow:none">Choose photos</div>
+    <div class="note">
+      <span style="color:var(--dim);flex:0 0 auto;margin-top:1px">${ic('check',19)}</span>
+      <div class="desc">This build measures and verifies, but does not store yet: nothing is
+        written, moved or deleted.</div>
+    </div>
+  </div></div>
+  <div class="tabbar">
+    <div class="tab on">${ic('check',21)}<span>Vault</span></div>
+    <div class="tab">${ic('info',21)}<span>Activity</span></div>
+    <div class="tab">${ic('cross',21)}<span>Settings</span></div>
+  </div>
+</div>`;
+
+const SHOTS = [
+  [home_empty, 'Home — nothing picked', 'The empty state was ~45% dead space. It cannot show real photos (no media permission), so it shows the <em>shape</em> of the idea: a mosaic that is visibly a diagram, not a fake camera roll.'],
+  [home_run,   'Home — after a run', 'Their photographs, a scrim, and the figure over them. The meter is new: “15.1 MB” alone is a number, “19% of 78.6 MB” is a claim.'],
+  [plan_move,  'Plan — Move', 'The figure now sits on the pictures it is about. Grid moved above the fold; permissions and arithmetic dropped below it, where they were always read anyway.'],
+  [plan_deep,  'Plan — Deep Move', 'Irreversibility carried four ways at once: figure, meter, selection, commit button — plus the padlock beside the one grant that authorises destruction.'],
+  [working,    'Working', 'The grid <em>is</em> the progress bar, so it gets the whole width — no gutter, no card. Veiled tiles are queued; a badge means its result is in.'],
+  [outcome,    'What changed', 'Tallies get a shape as well as a colour, so proven / unqualified / failed survive the commonest form of colour blindness.'],
+  [photo_proof,'One photo’s proof', 'Full-bleed to the top edge. The picture is the point of this screen; name and state ride over the scrim.'],
+  [activity,   'Activity', 'Structurally unchanged — it gains the drawn icons, elevation, and hashes set with real tracking so a chain reads as a chain.'],
+];
+
+const OLD = [[old_home, 'Before — home', 'Four hundred pixels of nothing, flat cards, and a tick / info / cross standing in for Vault / Activity / Settings.']];
+
+const rail = document.getElementById('rail');
+const render = () => {
+  const shots = document.getElementById('cmp').getAttribute('aria-pressed') === 'true'
+    ? OLD.concat(SHOTS) : SHOTS;
+  rail.innerHTML = shots.map(([html, t, c]) =>
+    `<figure>${html}<figcaption><b>${t}</b>${c}</figcaption></figure>`).join('');
+};
+
+document.getElementById('theme').onclick = e => {
+  const dark = e.target.getAttribute('aria-pressed') === 'true';
+  e.target.setAttribute('aria-pressed', String(!dark));
+  e.target.textContent = dark ? 'Light' : 'Dark';
+  document.body.classList.toggle('light', dark);
+};
+document.getElementById('cmp').onclick = e => {
+  const on = e.target.getAttribute('aria-pressed') === 'true';
+  e.target.setAttribute('aria-pressed', String(!on));
+  render();
+};
+render();
+</script>
+</body>
+</html>

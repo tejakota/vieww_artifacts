@@ -1,0 +1,24 @@
+[package]
+name = "vavlt-desktop"
+description = "vavlt on a laptop: a window, a folder chooser, and the same tree the phones run."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vavlt"
+path = "src/main.rs"
+
+[dependencies]
+vavlt-app.workspace = true
+vavlt-core.workspace = true
+vavlt-engine.workspace = true
+vieww.workspace = true
+vieww-platform-winit.workspace = true
+anyhow.workspace = true
+walkdir.workspace = true
+log.workspace = true
+# Console logging. The two mobile hosts have their own sinks — `android_logger`
+# and `NSLog` — so this is named here rather than in `vavlt-app`, which must
+# stay free of a logging backend for exactly that reason.
+env_logger = "0.11"

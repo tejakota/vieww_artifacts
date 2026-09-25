@@ -1,0 +1,11 @@
+[package]
+name = "capture-demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+three-capture.workspace = true
+three-reconstruction.workspace = true
+three-runtime.workspace = true

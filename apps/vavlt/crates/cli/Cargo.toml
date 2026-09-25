@@ -1,0 +1,23 @@
+[package]
+name = "vavlt-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vavlt"
+path = "src/main.rs"
+
+[features]
+default = []
+avif = ["vavlt-codecs/avif"]
+
+[dependencies]
+vavlt-core.workspace = true
+vavlt-codecs.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+rayon.workspace = true
+walkdir.workspace = true
+serde.workspace = true
+serde_json.workspace = true

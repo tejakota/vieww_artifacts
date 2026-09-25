@@ -1,0 +1,8 @@
+[package]
+name = "three-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Core data model and invariants for the .3 temporal 3D format"

@@ -1,0 +1,104 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/three-core",
+    "crates/three-format",
+    "crates/three-capture",
+    "crates/three-reconstruction",
+    "crates/three-runtime",
+    "crates/three-vieww",
+    "crates/three-social",
+    "crates/three-app",
+    "crates/three-cli",
+    "examples/capture-demo",
+    "examples/vieww-integration",
+    "examples/social-app",
+]
+
+# Everything except the Vieww reference viewer.
+#
+# The `.3` stack is deliberately buildable with no UI framework present: put
+# this checkout anywhere and `cargo test` / `cargo build` work. The viewer is
+# the one member that reaches across to a Vieww checkout, so it is excluded
+# from the *default* selection rather than from the workspace:
+#
+# * `cargo test` / `cargo build`              — the foundation, no Vieww needed.
+# * `cargo test --workspace`                  — everything, viewer included.
+# * `cargo run -p vieww-integration`          — the viewer, selected by name.
+#
+# Selecting it by name works whether or not it is a default member, so the
+# only thing `default-members` changes is what a bare `cargo test` builds.
+default-members = [
+    "crates/three-core",
+    "crates/three-format",
+    "crates/three-capture",
+    "crates/three-reconstruction",
+    "crates/three-runtime",
+    "crates/three-vieww",
+    "crates/three-social",
+    "crates/three-app",
+    "crates/three-cli",
+    "examples/capture-demo",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.89"
+
+[workspace.dependencies]
+three-core = { path = "crates/three-core", version = "0.1.0" }
+three-format = { path = "crates/three-format", version = "0.1.0" }
+three-capture = { path = "crates/three-capture", version = "0.1.0" }
+three-reconstruction = { path = "crates/three-reconstruction", version = "0.1.0" }
+three-runtime = { path = "crates/three-runtime", version = "0.1.0" }
+three-vieww = { path = "crates/three-vieww", version = "0.1.0" }
+three-social = { path = "crates/three-social", version = "0.1.0" }
+three-app = { path = "crates/three-app", version = "0.1.0" }
+
+# The Vieww framework, by path — used only by Vieww application members.
+#
+# The paths assume this checkout and a Vieww checkout sit side by side:
+#
+#     parent/
+#       three/            <- this workspace
+#       vieww-develop/    <- a checkout of Vieww
+#
+# `cargo` resolves workspace-relative paths from *this* file, so moving or
+# renaming the Vieww checkout means editing these three lines, nowhere else.
+# Vieww applications are non-default members so a missing checkout breaks
+# nothing else: see `default-members` above and `docs/VIEWW-INTEGRATION.md`.
+#
+# Toolchain note: Vieww's own `rust-toolchain.toml` pins an exact rustc and its
+# dependency tree (cosmic-text, image, ...) requires 1.89+. This workspace's
+# foundation builds on 1.89; building the viewer needs a toolchain new enough
+# for Vieww's tree — `rust-toolchain.toml` at this root pins the one this
+# integration was developed against.
+vieww = { path = "../vieww-develop/crates/vieww" }
+vieww-platform-winit = { path = "../vieww-develop/crates/vieww-platform-winit" }
+vieww-test-harness = { path = "../vieww-develop/crates/vieww-test-harness" }
+
+# The viewer's per-frame cost is dominated by Vieww's rasterizer and this
+# workspace's projection math, so a debug build inherits the same
+# optimisation carve-outs the Vieww workspace itself uses (see that
+# workspace's Cargo.toml for the measurements behind each line): the
+# pixel-facing crates get codegen, the widget/element layers stay debuggable.
+#
+# `"*"` covers third-party dependencies (cosmic-text, ttf-parser, winit);
+# the named vieww crates below are path dependencies of *this* workspace, so
+# without these entries a `cargo run -p vieww-integration` in debug mode
+# draws frames that take seconds — which presents as a hung window.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.vieww-paint]
+opt-level = 3
+[profile.dev.package.vieww-text]
+opt-level = 3
+[profile.dev.package.vieww-foundation]
+opt-level = 3
+[profile.dev.package.vieww-hal]
+opt-level = 2
+[profile.dev.package.three-vieww]
+opt-level = 3
