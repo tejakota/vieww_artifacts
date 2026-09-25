@@ -1,0 +1,15 @@
+[package]
+name = "three-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "three"
+path = "src/main.rs"
+
+[dependencies]
+three-core.workspace = true
+three-format.workspace = true
+three-runtime.workspace = true

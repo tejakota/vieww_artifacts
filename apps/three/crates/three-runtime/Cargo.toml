@@ -1,0 +1,14 @@
+[package]
+name = "three-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Capture orchestration and playback runtime for .3 media"
+
+[dependencies]
+three-core.workspace = true
+three-format.workspace = true
+three-capture.workspace = true
+three-reconstruction.workspace = true

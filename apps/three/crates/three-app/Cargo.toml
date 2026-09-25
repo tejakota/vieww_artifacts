@@ -1,0 +1,15 @@
+[package]
+name = "three-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Application orchestration for the 3 social media client"
+
+[dependencies]
+three-core.workspace = true
+three-format.workspace = true
+three-runtime.workspace = true
+three-vieww.workspace = true
+three-social.workspace = true

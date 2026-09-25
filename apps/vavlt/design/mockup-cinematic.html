@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vault — cinematic</title>
+<style>
+/* ===================================================================
+   CINEMATIC. Three moves borrowed from Netflix, and one refused.
+
+   Taken:  a full-bleed billboard that fades into the page rather than
+           ending at an edge; horizontal rails grouped by meaning; no
+           boxes — content flows, and a section is a heading and a rail
+           rather than a card.
+   Refused: rails as the *only* way to see a set. Netflix rails are for
+           browsing a catalogue you will never see all of. The plan
+           screen has the opposite job — you must be able to see every
+           photo to exclude one — so it keeps a grid behind "See all".
+           Netflix does this too: rows to browse, a grid for search.
+
+   The palette goes deeper than Adwaita's #242424 because a billboard
+   needs somewhere to fade *into*, and the accent stays Adwaita's blue
+   and red so the consent language is unchanged.
+   =================================================================== */
+:root{
+  --bg:#0e0f11; --bg-2:#141619; --raise:#1b1e22;
+  --fg:#fff; --fg-2:rgba(255,255,255,.78); --dim:rgba(255,255,255,.52);
+  --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.18);
+  --accent:#3584e4; --accent-txt:#8ab8f0; --accent-tint:rgba(53,132,228,.18);
+  --destructive:#e0313e; --destructive-txt:#ff8272; --destructive-tint:rgba(224,49,62,.16);
+  --warning-txt:#f8e45c; --warning-tint:rgba(248,228,92,.14);
+  --success-txt:#8ff0a4;
+  --glass:rgba(255,255,255,.13);
+  --fade:linear-gradient(180deg,
+        rgba(14,15,17,0) 0%, rgba(14,15,17,.10) 34%, rgba(14,15,17,.42) 56%,
+        rgba(14,15,17,.78) 74%, rgba(14,15,17,.96) 89%, #0e0f11 100%);
+  --topfade:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0));
+}
+.light{
+  --bg:#f6f6f7; --bg-2:#fff; --raise:#fff;
+  --fg:#141618; --fg-2:rgba(20,22,24,.80); --dim:rgba(20,22,24,.56);
+  --line:rgba(0,0,0,.09); --line-strong:rgba(0,0,0,.16);
+  --accent-txt:#1c71d8; --accent-tint:rgba(53,132,228,.13);
+  --destructive:#c01c28; --destructive-txt:#c01c28; --destructive-tint:rgba(192,28,40,.10);
+  --warning-txt:#9c6e03; --warning-tint:rgba(156,110,3,.12); --success-txt:#16803c;
+  --glass:rgba(0,0,0,.07);
+  --fade:linear-gradient(180deg,
+        rgba(246,246,247,0) 0%, rgba(246,246,247,.14) 34%, rgba(246,246,247,.5) 56%,
+        rgba(246,246,247,.84) 74%, rgba(246,246,247,.97) 89%, #f6f6f7 100%);
+  --topfade:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,0));
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:#eee;
+  font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:28px 20px 60px}
+h1{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.sub{color:#8e8e8e;font-size:13.5px;max-width:78ch;margin:8px 0 20px}
+.bar{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap}
+button.t{background:#1a1b1d;color:#ddd;border:1px solid #2a2c2f;border-radius:8px;
+  padding:8px 14px;font:inherit;font-size:13px;cursor:pointer}
+button.t[aria-pressed="true"]{background:#3584e4;border-color:#3584e4;color:#fff}
+.rail-out{display:flex;gap:22px;overflow-x:auto;padding-bottom:20px;align-items:flex-start}
+figure{flex:0 0 auto}
+figcaption{color:#868686;font-size:12px;margin-top:9px;max-width:412px}
+figcaption b{color:#ddd;font-weight:600;display:block;margin-bottom:3px;font-size:12.5px}
+
+/* ---------------- the phone ---------------- */
+.phone{width:412px;height:915px;background:var(--bg);color:var(--fg);border-radius:26px;
+  overflow:hidden;position:relative;display:flex;flex-direction:column;font-size:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.scroll{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column}
+
+/* Chrome floats over the billboard, never on a bar of its own. */
+.top{position:absolute;top:0;left:0;right:0;height:78px;z-index:6;
+  display:flex;align-items:center;gap:6px;padding:0 12px 0 6px;
+  background:var(--topfade)}
+.top .title{font-size:17px;font-weight:700;flex:1;letter-spacing:.1px}
+.iconbtn{width:48px;height:48px;border-radius:24px;display:grid;place-items:center;
+  color:var(--fg);flex:0 0 auto}
+
+/* The tab bar is glass, not a slab — the rail underneath scrolls past it. */
+.tabs{position:absolute;left:0;right:0;bottom:0;height:74px;z-index:6;display:flex;
+  background:linear-gradient(180deg,rgba(14,15,17,0),rgba(14,15,17,.92) 34%,#0e0f11 62%);
+  padding-top:10px}
+.light .tabs{background:linear-gradient(180deg,rgba(246,246,247,0),rgba(246,246,247,.9) 42%,#f6f6f7)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;color:var(--dim)}
+.tab.on{color:var(--fg)}
+.tab span{font-size:11.5px;letter-spacing:.3px}
+.tab.on span{font-weight:700}
+/* The one lit mark, so "where am I" survives a glance. */
+.tab.on em{position:absolute;top:0;width:26px;height:3px;border-radius:1.5px;background:var(--accent)}
+
+/* ---------------- the billboard ---------------- */
+.bb{position:relative;flex:0 0 auto;overflow:hidden}
+.bb .art{position:absolute;inset:0}
+.bb .art i{position:absolute;inset:0;background-size:cover;background-position:center}
+.bb .fade{position:absolute;inset:0;background:var(--fade)}
+.bb .lower{position:absolute;left:0;right:0;bottom:0;padding:0 20px 4px}
+/* When something floats up over the billboard's lower edge, the words have to
+   move out of its way rather than sit behind it. */
+.bb.floated .lower{padding-bottom:46px}
+
+/* A wash of the accent bled up from the bottom. The one purely
+   atmospheric thing here, and it is what stops a dark screen with a
+   photograph on it reading as a photo viewer. */
+.bb .wash{position:absolute;left:-30%;right:-30%;bottom:-40%;height:70%;border-radius:50%;
+  background:radial-gradient(closest-side,var(--accent-tint),transparent 70%);filter:blur(6px)}
+.bb.deep .wash{background:radial-gradient(closest-side,var(--destructive-tint),transparent 70%)}
+
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--dim)}
+.hero{font-size:62px;font-weight:600;letter-spacing:-1px;line-height:1;
+  font-variant-numeric:tabular-nums}
+.hero.sm{font-size:50px}
+.hero.deep{color:var(--destructive-txt)}
+.lede{font-size:15px;color:var(--fg-2);line-height:1.35}
+
+/* the meter */
+.meter{height:5px;border-radius:3px;background:var(--glass);overflow:hidden;margin:12px 0 10px}
+.meter i{display:block;height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--accent),#6aa6f2)}
+.meter.deep i{background:linear-gradient(90deg,var(--destructive),#ff7a68)}
+
+/* ---------------- buttons ---------------- */
+.cta{display:flex;gap:10px;margin-top:14px}
+/* Half the height, so every button is a stadium and the family is obvious at a
+   glance. `border-radius` larger than half is clamped by every engine, so 999
+   would work too — 26 is written out because it has to stay in step with the
+   height, and a number that tracks another number should say so. */
+.btn{height:52px;border-radius:26px;display:flex;align-items:center;justify-content:center;
+  gap:9px;font-size:15.5px;font-weight:700;flex:1;letter-spacing:.1px}
+.btn.solid{background:var(--fg);color:var(--bg);box-shadow:0 6px 18px rgba(0,0,0,.28)}
+.btn.accent{background:linear-gradient(180deg,#4a92e8,var(--accent) 60%,#2f76cf);color:#fff;
+  box-shadow:0 6px 18px rgba(53,132,228,.34),inset 0 1px 0 rgba(255,255,255,.28)}
+.btn.destr{background:linear-gradient(180deg,#ea4a55,var(--destructive) 60%,#c4252f);color:#fff;
+  box-shadow:0 6px 18px rgba(224,49,62,.34),inset 0 1px 0 rgba(255,255,255,.24)}
+/* Netflix's "More Info": frosted, not outlined. */
+.btn.glass{background:var(--glass);color:var(--fg);backdrop-filter:blur(12px)}
+.btn.wide{flex:none;width:100%}
+
+/* ---------------- rails ---------------- */
+.section{margin-top:26px}
+.section h3{font-size:16.5px;font-weight:700;padding:0 20px;display:flex;align-items:center;gap:8px}
+.section h3 small{font-weight:400;font-size:13px;color:var(--dim);margin-left:auto;
+  display:flex;align-items:center;gap:3px}
+p.note{font-size:13.5px;color:var(--dim);padding:2px 20px 0;line-height:1.4}
+.rail{display:flex;gap:8px;padding:12px 20px 0;overflow:hidden}
+/* The last card is deliberately cut by the screen edge. A rail whose
+   contents end flush reads as a finished row rather than as one you can
+   push, and that is the single cheapest signal that it scrolls. */
+/* 22 on a 108 tile, not 8. At this size a small radius reads as a cropped
+   rectangle; the curve has to be a visible fraction of the edge to register as
+   a shape of its own. */
+.rail .t{flex:0 0 auto;width:108px;height:108px;border-radius:22px;position:relative;overflow:hidden}
+.rail.tall .t{width:124px;height:166px;border-radius:24px}
+.rail .t.big{width:150px;height:150px;border-radius:28px}
+/* Netflix's hover-scale, as the resting state of the focused item. */
+.rail .t.focus{transform:scale(1.06);box-shadow:0 8px 22px rgba(0,0,0,.55);
+  /* A ring rather than an outline: `outline` is drawn square on a rounded box
+     in more than one engine, which puts sharp corners on the one tile that is
+     supposed to be the softest thing on screen. An inset box-shadow follows the
+     radius by construction. */
+  box-shadow:0 8px 22px rgba(0,0,0,.55),inset 0 0 0 2.5px var(--fg);z-index:2}
+/* Scoped to the tile, not to the rail. These two were `.rail .t…`, which meant
+   an excluded photograph and a photograph still in the codec both rendered at
+   full brightness inside the mosaic — the two states the grid exists to show. */
+.t.out{opacity:.34}
+.t .veil{position:absolute;inset:0;background:rgba(10,11,13,.62)}
+.t .cap{position:absolute;left:0;right:0;bottom:0;padding:22px 7px 6px;
+  background:linear-gradient(180deg,transparent,rgba(0,0,0,.8));
+  font-size:12px;font-weight:700;letter-spacing:.2px}
+.mark{position:absolute;right:7px;top:7px;width:24px;height:24px;border-radius:12px;
+  background:rgba(0,0,0,.62);display:grid;place-items:center;color:#fff}
+.pill{position:absolute;left:7px;bottom:7px;height:22px;border-radius:11px;padding:0 8px;
+  display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#fff;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(8px)}
+.pill.ok{background:rgba(53,132,228,.9)}
+.pill.fail{background:rgba(224,49,62,.92)}
+.pill.unq{background:rgba(248,228,92,.92);color:#141618}
+
+/* ---------------- the mosaic ----------------
+   Four columns, square cells, and a repeating span pattern so some photographs
+   are 2x2, some 2x1 and most 1x1. `grid-auto-flow:dense` back-fills the holes a
+   big block leaves, which is what keeps the wall solid without hand-placing
+   anything.
+
+   # The sizes are a function of position, not of chance
+
+   The obvious implementation is `Math.random()` per tile, and it is wrong in a
+   way that only shows up in use: this grid is the screen where you *exclude* a
+   photograph, so it rebuilds on every tap — and a random size means the whole
+   wall reshuffles under the finger that just tapped it. `i % 11` is stable
+   across rebuilds by construction, which is the only property that matters
+   here. It is also why an excluded photo stays in place and dims rather than
+   leaving the grid: removing it would reflow everything after it. */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:1fr;
+  grid-auto-flow:dense;gap:5px;padding:12px 20px 0}
+.grid .t{aspect-ratio:1;border-radius:16px;position:relative;overflow:hidden}
+/* A big block's radius grows with it, or a 2x2 tile at the 1x1 radius reads as
+   a different, squarer shape sitting among the others. */
+.grid .t.big{grid-column:span 2;grid-row:span 2;aspect-ratio:1;border-radius:26px}
+.grid .t.wide{grid-column:span 2;aspect-ratio:2;border-radius:20px}
+.grid .t.tall{grid-row:span 2;aspect-ratio:.5;border-radius:20px}
+
+/* flowing rows — no card, just rhythm and a hairline */
+.rows{padding:0 20px}
+.r{display:flex;align-items:center;gap:14px;padding:15px 0;border-bottom:1px solid var(--line)}
+.r:last-child{border-bottom:0}
+.r .l{flex:1;display:flex;flex-direction:column;gap:3px}
+.r .l b{font-size:15.5px;font-weight:600}
+.r .l s{text-decoration:none;font-size:13.5px;color:var(--dim);line-height:1.35}
+.r .v{font-size:15.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.2px}
+
+/* ---------------- the tier control ----------------
+   A stadium, and the radius is derived rather than chosen: half the height for
+   the track, half the *inner* height for the lozenge inside it. A fixed 12px on
+   a 76px control is the thing that reads as "a rectangle with the corners taken
+   off" — the curve has to be a function of the height or it fights it.
+
+   The lozenge also lifts: a shadow and a top highlight, so the selection reads
+   as an object sitting in a channel rather than as a filled region. That is
+   what makes a segmented control feel like something you slid. */
+.tier{margin:0 20px;height:76px;border-radius:38px;display:flex;position:relative;
+  background:var(--glass);backdrop-filter:blur(18px);overflow:hidden;
+  border:1px solid var(--line-strong);
+  /* the channel: a soft inner shade at the top, as if recessed */
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.22)}
+.light .tier{box-shadow:inset 0 2px 6px rgba(0,0,0,.07)}
+.tier .thumb{position:absolute;top:5px;bottom:5px;left:5px;width:calc(50% - 7px);
+  border-radius:33px;
+  background:linear-gradient(180deg,#4a92e8,var(--accent) 62%,#2f76cf);
+  box-shadow:0 4px 14px rgba(53,132,228,.42),
+             inset 0 1px 0 rgba(255,255,255,.34)}
+.tier.deep .thumb{left:auto;right:5px;
+  background:linear-gradient(180deg,#ea4a55,var(--destructive) 62%,#c4252f);
+  box-shadow:0 4px 14px rgba(224,49,62,.42),
+             inset 0 1px 0 rgba(255,255,255,.30)}
+.tier .o{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1px;position:relative;color:var(--fg-2)}
+.tier .o.on{color:#fff}
+.tier .o b{font-size:15.5px}
+.tier .o s{text-decoration:none;font-size:13px;opacity:.92;font-variant-numeric:tabular-nums}
+
+.stats{display:flex;gap:0;padding:0 20px;margin-top:20px}
+.stat{flex:1;display:flex;flex-direction:column;gap:2px}
+.stat .n{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;
+  display:flex;align-items:center;gap:6px;letter-spacing:-.5px}
+.stat .k{font-size:12px;color:var(--dim);line-height:1.3;padding-right:8px}
+
+.tint{margin:14px 20px 0;border-radius:20px;padding:14px 17px;font-size:13.5px;line-height:1.4}
+.chip{height:27px;border-radius:14px;padding:0 10px;display:inline-flex;align-items:center;
+  gap:5px;font-size:12px;font-weight:700;letter-spacing:.3px}
+.note2{display:flex;gap:12px;padding:0 20px;margin-top:20px;align-items:flex-start}
+.note2 .x{color:var(--dim);flex:0 0 auto;margin-top:1px}
+.note2 p{font-size:13.5px;color:var(--dim);line-height:1.45}
+/* Tall enough that the fade has room to finish before the button. A short one
+   leaves a heading sliced in half across the middle of it, which reads as
+   clipping rather than as depth. */
+.actionbar{position:absolute;left:0;right:0;bottom:0;z-index:6;padding:44px 20px 18px;
+  background:linear-gradient(180deg,rgba(14,15,17,0),rgba(14,15,17,.72) 24%,#0e0f11 46%)}
+.light .actionbar{background:linear-gradient(180deg,rgba(246,246,247,0),rgba(246,246,247,.82) 24%,#f6f6f7 46%)}
+.actionbar .sub2{font-size:12.5px;color:var(--dim);margin-top:9px;line-height:1.4;text-align:center}
+.spacer{height:120px;flex:0 0 auto}
+
+/* ghost tiles, for the state where there is nothing to show */
+.ghostrail .t{background:transparent;border:1.5px solid var(--line-strong);border-radius:22px}
+.ghostrail .t.lit{border-color:var(--accent);background:var(--accent-tint)}
+
+/* Stand-ins for photographs. Layered radials over a base ramp, so each has a
+   bright subject, a falloff and a dark corner — which is what the scrim and the
+   billboard type actually have to survive. A flat two-stop gradient tests
+   neither. */
+.p1{background:
+  radial-gradient(120% 80% at 62% 26%,rgba(255,236,190,.95),transparent 58%),
+  radial-gradient(70% 55% at 22% 72%,rgba(120,30,10,.75),transparent 70%),
+  linear-gradient(160deg,#f7b733,#fc4a1a 55%,#2b1055)}
+.p2{background:
+  radial-gradient(90% 60% at 30% 22%,rgba(220,255,245,.8),transparent 62%),
+  radial-gradient(80% 70% at 78% 88%,rgba(4,26,48,.85),transparent 66%),
+  linear-gradient(200deg,#43cea2,#185a9d)}
+.p3{background:
+  radial-gradient(85% 55% at 70% 18%,rgba(255,250,235,.9),transparent 60%),
+  radial-gradient(75% 65% at 18% 86%,rgba(46,20,66,.8),transparent 68%),
+  linear-gradient(140deg,#ffd6a5,#ff8fab 60%,#6a4c93)}
+.p4{background:linear-gradient(180deg,#2c5364,#0f2027)}
+.p5{background:linear-gradient(150deg,#c9d6ff,#9fa8b8 60%,#5b6472)}
+.p6{background:
+  radial-gradient(70% 50% at 40% 24%,rgba(255,252,220,.95),transparent 56%),
+  radial-gradient(90% 70% at 84% 92%,rgba(60,14,0,.8),transparent 64%),
+  linear-gradient(170deg,#f9d423,#e65c00)}
+.p7{background:linear-gradient(190deg,#8e9eab,#dfe4e6)}
+.p8{background:linear-gradient(155deg,#654ea3,#eaafc8)}
+.p9{background:
+  radial-gradient(80% 55% at 68% 30%,rgba(255,222,200,.85),transparent 58%),
+  radial-gradient(70% 60% at 16% 14%,rgba(18,6,44,.9),transparent 66%),
+  linear-gradient(175deg,#3a1c71,#d76d77 55%,#ffaf7b)}
+svg{display:block}
+</style>
+</head>
+<body>
+
+<h1>Vault — cinematic</h1>
+<p class="sub">
+  A billboard that fades into the page, horizontal rails grouped by meaning, and no boxes.
+  One Netflix move is deliberately <b>refused</b>: rails are not the only way to see a set —
+  the plan screen has to let you see every photo to exclude one, so it keeps a grid behind
+  “See all”. Netflix does the same thing: rows to browse, a grid for search.
+</p>
+
+<div class="bar">
+  <button class="t" id="theme" aria-pressed="true">Dark</button>
+</div>
+<div class="rail-out" id="out"></div>
+
+<script>
+const S = 'fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"';
+const I = {
+  vault:`<rect x="3" y="4" width="18" height="16" rx="3" ${S}/><circle cx="11" cy="12" r="3.6" ${S}/><circle cx="11" cy="12" r="1" fill="currentColor"/><path d="M13.6 14.6 15.6 16.6" ${S}/>`,
+  clock:`<circle cx="12" cy="12" r="8.4" ${S}/><path d="M12 12V7.4M12 12l3.4 1.6" ${S}/>`,
+  sliders:`<path d="M3.5 7h17M3.5 17h17" ${S}/><circle cx="9" cy="7" r="2.6" fill="currentColor"/><circle cx="15.5" cy="17" r="2.6" fill="currentColor"/>`,
+  check:`<path d="M4.8 12.6 9.6 17.4 19.2 6.8" ${S}/>`,
+  cross:`<path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6" ${S}/>`,
+  lock:`<rect x="5" y="10.5" width="14" height="9.5" rx="2.4" ${S}/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" ${S}/><circle cx="12" cy="15" r="1.3" fill="currentColor"/>`,
+  shield:`<path d="M12 3.2 19.8 6.4v5.6c0 4.4-3.2 7.4-7.8 8.8-4.6-1.4-7.8-4.4-7.8-8.8V6.4Z" ${S}/>`,
+  photo:`<rect x="3" y="5" width="18" height="14" rx="2.6" ${S}/><circle cx="8.6" cy="9.6" r="1.5" fill="currentColor"/><path d="m5.4 16.2 5-5 3.6 3.6 2.4-2.4 2.2 2.2" ${S}/>`,
+  export:`<path d="M12 3.6v10.8M12 14.6 7.6 10.2M12 14.6l4.4-4.4M4.4 18.9h15.2" ${S}/>`,
+  back:`<path d="M15 5.4 8.4 12 15 18.6" ${S}/>`,
+  forward:`<path d="M9 5.4 15.6 12 9 18.6" ${S}/>`,
+  contrast:`<circle cx="12" cy="12" r="8.4" ${S}/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor"/>`,
+  info:`<circle cx="12" cy="12" r="8.4" ${S}/><circle cx="12" cy="7.9" r="1.15" fill="currentColor"/><path d="M12 11.5V17" ${S}/>`,
+  grid:`<rect x="3.6" y="3.6" width="7.6" height="7.6" rx="2" ${S}/><rect x="12.8" y="3.6" width="7.6" height="7.6" rx="2" ${S}/><rect x="3.6" y="12.8" width="7.6" height="7.6" rx="2" ${S}/><rect x="12.8" y="12.8" width="7.6" height="7.6" rx="2" ${S}/>`,
+  restore:`<path d="M6.4 11.4V6.4h5" ${S}/><path d="M6.6 6.9a8 8 0 1 1-2.2 6.3" ${S}/>`,
+  play:`<path d="M8 5.5v13l11-6.5Z" fill="currentColor"/>`,
+};
+const ic=(n,s=22)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24">${I[n]}</svg>`;
+const P=['p1','p2','p3','p4','p5','p6','p7','p8','p9'];
+const sw=i=>P[i%P.length];
+
+/* Which photograph goes on the billboard.
+ *
+ * Not the first one. A night shot or an indoor frame makes the billboard 300px
+ * of near-black with a number on it, and roughly half a real camera roll is one
+ * of those. The app already decodes every thumbnail for the grid, so mean
+ * luminance is a sum it is holding the pixels for anyway — pick the brightest,
+ * most saturated frame and the billboard always has something in it.
+ *
+ * Stubbed here as a fixed choice; in the app it is one pass over the thumbnail
+ * buffers at pick time. */
+const BILLBOARD='p6';
+
+const topBar=(t,{back=false,trail=null}={})=>`
+  <div class="top">${back?`<div class="iconbtn">${ic('back')}</div>`:'<div style="width:14px"></div>'}
+  <div class="title">${t}</div>
+  ${trail?`<div class="iconbtn">${ic(trail)}</div>`:''}</div>`;
+
+const tabs=on=>`<div class="tabs">${[['vault','Vault'],['clock','Activity'],['sliders','Settings']]
+  .map(([k,l],i)=>`<div class="tab${i===on?' on':''}" style="position:relative">
+    ${i===on?'<em></em>':''}${ic(k,22)}<span>${l}</span></div>`).join('')}</div>`;
+
+/* How tall a billboard is, by what the screen is *for*. One language, four
+   weights — a browse screen earns half the surface for a photograph, a progress
+   screen does not, and the identical 430 everywhere is what made five screens
+   with four different jobs look like the same screen. */
+const BB={home:440,plan:344,outcome:330,working:210,proof:430};
+
+/* The billboard: art, a wash, a fade, and the words at the bottom. */
+const bb=(h,art,inner,cls='')=>`
+  <div class="bb ${cls}" style="height:${h}px">
+    <div class="art">${art}</div>
+    <div class="wash"></div>
+    <div class="fade"></div>
+    <div class="lower">${inner}</div>
+  </div>`;
+
+const tile=(i,o={})=>{
+  const st=o.st;
+  let pill='';
+  if(st==='ok')pill=`<div class="pill ok">−${17+i*3}%</div>`;
+  if(st==='fail')pill=`<div class="pill fail">${ic('cross',12)}failed</div>`;
+  if(st==='skip')pill=`<div class="pill">skipped</div>`;
+  if(st==='unq')pill=`<div class="pill unq">${ic('info',12)}unqualified</div>`;
+  return `<div class="t${o.size||''} ${o.ghost?'':sw(i)}${o.out?' out':''}${o.focus?' focus':''}">
+    ${st==='work'?'<div class="veil"></div>':''}${pill}
+    ${o.out?`<div class="mark">${ic('cross',14)}</div>`:''}
+    ${o.lock?`<div class="mark" style="color:var(--warning-txt)">${ic('lock',13)}</div>`:''}
+    ${o.cap?`<div class="cap">${o.cap}</div>`:''}
+  </div>`;};
+
+const rail=(n,f,cls='')=>`<div class="rail ${cls}">${
+  Array.from({length:n},(_,i)=>tile(i,f(i))).join('')}</div>`;
+
+/* Which shape the photograph at `i` gets. A pure function of the index — see
+   the note on `.grid`. Period 11 rather than 4 or 6, so the pattern does not
+   line up with the column count and produce visible stripes. */
+const shape=i=>{
+  const k=i%11;
+  if(k===0||k===7)return' big';
+  if(k===3)return' wide';
+  if(k===9)return' tall';
+  return'';
+};
+const grid=(n,f)=>`<div class="grid">${Array.from({length:n},(_,i)=>{
+  const o=f(i)||{};
+  return tile(i,{...o,size:shape(i)});}).join('')}</div>`;
+
+const sect=(title,meta,body,note)=>`
+  <div class="section"><h3>${title}${meta?`<small>${meta}</small>`:''}</h3>
+  ${note?`<p class="note">${note}</p>`:''}${body}</div>`;
+
+/* ================= screens ================= */
+
+/* 1 — Home, nothing picked. The billboard has no photograph to show, so
+   it shows the ghost rail instead: same component, empty. */
+const home_empty=`
+<div class="phone">
+  ${topBar('Vault',{trail:'contrast'})}
+  <div class="scroll">
+    ${bb(BB.home,'',`
+      <div class="eyebrow">local · no network</div>
+      <!-- 38, not 50: "Get space back" is fourteen characters and wraps to two
+           lines at the figure size, which turns a headline into a stack. A
+           billboard's words are not always a number. -->
+      <div class="hero" style="font-size:38px;margin-top:6px;line-height:1.08">Get space back</div>
+      <div class="hero" style="font-size:38px;line-height:1.08;opacity:.5">without losing anything</div>
+      <div class="lede" style="margin-top:12px">Hand Vault some photos. It shows you exactly
+        what it can save on those files, proves every claim, and does nothing until you say so.</div>
+      <div class="cta">
+        <div class="btn solid">${ic('photo',20)}Choose photos</div>
+      </div>`)}
+    ${sect('Nothing here yet','',
+      rail(7,i=>({ghost:true,lit:[1,4].includes(i)}),'ghostrail'),
+      'Vault declares no media permission on any platform, so it cannot see a photograph you did not hand it.')}
+    <div class="note2"><span class="x">${ic('shield',19)}</span>
+      <p>No <b>INTERNET</b> permission either. No build of this app can send anything anywhere.</p></div>
+    <div class="note2"><span class="x">${ic('info',19)}</span>
+      <p>This build measures and verifies but does not store yet — nothing is written, moved or
+      deleted. Every saving shown was proven by encoding your file and decoding it back.</p></div>
+  </div>
+  ${tabs(0)}
+</div>`;
+
+/* 2 — Home, after a run. Billboard on the best result; rails below for
+   the things you might do next. */
+const home_run=`
+<div class="phone">
+  ${topBar('Vault',{trail:'contrast'})}
+  <div class="scroll">
+    ${bb(BB.home,'<i class="p1"></i>',`
+      <div class="eyebrow">proven saving</div>
+      <div class="hero">15.1 MB</div>
+      <div class="meter"><i style="width:19%"></i></div>
+      <div class="lede">19% of the 78.6 MB you handed over · 9 files ·
+        your originals are still on this device</div>
+      <div class="cta">
+        <div class="btn solid">${ic('photo',20)}Choose photos</div>
+        <div class="btn glass">${ic('info',20)}Last run</div>
+      </div>`)}
+    ${sect('Waiting to be planned','10 photos ' + ic('forward',14),
+      rail(7,i=>({focus:i===0})))}
+    ${sect('Proven, and reversible','7 files ' + ic('forward',14),
+      rail(7,i=>({st:'ok'})))}
+    ${sect('Needs a look','2 files ' + ic('forward',14),
+      rail(4,i=>({st:i===0?'fail':'unq'})),
+      'One failed and one could not be qualified. Both originals are untouched.')}
+    <div class="spacer"></div>
+  </div>
+  ${tabs(0)}
+</div>`;
+
+/* 3 — Plan, Move. The tier control floats on the billboard's lower edge
+   so the figure and the thing that changes it are one object. */
+const plan_move=`
+<div class="phone">
+  ${topBar('',{back:true})}
+  <div class="scroll">
+    ${bb(BB.plan,'<i class="p3"></i>',`
+      <div class="eyebrow">you would get back</div>
+      <div class="hero sm">32.9 MB</div>
+      <div class="meter"><i style="width:28%"></i></div>
+      <div class="lede">10 photos · 117.6 MB handed over · 1 left out</div>`,'floated')}
+    <div style="margin-top:-40px;position:relative;z-index:3">
+      <div class="tier">
+        <div class="thumb"></div>
+        <div class="o on"><b>Move</b><s>32.9 MB</s></div>
+        <div class="o"><b>Deep Move</b><s>58.7 MB</s></div>
+      </div>
+      <p class="note" style="margin-top:10px">Byte-exact. Every original stays reconstructable
+        from the vault copy, and the app proves it by decoding each result and comparing.</p>
+    </div>
+    ${sect('In this plan','10 photos',
+      grid(10,i=>({lock:i===3,out:i===6})),
+      'Tap a photo to leave it out. Excluded photos leave the manifest, so the plan hash changes.')}
+    ${sect('Never re-encoded','1 photo',rail(2,i=>({lock:true,cap:'DNG'})),
+      'RAW is protected in every tier, including Deep Move — a rail, because a short list is the whole content.')}
+    <div class="spacer" style="height:150px"></div>
+  </div>
+  <div class="actionbar">
+    <div class="btn accent wide">Move 10 photos</div>
+    <div class="sub2">Encodes each photo and verifies it byte for byte. Your originals are not touched.</div>
+  </div>
+</div>`;
+
+/* 4 — Plan, Deep Move. */
+const plan_deep=`
+<div class="phone">
+  ${topBar('',{back:true})}
+  <div class="scroll">
+    ${bb(BB.plan,'<i class="p9"></i>',`
+      <div class="eyebrow" style="color:var(--destructive-txt)">irreversible after 14 days</div>
+      <div class="hero sm deep">58.7 MB</div>
+      <div class="meter deep"><i style="width:50%"></i></div>
+      <div class="lede">10 photos · 117.6 MB handed over · 1 left out</div>`,'deep floated')}
+    <div style="margin-top:-40px;position:relative;z-index:3">
+      <div class="tier deep">
+        <div class="thumb"></div>
+        <div class="o"><b>Move</b><s>32.9 MB</s></div>
+        <div class="o on"><b>Deep Move</b><s>58.7 MB</s></div>
+      </div>
+      <div class="tint" style="background:var(--destructive-tint);color:var(--destructive-txt)">
+        Not reversible once the 14-day window closes. A photo is only re-encoded if it scores
+        SSIMULACRA2 at or above 90 against your original — anything below the floor is kept
+        losslessly instead.</div>
+    </div>
+    ${sect('In this plan','10 photos',grid(10,i=>({lock:i===3,out:i===6})))}
+    <div class="section"><h3>The one grant that destroys something</h3>
+      <div class="rows" style="margin-top:6px">
+        <div class="r"><span style="color:var(--success-txt)">${ic('check',20)}</span>
+          <div class="l"><b>Reading these files</b>
+            <s>Granted by the picker. These 11 files and nothing else.</s></div></div>
+        <div class="r"><span style="color:var(--destructive-txt)">${ic('lock',20)}</span>
+          <div class="l"><b>Delete originals later</b>
+            <s>On. Marks them eligible after 14 days; nothing is deleted by this run.</s></div>
+          <div style="width:56px;height:34px;border-radius:17px;position:relative;
+              background:linear-gradient(180deg,#ea4a55,var(--destructive));
+              box-shadow:0 3px 10px rgba(224,49,62,.4),inset 0 1px 0 rgba(255,255,255,.25)">
+            <i style="position:absolute;top:3px;right:3px;width:28px;height:28px;border-radius:14px;
+              background:#fff;display:block;box-shadow:0 1px 3px rgba(0,0,0,.3)"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="spacer" style="height:150px"></div>
+  </div>
+  <div class="actionbar">
+    <div class="btn destr wide">Deep Move 10 photos</div>
+    <div class="sub2">Re-encodes each photo and scores it. Your originals are not touched by this run.</div>
+  </div>
+</div>`;
+
+/* 5 — Working. The billboard is the file in the codec right now; the
+   rails below are what is done and what is queued. Progress is the
+   photographs moving from one rail to the other. */
+const working=`
+<div class="phone">
+  ${topBar('')}
+  <div class="scroll">
+    ${bb(BB.working,'<i class="p2"></i>',`
+      <div class="eyebrow">encoding now</div>
+      <div class="hero sm" style="font-size:34px;letter-spacing:0">IMG_1204.jpg</div>
+      <div class="meter"><i style="width:50%"></i></div>
+      <div class="lede">5 of 10 · decoding each result and comparing it byte for byte</div>`)}
+    ${sect('','',grid(10,i=>({st:i>=5?'work':(i===3?'skip':'ok')})),
+      'The grid is the progress bar. A veiled photograph is still in the codec; a badge means its result is in.')}
+    <div class="note2"><span class="x">${ic('shield',19)}</span>
+      <p>One that cannot prove its roundtrip is reported as failed, not as saved. The run never
+      ships an encode it could not verify.</p></div>
+    <div class="spacer" style="height:150px"></div>
+  </div>
+  <div class="actionbar"><div class="btn glass wide">Stop</div></div>
+</div>`;
+
+/* 6 — Outcome. This is where rails beat a grid outright: the grouping
+   IS the information, and a single grid of mixed results hides it. */
+const outcome=`
+<div class="phone">
+  ${topBar('',{back:true})}
+  <div class="scroll">
+    ${bb(BB.outcome,'<i class="p6"></i>',`
+      <div class="eyebrow">measured, net of vault overhead</div>
+      <div class="hero sm">15.1 MB</div>
+      <div class="meter"><i style="width:19%"></i></div>
+      <div class="lede">78.6 MB → 63.5 MB · every figure proven on your own files</div>`)}
+    <div class="stats">
+      <div class="stat"><div class="n" style="color:var(--success-txt)">${ic('check',22)}7</div>
+        <div class="k">proven by decode + compare</div></div>
+      <div class="stat"><div class="n" style="color:var(--warning-txt)">${ic('info',22)}1</div>
+        <div class="k">unqualified — not counted</div></div>
+      <div class="stat"><div class="n" style="color:var(--destructive-txt)">${ic('cross',22)}1</div>
+        <div class="k">failed, original untouched</div></div>
+    </div>
+    ${sect('Proven','7 files ' + ic('forward',14),rail(7,i=>({st:'ok',focus:i===0})))}
+    ${sect('Not counted','1 file',rail(2,i=>({st:'unq'})),
+      'A ratio with no perceptual score is not a saving you can have, so it is excluded from the figure above.')}
+    ${sect('Failed','1 file',rail(2,i=>({st:'fail'})),
+      'Your original is untouched and remains the only copy.')}
+    ${sect('Left alone','1 file',rail(2,i=>({st:'skip',lock:true})))}
+    <div class="spacer" style="height:150px"></div>
+  </div>
+  <div class="actionbar">
+    <div class="cta" style="margin:0">
+      <div class="btn solid">Done</div>
+      <div class="btn glass">${ic('restore',20)}Restore</div>
+    </div>
+  </div>
+</div>`;
+
+/* 7 — One photograph's proof. Full billboard, then flowing rows. */
+const proof=`
+<div class="phone">
+  ${topBar('',{back:true})}
+  <div class="scroll">
+    ${bb(BB.proof,'<i class="p6"></i>',`
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <span class="chip" style="background:var(--destructive-tint);color:var(--destructive-txt)">
+          ${ic('cross',13)}FAILED</span>
+        <span class="chip" style="background:var(--glass);color:var(--fg-2)">JPEG</span>
+      </div>
+      <div class="hero sm" style="font-size:32px;letter-spacing:0">IMG_1205.jpg</div>
+      <div class="lede" style="margin-top:8px">Your original is untouched and remains the only
+        copy. The failure is logged as loudly as a success.</div>`)}
+    <div class="rows" style="margin-top:20px">
+      <div class="r"><div class="l"><b>before</b></div><div class="v">11.9 MB</div></div>
+      <div class="r"><div class="l"><b>after</b></div><div class="v">9.5 MB</div></div>
+      <div class="r"><div class="l"><b>saved</b></div>
+        <div class="v" style="color:var(--destructive-txt)">not counted</div></div>
+      <div class="r"><div class="l"><b>codec</b></div><div class="v">lepton</div></div>
+    </div>
+    <div class="tint" style="background:var(--warning-tint);color:var(--warning-txt)">
+      lepton: unsupported progressive scan</div>
+    ${sect('Others from this run','',rail(7,i=>({st:'ok'})))}
+    <div class="spacer" style="height:150px"></div>
+  </div>
+  <div class="actionbar"><div class="btn glass wide">Back to the run</div></div>
+</div>`;
+
+/* 8 — Activity. Rows flow; the chain is a chain. */
+const activity=`
+<div class="phone">
+  ${topBar('Activity')}
+  <div class="scroll">
+    <div style="height:78px;flex:0 0 auto"></div>
+    <div class="rows">
+    ${[['Run finished','7 proven · 1 unqualified · 1 failed · 15.1 MB saved, net','f25529228ff6190c','var(--line-strong)',''],
+       ['Failed: IMG_1205.jpg','lepton: unsupported progressive scan','844ffd8d98b25d5f','var(--destructive)','color:var(--destructive-txt)'],
+       ['Skipped: IMG_1203.dng','RAW is never re-encoded, in any tier','25c632c2f7293349','var(--warning-txt)',''],
+       ['Transform granted — 10 files','Move · plan 45adc24036f1969c','baee2e652a18f914','var(--accent)',''],
+       ['Access granted — 11 files','By the system picker. No media permission is declared.','0921c6be2aa5ef6a','var(--accent)','']]
+      .map(([t,d,h,c,st])=>`
+      <div class="r" style="align-items:stretch;gap:12px">
+        <div style="width:2px;border-radius:1px;background:${c};flex:0 0 auto"></div>
+        <div class="l"><div style="display:flex;gap:8px"><b style="flex:1;${st}">${t}</b>
+          <s style="font-size:12px">07:19</s></div>
+          <s>${d}</s>
+          <s style="font-size:11.5px;letter-spacing:1.1px;opacity:.6;font-family:ui-monospace,monospace">${h}…</s>
+        </div>
+      </div>`).join('')}
+    </div>
+    <div style="padding:22px 20px 0"><div class="btn glass wide">${ic('export',20)}Export the log</div></div>
+    <div class="note2"><span class="x">${ic('info',19)}</span>
+      <p>Each entry commits to the one before it, so a removed entry is detectable rather than
+      merely missing. The log does not survive uninstalling the app — that is why export exists.</p></div>
+    <div class="spacer"></div>
+  </div>
+  ${tabs(1)}
+</div>`;
+
+const SHOTS=[
+ [home_empty,'Home — nothing picked','No photographs to show and none invented: the rail renders as ghost tiles. Same component, empty.'],
+ [home_run,'Home — after a run','Billboard on the result, then rails for what you might do next. “Choose photos / Last run” is Netflix’s Play / More Info.'],
+ [plan_move,'Plan — Move','The tier control floats on the billboard’s lower edge, so the figure and the thing that changes it read as one object.'],
+ [plan_deep,'Plan — Deep Move','Irreversibility carried by the eyebrow, the figure, the meter, the wash behind it, the selection and the commit button.'],
+ [working,'Working','The billboard is the file in the codec right now. Progress is photographs moving from Queued to Done.'],
+ [outcome,'What changed','Where rails beat a grid outright — the grouping <em>is</em> the information, and one mixed grid hides it.'],
+ [proof,'One photo’s proof','Full billboard, then flowing rows. No card anywhere on this screen.'],
+ [activity,'Activity','Rows flow against hairlines instead of sitting in a card; the hash is set with real tracking so a chain reads as one.'],
+];
+
+const out=document.getElementById('out');
+out.innerHTML=SHOTS.map(([h,t,c])=>`<figure>${h}<figcaption><b>${t}</b>${c}</figcaption></figure>`).join('');
+document.getElementById('theme').onclick=e=>{
+  const d=e.target.getAttribute('aria-pressed')==='true';
+  e.target.setAttribute('aria-pressed',String(!d));
+  e.target.textContent=d?'Light':'Dark';
+  document.body.classList.toggle('light',d);
+};
+</script>
+</body>
+</html>

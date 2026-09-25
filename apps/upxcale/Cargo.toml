@@ -1,0 +1,69 @@
+[package]
+name = "upxcale"
+description = "Upscale photos — a vieww application."
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+
+# `upxcale` is deliberately its own workspace rather than a member of vieww's.
+# The framework is a dependency here, not a host: this crate is built with
+# `cargo build` from inside `upxcale/`, and nothing it does can change how
+# vieww's own CI resolves. The empty table is what stops cargo walking up the
+# directory tree and adopting `../vieww/Cargo.toml` as our workspace root.
+[workspace]
+
+[dependencies]
+# The framework, by path. `upxcale/` expects `vieww/` beside it:
+#
+#   parent/
+#   ├── vieww/     <- the framework
+#   └── upxcale/   <- this app
+#
+# Path deps rather than a git or registry dep because vieww is 0.0.1 and
+# unpublished — `docs/STABILITY.md` says every crate may break in any release,
+# so pinning to a checkout you can read is the only honest way to depend on it.
+vieww = { path = "../vieww/crates/vieww", features = ["gpu"] }
+vieww-foundation = { path = "../vieww/crates/vieww-foundation" }
+vieww-widget = { path = "../vieww/crates/vieww-widget" }
+vieww-element = { path = "../vieww/crates/vieww-element" }
+vieww-render = { path = "../vieww/crates/vieww-render" }
+vieww-paint = { path = "../vieww/crates/vieww-paint" }
+vieww-animation = { path = "../vieww/crates/vieww-animation" }
+vieww-gestures = { path = "../vieww/crates/vieww-gestures" }
+vieww-asset = { path = "../vieww/crates/vieww-asset" }
+vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit" }
+
+# PNG *encoding*, for "Save to Photos". `vieww-asset` decodes and deliberately
+# does not encode, so this is the application's own dependency rather than a
+# gap in the framework. Pinned to the same major version `vieww-asset` already
+# resolves, with default features off so no extra codec arrives uninvited.
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[features]
+default = []
+# The headless CPU rasteriser, used by `examples/shots.rs` to render each screen
+# state to a PNG without a display. Off by default so a phone build does not
+# carry a software renderer it will never call.
+cpu = ["vieww/cpu", "vieww-paint/cpu"]
+
+# `shots` needs the software rasteriser. Declaring the requirement here is what
+# lets a plain `cargo test` skip the example instead of failing to compile it —
+# without this, the crate's whole test suite is gated on a feature that only one
+# example wants.
+[[example]]
+name = "shots"
+required-features = ["cpu"]
+
+# A phone runs whatever profile the harness built, and vieww's own workspace
+# manifest explains at length why that matters: a debug build of vello is
+# roughly an order of magnitude slower, and a frame-rate report from one is a
+# report on `rustc -O0`. These mirror the framework's release profile so a
+# release build of the app is measured on the same terms the framework is.
+[profile.release]
+codegen-units = 1
+lto = "thin"
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2

@@ -1,0 +1,66 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/codecs",
+    "crates/cli",
+    "crates/engine",
+    "crates/app",
+    "crates/desktop",
+    "crates/ios",
+    "crates/android",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+vavlt-core = { path = "crates/core" }
+vavlt-codecs = { path = "crates/codecs" }
+vavlt-engine = { path = "crates/engine" }
+vavlt-app = { path = "crates/app" }
+
+# The UI framework. A sibling checkout rather than a vendored copy: vieww is its
+# own repository with its own workspace, CI and release cadence, and a copy in
+# here would be a fork nobody meant to make. Swap the path for
+#   { git = "https://github.com/teja/vieww", tag = "..." }
+# the day vieww tags a release; nothing else in this file changes.
+#
+# `gpu` is enabled here rather than per-host because both hosts put frames on a
+# screen and the screenshot harness needs the same backend — a feature unified
+# across the workspace is one build of vello, not three.
+# vieww = { path = "../vieww/crates/vieww", features = ["gpu"] }
+vieww = { path = "../vieww/crates/vieww" }
+vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit" }
+
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+infer = "0.16"
+walkdir = "2"
+rayon = "1"
+clap = { version = "4", features = ["derive"] }
+zstd = "0.13"
+oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
+lepton_jpeg = "0.5.8"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+log = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+
+# The UI is judged by eye, and a debug `vello` is roughly twenty times slower
+# than a release one — motion inspected in a debug build is a report on
+# `rustc -O0`. So dependencies are optimised even in a debug build of the app,
+# which keeps the app's own compile times short without making motion a lie.
+[profile.dev.package."*"]
+opt-level = 2
+
+
+
+[patch.crates-io]
+winit = { path = "../vieww/vendor/winit" }

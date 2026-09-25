@@ -1,0 +1,75 @@
+[package]
+name = "vavlt-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "vavlt_android"
+crate-type = ["cdylib"]
+
+[features]
+default = ["backend-hybrid"]
+backend-hybrid = ["vieww/hybrid", "vieww-platform-winit/hybrid"]
+backend-gpu = ["vieww/gpu", "vieww-platform-winit/gpu"]
+backend-cpu = ["vieww/cpu", "vieww-platform-winit/cpu"]
+
+[dependencies]
+vavlt-app.workspace = true
+vavlt-engine.workspace = true
+vieww.workspace = true
+vieww-platform-winit.workspace = true
+anyhow.workspace = true
+log.workspace = true
+
+# The picker shim and the class loader that reaches it. Pinned to the version
+# `ndk` resolves rather than picked freely: a second `jni` in the binary would
+# give us a `JavaVM` type that looks identical and is not.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk = "0.9"
+android_logger = "0.14"
+
+[build-dependencies]
+android-build = "0.1"
+
+# cargo-apk: the whole Android packaging config lives here, so there is no
+# Gradle project, no Kotlin toolchain and no AGP in this repo.
+[package.metadata.android]
+package = "dev.vavlt.app"
+apk_name = "vavlt"
+resources = "res"
+build_targets = ["aarch64-linux-android"]
+# No `runtime_libs`. Slint's Skia backend linked libc++ dynamically and needed
+# the NDK's shared runtime to ride along in the APK; vello does not, so
+# `runtime-libs/` is gone and the package is that much smaller.
+
+[package.metadata.android.sdk]
+# 24, down from Slint's 30. vieww's platform crate targets API 24 and nothing in
+# this app needs a newer one — the photo picker shim degrades to
+# ACTION_OPEN_DOCUMENT below API 33 either way, which it already did.
+min_sdk_version = 24
+target_sdk_version = 34
+
+[package.metadata.android.application]
+label = "vavlt"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar"
+icon = "@drawable/vavlt_icon"
+# There is no classes.dex in this APK. The Java the app uses — our picker shim,
+# and `accesskit_android`'s screen-reader delegate — is dexed at build time,
+# embedded in the .so and loaded through InMemoryDexClassLoader, so the package
+# genuinely carries no code of its own.
+has_code = false
+
+[package.metadata.android.application.activity]
+# Handled rather than restarted for. vieww's lifecycle already survives a lost
+# GPU surface; an activity recreated behind its back would throw away the
+# element tree instead.
+config_changes = "orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|density|uiMode"
+launch_mode = "singleTop"
+orientation = "portrait"
+exported = true
+
+# INVARIANT (SPEC §1, §6): no media permissions, and no INTERNET permission.
+# Access arrives exclusively as content URIs from the out-of-process system
+# photo picker. There is deliberately no <uses-permission> block below.

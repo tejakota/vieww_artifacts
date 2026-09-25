@@ -1,0 +1,93 @@
+[package]
+name = "snapsearch"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+
+[lib]
+name = "snapsearch"
+crate-type = ["lib", "cdylib"]
+
+[[bin]]
+name = "snapsearch"
+path = "src/main.rs"
+
+[[bin]]
+name = "filter_probe"
+path = "src/bin/filter_probe.rs"
+required-features = ["cpu"]
+
+[[bin]]
+name = "screenshot"
+path = "src/bin/screenshot.rs"
+required-features = ["cpu"]
+
+[dependencies]
+vieww = { path = "../vieww/crates/vieww" }
+vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit" }
+vieww-asset = { path = "../vieww/crates/vieww-asset" }
+
+[features]
+default = []
+# Headless CPU rasterisation, for the screenshot tool.
+cpu = ["vieww/cpu"]
+# The real semantic encoder. Off by default: it pulls in candle and needs
+# ~600MB of CLIP weights on disk, neither of which a UI build should carry
+# by default. See src/embed/clip.rs for where to put the weights.
+clip = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:image"]
+
+# Only for the integration tests, which write real PNG files to disk so the
+# decoder is exercised for real rather than mocked.
+[dev-dependencies]
+png = "0.17"
+
+[dependencies.candle-core]
+version = "0.9"
+optional = true
+
+[dependencies.candle-nn]
+version = "0.9"
+optional = true
+
+[dependencies.candle-transformers]
+version = "0.9"
+optional = true
+
+[dependencies.tokenizers]
+version = "0.21"
+optional = true
+default-features = false
+features = ["onig"]
+
+[dependencies.image]
+version = "0.25"
+optional = true
+default-features = false
+
+[target.'cfg(target_os = "android")'.dependencies]
+vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit", features = [] }
+
+[package.metadata.android]
+package = "dev.snapsearch.app"
+build_targets = ["aarch64-linux-android"]
+apk_name = "snapsearch"
+
+[package.metadata.android.sdk]
+min_sdk_version = 24
+target_sdk_version = 34
+
+[package.metadata.android.application]
+label = "SnapSearch"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar"
+
+[package.metadata.android.application.activity]
+orientation = "portrait"
+config_changes = "orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout|density"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2

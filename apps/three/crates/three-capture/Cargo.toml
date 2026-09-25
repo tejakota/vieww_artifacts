@@ -1,0 +1,11 @@
+[package]
+name = "three-capture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+description = "Device-independent camera, depth and IMU capture interfaces for 3"
+
+[dependencies]
+three-core.workspace = true

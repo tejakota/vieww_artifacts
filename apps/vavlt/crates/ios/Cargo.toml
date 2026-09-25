@@ -1,0 +1,48 @@
+[package]
+name = "vavlt-ios"
+description = "vavlt on an iPhone: a bundle, a PHPicker, and the same tree Android runs."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# A plain binary, unlike Android's cdylib. iOS *does* call `main` —
+# `UIApplicationMain` is started from inside it by winit — so the entry point is
+# an ordinary Rust executable. What iOS needs instead is a **bundle**: a
+# directory with an `Info.plist` beside the executable, signed for the device it
+# is going to. `ci/ios-app.sh` builds one.
+[[bin]]
+name = "vavlt-ios"
+path = "src/main.rs"
+
+[dependencies]
+vavlt-app.workspace = true
+vavlt-engine.workspace = true
+vieww.workspace = true
+vieww-platform-winit.workspace = true
+anyhow.workspace = true
+log.workspace = true
+env_logger = "0.11"
+
+# The photo picker and the app's own container directory are both Objective-C.
+# `objc2` rather than a hand-written `objc_msgSend`, for the reason vieww's own
+# iOS code gives: how a struct comes back from one is ABI-dependent, and getting
+# it wrong compiles cleanly and reads garbage.
+#
+# Pinned to the versions `vieww-platform-winit` already resolves for this
+# target. A second version would be a second, incompatible `UIView` type.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = { version = "0.2", features = [
+    "NSString",
+    "NSArray",
+    "NSURL",
+    "NSData",
+    "NSFileManager",
+    "NSError",
+] }
+objc2-ui-kit = { version = "0.2", features = [
+    "UIResponder",
+    "UIViewController",
+    "UIApplication",
+    "UIWindow",
+] }

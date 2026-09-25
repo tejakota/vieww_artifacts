@@ -1,0 +1,28 @@
+[package]
+name = "vieww-integration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "vieww_integration"
+path = "src/lib.rs"
+
+[[bin]]
+name = "three-viewer"
+path = "src/main.rs"
+
+[dependencies]
+three-core.workspace = true
+three-format.workspace = true
+three-runtime.workspace = true
+three-vieww.workspace = true
+three-app.workspace = true
+
+vieww.workspace = true
+vieww-platform-winit.workspace = true
+
+[dev-dependencies]
+vieww-test-harness.workspace = true
