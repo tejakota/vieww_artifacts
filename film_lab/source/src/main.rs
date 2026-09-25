@@ -8,7 +8,11 @@
 //! Each experiment renders a deterministic frame sequence through vieww's
 //! own rasterizer (no display, no GPU), writes PNGs + a metrics receipt
 //! (shapes counted by the renderer — no number typed by a human), and
-//! assembles a 4x4 @ 10fps contact sheet with ffmpeg for visual audit.
+//! assembles the full receipt set with ffmpeg: a 4x4 @ 10fps contact sheet
+//! for visual audit plus a palette-optimised `anim.gif` loop — the motion
+//! receipt (GIF over mp4: loops inline in browsers/GitHub with no codec,
+//! and measurably the smaller carrier at the lab's flat-colour content).
+//! Every render therefore ships anim.gif + sheet.png + metrics.txt.
 //!
 //! The experiments:
 //! - `light`   — the calibration: "Light." recreated from the author's sheet
@@ -107,7 +111,7 @@ mod exp_hero4k;
 mod film_lib;
 mod three_d;
 
-use film_lib::{contact_sheet, out_root, render_with, Experiment};
+use film_lib::{anim_gif, contact_sheet, out_root, render_with, Experiment};
 
 fn registry() -> Vec<Experiment> {
     vec![
@@ -197,6 +201,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match contact_sheet(&dir, tile) {
                     Some(sheet) => println!("    sheet: {}", sheet.display()),
                     None => println!("    sheet: FAILED (ffmpeg)"),
+                }
+                // The third artifact: the motion receipt. Cadence is
+                // per-plate (a 2-frame 4K receipt is a slow A/B flip,
+                // not a blink) — the recipe itself is one house line.
+                let gif_fps = match experiment.name.as_ref() {
+                    "hero" => 6,
+                    "hero4k" => 2,
+                    _ => 12,
+                };
+                match anim_gif(&dir, gif_fps, 640) {
+                    Some(g) => println!("    gif: {}", g.display()),
+                    None => println!("    gif: FAILED (ffmpeg)"),
                 }
             }
             Err(e) => {

@@ -7,12 +7,13 @@ Produced by autonomous sessions (2026-09-24/25) running the create → render �
 | Path | Contents |
 |------|----------|
 | `source/` | Complete Rust source: `film_lib.rs` (palette, RNG, clock, easing, `xywh()` rect helper, render harness + SceneReport receipts + the pixel-probe hook), `three_d.rs` (Vec3, perspective camera, mesh builder, painter's sort, gradient ramps), `main.rs` (selector), `exp_*.rs` (one file per experiment). Registered as a workspace crate — drop into `examples/` of the release tree. |
-| `renders/<name>/` | `sheet.png` (4×4 contact sheet, 16 frames) + `metrics.txt` for each experiment |
+| `renders/<name>/` | `anim.gif` (palette-optimised motion loop, the third artifact) + `sheet.png` (4×4 contact sheet, 16 frames) + `metrics.txt` (with its measured `gif=` line) — the three-artifact receipt set for each experiment |
+| `tools/` | `make_gifs.sh` — batch (re)generation of the `anim.gif` set from any rendered frame dir; the same house recipe the harness itself runs (`film_lib::anim_gif`) |
 | `premium-test/` | Pipeline verification: test-premium-ui through FrameDriver, 56 frames, 55/55 moving, 0 overflows (GIF + first/last frame + metrics) |
-| `vieww_film_lab_lite.zip` | ~25 MB — sheets + metrics + source + premium-test |
-| `vieww_film_lab_full_1of3.zip` | ~78 MB — the full lab: source, sheets, metrics, premium-test + all frames, experiments 1–12 |
-| `vieww_film_lab_full_2of3.zip` | ~74 MB — experiments 13–24 (frames + sheets + metrics, self-sufficient) |
-| `vieww_film_lab_full_3of3.zip` | ~85 MB — experiments 25–36, round 6 included (hero, avatar, fadeaway, sea, tesseract, blackhole, galaxy, forest, city, typo, mandel, hero4k). Unzip all three parts into the same directory to reassemble the complete lab |
+| `vieww_film_lab_lite.zip` | ~41 MB — anim.gifs + sheets + metrics + source + premium-test |
+| `vieww_film_lab_full_1of3.zip` | ~94 MB — the full lab: source, anim.gifs, sheets, metrics, premium-test + all frames, experiments 1–12 |
+| `vieww_film_lab_full_2of3.zip` | ~90 MB — experiments 13–24 (frames + anim.gifs + sheets + metrics, self-sufficient) |
+| `vieww_film_lab_full_3of3.zip` | ~101 MB — experiments 25–36, round 6 included (hero, avatar, fadeaway, sea, tesseract, blackhole, galaxy, forest, city, typo, mandel, hero4k). Unzip all three parts into the same directory to reassemble the complete lab |
 | `worklog.md` | Full session log: receipts, VLM audit verdicts, the bisection ladders, the alpha() incident, the Rect-edges incident, the U-22 census catch |
 
 ## The experiments
@@ -70,6 +71,8 @@ cargo run --release -p film_lab -- <experiment>
 
 Experiments: `light`, `mesh`, `ocean`, `kinetic`, `circuit`, `globe`, `receipts`, `aurora`, `spring`, `scrub`, `damage`, `rackfocus`, `morph`, `endcard`, `beams`, `liquid`, `unfold`, `shatter`, `wordmark`, `ghosts`, `settle`, `dolly`, `currents`, `probe`, `hero` (1920×1080, 8 frames) — plus round 6: `avatar`, `fadeaway` (32 frames), `sea`, `tesseract`, `blackhole`, `galaxy`, `forest`, `city`, `typo` (24 frames), `mandel`, `hero4k` (3840×2160, 2 frames). Env gates (FILM_BISECT and FILM_DUMP_CMDS) are documented in the sources.
 
+Every run produces the three-artifact receipt set per experiment — **`anim.gif` + `sheet.png` + `metrics.txt`** (both assemblies go through ffmpeg, as the harness always has; the `gif=` line in the metrics is measured off the file). The GIF step also runs standalone over already-rendered frame dirs: `tools/make_gifs.sh <frames_root> [renders_dest]`.
+
 ## Key lessons logged
 
 - `driver.use_system_fonts()` is mandatory for any text-bearing render — embedded DejaVu subsets panic otherwise (fixed at vieww-render/src/frame.rs:1096).
@@ -96,3 +99,4 @@ Experiments: `light`, `mesh`, `ocean`, `kinetic`, `circuit`, `globe`, `receipts`
 - **The window-slit incident (city)**: a face-aligned quad built by lerping "from the column at u" to "the column at u+s" renders as a one-sided sliver — windows present in the count, invisible in the frame. The shape count cannot tell you this; only the audit can. (Same genus as the Rect-edges and baseline-bake incidents: the arithmetic is legal, the geometry is wrong.)
 - **OnceLock re-entry is a silent deadlock** (forest round 1): `total_segments()` computed by calling `grow()`, which called `total_segments()` — the first render hung without an error, a timeout with no diagnostics. The fix was to stop needing the count at all (a depth-wave reveal needs no census). When a render hangs with zero output, suspect re-entrant initialisation before suspecting the renderer.
 - **Dark plates need bright anchors**: the audits that read best (avatar, blackhole, city, typo, fadeaway post-fix) all keep one bright element on stage — the lit contour, the photon ring, the windows' amber, the drop. The sea plate's 8/10 ceiling is the same lesson from below: the glints carry the frame when the water is dark.
+- **The GIF-vs-mp4 receipt (round-6 addendum)**: every plate now also ships as a palette-optimised `anim.gif` (640 px, two-pass palette, `floyd_steinberg` error diffusion) so the motion loops inline on GitHub with zero codecs. The dither was settled by the audit loop, not chosen: the first bayer:5 recipe — picked from an aurora-only size sample — was flagged DEGRADED by the A/B VLM on aurora's gradients, and the full bake-off then showed floyd is *smaller* than bayer on 34 of 36 plates anyway (the single-plate calibration, in miniature, is the sampled-attack lesson again). Measured honestly: all 36 GIFs total 16.1 MB against 1.4 MB for the same plates as crf-23 mp4 — **H.264 is ~11.3× smaller, and that number goes in the honesty ledger, not the marketing.** The GIF ships anyway because it is the right *repo* artifact (one click, no codec, no player); its byte price is printed per plate in every `metrics.txt` (`gif=` line). One known limit: `aurora` (intentional grain over smooth ramps) exceeds the GIF 256-colour floor at every dither/width tried — its audit surface of record stays the full-res sheet.

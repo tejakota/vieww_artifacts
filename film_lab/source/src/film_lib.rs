@@ -2,8 +2,8 @@
 //!
 //! Everything the film's element experiments agree on lives here: the palette,
 //! the clock discipline, the deterministic RNG, the easing curves, the render
-//! harness and the contact-sheet writer. An experiment file should contain
-//! *content*, never plumbing.
+//! harness, the contact-sheet writer and the anim.gif assembler. An experiment
+//! file should contain *content*, never plumbing.
 //!
 //! **The house rules, inherited from the graph (§3, §4.6):**
 //! - No number in a caption is typed by a human; anything printed is measured.
@@ -390,6 +390,66 @@ pub fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
         Ok(s) if s.success() => Some(sheet),
         _ => None,
     }
+}
+
+/// Assemble the palette-optimised loop with ffmpeg — the third artifact.
+/// Every render ships **anim.gif + sheet.png + metrics.txt**: the GIF is
+/// the motion receipt for human eyes (it loops inline in browsers and on
+/// GitHub, needs no codec, and at the lab's flat-colour vector content it
+/// is the smaller carrier — measured, not assumed); the sheet stays the
+/// audit surface, because motion cannot be watched and stills can.
+///
+/// House recipe, settled through the audit loop: two-pass palette,
+/// `palettegen stats_mode=full` (dark plates have big static grounds —
+/// diff would starve the palette), `paletteuse
+/// dither=floyd_steinberg:diff_mode=rectangle` — error diffusion is the
+/// anti-banding dither, and it measured *smaller* than ordered bayer
+/// on 34 of the 36 plates — scaled to `width`, looping forever. (One
+/// plate, aurora, intentionally carries grain over smooth ramps and
+/// exceeds the GIF 256-colour floor at every dither/width tried; its
+/// audit surface of record remains the full-res sheet.) Appends the
+/// measured `gif=` line to metrics.txt so one receipt covers all
+/// three artifacts — the byte count is read off the file, never
+/// guessed. The mirror of this for already-rendered frame dirs is
+/// `film_lab/tools/make_gifs.sh`.
+pub fn anim_gif(out_dir: &Path, fps: u32, width: u32) -> Option<PathBuf> {
+    let gif = out_dir.join("anim.gif");
+    let frames = out_dir.join("frame_%03d.png");
+    let vf = format!(
+        "scale={width}:-1:flags=lanczos,split[a][b];\
+         [a]palettegen=stats_mode=full[p];\
+         [b][p]paletteuse=dither=floyd_steinberg:diff_mode=rectangle"
+    );
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error"])
+        .arg("-framerate").arg(fps.to_string())
+        .arg("-i").arg(&frames)
+        .arg("-vf").arg(&vf)
+        .arg("-loop").arg("0")
+        .arg(&gif)
+        .status();
+    if !matches!(status, Ok(s) if s.success()) {
+        return None;
+    }
+
+    // The receipt line — every number measured, none typed (§4.5).
+    if let (Ok((fw, fh)), Ok(bytes)) = (
+        image::image_dimensions(out_dir.join("frame_000.png")),
+        std::fs::metadata(&gif).map(|m| m.len()),
+    ) {
+        let h = (width as f32 * fh as f32 / fw as f32).round() as u32;
+        let line = format!("gif=anim.gif,{width}x{h},{fps}fps,{bytes}\n");
+        let metrics = out_dir.join("metrics.txt");
+        if let Ok(body) = std::fs::read_to_string(&metrics) {
+            let stripped: String = body
+                .lines()
+                .filter(|l| !l.starts_with("gif="))
+                .map(|l| format!("{l}\n"))
+                .collect();
+            let _ = std::fs::write(&metrics, format!("{stripped}{line}"));
+        }
+    }
+    Some(gif)
 }
 
 /// Where experiment output lives: /home/z/my-project/download/film_lab/<name>.

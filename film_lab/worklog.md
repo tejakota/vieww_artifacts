@@ -189,3 +189,25 @@ Stage Summary:
 - 36 props live. The tolerance axes now measured: shape count (60,527 @ 101 ms), rect count (57,602 @ 69 ms), glyph runs (39/frame through 4 blur buckets), recursion (depth 8 → 9,661 faces), canvas (4K @ 440–489 ms, OOM boundary recorded), procedural density (city, galaxy), blend economy (Plus groups ≤ 3 per plate, filtered ≤ 62 per experiment).
 - The hero budget line, superseded in one axis: the hero's 4,703 shapes in 149 ms was never a count limit — galaxy proves 13× the count at ⅔ the cost. The master's constraint stack: taste → memory → time.
 - Round-6 audit scores: avatar 9, fadeaway 9, sea 8, tesseract 9, blackhole 9, galaxy 8, forest 8, city 9, typo 9, mandel 8, hero4k (receipt plate).
+
+---
+
+## Round 6 — addendum: the third artifact (session 6, 2026-09-25)
+
+Task: "I want you to create GIFs and push them since GIFs take less space than mp4. Also add this in the instructions to create GIFs plus sheet plus metrics.txt."
+
+Work Log:
+- The receipt set is now three artifacts per plate: **anim.gif + sheet.png + metrics.txt** — wired into the harness itself (`film_lib::anim_gif`, called by `main.rs` after every render), batchable after the fact (`film_lab/tools/make_gifs.sh`), and documented in `film_lab/README.md`, the top-level README, and handoff §9's collaboration protocol.
+- The recipe was settled through the audit loop, not picked:
+  - Calibration on the gradient- and star-heavy plates first chose `bayer:bayer_scale=5` — on aurora it measured 552 KB against floyd_steinberg's 611 KB and bayer:3's 880 KB. A conclusion drawn from one sample plate.
+  - The A/B VLM audit (GIF mid-frame vs the lanczos-scaled source, design intent carried in the prompt — the audit-prompt lesson applied) returned **PALETTE_DEGRADED** for aurora under bayer:5: "posterization beyond the source's own grain."
+  - The full 36-plate bake-off reversed the sample: **floyd is smaller than bayer:5 on 34 of 36 plates** (16,129,991 vs 16,859,275 bytes total), and the A/B audits came back **PALETTE_FAITHFUL** for light, city and galaxy. Floyd adopted. The single-plate calibration was the sampled-attack lesson in miniature: tune against the full population, not one frame's neighbour.
+  - aurora itself stayed DEGRADED at every config tried (bayer@640, floyd@640, floyd@960 @1.42 MB) — intentional grain over smooth ramps exceeds the GIF 256-colour floor, full stop. The two verdicts even contradicted in direction (bayer: "noise reads as static"; floyd: "grain lost"), so the second instrument arbitrated: PSNR 45.7 dB floyd vs 45.3 bayer on the mid-frame, scanline banding index src 0.42 / bayer 0.93 / floyd 1.26. aurora's audit surface of record remains its full-res sheet; the limitation is documented here, not hidden.
+- House recipe, final: two-pass palette GIF — `palettegen stats_mode=full` (diff would starve dark plates' big static grounds), `paletteuse dither=floyd_steinberg:diff_mode=rectangle`, 640 px wide, infinite loop, 12 fps presentation cadence (hero 6, hero4k 2 — a 2-frame 4K receipt is a slow A/B flip, not a blink).
+- All 36 plates converted: **16,129,991 bytes total** (mean 448 KB; smallest morph 83 KB; largest currents 1.51 MB, sea 1.28 MB). Every `metrics.txt` carries a measured `gif=` line — dimensions, fps, and the byte count read off the file, never guessed.
+- Determinism receipts: a fresh harness re-render of `morph` through `anim_gif()` produced a **byte-identical** anim.gif to the batch-made one, under both the bayer (89,447 bytes) and floyd (83,203 bytes) recipes; aurora and sea likewise byte-identical between calibration and production runs. The two paths agree to the byte, same as the frames always have.
+- Zips repackaged with the third artifact included: lite 25.2 → 41.2 MB, full 1/2/3-of-3: 77.6 → 93.6, 74.4 → 90.3, 85.2 → 101.1 MB (each full part still self-sufficient: source + premium-test + all 36 anim.gif+sheet+metrics sets + its 12-experiment frame subset).
+- **THE HONESTY-LEDGER ENTRY**: "GIFs take less space than mp4" was measured, not assumed. Same 36 plates, same 640 px presentation, libx264 crf 23 yuv420p: **1,431,359 bytes total — the mp4s are 11.3× smaller than the GIFs.** The GIF ships anyway (the author's instruction, and the right call for a *repo* artifact: it loops inline on GitHub with zero codecs and zero clicks); the byte price is printed per plate in every metrics.txt where anyone can audit it. GIF is the smaller carrier only against lossless or high-bitrate video, never against crf-23 H.264 — same genus as the 2550-vs-2551 and alpha() incidents: the claim, checked against the measurement.
+
+Stage Summary:
+- 36 anim.gifs live (repo tree + all four zips), 36 measured `gif=` receipt lines, one new harness function (`anim_gif`), one new tool (`tools/make_gifs.sh`), four refreshed zips — the delivery-format decision is itself now a receipt: measured, audited, honest.

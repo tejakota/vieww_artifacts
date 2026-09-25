@@ -6,3 +6,4 @@ filtered_layers=62
 open_subpath_fills=0
 render_mean_ms=69.901
 render_worst_ms=185.155
+gif=anim.gif,640x360,12fps,155964
