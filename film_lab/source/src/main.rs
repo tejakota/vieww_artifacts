@@ -82,6 +82,20 @@
 //! - `shadowplay` — the blur economy at the U-06 guard (30 of 32)
 //! - `prism` — the gradient axis: 256-stop animated re-sorted ramps
 //!
+//! Round 9 — the law machines, the laws of nature run as machines:
+//! - `quantum` — the probability axis: the double-slit, Born rule, watched
+//! - `smoke` — the fluid axis: Navier–Stokes, the vortex street, Strouhal
+//! - `threebody` — the chaos axis: the figure-eight, run twice, δ = 1e-5
+//! - `turing` — the morphogenesis axis: Gray–Scott, the regime tour
+//! - `galton` — the central-limit axis: the bean machine, σ measured
+//! - `caustics` — the refraction axis: Snell's rays, the envelope measured
+//! - `ising` — the criticality axis: the magnet annealed through T_c
+//! - `crystal` — the aperiodicity axis: five waves, C10 measured
+//! - `neural` — the learning axis: two spirals, the replayed mind
+//! - `truss` — the statics axis: method of joints, force as colour
+//! - `cellauto` — the computation axis: Rules 30/110 and Life
+//! - `collider` — the particle axis: the event, replayed, r = pT/qB
+//!
 //! Round 8 — the wonder engines, the machines the lab imagined:
 //! - `eclipse` — the narrative axis: totality, as a documented light sequence
 //! - `cymatics` — the frequency axis: 7,000 grains descending to Chladni nodes
@@ -148,6 +162,19 @@ mod exp_orrery;
 mod exp_storm;
 mod exp_kaleido;
 mod exp_ink;
+// ── Round 9: the law machines ──
+mod exp_quantum;
+mod exp_smoke;
+mod exp_threebody;
+mod exp_turing;
+mod exp_galton;
+mod exp_caustics;
+mod exp_ising;
+mod exp_crystal;
+mod exp_neural;
+mod exp_truss;
+mod exp_cellauto;
+mod exp_collider;
 mod film_lib;
 mod three_d;
 
@@ -247,6 +274,33 @@ fn registry() -> Vec<Experiment> {
             frame_hook: None,
         },
         Experiment::plain("ink", exp_ink::SECONDS, 24, exp_ink::frame),
+        // ── Round 9: the law machines — twelve new plates, one per law ──
+        Experiment {
+            name: "quantum",
+            seconds: exp_quantum::SECONDS,
+            frames: 20,
+            build: exp_quantum::frame,
+            probe: Some(exp_quantum::probe),
+            frame_hook: None,
+        },
+        Experiment::plain("smoke", exp_smoke::SECONDS, 20, exp_smoke::frame),
+        Experiment::plain("threebody", exp_threebody::SECONDS, 24, exp_threebody::frame),
+        Experiment::plain("turing", exp_turing::SECONDS, 20, exp_turing::frame),
+        Experiment::plain("galton", exp_galton::SECONDS, 20, exp_galton::frame),
+        Experiment::plain("caustics", exp_caustics::SECONDS, 20, exp_caustics::frame),
+        Experiment::plain("ising", exp_ising::SECONDS, 20, exp_ising::frame),
+        Experiment {
+            name: "crystal",
+            seconds: exp_crystal::SECONDS,
+            frames: 16,
+            build: exp_crystal::frame,
+            probe: Some(exp_crystal::probe),
+            frame_hook: None,
+        },
+        Experiment::plain("neural", exp_neural::SECONDS, 20, exp_neural::frame),
+        Experiment::plain("truss", exp_truss::SECONDS, 20, exp_truss::frame),
+        Experiment::plain("cellauto", exp_cellauto::SECONDS, 20, exp_cellauto::frame),
+        Experiment::plain("collider", exp_collider::SECONDS, 20, exp_collider::frame),
     ]
 }
 
