@@ -54,6 +54,19 @@
 //! - `hero` — the worst frame at 1920×1080: grid, shafts, dust, a 3,200-
 //!   quad knot, the liquid mass, the outline wordmark, a backdrop-blurred
 //!   caption — the budget receipt at master resolution
+//!
+//! Round 6 — the berserk spectrum, one plate per tolerance axis:
+//! - `avatar` — a single line becomes a 3D bust (lathe + orbiting light)
+//! - `fadeaway` — the text release: chroma split → blur → shard dust
+//! - `sea` — a drop becomes an entire ocean (one surface, scale reveal)
+//! - `tesseract` — a hypercube rotating through the 4th direction
+//! - `blackhole` — Doppler-boosted disk, lensed stars, photon ring
+//! - `galaxy` — 60,000 stars: the shape-count record (60,527/frame)
+//! - `forest` — the recursion: seed → canopy, apical + phototropic
+//! - `city` — ten thousand hash-addressed windows, lit fraction measured
+//! - `typo` — the sentence becomes weather; condenses into one drop
+//! - `mandel` — the count ceiling as art: 57,602 rects per frame
+//! - `hero4k` — the hero tree rasterised at 3840×2160
 
 mod exp_aurora;
 mod exp_beams;
@@ -80,6 +93,17 @@ mod exp_settle;
 mod exp_dolly;
 mod exp_currents;
 mod exp_probe;
+mod exp_avatar;
+mod exp_fadeaway;
+mod exp_sea;
+mod exp_tesseract;
+mod exp_blackhole;
+mod exp_galaxy;
+mod exp_forest;
+mod exp_city;
+mod exp_typo;
+mod exp_mandel;
+mod exp_hero4k;
 mod film_lib;
 mod three_d;
 
@@ -118,6 +142,18 @@ fn registry() -> Vec<Experiment> {
             probe: Some(exp_probe::probe),
         },
         Experiment::plain("hero", exp_hero::SECONDS, 8, exp_hero::frame),
+        // ── Round 6: the berserk spectrum — ten new plates + the 4K hero ──
+        Experiment::plain("avatar", exp_avatar::SECONDS, 16, exp_avatar::frame),
+        Experiment::plain("fadeaway", exp_fadeaway::SECONDS, 32, exp_fadeaway::frame),
+        Experiment::plain("sea", exp_sea::SECONDS, 16, exp_sea::frame),
+        Experiment::plain("tesseract", exp_tesseract::SECONDS, 16, exp_tesseract::frame),
+        Experiment::plain("blackhole", exp_blackhole::SECONDS, 16, exp_blackhole::frame),
+        Experiment::plain("galaxy", exp_galaxy::SECONDS, 16, exp_galaxy::frame),
+        Experiment::plain("forest", exp_forest::SECONDS, 16, exp_forest::frame),
+        Experiment::plain("city", exp_city::SECONDS, 16, exp_city::frame),
+        Experiment::plain("typo", exp_typo::SECONDS, 24, exp_typo::frame),
+        Experiment::plain("mandel", exp_mandel::SECONDS, 16, exp_mandel::frame),
+        Experiment::plain("hero4k", exp_hero4k::SECONDS, 2, exp_hero4k::frame),
     ]
 }
 
@@ -144,13 +180,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // receipt is the point; everything else stays at lab standard.
         let canvas = if experiment.name == "hero" {
             vieww_foundation::Size::new(1920.0, 1080.0)
+        } else if experiment.name == "hero4k" {
+            vieww_foundation::Size::new(3840.0, 2160.0)
         } else {
             film_lib::CANVAS
         };
         match render_with(experiment, &dir, canvas) {
             Ok(receipt) => {
                 receipt.print(experiment.name);
-                let tile = if experiment.name == "hero" { "4x2" } else { "4x4" };
+                let tile = match experiment.name.as_ref() {
+                    "hero" | "hero4k" => "4x2",
+                    "fadeaway" => "4x8",
+                    "typo" => "4x6",
+                    _ => "4x4",
+                };
                 match contact_sheet(&dir, tile) {
                     Some(sheet) => println!("    sheet: {}", sheet.display()),
                     None => println!("    sheet: FAILED (ffmpeg)"),

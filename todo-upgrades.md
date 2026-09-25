@@ -575,6 +575,16 @@ film is limited by the renderer. The constraint is taste, which is the good kind
 composition family, this session's own numbers: 1920×1080, 4,703 shapes,
 129 layers, 149 ms mean / 171 ms worst. The budget holds.*
 
+*Round 6 re-measured the axes around it: `galaxy` pushes **60,527 shapes
+through a frame in 101 ms** (13× the hero's count at two-thirds of its
+cost — the hero's expense is its blurred layers and big fills, not its
+shape count), `mandel` holds **57,602 flat rects at 69 ms**, and `hero4k`
+rasterises the same tree at 3840×2160 in **440–489 ms/frame** — 3× the
+cost for 4× the pixels. The 4K boundary that did surface is memory, not
+speed: a 4-frame 4K run was OOM-killed on the 4 GB bench while the
+2-frame run passes, so a 4K master is a chunked-pass plan. The constraint
+stack for the master: taste → memory → time.*
+
 
 ---
 

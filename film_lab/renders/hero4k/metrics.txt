@@ -1,0 +1,8 @@
+frames=2
+shapes=7403
+glyph_runs=4
+layers=27
+filtered_layers=6
+open_subpath_fills=0
+render_mean_ms=488.765
+render_worst_ms=670.175

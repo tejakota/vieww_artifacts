@@ -158,3 +158,34 @@ Stage Summary:
 - 25 props live; the two "one PR away" framework notes are closed, and the new instrument caught its own first bug (U-22) on its first plate — the receipts culture, compounding.
 - The probe: measured pixel facts in receipts — U-15's fixed point (Δch 1), U-18's floor (26/255), the chord closure's pixel-exact silence.
 - Round-5 receipts: ghosts 176 shapes/frame 97 ms (bloom is the cost, counted), settle 32 shapes/frame 25 ms, dolly 1,890 shapes/frame 46 ms, currents 459 shapes/frame 55 ms, probe 29 shapes/frame 44 ms. Hero re-measured at 4,703 shapes, 153 ms mean — the budget line holds.
+
+---
+
+## Round 6 — the berserk spectrum (session 5, 2026-09-25)
+
+Task: "Don't just take the three which are already being done… try anything and everything that checks the tolerance of the framework. Going berserk means this." — the author's three named arcs (line → 3D avatar, text → blurred fade-away, drop → entire ocean) became three of eleven plates, not the round's scope.
+
+Work Log:
+- Environment was a cold reset again: rustup 1.98.1, workspace rebuilt from the repo's own `vieww_base` + `film_lab/source` (the 25-experiment tree), build 2m17s clean.
+- Eleven new plates, each on its own tolerance axis:
+  - exp_avatar (genesis I): the profile line draws itself (dash-phase), radial copies fan into a lathe cage, the surface skins crown→base, then the light orbits the bust. 4,486 shapes/frame, 64 ms, 9/10.
+  - exp_fadeaway (genesis II / transition grammar): chromatic R/G/B split through Plus → ONE blurred group σ 0→16 with printed ink compensation → per-letter 3×4 clipped shard windows (U-11 verbatim) staggered left→right → dust → baseline hairline. 32-frame sampling on purpose. 9/10 after the audit-prompt lesson (below).
+  - exp_sea (genesis III): one heightfield the whole way — drop, strike, radial rings, camera rises to the horizon, wind waves, sun glitter path (380 specular samples, threshold-tested against the actual wave normals). 8/10.
+  - exp_tesseract: 4D rotation (XW/YW) → w-perspective → 3D camera; w-as-colour; ghosts evaluated; the hyper-flip bloom. 9/10.
+  - exp_blackhole: 2,400 Keplerian orbitals, Doppler beaming, far side bent over the top as the halo arc, photon ring, 2,400 lensed stars with tangential smear, infall spiral. 9/10.
+  - exp_galaxy: THE RECORD — 60,000 stars, 3 log-spiral arms, differential rotation, dust lanes, HII regions, golden core. 60,527 shapes/frame in 101 ms. 8/10.
+  - exp_forest: depth-8 recursion, apical dominance + phototropism, depth-wave growth, ~2,900 leaf billboards, fireflies. 8/10 after the dir_turn incident (below).
+  - exp_city: 13×13 procedural downtown, 3-octave hashed heights, per-window coordinate-hash lights (lit fraction measured live), traffic, crescent moon. 9/10 after the window-slit fix.
+  - exp_typo: 39 positioned+rotated Text widgets riding RK2-integrated flow tables, 4 direction-bucket blur groups (ghosts' economy), condensation into the drop. 936 glyph runs. 9/10.
+  - exp_mandel: seahorse-valley escape-time zoom as 320×180 = 57,602 rects/frame, smooth-coloured, budget 48+42·log₂(zoom). 69 ms. 8/10.
+  - exp_hero4k: the hero tree at ×2 root scale on 3840×2160 — 440–489 ms/frame; the 4-frame variant OOM-killed on the 4 GB bench (the tolerance data), 2-frame passes.
+- THE dir_turn INCIDENT: yaw-around-Y collapses for a vertical vector (the perpendicular is zero) — the tree rendered as a pole with a tuft. VLM: "shepherd's crook… dandelion hair-lines." Fixed with the orthonormal-frame tilt (pitch away from d, compass direction from yaw) + apical dominance (first child continues, laterals splay) + phototropism (children pulled 0.2 toward +Y). 6 → 4 → 8/10.
+- THE AUDIT-PROMPT INCIDENT: the SAME fadeaway sheet scored 2/10 context-free ("almost entirely black — extreme underexposure") and 9/10 with intent in the prompt ("intentionally dark — evaluate the transition"). Direct pixel check confirmed the text renders at (235, 229, 254). The audit prompt is part of the instrument; dark plates must be audited with their design intent named.
+- THE WINDOW-SLIT INCIDENT: face-aligned quads lerped from "column u" to "column u+s" — windows counted but one-sided-sliver invisible. The count cannot tell; only the audit can.
+- THE ONCELOCK DEADLOCK: total_segments() → grow() → total_segments() hung the first forest render with zero output — re-entrant get_or_init blocks on itself. Fixed by needing no census (depth-wave reveal).
+- Full 36-experiment registry re-render; all receipts fresh; zips repackaged as lite + full 3-of-3 (the 2-part split retired — round-6 frames need their own part).
+
+Stage Summary:
+- 36 props live. The tolerance axes now measured: shape count (60,527 @ 101 ms), rect count (57,602 @ 69 ms), glyph runs (39/frame through 4 blur buckets), recursion (depth 8 → 9,661 faces), canvas (4K @ 440–489 ms, OOM boundary recorded), procedural density (city, galaxy), blend economy (Plus groups ≤ 3 per plate, filtered ≤ 62 per experiment).
+- The hero budget line, superseded in one axis: the hero's 4,703 shapes in 149 ms was never a count limit — galaxy proves 13× the count at ⅔ the cost. The master's constraint stack: taste → memory → time.
+- Round-6 audit scores: avatar 9, fadeaway 9, sea 8, tesseract 9, blackhole 9, galaxy 8, forest 8, city 9, typo 9, mandel 8, hero4k (receipt plate).
