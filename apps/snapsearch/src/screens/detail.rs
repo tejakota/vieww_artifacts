@@ -17,6 +17,7 @@ use vieww::prelude::*;
 use crate::photo::Photo;
 use crate::state::AppState;
 use crate::theme::FluidTokens;
+use crate::widgets::icons as app_icons;
 
 pub struct DetailView {
     pub state: AppState,
@@ -91,26 +92,54 @@ impl Widget for DetailView {
         let caption = Flex::column()
             .main_axis_size(MainAxisSize::Min)
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .spacing(4.0)
+            .spacing(6.0)
             .children(children![
                 Text::new(self.photo.label.clone())
                     .color(theme.colors.on_surface)
                     .size(theme.text.title.size)
                     .bold()
                     .align(TextAlign::Center),
-                Text::new(match self.photo.source.path() {
-                    // The path is the one thing a person can act on outside
-                    // the app, so it is shown rather than hidden.
-                    Some(path) => path.display().to_string(),
-                    None => "generated sample".to_string(),
-                })
-                .color(theme.colors.on_surface_variant)
-                .size(theme.text.label.size)
-                .align(TextAlign::Center),
-                Text::new(if sharp { "full resolution" } else { "loading full size…" })
-                    .color(theme.colors.on_surface_variant)
-                    .size(theme.text.label.size)
-                    .align(TextAlign::Center),
+                // What this photo *is*, as chips rather than three stacked
+                // centred lines: the provenance (path or sample), and the
+                // resolution state. A chip row survives being read
+                // half-attentively; three identical grey lines do not.
+                Flex::row()
+                    .main_axis_alignment(MainAxisAlignment::Center)
+                    .main_axis_size(MainAxisSize::Min)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .spacing(8.0)
+                    .children(children![
+                        chip(
+                            tokens.surface_raised,
+                            app_icons::image(),
+                            match self.photo.source.path() {
+                                // The path is the one thing a person can act on
+                                // outside the app, so it is shown rather than
+                                // hidden — filename only; the full path is
+                                // wider than any phone.
+                                Some(path) => path
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| "file".to_string()),
+                                None => "generated sample".to_string(),
+                            },
+                            theme.colors.on_surface_variant,
+                        ),
+                        chip(
+                            tokens.surface_raised,
+                            app_icons::sparkle(),
+                            if sharp {
+                                "full resolution".to_string()
+                            } else {
+                                "loading full size…".to_string()
+                            },
+                            if sharp {
+                                theme.colors.success
+                            } else {
+                                theme.colors.on_surface_variant
+                            },
+                        ),
+                    ]),
             ]);
 
         Positioned::fill()
@@ -147,6 +176,7 @@ impl Widget for DetailView {
                                         .child(
                                             Align::new(Alignment::CENTER).child(close_button(
                                                 &self.state,
+                                                &tokens,
                                             ))
                                         ),
                                     ]),
@@ -159,20 +189,60 @@ impl Widget for DetailView {
     }
 }
 
-fn close_button(state: &AppState) -> WidgetNode {
+fn close_button(state: &AppState, tokens: &FluidTokens) -> WidgetNode {
     let close = state.clone();
-    // Filled rather than a text button, and no `theme` parameter: `Button`
-    // reads the ambient `ThemeData` in its own build, so the one thing a
-    // parameter could have added — a colour — was already decided by the
-    // `Theme` at this tree's root. Filled because this is the one control
-    // sitting directly on the photo-black scrim, where a text button's
-    // low-contrast label washes out — and it is the viewer's primary exit,
-    // which is what the filled style is *for*.
-    Flex::row()
-        .main_axis_size(MainAxisSize::Min)
-        .children(children![Button::new("Done")
-            .style(ButtonStyle::Filled)
-            .on_pressed(move || close.close_detail())])
+    // The ramp travels into the `'static` press builder as a value, not a
+    // reference — `Gradient` is `Copy`, and the token struct it came from is
+    // gone by the time a press rebuilds this.
+    let gradient = tokens.fluid_gradient();
+    // The viewer's exit, composed rather than a stock `Button`: the one
+    // control sitting directly on the photo-black scrim gets the fluid ramp
+    // and the FAB's shadow language — filled, lifted, unmistakably the
+    // primary thing to press — where a flat filled button washed out against
+    // the scrim and a text button worse.
+    Pressable::new(move |press| {
+        let scale = 1.0 - press * 0.06;
+        Transformed::scale(scale, scale).child(
+            Container::new()
+                .gradient(gradient)
+                .radius(f32::MAX)
+                .shadow(Shadow {
+                    color: Color::rgba(0x7c, 0x3a, 0xed, 0x99),
+                    offset: Offset::new(0.0, 10.0),
+                    blur: 26.0,
+                    spread: 0.0,
+                    is_inset: false,
+                })
+                .padding(EdgeInsets::symmetric(34.0, 14.0))
+                .child(
+                    Text::new("Done")
+                        .color(Color::WHITE)
+                        .size(16.0)
+                        .bold(),
+                ),
+        )
+        .into()
+    })
+    .on_tap(move || close.close_detail())
+    .into()
+}
+
+/// A small pill of metadata: glyph + text on a raised surface.
+fn chip(plate: Color, icon: IconData, text: String, ink: Color) -> WidgetNode {
+    Container::new()
+        .color(plate)
+        .radius(f32::MAX)
+        .padding(EdgeInsets::symmetric(10.0, 5.0))
+        .child(
+            Flex::row()
+                .main_axis_size(MainAxisSize::Min)
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .spacing(5.0)
+                .children(children![
+                    Icon::new(icon).size(11.0).color(ink),
+                    Text::new(text).color(ink).size(12.0),
+                ]),
+        )
         .into()
 }
 

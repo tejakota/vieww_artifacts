@@ -165,6 +165,20 @@ fn main() {
         write(&mut renderer, &mut driver, &out, "08-detail.png");
     }
 
+    // Frame 9: the no-match empty state — the illustration the empty grid
+    // wears. Only reachable by a query nothing scores against, so it is
+    // driven here exactly the way a real miss happens: query, run, wait out
+    // the search animation.
+    state.close_detail();
+    state.text_query.set("a chromatic dragon over detroit".to_string());
+    state.run_search();
+    for _ in 0..42 {
+        std::thread::sleep(Duration::from_millis(50));
+        state.advance_clock();
+        tick(&mut driver, Duration::from_millis(50));
+    }
+    write(&mut renderer, &mut driver, &out, "09-no-match.png");
+
     println!("wrote {}", out.display());
 }
 

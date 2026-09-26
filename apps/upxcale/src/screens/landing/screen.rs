@@ -107,14 +107,25 @@ impl Landing {
 
         Stack::new()
             .alignment(Alignment::TOP_LEFT)
-            .push(Positioned::fill().child(PhotoGrid {
-                cells,
-                offset: scroll.offset(),
-                on_drag: scroll.on_drag(),
-                on_drag_end: scroll.on_drag_end(),
-                on_extents: scroll.on_extents(),
-                on_tap,
-            }))
+            .push(Positioned::fill().child(
+                // The header above the grid: wordmark, tagline, and a count
+                // chip. Before this the masonry began at the very top edge —
+                // the screen had photographs but no identity, and the only
+                // words on it belonged to the button.
+                Flex::column()
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .children(children![
+                        header(&state, cells.len()),
+                        Flexible::expanded(1).child(PhotoGrid {
+                            cells,
+                            offset: scroll.offset(),
+                            on_drag: scroll.on_drag(),
+                            on_drag_end: scroll.on_drag_end(),
+                            on_extents: scroll.on_extents(),
+                            on_tap,
+                        }),
+                    ]),
+            ))
             .push(
                 Positioned::new().left(0.0).right(0.0).bottom(0.0).child(
                     Container::new()
@@ -144,6 +155,61 @@ impl Landing {
             )
             .into()
     }
+}
+
+/// The landing screen's masthead.
+///
+/// One row: the wordmark and its tagline on the left, the library count in a
+/// chip on the right. It scrolls away with the grid — it is the page's title,
+/// not chrome — and it says what the app does ("Lanczos ×4 on this device")
+/// in the one place a first-time reader is looking.
+fn header(state: &AppState, total: usize) -> WidgetNode {
+    let upscaled = state
+        .grid
+        .get()
+        .iter()
+        .filter(|item| item.upscaled)
+        .count();
+
+    let chip_text = if upscaled > 0 {
+        format!("{upscaled} of {total} upscaled")
+    } else {
+        format!("{total} photos")
+    };
+
+    Padding::new(EdgeInsets::only(16.0, 18.0, 16.0, 6.0)).child(
+        Flex::row()
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+        .children(children![
+            Flexible::expanded(1).child(
+                Flex::column()
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .spacing(2.0)
+                    .children(children![
+                        Text::new("upxcale")
+                            .style(TextStyle::new(26.0).bold())
+                            .color(theme::scheme().on_surface),
+                        Text::new("Lanczos-3 ×4 · unsharp · on this device")
+                            .style(TextStyle::new(12.0))
+                            .color(theme::scheme().on_surface_variant),
+                    ]),
+            ),
+            Container::new()
+                .decoration(
+                    BoxDecoration::new()
+                        .color(theme::scheme().surface_variant)
+                        .stadium(),
+                )
+                .padding(EdgeInsets::symmetric(12.0, 6.0))
+                .child(
+                    Text::new(chip_text)
+                        .style(TextStyle::new(12.0).bold())
+                        .color(theme::scheme().on_surface_variant),
+                ),
+        ])
+        ,
+    )
+    .into()
 }
 
 widget_node_from!(Landing);

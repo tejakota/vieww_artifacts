@@ -97,7 +97,7 @@ impl Widget for LibraryScreen {
 
         // ---- the scrolling library underneath everything ---------------
         let grid: WidgetNode = if tiles.is_empty() {
-            empty_state(&theme)
+            empty_state(&theme, &tokens)
         } else {
             Scrollable::vertical(state.scroll.offset())
                 .on_drag(state.scroll.on_drag())
@@ -204,6 +204,13 @@ impl Widget for LibraryScreen {
                 let state = state.clone();
                 let theme = theme.clone();
                 let badge = results.as_ref().map(|r| r.len());
+                // Captured as a plain value, not read inside the closure: a
+                // signal `.get()` only subscribes while a build is on the
+                // tracking stack, so reading `tick` inside this builder would
+                // subscribe nothing. The screen itself rebuilds every
+                // `CLOCK_INTERVAL` because `tick` is read in `build` above,
+                // and each rebuild hands the halo a fresh phase.
+                let tick = tick;
                 move |t| {
                     if t <= 0.001 {
                         return SizedBox::shrink().into();
@@ -214,7 +221,7 @@ impl Widget for LibraryScreen {
                         .child(
                             Opacity::new(t).child(
                                 Transformed::scale(0.85 + 0.15 * t, 0.85 + 0.15 * t)
-                                    .child(fab_cluster(&state, &theme, &tokens, badge)),
+                                    .child(fab_cluster(&state, &theme, &tokens, badge, tick)),
                             ),
                         )
                         .into()
@@ -226,6 +233,7 @@ impl Widget for LibraryScreen {
             .duration(theme.motion.duration_medium)
             .build({
                 let theme = theme.clone();
+                let tokens = FluidTokens::new();
                 let embedder = state.embedder.clone();
                 move |t| {
                     if t <= 0.001 {
@@ -239,7 +247,7 @@ impl Widget for LibraryScreen {
                         .child(
                             Align::new(Alignment::CENTER).child(
                                 Opacity::new(t).child(Padding::new(EdgeInsets::all(32.0)).child(
-                                    progress_dialog(&theme, progress, embedder.name()),
+                                    progress_dialog(&theme, &tokens, progress, embedder.name()),
                                 )),
                             ),
                         )
@@ -453,14 +461,34 @@ fn header(
 }
 
 /// The FAB, plus the "Search your photos…" hint pill beside it.
+///
+/// `tick` is the ambient clock the masonry already drifts on. The halo behind
+/// the button breathes on the same clock — a slow radial glow swelling and
+/// settling — so the one control the whole flow starts from is the one thing
+/// on the screen that is visibly *alive*, before anything is pressed. Same
+/// triangle wave, same period class as the tiles' drift: one ambient rhythm,
+/// not two.
 fn fab_cluster(
     state: &AppState,
     theme: &Rc<ThemeData>,
     tokens: &FluidTokens,
     badge: Option<usize>,
+    tick: u64,
 ) -> WidgetNode {
     let open = state.clone();
     let size = tokens.fab_size;
+
+    // The breath: a 0→1→0 triangle over ~7s of ambient ticks (the clock fires
+    // every 140ms), mapped to halo scale and alpha. Never absent — the FAB is
+    // the flow's entry point and a pulse that fully disappears reads as a
+    // flicker rather than a breath.
+    let breath = {
+        let phase = (tick % 50) as f32 / 50.0;
+        let tri = if phase < 0.5 { phase * 2.0 } else { 2.0 - phase * 2.0 };
+        0.35 + 0.65 * tri
+    };
+    let halo_pad = 10.0 + 10.0 * breath;
+    let halo_alpha = (0.30 + 0.28 * breath).clamp(0.0, 1.0);
 
     let hint = Container::new()
         .color(tokens.surface_raised)
@@ -479,25 +507,50 @@ fn fab_cluster(
                 .size(theme.text.body.size),
         );
 
-    let mut fab_stack: Vec<WidgetNode> = vec![Container::new()
-        .size(size, size)
-        .radius(tokens.fab_curve)
-        .gradient(tokens.fluid_gradient())
-        .shadow(Shadow {
-            color: Color::rgba(0x7c, 0x3a, 0xed, 0x8c),
-            offset: Offset::new(0.0, 12.0),
-            blur: 30.0,
-            spread: 0.0,
-            is_inset: false,
-        })
-        .alignment(Alignment::CENTER)
-        .child(
-            Icon::new(app_icons::search())
-                .size(26.0)
-                .color(Color::WHITE)
-                .label("Search photos"),
-        )
-        .into()];
+    // Bottom of the stack: the ambient halo, a soft violet bloom behind the
+    // button, sized and faded by the breath. The gradient's last stop is the
+    // transparent spelling of the SAME violet, not a flat alpha over a
+    // different hue — a tinted fade that changes hue on the way out reads as
+    // a smudge ring.
+    let mut fab_stack: Vec<WidgetNode> = vec![
+        Positioned::new()
+            .left(-halo_pad)
+            .top(-halo_pad)
+            .child(
+                Opacity::new(halo_alpha).child(
+                    Container::new()
+                        .size(size + halo_pad * 2.0, size + halo_pad * 2.0)
+                        .radius(f32::MAX)
+                        .gradient(
+                            Gradient::radial(Offset::new(0.5, 0.5), 0.5).with_stops(&[
+                                (0.0, Color::rgba(0x7c, 0x3a, 0xed, 0xff)),
+                                (0.55, Color::rgba(0x7c, 0x3a, 0xed, 0x66)),
+                                (1.0, Color::rgba(0x7c, 0x3a, 0xed, 0x00)),
+                            ]),
+                        ),
+                ),
+            )
+            .into(),
+        Container::new()
+            .size(size, size)
+            .radius(tokens.fab_curve)
+            .gradient(tokens.fluid_gradient())
+            .shadow(Shadow {
+                color: Color::rgba(0x7c, 0x3a, 0xed, 0x8c),
+                offset: Offset::new(0.0, 12.0),
+                blur: 30.0,
+                spread: 0.0,
+                is_inset: false,
+            })
+            .alignment(Alignment::CENTER)
+            .child(
+                Icon::new(app_icons::search())
+                    .size(26.0)
+                    .color(Color::WHITE)
+                    .label("Search photos"),
+            )
+            .into(),
+    ];
 
     if let Some(n) = badge {
         fab_stack.push(
@@ -786,7 +839,9 @@ fn reference_picker(
         .into()
 }
 
-fn progress_dialog(theme: &Rc<ThemeData>, progress: f32, encoder: &str) -> WidgetNode {
+fn progress_dialog(theme: &Rc<ThemeData>, tokens: &FluidTokens, progress: f32, encoder: &str) -> WidgetNode {
+    let progress = progress.clamp(0.0, 1.0);
+
     Container::new()
         .color(theme.colors.surface)
         .radius(theme.metrics.corner * 1.2)
@@ -804,6 +859,28 @@ fn progress_dialog(theme: &Rc<ThemeData>, progress: f32, encoder: &str) -> Widge
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .spacing(theme.metrics.gap * 1.5)
                 .children(children![
+                    // The sparkle in its own gradient disc — the same fluid
+                    // ramp the FAB carries, on the one dialog that IS the
+                    // search. It says "the model is working" in the app's
+                    // own visual language before a word is read.
+                    Container::new()
+                        .size(56.0, 56.0)
+                        .radius(f32::MAX)
+                        .gradient(tokens.fluid_gradient())
+                        .shadow(Shadow {
+                            color: Color::rgba(0x7c, 0x3a, 0xed, 0x73),
+                            offset: Offset::new(0.0, 8.0),
+                            blur: 22.0,
+                            spread: 0.0,
+                            is_inset: false,
+                        })
+                        .alignment(Alignment::CENTER)
+                        .child(
+                            Icon::new(app_icons::sparkle())
+                                .size(26.0)
+                                .color(Color::WHITE)
+                                .label("Searching"),
+                        ),
                     Text::new("Searching your library")
                         .color(theme.colors.on_surface)
                         .size(theme.text.title.size)
@@ -811,14 +888,51 @@ fn progress_dialog(theme: &Rc<ThemeData>, progress: f32, encoder: &str) -> Widge
                     Text::new(encoder.to_string())
                         .color(theme.colors.on_surface_variant)
                         .size(theme.text.label.size),
-                    SizedBox::from_size(Size::new(220.0, 6.0))
-                        .child(LinearProgress::new(progress)),
+                    SizedBox::from_size(Size::new(220.0, 6.0)).child(fluid_bar(tokens, progress)),
                     Text::new(format!("{}%", (progress * 100.0).round() as i32))
                         .color(theme.colors.on_surface_variant)
                         .size(theme.text.body.size),
                 ]),
         )
         .into()
+}
+
+/// The progress bar as the fluid ramp, rather than the theme's flat primary.
+///
+/// `LinearProgress` paints its track and fill from `ColorScheme` roles and
+/// has no gradient spelling; this is the same shape (rounded track, fill
+/// sized by a `LayoutBuilder`) with the app's own ramp on the fill — the
+/// one bar in the app that moves, carrying the one gradient the app owns.
+fn fluid_bar(tokens: &FluidTokens, progress: f32) -> WidgetNode {
+    // The ramp as a value, captured by the `'static` layout builder.
+    let gradient = tokens.fluid_gradient();
+    Container::new()
+        .height(6.0)
+        .radius(f32::MAX)
+        .color(theme_track())
+        .child(LayoutBuilder::new(move |constraints| {
+            let width = if constraints.has_bounded_width() {
+                constraints.max_width * progress
+            } else {
+                0.0
+            };
+            Align::new(Alignment::CENTER_LEFT)
+                .child(
+                    Container::new()
+                        .width(width.max(0.0))
+                        .height(6.0)
+                        .radius(f32::MAX)
+                        .gradient(gradient),
+                )
+                .into()
+        }))
+        .into()
+}
+
+/// The bar's track, one step off the surface so the fill reads as moving
+/// *over* something rather than appearing out of the card.
+fn theme_track() -> Color {
+    Color::rgb(0x2e, 0x29, 0x42)
 }
 
 fn toast_pill(theme: &Rc<ThemeData>, message: String) -> WidgetNode {
@@ -842,22 +956,115 @@ fn toast_pill(theme: &Rc<ThemeData>, message: String) -> WidgetNode {
                 is_inset: false,
             })
             .child(
-                Text::new(message)
-                    .color(theme.colors.on_surface)
-                    .size(theme.text.body.size)
+                // A long query echoed back in "Nothing close to …" once made
+                // this pill 420 of a 390-point screen. The cap lets the text
+                // wrap to a second line instead — a stadium becomes a
+                // lozenge, which is still a pill.
+                Constrained::new(Constraints::new(0.0, 310.0, 0.0, f32::INFINITY)).child(
+                    Text::new(message)
+                        .color(theme.colors.on_surface)
+                        .size(theme.text.body.size)
+                        .align(TextAlign::Center),
+                ),
             )])
         .into()
 }
 
-fn empty_state(theme: &Rc<ThemeData>) -> WidgetNode {
+fn empty_state(theme: &Rc<ThemeData>, tokens: &FluidTokens) -> WidgetNode {
+    // The illustration: three photo frames fanned behind a floating magnifier
+    // disc, over a wide violet bloom. Built from the same tokens as everything
+    // else — the frames carry the fluid ramp at low alpha, the disc is the
+    // surface-raised glass, and the whole thing sits on the app's background —
+    // so it reads as this app's empty state rather than a generic one.
+
+    // A photo frame: a rounded plate with a soft tint and a hairline, rotated
+    // about its own centre. `Transformed::rotate` turns about the child's
+    // top-left, which would swing the whole plate off its slot —
+    // `Transform::rotate_around` is the centre-pinned spelling, and it
+    // composes the two translations itself.
+    let frame = |rotate_deg: f32, tint: Color, w: f32, h: f32| {
+        Transformed::new(Transform::rotate_around(
+            Offset::new(w * 0.5, h * 0.5),
+            rotate_deg.to_radians(),
+        ))
+        .child(
+            Container::new()
+                .size(w, h)
+                .radius(18.0)
+                .color(tint)
+                .border(Border::new(Color::rgba(0xff, 0xff, 0xff, 0x2e), 1.0))
+                .shadow(Shadow {
+                    color: Color::rgba(0, 0, 0, 0x59),
+                    offset: Offset::new(0.0, 10.0),
+                    blur: 26.0,
+                    spread: 0.0,
+                    is_inset: false,
+                }),
+        )
+    };
+
+    let illustration = SizedBox::from_size(Size::new(220.0, 150.0)).child(
+        Stack::new().fit(StackFit::Expand).children(children![
+            // The bloom behind everything.
+            Positioned::fill().child(
+                Container::new().gradient(
+                    Gradient::radial(Offset::new(0.5, 0.5), 0.5).with_stops(&[
+                        (0.0, Color::rgba(0x7c, 0x3a, 0xed, 0x5e)),
+                        (1.0, Color::rgba(0x7c, 0x3a, 0xed, 0x00)),
+                    ]),
+                ),
+            ),
+            // Back frame, tilted left.
+            Positioned::new().left(8.0).top(6.0).child(
+                frame(-8.0, Color::rgba(0x7c, 0x3a, 0xed, 0x66), 108.0, 132.0),
+            ),
+            // Back frame, tilted right.
+            Positioned::new().right(8.0).top(6.0).child(
+                frame(7.0, Color::rgba(0xff, 0x6b, 0x81, 0x5c), 108.0, 132.0),
+            ),
+            // Front frame, square on, carrying the amber end of the ramp.
+            Positioned::new()
+                .left(56.0)
+                .top(16.0)
+                .child(frame(0.0, Color::rgba(0xff, 0xb5, 0x45, 0x59), 108.0, 132.0)),
+            // The magnifier disc, floating over the fan — the app's one glyph,
+            // on the surface the FAB's hint pill uses.
+            Positioned::new()
+                .left(84.0)
+                .top(44.0)
+                .child(
+                    Container::new()
+                        .size(52.0, 52.0)
+                        .radius(f32::MAX)
+                        .color(tokens.surface_raised)
+                        .border(Border::new(Color::rgba(0xff, 0xff, 0xff, 0x40), 1.5))
+                        .shadow(Shadow {
+                            color: Color::rgba(0, 0, 0, 0x66),
+                            offset: Offset::new(0.0, 10.0),
+                            blur: 24.0,
+                            spread: 0.0,
+                            is_inset: false,
+                        })
+                        .alignment(Alignment::CENTER)
+                        .child(
+                            Icon::new(app_icons::search())
+                                .size(24.0)
+                                .color(theme.colors.on_surface)
+                                .label("Search photos"),
+                        ),
+                ),
+        ]),
+    );
+
     Align::new(Alignment::CENTER)
         .child(
             Padding::new(EdgeInsets::all(theme.metrics.gap * 4.0)).child(
                 Flex::column()
                     .main_axis_size(MainAxisSize::Min)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .spacing(theme.metrics.gap)
+                    .spacing(theme.metrics.gap * 1.5)
                     .children(children![
+                        illustration,
                         Text::new("Nothing close to that")
                             .color(theme.colors.on_surface)
                             .size(theme.text.title.size)

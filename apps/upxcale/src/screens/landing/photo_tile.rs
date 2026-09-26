@@ -69,6 +69,7 @@ impl Widget for PhotoTile {
         let photo = self.photo;
         let upscaled = self.upscaled;
         let selected = self.selected;
+        let fresh = self.fresh;
         let image = self.image.clone();
         let on_tap = Rc::clone(&self.on_tap);
 
@@ -124,6 +125,21 @@ impl Widget for PhotoTile {
                         .left(theme_data.metrics.gap)
                         .bottom(theme_data.metrics.gap)
                         .child(upscaled_badge(&theme_data)),
+                );
+            }
+
+            // The just-finished mark: a beat of success on the tile that just
+            // landed. The ring draws the attention, this says what it means —
+            // same disc-and-tick language as the picker's selection, in the
+            // success colour the theme already carries. Never up with the
+            // selection mark: the landing grid does not select, the picker
+            // does not mark fresh.
+            if fresh {
+                layers = layers.push(
+                    Positioned::new()
+                        .top(theme_data.metrics.gap)
+                        .right(theme_data.metrics.gap)
+                        .child(fresh_check(&theme_data)),
                 );
             }
 
@@ -211,6 +227,29 @@ fn upscaled_badge(theme_data: &ThemeData) -> WidgetNode {
                         .size(10.0)
                         .bold(),
                 ]),
+        )
+        .into()
+}
+
+/// The momentary success mark on a freshly rendered tile.
+fn fresh_check(theme_data: &ThemeData) -> WidgetNode {
+    Container::new()
+        .decoration(
+            BoxDecoration::new()
+                .color(theme_data.colors.success)
+                .stadium()
+                .shadow(Shadow::new(
+                    Color::rgba(0, 0, 0, 102),
+                    Offset::new(0.0, 2.0),
+                    8.0,
+                )),
+        )
+        .size(24.0, 24.0)
+        .alignment(Alignment::CENTER)
+        .child(
+            Icon::new(vieww_widget::icons::check())
+                .size(14.0)
+                .color(theme_data.colors.on_success),
         )
         .into()
 }

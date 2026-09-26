@@ -187,7 +187,7 @@ impl CompareSheet {
                 Positioned::new()
                     .left(8.0)
                     .top(8.0)
-                    .child(stage_label("AFTER", label_style)),
+                    .child(after_label(label_style)),
             );
             layers = layers.push(
                 Positioned::new()
@@ -322,6 +322,33 @@ fn stage_label(text: &str, style: TextStyle) -> WidgetNode {
         .padding(EdgeInsets::symmetric(10.0, 4.0))
         .child(
             Text::new(text.to_string())
+                .style(style)
+                .color(theme::ON_PHOTO)
+                .size(11.0)
+                .bold(),
+        )
+        .into()
+}
+
+/// The AFTER chip: the primary's own colour on the plate, so the side the
+/// app made is the side that visibly belongs to it. A horizontal ramp of the
+/// primary rather than a flat fill — flat over a photograph reads as a
+/// sticker, a ramp reads as light.
+fn after_label(style: TextStyle) -> WidgetNode {
+    Container::new()
+        .decoration(
+            BoxDecoration::new()
+                .gradient(
+                    Gradient::horizontal().with_stops(&[
+                        (0.0, Color::rgba(10, 132, 255, 210)),
+                        (1.0, Color::rgba(10, 132, 255, 240)),
+                    ]),
+                )
+                .stadium(),
+        )
+        .padding(EdgeInsets::symmetric(10.0, 4.0))
+        .child(
+            Text::new(format!("AFTER · {UPSCALE_FACTOR}x"))
                 .style(style)
                 .color(theme::ON_PHOTO)
                 .size(11.0)

@@ -2,11 +2,26 @@ app=snapsearch
 what=semantic photo search (CLIP / local appearance encoder) built on vieww
 migrated=old vello vieww -> vieww_base native rasteriser; cpu feature -> native,
         bins (screenshot, filter_probe) rasterise through vieww::paint::native
-enriched=detail viewer: stage photo lifts off the scrim (same shadow language
-        as sheet + FAB), Done becomes the filled primary exit it always was
-screens=8 rendered by src/bin/screenshot.rs through the native rasteriser,
-        390x844 (real UI states, real encoder progress, real stagger)
-sheet=sheet.png,1812x1009,5 screens
-frames=114 timeline at 10fps (1.3s hold + 0.6s crossfade per screen, seamless
-      loop; 6 screens incl. the stagger reveal)
-gif=anim.gif,390,844,10fps,2246424
+enriched=round 2 — the fluid-flow pass: the FAB breathes (an ambient violet
+        halo swelling and settling on the masonry's own tick clock, so the
+        entry point of the whole flow is the one visibly alive thing at rest),
+        the searching dialog wears the sparkle medallion on the fluid ramp with
+        a gradient progress bar to match, result badges are the ramp itself
+        (sparkle glyph + score instead of a dark plate), the detail view's
+        Done button carries the ramp and the FAB's shadow language with
+        metadata chips (filename, resolution state) in place of three stacked
+        grey lines, and the no-match state is an illustration — three fanned
+        photo frames over a violet bloom behind the magnifier disc, all built
+        from the app's own tokens. New vector icons: the four-point sparkle
+        (cubic-bowed glint, not a star polygon) and the photo glyph (ring
+        frame + sun annulus + ridge). The toast pill gained a width cap: a
+        long query echoed back in "Nothing close to ..." once overflowed the
+        390pt surface by 30px (caught on the new no-match shot); it wraps to
+        a lozenge instead.
+screens=9 rendered by src/bin/screenshot.rs through the native rasteriser,
+        390x844 (real UI states, real encoder progress, real stagger, and now
+        the no-match empty state, driven the way a real miss happens)
+sheet=sheet.png,1790x1660,9 screens
+frames=171 timeline at 10fps (1.3s hold + 0.6s crossfade per screen, seamless
+      loop; 9 screens)
+gif=anim.gif,390,844,10fps,4010239

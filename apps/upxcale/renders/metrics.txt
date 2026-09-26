@@ -2,14 +2,20 @@ app=upxcale
 what=photo upscaler (Lanczos-3 resampler + unsharp mask) built on vieww
 migrated=old vello vieww -> vieww_base native rasteriser (vieww_paint::native,
         vieww-hal Vulkan swapchain); cpu/gpu features collapsed to `native`
-enriched=frosted-glass picker scrim (vieww-effects BackdropBlur, sigma 22),
-        route transitions (picker/progress Fade, compare SlideFromBottom),
-        one elevation language (CARD_SHADOW + RENDER_SHADOW tokens),
-        ThemeData.platform so controls draw host-native shapes
+enriched=round 2 — the identity pass: the landing screen has a masthead
+        (wordmark, "Lanczos-3 x4 - unsharp - on this device" tagline, and a
+        live count chip that reads "3 of 12 upscaled" once renders exist) —
+        before this the masonry began at the top edge and the only words on
+        the screen belonged to the button. A freshly rendered tile carries a
+        momentary success mark (success-green disc + tick, the same
+        disc-and-tick language as the picker's selection, never up at the
+        same time). The compare sheet's AFTER chip is the primary ramp
+        ("AFTER - 4x") against a neutral BEFORE, so which half the app made
+        is the one thing the comparison never leaves ambiguous.
 screens=5 source shots, 414x896, native rasteriser (examples/shots.rs,
         clock advanced so route transitions settle before capture)
 upscale_detail=shots/upscale-detail.png,960x1280
-sheet=sheet.png,1812x1009,5 screens
+sheet=sheet.png,1790x884,5 screens
 frames=100 timeline at 10fps (1.4s hold + 0.6s crossfade per screen,
-      seamless loop; 35 stored frames once identical holds merge)
-gif=anim.gif,414,896,10fps,2453352
+      seamless loop; 5 screens)
+gif=anim.gif,414,896,10fps,3311271
