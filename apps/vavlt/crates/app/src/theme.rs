@@ -25,7 +25,8 @@
 //! the typeface it always wanted.
 
 use vieww::foundation::{Color, FontFamily, FontWeight, TextStyle};
-use vieww::widget::{BuildContext, ColorScheme, Metrics, ThemeData, Typography};
+use vieww::foundation::TargetPlatform;
+use vieww::widget::{BuildContext, ColorScheme, Metrics, Motion, ThemeData, Typography};
 
 /// Which set of metrics a surface gets.
 ///
@@ -410,6 +411,18 @@ impl VavltTheme {
             colors: self.colors.scheme(),
             text: Typography::scale(self.colors.fg),
             metrics: self.metrics.framework(),
+            // `standard`, not `expressive`: this is a vault, and its own
+            // `motion` module already chose the critically-damped language —
+            // `FAST`/`BASE`/`NAV` are durations, not personalities, and the
+            // one place they meet the framework's spelling is here, where
+            // `duration_long` (320ms) equals `NAV` exactly. A bouncing
+            // switch in a consent-first app would be saying the wrong thing.
+            motion: Motion::standard(),
+            // The host's shapes — a switch on Android draws Android's track,
+            // on iOS the pill. The *colours* stay ours (above); only the
+            // control silhouettes follow the machine, which is the narrow
+            // promise `from_colors`'s own docs make for this field.
+            platform: TargetPlatform::current(),
         }
     }
 

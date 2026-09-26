@@ -12,6 +12,7 @@
 
 use vieww::foundation::IconData;
 use vieww::prelude::*;
+use vieww_effects::{BackdropBlur, BackdropFilter};
 
 use crate::theme::VavltTheme;
 
@@ -32,9 +33,11 @@ pub enum ButtonKind {
     /// action a billboard is asking for — an accent fill next to a photograph
     /// competes with it, and this does not.
     Solid,
-    /// Frosted. vieww has no backdrop blur, so this is a flat translucency —
-    /// which over a photograph still reads as a panel you can see through, and
-    /// that is most of what the effect was for.
+    /// Frosted — for real now. The migrated framework's `vieww-effects`
+    /// ships a `BackdropBlur` that samples the pixels already painted beneath
+    /// the widget and blurs *those*, so a Glass button floating over the
+    /// scrolling mosaic is genuine frosted glass: the tiles pass under it
+    /// softened, not merely dimmed through the translucent fill.
     Glass,
 }
 
@@ -189,13 +192,30 @@ pub fn button_with(
         container.into()
     };
 
-    if enabled {
+    let node: WidgetNode = if enabled {
         Pressable::new(body).on_tap(on_tap).into()
     } else {
         // Not a disabled `Pressable`: an element that still enters the gesture
         // arena can win a contest against the list scrolling under it, which is
         // a dead button that also eats the scroll.
         body(0.0)
+    };
+
+    // Glass gets the real thing: a backdrop blur beneath the translucent fill
+    // that was already standing in for one. A transparent tint, because the
+    // fill above already carries the wash — `BackdropFilter::dark` would
+    // double-ink it. The blur radius is small on purpose: this is a control,
+    // not a sheet, and heavily blurred chrome under a button reads as a smear
+    // the finger is about to drag through.
+    if kind == ButtonKind::Glass {
+        BackdropBlur::new(BackdropFilter {
+            blur: 12.0,
+            tint: Color::TRANSPARENT,
+        })
+        .child(node)
+        .into()
+    } else {
+        node
     }
 }
 

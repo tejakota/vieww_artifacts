@@ -20,7 +20,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use vavlt_app::model::Screen;
@@ -28,7 +28,7 @@ use vavlt_app::{Message, Platform, Scrolls, VavltApp, VavltState};
 use vavlt_engine::{Item, Source};
 use vieww::foundation::task::FrameWaker;
 use vieww::foundation::{Color, Size};
-use vieww::paint::gpu::{GpuError, GpuRenderer};
+use vieww::paint::native::NativeRenderer;
 use vieww::prelude::*;
 
 const PHONE: Size = Size {
@@ -39,19 +39,6 @@ const PHONE: Size = Size {
 /// The navigation duration in `theme::motion::NAV`. Sampled either side of it
 /// so the resting frames bracket the moving ones.
 const SAMPLES: [u64; 6] = [0, 60, 120, 200, 300, 420];
-
-fn renderer() -> Option<MutexGuard<'static, GpuRenderer>> {
-    static GPU: OnceLock<Option<Mutex<GpuRenderer>>> = OnceLock::new();
-    let slot = GPU.get_or_init(|| match GpuRenderer::headless() {
-        Ok(r) => Some(Mutex::new(r)),
-        Err(GpuError::NoAdapter) => {
-            eprintln!("skipping: no graphics adapter");
-            None
-        }
-        Err(e) => panic!("gpu: {e}"),
-    });
-    slot.as_ref().map(|g| g.lock().expect("gpu mutex"))
-}
 
 #[derive(Debug)]
 struct NoPlatform(PathBuf);
@@ -98,9 +85,9 @@ fn items() -> Vec<Item> {
 /// Time is driven explicitly with `draw_frame_at` rather than by sleeping: a
 /// wall-clock test of an animation is a test of how loaded the machine is.
 fn walk(name: &str, from: Screen, to: Screen) {
-    let Some(mut gpu) = renderer() else {
-        return;
-    };
+    // Own renderer, same as every shot in the screenshot suite — see the
+    // note there for why nothing is shared.
+    let mut gpu = NativeRenderer::new();
 
     let dir = std::env::temp_dir().join(format!("vavlt-t-{name}"));
     std::fs::create_dir_all(&dir).ok();

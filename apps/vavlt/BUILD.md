@@ -5,20 +5,15 @@ product). iOS needs a Mac and is at the bottom.
 
 ## Before anything
 
-**vieww must be checked out beside this repo.** It is a path dependency, not a
-vendored copy — see the comment in `Cargo.toml`. Nothing builds without it:
-
-```bash
-git clone https://github.com/teja/vieww ../vieww   # sibling of this directory
-ls ../vieww/crates/vieww/Cargo.toml                # this is what the path points at
-```
-
-The tree cargo expects:
+**The framework is in this repository.** It is a path dependency pointing at
+the in-repo checkout — the migrated vieww, where vello is gone and
+`vieww_paint::native::NativeRenderer` is the one renderer (see
+`vieww_base/docs/RENDERER-MIGRATION.md`):
 
 ```
-somewhere/
-├── vieww/          # the framework
-└── vavlt/          # this repo
+repo/
+├── vieww_base/     # the framework — what ../../vieww_base in Cargo.toml means
+└── apps/vavlt/     # this app
 ```
 
 Rust 1.85 or newer, stable. `rustup show` to check.
@@ -34,10 +29,11 @@ cargo run --release -p vavlt-desktop                 # opens on ~/Pictures
 cargo run --release -p vavlt-desktop /some/folder    # walks that instead
 ```
 
-**In release.** A debug `vello` is roughly twenty times slower, and motion
-judged by eye in a debug build is a judgement of `rustc -O0`. (The workspace
-already forces `opt-level = 2` on dependencies in dev builds, so a debug build
-of the *app* is a reasonable compromise while iterating.)
+**In release.** A debug rasteriser is roughly an order of magnitude slower
+than a release one, and motion judged by eye in a debug build is a judgement
+of `rustc -O0`. (The workspace already forces `opt-level = 2` on dependencies
+in dev builds, so a debug build of the *app* is a reasonable compromise while
+iterating.)
 
 `RUST_LOG=debug` for the run loop, the grants and the pump:
 
@@ -68,20 +64,16 @@ cargo clippy --workspace --all-targets
 
 ### Screenshots
 
-Renders every screen through the real GPU backend to `target/screenshots/`:
+Renders every screen through the native rasteriser to `target/screenshots/`:
 phone and desktop, dark and light, forty PNGs.
 
 ```bash
 cargo test -p vavlt-app --test screenshots --release -- --nocapture
 ```
 
-It needs a Vulkan adapter and **skips rather than fails** without one. On a
-headless box, software Vulkan is enough:
-
-```bash
-sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
-vulkaninfo --summary        # a device under "Devices:" means it will run
-```
+No adapter is needed — the native rasteriser is the same CPU code a window
+presents through, run with no window — so the suite runs green everywhere a
+`cargo test` does, and the pixels are identical with or without a GPU.
 
 ### System packages
 
@@ -206,7 +198,7 @@ than an unconfigured build.
 | `Error detecting NDK version for path` | A partial NDK download. Point `ANDROID_NDK_ROOT` at a directory that has `source.properties`. |
 | `no Android SDK at ...` | `ANDROID_HOME` unset or wrong. |
 | `javac`/`d8` not found | No JDK, or `ANDROID_HOME` has no `build-tools` installed. |
-| App launches to a black screen | The first frame costs ~480ms on a mid-range phone — vello compiling its shaders on device. Wait a second before believing it. |
+| App launches to a black screen | The first frame costs a few hundred ms on a mid-range phone — glyph outlines and mip chains warming up in the rasteriser's caches. Wait a second before believing it. |
 
 ### What the APK declares
 

@@ -63,7 +63,7 @@ by path. It expects a Vieww checkout next to this one:
 ```text
 parent/
   three/            this workspace
-  vieww-develop/    a checkout of Vieww
+  vieww_base/    the framework checkout (in-repo)
 ```
 
 With that in place (and a Rust toolchain new enough for Vieww's dependency
@@ -80,7 +80,7 @@ to point the path if your Vieww checkout lives elsewhere.
 
 ## Run the social app
 
-With Vieww checked out next to this workspace as `../vieww-develop`:
+With the framework checked out at `../../vieww_base` (as it is in this repo):
 
 ```bash
 cargo run -p three-social-app

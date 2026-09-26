@@ -9,11 +9,12 @@ license.workspace = true
 vavlt-core.workspace = true
 vavlt-engine.workspace = true
 vieww.workspace = true
+vieww-effects.workspace = true
 log.workspace = true
 
 [dev-dependencies]
 # The screenshot harness and the layout tests drive the real tree through the
-# real GPU backend. `vieww` already carries the `gpu` feature from the
+# native rasteriser. `vieww` already carries the `native` feature from the
 # workspace, so this names no new dependency — it only makes the PNG encoder
 # reachable from `tests/`.
 image.workspace = true

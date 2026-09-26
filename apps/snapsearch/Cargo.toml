@@ -15,22 +15,25 @@ path = "src/main.rs"
 [[bin]]
 name = "filter_probe"
 path = "src/bin/filter_probe.rs"
-required-features = ["cpu"]
+required-features = ["native"]
 
 [[bin]]
 name = "screenshot"
 path = "src/bin/screenshot.rs"
-required-features = ["cpu"]
+required-features = ["native"]
 
 [dependencies]
-vieww = { path = "../vieww/crates/vieww" }
-vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit" }
-vieww-asset = { path = "../vieww/crates/vieww-asset" }
+vieww = { path = "../../vieww_base/crates/vieww" }
+vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
+vieww-asset = { path = "../../vieww_base/crates/vieww-asset" }
+vieww-effects = { path = "../../vieww_base/crates/vieww-effects" }
 
 [features]
 default = []
-# Headless CPU rasterisation, for the screenshot tool.
-cpu = ["vieww/cpu"]
+# Headless rasterisation, for the screenshot tool. `native` is the one backend
+# feature the migrated vieww has — the old `cpu`/`gpu` pair collapsed into it
+# when vello left the tree.
+native = ["vieww/native"]
 # The real semantic encoder. Off by default: it pulls in candle and needs
 # ~600MB of CLIP weights on disk, neither of which a UI build should carry
 # by default. See src/embed/clip.rs for where to put the weights.
@@ -65,7 +68,7 @@ optional = true
 default-features = false
 
 [target.'cfg(target_os = "android")'.dependencies]
-vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit", features = [] }
+vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit", features = [] }
 
 [package.metadata.android]
 package = "dev.snapsearch.app"

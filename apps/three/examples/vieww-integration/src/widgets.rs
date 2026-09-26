@@ -9,10 +9,13 @@ use three_vieww::OrbitCamera;
 
 use vieww::prelude::*;
 use vieww::{DragDetails, ScaleDetails};
-use vieww::foundation::ScrollEvent;
+use vieww::foundation::{Offset, ScrollEvent, Shadow};
 
 use crate::painter::{MeshPainter, ViewPalette};
 use crate::state::{PlaybackState, Snapshot};
+
+/// The corner the media chamber and its frame share.
+const MEDIA_CORNER: f32 = 14.0;
 
 /// A shareable write path into the mounted [`PlaybackState`].
 ///
@@ -202,8 +205,23 @@ impl ThreeMediaView {
                 }
             })
             .child(
-                Clip::rounded(14.0)
-                    .child(Semantics::container(label).child(Painting::new(painter))),
+                // The chamber, lifted: a shadow-casting frame *outside* the
+                // clip (a shadow drawn inside its own `Clip` is clipped to
+                // the very corner it is meant to soften). The capture is
+                // this screen's one subject, and on a flat surface colour the
+                // difference between "a viewport into a 3D scene" and "a
+                // rectangle of dark pixels" is exactly this lift.
+                Container::new()
+                    .radius(MEDIA_CORNER)
+                    .shadow(Shadow::new(
+                        vieww::foundation::Color::rgba(0, 0, 0, 96),
+                        Offset::new(0.0, 14.0),
+                        36.0,
+                    ))
+                    .child(
+                        Clip::rounded(MEDIA_CORNER)
+                            .child(Semantics::container(label).child(Painting::new(painter))),
+                    ),
             )
     }
 }
@@ -239,41 +257,54 @@ impl ControlsBar {
         // human saw it), and equal-width transport buttons are what a media
         // player's row looks like anyway. Labels stay short enough that the
         // squeeze on a narrow window never has to wrap them.
+        //
+        // Hierarchy, not just equal slots: Play/Pause is the one action the
+        // thumb goes to every time, so it alone is `Filled` — the view-mode
+        // toggles beside it are `Text`, which reads as the secondary settings
+        // they are. Four identical filled buttons said "pick at random".
         let transport = Flex::row()
             .spacing(8.0)
             .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.playing { "Pause" } else { "Play" }).on_pressed(move || {
-                    if let Some(handle) = &play_pause {
-                        handle.write(|state| state.toggle_play());
-                    }
-                }),
+                Button::new(if snapshot.playing { "Pause" } else { "Play" })
+                    .style(ButtonStyle::Filled)
+                    .on_pressed(move || {
+                        if let Some(handle) = &play_pause {
+                            handle.write(|state| state.toggle_play());
+                        }
+                    }),
             ))
             .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.wireframe { "Shaded" } else { "Wire" }).on_pressed(
-                    move || {
-                        if let Some(handle) = &wireframe {
-                            handle.write(|state| state.toggle_wireframe());
-                        }
-                    },
-                ),
+                Button::new(if snapshot.wireframe { "Shaded" } else { "Wire" })
+                    .style(ButtonStyle::Text)
+                    .on_pressed(
+                        move || {
+                            if let Some(handle) = &wireframe {
+                                handle.write(|state| state.toggle_wireframe());
+                            }
+                        },
+                    ),
             ))
             .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.show_points { "Motes on" } else { "Motes off" }).on_pressed(
-                    move || {
-                        if let Some(handle) = &motes {
-                            handle.write(|state| state.toggle_points());
-                        }
-                    },
-                ),
+                Button::new(if snapshot.show_points { "Motes on" } else { "Motes off" })
+                    .style(ButtonStyle::Text)
+                    .on_pressed(
+                        move || {
+                            if let Some(handle) = &motes {
+                                handle.write(|state| state.toggle_points());
+                            }
+                        },
+                    ),
             ))
             .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.looping { "Loop on" } else { "Loop off" }).on_pressed(
-                    move || {
-                        if let Some(handle) = &looping {
-                            handle.write(|state| state.set_looping(!state.view().is_looping()));
-                        }
-                    },
-                ),
+                Button::new(if snapshot.looping { "Loop on" } else { "Loop off" })
+                    .style(ButtonStyle::Text)
+                    .on_pressed(
+                        move || {
+                            if let Some(handle) = &looping {
+                                handle.write(|state| state.set_looping(!state.view().is_looping()));
+                            }
+                        },
+                    ),
             ));
 
         // The timeline: a fixed clock readout, a flexible scrub track, and

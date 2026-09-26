@@ -1,7 +1,15 @@
 app=upxcale
 what=photo upscaler (Lanczos-3 resampler + unsharp mask) built on vieww
-screens=5 source shots, 414x896, vieww CPU backend (examples/shots.rs)
-upscale_detail=shots/upscale-detail.png,351609 bytes,960x1280
+migrated=old vello vieww -> vieww_base native rasteriser (vieww_paint::native,
+        vieww-hal Vulkan swapchain); cpu/gpu features collapsed to `native`
+enriched=frosted-glass picker scrim (vieww-effects BackdropBlur, sigma 22),
+        route transitions (picker/progress Fade, compare SlideFromBottom),
+        one elevation language (CARD_SHADOW + RENDER_SHADOW tokens),
+        ThemeData.platform so controls draw host-native shapes
+screens=5 source shots, 414x896, native rasteriser (examples/shots.rs,
+        clock advanced so route transitions settle before capture)
+upscale_detail=shots/upscale-detail.png,960x1280
 sheet=sheet.png,1812x1009,5 screens
-frames=100 at 10fps (1.4s hold + 0.6s crossfade per screen, seamless loop)
-gif=anim.gif,414,896,10fps,3665965
+frames=100 timeline at 10fps (1.4s hold + 0.6s crossfade per screen,
+      seamless loop; 35 stored frames once identical holds merge)
+gif=anim.gif,414,896,10fps,2453352

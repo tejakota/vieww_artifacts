@@ -29,7 +29,7 @@ use std::rc::Rc;
 
 use vieww_foundation::{Alignment, EdgeInsets};
 use vieww_widget::prelude::*;
-use vieww_widget::widget_node_from;
+use vieww_widget::{widget_node_from, RouteTransition};
 
 use crate::photos::{self, Photo};
 use crate::state::{routes, AppState};
@@ -191,7 +191,7 @@ pub fn landing_route(landing: Landing) -> Route {
     )
 }
 
-/// The picker, over a dismissable scrim.
+/// The picker, over a frosted dismissable scrim.
 #[must_use]
 pub fn picker_route(state: AppState) -> Route {
     let scroll = state.picker_scroll.clone();
@@ -214,8 +214,9 @@ pub fn picker_route(state: AppState) -> Route {
 
             Stack::new()
                 .fit(StackFit::Expand)
-                .push(Backdrop::dismissable(
-                    theme::SCRIM_PICKER,
+                .push(Backdrop::frosted(
+                    theme::SCRIM_PICKER_BLURRED,
+                    theme::PICKER_BLUR,
                     Rc::new(move || {
                         dismiss.clear_picks();
                         dismiss.nav.pop();
@@ -245,6 +246,11 @@ pub fn picker_route(state: AppState) -> Route {
                 .into()
         }),
     )
+    // A dialog fades: its position on the screen is the point — the card
+    // centres over the grid it is asking about, and sliding it in from an
+    // edge would break that correspondence. The navigator runs the same
+    // transition in reverse on the way out.
+    .transition(RouteTransition::Fade)
 }
 
 /// The progress overlay, over a scrim that cannot be tapped away.
@@ -262,6 +268,10 @@ pub fn progress_route(state: AppState) -> Route {
                 .into()
         }),
     )
+    // Fade rather than slide: the work this reports is already underway by
+    // the time the route exists, so the card should arrive *settled* — a
+    // slide would imply a journey that did not happen.
+    .transition(RouteTransition::Fade)
 }
 
 /// The before/after sheet.
@@ -310,4 +320,10 @@ pub fn compare_route(state: &AppState) -> Route {
                 .into()
         }),
     )
+    // A sheet, and sheets come from the bottom — the before/after pair reads
+    // as *lifting up over* the photograph it replaced. `RouteTransition`'s
+    // own doc for `SlideFromBottom` says exactly this, and the route shape
+    // here (modal, full-surface stack, grip handle on the divider) is the
+    // shape that convention belongs to.
+    .transition(RouteTransition::SlideFromBottom)
 }

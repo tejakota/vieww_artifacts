@@ -14,3 +14,10 @@ three-core.workspace = true
 vieww-integration = { path = "../vieww-integration" }
 vieww.workspace = true
 vieww-platform-winit.workspace = true
+
+[dev-dependencies]
+# The receipts: the same headless harness the viewer's own previews use,
+# so `cargo test -p three-social-app -- --ignored --nocapture` renders the
+# app's five screens to PNGs through the native rasteriser — no display,
+# no window, the same tree the `App` runs.
+vieww-test-harness.workspace = true

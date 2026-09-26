@@ -26,9 +26,12 @@
 //! # What is proven and what is not
 //!
 //! **vieww renders on a real iPhone** — an iPhone 14 on iOS 17, through a
-//! device cloud: vello's compute pipeline runs on Metal, taps reach their
-//! handlers, text shapes, animation runs inside budget. That is the framework's
-//! result, not this app's.
+//! device cloud: the rasteriser's frames reach the screen, taps reach their
+//! handlers, text shapes, animation runs inside budget. (The device-cloud runs
+//! predate the renderer migration, which replaced vello with the in-house
+//! CPU rasteriser — the claim those runs established, "a vieww tree draws and
+//! responds on real hardware", is what carries forward, not the backend's
+//! name.) That is the framework's result, not this app's.
 //!
 //! **This crate has not been on a device.** The tree it mounts is the one the
 //! screenshot suite photographs and the one Android runs, so the *interface* is

@@ -10,29 +10,35 @@ publish = false
 # The framework is a dependency here, not a host: this crate is built with
 # `cargo build` from inside `upxcale/`, and nothing it does can change how
 # vieww's own CI resolves. The empty table is what stops cargo walking up the
-# directory tree and adopting `../vieww/Cargo.toml` as our workspace root.
+# directory tree and adopting `../../vieww_base/Cargo.toml` as our workspace
+# root.
 [workspace]
 
 [dependencies]
-# The framework, by path. `upxcale/` expects `vieww/` beside it:
+# The framework, by path. `upxcale/` expects the vieww checkout at
+# `../../vieww_base/` — the in-repo copy of the framework this app migrates to
+# (vello is gone; vieww_paint::native::NativeRenderer, backed by vieww-hal's
+# Vulkan swapchain, is the one renderer — see vieww_base's
+# docs/RENDERER-MIGRATION.md):
 #
-#   parent/
-#   ├── vieww/     <- the framework
-#   └── upxcale/   <- this app
+#   repo/
+#   ├── vieww_base/  <- the framework
+#   └── apps/upxcale/ <- this app
 #
 # Path deps rather than a git or registry dep because vieww is 0.0.1 and
 # unpublished — `docs/STABILITY.md` says every crate may break in any release,
 # so pinning to a checkout you can read is the only honest way to depend on it.
-vieww = { path = "../vieww/crates/vieww", features = ["gpu"] }
-vieww-foundation = { path = "../vieww/crates/vieww-foundation" }
-vieww-widget = { path = "../vieww/crates/vieww-widget" }
-vieww-element = { path = "../vieww/crates/vieww-element" }
-vieww-render = { path = "../vieww/crates/vieww-render" }
-vieww-paint = { path = "../vieww/crates/vieww-paint" }
-vieww-animation = { path = "../vieww/crates/vieww-animation" }
-vieww-gestures = { path = "../vieww/crates/vieww-gestures" }
-vieww-asset = { path = "../vieww/crates/vieww-asset" }
-vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit" }
+vieww = { path = "../../vieww_base/crates/vieww", features = ["native"] }
+vieww-foundation = { path = "../../vieww_base/crates/vieww-foundation" }
+vieww-widget = { path = "../../vieww_base/crates/vieww-widget" }
+vieww-element = { path = "../../vieww_base/crates/vieww-element" }
+vieww-render = { path = "../../vieww_base/crates/vieww-render" }
+vieww-paint = { path = "../../vieww_base/crates/vieww-paint" }
+vieww-animation = { path = "../../vieww_base/crates/vieww-animation" }
+vieww-effects = { path = "../../vieww_base/crates/vieww-effects" }
+vieww-gestures = { path = "../../vieww_base/crates/vieww-gestures" }
+vieww-asset = { path = "../../vieww_base/crates/vieww-asset" }
+vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
 
 # PNG *encoding*, for "Save to Photos". `vieww-asset` decodes and deliberately
 # does not encode, so this is the application's own dependency rather than a
@@ -42,24 +48,27 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 
 [features]
 default = []
-# The headless CPU rasteriser, used by `examples/shots.rs` to render each screen
+# The headless rasteriser, used by `examples/shots.rs` to render each screen
 # state to a PNG without a display. Off by default so a phone build does not
-# carry a software renderer it will never call.
-cpu = ["vieww/cpu", "vieww-paint/cpu"]
+# carry a software renderer it will never call. `native` is the one backend
+# feature the migrated vieww has — the old `cpu`/`gpu` pair collapsed into it
+# when vello left the tree.
+native = ["vieww/native", "vieww-paint/native"]
 
-# `shots` needs the software rasteriser. Declaring the requirement here is what
+# `shots` needs the rasteriser. Declaring the requirement here is what
 # lets a plain `cargo test` skip the example instead of failing to compile it —
 # without this, the crate's whole test suite is gated on a feature that only one
 # example wants.
 [[example]]
 name = "shots"
-required-features = ["cpu"]
+required-features = ["native"]
 
 # A phone runs whatever profile the harness built, and vieww's own workspace
-# manifest explains at length why that matters: a debug build of vello is
-# roughly an order of magnitude slower, and a frame-rate report from one is a
-# report on `rustc -O0`. These mirror the framework's release profile so a
-# release build of the app is measured on the same terms the framework is.
+# manifest explains at length why that matters: a debug build of the native
+# rasteriser is roughly an order of magnitude slower, and a frame-rate report
+# from one is a report on `rustc -O0`. These mirror the framework's release
+# profile so a release build of the app is measured on the same terms the
+# framework is.
 [profile.release]
 codegen-units = 1
 lto = "thin"

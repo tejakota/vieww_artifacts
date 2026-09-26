@@ -29,6 +29,7 @@ use vieww_widget::prelude::*;
 use vieww_widget::widget_node_from;
 
 use crate::state::RenderState;
+use crate::theme;
 
 /// The widest the card may be. The prototype used `min(80%, 280px)`; at the
 /// 414pt surface this app targets, 280 is the binding half of that.
@@ -59,7 +60,11 @@ impl Widget for ProgressOverlay {
             .decoration(
                 BoxDecoration::new()
                     .color(theme_data.colors.surface_variant)
-                    .radius(corner),
+                    .radius(corner)
+                    // The picker's `CARD_SHADOW`, verbatim: both cards float,
+                    // so both cast the same shadow. One elevation language —
+                    // see `theme.rs`.
+                    .shadow(theme::CARD_SHADOW),
             )
             .padding(EdgeInsets::symmetric(gap * 3.0, gap * 4.0))
             .child(

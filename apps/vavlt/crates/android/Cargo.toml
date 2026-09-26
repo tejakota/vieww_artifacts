@@ -9,10 +9,11 @@ name = "vavlt_android"
 crate-type = ["cdylib"]
 
 [features]
-default = ["backend-hybrid"]
-backend-hybrid = ["vieww/hybrid", "vieww-platform-winit/hybrid"]
-backend-gpu = ["vieww/gpu", "vieww-platform-winit/gpu"]
-backend-cpu = ["vieww/cpu", "vieww-platform-winit/cpu"]
+# The old backend trio (`hybrid`/`gpu`/`cpu`) collapsed into `native` when
+# vello left the vieww tree; kept as one no-op feature so the CI line and the
+# muscle memory that type `--features backend-native` keep working.
+default = ["backend-native"]
+backend-native = []
 
 [dependencies]
 vavlt-app.workspace = true

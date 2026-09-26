@@ -1,4 +1,4 @@
-//! Every screen, rendered to a PNG through the real GPU backend.
+//! Every screen, rendered to a PNG through the native rasteriser.
 //!
 //! ```console
 //! cargo test -p vavlt-app --test screenshots --release -- --nocapture
@@ -16,19 +16,20 @@
 //! same widget tree in all four, which is the claim the whole port is built on
 //! and therefore the one worth photographing.
 //!
-//! # It skips rather than fails without a GPU
+//! # It never skips any more
 //!
-//! `GpuRenderer::headless` needs an adapter. On a machine with none — a CI box
-//! with no `lavapipe`, say — every test here returns early rather than going
-//! red, the same way `vieww`'s own pixel tests do. A screenshot suite that
-//! fails on the absence of a screen is a suite people delete.
+//! The old suite skipped when `GpuRenderer::headless` found no adapter — a
+//! CI box with no `lavapipe`, say. The native rasteriser needs no adapter at
+//! all: it is the same code a window presents through, run here with no
+//! window, so this suite runs everywhere a `cargo test` does and a machine
+//! with no GPU photographs exactly the same pixels a machine with one does.
 //!
 //! Output lands in `target/screenshots/`.
 
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::Arc;
 
 use vavlt_app::model::{Screen, Tab, Thumb};
 use vavlt_app::{Message, Platform, Scrolls, VavltApp, VavltState};
@@ -36,7 +37,7 @@ use vavlt_core::Tier;
 use vavlt_engine::{Item, Outcome, Proof, Source};
 use vieww::foundation::task::FrameWaker;
 use vieww::foundation::{Color, Size};
-use vieww::paint::gpu::{GpuError, GpuRenderer};
+use vieww::paint::native::NativeRenderer;
 use vieww::prelude::*;
 
 /// A phone. Pixel-ish logical size, the surface the design was drawn for.
@@ -52,26 +53,13 @@ const DESKTOP: Size = Size {
 };
 
 // --- the harness -----------------------------------------------------------
-
-/// The process-wide renderer, or `None` on a machine with no usable adapter.
-///
-/// One device for the whole binary, never dropped, behind a mutex — the same
-/// arrangement `vieww`'s own GPU tests use, and for the same reason: creating a
-/// device per test and dropping them at exit segfaults in driver teardown.
-fn renderer() -> Option<MutexGuard<'static, GpuRenderer>> {
-    static GPU: OnceLock<Option<Mutex<GpuRenderer>>> = OnceLock::new();
-
-    let slot = GPU.get_or_init(|| match GpuRenderer::headless() {
-        Ok(renderer) => Some(Mutex::new(renderer)),
-        Err(GpuError::NoAdapter) => {
-            eprintln!("skipping screenshots: no graphics adapter");
-            None
-        }
-        Err(error) => panic!("initialising the GPU backend: {error}"),
-    });
-
-    slot.as_ref().map(|gpu| gpu.lock().expect("the GPU mutex"))
-}
+//
+// No shared renderer: the old GPU suite needed one device for the whole
+// binary because creating and dropping adapters per test segfaulted in driver
+// teardown. The native rasteriser is pure CPU — nothing to tear down, no
+// driver involved — so each shot builds its own and the tests stay
+// independent of each other's caches. (`NativeRenderer` also holds raw
+// font pointers and is not `Send`, which rules out a shared static anyway.)
 
 /// A host that opens nothing.
 ///
@@ -138,9 +126,7 @@ struct Shot {
 /// so the first frame draws the pre-measurement tree. Photographing that would
 /// mean photographing a grid that has not been told how wide it is.
 fn shoot(shot: &Shot, prepare: impl FnOnce(&Rc<VavltState>)) {
-    let Some(mut gpu) = renderer() else {
-        return;
-    };
+    let mut gpu = NativeRenderer::new();
 
     let dir = std::env::temp_dir().join(format!("vavlt-shot-{}", shot.name));
     std::fs::create_dir_all(&dir).expect("scratch dir");

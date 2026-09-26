@@ -78,12 +78,10 @@ impl Widget for CompareSheet {
         let gap = theme_data.metrics.gap;
         let corner = theme_data.metrics.corner * 2.4;
 
-        let sheet = Container::new()
-            .decoration(
-                BoxDecoration::new()
-                    .color(theme_data.colors.surface_variant)
-                    .radius(corner),
-            )
+        // The sheet's content column. Padding lives here; the paint
+        // (fill, corner, shadow) lives on the wrapper *outside* the clip, so
+        // the shadow is not clipped away by the very corner it follows.
+        let body = Container::new()
             .padding(EdgeInsets::only(gap * 1.5, gap * 1.5, gap * 1.5, gap * 2.0))
             .child(
                 Flex::column()
@@ -98,16 +96,33 @@ impl Widget for CompareSheet {
                     ]),
             );
 
+        let sheet = Container::new()
+            .decoration(
+                BoxDecoration::new()
+                    .color(theme_data.colors.surface_variant)
+                    .radius(corner)
+                    // The third floating surface, the same lift: `CARD_SHADOW`
+                    // again, over the deepest scrim. A sheet that slides up
+                    // from the bottom (its route transition) and casts nothing
+                    // would read as pasted rather than lifted. On the wrapper,
+                    // not the clipped body, for the reason above.
+                    .shadow(theme::CARD_SHADOW),
+            )
+            .child(Clip::rounded(corner).child(body));
+
         // Pinned to the bottom edge at a fixed fraction of the height. `Align`
         // with a height factor is vieww's spelling of "as tall as this much of
-        // the parent, at the bottom".
+        // the parent, at the bottom". The `SizedBox` bounds the sheet to the
+        // fraction; the shadow is allowed to escape it over the scrim, which
+        // is the point — it is what separates the sheet's edge from the deep
+        // black behind it.
         Align::new(Alignment::BOTTOM_CENTER)
             .child(
                 SizedBox::from_size(Size::new(
                     crate::SURFACE.width,
                     crate::SURFACE.height * SHEET_FRACTION,
                 ))
-                .child(Clip::rounded(corner).child(sheet)),
+                .child(sheet),
             )
             .into()
     }
