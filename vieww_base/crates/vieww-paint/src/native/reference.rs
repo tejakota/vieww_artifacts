@@ -143,6 +143,18 @@ pub struct SceneReport {
     pub unsupported_blends: usize,
 }
 
+/// Multiply a paint's alpha — the other half of U-18's ink-preserving
+/// clamp. A solid colour fades its own alpha; a gradient fades every stop,
+/// which is what an enclosing opacity already does to one.
+fn paint_faded(paint: &crate::Paint, alpha: f32) -> crate::Paint {
+    let k = alpha.clamp(0.0, 1.0);
+    let fade = |c: Color| Color::rgba(c.r, c.g, c.b, (c.a as f32 * k).round() as u8);
+    crate::Paint {
+        color: fade(paint.color),
+        gradient: paint.gradient.map(|g| g.faded(k)),
+    }
+}
+
 pub struct NativeRenderer {
     glyphs: GlyphCache,
     /// Clip masks already rasterised this frame — see `native/clip.rs`'s
@@ -188,6 +200,16 @@ pub struct NativeRenderer {
     /// U-06's opt-in ceiling on `filtered_layers` per frame — `None` is no
     /// guard. See [`Self::guard_filtered_layers_below`].
     filtered_layer_guard: Option<usize>,
+    /// The hairline floor, in device pixels — todo-upgrades U-18.
+    ///
+    /// `None` (the default) is the historical behaviour: a stroke whose
+    /// device width falls below a pixel is drawn at whatever coverage its
+    /// width earns, and at 0.03 px that is nothing anyone can see. Set it,
+    /// and such a stroke is drawn at the floor width with its alpha scaled
+    /// down by the same factor — the ink-preserving clamp every other 2D
+    /// drawing API applies, made a caller's decision rather than the
+    /// renderer's.
+    hairline_floor: Option<f32>,
 }
 
 impl fmt::Debug for NativeRenderer {
@@ -238,6 +260,7 @@ impl NativeRenderer {
             aa: AaMode::Gray,
             lcd_frame: false,
             filtered_layer_guard: None,
+            hairline_floor: None,
         }
     }
 
@@ -265,6 +288,7 @@ impl NativeRenderer {
             aa: AaMode::Gray,
             lcd_frame: false,
             filtered_layer_guard: None,
+            hairline_floor: None,
         }
     }
 
@@ -289,6 +313,7 @@ impl NativeRenderer {
             aa: AaMode::Gray,
             lcd_frame: false,
             filtered_layer_guard: None,
+            hairline_floor: None,
         }
     }
 
@@ -313,6 +338,7 @@ impl NativeRenderer {
             aa: mode,
             lcd_frame: false,
             filtered_layer_guard: None,
+            hairline_floor: None,
         }
     }
 
@@ -346,6 +372,41 @@ impl NativeRenderer {
     /// shipped build pays only the `Option` check.
     pub fn guard_filtered_layers_below(&mut self, limit: usize) -> &mut Self {
         self.filtered_layer_guard = Some(limit);
+        self
+    }
+
+    /// Opt in to a minimum visible stroke width, in device pixels —
+    /// todo-upgrades U-18, closed as a *policy* rather than a default.
+    ///
+    /// # What the entry actually asked for
+    ///
+    /// Fifty thousand strokes at 0.01 px render as very nearly nothing. That
+    /// is arithmetically correct — one percent coverage — and it is not what
+    /// any drawing API does, because a diagram whose lines disappear when the
+    /// user zooms out is a broken diagram rather than an accurate one.
+    ///
+    /// The analysis that kept this out of the renderer for two rounds still
+    /// holds and is worth restating: an ink-preserving clamp is *arithmetically*
+    /// the same picture. A 0.25 px stroke at full alpha and a 1 px stroke at
+    /// quarter alpha differ by less than a quantisation step. The probe
+    /// plate's own ladder measured where that stops being true: `2.00px→218,
+    /// 1.00→122, 0.50→74, then 0.25/0.12/0.06/0.03 all land identically at
+    /// 26/255`. Below half a pixel the rasterizer's coverage is
+    /// **sub-proportional** — four different widths produce one number —
+    /// so the clamp is not a no-op down there: it is the difference between a
+    /// ladder with four indistinguishable rungs and one that keeps counting.
+    ///
+    /// So: off by default (the honest arithmetic), available in one call
+    /// (the legible picture), and the choice belongs to whoever knows whether
+    /// this frame is a chart or a photograph.
+    ///
+    /// ```no_run
+    /// # use vieww_paint::native::NativeRenderer;
+    /// let mut renderer = NativeRenderer::new();
+    /// renderer.hairline_floor(1.0); // nothing thinner than a pixel
+    /// ```
+    pub fn hairline_floor(&mut self, px: f32) -> &mut Self {
+        self.hairline_floor = if px > 0.0 { Some(px) } else { None };
         self
     }
 
@@ -834,11 +895,40 @@ impl NativeRenderer {
                 transform,
                 clip,
             } => {
-                let polygons = stroke_to_polygons(path, stroke.width, &stroke.style, *transform);
-                let bounds = path.bounds().inflate(stroke.reach());
+                // U-18: the hairline floor, applied in DEVICE space,
+                // because that is where "below one pixel" means anything.
+                // The transform's area scale is √|det|; a degenerate
+                // transform leaves the width alone rather than dividing by
+                // zero.
+                let scale = transform.determinant().abs().sqrt();
+                let (width, paint_used) = match self.hairline_floor {
+                    Some(floor) if scale > 1e-6 && stroke.width > 0.0 => {
+                        let device = stroke.width * scale;
+                        if device < floor {
+                            // widen to the floor, dim by exactly the factor
+                            // widened: the total ink is unchanged, and it is
+                            // now spread over something a screen can show.
+                            (floor / scale, paint_faded(paint, device / floor))
+                        } else {
+                            (stroke.width, *paint)
+                        }
+                    }
+                    _ => (stroke.width, *paint),
+                };
+                let polygons = stroke_to_polygons(path, width, &stroke.style, *transform);
+                let bounds = path
+                    .bounds()
+                    .inflate(stroke.reach().max(width * 0.5 + 1.0));
                 let (target, origin) = current!();
                 self.paint_shape(
-                    target, origin, &polygons, bounds, *transform, paint, clip, surface,
+                    target,
+                    origin,
+                    &polygons,
+                    bounds,
+                    *transform,
+                    &paint_used,
+                    clip,
+                    surface,
                 );
                 report.shapes += 1;
                 if !clip.shapes().is_empty() {
@@ -1871,6 +1961,73 @@ mod tests {
             Color::WHITE,
             "the open petal renders closed along the chord, not empty"
         );
+    }
+
+    /// U-18, the measurement that justified the policy — and it is worse
+    /// than the entry recorded.
+    ///
+    /// The probe plate measured its hairline ladder inside a busy frame and
+    /// found four sub-pixel widths landing on one shared ink value of
+    /// 26/255. On a bare axis-aligned stroke the collapse is not to a floor
+    /// but to **nothing**: 0.25 px reads 64/255 and 0.12, 0.06 and 0.03 all
+    /// read exactly 0. The plate's 26 was neighbouring ink, not the
+    /// stroke's. "Sub-proportional below half a pixel" understated it;
+    /// below about an eighth of a pixel the stroke is simply absent.
+    #[test]
+    fn sub_pixel_strokes_vanish_entirely_without_a_floor() {
+        assert_eq!(
+            brightest_stroke_ink(0.12, None),
+            0,
+            "a 0.12px stroke draws nothing at all"
+        );
+        assert_eq!(brightest_stroke_ink(0.06, None), 0);
+        assert_eq!(brightest_stroke_ink(0.03, None), 0);
+        // and with the floor on, every one of them is visible
+        for w in [0.12_f32, 0.06, 0.03] {
+            assert!(
+                brightest_stroke_ink(w, Some(1.0)) > 0,
+                "the floor must make a {w}px stroke visible"
+            );
+        }
+    }
+
+    /// And with the floor on, they separate again: each rung is drawn one
+    /// pixel wide and dimmed by its own width, so the ladder counts.
+    #[test]
+    fn the_hairline_floor_separates_the_rungs_it_was_asked_to_separate() {
+        let with: Vec<u8> = [0.25_f32, 0.12, 0.06]
+            .iter()
+            .map(|&w| brightest_stroke_ink(w, Some(1.0)))
+            .collect();
+        assert!(
+            with[0] > with[1] && with[1] > with[2],
+            "the floor should make thinner strokes measurably dimmer, got {with:?}"
+        );
+        // and it is a floor, not a multiplier: a stroke already wider than
+        // the floor is untouched.
+        assert_eq!(
+            brightest_stroke_ink(3.0, Some(1.0)),
+            brightest_stroke_ink(3.0, None),
+            "a stroke above the floor must render identically with it on"
+        );
+    }
+
+    /// The brightest pixel of a horizontal stroke of `width`, rendered with
+    /// or without a hairline floor.
+    fn brightest_stroke_ink(width: f32, floor: Option<f32>) -> u8 {
+        let mut path = Path::new();
+        path.move_to(vieww_foundation::Offset::new(4.0, 16.0));
+        path.line_to(vieww_foundation::Offset::new(60.0, 16.0));
+        let mut scene = Scene::new();
+        scene.stroke_path(&path, crate::Stroke::new(width), Color::WHITE.into());
+        let mut renderer = NativeRenderer::new();
+        if let Some(px) = floor {
+            renderer.hairline_floor(px);
+        }
+        let (pixels, _) = renderer
+            .render_to_pixels(&scene, 64, 32, Color::BLACK)
+            .expect("render");
+        pixels.data().chunks(4).map(|p| p[0]).max().unwrap_or(0)
     }
 
     /// A guard set above the frame's filtered-layer count stays quiet and

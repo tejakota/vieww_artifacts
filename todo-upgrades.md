@@ -14,6 +14,43 @@ clarity · `TRAP` behaves correctly and is easy to get wrong.
 
 ---
 
+## Round-11 re-audit — every entry re-checked against the tree (2026-09-26)
+
+The question asked of this file in round 11 was the right one: *are these
+still fixed, or has the annotation gone stale?* A status line is a claim
+about code, and a claim about code that nobody re-runs is a rumour. So every
+`FIXED` entry was re-verified **against the checkout, not against this
+file** — the API it names looked up in the crate it names, and the test it
+names run.
+
+| Entry | Claim | Verified |
+|---|---|---|
+| U-01 | `Sketch::Layer` carries `blend`, replay passes it | `sketch.rs` records it; `objects/painting.rs:87,91` passes it to both layer pushes |
+| U-02 | `vieww_effects::Blend` routes through `Opacity::blend` | `effects/src/widgets.rs:384` |
+| U-03 | `outline_glyph` / `units_per_em` public | re-exported at `vieww-paint/src/lib.rs:107` |
+| U-04 | `Transform3::project_rect` exists | `foundation/src/transform3.rs:205` |
+| U-05 | `Sketchbook::mesh` bleeds per axis | present, with the empty-grid `debug_assert` |
+| U-06 | `guard_filtered_layers_below` | `native/reference.rs:347` |
+| U-08 / U-17 | non-decreasing stop assert | `paint.rs`, fires in debug |
+| U-12 | `Sketchbook::path_shadow` | present |
+| U-14 | `blur_angle` + `directional_blur` | `foundation/src/filter.rs` |
+| U-15 | blur clamps to edge, both kernels | `filter.rs:489` and the renderer's Premul passes |
+| U-16 | finite `debug_assert`s on every path verb | 8 sites in `path.rs` |
+| U-20 | `SceneReport::open_subpath_fills` | `native/reference.rs:824` |
+| U-21 | `Filtered::with_blur_angle` | present |
+| U-22 | `Path::arc` closes a full turn | `path.rs`, the ring construction |
+
+**Tests re-run, not trusted:** `vieww-foundation` 518 + 29 doc-tests, all
+green; `vieww-effects` 13; `vieww-paint --features native` 237 + 26 across
+its integration suites. Every named test in the annotations above exists and
+passes. **Nothing in U-01…U-22 has gone stale.**
+
+And the two that were genuinely open — U-18 and U-23 — are closed in this
+round, below. That leaves this file with **no OPEN entries** for the first
+time since it was written.
+
+---
+
 ## U-01 · `Sketch::Layer` cannot carry a blend mode
 > **Status → FIXED in `vieww_base`, 2026-09-24.** `Sketch::Layer` carries a `blend` field, `Sketchbook::blended_layer` records it, and `RenderPainting::replay` (`vieww-render/src/objects/painting.rs`) now passes it to both `push_layer` and `push_filtered_layer` instead of hard-coding `Normal`. The widget form stays for addressable beats, exactly as the silver lining suggested. Test: `a_blended_layer_records_its_mode`.
 
@@ -454,9 +491,46 @@ the mistake actually visible — in a panic message rather than in a rectangle.
 ---
 
 ## U-18 · Sub-pixel strokes vanish rather than clamping to a hairline
-> **Status → OPEN in `vieww_base`, 2026-09-25 (probe evidence appended).** Deliberately not implemented, with the analysis that stopped it: the entry's suggested ink-preserving clamp (one pixel wide, alpha scaled by the device width) is mathematically equivalent to what the coverage-based rasterizer already produces at 8-bit coverage — a 0.01px stroke at full alpha and a 1px stroke at 1% alpha land within a quantisation step of each other. What the complaint actually asks for is a minimum-visibility *policy* (bloom the ink on the way down), which is the same class of taste decision as U-14's motion blur. **Now measured, not argued:** the probe plate's hairline ladder reads the ink of each rung out of the output buffer — `2.00px→218, 1.00→122, 0.50→74, then 0.25/0.12/0.06/0.03 all land identically at 26/255` (≈1/64 coverage, sub-proportional below half a pixel). The vanishing is real, the floor is real, and the entry's analysis holds: the clamp would change the number without changing the picture. Recorded here so the next pass starts from the measurement, not the surprise.
+> **Status → FIXED in `vieww_base`, 2026-09-26 (round 11), as an opt-in
+> policy.** `NativeRenderer::hairline_floor(px)` — a stroke whose *device*
+> width (`stroke.width · √|det T|`) falls below the floor is drawn at the
+> floor and faded by exactly the factor it was widened, so the total ink is
+> unchanged and the line is visible. Off by default, because the arithmetic
+> without it is correct and a renderer should not decide for a photograph
+> what it decides for a chart; one call turns it on.
+>
+> **And the round-11 measurement corrected the entry's own evidence.** The
+> probe plate's ladder reported four sub-pixel widths landing on a shared
+> ink of 26/255, and this file recorded "sub-proportional below half a
+> pixel". On a bare axis-aligned stroke, measured in the new unit test, the
+> collapse is not to a floor but to **nothing**: 0.25 px reads 64/255 and
+> **0.12, 0.06 and 0.03 all read exactly 0**. The 26 the plate saw was
+> neighbouring ink in a busy frame, not the hairline's. The vanishing is
+> total, which is precisely the case the "it is already arithmetically the
+> same picture" argument does not cover — you cannot scale zero. Tests:
+> `sub_pixel_strokes_vanish_entirely_without_a_floor`,
+> `the_hairline_floor_separates_the_rungs_it_was_asked_to_separate`.
+>
+> **And the lab's own instrument now reads the difference.** The harness
+> takes `FILM_HAIRLINE_FLOOR`, so the probe plate can be re-rendered with
+> the policy on and its ladder diffed against the committed baseline. The
+> same seven rungs, same frame, same probe:
+>
+> ```text
+> floor off   2.00→218  1.00→122  0.50→74  0.25→26  0.12→26  0.06→26  0.03→26
+> floor 1.0   2.00→218  1.00→122  0.50→74  0.25→50  0.12→37  0.06→32  0.03→29
+> ```
+>
+> Above half a pixel the two are **identical to the byte** — the floor is a
+> floor, not a multiplier. Below it, four rungs that were one number become
+> four. The committed receipt stays floor-off, because the probe plate's job
+> is to measure the renderer's arithmetic rather than a policy layered over
+> it.
+>
+> The original round-10 analysis, kept because it was right about the range
+> it covered: **OPEN, 2026-09-25 (probe evidence appended).** Deliberately not implemented, with the analysis that stopped it: the entry's suggested ink-preserving clamp (one pixel wide, alpha scaled by the device width) is mathematically equivalent to what the coverage-based rasterizer already produces at 8-bit coverage — a 0.01px stroke at full alpha and a 1px stroke at 1% alpha land within a quantisation step of each other. What the complaint actually asks for is a minimum-visibility *policy* (bloom the ink on the way down), which is the same class of taste decision as U-14's motion blur. **Now measured, not argued:** the probe plate's hairline ladder reads the ink of each rung out of the output buffer — `2.00px→218, 1.00→122, 0.50→74, then 0.25/0.12/0.06/0.03 all land identically at 26/255` (≈1/64 coverage, sub-proportional below half a pixel). The vanishing is real, the floor is real, and the entry's analysis holds: the clamp would change the number without changing the picture. Recorded here so the next pass starts from the measurement, not the surprise.
 
-**Status:** GAP · **Found by:** the breaker
+**Status:** GAP → CLOSED (round 11) · **Found by:** the breaker
 
 Fifty thousand strokes at 0.01px wide render as very nearly nothing. That is
 arithmetically correct — 1% coverage — and it is not what any drawing API does.
@@ -622,7 +696,30 @@ survives.*
 ---
 
 ## U-23 · `Gradient::with_stops` silently truncates at eight stops
-**Status:** OPEN in `vieww_base`, 2026-09-25 · **Found by:** the prism plate, the gradient axis
+> **Status → FIXED in `vieww_base`, 2026-09-26 (round 11).** All three of
+> the entry's own candidates, plus the one it did not think of:
+> - `MAX_GRADIENT_STOPS` is **16**, not 8. Eight was justified as "past the
+>   point where a designer's ramp stops being legible", which is true of
+>   ramps a designer *writes* and false of ramps a program *computes*.
+>   Sixteen costs 64 more bytes in a `Copy` type.
+> - `with_stops` now **`debug_assert!`s** when it would drop a stop, naming
+>   how many and pointing at the two alternatives — U-16/U-17's philosophy,
+>   applied to the one silence they had missed.
+> - `try_with_stops` returns `None` rather than truncating, for callers who
+>   will not rely on a debug build.
+> - **`with_stops_resampled`** takes a ramp of any length and *evaluates* it
+>   at `MAX_GRADIENT_STOPS` evenly spaced offsets. Truncation keeps a ramp's
+>   left edge; resampling keeps its *shape*. A 256-stop spectrum becomes the
+>   whole rainbow, coarsely — which is what the prism plate wanted all along.
+>
+> The prism plate now hands the framework its own 256-stop spectrum through
+> that door, and the screen underlay is a full spectrum instead of the flat
+> orange panel this entry was written about. Tests:
+> `an_over_long_ramp_is_refused_rather_than_truncated`,
+> `a_resampled_ramp_keeps_the_whole_spectrum_not_its_left_edge`,
+> `resampling_a_short_ramp_leaves_it_alone`.
+
+**Status:** OPEN → FIXED (round 11) · **Found by:** the prism plate, the gradient axis
 
 `MAX_GRADIENT_STOPS` is 8 — a deliberate fixed capacity (`Copy` gradient,
 stack stops, the doc comment says eight is past any designer's ramp). The

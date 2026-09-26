@@ -121,6 +121,20 @@
 //! - `foucault` — the rotation axis: 270.7 deg/day at the Pantheon
 //! - `rainbow` — the deviation axis: Descartes' 42.4 deg, ray-counted
 //! - `sorting` — the algorithm axis: six sorts, ops counted from replay
+//!
+//! Round 11 — the machines of life, information and mind:
+//! - `gas` — the thermodynamic axis: Maxwell–Boltzmann out of one speed
+//! - `evolve` — the evolution axis: the breeder's equation, measured
+//! - `slime` — the transport axis: Tero's Physarum builds Tokyo
+//! - `epidemic` — the contagion axis: four estimates of one R₀
+//! - `traffic` — the jam axis: Nagel–Schreckenberg, Rankine–Hugoniot
+//! - `huffman` — the information axis: Shannon's bound and Kraft's equality
+//! - `maze` — the search axis: BFS, A* and greedy on one braided maze
+//! - `newton` — the root axis: Cayley's question, the Wada boundary
+//! - `planck` — the radiation axis: Wien and Stefan from the curve itself
+//! - `excite` — the excitable axis: a Barkley rotor and its own period
+//! - `pidigits` — the counting axis: π banged out of two blocks
+//! - `pathtrace` — the light-transport axis: 1/√N, fitted; the furnace test
 
 mod exp_aurora;
 mod exp_beams;
@@ -201,6 +215,19 @@ mod exp_neural;
 mod exp_truss;
 mod exp_cellauto;
 mod exp_collider;
+// ── Round 11: the machines of life, information & mind ──
+mod exp_evolve;
+mod exp_epidemic;
+mod exp_excite;
+mod exp_gas;
+mod exp_maze;
+mod exp_newton;
+mod exp_pathtrace;
+mod exp_pidigits;
+mod exp_planck;
+mod exp_huffman;
+mod exp_traffic;
+mod exp_slime;
 mod film_lib;
 mod three_d;
 
@@ -361,6 +388,19 @@ fn registry() -> Vec<Experiment> {
             frame_hook: None,
         },
         Experiment::plain("sorting", exp_sorting::SECONDS, 24, exp_sorting::frame),
+        // ── Round 11: the machines of life, information & mind ──
+        Experiment::plain("gas", exp_gas::SECONDS, 20, exp_gas::frame),
+        Experiment::plain("evolve", exp_evolve::SECONDS, 24, exp_evolve::frame),
+        Experiment::plain("slime", exp_slime::SECONDS, 16, exp_slime::frame),
+        Experiment::plain("epidemic", exp_epidemic::SECONDS, 24, exp_epidemic::frame),
+        Experiment::plain("traffic", exp_traffic::SECONDS, 20, exp_traffic::frame),
+        Experiment::plain("huffman", exp_huffman::SECONDS, 20, exp_huffman::frame),
+        Experiment::plain("maze", exp_maze::SECONDS, 20, exp_maze::frame),
+        Experiment::plain("newton", exp_newton::SECONDS, 20, exp_newton::frame),
+        Experiment::plain("planck", exp_planck::SECONDS, 16, exp_planck::frame),
+        Experiment::plain("excite", exp_excite::SECONDS, 20, exp_excite::frame),
+        Experiment::plain("pidigits", exp_pidigits::SECONDS, 20, exp_pidigits::frame),
+        Experiment::plain("pathtrace", exp_pathtrace::SECONDS, 14, exp_pathtrace::frame),
     ]
 }
 

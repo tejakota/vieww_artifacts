@@ -239,26 +239,32 @@ pub fn frame(t: f32) -> WidgetNode {
             }
 
             // ── THE SCREEN — the stop field, drawn as geometry. ──
-            // THE FINDING OF THE PLATE: `Gradient::with_stops` carries
-            // MAX_GRADIENT_STOPS = 8 and silently `.take(8)`s the rest —
-            // the first render of this screen was a flat orange panel
-            // (the sorted first eight stops are all red-orange) with no
-            // assert, no warning. So the 256-stop spectrum rides as 256
-            // flat rects, one per stop, at the stop's own offset — and
-            // the re-sort animation becomes the rects breathing. The
-            // gradient the framework CAN carry (8 stops) rides beneath.
+            // THE FINDING OF THE PLATE (round 7): `Gradient::with_stops`
+            // carried MAX_GRADIENT_STOPS = 8 and silently `.take(8)`d the
+            // rest — the first render of this screen was a flat orange
+            // panel (the sorted first eight stops are all red-orange) with
+            // no assert and no warning. Logged as U-23.
+            //
+            // **CLOSED IN ROUND 11.** The cap is now 16, over-long ramps
+            // `debug_assert!` instead of truncating, and
+            // `with_stops_resampled` evaluates a ramp of any length at the
+            // cap's resolution. The underlay below is the plate's own
+            // 256-stop spectrum handed straight to the framework — the
+            // whole rainbow, coarsely, instead of its red-orange left edge.
+            // The 256 rects still ride on top, because the stop field is
+            // the plate's subject and the re-sort animation lives in them.
             let (sx0, sy0, sx1, sy1) = SCREEN;
+            let spectrum: Vec<(f32, vieww_foundation::Color)> = (0..256)
+                .map(|i| {
+                    let u = i as f32 / 255.0;
+                    (u, hsv(u * 0.95, 0.8, 0.92))
+                })
+                .collect();
             book.rect(
                 Rect::new(sx0, sy0, sx1, sy1),
-                Gradient::horizontal().with_dither().with_stops(&[
-                    (0.0, hsv(0.0, 0.8, 0.9)),
-                    (0.17, hsv(0.14, 0.85, 0.92)),
-                    (0.33, hsv(0.33, 0.8, 0.95)),
-                    (0.5, hsv(0.5, 0.75, 0.95)),
-                    (0.67, hsv(0.67, 0.8, 0.92)),
-                    (0.83, hsv(0.83, 0.8, 0.9)),
-                    (1.0, hsv(0.95, 0.8, 0.9)),
-                ]),
+                Gradient::horizontal()
+                    .with_dither()
+                    .with_stops_resampled(&spectrum),
             );
             for w in stops.windows(2) {
                 let (o0, c0) = w[0];
@@ -308,7 +314,10 @@ fn receipt_panel(t: f32, live_stops: usize) -> WidgetNode {
     let lines = [
         "PRISM · THE GRADIENT AXIS · THE SPECTRUM FURNACE".to_string(),
         format!("stop field {live_stops}/256 · drawn as {live_stops} rects"),
-        "MAX_GRADIENT_STOPS=8 · the framework's ceiling, measured".to_string(),
+        format!(
+            "MAX_GRADIENT_STOPS={} · U-23 CLOSED: the underlay is the same 256-stop spectrum, resampled by the framework",
+            vieww_foundation::MAX_GRADIENT_STOPS
+        ),
         format!("rays {RAYS} · gradient-per-ray (3 stops each) · re-sort U-08"),
         "3 sweep rings · with_stops_mirrored (U-10 seam-free)".to_string(),
     ];
@@ -322,7 +331,7 @@ fn receipt_panel(t: f32, live_stops: usize) -> WidgetNode {
             Positioned::new()
                 .left(P_X)
                 .top(P_Y + i as f32 * 16.0)
-                .width(460.0)
+                .width(760.0)
                 .height(15.0)
                 .child(
                     Text::new(line.clone()).style(

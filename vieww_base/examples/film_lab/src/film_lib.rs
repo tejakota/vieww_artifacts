@@ -341,13 +341,26 @@ pub fn render_with(
     let mut driver = FrameDriver::new(canvas);
     // The film renders text; the default font store is embedded-only subsets.
     // This one line is the difference between legible captions and a panic.
-    driver.use_system_fonts();
+    if std::env::var("FILM_EMBEDDED_FONTS").is_err() {
+        driver.use_system_fonts();
+    }
     let mut renderer = NativeRenderer::new();
     // The U-06 discipline, demonstrated where it lives: a frame that wants
     // more than 32 blurred layers is a bug in the grouping, not an ambition
     // — the guard fires named in debug builds, and the receipt carries the
     // number in every build.
     renderer.guard_filtered_layers_below(32);
+    // U-18's hairline policy, opt-in per run so any plate can be re-rendered
+    // with it and diffed: `FILM_HAIRLINE_FLOOR=1.0 cargo run --release -- probe`.
+    // Off by default, because the lab's baseline measurements — the probe
+    // plate's ladder above all — are measurements of the renderer's own
+    // arithmetic, and a policy layered over it would quietly change what
+    // they mean.
+    if let Ok(px) = std::env::var("FILM_HAIRLINE_FLOOR") {
+        if let Ok(px) = px.parse::<f32>() {
+            renderer.hairline_floor(px);
+        }
+    }
 
     let mut receipt = Receipt {
         frames: experiment.frames,

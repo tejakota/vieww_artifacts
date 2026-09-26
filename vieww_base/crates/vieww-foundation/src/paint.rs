@@ -14,19 +14,44 @@
 //! per command, per frame.
 //!
 //! So a gradient carries a **fixed-capacity** stop array instead
-//! ([`MAX_GRADIENT_STOPS`]). Eight is past the point where a designer's ramp
-//! stops being legible, and the cost of the choice is bounded and known:
-//! [`Gradient::with_stops`] silently keeps the first eight rather than
-//! allocating. If a real design ever needs more, the fix is a `Box<[GradientStop]>`
-//! here and a clone in `State::apply` — a trade this makes consciously rather
-//! than by default.
+//! ([`MAX_GRADIENT_STOPS`]). The cap is the price of `Copy`, and it is paid
+//! knowingly; what is *not* acceptable is paying it silently.
+//!
+//! # The cap must never be silent (todo-upgrades U-23)
+//!
+//! [`Gradient::with_stops`] used to `.take(MAX_GRADIENT_STOPS)` and return,
+//! so a 256-stop data-driven spectrum rendered as its first eight stops and
+//! then ran flat. The gradient axis found it the hard way: a rainbow's first
+//! eight sorted offsets are all red-orange, so the plate's whole screen came
+//! out a uniform `(239, 136, 92)` — a failure that looks exactly like a
+//! decision, which is the species U-16 and U-17 exist to prevent.
+//!
+//! Three doors are open now, and none of them is quiet:
+//! - [`Gradient::with_stops`] keeps the first `MAX_GRADIENT_STOPS` **and
+//!   `debug_assert!`s** if it had to drop any, naming the count.
+//! - [`Gradient::try_with_stops`] returns `None` instead of truncating, for
+//!   callers who would rather handle it than trust a debug build.
+//! - [`Gradient::with_stops_resampled`] takes a ramp of any length and
+//!   **evaluates it** at `MAX_GRADIENT_STOPS` evenly spaced offsets. A
+//!   256-stop spectrum becomes the best fixed-capacity approximation of
+//!   itself — the whole rainbow, coarsely — rather than its own left edge.
+//!
+//! If a real design ever needs the exact ramp, the fix is a
+//! `Box<[GradientStop]>` here and a clone in `State::apply` — a trade to make
+//! consciously rather than by default.
 
 use crate::{Color, Offset, Rect};
 
 /// How many colour stops a [`Gradient`] can carry.
 ///
 /// See the module docs: the cap is what keeps every paint type `Copy`.
-pub const MAX_GRADIENT_STOPS: usize = 8;
+///
+/// Raised from 8 to 16 with the U-23 work. Eight was chosen as "past the
+/// point where a designer's ramp stops being legible", which is true of
+/// ramps a designer *writes* and not of ramps a program *computes* — a
+/// spectrum, a colour map, a measured series. Sixteen costs 64 more bytes
+/// in a `Copy` type and buys the whole visible spectrum at 20 nm steps.
+pub const MAX_GRADIENT_STOPS: usize = 16;
 
 /// One colour at one position along a gradient.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -252,6 +277,20 @@ impl Gradient {
     /// still (todo-upgrades U-08, U-17).
     #[must_use]
     pub fn with_stops(mut self, stops: &[(f32, Color)]) -> Self {
+        // U-23: the cap is fine, the silence was not. A caller who hands
+        // over more stops than the type can hold has made a mistake worth
+        // seeing — in a panic during development, not as a flat panel in a
+        // shipped frame.
+        debug_assert!(
+            stops.len() <= MAX_GRADIENT_STOPS,
+            "a gradient carries at most {MAX_GRADIENT_STOPS} stops and {} were given: \
+             the extra {} would be dropped silently and the ramp would run flat from \
+             the last one kept. Use `try_with_stops` to handle it, or \
+             `with_stops_resampled` to evaluate the ramp at {MAX_GRADIENT_STOPS} \
+             evenly spaced offsets.",
+            stops.len(),
+            stops.len() - MAX_GRADIENT_STOPS
+        );
         debug_assert!(
             stops.windows(2).all(|w| w[0].0 <= w[1].0 + 1e-6),
             "gradient stops must be non-decreasing: {stops:?} — a ramp listed \
@@ -315,6 +354,73 @@ impl Gradient {
             }
         }
         self.with_stops(&ramp)
+    }
+
+    /// Replace the stops, or refuse. Returns `None` when the ramp is longer
+    /// than [`MAX_GRADIENT_STOPS`], so a caller that cannot rely on a debug
+    /// build can branch instead (todo-upgrades U-23).
+    ///
+    /// ```
+    /// use vieww_foundation::{Color, Gradient, MAX_GRADIENT_STOPS};
+    ///
+    /// let short: Vec<(f32, Color)> = (0..4).map(|i| (i as f32 / 3.0, Color::RED)).collect();
+    /// assert!(Gradient::vertical().try_with_stops(&short).is_some());
+    ///
+    /// let long: Vec<(f32, Color)> =
+    ///     (0..MAX_GRADIENT_STOPS + 1).map(|i| (i as f32 / 40.0, Color::RED)).collect();
+    /// assert!(Gradient::vertical().try_with_stops(&long).is_none());
+    /// ```
+    #[must_use]
+    pub fn try_with_stops(self, stops: &[(f32, Color)]) -> Option<Self> {
+        if stops.len() > MAX_GRADIENT_STOPS {
+            return None;
+        }
+        Some(self.with_stops(stops))
+    }
+
+    /// Replace the stops with an **evaluation** of a ramp of any length at
+    /// [`MAX_GRADIENT_STOPS`] evenly spaced offsets (todo-upgrades U-23).
+    ///
+    /// This is the door a computed ramp wants: a 256-stop spectrum, a colour
+    /// map, a measured series. Truncation keeps the ramp's left edge and
+    /// throws the rest away; resampling keeps the *shape* of the whole ramp
+    /// at the resolution the type can carry.
+    ///
+    /// The input must be non-decreasing in offset, like every other ramp
+    /// here. Offsets are sampled across the input's own span, so a ramp that
+    /// only covers `0.2..0.8` resamples within that span rather than being
+    /// stretched.
+    ///
+    /// ```
+    /// use vieww_foundation::{Color, Gradient, MAX_GRADIENT_STOPS};
+    ///
+    /// // a 256-stop spectrum, carried as its best 16-stop approximation
+    /// let spectrum: Vec<(f32, Color)> = (0..256)
+    ///     .map(|i| {
+    ///         let t = i as f32 / 255.0;
+    ///         (t, Color::rgb((t * 255.0) as u8, 40, (255.0 - t * 255.0) as u8))
+    ///     })
+    ///     .collect();
+    /// let g = Gradient::horizontal().with_stops_resampled(&spectrum);
+    /// assert_eq!(g.stops().len(), MAX_GRADIENT_STOPS);
+    /// // the last stop is the spectrum's last colour, not its eighth
+    /// assert_eq!(g.stops().last().unwrap().color.r, 255);
+    /// ```
+    #[must_use]
+    pub fn with_stops_resampled(self, stops: &[(f32, Color)]) -> Self {
+        if stops.len() <= MAX_GRADIENT_STOPS {
+            return self.with_stops(stops);
+        }
+        let first = stops[0].0;
+        let last = stops[stops.len() - 1].0;
+        let span = (last - first).max(1e-9);
+        let n = MAX_GRADIENT_STOPS;
+        let mut out: Vec<(f32, Color)> = Vec::with_capacity(n);
+        for k in 0..n {
+            let at = first + span * k as f32 / (n - 1) as f32;
+            out.push((at, sample_ramp(stops, at)));
+        }
+        self.with_stops(&out)
     }
 
     /// A two-stop ramp, which is the overwhelmingly common case.
@@ -805,15 +911,85 @@ pub fn fade(color: Color, alpha: f32) -> Color {
     color.with_alpha(a)
 }
 
+/// Evaluate a piecewise-linear ramp at one offset. Used by
+/// [`Gradient::with_stops_resampled`]; kept private because it is the
+/// resampler's arithmetic and not a promise about how the rasterizer
+/// interpolates.
+fn sample_ramp(stops: &[(f32, Color)], at: f32) -> Color {
+    if stops.is_empty() {
+        return Color::TRANSPARENT;
+    }
+    if at <= stops[0].0 {
+        return stops[0].1;
+    }
+    if at >= stops[stops.len() - 1].0 {
+        return stops[stops.len() - 1].1;
+    }
+    for w in stops.windows(2) {
+        let (a_off, a_col) = w[0];
+        let (b_off, b_col) = w[1];
+        if at >= a_off && at <= b_off {
+            let span = b_off - a_off;
+            let t = if span > 1e-9 { (at - a_off) / span } else { 0.0 };
+            return a_col.lerp(b_col, t);
+        }
+    }
+    stops[stops.len() - 1].1
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(debug_assertions, ignore = "U-23: over-cap now debug_asserts")]
     fn stops_past_the_cap_are_dropped_rather_than_allocated_for() {
         let many: Vec<(f32, Color)> = (0..20).map(|i| (i as f32 / 19.0, Color::RED)).collect();
         let gradient = Gradient::vertical().with_stops(&many);
         assert_eq!(gradient.stops().len(), MAX_GRADIENT_STOPS);
+    }
+
+    #[test]
+    fn an_over_long_ramp_is_refused_rather_than_truncated() {
+        let many: Vec<(f32, Color)> = (0..MAX_GRADIENT_STOPS + 1)
+            .map(|i| (i as f32 / 64.0, Color::RED))
+            .collect();
+        assert!(Gradient::vertical().try_with_stops(&many).is_none());
+        let exact: Vec<(f32, Color)> = (0..MAX_GRADIENT_STOPS)
+            .map(|i| (i as f32 / 64.0, Color::RED))
+            .collect();
+        assert!(Gradient::vertical().try_with_stops(&exact).is_some());
+    }
+
+    #[test]
+    fn a_resampled_ramp_keeps_the_whole_spectrum_not_its_left_edge() {
+        // The exact shape of U-23's failure: a long ramp that is red at the
+        // start and blue at the end. Truncation keeps only red.
+        let long: Vec<(f32, Color)> = (0..256)
+            .map(|i| {
+                let t = i as f32 / 255.0;
+                (
+                    t,
+                    Color::rgb((255.0 * (1.0 - t)) as u8, 0, (255.0 * t) as u8),
+                )
+            })
+            .collect();
+        let g = Gradient::horizontal().with_stops_resampled(&long);
+        assert_eq!(g.stops().len(), MAX_GRADIENT_STOPS);
+        let first = g.stops().first().unwrap().color;
+        let last = g.stops().last().unwrap().color;
+        assert!(first.r > 250 && first.b < 5, "the ramp starts red");
+        assert!(last.b > 250 && last.r < 5, "and it ends BLUE, not red");
+        // and it is monotone across the middle, so the shape survived
+        let mid = g.stops()[MAX_GRADIENT_STOPS / 2].color;
+        assert!(mid.b > first.b && mid.b < last.b);
+    }
+
+    #[test]
+    fn resampling_a_short_ramp_leaves_it_alone() {
+        let short = [(0.0, Color::RED), (1.0, Color::BLUE)];
+        let g = Gradient::vertical().with_stops_resampled(&short);
+        assert_eq!(g.stops().len(), 2);
     }
 
     #[test]

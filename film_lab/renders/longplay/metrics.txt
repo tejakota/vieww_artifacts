@@ -4,28 +4,28 @@ glyph_runs=1280
 layers=0
 filtered_layers=0
 open_subpath_fills=1024
-build_mean_ms=0.612
-build_worst_ms=3.325
-render_mean_ms=25.929
-render_worst_ms=35.816
+build_mean_ms=0.928
+build_worst_ms=5.726
+render_mean_ms=28.947
+render_worst_ms=41.799
 probe=lamp peak channel 213/255 (the light never sleeps)
 probe=sea mean G 7/255
 probe=vignette centre G 12 vs corner G 3 (Δ9)
-series=f000 rss=37716KiB build=3.3ms raster=32.6ms
-series=f016 rss=38772KiB build=0.6ms raster=26.4ms
-series=f032 rss=38868KiB build=0.6ms raster=26.4ms
-series=f048 rss=38964KiB build=0.6ms raster=25.6ms
-series=f064 rss=38620KiB build=0.6ms raster=26.3ms
-series=f080 rss=38980KiB build=0.6ms raster=25.7ms
-series=f096 rss=38716KiB build=0.6ms raster=26.2ms
-series=f112 rss=39076KiB build=0.6ms raster=25.0ms
-series=f128 rss=38812KiB build=0.6ms raster=26.3ms
-series=f144 rss=39172KiB build=0.6ms raster=26.1ms
-series=f160 rss=38908KiB build=0.6ms raster=26.1ms
-series=f176 rss=39212KiB build=0.6ms raster=26.0ms
-series=f192 rss=39140KiB build=0.6ms raster=25.1ms
-series=f208 rss=39236KiB build=0.6ms raster=26.0ms
-series=f224 rss=39244KiB build=0.6ms raster=25.7ms
-series=f240 rss=39340KiB build=0.6ms raster=25.3ms
+series=f000 rss=137748KiB build=5.7ms raster=32.0ms
+series=f016 rss=137748KiB build=0.8ms raster=28.6ms
+series=f032 rss=137748KiB build=0.8ms raster=30.1ms
+series=f048 rss=137748KiB build=0.9ms raster=28.7ms
+series=f064 rss=137748KiB build=0.8ms raster=28.9ms
+series=f080 rss=137748KiB build=0.9ms raster=29.5ms
+series=f096 rss=137748KiB build=0.9ms raster=28.9ms
+series=f112 rss=137748KiB build=1.0ms raster=28.9ms
+series=f128 rss=137748KiB build=0.9ms raster=29.7ms
+series=f144 rss=137748KiB build=1.0ms raster=29.1ms
+series=f160 rss=137748KiB build=0.9ms raster=28.4ms
+series=f176 rss=137748KiB build=0.9ms raster=35.0ms
+series=f192 rss=137748KiB build=1.2ms raster=29.3ms
+series=f208 rss=137748KiB build=1.0ms raster=28.4ms
+series=f224 rss=137748KiB build=0.9ms raster=29.2ms
+series=f240 rss=137748KiB build=1.2ms raster=29.3ms
 gif=anim.gif,640x360,12fps,682719
 gif_stride=4

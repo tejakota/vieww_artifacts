@@ -345,3 +345,251 @@ Stage Summary:
 - Removed from the tree: all 1,494 `frame_*.png` across the 78 plate dirs (and the decimated `longplay` stride-4 set — its endurance evidence lives on as the `series=` lines in its metrics.txt, which was always the receipt).
 - Kept in the tree: all 78 `anim.gif`, all 78 `sheet.png`, all `metrics.txt`, `premium-test` (GIF + first/last frame + metrics), full `source/`, `tools/`, both READMEs, this worklog.
 - History was rewritten to purge the frames and the five dead zip archives from every prior commit — the clone is now a fraction of its former size, and `git log` still tells the full ten-round story.
+
+---
+
+## Round 11 — the machines of life, information & mind (session 11, 2026-09-26)
+
+Task: "Work on round 11 giving your maximum effort. This might be the last
+round — cover everything possible. Go beyond the boundaries and create.
+Berserk mode. The best props/artifacts with the topmost UI framework. Give a
+check and create the sheets, GIFs. Remove any compressed files and push the
+extracted folders." Plus, mid-session: *"last time you said some features are
+missing which are noted down in todo-upgrades. Check if they are still stale
+or fixed."*
+
+Work Log:
+- **Twelve new plates.** Rounds 9 and 10 ran the laws of physics as machines.
+  Round 11 runs the machines that physics does not cover: the ones that live,
+  the ones that compute, and the ones that search. `gas`, `evolve`, `slime`,
+  `epidemic`, `traffic`, `huffman`, `maze`, `newton`, `planck`, `excite`,
+  `pidigits`, `pathtrace`. **90 plates total.**
+  - `gas` (the thermodynamic axis): 560 hard discs seeded in the left third,
+    **every one at exactly the same speed**, elastic collisions and perfect
+    mirror walls — no thermostat anywhere, so the Maxwell curve has to be
+    *made*. Receipts: **T = ⟨v²⟩/2 measured from the drawn discs, χ²/dof =
+    0.59 against Maxwell–Boltzmann over 19 bins**; Boltzmann's H falls 99.6%
+    of the way to H_eq *computed from the law at that same T* (not a
+    remembered number); the left-half occupancy relaxes 1.000 → 0.471; and
+    the ideal gas law closes from the **wall impulses**: PA/NkT = 1.097
+    against the 2-D hard-disc virial 1 + 2η + 3.13η² = 1.111, the 9.7% excess
+    being the discs' own area measured as pressure. |ΔE/E| = 1.2×10⁻¹⁵.
+  - `evolve` (the evolution axis): 240 rockets × 48 thrust genes threading a
+    gap nothing told them about. Generation 0 arrives 0/240; generation 39
+    arrives 102/240. Receipt: **the breeder's equation R = (1−p)·S − p·X̄ on
+    an additive trait, slope h² = 0.964 (r² = 0.983) against the law's
+    1 − p_mutate = 0.978 — a 1.4% miss with no environmental variance in the
+    machine at all.** Diversity spent: 0.452 → 0.249.
+  - `slime` (the transport axis): Tero et al.'s adaptive-conductivity model —
+    dD/dt = f(|Q|) − D over 2,354 tubes with pressures from Kirchhoff's law
+    at 627 nodes, source and sink walking all 66 town pairs. **No search, no
+    cost function, no shortest-path code.** Receipts: Kirchhoff residual
+    2.34×10⁻² (1.17% of the injected current), 86 of 2,354 tubes surviving
+    with 99% of the conductivity in the thickest 5%, **TL/MST = 1.410**, all
+    12 towns reachable through living tube, and **98.8% of single-tube cuts
+    change nothing** where a minimum spanning tree survives none.
+  - `epidemic` (the contagion axis): SIR agent by agent on a seeded contact
+    graph, every infection attributed to the case that caused it. Receipt:
+    **four independent estimates of one R₀ from one run** — structural 2.563,
+    contact-traced 2.211, from the peak (S crosses 1/R₀) 3.019, and inverting
+    the final-size law on the attack rate 2.578. The last lands **+0.6%** from
+    the first. Forward final size 0.901 vs the run's 0.902 (+0.2%).
+    Superspreading counted: the busiest 10% of cases caused 35.1%.
+  - `traffic` (the jam axis): Nagel–Schreckenberg on a 240-cell ring at
+    ρ = 0.16, with the time–space diagram underneath and 28 independent rings
+    building the fundamental diagram. Receipts: **the backward wave fitted at
+    −0.562 cells/step against the Rankine–Hugoniot shock condition computed
+    from the same rows' two traffic states, −0.537 (−4.7%)**; free-flow slope
+    4.666 vs v_max − p = 4.700; critical density 0.117 at q = 0.494.
+  - `huffman` (the information axis): the tree built merge by merge from a
+    fixed passage. **H = 4.0713 bits, L = 4.1134, the gap 0.0421 inside the
+    guaranteed H ≤ L < H+1; Kraft's Σ2^(−lᵢ) = 1.000000000000 exactly**;
+    1.94× compression against flat bytes; and the encoded stream's own per-bit
+    entropy 0.993570 — 0.0064 bits short of noise, which is what a coded
+    stream should look like.
+  - `maze` (the search axis): one braided maze, three searches. **Admissibility
+    is not assumed — it is checked exhaustively against the true distance
+    field from a reverse BFS: 0 violations in 1,729 cells.** With that
+    established A* *must* return the optimal path, and does: BFS 125 cells,
+    A* 125 cells, greedy 133 (+6.4%). Expansions: BFS 1,729 · A* 780 ·
+    greedy 146 — the heuristic buys 2.22× for exactly the same answer.
+  - `newton` (the root axis): Cayley's 1879 question, 57,600 Newton runs per
+    frame on z⁵ − 1 + a·z² with the roots **found, not hard-coded**. Receipts:
+    **quadratic convergence fitted from 1,891 real error pairs, |eₙ₊₁| ∝
+    |eₙ|^1.9998 (−0.01% from 2)**; the constant 1.981 against |f″/2f′| = 1.867;
+    and **the Wada property counted on the raster the frame just drew — 74.5%
+    of boundary pixels have three or more basins in their 8-neighbourhood.**
+  - `planck` (the radiation axis): twelve blackbody curves, and both laws
+    derived *from the curves* rather than quoted. **Wien: every peak located
+    by golden-section search on the plate's own sampled curve, ⟨λ_max·T⟩ =
+    2.897772×10⁻³ m·K against CODATA's 2.897772×10⁻³ (+0.0000%)** — and b
+    itself is not quoted either, x = 5(1 − e^(−x)) solved by bisection to
+    4.965114. **Stefan–Boltzmann by Simpson quadrature of πB_λ: M ∝ T^4.00000,
+    σ = 5.670371×10⁻⁸ against 5.670374×10⁻⁸ (−0.000%).** The
+    Rayleigh–Jeans curve is drawn beside them and is already 2× too large at
+    1,984 nm.
+  - `excite` (the excitable axis): a Barkley rotor on 200×112 cells from a
+    cross-field break. Receipts: **T = 4.360 by autocorrelation of a probe
+    electrode's own trace, λ = 12.17 from the raster along the electrode
+    line, and a rested planar front speed c₀ = 3.792 measured in a separate
+    1-D strip of the same medium.** λ/T = 2.791 sits 26.4% below c₀, and the
+    plate says which part curvature can explain (D/r = 0.078) and which part
+    is recovery — the same strip **paced at the rotor's own period does not
+    capture 1:1 at all.** The tip meanders in a 0.97-cell circle: rigid
+    rotation at the resolution limit of a dx = 1 grid.
+  - `pidigits` (the counting axis): Galperin's blocks, event-driven with exact
+    collision times. **3 · 31 · 314 · 3,141 · 31,415 · 314,159 — counted, and
+    equal to ⌈π/θ⌉ − 1 at every mass ratio, and equal to the digits of π.**
+    Turned around: N·θ gives π = 3.141590 (error 8.4×10⁻⁷). |ΔE/E| = 7.8×10⁻¹⁵
+    across 314,159 collisions in f64.
+  - `pathtrace` (the light-transport axis): a Cornell box with no light
+    sampling and no denoiser, because the subject is the noise. **The error is
+    estimated with no reference image at all — the samples split into two
+    halves and RMS(A−B)/2 — and the ladder 2…64 spp fits error ∝ N^−0.5075
+    (r² = 0.9995) against Monte Carlo's exact −0.5.** The **white furnace
+    test** passes at 0.000e0 worst-pixel error with two interreflecting
+    albedo-1 spheres, and the depth cap's bias is *measured* by re-tracing the
+    identical paths from the same seeds to depth 16: the depth-5 image is
+    6.65% darker.
+- **THE ROUND'S RECEIPT CATCHES — eight broken instruments found by their own
+  printouts:**
+  - `evolve`: realized heritability printed **1.684**, which is impossible —
+    children cannot respond by more than the selection applied. Two bugs under
+    it: R/S was being measured on *fitness*, a wildly non-additive function of
+    the genes where crossover is routinely transgressive; and the estimator
+    was a mean of per-generation ratios, which is a mean of a heavy-tailed
+    quantity. Moved to an additive trait and a least-squares slope, it read
+    0.67 — still wrong, and a five-minute Python replica of the genetic
+    operators *alone* reproduced 0.30 over a long run, which located the real
+    omission: **mutation does not just dilute the response, it pulls the mean
+    back toward zero.** The honest law is R = (1−p)S − p·X̄; regressing
+    R + p·X̄ on S gives 0.964 against 0.978.
+  - `evolve`, again: rockets were **tunnelling through the wall**. Terminal
+    velocity was 25 px/step against a 16-px bar and a point-in-band test, so
+    the population "learned" a gap that was the whole wall — arrivals sat at
+    67% in generation 0, which is what gave it away. Segment-crossing test,
+    and a thrust budget chosen so the flight is a flight.
+  - `slime`: built first as Jones's **agent** model, the one that makes the
+    wallpapers. Five parameter sets produced three different beautiful things
+    and not one network — a vertical column, a pair of self-reinforcing ropes,
+    a handsome vein system that ignored the food — and the connectivity
+    receipt printed 3/12, 1/12, 6/12, 1/12 while every one of those frames
+    would have passed an audit by eye. The trail feedback is winner-take-all
+    at any density this bench can afford. **The rewrite to the Tokyo paper's
+    other model is the finding.**
+  - `slime`, again: the source/sink walk `(s, 5s+3) mod 12` looks like it
+    covers the towns and does not — the offset takes three values, so 30 of
+    the 66 pairs were never demanded and the network came out in two pieces,
+    7/12 reachable. And the Gauss–Seidel left a Kirchhoff residual at 11% of
+    the injected current, which makes the adaptation step's Q a fiction; SOR
+    at ω = 1.85 bought two orders of magnitude for the same sweeps.
+  - `epidemic`: one index case at R₀ ≈ 2.5 dies out about 1/R₀ of the time,
+    and did — five cases, no epidemic, and a final-size receipt comparing
+    0.002 against 0.000. Ten simultaneous introductions make extinction a
+    10⁻⁴ event and the law being checked the deterministic one.
+  - `traffic`: the backward wave was compared against "the model's exact −1
+    cell/step", which is the **deterministic** limit and not this model. A
+    Python replica measured −0.50 by two independent instruments, and the
+    Rankine–Hugoniot shock condition on the same rows predicted −0.534 against
+    a measured −0.522. The free-flow slope's "theory" was also wrong:
+    v_max·(1−p) = 3.50 against a measured 4.67; the right statement is
+    v_max − p = 4.70.
+  - `maze`: a perfect maze is a **tree**, so all three searches must walk the
+    same corridors — the first cut measured BFS 460, A* 443, greedy 418 and
+    three identical paths. A true fact about trees and a useless experiment
+    about search. Braiding 16% of the interior walls out makes it a graph, and
+    the heuristic has something to buy.
+  - `excite`: four instruments in a row failed to close λ = cT, and each
+    failure was informative. FitzHugh–Nagumo at the textbook parameters put
+    the rest state 0.04 from the cubic knee — **the oscillatory regime**, one
+    enormous wave, and a receipt printing 0 crossings, T = 0, λ = 0. Barkley
+    gave a rotor. Then: a tip-rotation period at almost exactly **twice** the
+    electrode's, because the tip positions were integer cells and the meander
+    circle is about one cell across; a period from crossing spans that
+    disagreed with the autocorrelation by 17% on three crossings; a
+    two-electrode conduction velocity that would not reconcile with λ/T
+    however the line was placed, because a spiral's apparent speed along a
+    chord is not its radial phase speed; and a paced-strip velocity of 20.6
+    against a rested 3.79, where the arrival detector was re-triggering on the
+    previous beat's plateau. **Each was removed rather than patched, and what
+    is printed is what closed.**
+- **`pathtrace`'s own small catch:** the sample ladder started at 1 spp, but
+  the half-buffer estimator needs a sample in each half, so that rung was
+  silently a 2 spp render sitting off the line it was being fitted to — the
+  exponent read −0.4511. Starting the ladder at 2 gives −0.5075.
+- **THE TODO-UPGRADES RE-AUDIT (the mid-session question, answered).** Every
+  `FIXED` annotation in `todo-upgrades.md` was re-verified **against the
+  checkout rather than against the file** — each named API looked up in the
+  crate it names, each named test run. All of U-01…U-22 hold: no annotation
+  has gone stale. Tests re-run: `vieww-foundation` 518 + 29 doc-tests,
+  `vieww-effects` 13, `vieww-paint --features native` 237 + 26 across its
+  integration suites, all green. The two genuinely OPEN entries are **closed
+  in this round**:
+  - **U-23 (the silent gradient truncation) — FIXED.** `MAX_GRADIENT_STOPS` is
+    16 rather than 8; `with_stops` now `debug_assert!`s when it would drop a
+    stop instead of dropping it quietly; `try_with_stops` returns `None`
+    rather than truncating; and **`with_stops_resampled` evaluates a ramp of
+    any length at the cap's resolution**, so a 256-stop spectrum becomes the
+    whole rainbow coarsely instead of its red-orange left edge. The `prism`
+    plate — which found the defect in round 7 and worked around it with 256
+    flat rects — now hands the framework its own 256-stop spectrum through
+    that door, and its screen underlay is a spectrum instead of the flat
+    orange panel the entry was written about.
+  - **U-18 (sub-pixel strokes vanish) — FIXED as an opt-in policy.**
+    `NativeRenderer::hairline_floor(px)`: a stroke whose *device* width falls
+    below the floor is drawn at the floor and faded by exactly the factor it
+    was widened, so the ink is conserved and the line is visible. Off by
+    default, because without it the arithmetic is correct and a renderer
+    should not decide for a photograph what it decides for a chart. **And the
+    measurement corrected this file's own evidence:** the probe plate reported
+    four sub-pixel widths landing on a shared 26/255, and a bare stroke in a
+    unit test shows the collapse is not to a floor but to *nothing* —
+    0.25 px reads 64/255 and 0.12, 0.06 and 0.03 all read exactly 0. The 26
+    was neighbouring ink. The harness takes `FILM_HAIRLINE_FLOOR`, so the
+    probe's ladder can be re-read with the policy on: above half a pixel the
+    two are identical to the byte, and below it four rungs that were one
+    number become 50 / 37 / 32 / 29.
+- **THE RE-RENDER CHECK, and what it found.** All 90 plates were re-rendered
+  one process per plate. **17 of the 90 sheets came back with different
+  pixels, and not one of them because of a change in this repository.** The
+  gradient-cap raise was the obvious suspect and was *tested*: rebuilding at
+  `MAX_GRADIENT_STOPS = 8` and re-rendering five of the changed plates
+  reproduced none of the old hashes, which eliminates it. Repeated renders on
+  this bench are byte-identical (verified on four plates), so the lab is
+  deterministic — **per bench.** The cause is
+  `FrameDriver::use_system_fonts()`, which calls `db.load_system_fonts()`: the
+  film's text is resolved against whatever faces the *host* has installed, so
+  glyph rasterisation is a property of the machine and not of the source, and
+  the plates that moved are the text-forward ones (`kinetic`, `endcard`,
+  `wordmark`, `han`, `receipts`, `hero`, …). This is a real hole in the
+  determinism claim at the top of `film_lib.rs`, now named. The obvious fix —
+  pin the embedded-only store — was tried and rejected by measurement:
+  `FILM_EMBEDDED_FONTS=1` renders, but `han`'s CJK comes out as tofu boxes,
+  because those glyphs *are* the system's. The switch is kept for plates that
+  can use it; the default stays honest about its dependency.
+- Frames removed per the round-10 storage policy: the tree carries **90
+  `sheet.png` + 90 `anim.gif` + 90 `metrics.txt`** and nothing else, 101 MB.
+
+Stage Summary:
+- **90 props live (78 + 12 new).** The life/information/mind axes closed:
+  thermodynamics (χ²/dof 0.59 against Maxwell, PA/NkT within 1.3% of the
+  hard-disc virial), evolution (the breeder's equation at −1.4%), transport
+  (TL/MST 1.410 with 98.8% fault tolerance and no search anywhere),
+  contagion (four estimates of R₀ agreeing to ±15%, the final-size law at
+  +0.2%), traffic (Rankine–Hugoniot at −4.7%), information (Kraft exactly 1,
+  Shannon's bound with 0.042 bits of slack), search (0 admissibility
+  violations in 1,729 cells; A* 2.22× cheaper for the identical path),
+  root-finding (convergence exponent 1.9998; Wada at 74.5%), radiation (Wien
+  and Stefan to five figures from quadrature alone), excitability (a rotor
+  and three measurements of it), counting (six mass ratios, six prefixes of
+  π), and light transport (N^−0.5075, r² = 0.9995, and a furnace test at
+  zero).
+- **`todo-upgrades.md` has no OPEN entries for the first time since it was
+  written**, and the re-audit says the closed ones are closed in the code and
+  not only in the file.
+- The round's meta-finding joins rounds 9 and 10 in the honesty ledger:
+  **eight broken instruments caught by their own printouts this session, and
+  a determinism claim caught by a hash.** Where an instrument could not be
+  made to close its books — `excite`'s conduction velocity — it was removed
+  and the plate says what it does and does not know. The receipts stay the
+  spine.

@@ -282,7 +282,7 @@ fn receipt_panel(t: f32) -> WidgetNode {
         "PROBE · THE INSTRUMENT PANEL · MEASURED IN PIXELS".to_string(),
         format!("wash σ{:.0} full-bleed — corners read by the probe", WASH_SIGMA),
         format!("petals {} · open #{} · open_subpath_fills → 1", PETALS, OPEN_PETAL),
-        format!("ladder {} rungs {:.2}→{:.2} px (U-18: OPEN, recorded)", RUNGS.len(),
+        format!("ladder {} rungs {:.2}→{:.2} px (U-18 CLOSED r11: floor off here)", RUNGS.len(),
             RUNGS[0], RUNGS[RUNGS.len() - 1]),
         "probe lines below: from the RGBA buffer, last frame".to_string(),
     ];
