@@ -335,3 +335,13 @@ Stage Summary:
 - **78 props live (66 + 12 new).** The emergence axes closed: SOC (τ = 1.174 vs 1.25), percolation (spanning bracketed at 0.5783–0.5784 by 18-step bisection vs 0.5927 infinite-lattice), ant emergence (104/(2,2) counted), fractal growth (D = 1.71 = literature), the attractor (λ = 0.878 vs 0.906), chaos with the books paid (energy 1.1×10⁻⁸), aperiodic order (C5 from the raster, 0.98+ vs the 60° control), space-filling (D = 1.764 from the box-count, tending 2), spacetime (chirp +0.6% of 11/3), Earth's rotation (−271.06°/day closed exactly), sky optics (both bows from the luminance profile), and the algorithm race (counts from the traces, merge hugging n·log₂n at 527 comparisons while bubble pays 4,560).
 - Round-10 audit scores: sandpile ~8.5, percolation 8.5+, lorenz 8.5, penrose excellent, ant pass, dla pass, dragon pass, gw pass, foucault pass, rainbow excellent, sorting pass; doublepend 6/10 at sheet scale (the twin-legibility limit, documented above and settled by pixel census).
 - The round's meta-finding joins round 9's in the honesty ledger: **seven broken receipts caught by their own printouts this session, zero of them caught by the VLM's eye.** The receipts stay the spine.
+
+---
+
+## Round-10 close-out: the storage slim-down (2026-09-26)
+
+**The decision.** The repository had grown past 3.4 GB — 1.4 GB of it the 1,494 `renders/<name>/frame_*.png` files, the rest git history still carrying the five removed zip archives. The tree is now the lean, reviewable form: per plate, the **`sheet.png` contact sheet (16 frames) + the `anim.gif` motion loop + `metrics.txt`** — the receipt set that was always the spine. Every individual frame remains **byte-reproducible from `source/`** (deterministic RNG, fixed clock, FrameDriver), so nothing is lost that cannot be regenerated exactly: `cargo run --release -- <name>` then `tools/make_gifs.sh`.
+
+- Removed from the tree: all 1,494 `frame_*.png` across the 78 plate dirs (and the decimated `longplay` stride-4 set — its endurance evidence lives on as the `series=` lines in its metrics.txt, which was always the receipt).
+- Kept in the tree: all 78 `anim.gif`, all 78 `sheet.png`, all `metrics.txt`, `premium-test` (GIF + first/last frame + metrics), full `source/`, `tools/`, both READMEs, this worklog.
+- History was rewritten to purge the frames and the five dead zip archives from every prior commit — the clone is now a fraction of its former size, and `git log` still tells the full ten-round story.
