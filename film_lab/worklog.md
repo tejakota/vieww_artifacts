@@ -593,3 +593,20 @@ Stage Summary:
   made to close its books — `excite`'s conduction velocity — it was removed
   and the plate says what it does and does not know. The receipts stay the
   spine.
+
+---
+Task ID: 12
+Agent: main (Super Z)
+Task: "Check the complete capabilities and layout a plan" — the keynote film production blueprint for the viewwstudio product release, using the repo's 4-act (kishōtenketsu) methodology; shortlist the vieww features the film will use.
+
+Work Log:
+- Full-context pass: handoff.md, film_lab README + worklog (rounds 1-11), todo-upgrades.md (no OPEN entries), vieww_base docs + guides, viewwstudio docs 01-06, apps/README, viewwsite README, Keynote strategy.png + scene_graph_v07.png (VLM), premium-test receipts
+- User-clarified shape: repo MD + polished PDF; explicit 4 acts; 3:00 locked; free reinvention of story internals; full-blueprint depth; all four feature families in the shortlist; sheet-vf visual floor; reuse + ~8 new builds
+- Designed and wrote `KEYNOTE_FILM_PLAN.md` (repo root, 7 sections, 586 lines): Ki-Sho-Ten-Ketsu at 40+85+30+25=180s; scenes S01-S16; twists K0-K5 restaged (K1 now the 0:13 hard cut out of the wait); counter ladder 1-7 intact; reveal F1-F6 in Ten, F7 opens Ketsu; new beats: the drop (S02-S03 genesis), the loop (S16 — the end card as one more buffer, session chip 3:00); 8 new builds N-01..N-08; build board T-01..T-08; risk register (10 rows); the v0.7 delta table
+- Honesty ledger grown 10 → 12 lines: "alive in N seconds" replaces "nothing was compiled" (06-say.md documents say → codegen → rustc → cdylib → dlopen); determinism is per-bench, the manifest names its bench
+- Generated `KEYNOTE_FILM_PLAN.pdf` (20 pages): Template 07 Crystal Blue cover (poster_validate + cover_validate pass, html2poster render) + ReportLab body (clickable TOC, 23 tables, font fallback) merged via pypdf; font.check 0 issues; toc.check pass; pdf_qa PASS (8 English-quote line-start warnings, accepted); VLM visual check clean
+
+Stage Summary:
+- The film is a build program again: critical path T-03 (session spine), first moves T-01 + T-03
+- The capability surface is now audited in four families with receipts: the studio loop, the framework powers (each effect names its primitive), the 90-plate props library in three registers, the ecosystem proof (four apps, viewwsite, the 59.3/4.09 device receipt)
+- Everything the plan proposes renders today: no feature in the shortlist reaches past the audited surface; the wonder register is budgeted for Acts III-IV, the law machines held for the extended cut
