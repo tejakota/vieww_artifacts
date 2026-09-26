@@ -1,7 +1,22 @@
 app=vavlt
 what=consent-first photo/video vault engine, one vieww UI across desktop/android/ios
-source=design/mockup.html + design/mockup-cinematic.html, 8 screens each
-screens=8 cinematic set, captured at 2x (824x1830), redesign set also captured
-sheet=sheet.png,1264x1608,8 screens
-frames=120 at 10fps (1.1s hold + 0.4s crossfade per screen, seamless loop)
-gif=anim.gif,412,915,10fps,4549104
+migrated=old vello ../vieww checkout -> in-repo vieww_base (native rasteriser;
+        winit patch dropped — the new platform crate takes winit 0.30 from
+        crates.io); GpuRenderer::headless in the test harness -> NativeRenderer,
+        so the screenshot suite runs everywhere instead of skipping without
+        an adapter; android's three backend features collapsed to one no-op
+        `backend-native`
+enriched=Glass buttons are real frosted glass now (vieww-effects BackdropBlur
+        under the translucent fill — "Stop" and the photo actions soften the
+        mosaic scrolling beneath them); the tier control's channel is a real
+        inset shadow (Shadow::inset follows the radius, darkens into the
+        track); framework theme carries Motion::standard and the host
+        platform's control shapes; the ghost wall's tiles derive their height
+        from the space the copy leaves (the new text metrics made the fixed
+        66-point rows overflow)
+screens=8 of the 40 the screenshot suite renders (phone dark; the suite does
+        phone+desktop, dark+light) — 412x915, real app, no display
+sheet=sheet.png,1264x1544,8 screens, two rows
+frames=105 timeline at 10fps (1.1s hold + 0.4s crossfade per screen, seamless
+      loop; 7 screens)
+gif=anim.gif,412,915,10fps,1867258

@@ -11,7 +11,7 @@
 use std::time::Duration;
 
 use vieww::foundation::{Color, Size};
-use vieww::paint::cpu::CpuRenderer;
+use vieww::paint::native::NativeRenderer;
 use vieww::prelude::*;
 use vieww::render::FrameDriver;
 
@@ -76,7 +76,7 @@ fn main() {
 
     for (name, root) in cases {
         let mut driver = FrameDriver::new(Size::new(W, H));
-        let mut renderer = CpuRenderer::new();
+        let mut renderer = NativeRenderer::new();
         driver.set_root(
             Theme::new(ThemeData::dark()).child(
                 Container::new()

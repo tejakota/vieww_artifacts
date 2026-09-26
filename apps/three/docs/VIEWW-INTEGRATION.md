@@ -73,9 +73,9 @@ the whole `.3` stack with no Vieww present. The three path dependencies live
 in the root `Cargo.toml`:
 
 ```toml
-vieww                = { path = "../vieww-develop/crates/vieww" }
-vieww-platform-winit = { path = "../vieww-develop/crates/vieww-platform-winit" }
-vieww-test-harness   = { path = "../vieww-develop/crates/vieww-test-harness" }
+vieww                = { path = "../../vieww_base/crates/vieww" }
+vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
+vieww-test-harness   = { path = "../../vieww_base/crates/vieww-test-harness" }
 ```
 
 They assume the two checkouts sit side by side. Moving or renaming the Vieww

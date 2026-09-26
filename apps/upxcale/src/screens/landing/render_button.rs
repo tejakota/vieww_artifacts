@@ -28,7 +28,7 @@
 
 use std::rc::Rc;
 
-use vieww_foundation::{Alignment, Color, EdgeInsets, Offset, Shadow};
+use vieww_foundation::{Alignment, EdgeInsets};
 use vieww_widget::prelude::*;
 use vieww_widget::widget_node_from;
 
@@ -78,12 +78,11 @@ impl Widget for RenderButton {
                         .stadium()
                         // The accent-tinted shadow is what lifts it off a grid
                         // of photographs; a neutral one disappears against a
-                        // dark tile.
-                        .shadow(Shadow::new(
-                            Color::rgba(10, 132, 255, 107),
-                            Offset::new(0.0, 8.0),
-                            24.0,
-                        )),
+                        // dark tile. Lives in `theme.rs` as `RENDER_SHADOW`
+                        // beside the cards' neutral `CARD_SHADOW`, so the
+                        // app's whole elevation language is readable in one
+                        // place.
+                        .shadow(theme::RENDER_SHADOW),
                 )
                 .height(HEIGHT)
                 .padding(EdgeInsets::symmetric(24.0, 0.0))

@@ -1,7 +1,7 @@
 //! Render every screen state to a PNG, with no window and no GPU.
 //!
 //! ```console
-//! cargo run --example shots --features cpu --release -- shots/
+//! cargo run --example shots --features native --release -- shots/
 //! ```
 //!
 //! This is the smoke test. If all five images come out, then the theme
@@ -9,8 +9,9 @@
 //! upscaler ran, and the whole tree laid out and rasterised — which is most of
 //! the app minus the finger.
 //!
-//! It is also how the app is checked on a machine with no display. vieww's
-//! CPU backend rasterises the same `Scene` the GPU one does, so a layout bug
+//! It is also how the app is checked on a machine with no display. `vieww`'s
+//! native rasteriser needs no adapter at all — it is the same code a window
+//! presents through, run here with no window — so a layout bug
 //! shows up here exactly as it would on a phone; what it cannot tell you is
 //! whether the frame budget was met, which is a question for
 //! `ci/device-suite.sh` on real hardware.
@@ -23,6 +24,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use upxcale::photos::{self, Library};
 use upxcale::screens::landing::{
@@ -34,7 +36,7 @@ use upxcale::SURFACE;
 use vieww_asset::{AssetBundle, DirectoryBundle};
 use vieww_element::NavigatorController;
 use vieww_foundation::task::{FrameWaker, Inline, NoWaker, Spawn};
-use vieww_paint::cpu::CpuRenderer;
+use vieww_paint::native::NativeRenderer;
 use vieww_render::FrameDriver;
 use vieww_widget::prelude::*;
 
@@ -46,8 +48,16 @@ fn main() {
     std::fs::create_dir_all(&out).expect("creating the output directory");
 
     let mut driver = FrameDriver::new(SURFACE);
-    let mut renderer = CpuRenderer::new();
+    let mut renderer = NativeRenderer::new();
     let runtime = driver.elements().runtime().clone();
+
+    // The clock the routes' transitions run on. `draw_frame()` (no args)
+    // ticks at `Duration::ZERO` — a single-instant convenience for tests, not
+    // a running clock — and a route whose `Animated` transition has not seen
+    // time pass is a route painted at `t = 0`: fully faded out, slid fully off
+    // the edge. Advancing the clock here is what keeps a screenshot a record
+    // of the *settled* screen rather than of the first instant of its arrival.
+    let mut elapsed = Duration::ZERO;
 
     let bundle: Rc<dyn AssetBundle> = Rc::new(DirectoryBundle::at(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -74,7 +84,7 @@ fn main() {
     driver.set_root(landing);
 
     // ── 1. the landing grid, as the app opens ───────────────────────────────
-    shoot(&mut driver, &mut renderer, &out, "1-landing");
+    shoot(&mut driver, &mut renderer, &mut elapsed, &out, "1-landing");
 
     // ── 2. the picker, with three photographs ticked ────────────────────────
     state.clear_picks();
@@ -82,7 +92,7 @@ fn main() {
         state.toggle_pick(id);
     }
     nav.push(picker_route(state.clone()));
-    shoot(&mut driver, &mut renderer, &out, "2-picker");
+    shoot(&mut driver, &mut renderer, &mut elapsed, &out, "2-picker");
 
     // ── 3. the progress overlay, mid-batch ──────────────────────────────────
     // Pushed *before* the render starts so the card is caught with the bar part
@@ -95,21 +105,21 @@ fn main() {
         photos_total: 3,
         status: "Photo 2 of 3".to_string(),
     });
-    shoot(&mut driver, &mut renderer, &out, "3-progress");
+    shoot(&mut driver, &mut renderer, &mut elapsed, &out, "3-progress");
 
     // ── 4. the grid after the render ────────────────────────────────────────
     // `Inline` means the whole batch has run by the time this returns.
     assert!(state.start_render(), "the render should have started");
     let finished = state.poll_render();
     assert!(finished, "an inline render should complete within one poll");
-    shoot(&mut driver, &mut renderer, &out, "4-rendered");
+    shoot(&mut driver, &mut renderer, &mut elapsed, &out, "4-rendered");
 
     // ── 5. before / after ───────────────────────────────────────────────────
     let photo = photos::by_id("a1").expect("a1 is in the catalogue");
     state.open_compare(photo.id);
     state.set_divider(0.45);
     nav.push(compare_route(&state));
-    shoot(&mut driver, &mut renderer, &out, "5-compare");
+    shoot(&mut driver, &mut renderer, &mut elapsed, &out, "5-compare");
 
     // ── and the proof the upscaler did something ────────────────────────────
     let source = state.library.source(photo).expect("decoding the source");
@@ -137,13 +147,27 @@ fn main() {
     println!("wrote {}", path.display());
 }
 
-/// Draw one frame and rasterise it.
-fn shoot(driver: &mut FrameDriver, renderer: &mut CpuRenderer, out: &std::path::Path, name: &str) {
-    // Twice: the first frame mounts the tree and the second paints it with
-    // every route transition settled. A single frame catches routes mid-fade,
-    // which makes a screenshot a poor record of what the screen looks like.
-    driver.draw_frame();
-    driver.draw_frame();
+/// Draw frames until every route transition has settled, then rasterise one.
+fn shoot(
+    driver: &mut FrameDriver,
+    renderer: &mut NativeRenderer,
+    elapsed: &mut Duration,
+    out: &std::path::Path,
+    name: &str,
+) {
+    // `vieww_widget::ROUTE_DURATION` is 220ms of transition, but the honest
+    // budget here is "long enough that nothing is still animating", not a
+    // specific number: a spring's settle tail outlasts its nominal duration,
+    // and a screenshot that catches one is a screenshot of a wobble. 15
+    // 16.67ms frames is 250ms of settled time after the first mount frame —
+    // past the transition, and past the fade of whatever the route replaced.
+    // The first frame mounts the tree; the rest let the clock run.
+    for step in 0..16 {
+        // The first draw is the mount; give it the current instant so the
+        // `Animated` transition starts its clock "now" rather than at zero.
+        *elapsed += Duration::from_millis(if step == 0 { 0 } else { 17 });
+        driver.draw_frame_at(*elapsed);
+    }
 
     let (png, report) = renderer
         .render_to_png(

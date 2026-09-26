@@ -8,10 +8,10 @@ cargo fmt --all -- --check
 cargo test
 cargo test -p three-social -p three-app
 
-if [[ -d ../vieww-develop/crates/vieww ]]; then
+if [[ -d ../../vieww_base/crates/vieww ]]; then
   cargo test --workspace
   echo "Vieww integration present: full workspace tests passed."
 else
-  echo "Vieww checkout not found at ../vieww-develop; skipped Vieww-dependent workspace tests."
+  echo "Vieww checkout not found at ../../vieww_base; skipped Vieww-dependent workspace tests."
   echo "Place Vieww there, then run: cargo test --workspace"
 fi

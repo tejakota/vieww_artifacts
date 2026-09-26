@@ -59,11 +59,13 @@ three-app = { path = "crates/three-app", version = "0.1.0" }
 
 # The Vieww framework, by path — used only by Vieww application members.
 #
-# The paths assume this checkout and a Vieww checkout sit side by side:
+# The paths point at the in-repo framework checkout — the migrated vieww
+# (vello is gone; vieww_paint::native is the one renderer, presented through
+# vieww-hal's Vulkan swapchain — see vieww_base/docs/RENDERER-MIGRATION.md):
 #
-#     parent/
-#       three/            <- this workspace
-#       vieww-develop/    <- a checkout of Vieww
+#     repo/
+#       vieww_base/       <- the framework
+#       apps/three/       <- this workspace
 #
 # `cargo` resolves workspace-relative paths from *this* file, so moving or
 # renaming the Vieww checkout means editing these three lines, nowhere else.
@@ -75,9 +77,9 @@ three-app = { path = "crates/three-app", version = "0.1.0" }
 # foundation builds on 1.89; building the viewer needs a toolchain new enough
 # for Vieww's tree — `rust-toolchain.toml` at this root pins the one this
 # integration was developed against.
-vieww = { path = "../vieww-develop/crates/vieww" }
-vieww-platform-winit = { path = "../vieww-develop/crates/vieww-platform-winit" }
-vieww-test-harness = { path = "../vieww-develop/crates/vieww-test-harness" }
+vieww = { path = "../../vieww_base/crates/vieww" }
+vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
+vieww-test-harness = { path = "../../vieww_base/crates/vieww-test-harness" }
 
 # The viewer's per-frame cost is dominated by Vieww's rasterizer and this
 # workspace's projection math, so a debug build inherits the same

@@ -64,7 +64,7 @@ impl SocialScreen {
         Container::new().color(theme.colors.surface).child(
             Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .push(Flexible::expanded(1).child(body))
-                .push(navbar(&snap,handle))
+                .push(navbar(&theme,&snap,handle))
         )
     }
 }
@@ -72,31 +72,152 @@ impl SocialScreen {
 fn home_screen(theme:&ThemeData,snap:&Snapshot,handle:Option<Handle>)->WidgetNode{
     let toggle=handle.clone();
     let label=if snap.feed==HomeFeed::ForYou{"For You"}else{"Following"};
-    let mut col=Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0)
-        .push(Flex::row().main_axis_alignment(MainAxisAlignment::SpaceBetween).push(Text::new("3").style(theme.text.title)).push(Button::new(label).on_pressed(move||{if let Some(h)=&toggle{h.write(|s|s.toggle_feed())}})));
-    if let Some(post)=snap.posts.first(){
+    let header=Flex::row().main_axis_alignment(MainAxisAlignment::SpaceBetween)
+        .push(Text::new("3").style(theme.text.title).size(28.0).bold())
+        .push(Button::new(label).on_pressed(move||{if let Some(h)=&toggle{h.write(|s|s.toggle_feed())}}));
+
+    // The moment card: author, caption, the capture itself and the action
+    // row travel together on one raised surface. A feed post is *one thing*;
+    // before this it was four siblings floating on the page background, and
+    // the viewer's dark chamber bled straight into the surrounding surface
+    // with nothing marking whose content it was. Same layout, one surface:
+    // radius, fill, and the cast shadow that separates it from the page.
+    let card=if let Some(post)=snap.posts.first(){
         let like=handle.clone(); let id=post.id.clone();
-        col=col.push(Text::new(format!("@{}",post.author.0)).style(theme.text.label))
+        Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0)
+            .push(Text::new(format!("@{}",post.author.0)).style(theme.text.label).color(theme.colors.primary).bold())
             .push(Text::new(post.caption.clone()).style(theme.text.body))
             .push(Flexible::expanded(1).child(ViewerScreen{capture:Rc::new(demo_capture())}))
             .push(Flex::row().spacing(8.0)
                 .push(Button::new(format!("♥ {}",post.likes)).on_pressed(move||{if let Some(h)=&like{h.write(|s|s.like(&id))}}))
                 .push(Button::new(format!("Comment {}",post.comments)))
                 .push(Button::new("Remix"))
-                .push(Button::new("Share")));
-    }
-    Container::new().padding(EdgeInsets::all(14.0)).child(col).into()
+                .push(Button::new("Share")))
+    }else{
+        Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch)
+    };
+    let card=Container::new()
+        .color(theme.colors.surface_variant)
+        .radius(18.0)
+        .shadow(Shadow::new(Color::rgba(0,0,0,110),Offset::new(0.0,12.0),32.0))
+        .padding(EdgeInsets::all(12.0))
+        .child(card);
+
+    Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(12.0)
+        .push(header)
+        .push(Flexible::expanded(1).child(card))
+        .into()
 }
 
-fn simple_screen(theme:&ThemeData,title:&str,subtitle:&str)->WidgetNode{Container::new().padding(EdgeInsets::all(20.0)).child(Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(8.0).push(Text::new(title).style(theme.text.title)).push(Text::new(subtitle).style(theme.text.body))).into()}
-fn navbar(snap:&Snapshot,handle:Option<Handle>)->WidgetNode{
+fn simple_screen(theme:&ThemeData,title:&str,subtitle:&str)->WidgetNode{
+    // A hairline separates the title from the body — the one mark a text
+    // page needs to read as *designed* rather than typed, and the accent
+    // rule under the title says which screen you are on without a tab bar.
+    Container::new().padding(EdgeInsets::all(20.0)).child(Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(10.0)
+        .push(Text::new(title).style(theme.text.title).bold())
+        .push(Container::new().height(2.0).width(44.0).radius(f32::MAX).color(theme.colors.primary))
+        .push(Text::new(subtitle).style(theme.text.body).color(theme.colors.on_surface_variant))).into()
+}
+fn navbar(theme:&ThemeData,snap:&Snapshot,handle:Option<Handle>)->WidgetNode{
+    // The bar sits on its own raised surface with a hairline above it, so
+    // the content scrolls *under* something rather than into nothing. The
+    // active tab is the filled one and the rest are text — the framework's
+    // own button hierarchy doing the work the "•" bullet used to do alone.
     let active=match &snap.route{Route::Root(t)=>Some(*t),_=>None};
     let mut row=Flex::row().spacing(6.0);
-    for (tab,name) in [(Tab::Home,"Home"),(Tab::Explore,"Explore"),(Tab::Create,"Create"),(Tab::Activity,"Activity"),(Tab::Profile,"Profile")]{let h=handle.clone();let label=if active==Some(tab){format!("• {name}")}else{name.into()};row=row.push(Flexible::expanded(1).child(Button::new(label).on_pressed(move||{if let Some(h)=&h{h.write(|s|s.tab(tab))}})));}
-    Container::new().padding(EdgeInsets::all(10.0)).child(row).into()
+    for (tab,name) in [(Tab::Home,"Home"),(Tab::Explore,"Explore"),(Tab::Create,"Create"),(Tab::Activity,"Activity"),(Tab::Profile,"Profile")]{
+        let h=handle.clone();
+        let is_active=active==Some(tab);
+        let mut b=Button::new(name).on_pressed(move||{if let Some(h)=&h{h.write(|s|s.tab(tab))}});
+        b=if is_active{b.style(ButtonStyle::Filled)}else{b.style(ButtonStyle::Text)};
+        row=row.push(Flexible::expanded(1).child(b));
+    }
+    Container::new()
+        .color(theme.colors.surface_variant)
+        .border(Border::thin(theme.colors.outline))
+        .padding(EdgeInsets::symmetric(10.0,6.0))
+        .child(row).into()
 }
 
 fn main()->Result<(),Box<dyn std::error::Error>>{
     let report=App::new().title("3 — social 3D").size(Size::new(480.0,860.0)).theme(ThemeData::dark()).run(|driver|driver.set_root(WidgetNode::new(SocialScreen)))?;
     println!("{report}"); Ok(())
+}
+
+// ── the receipts ─────────────────────────────────────────────────────────────
+//
+// The five screens of the app's story, rendered through the native
+// rasteriser with no display and no window — the same tree `App::run` shows,
+// mounted in the same harness the viewer's own `previews.rs` uses. Run on
+// demand (ignored by default because it writes files):
+//
+// ```text
+// cargo test -p three-social-app -- --ignored --nocapture
+// ```
+#[cfg(test)]
+mod receipts {
+    use super::*;
+    use std::time::Duration;
+    use vieww_test_harness::TestHarness;
+    use vieww_test_harness::visual;
+
+    const WINDOW: Size = Size { width: 480.0, height: 860.0 };
+    const OUT_DIR: &str = "target/screens";
+
+    fn mounted_app() -> TestHarness {
+        let mut harness = TestHarness::new(WINDOW);
+        harness.mount(Theme::new(ThemeData::dark()).child(WidgetNode::new(SocialScreen)));
+        harness
+    }
+
+    /// Walk the social state the way a tap would, then let a frame happen.
+    fn select(harness: &mut TestHarness, tab: Tab) {
+        let cell = {
+            let driver = harness.driver();
+            let tree = driver.elements();
+            let root = tree
+                .iter()
+                .into_iter()
+                .find(|element| element.debug_name() == "SocialScreen")
+                .expect("the root screen is mounted");
+            root.state().expect("the screen owns a social state").clone()
+        };
+        let mut state = cell.borrow_mut();
+        let social = state
+            .as_any_mut()
+            .downcast_mut::<SocialState>()
+            .expect("the screen's state is the social state");
+        social.tab(tab);
+        drop(state);
+        harness.request_frame();
+    }
+
+    fn save(harness: &mut TestHarness, name: &str) {
+        let frame = visual::render(harness.driver(), WINDOW, Color::WHITE);
+        std::fs::create_dir_all(OUT_DIR).expect("create the screens directory");
+        let path = std::path::Path::new(OUT_DIR).join(name);
+        frame.write_png(&path).expect("write the screen");
+        println!("wrote {}", path.display());
+    }
+
+    #[test]
+    #[ignore = "writes PNG files; run with -- --ignored --nocapture"]
+    fn render_the_app_screens() {
+        // 1. Home: the moment card, feed live, capture playing.
+        let mut harness = mounted_app();
+        harness.tick(Duration::from_millis(400));
+        save(&mut harness, "1-home.png");
+
+        // 2-5. One screen per tab, each settled a beat.
+        for (tab, name) in [
+            (Tab::Explore, "2-explore.png"),
+            (Tab::Create, "3-create.png"),
+            (Tab::Activity, "4-activity.png"),
+            (Tab::Profile, "5-profile.png"),
+        ] {
+            select(&mut harness, tab);
+            harness.tick(Duration::from_millis(120));
+            save(&mut harness, name);
+        }
+    }
 }

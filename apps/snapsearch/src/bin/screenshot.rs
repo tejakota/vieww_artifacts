@@ -1,11 +1,12 @@
-//! Renders SnapSearch through `vieww`'s CPU backend — no display, no GPU,
-//! no window — so the UI can be checked from a picture in an environment
-//! with neither a screen nor a graphics adapter. Same pattern as the
-//! framework's own `examples/screenshot`.
+//! Renders SnapSearch through `vieww`'s native rasteriser — no display, no
+//! window — so the UI can be checked from a picture in an environment with
+//! neither a screen nor a graphics adapter. Same pattern as the framework's
+//! own `examples/screenshot`: `NativeRenderer` needs no adapter at all, it is
+//! the same code a window presents through, run here with no window.
 //!
 //! ```console
-//! cargo run --bin screenshot --features cpu            # writes ./shots/*.png
-//! cargo run --bin screenshot --features cpu -- /tmp/out
+//! cargo run --bin screenshot --features native        # writes ./shots/*.png
+//! cargo run --bin screenshot --features native -- /tmp/out
 //! ```
 
 use std::cell::RefCell;
@@ -14,7 +15,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use vieww::foundation::{Color, Size};
-use vieww::paint::cpu::CpuRenderer;
+use vieww::paint::native::NativeRenderer;
 use vieww::render::FrameDriver;
 
 use snapsearch::state::SearchMode;
@@ -30,7 +31,7 @@ fn main() {
     std::fs::create_dir_all(&out).expect("creating the output directory");
 
     let mut driver = FrameDriver::new(Size::new(W, H));
-    let mut renderer = CpuRenderer::new();
+    let mut renderer = NativeRenderer::new();
 
     // `draw_frame()` (no args) always ticks at `Duration::ZERO` — it's a
     // single-instant convenience for tests, not a running clock. Every
@@ -167,10 +168,10 @@ fn main() {
     println!("wrote {}", out.display());
 }
 
-fn write(renderer: &mut CpuRenderer, driver: &mut FrameDriver, out: &std::path::Path, name: &str) {
+fn write(renderer: &mut NativeRenderer, driver: &mut FrameDriver, out: &std::path::Path, name: &str) {
     let (png, report) = renderer
         .render_to_png(driver.scene(), W as u32, H as u32, Color::rgb(0x12, 0x10, 0x20))
-        .expect("rasterising through the CPU backend");
+        .expect("rasterising through the native backend");
     let path = out.join(name);
     std::fs::write(&path, png).expect("writing the PNG");
     println!(

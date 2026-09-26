@@ -22,18 +22,20 @@ vavlt-codecs = { path = "crates/codecs" }
 vavlt-engine = { path = "crates/engine" }
 vavlt-app = { path = "crates/app" }
 
-# The UI framework. A sibling checkout rather than a vendored copy: vieww is its
-# own repository with its own workspace, CI and release cadence, and a copy in
-# here would be a fork nobody meant to make. Swap the path for
-#   { git = "https://github.com/teja/vieww", tag = "..." }
-# the day vieww tags a release; nothing else in this file changes.
+# The UI framework, by path at the in-repo checkout — the migrated vieww
+# (vello is gone; `vieww_paint::native::NativeRenderer` is the one renderer,
+# CPU-rasterised and presented through vieww-hal's Vulkan swapchain — see
+# vieww_base/docs/RENDERER-MIGRATION.md).
 #
-# `gpu` is enabled here rather than per-host because both hosts put frames on a
-# screen and the screenshot harness needs the same backend — a feature unified
-# across the workspace is one build of vello, not three.
-# vieww = { path = "../vieww/crates/vieww", features = ["gpu"] }
-vieww = { path = "../vieww/crates/vieww" }
-vieww-platform-winit = { path = "../vieww/crates/vieww-platform-winit" }
+# `native` is enabled here rather than per-host because both hosts put frames
+# on a screen and the screenshot harness needs the same backend — and because
+# the old `cpu`/`gpu` pair collapsed into it when vello left the tree. A
+# feature unified across the workspace is one build of the rasteriser, not
+# three.
+vieww = { path = "../../vieww_base/crates/vieww", features = ["native"] }
+vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
+# The effects crate the framework's frosted glass lives in — same checkout.
+vieww-effects = { path = "../../vieww_base/crates/vieww-effects" }
 
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
@@ -53,14 +55,12 @@ log = "0.4"
 opt-level = 3
 lto = "thin"
 
-# The UI is judged by eye, and a debug `vello` is roughly twenty times slower
-# than a release one — motion inspected in a debug build is a report on
-# `rustc -O0`. So dependencies are optimised even in a debug build of the app,
-# which keeps the app's own compile times short without making motion a lie.
+# The UI is judged by eye, and a debug rasteriser is roughly an order of
+# magnitude slower than a release one — motion inspected in a debug build is a
+# report on `rustc -O0`. So dependencies are optimised even in a debug build of
+# the app, which keeps the app's own compile times short without making motion
+# a lie.
 [profile.dev.package."*"]
 opt-level = 2
 
 
-
-[patch.crates-io]
-winit = { path = "../vieww/vendor/winit" }

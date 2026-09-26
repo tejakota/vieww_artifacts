@@ -12,8 +12,6 @@
 //! shown, scaled: something immediately, sharpened a moment later, rather
 //! than a spinner over an empty screen.
 
-use std::rc::Rc;
-
 use vieww::prelude::*;
 
 use crate::photo::Photo;
@@ -59,14 +57,30 @@ impl Widget for DetailView {
 
         let stage = Transformed::translate(Offset::new(0.0, rise)).child(
             Padding::new(EdgeInsets::symmetric(theme.metrics.gap * 2.0, 0.0)).child(
-                Clip::new(ClipShape::RRect {
-                    radius: tokens.tile_curve,
-                })
-                .child(
-                    Container::new()
-                        .color(theme.colors.surface_variant)
-                        .child(Image::new(shown).fit(BoxFit::Contain).label(self.photo.label.clone())),
-                ),
+                // The lift rides *outside* the clip: a shadow drawn inside
+                // its own `Clip` is clipped to the very corner it is meant
+                // to soften, and a shadow on a square box would not follow
+                // the rounded corner at all. Same shape as the sheet and
+                // the FAB — the one photograph on screen, over the deepest
+                // scrim in the app, should read as floating, not pasted.
+                Container::new()
+                    .color(theme.colors.surface_variant)
+                    .radius(tokens.tile_curve)
+                    .shadow(Shadow::new(
+                        Color::rgba(0, 0, 0, 0x99),
+                        Offset::new(0.0, 18.0),
+                        44.0,
+                    ))
+                    .child(
+                        Clip::new(ClipShape::RRect {
+                            radius: tokens.tile_curve,
+                        })
+                        .child(
+                            Container::new()
+                                .color(theme.colors.surface_variant)
+                                .child(Image::new(shown).fit(BoxFit::Contain).label(self.photo.label.clone())),
+                        ),
+                    ),
             ),
         );
 
@@ -133,7 +147,6 @@ impl Widget for DetailView {
                                         .child(
                                             Align::new(Alignment::CENTER).child(close_button(
                                                 &self.state,
-                                                &theme
                                             ))
                                         ),
                                     ]),
@@ -146,11 +159,19 @@ impl Widget for DetailView {
     }
 }
 
-fn close_button(state: &AppState, theme: &Rc<ThemeData>) -> WidgetNode {
+fn close_button(state: &AppState) -> WidgetNode {
     let close = state.clone();
+    // Filled rather than a text button, and no `theme` parameter: `Button`
+    // reads the ambient `ThemeData` in its own build, so the one thing a
+    // parameter could have added — a colour — was already decided by the
+    // `Theme` at this tree's root. Filled because this is the one control
+    // sitting directly on the photo-black scrim, where a text button's
+    // low-contrast label washes out — and it is the viewer's primary exit,
+    // which is what the filled style is *for*.
     Flex::row()
         .main_axis_size(MainAxisSize::Min)
         .children(children![Button::new("Done")
+            .style(ButtonStyle::Filled)
             .on_pressed(move || close.close_detail())])
         .into()
 }

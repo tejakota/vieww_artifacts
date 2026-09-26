@@ -8,10 +8,10 @@
 //! cargo apk run --release
 //! ```
 //!
-//! **Run it in release.** A debug `vello` is roughly an order of magnitude
-//! slower, and a frame-rate impression from one is an impression of
-//! `rustc -O0` rather than of this app. vieww's own README says the same thing
-//! about its examples, for the same reason.
+//! **Run it in release.** A debug build of the native rasteriser is roughly an
+//! order of magnitude slower, and a frame-rate impression from one is an
+//! impression of `rustc -O0` rather than of this app. vieww's own README says
+//! the same thing about its examples, for the same reason.
 //!
 //! # What this file is responsible for
 //!

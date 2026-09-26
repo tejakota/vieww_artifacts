@@ -136,18 +136,23 @@ pub fn tier_control(
                     })
                     .collect();
 
-                // The channel. vieww has no inset shadow, so the recess is a
-                // gradient on the track itself — dark at the top, clearing by a
-                // third — which is what an inner shadow would have drawn anyway.
+                // The channel, recessed for real. The framework grew an
+                // inset shadow (`Shadow::inset`, honouring the corner radius
+                // and darkening relative to what is behind it), which is what
+                // this track wanted all along: the old stand-in was a gradient
+                // on the fill — dark at the top, clearing by a third — which
+                // approximated the look but did not follow the radius and sat
+                // *on* the colour rather than darkening *into* it.
                 let track = theme.colors.btn;
                 Container::new()
                     .height(HEIGHT)
                     .radius(HEIGHT / 2.0)
-                    .gradient(Gradient::vertical().with_stops(&[
-                        (0.0, Color::rgba(0, 0, 0, 56).over(track)),
-                        (0.34, track),
-                        (1.0, track),
-                    ]))
+                    .shadow(Shadow::inset(
+                        Color::rgba(0, 0, 0, 56),
+                        Offset::new(0.0, 3.0),
+                        6.0,
+                    ))
+                    .color(track)
                     .border(Border::new(theme.colors.line_strong, 1.0))
                     .child(Stack::new().children(children![thumb, Flex::row().children(cells),]))
                     .into()

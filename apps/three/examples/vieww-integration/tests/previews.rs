@@ -6,8 +6,12 @@
 //!
 //! Ignored by default because it writes files; the regular test suite never
 //! touches the disk beyond `target/`. The same headless path the viewer
-//! tests use — real element tree, real frame loop, the CPU rasterizer — so
-//! what lands in the PNG is what the window shows.
+//! tests use — real element tree, real frame loop, the native rasteriser —
+//! so what lands in the PNG is what the window shows.
+//!
+//! `render_the_moment_loop` additionally writes the GIF's source frames: the
+//! 3-second capture playing through the real frame loop at capture rate, the
+//! way the feed shows it — not a reproduction, the render itself.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -87,4 +91,24 @@ fn render_the_reference_previews() {
     });
     harness.tick(Duration::from_millis(50));
     save(&mut harness, "viewer-wireframe.png");
+}
+
+#[test]
+#[ignore = "writes PNG files; run with -- --ignored --nocapture"]
+fn render_the_moment_loop() {
+    // The receipt GIF's frames: 30 at 100ms — the 3-second demo capture
+    // playing once through at capture rate, driven by the same `tick` clock
+    // the harness runs everything else on. Every frame is a real render of
+    // the real tree: the sine mesh rippling, the 32 motes drifting, the
+    // camera orbiting as `demo_capture`'s orbit track moves it.
+    let mut harness = mounted_viewer();
+    let dir = std::path::Path::new("target/moment");
+    std::fs::create_dir_all(dir).expect("create the moment directory");
+    for frame in 0..30 {
+        harness.tick(Duration::from_millis(100));
+        let image = visual::render(harness.driver(), WINDOW, Color::WHITE);
+        let path = dir.join(format!("moment-{:02}.png", frame));
+        image.write_png(&path).expect("write the moment frame");
+    }
+    println!("wrote {} moment frames", 30);
 }

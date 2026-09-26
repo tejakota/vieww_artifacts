@@ -1,9 +1,17 @@
 app=3 (three)
 what=temporal 3D capture, .3 format, social product built on vieww
-moment=demo capture reproduced from crates/three-runtime spec: 9x9 sine mesh,
-      32 deterministic motes (LCG seed 0x3D5C1A7F), camera orbit radius 2.6 y 1.4
-render=perspective projection + flat shading + depth sorting (three-vieww's job)
-screens=5 app screens, 414x896, captured at 2x
+migrated=old vello vieww-develop checkout -> in-repo vieww_base (native
+        rasteriser, vieww-hal Vulkan swapchain); workspace deps repointed
+enriched=the moment card: one raised surface carrying author, caption,
+        capture and actions (was four siblings on the page background);
+        viewer chamber lifted (shadow outside the clip); Play is the filled
+        primary, view-mode toggles secondary; navbar on its own raised
+        surface, active tab filled; simple screens get an accent rule
+screens=5 real app screens rendered headlessly by the receipts test in
+        examples/social-app (TestHarness + vieww_paint::native), 480x860
+moment=the gif's 30 frames are 30 real renders: the 3s demo capture played
+        through the actual frame loop at capture rate (previews.rs,
+        render_the_moment_loop) — not a reproduction
 sheet=sheet.png,1812x1009,5 screens
-frames=30 at 10fps — the 3s moment looping in the feed, as the viewer does
-gif=anim.gif,414,896,10fps,587973
+frames=30 at 10fps — the moment looping, as the viewer plays it
+gif=anim.gif,480,860,10fps,832605

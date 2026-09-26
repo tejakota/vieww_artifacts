@@ -29,6 +29,7 @@ use vieww_widget::prelude::*;
 use vieww_widget::{widget_node_from, Handler};
 
 use crate::photos::Photo;
+use crate::theme;
 
 use super::photo_tile::PickerCell;
 
@@ -139,7 +140,16 @@ impl Widget for PickerDialog {
                         .decoration(
                             BoxDecoration::new()
                                 .color(theme_data.colors.surface_variant)
-                                .radius(corner),
+                                .radius(corner)
+                                // One elevation language across every floating
+                                // surface: the Render button carries the
+                                // accent-tinted lift, the cards this neutral
+                                // one. Over a frosted scrim the shadow is what
+                                // keeps the card reading as *above* the blur —
+                                // without it the frosted glass flattens
+                                // everything behind it onto one plane, dialog
+                                // included.
+                                .shadow(theme::CARD_SHADOW),
                         )
                         .margin(EdgeInsets::symmetric(gap * 2.0, 0.0))
                         .child(Clip::rounded(corner).child(card)),

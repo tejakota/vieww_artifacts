@@ -1,6 +1,6 @@
 # upxcale
 
-Upscale photographs. A [`vieww`](../vieww) application.
+Upscale photographs. A [`vieww`](../../vieww_base) application.
 
 Built from the HTML prototype in `upscale_app/prototype/`, module for module,
 so the two can be read side by side.
@@ -10,23 +10,27 @@ so the two can be read side by side.
 cargo run --release
 
 # every screen state to a PNG, no window and no GPU
-cargo run --example shots --features cpu --release -- shots/
+cargo run --example shots --features native --release -- shots/
 
 # the tests
 cargo test
 ```
 
-**Run it in release.** A debug `vello` is roughly an order of magnitude slower,
-and an impression of the frame rate from one is an impression of `rustc -O0`.
+**Run it in release.** A debug build of the native rasteriser is roughly an
+order of magnitude slower, and an impression of the frame rate from one is an
+impression of `rustc -O0`.
 
 ## Layout
 
-`upxcale/` expects `vieww/` beside it — the dependencies are path deps:
+`upxcale/` builds against the in-repo framework checkout at
+`../../vieww_base/` — the dependencies are path deps:
 
 ```
-parent/
-├── vieww/      ← the framework
-└── upxcale/    ← this app
+repo/
+├── vieww_base/    ← the framework (vello is gone: vieww_paint::native is
+│                    the one renderer, CPU-rasterised, presented through
+│                    vieww-hal's Vulkan swapchain)
+└── apps/upxcale/  ← this app
 ```
 
 It is its own workspace, not a member of vieww's, so building it can never
@@ -118,11 +122,14 @@ running in the browser. It is O(n) per build, which is right at a dozen
 photographs and would not be at ten thousand; the fix at that size is to
 virtualise, not to pack more cleverly.
 
-**The blur behind a popup is gone.** vieww has no `BackdropFilter` — that is a
-compositor feature, and faking it means rendering the body to an offscreen
-layer, blurring it, and compositing it back, every frame a popup is up, against
-a 16.67ms budget. `backdrop.rs` uses a deeper scrim instead. If vieww grows a
-real backdrop filter, that is the one file that changes.
+**The blur behind a popup is real now.** The old vieww had no `BackdropFilter`
+— that is a compositor feature, and faking it meant rendering the body to an
+offscreen layer, blurring it, and compositing it back, every frame a popup was
+up. The migrated framework ships one: `vieww-effects`' `BackdropBlur` samples
+the real destination pixels beneath the widget, blurs and tints *that* copy,
+and only then paints the dialog on top — genuine frosted glass. `backdrop.rs`
+uses it for the picker's scrim, which is the one file that changed when the
+framework grew the feature.
 
 **The progress bar tells the truth.** The prototype's was a `setInterval`
 adding a random amount. Here the worker reports each stage it finishes — two
@@ -165,9 +172,9 @@ screen takes `&[Photo]` rather than reaching for the constant.
 The app was built and verified on a machine with no display, so:
 
 - **Every screen state renders** — `examples/shots.rs` drives the real tree
-  through all five and rasterises them through vieww's CPU backend, which
-  produces the same `Scene` the GPU one does.
-- **20 tests pass**, covering the resampler's properties, the PNG round trip,
+  through all five and rasterises them through `vieww_paint::native`, the same
+  rasteriser a window presents through.
+- **21 tests pass**, covering the resampler's properties, the PNG round trip,
   the icon geometry, and the whole screen flow from first open through render
   to comparison.
 - **`cargo clippy --all-targets` is clean.**

@@ -232,49 +232,81 @@ pub fn billboard(
 }
 
 /// The band with nothing in it: outlined slots, three of them lit.
+///
+/// # The tiles fit the wall, not the other way round
+///
+/// `billboard`'s ghost case gives the wall "whatever the copy leaves", and the
+/// copy's height is a function of the framework's text metrics — which changed
+/// under the migrated vieww (line heights are a few points taller across the
+/// scale). Fixed 66-point tiles stopped fitting: the rows column overflowed
+/// the shrunken wall by 63px and the last row clipped mid-tile. So the row
+/// height is *derived* from the constraints the wall actually got — full-size
+/// (66) when there is room, proportionally smaller when the copy is taller,
+/// floored at 24 so a two-line headline degrades the wall's density rather
+/// than its shape. The radius follows the height, so a short tile is a short
+/// capsule rather than a clipped one.
 fn ghost_tiles(theme: &VavltTheme) -> WidgetNode {
     let colors = theme.colors;
-    let rows: Vec<WidgetNode> = (0..3)
-        .map(|row| {
-            let cells: Vec<WidgetNode> = (0..5)
-                .map(|col| {
-                    let index = row * 5 + col;
-                    let lit = matches!(index, 0 | 7 | 11);
-                    Flexible::expanded(1)
-                        .child(
-                            Container::new()
-                                .height(66.0)
-                                .radius(22.0)
-                                .color(if lit {
-                                    colors.accent_tint
-                                } else {
-                                    Color::rgba(0, 0, 0, 0)
-                                })
-                                .border(Border::new(
-                                    if lit {
-                                        colors.accent_bg
-                                    } else {
-                                        colors.line_strong
-                                    },
-                                    1.5,
-                                )),
-                        )
-                        .into()
+    // Below the top bar, so the first row is not half under a chevron; four
+    // points clear of the bottom edge so the tiles' last row never rides the
+    // seam where the wall ends and the copy begins (and never loses a rounding
+    // pixel to it — `empty_billboard`'s overlap assertion measures exactly
+    // that seam).
+    Padding::new(EdgeInsets::only(20.0, 78.0, 20.0, 4.0)).child(
+        LayoutBuilder::new(move |constraints: Constraints| {
+            const GAP: f32 = 7.0;
+            const FULL: f32 = 66.0;
+            const FLOOR: f32 = 24.0;
+            let available = if constraints.has_bounded_height() {
+                constraints.max_height - 78.0 - 4.0
+            } else {
+                // Unbounded (a tree dump, a unit test): draw the design's
+                // own numbers rather than deriving nonsense from infinity.
+                3.0 * FULL + 2.0 * GAP
+            };
+            let tile = (((available - 2.0 * GAP) / 3.0).floor()).clamp(FLOOR, FULL);
+            let radius = (22.0 * (tile / FULL)).clamp(6.0, 22.0);
+
+            let rows: Vec<WidgetNode> = (0..3)
+                .map(|row| {
+                    let cells: Vec<WidgetNode> = (0..5)
+                        .map(|col| {
+                            let index = row * 5 + col;
+                            let lit = matches!(index, 0 | 7 | 11);
+                            Flexible::expanded(1)
+                                .child(
+                                    Container::new()
+                                        .height(tile)
+                                        .radius(radius)
+                                        .color(if lit {
+                                            colors.accent_tint
+                                        } else {
+                                            Color::rgba(0, 0, 0, 0)
+                                        })
+                                        .border(Border::new(
+                                            if lit {
+                                                colors.accent_bg
+                                            } else {
+                                                colors.line_strong
+                                            },
+                                            1.5,
+                                        )),
+                                )
+                                .into()
+                        })
+                        .collect();
+                    Flex::row().spacing(GAP).children(cells).into()
                 })
                 .collect();
-            Flex::row().spacing(7.0).children(cells).into()
-        })
-        .collect();
 
-    // Below the top bar, so the first row is not half under a chevron.
-    Padding::new(EdgeInsets::only(20.0, 78.0, 20.0, 0.0))
-        .child(
             Flex::column()
                 .main_axis_size(MainAxisSize::Min)
-                .spacing(7.0)
-                .children(rows),
-        )
-        .into()
+                .spacing(GAP)
+                .children(rows)
+                .into()
+        }),
+    )
+    .into()
 }
 
 /// The label above a billboard figure. Uppercase, tracked wide, dim.

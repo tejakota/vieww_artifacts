@@ -15,9 +15,17 @@
 //! rather than restating eleven hex values means the app follows the framework
 //! if those conventions are ever corrected.
 
-use vieww_foundation::Color;
-use vieww_foundation::TargetPlatform;
+use vieww_foundation::{Color, Offset, Shadow, TargetPlatform};
 use vieww_widget::{ColorScheme, Metrics, Motion, ThemeData, Typography};
+
+/// The platform the controls draw the shapes of, resolved at compile time the
+/// same way `ThemeData::from_colors` does — so the same binary looks native on
+/// the machine it runs on. (`with_platform` is the deterministic override a
+/// test would use; the desktop harness here wants the host's answer.)
+#[must_use]
+pub const fn host_platform() -> TargetPlatform {
+    TargetPlatform::current()
+}
 
 /// The dark scheme the app ships in.
 ///
@@ -44,6 +52,7 @@ pub fn theme() -> ThemeData {
         text: Typography::scale(colors.on_surface),
         metrics: Metrics::apple(),
         motion: Motion::standard(),
+        platform: host_platform(),
     }
 }
 
@@ -61,6 +70,7 @@ pub fn adaptive(platform: TargetPlatform) -> ThemeData {
         text: Typography::scale(colors.on_surface),
         metrics: Metrics::adaptive(platform),
         motion: Motion::adaptive(platform),
+        platform,
     }
 }
 
@@ -74,11 +84,49 @@ pub fn adaptive(platform: TargetPlatform) -> ThemeData {
 
 /// The barrier behind the picker. Shallower than the others: the grid stays
 /// legible through it, which is the point of blurring rather than hiding.
+///
+/// With the frosted backdrop now blurring for real, this is the *unblurred*
+/// spelling — the depth the barrier alone paints when nothing frosts it.
 pub const SCRIM_PICKER: Color = Color::rgba(0, 0, 0, 115);
+
+/// The wash the picker's frosted route carries. Shallower than
+/// [`SCRIM_PICKER`] because the blur beneath it is doing half the
+/// pushing-back — stacked at full depth on top of a blur, the grid the user
+/// is about to pick from would stop reading entirely, which is the opposite
+/// of what `backdrop-blur.css` asked for.
+pub const SCRIM_PICKER_BLURRED: Color = Color::rgba(0, 0, 0, 66);
+
+/// The picker's backdrop-blur sigma. 22 is the top of the phone-dialog range
+/// — deep enough that the grid reads as *behind glass* rather than merely
+/// dimmed, shallow enough that photo colours still come through as colours,
+/// which is what the user is choosing between.
+pub const PICKER_BLUR: f32 = 22.0;
 
 /// The barrier behind the progress card. Deeper — nothing behind it is
 /// actionable while a render is in flight.
 pub const SCRIM_PROGRESS: Color = Color::rgba(0, 0, 0, 158);
+
+/// The shadow every floating card casts — the picker and the progress card,
+/// the same one deliberately. Neutral rather than accent-tinted (the Render
+/// button's [`RENDER_SHADOW`] owns the tint) because a card is a surface, not
+/// an action, and its lift should not announce itself in colour. The offset
+/// and blur are the “mid dialog” step of the elevation scale: far enough that
+/// the card reads as floating, shallow enough that it does not halo.
+pub const CARD_SHADOW: Shadow = Shadow::new(
+    Color::rgba(0, 0, 0, 140),
+    Offset::new(0.0, 16.0),
+    40.0,
+);
+
+/// The shadow the **Render** button casts — the one accent-tinted shadow in
+/// the app, because the one primary action is the one thing allowed to glow
+/// in its own colour. Lifts it off a grid of photographs, where a neutral
+/// shadow disappears against a dark tile.
+pub const RENDER_SHADOW: Shadow = Shadow::new(
+    Color::rgba(10, 132, 255, 107),
+    Offset::new(0.0, 8.0),
+    24.0,
+);
 
 /// The barrier behind the compare sheet. Deepest, so the two images are the
 /// only things on screen with any luminance.

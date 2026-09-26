@@ -2660,6 +2660,7 @@ dependencies = [
  "vieww",
  "vieww-integration",
  "vieww-platform-winit",
+ "vieww-test-harness",
 ]
 
 [[package]]
@@ -2962,6 +2963,7 @@ name = "vieww-paint"
 version = "0.1.0"
 dependencies = [
  "png 0.17.16",
+ "skrifa 0.40.0",
  "ttf-parser",
  "vieww-foundation",
 ]
