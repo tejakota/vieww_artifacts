@@ -1,0 +1,15 @@
+frames=20
+shapes=18102
+glyph_runs=120
+layers=79
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=1.217
+build_worst_ms=3.820
+render_mean_ms=25.140
+render_worst_ms=33.610
+probe=RASTER PEAK 1: β = 41.0° (luminance profile of the final frame)
+probe=RASTER PEAK 2: β = 52.2° — the secondary, dimmer and wider
+probe=DESCARTES: primary β* red 42.28° … violet 40.20° · secondary red 50.53° … violet 54.28°
+probe=Alexander's dark band: 42.3°–54.3°, the gap between the bows, in the same profile
+gif=anim.gif,640x360,12fps,60578
