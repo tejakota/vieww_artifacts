@@ -10,7 +10,7 @@ Produced by autonomous sessions (2026-09-24/25) running the create → render �
 | `renders/<name>/` | `anim.gif` (palette-optimised motion loop, the third artifact) + `sheet.png` (4×4 contact sheet, 16 frames) + `metrics.txt` (with its measured `gif=` line) — the three-artifact receipt set for each experiment |
 | `tools/` | `make_gifs.sh` — batch (re)generation of the `anim.gif` set from any rendered frame dir; the same house recipe the harness itself runs (`film_lib::anim_gif`) |
 | `premium-test/` | Pipeline verification: test-premium-ui through FrameDriver, 56 frames, 55/55 moving, 0 overflows (GIF + first/last frame + metrics) |
-| `renders/<name>/frame_*.png` | **Every rendered frame, in-tree** (round 10: the four frame-part archives were extracted into the tree itself — no compressed artifacts remain; the lab is its own reviewable whole). Standing policy (round 7) unchanged in spirit: `longplay`'s 256 near-identical night frames ride decimated to stride 4 (the full set is byte-reproducible from source; the endurance evidence is the series in its metrics.txt) |
+| frame storage | **Frames are not stored in-tree** (round-10 close-out: the 1,494 `frame_*.png` — 1.4 GB — were removed to keep the repository lean; the per-plate reviewable set is the `sheet.png` contact sheet + the `anim.gif` motion loop + the `metrics.txt` receipts, and every frame remains byte-reproducible from `source/` via the deterministic FrameDriver). Any frame dir can be regenerated on demand: `cargo run --release -- <name>` then `tools/make_gifs.sh` for the loops |
 | `worklog.md` | Full session log: receipts, VLM audit verdicts, the bisection ladders, the alpha() incident, the Rect-edges incident, the U-22 census catch |
 
 ## The experiments
