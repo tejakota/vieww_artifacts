@@ -185,7 +185,12 @@ pub fn plan(theme: &VavltTheme, state: &Rc<VavltState>, scroll: &ScrollControlle
     let action = ui::action_bar(
         theme,
         children![
-            ui::button(
+            // The deep tier's button carries the warning glyph as well as the
+            // destructive colour: colour alone is a channel not every eye
+            // gets, and "Deep Move" without a mark is a label, not a caution.
+            // The Move tier stays glyph-free — its button is a suggestion,
+            // and suggestions do not warn.
+            ui::button_with(
                 theme,
                 if included == 0 {
                     "Nothing selected".to_string()
@@ -194,6 +199,7 @@ pub fn plan(theme: &VavltTheme, state: &Rc<VavltState>, scroll: &ScrollControlle
                 } else {
                     format!("Move {included} photos")
                 },
+                deep.then(ui::icons::warn),
                 if deep {
                     ui::ButtonKind::Destructive
                 } else {

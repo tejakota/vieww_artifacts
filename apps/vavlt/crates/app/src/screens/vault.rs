@@ -161,23 +161,44 @@ pub fn vault(theme: &VavltTheme, state: &Rc<VavltState>, scroll: &ScrollControll
     ui::bleed_body(theme, scroll, body)
 }
 
-/// An icon and a paragraph, aligned at the cap height rather than the box.
+/// An assurance: a glyph in a tinted disc, and the paragraph beside it.
+///
+/// The first pass was a dim icon and a caption — a footnote. But these two
+/// paragraphs are the app's *pitch* (no permissions, no network; nothing
+/// written without consent), and the audit's verdict on the landing screen was
+/// "reads as a legal document". A card with a coloured disc says "a promise"
+/// before a word is read, which is what these are.
 pub fn note(theme: &VavltTheme, icon: IconData, text: &str) -> WidgetNode {
     Padding::new(EdgeInsets::only(
         theme.metrics.gutter,
-        20.0,
+        12.0,
         theme.metrics.gutter,
         0.0,
     ))
     .child(
-        Flex::row()
-            .cross_axis_alignment(CrossAxisAlignment::Start)
-            .spacing(12.0)
-            .children(children![
-                Padding::new(EdgeInsets::only(0.0, 1.0, 0.0, 0.0))
-                    .child(Icon::new(icon).size(19.0).color(theme.colors.dim)),
-                Flexible::expanded(1).child(ui::caption(theme, text.to_string())),
-            ]),
+        Container::new()
+            .color(theme.colors.card)
+            .radius(12.0)
+            .padding(EdgeInsets::all(14.0))
+            .child(
+                Flex::row()
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .spacing(12.0)
+                    .children(children![
+                        // The disc: the accent tint under the accent ink, the
+                        // same pairing the tier control and the meter use — so
+                        // "a thing vavlt guarantees" has one look everywhere.
+                        Container::new()
+                            .size(34.0, 34.0)
+                            .radius(f32::MAX)
+                            .color(theme.colors.accent_tint)
+                            .alignment(Alignment::CENTER)
+                            .child(
+                                Icon::new(icon).size(17.0).color(theme.colors.accent_txt),
+                            ),
+                        Flexible::expanded(1).child(ui::caption(theme, text.to_string())),
+                    ]),
+            ),
     )
     .into()
 }

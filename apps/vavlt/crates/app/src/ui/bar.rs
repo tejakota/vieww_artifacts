@@ -95,10 +95,17 @@ pub fn tab_bar(
         .map(|tab| {
             let tab = *tab;
             let selected = tab == current;
+            // `fg_2` for the resting tabs, not `dim`: the audit's one-line
+            // verdict was "the bottom navigation icons are barely visible",
+            // and it was right — `dim` is the caption ink, and an icon row
+            // drawn in caption ink reads as a footnote rather than as the
+            // app's primary navigation. The selected tab keeps the accent
+            // text colour; the step between the two is what says where you
+            // are, and it is now a step you can see.
             let tint = if selected {
                 theme.colors.accent_txt
             } else {
-                theme.colors.dim
+                theme.colors.fg_2
             };
             let pick = on_selected.clone();
 

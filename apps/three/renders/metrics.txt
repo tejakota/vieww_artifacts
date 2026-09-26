@@ -2,16 +2,23 @@ app=3 (three)
 what=temporal 3D capture, .3 format, social product built on vieww
 migrated=old vello vieww-develop checkout -> in-repo vieww_base (native
         rasteriser, vieww-hal Vulkan swapchain); workspace deps repointed
-enriched=the moment card: one raised surface carrying author, caption,
-        capture and actions (was four siblings on the page background);
-        viewer chamber lifted (shadow outside the clip); Play is the filled
-        primary, view-mode toggles secondary; navbar on its own raised
-        surface, active tab filled; simple screens get an accent rule
-screens=5 real app screens rendered headlessly by the receipts test in
-        examples/social-app (TestHarness + vieww_paint::native), 480x860
+enriched=round 2 — the real-screens pass: the four stub tabs are gone.
+        Explore is a live search field over the backend's own
+        `search_profiles` answer, each person a card with a
+        handle-hashed gradient avatar and a Follow button wired through the
+        product state (the button says what it does: Follow / Following).
+        Create is the pipeline as a numbered timeline — six stages, the
+        capture stage live-lit while a capture is in flight. Activity is
+        the backend's own notification feed: the seed leaves a real trail
+        (maya liked and followed, noah liked, commented, followed — every
+        act through `set_active_user` the way a multi-user server would),
+        each row carrying its glyph (heart / comment bubble / person) and
+        an unread dot. Profile is a gradient-ringed avatar, the bio, a
+        stats bar, and the moments as cards with their counts. New vector
+        glyphs on the framework's 24x24 grid: heart, person, magnifier,
+        comment bubble, and the .3 cube in three-quarter view.
 moment=the gif's 30 frames are 30 real renders: the 3s demo capture played
         through the actual frame loop at capture rate (previews.rs,
         render_the_moment_loop) — not a reproduction
-sheet=sheet.png,1812x1009,5 screens
-frames=30 at 10fps — the moment looping, as the viewer plays it
-gif=anim.gif,480,860,10fps,832605
+sheet=sheet.png,1790x761,5 screens
+gif=anim.gif,480,820,10fps,450189

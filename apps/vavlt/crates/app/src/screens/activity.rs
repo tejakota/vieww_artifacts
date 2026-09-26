@@ -37,7 +37,11 @@ pub fn activity(
     }
 
     let m = theme.metrics;
-    let mut body: Vec<WidgetNode> = rows.iter().map(|row| entry(theme, row)).collect();
+    let mut body: Vec<WidgetNode> = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| entry(theme, row, index))
+        .collect();
 
     body.push(ui::gap(m.sp_1));
 
@@ -60,7 +64,7 @@ pub fn activity(
     ui::screen_body(theme, scroll, body)
 }
 
-fn entry(theme: &VavltTheme, row: &AuditRow) -> WidgetNode {
+fn entry(theme: &VavltTheme, row: &AuditRow, index: usize) -> WidgetNode {
     let m = theme.metrics;
     let rule = match row.kind {
         AuditKind::Fail => theme.colors.destructive_bg,
@@ -116,7 +120,7 @@ fn entry(theme: &VavltTheme, row: &AuditRow) -> WidgetNode {
     // version laid out a 3x0 rectangle and drew nothing at all. Anchoring top
     // *and* bottom in a stack sized by its content is the arrangement that
     // actually takes the entry's height.
-    Stack::new()
+    let stack = Stack::new()
         .children(children![
             content,
             Positioned::new()
@@ -125,6 +129,27 @@ fn entry(theme: &VavltTheme, row: &AuditRow) -> WidgetNode {
                 .bottom(m.sp_1)
                 .width(3.0)
                 .child(Container::new().color(rule).radius(2.0)),
-        ])
-        .into()
+        ]);
+
+    // Zebra striping: the audit's verdict on this screen was "hard to scan —
+    // the timestamps and tags run together", and a hash-chained log is the
+    // one screen where the eye needs to walk rows without losing its place.
+    // Even rows sit on `card`, odd rows on the bare window — a full surface
+    // step rather than a wash, because the washes this theme carries land
+    // within a couple of points of `card` in dark and are invisible in light
+    // (where card and view are both white). The rule rides inside the plate,
+    // clear of its corner.
+    let plate = if index % 2 == 0 {
+        theme.colors.card
+    } else {
+        Color::rgba(0, 0, 0, 0)
+    };
+    Padding::new(EdgeInsets::only(m.sp_1, 0.0, 0.0, 0.0)).child(
+        Container::new()
+            .color(plate)
+            .radius(10.0)
+            .padding(EdgeInsets::only(m.sp_1, m.sp_1, m.sp_1, m.sp_1 + 2.0))
+            .child(stack),
+    )
+    .into()
 }

@@ -13,6 +13,7 @@ use vieww::prelude::*;
 use vieww::widget::Handler;
 
 use crate::photo::{self, Photo};
+use crate::theme::FluidTokens;
 
 pub const COLUMN_COUNT: usize = 2;
 pub const TILE_BASE: f32 = 208.0;
@@ -243,6 +244,12 @@ fn tile(
             let mut layers = vec![Positioned::fill().child(picture).into()];
 
             if let Some(score) = score {
+                // The relevance badge as the fluid ramp itself: gradient pill,
+                // sparkle glyph, score — the result grid's one mark of “how
+                // well this matched”, wearing the same ramp the search began
+                // from. A dark plate said “an overlay”; the ramp says “this
+                // came out of the search”.
+                //
                 // Deliberately a *sibling* of the clip rather than a child of
                 // it. Inside the `Clip` the badge's pill painted but its
                 // glyphs did not — the known CPU-backend glyph placement bug
@@ -256,14 +263,34 @@ fn tile(
                         .bottom(10.0)
                         .child(
                             Container::new()
-                                .color(Color::rgba(8, 6, 16, 0xdd))
+                                .gradient(FluidTokens::new().fluid_gradient())
                                 .radius(f32::MAX)
                                 .padding(EdgeInsets::symmetric(11.0, 5.0))
+                                .shadow(Shadow {
+                                    color: Color::rgba(0x7c, 0x3a, 0xed, 0x8c),
+                                    offset: Offset::new(0.0, 4.0),
+                                    blur: 14.0,
+                                    spread: 0.0,
+                                    is_inset: false,
+                                })
                                 .child(
-                                    Text::new(format!("{}%", (score * 100.0).round() as i32))
-                                        .color(Color::WHITE)
-                                        .size(theme_for_build.text.label.size)
-                                        .bold(),
+                                    Flex::row()
+                                        .main_axis_size(MainAxisSize::Min)
+                                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                                        .spacing(5.0)
+                                        .children(children![
+                                            Icon::new(crate::widgets::icons::sparkle())
+                                                .size(11.0)
+                                                .color(Color::WHITE)
+                                                .label("match"),
+                                            Text::new(format!(
+                                                "{}%",
+                                                (score * 100.0).round() as i32
+                                            ))
+                                            .color(Color::WHITE)
+                                            .size(theme_for_build.text.label.size)
+                                            .bold(),
+                                        ]),
                                 ),
                         )
                         .into(),

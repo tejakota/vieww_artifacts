@@ -396,6 +396,45 @@ pub fn restore() -> IconData {
     ])
 }
 
+/// A warning triangle with an exclamation — the mark the irreversible
+/// action carries, so the danger is seen before the colour is.
+///
+/// Solid rather than outlined: this glyph sits alone beside a word, where an
+/// outline triangle at 19 points reads as a play button.
+#[must_use]
+pub fn warn() -> IconData {
+    let mut path = Path::default();
+    // The triangle, blunt-nosed so the point is not a single hot pixel.
+    path.move_to(Offset::new(12.0, 3.4));
+    path.line_to(Offset::new(20.6, 18.6));
+    path.cubic_to(
+        Offset::new(19.4, 20.6),
+        Offset::new(18.0, 21.0),
+        Offset::new(16.6, 21.0),
+    );
+    path.line_to(Offset::new(7.4, 21.0));
+    path.cubic_to(
+        Offset::new(6.0, 21.0),
+        Offset::new(4.6, 20.6),
+        Offset::new(3.4, 18.6),
+    );
+    path.close();
+
+    // The exclamation, punched out of the fill by winding the hole against it.
+    let mut hole = Path::default();
+    // The bar: a rounded quadrilateral, slightly tapered toward the top.
+    hole.move_to(Offset::new(10.9, 8.2));
+    hole.line_to(Offset::new(13.1, 8.2));
+    hole.line_to(Offset::new(12.7, 14.2));
+    hole.line_to(Offset::new(11.3, 14.2));
+    hole.close();
+    // The dot.
+    hole.extend(&arc(12.0, 17.2, 1.35, 0.0, TAU));
+    path.extend(&hole.reversed());
+
+    IconData::square24(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -6,17 +6,23 @@ migrated=old vello ../vieww checkout -> in-repo vieww_base (native rasteriser;
         so the screenshot suite runs everywhere instead of skipping without
         an adapter; android's three backend features collapsed to one no-op
         `backend-native`
-enriched=Glass buttons are real frosted glass now (vieww-effects BackdropBlur
-        under the translucent fill — "Stop" and the photo actions soften the
-        mosaic scrolling beneath them); the tier control's channel is a real
-        inset shadow (Shadow::inset follows the radius, darkens into the
-        track); framework theme carries Motion::standard and the host
-        platform's control shapes; the ghost wall's tiles derive their height
-        from the space the copy leaves (the new text metrics made the fixed
-        66-point rows overflow)
+enriched=round 2 — the legibility pass: the bottom tab bar's resting icons
+        moved from caption-ink `dim` to `fg_2` (the audit's verdict was
+        "barely visible", and it was right — a primary navigation drawn in
+        footnote ink reads as a footnote). The activity log is zebra-striped:
+        even entries on `card`, odd entries on the bare window — a full
+        surface step, because the theme's washes land within two points of
+        card in dark and are invisible in light (card and view are both
+        white there). The vault's two privacy notes are assurance cards now:
+        accent-tinted disc + accent ink glyph + the paragraph, instead of a
+        dim icon and a caption — they are the app's pitch, and the landing
+        screen read as a legal document. The deep tier's commit button
+        carries a new warning-triangle glyph (wound against its fill so the
+        exclamation is a hole) beside the destructive colour — colour alone
+        is a channel not every eye gets.
 screens=8 of the 40 the screenshot suite renders (phone dark; the suite does
         phone+desktop, dark+light) — 412x915, real app, no display
-sheet=sheet.png,1264x1544,8 screens, two rows
-frames=105 timeline at 10fps (1.1s hold + 0.4s crossfade per screen, seamless
-      loop; 7 screens)
-gif=anim.gif,412,915,10fps,1867258
+sheet=sheet.png,1290x1528,8 screens, two rows
+frames=120 timeline at 10fps (1.1s hold + 0.4s crossfade per screen, seamless
+      loop; 8 screens)
+gif=anim.gif,412,915,10fps,2512394
