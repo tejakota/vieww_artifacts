@@ -108,6 +108,20 @@
 //! - `kaleido` — the symmetry axis: D12, the mirror measured from the raster
 //! - `ink` — the diffusion axis: one drop becomes a nebula, then dilutes
 
+//! Round 10 — the closing round: twelve machines of emergence and signature:
+//! - `sandpile` — the criticality axis II: BTW, avalanches as a power law
+//! - `percolation` — the connectivity axis: p_c, the spanning transition
+//! - `ant` — the emergence axis: Langton's ant, chaos → highway
+//! - `dla` — the growth axis: the aggregate, D by mass-radius
+//! - `lorenz` — the attractor axis: the butterfly, lambda fitted
+//! - `doublepend` — the chaos axis II: the arm, energy receipt + basins
+//! - `penrose` — the aperiodicity axis II: the pentagrid, phi counted
+//! - `dragon` — the space-filling axis: D=2 measured from the raster
+//! - `gw` — the spacetime axis: the chirp of 2015, 11/3 measured
+//! - `foucault` — the rotation axis: 270.7 deg/day at the Pantheon
+//! - `rainbow` — the deviation axis: Descartes' 42.4 deg, ray-counted
+//! - `sorting` — the algorithm axis: six sorts, ops counted from replay
+
 mod exp_aurora;
 mod exp_beams;
 mod exp_circuit;
@@ -128,6 +142,18 @@ mod exp_scrub;
 mod exp_shatter;
 mod exp_spring;
 mod exp_wordmark;
+mod exp_ant;
+mod exp_doublepend;
+mod exp_dla;
+mod exp_dragon;
+mod exp_foucault;
+mod exp_gw;
+mod exp_lorenz;
+mod exp_penrose;
+mod exp_percolation;
+mod exp_rainbow;
+mod exp_sandpile;
+mod exp_sorting;
 mod exp_ghosts;
 mod exp_settle;
 mod exp_dolly;
@@ -301,6 +327,40 @@ fn registry() -> Vec<Experiment> {
         Experiment::plain("truss", exp_truss::SECONDS, 20, exp_truss::frame),
         Experiment::plain("cellauto", exp_cellauto::SECONDS, 20, exp_cellauto::frame),
         Experiment::plain("collider", exp_collider::SECONDS, 20, exp_collider::frame),
+        // ── Round 10: the closing round — machines of emergence & signature ──
+        Experiment::plain("gw", exp_gw::SECONDS, 20, exp_gw::frame),
+        Experiment::plain("sandpile", exp_sandpile::SECONDS, 20, exp_sandpile::frame),
+        Experiment::plain("percolation", exp_percolation::SECONDS, 24, exp_percolation::frame),
+        Experiment::plain("ant", exp_ant::SECONDS, 24, exp_ant::frame),
+        Experiment::plain("dla", exp_dla::SECONDS, 24, exp_dla::frame),
+        Experiment::plain("lorenz", exp_lorenz::SECONDS, 24, exp_lorenz::frame),
+        Experiment::plain("doublepend", exp_doublepend::SECONDS, 24, exp_doublepend::frame),
+        Experiment {
+            name: "penrose",
+            seconds: exp_penrose::SECONDS,
+            frames: 24,
+            build: exp_penrose::frame,
+            probe: Some(exp_penrose::probe),
+            frame_hook: None,
+        },
+        Experiment {
+            name: "dragon",
+            seconds: exp_dragon::SECONDS,
+            frames: 24,
+            build: exp_dragon::frame,
+            probe: Some(exp_dragon::probe),
+            frame_hook: None,
+        },
+        Experiment::plain("foucault", exp_foucault::SECONDS, 24, exp_foucault::frame),
+        Experiment {
+            name: "rainbow",
+            seconds: exp_rainbow::SECONDS,
+            frames: 20,
+            build: exp_rainbow::frame,
+            probe: Some(exp_rainbow::probe),
+            frame_hook: None,
+        },
+        Experiment::plain("sorting", exp_sorting::SECONDS, 24, exp_sorting::frame),
     ]
 }
 

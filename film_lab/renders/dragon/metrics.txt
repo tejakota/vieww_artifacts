@@ -1,0 +1,17 @@
+frames=24
+shapes=5220
+glyph_runs=144
+layers=46
+filtered_layers=0
+open_subpath_fills=0
+build_mean_ms=0.962
+build_worst_ms=3.548
+render_mean_ms=40.411
+render_worst_ms=59.189
+probe=box-count ε=64px: N = 48
+probe=box-count ε=32px: N = 157
+probe=box-count ε=16px: N = 541
+probe=box-count ε=8px: N = 1853
+probe=box-count ε=4px: N = 6311
+probe=BOX-COUNTING DIMENSION: D = 1.764 (the law's limit: 2 — a curve with area)
+gif=anim.gif,640x360,12fps,134880
