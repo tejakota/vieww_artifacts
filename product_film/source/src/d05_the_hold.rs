@@ -7,7 +7,7 @@
 //! with, still blinking, still ready. The loop is the invitation:
 //! *your thought is the next one.*
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Gradient, Rect, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{

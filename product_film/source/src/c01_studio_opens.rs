@@ -14,7 +14,6 @@
 //! for one beat before dissolving into the chrome.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{ACCENT, Ctx, INK, SYN_TYPE, W, caption, chip_row, clamp01, studio_chrome, tint};
@@ -79,8 +78,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             ("the real editor", SYN_TYPE),
             ("the real preview", ACCENT),
         ],
-        W - 640.0,
-        936.0,
+        // The editor's empty lower band — see `receipt_row`. Pinned
+        // right, these rows rendered straight through the preview
+        // pane's description paragraph in every studio scene.
+        360.0,
+        924.0,
         clamp01((sec - 1.4) / 0.5),
     ));
 

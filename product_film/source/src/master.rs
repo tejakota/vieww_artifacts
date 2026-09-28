@@ -45,7 +45,7 @@
 //! frame a function of the checkout. The manifest names its bench.
 
 use std::io::Write as IoWrite;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command as ProcCommand, Stdio};
 use std::time::Duration;
 
@@ -60,8 +60,17 @@ use super::script;
 use super::{scenes, total_frames, Ctx, Kind, Probe, SceneDef, FPS, H, W};
 
 /// Where the film's artifacts live while being built.
+///
+/// `PRODUCT_FILM_OUT` overrides it. The default was an absolute path into
+/// one machine's home directory, which made the review loop
+/// (`film_lab pf:<scene>`) unrunnable on any other checkout — the previews
+/// were written somewhere that did not exist and the command failed before
+/// it drew a frame. The env var is the portable door; the default stays so
+/// the bench that rendered the master keeps rendering it to the same place.
 pub fn work_root() -> PathBuf {
-    PathBuf::from("/home/z/my-project/download/product_film")
+    std::env::var_os("PRODUCT_FILM_OUT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/home/z/my-project/download/product_film"))
 }
 
 fn manifest_path() -> PathBuf {
@@ -319,6 +328,14 @@ fn calibrate() -> Result<(), Box<dyn std::error::Error>> {
 /// once), and the script cursor.
 struct Rig {
     driver: FrameDriver,
+    /// A second driver, for the film's own chrome.
+    ///
+    /// The chrome cannot share the scene driver. Swapping that driver's
+    /// root to draw the captions makes it repaint its background over the
+    /// whole canvas, and appending *that* over the world buried the studio
+    /// under a full-frame fill — the app came out at a third of its real
+    /// luminance. A driver per space keeps each one's background its own.
+    chrome_driver: FrameDriver,
     studio: Option<Studio>,
     cursor: usize,
     /// The background the current frame's scene asked for.
@@ -329,8 +346,11 @@ impl Rig {
     fn new() -> Rig {
         let mut driver = FrameDriver::new(Size::new(W, H));
         driver.set_fonts(super::fonts());
+        let mut chrome_driver = FrameDriver::new(Size::new(W, H));
+        chrome_driver.set_fonts(super::fonts());
         Rig {
             driver,
+            chrome_driver,
             studio: None,
             cursor: 0,
             background: super::GROUND,
@@ -349,6 +369,43 @@ impl Rig {
     /// Build one frame of scene `s` at in-scene frame `i`: apply the
     /// script, mount (or keep) the studio, set the root, draw.
     fn build_frame<'a>(&mut self, s: &SceneDef, start_abs: f32, i: usize, probe: &'a Probe) -> Ctx<'a> {
+        self.build_frame_shot(s, start_abs, i, probe, 1.0)
+    }
+
+    /// [`build_frame`](Self::build_frame), with the cut's luminance ramp
+    /// applied.
+    ///
+    /// `alpha` rides two things at once. It fades the scene's own tree,
+    /// and it blends the **background** toward the film's ground — which
+    /// is the half that matters at the studio boundaries. The studio
+    /// clears to `StudioTheme::dark().window` and the graphics acts clear
+    /// to `GROUND`, so a hard cut between them moves mean frame luminance
+    /// by twenty-two levels in a single frame no matter what the trees do.
+    /// Ramping the clear colour with the tree turns that step into a
+    /// third-of-a-second slope, and the two halves of the film start
+    /// looking like one exposure.
+    fn build_frame_shot<'a>(
+        &mut self,
+        s: &SceneDef,
+        start_abs: f32,
+        i: usize,
+        probe: &'a Probe,
+        alpha: f32,
+    ) -> Ctx<'a> {
+        self.build_frame_cam(s, start_abs, i, probe, alpha, super::Cam::STILL)
+    }
+
+    /// [`build_frame_shot`](Self::build_frame_shot), told where the camera
+    /// is — so a scene can place things in depth against the move.
+    fn build_frame_cam<'a>(
+        &mut self,
+        s: &SceneDef,
+        start_abs: f32,
+        i: usize,
+        probe: &'a Probe,
+        alpha: f32,
+        cam: super::Cam,
+    ) -> Ctx<'a> {
         let n = s.frames();
         let sec = i as f32 / FPS;
         let t = (sec / s.seconds).min(1.0);
@@ -359,29 +416,84 @@ impl Rig {
             abs,
             ladder: super::ladder_at(abs),
             probe,
+            cam,
         };
 
         // The script only exists in the studio act; applying it before
         // the studio exists would mount the app early — so only apply
         // while a scene is a studio scene (or the studio is already
         // mounted and actions are still pending).
+        let a = alpha.clamp(0.0, 1.0);
+        let ramping = a < 0.999;
+        // Anything the previous frame registered and never drained.
+        super::clear_chrome();
         match s.kind {
             Kind::Studio => {
                 let _ = self.studio();
                 script::apply_up_to(&mut self.driver, self.studio.as_ref().unwrap(), abs, &mut self.cursor);
                 let overlay: WidgetNode = (s.build)(&ctx);
-                let root = script::shell_root(self.studio.as_ref().unwrap(), overlay);
-                self.background = viewwstudio::StudioTheme::dark().window;
+                let mut root = script::shell_root(self.studio.as_ref().unwrap(), overlay);
+                if ramping {
+                    root = vieww_widget::Opacity::new(a).child(root).into();
+                }
+                let win = viewwstudio::StudioTheme::dark().window;
+                self.background = if ramping {
+                    crate::film_lib::mix(super::GROUND, win, a)
+                } else {
+                    win
+                };
                 self.driver.set_root(root);
             }
             Kind::Pure => {
-                let tree: WidgetNode = (s.build)(&ctx);
+                let mut tree: WidgetNode = (s.build)(&ctx);
+                if ramping {
+                    tree = vieww_widget::Opacity::new(a).child(tree).into();
+                }
                 self.background = super::GROUND;
                 self.driver.set_root(tree);
             }
         }
         self.driver.draw_frame_at(Duration::from_secs_f64(abs as f64));
         ctx
+    }
+
+    /// Build a frame and split it into its two spaces: the world the
+    /// camera looks at, and the screen-space chrome composited over it.
+    ///
+    /// Two layout passes, one raster. The chrome tree is a handful of
+    /// text runs and a pill, so laying it out separately costs almost
+    /// nothing next to the frame it rides on — and it is the only way the
+    /// captions can stay put while the picture moves.
+    fn build_split<'a>(
+        &mut self,
+        s: &SceneDef,
+        start_abs: f32,
+        i: usize,
+        probe: &'a Probe,
+        index: usize,
+    ) -> (Ctx<'a>, vieww_paint::Scene, super::Shot) {
+        // The shot is a function of the clock alone, so it is known
+        // before the tree exists — which means one build pass, and a
+        // scene that can read the camera it is being seen through.
+        let sec = i as f32 / FPS;
+        let t = (sec / s.seconds).min(1.0);
+        let sh = super::shot(s.id, index, s.seconds, t, sec);
+        let alpha = sh.alpha;
+        super::clear_chrome();
+        let ctx = self.build_frame_cam(s, start_abs, i, probe, alpha, sh.cam);
+        let world = self.driver.scene().clone();
+        let chrome_tree = super::take_chrome();
+        let abs = start_abs + i as f32 / FPS;
+        let a = alpha.clamp(0.0, 1.0);
+        let root: WidgetNode = if a < 0.999 {
+            vieww_widget::Opacity::new(a).child(chrome_tree).into()
+        } else {
+            chrome_tree
+        };
+        self.chrome_driver.set_root(root);
+        self.chrome_driver
+            .draw_frame_at(Duration::from_secs_f64(abs as f64));
+        (ctx, world, sh)
     }
 }
 
@@ -424,12 +536,84 @@ fn raster(
     driver: &FrameDriver,
     background: vieww_foundation::Color,
 ) -> Result<(vieww_paint::native::Pixels, SceneReport), vieww_paint::native::RendererError> {
+    raster_through(renderer, driver, background, super::Cam::STILL)
+}
+
+/// [`raster`], through a camera.
+///
+/// The camera rides the same seam `SCALE_FACTOR` does and for the same
+/// reason: the frame is already a command list, so moving it is a
+/// coordinate change on that list rather than a second paint pass.
+/// `Scene::append` is documented for exactly this — lifting a recording
+/// into another space without replaying paint — and it composes with
+/// `Scene::scaled`, so a 4K master and a 1080p master remain the *same
+/// film*, camera included.
+///
+/// Order matters: the camera is a **logical** move (it is authored in
+/// 1920×1080 points, like the layout and the script's taps), so it applies
+/// first and the device scale applies to the result. Doing it the other
+/// way would make the camera's framing depend on the raster resolution.
+///
+/// A still camera costs nothing — the command list is handed to the
+/// renderer untouched, which is what the whole studio act does.
+fn raster_through(
+    renderer: &mut NativeRenderer,
+    driver: &FrameDriver,
+    background: vieww_foundation::Color,
+    cam: super::Cam,
+) -> Result<(vieww_paint::native::Pixels, SceneReport), vieww_paint::native::RendererError> {
+    let s = scale_factor();
+    let (rw, rh) = raster_size();
+    let scale_is_one = (s - 1.0).abs() < f32::EPSILON;
+
+    match (cam.is_still(), scale_is_one) {
+        (true, true) => renderer.render_to_pixels(driver.scene(), rw, rh, background),
+        (true, false) => {
+            let scaled = driver.scene().scaled(s);
+            renderer.render_to_pixels(&scaled, rw, rh, background)
+        }
+        (false, true) => {
+            let moved = through_camera(driver.scene(), cam);
+            renderer.render_to_pixels(&moved, rw, rh, background)
+        }
+        (false, false) => {
+            let moved = through_camera(driver.scene(), cam);
+            let scaled = moved.scaled(s);
+            renderer.render_to_pixels(&scaled, rw, rh, background)
+        }
+    }
+}
+
+/// Lift a frame's command list through the camera's transform.
+fn through_camera(scene: &vieww_paint::Scene, cam: super::Cam) -> vieww_paint::Scene {
+    let mut moved = vieww_paint::Scene::default();
+    moved.append(scene, cam.transform());
+    moved
+}
+
+/// Raster the two spaces as one frame: the world through the camera, the
+/// film's own chrome over the top of it, untouched.
+///
+/// Both are already command lists, so composing them is two `append`s and
+/// a single raster — the chrome does not cost a second pass over the
+/// pixels, only a second (very small) layout.
+fn raster_split(
+    renderer: &mut NativeRenderer,
+    world: &vieww_paint::Scene,
+    chrome: &vieww_paint::Scene,
+    background: vieww_foundation::Color,
+    cam: super::Cam,
+) -> Result<(vieww_paint::native::Pixels, SceneReport), vieww_paint::native::RendererError> {
+    let mut frame = vieww_paint::Scene::default();
+    frame.append(world, cam.transform());
+    frame.append(chrome, vieww_foundation::Transform::IDENTITY);
+
     let s = scale_factor();
     let (rw, rh) = raster_size();
     if (s - 1.0).abs() < f32::EPSILON {
-        renderer.render_to_pixels(driver.scene(), rw, rh, background)
+        renderer.render_to_pixels(&frame, rw, rh, background)
     } else {
-        let scaled = driver.scene().scaled(s);
+        let scaled = frame.scaled(s);
         renderer.render_to_pixels(&scaled, rw, rh, background)
     }
 }
@@ -466,8 +650,72 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
     let t0 = std::time::Instant::now();
     let mut counted_frames = 0usize;
 
+    // ── Resume — the census counts 18,000 frames, and a bench that can
+    // only run in bounded windows would otherwise lose the whole pass at
+    // the window's edge. The checkpoint carries the *completed* scenes'
+    // counts and samples, written once per scene boundary; an interrupted
+    // scene restarts from its first frame with nothing of its own in the
+    // state, so no partial counts or duplicate samples can survive a
+    // resume. The same discipline the master's segment+sheet resume uses,
+    // applied to pass 1.
+    let state_path = root.join("census_state.txt");
+    let mut start_scene = 0usize;
+    if let Some(state) = std::fs::read_to_string(&state_path).ok() {
+        for line in state.lines() {
+            let Some((k, v)) = line.split_once('=') else { continue };
+            let v = v.trim();
+            match k.trim() {
+                "next_scene" => start_scene = v.parse().unwrap_or(0),
+                "counted_frames" => counted_frames = v.parse().unwrap_or(0),
+                "shapes" => probe.shapes = v.parse().unwrap_or(0),
+                "glyph_runs" => probe.glyph_runs = v.parse().unwrap_or(0),
+                "glyphs" => probe.glyphs = v.parse().unwrap_or(0),
+                "layers" => probe.layers = v.parse().unwrap_or(0),
+                "filtered_layers" => probe.filtered = v.parse().unwrap_or(0),
+                "strokes" => probe.strokes = v.parse().unwrap_or(0),
+                "shadows" => probe.shadows = v.parse().unwrap_or(0),
+                "frame_ms_samples" => {
+                    frame_ms_samples =
+                        v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
+                }
+                "alive_samples" => {
+                    alive_samples =
+                        v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
+                }
+                _ => {}
+            }
+        }
+        if start_scene > 0 {
+            println!(
+                "census resume — {} scenes already counted · {} frames · continuing at scene {}",
+                start_scene, counted_frames, start_scene + 1
+            );
+        }
+    }
+
     for (si, s) in all.iter().enumerate() {
+        if si < start_scene {
+            continue;
+        }
         let start_abs: f32 = all.iter().take(si).map(|x| x.seconds).sum();
+
+        // A resume into the middle of the studio act: the session is one
+        // continuous rig across C01–C09, so a fresh rig joining mid-act
+        // replays the script from the film's start to this scene's start
+        // (no raster — the actions are cheap, the compiles are cached) —
+        // the same replay the master's own resume performs.
+        if start_scene > 0 && si == start_scene && s.kind == Kind::Studio && rig.studio.is_none() {
+            println!("  resuming into the studio act at {} — replaying the session", s.id);
+            let _ = rig.studio();
+            script::apply_up_to(
+                &mut rig.driver,
+                rig.studio.as_ref().unwrap(),
+                start_abs,
+                &mut rig.cursor,
+            );
+            rig.driver.draw_frame_at(Duration::from_secs_f64(start_abs as f64));
+        }
+
         let n = s.frames();
         let sample_every = (n / 12).max(1);
         for i in 0..n {
@@ -478,20 +726,30 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
             let sample = alive_window || (i % sample_every == 0);
 
             if sample {
+                // The census measures the frame the master will ship —
+                // camera, chrome split and all — so the frame-time
+                // receipt on the end card stays true to what was rendered.
                 let t_start = std::time::Instant::now();
-                let _ctx = rig.build_frame(s, start_abs, i, &empty_probe);
-                let (pixels, _report) = raster(&mut renderer, &rig.driver, rig.background)?;
+                let (ctx, world, sh) = rig.build_split(s, start_abs, i, &empty_probe, si);
+                let (pixels, _report) =
+                    raster_split(&mut renderer, &world, rig.chrome_driver.scene(), rig.background, sh.cam)?;
                 let took = t_start.elapsed().as_secs_f64() * 1000.0;
                 frame_ms_samples.push(took);
                 if alive_window {
                     alive_samples.push(took);
                 }
                 let _ = pixels;
-                count_scene_commands(rig.driver.scene().commands(), &mut probe);
+                // Both spaces. The frame is the world *and* the chrome
+                // over it, so counting only `driver.scene()` — which
+                // after the split holds the chrome alone — would report a
+                // film made of captions.
+                count_scene_commands(world.commands(), &mut probe);
+                count_scene_commands(rig.chrome_driver.scene().commands(), &mut probe);
                 counted_frames += 1;
             } else {
-                let _ctx = rig.build_frame(s, start_abs, i, &empty_probe);
-                count_scene_commands(rig.driver.scene().commands(), &mut probe);
+                let (_ctx, world, _sh) = rig.build_split(s, start_abs, i, &empty_probe, si);
+                count_scene_commands(world.commands(), &mut probe);
+                count_scene_commands(rig.chrome_driver.scene().commands(), &mut probe);
                 counted_frames += 1;
             }
         }
@@ -502,6 +760,30 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
             n,
             t0.elapsed().as_secs_f32()
         );
+
+        // The checkpoint — this scene's counts are now final, so a run
+        // that ends here resumes at the next scene with exactly what a
+        // continuous pass would have had. `{:?}`/`{}` on f64 is the
+        // shortest round-trip form, so the samples survive the save/load
+        // byte-exact.
+        let fmt_samples = |v: &[f64]| {
+            v.iter().map(|x| format!("{x}")).collect::<Vec<_>>().join(",")
+        };
+        let state = format!(
+            "next_scene={}\ncounted_frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nframe_ms_samples={}\nalive_samples={}\n",
+            si + 1,
+            counted_frames,
+            probe.shapes,
+            probe.glyph_runs,
+            probe.glyphs,
+            probe.layers,
+            probe.filtered,
+            probe.strokes,
+            probe.shadows,
+            fmt_samples(&frame_ms_samples),
+            fmt_samples(&alive_samples),
+        );
+        std::fs::write(&state_path, state)?;
     }
 
     // The medians — measured, never picked.
@@ -534,6 +816,9 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
         probe.bench,
     );
     std::fs::write(manifest_path(), body)?;
+    // The census is complete — the checkpoint has no further use, and a
+    // stale one would make a fresh census skip scenes it should recount.
+    let _ = std::fs::remove_file(&state_path);
     println!(
         "\ncensus complete — {} frames counted · {} raster samples · median {:.2} ms",
         counted_frames,
@@ -650,8 +935,17 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         let mut stdin = ffmpeg.stdin.take().ok_or("no ffmpeg stdin")?;
 
         for i in 0..n {
-            let _ctx = rig.build_frame(s, start_abs, i, &probe);
-            let (pixels, _report) = raster(&mut renderer, &rig.driver, rig.background)?;
+            // Two passes over the frame: once to learn where the shot is
+            // (the ctx the scene needs), then once more with the cut's
+            // ramp applied, because the ramp changes the clear colour and
+            // the clear colour is decided while the tree is built.
+            // Two passes over the frame: once to learn where the shot is,
+            // then once more with the cut's ramp applied, because the ramp
+            // changes the clear colour and the clear colour is decided
+            // while the tree is built.
+            let (_ctx, world, sh) = rig.build_split(s, start_abs, i, &probe, si);
+            let (pixels, _report) =
+                raster_split(&mut renderer, &world, rig.chrome_driver.scene(), rig.background, sh.cam)?;
             stdin.write_all(pixels.data())?;
 
             // The sheet frames — sixteen strided, parked only for the tile.
@@ -762,8 +1056,9 @@ fn preview_scene(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         // Sixteen evenly spaced beats, including the hold at the end.
         let i = (k as f32 / (n - 1) as f32 * (found.frames() - 1) as f32).round() as usize;
         let t_render = std::time::Instant::now();
-        let _ctx = rig.build_frame(found, start_abs, i, &probe);
-        let (pixels, report) = raster(&mut renderer, &rig.driver, rig.background)?;
+        let (_ctx, world, sh) = rig.build_split(found, start_abs, i, &probe, si);
+        let (pixels, report) =
+            raster_split(&mut renderer, &world, rig.chrome_driver.scene(), rig.background, sh.cam)?;
         let ms = t_render.elapsed().as_secs_f64() * 1000.0;
         let img = image::RgbaImage::from_raw(rw, rh, pixels.data().to_vec())
             .ok_or("invalid frame")?;

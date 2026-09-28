@@ -11,7 +11,6 @@
 //! frame's real size, wrapped wrong nowhere.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{ACCENT, Ctx, LEDGER, MUTED, SYN_TYPE, W, alpha, caption, chip_row, clamp01, studio_chrome};
@@ -139,8 +138,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             ("a flex that overflows here, overflows there", LEDGER),
             ("a text that wraps here, wraps there", LEDGER),
         ],
-        W - 900.0,
-        936.0,
+        // The editor's empty lower band — see `receipt_row`. Pinned
+        // right, these rows rendered straight through the preview
+        // pane's description paragraph in every studio scene.
+        360.0,
+        924.0,
         clamp01((sec - 1.0) / 0.5),
     ));
 

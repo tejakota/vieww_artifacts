@@ -7,7 +7,7 @@ rasteriser, raw RGBA streamed into ffmpeg. Nothing was added in post;
 there is no audio, by construction.
 
 ```text
-product_film.mp4        the film (5:00 · 1080p60 · h264 · 19 MB · silent)
+product_film.mp4        the film (5:00 · 1080p60 · h264 · 30 MB · silent)
 sheets/                 one 4×4 contact sheet per scene (23 PNGs) — the audit surface
 manifest.txt            the film's own census: every number measured, none typed
 scale_4k_endcard.png    the 4K receipt — SCALE_FACTOR=2, glyph edges scan-converted
@@ -17,18 +17,25 @@ source/                 a copy of the film's source, for review
 
 ## The receipts (pass 1, the census — pass 2 quotes them)
 
+This master is the **camera/cuts/caret re-render**: the film's camera
+plan (movement III holds `Cam::STILL` by construction), decelerating
+entry / accelerating exit cut handles with a luminance ramp, the
+shaper-measured type-on caret, the top caption band, the screen-space
+chrome split, and the A04 device splay through `panel_3d` (2×2
+piecewise-affine, so the silhouette is the true perspective quad).
+
 ```text
 frames=18000            60 fps × 300 s, derived from the scene table
-shapes=4602478          fill + stroke commands across the whole film
-glyph_runs=1166944      DrawGlyphs commands
-glyphs=17505082         glyph instances placed
-layers=76850            (filtered_layers=46252 — the blur economy)
-strokes=578643          · shadows=83008
-alive_seconds=0.140     the measured edit→pixels latency through the real studio,
+shapes=4647195          fill + stroke commands across the whole film
+glyph_runs=1154403      DrawGlyphs commands
+glyphs=17499560         glyph instances placed
+layers=114991           (filtered_layers=46207 — the blur economy)
+strokes=590131          · shadows=82890
+alive_seconds=0.151     the measured edit→pixels latency through the real studio,
                         this bench (2-core container), at master resolution
-frame_ms=135.95         median sampled build+raster frame time at 1080p
+frame_ms=144.73         median sampled build+raster frame time at 1080p
 scale_factor=1          this master; the 4K receipt beside it ran at 2
-bench=linux · x86_64 · rust 1.98.1 · 4 embedded faces
+bench=linux · x86_64 · rust 1.98.1 · 6 embedded faces
 ```
 
 The ledger scene additionally quotes the repository's own certification

@@ -182,7 +182,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         .iter()
         .enumerate()
         {
-            stack = stack.push(
+            // Annotation, not world: the dive scales the study, and the
+            // film's reading of it has to stay put and stay legible.
+            stack = stack.push(super::chrome(
                 Positioned::new()
                     .left(280.0)
                     .top(300.0 + i as f32 * 34.0)
@@ -199,8 +201,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 )
                                 .align(TextAlign::Left),
                         ),
-                    ),
-            );
+                    )
+                    .into(),
+            ));
         }
     }
 

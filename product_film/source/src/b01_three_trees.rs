@@ -15,7 +15,7 @@ use vieww_widget::prelude::*;
 
 use super::{
     ACCENT, Ctx, ENGINE, MUTED, W, alpha, caption, clamp01, distance_chip, gap_line, glow, grain,
-    ground, pole_caret, pole_screen, progress_rail, spring_out, tint, vignette, xywh,
+    ground, pole_caret, pole_screen, progress_rail, spring_out, tint, vignette,
 };
 use crate::film_lib::{Rng, ease_out_cubic};
 

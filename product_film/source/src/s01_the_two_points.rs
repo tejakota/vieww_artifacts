@@ -14,9 +14,8 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, Ctx, GROUND, INK, MUTED, W, alpha, backdrop, caption, clamp01, distance_chip, dust,
-    gap_line, glow, grain, ground, gmono_w, pole_caret, pole_screen, progress_rail, vignette,
-    xywh,
+    ACCENT, Ctx, GROUND, INK, MUTED, W, alpha, caption, clamp01, distance_chip, dust,
+    gap_line, glow, grain, ground, pole_caret, pole_screen, progress_rail, vignette,
 };
 use crate::film_lib::ease_out_cubic;
 
@@ -99,47 +98,21 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 
     // The question — types itself between the poles, mid-scene.
     let type_p = clamp01((t - 0.34) / 0.34);
-    let typed_n = (QUESTION.chars().count() as f32 * ease_out_cubic(type_p)).round() as usize;
-    let shown: String = QUESTION.chars().take(typed_n).collect();
-    if typed_n > 0 {
-        let y = 620.0;
-        let x0 = W * 0.5 - gmono_w(26.0, QUESTION.chars().count()) * 0.5;
-        stack = stack.push(
-            Positioned::new()
-                .left(x0)
-                .top(y)
-                .width(gmono_w(26.0, QUESTION.chars().count()) + 30.0)
-                .height(40.0)
-                .child(
-                    Text::new(shown)
-                        .style(
-                            TextStyle::new(26.0)
-                                .monospace()
-                                .letter_spacing(1.6)
-                                .color(alpha(INK, 0.92)),
-                        )
-                        .align(TextAlign::Left),
-                ),
-        );
-        // The type-on caret.
-        let on = (sec * 2.6).fract() < 0.55;
-        let w = gmono_w(26.0, typed_n);
-        if on && type_p < 1.0 {
-            stack = stack.push(
-                Positioned::new()
-                    .left(x0 + w + 4.0)
-                    .top(y + 4.0)
-                    .width(13.0)
-                    .height(30.0)
-                    .child(Painting::sized(
-                        Size::new(13.0, 30.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(5.0, 0.0, 3.5, 28.0), 1.8, alpha(ACCENT, 0.95));
-                        }),
-                    )),
-            );
-        }
-    }
+    // One anchor, one tracked measurement — see `type_on`. The anchor here
+    // was already right; the drift was `gmono_w` ignoring the 1.6 tracking,
+    // so the caret fell a pixel and a half behind per character and was
+    // most of a word adrift by the end of the line.
+    stack = stack.push(super::type_on(
+        QUESTION,
+        super::TypeAt::CenteredOn((W * 0.5) as i32),
+        620.0,
+        TextStyle::new(26.0)
+            .monospace()
+            .letter_spacing(1.6)
+            .color(alpha(INK, 0.92)),
+        type_p,
+        sec,
+    ));
 
     // The captions — the question's framing.
     stack = stack.push(caption(

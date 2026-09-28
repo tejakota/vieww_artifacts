@@ -11,7 +11,6 @@
 //! The film marks the moment with a "still 1" receipt chip.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{ACCENT, Ctx, INK, LEDGER, MUTED, SYN_KEYWORD, W, alpha, caption, chip_row, clamp01, studio_chrome};
@@ -135,8 +134,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             ("remount: new screen", MUTED),
             ("count: still 1", LEDGER),
         ],
-        W - 640.0,
-        936.0,
+        // The editor's empty lower band — see `receipt_row`. Pinned
+        // right, these rows rendered straight through the preview
+        // pane's description paragraph in every studio scene.
+        360.0,
+        924.0,
         clamp01((ctx.sec - 1.0) / 0.5),
     ));
 
