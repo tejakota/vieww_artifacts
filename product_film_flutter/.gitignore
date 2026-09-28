@@ -1,0 +1,15 @@
+# Flutter build artifacts
+.dart_tool/
+.build/
+.packages
+.flutter-plugins*
+.pub-cache/
+.pub/
+build/
+.fvm/
+.idea/
+*.iml
+.vscode/
+
+# The renderer's output stays out of the tree except the committed film.
+film/*.seg.mp4
