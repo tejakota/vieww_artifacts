@@ -231,6 +231,7 @@ mod exp_slime;
 mod film_lib;
 mod keynote;
 mod keynote_v5;
+mod keynote_z;
 mod three_d;
 
 use film_lib::{anim_gif_strided, contact_sheet_strided, out_root, render_with, Experiment};
@@ -417,6 +418,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // its own preview spelling (`keynote_v5/master.rs`).
         if arg == "census5" || arg == "master5" || arg.starts_with("k5:") {
             return keynote_v5::master::run(&arg);
+        }
+        // The z release film — THE SPARK, the viewwstudio keynote's
+        // sixth build — same two passes, its own preview spelling
+        // (`keynote_z/master.rs`).
+        if arg == "censusz" || arg == "masterz" || arg == "kzcal" || arg.starts_with("kz:") {
+            return keynote_z::master::run(&arg);
         }
     }
     let filter = std::env::args().nth(1);

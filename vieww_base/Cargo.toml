@@ -135,6 +135,11 @@ keywords = ["ui", "gui", "framework", "mobile"]
 categories = ["gui", "rendering"]
 
 [workspace.dependencies]
+# The studio itself — the film (keynote_z) mounts the real app on its
+# own FrameDriver and drives it with a frame-indexed script; Tier B of
+# the keynote plan's honesty ladder, and viewwstudio's first in-repo
+# consumer outside its own examples.
+viewwstudio = { path = "apps/viewwstudio" }
 vieww = { path = "crates/vieww", version = "0.1.0" }
 vieww-foundation = { path = "crates/vieww-foundation", version = "0.1.0" }
 vieww-widget = { path = "crates/vieww-widget", version = "0.1.0" }

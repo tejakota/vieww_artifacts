@@ -1972,6 +1972,7 @@ dependencies = [
  "vieww-render",
  "vieww-text",
  "vieww-widget",
+ "viewwstudio",
 ]
 
 [[package]]

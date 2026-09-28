@@ -18,6 +18,9 @@ vieww-render.workspace = true
 vieww-widget.workspace = true
 vieww-effects.workspace = true
 vieww-text.workspace = true
+# THE SPARK (keynote_z) renders the *actual* viewwstudio — the real app
+# mounts on the film's own FrameDriver, driven by a frame-indexed script.
+viewwstudio.workspace = true
 
 [lints]
 workspace = true
