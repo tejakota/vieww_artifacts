@@ -232,6 +232,7 @@ mod film_lib;
 mod keynote;
 mod keynote_v5;
 mod keynote_z;
+mod product_film;
 mod three_d;
 
 use film_lib::{anim_gif_strided, contact_sheet_strided, out_root, render_with, Experiment};
@@ -424,6 +425,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // (`keynote_z/master.rs`).
         if arg == "censusz" || arg == "masterz" || arg == "kzcal" || arg.starts_with("kz:") {
             return keynote_z::master::run(&arg);
+        }
+        // The product film — THE DISTANCE, the viewwstudio product
+        // film — same two passes, its own preview spelling, the
+        // SCALE_FACTOR door, and the tap calibration probe
+        // (`product_film/master.rs`).
+        if arg == "censuspf" || arg == "masterpf" || arg == "pfcal" || arg.starts_with("pf:") {
+            return product_film::master::run(&arg);
         }
     }
     let filter = std::env::args().nth(1);
