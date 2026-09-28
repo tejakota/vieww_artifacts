@@ -9,6 +9,7 @@ Produced by autonomous sessions (2026-09-24/26) running the create → render �
 | `source/` | Complete Rust source: `film_lib.rs` (palette, RNG, clock, easing, `xywh()` rect helper, render harness + SceneReport receipts + the pixel-probe hook), `three_d.rs` (Vec3, perspective camera, mesh builder, painter's sort, gradient ramps), `main.rs` (selector), `exp_*.rs` (one file per experiment). Registered as a workspace crate — drop into `examples/` of the release tree. |
 | `renders/<name>/` | `anim.gif` (palette-optimised motion loop, the third artifact) + `sheet.png` (4×4 contact sheet, 16 frames) + `metrics.txt` (with its measured `gif=` line) — the three-artifact receipt set for each experiment |
 | `tools/` | `make_gifs.sh` — batch (re)generation of the `anim.gif` set from any rendered frame dir; the same house recipe the harness itself runs (`film_lib::anim_gif`) |
+| `keynote_v5/` | **The viewwstudio release film (v5)** — `keynote_v5.mp4` (1920×1080 · 60 fps · 3:39 · 13,140 frames, every one rendered by vieww's own rasterizer) + 22 per-scene contact sheets + the README's receipts table. Source: `vieww_base/examples/film_lab/src/keynote_v5/` (22 scenes, the studio kit, the two-pass harness). Per the storage policy only the MP4 and the sheets ship |
 | `premium-test/` | Pipeline verification: test-premium-ui through FrameDriver, 56 frames, 55/55 moving, 0 overflows (GIF + first/last frame + metrics) |
 | frame storage | **Frames are not stored in-tree** (policy set at the round-10 close-out and held through round 11's 90-plate re-render: the `frame_*.png` — 1.4 GB at the time — were removed to keep the repository lean; the per-plate reviewable set is the `sheet.png` contact sheet + the `anim.gif` motion loop + the `metrics.txt` receipts, and every frame remains byte-reproducible from `source/` via the deterministic FrameDriver). Any frame dir can be regenerated on demand: `cargo run --release -- <name>` then `tools/make_gifs.sh` for the loops |
 | `worklog.md` | Full session log: receipts, VLM audit verdicts, the bisection ladders, the alpha() incident, the Rect-edges incident, the U-22 census catch |
@@ -221,3 +222,26 @@ Every run produces the three-artifact receipt set per experiment — **`anim.gif
    is how U-18's own recorded evidence turned out to be wrong: the probe
    plate's "four widths land on 26/255" was neighbouring ink, and a bare
    stroke below an eighth of a pixel renders exactly **0**.
+
+
+---
+
+## The keynote films
+
+| Build | Medium | Where |
+|-------|--------|-------|
+| v1–v3 | MP4 rendered by vieww (`FrameDriver` + `NativeRenderer`, the 3:00 sixteen-scene cut) | `keynote/` (artifacts) + `vieww_base/examples/film_lab/src/keynote/` (source) |
+| v4 | web-native (one folder, no server — the film is a page) | `keynote_v4/` |
+| **v5** | **MP4 rendered by vieww — the viewwstudio release film: 4 acts, 22 scenes, 3:39** | `keynote_v5/` (artifacts) + `vieww_base/examples/film_lab/src/keynote_v5/` (source) |
+
+**v5 is the release keynote the reference script asked for** — the hook
+(the lie of cross-platform UI: 41.7 MB before your first pixel, silent
+truncation, rust locked out) → the architecture (36 crates, its own
+rasterizer, the sub-pixel floor, one-click toolchains, the ceilings) →
+the live demo (**viewwstudio**: `say` typing the counter, first paint in
+0.075 s, per-keystroke compose, the descent to rust with state held,
+2,400 boids inside a UI sheet, the fourier canvas, the `.apk`/`.ipa`
+cross-build, devtools on the studio itself) → the guarantee (the green
+ledger, the 90-plate wall, built-on-vieww, the self-auditing end card).
+viewwstudio is the hero; vieww is the foundation it stands on; every
+number on screen is emitted or quoted with its source named.

@@ -230,6 +230,7 @@ mod exp_traffic;
 mod exp_slime;
 mod film_lib;
 mod keynote;
+mod keynote_v5;
 mod three_d;
 
 use film_lib::{anim_gif_strided, contact_sheet_strided, out_root, render_with, Experiment};
@@ -411,6 +412,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(arg) = std::env::args().nth(1) {
         if arg == "census" || arg == "master" || arg.starts_with("kn:") {
             return keynote::master::run(&arg);
+        }
+        // The v5 release film — the viewwstudio keynote — same two passes,
+        // its own preview spelling (`keynote_v5/master.rs`).
+        if arg == "census5" || arg == "master5" || arg.starts_with("k5:") {
+            return keynote_v5::master::run(&arg);
         }
     }
     let filter = std::env::args().nth(1);
