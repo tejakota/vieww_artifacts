@@ -1,0 +1,12 @@
+frames=4080
+shapes=720108
+glyph_runs=217790
+glyphs=3297464
+layers=20242
+filtered_layers=7414
+strokes=115900
+shadows=19598
+alive_seconds=0.143
+frame_ms=54.66
+scale_factor=1
+bench=linux · x86_64 · rust 1.98.1 · 6 embedded faces

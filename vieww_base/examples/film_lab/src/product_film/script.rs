@@ -231,7 +231,23 @@ fn set_text(text: String) -> TextEditingValue {
 /// the same drawn tree. The tap lands at its release time — which is
 /// when the witness ladder counts it anyway.
 pub fn apply_up_to(driver: &mut FrameDriver, studio: &Studio, abs: f32, cursor: &mut usize) {
-    let script = script();
+    apply_list(driver, studio, &script(), abs, cursor);
+}
+
+/// Apply **any** session list — this film's own, or a guest film's —
+/// up to `abs`, resuming from `cursor`.
+///
+/// `studio_film` drives the same app through this door: one vocabulary,
+/// one set of rules. The pointer-pair rule is the list's, not the
+/// caller's — a `PointerDown` whose release is not yet due is deferred,
+/// and both halves land in one frame.
+pub fn apply_list(
+    driver: &mut FrameDriver,
+    studio: &Studio,
+    script: &[(f32, Action)],
+    abs: f32,
+    cursor: &mut usize,
+) {
     let clock = Duration::from_secs_f64(abs.max(0.0) as f64);
     while *cursor < script.len() {
         let (at, action) = &script[*cursor];
