@@ -10,11 +10,11 @@
 //!
 //! The need's peak — and the act's last word: *mockup is not device.*
 
-use vieww_foundation::{Color, Offset, Rect, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Rect, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, BREAK_RED, Ctx, GROUND, MUTED, SYN_COMMENT, W, alpha, caption, clamp01,
+    ACCENT, BREAK_RED, Ctx, MUTED, SYN_COMMENT, W, alpha, caption, clamp01,
     distance_chip, gap_line, grain, ground, pole_caret, pole_screen, progress_rail, spring_out,
     tint, vignette, xywh,
 };

@@ -45,7 +45,7 @@
 //! frame a function of the checkout. The manifest names its bench.
 
 use std::io::Write as IoWrite;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command as ProcCommand, Stdio};
 use std::time::Duration;
 

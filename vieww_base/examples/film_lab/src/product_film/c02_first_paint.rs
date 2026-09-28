@@ -19,10 +19,9 @@ use vieww_widget::WidgetNode;
 
 use super::{
     ACCENT, Ctx, INK, LEDGER, MUTED, SYN_TYPE, W, alpha, caption, chip_row, clamp01,
-    distance_chip, studio_chrome, tap_ring_at,
+    studio_chrome, tap_ring_at,
 };
 use super::script::TAP_LIVE_ROW;
-use crate::film_lib::ease_out_cubic;
 
 /// The acceptance moment — the tap lands at 140.2 (film seconds).
 const ACCEPT_AT: f32 = 140.2;

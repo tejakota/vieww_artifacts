@@ -35,7 +35,7 @@ use viewwstudio::{Shell, Workspace};
 use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{Ctx, H, W};
+use super::{H, W};
 
 /// The film's window — the studio runs full-bleed at logical master size.
 /// (SCALE_FACTOR never changes this: the studio lays out in logical

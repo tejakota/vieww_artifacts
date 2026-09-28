@@ -11,12 +11,12 @@
 //!
 //! The engine act's claim, one last time, as geography.
 
-use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Offset, Sketchbook};
 use vieww_widget::prelude::*;
 
 use super::{
     ACCENT, Ctx, INK, LEDGER, MUTED, W, alpha, caption, clamp01, distance_chip, glow, grain,
-    ground, progress_rail, stars_deep, tint, vignette, xywh,
+    ground, progress_rail, stars_deep, vignette, xywh,
 };
 use crate::film_lib::{Rng, ease_out_cubic};
 

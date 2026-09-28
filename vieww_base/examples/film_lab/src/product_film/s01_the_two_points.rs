@@ -14,9 +14,8 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, Ctx, GROUND, INK, MUTED, W, alpha, backdrop, caption, clamp01, distance_chip, dust,
-    gap_line, glow, grain, ground, gmono_w, pole_caret, pole_screen, progress_rail, vignette,
-    xywh,
+    ACCENT, Ctx, GROUND, INK, MUTED, W, alpha, caption, clamp01, distance_chip, dust,
+    gap_line, glow, grain, ground, pole_caret, pole_screen, progress_rail, vignette,
 };
 use crate::film_lib::ease_out_cubic;
 
