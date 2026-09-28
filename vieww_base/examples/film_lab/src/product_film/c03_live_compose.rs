@@ -13,7 +13,6 @@
 //! stopwatch around the keystroke → the next frame's raster.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{ACCENT, Ctx, INK, LEDGER, MUTED, alpha, caption, chip_row, clamp01, distance_chip, studio_chrome};

@@ -14,7 +14,6 @@
 //! for one beat before dissolving into the chrome.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{ACCENT, Ctx, INK, SYN_TYPE, W, caption, chip_row, clamp01, studio_chrome, tint};

@@ -650,8 +650,72 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
     let t0 = std::time::Instant::now();
     let mut counted_frames = 0usize;
 
+    // ── Resume — the census counts 18,000 frames, and a bench that can
+    // only run in bounded windows would otherwise lose the whole pass at
+    // the window's edge. The checkpoint carries the *completed* scenes'
+    // counts and samples, written once per scene boundary; an interrupted
+    // scene restarts from its first frame with nothing of its own in the
+    // state, so no partial counts or duplicate samples can survive a
+    // resume. The same discipline the master's segment+sheet resume uses,
+    // applied to pass 1.
+    let state_path = root.join("census_state.txt");
+    let mut start_scene = 0usize;
+    if let Some(state) = std::fs::read_to_string(&state_path).ok() {
+        for line in state.lines() {
+            let Some((k, v)) = line.split_once('=') else { continue };
+            let v = v.trim();
+            match k.trim() {
+                "next_scene" => start_scene = v.parse().unwrap_or(0),
+                "counted_frames" => counted_frames = v.parse().unwrap_or(0),
+                "shapes" => probe.shapes = v.parse().unwrap_or(0),
+                "glyph_runs" => probe.glyph_runs = v.parse().unwrap_or(0),
+                "glyphs" => probe.glyphs = v.parse().unwrap_or(0),
+                "layers" => probe.layers = v.parse().unwrap_or(0),
+                "filtered_layers" => probe.filtered = v.parse().unwrap_or(0),
+                "strokes" => probe.strokes = v.parse().unwrap_or(0),
+                "shadows" => probe.shadows = v.parse().unwrap_or(0),
+                "frame_ms_samples" => {
+                    frame_ms_samples =
+                        v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
+                }
+                "alive_samples" => {
+                    alive_samples =
+                        v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
+                }
+                _ => {}
+            }
+        }
+        if start_scene > 0 {
+            println!(
+                "census resume — {} scenes already counted · {} frames · continuing at scene {}",
+                start_scene, counted_frames, start_scene + 1
+            );
+        }
+    }
+
     for (si, s) in all.iter().enumerate() {
+        if si < start_scene {
+            continue;
+        }
         let start_abs: f32 = all.iter().take(si).map(|x| x.seconds).sum();
+
+        // A resume into the middle of the studio act: the session is one
+        // continuous rig across C01–C09, so a fresh rig joining mid-act
+        // replays the script from the film's start to this scene's start
+        // (no raster — the actions are cheap, the compiles are cached) —
+        // the same replay the master's own resume performs.
+        if start_scene > 0 && si == start_scene && s.kind == Kind::Studio && rig.studio.is_none() {
+            println!("  resuming into the studio act at {} — replaying the session", s.id);
+            let _ = rig.studio();
+            script::apply_up_to(
+                &mut rig.driver,
+                rig.studio.as_ref().unwrap(),
+                start_abs,
+                &mut rig.cursor,
+            );
+            rig.driver.draw_frame_at(Duration::from_secs_f64(start_abs as f64));
+        }
+
         let n = s.frames();
         let sample_every = (n / 12).max(1);
         for i in 0..n {
@@ -696,6 +760,30 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
             n,
             t0.elapsed().as_secs_f32()
         );
+
+        // The checkpoint — this scene's counts are now final, so a run
+        // that ends here resumes at the next scene with exactly what a
+        // continuous pass would have had. `{:?}`/`{}` on f64 is the
+        // shortest round-trip form, so the samples survive the save/load
+        // byte-exact.
+        let fmt_samples = |v: &[f64]| {
+            v.iter().map(|x| format!("{x}")).collect::<Vec<_>>().join(",")
+        };
+        let state = format!(
+            "next_scene={}\ncounted_frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nframe_ms_samples={}\nalive_samples={}\n",
+            si + 1,
+            counted_frames,
+            probe.shapes,
+            probe.glyph_runs,
+            probe.glyphs,
+            probe.layers,
+            probe.filtered,
+            probe.strokes,
+            probe.shadows,
+            fmt_samples(&frame_ms_samples),
+            fmt_samples(&alive_samples),
+        );
+        std::fs::write(&state_path, state)?;
     }
 
     // The medians — measured, never picked.
@@ -728,6 +816,9 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
         probe.bench,
     );
     std::fs::write(manifest_path(), body)?;
+    // The census is complete — the checkpoint has no further use, and a
+    // stale one would make a fresh census skip scenes it should recount.
+    let _ = std::fs::remove_file(&state_path);
     println!(
         "\ncensus complete — {} frames counted · {} raster samples · median {:.2} ms",
         counted_frames,

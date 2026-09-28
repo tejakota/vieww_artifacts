@@ -1967,15 +1967,24 @@ pub fn dust_deep(
 /// tilted plane occupies — and an earlier film in this lab used it. This
 /// one never did.
 ///
-/// The two halves work together: `project_rect` gives the exact
-/// perspective quad, which becomes the **clip**, so the panel's silhouette
-/// is genuinely projected; the contents ride an affine transform fitted to
-/// that quad. An affine cannot reproduce a perspective divide — parallel
-/// lines stay parallel — but across a panel of a few hundred pixels at the
-/// small angles used here the error is under a pixel, and the alternative
-/// is re-projecting every child by hand. The silhouette is exact, the fill
-/// is a very good approximation, and this comment is the honest account of
-/// which is which.
+/// **Piecewise affine, 2×2.** A single affine fitted to the projected
+/// corners maps the panel to a *parallelogram*: its verticals stay
+/// vertical, the trapezoid exists only in the clip, and since the content
+/// never reaches the clip's slanted edge the panel renders as a rotated
+/// rectangle — displaced, but flat. (That was this function's first cut,
+/// measured on the render: side edges vertical to 0.3 px.)
+///
+/// So the panel is drawn as four quadrants, each with its own affine
+/// fitted to its own three projected corners. Perspective maps straight
+/// lines to straight lines, so every cell edge lands exactly on the
+/// true projected edge, adjacent cells agree exactly along their shared
+/// seam (both affines pass through the same two corners, and both map
+/// the straight seam to the straight line between them), and the union
+/// silhouette is the true perspective quad. Only the interior carries
+/// error — a quarter of the corner discrepancy at each cell's centre,
+/// ~3 px on a 300 px panel at 26° — where nothing is anchored to
+/// anything. The cost is the source drawn four times, clipped to
+/// disjoint quadrants.
 ///
 /// `focal` is in logical pixels: larger is a longer lens.
 #[allow(clippy::too_many_arguments)]
@@ -1986,7 +1995,7 @@ pub fn panel_3d(
     pitch: f32,
     focal: f32,
     alpha_mul: f32,
-    source: impl FnOnce(&mut Sketchbook),
+    source: impl Fn(&mut Sketchbook),
 ) {
     use vieww_foundation::Transform3;
 
@@ -2005,43 +2014,50 @@ pub fn panel_3d(
         .then(Transform3::translation(cx, cy, 0.0))
         .then(Transform3::perspective(focal));
 
-    let Some(quad) = t3.project_rect(rect) else {
-        // Behind the camera — draw it flat rather than not at all.
-        source(book);
-        return;
-    };
+    // A cell that cannot be projected (behind the camera) is skipped
+    // rather than failing the panel; at the angles this function is
+    // called with it does not happen.
+    let a_mul = alpha_mul.clamp(0.0, 1.0);
+    for (x0, x1) in [(rect.left, cx), (cx, rect.right)] {
+        for (y0, y1) in [(rect.top, cy), (cy, rect.bottom)] {
+            let Some(quad) = t3.project_rect(Rect::new(x0, y0, x1, y1)) else {
+                continue;
+            };
+            let (Some(tl), Some(tr), Some(bl)) = (
+                t3.project(Offset::new(x0, y0), 0.0),
+                t3.project(Offset::new(x1, y0), 0.0),
+                t3.project(Offset::new(x0, y1), 0.0),
+            ) else {
+                continue;
+            };
+            // The affine through the cell's own three corners: the top
+            // edge gives the x basis, the left edge the y basis.
+            let wsp = (x1 - x0).max(1.0);
+            let hsp = (y1 - y0).max(1.0);
+            let ax = (tr.dx - tl.dx) / wsp;
+            let ay = (tr.dy - tl.dy) / wsp;
+            let bx = (bl.dx - tl.dx) / hsp;
+            let by = (bl.dy - tl.dy) / hsp;
+            let fit = Transform::new(
+                ax,
+                ay,
+                bx,
+                by,
+                tl.dx - (ax * x0 + bx * y0),
+                tl.dy - (ay * x0 + by * y0),
+            );
 
-    // Fit an affine to the projected corners: the top edge gives the x
-    // basis, the left edge the y basis. With no perspective this is exact;
-    // with a little, it is the best affine through the same corners.
-    let tl = t3.project(Offset::new(rect.left, rect.top), 0.0);
-    let tr = t3.project(Offset::new(rect.right, rect.top), 0.0);
-    let bl = t3.project(Offset::new(rect.left, rect.bottom), 0.0);
-    let (Some(tl), Some(tr), Some(bl)) = (tl, tr, bl) else {
-        source(book);
-        return;
-    };
-    let wsp = (rect.right - rect.left).max(1.0);
-    let hsp = (rect.bottom - rect.top).max(1.0);
-    let ax = (tr.dx - tl.dx) / wsp;
-    let ay = (tr.dy - tl.dy) / wsp;
-    let bx = (bl.dx - tl.dx) / hsp;
-    let by = (bl.dy - tl.dy) / hsp;
-    let fit = Transform::new(
-        ax,
-        ay,
-        bx,
-        by,
-        tl.dx - (ax * rect.left + bx * rect.top),
-        tl.dy - (ay * rect.left + by * rect.top),
-    );
-
-    // The clip is the *projected* quad, so it is already in screen space
-    // and must sit outside the transform — `Sketchbook::window` puts its
-    // clip inside, which would project it a second time.
-    book.layer(alpha_mul.clamp(0.0, 1.0), 0.0, Some(quad), |g| {
-        g.transformed(fit, source);
-    });
+            // The clip is the *projected* cell quad, so it is already in
+            // screen space and must sit outside the transform —
+            // `Sketchbook::window` puts its clip inside, which would
+            // project it a second time.
+            book.layer(a_mul, 0.0, Some(quad), |g| {
+                // Borrow, not move: the loop draws the source once per
+                // quadrant, and an `Fn` source is shareable by design.
+                g.transformed(fit, |b| source(b));
+            });
+        }
+    }
 }
 
 /// A full-frame flash — the match-cut breath between scenes.

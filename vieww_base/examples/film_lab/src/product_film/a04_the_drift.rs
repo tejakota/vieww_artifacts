@@ -69,6 +69,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 
     // The three devices — each drifts in on its own spring, each draws
     // THE SAME SCREEN, and each gets it wrong in its own way.
+    //
+    // The splay's pivot: the trio's own centre, derived from the table —
+    // the outer two turn away from the middle one, which stays square to
+    // the lens. (Anchoring on the frame's centre turned the *phone* more
+    // than the desktop, because the trio sits right of frame centre —
+    // and at the angles a 1500 px lens makes honest, the whole projected
+    // quad differed from its rectangle by two pixels, which is to say
+    // the splay did not exist. See the panel_3d call for the lens.)
+    let group_cx = DEVICES.iter().map(|d| d.0 + d.2 * 0.5).sum::<f32>() / DEVICES.len() as f32;
     for (di, (x, y, dw, dh, corner, label)) in DEVICES.iter().enumerate() {
         let (x, y, dw, dh, corner, label) = (*x, *y, *dw, *dh, *corner, *label);
         let arrive = spring_out(clamp01((t - 0.08 - di as f32 * 0.12) / 0.6), 8.0, 0.62);
@@ -82,11 +91,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let y2 = y + (dh - h2) * 0.5;
         let device_a = ease_out_cubic(clamp01((t - 0.08 - di as f32 * 0.12) / 0.3));
         let drift_k = ease_out_cubic(clamp01((t - 0.30 - di as f32 * 0.1) / 0.4));
-        // Splay about the frame's centre: the outer devices turn away, the
-        // middle one stays nearly square to the lens.
-        let from_centre = (x + dw * 0.5 - super::W * 0.5) / (super::W * 0.5);
-        let yaw = -from_centre * 0.34 * (0.25 + 0.75 * drift_k);
-        let pitch = -0.045 * (0.3 + 0.7 * drift_k);
+        // Splay about the trio's centre: the outer devices turn away, the
+        // middle one stays square to the lens. The angle *is* the story
+        // here, so it is driven by `drift_k` rather than the clock — and
+        // it has to be big enough to see: 26 degrees through a 620 px
+        // lens moves the silhouette's edges by 8-13 px, which reads;
+        // 8 degrees through 1500 px moved them by two, which did not.
+        let from_centre = (x + dw * 0.5 - group_cx) / (super::W * 0.5);
+        let yaw = -from_centre * 1.7 * (0.25 + 0.75 * drift_k);
+        let pitch = -0.10 * (0.3 + 0.7 * drift_k);
 
         // The drift: each device's *content* diverges from the master.
         // Device 0 (desktop): the text wraps short — lines break early.
@@ -109,12 +122,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                             // away from each other as they stop agreeing.
                             // The angle *is* the story here, so it is
                             // driven by `drift_k` rather than the clock.
+                            // A 620 px lens — normal, not long: at 1500
+                            // the perspective divide cancelled the very
+                            // rotation it was there to reveal.
                             super::panel_3d(
                                 book,
                                 xywh(0.0, 0.0, w2, h2 + 40.0),
                                 yaw,
                                 pitch,
-                                1500.0,
+                                620.0,
                                 1.0,
                                 move |book: &mut Sketchbook| {
                                 // The device frame.

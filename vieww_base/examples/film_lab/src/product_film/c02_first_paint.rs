@@ -14,7 +14,6 @@
 //! relief begins: the loop the studio exists to shorten, shortened.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{

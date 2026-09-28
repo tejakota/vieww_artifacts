@@ -12,7 +12,6 @@
 //! the proof.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{Ctx, LEDGER, W, alpha, caption, chip_row, clamp01, studio_chrome, tap_ring_at};

@@ -11,7 +11,6 @@
 //! The film marks the moment with a "still 1" receipt chip.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{ACCENT, Ctx, INK, LEDGER, MUTED, SYN_KEYWORD, W, alpha, caption, chip_row, clamp01, studio_chrome};

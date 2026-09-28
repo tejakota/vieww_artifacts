@@ -11,7 +11,6 @@
 //! frame's real size, wrapped wrong nowhere.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{ACCENT, Ctx, LEDGER, MUTED, SYN_TYPE, W, alpha, caption, chip_row, clamp01, studio_chrome};
