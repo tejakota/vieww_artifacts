@@ -11,7 +11,10 @@ use vieww_widget::prelude::*;
 
 use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, spring_out};
 use crate::product_film as pf;
-use super::{ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, INK, MUTED, SYN_TYPE, W};
+use super::filmkit as fk;
+use super::{
+    ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, H, INK, MUTED, SYN_TYPE, W,
+};
 
 /// The repository — the call to action.
 const REPO: &str = "github.com/tejakota/vieww_artifacts";
@@ -28,41 +31,82 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     let mut stack = Stack::new();
 
     // The room — stars arrive as the studio recedes: the film's first
-    // deep breath since the studio act began.
+    // deep breath since the studio act began. Painted with overscan
+    // margin, because this scene's camera is the one move allowed to
+    // leave the canvas — a real dolly-out, past zoom 1.0.
+    const MARGIN: f32 = 260.0;
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(10, 9, 13)),
-                    (0.6, BG_DEEP),
-                    (1.0, Color::rgb(8, 8, 12)),
-                ]),
+            fk::room(
+                book,
+                w,
+                h,
+                MARGIN,
+                Color::rgb(10, 9, 13),
+                BG_DEEP,
+                Color::rgb(8, 8, 12),
             );
             let star_a = clamp01((t - 0.10) / 0.35);
             if star_a > 0.01 {
-                pf::stars(book, w, h, 0xC0DE, 110, t, 0.10 * star_a);
+                fk::stars_wide(book, w, h, MARGIN, 0xC0DE, 110, t, 0.10 * star_a);
             }
             pf::vignette(book, w, h, 0.55);
         }),
     )));
 
     // The studio, receding — a panel that carries the act's shape: a
-    // sidebar, code lines, a preview. It shrinks toward the dark and
-    // gives its light back to the stars.
+    // sidebar, code lines, a preview. It shrinks toward the dark, tilts
+    // back in true perspective as it goes, and gives its light back to
+    // the stars.
     let panel_p = ease_in_out(clamp01(t / 0.9));
     let scale = 1.14 - 0.52 * panel_p;
     let alpha = 1.0 - 0.82 * panel_p;
     if alpha > 0.02 {
+        let yaw = 0.34 * panel_p;
+        let pitch = -0.16 * panel_p;
         stack = stack.push(Transformed::translate(Offset::new(0.0, -18.0 * panel_p)).child(
             Opacity::new(alpha).child(Painting::sized(CANVAS, PaintWith::new(
                 move |book: &mut Sketchbook, _s: Size| {
-                    draw_studio_ghost(book, scale, panel_p);
+                    // The tilt: the ghost falls away into the depth it
+                    // came from, projected by the framework's own
+                    // quadrant projector.
+                    pf::panel_3d(
+                        book,
+                        Rect::new(470.0, 230.0, 1450.0, 850.0),
+                        yaw,
+                        pitch,
+                        1150.0,
+                        1.0,
+                        |b| draw_studio_ghost(b, scale, panel_p),
+                    );
                 },
             ))),
         ));
+    }
+
+    // The light gives itself back — thin threads converging on the spot
+    // the studio left, riders flowing inward, the room absorbing it.
+    if panel_p > 0.05 {
+        let rays = 7;
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                let centre = Offset::new(W * 0.5, H * 0.5 - 18.0 * panel_p);
+                for k in 0..rays {
+                    let ang = k as f32 * std::f32::consts::TAU / rays as f32 + 0.4;
+                    let from = Offset::new(
+                        centre.dx + 980.0 * ang.cos(),
+                        centre.dy + 700.0 * ang.sin(),
+                    );
+                    let pts = fk::thread_pts(from, centre, 0.0);
+                    let a = panel_p * 0.8;
+                    fk::grow_stroke(book, &pts, clamp01(panel_p * 1.4 - k as f32 * 0.05), BRAND_FAR, 1.1, 0.35 * a);
+                    fk::rider(book, &pts, (t * 0.30 + k as f32 * 0.14) % 1.0, BRAND_NEAR, 2.2, a);
+                }
+            }),
+        )));
     }
 
     // The words — what the recede means.
@@ -168,7 +212,17 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
 
     // The mark — the studio's own, revealing panel by panel: the
     // editor panel first, the preview panel over it, the ground
-    // always whole. `revealed` is the brand's own door.
+    // always whole. `revealed` is the brand's own door. Behind it, a
+    // 3D halo — a ring in real perspective, riders orbiting it.
+    let ring_a = clamp01((t - 0.02) / 0.4) * 0.9;
+    if ring_a > 0.01 {
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+                fk::ring3(book, s, Offset::new(W * 0.5, 294.0), 205.0, sec, ring_a);
+            }),
+        )));
+    }
     let editor_a = ease_out_expo(clamp01((t - 0.04) / 0.12));
     let preview_a = spring_out(clamp01((t - 0.10) / 0.16), 9.0, 0.62);
     if editor_a > 0.01 {
@@ -189,7 +243,8 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         ))));
     }
 
-    // The wordmark — the studio's name in the brand's type.
+    // The wordmark — the studio's name in the brand's type, two-tone
+    // by demand: `vieww` in ink, `studio` in the brand's purple.
     let name_a = ease_out_expo(clamp01((t - 0.12) / 0.14));
     if name_a > 0.01 {
         let rise = (1.0 - name_a) * 16.0;
@@ -199,16 +254,30 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                 .top(396.0 + rise)
                 .width(W)
                 .height(80.0)
-                .child(Opacity::new(name_a).child(
-                    Text::new("viewwstudio".to_string())
-                        .style(pf::geist(56.0).bold().letter_spacing(6.0).color(pf::alpha(INK, 0.97)))
-                        .align(TextAlign::Center),
-                )),
+                .child(Opacity::new(name_a).child(fk::wordmark(56.0, 1.0))),
         );
     }
 
-    // The underline — the brand's own ramp, growing to its width.
+    // The underline — the brand's own ramp, growing to its width, fed
+    // by two ribbons flowing in from the frame's edges.
     let line_a = clamp01((t - 0.22) / 0.12);
+    let ribbons_a = clamp01((t - 0.30) / 0.4);
+    if ribbons_a > 0.01 {
+        let (la, sec_v) = (ribbons_a, sec);
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                for (from, bend, phase) in [
+                    (Offset::new(W * 0.10, 620.0), -110.0, 0.0),
+                    (Offset::new(W * 0.90, 620.0), 110.0, 0.5),
+                ] {
+                    let pts = fk::thread_pts(from, Offset::new(W * 0.5, 493.0), bend);
+                    fk::ribbon(book, &pts, 2.0, sec_v + phase, BRAND_FAR, 0.55 * la);
+                    fk::rider(book, &pts, (sec_v * 0.22 + phase) % 1.0, BRAND_NEAR, 2.4, la);
+                }
+            }),
+        )));
+    }
     if line_a > 0.01 {
         let target_w = 620.0;
         let uw = target_w * ease_out_expo(line_a);
@@ -323,7 +392,13 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     )));
 
     // The mark, whole; the name; the release line; the repo. Nothing
-    // arrives — everything is already here.
+    // arrives — everything is already here. The halo keeps orbiting.
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            fk::ring3(book, s, Offset::new(W * 0.5, 294.0), 205.0, sec + 11.0, 0.9);
+        }),
+    )));
     stack = stack.push(Positioned::new().left((W - 112.0) * 0.5).top(238.0).width(112.0).height(112.0).child(
         pf::brand_mark(112.0, 1.0, 1.0),
     ));
@@ -333,11 +408,7 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
             .top(396.0)
             .width(W)
             .height(80.0)
-            .child(
-                Text::new("viewwstudio".to_string())
-                    .style(pf::geist(56.0).bold().letter_spacing(6.0).color(pf::alpha(INK, 0.97)))
-                    .align(TextAlign::Center),
-            ),
+            .child(fk::wordmark(56.0, 1.0)),
     );
     stack = stack.push(Positioned::new().left((W - 620.0) * 0.5).top(492.0).width(620.0).height(3.0).child(
         Painting::sized(Size::new(620.0, 3.0), PaintWith::new(

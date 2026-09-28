@@ -8,8 +8,9 @@
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Shadow, Sketchbook, TextAlign};
 use vieww_widget::prelude::*;
 
-use crate::film_lib::{clamp01, ease_out_cubic, ease_out_expo};
+use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, Rng};
 use crate::product_film as pf;
+use super::filmkit as fk;
 use super::{
     BRAND_FAR, BRAND_NEAR, PORTS, ACCENT, BG_DEEP, BREAK_RED, CANVAS, INK, MUTED, SYN_TYPE, W,
 };
@@ -118,25 +119,16 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(Painting::sized(CANVAS, PaintWith::new(
             move |book: &mut Sketchbook, _s: Size| {
                 // The rail — a cubic that leaves the card's edge and
-                // lands on the station, drawn to its own progress.
+                // lands on the station, drawn to its own progress; once
+                // landed, it *flows*: the picture is in transit, and
+                // the dashes say so.
                 if rail_p > 0.01 {
-                    let end = Offset::new(
-                        anchor.dx + (station_center(station).dx - anchor.dx) * rail_p,
-                        anchor.dy + (station_center(station).dy - anchor.dy) * rail_p,
-                    );
-                    let mid1 = Offset::new(
-                        anchor.dx + (end.dx - anchor.dx) * 0.45,
-                        anchor.dy - 70.0,
-                    );
-                    let mid2 = Offset::new(
-                        anchor.dx + (end.dx - anchor.dx) * 0.55,
-                        end.dy - 70.0,
-                    );
-                    let mut path = Path::new();
-                    path.move_to(anchor).cubic_to(mid1, mid2, end);
-                    book.stroke(path, pf::alpha(ACCENT, 0.16 + 0.30 * rail_p), 1.4);
-                    // The rail's tip — a small landing pulse.
-                    book.circle(end, 3.2, pf::alpha(ACCENT, 0.9 * rail_p));
+                    let pts = fk::thread_pts(anchor, station_center(station), -150.0);
+                    fk::grow_stroke(book, &pts, rail_p, ACCENT, 1.5, 0.30 + 0.45 * rail_p);
+                    let flow = clamp01((rail_p - 0.85) * 7.0);
+                    if flow > 0.01 {
+                        fk::flow_along(book, &pts, rail_t0 + t * 1.0 + i as f32 * 1.3, ACCENT, flow * 0.8, 1.3, 0.16);
+                    }
                 }
                 // The port card — the same picture, translated.
                 if card_p > 0.01 {
@@ -400,6 +392,20 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
                         .with_stops(&[(0.0, pf::SYN_MACRO), (1.0, BREAK_RED)]),
                 );
             }
+            // The gauge's orbit — cost particles circling the dial, the
+            // meter alive between payments.
+            fk::orbit_dots(
+                book,
+                Offset::new(cx, cy),
+                168.0,
+                168.0,
+                5,
+                t * 10.0,
+                0.55,
+                BREAK_RED,
+                0.30 + 0.45 * (paid / 4.0),
+                2.2,
+            );
         })),
     ));
     // The gauge's numerals — a widget over the painting.
@@ -436,6 +442,18 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         let gate_w = 980.0 * ease_out_expo(in_p);
         let (gate, toll) = (*gate, *toll);
         let flash = if pay_p > 0.0 && pay_p < 1.0 { 1.0 - pay_p } else { 0.0 };
+        // The toll, paid, flows to the gauge — every cost travels.
+        let flow_a = clamp01((pay_p - 0.6) * 2.5);
+        if flow_a > 0.01 {
+            let from = Offset::new(160.0 + gate_w, y + 48.0);
+            let to = Offset::new(1368.0, 330.0 + i as f32 * 56.0);
+            let phase = t * 1.0 + i as f32 * 0.9;
+            stack = stack.push(Positioned::fill().child(
+                Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                    fk::flow_thread(book, from, to, 40.0, phase, BREAK_RED, flow_a * 0.75, 1.4);
+                })),
+            ));
+        }
         stack = stack.push(
             Positioned::new()
                 .left(160.0)
@@ -506,27 +524,75 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
 
     let mut stack = Stack::new();
 
-    // The room — the film's darkest: a point of light in it.
+    // The room — the film's darkest: a point of light in it, and
+    // beneath it, a real 3D floor — a perspective grid the camera
+    // dollies over as the question lands. Depth, not decoration.
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
             book.rect(Rect::new(0.0, 0.0, w, h), Color::rgb(7, 6, 9));
             pf::stars(book, w, h, 0x0A11, 44, t, 0.05);
-            // The point of light — grows, then holds, breathing.
+
+            // The 3D floor — the camera flies forward for the whole
+            // scene, in step with the 2D camera's push. Aimed slightly
+            // up, so the grid lives in the lower third and the question
+            // keeps the horizon to itself.
+            use crate::three_d::{draw_dot3, Camera as Cam3, Vec3};
+            let dolly = ease_in_out(clamp01(t / 0.92));
+            let cam3 = Cam3 {
+                eye: Vec3::new(0.0, 60.0, -80.0 - 520.0 * dolly),
+                target: Vec3::new(0.0, 190.0, 420.0),
+                fov: 0.72,
+            };
+            fk::grid_floor_lines(
+                book,
+                &cam3,
+                s,
+                1700.0,
+                30.0,
+                2100.0,
+                180.0,
+                BRAND_NEAR,
+                0.85,
+                120.0,
+                1500.0,
+            );
+            // Motes rising off the floor — depth cues, not dust.
+            let mote_a = clamp01((t - 0.12) / 0.3);
+            if mote_a > 0.01 {
+                for k in 0..14 {
+                    let mut rng = Rng::new(0x907E ^ (k as u64).wrapping_mul(0x2545));
+                    let x = (rng.f01() - 0.5) * 2400.0;
+                    let z = 100.0 + rng.f01() * 1600.0;
+                    let rise = ((t * 0.14 + rng.f01()) % 1.0) * 320.0;
+                    let alpha = mote_a * 0.4 * (1.0 - rise / 320.0);
+                    draw_dot3(
+                        book,
+                        Vec3::new(x, 20.0 + rise, z),
+                        2.6,
+                        &cam3,
+                        s,
+                        pf::alpha(BRAND_FAR, alpha),
+                    );
+                }
+            }
+
+            // The point of light — grows, then holds, breathing. It is
+            // the shot's subject; it earns its luminance.
             let grow = ease_out_expo(clamp01(t / 0.22));
             let breath = 1.0 + 0.05 * (sec * 1.2).sin();
             if grow > 0.01 {
                 book.layer(grow, 60.0, None, |glow_book| {
                     glow_book.circle(
                         Offset::new(w * 0.5, h * 0.44),
-                        26.0 * grow * breath,
-                        pf::alpha(BRAND_FAR, 0.30),
+                        30.0 * grow * breath,
+                        pf::alpha(BRAND_FAR, 0.5),
                     );
                     glow_book.circle(
                         Offset::new(w * 0.5, h * 0.44),
-                        5.0 * grow,
-                        pf::alpha(Color::WHITE, 0.8),
+                        7.0 * grow,
+                        pf::alpha(Color::WHITE, 0.95),
                     );
                 });
             }

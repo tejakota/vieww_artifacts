@@ -12,6 +12,7 @@ use vieww_widget::prelude::*;
 
 use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, spring_out};
 use crate::product_film as pf;
+use super::filmkit as fk;
 use super::{ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, ENGINE, INK, LEDGER, MUTED, SYN_TYPE, CERT_CRATES};
 
 /// The engine's headline crates — the ones a film can name without
@@ -63,6 +64,17 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
                     glow_book.circle(Offset::new(w * 0.72, h * 0.52), 120.0 * pulse, pf::alpha(BRAND_NEAR, 0.13));
                 });
             }
+            // The machine room — real 3D boxes orbiting the heart, in
+            // true perspective, drawn by the framework's own mesh
+            // pipeline. The engine has depth because it has parts.
+            fk::cube_orbit(
+                book,
+                s,
+                Offset::new(w * 0.74, h * 0.52),
+                sec,
+                heart * 0.95,
+                Color::rgb(11, 10, 15),
+            );
             pf::vignette(book, w, h, 0.5);
         }),
     )));
@@ -116,8 +128,9 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
                 book.circle(Offset::new(cx, cy), 26.0 * heart * pulse, pf::alpha(BRAND_NEAR, 0.9));
                 book.ring(Offset::new(cx, cy), 36.0 * heart, 1.4, pf::alpha(BRAND_FAR, 0.6 * heart));
             }
-            // The crates — each edge draws, then its node blooms, then
-            // its label is a widget outside this painting.
+            // The crates — each edge draws, then its node blooms; a
+            // rider pulses outward along the edge — the engine's
+            // heartbeat, one pulse per crate.
             for (i, (name, phase)) in GRAPH.iter().enumerate() {
                 let p = ease_out_cubic(clamp01((t - 0.16 - i as f32 * 0.045) / 0.16));
                 if p <= 0.01 {
@@ -131,6 +144,13 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
                 let mut path = Path::new();
                 path.move_to(Offset::new(cx, cy)).line_to(end);
                 book.stroke(path, pf::alpha(BRAND_FAR, 0.28 * p), 1.2);
+                // The pulse riding the edge, always in motion.
+                let ride = ((t * 0.5 + i as f32 * 0.13) % 1.0) * p;
+                book.circle(
+                    Offset::new(cx + (end.dx - cx) * ride, cy + (end.dy - cy) * ride),
+                    2.2,
+                    pf::alpha(BRAND_FAR, 0.8 * p),
+                );
                 // The node.
                 book.circle(end, 6.5, pf::alpha(if i == GRAPH.len() - 1 { ACCENT } else { SYN_TYPE }, 0.9 * p));
                 if i == GRAPH.len() - 1 {
@@ -227,6 +247,11 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         let x = 150.0 + i as f32 * 336.0;
         let rise = (1.0 - p) * 18.0;
         let (title, sub) = (*title, *sub);
+        // Each station lands as a slab in perspective — tilted in, then
+        // resting at its own small yaw. The pipeline has sides.
+        let yaw = (if i % 2 == 0 { -1.0 } else { 1.0 }) * (0.26 * (1.0 - p) + 0.07);
+        let pitch = 0.05;
+        let pi = i;
         stack = stack.push(
             Positioned::new()
                 .left(x)
@@ -236,9 +261,21 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
                 .child(Opacity::new(p).child(Painting::sized(
                     Size::new(264.0, 150.0),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The body, projected. The shadow stays flat —
+                        // light doesn't tilt with the card.
                         book.shadow(pf::xywh(0.0, 6.0, 264.0, 150.0), 16.0, vieww_foundation::Shadow::new(pf::alpha(Color::BLACK, 0.4), Offset::new(0.0, 8.0), 22.0));
-                        book.rrect(pf::xywh(0.0, 0.0, 264.0, 150.0), 16.0, pf::alpha(pf::SURFACE, 0.94));
-                        book.stroke_rrect(pf::xywh(0.0, 0.0, 264.0, 150.0), 16.0, pf::alpha(if i == 4 { ACCENT } else { Color::WHITE }, if i == 4 { 0.35 } else { 0.06 }), 1.1);
+                        pf::panel_3d(book, vieww_foundation::Rect::new(0.0, 0.0, 264.0, 150.0), yaw, pitch, 1050.0, 1.0, |b| {
+                            b.rrect(pf::xywh(0.0, 0.0, 264.0, 150.0), 16.0, pf::alpha(pf::SURFACE, 0.94));
+                            b.stroke_rrect(pf::xywh(0.0, 0.0, 264.0, 150.0), 16.0, pf::alpha(if pi == 4 { ACCENT } else { Color::WHITE }, if pi == 4 { 0.35 } else { 0.06 }), 1.1);
+                            // A spine of stage dots — five stages, five lights.
+                            for d in 0..5 {
+                                b.circle(
+                                    Offset::new(22.0 + d as f32 * 12.0, 128.0),
+                                    3.0,
+                                    pf::alpha(if d <= pi { BRAND_FAR } else { pf::FAINT }, 0.7),
+                                );
+                            }
+                        });
                     }),
                 ))),
         );
@@ -261,17 +298,28 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
                         ),
                 )),
         );
-        // The connector to the next station, drawn after the panel lands.
+        // The connector to the next station — a slight arc that draws
+        // itself, then flows. The line is the pipeline.
         if i < STOPS.len() - 1 {
             let wire_p = ease_out_cubic(clamp01((t - t0 - 0.08) / 0.16));
             if wire_p > 0.01 {
                 let x0 = x + 264.0;
-                let x1 = x0 + 72.0 * wire_p;
-                let wire_i = i;
-                stack = stack.push(Positioned::new().left(x0).top(370.0).width(72.0).height(4.0).child(
-                    Painting::sized(Size::new(72.0, 4.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.line(Offset::new(0.0, 2.0), Offset::new(x1 - x0, 2.0), pf::alpha(BRAND_FAR, 0.5), 2.0);
-                        let _ = wire_i;
+                let from = Offset::new(x0, 372.0);
+                let to = Offset::new(x0 + 72.0, 372.0);
+                let phase = t * 2.0 + i as f32 * 0.7;
+                stack = stack.push(Positioned::new().left(x0 - 8.0).top(340.0).width(96.0).height(64.0).child(
+                    Painting::sized(Size::new(96.0, 64.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        let pts = fk::thread_pts(
+                            Offset::new(8.0, 32.0),
+                            Offset::new(80.0, 32.0),
+                            14.0,
+                        );
+                        fk::grow_stroke(book, &pts, wire_p, BRAND_FAR, 2.0, 0.55);
+                        let flow = clamp01((wire_p - 0.8) * 5.0);
+                        if flow > 0.01 {
+                            fk::flow_along(book, &pts, phase, BRAND_FAR, flow * 0.8, 1.5, 0.4);
+                        }
+                        let _ = (from, to);
                     })),
                 ));
             }
@@ -435,9 +483,11 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
                 // The lane's baseline and end tick.
                 book.line(Offset::new(ox, oy + h), Offset::new(ox + w, oy + h), pf::alpha(Color::WHITE, 0.08), 1.0);
                 book.line(Offset::new(ox + w, oy + h), Offset::new(ox + w, oy), pf::alpha(Color::WHITE, 0.08), 1.0);
-                // The curve, drawn to its own progress.
+                // The curve, drawn to its own progress — one self-
+                // drawing stroke, then a comet riding it at the film's
+                // own clock.
                 let steps = 72;
-                let mut prev: Option<Offset> = None;
+                let mut curve: Vec<Offset> = Vec::new();
                 for s_i in 0..=steps {
                     let u = s_i as f32 / steps as f32;
                     let v = match lane_i {
@@ -447,28 +497,19 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
                     };
                     // Map v (which may overshoot) into the lane.
                     let y = oy + h - v * h * 0.72 - h * 0.14;
-                    let cur = Offset::new(ox + u * w, y.max(oy - 26.0));
-                    if let Some(prev) = prev {
-                        if u <= p {
-                            let mut path = Path::new();
-                            path.move_to(prev).line_to(cur);
-                            book.stroke(path, pf::alpha(if lane_i == 1 { ACCENT } else { ENGINE }, 0.85), 2.2);
-                        }
-                    }
-                    prev = Some(cur);
+                    curve.push(Offset::new(ox + u * w, y.max(oy - 26.0)));
                 }
-                // The ball — riding the curve at the film's own clock.
+                fk::grow_stroke(book, &curve, p, if lane_i == 1 { ACCENT } else { ENGINE }, 2.4, 0.85);
+                // The ball — with its trail, so the easing is legible
+                // as motion, not just position.
                 let u = t;
                 let v = match lane_i {
                     0 => ease_out_cubic(u.clamp(0.0, 1.0)),
                     1 => spring_out(u.clamp(0.0, 1.0), 8.0, 0.55).clamp(-0.15, 1.35),
                     _ => ease_in_out(u.clamp(0.0, 1.0)),
                 };
-                let bx = ox + u.clamp(0.0, 1.0) * w;
-                let by = oy + h - v * h * 0.72 - h * 0.14;
-                book.layer(0.9, 10.0, None, |b| {
-                    b.circle(Offset::new(bx, by.max(oy - 26.0)), 9.0, pf::alpha(if lane_i == 1 { ACCENT } else { SYN_TYPE }, 0.95));
-                });
+                let _ = v;
+                fk::rider(book, &curve, u.clamp(0.0, 1.0), if lane_i == 1 { ACCENT } else { SYN_TYPE }, 5.5, 0.95);
                 // The scrub window — one cycle of the beat, restarted
                 // every 1.6 s so the ball never stops teaching.
                 let _ = sec;

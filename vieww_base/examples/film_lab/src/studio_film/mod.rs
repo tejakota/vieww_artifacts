@@ -20,6 +20,7 @@
 //! CPU renderer. Nothing here consults a wall clock: a frame is a pure
 //! function of its index.
 
+pub mod filmkit;
 pub mod m1_need;
 pub mod m2_engine;
 pub mod m3_studio;
@@ -184,8 +185,22 @@ pub fn progress_rail(abs: f32) -> vieww_widget::WidgetNode {
 /// this film's voice over the real product's pixels. The studio itself
 /// renders ungraded (the honesty rule): this layer only annotates.
 pub fn studio_plate(ctx: &Ctx, movement: &str, name: &str) -> vieww_widget::prelude::Stack {
+    studio_plate_faded(ctx, movement, name, 1.0)
+}
+
+/// [`studio_plate`], faded by `a` — Z07's first beat asks for the
+/// *exact* studio on the first frame, so its plate arrives late.
+pub fn studio_plate_faded(
+    ctx: &Ctx,
+    movement: &str,
+    name: &str,
+    a: f32,
+) -> vieww_widget::prelude::Stack {
     use vieww_foundation::{Gradient, Size, Sketchbook};
     use vieww_widget::prelude::*;
+    if a <= 0.01 {
+        return Stack::new();
+    }
     let abs = ctx.abs;
     let times = taps();
     let pulse = tap_pulse(abs, &times);
@@ -199,13 +214,13 @@ pub fn studio_plate(ctx: &Ctx, movement: &str, name: &str) -> vieww_widget::prel
                         pf::xywh(0.0, pf::H - 150.0, pf::W, 150.0),
                         Gradient::vertical().with_dither().with_stops(&[
                             (0.0, pf::alpha(Color::BLACK, 0.0)),
-                            (1.0, pf::alpha(Color::BLACK, 0.42)),
+                            (1.0, pf::alpha(Color::BLACK, 0.42 * a)),
                         ]),
                     );
                 }),
             ),
         ))
-        .push(pf::band_scrim(1.0))
+        .push(pf::band_scrim(a))
         // The headline plate's scrim — the same borrow the product film
         // makes: the least costly rectangle in the frame, under the
         // act's big line, over the editor's first code lines.
@@ -217,15 +232,15 @@ pub fn studio_plate(ctx: &Ctx, movement: &str, name: &str) -> vieww_widget::prel
                         pf::xywh(0.0, 0.0, pf::W, 190.0),
                         Gradient::vertical().with_dither().with_stops(&[
                             (0.0, pf::alpha(pf::BG_DEEP, 0.0)),
-                            (0.22, pf::alpha(pf::BG_DEEP, 0.80)),
-                            (0.78, pf::alpha(pf::BG_DEEP, 0.80)),
+                            (0.22, pf::alpha(pf::BG_DEEP, 0.80 * a)),
+                            (0.78, pf::alpha(pf::BG_DEEP, 0.80 * a)),
                             (1.0, pf::alpha(pf::BG_DEEP, 0.0)),
                         ]),
                     );
                 }),
             ),
         ))
-        .push(pf::act_chip(movement, name, pf::clamp01((ctx.sec - 0.3) / 0.5)))
+        .push(pf::act_chip(movement, name, pf::clamp01((ctx.sec - 0.3) / 0.5) * a))
         .push(witness_chip(ladder, pulse))
         .push(pf::chrome(progress_rail(abs)))
 }

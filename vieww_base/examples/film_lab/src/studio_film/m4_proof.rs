@@ -10,7 +10,8 @@ use vieww_widget::prelude::*;
 
 use crate::film_lib::ease_out_expo;
 use crate::product_film as pf;
-use super::{ACCENT, BG_DEEP, CANVAS, INK, MUTED, SYN_COMMENT};
+use super::filmkit as fk;
+use super::{ACCENT, BG_DEEP, BRAND_FAR, CANVAS, INK, MUTED, SYN_COMMENT};
 
 /// The ledger's rows — (label, value, source). The last row is the
 /// film's own audit, filled from the census manifest at build time.
@@ -70,7 +71,11 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
 
     let mut stack = Stack::new();
 
-    // The room — the audit's register: flat, dark, exact.
+    // The room — the audit's register: flat, dark, exact. A single
+    // flowing rail runs down its left edge: the receipts arriving,
+    // continuously, for as long as the audit speaks.
+    let rail_a = 0.5 * pf::clamp01(t / 0.2);
+    let rail_t = t * 8.0;
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
@@ -83,6 +88,14 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
                     (1.0, Color::rgb(12, 11, 10)),
                 ]),
             );
+            if rail_a > 0.01 {
+                let pts = fk::thread_pts(
+                    vieww_foundation::Offset::new(180.0, 130.0),
+                    vieww_foundation::Offset::new(230.0, 940.0),
+                    120.0,
+                );
+                fk::flow_along(book, &pts, rail_t, BRAND_FAR, rail_a, 1.4, 0.10);
+            }
             pf::vignette(book, w, h, 0.5);
         }),
     )));
