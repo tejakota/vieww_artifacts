@@ -158,7 +158,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     )),
                 ),
         );
-        stack = stack.push(
+        stack = stack.push(super::chrome(
             Positioned::new()
                 .left(W - 460.0 + 20.0)
                 .top(152.0)
@@ -175,8 +175,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                             )
                             .align(TextAlign::Left),
                     ),
-                ),
-        );
+                )
+                .into(),
+        ));
     }
 
     // The captions.

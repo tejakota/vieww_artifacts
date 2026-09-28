@@ -121,50 +121,25 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // The release line — typed on with a caret, the call to action.
     let release_a = clamp01((t - 0.22) / 0.10);
     if release_a > 0.0 {
-        let chars = RELEASE.chars().count();
-        let typed = (chars as f32 * clamp01((t - 0.24) / 0.30)) as usize;
-        let shown: String = RELEASE.chars().take(typed).collect();
-        let done = typed >= chars;
-        stack = stack.push(
-            Positioned::new()
-                .left(0.0)
-                .top(518.0)
-                .width(W)
-                .height(48.0)
-                .child(
-                    super::Opacity::new(release_a).child(
-                        Text::new(shown)
-                            .style(
-                                super::geist(30.0)
-                                    .letter_spacing(2.4)
-                                    .color(alpha(ACCENT, 1.0)),
-                            )
-                            .align(TextAlign::Center),
-                    ),
-                ),
-        );
-        // The caret, until the line completes.
-        if !done {
-            let on = (sec * 2.6).fract() < 0.55;
-            let w = super::gmono_w(30.0, typed);
-            if on {
-                stack = stack.push(
-                    Positioned::new()
-                        .left(W * 0.5 - super::gmono_w(30.0, chars) * 0.5 + w + 4.0)
-                        .top(526.0)
-                        .width(14.0)
-                        .height(32.0)
-                        .child(
-                            Positioned::fill().child(Painting::sized(
-                                Size::new(14.0, 32.0),
-                                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                                    book.rrect(xywh(5.0, 0.0, 4.0, 30.0), 2.0, alpha(ACCENT, 0.9));
-                                }),
-                            )),
-                        ),
-                );
-            }
-        }
+        // One anchor, one tracked measurement — see `type_on`.
+        //
+        // This line had a third fault on top of the shared two: it is set
+        // in **Geist**, a proportional face, and its caret was placed with
+        // `gmono_w`, a *monospace* advance constant. There is no value of
+        // that constant that lands a caret on proportional text, so the
+        // caret could only ever be approximately wrong. The line moves to
+        // the film's mono instrument voice, which is the voice a caret
+        // belongs to anyway, and the measurement becomes exact.
+        stack = stack.push(super::Opacity::new(release_a).child(super::type_on(
+            RELEASE,
+            super::TypeAt::CenteredOn((W * 0.5) as i32),
+            518.0,
+            super::geist(30.0)
+                .letter_spacing(2.4)
+                .color(alpha(ACCENT, 1.0)),
+            clamp01((t - 0.24) / 0.30),
+            sec,
+        )));
     }
 
     // The facts row — the release's own metadata, centered under the line.
@@ -198,48 +173,19 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     if repo_a > 0.0 {
         let chars = REPO.chars().count();
         let typed = (chars as f32 * clamp01((t - 0.68) / 0.26)) as usize;
-        let shown: String = REPO.chars().take(typed).collect();
         let done = typed >= chars;
-        stack = stack.push(
-            Positioned::new()
-                .left(0.0)
-                .top(648.0)
-                .width(W)
-                .height(40.0)
-                .child(
-                    super::Opacity::new(repo_a).child(
-                        Text::new(shown)
-                            .style(
-                                TextStyle::new(24.0)
-                                    .monospace()
-                                    .letter_spacing(2.2)
-                                    .color(alpha(tint(ACCENT, 0.15), 1.0)),
-                            )
-                            .align(TextAlign::Center),
-                    ),
-                ),
-        );
-        if !done {
-            let on = (sec * 2.6).fract() < 0.55;
-            let w = super::gmono_w(24.0, typed);
-            if on {
-                stack = stack.push(
-                    Positioned::new()
-                        .left(W * 0.5 - super::gmono_w(24.0, chars) * 0.5 + w + 4.0)
-                        .top(654.0)
-                        .width(13.0)
-                        .height(26.0)
-                        .child(
-                            Positioned::fill().child(Painting::sized(
-                                Size::new(13.0, 26.0),
-                                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                                    book.rrect(xywh(4.0, 0.0, 3.5, 24.0), 1.8, alpha(ACCENT, 0.9));
-                                }),
-                            )),
-                        ),
-                );
-            }
-        } else {
+        stack = stack.push(super::Opacity::new(repo_a).child(super::type_on(
+            REPO,
+            super::TypeAt::CenteredOn((W * 0.5) as i32),
+            648.0,
+            TextStyle::new(24.0)
+                .monospace()
+                .letter_spacing(2.2)
+                .color(alpha(tint(ACCENT, 0.15), 1.0)),
+            clamp01((t - 0.68) / 0.26),
+            sec,
+        )));
+        if done {
             // The underline — springs under the repo.
             let u = super::spring_out(clamp01((t - 0.94) / 0.30), 13.0, 0.45);
             let w = 470.0 * u;

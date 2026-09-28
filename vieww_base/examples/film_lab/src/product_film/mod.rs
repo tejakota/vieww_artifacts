@@ -54,7 +54,7 @@
 //! and the studio session are all in logical points and never change with
 //! scale.
 
-use vieww_foundation::{Color, Offset, Rect, Size};
+use vieww_foundation::{Color, Offset, Rect, Size, Transform};
 pub use vieww_widget::prelude::*;
 pub use vieww_widget::{Opacity, Painting, PaintWith};
 
@@ -136,6 +136,36 @@ pub struct Ctx<'a> {
     pub ladder: u32,
     /// The census pass's receipts (zeros until the census has run).
     pub probe: &'a Probe,
+    /// The camera this frame is seen through.
+    ///
+    /// A scene reads it to place things *in depth*: the camera moves the
+    /// whole world uniformly, which is flat by construction, so anything
+    /// that should sit behind or in front of the subject has to displace
+    /// itself against the move. That is what `parallax` is for.
+    pub cam: Cam,
+}
+
+impl Ctx<'_> {
+    /// How far a layer at `depth` should displace against the camera.
+    ///
+    /// `depth` 0 is the subject plane — it moves exactly with the camera
+    /// and gets no displacement. Positive depth is *behind* it and lags;
+    /// 1.0 lags completely, which is to say it ignores the camera's pan
+    /// and behaves like a painted backdrop. Negative depth is in front
+    /// and leads, which is what foreground dust wants.
+    ///
+    /// This compensates the camera's **pan** only, not its zoom: the zoom
+    /// is shared by every layer, because a translation cannot express a
+    /// difference of scale and pretending otherwise would put the layers
+    /// out of register. A layer that also wants to recede under a push
+    /// scales itself.
+    pub fn parallax(&self, depth: f32) -> Offset {
+        let c = self.cam;
+        Offset::new(
+            (c.at.dx - W * 0.5) * depth,
+            (c.at.dy - H * 0.5) * depth,
+        )
+    }
 }
 
 /// One scene in the film.
@@ -537,13 +567,51 @@ pub fn glow(book: &mut Sketchbook, x: f32, y: f32, r: f32, color: Color, a: f32)
 
 /// The standard star field — sparse, calm, deterministic.
 pub fn stars(book: &mut Sketchbook, w: f32, h: f32, seed: u64, n: usize, t: f32, base: f32) {
+    stars_deep(book, w, h, seed, n, t, base, Offset::ZERO);
+}
+
+/// The star field, in depth.
+///
+/// A camera that moves everything by the same amount is a camera looking
+/// at a painted flat, which is what the film's ground and dust were: one
+/// plane, uniformly transformed. Giving the field three strata and letting
+/// each lag the camera's pan by a different amount is what turns a move
+/// into a *space* — the near dust slides past, the far stars barely
+/// answer, and the subject sits between them. It costs one offset per
+/// star and it is the difference between a zoom and a dolly.
+///
+/// `pan` is the camera displacement to work against — `Ctx::parallax(1.0)`.
+#[allow(clippy::too_many_arguments)]
+pub fn stars_deep(
+    book: &mut Sketchbook,
+    w: f32,
+    h: f32,
+    seed: u64,
+    n: usize,
+    t: f32,
+    base: f32,
+    pan: Offset,
+) {
     let mut rng = Rng::new(seed);
     for _ in 0..n {
         let x = rng.f01() * w;
         let y = rng.f01() * h;
         let r = 0.4 + rng.f01() * 0.9;
         let tw = 0.5 + 0.5 * (t * 3.2 + rng.f01() * 9.0).sin();
-        book.circle(Offset::new(x, y), r, alpha(Color::WHITE, base * (0.4 + 0.6 * tw)));
+        // Three strata, keyed off the star's own size so the near ones
+        // (larger, brighter) are the ones that slide.
+        let depth = if r > 1.05 {
+            -0.22
+        } else if r > 0.75 {
+            0.35
+        } else {
+            0.78
+        };
+        book.circle(
+            Offset::new(x + pan.dx * depth, y + pan.dy * depth),
+            r,
+            alpha(Color::WHITE, base * (0.4 + 0.6 * tw)),
+        );
     }
 }
 
@@ -588,14 +656,115 @@ pub fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
     .into()
 }
 
-/// The film's caption — bottom-left, mono, tracked, with an accent tick.
+// ── The band — the film's own strip, reserved at the top ────────────────────
+//
+// The narration used to live in the bottom third, and it shared that third
+// with two other things that were laid out independently of it: the
+// distance readout, centred at `W * 0.5`, and (in the studio act) the
+// app's own bottom panel tab bar. Nothing reserved a lane, so nothing had
+// to agree, and the result was a caption with a hole punched through it in
+// most of the film — "every number on screen is a receipt — counted,
+// n▉▉▉▉▉▉▉" being the one that hurt, since that is the thesis.
+//
+// So the film takes a strip and keeps it. The band is film chrome only:
+// the rail, the movement label, and the caption stack. Nothing else may be
+// laid out inside it, and the caption never leaves it. The distance
+// readout stays at the bottom, alone, where it is now the only thing —
+// two instruments, two ends of the frame, and no arithmetic between them.
+//
+// Reading order comes with it. The old stack put the newest line *above*
+// the older one, and cross-faded the new line in at a lower opacity than
+// the line it was replacing, so the eye was pulled to the stale line and
+// then had to read upward. Here the older line sits higher and dimmer and
+// the newest line sits at the bottom of the band at full weight — the
+// subtitle convention, which is the convention because it is the one that
+// reads.
+
+/// The reserved band's height. Nothing outside `mod.rs` lays out inside it.
+pub const BAND_H: f32 = 146.0;
+/// The older caption line — higher in the band, and dimmer.
+pub const CAP_Y0: f32 = 64.0;
+/// The newest caption line — the bottom of the band, at full weight.
+pub const CAP_Y1: f32 = 98.0;
+/// The movement label's baseline inside the band.
+pub const ACT_Y: f32 = 44.0;
+
+/// Map a scene's legacy bottom-third caption `y` into the band.
+///
+/// The scenes call `caption` with one of two literals — `1002.0` for the
+/// line that arrives first and `966.0` for the line that replaces it (plus
+/// a lone `1006.0` on the end card). Rather than touch forty-one call
+/// sites and risk transposing a pair, the remap happens here, and it
+/// **flips** the order on the way: the first line is the older line, so in
+/// the band it belongs on top.
+fn band_slot(legacy_y: f32) -> f32 {
+    if legacy_y >= 990.0 {
+        CAP_Y0
+    } else {
+        CAP_Y1
+    }
+}
+
+/// The band's scrim — a plate under the film's own chrome.
+///
+/// In the pure scenes this is barely visible over the ground. In the
+/// studio act it is doing real work: the app's menu bar and tab strip live
+/// at the very top of the frame, and the movement label used to be drawn
+/// straight through the breadcrumb beneath them — "M O V E M E N T  I I I"
+/// and "product_film_workspace › live.rs" overprinted into an unreadable
+/// smear for the whole hundred and four seconds. The scrim holds the two
+/// apart. It stops short of opaque on purpose: the app is still faintly
+/// there under the film's voice, which is the honest picture.
+pub fn band_scrim(strength: f32) -> WidgetNode {
+    if strength <= 0.01 {
+        return Stack::new().into();
+    }
+    chrome(
+    Positioned::new()
+        .left(0.0)
+        .top(0.0)
+        .width(W)
+        .height(BAND_H + 30.0)
+        .child(Painting::sized(
+            Size::new(W, BAND_H + 30.0),
+            // The band's own height, not the size handed in: chrome is
+            // composited inside a full-canvas box, so painting to `s`
+            // stretched this gradient over all 1080 rows and dropped the
+            // whole frame to a third of its luminance.
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                book.rect(
+                    xywh(0.0, 0.0, W, BAND_H + 30.0),
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, alpha(BG_DEEP, 0.94 * strength)),
+                        (0.62, alpha(BG_DEEP, 0.90 * strength)),
+                        (1.0, alpha(BG_DEEP, 0.0)),
+                    ]),
+                );
+            }),
+        ))
+        .into(),
+    )
+}
+
+/// The film's caption — in the band, mono, tracked, with an accent tick.
 /// `appear` in `[0, 1]` fades it in with a slight rise.
+///
+/// The `y` argument is a scene's legacy bottom-third coordinate and is
+/// remapped through [`band_slot`]; see the band note above.
 pub fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
     let a = crate::film_lib::ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
     }
+    let older = y >= 990.0;
+    let y = band_slot(y);
+    // The older line is held back to 0.55 so the newest line is always the
+    // brightest thing in the band — the opposite of what the stack used to
+    // do, where the arriving line faded up *underneath* the one it was
+    // replacing and spent its first half-second dimmer than stale text.
+    let a = if older { a * 0.55 } else { a };
     let rise = (1.0 - a) * 14.0;
+    chrome(
     Stack::new()
         .push(
             Positioned::new()
@@ -626,7 +795,8 @@ pub fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
                         .align(TextAlign::Left),
                 )),
         )
-        .into()
+        .into(),
+    )
 }
 
 /// A centered caption — key info stays center-frame.
@@ -656,13 +826,19 @@ pub fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
         .into()
 }
 
+/// A chip's horizontal padding. Named because `chip_row` has to measure
+/// what `chip` draws, and the two had drifted: the row added a flat 26 px
+/// for a box whose real horizontal inset is `2 × 11` plus a 1 px border a
+/// side. One constant, one truth.
+pub const CHIP_PAD_X: f32 = 11.0;
+
 /// A small chip — rounded label with a soft border, the receipts' container.
 pub fn chip(text: impl Into<String>, size: f32, fg: Color) -> WidgetNode {
     Container::new()
         .color(alpha(SURFACE, 0.88))
         .radius(7.0)
         .border(vieww_foundation::Border::new(alpha(fg, 0.22), 1.0))
-        .padding(vieww_foundation::EdgeInsets::symmetric(7.0, 11.0))
+        .padding(vieww_foundation::EdgeInsets::symmetric(7.0, CHIP_PAD_X))
         .child(
             Text::new(text)
                 .style(geist_mono(size).letter_spacing(1.1).color(fg)),
@@ -684,7 +860,13 @@ pub fn chip_row(chips: &[(&str, Color)], x: f32, y: f32, appear: f32) -> WidgetN
         if chip_a <= 0.01 {
             continue;
         }
-        let w = gmono_w(14.0, text.len()) + 26.0;
+        // Tracked width, not the bare advance. `chip()` sets
+        // `letter_spacing(1.1)`, so measuring with `gmono_w` alone lost
+        // `1.1 × chars` — about 21 px on "remount: new screen", which is
+        // more than the 10 px gap the row leaves between chips. Every
+        // receipt row in the studio act had its chips growing into their
+        // neighbour; the wider the label, the worse the overlap.
+        let w = gmono_tw(14.0, text.chars().count(), 1.1) + CHIP_PAD_X * 2.0 + 2.0;
         let rise = (1.0 - crate::film_lib::ease_out_cubic(chip_a)) * 10.0;
         stack = stack.push(
             Positioned::new()
@@ -716,15 +898,598 @@ pub fn group_commas(n: u64) -> String {
 /// Geist Mono's advance in ems — layout arithmetic for the mono grid.
 pub const GEIST_MONO_ADV: f32 = 0.6035;
 
-/// A Geist Mono run's pixel width.
+/// A Geist Mono run's pixel width, **advance only** — no tracking.
+///
+/// Prefer [`gmono_tw`] for anything that has to line up with laid-out text.
+/// This one stays because a few call sites genuinely want the bare grid
+/// (a glyph cell, a column step), and because silently folding tracking in
+/// here would move those.
 pub fn gmono_w(size: f32, chars: usize) -> f32 {
     size * GEIST_MONO_ADV * chars as f32
+}
+
+// ── Two spaces: the world, and the film's own voice ─────────────────────────
+//
+// The camera revealed a distinction the film had never needed to make.
+// Everything it draws was in one tree, so the camera — which moves the
+// whole command list — moved the captions and the rail along with the
+// scene. A push from 1.0 to 2.35 on the rasteriser scene dragged the
+// narration off the left edge of frame and scaled it to twice its size.
+//
+// Which is correct behaviour for a camera and the wrong place for a
+// caption. A film's furniture — subtitles, the movement label, the
+// timeline, the distance readout — does not live in the world the camera
+// is looking at. It is composited over the finished picture, in *screen*
+// space, at a fixed size, and it does not move when the camera does.
+//
+// So the chrome helpers no longer return a node into the scene's tree.
+// They register themselves here, and the master drains them into a second
+// tree that is composited after the camera transform and never subject to
+// it. No scene file changes: `caption` is still called exactly where it
+// was, it simply lands in the other space.
+
+thread_local! {
+    static CHROME: std::cell::RefCell<Vec<WidgetNode>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Register a node in **screen space** — composited over the frame, after
+/// the camera, at a fixed size.
+pub fn chrome(node: WidgetNode) -> WidgetNode {
+    CHROME.with(|c| c.borrow_mut().push(node));
+    Stack::new().into()
+}
+
+/// Drain the frame's screen-space chrome into one tree.
+///
+/// The master calls this straight after building a scene, so what comes
+/// back is exactly what this frame registered and the buffer is left
+/// empty for the next one.
+pub fn take_chrome() -> WidgetNode {
+    let items = CHROME.with(|c| std::mem::take(&mut *c.borrow_mut()));
+    let mut stack = Stack::new();
+    for item in items {
+        stack = stack.push(Positioned::fill().child(item));
+    }
+    stack.into()
+}
+
+/// Throw away anything registered but not drained — the census and the
+/// calibration probe build frames they never composite.
+pub fn clear_chrome() {
+    CHROME.with(|c| c.borrow_mut().clear());
+}
+
+// ── Measuring what will actually be drawn ───────────────────────────────────
+//
+// `vieww-text`'s own test for this says it in one line: *"the caret walks
+// the same advances the glyphs were placed with. Measuring one way and
+// drawing another puts the caret between the wrong letters."* The film was
+// doing exactly that — placing glyphs through the shaper and placing the
+// caret with `size × 0.6035 × chars`, a constant. A constant cannot
+// account for tracking (which the shaper folds into the advances, one gap
+// per glyph), and on the end card it could not even account for the
+// *typeface*, since that line is set in proportional Geist and was being
+// measured with a monospace advance.
+//
+// So nothing here estimates any more. The film already builds its own
+// `FontStore` — the embedded faces plus the site's Geist, no system scan,
+// deterministic by checkout — and that store can lay a run out and be
+// asked where the caret goes. The store is built once per thread and the
+// answers are memoised, because a type-on asks the same question about the
+// same prefix on every frame it is on screen.
+
+thread_local! {
+    static SHAPER: std::cell::RefCell<Option<vieww_text::FontStore>> =
+        const { std::cell::RefCell::new(None) };
+    static MEASURED: std::cell::RefCell<
+        std::collections::HashMap<(u64, u32, u32), (f32, f32)>,
+    > = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Where the shaper puts a caret `bytes` into `text`, and how wide the
+/// whole run is — both in logical pixels, both measured.
+pub fn measured_caret(text: &str, style: TextStyle, bytes: usize) -> (f32, f32) {
+    use std::hash::{Hash, Hasher};
+    let key = {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut h);
+        style.size.to_bits().hash(&mut h);
+        style.letter_spacing.to_bits().hash(&mut h);
+        format!("{:?}", style.family).hash(&mut h);
+        (h.finish(), bytes as u32, style.size.to_bits())
+    };
+    if let Some(hit) = MEASURED.with(|m| m.borrow().get(&key).copied()) {
+        return hit;
+    }
+    let out = SHAPER.with(|s| {
+        let mut slot = s.borrow_mut();
+        let store = slot.get_or_insert_with(fonts);
+        let spans = [vieww_text::TextSpan::new(text, style)];
+        let p = vieww_text::Paragraph::layout(store, &spans, f32::INFINITY);
+        let caret = p.cursor_rect(vieww_foundation::TextPosition::new(bytes.min(text.len())));
+        (caret.left, p.size().width)
+    });
+    MEASURED.with(|m| {
+        m.borrow_mut().insert(key, out);
+    });
+    out
+}
+
+/// A Geist Mono run's **tracked** pixel width — advance plus the
+/// `letter_spacing` the style actually sets.
+///
+/// `gmono_w` alone under-measures every tracked run by `tracking × chars`,
+/// and the film tracks everything: chips at 1.1, the distance readout at
+/// 1.5, the type-on lines at 1.6–2.0. That missing term is the single
+/// arithmetic error behind a whole family of visible defects — chips
+/// overlapping their neighbour in every Movement III receipt row, the
+/// distance readout wrapping and spilling "ms" out the bottom of its own
+/// pill, and the type-on caret finishing short of the last glyph. One term,
+/// a dozen symptoms.
+///
+/// The shaper folds tracking **into each glyph's advance** rather than
+/// placing it between them — `vieww-text`'s own test is titled
+/// "letter_spacing lands in the advances rather than beside them", and
+/// asserts "four glyphs at four pixels each". So an `n`-character run
+/// carries `n` units of tracking, not `n - 1`.
+///
+/// This is still an estimate and still assumes a monospace face. Anything
+/// that has to land on a glyph — a caret above all — should use
+/// [`measured_caret`] instead and ask the shaper.
+pub fn gmono_tw(size: f32, chars: usize, tracking: f32) -> f32 {
+    if chars == 0 {
+        return 0.0;
+    }
+    gmono_w(size, chars) + tracking * chars as f32
+}
+
+// ── The type-on — one anchor for the text and the caret ─────────────────────
+
+/// How a type-on line is placed horizontally.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum TypeAt {
+    /// Left edge pinned at `x`.
+    Left(i32),
+    /// The **finished** line centred on `x`. The line does not re-centre as
+    /// it types: it is laid out where it will end up and fills in from the
+    /// left, which is what a caret can follow.
+    CenteredOn(i32),
+}
+
+/// A line that types itself, with a caret that is actually on the end of it.
+///
+/// This exists because the caret and the text had drifted apart in three
+/// different ways at once, and each one was invisible in the source:
+///
+/// 1. **Anchor mismatch.** The text was `TextAlign::Center` inside a
+///    full-width box, so the rendered string *re-centred on every
+///    keystroke* — its left edge walking left by half a glyph per
+///    character. The caret was pinned to `W*0.5 - gmono_w(full)*0.5`, a
+///    fixed point derived from the *finished* string. The error is
+///    `(gmono_w(typed) - gmono_w(full)) / 2`, which starts at about
+///    −190 px on a 22-character line and only closes on the last
+///    character. The caret began in empty space before the first letter,
+///    walked *through* the word overprinting glyphs, and arrived late.
+/// 2. **Missing tracking.** Even with the anchors agreed, `gmono_w`
+///    ignored `letter_spacing`, so the caret finished short by
+///    `tracking × chars` — 44 px on a 2.0-tracked line.
+/// 3. **Free-running blink.** The blink was `(sec * 2.6).fract()`, a phase
+///    of the scene clock rather than of the typing, so the caret could be
+///    dark for the exact beats a character landed on.
+///
+/// Here the text and the caret are computed from **one** `x0` and **one**
+/// tracked measurement, so they cannot disagree by construction, and the
+/// blink is suppressed while a character is actually landing — a real
+/// caret is solid while you type and only blinks once you stop.
+pub fn type_on(
+    full: &str,
+    at: TypeAt,
+    y: f32,
+    style: TextStyle,
+    progress: f32,
+    clock: f32,
+) -> WidgetNode {
+    let size = style.size;
+    let p = clamp01(progress);
+    let total = full.chars().count();
+    let typed_n = (total as f32 * crate::film_lib::ease_out_cubic(p)).round() as usize;
+    if typed_n == 0 {
+        return Stack::new().into();
+    }
+    let shown: String = full.chars().take(typed_n).collect();
+
+    // One anchor, and the shaper's own arithmetic for both halves of it.
+    // The line is laid out where the *finished* line will sit and fills in
+    // from the left — a centred line that re-centres per keystroke is a
+    // line no caret can follow, and that was the original fault.
+    let typed_bytes = shown.len();
+    let (caret_x, full_w) = measured_caret(full, style, typed_bytes);
+    let x0 = match at {
+        TypeAt::Left(x) => x as f32,
+        TypeAt::CenteredOn(x) => x as f32 - full_w * 0.5,
+    };
+
+    let mut stack = Stack::new().push(
+        Positioned::new()
+            .left(x0)
+            .top(y)
+            .width(full_w + size)
+            .height(size * 1.45)
+            .child(
+                Text::new(shown)
+                    .style(style)
+                    .align(TextAlign::Left),
+            ),
+    );
+
+    // The caret sits one advance past the last glyph — solid while the line
+    // is still landing, blinking once it has settled.
+    let done = typed_n >= total;
+    let settled = (clock * 2.4).fract() < 0.55;
+    if !done || settled {
+        stack = stack.push(
+            Positioned::new()
+                .left(x0 + caret_x)
+                .top(y + size * 0.16)
+                .width(size * 0.1 + 2.0)
+                .height(size * 1.02)
+                .child(
+                    Container::new()
+                        .color(alpha(style.color, if done { 0.75 } else { 0.95 }))
+                        .radius(1.5),
+                ),
+        );
+    }
+    stack.into()
 }
 
 /// A count-up value — integer part eased, so digits roll to their rest.
 pub fn count_up(target: u64, progress: f32) -> u64 {
     let e = crate::film_lib::ease_out_cubic(progress.clamp(0.0, 1.0));
     ((target as f32 * e).round()) as u64
+}
+
+// ── The camera ──────────────────────────────────────────────────────────────
+//
+// The film had none. Every element arrived by opacity — eighty-six
+// `Opacity` wrappers, one `translate`, no `Transform` at all — and then sat
+// perfectly still until the cut took it. Measured as mean inter-frame
+// difference the whole picture runs at about 0.03/255, which is to say
+// eighteen thousand frames were rendered to deliver what is, kinetically, a
+// sequence of stills. Nothing in it needed sixty frames a second, or
+// twenty-four.
+//
+// The camera is the cheapest way to change that, because it does not
+// require touching a single scene: the frame is already a command list, and
+// `Scene::append` exists precisely to lift a recording into another
+// coordinate space without replaying the paint pass. So the film gets a
+// camera the way it already got `SCALE_FACTOR` — after compositing, over
+// the whole frame, one transform.
+//
+// **The studio act keeps the camera off.** Movement III's claim is that
+// those are the product's own pixels, and a scaled frame is resampled
+// pixels. `Cam::STILL` there is a correctness constraint, not an oversight.
+//
+// Zoom stays at or above 1.0 throughout. Below it the frame would show more
+// world than the canvas paints and the star field's edge would walk into
+// shot — so a "pull back" here is written as a move *down to* 1.0 from a
+// tight start, which reads the same and cannot reveal the seam.
+
+/// A 2D camera over the finished frame: a zoom about a held world point.
+#[derive(Clone, Copy, PartialEq)]
+pub struct Cam {
+    /// Magnification. 1.0 is the canvas, 1:1.
+    pub zoom: f32,
+    /// The world point pinned to the centre of frame.
+    pub at: Offset,
+}
+
+impl Cam {
+    /// The canvas, untouched — and the identity the studio act holds.
+    pub const STILL: Cam = Cam {
+        zoom: 1.0,
+        at: Offset::new(W * 0.5, H * 0.5),
+    };
+
+    /// A zoom about the canvas centre.
+    pub fn zoom(z: f32) -> Cam {
+        Cam { zoom: z, ..Cam::STILL }
+    }
+
+    /// A zoom about an arbitrary held point.
+    pub fn at(z: f32, x: f32, y: f32) -> Cam {
+        Cam {
+            zoom: z,
+            at: Offset::new(x, y),
+        }
+    }
+
+    /// True when this camera cannot change a pixel, so the master can skip
+    /// the copy entirely.
+    pub fn is_still(&self) -> bool {
+        (self.zoom - 1.0).abs() < 1.0e-4
+            && (self.at.dx - W * 0.5).abs() < 0.01
+            && (self.at.dy - H * 0.5).abs() < 0.01
+    }
+
+    /// Nudge the camera by a screen-space offset — the shake's door in.
+    pub fn nudged(self, dx: f32, dy: f32) -> Cam {
+        Cam {
+            at: Offset::new(self.at.dx + dx, self.at.dy + dy),
+            ..self
+        }
+    }
+
+    /// The transform that takes world space to screen space: the held
+    /// point lands at frame centre, everything else scales about it.
+    pub fn transform(&self) -> Transform {
+        let z = self.zoom.max(0.05);
+        Transform::new(
+            z,
+            0.0,
+            0.0,
+            z,
+            W * 0.5 - self.at.dx * z,
+            H * 0.5 - self.at.dy * z,
+        )
+    }
+}
+
+/// Interpolate two cameras. Eased by the caller — this is the straight line.
+pub fn cam_lerp(a: Cam, b: Cam, t: f32) -> Cam {
+    let t = clamp01(t);
+    Cam {
+        zoom: a.zoom + (b.zoom - a.zoom) * t,
+        at: Offset::new(
+            a.at.dx + (b.at.dx - a.at.dx) * t,
+            a.at.dy + (b.at.dy - a.at.dy) * t,
+        ),
+    }
+}
+
+/// A decaying impulse — an event the camera felt, not a loop it is in.
+///
+/// `since` is seconds since the hit. The shake is deterministic (it is a
+/// function of `since` alone, not of a running RNG) because the film's
+/// whole contract is that a frame is a function of the checkout.
+pub fn cam_shake(since: f32, amplitude: f32) -> (f32, f32) {
+    if !(0.0..0.55).contains(&since) {
+        return (0.0, 0.0);
+    }
+    let decay = (1.0 - since / 0.55).powf(2.2);
+    let a = amplitude * decay;
+    (
+        a * (since * 62.0).sin(),
+        a * 0.55 * (since * 48.0 + 1.7).sin(),
+    )
+}
+
+/// The film's camera plan, in one place — because a camera plan is a
+/// document, and reading it should not mean opening twenty-three files.
+///
+/// Every move is slow, motivated and single: one idea per scene. The
+/// easings vary on purpose — a push that decelerates into its subject
+/// reads differently from one that is still travelling when the cut
+/// comes, and the film had exactly one easing curve doing eighty percent
+/// of the work.
+pub fn camera(id: &str, t: f32, sec: f32) -> Cam {
+    use crate::film_lib::{ease_in_out, ease_out_cubic, ease_out_expo, smoothstep};
+    match id {
+        // The question, asked closer than it was posed.
+        "P01" => cam_lerp(Cam::zoom(1.0), Cam::zoom(1.055), ease_in_out(t)),
+
+        // The wait closes in on the terminal — the only move in the film
+        // that is meant to feel slightly oppressive.
+        "A01" => cam_lerp(
+            Cam::zoom(1.0),
+            Cam::at(1.075, W * 0.5, H * 0.56),
+            smoothstep(t),
+        ),
+
+        // The tolls become a journey. The camera tracks the signal left to
+        // right through the gates instead of watching a stack from across
+        // the room — the metaphor is serial, so the shot is too.
+        "A02" => {
+            let travel = ease_in_out(clamp01((t - 0.14) / 0.72));
+            cam_lerp(
+                Cam::at(1.16, 700.0, 452.0),
+                Cam::at(1.03, 1180.0, 452.0),
+                travel,
+            )
+        }
+
+        // Held — then hit, once, when the frame budget breaks. The jank is
+        // an event; the camera should have felt it.
+        "A03" => {
+            let base = cam_lerp(Cam::zoom(1.02), Cam::zoom(1.06), ease_out_cubic(t));
+            let (dx, dy) = cam_shake(sec - 8.6, 9.0);
+            base.nudged(dx, dy)
+        }
+
+        // Pull back off the desktop to take in all three devices at once.
+        "A04" => cam_lerp(
+            Cam::at(1.22, 850.0, 460.0),
+            Cam::at(1.0, W * 0.5, H * 0.5),
+            ease_out_expo(clamp01((t - 0.08) / 0.62)),
+        ),
+
+        // Start on the first tree, widen as the set completes.
+        "B01" => cam_lerp(
+            Cam::at(1.30, 700.0, 500.0),
+            Cam::zoom(1.0),
+            ease_out_expo(clamp01((t - 0.05) / 0.70)),
+        ),
+
+        // A slow drift across the constellation, never arriving.
+        "B02" => {
+            let d = ease_in_out(t);
+            cam_lerp(
+                Cam::at(1.10, 900.0, 430.0),
+                Cam::at(1.02, 1010.0, 480.0),
+                d,
+            )
+        }
+
+        // The film's one real push: from the glyph, down to a single
+        // pixel's coverage. This is the shot the scene was always
+        // describing and never showed.
+        "B03" => {
+            let p = ease_in_out(clamp01((t - 0.18) / 0.66));
+            cam_lerp(Cam::zoom(1.0), Cam::at(2.35, 905.0, 300.0), p)
+        }
+
+        // Settle back to take the three panels as one argument.
+        "B04" => cam_lerp(
+            Cam::at(1.18, 640.0, 520.0),
+            Cam::zoom(1.0),
+            ease_out_expo(clamp01((t - 0.06) / 0.60)),
+        ),
+
+        // ── Movement III — the app's pixels are its own. ────────────────
+        "C01" | "C02" | "C03" | "C04" | "C05" | "C06" | "C07" | "C08" | "C09" => Cam::STILL,
+
+        // The receipts settle into place.
+        "D01" => cam_lerp(Cam::zoom(1.05), Cam::zoom(1.0), ease_out_expo(t)),
+
+        // The pullback, finally pulling back: start tight on the studio
+        // card, widen until the constellation around it is the shot. The
+        // scene has been called `the_pullback` all along.
+        "D02" => cam_lerp(
+            Cam::at(1.85, 960.0, 560.0),
+            Cam::zoom(1.0),
+            ease_out_expo(clamp01((t - 0.04) / 0.74)),
+        ),
+
+        // In, as the poles meet — the distance collapsing is the camera's
+        // move as much as the geometry's.
+        "D03" => {
+            let p = ease_in_out(clamp01((t - 0.22) / 0.50));
+            cam_lerp(Cam::zoom(1.0), Cam::at(1.42, 960.0, 440.0), p)
+        }
+
+        // A last, barely-there settle onto the mark.
+        "D04" => cam_lerp(Cam::zoom(1.035), Cam::zoom(1.0), ease_out_expo(clamp01(t / 0.5))),
+
+        _ => Cam::STILL,
+    }
+}
+
+// ── The cut ─────────────────────────────────────────────────────────────────
+//
+// There were twenty-two cuts in the film and all twenty-two were the same
+// cut: the outgoing scene was killed on a frame boundary with no exit ramp
+// at all — sixteen of the twenty-three scene files contain no fade-out
+// logic of any kind — and the incoming scene began from an empty frame
+// with its elements on `(t - 0.3) / 0.5`-style appear delays. The join is
+// therefore a third to two-thirds of a second of very nearly nothing, at
+// every boundary, which adds up to something like eight to twelve seconds
+// of the runtime. It does not read as rhythm. It reads as buffering.
+//
+// Two of those cuts were worse than the rest. Mean frame luminance runs
+// 27–30 across the graphics acts and 49–54 across the studio act, so the
+// join into `C01` is a **+22.5 jump in a single frame** and the join out
+// of `C09` is −16. In a dark room that is the audience flinching, twice,
+// and it is also why the two halves of the film do not look like the same
+// piece of work.
+//
+// The fix is a shot, not a dissolve. Each scene now enters *moving* and
+// leaves *accelerating*, through the camera, with a short luminance ramp
+// riding along. That matters for the brief the film set itself: a
+// cross-fade reads the same at 24 fps as at 60, but a fast camera move
+// only resolves cleanly at a high frame rate. If the film is going to
+// render eighteen thousand frames it should put something in them that
+// needs eighteen thousand frames.
+//
+// `ease_in_*` on the way out is the point. The film had two `ease_in_out`
+// calls against fifty `ease_out_cubic`, which means nothing in five
+// minutes ever accelerated, which in turn is *why* nothing ever left:
+// every element decelerated into place and then waited to be cut. Things
+// that leave have to speed up first.
+
+/// The handle either side of a cut.
+const CUT_IN: f32 = 0.34;
+const CUT_OUT: f32 = 0.26;
+
+/// Acceleration — the curve the film did not have.
+pub fn ease_in_cubic(t: f32) -> f32 {
+    let t = clamp01(t);
+    t * t * t
+}
+
+/// What the master needs to render one frame: where the camera is, and how
+/// much of the frame is present.
+#[derive(Clone, Copy)]
+pub struct Shot {
+    pub cam: Cam,
+    /// Global frame opacity, and the luminance ramp across a cut. 1.0 is
+    /// the scene as authored.
+    pub alpha: f32,
+}
+
+/// The camera a scene is entered from and left towards.
+///
+/// Varied by position so the cut does not become a tic — the same handle
+/// on every join is its own kind of monotony. Movement boundaries get a
+/// bigger move than the joins inside a movement, because they *are* a
+/// bigger change, and the two studio boundaries get the largest because
+/// they also carry the luminance ramp.
+fn cut_handles(index: usize, base: Cam) -> (Cam, Cam) {
+    // The rail already knows where the movements break; the same list.
+    let movement_break = matches!(index, 1 | 5 | 9 | 18 | 20);
+    let into_studio = index == 9;
+    let out_of_studio = index == 18;
+
+    let (zin, lift) = if into_studio || out_of_studio {
+        (1.085, 26.0)
+    } else if movement_break {
+        (1.055, 18.0)
+    } else {
+        (1.028, 10.0)
+    };
+
+    let enter = Cam {
+        zoom: base.zoom * zin,
+        at: Offset::new(base.at.dx, base.at.dy + lift),
+    };
+    let leave = Cam {
+        zoom: base.zoom * (2.0 - zin).max(0.7),
+        at: Offset::new(base.at.dx, base.at.dy - lift * 0.8),
+    };
+    (enter, leave)
+}
+
+/// The full shot for a frame: the scene's camera plan, with the cut's
+/// handles composed on either end.
+pub fn shot(id: &str, index: usize, seconds: f32, t: f32, sec: f32) -> Shot {
+    use crate::film_lib::ease_out_expo;
+
+    let base = camera(id, t, sec);
+    let (enter, leave) = cut_handles(index, base);
+    let first = index == 0;
+    let last = id == "D05";
+
+    // Entering — decelerating into the scene's own camera.
+    if !first && sec < CUT_IN {
+        let e = ease_out_expo(clamp01(sec / CUT_IN));
+        return Shot {
+            cam: cam_lerp(enter, base, e),
+            alpha: clamp01(sec / (CUT_IN * 0.62)),
+        };
+    }
+
+    // Leaving — accelerating out of it. The last scene is exempt: the film
+    // should end on a held frame, not on a frame that is still travelling.
+    let remaining = seconds - sec;
+    if !last && remaining < CUT_OUT {
+        let l = ease_in_cubic(clamp01(1.0 - remaining / CUT_OUT));
+        return Shot {
+            cam: cam_lerp(base, leave, l),
+            alpha: 1.0 - ease_in_cubic(clamp01(1.0 - remaining / (CUT_OUT * 0.72))),
+        };
+    }
+
+    Shot { cam: base, alpha: 1.0 }
 }
 
 // ── The gap — the film's spine, drawn where a scene needs it ────────────────
@@ -851,36 +1616,64 @@ pub fn distance_chip(abs: f32, a: f32) -> WidgetNode {
     let ms = distance_ms(abs);
     let text = distance_text(ms);
     let label = "the distance";
-    let w = gmono_w(15.0, label.len() + text.len() + 3) + 36.0;
+    let line = format!("{label} · {text}");
+
+    // The pill is sized from the **tracked** width of the line it has to
+    // hold, and from one place. It used to be sized from `gmono_w` — the
+    // untracked estimate — which came up short by `1.5 × chars`, so the
+    // line no longer fitted the box it was given, wrapped, and put "ms" on
+    // a second row that fell straight out the bottom of a pill painted at
+    // a hard-coded 30 px. The readout the whole film hangs on spent most
+    // of its runtime visibly broken.
+    const SIZE: f32 = 15.0;
+    const TRACK: f32 = 1.5;
+    const PAD_L: f32 = 30.0;
+    const PAD_R: f32 = 16.0;
+    const PILL_H: f32 = 30.0;
+    let text_w = gmono_tw(SIZE, line.chars().count(), TRACK);
+    let w = (PAD_L + text_w + PAD_R).ceil();
+    let x = (W * 0.5 - w * 0.5).round();
+
+    chrome(
     Stack::new()
         .push(
             Positioned::new()
-                .left(W * 0.5 - w * 0.5)
+                .left(x)
                 .top(1008.0)
                 .width(w)
-                .height(34.0)
+                .height(PILL_H)
                 .child(Opacity::new(a).child(Painting::sized(
-                    Size::new(w, 34.0),
+                    Size::new(w, PILL_H),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.rrect(xywh(0.0, 0.0, w, 30.0), 9.0, alpha(SURFACE_2, 0.92));
-                        book.stroke_rrect(xywh(0.0, 0.0, w, 30.0), 9.0, alpha(ACCENT, 0.28), 1.1);
-                        book.circle(Offset::new(16.0, 15.0), 3.5, alpha(ACCENT, 0.7));
+                        book.rrect(xywh(0.0, 0.0, w, PILL_H), 9.0, alpha(SURFACE_2, 0.92));
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, w, PILL_H),
+                            9.0,
+                            alpha(ACCENT, 0.28),
+                            1.1,
+                        );
+                        book.circle(Offset::new(16.0, PILL_H * 0.5), 3.5, alpha(ACCENT, 0.7));
                     }),
                 ))),
         )
         .push(
             Positioned::new()
-                .left(W * 0.5 - w * 0.5 + 30.0)
-                .top(1014.0)
-                .width(w - 36.0)
-                .height(22.0)
-                .child(
-                    Text::new(format!("{label} · {text}"))
-                        .style(geist_mono(15.0).letter_spacing(1.5).color(alpha(INK, 0.9)))
+                .left(x + PAD_L)
+                .top(1008.0 + (PILL_H - SIZE * 1.34) * 0.5)
+                .width(text_w + SIZE)
+                .height(SIZE * 1.34)
+                .child(Opacity::new(a).child(
+                    Text::new(line)
+                        .style(
+                            geist_mono(SIZE)
+                                .letter_spacing(TRACK)
+                                .color(alpha(INK, 0.9)),
+                        )
                         .align(TextAlign::Left),
-                ),
+                )),
         )
-        .into()
+        .into(),
+    )
 }
 
 /// The act chip — the movement's name.
@@ -889,11 +1682,12 @@ pub fn act_chip(movement: &str, name: &str, appear: f32) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
+    chrome(
     Stack::new()
         .push(
             Positioned::new()
                 .left(178.0)
-                .top(92.0)
+                .top(ACT_Y)
                 .width(700.0)
                 .height(26.0)
                 .child(Opacity::new(a).child(
@@ -906,7 +1700,8 @@ pub fn act_chip(movement: &str, name: &str, appear: f32) -> WidgetNode {
                         .align(TextAlign::Left),
                 )),
         )
-        .into()
+        .into(),
+    )
 }
 
 /// The film's progress rail — a hairline at the very bottom, one tick per
@@ -915,6 +1710,7 @@ pub fn progress_rail(abs: f32) -> WidgetNode {
     let total = total_seconds();
     let frac = (abs / total).clamp(0.0, 1.0);
     let starts: Vec<f32> = (0..scenes().len()).map(scene_start).collect();
+    chrome(
     Painting::sized(Size::new(W, 26.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
         let x0 = 180.0;
         let x1 = W - 180.0;
@@ -935,7 +1731,8 @@ pub fn progress_rail(abs: f32) -> WidgetNode {
         book.circle(Offset::new(px, y), 3.0, alpha(ACCENT, 0.9));
         book.line(Offset::new(px, y), Offset::new(px, y + 10.0), alpha(ACCENT, 0.55), 1.2);
     }))
-    .into()
+    .into(),
+    )
 }
 
 // ── The studio scenes' chrome — the film's voice over the real product ───────
@@ -1019,6 +1816,44 @@ pub fn studio_chrome(ctx: &Ctx) -> Stack {
                 );
             }),
         )))
+        // The headline plate.
+        //
+        // Every studio scene drops its big line at y≈190, which is inside
+        // the editor's code area in all nine of them — "one file, one
+        // screen()", "edit a line, see the picture change", the say
+        // program, the swatch row, all painted straight through lines 4
+        // to 8 with nothing between them. Two runs of text at similar
+        // weight over each other is not a composite, it is a collision,
+        // and neither survived it.
+        //
+        // This is a scrim, not a fill: the file's comment header stays
+        // faintly readable underneath, which keeps the honesty rule — the
+        // app is still there and still drawing — while giving the film's
+        // voice a surface to sit on. It is the least costly rectangle in
+        // the frame to borrow, being the same eight lines of prose for
+        // the whole act.
+        .push(
+            Positioned::new()
+                .left(0.0)
+                .top(BAND_H + 24.0)
+                .width(W)
+                .height(190.0)
+                .child(Painting::sized(
+                    Size::new(W, 190.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        book.rect(
+                            xywh(0.0, 0.0, W, 190.0),
+                            Gradient::vertical().with_dither().with_stops(&[
+                                (0.0, alpha(BG_DEEP, 0.0)),
+                                (0.22, alpha(BG_DEEP, 0.80)),
+                                (0.78, alpha(BG_DEEP, 0.80)),
+                                (1.0, alpha(BG_DEEP, 0.0)),
+                            ]),
+                        );
+                    }),
+                )),
+        )
+        .push(band_scrim(1.0))
         .push(act_chip("MOVEMENT III", "THE STUDIO", clamp01((ctx.sec - 0.3) / 0.5)))
         .push(witness_chip(ctx.ladder, tap_pulse(ctx.abs)))
         .push(session_chip(abs, clamp01((ctx.sec - 1.2) / 0.6)))
@@ -1057,7 +1892,13 @@ pub fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
 
 /// A receipt chip row pinned bottom-right.
 pub fn receipt_row(chips: &[(&str, Color)], appear: f32) -> WidgetNode {
-    chip_row(chips, W - 900.0, 936.0, appear)
+    // The editor's empty lower half, not the preview pane's paragraph.
+    //
+    // Pinned at `W - 900` this row landed exactly on the preview's
+    // description text — three chips and a paragraph rendered through each
+    // other, in every studio scene — while the bottom third of the editor
+    // sat empty for the whole act. The chips go where the app isn't.
+    chip_row(chips, 360.0, 924.0, appear)
 }
 
 // ── Film grain and dust — the film's air ─────────────────────────────────────
@@ -1081,6 +1922,24 @@ pub fn grain(book: &mut Sketchbook, w: f32, h: f32, frame_i: u64, strength: f32)
 
 /// Slow dust motes — the wait's air.
 pub fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, strength: f32) {
+    dust_deep(book, w, h, t, seed, strength, Offset::ZERO);
+}
+
+/// The dust, in depth — the near stratum of the film's air.
+///
+/// Dust reads as foreground, so it *leads* the camera rather than lagging
+/// it: a negative depth. Against a push this is what makes the move feel
+/// like the lens travelling through something rather than the picture
+/// getting bigger.
+pub fn dust_deep(
+    book: &mut Sketchbook,
+    w: f32,
+    h: f32,
+    t: f32,
+    seed: u64,
+    strength: f32,
+    pan: Offset,
+) {
     let mut rng = Rng::new(seed);
     for _ in 0..64 {
         let bx = rng.f01() * w;
@@ -1088,12 +1947,101 @@ pub fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, strength: 
         let r = 0.8 + rng.f01() * 1.7;
         let drift = (t * 1.3 + rng.f01() * 7.0).sin() * 10.0;
         let fall = t * 12.0 * rng.f01();
+        let depth = -0.18 - rng.f01() * 0.26;
         book.circle(
-            Offset::new(bx + drift, (by + fall) % h),
+            Offset::new(bx + drift + pan.dx * depth, (by + fall) % h + pan.dy * depth),
             r,
             alpha(MUTED, 0.22 * strength),
         );
     }
+}
+
+// ── Depth for a flat panel ──────────────────────────────────────────────────
+
+/// Draw `source` as a panel standing in space, turned `yaw` radians about
+/// its own vertical axis and pitched `pitch` about its horizontal one.
+///
+/// The film is a stack of rectangles seen square-on, which is the flattest
+/// a picture can be. `vieww-foundation` ships `Transform3` — with a real
+/// perspective divide, and a `project_rect` that hands back the quad a
+/// tilted plane occupies — and an earlier film in this lab used it. This
+/// one never did.
+///
+/// The two halves work together: `project_rect` gives the exact
+/// perspective quad, which becomes the **clip**, so the panel's silhouette
+/// is genuinely projected; the contents ride an affine transform fitted to
+/// that quad. An affine cannot reproduce a perspective divide — parallel
+/// lines stay parallel — but across a panel of a few hundred pixels at the
+/// small angles used here the error is under a pixel, and the alternative
+/// is re-projecting every child by hand. The silhouette is exact, the fill
+/// is a very good approximation, and this comment is the honest account of
+/// which is which.
+///
+/// `focal` is in logical pixels: larger is a longer lens.
+#[allow(clippy::too_many_arguments)]
+pub fn panel_3d(
+    book: &mut Sketchbook,
+    rect: Rect,
+    yaw: f32,
+    pitch: f32,
+    focal: f32,
+    alpha_mul: f32,
+    source: impl FnOnce(&mut Sketchbook),
+) {
+    use vieww_foundation::Transform3;
+
+    if yaw.abs() < 1.0e-4 && pitch.abs() < 1.0e-4 {
+        source(book);
+        return;
+    }
+
+    let cx = (rect.left + rect.right) * 0.5;
+    let cy = (rect.top + rect.bottom) * 0.5;
+
+    // Turn about the panel's own centre, then project.
+    let t3 = Transform3::translation(-cx, -cy, 0.0)
+        .then(Transform3::rotation_y(yaw))
+        .then(Transform3::rotation_x(pitch))
+        .then(Transform3::translation(cx, cy, 0.0))
+        .then(Transform3::perspective(focal));
+
+    let Some(quad) = t3.project_rect(rect) else {
+        // Behind the camera — draw it flat rather than not at all.
+        source(book);
+        return;
+    };
+
+    // Fit an affine to the projected corners: the top edge gives the x
+    // basis, the left edge the y basis. With no perspective this is exact;
+    // with a little, it is the best affine through the same corners.
+    let tl = t3.project(Offset::new(rect.left, rect.top), 0.0);
+    let tr = t3.project(Offset::new(rect.right, rect.top), 0.0);
+    let bl = t3.project(Offset::new(rect.left, rect.bottom), 0.0);
+    let (Some(tl), Some(tr), Some(bl)) = (tl, tr, bl) else {
+        source(book);
+        return;
+    };
+    let wsp = (rect.right - rect.left).max(1.0);
+    let hsp = (rect.bottom - rect.top).max(1.0);
+    let ax = (tr.dx - tl.dx) / wsp;
+    let ay = (tr.dy - tl.dy) / wsp;
+    let bx = (bl.dx - tl.dx) / hsp;
+    let by = (bl.dy - tl.dy) / hsp;
+    let fit = Transform::new(
+        ax,
+        ay,
+        bx,
+        by,
+        tl.dx - (ax * rect.left + bx * rect.top),
+        tl.dy - (ay * rect.left + by * rect.top),
+    );
+
+    // The clip is the *projected* quad, so it is already in screen space
+    // and must sit outside the transform — `Sketchbook::window` puts its
+    // clip inside, which would project it a second time.
+    book.layer(alpha_mul.clamp(0.0, 1.0), 0.0, Some(quad), |g| {
+        g.transformed(fit, source);
+    });
 }
 
 /// A full-frame flash — the match-cut breath between scenes.

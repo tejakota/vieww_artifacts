@@ -116,8 +116,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             ("rebuild: one subtree", LEDGER),
             ("budget: kept", ACCENT),
         ],
-        W - 640.0,
-        936.0,
+        // The editor's empty lower band — see `receipt_row`. Pinned
+        // right, these rows rendered straight through the preview
+        // pane's description paragraph in every studio scene.
+        360.0,
+        924.0,
         clamp01((sec - 1.0) / 0.5),
     ));
 

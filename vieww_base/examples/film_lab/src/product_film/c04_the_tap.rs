@@ -90,8 +90,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             ("real gesture arena", LEDGER),
             ("real route", super::ACCENT),
         ],
-        W - 640.0,
-        936.0,
+        // The editor's empty lower band — see `receipt_row`. Pinned
+        // right, these rows rendered straight through the preview
+        // pane's description paragraph in every studio scene.
+        360.0,
+        924.0,
         clamp01((ctx.sec - 0.8) / 0.4),
     ));
 

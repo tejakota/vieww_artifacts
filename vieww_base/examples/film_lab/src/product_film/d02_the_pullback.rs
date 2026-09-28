@@ -16,7 +16,7 @@ use vieww_widget::prelude::*;
 
 use super::{
     ACCENT, Ctx, INK, LEDGER, MUTED, W, alpha, caption, clamp01, distance_chip, glow, grain,
-    ground, progress_rail, stars, tint, vignette, xywh,
+    ground, progress_rail, stars_deep, tint, vignette, xywh,
 };
 use crate::film_lib::{Rng, ease_out_cubic};
 
@@ -67,6 +67,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
     let pull = pullback(t);
+    // The camera's pan, for the sky to work against — the pullback is the
+    // film's one real scale move, and a flat sky would give it away.
+    let pan = ctx.parallax(1.0);
 
     let room = Painting::sized(
         super::CANVAS,
@@ -75,7 +78,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             let h = s.height;
             ground(book, w, h);
             // The constellation's sky — arriving with the pullback.
-            stars(book, w, h, 0x1115, 110, t, 0.12 * pull);
+            stars_deep(book, w, h, 0x1115, 110, t, 0.12 * pull, pan);
             vignette(book, w, h, 0.5);
             grain(book, w, h, frame_i, 0.3);
 
