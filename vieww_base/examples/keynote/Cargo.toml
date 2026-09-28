@@ -1,0 +1,22 @@
+[package]
+name = "keynote"
+description = "The viewwstudio release keynote film — every frame rendered by vieww itself, headless, through FrameDriver + NativeRenderer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+vieww = { workspace = true, features = ["native"] }
+vieww-animation.workspace = true
+vieww-foundation.workspace = true
+vieww-paint = { workspace = true, features = ["native"] }
+vieww-render.workspace = true
+vieww-widget.workspace = true
+vieww-effects.workspace = true
+vieww-text.workspace = true
+
+[lints]
+workspace = true

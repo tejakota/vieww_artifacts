@@ -229,8 +229,6 @@ mod exp_huffman;
 mod exp_traffic;
 mod exp_slime;
 mod film_lib;
-mod keynote;
-mod keynote_v5;
 mod three_d;
 
 use film_lib::{anim_gif_strided, contact_sheet_strided, out_root, render_with, Experiment};
@@ -407,18 +405,8 @@ fn registry() -> Vec<Experiment> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // The keynote's two passes and its per-scene preview mode — see
-    // `keynote/master.rs` (census · master · kn:<scene>).
-    if let Some(arg) = std::env::args().nth(1) {
-        if arg == "census" || arg == "master" || arg.starts_with("kn:") {
-            return keynote::master::run(&arg);
-        }
-        // The v5 release film — the viewwstudio keynote — same two passes,
-        // its own preview spelling (`keynote_v5/master.rs`).
-        if arg == "census5" || arg == "master5" || arg.starts_with("k5:") {
-            return keynote_v5::master::run(&arg);
-        }
-    }
+    // The keynote film lives in its own crate (`examples/keynote`) — this lab
+    // is the capability bench, nothing in it belongs to the film.
     let filter = std::env::args().nth(1);
     let experiments: Vec<Experiment> = registry()
         .into_iter()

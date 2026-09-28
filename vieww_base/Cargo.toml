@@ -38,6 +38,7 @@ members = [
     "crates/vieww-build",
     "crates/vieww-cli",
     "examples/film_lab",
+    "examples/keynote",
     "examples/guide-counter",
     "examples/reload-guest",
     "examples/reload-host",
