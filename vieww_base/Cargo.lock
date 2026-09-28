@@ -2688,6 +2688,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "keynote"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "vieww",
+ "vieww-animation",
+ "vieww-effects",
+ "vieww-foundation",
+ "vieww-paint",
+ "vieww-render",
+ "vieww-text",
+ "vieww-widget",
+]
+
+[[package]]
 name = "libappindicator"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
