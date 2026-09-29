@@ -53,17 +53,24 @@ mod simulation;
 mod ticker;
 mod tween;
 
+pub mod blend_tree;
 pub mod keyframe;
+pub mod lfo;
+pub mod noise;
+pub mod particles;
 pub mod skeletal;
 pub mod spring;
 pub mod state_machine;
 
 pub use controller::{AnimationController, AnimationStatus};
 pub use curve::Curve;
-pub use keyframe::{Keyframe, Keyframes, Timeline, TimelineFrame};
+pub use keyframe::{Keyframe, Keyframes, LoopMode, Timeline, TimelineFrame};
 pub use simulation::{Fling, Motion, Simulation, Spring, MIN_FLING_VELOCITY};
 // `SpringAnimation` is the retargetable, Ticker-driven spring; `Spring` above
 // is the closed-form simulation. See `spring.rs` for why both exist.
+pub use blend_tree::{BlendTree1, BlendTree2, Child1, Child2};
+pub use lfo::{Lfo, Wave};
+pub use particles::{Particle, ParticleField};
 pub use skeletal::{BoneTransform, Pose, Skeleton, SkeletalClip, Skin, Vertex};
 pub use spring::{Spring2D, SpringAnimation, SpringPreset, SpringSpec};
 pub use state_machine::{Guard, StateMachine};

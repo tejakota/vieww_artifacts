@@ -11,6 +11,105 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## The most recent effort (2026-09-29, later): the cross-framework capability recheck — thirteen capabilities, physics joints, twenty-four photographed examples
+
+Scope was the harder reading of the repository-root document: not "what did
+the gap list say," but "what capability does *every* framework in the
+document's twenty-two layer tables offer, and does vieww answer it?" The
+audit went capability-by-capability; thirteen existed elsewhere and not
+here. All thirteen are now closed, each with tests and a numbered feature
+example run headless, plus a `Joint` in `vieww-physics` and the examples
+debt of the first pass repaid.
+
+**Verified, by things that ran (pinned rustc 1.98.1, this machine):**
+
+1. **`vieww-animation` grew six modules, 68 tests and 2 doctests** (186 lib
+   tests + 16 doctests total, all green, clippy clean): `noise` (seeded
+   Perlin 1/2/3 D + fBm, bounded ±1 by the g·√N/2 argument, lattice-flat
+   and neighbour-coherence pinned); `lfo` (five waveforms as a `Simulation`
+   that honestly never finishes); `particles` (`ParticleField` — a pure
+   function of time: births hashed from `(seed, index)`, closed-form
+   ballistic positions, capacity `rate × lifetime_max` as a theorem,
+   checked empirically across a 600-step sweep); `blend_tree` (`BlendTree1`
+   smoothstep between threshold brackets, `BlendTree2` inverse-distance
+   weights, children at a shared clock); `skeletal::solve_two_bone` (the
+   law of cosines, zig-zag sign pinned by the round-trip test that caught
+   the same-sign bug, unreachable targets extend and say so); keyframe
+   `LoopMode` (loop wraps to frame zero, ping-pong is continuous at the
+   turn); and 27 named `Curve` presets (the GSAP families on Penner's
+   equations — endpoints, mirror symmetry, in-out symmetry, monotone
+   families and the bounce landing values all pinned).
+2. **`vieww-audio::analysis` (new module, 11 tests)**: radix-2
+   Cooley–Tukey FFT (bit-reversal + butterflies), Hann window, `Spectrum`
+   with bin pitches, peak bin and band energy. Its tests round-trip the
+   crate's own synthesis — a rendered 440 Hz tone is *found* at 440 Hz; a
+   two-note mixdown shows both notes' bands dominating quiet bands — the
+   cheapest complete test there is, and no fixture files.
+3. **`vieww-widget` grew four widgets, two shapes and 35 tests** (558 lib
+   tests total, green, clippy clean): `FunctionGraph` (y = f(x), origin
+   axes, NaN as gaps); `MathText` (TeX subset — `^`/`_`, `\frac`,
+   `\sqrt[n]`, Greek, operators — real text runs, layout-box rules,
+   unknown commands stay visible); `SplitText` (per-char and per-word
+   cascades, the window maths pinned at both ends); `Star`/`Polygon` morph
+   shapes (exact corner interpolation; flat sides, envelope and morph
+   round-trip tested). Also fixed while there: `ScatterChart`, `PieChart`,
+   `DonutChart` and `ChartAxes` were never in the widget prelude — a
+   pre-existing gap the new examples flushed out.
+4. **`vieww-physics::Joint` (9 tests)**: the distance joint — rods and
+   tethers, stiffness clamped 0..=1, position correction split by inverse
+   mass and a velocity impulse that cancels along-axis drift. The tests
+   pin the physics the module can honestly claim: a pendulum *swings* (no
+   damping, so the assertion is the circle it stays on), a hanging bob
+   stays put, equal masses meet in the middle with the centre of mass
+   unmoved, a swing does not gain energy. `vieww-physics` total: 22 tests.
+5. **`Lerp` for `(f32, f32)`** in `vieww-animation` — the two-parameter
+   pose a blend tree wants.
+6. **Twenty-four new feature examples, 56–79** (`feature-keyframes` …
+   `feature-ik`): every capability above *and* the first pass's
+   example-less crates — audio, video, mesh, network, physics, embed,
+   skeletal, state machine, keyframes, blend tree, scatter/pie/donut. Each
+   animated one drives a signal from a ticker the *widget* keeps alive
+   (the registry holds tickers weakly — the bug the first shot run
+   produced single frozen frames for, and the reason every clock is a
+   field on its widget now).
+7. **Every one of the twenty-four photographed headless** — `VIEWW_SHOT`
+   through the CPU rasteriser, the `ci/certify/shot-suite.sh` path:
+   **76 PNGs**, animated examples as 5-frame strips verified
+   frame-different (byte-compared; the lfo/morph strips' first and last
+   frames coincide because their clocks wrap — checked, not assumed), and
+   every static example verified non-blank by pixel statistics. The shots
+   live outside the repository (out/ is for capture directories), and the
+   counters were reviewed as they printed.
+8. **`cargo test -p` green on every touched crate** — `vieww-animation`
+   186 + 16 doctests, `vieww-audio` 42 + 4, `vieww-widget` 558, 11 doctests
+   in its other suites, `vieww-physics` 22 + 1 — and `cargo clippy
+   --all-targets` clean on all of them and on all twenty-four examples
+   (the only warning in range is `vieww-foundation`'s pre-existing
+   `Brush` variant-size note, untouched by this pass).
+9. **The facade re-exports every new type** (`BlendTree1/2`, `Particle`,
+   `ParticleField`, `LoopMode`, `Spectrum`, `Joint`, …), the new widgets
+   are in the prelude, and `cargo test -p vieww --test facade_exports`
+   stays green.
+
+**Not verified, and why:**
+
+- The particle field is *ballistic* — constant velocity, constant gravity —
+  and says so in its module docs: drag, attractors and a per-particle force
+  field are integration, which is a different contract than the one this
+  crate makes. Named, not pretended.
+- `MathText` is a TeX *subset*, stated in its module docs, not TeX:
+  matrices, alignment and macro definition are out of scope, and an
+  unknown command renders as visible text rather than vanishing.
+- N-bone IK (FABRIK, CCD) remains out for the reason the skeletal module
+  docs gave before two-bone IK arrived: iterative solvers have convergence
+  behaviour, and the analytic two-bone case does not. The leg chains of a
+  spider are still a named gap.
+- The blend tree's 2D form is inverse-distance weighting rather than
+  Unity's triangulated freeform — a documented choice, and the same
+  answers at the children either way.
+- `SplitText` loses cross-glyph kerning, exactly as GSAP's own split does,
+  and its module docs say so.
+
 ## The most recent effort (2026-09-29): the capability gap-closure pass — six new crates, three animation modules, two charts, a real iframe
 
 Scope was the "Identified Gaps" table in the repository-root document

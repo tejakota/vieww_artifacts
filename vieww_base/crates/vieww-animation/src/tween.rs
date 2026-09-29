@@ -50,6 +50,20 @@ impl Lerp for f32 {
     }
 }
 
+/// The pair-of-scalars case — a 2D point, a width-and-height, a parameter
+/// pair. Spelled component-wise, the way `Offset` below is; the reason a
+/// tuple gets an impl at all is that a blend tree over `(f32, f32)` is the
+/// natural spelling of a two-parameter pose, and refusing it sends callers
+/// to hand-rolled per-component trees.
+impl Lerp for (f32, f32) {
+    fn lerp(self, other: Self, t: f32) -> Self {
+        (
+            self.0.lerp(other.0, t),
+            self.1.lerp(other.1, t),
+        )
+    }
+}
+
 impl Lerp for Offset {
     fn lerp(self, other: Self, t: f32) -> Self {
         Self::new(self.dx.lerp(other.dx, t), self.dy.lerp(other.dy, t))

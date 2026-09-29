@@ -89,19 +89,21 @@ pub use vieww_text as text;
 pub use vieww_widget as widget;
 
 pub use vieww_animation::{
-    AnimationController, AnimationStatus, Curve, Fling, Guard, Keyframe, Keyframes, Lerp, Motion,
-    Simulation, Spring, StateMachine, Ticker, Tickers, Timeline, TimelineFrame, Tween,
+    AnimationController, AnimationStatus, BlendTree1, BlendTree2, Curve, Fling, Guard, Keyframe,
+    Keyframes, Lerp, LoopMode, Motion, Particle, ParticleField, Simulation, Spring, StateMachine,
+    Ticker, Tickers, Timeline, TimelineFrame, Tween, Wave as LfoWave,
 };
 pub use vieww_audio::{
     AudioPlayer, Envelope, MixError, Mixer, NoAudio, PlaybackHandle, RecordingPlayer,
     RecordedCommand, Samples, Sound, Tone, Waveform,
 };
+pub use vieww_audio::analysis::{Spectrum, Window as AnalysisWindow};
 pub use vieww_embed::{WebContent, WebView, WEB_VIEW_KIND};
 pub use vieww_mesh::{parse_obj, parse_stl, Mesh, MeshError, Point3, TexCoord};
 pub use vieww_network::{
     HttpClient, HttpRequest, HttpResponse, MemoryClient, Method, NetError, NoNetwork, Scheme, Url,
 };
-pub use vieww_physics::{collide, Body, Contact, Shape as PhysicsShape, World};
+pub use vieww_physics::{collide, Body, Contact, Joint, Shape as PhysicsShape, World};
 pub use vieww_video::{FrameSequence, GeneratedVideo, Pattern, VideoPlayer, VideoSource};
 pub use vieww_asset::{AssetBundle, AssetError, DirectoryBundle, EmbeddedBundle, ImageCache};
 pub use vieww_element::{

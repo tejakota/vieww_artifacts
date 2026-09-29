@@ -1290,6 +1290,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-audio-reactive"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-audio",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-audio-waveform"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-audio",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-bar-chart"
 version = "0.1.0"
 dependencies = [
@@ -1324,6 +1344,18 @@ dependencies = [
  "vieww-element",
  "vieww-foundation",
  "vieww-render",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-blend-tree"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
  "vieww-widget",
 ]
 
@@ -1525,6 +1557,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-donut-chart"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-easing-presets"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-embed"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-embed",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-flex-column"
 version = "0.1.0"
 dependencies = [
@@ -1558,6 +1621,16 @@ dependencies = [
  "vieww-element",
  "vieww-foundation",
  "vieww-render",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-function-graph"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-animation",
+ "vieww-foundation",
  "vieww-widget",
 ]
 
@@ -1601,6 +1674,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-ik"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-image-display"
 version = "0.1.0"
 dependencies = [
@@ -1618,6 +1703,30 @@ version = "0.1.0"
 dependencies = [
  "vieww-foundation",
  "vieww-image",
+]
+
+[[package]]
+name = "feature-keyframes"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-lfo"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
 ]
 
 [[package]]
@@ -1684,7 +1793,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-math-text"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-mesh"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-mesh",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-motion-tokens"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-network"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-foundation",
+ "vieww-network",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-noise"
 version = "0.1.0"
 dependencies = [
  "feature-harness",
@@ -1703,6 +1856,53 @@ dependencies = [
  "vieww",
  "vieww-animation",
  "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-particles"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-physics"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-physics",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-physics-joint"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-physics",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-pie-chart"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
  "vieww-foundation",
  "vieww-widget",
 ]
@@ -1744,6 +1944,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-scatter-chart"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-scroll-driven"
 version = "0.1.0"
 dependencies = [
@@ -1769,6 +1978,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-shape-morph"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-sized-box"
 version = "0.1.0"
 dependencies = [
@@ -1781,7 +2002,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-skeletal"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-splash-screen"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-split-text"
 version = "0.1.0"
 dependencies = [
  "feature-harness",
@@ -1806,6 +2051,18 @@ dependencies = [
 
 [[package]]
 name = "feature-stack-positioned"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-state-machine"
 version = "0.1.0"
 dependencies = [
  "feature-harness",
@@ -1933,6 +2190,16 @@ dependencies = [
  "vieww-animation",
  "vieww-element",
  "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-video-filmstrip"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww-foundation",
+ "vieww-video",
  "vieww-widget",
 ]
 
