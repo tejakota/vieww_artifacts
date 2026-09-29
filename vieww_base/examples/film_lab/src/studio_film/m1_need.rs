@@ -19,22 +19,24 @@ use super::{
 
 /// The design's own geometry — the one card every port is supposed to
 /// ship. Centered on the canvas, below the caption band.
-const CARD: Rect = Rect::new(740.0, 280.0, 1180.0, 840.0);
+// Re-pitched into the body band (300–900): the header and footer are
+// the film's own type, and nothing in a scene may draw into them.
+const CARD: Rect = Rect::new(740.0, 356.0, 1180.0, 796.0);
 
 /// The four ports' stations, clockwise from top-left.
 const STATIONS: [Rect; 4] = [
-    Rect::new(120.0, 210.0, 420.0, 410.0),
-    Rect::new(1500.0, 210.0, 1800.0, 410.0),
-    Rect::new(120.0, 770.0, 420.0, 970.0),
-    Rect::new(1500.0, 770.0, 1800.0, 970.0),
+    Rect::new(120.0, 316.0, 420.0, 476.0),
+    Rect::new(1500.0, 316.0, 1800.0, 476.0),
+    Rect::new(120.0, 724.0, 420.0, 884.0),
+    Rect::new(1500.0, 724.0, 1800.0, 884.0),
 ];
 
 /// Where each rail leaves the truth card's edge.
 const CARD_ANCHORS: [Offset; 4] = [
-    Offset::new(740.0, 370.0),
-    Offset::new(1180.0, 370.0),
-    Offset::new(740.0, 750.0),
-    Offset::new(1180.0, 750.0),
+    Offset::new(740.0, 426.0),
+    Offset::new(1180.0, 426.0),
+    Offset::new(740.0, 726.0),
+    Offset::new(1180.0, 726.0),
 ];
 
 /// What each port gets wrong — the drift is specific, not generic.
@@ -172,7 +174,7 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(W - 640.0)
-                .top(150.0)
+                .top(318.0)
                 .width(460.0)
                 .height(30.0)
                 .child(
@@ -371,7 +373,7 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
     // the gates pay.
     let paid_n = GATES.iter().enumerate().filter(|(i, _)| t > 0.14 + *i as f32 * 0.14 + 0.22).count();
     let paid = paid_n as f32;
-    stack = stack.push(Positioned::new().left(1330.0).top(250.0).width(400.0).height(400.0).child(
+    stack = stack.push(Positioned::new().left(1330.0).top(322.0).width(400.0).height(400.0).child(
         Painting::sized(Size::new(400.0, 400.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             let cx = 200.0;
             let cy = 200.0;
@@ -412,7 +414,7 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(
         Positioned::new()
             .left(1330.0)
-            .top(400.0)
+            .top(474.0)
             .width(400.0)
             .height(80.0)
             .child(
@@ -438,7 +440,7 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         if in_p <= 0.01 {
             continue;
         }
-        let y = 268.0 + i as f32 * 118.0;
+        let y = 326.0 + i as f32 * 116.0;
         let gate_w = 980.0 * ease_out_expo(in_p);
         let (gate, toll) = (*gate, *toll);
         let flash = if pay_p > 0.0 && pay_p < 1.0 { 1.0 - pay_p } else { 0.0 };
@@ -446,7 +448,7 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         let flow_a = clamp01((pay_p - 0.6) * 2.5);
         if flow_a > 0.01 {
             let from = Offset::new(160.0 + gate_w, y + 48.0);
-            let to = Offset::new(1368.0, 330.0 + i as f32 * 56.0);
+            let to = Offset::new(1368.0, 400.0 + i as f32 * 54.0);
             let phase = t * 1.0 + i as f32 * 0.9;
             stack = stack.push(Positioned::fill().child(
                 Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
@@ -582,19 +584,36 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
             // the shot's subject; it earns its luminance.
             let grow = ease_out_expo(clamp01(t / 0.22));
             let breath = 1.0 + 0.05 * (sec * 1.2).sin();
+            // The charge — once the second line has landed, the point
+            // gathers. This is the scene's second half, which the v2
+            // cut spent holding a still frame.
+            let charge = clamp01((t - 0.60) / 0.34);
+            let centre = Offset::new(w * 0.5, h * 0.345);
             if grow > 0.01 {
                 book.layer(grow, 60.0, None, |glow_book| {
                     glow_book.circle(
-                        Offset::new(w * 0.5, h * 0.44),
-                        30.0 * grow * breath,
-                        pf::alpha(BRAND_FAR, 0.5),
+                        centre,
+                        (34.0 + 46.0 * charge) * grow * breath,
+                        pf::alpha(BRAND_FAR, 0.5 + 0.22 * charge),
                     );
                     glow_book.circle(
-                        Offset::new(w * 0.5, h * 0.44),
-                        7.0 * grow,
+                        centre,
+                        (8.0 + 7.0 * charge) * grow,
                         pf::alpha(Color::WHITE, 0.95),
                     );
                 });
+            }
+            // Three rings leaving the point, staggered — the answer
+            // beginning before the film has said what it is.
+            if charge > 0.01 {
+                for k in 0..3 {
+                    let ph = clamp01(charge * 1.35 - k as f32 * 0.24);
+                    if ph <= 0.01 || ph >= 1.0 {
+                        continue;
+                    }
+                    let r = 44.0 + 460.0 * ease_out_expo(ph);
+                    book.ring(centre, r, 1.4, pf::alpha(BRAND_FAR, 0.34 * (1.0 - ph)));
+                }
             }
             pf::vignette(book, w, h, 0.62);
         }),
@@ -605,16 +624,16 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(pf::type_on(
         "what if the distance were the bug?",
         pf::TypeAt::CenteredOn(W as i32 / 2),
-        560.0,
-        pf::geist(36.0).letter_spacing(1.2).color(pf::alpha(INK, 0.97)),
+        532.0,
+        pf::geist(68.0).letter_spacing(0.4).color(pf::alpha(INK, 0.97)),
         clamp01((t - 0.16) / 0.24),
         sec,
     ));
     stack = stack.push(pf::type_on(
         "and the fix were the framework?",
         pf::TypeAt::CenteredOn(W as i32 / 2),
-        626.0,
-        pf::geist(36.0).letter_spacing(1.2).color(pf::alpha(ACCENT, 0.95)),
+        636.0,
+        pf::geist(62.0).letter_spacing(0.4).color(pf::alpha(ACCENT, 0.95)),
         clamp01((t - 0.44) / 0.24),
         sec - 3.5,
     ));

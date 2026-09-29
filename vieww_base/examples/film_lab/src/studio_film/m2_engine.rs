@@ -70,10 +70,14 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
             fk::cube_orbit(
                 book,
                 s,
-                Offset::new(w * 0.74, h * 0.52),
+                Offset::new(w * 0.72, h * 0.545),
                 sec,
                 heart * 0.95,
                 Color::rgb(11, 10, 15),
+                // The crates draw in as the constellation completes: by
+                // the time the count reads 36, the parts have become the
+                // core and stop asking for the eye.
+                clamp01((t - 0.52) / 0.38),
             );
             pf::vignette(book, w, h, 0.5);
         }),
@@ -111,7 +115,7 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
 
     // The graph — right two-thirds: a centre node, two rings of crates,
     // edges drawing outward on a stagger.
-    stack = stack.push(Positioned::new().left(1000.0).top(60.0).width(840.0).height(960.0).child(
+    stack = stack.push(Positioned::new().left(1000.0).top(304.0).width(840.0).height(592.0).child(
         Painting::sized(Size::new(840.0, 960.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             let cx = 420.0;
             let cy = 480.0;
@@ -193,7 +197,7 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(700.0)
+                .top(818.0)
                 .width(620.0)
                 .height(60.0)
                 .child(Opacity::new(count_p.min(1.0)).child(
@@ -255,7 +259,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(x)
-                .top(300.0 + rise)
+                .top(338.0 + rise)
                 .width(264.0)
                 .height(150.0)
                 .child(Opacity::new(p).child(Painting::sized(
@@ -282,7 +286,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(x + 20.0)
-                .top(340.0)
+                .top(378.0)
                 .width(224.0)
                 .height(80.0)
                 .child(Opacity::new(p).child(
@@ -304,10 +308,10 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
             let wire_p = ease_out_cubic(clamp01((t - t0 - 0.08) / 0.16));
             if wire_p > 0.01 {
                 let x0 = x + 264.0;
-                let from = Offset::new(x0, 372.0);
-                let to = Offset::new(x0 + 72.0, 372.0);
+                let from = Offset::new(x0, 410.0);
+                let to = Offset::new(x0 + 72.0, 410.0);
                 let phase = t * 2.0 + i as f32 * 0.7;
-                stack = stack.push(Positioned::new().left(x0 - 8.0).top(340.0).width(96.0).height(64.0).child(
+                stack = stack.push(Positioned::new().left(x0 - 8.0).top(378.0).width(96.0).height(64.0).child(
                     Painting::sized(Size::new(96.0, 64.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                         let pts = fk::thread_pts(
                             Offset::new(8.0, 32.0),
@@ -329,7 +333,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
     // The packets — small lights riding the line, on a fixed beat.
     let beat = t * 4.0;
     let packets = 3;
-    stack = stack.push(Positioned::new().left(150.0).top(0.0).width(1680.0).height(1080.0).child(
+    stack = stack.push(Positioned::new().left(150.0).top(300.0).width(1680.0).height(600.0).child(
         Painting::sized(Size::new(1680.0, 1080.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             for k in 0..packets {
                 let ph = beat + k as f32 * 0.33;
@@ -340,7 +344,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
                     continue;
                 }
                 book.layer(a, 8.0, None, |b| {
-                    b.circle(Offset::new(x, 372.0), 5.0, pf::alpha(BRAND_FAR, 0.9));
+                    b.circle(Offset::new(x, 110.0), 5.0, pf::alpha(BRAND_FAR, 0.9));
                 });
             }
         })),
@@ -353,7 +357,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         let total_w = 1560.0;
         let worst = pf::CERT_WORST_MS / BUDGET_MS;
         let p95 = pf::CERT_P95_MS / BUDGET_MS;
-        stack = stack.push(Positioned::new().left(180.0).top(560.0).width(1560.0).height(120.0).child(
+        stack = stack.push(Positioned::new().left(180.0).top(566.0).width(1560.0).height(120.0).child(
             Painting::sized(Size::new(1560.0, 120.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 // The track.
                 book.rrect(pf::xywh(0.0, 40.0, total_w, 14.0), 7.0, pf::alpha(Color::WHITE, 0.05));
@@ -367,7 +371,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(520.0)
+                .top(528.0)
                 .width(1560.0)
                 .height(32.0)
                 .child(
@@ -378,7 +382,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(588.0)
+                .top(594.0)
                 .width(1560.0)
                 .height(90.0)
                 .child(
@@ -403,10 +407,10 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
     // The damage callout — one dirty rect, one repaint.
     let dmg_p = ease_out_expo(clamp01((t - 0.70) / 0.2));
     if dmg_p > 0.01 {
-        stack = stack.push(Positioned::new().left(180.0).top(740.0).width(1560.0).height(190.0).child(
-            Painting::sized(Size::new(1560.0, 190.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+        stack = stack.push(Positioned::new().left(180.0).top(690.0).width(1560.0).height(172.0).child(
+            Painting::sized(Size::new(1560.0, 172.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 // The window — faint content lines, mostly asleep.
-                book.rrect(pf::xywh(0.0, 0.0, 1560.0, 190.0), 14.0, pf::alpha(pf::SURFACE, 0.5 * dmg_p));
+                book.rrect(pf::xywh(0.0, 0.0, 1560.0, 172.0), 14.0, pf::alpha(pf::SURFACE, 0.5 * dmg_p));
                 for row in 0..5 {
                     let y = 26.0 + row as f32 * 32.0;
                     book.rrect(pf::xywh(28.0, y, 620.0 - (row as f32 * 60.0), 9.0), 4.5, pf::alpha(Color::WHITE, 0.05 * dmg_p));
@@ -427,7 +431,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(880.0)
+                .top(866.0)
                 .width(900.0)
                 .height(28.0)
                 .child(Opacity::new(dmg_p).child(
@@ -473,8 +477,8 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
         if p <= 0.01 {
             continue;
         }
-        let lane_y = 240.0 + i as f32 * 210.0;
-        let (x0, y0, w, h) = (400.0, lane_y, 900.0, 130.0);
+        let lane_y = 336.0 + i as f32 * 182.0;
+        let (x0, y0, w, h) = (410.0, lane_y, 720.0, 112.0);
         let lane_i = i;
         stack = stack.push(Positioned::new().left(x0 - 40.0).top(y0 - 46.0).width(w + 320.0).height(h + 90.0).child(
             Painting::sized(Size::new(w + 320.0, h + 90.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
@@ -518,46 +522,109 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
         // The lane's name — left of its curve.
         stack = stack.push(
             Positioned::new()
-                .left(150.0)
-                .top(lane_y + 10.0)
-                .width(240.0)
-                .height(56.0)
+                .left(96.0)
+                .top(lane_y + 22.0)
+                .width(300.0)
+                .height(60.0)
                 .child(Opacity::new(p).child(
                     Flex::column().spacing(4.0).push(
                         Text::new(LANES[i].to_string())
-                            .style(pf::geist_mono(15.0).letter_spacing(1.1).color(pf::alpha(INK, 0.92))),
+                            .style(pf::geist_mono(21.0).letter_spacing(1.2).color(pf::alpha(INK, 0.94))),
                     ),
                 )),
         );
     }
 
-    // The claim — right column, the API spelled out.
+    // The specimens — one card per lane, driven by that lane's own
+    // easing along a shared rail, on a shared 2.4 s loop. The curve
+    // above says what the easing is; the card says what it feels like.
+    let spec_p = clamp01((t - 0.30) / 0.18);
+    if spec_p > 0.01 {
+        let loop_u = clamp01(((sec % 2.4) / 1.55).min(1.0));
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                for i in 0..3 {
+                    let lane_y = 336.0 + i as f32 * 182.0;
+                    let (rx0, rx1) = (1270.0, 1776.0);
+                    let cy = lane_y + 56.0;
+                    let a = spec_p;
+                    // The rail the specimen travels, and its two stops.
+                    book.rect(
+                        Rect::new(rx0, cy - 0.5, rx1, cy + 0.5),
+                        pf::alpha(Color::WHITE, 0.10 * a),
+                    );
+                    for x in [rx0, rx1] {
+                        book.rect(
+                            Rect::new(x - 0.75, cy - 26.0, x + 0.75, cy + 26.0),
+                            pf::alpha(Color::WHITE, 0.16 * a),
+                        );
+                    }
+                    let v = match i {
+                        0 => ease_out_cubic(loop_u),
+                        1 => spring_out(loop_u, 8.0, 0.55).clamp(-0.18, 1.32),
+                        _ => ease_in_out(loop_u),
+                    };
+                    let color = if i == 1 { ACCENT } else { ENGINE };
+                    let cw = 86.0;
+                    let cx = rx0 + (rx1 - rx0 - cw) * v;
+                    // The trail — where the specimen has just been,
+                    // which is the part of an easing you cannot draw
+                    // on an axis.
+                    for k in 1..5 {
+                        let back = clamp01(loop_u - k as f32 * 0.035);
+                        let bv = match i {
+                            0 => ease_out_cubic(back),
+                            1 => spring_out(back, 8.0, 0.55).clamp(-0.18, 1.32),
+                            _ => ease_in_out(back),
+                        };
+                        let bx = rx0 + (rx1 - rx0 - cw) * bv;
+                        book.rrect(
+                            pf::xywh(bx, cy - 21.0, cw, 42.0),
+                            11.0,
+                            pf::alpha(color, 0.06 * a * (5 - k) as f32 / 5.0),
+                        );
+                    }
+                    book.rrect(pf::xywh(cx, cy - 21.0, cw, 42.0), 11.0, pf::alpha(color, 0.85 * a));
+                    book.stroke_rrect(
+                        pf::xywh(cx, cy - 21.0, cw, 42.0),
+                        11.0,
+                        pf::alpha(Color::WHITE, 0.18 * a),
+                        1.0,
+                    );
+                }
+            }),
+        )));
+        // The rail's one label — said once, over the top lane.
+        stack = stack.push(
+            Positioned::new().left(1270.0).top(310.0).width(520.0).height(24.0).child(
+                Opacity::new(spec_p).child(
+                    Text::new("the same clock, three easings".to_string())
+                        .style(pf::geist_mono(15.0).letter_spacing(2.0).color(pf::alpha(MUTED, 0.85))),
+                ),
+            ),
+        );
+    }
+
+    // The claim — the API spelled out, under the specimens.
     let claim_p = clamp01((t - 0.55) / 0.2);
     if claim_p > 0.01 {
         stack = stack.push(
             Positioned::new()
-                .left(1420.0)
-                .top(300.0)
-                .width(340.0)
-                .height(360.0)
+                .left(1270.0)
+                .top(846.0)
+                .width(620.0)
+                .height(48.0)
                 .child(Opacity::new(claim_p).child(
                     Flex::column()
-                        .spacing(14.0)
+                        .spacing(8.0)
                         .push(
-                            Text::new("Tween · Curve".to_string())
+                            Text::new("Tween · Curve   —   Spring · closed form   —   Ticker · one clock".to_string())
                                 .style(pf::geist_mono(16.0).letter_spacing(1.2).color(pf::alpha(SYN_TYPE, 0.95))),
                         )
                         .push(
-                            Text::new("Spring · closed form".to_string())
-                                .style(pf::geist_mono(16.0).letter_spacing(1.2).color(pf::alpha(ACCENT, 0.95))),
-                        )
-                        .push(
-                            Text::new("Ticker · one clock".to_string())
-                                .style(pf::geist_mono(16.0).letter_spacing(1.2).color(pf::alpha(LEDGER, 0.95))),
-                        )
-                        .push(
-                            Text::new("deterministic — the same\nframe, every render".to_string())
-                                .style(pf::geist_mono(13.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.9))),
+                            Text::new("deterministic — the same frame, every render".to_string())
+                                .style(pf::geist_mono(14.0).letter_spacing(0.9).color(pf::alpha(MUTED, 0.9))),
                         ),
                 )),
         );

@@ -196,11 +196,21 @@ impl Rig {
         // The film's own voice — captions, chips, the rail — on its own
         // driver, so the world's scene stays the world's. The chrome
         // rides the same luminance ramp the world does.
-        let chrome_tree = pf::take_chrome();
+        // The matte goes on the chrome layer, *under* the chrome's own
+        // type and over everything the world drew: the header and the
+        // footer are the film's, and the body is the only band anything
+        // is allowed to move in. Z07's opening beat is the one exemption
+        // — its contract is the exact studio, full frame — so the matte
+        // arrives there on the same envelope the rest of the film's
+        // voice does.
+        let matte_a = super::matte_alpha(s.id, sec);
+        let chrome_tree = vieww_widget::prelude::Stack::new()
+            .push(super::frame_matte(matte_a))
+            .push(vieww_widget::prelude::Positioned::fill().child(pf::take_chrome()));
         let chrome_root: vieww_widget::WidgetNode = if ramping {
             Opacity::new(a).child(chrome_tree).into()
         } else {
-            chrome_tree
+            chrome_tree.into()
         };
         self.chrome_driver.set_root(chrome_root);
         self.chrome_driver

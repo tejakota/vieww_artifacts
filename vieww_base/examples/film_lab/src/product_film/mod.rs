@@ -406,7 +406,10 @@ impl Probe {
             "{} · {} · rust {} · {} embedded faces",
             std::env::consts::OS,
             std::env::consts::ARCH,
-            "1.98.1",
+            // Asked of the compiler that built this binary (build.rs),
+            // never typed: the bench identity is a receipt like every
+            // other number the film puts on screen.
+            env!("FILM_RUSTC_VERSION"),
             fonts,
         )
     }

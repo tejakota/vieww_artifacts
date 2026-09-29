@@ -15,7 +15,16 @@
 //! Two scenes' kinds, the house rule: `Pure` scenes are functions of the
 //! frame's [`Ctx`]; `Studio` scenes ride on the **actual `viewwstudio`
 //! app**, mounted once on the film's own driver and driven by this
-//! film's session script ([`script`]). Every frame of every scene —
+//! film's session script ([`script`]).
+//!
+//! **Exactly one scene is `Studio`, by the brief.** Z07 shows the real
+//! application — its first frames are the app and nothing else, no matte,
+//! no overlay, no camera move — because that is what the product looks
+//! like and the audience is owed a look at it. The three scenes that
+//! follow *explain* it, and an explanation wants a diagram: they are the
+//! film's own drawing of the shell ([`shell`]), which can explode,
+//! re-frame and re-tint on a beat. Same rasterizer, same palette, same
+//! proportions; a different register. Every frame of every scene —
 //! including the studio's own pixels — is rasterised by vieww's native
 //! CPU renderer. Nothing here consults a wall clock: a frame is a pure
 //! function of its index.
@@ -28,6 +37,7 @@ pub mod m4_proof;
 pub mod m5_release;
 pub mod master;
 pub mod script;
+pub mod shell;
 
 use crate::product_film as pf;
 use crate::product_film::{Ctx, Kind, SceneDef};
@@ -71,9 +81,9 @@ pub fn scenes() -> Vec<SceneDef> {
         SceneDef { id: "Z06", name: "the_motion",       seconds: 9.0,  kind: Kind::Pure,   build: m2_engine::the_motion },
         // ── Movement III · THE STUDIO (the real app) ────────────────
         SceneDef { id: "Z07", name: "studio_opens",     seconds: 10.0, kind: Kind::Studio, build: m3_studio::studio_opens },
-        SceneDef { id: "Z08", name: "live_compose",     seconds: 11.0, kind: Kind::Studio, build: m3_studio::live_compose },
-        SceneDef { id: "Z09", name: "say_to_rust",      seconds: 12.0, kind: Kind::Studio, build: m3_studio::say_to_rust },
-        SceneDef { id: "Z10", name: "ships_everywhere", seconds: 9.0,  kind: Kind::Studio, build: m3_studio::ships_everywhere },
+        SceneDef { id: "Z08", name: "live_compose",     seconds: 11.0, kind: Kind::Pure,   build: m3_studio::live_compose },
+        SceneDef { id: "Z09", name: "say_to_rust",      seconds: 12.0, kind: Kind::Pure,   build: m3_studio::say_to_rust },
+        SceneDef { id: "Z10", name: "ships_everywhere", seconds: 9.0,  kind: Kind::Pure,   build: m3_studio::ships_everywhere },
         // ── Movement IV · THE PROOF ─────────────────────────────────
         SceneDef { id: "Z11", name: "the_ledger",       seconds: 14.0, kind: Kind::Pure,   build: m4_proof::the_ledger },
         // ── Movement V · THE RELEASE ────────────────────────────────
@@ -139,6 +149,94 @@ pub fn tap_pulse(abs: f32, times: &[f32]) -> f32 {
 // `pf::act_chip`) so the two films speak with one voice. What this film
 // adds is its own progress rail (pinned to *this* film's scene list)
 // and its own studio overlay plate.
+
+// ── The frame's three bands ─────────────────────────────────────────────────
+//
+// The film has a header, a body and a footer, and only one of the three
+// is allowed to move.
+//
+// * **Header** — `0 .. HEADER_H`. The act chip, the two caption lines,
+//   and (in the studio act) the headline plate. Type only.
+// * **Body** — `HEADER_H .. FOOTER_Y`. *Every* animated thing in the
+//   film: every card, thread, slab, gauge, mark and diagram.
+// * **Footer** — `FOOTER_Y .. H`. The receipts row, the witness chip and
+//   the progress rail. Type only.
+//
+// This is enforced rather than observed. [`frame_matte`] paints the two
+// bands opaque on the chrome layer — under the chrome's own type, over
+// everything the world drew — so a scene that strays out of the body is
+// simply cut off at the band, the way a matte cuts a frame. No scene can
+// quietly reclaim the header by drawing higher.
+
+/// Where the body begins. Above it: the film's voice, nothing else.
+pub const HEADER_H: f32 = 300.0;
+
+/// Where the body ends. Below it: the receipts and the rail, nothing else.
+pub const FOOTER_Y: f32 = 900.0;
+
+/// The matte's strength for a scene at `sec` into it.
+///
+/// One exemption, and it is the brief's: **Z07's first beat is the exact
+/// studio** — the whole app, the whole frame, nothing of the film's over
+/// it. The matte arrives with the rest of the film's voice at 0.40 s, on
+/// the same envelope, so the moment the audience stops looking at the
+/// product and starts being shown it is a single move.
+pub fn matte_alpha(id: &str, sec: f32) -> f32 {
+    if id == "Z07" {
+        pf::clamp01((sec - 0.40) / 0.55)
+    } else {
+        1.0
+    }
+}
+
+/// The matte — the two opaque bands that make the header and footer the
+/// film's own, and the body the only place anything may move.
+///
+/// `a` fades the whole matte. It is 0 for Z07's opening beat, whose
+/// contract is the *exact* studio, full frame, unmatted; everywhere else
+/// it is 1 and the bands are absolute.
+pub fn frame_matte(a: f32) -> vieww_widget::WidgetNode {
+    use vieww_foundation::{Gradient, Size, Sketchbook};
+    use vieww_widget::prelude::*;
+    if a <= 0.005 {
+        return Stack::new().into();
+    }
+    Positioned::fill()
+        .child(Painting::sized(
+            pf::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                let ground = pf::alpha(pf::BG_DEEP, a);
+                book.rect(pf::xywh(0.0, 0.0, pf::W, HEADER_H), ground);
+                book.rect(pf::xywh(0.0, FOOTER_Y, pf::W, pf::H - FOOTER_Y), ground);
+                // The seams — a hairline where each band meets the body,
+                // so the frame reads as composed rather than cropped, and
+                // a short accent tick on the left of each.
+                // The header's seam feathers downward into the body; the
+                // footer's feathers upward. Both are 28 px, so a card
+                // that ends near a band does not end on a hard line.
+                book.rect(pf::xywh(0.0, HEADER_H - 0.5, pf::W, 1.0), pf::alpha(Color::WHITE, 0.07 * a));
+                book.rect(
+                    pf::xywh(0.0, HEADER_H, pf::W, 28.0),
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, pf::alpha(pf::BG_DEEP, 0.60 * a)),
+                        (1.0, pf::alpha(pf::BG_DEEP, 0.0)),
+                    ]),
+                );
+                book.rect(pf::xywh(0.0, FOOTER_Y - 0.5, pf::W, 1.0), pf::alpha(Color::WHITE, 0.07 * a));
+                book.rect(
+                    pf::xywh(0.0, FOOTER_Y - 28.0, pf::W, 28.0),
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, pf::alpha(pf::BG_DEEP, 0.0)),
+                        (1.0, pf::alpha(pf::BG_DEEP, 0.60 * a)),
+                    ]),
+                );
+                for y in [HEADER_H, FOOTER_Y] {
+                    book.rect(pf::xywh(72.0, y - 1.0, 108.0, 2.0), pf::alpha(pf::ACCENT, 0.30 * a));
+                }
+            }),
+        ))
+        .into()
+}
 
 /// This film's progress rail — one tick per scene, the playhead sliding.
 pub fn progress_rail(abs: f32) -> vieww_widget::WidgetNode {
@@ -210,6 +308,15 @@ pub fn studio_plate_faded(
             Painting::sized(
                 pf::CANVAS,
                 PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                    // The exposure. The studio's live preview renders a
+                    // light-themed app, so the brightest thing in the
+                    // studio act is a white rectangle in the right third
+                    // — it out-shouted the film's own voice in the v2
+                    // cut. A vignette is the cinematographer's answer:
+                    // it changes no pixel's meaning, only the frame's
+                    // falloff, exactly as a lens would. The app is still
+                    // ungraded; the *shot* is exposed.
+                    pf::vignette(book, pf::W, pf::H, 0.62 * a);
                     book.rect(
                         pf::xywh(0.0, pf::H - 150.0, pf::W, 150.0),
                         Gradient::vertical().with_dither().with_stops(&[

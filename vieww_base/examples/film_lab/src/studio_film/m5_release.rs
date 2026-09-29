@@ -74,7 +74,7 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
                     // quadrant projector.
                     pf::panel_3d(
                         book,
-                        Rect::new(470.0, 230.0, 1450.0, 850.0),
+                        Rect::new(470.0, 330.0, 1450.0, 866.0),
                         yaw,
                         pitch,
                         1150.0,
@@ -219,15 +219,15 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-                fk::ring3(book, s, Offset::new(W * 0.5, 294.0), 205.0, sec, ring_a);
+                fk::ring3(book, s, Offset::new(W * 0.5, 412.0), 236.0, sec, ring_a);
             }),
         )));
     }
     let editor_a = ease_out_expo(clamp01((t - 0.04) / 0.12));
     let preview_a = spring_out(clamp01((t - 0.10) / 0.16), 9.0, 0.62);
     if editor_a > 0.01 {
-        stack = stack.push(Positioned::new().left((W - 112.0) * 0.5).top(238.0).width(112.0).height(112.0).child(
-            pf::brand_mark(112.0, editor_a, preview_a.clamp(0.0, 1.0)),
+        stack = stack.push(Positioned::new().left((W - 168.0) * 0.5).top(330.0).width(168.0).height(168.0).child(
+            pf::brand_mark(168.0, editor_a, preview_a.clamp(0.0, 1.0)),
         ));
         // The sting — one glow breathing behind the mark.
         stack = stack.push(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(
@@ -236,7 +236,7 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                 if glow_p > 0.01 {
                     let pulse = 0.8 + 0.2 * (sec * 2.0).sin();
                     book.layer(glow_p, 44.0, None, |b| {
-                        b.circle(Offset::new(W * 0.5, 294.0), 130.0 * pulse, pf::alpha(BRAND_NEAR, 0.10 * glow_p));
+                        b.circle(Offset::new(W * 0.5, 412.0), 160.0 * pulse, pf::alpha(BRAND_NEAR, 0.11 * glow_p));
                     });
                 }
             },
@@ -251,10 +251,10 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(0.0)
-                .top(396.0 + rise)
+                .top(520.0 + rise)
                 .width(W)
-                .height(80.0)
-                .child(Opacity::new(name_a).child(fk::wordmark(56.0, 1.0))),
+                .height(130.0)
+                .child(Opacity::new(name_a).child(fk::wordmark(92.0, 1.0))),
         );
     }
 
@@ -268,10 +268,10 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 for (from, bend, phase) in [
-                    (Offset::new(W * 0.10, 620.0), -110.0, 0.0),
-                    (Offset::new(W * 0.90, 620.0), 110.0, 0.5),
+                    (Offset::new(W * 0.08, 830.0), -130.0, 0.0),
+                    (Offset::new(W * 0.92, 830.0), 130.0, 0.5),
                 ] {
-                    let pts = fk::thread_pts(from, Offset::new(W * 0.5, 493.0), bend);
+                    let pts = fk::thread_pts(from, Offset::new(W * 0.5, 652.0), bend);
                     fk::ribbon(book, &pts, 2.0, sec_v + phase, BRAND_FAR, 0.55 * la);
                     fk::rider(book, &pts, (sec_v * 0.22 + phase) % 1.0, BRAND_NEAR, 2.4, la);
                 }
@@ -279,10 +279,10 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         )));
     }
     if line_a > 0.01 {
-        let target_w = 620.0;
+        let target_w = 840.0;
         let uw = target_w * ease_out_expo(line_a);
-        stack = stack.push(Positioned::new().left((W - uw) * 0.5).top(492.0).width(uw).height(3.0).child(
-            Painting::sized(Size::new(uw.max(1.0), 3.0), PaintWith::new(
+        stack = stack.push(Positioned::new().left((W - uw) * 0.5).top(650.0).width(uw).height(4.0).child(
+            Painting::sized(Size::new(uw.max(1.0), 4.0), PaintWith::new(
                 move |book: &mut Sketchbook, s: Size| {
                     book.rect(
                         Rect::new(0.0, 0.0, s.width, s.height),
@@ -303,8 +303,8 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(pf::type_on(
         RELEASE,
         pf::TypeAt::CenteredOn(W as i32 / 2),
-        548.0,
-        pf::geist(30.0).letter_spacing(2.4).color(pf::alpha(ACCENT, 1.0)),
+        692.0,
+        pf::geist(42.0).bold().letter_spacing(3.0).color(pf::alpha(ACCENT, 1.0)),
         clamp01((t - 0.26) / 0.20),
         sec,
     ));
@@ -315,12 +315,12 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(0.0)
-                .top(630.0 + (1.0 - ease_out_cubic(repo_a)) * 10.0)
+                .top(768.0 + (1.0 - ease_out_cubic(repo_a)) * 10.0)
                 .width(W)
-                .height(30.0)
+                .height(34.0)
                 .child(Opacity::new(repo_a).child(
                     Text::new(REPO.to_string())
-                        .style(pf::geist_mono(16.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.95)))
+                        .style(pf::geist_mono(20.0).letter_spacing(2.0).color(pf::alpha(MUTED, 0.95)))
                         .align(TextAlign::Center),
                 )),
         );
@@ -332,9 +332,9 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(0.0)
-                .top(700.0)
+                .top(824.0)
                 .width(W)
-                .height(60.0)
+                .height(66.0)
                 .child(Opacity::new(contract_a).child(
                     Flex::column()
                         .spacing(6.0)
@@ -344,12 +344,12 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                                 pf::group_commas(probe.frames),
                                 probe.frame_ms
                             ))
-                            .style(pf::geist_mono(14.0).letter_spacing(1.2).color(pf::alpha(SYN_TYPE, 0.85)))
+                            .style(pf::geist_mono(16.0).letter_spacing(1.4).color(pf::alpha(SYN_TYPE, 0.85)))
                             .align(TextAlign::Center),
                         )
                         .push(
                             Text::new(probe.bench.clone())
-                                .style(pf::geist_mono(12.0).letter_spacing(1.0).color(pf::alpha(pf::FAINT, 0.9)))
+                                .style(pf::geist_mono(13.0).letter_spacing(1.0).color(pf::alpha(pf::FAINT, 0.9)))
                                 .align(TextAlign::Center),
                         ),
                 )),
@@ -385,7 +385,7 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
             pf::stars(book, w, h, 0xE2D1, 90, t + 11.0, 0.09);
             let pulse = 1.0 + 0.08 * (sec * 1.2).sin();
             book.layer(0.8, 44.0, None, |b| {
-                b.circle(Offset::new(w * 0.5, 294.0), 130.0 * pulse, pf::alpha(BRAND_NEAR, 0.10));
+                b.circle(Offset::new(w * 0.5, 412.0), 160.0 * pulse, pf::alpha(BRAND_NEAR, 0.11));
             });
             pf::vignette(book, w, h, 0.5);
         }),
@@ -396,22 +396,22 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-            fk::ring3(book, s, Offset::new(W * 0.5, 294.0), 205.0, sec + 11.0, 0.9);
+            fk::ring3(book, s, Offset::new(W * 0.5, 412.0), 236.0, sec + 11.0, 0.9);
         }),
     )));
-    stack = stack.push(Positioned::new().left((W - 112.0) * 0.5).top(238.0).width(112.0).height(112.0).child(
-        pf::brand_mark(112.0, 1.0, 1.0),
+    stack = stack.push(Positioned::new().left((W - 168.0) * 0.5).top(330.0).width(168.0).height(168.0).child(
+        pf::brand_mark(168.0, 1.0, 1.0),
     ));
     stack = stack.push(
         Positioned::new()
             .left(0.0)
-            .top(396.0)
+            .top(520.0)
             .width(W)
-            .height(80.0)
-            .child(fk::wordmark(56.0, 1.0)),
+            .height(130.0)
+            .child(fk::wordmark(92.0, 1.0)),
     );
-    stack = stack.push(Positioned::new().left((W - 620.0) * 0.5).top(492.0).width(620.0).height(3.0).child(
-        Painting::sized(Size::new(620.0, 3.0), PaintWith::new(
+    stack = stack.push(Positioned::new().left((W - 840.0) * 0.5).top(650.0).width(840.0).height(4.0).child(
+        Painting::sized(Size::new(840.0, 4.0), PaintWith::new(
             move |book: &mut Sketchbook, s: Size| {
                 book.rect(
                     Rect::new(0.0, 0.0, s.width, s.height),
@@ -429,24 +429,24 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(
         Positioned::new()
             .left(0.0)
-            .top(548.0)
+            .top(692.0)
             .width(W)
-            .height(44.0)
+            .height(60.0)
             .child(
                 Text::new(RELEASE.to_string())
-                    .style(pf::geist(30.0).letter_spacing(2.4).color(pf::alpha(ACCENT, 1.0)))
+                    .style(pf::geist(42.0).bold().letter_spacing(3.0).color(pf::alpha(ACCENT, 1.0)))
                     .align(TextAlign::Center),
             ),
     );
     stack = stack.push(
         Positioned::new()
             .left(0.0)
-            .top(630.0)
+            .top(768.0)
             .width(W)
-            .height(30.0)
+            .height(34.0)
             .child(
                 Text::new(REPO.to_string())
-                    .style(pf::geist_mono(16.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.95)))
+                    .style(pf::geist_mono(20.0).letter_spacing(2.0).color(pf::alpha(MUTED, 0.95)))
                     .align(TextAlign::Center),
             ),
     );
@@ -454,16 +454,16 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(0.0)
-                .top(700.0)
+                .top(836.0)
                 .width(W)
-                .height(24.0)
+                .height(28.0)
                 .child(
                     Text::new(format!(
                         "every frame rendered by vieww — {} frames · {}",
                         pf::group_commas(probe.frames),
                         probe.bench
                     ))
-                    .style(pf::geist_mono(13.0).letter_spacing(1.0).color(pf::alpha(pf::FAINT, 0.9)))
+                    .style(pf::geist_mono(14.0).letter_spacing(1.0).color(pf::alpha(pf::FAINT, 0.9)))
                     .align(TextAlign::Center),
                 ),
         );

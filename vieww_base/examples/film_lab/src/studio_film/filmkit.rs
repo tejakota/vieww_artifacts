@@ -66,9 +66,14 @@ pub fn sf_camera(id: &str, t: f32, sec: f32) -> pf::Cam {
 
         // Push toward the gauge — the cost meter earns the focus, while
         // the gates keep their place in the frame.
+        // The push toward the gauge is bounded by what it must not
+        // crop: the gate list starts at x=160 and the gauge ends at
+        // x=1730, so at zoom 1.05 the held point can only live between
+        // 816 and 1074. The v2 cut held 1250, and sliced every gate
+        // label in half for the back three quarters of the scene.
         "Z02" => pf::cam_lerp(
             pf::Cam::zoom(1.0),
-            pf::Cam::at(1.050, 1250.0, 470.0),
+            pf::Cam::at(1.048, 1046.0, 540.0),
             ease_in_out(clamp01((t - 0.10) / 0.76)),
         ),
 
@@ -91,12 +96,19 @@ pub fn sf_camera(id: &str, t: f32, sec: f32) -> pf::Cam {
         // Track the pipeline left to right with the packets — the
         // metaphor is serial, so the shot is. The travel ends framed on
         // the whole line, first station included.
+        // The pipeline's five stations span x 150–1758, which leaves a
+        // lateral track no room: at any zoom that frames the line, the
+        // held point can only move a few dozen pixels before the first
+        // station leaves the frame — and in the v2 cut it did, for the
+        // back half of the scene. The move that *is* available is a
+        // lean: the shot pushes in on the line as the packets start to
+        // travel, and the packets carry the lateral motion instead.
         "Z05" => {
-            let travel = ease_in_out(clamp01((t - 0.12) / 0.72));
+            let lean = ease_in_out(clamp01((t - 0.12) / 0.72));
             pf::cam_lerp(
-                pf::Cam::at(1.115, 720.0, 430.0),
-                pf::Cam::at(1.020, 1080.0, 460.0),
-                travel,
+                pf::Cam::at(1.000, 960.0, 540.0),
+                pf::Cam::at(1.098, 954.0, 524.0),
+                lean,
             )
         }
 
@@ -123,36 +135,47 @@ pub fn sf_camera(id: &str, t: f32, sec: f32) -> pf::Cam {
         }
 
         // Into the editor — where the edit happens is where we look.
+        // Bounded so the shell (x 118–1802) keeps both its ends: at
+        // zoom 1.06 the held point lives between 906 and 1014.
         "Z08" => pf::cam_lerp(
             pf::Cam::zoom(1.0),
-            pf::Cam::at(1.070, 840.0, 500.0),
+            pf::Cam::at(1.058, 950.0, 556.0),
             ease_in_out(clamp01((t - 0.06) / 0.60)),
         ),
 
         // Track the compile, then feel the taps.
         "Z09" => {
             let base = pf::cam_lerp(
-                pf::Cam::at(1.050, 870.0, 500.0),
+                pf::Cam::at(1.046, 958.0, 544.0),
                 pf::Cam::at(1.000, 960.0, 540.0),
                 ease_in_out(t),
             );
-            let (d1x, d1y) = pf::cam_shake(sec - 85.6, 7.0);
-            let (d2x, d2y) = pf::cam_shake(sec - 87.2, 5.0);
+            // The presses are the explanation's own, at 8.0 s and 9.4 s
+            // into the scene — the v2 numbers were absolute film seconds
+            // from when this scene rode the live session, and never fired.
+            let (d1x, d1y) = pf::cam_shake(sec - 8.0, 6.0);
+            let (d2x, d2y) = pf::cam_shake(sec - 9.4, 4.5);
             base.nudged(d1x + d2x, d1y + d2y)
         }
 
-        // A lateral pass while the platforms flip.
+        // The fleet spans x 184–1620, so a lateral pass would walk the
+        // first device out of frame. The move that fits is a lean into
+        // the three of them as the third lands.
         "Z10" => pf::cam_lerp(
-            pf::Cam::at(1.060, 820.0, 520.0),
-            pf::Cam::at(1.060, 1100.0, 520.0),
-            ease_in_out(t),
+            pf::Cam::at(1.000, 960.0, 540.0),
+            pf::Cam::at(1.062, 958.0, 556.0),
+            ease_in_out(clamp01((t - 0.08) / 0.70)),
         ),
 
-        // The ledger settles into place.
+        // The ledger falls through its three registers: framed on the
+        // hero cards, easing down and out until the whole audit — cards,
+        // gauge, and the film's own row — is in one frame at the end.
+        // The travel is small by construction: the registers themselves
+        // carry the motion, and the camera only follows the reading eye.
         "Z11" => pf::cam_lerp(
-            pf::Cam::zoom(1.060),
-            pf::Cam::zoom(1.0),
-            ease_out_expo(clamp01(t / 0.55)),
+            pf::Cam::at(1.075, 960.0, 506.0),
+            pf::Cam::at(1.020, 960.0, 546.0),
+            ease_in_out(clamp01((t - 0.06) / 0.80)),
         ),
 
         // The pullback, actually pulling back — below 1.0 is allowed
@@ -744,6 +767,14 @@ pub fn grid_floor_lines(
 
 /// A ring of 3D boxes orbiting a centre — the engine's machine room.
 /// Cheap by design: eight boxes, forty-eight quads, real perspective.
+/// The engine's parts, orbiting its heart — and then *joining* it.
+///
+/// `converge` in `0..1` draws the orbits in: at 0 the crates are eight
+/// separate bodies at their full radii, at 1 they have fallen to a third
+/// of the way out and dimmed, because by then the scene has said the
+/// thing they illustrate — *36 crates, one core* — and eight boxes still
+/// circling a claim they have already made are decoration. They were
+/// decoration in the v2 cut, which is the note this answers.
 pub fn cube_orbit(
     book: &mut Sketchbook,
     canvas: Size,
@@ -751,7 +782,11 @@ pub fn cube_orbit(
     t: f32,
     a: f32,
     fog_color: Color,
+    converge: f32,
 ) {
+    let converge = clamp01(converge);
+    let shrink = 1.0 - 0.62 * ease_in_out(converge);
+    let a = a * (1.0 - 0.72 * converge);
     use crate::three_d::{box_mesh, draw_mesh, Camera, MeshStyle, Vec3};
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 {
@@ -782,7 +817,11 @@ pub fn cube_orbit(
         (250.0, -80.0, 0.15, 30.0, 5.2, BRAND_NEAR),
     ];
     for (ring, y, tilt, size, phase, color) in specs {
-        let ang = t * 0.28 + phase;
+        let ring = ring * shrink;
+        let size = size * (1.0 - 0.28 * converge);
+        // The orbit also slows as it closes, so the convergence reads as
+        // settling rather than as a spin-down.
+        let ang = t * (0.28 - 0.14 * converge) + phase;
         let (s, c) = ang.sin_cos();
         let x = ring * c;
         let z = ring * s;
@@ -1021,6 +1060,160 @@ pub fn stars_wide(book: &mut Sketchbook, w: f32, h: f32, margin: f32, seed: u64,
         let tw = 0.5 + 0.5 * (t * (0.4 + rng.f01() * 1.4) + rng.f01() * 7.0).sin();
         let r = 0.6 + rng.f01() * 1.3;
         book.circle(Offset::new(x, y), r, pf::alpha(Color::WHITE, base * tw));
+    }
+}
+
+// ── The stage kit (v3) ──────────────────────────────────────────────────────
+//
+// The v2 cut annotated the live app by drawing *on* it: cards, chips and
+// slabs landed straight over the editor's code and the preview's white.
+// Two things competed for every pixel and neither won. The v3 rule is a
+// stage: an annotation group first clears a plate for itself — a soft,
+// dark, rounded panel with a lit seam — and only then draws. The app is
+// never graded (the honesty rule holds); it is *occluded*, deliberately,
+// by the film's own layer, the way a lower third occludes a news desk.
+
+/// A stage plate — the dark panel an annotation group clears for itself
+/// over the live app. Grows from its own centre on `p`, carries a top
+/// accent seam, a hairline edge and a real drop shadow.
+///
+/// Draw this *first*, then draw the group's content at the same rect.
+pub fn stage_plate(book: &mut Sketchbook, r: Rect, p: f32, color: Color, a: f32) {
+    let p = clamp01(p);
+    if p <= 0.01 || a <= 0.01 {
+        return;
+    }
+    let grow = ease_out_expo(p);
+    let (cx, cy) = (r.left + r.width() * 0.5, r.top + r.height() * 0.5);
+    let hw = r.width() * 0.5 * (0.88 + 0.12 * grow);
+    let hh = r.height() * 0.5 * grow;
+    if hh < 1.0 || hw < 1.0 {
+        return;
+    }
+    let body = Rect::new(cx - hw, cy - hh, cx + hw, cy + hh);
+    let radius = 18.0;
+    book.shadow(
+        Rect::new(body.left, body.top + 10.0, body.right, body.bottom + 10.0),
+        radius,
+        vieww_foundation::Shadow::new(pf::alpha(Color::BLACK, 0.62 * a), Offset::new(0.0, 14.0), 42.0),
+    );
+    // The plate itself — near-opaque so the app under it stops shouting.
+    book.rrect(
+        body,
+        radius,
+        pf::alpha(Color::rgb(0x12, 0x10, 0x14), (0.93 * a).min(1.0)),
+    );
+    book.rrect(
+        body,
+        radius,
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, pf::alpha(color, 0.055 * a)),
+            (1.0, pf::alpha(Color::BLACK, 0.0)),
+        ]),
+    );
+    book.stroke_rrect(body, radius, pf::alpha(Color::WHITE, 0.07 * a), 1.0);
+    // The seam — a lit rule along the plate's top edge, drawn to `grow`.
+    let seam_w = body.width() * 0.62 * grow;
+    if seam_w > 2.0 {
+        book.rect(
+            Rect::new(body.left + 22.0, body.top, body.left + 22.0 + seam_w, body.top + 2.0),
+            Gradient::horizontal().with_stops(&[
+                (0.0, pf::alpha(color, 0.0)),
+                (0.22, pf::alpha(color, 0.85 * a)),
+                (1.0, pf::alpha(color, 0.0)),
+            ]),
+        );
+    }
+}
+
+/// A specular sheen travelling once across a plate — the premium tell.
+/// `p` is the sweep's own progress; outside `0..1` it draws nothing.
+pub fn plate_sheen(book: &mut Sketchbook, r: Rect, p: f32, a: f32) {
+    let p = clamp01(p);
+    if p <= 0.001 || p >= 0.999 || a <= 0.01 {
+        return;
+    }
+    let band = r.width() * 0.34;
+    let x = r.left - band + (r.width() + band) * p;
+    // Fade in and out so the sheen never pops at the plate's edges.
+    let env = (p * std::f32::consts::PI).sin();
+    book.transformed(Transform::translate(Offset::new(x, r.top)), |b| {
+        b.rect(
+            Rect::new(0.0, 0.0, band, r.height()),
+            Gradient::horizontal().with_stops(&[
+                (0.0, pf::alpha(Color::WHITE, 0.0)),
+                (0.5, pf::alpha(Color::WHITE, 0.05 * a * env)),
+                (1.0, pf::alpha(Color::WHITE, 0.0)),
+            ]),
+        );
+    });
+}
+
+/// A measured bar against a budget — the ledger's gauge. `value` and
+/// `budget` share units; the bar fills to `value/scale` on `p`, and the
+/// budget's line is drawn where it actually falls, labelled by the
+/// caller. Over budget is drawn in `over`, under in `under`.
+pub fn budget_bar(
+    book: &mut Sketchbook,
+    r: Rect,
+    value: f32,
+    budget: f32,
+    scale: f32,
+    p: f32,
+    under: Color,
+    over: Color,
+    a: f32,
+) {
+    let p = clamp01(p);
+    if a <= 0.01 {
+        return;
+    }
+    let radius = r.height() * 0.5;
+    book.rrect(r, radius, pf::alpha(Color::WHITE, 0.05 * a));
+    let frac = (value / scale).clamp(0.0, 1.0) * ease_out_expo(p);
+    let color = if value > budget { over } else { under };
+    let w = r.width() * frac;
+    if w > 2.0 {
+        let fill = Rect::new(r.left, r.top, r.left + w, r.bottom);
+        book.rrect(
+            fill,
+            radius,
+            Gradient::horizontal().with_dither().with_stops(&[
+                (0.0, pf::alpha(color, 0.55 * a)),
+                (1.0, pf::alpha(color, 0.95 * a)),
+            ]),
+        );
+        // The head — a soft light where the bar stops growing.
+        book.layer(a, 10.0, None, |b| {
+            b.circle(
+                Offset::new(r.left + w, r.top + r.height() * 0.5),
+                r.height() * 0.85,
+                pf::alpha(color, 0.35),
+            );
+        });
+    }
+    // The budget line — where the frame's 60 fps allowance actually is.
+    let bx = r.left + r.width() * (budget / scale).clamp(0.0, 1.0);
+    book.rect(
+        Rect::new(bx - 0.75, r.top - 9.0, bx + 0.75, r.bottom + 9.0),
+        pf::alpha(Color::WHITE, 0.32 * a),
+    );
+}
+
+/// A hairline tick ladder under a gauge — the scale the bars are read
+/// against, so a bar means a number and not a feeling.
+pub fn gauge_ticks(book: &mut Sketchbook, x0: f32, x1: f32, y: f32, n: usize, a: f32) {
+    if a <= 0.01 {
+        return;
+    }
+    for i in 0..=n {
+        let f = i as f32 / n as f32;
+        let x = x0 + (x1 - x0) * f;
+        let major = i % 2 == 0;
+        book.rect(
+            Rect::new(x - 0.5, y, x + 0.5, y + if major { 7.0 } else { 4.0 }),
+            pf::alpha(Color::WHITE, (if major { 0.22 } else { 0.12 }) * a),
+        );
     }
 }
 
