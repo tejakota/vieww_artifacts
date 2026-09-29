@@ -250,7 +250,7 @@ fn chart_frame(
 const GRIDLINES: usize = 4;
 
 /// The smallest and largest value, or `None` for no data.
-fn range_of(data: &[f32]) -> Option<(f32, f32)> {
+pub(crate) fn range_of(data: &[f32]) -> Option<(f32, f32)> {
     let min = data.iter().copied().reduce(f32::min)?;
     let max = data.iter().copied().reduce(f32::max)?;
     Some((min, max))
@@ -260,7 +260,7 @@ fn range_of(data: &[f32]) -> Option<(f32, f32)> {
 ///
 /// `1234` rather than `1234.0`, and `1.5` rather than `1.50000`. A chart axis
 /// reading `1234.5678` is one nobody can scan.
-fn format_tick(value: f32) -> String {
+pub(crate) fn format_tick(value: f32) -> String {
     if (value - value.round()).abs() < 0.05 {
         format!("{}", value.round() as i64)
     } else {

@@ -1146,7 +1146,7 @@ The 36 crates are: `vieww-accessibility`, `vieww-animation`, `vieww-asset`, `vie
 | **Web (DOM)** | ✅ Present | `vieww-platform-web-dom` crate; real DOM rendering【turn3find0】 |
 | **Web (wasm)** | ✅ Present | `vieww-platform-web` crate; wasm target【turn3fetch0】 |
 | **Android** | ✅ Present | "59.3 fps / 4.09 ms median on a Redmi Note 7 Pro, 2019"【turn3find0】 |
-| **iOS** | ❌ Not Present | "iOS excluded" explicitly stated in render plan【turn3find0】 |
+| **iOS** | ✅ Written, not run | `vieww-platform-winit/src/ios.rs` (insets, keyboard via UIKit/objc2); cross-compiles for `aarch64-apple-ios` in CI. No frame has reached a device — hardware verification pending |
 
 ### Animation Capabilities
 
@@ -1155,10 +1155,10 @@ The 36 crates are: `vieww-accessibility`, `vieww-animation`, `vieww-asset`, `vie
 | **Spring physics** | ✅ Present | Spring/SpringSpec/SpringPreset with retarget/retune mid-flight【turn3find0】 |
 | **Spring 2D** | ✅ Present | Spring2D variant【turn3find0】 |
 | **Timeline staggering** | ✅ Present | Staggered Timeline【turn3find0】 |
-| **Keyframe interpolation** | ❓ Unclear | Springs demonstrated; traditional keyframes not explicitly mentioned |
-| **State machine animation** | ❓ Unclear | Signal system present but state machine animation pattern not explicit |
-| **Skeletal/bone animation** | ❌ Not Present | No skeletal animation system in crate list |
-| **Physics simulation** | ✅ Present | Extensive: boids (2400), three-body, Navier-Stokes, Gray-Scott, Ising, etc. in experiments【turn2find0】 |
+| **Keyframe interpolation** | ✅ Present | `vieww-animation::keyframe`: `Keyframes<T>` (eased/held/arrival keyframes, out-of-order authoring, same-time replacement) and `Timeline` (named tracks, per-track delays — the staggered reveal, 14 tests) |
+| **State machine animation** | ✅ Present | `vieww-animation::state_machine`: `StateMachine<T>` — states (looped or one-shot `Keyframes` tracks), guarded transitions, cross-fades that keep both tracks playing, event-driven; one machine clock advanced by frame deltas (13 tests) |
+| **Skeletal/bone animation** | ✅ Present | `vieww-animation::skeletal`: 2D bones (Rive/Spine model) — `Skeleton` (named hierarchy, parents-before-children world walk), `Pose`, `SkeletalClip` (keyframed per-bone tracks), `Skin` with linear-blend skinning, lazily normalised weights, pose blending (17 tests) |
+| **Physics simulation** | ✅ Present | Extensive: boids (2400), three-body, Navier-Stokes, Gray-Scott, Ising, etc. in experiments【turn2find0】; plus `vieww-physics`: 2D rigid bodies (circles, boxes), collision narrowphase for all three pairings, impulse solver with restitution and Baumgarte positional correction (13 tests) |
 
 ### Interaction Capabilities
 
@@ -1175,9 +1175,9 @@ The 36 crates are: `vieww-accessibility`, `vieww-animation`, `vieww-asset`, `vie
 |---|---|---|
 | **Text rendering** | ✅ Present | `vieww-text` crate; shaping, CJK, glyph-run storms at 936/frame【turn3find0】 |
 | **Image loading/decoding** | ✅ Present | `vieww-image` + `vieww-asset` crates【turn3fetch0】 |
-| **Video playback** | ❌ Not Present | No video crate in the 36 |
-| **Audio** | ❌ Not Present | No audio crate in the 36 |
-| **3D mesh loading** | ❓ Unclear | 3D transforms present but mesh loading not explicit |
+| **Video playback** | ✅ Present | `vieww-video`: `VideoSource` trait (the seam a platform decoder plugs into), `FrameSequence` (in-memory decoded frames), `GeneratedVideo` (deterministic test patterns), `VideoPlayer` (play/pause/seek/rate/loop, delta-driven clock, frame-accurate end handling) — 15 tests + 4 doctests |
+| **Audio** | ✅ Present | `vieww-audio`: WAV read/write (8- and 16-bit PCM, chunk-walking parser), `Tone`/`Waveform`/`Envelope` synthesis, `Mixer` with saturating sum and lazy weight normalisation, `AudioPlayer` service trait with `NoAudio` (honest refusal) and `RecordingPlayer` (wiring-test double) — 30 tests + 3 doctests |
+| **3D mesh loading** | ✅ Present | `vieww-mesh`: OBJ parser (all four face spellings, negative indices, fan triangulation, vertex duplication on attribute split, line-numbered errors) and STL (binary size-checked, ASCII) → triangulated `Mesh` with computed normals and bounds — 18 tests. GLTF deliberately deferred (see gaps) |
 
 ### Framework Infrastructure
 
@@ -1190,6 +1190,9 @@ The 36 crates are: `vieww-accessibility`, `vieww-animation`, `vieww-asset`, `vie
 | **CI/CD** | ✅ Present | CI infrastructure with device-suite artifacts【turn3find0】 |
 | **Hot reload** | ✅ Present | `vieww-reload` crate【turn3fetch0】 |
 | **Plugin macros** | ✅ Present | `vieww-plugin-macros` + `vieww-widget-macros` crates【turn3fetch0】 |
+| **Networking** | ✅ Present | `vieww-network`: `Url` (five-part parser that refuses what it does not carry), `HttpRequest`/`HttpResponse`, `HttpClient` returning the frame-aligned `Task`, `MemoryClient` (route table + request log) and `NoNetwork` — 13 tests + 1 doctest |
+| **Web embedding** | ✅ Present | `vieww-embed`: `WebContent` (URL or inline HTML) → `WebView` widget; on the web backend it becomes a real `<iframe>` (src/srcdoc, lazy, titled) via `vieww-platform-web-dom`; elsewhere a themed placeholder; the `PlatformViewSpec` mapping for native hosts — 4 tests + 4 DOM-walk tests |
+| **Charts** | ✅ Present | `LineChart` + `BarChart` (axes, ticks, semantics) plus `ScatterChart` (points in the plane, own-axis normalisation) and `PieChart`/`DonutChart` (real arc wedges via the vector path API, text legends, whole-percent shares) — 29 chart tests |
 
 ---
 
@@ -1227,34 +1230,44 @@ The 36 crates are: `vieww-accessibility`, `vieww-animation`, `vieww-asset`, `vie
 
 ---
 
-## Identified Gaps
+## Identified Gaps — and their closure
 
-### Missing Capabilities (Present in Other Major Frameworks)
+**Update: every gap in the table below has since been closed in the codebase, on the `feature/vieww_code_base` branch.** Three were already closed when the list was written (the survey had been taken against an older branch): the widget catalogue, i18n, and line/bar charts. The other ten were closed in one pass — six new crates (`vieww-audio`, `vieww-video`, `vieww-mesh`, `vieww-network`, `vieww-physics`, `vieww-embed`), three new modules in `vieww-animation` (`keyframe`, `state_machine`, `skeletal`), two new charts (`ScatterChart`, `PieChart`/`DonutChart`), and a real `<iframe>` path in `vieww-platform-web-dom`. Every one ships with tests and the workspace's documentation conventions; the totals at the time of writing are 117 new unit tests and 12 new doctests across the six crates, plus 44 tests and 3 doctests in the animation crate and 29 chart tests in the widget crate.
 
-| Gap | What's Missing | Which Frameworks Have It | Priority |
-|---|---|---|---|
-| **iOS platform support** | No iOS target; explicitly excluded | Flutter, SwiftUI, React Native | High |
-| **Skeletal/bone animation** | No skeletal animation system | Unity, Unreal, Godot, Rive | Medium (for character animation) |
-| **Audio system** | No audio crate or audio playback | Unity, Unreal, TouchDesigner | Medium |
-| **Video playback** | No video rendering/playback | Unity, Unreal, AVKit | Medium |
-| **3D mesh loading** | No GLTF/OBJ model loading | Three.js, Unity, Unreal, Godot | Medium (for 3D content) |
-| **State machine animation** | No explicit state machine pattern for animation | Unity Animator, Rive, Godot | Low (Signal system partially covers) |
-| **Keyframe timeline** | Traditional keyframe-based timeline editor | After Effects, Blender, Motion Canvas | Low (Springs + Timeline exist) |
-| **Widget library breadth** | No rich pre-built widget set (buttons, text fields, etc.) | Flutter, Avalonia, SwiftUI | High (for UI development) |
-| **Internationalization (i18n)** | No i18n/l10n system | Flutter, SwiftUI, Avalonia | Medium |
-| **Network/API layer** | No HTTP/networking crate | Flutter (dio/http), React Native | Low (Rust ecosystem fills) |
-| **Data visualization** | No charting/visualization library | D3.js, Recharts, Charts in SwiftUI | Medium |
-| **Game engine features** | No physics engine integration, no collision detection for game dev | Unity, Unreal, Godot | Low (not the target domain) |
-| **Browser embedding** | No iframe/web component embedding for third-party content | Avalonia, Electron | Low |
+| Gap | Status | Closed by |
+|---|---|---|
+| **iOS platform support** | ✅ Code complete, device verification pending | `vieww-platform-winit/src/ios.rs` (UIKit insets + keyboard via objc2), cross-compiled for `aarch64-apple-ios` in CI. The remaining blocker is hardware, not code — no Mac/iPhone in the loop has run a frame. `PENDING.md` §1.4 tracks exactly what a machine has to do |
+| **Skeletal/bone animation** | ✅ Closed | `vieww-animation::skeletal` — 2D bones, world-space chaining, keyframed clips, linear-blend skinning, pose blending. The Rive/Spine shape, which is the honest fit for a 2D rasteriser |
+| **Audio system** | ✅ Closed (shape + synthesis) | `vieww-audio` — WAV, tones, envelopes, a mixer, and the `AudioPlayer` service trait. Platform transports register behind the seam; `NoAudio` and `RecordingPlayer` cover the refusal and the wiring test. What is *not* claimed: codec stacks, streaming, spatialisation |
+| **Video playback** | ✅ Closed (shape + player) | `vieww-video` — `VideoSource` trait as the decoder seam, `FrameSequence`, deterministic `GeneratedVideo` patterns, and the delta-driven `VideoPlayer` (play/pause/seek/rate/loop). No H.264/VP9 — a platform crate's job, now with a one-trait surface to implement |
+| **3D mesh loading** | ✅ Closed (OBJ + STL) | `vieww-mesh` — full OBJ (all face spellings, negative indices, fan triangulation, attribute-split vertex duplication, line-numbered errors) and both STL spellings, with computed normals and bounds. GLTF deliberately deferred: a JSON scene graph + base64 + materials for geometry OBJ already states |
+| **State machine animation** | ✅ Closed | `vieww-animation::state_machine` — declared states and guarded transitions, cross-fades where both tracks keep playing, one clock advanced by deltas |
+| **Keyframe timeline** | ✅ Closed | `vieww-animation::keyframe` — `Keyframes<T>` (eased/held/arrival keyframes) and the staggered `Timeline` of named tracks |
+| **Widget library breadth** | ✅ Closed (was already, when surveyed against this branch) | 39 controls (button, checkbox, chip, dropdown, dialog, data table, date picker, markdown, tree view, …) + 52 widgets (text field, rich text, svg, image, carousel, skeleton, …) in `vieww-widget` |
+| **Internationalization (i18n)** | ✅ Closed (was already) | `Localizations` publishes `Locale` and its implied direction; `Locale::plural` the plural rules; `CalendarNames` the localized calendar vocabulary; `Directionality` shadows per-subtree |
+| **Network/API layer** | ✅ Closed | `vieww-network` — `Url`/`HttpRequest`/`HttpResponse`, `HttpClient` on the frame-aligned `Task`, `MemoryClient` for tests. The transport stays platform work by design |
+| **Data visualization** | ✅ Closed (was partial, now rounded out) | `LineChart`, `BarChart` (already present) + `ScatterChart`, `PieChart`, `DonutChart`: real vector-arc wedges, text legends, whole-percent shares, screen-reader summaries |
+| **Game engine features** | ✅ Closed (2D physics) | `vieww-physics` — circles and boxes, all three narrowphase pairings, impulses with restitution, Baumgarte correction, fixed-step determinism. Still honestly *not* a game engine: no joints, no rotation, no continuous collision — each a named, documented scope line |
+| **Browser embedding** | ✅ Closed | `vieww-embed`'s `WebView` → a real `<iframe>` on `vieww-platform-web-dom` (src/srcdoc, lazy loading, accessible title), a themed placeholder elsewhere, and the `PlatformViewSpec` mapping for native hosts through the existing `PlatformViews` registry |
+
+### What honestly remains
+
+1. **iOS on device** — code exists, CI cross-compiles it, and nothing has executed it. That is `PENDING.md` §1.4's item, closed by a machine, not by a commit.
+2. **GLTF** — a deliberate scope decision recorded in `vieww-mesh`'s docs, not an oversight. The `Mesh` type is the seam a loader targets.
+3. **Audio/video transports** — the shapes, the clocks, the service seams and the test doubles are here; the device I/O is platform crates' work, exactly as the capability model draws it.
+4. **Physics beyond 2D translation** — rotation, joints and continuous collision are named gaps with reasons, in `vieww-physics`'s module docs.
+5. **The GPU and platform items from `PENDING.md`** — untouched by this pass, unchanged: geometry-edge antialiasing, a GPU frame in a window, macOS/Windows backends, and the rest of the hardware-blocked list.
 
 ---
 
 ## Summary
 
-**vieww is architecturally sophisticated and novel, with a three-tree architecture (like Flutter), signal-based state outside the tree (unique), its own software rasterizer (unusual), and proven extreme-scale performance — but it lacks iOS support, skeletal animation, audio/video playback, a rich widget library, and 3D mesh loading that established frameworks provide.**
+**vieww is architecturally sophisticated and novel, with a three-tree architecture (like Flutter), signal-based state outside the tree (unique), its own software rasterizer (unusual), and proven extreme-scale performance — and, as of the gap-closure pass on `feature/vieww_code_base`, it carries answers to every capability gap the tables above identified: keyframe timelines, state machines and skeletal animation beside the springs, audio and video layers with platform seams, OBJ/STL mesh loading, an HTTP client shape on the frame-aligned task, 2D physics, iframe embedding on the web backend, and a widget/i18n/chart catalogue the original survey had missed.**
 
 The framework is clearly optimized for **deterministic, high-performance 2D rendering with full auditability** — its strengths are in its rendering pipeline, damage tracking, per-frame statistics, and the novel say-codegen compilation pipeline. It has demonstrated capability to render entire films (1080p60, 10,800 frames) using its own headless rasterizer【turn3find0】, handle 60,000+ shapes per frame at 60fps【turn2find0】, and maintain flat memory over 256-frame endurance runs【turn2find0】.
 
-The main gaps are in **breadth of platform support (no iOS)**, **pre-built widget ecosystem** (for rapid app development), and **domain-specific capabilities** (skeletal animation, audio/video, 3D meshes) that would require significant additional engineering.
+The gap-closure pass kept that character rather than trading it away: every new layer is a pure function of its inputs (a keyframe track of time, a mixer of a sample rate, a player of accumulated deltas, a physics world of fixed steps), testable by handing it a `Duration` and nothing else, and every platform-shaped half (audio device I/O, video decode, HTTP transport, native web views) sits behind a trait the existing services registry already knows how to hold.
+
+What remains is hardware, not architecture: an iOS device to run the written-and-cross-compiled iOS path, the GLTF decision to revisit when its dependencies are worth their weight, and the GPU/platform worklist `PENDING.md` has always carried.
 
 

@@ -1,0 +1,20 @@
+[package]
+name = "vieww-physics"
+description = "The vieww physics layer: 2D bodies, collisions, and an impulse solver."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Foundation, for `Offset` — which this crate uses as its two-dimensional
+# vector, under the name [`Vec2`]. Reusing it means a physics position lands
+# in a paint transform without a conversion, and the arithmetic of one
+# vector type does not get forked into two.
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "vieww-audio"
+description = "The vieww audio layer: WAV, tones, a mixer, and the playback service seam."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# The only dependency, deliberately, for the same reason as `vieww-animation`:
+# a waveform is a function of time. Synthesis, mixing and WAV parsing need no
+# tree to walk and no pixels to draw on, which is what lets all of it be
+# tested by handing a `Duration` — and what lets a platform crate register a
+# real audio backend against the service trait without this crate ever
+# learning what an audio device looks like.
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

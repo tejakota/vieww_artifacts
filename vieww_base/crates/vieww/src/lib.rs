@@ -73,7 +73,13 @@
 //! ```
 
 pub use vieww_animation as animation;
+pub use vieww_audio as audio;
 pub use vieww_effects as effects;
+pub use vieww_embed as embed;
+pub use vieww_mesh as mesh;
+pub use vieww_network as network;
+pub use vieww_physics as physics;
+pub use vieww_video as video;
 pub use vieww_element as element;
 pub use vieww_foundation as foundation;
 pub use vieww_gestures as gestures;
@@ -83,9 +89,20 @@ pub use vieww_text as text;
 pub use vieww_widget as widget;
 
 pub use vieww_animation::{
-    AnimationController, AnimationStatus, Curve, Fling, Lerp, Motion, Simulation, Spring, Ticker,
-    Tickers, Tween,
+    AnimationController, AnimationStatus, Curve, Fling, Guard, Keyframe, Keyframes, Lerp, Motion,
+    Simulation, Spring, StateMachine, Ticker, Tickers, Timeline, TimelineFrame, Tween,
 };
+pub use vieww_audio::{
+    AudioPlayer, Envelope, MixError, Mixer, NoAudio, PlaybackHandle, RecordingPlayer,
+    RecordedCommand, Samples, Sound, Tone, Waveform,
+};
+pub use vieww_embed::{WebContent, WebView, WEB_VIEW_KIND};
+pub use vieww_mesh::{parse_obj, parse_stl, Mesh, MeshError, Point3, TexCoord};
+pub use vieww_network::{
+    HttpClient, HttpRequest, HttpResponse, MemoryClient, Method, NetError, NoNetwork, Scheme, Url,
+};
+pub use vieww_physics::{collide, Body, Contact, Shape as PhysicsShape, World};
+pub use vieww_video::{FrameSequence, GeneratedVideo, Pattern, VideoPlayer, VideoSource};
 pub use vieww_asset::{AssetBundle, AssetError, DirectoryBundle, EmbeddedBundle, ImageCache};
 pub use vieww_element::{
     Animation, BuildError, DragController, DragTargetId, Dropped, Element, ElementId, ElementTree,

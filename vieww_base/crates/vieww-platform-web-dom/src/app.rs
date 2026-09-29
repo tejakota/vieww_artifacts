@@ -209,6 +209,22 @@ impl Inner {
                 }
             }
         }
+        if old.iframe != new.iframe {
+            // A changed embed is a *reload* — the browser replaces the
+            // frame's content — which is exactly what a `src` change means
+            // and what a `srcdoc` change means too. Set both attributes,
+            // and the title with them, so the accessible name follows the
+            // content it names.
+            if let Some(iframe) = &new.iframe {
+                if let Some(src) = &iframe.src {
+                    element.set_attribute("src", src)?;
+                }
+                if let Some(srcdoc) = &iframe.srcdoc {
+                    element.set_attribute("srcdoc", srcdoc)?;
+                }
+                element.set_attribute("title", &iframe.title)?;
+            }
+        }
         if old.children.len() != new.children.len() {
             let created = self.create(new, mounts)?;
             if let Some(parent) = node.parent_node() {
@@ -247,6 +263,20 @@ impl Inner {
         }
         if let Some(href) = &node.href {
             element.set_attribute(if node.tag == "img" { "src" } else { "href" }, href)?;
+        }
+        if let Some(iframe) = &node.iframe {
+            if let Some(src) = &iframe.src {
+                element.set_attribute("src", src)?;
+            }
+            if let Some(srcdoc) = &iframe.srcdoc {
+                element.set_attribute("srcdoc", srcdoc)?;
+            }
+            // The one line a screen reader gets from an otherwise opaque
+            // iframe; browsers surface it as the frame's accessible name.
+            element.set_attribute("title", &iframe.title)?;
+            // `loading=lazy` off-screen: an embed below the fold does not
+            // contend with the application's own first paint.
+            element.set_attribute("loading", "lazy")?;
         }
         if let Some((id, mount)) = &node.canvas {
             mounts.push((id.clone(), mount.clone()));

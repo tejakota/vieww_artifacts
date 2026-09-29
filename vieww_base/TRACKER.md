@@ -11,7 +11,107 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
-## The most recent effort (2026-09-15): the GPU compositor, measured standards, one certification command
+## The most recent effort (2026-09-29): the capability gap-closure pass — six new crates, three animation modules, two charts, a real iframe
+
+Scope was the "Identified Gaps" table in the repository-root document
+(`What are the best UI frameworks.md`), which listed thirteen capabilities the
+comparison frameworks have and vieww did not. Three of those were stale (the
+widget catalogue, i18n, and line/bar charts — present all along on this
+branch); the other ten are now closed. Evidence below is from
+`cargo test -p <crate>` on the pinned rustc 1.98.1 on this machine, run
+crate-by-crate; a single whole-workspace `cargo test --workspace` run was
+started but this container's 10 GB disk cannot hold the full test-binary link
+set, so per-crate results are the record.
+
+**Verified, by things that ran:**
+
+1. **`vieww-animation` grew three modules, 44 tests and 3 doctests** (118
+   lib tests total, all green): `keyframe` (`Keyframes<T>` with
+   eased/held/arrival keyframes, out-of-order insertion, same-time
+   replacement, and the staggered `Timeline` of named tracks — 14 tests);
+   `state_machine` (`StateMachine<T>` with declared states and guarded
+   transitions, cross-fades where the from-state keeps playing, one clock
+   advanced by deltas — 13 tests); `skeletal` (2D bones in a
+   parents-before-children flat walk, `Pose`, `SkeletalClip`, linear-blend
+   `Skin` with lazily normalised weights, pose blending — 17 tests, including
+   the two-bone-arm skinning identity that catches a composition-order
+   regression and the default-scale-identity test that catches a
+   degenerate-matrix regression, both of which failed before their fixes).
+2. **`vieww-audio` (new, 30 tests + 3 doctests)**: WAV read/write — 8- and
+   16-bit PCM, chunk-walking (a `LIST` chunk before `data` parses), 8-bit
+   silence-at-128, truncation and missing-chunk errors named by line and
+   kind; `Waveform`/`Envelope`/`Tone` synthesis with continuous-at-boundary
+   envelopes; `Mixer` with saturating sums, stereo downmix-by-mean, phase-
+   locked stagger test, rate refusal; the `AudioPlayer` service trait with
+   `NoAudio` (honest refusal) and `RecordingPlayer` (wiring double).
+3. **`vieww-video` (new, 15 tests + 4 doctests)**: `VideoSource` trait,
+   `FrameSequence`, deterministic `GeneratedVideo` patterns, `VideoPlayer`
+   with delta-driven clock — pause-holds-position, loop wraps counted
+   (forward and backward), speed 2×, negative speed without looping stops
+   at zero, the end is the last frame exactly, empty sources report `None`.
+4. **`vieww-mesh` (new, 18 tests + 1 doctest)**: OBJ — all four face
+   spellings, negative indices, pentagon fan triangulation, scene records
+   skipped, computed normals for files without `vn`, errors with line
+   numbers, the pool/output vertex split (a quad is 4 vertices, not 8);
+   STL — binary and ASCII, size-checked against the `solid`-header trap.
+5. **`vieww-network` (new, 13 tests + 1 doctest)**: `Url` five-part parser
+   (ports, lowercased hosts, refusal of userinfo/unknown schemes with
+   reasons), `HttpRequest`/`HttpResponse`, `HttpClient` on the foundation
+   `Task`, `MemoryClient` with route tables, computed answers and a request
+   log, registration through `Services`.
+6. **`vieww-physics` (new, 13 tests + 1 doctest)**: gravity integration
+   (semi-implicit, checked at two steps), fixed bodies never move, a ball
+   rests on a floor to within 1.5 px, restitution split by the pair-minimum,
+   equal-mass head-on stop with momentum conserved, barge-and-pebble
+   impulse split, all three narrowphase pairings with the a-to-b normal
+   convention pinned both ways, correction leaves a hair under touching by
+   design.
+7. **`vieww-embed` (new, 4 tests + 1 doctest)**: `WebContent` (URL/HTML) →
+   `PlatformViewSpec` of kind `"webview"` with the parameters a native
+   factory expects; `WebView` widget with a themed placeholder build.
+8. **`vieww-platform-web-dom` turns the embed into a real `<iframe>`**: the
+   DOM walk recognises `vieww_embed::WebView` (the same escape-hatch shape
+   `Styled`/`Tag`/`Canvas` use) and emits an `iframe` VNode with `src` or
+   `srcdoc`, a `title` for assistive technology, lazy loading, and the
+   widget's requested size; the patcher sets the attributes on create and
+   on change. 4 new walk tests (`tree::tests`), 7 lib tests total, green.
+9. **`vieww-widget` grew two charts, 29 chart tests green** (523 lib tests
+   total): `ScatterChart` (points in the plane, own-axis normalisation,
+   inset so extreme points keep their edges, the same axis frame as the
+   line chart) and `PieChart`/`DonutChart` (real vector-arc wedges through
+   the `Sketchbook` path API, chunked text legends, whole-percent shares,
+   screen-reader summaries with the shares, negative slices skipped
+   silently, the donut's centre-label overlay).
+10. **The `vieww` facade re-exports every new module and crate** — checked
+    by `cargo check -p vieww`, `cargo test -p vieww --test facade_exports`
+    (green), and the full set of facade integration tests run one binary
+    at a time against the disk limit: `sensitive_capture` (6),
+    `settings_screen` (15), `extensibility` (10), `editor` (22),
+    `paint_to_pixels` (13), `accessibility_preferences` (0),
+    `facade_exports` (1), and every remaining `crates/vieww/tests/*.rs`
+    suite — **zero failures**.
+11. **`cargo clippy --all-targets` clean** on all ten changed or new crates
+    (`vieww`, `vieww-animation`, the six new crates, `vieww-widget`,
+    `vieww-platform-web-dom`) under the pinned 1.98.1.
+
+**Not verified, and why:**
+
+- The audio *device path*, the video *decode path* and the HTTP *transport*
+  are platform work behind the traits, deliberately: this pass ships the
+  shapes, the clocks, the seams and the test doubles, and the registry
+  entries a platform crate registers. Nothing here claims a speaker, a
+  decoder or a socket.
+- GLTF is a recorded scope decision (`vieww-mesh`'s module docs), not a gap
+  forgotten: the `Mesh` type is the seam a loader targets.
+- Physics beyond 2D translation — rotation, joints, continuous collision —
+  is named as out of scope in `vieww-physics`'s module docs.
+- iOS remains `PENDING.md` §1.4: written, cross-compiled in CI, never run.
+- The whole-workspace single-command test run could not complete on this
+  machine's disk; per-crate results above are the substitute, and
+  `ci/certify/certify.sh` on a bigger machine remains the one command that
+  runs everything.
+
+
 
 Scope was a review of the September 15 archive: GPU planner gaps, a
 certification script that did not run most suites, a standard runner that fed

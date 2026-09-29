@@ -4742,14 +4742,20 @@ version = "0.1.0"
 dependencies = [
  "vieww-animation",
  "vieww-asset",
+ "vieww-audio",
  "vieww-effects",
  "vieww-element",
+ "vieww-embed",
  "vieww-foundation",
  "vieww-gestures",
+ "vieww-mesh",
+ "vieww-network",
  "vieww-paint",
+ "vieww-physics",
  "vieww-render",
  "vieww-test-harness",
  "vieww-text",
+ "vieww-video",
  "vieww-widget",
 ]
 
@@ -4776,6 +4782,13 @@ version = "0.1.0"
 dependencies = [
  "image",
  "roxmltree",
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-audio"
+version = "0.1.0"
+dependencies = [
  "vieww-foundation",
 ]
 
@@ -4827,6 +4840,14 @@ dependencies = [
  "vieww-animation",
  "vieww-foundation",
  "vieww-gestures",
+ "vieww-widget",
+]
+
+[[package]]
+name = "vieww-embed"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
  "vieww-widget",
 ]
 
@@ -4894,6 +4915,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vieww-mesh"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-network"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+]
+
+[[package]]
 name = "vieww-paint"
 version = "0.1.0"
 dependencies = [
@@ -4903,6 +4938,13 @@ dependencies = [
  "ttf-parser",
  "vieww-foundation",
  "vieww-text",
+]
+
+[[package]]
+name = "vieww-physics"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
 ]
 
 [[package]]
@@ -4930,6 +4972,7 @@ version = "0.1.0"
 dependencies = [
  "js-sys",
  "vieww-element",
+ "vieww-embed",
  "vieww-foundation",
  "vieww-widget",
  "wasm-bindgen",
@@ -5101,6 +5144,13 @@ version = "0.1.0"
 dependencies = [
  "cosmic-text",
  "ttf-parser",
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-video"
+version = "0.1.0"
+dependencies = [
  "vieww-foundation",
 ]
 

@@ -12,6 +12,12 @@ categories.workspace = true
 [dependencies]
 vieww-animation.workspace = true
 vieww-asset.workspace = true
+vieww-audio.workspace = true
+vieww-embed.workspace = true
+vieww-mesh.workspace = true
+vieww-network.workspace = true
+vieww-physics.workspace = true
+vieww-video.workspace = true
 vieww-foundation.workspace = true
 vieww-paint.workspace = true
 vieww-widget.workspace = true

@@ -80,9 +80,20 @@ rasterizer would have made that suite unable to catch anything at all.
 
 Cutting across that stack: `vieww-foundation` (geometry, color, input,
 accessibility preferences, capability types — no dependency on anything
-above it), `vieww-gestures`, `vieww-animation`, `vieww-text`, `vieww-asset`,
-`vieww-image`, and the platform bridge (`vieww-platform`,
-`vieww-platform-winit`, `vieww-hardware`).
+above it), `vieww-gestures`, `vieww-animation` (springs, tweens, and — since
+the gap-closure pass — keyframes, state machines and skeletal animation),
+`vieww-text`, `vieww-asset`, `vieww-image`, and the platform bridge
+(`vieww-platform`, `vieww-platform-winit`, `vieww-hardware`).
+
+Beside those, six service-shaped layers with the same rule as the platform
+bridge: the framework owns the deterministic half, a platform crate owns the
+device half, and a trait decides the border — `vieww-audio` (synthesis,
+mixing, WAV, the `AudioPlayer` seam), `vieww-video` (sources and a
+delta-driven player, the `VideoSource` seam), `vieww-mesh` (OBJ and STL into
+triangles), `vieww-network` (requests, responses and the `HttpClient` seam
+on the frame-aligned `Task`), `vieww-physics` (2D bodies, collisions and an
+impulse solver, fixed-step deterministic), and `vieww-embed` (web content in
+the tree — a real `<iframe>` on the DOM backend, a placeholder elsewhere).
 
 ## Quick start
 

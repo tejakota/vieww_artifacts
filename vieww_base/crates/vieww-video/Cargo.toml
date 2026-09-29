@@ -1,0 +1,21 @@
+[package]
+name = "vieww-video"
+description = "The vieww video layer: sources, players, and the frame clock."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Foundation, for one type: `Image`, the decoded-pixel buffer the paint layer
+# already knows how to draw. A video frame here *is* an `Image`, so a video
+# reaches the screen through the same path a photo does — no second image
+# pipeline, no second texture upload story, and a platform decoder's output
+# drops straight into a widget that was written for stills.
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true
