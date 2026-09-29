@@ -684,13 +684,13 @@ pub fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
 // reads.
 
 /// The reserved band's height. Nothing outside `mod.rs` lays out inside it.
-pub const BAND_H: f32 = 146.0;
+pub const BAND_H: f32 = 280.0;
 /// The older caption line — higher in the band, and dimmer.
-pub const CAP_Y0: f32 = 64.0;
+pub const CAP_Y0: f32 = 98.0;
 /// The newest caption line — the bottom of the band, at full weight.
-pub const CAP_Y1: f32 = 98.0;
+pub const CAP_Y1: f32 = 152.0;
 /// The movement label's baseline inside the band.
-pub const ACT_Y: f32 = 44.0;
+pub const ACT_Y: f32 = 40.0;
 
 /// Map a scene's legacy bottom-third caption `y` into the band.
 ///
@@ -771,29 +771,29 @@ pub fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
     Stack::new()
         .push(
             Positioned::new()
-                .left(180.0)
+                .left(84.0)
                 .top(y + rise)
-                .width(10.0)
-                .height(28.0)
+                .width(12.0)
+                .height(36.0)
                 .child(Opacity::new(a).child(Painting::sized(
-                    Size::new(10.0, 28.0),
+                    Size::new(12.0, 36.0),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.rrect(xywh(0.0, 0.0, 4.0, 28.0), 2.0, alpha(ACCENT, 0.9));
+                        book.rrect(xywh(0.0, 0.0, 5.0, 36.0), 2.5, alpha(ACCENT, 0.9));
                     }),
                 ))),
         )
         .push(
             Positioned::new()
-                .left(202.0)
+                .left(112.0)
                 .top(y + rise)
-                .width(1560.0)
-                .height(32.0)
+                .width(1724.0)
+                .height(42.0)
                 .child(Opacity::new(a).child(
                     Text::new(text)
                         .style(
-                            geist_mono(22.0)
-                                .letter_spacing(1.8)
-                                .color(alpha(INK, 0.92)),
+                            geist_mono(28.0)
+                                .letter_spacing(1.6)
+                                .color(alpha(INK, 0.94)),
                         )
                         .align(TextAlign::Left),
                 )),
@@ -1689,16 +1689,16 @@ pub fn act_chip(movement: &str, name: &str, appear: f32) -> WidgetNode {
     Stack::new()
         .push(
             Positioned::new()
-                .left(178.0)
+                .left(112.0)
                 .top(ACT_Y)
-                .width(700.0)
-                .height(26.0)
+                .width(1200.0)
+                .height(30.0)
                 .child(Opacity::new(a).child(
                     Text::new(format!("{movement} — {name}"))
                         .style(
-                            geist_mono(15.0)
-                                .letter_spacing(4.5)
-                                .color(alpha(MUTED, 0.85)),
+                            geist_mono(19.0)
+                                .letter_spacing(6.0)
+                                .color(alpha(MUTED, 0.88)),
                         )
                         .align(TextAlign::Left),
                 )),

@@ -16,64 +16,39 @@ use viewwstudio::command::Command;
 use viewwstudio::state::{Platform, Studio, View};
 
 /// Where the studio session begins on this film's clock.
-pub const STUDIO_OPEN: f32 = 56.0;
+pub const STUDIO_OPEN: f32 = 126.0;
 
-/// The counter's **Add one** button, hit-tested against this film's
-/// own session state (panel open, counter.say rendered, iOS 393×852
-/// at the pane's 66% zoom). The product film's constant was calibrated
-/// against its session, whose layout at tap time differed; this film
-/// re-derives its own from the rendered preview.
+/// The counter's **Add one** button, hit-tested against this film's own
+/// session state (panel open, counter.say rendered, iOS 393×852 at the
+/// pane's 66% zoom).
 pub const TAP_ADD_ONE: Offset = Offset::new(1593.0, 254.0);
 
 /// The session — every action, in order, at absolute film seconds.
 ///
-/// Read it as the studio act's stage directions:
+/// **The studio act is one scene long now.** In the v3 cut four scenes
+/// rode the live application and the film annotated it; the review asked
+/// for the product on the first frame and animation for the explanation,
+/// so Z11 is the only scene the app renders in. The session is what that
+/// one scene does — sixteen seconds of real work, no more scripted than
+/// it has to be: a file opens, the panel breathes, live preview is
+/// accepted, the damage overlay goes on, and two real edits land while it
+/// is on.
 ///
-/// * **Z07 · studio_opens** (56–66) — the say file opens, the panel
-///   breathes closed and open; the shell is shown, not narrated.
-/// * **Z08 · live_compose** (66–77) — live preview accepted, damage
-///   overlay on, two edits land while it is on: the audience sees
-///   exactly what an edit costs.
-/// * **Z09 · say_to_rust** (77–89) — the `.say` program types itself,
-///   renders through real rustc (settled off-clock), and the counter
-///   takes two real taps.
-/// * **Z10 · ships_everywhere** (89–98) — the same tree re-frames
-///   itself android → ios → desktop, then the token editor flips the
-///   accent teal → purple, live.
+/// Everything after Z11 — the compile pipeline, the fleet, the tokens —
+/// is the film's own drawing, and says so.
 pub fn session() -> Vec<(f32, Action)> {
+    let t0 = STUDIO_OPEN;
     vec![
-        // Z07 — the shell, first contact.
-        (56.4, Action::OpenPath("counter.say".into())),
-        (60.0, Action::PanelOpen(false)),
-        (64.0, Action::PanelOpen(true)),
-        // Z08 — edit a line, see the picture change.
-        (66.6, Action::ActiveTab(TAB_LIVE)),
-        (67.2, Action::Run(Command::LivePreview)),
-        (69.2, Action::AcceptLive),
-        (71.0, Action::ShowDamage(true)),
-        (73.0, Action::SetLiveTitle("My own inbox".into())),
-        (75.6, Action::SetLiveRow("Shipped the beta today".into())),
-        (76.8, Action::ShowDamage(false)),
-        // Z09 — .say → rust → cdylib → pixels.
-        (77.4, Action::OpenPath("counter.say".into())),
-        (78.0, Action::TypeSay(40)),
-        (79.0, Action::TypeSay(96)),
-        (80.0, Action::TypeSay(152)),
-        (81.0, Action::TypeSay(208)),
-        (82.0, Action::TypeSay(usize::MAX)),
-        (83.2, Action::Render),
-        (83.4, Action::Settle),
-        (85.6, Action::PointerDown(TAP_ADD_ONE)),
-        (85.72, Action::PointerUp(TAP_ADD_ONE)),
-        (87.2, Action::PointerDown(TAP_ADD_ONE)),
-        (87.32, Action::PointerUp(TAP_ADD_ONE)),
-        // Z10 — one tree, every device; tokens, not forks.
-        (89.6, Action::Platform(Platform::Android)),
-        (91.2, Action::Platform(Platform::Ios)),
-        (92.8, Action::Platform(Platform::Desktop)),
-        (94.4, Action::View(View::Tokens)),
-        (95.6, Action::Accent("Teal".into())),
-        (96.8, Action::Accent("Purple".into())),
+        (t0 + 0.4, Action::OpenPath("counter.say".into())),
+        (t0 + 3.6, Action::PanelOpen(false)),
+        (t0 + 6.2, Action::PanelOpen(true)),
+        (t0 + 7.4, Action::ActiveTab(TAB_LIVE)),
+        (t0 + 8.0, Action::Run(Command::LivePreview)),
+        (t0 + 9.4, Action::AcceptLive),
+        (t0 + 10.6, Action::ShowDamage(true)),
+        (t0 + 11.8, Action::SetLiveTitle("My own inbox".into())),
+        (t0 + 13.6, Action::SetLiveRow("Shipped the beta today".into())),
+        (t0 + 15.2, Action::ShowDamage(false)),
     ]
 }
 

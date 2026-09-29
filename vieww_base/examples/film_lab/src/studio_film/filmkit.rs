@@ -55,147 +55,187 @@ pub const CUT_OUT: f32 = 0.30;
 /// on the first frame, and the first frame obliges: identity transform,
 /// no overlay, no ramp.
 pub fn sf_camera(id: &str, t: f32, sec: f32) -> pf::Cam {
+    // Every arm is bounded by what it must not crop. At zoom `z` the held
+    // point can only live in `[W/2z, W - W/2z] × [H/2z, H - H/2z]`, and
+    // tighter still if the scene's content does not reach the canvas edge.
+    // The bounds are written beside each move rather than discovered in a
+    // contact sheet.
     match id {
-        // The picture on its stage: a slow drift toward the card, the
-        // audience leaning in before they know why.
+        // Z01 — the picture on its stage: a slow drift toward the card.
         "Z01" => pf::cam_lerp(
-            pf::Cam::at(1.030, 820.0, 520.0),
-            pf::Cam::at(1.065, 1010.0, 500.0),
+            pf::Cam::at(1.030, 946.0, 534.0),
+            pf::Cam::at(1.052, 1006.0, 548.0),
             ease_in_out(t),
         ),
 
-        // Push toward the gauge — the cost meter earns the focus, while
-        // the gates keep their place in the frame.
-        // The push toward the gauge is bounded by what it must not
-        // crop: the gate list starts at x=160 and the gauge ends at
-        // x=1730, so at zoom 1.05 the held point can only live between
-        // 816 and 1074. The v2 cut held 1250, and sliced every gate
-        // label in half for the back three quarters of the scene.
+        // Z02 — the push toward the gauge. Gates start at x=160, the
+        // gauge ends at 1730: at 1.048 the held point lives in [916, 1004].
         "Z02" => pf::cam_lerp(
             pf::Cam::zoom(1.0),
-            pf::Cam::at(1.048, 1046.0, 540.0),
+            pf::Cam::at(1.048, 1000.0, 552.0),
             ease_in_out(clamp01((t - 0.10) / 0.76)),
         ),
 
-        // Dolly into the point of light. The 3D grid floor underneath
-        // moves with it — the one shot where the world itself has depth.
+        // Z03 — the drift: the shot widens as the tracks separate, so the
+        // gap grows in the frame as well as in the picture.
         "Z03" => pf::cam_lerp(
-            pf::Cam::at(1.00, W * 0.5, H * 0.46),
-            pf::Cam::at(1.14, W * 0.5, H * 0.45),
+            pf::Cam::at(1.075, 958.0, 544.0),
+            pf::Cam::at(1.006, 960.0, 540.0),
+            ease_in_out(clamp01((t - 0.08) / 0.74)),
+        ),
+
+        // Z04 — the bridge: a lean toward the gap, which is the subject.
+        "Z04" => pf::cam_lerp(
+            pf::Cam::at(1.004, 960.0, 540.0),
+            pf::Cam::at(1.062, 958.0, 556.0),
+            ease_in_out(clamp01((t - 0.10) / 0.70)),
+        ),
+
+        // Z05 — the question: a dolly into the point of light, the one
+        // shot whose world has a real 3D floor under it.
+        "Z05" => pf::cam_lerp(
+            pf::Cam::at(1.00, W * 0.5, H * 0.5),
+            pf::Cam::at(1.12, W * 0.5, 546.0),
             ease_in_out(clamp01(t / 0.92)),
         ),
 
-        // Pan across the crate constellation, engine heart to studio node —
-        // framed so the wordmark and the graph both survive the move.
-        "Z04" => pf::cam_lerp(
-            pf::Cam::at(1.045, 660.0, 545.0),
-            pf::Cam::at(1.055, 1020.0, 520.0),
-            ease_in_out(t),
-        ),
-
-        // Track the pipeline left to right with the packets — the
-        // metaphor is serial, so the shot is. The travel ends framed on
-        // the whole line, first station included.
-        // The pipeline's five stations span x 150–1758, which leaves a
-        // lateral track no room: at any zoom that frames the line, the
-        // held point can only move a few dozen pixels before the first
-        // station leaves the frame — and in the v2 cut it did, for the
-        // back half of the scene. The move that *is* available is a
-        // lean: the shot pushes in on the line as the packets start to
-        // travel, and the packets carry the lateral motion instead.
-        "Z05" => {
-            let lean = ease_in_out(clamp01((t - 0.12) / 0.72));
-            pf::cam_lerp(
-                pf::Cam::at(1.000, 960.0, 540.0),
-                pf::Cam::at(1.098, 954.0, 524.0),
-                lean,
-            )
-        }
-
-        // A gentle fall down the three lanes.
+        // Z06 — a pan across the crate constellation, engine heart to
+        // studio node, framed so the wordmark survives the move.
         "Z06" => pf::cam_lerp(
-            pf::Cam::at(1.040, 960.0, 470.0),
-            pf::Cam::at(1.075, 960.0, 565.0),
+            pf::Cam::at(1.045, 942.0, 548.0),
+            pf::Cam::at(1.058, 1002.0, 536.0),
             ease_in_out(t),
         ),
 
-        // The studio: exact and still for the first beat, then the only
-        // push the product's pixels ever ride — framed so the corner
-        // brackets (inset at 36) survive the move.
-        "Z07" => {
+        // Z07 — the layers: a slow fall down the stack, matching the
+        // direction the change itself falls.
+        "Z07" => pf::cam_lerp(
+            pf::Cam::at(1.060, 958.0, 522.0),
+            pf::Cam::at(1.060, 958.0, 566.0),
+            ease_in_out(clamp01((t - 0.08) / 0.80)),
+        ),
+
+        // Z08 — the pipeline spans x 150–1758, so a lateral track has no
+        // room: the move available is a lean, and the packets carry the
+        // lateral motion instead.
+        "Z08" => pf::cam_lerp(
+            pf::Cam::at(1.000, 960.0, 540.0),
+            pf::Cam::at(1.098, 954.0, 528.0),
+            ease_in_out(clamp01((t - 0.12) / 0.72)),
+        ),
+
+        // Z09 — a gentle fall down the three lanes.
+        "Z09" => pf::cam_lerp(
+            pf::Cam::at(1.040, 958.0, 528.0),
+            pf::Cam::at(1.072, 958.0, 560.0),
+            ease_in_out(t),
+        ),
+
+        // Z10 — the specimen sheet: a push in on the ramp, as type does
+        // when you lean toward it.
+        "Z10" => pf::cam_lerp(
+            pf::Cam::at(1.004, 960.0, 540.0),
+            pf::Cam::at(1.055, 900.0, 548.0),
+            ease_in_out(clamp01((t - 0.10) / 0.74)),
+        ),
+
+        // Z11 — the studio: exact and dead still for the first beat, then
+        // the only push the product's own pixels ever ride.
+        "Z11" => {
             if sec < 0.40 {
                 pf::Cam::STILL
             } else {
                 pf::cam_lerp(
                     pf::Cam::STILL,
-                    pf::Cam::at(1.035, 960.0, 525.0),
-                    ease_out_cubic(clamp01((sec - 0.40) / 1.7)),
+                    pf::Cam::at(1.030, 960.0, 534.0),
+                    ease_out_cubic(clamp01((sec - 0.40) / 2.2)),
                 )
             }
         }
 
-        // Into the editor — where the edit happens is where we look.
-        // Bounded so the shell (x 118–1802) keeps both its ends: at
-        // zoom 1.06 the held point lives between 906 and 1014.
-        "Z08" => pf::cam_lerp(
+        // Z12 — the shell comes apart: the shot pulls back as it does, so
+        // the exploded view never leaves the frame.
+        "Z12" => pf::cam_lerp(
+            pf::Cam::at(1.070, 958.0, 548.0),
+            pf::Cam::at(1.004, 960.0, 540.0),
+            ease_in_out(clamp01((t - 0.06) / 0.34)),
+        ),
+
+        // Z13 — into the editor, where the edit happens.
+        "Z13" => pf::cam_lerp(
             pf::Cam::zoom(1.0),
-            pf::Cam::at(1.058, 950.0, 556.0),
+            pf::Cam::at(1.056, 950.0, 552.0),
             ease_in_out(clamp01((t - 0.06) / 0.60)),
         ),
 
-        // Track the compile, then feel the taps.
-        "Z09" => {
+        // Z14 — track the compile, then feel the two presses.
+        "Z14" => {
             let base = pf::cam_lerp(
                 pf::Cam::at(1.046, 958.0, 544.0),
                 pf::Cam::at(1.000, 960.0, 540.0),
                 ease_in_out(t),
             );
-            // The presses are the explanation's own, at 8.0 s and 9.4 s
-            // into the scene — the v2 numbers were absolute film seconds
-            // from when this scene rode the live session, and never fired.
-            let (d1x, d1y) = pf::cam_shake(sec - 8.0, 6.0);
-            let (d2x, d2y) = pf::cam_shake(sec - 9.4, 4.5);
+            let (d1x, d1y) = pf::cam_shake(sec - 10.4, 6.0);
+            let (d2x, d2y) = pf::cam_shake(sec - 12.0, 4.5);
             base.nudged(d1x + d2x, d1y + d2y)
         }
 
-        // The fleet spans x 184–1620, so a lateral pass would walk the
-        // first device out of frame. The move that fits is a lean into
-        // the three of them as the third lands.
-        "Z10" => pf::cam_lerp(
+        // Z15 — a lean into the fleet as the third device lands.
+        "Z15" => pf::cam_lerp(
             pf::Cam::at(1.000, 960.0, 540.0),
-            pf::Cam::at(1.062, 958.0, 556.0),
+            pf::Cam::at(1.058, 958.0, 552.0),
             ease_in_out(clamp01((t - 0.08) / 0.70)),
         ),
 
-        // The ledger falls through its three registers: framed on the
-        // hero cards, easing down and out until the whole audit — cards,
-        // gauge, and the film's own row — is in one frame at the end.
-        // The travel is small by construction: the registers themselves
-        // carry the motion, and the camera only follows the reading eye.
-        "Z11" => pf::cam_lerp(
-            pf::Cam::at(1.075, 960.0, 506.0),
-            pf::Cam::at(1.020, 960.0, 546.0),
+        // Z16 — the inspector: the shot follows the pointer's own drift
+        // from the tree toward the device.
+        "Z16" => pf::cam_lerp(
+            pf::Cam::at(1.030, 946.0, 540.0),
+            pf::Cam::at(1.048, 1004.0, 548.0),
+            ease_in_out(clamp01((t - 0.10) / 0.76)),
+        ),
+
+        // Z17 — the build: a slow push as the bar fills.
+        "Z17" => pf::cam_lerp(
+            pf::Cam::at(1.004, 960.0, 540.0),
+            pf::Cam::at(1.050, 958.0, 556.0),
+            ease_in_out(clamp01((t - 0.08) / 0.78)),
+        ),
+
+        // Z18 — the ledger falls through its three registers; the travel
+        // is small by construction, and the registers carry the motion.
+        "Z18" => pf::cam_lerp(
+            pf::Cam::at(1.070, 958.0, 512.0),
+            pf::Cam::at(1.016, 960.0, 548.0),
             ease_in_out(clamp01((t - 0.06) / 0.80)),
         ),
 
-        // The pullback, actually pulling back — below 1.0 is allowed
-        // here, the room is painted overscan for exactly this reason.
-        "Z12" => pf::cam_lerp(
+        // Z19 — the crate grid: a drift right as the grid fills, ending
+        // framed on the count it produced.
+        "Z19" => pf::cam_lerp(
+            pf::Cam::at(1.038, 936.0, 542.0),
+            pf::Cam::at(1.038, 984.0, 542.0),
+            ease_in_out(clamp01((t - 0.10) / 0.76)),
+        ),
+
+        // Z20 — the pullback, actually pulling back: below 1.0 is allowed
+        // here, and only here, because the room is painted overscan.
+        "Z20" => pf::cam_lerp(
             pf::Cam::at(1.140, 960.0, 545.0),
             pf::Cam::at(0.960, 960.0, 540.0),
             ease_out_expo(clamp01((t - 0.05) / 0.80)),
         ),
 
-        // A last settle onto the mark.
-        "Z13" => pf::cam_lerp(
-            pf::Cam::at(1.045, 960.0, 470.0),
-            pf::Cam::at(1.000, 960.0, 480.0),
+        // Z21 — a last settle onto the mark.
+        "Z21" => pf::cam_lerp(
+            pf::Cam::at(1.040, 960.0, 528.0),
+            pf::Cam::at(1.000, 960.0, 540.0),
             ease_out_expo(clamp01(t / 0.50)),
         ),
 
-        // The hold: still — and pinned to exactly where the end card's
-        // camera came to rest, so the cut between them does not exist.
-        "Z14" => pf::Cam::at(1.0, 960.0, 480.0),
+        // Z22 — the hold: still, pinned exactly where the end card came
+        // to rest, so the cut between them does not exist.
+        "Z22" => pf::Cam::at(1.0, 960.0, 540.0),
 
         _ => pf::Cam::STILL,
     }
@@ -204,9 +244,9 @@ pub fn sf_camera(id: &str, t: f32, sec: f32) -> pf::Cam {
 /// The camera a scene is entered from and left towards — bigger moves at
 /// movement breaks, none at all into the studio's exact first frame.
 fn cut_handles(index: usize, base: pf::Cam) -> (pf::Cam, pf::Cam) {
-    let movement_break = matches!(index, 3 | 6 | 10 | 11);
-    let into_studio = index == 6;
-    let studio_act = matches!(index, 6 | 7 | 8 | 9);
+    let movement_break = matches!(index, 5 | 10 | 17 | 19);
+    let into_studio = index == 10;
+    let studio_act = (10..=16).contains(&index);
 
     // The studio's first scene enters dead still — its first frame is
     // the brief's "exact studio" and nothing may move it.
@@ -214,7 +254,7 @@ fn cut_handles(index: usize, base: pf::Cam) -> (pf::Cam, pf::Cam) {
         return (base, base);
     }
 
-    let (zin, lift) = if into_studio || index == 10 {
+    let (zin, lift) = if into_studio || index == 17 {
         (1.070, 24.0)
     } else if movement_break {
         (1.052, 18.0)
@@ -245,9 +285,9 @@ pub fn shot_sf(id: &str, index: usize, seconds: f32, t: f32, sec: f32) -> pf::Sh
     // Scenes that must not be moved by a join: the studio's exact first
     // frame, and the end card → hold pair, whose content is identical —
     // the cut between them should not exist at all.
-    let pristine = id == "Z07" || id == "Z14";
-    let held = id == "Z13" || id == "Z14";
-    let last = id == "Z14";
+    let pristine = id == "Z11" || id == "Z22";
+    let held = id == "Z21" || id == "Z22";
+    let last = id == "Z22";
 
     if !first && !pristine && sec < CUT_IN {
         let e = ease_out_expo(clamp01(sec / CUT_IN));
@@ -323,38 +363,40 @@ fn enter_join(id: &str, sec: f32) -> JoinState {
     let dur = 0.46;
     let p = ease_out_expo(clamp01(sec / dur));
     let enter = true;
+    // The grammar: inside a movement the film pushes — left-out/right-in,
+    // then up-out/below-in, alternating so consecutive cuts never repeat a
+    // direction. Between movements it dissolves, except where the content
+    // itself asks for something: the question closes like an eye and the
+    // engine opens out of it, and the compile arrives with static.
     match id {
-        // Z01 opens the film — it arrives by its own content, not a join.
         "Z01" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 1.0, enter },
-        // Z02 rides Z01's push out of frame: in from the right.
         "Z02" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z03 rides Z02's upward push: in from below.
         "Z03" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
-        // Z04 opens out of the question's iris.
-        "Z04" => JoinState {
+        "Z04" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z05" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
+        // The engine opens out of the question's iris.
+        "Z06" => JoinState {
             slide: Slide::NONE,
-            fx: JoinFx::Iris { x: W * 0.5, y: H * 0.45 },
+            fx: JoinFx::Iris { x: W * 0.5, y: 540.0 },
             p: ease_out_cubic(clamp01(sec / 0.55)),
             enter,
         },
-        // Z05 continues the left-to-right journey.
-        "Z05" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z06 rides Z05's upward push.
-        "Z06" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
-        // Z07 — the exact studio. No join at all; the cut *is* the beat.
-        "Z07" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 1.0, enter },
-        // Z08 continues the studio act's lateral grammar.
-        "Z08" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z09 — the compile arrives with static.
-        "Z09" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::Glitch, p, enter },
-        // Z10 continues the push chain.
-        "Z10" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z11 — the ledger dissolves in; the numbers need no theatre.
+        "Z07" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z08" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
+        "Z09" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z10" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
+        // The exact studio. No join at all; the cut *is* the beat.
         "Z11" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 1.0, enter },
-        // Z12 — the release, entered gently.
-        "Z12" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 1.0, enter },
-        // Z13 — the end card, likewise.
-        "Z13" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 1.0, enter },
+        "Z12" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z13" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
+        // The compile arrives with static.
+        "Z14" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::Glitch, p, enter },
+        "Z15" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
+        "Z16" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z17" => JoinState { slide: Slide { dx: 0.0, dy: 1.0 }, fx: JoinFx::None, p, enter },
+        // The proof dissolves in; numbers need no theatre.
+        "Z18" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 1.0, enter },
+        "Z19" => JoinState { slide: Slide { dx: 1.0, dy: 0.0 }, fx: JoinFx::None, p, enter },
         _ => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 1.0, enter },
     }
 }
@@ -363,37 +405,41 @@ fn enter_join(id: &str, sec: f32) -> JoinState {
 fn exit_join(id: &str, seconds: f32, sec: f32) -> JoinState {
     let remaining = seconds - sec;
     let dur = 0.34;
-    // p counts *through* the leave: 0 = not started, 1 = fully gone.
+    // p counts *through* the leave: 0 = not started, 1 = fully gone. Each
+    // exit is the door the next scene's entrance comes in by — one door,
+    // both sides, so a push carries across the cut instead of restarting.
     let p = pf::ease_in_cubic(clamp01(1.0 - remaining / dur));
     let enter = false;
     match id {
-        // Z01 pushes left out; Z02 enters from the right. One door.
         "Z01" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z02 pushes up out; Z03 enters from below.
         "Z02" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
-        // Z03 — the question closes like an eye, onto the light itself.
-        "Z03" => JoinState {
+        "Z03" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z04" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
+        // The question closes like an eye, onto the light itself.
+        "Z05" => JoinState {
             slide: Slide::NONE,
-            fx: JoinFx::Iris { x: W * 0.5, y: H * 0.44 },
+            fx: JoinFx::Iris { x: W * 0.5, y: 540.0 },
             p: pf::ease_in_cubic(clamp01(1.0 - remaining / 0.55)),
             enter,
         },
-        // Z04 pushes left out; Z05 enters from the right.
-        "Z04" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z05 pushes up out; Z06 enters from below.
-        "Z05" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
-        // Z06 dissolves into the studio — the luminance ramp alone.
-        "Z06" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 0.0, enter },
-        // Z07 pushes left out; Z08 enters from the right.
-        "Z07" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z08 pushes up out; Z09 enters from below — with static.
-        "Z08" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
-        // Z09 pushes left out; Z10 enters from the right.
-        "Z09" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
-        // Z10 dissolves into the ledger.
+        "Z06" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z07" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
+        "Z08" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z09" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
+        // The engine dissolves into the studio — the luminance ramp alone,
+        // because the next frame is the product and must arrive unmoved.
         "Z10" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 0.0, enter },
-        // Z11 — the receipts glitch apart into the release's dark.
-        "Z11" => JoinState {
+        "Z11" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z12" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
+        "Z13" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z14" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
+        "Z15" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        "Z16" => JoinState { slide: Slide { dx: 0.0, dy: -1.15 }, fx: JoinFx::None, p, enter },
+        // The studio act dissolves into the proof.
+        "Z17" => JoinState { slide: Slide::NONE, fx: JoinFx::None, p: 0.0, enter },
+        "Z18" => JoinState { slide: Slide { dx: -1.15, dy: 0.0 }, fx: JoinFx::None, p, enter },
+        // The receipts glitch apart into the release's dark.
+        "Z19" => JoinState {
             slide: Slide::NONE,
             fx: JoinFx::Glitch,
             p: pf::ease_in_cubic(clamp01(1.0 - remaining / 0.50)),

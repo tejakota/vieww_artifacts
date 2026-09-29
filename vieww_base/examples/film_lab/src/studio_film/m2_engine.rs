@@ -115,7 +115,7 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
 
     // The graph — right two-thirds: a centre node, two rings of crates,
     // edges drawing outward on a stagger.
-    stack = stack.push(Positioned::new().left(1000.0).top(304.0).width(840.0).height(592.0).child(
+    stack = stack.push(Positioned::new().left(1000.0).top(288.0).width(840.0).height(664.0).child(
         Painting::sized(Size::new(840.0, 960.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             let cx = 420.0;
             let cy = 480.0;
@@ -197,7 +197,7 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(818.0)
+                .top(886.0)
                 .width(620.0)
                 .height(60.0)
                 .child(Opacity::new(count_p.min(1.0)).child(
@@ -259,7 +259,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(x)
-                .top(338.0 + rise)
+                .top(322.0 + rise)
                 .width(264.0)
                 .height(150.0)
                 .child(Opacity::new(p).child(Painting::sized(
@@ -286,7 +286,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(x + 20.0)
-                .top(378.0)
+                .top(362.0)
                 .width(224.0)
                 .height(80.0)
                 .child(Opacity::new(p).child(
@@ -308,10 +308,10 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
             let wire_p = ease_out_cubic(clamp01((t - t0 - 0.08) / 0.16));
             if wire_p > 0.01 {
                 let x0 = x + 264.0;
-                let from = Offset::new(x0, 410.0);
-                let to = Offset::new(x0 + 72.0, 410.0);
+                let from = Offset::new(x0, 394.0);
+                let to = Offset::new(x0 + 72.0, 394.0);
                 let phase = t * 2.0 + i as f32 * 0.7;
-                stack = stack.push(Positioned::new().left(x0 - 8.0).top(378.0).width(96.0).height(64.0).child(
+                stack = stack.push(Positioned::new().left(x0 - 8.0).top(362.0).width(96.0).height(64.0).child(
                     Painting::sized(Size::new(96.0, 64.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                         let pts = fk::thread_pts(
                             Offset::new(8.0, 32.0),
@@ -333,7 +333,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
     // The packets — small lights riding the line, on a fixed beat.
     let beat = t * 4.0;
     let packets = 3;
-    stack = stack.push(Positioned::new().left(150.0).top(300.0).width(1680.0).height(600.0).child(
+    stack = stack.push(Positioned::new().left(150.0).top(284.0).width(1680.0).height(676.0).child(
         Painting::sized(Size::new(1680.0, 1080.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             for k in 0..packets {
                 let ph = beat + k as f32 * 0.33;
@@ -357,7 +357,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         let total_w = 1560.0;
         let worst = pf::CERT_WORST_MS / BUDGET_MS;
         let p95 = pf::CERT_P95_MS / BUDGET_MS;
-        stack = stack.push(Positioned::new().left(180.0).top(566.0).width(1560.0).height(120.0).child(
+        stack = stack.push(Positioned::new().left(180.0).top(584.0).width(1560.0).height(120.0).child(
             Painting::sized(Size::new(1560.0, 120.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 // The track.
                 book.rrect(pf::xywh(0.0, 40.0, total_w, 14.0), 7.0, pf::alpha(Color::WHITE, 0.05));
@@ -371,7 +371,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(528.0)
+                .top(546.0)
                 .width(1560.0)
                 .height(32.0)
                 .child(
@@ -382,7 +382,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(594.0)
+                .top(612.0)
                 .width(1560.0)
                 .height(90.0)
                 .child(
@@ -407,10 +407,10 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
     // The damage callout — one dirty rect, one repaint.
     let dmg_p = ease_out_expo(clamp01((t - 0.70) / 0.2));
     if dmg_p > 0.01 {
-        stack = stack.push(Positioned::new().left(180.0).top(690.0).width(1560.0).height(172.0).child(
-            Painting::sized(Size::new(1560.0, 172.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+        stack = stack.push(Positioned::new().left(180.0).top(722.0).width(1560.0).height(190.0).child(
+            Painting::sized(Size::new(1560.0, 190.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 // The window — faint content lines, mostly asleep.
-                book.rrect(pf::xywh(0.0, 0.0, 1560.0, 172.0), 14.0, pf::alpha(pf::SURFACE, 0.5 * dmg_p));
+                book.rrect(pf::xywh(0.0, 0.0, 1560.0, 190.0), 14.0, pf::alpha(pf::SURFACE, 0.5 * dmg_p));
                 for row in 0..5 {
                     let y = 26.0 + row as f32 * 32.0;
                     book.rrect(pf::xywh(28.0, y, 620.0 - (row as f32 * 60.0), 9.0), 4.5, pf::alpha(Color::WHITE, 0.05 * dmg_p));
@@ -431,7 +431,7 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(180.0)
-                .top(866.0)
+                .top(920.0)
                 .width(900.0)
                 .height(28.0)
                 .child(Opacity::new(dmg_p).child(
@@ -477,7 +477,7 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
         if p <= 0.01 {
             continue;
         }
-        let lane_y = 336.0 + i as f32 * 182.0;
+        let lane_y = 316.0 + i as f32 * 206.0;
         let (x0, y0, w, h) = (410.0, lane_y, 720.0, 112.0);
         let lane_i = i;
         stack = stack.push(Positioned::new().left(x0 - 40.0).top(y0 - 46.0).width(w + 320.0).height(h + 90.0).child(
@@ -545,7 +545,7 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 for i in 0..3 {
-                    let lane_y = 336.0 + i as f32 * 182.0;
+                    let lane_y = 316.0 + i as f32 * 206.0;
                     let (rx0, rx1) = (1270.0, 1776.0);
                     let cy = lane_y + 56.0;
                     let a = spec_p;
@@ -597,7 +597,7 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
         )));
         // The rail's one label — said once, over the top lane.
         stack = stack.push(
-            Positioned::new().left(1270.0).top(310.0).width(520.0).height(24.0).child(
+            Positioned::new().left(1270.0).top(292.0).width(520.0).height(24.0).child(
                 Opacity::new(spec_p).child(
                     Text::new("the same clock, three easings".to_string())
                         .style(pf::geist_mono(15.0).letter_spacing(2.0).color(pf::alpha(MUTED, 0.85))),
@@ -612,7 +612,7 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(1270.0)
-                .top(846.0)
+                .top(902.0)
                 .width(620.0)
                 .height(48.0)
                 .child(Opacity::new(claim_p).child(
@@ -636,3 +636,261 @@ pub fn the_motion(ctx: &pf::Ctx) -> WidgetNode {
     stack.into()
 }
 
+
+// ── Z07 · the_layers ────────────────────────────────────────────────────────
+
+/// **One core: widget → element → scene → pixels.** Z06 named the engine;
+/// this scene opens it. Four planes in true perspective, stacked back to
+/// front, each one a real stage of the framework — and a single change
+/// falling through all four, so the stack is shown working rather than
+/// labelled.
+///
+/// The planes are drawn with the framework's own quadrant projector, so
+/// the depth is projection and not a skew.
+pub fn the_layers(ctx: &pf::Ctx) -> WidgetNode {
+    let t = ctx.t;
+    let sec = ctx.sec;
+    let mut stack = Stack::new();
+
+    /// (name, what it holds, colour, the crate it lives in)
+    const LAYERS: [(&str, &str, Color, &str); 4] = [
+        ("widget", "what you wrote", ACCENT, "vieww-widget"),
+        ("element", "what persists", SYN_TYPE, "vieww-element"),
+        ("scene", "what to draw", LEDGER, "vieww-paint"),
+        ("pixels", "the picture", INK, "vieww-render"),
+    ];
+    const PLANE_W: f32 = 760.0;
+    const PLANE_H: f32 = 268.0;
+    const CX: f32 = 700.0;
+
+    // The drop — one change falling through the four planes, on a loop,
+    // so the relationship between them is a motion and not a diagram.
+    let drop_u = ((sec - 2.0).max(0.0) / 3.2).fract();
+    let dropping = sec > 2.0;
+
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            book.rect(
+                Rect::new(0.0, 0.0, w, h),
+                Gradient::vertical().with_dither().with_stops(&[
+                    (0.0, Color::rgb(13, 12, 18)),
+                    (0.56, BG_DEEP),
+                    (1.0, Color::rgb(10, 9, 13)),
+                ]),
+            );
+            pf::stars(book, w, h, 0x1A4E, 38, t, 0.05);
+
+            for (i, (_, _, color, _)) in LAYERS.iter().enumerate() {
+                let p = ease_out_expo(clamp01((t - 0.08 - i as f32 * 0.075) / 0.22));
+                if p <= 0.01 {
+                    continue;
+                }
+                let color = *color;
+                // Back to front, each plane lower and further right, so
+                // all four edges are visible at once.
+                let y = 336.0 + i as f32 * 138.0;
+                let r = Rect::new(CX - PLANE_W * 0.5 + i as f32 * 36.0, y, CX + PLANE_W * 0.5 + i as f32 * 36.0, y + PLANE_H);
+                pf::panel_3d(book, r, 0.22, 0.26, 1700.0, p, |b| {
+                    b.rrect(r, 14.0, pf::alpha(Color::rgb(0x16, 0x13, 0x1D), 0.96));
+                    b.stroke_rrect(r, 14.0, pf::alpha(color, 0.58), 1.5);
+                    // What the plane holds, drawn as that plane's own
+                    // idea of content: boxes for widgets, a tree for
+                    // elements, command bars for the scene, a raster
+                    // grid for pixels.
+                    match i {
+                        0 => {
+                            for k in 0..6 {
+                                let bx = r.left + 40.0 + (k % 3) as f32 * 220.0;
+                                let by = r.top + 44.0 + (k / 3) as f32 * 86.0;
+                                b.rrect(pf::xywh(bx, by, 180.0, 60.0), 9.0, pf::alpha(color, 0.26));
+                                b.stroke_rrect(pf::xywh(bx, by, 180.0, 60.0), 9.0, pf::alpha(color, 0.60), 1.2);
+                            }
+                        }
+                        1 => {
+                            let root = Offset::new(r.left + 90.0, r.top + PLANE_H * 0.5);
+                            b.circle(root, 7.0, pf::alpha(color, 0.9));
+                            for k in 0..5 {
+                                let to = Offset::new(r.left + 300.0 + (k % 2) as f32 * 220.0, r.top + 60.0 + k as f32 * 44.0);
+                                let pts = fk::thread_pts(root, to, 40.0);
+                                fk::grow_stroke(b, &pts, 1.0, color, 1.3, 0.5);
+                                b.circle(to, 5.0, pf::alpha(color, 0.85));
+                            }
+                        }
+                        2 => {
+                            for k in 0..7 {
+                                let by = r.top + 30.0 + k as f32 * 31.0;
+                                let bw = 120.0 + ((k * 137) % 460) as f32;
+                                b.rrect(pf::xywh(r.left + 40.0, by, bw, 14.0), 7.0, pf::alpha(color, 0.42));
+                            }
+                        }
+                        _ => {
+                            for gy in 0..8 {
+                                for gx in 0..22 {
+                                    let on = ((gx * 7 + gy * 13) % 5) < 3;
+                                    if !on {
+                                        continue;
+                                    }
+                                    b.rect(
+                                        pf::xywh(r.left + 40.0 + gx as f32 * 30.0, r.top + 34.0 + gy as f32 * 26.0, 22.0, 19.0),
+                                        pf::alpha(color, 0.14 + 0.07 * ((gx + gy) % 3) as f32),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // The change, falling. A lit packet that crosses each plane's
+            // surface in turn and brightens the plane it is on.
+            if dropping {
+                let seg = (drop_u * 4.0).min(3.999);
+                let i = seg as usize;
+                let f = seg - i as f32;
+                let y0 = 336.0 + i as f32 * 138.0 + PLANE_H * 0.5;
+                let y1 = y0 + 138.0;
+                let x = CX + i as f32 * 36.0 + 36.0 * f;
+                let y = y0 + (y1 - y0) * f;
+                book.layer(1.0, 16.0, None, |b| {
+                    b.circle(Offset::new(x, y), 15.0, pf::alpha(BRAND_NEAR, 0.45));
+                    b.circle(Offset::new(x, y), 6.0, pf::alpha(Color::WHITE, 0.95));
+                });
+            }
+            pf::vignette(book, w, h, 0.5);
+        }),
+    )));
+
+    // The names, right of the stack, each landing with its plane. One
+    // column, one baseline grid, so four labels read as one list.
+    for (i, (name, holds, color, krate)) in LAYERS.iter().enumerate() {
+        let p = ease_out_cubic(clamp01((t - 0.12 - i as f32 * 0.075) / 0.20));
+        if p <= 0.01 {
+            continue;
+        }
+        let y = 360.0 + i as f32 * 138.0;
+        let lit = dropping && ((drop_u * 4.0) as usize) == i;
+        stack = stack.push(Positioned::new().left(1290.0).top(y).width(560.0).height(48.0).child(
+            Opacity::new(p).child(Text::new((*name).to_string())
+                .style(pf::geist(38.0).bold().letter_spacing(-0.4)
+                    .color(pf::alpha(if lit { INK } else { *color }, 0.97)))),
+        ));
+        stack = stack.push(Positioned::new().left(1290.0).top(y + 46.0).width(560.0).height(28.0).child(
+            Opacity::new(p * 0.95).child(Text::new((*holds).to_string())
+                .style(pf::geist_mono(17.0).letter_spacing(1.2).color(pf::alpha(MUTED, 0.9)))),
+        ));
+        stack = stack.push(Positioned::new().left(1290.0).top(y + 72.0).width(560.0).height(24.0).child(
+            Opacity::new(p * 0.8).child(Text::new((*krate).to_string())
+                .style(pf::geist_mono(14.0).letter_spacing(1.6).color(pf::alpha(pf::FAINT, 0.9)))),
+        ));
+    }
+
+    pf::caption("one core: widget → element → scene → native pixels.", 1002.0, clamp01((t - 0.06) / 0.10));
+    pf::caption("no dom, no bridge, no interpreter between any two of them.", 966.0, clamp01((t - 0.58) / 0.10));
+    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    stack.into()
+}
+
+// ── Z10 · the_type ──────────────────────────────────────────────────────────
+
+/// **Text is not a texture.** The engine shapes its own type: six
+/// embedded faces, real shaping, real metrics, the same glyphs on every
+/// platform because the platform is not the one drawing them.
+///
+/// Shown as a specimen sheet — a size ramp that grows live, the script
+/// coverage as a row of real strings, and the one receipt that matters:
+/// the film's own frames were typeset by this.
+pub fn the_type(ctx: &pf::Ctx) -> WidgetNode {
+    let t = ctx.t;
+    let sec = ctx.sec;
+    let probe = ctx.probe;
+    let mut stack = Stack::new();
+
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            book.rect(
+                Rect::new(0.0, 0.0, w, h),
+                Gradient::vertical().with_dither().with_stops(&[
+                    (0.0, Color::rgb(14, 13, 17)),
+                    (0.56, BG_DEEP),
+                    (1.0, Color::rgb(10, 9, 13)),
+                ]),
+            );
+            // The baseline grid the specimen sits on — the one place in
+            // the film where the grid is the subject.
+            let grid_a = clamp01((t - 0.06) / 0.16) * 0.10;
+            if grid_a > 0.005 {
+                for k in 0..9 {
+                    let y = 316.0 + k as f32 * 76.0;
+                    book.rect(pf::xywh(super::MARGIN, y, w - super::MARGIN * 2.0, 1.0), pf::alpha(Color::WHITE, grid_a));
+                }
+            }
+            pf::vignette(book, w, h, 0.5);
+        }),
+    )));
+
+    // The size ramp — one word at six sizes, each arriving on its beat,
+    // all sharing a left edge so the ramp reads as a ramp.
+    const RAMP: [f32; 6] = [88.0, 62.0, 44.0, 32.0, 24.0, 18.0];
+    let mut y = 316.0;
+    for (i, size) in RAMP.iter().enumerate() {
+        let p = ease_out_expo(clamp01((t - 0.08 - i as f32 * 0.055) / 0.18));
+        if p > 0.01 {
+            stack = stack.push(Positioned::new().left(super::MARGIN).top(y).width(1100.0).height(size * 1.35).child(
+                Opacity::new(p).child(Text::new("shaping, not blitting".to_string())
+                    .style(pf::geist(*size).bold().letter_spacing(-0.5).color(pf::alpha(INK, 0.96)))),
+            ));
+            stack = stack.push(Positioned::new().left(1180.0).top(y + size * 0.42).width(200.0).height(26.0).child(
+                Opacity::new(p * 0.75).child(Text::new(format!("{size:.0} px"))
+                    .style(pf::geist_mono(15.0).letter_spacing(1.6).color(pf::alpha(pf::FAINT, 0.9)))),
+            ));
+        }
+        y += size * 1.12 + 28.0;
+    }
+
+    // The script coverage — real strings, not a claim about them.
+    const SCRIPTS: [(&str, &str); 4] = [
+        ("latin", "Hamburgefonstiv"),
+        ("greek", "Ελληνικά"),
+        ("cyrillic", "Кириллица"),
+        ("symbols", "→ ≠ ∑ ✓ ·"),
+    ];
+    for (i, (name, sample)) in SCRIPTS.iter().enumerate() {
+        let p = ease_out_cubic(clamp01((t - 0.44 - i as f32 * 0.05) / 0.16));
+        if p <= 0.01 {
+            continue;
+        }
+        let sy = 356.0 + i as f32 * 96.0;
+        stack = stack.push(Positioned::new().left(1420.0).top(sy).width(420.0).height(44.0).child(
+            Opacity::new(p).child(Text::new((*sample).to_string())
+                .style(pf::geist(34.0).color(pf::alpha(INK, 0.95)))),
+        ));
+        stack = stack.push(Positioned::new().left(1420.0).top(sy + 40.0).width(420.0).height(24.0).child(
+            Opacity::new(p * 0.8).child(Text::new((*name).to_string())
+                .style(pf::geist_mono(14.0).letter_spacing(2.4).color(pf::alpha(SYN_TYPE, 0.85)))),
+        ));
+    }
+
+    // The receipt — the faces this very frame was set in, counted by the
+    // renderer rather than claimed by the film.
+    let rec_a = clamp01((t - 0.62) / 0.14);
+    if rec_a > 0.01 {
+        stack = stack.push(Positioned::new().left(super::MARGIN).top(898.0).width(1720.0).height(34.0).child(
+            Opacity::new(rec_a).child(Text::new(format!(
+                "{} — every glyph in this film shaped by vieww-text, {} glyph runs counted",
+                probe.bench,
+                pf::group_commas(probe.glyph_runs)
+            ))
+            .style(pf::geist_mono(17.0).letter_spacing(1.0).color(pf::alpha(LEDGER, 0.9)))),
+        ));
+    }
+
+    pf::caption("text is shaped here, not handed to a platform.", 1002.0, clamp01((t - 0.06) / 0.10));
+    pf::caption("the same glyphs, the same metrics, every device.", 966.0, clamp01((t - 0.56) / 0.10));
+    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    let _ = sec;
+    stack.into()
+}

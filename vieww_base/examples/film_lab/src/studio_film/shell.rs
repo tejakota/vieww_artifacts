@@ -35,26 +35,26 @@ use super::{ACCENT, ACCENT_DEEP, BRAND_NEAR, INK, MUTED, SYN_COMMENT, SYN_KEYWOR
 // ── The shell's geometry ────────────────────────────────────────────────────
 
 /// The shell's frame, inside the body band with a margin on every side.
-pub const SHELL: Rect = Rect { left: 118.0, top: 326.0, right: 1802.0, bottom: 874.0 };
+pub const SHELL: Rect = Rect { left: 110.0, top: 300.0, right: 1810.0, bottom: 938.0 };
 
 /// The file tree's right edge.
-pub const SIDEBAR_R: f32 = 372.0;
+pub const SIDEBAR_R: f32 = 386.0;
 
 /// The editor's right edge — where the preview pane begins.
-pub const EDITOR_R: f32 = 1332.0;
+pub const EDITOR_R: f32 = 1420.0;
 
 /// The preview device's rect inside the preview pane.
-pub const DEVICE: Rect = Rect { left: 1440.0, top: 366.0, right: 1700.0, bottom: 834.0 };
+pub const DEVICE: Rect = Rect { left: 1520.0, top: 348.0, right: 1780.0, bottom: 890.0 };
 
 /// The editor's first code line's baseline, and the line pitch.
-pub const CODE_Y0: f32 = 392.0;
-pub const CODE_DY: f32 = 30.0;
+pub const CODE_Y0: f32 = 372.0;
+pub const CODE_DY: f32 = 34.0;
 
 /// The gutter's x — where line numbers sit.
-pub const GUTTER_X: f32 = 396.0;
+pub const GUTTER_X: f32 = 410.0;
 
 /// The code's left margin.
-pub const CODE_X: f32 = 452.0;
+pub const CODE_X: f32 = 468.0;
 
 // ── The parts ───────────────────────────────────────────────────────────────
 
@@ -109,6 +109,31 @@ pub fn frame(book: &mut Sketchbook, p: f32, a: f32) {
         Rect::new(r.left + 104.0, r.top + 16.0, r.left + 104.0 + 250.0 * p, r.top + 20.0),
         pf::alpha(pf::FAINT, 0.30 * a),
     );
+    // The activity rail — the studio's own six tools, in the studio's own
+    // icons, each in a tile that centres its glyph by construction.
+    for k in 0..6 {
+        super::kit::icon_tile(
+            book,
+            [
+                super::kit::Ico::Folder,
+                super::kit::Ico::Search,
+                super::kit::Ico::Code,
+                super::kit::Ico::Warning,
+                super::kit::Ico::Dashboard,
+                super::kit::Ico::Gear,
+            ][k],
+            Offset::new(r.left + 28.0, r.top + 74.0 + k as f32 * 52.0),
+            36.0,
+            ACCENT,
+            k == 0,
+            a * p,
+        );
+    }
+    // The editor's tab strip — one open file, named by a bar.
+    let tabs_y = r.top + 42.0;
+    book.rect(Rect::new(sx, tabs_y, px, tabs_y + 34.0), pf::alpha(Color::rgb(0x0F, 0x0D, 0x13), 0.9 * a));
+    book.rrect(pf::xywh(sx + 14.0, tabs_y + 4.0, 168.0 * p, 26.0), 6.0, pf::alpha(Color::rgb(0x1B, 0x17, 0x22), a));
+    book.rect(pf::xywh(sx + 14.0, tabs_y + 30.0, 168.0 * p, 2.0), pf::alpha(ACCENT, 0.9 * a));
 }
 
 /// The file tree — rows that land one after another, with the open file
@@ -117,23 +142,32 @@ pub fn tree(book: &mut Sketchbook, p: f32, open: usize, a: f32) {
     if p <= 0.01 || a <= 0.01 {
         return;
     }
-    let widths = [128.0f32, 96.0, 150.0, 112.0, 138.0, 104.0, 126.0, 92.0, 144.0];
+    let widths = [128.0f32, 96.0, 150.0, 112.0, 138.0, 104.0, 126.0, 92.0, 144.0, 118.0, 136.0, 88.0];
     for (i, w) in widths.iter().enumerate() {
         let rp = ease_out_cubic(clamp01(p * 1.5 - i as f32 * 0.07));
         if rp <= 0.01 {
             continue;
         }
-        let y = SHELL.top + 66.0 + i as f32 * 34.0;
-        let indent = if i % 3 == 0 { 0.0 } else { 18.0 };
+        let y = SHELL.top + 70.0 + i as f32 * 40.0;
+        let indent = 56.0 + if i % 3 == 0 { 0.0 } else { 18.0 };
         if i == open {
             book.rrect(
-                pf::xywh(SHELL.left + 12.0, y - 7.0, SIDEBAR_R - SHELL.left - 24.0, 26.0),
+                pf::xywh(SHELL.left + 56.0, y - 9.0, SIDEBAR_R - SHELL.left - 72.0, 30.0),
                 7.0,
                 pf::alpha(ACCENT_DEEP, 0.34 * a * rp),
             );
         }
+        super::kit::icon_at(
+            book,
+            if i % 3 == 0 { super::kit::Ico::Folder } else { super::kit::Ico::File },
+            Offset::new(SHELL.left + 34.0 + indent, y + 4.0),
+            17.0,
+            if i == open { ACCENT } else { MUTED },
+            1.6,
+            (if i == open { 1.0 } else { 0.66 }) * a * rp,
+        );
         book.rrect(
-            pf::xywh(SHELL.left + 30.0 + indent, y, w * rp, 9.0),
+            pf::xywh(SHELL.left + 50.0 + indent, y, w * rp, 9.0),
             4.5,
             pf::alpha(if i == open { INK } else { MUTED }, (if i == open { 0.9 } else { 0.42 }) * a),
         );

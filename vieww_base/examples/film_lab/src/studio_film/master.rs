@@ -49,13 +49,24 @@ fn manifest_path() -> PathBuf {
     work_root().join("manifest.txt")
 }
 
-/// The device-resolution multiplier — the house SCALE_FACTOR door.
+/// The device-resolution multiplier in force for this render.
+///
+/// [`super::SCALE_FACTOR`] is the film's own constant — the resolution the
+/// film is mastered at when nobody says otherwise. The `SCALE_FACTOR`
+/// environment variable overrides it for a one-off pass, so a 4K master is
+/// `SCALE_FACTOR=2 cargo run --release -p film_lab -- mastersf` and needs
+/// no edit.
+///
+/// Either way the number scales the *scene*, not the frame: [`raster`]
+/// applies it to the finished command list, so the whole picture is
+/// re-rasterised at the output resolution. Type is re-shaped, curves are
+/// re-flattened, hairlines stay hairlines. Nothing is enlarged.
 pub fn scale_factor() -> f32 {
     std::env::var("SCALE_FACTOR")
         .ok()
         .and_then(|v| v.parse::<f32>().ok())
         .filter(|f| *f > 0.0 && *f <= 8.0)
-        .unwrap_or(1.0)
+        .unwrap_or(super::SCALE_FACTOR)
 }
 
 fn raster_size() -> (u32, u32) {
@@ -203,6 +214,15 @@ impl Rig {
         // — its contract is the exact studio, full frame — so the matte
         // arrives there on the same envelope the rest of the film's
         // voice does.
+        // The act chip is the header's own, and it belongs to every
+        // scene: pushing it here rather than in each scene means a new
+        // scene cannot forget it, and the movement it names comes from
+        // the scene list's own mapping.
+        pf::chrome(pf::act_chip(
+            super::movement_of(s.id),
+            super::movement_name(s.id),
+            pf::clamp01((sec - 0.25) / 0.45),
+        ));
         let matte_a = super::matte_alpha(s.id, sec);
         let chrome_tree = vieww_widget::prelude::Stack::new()
             .push(super::frame_matte(matte_a))

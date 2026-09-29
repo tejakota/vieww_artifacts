@@ -137,7 +137,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
             continue;
         }
         let x = x0 + i as f32 * (card_w + gap);
-        let rect = Rect::new(x, 318.0, x + card_w, 318.0 + 196.0);
+        let rect = Rect::new(x, 300.0, x + card_w, 300.0 + 212.0);
         let color = *color;
         // The card's own sheen, one pass, staggered behind the landing.
         let sheen_p = pf::clamp01((t - t0 - 0.09) / 0.22);
@@ -164,19 +164,19 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
             stack = stack.push(
                 Positioned::new()
                     .left(x)
-                    .top(342.0 + (1.0 - text_a) * 10.0)
+                    .top(326.0 + (1.0 - text_a) * 10.0)
                     .width(card_w)
                     .height(120.0)
                     .child(Opacity::new(text_a).child(
                         Text::new(format!("{shown}{unit}"))
-                            .style(pf::geist(82.0).bold().letter_spacing(-1.5).color(pf::alpha(INK, 0.98)))
+                            .style(pf::geist(88.0).bold().letter_spacing(-1.5).color(pf::alpha(INK, 0.98)))
                             .align(TextAlign::Center),
                     )),
             );
             stack = stack.push(
                 Positioned::new()
                     .left(x)
-                    .top(452.0)
+                    .top(442.0)
                     .width(card_w)
                     .height(28.0)
                     .child(Opacity::new(text_a).child(
@@ -188,7 +188,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
             stack = stack.push(
                 Positioned::new()
                     .left(x)
-                    .top(480.0)
+                    .top(472.0)
                     .width(card_w)
                     .height(22.0)
                     .child(Opacity::new(text_a * 0.8).child(
@@ -204,14 +204,14 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
     //
     // The gauge. Two measured frame times against the 60 fps allowance,
     // drawn at the same scale so the gap is a length and not a claim.
-    let gauge_p = pf::clamp01((t - 0.28) / 0.14);
+    let gauge_p = pf::clamp01((t - 0.22) / 0.11);
     if gauge_p > 0.01 {
         let gx0 = 470.0;
         let gx1 = 1560.0;
-        let plate = Rect::new(360.0, 540.0, 1560.0, 540.0 + 226.0);
+        let plate = Rect::new(360.0, 542.0, 1560.0, 542.0 + 256.0);
         let bars: [(&str, f32, f32); 2] = [
-            ("p95 frame", pf::CERT_P95_MS, 0.34),
-            ("worst frame", pf::CERT_WORST_MS, 0.42),
+            ("p95 frame", pf::CERT_P95_MS, 0.30),
+            ("worst frame", pf::CERT_WORST_MS, 0.37),
         ];
         let ga = gauge_p;
         stack = stack.push(Positioned::fill().child(Painting::sized(
@@ -226,7 +226,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
                     if p <= 0.01 {
                         continue;
                     }
-                    let y = 618.0 + k as f32 * 58.0;
+                    let y = 630.0 + k as f32 * 64.0;
                     fk::budget_bar(
                         book,
                         Rect::new(gx0, y, gx1 - 150.0, y + 26.0),
@@ -241,13 +241,13 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
                 }
                 // The scale under the bars, and the budget's own line
                 // carried the full height of the gauge.
-                let ticks_a = pf::clamp01((t - 0.36) / 0.12);
-                fk::gauge_ticks(book, gx0, gx1 - 150.0, 708.0, 12, ticks_a * ga);
+                let ticks_a = pf::clamp01((t - 0.29) / 0.10);
+                fk::gauge_ticks(book, gx0, gx1 - 150.0, 728.0, 12, ticks_a * ga);
                 let bx = gx0 + (gx1 - 150.0 - gx0) * (BUDGET_MS / GAUGE_MS);
-                let line_p = ease_out_expo(pf::clamp01((t - 0.31) / 0.16));
+                let line_p = ease_out_expo(pf::clamp01((t - 0.25) / 0.12));
                 if line_p > 0.01 {
                     book.rect(
-                        Rect::new(bx - 1.0, 596.0, bx + 1.0, 596.0 + 112.0 * line_p),
+                        Rect::new(bx - 1.0, 606.0, bx + 1.0, 606.0 + 122.0 * line_p),
                         pf::alpha(Color::WHITE, 0.38 * ga),
                     );
                 }
@@ -258,7 +258,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
         // is shaped by the same engine that shapes the app's.
         let title_a = ease_out_cubic(pf::clamp01((gauge_p - 0.4) / 0.6));
         stack = stack.push(
-            Positioned::new().left(400.0).top(566.0).width(760.0).height(30.0).child(
+            Positioned::new().left(400.0).top(570.0).width(760.0).height(32.0).child(
                 Opacity::new(title_a).child(
                     Text::new("the frame budget — 60 fps allows 16.7 ms".to_string())
                         .style(pf::geist_mono(17.0).letter_spacing(2.0).color(pf::alpha(ACCENT, 0.95))),
@@ -270,7 +270,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
             if p <= 0.01 {
                 continue;
             }
-            let y = 618.0 + k as f32 * 58.0;
+            let y = 630.0 + k as f32 * 64.0;
             stack = stack.push(
                 Positioned::new().left(400.0).top(y + 28.0).width(320.0).height(20.0).child(
                     Opacity::new(p).child(
@@ -290,10 +290,10 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
             );
         }
         // The headroom — the scene's whole point, said once, in words.
-        let head_a = pf::clamp01((t - 0.50) / 0.12);
+        let head_a = pf::clamp01((t - 0.44) / 0.10);
         if head_a > 0.01 {
             stack = stack.push(
-                Positioned::new().left(400.0).top(740.0).width(1160.0).height(26.0).child(
+                Positioned::new().left(400.0).top(756.0).width(1160.0).height(28.0).child(
                     Opacity::new(head_a).child(
                         Text::new(format!(
                             "{:.1} ms of headroom on the worst frame the audit could find — and a {:.1} ms cold start.",
@@ -312,10 +312,10 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
     // The only measured row in the film. It arrives last, in the film's
     // own accent, on its own plate — the audit turning to look at the
     // thing that has been showing it to you.
-    let film_p = pf::clamp01((t - 0.62) / 0.12);
+    let film_p = pf::clamp01((t - 0.58) / 0.10);
     if film_p > 0.01 && probe.frames > 0 {
-        let plate = Rect::new(360.0, 786.0, 1560.0, 786.0 + 106.0);
-        let sheen_p = pf::clamp01((t - 0.70) / 0.22);
+        let plate = Rect::new(360.0, 824.0, 1560.0, 824.0 + 116.0);
+        let sheen_p = pf::clamp01((t - 0.66) / 0.18);
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
@@ -325,14 +325,14 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
         )));
         let a = ease_out_cubic(pf::clamp01((film_p - 0.4) / 0.6));
         if a > 0.01 {
-            let roll = pf::clamp01((t - 0.66) / 0.22);
+            let roll = pf::clamp01((t - 0.62) / 0.18);
             let frames = if roll >= 1.0 {
                 probe.frames
             } else {
                 pf::count_up(probe.frames, roll)
             };
             stack = stack.push(
-                Positioned::new().left(400.0).top(804.0).width(760.0).height(32.0).child(
+                Positioned::new().left(400.0).top(844.0).width(760.0).height(32.0).child(
                     Opacity::new(a).child(
                         Text::new("and this film audited itself".to_string())
                             .style(pf::geist_mono(16.0).letter_spacing(2.2).color(pf::alpha(ACCENT, 0.95))),
@@ -340,7 +340,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
                 ),
             );
             stack = stack.push(
-                Positioned::new().left(400.0).top(838.0).width(900.0).height(28.0).child(
+                Positioned::new().left(400.0).top(878.0).width(900.0).height(28.0).child(
                     Opacity::new(a * 0.9).child(
                         Text::new(format!(
                             "every frame rendered by vieww · {:.0} ms median · {}",
@@ -351,7 +351,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
                 ),
             );
             stack = stack.push(
-                Positioned::new().left(1120.0).top(804.0).width(420.0).height(66.0).child(
+                Positioned::new().left(1120.0).top(844.0).width(420.0).height(66.0).child(
                     Opacity::new(a).child(
                         Text::new(format!("{} frames", pf::group_commas(frames)))
                             .style(pf::geist(48.0).bold().letter_spacing(-0.5).color(pf::alpha(INK, 0.98)))
@@ -371,9 +371,149 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(pf::caption(
         "the last one is measured, not quoted — this film is its own benchmark.",
         966.0,
-        pf::clamp01((t - 0.64) / 0.10),
+        pf::clamp01((t - 0.60) / 0.09),
     ));
     stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
     let _ = (sec, ACCENT_DEEP);
+    stack.into()
+}
+
+// ── Z19 · the_receipts ──────────────────────────────────────────────────────
+
+/// **Where the numbers come from.** The ledger gave the headline figures;
+/// this scene gives their provenance — the 36 crates as 36 real tiles,
+/// each named, filling in as the count runs, and the certification's own
+/// breakdown beside them.
+///
+/// The crate names are `pf::CRATES`, quoted from the workspace manifest.
+/// A film that says "36 crates" and then shows 36 named crates is making
+/// a checkable claim; one that shows a number is making a decorative one.
+pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
+    let t = ctx.t;
+    let sec = ctx.sec;
+    let probe = ctx.probe;
+    let mut stack = Stack::new();
+
+    const COLS: usize = 6;
+    const TILE_W: f32 = 196.0;
+    const TILE_H: f32 = 58.0;
+    const GAP: f32 = 12.0;
+    const GRID_X: f32 = 96.0;
+    const GRID_Y: f32 = 330.0;
+
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            book.rect(
+                Rect::new(0.0, 0.0, w, h),
+                Gradient::vertical().with_dither().with_stops(&[
+                    (0.0, Color::rgb(14, 13, 18)),
+                    (0.55, BG_DEEP),
+                    (1.0, Color::rgb(10, 9, 13)),
+                ]),
+            );
+            // The 36 tiles. Each lands on its own beat, in reading order,
+            // so the grid fills the way a count runs.
+            for i in 0..pf::CERT_CRATES {
+                let p = ease_out_expo(pf::clamp01((t - 0.08 - i as f32 * 0.012) / 0.14));
+                if p <= 0.01 {
+                    continue;
+                }
+                let (cx, cy) = (i % COLS, i / COLS);
+                let x = GRID_X + cx as f32 * (TILE_W + GAP);
+                let y = GRID_Y + cy as f32 * (TILE_H + GAP);
+                let r = pf::xywh(x, y + (1.0 - p) * 8.0, TILE_W, TILE_H);
+                book.rrect(r, 10.0, pf::alpha(Color::rgb(0x14, 0x12, 0x1A), 0.96 * p));
+                book.stroke_rrect(r, 10.0, pf::alpha(ACCENT, 0.20 * p), 1.0);
+                // A lit spine on the left of each tile — the tiles are a
+                // list, and a list reads better with a rail.
+                book.rect(pf::xywh(r.left, r.top + 10.0, 3.0, r.height() - 20.0), pf::alpha(BRAND_NEAR, 0.55 * p));
+            }
+            pf::vignette(book, w, h, 0.5);
+        }),
+    )));
+
+    // The crate names, as type, at the tiles' own coordinates.
+    for (i, name) in pf::CRATES.iter().enumerate().take(pf::CERT_CRATES) {
+        let p = ease_out_cubic(pf::clamp01((t - 0.08 - i as f32 * 0.012) / 0.14));
+        if p <= 0.01 {
+            continue;
+        }
+        let (cx, cy) = (i % COLS, i / COLS);
+        let x = GRID_X + cx as f32 * (TILE_W + GAP);
+        let y = GRID_Y + cy as f32 * (TILE_H + GAP);
+        stack = stack.push(Positioned::new().left(x + 16.0).top(y + 18.0 + (1.0 - p) * 8.0).width(TILE_W - 24.0).height(26.0).child(
+            Opacity::new(p).child(Text::new((*name).to_string())
+                .style(pf::geist_mono(15.0).letter_spacing(0.4).color(pf::alpha(INK, 0.92)))),
+        ));
+    }
+
+    // The count, running with the grid.
+    let filled = pf::CRATES
+        .iter()
+        .enumerate()
+        .take(pf::CERT_CRATES)
+        .filter(|(i, _)| t > 0.08 + *i as f32 * 0.012)
+        .count();
+    let head_a = pf::clamp01(t / 0.10);
+    if head_a > 0.01 {
+        stack = stack.push(Positioned::new().left(1350.0).top(324.0).width(500.0).height(110.0).child(
+            Opacity::new(head_a).child(Text::new(format!("{filled}"))
+                .style(pf::geist(92.0).bold().letter_spacing(-2.0).color(pf::alpha(INK, 0.98)))),
+        ));
+        stack = stack.push(Positioned::new().left(1350.0).top(432.0).width(500.0).height(32.0).child(
+            Opacity::new(head_a).child(Text::new("crates, named".to_string())
+                .style(pf::geist_mono(19.0).letter_spacing(2.0).color(pf::alpha(ACCENT, 0.95)))),
+        ));
+    }
+
+    // The certification's breakdown, under the count — the rows the
+    // ledger's hero cards summarised.
+    const ROWS: [(&str, &str); 4] = [
+        ("unit + integration", "the workspace's own suite"),
+        ("vulkan conformance", "37 device tests"),
+        ("golden frames", "pixel-compared, every run"),
+        ("allocation probes", "60 steady frames, zero"),
+    ];
+    for (i, (label, note)) in ROWS.iter().enumerate() {
+        let p = ease_out_cubic(pf::clamp01((t - 0.42 - i as f32 * 0.05) / 0.16));
+        if p <= 0.01 {
+            continue;
+        }
+        let y = 512.0 + i as f32 * 82.0;
+        stack = stack.push(Positioned::new().left(1350.0).top(y).width(520.0).height(30.0).child(
+            Opacity::new(p).child(Text::new((*label).to_string())
+                .style(pf::geist_mono(19.0).letter_spacing(1.0).color(pf::alpha(INK, 0.94)))),
+        ));
+        stack = stack.push(Positioned::new().left(1350.0).top(y + 30.0).width(520.0).height(26.0).child(
+            Opacity::new(p * 0.85).child(Text::new((*note).to_string())
+                .style(pf::geist_mono(14.0).letter_spacing(0.9).color(pf::alpha(MUTED, 0.88)))),
+        ));
+        stack = stack.push(Positioned::new().left(1350.0).top(y + 58.0).width(500.0).height(2.0).child(
+            Opacity::new(p * 0.5).child(Painting::sized(Size::new(500.0, 2.0), PaintWith::new(
+                move |book: &mut Sketchbook, _s: Size| {
+                    book.rect(Rect::new(0.0, 0.0, 500.0, 1.0), pf::alpha(Color::WHITE, 0.08));
+                },
+            ))),
+        ));
+    }
+
+    // The film's own line, last.
+    let film_a = pf::clamp01((t - 0.74) / 0.12);
+    if film_a > 0.01 && probe.frames > 0 {
+        stack = stack.push(Positioned::new().left(1350.0).top(852.0).width(540.0).height(30.0).child(
+            Opacity::new(film_a).child(Text::new(format!(
+                "and {} frames of this film, counted by its own census",
+                pf::group_commas(probe.frames)
+            ))
+            .style(pf::geist_mono(15.0).letter_spacing(0.9).color(pf::alpha(LEDGER, 0.9)))),
+        ));
+    }
+
+    stack = stack.push(pf::caption("thirty-six crates, one core — and here they are.", 1002.0, pf::clamp01((t - 0.05) / 0.10)));
+    stack = stack.push(pf::caption("a number you can check is worth more than a number you can read.", 966.0, pf::clamp01((t - 0.60) / 0.10)));
+    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    let _ = sec;
     stack.into()
 }
