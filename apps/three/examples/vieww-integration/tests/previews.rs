@@ -69,7 +69,10 @@ fn edit(harness: &mut TestHarness, edit: impl FnOnce(&mut PlaybackState)) {
 #[test]
 #[ignore = "writes PNG files; run with -- --ignored"]
 fn render_the_reference_previews() {
-    // 1. The viewer as it opens: playing the demo capture, shaded, motes on.
+    // 1. The viewer as it opens: playing the demo capture through the
+    //    engine — depth-buffered, lit, shadowed, motes occluded by the
+    //    surface — which is the default now that the framework owns a 3D
+    //    stack. The painter is one toggle away and shot 3.
     let mut harness = mounted_viewer();
     harness.tick(Duration::from_millis(100));
     save(&mut harness, "viewer-initial.png");
@@ -83,7 +86,8 @@ fn render_the_reference_previews() {
     save(&mut harness, "viewer-halfway.png");
 
     // 3. Wireframe from a fresh angle: a dragged camera, wire mode, motes
-    //    left on so the two layers read together.
+    //    left on so the two layers read together. Asking for the wire
+    //    drops back to the painter — wireframe is the painter's view.
     edit(&mut harness, |state| {
         state.orbit(160.0, 60.0);
         state.zoom(-40.0);
@@ -91,6 +95,15 @@ fn render_the_reference_previews() {
     });
     harness.tick(Duration::from_millis(50));
     save(&mut harness, "viewer-wireframe.png");
+
+    // 4. The same dragged angle, back under the engine: the identical
+    //    viewpoint rendered depth-correct with the light rig, so the two
+    //    previews are a comparison rather than two unrelated pictures.
+    edit(&mut harness, |state| {
+        state.toggle_engine();
+    });
+    harness.tick(Duration::from_millis(50));
+    save(&mut harness, "viewer-engine.png");
 }
 
 #[test]

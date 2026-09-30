@@ -666,6 +666,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "color_quant"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
+
+[[package]]
 name = "combine"
 version = "4.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1131,6 +1137,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gif"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee8cfcc411d9adbbaba82fb72661cc1bcca13e8bba98b364e62b2dba8f960159"
+dependencies = [
+ "color_quant",
+ "weezl",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1196,6 +1212,8 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
+ "color_quant",
+ "gif",
  "moxcms",
  "num-traits",
  "png 0.18.1",
@@ -2864,13 +2882,28 @@ version = "0.1.0"
 dependencies = [
  "vieww-animation",
  "vieww-asset",
+ "vieww-audio",
  "vieww-effects",
  "vieww-element",
+ "vieww-embed",
  "vieww-foundation",
  "vieww-gestures",
+ "vieww-mesh",
+ "vieww-network",
  "vieww-paint",
+ "vieww-physics",
  "vieww-render",
  "vieww-text",
+ "vieww-video",
+ "vieww-widget",
+]
+
+[[package]]
+name = "vieww-3d"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+ "vieww-mesh",
  "vieww-widget",
 ]
 
@@ -2890,6 +2923,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "vieww-audio"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+]
+
+[[package]]
 name = "vieww-effects"
 version = "0.1.0"
 dependencies = [
@@ -2904,6 +2944,14 @@ dependencies = [
  "vieww-animation",
  "vieww-foundation",
  "vieww-gestures",
+ "vieww-widget",
+]
+
+[[package]]
+name = "vieww-embed"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
  "vieww-widget",
 ]
 
@@ -2954,8 +3002,24 @@ dependencies = [
  "three-runtime",
  "three-vieww",
  "vieww",
+ "vieww-3d",
+ "vieww-mesh",
  "vieww-platform-winit",
  "vieww-test-harness",
+]
+
+[[package]]
+name = "vieww-mesh"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-network"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
 ]
 
 [[package]]
@@ -2965,6 +3029,13 @@ dependencies = [
  "png 0.17.16",
  "skrifa 0.40.0",
  "ttf-parser",
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-physics"
+version = "0.1.0"
+dependencies = [
  "vieww-foundation",
 ]
 
@@ -3031,6 +3102,14 @@ version = "0.1.0"
 dependencies = [
  "cosmic-text",
  "ttf-parser",
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-video"
+version = "0.1.0"
+dependencies = [
+ "image",
  "vieww-foundation",
 ]
 

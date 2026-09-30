@@ -26,8 +26,9 @@ says where each piece lives and why.
   │  ThreeView  ─ media clock,   │   │  ViewerScreen ─ root widget       │
   │  OrbitCamera   frame picking │──▶│  PlaybackState ─ element state    │
   │  Projector   ─ perspective   │   │  ThreeMediaView ─ gesture surface │
-  │  shaded_triangles / wireframe│   │  MeshPainter ─ Sketchbook painter │
-  │  projected_points            │   │  ControlsBar ─ transport + scrub  │
+  │  shaded_triangles / wireframe│   │  EngineViewport ─ vieww-3d        │
+  │  projected_points            │   │  MeshPainter ─ Sketchbook painter │
+  │                              │   │  ControlsBar ─ transport + scrub  │
   └──────────────────────────────┘   └───────────────────────────────────┘
         pure geometry + media            widgets, gestures, theming
 ```
@@ -52,7 +53,21 @@ touching the widget layer.
   records shaded triangles (or wireframe edges, or point motes) into the
   `Sketchbook`, far-to-near. `should_repaint` compares everything the drawing
   depends on, so an unchanged frame is never re-projected.
-- **`ThreeMediaView`** is the gesture surface: drag orbits, scroll and pinch
+- **`EngineViewport`** (the default surface) renders the same frame through
+  the framework's own `vieww-3d` stack: `src/engine.rs` bridges the
+  `MeshFrame` to a `vieww_mesh::Mesh` with computed normals, maps
+  `OrbitCamera` onto the engine camera at the painter's own fov, and lights
+  the chamber with the painter's ambient/key balance — one of the two
+  reasons the engine exists next to the painter. The other is the depth
+  buffer: where the wave surface folds over itself, mean-depth sorting can
+  draw a farther triangle over a nearer one, and the engine cannot; it also
+  shadows the surface onto itself, so the wave's relief reads as relief. The
+  motes ride the same depth buffer as one instanced node, occluded by the
+  surface. The whole render lands in the tree through `Viewport3D` — a 3D
+  scene composited as an image, the TouchDesigner "render TOP" model.
+- **`MeshPainter`** (the alternate surface, and the wireframe path) records
+  the projection into the `Sketchbook`; **`ThreeMediaView`** is the gesture
+  surface either way: drag orbits, scroll and pinch
   zoom, wrapped in a `Semantics` container so a screen reader is told what
   the ink rectangle is.
 - **`ControlsBar`** is the transport: play/pause, wireframe, motes, loop,

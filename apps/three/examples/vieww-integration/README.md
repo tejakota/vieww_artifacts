@@ -20,7 +20,12 @@ Interacting with it:
 
 - **drag** on the capture — orbit the camera around the subject
 - **scroll / pinch** — zoom
-- **Pause / Play, Wire, Motes, Loop, Reset view** — the transport row
+- **Pause / Play, Wire, Motes, Loop, Painter/Engine, Reset view** — the
+  transport row. The media surface itself defaults to **the engine** — the
+  capture rendered through the framework's `vieww-3d` stack (depth buffer,
+  lights, shadows); **Painter** switches to this workspace's own projection
+  painter, and **Wire** goes there too, because wireframe is the painter's
+  view.
 - **the slider** — scrub the timeline; playback continues from wherever you
   scrub to
 
@@ -30,11 +35,19 @@ Interacting with it:
   clock and camera. Start here: it is the smallest complete example of
   vieww's state-survives-rebuild model, including the frame-clock `tick`
   that drives playback and the `StateHandle` write path handlers use.
+- `src/engine.rs` — the `vieww-3d` path: a `MeshFrame` becomes a
+  `vieww_mesh::Mesh` with computed normals, the orbit camera becomes the
+  engine camera at the painter's own fov, the light rig matches the
+  painter's ambient/diffuse balance, and the motes become one occluded
+  instanced node. Presented through `Viewport3D`, the widget that composites
+  a 3D render into the tree as an image.
 - `src/painter.rs` — `MeshPainter`, a `vieww::Painter` that records a `.3`
   frame into a `Sketchbook`. The whole 3D-to-2D pipeline is a call into
-  `three-vieww`; the painter is genuinely just recording.
+  `three-vieww`; the painter is genuinely just recording. Still the
+  wireframe path, and the reference the engine is held against.
 - `src/widgets.rs` — `ViewerScreen` (root + state owner), `ThreeMediaView`
-  (gestures + `Painting`), `ControlsBar` (transport + scrub).
+  (gestures + the engine-or-painter surface), `ControlsBar` (transport +
+  scrub).
 - `src/main.rs` — the `vieww_platform_winit::App` entry, themed dark like
   every media viewer.
 - `tests/` — the headless suite (see `docs/VIEWW-INTEGRATION.md`).
@@ -42,10 +55,10 @@ Interacting with it:
 ## Lifting it into your own app
 
 The crate is a reference, not a runtime dependency: copy `state.rs`,
-`painter.rs` and `widgets.rs` into a Vieww application, depend on
-`three-vieww` + `three-runtime`, and construct the screen over any
-`Rc<Capture3D>`. Nothing in the crate reaches back into the example's own
-wiring — the capture comes in, widgets come out.
+`engine.rs`, `painter.rs` and `widgets.rs` into a Vieww application, depend
+on `three-vieww` + `three-runtime` + `vieww-3d`, and construct the screen
+over any `Rc<Capture3D>`. Nothing in the crate reaches back into the
+example's own wiring — the capture comes in, widgets come out.
 
 ## Generating previews
 

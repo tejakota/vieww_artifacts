@@ -36,10 +36,12 @@ use std::rc::Rc;
 use three_core::Capture3D;
 use three_format::FormatError;
 
+pub mod engine;
 pub mod painter;
 pub mod state;
 pub mod widgets;
 
+pub use engine::{capture_scene, engine_camera, frame_mesh, EngineViewport};
 pub use painter::{MeshPainter, ViewPalette};
 pub use state::{PlaybackState, Snapshot};
 pub use widgets::{ControlsBar, StateHandle, ThreeMediaView, ViewerScreen};

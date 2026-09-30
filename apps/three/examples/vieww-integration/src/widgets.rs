@@ -11,6 +11,7 @@ use vieww::prelude::*;
 use vieww::{DragDetails, ScaleDetails};
 use vieww::foundation::{Offset, ScrollEvent, Shadow};
 
+use crate::engine::EngineViewport;
 use crate::painter::{MeshPainter, ViewPalette};
 use crate::state::{PlaybackState, Snapshot};
 
@@ -95,6 +96,7 @@ impl ViewerScreen {
                         camera: snapshot.camera,
                         wireframe: snapshot.wireframe,
                         show_points: snapshot.show_points,
+                        engine: snapshot.engine,
                         capture: Rc::clone(&snapshot.capture),
                         frame_count: snapshot.frame_count,
                         handle: handle.clone(),
@@ -147,6 +149,9 @@ pub struct ThreeMediaView {
     pub camera: OrbitCamera,
     pub wireframe: bool,
     pub show_points: bool,
+    /// Render through `vieww-3d` (the engine: depth buffer, lights,
+    /// shadows) rather than the painter. See `src/engine.rs`.
+    pub engine: bool,
     pub frame_count: usize,
     handle: Option<StateHandle>,
 }
@@ -157,16 +162,34 @@ impl ThreeMediaView {
         let theme = ThemeData::of(ctx);
         let palette = ViewPalette::from_theme(&theme);
 
-        let painter = MeshPainter {
-            capture: Rc::clone(&self.capture),
-            mesh_index: self.mesh_index,
-            points_index: self.points_index,
-            camera: self.camera,
-            wireframe: self.wireframe,
-            show_points: self.show_points,
-            palette,
-            shading: three_vieww::MeshShading::default(),
-            lens: three_vieww::Perspective::default(),
+        // The media surface itself: the framework's 3D engine when the
+        // snapshot says so, this workspace's painter otherwise. Same
+        // gestures over either — the engine does not change how the viewer
+        // is driven, only who rasterises it.
+        let media: WidgetNode = if self.engine {
+            EngineViewport {
+                capture: Rc::clone(&self.capture),
+                mesh_index: self.mesh_index,
+                points_index: self.points_index,
+                camera: self.camera,
+                show_points: self.show_points,
+                palette,
+                fov_y: three_vieww::Perspective::default().fov_y,
+            }
+            .into()
+        } else {
+            let painter = MeshPainter {
+                capture: Rc::clone(&self.capture),
+                mesh_index: self.mesh_index,
+                points_index: self.points_index,
+                camera: self.camera,
+                wireframe: self.wireframe,
+                show_points: self.show_points,
+                palette,
+                shading: three_vieww::MeshShading::default(),
+                lens: three_vieww::Perspective::default(),
+            };
+            Painting::new(painter).into()
         };
 
         let drag = self.handle.clone();
@@ -220,7 +243,7 @@ impl ThreeMediaView {
                     ))
                     .child(
                         Clip::rounded(MEDIA_CORNER)
-                            .child(Semantics::container(label).child(Painting::new(painter))),
+                            .child(Semantics::container(label).child(media)),
                     ),
             )
     }
@@ -247,21 +270,22 @@ impl ControlsBar {
         let wireframe = self.handle.clone();
         let motes = self.handle.clone();
         let looping = self.handle.clone();
+        let engine = self.handle.clone();
         let reset = self.handle.clone();
         let scrub = self.handle.clone();
 
-        // Four toggles, each filling an equal slot of the transport row.
+        // Five toggles, each filling an equal slot of the transport row.
         // Tight `Flexible::expanded` rather than natural-size buttons: a
-        // natural row of five buttons was 73 px too wide for a 480 px window
-        // (the harness tests caught it as a `RenderRow` overflow before any
-        // human saw it), and equal-width transport buttons are what a media
-        // player's row looks like anyway. Labels stay short enough that the
-        // squeeze on a narrow window never has to wrap them.
+        // natural row of buttons overflows a 480 px window (the harness
+        // tests caught it as a `RenderRow` overflow before any human saw
+        // it), and equal-width transport buttons are what a media player's
+        // row looks like anyway. Labels stay short enough that the squeeze
+        // on a narrow window never has to wrap them.
         //
         // Hierarchy, not just equal slots: Play/Pause is the one action the
         // thumb goes to every time, so it alone is `Filled` — the view-mode
-        // toggles beside it are `Text`, which reads as the secondary settings
-        // they are. Four identical filled buttons said "pick at random".
+        // toggles beside it are `Text`, which reads as the secondary
+        // settings they are.
         let transport = Flex::row()
             .spacing(8.0)
             .push(Flexible::expanded(1).child(
@@ -305,6 +329,18 @@ impl ControlsBar {
                             }
                         },
                     ),
+            ))
+            .push(Flexible::expanded(1).child(
+                // The renderer itself, as a setting: vieww-3d's engine (depth
+                // buffer, lights, shadows) or this workspace's painter. The
+                // label names where a press goes, not where it is.
+                Button::new(if snapshot.engine { "Painter" } else { "Engine" })
+                    .style(ButtonStyle::Text)
+                    .on_pressed(move || {
+                        if let Some(handle) = &engine {
+                            handle.write(|state| state.toggle_engine());
+                        }
+                    }),
             ));
 
         // The timeline: a fixed clock readout, a flexible scrub track, and

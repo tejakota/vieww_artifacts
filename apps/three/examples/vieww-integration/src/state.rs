@@ -59,6 +59,13 @@ pub struct PlaybackState {
     playing: bool,
     wireframe: bool,
     show_points: bool,
+    /// Whether the media surface renders through `vieww-3d` (the engine:
+    /// depth buffer, lights, shadows) rather than the app's own painter.
+    ///
+    /// On by default — the ramp-up point: a capture viewed through the
+    /// framework's 3D stack, not this workspace's own projection math. The
+    /// painter stays one toggle away, and stays the wireframe path.
+    engine: bool,
     last_now: Option<Duration>,
     pending: bool,
     /// The previous pinch scale, so one scale gesture becomes incremental
@@ -76,6 +83,7 @@ impl PlaybackState {
             playing: true,
             wireframe: false,
             show_points: true,
+            engine: true,
             last_now: None,
             pending: false,
             pinch_anchor: 1.0,
@@ -109,6 +117,11 @@ impl PlaybackState {
         self.show_points
     }
 
+    /// Whether the media surface renders through the `vieww-3d` engine.
+    pub fn engine(&self) -> bool {
+        self.engine
+    }
+
     // -- writes, from handlers ----------------------------------------------
 
     /// Play or pause the media clock.
@@ -129,8 +142,27 @@ impl PlaybackState {
     }
 
     /// Toggle wireframe rendering.
+    ///
+    /// Wireframe is a painter view — the engine renders shaded geometry by
+    /// design — so asking for the wire leaves the engine, which the toggle
+    /// does itself rather than leaving a button that looks pressed and a
+    /// surface that stays shaded.
     pub fn toggle_wireframe(&mut self) {
         self.wireframe = !self.wireframe;
+        if self.wireframe {
+            self.engine = false;
+        }
+        self.pending = true;
+    }
+
+    /// Toggle the media surface between the `vieww-3d` engine and the app's
+    /// own painter. Switching to the engine restores shaded rendering —
+    /// a wireframe under the engine is not a state that exists.
+    pub fn toggle_engine(&mut self) {
+        self.engine = !self.engine;
+        if self.engine {
+            self.wireframe = false;
+        }
         self.pending = true;
     }
 
@@ -243,6 +275,7 @@ pub struct Snapshot {
     pub looping: bool,
     pub wireframe: bool,
     pub show_points: bool,
+    pub engine: bool,
     pub camera: OrbitCamera,
 }
 
@@ -262,6 +295,7 @@ impl Snapshot {
             looping: view.is_looping(),
             wireframe: state.wireframe(),
             show_points: state.show_points(),
+            engine: state.engine(),
             camera: *state.camera(),
             capture: view.shared_capture(),
         }
@@ -285,6 +319,7 @@ impl Snapshot {
             looping: true,
             wireframe: false,
             show_points: true,
+            engine: true,
             camera: initial_camera(capture),
             capture: Rc::clone(capture),
         }
@@ -395,6 +430,7 @@ mod tests {
         assert_eq!(from_state.playing, initial.playing);
         assert_eq!(from_state.wireframe, initial.wireframe);
         assert_eq!(from_state.show_points, initial.show_points);
+        assert_eq!(from_state.engine, initial.engine);
         assert_eq!(from_state.mesh_index, initial.mesh_index);
         assert_eq!(from_state.progress, initial.progress);
     }
