@@ -53,7 +53,18 @@ mod simulation;
 mod ticker;
 mod tween;
 
+pub mod animator;
 pub mod blend_tree;
+pub mod channels;
+pub mod constraints;
+pub mod expr;
+pub mod fcurve;
+pub mod flow;
+pub mod nla;
+pub mod particle_system;
+pub mod retarget;
+pub mod sequence;
+pub mod shared;
 pub mod keyframe;
 pub mod lfo;
 pub mod noise;
