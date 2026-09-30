@@ -1267,6 +1267,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-3d-advanced"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-3d",
+ "vieww-foundation",
+ "vieww-mesh",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-3d-scene"
 version = "0.1.0"
 dependencies = [
@@ -1886,6 +1898,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-particles-retarget"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-path-ops"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-physics"
 version = "0.1.0"
 dependencies = [
@@ -1952,6 +1985,17 @@ dependencies = [
  "vieww",
  "vieww-animation",
  "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-rigging"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
  "vieww-foundation",
  "vieww-widget",
 ]
@@ -2142,6 +2186,17 @@ dependencies = [
  "vieww",
  "vieww-animation",
  "vieww-element",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-timelines"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-animation",
  "vieww-foundation",
  "vieww-widget",
 ]

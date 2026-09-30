@@ -41,6 +41,7 @@ use vieww_platform_winit::App;
 use vieww_render::FrameDriver;
 
 mod clock;
+pub mod draw;
 mod page;
 pub use clock::{caption, clocked, Clocked};
 pub use page::{fits, set_page};
