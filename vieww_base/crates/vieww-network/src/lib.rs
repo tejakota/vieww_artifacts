@@ -66,6 +66,8 @@ use vieww_foundation::task::Task;
 
 pub use vieww_foundation as foundation;
 
+pub mod osc;
+
 /// An HTTP method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Method {
