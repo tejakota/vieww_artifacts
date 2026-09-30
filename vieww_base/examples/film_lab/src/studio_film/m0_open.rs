@@ -12,7 +12,7 @@ use vieww_widget::prelude::*;
 
 use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic};
 use crate::product_film as pf;
-use super::{ACCENT, BRAND_FAR, BRAND_NEAR, CANVAS, INK, MUTED};
+use super::{ACCENT, BRAND_FAR, CANVAS, INK, MUTED};
 
 /// Where the light sits, in scene (= screen) coordinates.
 const LIGHT: Offset = Offset::new(960.0, 420.0);
@@ -27,25 +27,23 @@ pub fn the_hush(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let mut stack = Stack::new();
 
-    // The room — near black, a violet warmth that gathers over the first
-    // seconds, a few stars that arrive late.
+    // The room — near black, a few stars that arrive late. The cold open
+    // once carried a soft violet wash gathering behind the light; it is
+    // gone with the rest of the radial glows (see `mod.rs`) — the hush is
+    // now *drawn*: darkness, stars, and one crisp point of light.
     super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
             book.rect(Rect::new(0.0, 0.0, w, h), Color::rgb(6, 6, 9));
-            let warm = slow(sec, 0.6, 5.0);
-            if warm > 0.01 {
-                book.layer(warm, 90.0, None, |g| {
-                    g.circle(Offset::new(w * 0.5, h * 0.42), 520.0, pf::alpha(BRAND_NEAR, 0.10));
-                });
-            }
             pf::stars(book, w, h, 0x0B1E, 40, t, 0.05 * slow(sec, 3.0, 4.0));
             pf::vignette(book, w, h, 0.65);
         }),
     )));
 
-    // The light — appears, breathes, then splits into four.
+    // The light — appears, breathes, then splits into four. A point of
+    // light with an edge: a white core and a thin ring, bright by being
+    // crisp rather than by being blurred — a drawn star, not a bloom.
     let appear = slow(sec, 0.8, 1.8);
     let split = ease_out_cubic(clamp01((sec - 5.4) / 2.2));
     stack = stack.push(Positioned::fill().child(Painting::sized(
@@ -57,9 +55,8 @@ pub fn the_hush(ctx: &pf::Ctx) -> WidgetNode {
             let breath = 1.0 + 0.08 * (sec * 1.1).sin();
             let spread = [(-1.5, 0.0), (-0.5, 0.0), (0.5, 0.0), (1.5, 0.0)];
             if split < 0.02 {
-                book.layer(appear, 40.0, None, |g| {
-                    g.circle(LIGHT, 46.0 * breath, pf::alpha(BRAND_FAR, 0.55));
-                });
+                book.ring(LIGHT, 46.0 * breath, 1.6, pf::alpha(BRAND_FAR, 0.60 * appear));
+                book.ring(LIGHT, 58.0 * breath, 1.0, pf::alpha(BRAND_FAR, 0.28 * appear));
                 book.circle(LIGHT, 7.0 * appear, pf::alpha(Color::WHITE, 0.95 * appear));
                 return;
             }
@@ -70,9 +67,7 @@ pub fn the_hush(ctx: &pf::Ctx) -> WidgetNode {
                 book.line(LIGHT, p, pf::alpha(BRAND_FAR, 0.22 * split), 1.0);
                 let col = [super::SYN_TYPE, BRAND_FAR, super::TERM_GREEN, super::SYN_MACRO][k];
                 let tint = pf::mix(BRAND_FAR, col, split);
-                book.layer(appear, 30.0, None, |g| {
-                    g.circle(p, 30.0 * breath, pf::alpha(tint, 0.5));
-                });
+                book.ring(p, 30.0 * breath, 1.4, pf::alpha(tint, 0.55 * appear));
                 book.circle(p, 6.0, pf::alpha(Color::WHITE, 0.92));
             }
             book.circle(LIGHT, 3.0, pf::alpha(Color::WHITE, 0.5 * (1.0 - split) + 0.2));

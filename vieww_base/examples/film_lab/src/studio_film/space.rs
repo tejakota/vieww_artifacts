@@ -155,13 +155,14 @@ pub fn disc(book: &mut Sketchbook, view: &View, plane: &Plane, c: (f32, f32), r:
     fill(book, view, plane, &pts, color);
 }
 
-/// A soft glowing point in space, sized by perspective.
+/// A point of light in space, sized by perspective: a solid core with a
+/// crisp ring — drawn, not blurred. The soft halo this once had is gone
+/// with the film's radial glows (see `mod.rs`).
 pub fn glow_point(book: &mut Sketchbook, view: &View, p: Vec3, r: f32, color: Color, a: f32) {
     if let Some((o, _, k)) = view.project(p) {
         let s = (k * 900.0).clamp(0.3, 3.0);
-        book.layer(a.clamp(0.0, 1.0), 10.0, None, |b| {
-            b.circle(o, r * 2.2 * s, pf::alpha(color, 0.55));
-        });
-        book.circle(o, r * s, pf::alpha(Color::WHITE, 0.95 * a.clamp(0.0, 1.0)));
+        let a = a.clamp(0.0, 1.0);
+        book.ring(o, r * 1.7 * s, 1.1, pf::alpha(color, 0.55 * a));
+        book.circle(o, r * s, pf::alpha(Color::WHITE, 0.95 * a));
     }
 }

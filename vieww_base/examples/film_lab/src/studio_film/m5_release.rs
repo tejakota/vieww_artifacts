@@ -8,12 +8,13 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign};
 use vieww_widget::prelude::*;
+use vieww_widget::{RichText, Span};
 
 use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, spring_out};
 use crate::product_film as pf;
 use super::filmkit as fk;
 use super::{
-    ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, H, INK, MUTED, SYN_TYPE, W,
+    ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, H, INK, MUTED, SYN_TYPE, TERM_GREEN, W,
 };
 
 /// The repository — the call to action.
@@ -250,18 +251,9 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(Positioned::new().left((W - 184.0) * 0.5).top(332.0).width(184.0).height(184.0).child(
             pf::brand_mark(184.0, editor_a, preview_a.clamp(0.0, 1.0)),
         ));
-        // The sting — one glow breathing behind the mark.
-        stack = stack.push(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(
-            move |book: &mut Sketchbook, _s: Size| {
-                let glow_p = clamp01((t - 0.42) / 0.14);
-                if glow_p > 0.01 {
-                    let pulse = 0.8 + 0.2 * (sec * 2.0).sin();
-                    book.layer(glow_p, 44.0, None, |b| {
-                        b.circle(Offset::new(W * 0.5, 424.0), 178.0 * pulse, pf::alpha(BRAND_NEAR, 0.11 * glow_p));
-                    });
-                }
-            },
-        ))));
+        // (The sting's breathing glow behind the mark is gone with the
+        // film's radial glows — the orbiting 3D ring above and the
+        // underline below carry the release's altitude on their own.)
     }
 
     // The wordmark — the studio's name in the brand's type, two-tone
@@ -330,13 +322,44 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         sec,
     ));
 
+    // The audience row — the film's bookend. The cold open named everyone
+    // the film is for ("designs apps, builds them, or simply uses them");
+    // the end card hands each of them their takeaway in one line, before
+    // the repository asks anything of anyone. Three audiences, three of
+    // the film's own working colours, one sentence.
+    let aud_a = clamp01((t - 0.44) / 0.14);
+    if aud_a > 0.01 {
+        let mono = pf::geist_mono(21.0).letter_spacing(1.4);
+        let rise = (1.0 - ease_out_cubic(aud_a)) * 8.0;
+        stack = stack.push(
+            Positioned::new()
+                .left(0.0)
+                .top(808.0 + rise)
+                .width(W)
+                .height(34.0)
+                .child(Opacity::new(aud_a).child(
+                    RichText::new(vec![
+                        Span::new("for everyone who ").color(pf::alpha(MUTED, 0.95)),
+                        Span::new("designs").color(pf::alpha(BRAND_NEAR, 0.98)),
+                        Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
+                        Span::new("builds").color(pf::alpha(SYN_TYPE, 0.98)),
+                        Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
+                        Span::new("uses").color(pf::alpha(TERM_GREEN, 0.98)),
+                        Span::new(" it").color(pf::alpha(MUTED, 0.95)),
+                    ])
+                    .style(mono)
+                    .align(TextAlign::Center),
+                )),
+        );
+    }
+
     // The repository — where the beta lives.
     let repo_a = clamp01((t - 0.52) / 0.12);
     if repo_a > 0.01 {
         stack = stack.push(
             Positioned::new()
                 .left(0.0)
-                .top(824.0 + (1.0 - ease_out_cubic(repo_a)) * 10.0)
+                .top(858.0 + (1.0 - ease_out_cubic(repo_a)) * 10.0)
                 .width(W)
                 .height(34.0)
                 .child(Opacity::new(repo_a).child(
@@ -356,7 +379,7 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
     let contract_a = clamp01((t - 0.62) / 0.12);
     if contract_a > 0.01 && probe.frames > 0 {
         stack = stack.push(
-            Positioned::new().left(0.0).top(876.0).width(W).height(32.0).child(
+            Positioned::new().left(0.0).top(900.0).width(W).height(32.0).child(
                 Opacity::new(contract_a).child(
                     Text::new(format!(
                         "every frame rendered by vieww — {} frames · {:.0} ms median",
@@ -369,7 +392,7 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
             ),
         );
         stack = stack.push(
-            Positioned::new().left(0.0).top(912.0).width(W).height(30.0).child(
+            Positioned::new().left(0.0).top(936.0).width(W).height(30.0).child(
                 Opacity::new(contract_a * 0.9).child(
                     Text::new(probe.bench.clone())
                         .style(pf::geist_mono(17.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.85)))
@@ -410,16 +433,10 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     )));
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
-        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-            let (w, h) = (s.width, s.height);
-            let _ = (w, h, &s);
-
-
-            let pulse = 1.0 + 0.08 * (sec * 1.2).sin();
-            book.layer(0.8, 44.0, None, |b| {
-                b.circle(Offset::new(w * 0.5, 424.0), 178.0 * pulse, pf::alpha(BRAND_NEAR, 0.11));
-            });
-
+        PaintWith::new(move |_book: &mut Sketchbook, s: Size| {
+            let _ = s;
+            // (No glow behind the mark here either — the hold is the
+            // end card at rest, and its rest is drawn, not bloomed.)
         }),
     )));
 
@@ -470,10 +487,31 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
                     .align(TextAlign::Center),
             ),
     );
+    // The audience row, at rest — the same bookend the end card typed on.
     stack = stack.push(
         Positioned::new()
             .left(0.0)
-            .top(824.0)
+            .top(808.0)
+            .width(W)
+            .height(34.0)
+            .child(
+                RichText::new(vec![
+                    Span::new("for everyone who ").color(pf::alpha(MUTED, 0.95)),
+                    Span::new("designs").color(pf::alpha(BRAND_NEAR, 0.98)),
+                    Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
+                    Span::new("builds").color(pf::alpha(SYN_TYPE, 0.98)),
+                    Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
+                    Span::new("uses").color(pf::alpha(TERM_GREEN, 0.98)),
+                    Span::new(" it").color(pf::alpha(MUTED, 0.95)),
+                ])
+                .style(pf::geist_mono(21.0).letter_spacing(1.4))
+                .align(TextAlign::Center),
+            ),
+    );
+    stack = stack.push(
+        Positioned::new()
+            .left(0.0)
+            .top(858.0)
             .width(W)
             .height(34.0)
             .child(
@@ -486,7 +524,7 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(0.0)
-                .top(876.0)
+                .top(900.0)
                 .width(W)
                 .height(32.0)
                 .child(
@@ -500,7 +538,7 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
                 ),
         );
         stack = stack.push(
-            Positioned::new().left(0.0).top(912.0).width(W).height(30.0).child(
+            Positioned::new().left(0.0).top(936.0).width(W).height(30.0).child(
                 Text::new(probe.bench.clone())
                     .style(pf::geist_mono(17.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.85)))
                     .align(TextAlign::Center),

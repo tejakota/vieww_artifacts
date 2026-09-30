@@ -13,11 +13,17 @@
 //! 3. **chrome** — the centred header, the footer's receipts and the rail,
 //!    screen space, never scaled.
 //!
-//! There is no camera and no join effect any more. Every cut is the same
-//! short dissolve through the ground with a two-percent settle of the
-//! world, which is the one transition that cannot crop anything and
-//! cannot jolt: the old pushes zoomed past the padding and the slides
-//! threw whole frames across the screen in a third of a second.
+//! There is no camera any more, and no join throws a frame across the
+//! screen. What a cut does instead is the **join grammar** — one join per
+//! movement, each a *clip reveal* rather than a motion, so nothing can
+//! crop and nothing can jolt: the old pushes zoomed past the padding and
+//! the slides threw whole frames across the screen in a third of a
+//! second, and a reveal can do neither. The ground still dissolves at
+//! every cut; the world arrives inside it by its movement's own door —
+//! the pipeline sweeps in left-to-right, the studio opens as a window,
+//! the ledger rises, the release settles from above. Every join finishes
+//! inside `CUT_IN` and ends on the whole frame, and each leaves one crisp
+//! accent tell behind that fades as it completes.
 //!
 //! **Pass 1 · census.** Walks every frame, applies the session, counts the
 //! command stream — including the real studio's own draw commands — and
@@ -118,6 +124,58 @@ pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
 pub const CUT_IN: f32 = 0.45;
 pub const CUT_OUT: f32 = 0.35;
 
+// ── The join grammar ───────────────────────────────────────────────────────
+
+/// How a scene's world arrives at a cut — one door per movement, all of
+/// them clip reveals (see the module note). The ground and the chrome
+/// still ride the dissolve; the join only governs the world's own entry.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Join {
+    /// Fade up through the ground — the need's abrupt, mechanical cuts.
+    Dissolve,
+    /// A left-to-right sweep: the pipeline's own direction. The engine
+    /// movement flows in the way its scenes argue.
+    Wipe,
+    /// A rounded window growing from the centre — a look onto the studio.
+    /// Z11, the one scene the brief holds plain, keeps the Dissolve.
+    Aperture,
+    /// Up from the footer: the ledger builds from below.
+    Rise,
+    /// Down from the header: the release settles from above.
+    Fall,
+}
+
+/// The join a scene enters by. Chosen once, from the movement column —
+/// the same single source the act chip and the rail's major ticks read,
+/// so the join can never disagree with the film's own table of contents.
+fn join_of(id: &str) -> Join {
+    match super::movement_of(id) {
+        "MOVEMENT I" => Join::Dissolve,
+        "MOVEMENT II" => Join::Wipe,
+        "MOVEMENT III" if id != "Z11" => Join::Aperture,
+        "MOVEMENT III" => Join::Dissolve,
+        "MOVEMENT IV" => Join::Rise,
+        _ => Join::Fall,
+    }
+}
+
+/// The reveal rectangle for `join` at eased progress `p` (0..1) — the
+/// region of the frame the incoming world already occupies. Always ends
+/// at the whole frame; never moves content, only unmasks it.
+fn join_rect(join: Join, p: f32, full: Rect) -> Rect {
+    let p = p.clamp(0.0, 1.0);
+    match join {
+        Join::Dissolve => full,
+        Join::Wipe => Rect::new(full.left, full.top, full.right - full.width() * (1.0 - p), full.bottom),
+        Join::Aperture => {
+            let (cx, cy) = ((full.left + full.right) * 0.5, (full.top + full.bottom) * 0.5);
+            Rect::new(cx - full.width() * 0.5 * p, cy - full.height() * 0.5 * p, cx + full.width() * 0.5 * p, cy + full.height() * 0.5 * p)
+        }
+        Join::Rise => Rect::new(full.left, full.bottom - full.height() * p, full.right, full.bottom),
+        Join::Fall => Rect::new(full.left, full.top, full.right, full.top + full.height() * p),
+    }
+}
+
 /// The frame's envelope at `sec` of a scene `seconds` long: the content's
 /// opacity and the world's settle scale. The first scene fades up from
 /// the ground, the last holds to its final frame.
@@ -186,6 +244,11 @@ struct Rig {
     has_over: bool,
     alpha: f32,
     world: Transform,
+    /// The world's own opacity this frame — the dissolve `alpha`, except
+    /// while a join reveals the world by clip instead of by fade.
+    world_alpha: f32,
+    /// The join in force while it reveals (None once the world is whole).
+    join: Option<(Join, f32)>,
 }
 
 impl Rig {
@@ -211,6 +274,8 @@ impl Rig {
             has_over: false,
             alpha: 1.0,
             world: Transform::IDENTITY,
+            world_alpha: 1.0,
+            join: None,
         }
     }
 
@@ -358,6 +423,18 @@ impl Rig {
         self.world = fit.then(settle);
         self.alpha = a;
 
+        // The join: while a scene with a door enters, its world arrives
+        // *inside* the reveal at full opacity — the clip is the entrance,
+        // so the dissolve's fade is not doubled over it. The first scene
+        // has no predecessor and keeps the plain fade.
+        let join = join_of(s.id);
+        let entering = si > 0 && join != Join::Dissolve && sec < CUT_IN;
+        self.join = entering.then(|| {
+            let p = ease_out_cubic(clamp01(sec / CUT_IN));
+            (join, p)
+        });
+        self.world_alpha = if entering { 1.0 } else { a };
+
         // The ground.
         let grounds = frame::take_ground();
         let ground_root: WidgetNode = if grounds.is_empty() {
@@ -448,8 +525,15 @@ fn compose(rig: &Rig) -> Scene {
     // 1 · ground — dissolves toward the clear colour at a cut.
     group(&mut frame_scene, full, a, |f| f.append(rig.ground_driver.scene(), Transform::IDENTITY));
 
-    // 2 · world.
-    group(&mut frame_scene, full, a, |f| {
+    // 2 · world — composed into a staging scene first, so the join's
+    // reveal and the dissolve's opacity can be applied to the whole world
+    // at once. `append_clipped` is the only clip that reaches a recording
+    // (a layer's `bounds` is an estimate, not a mask), and the group layer
+    // is the only honest group opacity — so the world gets both, in that
+    // order.
+    let mut world = Scene::default();
+    {
+        let f = &mut world;
         if rig.kind == Kind::Pure {
             f.append(rig.driver.scene(), w);
         }
@@ -487,7 +571,65 @@ fn compose(rig: &Rig) -> Scene {
         if rig.has_over {
             f.append(rig.over_driver.scene(), w);
         }
-    });
+    }
+    let wa = rig.world_alpha;
+    let clip = rig.join.map(|(j, p)| join_rect(j, p, full));
+    if wa >= 0.999 && clip.is_none() {
+        frame_scene.append(&world, Transform::IDENTITY);
+    } else if wa > 0.004 {
+        // A degenerate reveal (the first frames of a wipe) clips the whole
+        // world away, which is the point: nothing has arrived yet.
+        let est = clip.unwrap_or(full);
+        frame_scene.push_layer(est, wa, BlendMode::Normal);
+        frame_scene.append_clipped(&world, Transform::IDENTITY, clip);
+        frame_scene.pop_layer();
+    }
+
+    // 2b · The join's own tell — one crisp accent edge travelling with the
+    // reveal, dissolving as the world completes it. It obeys the frame's
+    // padding exactly: horizontal edges span PAD_X to W-PAD_X, vertical
+    // ones HEADER_H to FOOTER_Y. This is the join's vector motion, drawn
+    // as a mark rather than a blur (the film has no radial glows).
+    if let Some((join, p)) = rig.join {
+        if p > 0.01 && p < 0.995 {
+            let fade = 1.0 - p;
+            let ta = 0.55 * fade * fade;
+            let tell = pf::alpha(super::ACCENT, ta);
+            match join {
+                Join::Wipe => {
+                    let x = full.right - full.width() * (1.0 - p);
+                    frame_scene.fill_rrect(
+                        Rect::new(x - 1.25, frame::HEADER_H, x + 1.25, frame::FOOTER_Y),
+                        1.25,
+                        tell.into(),
+                    );
+                }
+                Join::Aperture => {
+                    let r = join_rect(Join::Aperture, p, full);
+                    if !r.is_empty() {
+                        frame_scene.stroke_rrect(r, 20.0, Stroke::new(1.5), tell.into());
+                    }
+                }
+                Join::Rise => {
+                    let y = full.bottom - full.height() * p;
+                    frame_scene.fill_rrect(
+                        Rect::new(frame::PAD_X, y - 1.25, pf::W - frame::PAD_X, y + 1.25),
+                        1.25,
+                        tell.into(),
+                    );
+                }
+                Join::Fall => {
+                    let y = full.top + full.height() * p;
+                    frame_scene.fill_rrect(
+                        Rect::new(frame::PAD_X, y - 1.25, pf::W - frame::PAD_X, y + 1.25),
+                        1.25,
+                        tell.into(),
+                    );
+                }
+                Join::Dissolve => {}
+            }
+        }
+    }
 
     // 3 · chrome.
     frame_scene.append(rig.chrome_driver.scene(), Transform::IDENTITY);
@@ -734,6 +876,16 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
                 "-i", "-",
                 "-c:v", "libx264", "-preset", "medium", "-crf", "17",
                 "-pix_fmt", "yuv420p",
+                // `aq-mode=3` (auto-variance AQ with dark bias) is the
+                // encoder-side half of the no-radial-glow decision: an
+                // 8-bit yuv420 H.264 quantises a soft luminance ramp on a
+                // near-black ground into visible steps — the "glitch" the
+                // review saw on the old glows. The renderer's side of the
+                // fix is that the film no longer draws them (its gradients
+                // are linear, dithered, and mostly crisp-edged); this makes
+                // the encoder spend its bits where the dark ramps still
+                // are, so the floors and vignettes stay smooth too.
+                "-x264-params", "aq-mode=3",
             ])
             .arg(&seg)
             .stdin(Stdio::piped())

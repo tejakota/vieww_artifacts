@@ -66,22 +66,9 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
             pf::vignette(book, w, h, 0.5);
         }),
     )));
-    stack = stack.push(Positioned::fill().child(Painting::sized(
-        CANVAS,
-        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-            let (w, h) = (s.width, s.height);
-            let _ = (w, h, &s);
-
-            // One glow behind the graph's centre — the engine's heart.
-            let heart = ease_out_expo(clamp01(t / 0.20));
-            if heart > 0.01 {
-                let pulse = 1.0 + 0.06 * (sec * 1.4).sin();
-                book.layer(heart, 52.0, None, |glow_book| {
-                    glow_book.circle(GRAPH_C, 150.0 * pulse, pf::alpha(BRAND_NEAR, 0.14));
-                });
-            }
-        }),
-    )));
+    // (The glow that once sat behind the graph's centre is gone with the
+    // film's radial glows — a blurred halo bands on the encode. The heart
+    // of the engine is the mark and its ring, drawn crisp below.)
 
     // The wordmark — left third. "vieww", the engine's name, with its
     // claim underneath.
@@ -139,10 +126,10 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
             }
             if heart > 0.01 {
                 let pulse = 1.0 + 0.05 * (sec * 1.4).sin();
-                // The core is the vieww mark itself, flat, inside its ring.
-                book.layer(heart, 30.0, None, |g| {
-                    g.circle(Offset::new(cx, cy), 70.0 * pulse, pf::alpha(BRAND_NEAR, 0.30));
-                });
+                // The core is the vieww mark itself, flat, inside its ring
+                // — and a second, wider ring where the old halo was: the
+                // heart drawn, not blurred.
+                book.ring(Offset::new(cx, cy), 86.0 * pulse, 1.1, pf::alpha(BRAND_NEAR, 0.30 * heart));
                 super::models::draw_mark_2d(book, Offset::new(cx, cy), 34.0 * (0.7 + 0.3 * heart) * pulse, heart);
                 book.ring(Offset::new(cx, cy), 60.0 * heart, 1.4, pf::alpha(BRAND_FAR, 0.6 * heart));
             }
@@ -332,9 +319,9 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
                 if a <= 0.01 {
                     continue;
                 }
-                book.layer(a, 8.0, None, |b| {
-                    b.circle(Offset::new(x, 110.0), 5.0, pf::alpha(BRAND_FAR, 0.9));
-                });
+                // A crisp signal dot — core plus ring, no blur.
+                book.ring(Offset::new(x, 110.0), 8.0, 1.1, pf::alpha(BRAND_FAR, 0.55 * a));
+                book.circle(Offset::new(x, 110.0), 3.4, pf::alpha(BRAND_FAR, 0.9 * a));
             }
         })),
     ));

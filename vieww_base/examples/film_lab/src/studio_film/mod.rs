@@ -1,33 +1,69 @@
 //! studio_film — **THE GAP, THE ENGINE, THE STUDIO** — the viewwstudio
 //! product film, rendered by vieww.
 //!
-//! Five movements, fourteen scenes, 136 s at 30 fps, one canvas
+//! Five movements, twenty-three scenes, 318 s at 60 fps, one canvas
 //! (1920×1080 logical). The emotional arc is the brief's own:
 //!
 //! | movement | scenes | feeling |
 //! |---|---|---|
-//! | I · THE NEED | Z01–Z03 | curiosity → need — why another UI/UX framework at all |
-//! | II · THE ENGINE | Z04–Z06 | relief begins — vieww, the engine under the studio |
-//! | III · THE STUDIO | Z07–Z10 | relief, paid — the *actual* viewwstudio doing real work |
-//! | IV · THE PROOF | Z11 | trust — real metrics, every number a receipt |
-//! | V · THE RELEASE | Z12–Z14 | resolution — the mark, the name, *beta release available today* |
+//! | I · THE NEED | Z00–Z05 | curiosity → need — why another UI/UX framework at all |
+//! | II · THE ENGINE | Z06–Z10B | relief begins — vieww, the engine under the studio |
+//! | III · THE STUDIO | Z11–Z17 | relief, paid — the *actual* viewwstudio doing real work |
+//! | IV · THE PROOF | Z18–Z19 | trust — real metrics, every number a receipt |
+//! | V · THE RELEASE | Z20–Z22 | resolution — the mark, the name, *beta release available today* |
 //!
 //! Two scenes' kinds, the house rule: `Pure` scenes are functions of the
 //! frame's [`Ctx`]; `Studio` scenes ride on the **actual `viewwstudio`
 //! app**, mounted once on the film's own driver and driven by this
 //! film's session script ([`script`]).
 //!
-//! **Exactly one scene is `Studio`, by the brief.** Z07 shows the real
-//! application — its first frames are the app and nothing else, no matte,
-//! no overlay, no camera move — because that is what the product looks
-//! like and the audience is owed a look at it. The three scenes that
-//! follow *explain* it, and an explanation wants a diagram: they are the
-//! film's own drawing of the shell ([`shell`]), which can explode,
-//! re-frame and re-tint on a beat. Same rasterizer, same palette, same
-//! proportions; a different register. Every frame of every scene —
-//! including the studio's own pixels — is rasterised by vieww's native
-//! CPU renderer. Nothing here consults a wall clock: a frame is a pure
-//! function of its index.
+//! **Z11 opens the studio act on the real application, whole.** Its
+//! first frames are the app and nothing else — no matte, no overlay, no
+//! camera move — because that is what the product looks like and the
+//! audience is owed a look at it. The six scenes that follow *explain*
+//! it, and an explanation wants a diagram: they are the film's own
+//! drawing of the shell, quoting the app as plates of its own draw list
+//! — magnified, taken apart, or captured in a state the scene needs.
+//! Same rasterizer, same palette, same proportions; a different
+//! register. Every frame of every scene — including the studio's own
+//! pixels — is rasterised by vieww's native CPU renderer. Nothing here
+//! consults a wall clock: a frame is a pure function of its index.
+//!
+//! # The audience bookend
+//!
+//! The cold open names everyone the film is for — *everyone who designs
+//! apps, builds them, or simply uses them* — and the end card hands each
+//! of them their takeaway in one line before the repository asks
+//! anything of anyone: designers get the studio (movement III), builders
+//! get the engine and the say-to-Rust descent (movements II–III), users
+//! get the everywhere-one-design release (movements I and V), and the
+//! proof movement answers the people who sign. Three audiences, one
+//! sentence, said twice.
+//!
+//! # The light rule — no radial glows
+//!
+//! **This film draws no radial glows.** Not a style call — a pipeline
+//! one. The rasterizer is innocent: its gradients are evaluated per
+//! pixel in `f32` with a ±0.5/255 ordered dither (`vieww-paint`'s
+//! `DeviceRamp`), so a rendered PNG of even the softest halo is smooth
+//! *in 8 bits*. What breaks it is the master's encode: `libx264` at
+//! `yuv420p` quantises a soft luminance ramp that spans two or three
+//! 8-bit levels over a near-black ground into visible steps — the
+//! macroblock banding that read as a "glitch". The old glows were drawn
+//! at alphas of 0.07–0.16 over `BG_DEEP`, exactly the content H.264
+//! spends its fewest bits on. The fix is both halves: the film now draws
+//! light the *vector* way (solid cores, crisp rings, strokes, the
+//! shadow's own blur), and the encoder gets `aq-mode=3` so the dark
+//! ramps that remain keep their bits. Shadows, the linear room
+//! gradients and the photographic vignette stay — they are not radial
+//! light, and they do not band.
+//!
+//! # The join grammar
+//!
+//! Every cut is a clip reveal, one door per movement (see `master`):
+//! the engine sweeps in left-to-right the way its pipeline flows, the
+//! studio opens as a window, the ledger rises, the release settles from
+//! above — and the need stays abrupt, as the wait deserves.
 
 pub mod filmkit;
 pub mod m0_open;

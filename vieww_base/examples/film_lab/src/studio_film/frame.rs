@@ -48,18 +48,25 @@ use crate::product_film as pf;
 pub const HEADER_H: f32 = 146.0;
 /// Where the footer begins: receipts and the rail below.
 pub const FOOTER_Y: f32 = 1000.0;
-/// The side padding every band respects.
+/// **The** side padding — top, right, bottom and left all answer to this
+/// one number and to [`PAD_Y`]: the body, the safe area, the header's
+/// centred type and the rail all stop `PAD_X` from the left and right
+/// edges, and the body keeps `PAD_Y` of air under the header seam and
+/// above the footer seam. One discipline, every band — a frame with
+/// 72 px here and 128 px there is two frames.
 pub const PAD_X: f32 = 128.0;
 /// The body's vertical breathing room inside the header/footer seams.
 pub const PAD_Y: f32 = 16.0;
 
 /// The body as the scenes were authored against it — the studio scenes
 /// place their plates relative to this rectangle and declare it as their
-/// content box, so it stays fixed.
+/// content box, so it stays fixed. Its sides carry the same [`PAD_X`] as
+/// the safe area, the header and the rail: one padding on all four sides
+/// of the frame.
 pub const BODY: Rect = Rect {
-    left: 72.0,
+    left: PAD_X,
     top: HEADER_H + PAD_Y,
-    right: pf::W - 72.0,
+    right: pf::W - PAD_X,
     bottom: FOOTER_Y - PAD_Y,
 };
 
@@ -354,7 +361,10 @@ pub fn rail(abs: f32) -> WidgetNode {
                 let px = x0 + (x1 - x0) * frac;
                 book.line(Offset::new(x0, y), Offset::new(px, y), pf::alpha(super::ACCENT, 0.55 * ra), 1.6);
                 book.circle(Offset::new(px, y), 4.0, pf::alpha(super::ACCENT, 0.95 * ra));
-                book.circle(Offset::new(px, y), 8.0, pf::alpha(super::ACCENT, 0.18 * ra));
+                // A crisp ring, not a soft disc: the playhead is a mark on
+                // the rail, not a light in the room (the film's no-glow
+                // decision — see `mod.rs`).
+                book.ring(Offset::new(px, y), 7.5, 1.2, pf::alpha(super::ACCENT, 0.30 * ra));
             }),
         ))
         .into()

@@ -49,7 +49,10 @@ const FLAWS: [&str; 4] = [
 
 pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
-    let sec = ctx.sec;
+    // `ctx.sec` is unused here since the stage light came out — the
+    // picture's breathing now lives in the flows, which are functions
+    // of `t` alone.
+    let _ = ctx.sec;
 
     let mut stack = Stack::new();
 
@@ -70,29 +73,10 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
             pf::vignette(book, w, h, 0.5);
         }),
     )));
-    stack = stack.push(Positioned::fill().child(Painting::sized(
-        CANVAS,
-        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            // A soft stage light behind the truth card — one blurred
-            // group, breathing with the card it lifts.
-            let stage_a = ease_out_cubic(clamp01(t / 0.10));
-            if stage_a > 0.01 {
-                let pulse = 1.0 + 0.10 * (sec * 1.5).sin();
-                book.layer(stage_a, 46.0, None, |glow_book| {
-                    glow_book.rrect(
-                        pf::xywh(
-                            CARD.left - 60.0 * pulse,
-                            CARD.top - 50.0 * pulse,
-                            CARD.width() + 120.0 * pulse,
-                            CARD.height() + 100.0 * pulse,
-                        ),
-                        46.0,
-                        pf::alpha(BRAND_NEAR, 0.16),
-                    );
-                });
-            }
-        }),
-    )));
+    // (The stage light that once breathed behind the truth card is gone
+    // with the film's other radial glows: on an 8-bit yuv420 encode a soft
+    // halo over a near-black ground reads as banding, not as light. The
+    // card's own shadow and rim carry it instead — see `mod.rs`.)
 
     // The truth card — one design, drawn once. It arrives on a
     // decelerate and then holds; the breathing lives in the light
@@ -572,7 +556,9 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
             }
 
             // The point of light — grows, then holds, breathing. It is
-            // the shot's subject; it earns its luminance.
+            // the shot's subject, so it earns its luminance the drawn
+            // way: a solid core with crisp rings around it, bright by
+            // contrast rather than by blur (no radial glows — `mod.rs`).
             let grow = ease_out_expo(clamp01(t / 0.22));
             let breath = 1.0 + 0.05 * (sec * 1.2).sin();
             // The charge — once the second line has landed, the point
@@ -581,18 +567,9 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
             let charge = clamp01((t - 0.60) / 0.34);
             let centre = Offset::new(w * 0.5, 400.0);
             if grow > 0.01 {
-                book.layer(grow, 60.0, None, |glow_book| {
-                    glow_book.circle(
-                        centre,
-                        (34.0 + 46.0 * charge) * grow * breath,
-                        pf::alpha(BRAND_FAR, 0.5 + 0.22 * charge),
-                    );
-                    glow_book.circle(
-                        centre,
-                        (8.0 + 7.0 * charge) * grow,
-                        pf::alpha(Color::WHITE, 0.95),
-                    );
-                });
+                book.ring(centre, (34.0 + 46.0 * charge) * grow * breath, 2.2, pf::alpha(BRAND_FAR, (0.42 + 0.20 * charge) * grow));
+                book.ring(centre, (34.0 + 46.0 * charge) * grow * breath + 14.0, 1.0, pf::alpha(BRAND_FAR, 0.22 * grow));
+                book.circle(centre, (8.0 + 7.0 * charge) * grow, pf::alpha(Color::WHITE, 0.95));
             }
             // Three rings leaving the point, staggered — the answer
             // beginning before the film has said what it is.

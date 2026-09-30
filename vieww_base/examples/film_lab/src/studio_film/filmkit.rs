@@ -118,8 +118,10 @@ pub fn grow_stroke(book: &mut Sketchbook, pts: &[Offset], frac: f32, color: Colo
     book.stroke_styled(path_through(pts), pf::alpha(color, a), width, style);
 }
 
-/// A comet rider: a glowing dot at `s` of the way along `pts`, with a
-/// fading trail trailing behind it.
+/// A comet rider: a bright dot at `s` of the way along `pts`, with a
+/// fading trail trailing behind it. The head is a solid core with a
+/// crisp ring — the blur it once had is gone with the film's radial
+/// glows, and the trail does the softness now.
 pub fn rider(book: &mut Sketchbook, pts: &[Offset], s: f32, color: Color, r: f32, a: f32) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 || pts.len() < 2 {
@@ -133,9 +135,7 @@ pub fn rider(book: &mut Sketchbook, pts: &[Offset], s: f32, color: Color, r: f32
         book.circle(p, r * fade, pf::alpha(color, 0.30 * fade * a));
     }
     let head = point_at(pts, s.clamp(0.0, 1.0));
-    book.layer(a, 7.0, None, |b| {
-        b.circle(head, r * 1.5, pf::alpha(color, 0.55));
-    });
+    book.ring(head, r * 1.5, 1.1, pf::alpha(color, 0.55 * a));
     book.circle(head, r, pf::alpha(Color::WHITE, 0.9 * a));
 }
 
@@ -449,9 +449,9 @@ pub fn ring3(
                 pt.dx + center.dx - canvas.width * 0.5,
                 pt.dy + center.dy - canvas.height * 0.5,
             );
-            book.layer(a, 6.0, None, |b| {
-                b.circle(moved, 4.5, pf::alpha(BRAND_FAR, 0.8));
-            });
+            // A crisp orbiting dot — core plus ring, no blur.
+            book.ring(moved, 7.5, 1.0, pf::alpha(BRAND_FAR, 0.5 * a));
+            book.circle(moved, 4.0, pf::alpha(BRAND_FAR, 0.8 * a));
         }
     }
 }
@@ -703,14 +703,12 @@ pub fn budget_bar(
                 (1.0, pf::alpha(color, 0.95 * a)),
             ]),
         );
-        // The head — a soft light where the bar stops growing.
-        book.layer(a, 10.0, None, |b| {
-            b.circle(
-                Offset::new(r.left + w, r.top + r.height() * 0.5),
-                r.height() * 0.85,
-                pf::alpha(color, 0.35),
-            );
-        });
+        // The head — a bright cap where the bar stops growing: a solid
+        // dot in the colour lifted toward white, plus a crisp ring. A
+        // soft bloom here would band on the encode (no radial glows).
+        let head_c = Offset::new(r.left + w, r.top + r.height() * 0.5);
+        book.ring(head_c, r.height() * 0.72, 1.0, pf::alpha(color, 0.45 * a));
+        book.circle(head_c, r.height() * 0.42, pf::alpha(pf::mix(color, Color::WHITE, 0.35), 0.9 * a));
     }
     // The budget line — where the frame's 60 fps allowance actually is.
     let bx = r.left + r.width() * (budget / scale).clamp(0.0, 1.0);

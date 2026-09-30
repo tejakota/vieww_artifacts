@@ -51,10 +51,10 @@ pub fn beyond_ui(ctx: &pf::Ctx) -> WidgetNode {
     super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            // A flat deep ground — the four cards and their shadows carry
+            // the depth; the soft violet halo that once sat here is gone
+            // with the film's radial glows (see `mod.rs`).
             book.rect(Rect::new(0.0, 0.0, s.width, s.height), BG_DEEP);
-            book.layer(0.6, 70.0, None, |g| {
-                g.circle(Offset::new(s.width * 0.5, 560.0), 520.0, pf::alpha(BRAND_NEAR, 0.07));
-            });
             pf::vignette(book, s.width, s.height, 0.5);
         }),
     )));
@@ -154,13 +154,12 @@ fn draw_model(book: &mut Sketchbook, st: Rect, sec: f32, a: f32) {
         canvas: Size::new(pf::W, pf::H),
         centre: c,
     };
-    // A soft floor shadow, then the mark turning above it.
+    // A soft floor shadow, then the mark turning above it — a crisp
+    // ring where a halo once sat: the model lit per face needs no bloom.
     book.layer(a, 16.0, None, |b| {
         b.rrect(pf::xywh(c.dx - 90.0, c.dy + 128.0, 180.0, 18.0), 9.0, pf::alpha(Color::BLACK, 0.8));
     });
-    book.layer(a, 50.0, None, |b| {
-        b.circle(c, 110.0, pf::alpha(BRAND_NEAR, 0.18));
-    });
+    book.ring(c, 132.0, 1.2, pf::alpha(BRAND_NEAR, 0.22 * a));
     models::draw_mesh(
         book,
         &view,

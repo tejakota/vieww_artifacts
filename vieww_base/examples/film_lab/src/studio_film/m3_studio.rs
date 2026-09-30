@@ -166,14 +166,16 @@ fn card_tag(x: f32, y: f32, name: &str, what: &str, color: Color, a: f32) -> Wid
         .into()
 }
 
-/// A focus ring over a rectangle: an accent outline with a soft bloom.
+/// A focus ring over a rectangle: an accent outline, doubled by a dimmer
+/// hairline further out.
 fn ring(book: &mut Sketchbook, r: Rect, radius: f32, color: Color, a: f32, width: f32) {
     if a <= 0.01 {
         return;
     }
-    book.layer(a * 0.6, 10.0, None, |b| {
-        b.stroke_rrect(r.inflate(2.0), radius, pf::alpha(color, 0.8), width * 2.5);
-    });
+    // Two crisp strokes — the halo this once drew with a blur is gone
+    // with the film's radial glows; a second hairline, further out and
+    // dimmer, is the whole of the "soft" register now.
+    book.stroke_rrect(r.inflate(3.0), radius, pf::alpha(color, 0.30 * a), width);
     book.stroke_rrect(r, radius, pf::alpha(color, 0.95 * a), width);
 }
 
@@ -494,8 +496,11 @@ pub fn say_to_rust(ctx: &pf::Ctx) -> WidgetNode {
         let r = Rect::new(c.dx - sw * 0.5, c.dy - sh * 0.5, c.dx + sw * 0.5, c.dy + sh * 0.5);
         let glow = if lit { (1.0 - (sec - lit_at[i]) / 0.8).max(0.0) } else { 0.0 };
         stack = stack.push(paint(move |book| {
+            // The lit pulse: a crisp expanding stroke around the station
+            // the tap reached — a drawn ring, not a radial glow.
             if glow > 0.01 {
-                pf::glow(book, c.dx, c.dy, 90.0, ACCENT, 0.35 * glow);
+                let r2 = r.inflate(6.0 + 10.0 * glow);
+                book.stroke_rrect(r2, 12.0 + 8.0 * glow, pf::alpha(ACCENT, 0.55 * glow), 1.5);
             }
             book.rrect(r, 12.0, pf::alpha(Color::rgb(0x18, 0x16, 0x1E), 0.97 * arrive));
             book.stroke_rrect(r, 12.0, pf::alpha(if lit { ACCENT } else { pf::FAINT }, (if lit { 0.9 } else { 0.5 }) * arrive), 1.5);
