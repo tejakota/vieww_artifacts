@@ -165,6 +165,10 @@ pub struct Library {
     bundle: Rc<dyn AssetBundle>,
     sources: RefCell<HashMap<String, Image>>,
     upscaled: RefCell<HashMap<String, Image>>,
+    /// Plain resamples at the result's size — the "what Lanczos alone would
+    /// have shipped" stage the measurements strip measures against. See
+    /// [`Library::baseline`].
+    baselines: RefCell<HashMap<String, Image>>,
 }
 
 /// Hand-written because `dyn AssetBundle` is not `Debug` and the orphan rule
@@ -180,7 +184,6 @@ impl std::fmt::Debug for Library {
             .finish()
     }
 }
-
 impl Library {
     #[must_use]
     pub fn new(bundle: Rc<dyn AssetBundle>) -> Self {
@@ -188,6 +191,7 @@ impl Library {
             bundle,
             sources: RefCell::new(HashMap::new()),
             upscaled: RefCell::new(HashMap::new()),
+            baselines: RefCell::new(HashMap::new()),
         }
     }
 
@@ -217,6 +221,32 @@ impl Library {
     #[must_use]
     pub fn is_upscaled(&self, photo: &Photo) -> bool {
         self.upscaled.borrow().contains_key(photo.id)
+    }
+
+    /// The plain 4x resample at the result's own size, if there is a result.
+    ///
+    /// This is the control the compare sheet's measurements need: the same
+    /// photograph, resampled by the same Lanczos pass, **without** the
+    /// unsharp mask — so the measurements strip's two curves differ by
+    /// exactly the sharpening pass and nothing else. Measuring the source at
+    /// its native size against the 4x result instead would ask per-pixel
+    /// contrast of two different pixel pitches and call the resample a loss
+    /// it never was.
+    ///
+    /// Cached like every other stage, so a sheet that reopens (or a divider
+    /// drag that rebuilds it) resamples nothing.
+    #[must_use]
+    pub fn baseline(&self, photo: &Photo) -> Option<Image> {
+        if let Some(image) = self.baselines.borrow().get(photo.id) {
+            return Some(image.clone());
+        }
+        let result = self.result(photo)?;
+        let source = self.source(photo).ok()?;
+        let plain = upscale::resample(&source, result.width(), result.height());
+        self.baselines
+            .borrow_mut()
+            .insert(photo.id.to_string(), plain.clone());
+        Some(plain)
     }
 
     /// Run the upscaler and keep the result.

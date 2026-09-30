@@ -25,6 +25,16 @@ pub enum SearchMode {
     Photo,
 }
 
+/// How the library's content is presented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibraryView {
+    /// The masonry grid — recency-shaped, one tile per photo.
+    Grid,
+    /// The Space map — similarity-shaped, photos placed by their
+    /// embeddings through a force layout, matches ringed in viridis.
+    Space,
+}
+
 /// A photo and how well it matched, `0.0..=1.0`.
 pub type Match = (Photo, f32);
 
@@ -46,6 +56,10 @@ pub struct AppState {
     /// live-replace. One signal, and each tile derives its own phase from
     /// its index — the prototype's per-tile `animation-delay` trick.
     pub tick: Signal<u64>,
+
+    /// Grid or Space — how the library is being looked at. The Space view
+    /// is the embedding space made visible; see `widgets::space_map`.
+    pub view: Signal<LibraryView>,
 
     /// The encoder behind search, and the index of the library it built.
     ///
@@ -187,6 +201,7 @@ impl AppState {
             progress: runtime.signal(0.0),
             toast: runtime.signal(None),
             tick: runtime.signal(0u64),
+            view: runtime.signal(LibraryView::Grid),
             embedder,
             index,
             search_started: Rc::new(Cell::new(None)),
@@ -369,6 +384,11 @@ impl AppState {
 
     pub fn clear_search(&self) {
         self.results.set(None);
+    }
+
+    /// Switch the library between the grid and the Space map.
+    pub fn set_view(&self, view: LibraryView) {
+        self.view.set(view);
     }
 
     pub fn show_toast(&self, message: impl Into<String>) {

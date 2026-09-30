@@ -166,6 +166,16 @@ impl EmbeddingIndex {
         self.entries.len()
     }
 
+    /// The vector indexed at `index` — the same order `search`'s indices
+    /// refer to, which is the order the photos were indexed in.
+    ///
+    /// The Space view reads these to place every photo by its embedding;
+    /// `None` for a photo whose vector has not landed yet (the index can
+    /// lag the grid while the loader is still working).
+    pub fn vector(&self, index: usize) -> Option<&[f32]> {
+        self.entries.get(index).map(|e| e.vector.as_slice())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

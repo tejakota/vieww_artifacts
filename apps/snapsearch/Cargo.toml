@@ -27,6 +27,9 @@ vieww = { path = "../../vieww_base/crates/vieww" }
 vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
 vieww-asset = { path = "../../vieww_base/crates/vieww-asset" }
 vieww-effects = { path = "../../vieww_base/crates/vieww-effects" }
+# The Space view: photos placed on a force-directed map of their embedding
+# similarity (vieww_dataviz::force), match rings through the viridis ramp.
+vieww-dataviz = { path = "../../vieww_base/crates/vieww-dataviz" }
 
 [features]
 default = []

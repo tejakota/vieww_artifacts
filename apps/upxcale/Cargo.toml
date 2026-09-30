@@ -38,6 +38,11 @@ vieww-animation = { path = "../../vieww_base/crates/vieww-animation" }
 vieww-effects = { path = "../../vieww_base/crates/vieww-effects" }
 vieww-gestures = { path = "../../vieww_base/crates/vieww-gestures" }
 vieww-asset = { path = "../../vieww_base/crates/vieww-asset" }
+# The measurements strip on the compare sheet: the local-contrast profile
+# chart is drawn through the framework's data-visualisation toolkit — its
+# continuous scale (niced ticks), its monotone line curve, and its colour
+# ramps. See `src/screens/landing/measure.rs`.
+vieww-dataviz = { path = "../../vieww_base/crates/vieww-dataviz" }
 vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
 
 # PNG *encoding*, for "Save to Photos". `vieww-asset` decodes and deliberately

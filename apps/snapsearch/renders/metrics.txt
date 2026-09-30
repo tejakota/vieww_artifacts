@@ -1,5 +1,18 @@
 app=snapsearch
 what=semantic photo search (CLIP / local appearance encoder) built on vieww
+space=round 3 — the Space view: the library as a similarity map, built on
+        vieww-dataviz (force::Simulation — the d3-force port — with kNN
+        cosine links, wider charge, collide; color::viridis match rings).
+        Photos are placed by a deterministic force projection of their own
+        embeddings, so the map the app's premise promises is finally on
+        screen: alike ends up beside alike, clusters are visible, and a
+        search's matches are shown *placed* — the "sunset over water"
+        two-subject query rings matches in two regions of the map, which
+        the ranked list cannot say. Dots carry their photo's mean thumbnail
+        colour; non-matches dim to context while matches ring in viridis;
+        tapping near a dot opens the photo, exactly as tapping a tile does.
+        See src/widgets/space_map.rs and src/screens/library.rs (Grid/Space
+        toggle in the header). 5 new tests; 43 pass.
 migrated=old vello vieww -> vieww_base native rasteriser; cpu feature -> native,
         bins (screenshot, filter_probe) rasterise through vieww::paint::native
 enriched=round 2 — the fluid-flow pass: the FAB breathes (an ambient violet
@@ -18,10 +31,11 @@ enriched=round 2 — the fluid-flow pass: the FAB breathes (an ambient violet
         long query echoed back in "Nothing close to ..." once overflowed the
         390pt surface by 30px (caught on the new no-match shot); it wraps to
         a lozenge instead.
-screens=9 rendered by src/bin/screenshot.rs through the native rasteriser,
-        390x844 (real UI states, real encoder progress, real stagger, and now
-        the no-match empty state, driven the way a real miss happens)
-sheet=sheet.png,1790x1660,9 screens
-frames=171 timeline at 10fps (1.3s hold + 0.6s crossfade per screen, seamless
-      loop; 9 screens)
-gif=anim.gif,390,844,10fps,4010239
+screens=11 rendered by src/bin/screenshot.rs through the native rasteriser,
+        390x844 (real UI states, real encoder progress, real stagger, the
+        no-match empty state, and the Space view — at rest and with matches
+        ringed in viridis)
+sheet=sheet.png,1790x1398,11 screens
+frames=209 timeline at 10fps (1.3s hold + 0.6s crossfade per screen, seamless
+      loop; 11 screens)
+gif=anim.gif,390,844,10fps,6081292

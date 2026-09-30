@@ -41,6 +41,7 @@ use vieww_widget::widget_node_from;
 
 use crate::icons;
 use crate::photos::{Photo, UPSCALE_FACTOR};
+use crate::screens::landing::measure;
 use crate::theme;
 
 /// How much of the screen height the sheet takes.
@@ -56,6 +57,12 @@ pub struct CompareSheet {
     pub before: Option<Pixels>,
     /// The upscaled result, clipped to the left of the divider.
     pub after: Option<Pixels>,
+    /// The plain 4x resample at the result's size — the control the
+    /// measurements strip measures against. The stage shows the eye's
+    /// comparison (source vs result); the chart shows the ruler's (plain 4x
+    /// vs sharpened 4x, same pixels-per-edge, differing only by the unsharp
+    /// pass). `None` until both a result and its source are available.
+    pub baseline: Option<Pixels>,
     /// Divider position, 0..=1.
     pub divider: f32,
     /// Called with a new fraction as the finger moves.
@@ -83,8 +90,8 @@ impl Widget for CompareSheet {
         // the shadow is not clipped away by the very corner it follows.
         let body = Container::new()
             .padding(EdgeInsets::only(gap * 1.5, gap * 1.5, gap * 1.5, gap * 2.0))
-            .child(
-                Flex::column()
+            .child({
+                let column = Flex::column()
                     .cross_axis_alignment(CrossAxisAlignment::Stretch)
                     .spacing(gap * 1.5)
                     .children(children![
@@ -92,9 +99,23 @@ impl Widget for CompareSheet {
                         header(&theme_data, self.photo, &self.on_close),
                         // The stage takes everything left over.
                         Flexible::expanded(1).child(self.stage(&theme_data)),
-                        footer(&theme_data, &self.on_save, &self.on_close),
-                    ]),
-            );
+                    ]);
+                // What the stage is showing, measured like with like: the
+                // plain-4x control and the sharpened result at the same
+                // pixel pitch, with the divider carried onto the chart.
+                // Absent until both are decoded — a skeleton stage gets a
+                // skeleton chart, not a half-drawn one.
+                let column = match measure::measurements_row(
+                    &theme_data,
+                    &self.baseline,
+                    &self.after,
+                    self.divider,
+                ) {
+                    Some(measurements) => column.push(measurements),
+                    None => column,
+                };
+                column.push(footer(&theme_data, &self.on_save, &self.on_close))
+            });
 
         let sheet = Container::new()
             .decoration(
@@ -390,6 +411,7 @@ impl std::fmt::Debug for CompareSheet {
             .field("photo", &self.photo.id)
             .field("divider", &self.divider)
             .field("has_after", &self.after.is_some())
+            .field("has_baseline", &self.baseline.is_some())
             .finish()
     }
 }

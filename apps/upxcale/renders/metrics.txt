@@ -1,5 +1,17 @@
 app=upxcale
 what=photo upscaler (Lanczos-3 resampler + unsharp mask) built on vieww
+measured=round 3 — the compare sheet carries a measurements strip built on
+        vieww-dataviz (Continuous::linear nice/ticks, shape::line
+        Curve::MonotoneX, color::ramp): the plain-4x control and the shipped
+        sharpened result, both at the result's own size, profiled as mean
+        local contrast per relative column band (48 bands, strided sampling;
+        see src/screens/landing/measure.rs). Like with like — same
+        pixels-per-edge, differing by exactly the unsharp pass — so the
+        headline number is a measurement, not a claim. The stage's divider
+        is carried onto the chart as a marker line, so the chart and the
+        drag read together. Receipt: screen 05, "+13% edge energy" on
+        mountain-ridge, cross-checked by shots.rs's acutance printout
+        (plain 0.339 vs sharpened 0.377, +11%).
 migrated=old vello vieww -> vieww_base native rasteriser (vieww_paint::native,
         vieww-hal Vulkan swapchain); cpu/gpu features collapsed to `native`
 enriched=round 2 — the identity pass: the landing screen has a masthead
@@ -15,7 +27,7 @@ enriched=round 2 — the identity pass: the landing screen has a masthead
 screens=5 source shots, 414x896, native rasteriser (examples/shots.rs,
         clock advanced so route transitions settle before capture)
 upscale_detail=shots/upscale-detail.png,960x1280
-sheet=sheet.png,1790x884,5 screens
+sheet=sheet.png,1790x884,5 screens (regenerated with the measured compare stage)
 frames=100 timeline at 10fps (1.4s hold + 0.6s crossfade per screen,
       seamless loop; 5 screens)
-gif=anim.gif,414,896,10fps,3311271
+gif=anim.gif,414,896,10fps,4423871

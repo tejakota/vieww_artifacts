@@ -14,10 +14,10 @@ use vieww::prelude::*;
 use vieww::widget::Handler;
 
 use crate::photo::Photo;
-use crate::state::{AppState, Match, SearchMode};
+use crate::state::{AppState, LibraryView, Match, SearchMode};
 use crate::theme::FluidTokens;
 use crate::widgets::icons as app_icons;
-use crate::widgets::Masonry;
+use crate::widgets::{Masonry, SpaceLayout, SpaceMap};
 use crate::library::Origin;
 use crate::screens::DetailView;
 
@@ -90,6 +90,9 @@ impl Widget for LibraryScreen {
             None => library.iter().cloned().map(|p| (p, None)).collect(),
         };
 
+        let view = state.view.get();
+        let has_tiles = !tiles.is_empty();
+
         let tap_state = state.clone();
         let on_tap: Handler<Photo> = Rc::new(move |photo: Photo| {
             tap_state.open_detail(photo);
@@ -98,6 +101,8 @@ impl Widget for LibraryScreen {
         // ---- the scrolling library underneath everything ---------------
         let grid: WidgetNode = if tiles.is_empty() {
             empty_state(&theme, &tokens)
+        } else if view == LibraryView::Space {
+            space_view(&state, &theme, &library, results.as_deref(), on_tap)
         } else {
             Scrollable::vertical(state.scroll.offset())
                 .on_drag(state.scroll.on_drag())
@@ -135,6 +140,13 @@ impl Widget for LibraryScreen {
                     &theme,
                     header(&state, &theme, results.as_deref(), header_t, &origin, loading),
                 ),
+                // The Space view's one line of instruction — the grid needs
+                // none, its gesture is universal; a map does.
+                if view == LibraryView::Space && has_tiles {
+                    space_caption(&theme)
+                } else {
+                    SizedBox::shrink().into()
+                },
                 // `Scrollable` has no height of its own; without an
                 // expanded `Flexible` it collapses to nothing.
                 Flexible::expanded(1).child(grid),
@@ -429,11 +441,48 @@ fn header(
         );
     }
 
-    let mut row = vec![Flex::column()
-        .cross_axis_alignment(CrossAxisAlignment::Start)
-        .spacing(2.0)
-        .children(stacked)
+    // The headline yields to whatever the row's right side needs — the view
+    // toggle and, with results, the Clear button — rather than the row
+    // overflowing the screen's width when all three are present.
+    let mut row = vec![Flexible::expanded(1)
+        .child(
+            Flex::column()
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .spacing(2.0)
+                .children(stacked),
+        )
         .into()];
+
+    // Grid or Space: the library, seen two ways. The active side is filled;
+    // the other stays text. Two small buttons rather than a segmented
+    // control — the header is already busy, and a toggle that reads as two
+    // words beats one that reads as a widget.
+    let view = state.view.peek();
+    let set_grid = state.clone();
+    let set_space = state.clone();
+    row.push(
+        Flex::row()
+            .spacing(4.0)
+            .push(
+                Button::new("Grid")
+                    .style(if view == LibraryView::Grid {
+                        ButtonStyle::Filled
+                    } else {
+                        ButtonStyle::Text
+                    })
+                    .on_pressed(move || set_grid.set_view(LibraryView::Grid)),
+            )
+            .push(
+                Button::new("Space")
+                    .style(if view == LibraryView::Space {
+                        ButtonStyle::Filled
+                    } else {
+                        ButtonStyle::Text
+                    })
+                    .on_pressed(move || set_space.set_view(LibraryView::Space)),
+            )
+            .into(),
+    );
 
     if results.is_some() {
         let clear = state.clone();
@@ -458,6 +507,76 @@ fn header(
             .children(row),
     )
     .into()
+}
+
+/// The Space view: the library laid out by embedding similarity.
+///
+/// Photos whose vector has not landed yet are simply absent — the map shows
+/// what the index knows. Match scores, when a search has run, are normalised
+/// against the best hit exactly as the grid's badges are, so a dot's ring and
+/// its tile's badge say the same number.
+fn space_view(
+    state: &AppState,
+    theme: &Rc<ThemeData>,
+    library: &Rc<Vec<Photo>>,
+    results: Option<&Vec<Match>>,
+    on_tap: Handler<Photo>,
+) -> WidgetNode {
+    // Only photos the index has vectors for are placed.
+    let mut photos: Vec<Photo> = Vec::with_capacity(library.len());
+    let mut vectors: Vec<Vec<f32>> = Vec::with_capacity(library.len());
+    for (index, photo) in library.iter().enumerate() {
+        if let Some(vector) = state.index.borrow().vector(index) {
+            photos.push(photo.clone());
+            vectors.push(vector.to_vec());
+        }
+    }
+
+    let layout = SpaceLayout::build(&photos, &vectors);
+
+    // Scores, parallel to the placed photos: photo id -> normalised score.
+    let scores: Vec<Option<f32>> = match results {
+        Some(matches) => {
+            let best = matches.first().map(|(_, s)| *s).unwrap_or(1.0).max(f32::EPSILON);
+            let by_id: std::collections::HashMap<&str, f32> = matches
+                .iter()
+                .map(|(p, s)| (p.id.as_str(), (s / best).clamp(0.0, 1.0)))
+                .collect();
+            photos
+                .iter()
+                .map(|p| by_id.get(p.id.as_str()).copied())
+                .collect()
+        }
+        None => photos.iter().map(|_| None).collect(),
+    };
+
+    Padding::new(EdgeInsets::only(
+        theme.metrics.gap * 1.5,
+        0.0,
+        theme.metrics.gap * 1.5,
+        theme.metrics.gap * 1.5,
+    ))
+    .child(
+        Clip::rounded(theme.metrics.corner * 2.0).child(SpaceMap {
+            photos,
+            layout,
+            scores,
+            has_matches: results.is_some_and(|m| !m.is_empty()),
+            on_tap,
+        }),
+    )
+    .into()
+}
+
+/// The Space view's one line of instruction.
+fn space_caption(theme: &Rc<ThemeData>) -> WidgetNode {
+    Padding::new(EdgeInsets::symmetric(theme.metrics.gap * 2.5, 0.0))
+        .child(
+            Text::new("SPACE · placed by embedding similarity — near is alike; matches ring in viridis")
+                .color(theme.colors.on_surface_variant)
+                .size(theme.text.label.size),
+        )
+        .into()
 }
 
 /// The FAB, plus the "Search your photos…" hint pill beside it.
