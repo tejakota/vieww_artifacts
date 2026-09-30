@@ -21,6 +21,9 @@ vavlt-core = { path = "crates/core" }
 vavlt-codecs = { path = "crates/codecs" }
 vavlt-engine = { path = "crates/engine" }
 vavlt-app = { path = "crates/app" }
+# The Activity tab's vault treemap: the squarified layout is
+# vieww_dataviz::hierarchy (stratify + sum + sort_by_value + treemap).
+vieww-dataviz = { path = "../../vieww_base/crates/vieww-dataviz" }
 
 # The UI framework, by path at the in-repo checkout — the migrated vieww
 # (vello is gone; `vieww_paint::native::NativeRenderer` is the one renderer,

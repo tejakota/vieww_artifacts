@@ -9,6 +9,8 @@ license.workspace = true
 vavlt-core.workspace = true
 vavlt-engine.workspace = true
 vieww.workspace = true
+# The vault treemap on the Activity tab (see the workspace manifest).
+vieww-dataviz.workspace = true
 vieww-effects.workspace = true
 log.workspace = true
 

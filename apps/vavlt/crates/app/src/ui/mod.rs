@@ -28,6 +28,7 @@ mod rail;
 mod row;
 mod segmented;
 mod tile;
+mod vault_map;
 
 pub use bar::{action_bar, status_page, tab_bar, top_bar, top_bar_height};
 pub use billboard::{billboard, brightest, eyebrow, figure, lede, meter, Height};
@@ -38,6 +39,7 @@ pub use rail::{rail, section};
 pub use row::{row, switch_row, Row};
 pub use segmented::tier_control;
 pub use tile::tile;
+pub use vault_map::{by_class, vault_map, ClassShare};
 
 use vieww::element::ScrollController;
 use vieww::prelude::*;

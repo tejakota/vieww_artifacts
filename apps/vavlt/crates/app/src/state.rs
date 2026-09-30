@@ -844,6 +844,18 @@ impl VavltState {
         })
     }
 
+    /// Everything the user handed over, exclusions included — the whole of
+    /// the grant, as the Activity tab's treemap card reads it.
+    ///
+    /// The audit log records the grant as a count; this is the grant as a
+    /// composition. Exclusions are deliberately kept: the card's story is
+    /// "what was handed over", and the plan screen is where exclusions are
+    /// negotiated.
+    #[must_use]
+    pub fn handed_over(&self) -> Vec<Item> {
+        self.items.borrow().clone()
+    }
+
     fn included_positions(&self) -> Vec<usize> {
         self.photos.with(|photos| {
             photos

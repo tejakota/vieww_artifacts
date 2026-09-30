@@ -1,5 +1,17 @@
 app=vavlt
 what=consent-first photo/video vault engine, one vieww UI across desktop/android/ios
+treemap=round 3 — the Activity tab's composition card: what was handed over,
+        by class, by bytes, as a squarified treemap built on
+        vieww-dataviz::hierarchy (stratify + sum + sort_by_value + treemap —
+        the d3.treemap pipeline). Real numbers: Item::bytes as the picker
+        reported them, aggregated by AssetClass, formatted by the engine's
+        own fmt_bytes, so the card and the plan screen cannot disagree.
+        Classes get a muted categorical wheel washed toward the card
+        (never the accent — the accent means action); labels appear only
+        where a block has room for one. New screenshot state
+        11-activity-composition (a mixed vault: JPEG/PNG/HEIC/video/RAW) and
+        the regular 09-activity shot now carries the card over its real
+        grant. 5 new unit tests. See src/ui/vault_map.rs.
 migrated=old vello ../vieww checkout -> in-repo vieww_base (native rasteriser;
         winit patch dropped — the new platform crate takes winit 0.30 from
         crates.io); GpuRenderer::headless in the test harness -> NativeRenderer,
@@ -20,9 +32,9 @@ enriched=round 2 — the legibility pass: the bottom tab bar's resting icons
         carries a new warning-triangle glyph (wound against its fill so the
         exclamation is a hole) beside the destructive colour — colour alone
         is a channel not every eye gets.
-screens=8 of the 40 the screenshot suite renders (phone dark; the suite does
+screens=9 of the 44 the screenshot suite renders (phone dark; the suite does
         phone+desktop, dark+light) — 412x915, real app, no display
-sheet=sheet.png,1290x1528,8 screens, two rows
-frames=120 timeline at 10fps (1.1s hold + 0.4s crossfade per screen, seamless
-      loop; 8 screens)
-gif=anim.gif,412,915,10fps,2512394
+sheet=sheet.png,1290x1248,9 screens, two rows
+frames=135 timeline at 10fps (1.1s hold + 0.4s crossfade per screen, seamless
+      loop; 9 screens)
+gif=anim.gif,412,915,10fps,3461338

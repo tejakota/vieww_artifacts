@@ -37,11 +37,22 @@ pub fn activity(
     }
 
     let m = theme.metrics;
-    let mut body: Vec<WidgetNode> = rows
-        .iter()
-        .enumerate()
-        .map(|(index, row)| entry(theme, row, index))
-        .collect();
+
+    // The insight card, when there is a grant to describe: the vault as a
+    // treemap, by class, by bytes. First in the body — the composition is
+    // the answer to "what was all this?" and the log beneath it is the
+    // receipt for how it went.
+    let mut body: Vec<WidgetNode> = Vec::new();
+    if let Some(map) = ui::vault_map(theme, &state.handed_over()) {
+        body.push(map);
+        body.push(ui::gap(m.sp_3));
+    }
+
+    body.extend(
+        rows.iter()
+            .enumerate()
+            .map(|(index, row)| entry(theme, row, index)),
+    );
 
     body.push(ui::gap(m.sp_1));
 
