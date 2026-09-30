@@ -14,16 +14,17 @@
 //!    screen space, never scaled.
 //!
 //! There is no camera any more, and no join throws a frame across the
-//! screen. What a cut does instead is the **join grammar** — one join per
-//! movement, each a *clip reveal* rather than a motion, so nothing can
-//! crop and nothing can jolt: the old pushes zoomed past the padding and
-//! the slides threw whole frames across the screen in a third of a
-//! second, and a reveal can do neither. The ground still dissolves at
-//! every cut; the world arrives inside it by its movement's own door —
-//! the pipeline sweeps in left-to-right, the studio opens as a window,
-//! the ledger rises, the release settles from above. Every join finishes
-//! inside `CUT_IN` and ends on the whole frame, and each leaves one crisp
-//! accent tell behind that fades as it completes.
+//! screen. What a cut does instead is the **frame dissolve**: the
+//! previous scene's final frame and the new scene's live frame are
+//! blended as one A→B cross-dissolve — no dip to dark between them, no
+//! wipes, no sliding lines, no rectangles. The outgoing scene holds its
+//! brightness to its last frame (there is no tail fade); the entrance
+//! *is* the dissolve, run over `CUT_IN` and widened at the movement
+//! boundaries, where acts change like chapters and scenes like
+//! sentences. Where the incoming world is a carded window — the studio
+//! act — the window grows out of the previous scene's content box while
+//! its corners curve in: the rectangle becoming the curved rectangle,
+//! the contents scaling within it as the frames dissolve around it.
 //!
 //! **Pass 1 · census.** Walks every frame, applies the session, counts the
 //! command stream — including the real studio's own draw commands — and
@@ -120,84 +121,88 @@ pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
 
 // ── The cut ─────────────────────────────────────────────────────────────────
 
-/// The dissolve's two halves, seconds.
+/// The entrance dissolve, seconds — widened ×1.5 at the movement
+/// boundaries by [`cut_len`] (the acts change like chapters, the scenes
+/// inside them like sentences).
 pub const CUT_IN: f32 = 0.45;
+
+/// How long a movement's label fades at its edges, seconds. No scene
+/// fades out at its tail any more — the next scene's dissolve is the
+/// cut, so the outgoing frame holds to full brightness.
 pub const CUT_OUT: f32 = 0.35;
 
-// ── The join grammar ───────────────────────────────────────────────────────
+// ── The dissolve grammar ────────────────────────────────────────────────────
 
-/// How a scene's world arrives at a cut — one door per movement, all of
-/// them clip reveals (see the module note). The ground and the chrome
-/// still ride the dissolve; the join only governs the world's own entry.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Join {
-    /// Fade up through the ground — the need's abrupt, mechanical cuts.
-    Dissolve,
-    /// A left-to-right sweep: the pipeline's own direction. The engine
-    /// movement flows in the way its scenes argue.
-    Wipe,
-    /// A rounded window growing from the centre — a look onto the studio.
-    /// Z11, the one scene the brief holds plain, keeps the Dissolve.
-    Aperture,
-    /// Up from the footer: the ledger builds from below.
-    Rise,
-    /// Down from the header: the release settles from above.
-    Fall,
+/// A cut in progress — the previous scene dissolving into this one. The
+/// dissolve itself is a pixel blend in [`finish_frame`] (the A of the
+/// A→B is the previous scene's final frame, persisted as PNG so a render
+/// can resume across processes); what lives here is the *geometry*:
+/// where the incoming window grows from.
+#[derive(Clone, Copy)]
+struct Cut {
+    /// The previous scene's fitted content box, screen space — the
+    /// rectangle a carded window grows out of.
+    prev_box: Rect,
+    /// The previous scene's window radius — a studio window's 14 at
+    /// scale, or 0 for a pure scene's sharp rectangle.
+    prev_radius: f32,
+    /// The dissolve's eased progress this frame: 0 = the previous frame
+    /// whole, 1 = the new frame whole.
+    e: f32,
 }
 
-/// The join a scene enters by. Chosen once, from the movement column —
-/// the same single source the act chip and the rail's major ticks read,
-/// so the join can never disagree with the film's own table of contents.
-fn join_of(id: &str) -> Join {
-    match super::movement_of(id) {
-        "MOVEMENT I" => Join::Dissolve,
-        "MOVEMENT II" => Join::Wipe,
-        "MOVEMENT III" if id != "Z11" => Join::Aperture,
-        "MOVEMENT III" => Join::Dissolve,
-        "MOVEMENT IV" => Join::Rise,
-        _ => Join::Fall,
+/// How long scene `si`'s entrance dissolve runs — `CUT_IN`, widened at
+/// the movement boundaries: the acts change like chapters, the scenes
+/// inside them like sentences.
+fn cut_len(si: usize) -> f32 {
+    let all = scenes();
+    let boundary = si == 0 || super::movement_of(all[si - 1].id) != super::movement_of(all[si].id);
+    CUT_IN * if boundary { 1.5 } else { 1.0 }
+}
+
+/// The previous scene's fitted content box, screen space — where an
+/// incoming carded window begins. Its corners are square: a pure
+/// scene's world is a rectangle.
+fn prev_window(si: usize) -> Rect {
+    let all = scenes();
+    let content = frame::content_box(all[si - 1].id);
+    let (fs, off) = frame::fit(content, super::layout::MAX_SCALE);
+    Transform::new(fs, 0.0, 0.0, fs, off.dx, off.dy).apply_rect(content)
+}
+
+/// The previous scene's window radius — 14 at studio scale for a studio
+/// scene, 0 for a pure one.
+fn prev_radius(si: usize) -> f32 {
+    let all = scenes();
+    if all[si - 1].kind == Kind::Studio {
+        let (fs, _) = frame::fit(frame::content_box(all[si - 1].id), super::layout::MAX_SCALE);
+        14.0 * fs
+    } else {
+        0.0
     }
 }
 
-/// The reveal rectangle for `join` at eased progress `p` (0..1) — the
-/// region of the frame the incoming world already occupies. Always ends
-/// at the whole frame; never moves content, only unmasks it.
-fn join_rect(join: Join, p: f32, full: Rect) -> Rect {
-    let p = p.clamp(0.0, 1.0);
-    match join {
-        Join::Dissolve => full,
-        Join::Wipe => Rect::new(full.left, full.top, full.right - full.width() * (1.0 - p), full.bottom),
-        Join::Aperture => {
-            let (cx, cy) = ((full.left + full.right) * 0.5, (full.top + full.bottom) * 0.5);
-            Rect::new(cx - full.width() * 0.5 * p, cy - full.height() * 0.5 * p, cx + full.width() * 0.5 * p, cy + full.height() * 0.5 * p)
-        }
-        Join::Rise => Rect::new(full.left, full.bottom - full.height() * p, full.right, full.bottom),
-        Join::Fall => Rect::new(full.left, full.top, full.right, full.top + full.height() * p),
-    }
+/// The linear interpolation of two rectangles — the window morph's
+/// arithmetic.
+fn lerp_rect(a: Rect, b: Rect, t: f32) -> Rect {
+    Rect::new(
+        a.left + (b.left - a.left) * t,
+        a.top + (b.top - a.top) * t,
+        a.right + (b.right - a.right) * t,
+        a.bottom + (b.bottom - a.bottom) * t,
+    )
 }
 
-/// The frame's envelope at `sec` of a scene `seconds` long: the content's
-/// opacity and the world's settle scale. The first scene fades up from
-/// the ground, the last holds to its final frame.
-fn envelope(id: &str, index: usize, last: bool, seconds: f32, sec: f32) -> (f32, f32) {
-    let mut a = 1.0f32;
-    let mut k = 1.0f32;
-    // The end card and the hold are one picture: no cut between them.
-    let seamless_in = id == "Z22";
-    let last = last || id == "Z21";
-    if !seamless_in && (index > 0 || sec < CUT_IN) {
-        let e = ease_out_cubic(clamp01(sec / CUT_IN));
-        a = a.min(e);
-        k *= 0.975 + 0.025 * ease_out_cubic(clamp01(sec / (CUT_IN * 1.6)));
+/// The frame's alpha at `sec` of a scene `seconds` long. Only the cold
+/// open fades up from the dark; every later cut is the A→B dissolve
+/// ([`Cut`]), so the frame itself never dips — the outgoing scene holds
+/// its brightness to its last frame, and the entrance is the dissolve.
+fn envelope(index: usize, sec: f32) -> f32 {
+    if index == 0 && sec < CUT_IN {
+        ease_out_cubic(clamp01(sec / CUT_IN))
+    } else {
+        1.0
     }
-    let remaining = seconds - sec;
-    if !last && remaining < CUT_OUT {
-        let e = clamp01(remaining / CUT_OUT);
-        let e = e * e * (3.0 - 2.0 * e);
-        a = a.min(e);
-        k *= 0.985 + 0.015 * e;
-    }
-    (a, k)
 }
 
 /// The act label's opacity: it only fades at a movement's edges, so
@@ -244,11 +249,12 @@ struct Rig {
     has_over: bool,
     alpha: f32,
     world: Transform,
-    /// The world's own opacity this frame — the dissolve `alpha`, except
-    /// while a join reveals the world by clip instead of by fade.
-    world_alpha: f32,
-    /// The join in force while it reveals (None once the world is whole).
-    join: Option<(Join, f32)>,
+    /// The cut in force while this scene dissolves in (None once whole).
+    cut: Option<Cut>,
+    /// The previous scene's final frame, RGBA at raster size — the A of
+    /// the A→B dissolve. Set by the master once per scene; absent in the
+    /// census and in previews without a prior master run.
+    prev_px: Option<Vec<u8>>,
 }
 
 impl Rig {
@@ -274,9 +280,16 @@ impl Rig {
             has_over: false,
             alpha: 1.0,
             world: Transform::IDENTITY,
-            world_alpha: 1.0,
-            join: None,
+            cut: None,
+            prev_px: None,
         }
+    }
+
+    /// Load the previous scene's final frame for the entrance dissolve —
+    /// the A of the A→B blend. `None` when there is nothing to dissolve
+    /// from (the cold open, the seamless hold, a fresh census).
+    fn set_prev_frame(&mut self, px: Option<Vec<u8>>) {
+        self.prev_px = px;
     }
 
     fn ensure_studio(&mut self) {
@@ -343,8 +356,7 @@ impl Rig {
         let sec = i as f32 / FPS;
         let t = (sec / s.seconds).min(1.0);
         let abs = start_abs + sec;
-        let last = si + 1 == scenes().len();
-        let (a, k) = envelope(s.id, si, last, s.seconds, sec);
+        let a = envelope(si, sec);
 
         frame::reset();
         pf::clear_chrome();
@@ -411,29 +423,25 @@ impl Rig {
             });
         }
 
-        // The fit, with the cut's settle about the body's centre.
+        // The fit — one uniform transform, no settle pop: the entrance is
+        // the dissolve, not a zoom.
         let content = frame::take_boxed().unwrap_or_else(|| frame::content_box(s.id));
         let (fs, off) = frame::fit(content, super::layout::MAX_SCALE);
-        let fit = Transform::new(fs, 0.0, 0.0, fs, off.dx, off.dy);
-        let c = Offset::new(
-            (frame::BODY.left + frame::BODY.right) * 0.5,
-            (frame::BODY.top + frame::BODY.bottom) * 0.5,
-        );
-        let settle = Transform::new(k, 0.0, 0.0, k, c.dx * (1.0 - k), c.dy * (1.0 - k));
-        self.world = fit.then(settle);
+        self.world = Transform::new(fs, 0.0, 0.0, fs, off.dx, off.dy);
         self.alpha = a;
 
-        // The join: while a scene with a door enters, its world arrives
-        // *inside* the reveal at full opacity — the clip is the entrance,
-        // so the dissolve's fade is not doubled over it. The first scene
-        // has no predecessor and keeps the plain fade.
-        let join = join_of(s.id);
-        let entering = si > 0 && join != Join::Dissolve && sec < CUT_IN;
-        self.join = entering.then(|| {
-            let p = ease_out_cubic(clamp01(sec / CUT_IN));
-            (join, p)
+        // The cut: every scene after the cold open dissolves out of its
+        // predecessor's final frame — the pixel blend in `finish_frame`
+        // carries the A→B, and a carded world grows out of the previous
+        // scene's content box while it runs (see `compose`). The hold is
+        // seamless: it continues the end card's picture without a cut.
+        let seamless = s.id == "Z22";
+        let len = cut_len(si);
+        self.cut = (si > 0 && !seamless && sec < len).then(|| Cut {
+            prev_box: prev_window(si),
+            prev_radius: prev_radius(si),
+            e: ease_out_cubic(clamp01(sec / len)),
         });
-        self.world_alpha = if entering { 1.0 } else { a };
 
         // The ground.
         let grounds = frame::take_ground();
@@ -522,15 +530,13 @@ fn compose(rig: &Rig) -> Scene {
     let w = rig.world;
     let full = Rect::new(0.0, 0.0, pf::W, pf::H);
 
-    // 1 · ground — dissolves toward the clear colour at a cut.
+    // 1 · ground — carries the frame's alpha (the cold open's fade-up; a
+    // later cut's change of light rides the pixel dissolve instead).
     group(&mut frame_scene, full, a, |f| f.append(rig.ground_driver.scene(), Transform::IDENTITY));
 
-    // 2 · world — composed into a staging scene first, so the join's
-    // reveal and the dissolve's opacity can be applied to the whole world
-    // at once. `append_clipped` is the only clip that reaches a recording
-    // (a layer's `bounds` is an estimate, not a mask), and the group layer
-    // is the only honest group opacity — so the world gets both, in that
-    // order.
+    // 2 · world — composed into a staging scene first so the whole world
+    // takes the frame's opacity at once (the cold open's fade-up; every
+    // later cut is the pixel dissolve, not a fade).
     let mut world = Scene::default();
     {
         let f = &mut world;
@@ -545,11 +551,20 @@ fn compose(rig: &Rig) -> Scene {
                 Some(key) => rig.snaps.get(key).unwrap_or_else(|| rig.driver.scene()),
                 None => rig.driver.scene(),
             };
-            let s = p.dst.width() / p.src.width().max(1.0);
-            let local = Transform::new(s, 0.0, 0.0, s, p.dst.left - p.src.left * s, p.dst.top - p.src.top * s);
-            let t = local.then(w);
-            let dst = w.apply_rect(p.dst);
-            let r = p.radius * w.a;
+            // The window, screen space — and, while a cut dissolves, the
+            // morph: a carded world begins as the previous scene's
+            // content box (a sharp rectangle) and grows into its own
+            // curved window, corners easing in, contents scaling within.
+            let mut dst = w.apply_rect(p.dst);
+            let mut r = p.radius * w.a;
+            if let Some(cut) = &rig.cut {
+                if p.card && cut.e < 0.999 {
+                    dst = lerp_rect(cut.prev_box, dst, cut.e);
+                    r = cut.prev_radius + (r - cut.prev_radius) * cut.e;
+                }
+            }
+            let s = dst.width() / p.src.width().max(1.0);
+            let t = Transform::new(s, 0.0, 0.0, s, dst.left - p.src.left * s, dst.top - p.src.top * s);
             if p.alpha <= 0.004 {
                 continue;
             }
@@ -572,63 +587,17 @@ fn compose(rig: &Rig) -> Scene {
             f.append(rig.over_driver.scene(), w);
         }
     }
-    let wa = rig.world_alpha;
-    let clip = rig.join.map(|(j, p)| join_rect(j, p, full));
-    if wa >= 0.999 && clip.is_none() {
+    // The world rides the frame's own alpha — 1 everywhere but the cold
+    // open's fade-up. At a cut the world does not fade (that would dip
+    // the picture); the dissolve is the pixel blend in `finish_frame`,
+    // and the window morph above is the entrance.
+    let wa = rig.alpha;
+    if wa >= 0.999 {
         frame_scene.append(&world, Transform::IDENTITY);
     } else if wa > 0.004 {
-        // A degenerate reveal (the first frames of a wipe) clips the whole
-        // world away, which is the point: nothing has arrived yet.
-        let est = clip.unwrap_or(full);
-        frame_scene.push_layer(est, wa, BlendMode::Normal);
-        frame_scene.append_clipped(&world, Transform::IDENTITY, clip);
+        frame_scene.push_layer(full, wa, BlendMode::Normal);
+        frame_scene.append(&world, Transform::IDENTITY);
         frame_scene.pop_layer();
-    }
-
-    // 2b · The join's own tell — one crisp accent edge travelling with the
-    // reveal, dissolving as the world completes it. It obeys the frame's
-    // padding exactly: horizontal edges span PAD_X to W-PAD_X, vertical
-    // ones HEADER_H to FOOTER_Y. This is the join's vector motion, drawn
-    // as a mark rather than a blur (the film has no radial glows).
-    if let Some((join, p)) = rig.join {
-        if p > 0.01 && p < 0.995 {
-            let fade = 1.0 - p;
-            let ta = 0.55 * fade * fade;
-            let tell = pf::alpha(super::ACCENT, ta);
-            match join {
-                Join::Wipe => {
-                    let x = full.right - full.width() * (1.0 - p);
-                    frame_scene.fill_rrect(
-                        Rect::new(x - 1.25, frame::HEADER_H, x + 1.25, frame::FOOTER_Y),
-                        1.25,
-                        tell.into(),
-                    );
-                }
-                Join::Aperture => {
-                    let r = join_rect(Join::Aperture, p, full);
-                    if !r.is_empty() {
-                        frame_scene.stroke_rrect(r, 20.0, Stroke::new(1.5), tell.into());
-                    }
-                }
-                Join::Rise => {
-                    let y = full.bottom - full.height() * p;
-                    frame_scene.fill_rrect(
-                        Rect::new(frame::PAD_X, y - 1.25, pf::W - frame::PAD_X, y + 1.25),
-                        1.25,
-                        tell.into(),
-                    );
-                }
-                Join::Fall => {
-                    let y = full.top + full.height() * p;
-                    frame_scene.fill_rrect(
-                        Rect::new(frame::PAD_X, y - 1.25, pf::W - frame::PAD_X, y + 1.25),
-                        1.25,
-                        tell.into(),
-                    );
-                }
-                Join::Dissolve => {}
-            }
-        }
     }
 
     // 3 · chrome.
@@ -688,14 +657,40 @@ fn clear_color() -> Color {
     Color::rgb(11, 10, 14)
 }
 
-/// Raster the composed frame.
+/// Raster the composed frame — then, while a cut dissolves, blend it with
+/// the previous scene's final frame: the A→B dissolve itself, one blend
+/// carrying both directions. No dip to dark, no wipe: the outgoing frame
+/// fades out exactly as the incoming frame fades in, at eased weight
+/// `cut.e`. The blend is raster-side on purpose — the previous frame
+/// exists as pixels (persisted per scene as PNG, so a render can resume
+/// across processes), and pixels are what a dissolve dissolves.
 fn finish_frame(rig: &Rig, renderer: &mut NativeRenderer) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let (rw, rh) = raster_size();
     let s = scale_factor();
     let scene = compose(rig);
     let scaled = if (s - 1.0).abs() < 1.0e-4 { scene } else { scene.scaled(s) };
     let (pixels, _report) = renderer.render_to_pixels(&scaled, rw, rh, clear_color())?;
-    Ok(pixels.data().to_vec())
+    let mut px = pixels.data().to_vec();
+    if let Some(cut) = &rig.cut {
+        if cut.e < 0.999 {
+            if let Some(prev) = rig.prev_px.as_ref() {
+                // A size mismatch (a `SCALE_FACTOR` change between runs)
+                // simply forgoes the blend for that scene.
+                if prev.len() == px.len() {
+                    // Integer lerp, 8.8 fixed point — fast enough to run on
+                    // every frame of the dissolve window.
+                    let w_new = (cut.e * 256.0).round() as u16;
+                    let w_old = 256 - w_new;
+                    for i in (0..px.len()).step_by(4) {
+                        px[i] = ((prev[i] as u16 * w_old + px[i] as u16 * w_new) >> 8) as u8;
+                        px[i + 1] = ((prev[i + 1] as u16 * w_old + px[i + 1] as u16 * w_new) >> 8) as u8;
+                        px[i + 2] = ((prev[i + 2] as u16 * w_old + px[i + 2] as u16 * w_new) >> 8) as u8;
+                    }
+                }
+            }
+        }
+    }
+    Ok(px)
 }
 
 // ── Pass 1 — the census ─────────────────────────────────────────────────────
@@ -812,6 +807,7 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
     let seg_dir = root.join("segments");
     std::fs::create_dir_all(root.join("sheets"))?;
+    std::fs::create_dir_all(root.join("cut"))?;
     std::fs::create_dir_all(&seg_dir)?;
 
     let manifest = manifest_path();
@@ -863,6 +859,26 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
             rig.driver.draw_frame_at(Duration::from_secs_f64(start_abs as f64));
         }
 
+        // The A of this scene's entrance dissolve: the previous scene's
+        // final frame, as this run or an earlier one left it (the cut/
+        // directory is what lets a render resume across processes — see
+        // `finish_frame`). The hold has none: it continues the end card
+        // seamlessly.
+        if si > 0 && s.id != "Z22" {
+            let prev = &all[si - 1];
+            let path = root.join("cut").join(format!("{:02}_{}.png", si, prev.name));
+            let px = std::fs::read(&path)
+                .ok()
+                .and_then(|b| image::load_from_memory(&b).ok())
+                .map(|img| img.to_rgba8().into_raw());
+            if px.is_none() {
+                println!("  {} {} · no predecessor frame — plain entrance", s.id, s.name);
+            }
+            rig.set_prev_frame(px);
+        } else {
+            rig.set_prev_frame(None);
+        }
+
         let scene_dir = root.join("frames").join(format!("{:02}_{}", si + 1, s.name));
         std::fs::remove_dir_all(&scene_dir).ok();
         std::fs::create_dir_all(&scene_dir)?;
@@ -895,13 +911,19 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         let mut stdin = ffmpeg.stdin.take().ok_or("no ffmpeg stdin")?;
 
         let picks = sheet_picks(n);
+        let mut last_buf: Option<Vec<u8>> = None;
         for i in 0..n {
             rig.build_frame(s, si, start_abs, i, &probe);
             let buf = finish_frame(&rig, &mut renderer)?;
             stdin.write_all(&buf)?;
             if let Some(k) = picks.iter().position(|p| *p == i) {
-                let img = image::RgbaImage::from_raw(rw, rh, buf).ok_or("invalid frame")?;
+                let img = image::RgbaImage::from_raw(rw, rh, buf.clone()).ok_or("invalid frame")?;
                 img.save(scene_dir.join(format!("frame_{k:03}.png")))?;
+            }
+            if i + 1 == n {
+                // The A of the *next* scene's dissolve — this scene's final
+                // frame, held at full brightness (there is no tail fade).
+                last_buf = Some(buf);
             }
             if i % 300 == 0 && i > 0 {
                 println!("  {} {} · {:>3}% · {:.1} min in", s.id, s.name, i * 100 / n, t0.elapsed().as_secs_f32() / 60.0);
@@ -911,6 +933,12 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         let status = ffmpeg.wait()?;
         if !status.success() {
             return Err(format!("ffmpeg exited {status} on {}", s.id).into());
+        }
+        if let Some(buf) = last_buf {
+            if si + 1 < all.len() && all[si + 1].id != "Z22" {
+                let img = image::RgbaImage::from_raw(rw, rh, buf).ok_or("invalid frame")?;
+                img.save(root.join("cut").join(format!("{:02}_{}.png", si + 1, s.name)))?;
+            }
         }
         tile_sheet(&scene_dir, &sheet)?;
         println!("  {} {} · done in {:.1}s", s.id, s.name, scene_t0.elapsed().as_secs_f32());
@@ -948,9 +976,11 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// The sixteen frames a sheet shows: evenly through the scene, skipping
-/// the dissolves at either end so every tile is a settled picture.
+/// the dissolves at either end — the head past the *widest* entrance
+/// dissolve (a movement boundary's 1.5× `CUT_IN`) — so every tile is a
+/// settled picture.
 fn sheet_picks(n: usize) -> Vec<usize> {
-    let lo = ((CUT_IN + 0.15) * FPS) as usize;
+    let lo = ((CUT_IN * 1.5 + 0.15) * FPS) as usize;
     let hi = n.saturating_sub(((CUT_OUT + 0.05) * FPS) as usize + 1).max(lo + 16);
     (0..16).map(|k| lo + k * (hi - lo) / 15).map(|i| i.min(n - 1)).collect()
 }
@@ -995,6 +1025,17 @@ fn preview(name: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut renderer = NativeRenderer::new();
     renderer.guard_filtered_layers_below(32);
     let mut rig = Rig::new();
+    // The A of the entrance dissolve, when a master run has already left
+    // one — the preview then shows the true cut, not just the scene.
+    if si > 0 && s.id != "Z22" {
+        let prev = &scenes()[si - 1];
+        let path = work_root().join("cut").join(format!("{:02}_{}.png", si, prev.name));
+        let px = std::fs::read(&path)
+            .ok()
+            .and_then(|b| image::load_from_memory(&b).ok())
+            .map(|img| img.to_rgba8().into_raw());
+        rig.set_prev_frame(px);
+    }
     if s.kind == Kind::Studio {
         rig.ensure_studio();
         let mut warm = 0usize;

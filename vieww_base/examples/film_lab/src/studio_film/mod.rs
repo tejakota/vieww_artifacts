@@ -58,12 +58,17 @@
 //! gradients and the photographic vignette stay — they are not radial
 //! light, and they do not band.
 //!
-//! # The join grammar
+//! # The dissolve grammar
 //!
-//! Every cut is a clip reveal, one door per movement (see `master`):
-//! the engine sweeps in left-to-right the way its pipeline flows, the
-//! studio opens as a window, the ledger rises, the release settles from
-//! above — and the need stays abrupt, as the wait deserves.
+//! Every cut is a frame dissolve, one grammar for the whole film (see
+//! `master`): the previous scene's final frame cross-dissolves into the
+//! new scene's live frame — no dip to dark, no wipes, no sliding lines
+//! — held slightly longer where a movement gives way to the next. Where
+//! the incoming world is a carded window (the studio act), the window
+//! grows out of the previous scene's content box while its corners
+//! curve in: the rectangle becoming the curved rectangle. The need
+//! stays plain — abrupt cuts would be flattery the wait does not
+//! deserve.
 
 pub mod filmkit;
 pub mod m0_open;

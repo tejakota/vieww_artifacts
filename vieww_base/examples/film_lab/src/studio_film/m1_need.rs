@@ -571,16 +571,17 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
                 book.ring(centre, (34.0 + 46.0 * charge) * grow * breath + 14.0, 1.0, pf::alpha(BRAND_FAR, 0.22 * grow));
                 book.circle(centre, (8.0 + 7.0 * charge) * grow, pf::alpha(Color::WHITE, 0.95));
             }
-            // Three rings leaving the point, staggered — the answer
-            // beginning before the film has said what it is.
+            // Two rings leaving the point, unhurried — the answer
+            // beginning before the film has said what it is. Three read
+            // as busy; two, slower and more staggered, read as calm.
             if charge > 0.01 {
-                for k in 0..3 {
-                    let ph = clamp01(charge * 1.35 - k as f32 * 0.24);
+                for k in 0..2 {
+                    let ph = clamp01(charge * 0.85 - k as f32 * 0.34);
                     if ph <= 0.01 || ph >= 1.0 {
                         continue;
                     }
-                    let r = 44.0 + 190.0 * ease_out_expo(ph);
-                    book.ring(centre, r, 1.4, pf::alpha(BRAND_FAR, 0.34 * (1.0 - ph)));
+                    let r = 44.0 + 235.0 * ease_out_expo(ph);
+                    book.ring(centre, r, 1.3, pf::alpha(BRAND_FAR, 0.30 * (1.0 - ph)));
                 }
             }
             pf::vignette(book, w, h, 0.62);

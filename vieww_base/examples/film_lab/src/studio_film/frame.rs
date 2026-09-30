@@ -360,11 +360,9 @@ pub fn rail(abs: f32) -> WidgetNode {
                 }
                 let px = x0 + (x1 - x0) * frac;
                 book.line(Offset::new(x0, y), Offset::new(px, y), pf::alpha(super::ACCENT, 0.55 * ra), 1.6);
-                book.circle(Offset::new(px, y), 4.0, pf::alpha(super::ACCENT, 0.95 * ra));
-                // A crisp ring, not a soft disc: the playhead is a mark on
-                // the rail, not a light in the room (the film's no-glow
-                // decision — see `mod.rs`).
-                book.ring(Offset::new(px, y), 7.5, 1.2, pf::alpha(super::ACCENT, 0.30 * ra));
+                // No playhead mark: the travelled line itself is the
+                // position — a circle at its tip read as a bug (two bars
+                // and a dot), so the rail ends where the line ends.
             }),
         ))
         .into()
