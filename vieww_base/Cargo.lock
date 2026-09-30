@@ -1671,6 +1671,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-graph-game-collab-lottie"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-collab",
+ "vieww-foundation",
+ "vieww-game",
+ "vieww-graph",
+ "vieww-lottie",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-grayscale"
 version = "0.1.0"
 dependencies = [
