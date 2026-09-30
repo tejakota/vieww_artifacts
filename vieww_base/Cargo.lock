@@ -1420,6 +1420,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-canvas-dataviz"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-canvas",
+ "vieww-dataviz",
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-checkbox"
 version = "0.1.0"
 dependencies = [
@@ -1926,6 +1938,17 @@ dependencies = [
  "vieww",
  "vieww-animation",
  "vieww-element",
+ "vieww-foundation",
+ "vieww-physics",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-physics-advanced"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
  "vieww-foundation",
  "vieww-physics",
  "vieww-widget",

@@ -425,6 +425,11 @@ impl Path {
 
         if open {
             self.move_to(at(start));
+        } else {
+            // Continuing a subpath: a straight edge to where the arc begins
+            // (the side of a wedge, the end of a band). Without it the first
+            // cubic would start from wherever the pen was and bulge.
+            self.line_to(at(start));
         }
         if sweep == 0.0 || radius <= 0.0 {
             return;

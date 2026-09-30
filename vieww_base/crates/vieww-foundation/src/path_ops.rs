@@ -1168,4 +1168,28 @@ mod tests {
         let clean = bow.boolean(&Path::new(), PathOp::Union);
         assert!((area(&clean) - 50.0).abs() < 0.01, "{}", area(&clean));
     }
+
+    #[test]
+    fn arc_ring_band_and_wedge_have_straight_sides() {
+        use std::f32::consts::PI;
+        let c = Offset::new(0.0, 0.0);
+        // A half band, radius 100, width 40: in the band, not in the hole.
+        let band = Path::arc_ring(c, 100.0, 40.0, 0.0, PI);
+        assert!(band.contains(Offset::new(0.0, 80.0), FillRule::NonZero));
+        assert!(!band.contains(Offset::new(0.0, 40.0), FillRule::NonZero));
+        assert!(!band.contains(Offset::new(0.0, -80.0), FillRule::NonZero));
+        // A quarter wedge from the centre covers near its bisector.
+        let wedge = Path::arc_ring(c, 100.0, 100.0, 0.0, PI / 2.0);
+        assert!(wedge.contains(Offset::new(20.0, 20.0), FillRule::NonZero));
+        assert!(!wedge.contains(Offset::new(-20.0, 20.0), FillRule::NonZero));
+        // The inner arc of the band starts on the inner circle, not at the
+        // outer arc's end: the band's end is a straight edge.
+        let lines = band.verbs().iter().filter(|v| matches!(v, crate::PathVerb::LineTo(_))).count();
+        assert!(lines >= 1, "{:?}", band.verbs());
+        let first_inner = band.verbs().iter().find_map(|v| match v {
+            crate::PathVerb::LineTo(p) => Some(*p),
+            _ => None,
+        });
+        assert!((first_inner.unwrap().distance() - 60.0).abs() < 1e-3);
+    }
 }
