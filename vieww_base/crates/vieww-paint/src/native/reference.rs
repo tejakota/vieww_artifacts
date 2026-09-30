@@ -2279,4 +2279,80 @@ mod tests {
             "foreground content is not blurred along with the backdrop"
         );
     }
+
+    /// A backdrop-filtered layer must not touch anything outside its own
+    /// bounds — not even the blur's nominal reach. The region the layer
+    /// snapshots, blurs and composites back is its declared box; a
+    /// blur-spreading margin belongs to *plain* filters, whose own ink has
+    /// somewhere to spread to. Applied to a backdrop layer, that margin
+    /// samples the **neighbours'** paint and composites the blurred copy over
+    /// it, which is how vavlt's outcome screen lost the right 36 px of the
+    /// solid white `Done` button to the Glass `Restore` button's backdrop
+    /// blur: the chip's edge came back as a 3σ ramp and read as a smear
+    /// bleeding under the frosted button. This is the renderer-side pin of
+    /// `Scene`'s `a_backdrop_layers_region_is_its_declared_bounds_not_grown_by_reach`.
+    ///
+    /// Built through the `Canvas` trait (unlike the two tests above) so the
+    /// bounds the renderer reads have passed through `push_filtered_layer`'s
+    /// growth decision — this is the path the widget tree actually takes.
+    #[test]
+    fn a_backdrop_layer_leaves_the_paint_beside_it_alone() {
+        let white = Color::rgba(255, 255, 255, 255);
+        let bg = Color::rgba(14, 15, 17, 255);
+        let sigma = 12.0_f32;
+
+        // A 200×60 surface at the dark window colour, with an opaque white
+        // "button" filling x = 20..110 — the neighbour the layer must not
+        // touch. The backdrop layer ("the glass panel") sits at x = 120..190,
+        // a 10 px gutter away, and paints only a translucent chip of its own.
+        let mut scene = Scene::new();
+        scene.fill_rect(Rect::new(0.0, 0.0, 200.0, 60.0), bg.into());
+        scene.fill_rect(Rect::new(20.0, 2.0, 110.0, 58.0), white.into());
+        scene.push_filtered_layer(
+            Rect::new(120.0, 2.0, 190.0, 58.0),
+            1.0,
+            BlendMode::Normal,
+            ImageFilter::backdrop_blur(sigma),
+        );
+        scene.fill_rect(
+            Rect::new(120.0, 2.0, 190.0, 58.0),
+            Color::rgba(45, 46, 48, 200).into(),
+        );
+        scene.pop_layer();
+
+        let mut renderer = NativeRenderer::new();
+        let (pixels, report) = renderer
+            .render_to_pixels(&scene, 200, 60, Color::TRANSPARENT)
+            .expect("render");
+        assert_eq!(report.filtered_layers, 1, "the backdrop path ran");
+
+        // The neighbour's right edge: exactly white at the last column of the
+        // chip and every column of the gutter — with the old reach-grown
+        // region this came back as a Gaussian ramp from 110 down to ~140.
+        assert_eq!(
+            pixels.pixel(109, 30),
+            white,
+            "the last column of the neighbour's edge is uneroded"
+        );
+        // The gutter between the two, where the old glow smeared white
+        // through the neighbour's blur: exactly the background.
+        for x in [112, 115, 118] {
+            assert_eq!(
+                pixels.pixel(x, 30),
+                bg,
+                "the gutter at x = {x} is the background, not a blurred halo"
+            );
+        }
+        // The layer's own interior: the translucent chip over the blurred
+        // flat backdrop — the glass look, unchanged by the fix. A flat
+        // backdrop is blur-invariant, so this is just the chip's fill
+        // composited over the background: (45·200 + 14·55)/255 ≈ 38.
+        let inside = pixels.pixel(155, 30);
+        assert_eq!(
+            inside,
+            Color::rgba(38, 39, 41, 255),
+            "the chip still shows its translucent fill over the (flat, so \
+             blur-invariant) backdrop"
+        );
+    }
 }

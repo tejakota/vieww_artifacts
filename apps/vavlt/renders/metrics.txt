@@ -1,5 +1,20 @@
 app=vavlt
 what=consent-first photo/video vault engine, one vieww UI across desktop/android/ios
+fixed=the Glass Restore button's backdrop blur was eroding the solid Done
+        button beside it: a backdrop-filtered layer's rasterisation region
+        was grown by the blur's reach (3 sigma = 36 px at the Glass button's
+        sigma 12), so the layer sampled the Done chip's own paint, blurred
+        it, and composited the blurred copy back over it — the white chip
+        lost its right 36 px to a Gaussian ramp and smeared a glow through
+        the gutter under the frosted chip, in both themes and both form
+        factors (06 what changed, bottom row). The region for a backdrop
+        filter is now its declared bounds, ungrown, in
+        vieww-paint::scene::push_filtered_layer; the blur clamps at the
+        widget's edges. Two regression tests: scene-side
+        a_backdrop_layers_region_is_its_declared_bounds_not_grown_by_reach,
+        renderer-side a_backdrop_layer_leaves_the_paint_beside_it_alone.
+        Only vavlt uses BackdropBlur today (the Glass button), so no other
+        app's pixels move. sheet/anim regenerated.
 treemap=round 3 — the Activity tab's composition card: what was handed over,
         by class, by bytes, as a squarified treemap built on
         vieww-dataviz::hierarchy (stratify + sum + sort_by_value + treemap —
@@ -37,4 +52,4 @@ screens=9 of the 44 the screenshot suite renders (phone dark; the suite does
 sheet=sheet.png,1290x1248,9 screens, two rows
 frames=135 timeline at 10fps (1.1s hold + 0.4s crossfade per screen, seamless
       loop; 9 screens)
-gif=anim.gif,412,915,10fps,3461338
+gif=anim.gif,412,915,10fps,3456318
