@@ -42,19 +42,19 @@ fn hero_cards() -> [(String, &'static str, &'static str, Color); 3] {
         (
             pf::group_commas(pf::CERT_TESTS),
             "",
-            "certification tests, green",
+            "automated tests, all passing",
             SYN_TYPE,
         ),
         (
             format!("{}", pf::CERT_CRATES),
             "",
-            "crates · one core, no forks",
+            "building blocks, one engine",
             BRAND_NEAR,
         ),
         (
             format!("{}", pf::CERT_ALLOCS_STEADY),
             "",
-            "allocations · 60 steady frames",
+            "memory hiccups while animating",
             LEDGER,
         ),
     ]
@@ -102,10 +102,11 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
     // speaks — and a hairline grid that only exists where numbers are.
     let rail_a = 0.55 * pf::clamp01(t / 0.16);
     let rail_t = t * 8.0;
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
+            let _ = (w, h);
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
                 Gradient::vertical().with_dither().with_stops(&[
@@ -114,11 +115,17 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
                     (1.0, Color::rgb(11, 10, 14)),
                 ]),
             );
-            if rail_a > 0.01 {
-                let pts = fk::thread_pts(Offset::new(128.0, 90.0), Offset::new(168.0, 990.0), 110.0);
-                fk::flow_along(book, &pts, rail_t, BRAND_FAR, rail_a, 1.4, 0.10);
-            }
             pf::vignette(book, w, h, 0.52);
+        }),
+    )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            let _ = (w, h, &s);
+
+            let _ = (rail_a, rail_t);
+
         }),
     )));
 
@@ -176,24 +183,24 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
             stack = stack.push(
                 Positioned::new()
                     .left(x)
-                    .top(442.0)
+                    .top(438.0)
                     .width(card_w)
-                    .height(28.0)
+                    .height(32.0)
                     .child(Opacity::new(text_a).child(
                         Text::new(label.to_string())
-                            .style(pf::geist_mono(17.0).letter_spacing(1.6).color(pf::alpha(color, 0.92)))
+                            .style(pf::geist_mono(21.0).letter_spacing(1.0).color(pf::alpha(color, 0.95)))
                             .align(TextAlign::Center),
                     )),
             );
             stack = stack.push(
                 Positioned::new()
                     .left(x)
-                    .top(472.0)
+                    .top(474.0)
                     .width(card_w)
-                    .height(22.0)
+                    .height(24.0)
                     .child(Opacity::new(text_a * 0.8).child(
                         Text::new("audit".to_string())
-                            .style(pf::geist_mono(12.0).letter_spacing(2.6).color(pf::alpha(MUTED, 0.7)))
+                            .style(pf::geist_mono(15.0).letter_spacing(2.4).color(pf::alpha(MUTED, 0.8)))
                             .align(TextAlign::Center),
                     )),
             );
@@ -206,12 +213,12 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
     // drawn at the same scale so the gap is a length and not a claim.
     let gauge_p = pf::clamp01((t - 0.22) / 0.11);
     if gauge_p > 0.01 {
-        let gx0 = 470.0;
-        let gx1 = 1560.0;
-        let plate = Rect::new(360.0, 542.0, 1560.0, 542.0 + 256.0);
+        let gx0 = 330.0;
+        let gx1 = 1700.0;
+        let plate = Rect::new(212.0, 542.0, 1708.0, 542.0 + 256.0);
         let bars: [(&str, f32, f32); 2] = [
-            ("p95 frame", pf::CERT_P95_MS, 0.30),
-            ("worst frame", pf::CERT_WORST_MS, 0.37),
+            ("typical frame", pf::CERT_P95_MS, 0.30),
+            ("slowest frame", pf::CERT_WORST_MS, 0.37),
         ];
         let ga = gauge_p;
         stack = stack.push(Positioned::fill().child(Painting::sized(
@@ -258,13 +265,14 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
         // is shaped by the same engine that shapes the app's.
         let title_a = ease_out_cubic(pf::clamp01((gauge_p - 0.4) / 0.6));
         stack = stack.push(
-            Positioned::new().left(400.0).top(570.0).width(760.0).height(32.0).child(
+            Positioned::new().left(252.0).top(564.0).width(1000.0).height(34.0).child(
                 Opacity::new(title_a).child(
-                    Text::new("the frame budget — 60 fps allows 16.7 ms".to_string())
-                        .style(pf::geist_mono(17.0).letter_spacing(2.0).color(pf::alpha(ACCENT, 0.95))),
+                    Text::new("time allowed for one smooth frame: 16.7 ms".to_string())
+                        .style(pf::geist_mono(22.0).letter_spacing(1.4).color(pf::alpha(ACCENT, 0.97))),
                 ),
             ),
         );
+        let gx0_l = gx0;
         for (k, (label, value, t0)) in bars.iter().enumerate() {
             let p = pf::clamp01((t - t0) / 0.16);
             if p <= 0.01 {
@@ -272,15 +280,15 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
             }
             let y = 630.0 + k as f32 * 64.0;
             stack = stack.push(
-                Positioned::new().left(400.0).top(y + 28.0).width(320.0).height(20.0).child(
+                Positioned::new().left(gx0_l).top(y + 28.0).width(320.0).height(26.0).child(
                     Opacity::new(p).child(
                         Text::new(label.to_string())
-                            .style(pf::geist_mono(15.0).letter_spacing(1.4).color(pf::alpha(MUTED, 0.9))),
+                            .style(pf::geist_mono(19.0).letter_spacing(1.0).color(pf::alpha(MUTED, 0.92))),
                     ),
                 ),
             );
             stack = stack.push(
-                Positioned::new().left(1300.0).top(y - 8.0).width(250.0).height(48.0).child(
+                Positioned::new().left(1440.0).top(y - 8.0).width(250.0).height(48.0).child(
                     Opacity::new(p).child(
                         Text::new(format!("{:.1} ms", count_f(*value, (t - t0) / 0.20)))
                             .style(pf::geist(34.0).bold().color(pf::alpha(LEDGER, 0.98)))
@@ -293,14 +301,14 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
         let head_a = pf::clamp01((t - 0.44) / 0.10);
         if head_a > 0.01 {
             stack = stack.push(
-                Positioned::new().left(400.0).top(756.0).width(1160.0).height(28.0).child(
+                Positioned::new().left(252.0).top(760.0).width(1440.0).height(30.0).child(
                     Opacity::new(head_a).child(
                         Text::new(format!(
-                            "{:.1} ms of headroom on the worst frame the audit could find — and a {:.1} ms cold start.",
+                            "even the slowest frame finishes {:.1} ms early — and the app starts in {:.1} ms.",
                             BUDGET_MS - pf::CERT_WORST_MS,
                             pf::CERT_STARTUP_MS
                         ))
-                        .style(pf::geist_mono(16.0).letter_spacing(1.2).color(pf::alpha(LEDGER, 0.88))),
+                        .style(pf::geist_mono(20.0).letter_spacing(0.6).color(pf::alpha(LEDGER, 0.92))),
                     ),
                 ),
             );
@@ -314,7 +322,7 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
     // thing that has been showing it to you.
     let film_p = pf::clamp01((t - 0.58) / 0.10);
     if film_p > 0.01 && probe.frames > 0 {
-        let plate = Rect::new(360.0, 824.0, 1560.0, 824.0 + 116.0);
+        let plate = Rect::new(212.0, 824.0, 1708.0, 824.0 + 116.0);
         let sheen_p = pf::clamp01((t - 0.66) / 0.18);
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
@@ -332,26 +340,26 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
                 pf::count_up(probe.frames, roll)
             };
             stack = stack.push(
-                Positioned::new().left(400.0).top(844.0).width(760.0).height(32.0).child(
+                Positioned::new().left(252.0).top(842.0).width(900.0).height(34.0).child(
                     Opacity::new(a).child(
-                        Text::new("and this film audited itself".to_string())
-                            .style(pf::geist_mono(16.0).letter_spacing(2.2).color(pf::alpha(ACCENT, 0.95))),
+                        Text::new("and this film measured itself".to_string())
+                            .style(pf::geist_mono(21.0).letter_spacing(1.4).color(pf::alpha(ACCENT, 0.97))),
                     ),
                 ),
             );
             stack = stack.push(
-                Positioned::new().left(400.0).top(878.0).width(900.0).height(28.0).child(
+                Positioned::new().left(252.0).top(882.0).width(1000.0).height(30.0).child(
                     Opacity::new(a * 0.9).child(
                         Text::new(format!(
-                            "every frame rendered by vieww · {:.0} ms median · {}",
-                            probe.frame_ms, probe.bench
+                            "every frame drawn by vieww itself · about {:.0} ms each, on an ordinary CPU",
+                            probe.frame_ms
                         ))
-                        .style(pf::geist_mono(13.0).letter_spacing(1.0).color(pf::alpha(MUTED, 0.85))),
+                        .style(pf::geist_mono(17.0).letter_spacing(0.4).color(pf::alpha(MUTED, 0.9))),
                     ),
                 ),
             );
             stack = stack.push(
-                Positioned::new().left(1120.0).top(844.0).width(420.0).height(66.0).child(
+                Positioned::new().left(1268.0).top(846.0).width(420.0).height(66.0).child(
                     Opacity::new(a).child(
                         Text::new(format!("{} frames", pf::group_commas(frames)))
                             .style(pf::geist(48.0).bold().letter_spacing(-0.5).color(pf::alpha(INK, 0.98)))
@@ -363,17 +371,16 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
     }
 
     // ── The film's voice ────────────────────────────────────────────
-    stack = stack.push(pf::caption(
-        "every number a receipt — quoted from the repo's own audit.",
+    stack = stack.push(super::frame::caption(
+        "Every number here is real.",
         1002.0,
         pf::clamp01((t - 0.06) / 0.10),
     ));
-    stack = stack.push(pf::caption(
-        "the last one is measured, not quoted — this film is its own benchmark.",
+    stack = stack.push(super::frame::caption(
+        "The last one was measured while making this very film.",
         966.0,
         pf::clamp01((t - 0.60) / 0.09),
     ));
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
     let _ = (sec, ACCENT_DEEP);
     stack.into()
 }
@@ -395,16 +402,17 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
     let mut stack = Stack::new();
 
     const COLS: usize = 6;
-    const TILE_W: f32 = 196.0;
-    const TILE_H: f32 = 58.0;
-    const GAP: f32 = 12.0;
+    const TILE_W: f32 = 200.0;
+    const TILE_H: f32 = 62.0;
+    const GAP: f32 = 14.0;
     const GRID_X: f32 = 96.0;
     const GRID_Y: f32 = 330.0;
 
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
+            let _ = (w, h);
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
                 Gradient::vertical().with_dither().with_stops(&[
@@ -413,6 +421,15 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
                     (1.0, Color::rgb(10, 9, 13)),
                 ]),
             );
+            pf::vignette(book, w, h, 0.5);
+        }),
+    )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            let _ = (w, h, &s);
+
             // The 36 tiles. Each lands on its own beat, in reading order,
             // so the grid fills the way a count runs.
             for i in 0..pf::CERT_CRATES {
@@ -430,7 +447,7 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
                 // list, and a list reads better with a rail.
                 book.rect(pf::xywh(r.left, r.top + 10.0, 3.0, r.height() - 20.0), pf::alpha(BRAND_NEAR, 0.55 * p));
             }
-            pf::vignette(book, w, h, 0.5);
+
         }),
     )));
 
@@ -443,11 +460,16 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
         let (cx, cy) = (i % COLS, i / COLS);
         let x = GRID_X + cx as f32 * (TILE_W + GAP);
         let y = GRID_Y + cy as f32 * (TILE_H + GAP);
-        stack = stack.push(Positioned::new().left(x + 16.0).top(y + 18.0 + (1.0 - p) * 8.0).width(TILE_W - 24.0).height(26.0).child(
-            Opacity::new(p).child(Text::new((*name).to_string())
-                .style(pf::geist_mono(15.0).letter_spacing(0.4).color(pf::alpha(INK, 0.92)))),
-        ));
+        // The shared `vieww-` prefix is said once, above the grid; each
+        // tile carries the part that tells the crates apart, at a size
+        // that fits the tile on one line.
+        let short = name.strip_prefix("vieww-").unwrap_or(name);
+        stack = stack.push(super::frame::label(x + 16.0, y + (1.0 - p) * 8.0, TILE_W - 22.0, TILE_H, short.to_string(),
+            pf::geist_mono(if short.len() > 15 { 17.0 } else { 20.0 }).color(pf::alpha(INK, 0.94)), TextAlign::Left, p));
     }
+
+    stack = stack.push(super::frame::label(GRID_X, GRID_Y - 44.0, 800.0, 32.0, "every part of vieww, by name".to_string(),
+        pf::geist_mono(20.0).letter_spacing(1.0).color(pf::alpha(MUTED, 0.92)), TextAlign::Left, pf::clamp01(t / 0.10)));
 
     // The count, running with the grid.
     let filled = pf::CRATES
@@ -458,39 +480,39 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
         .count();
     let head_a = pf::clamp01(t / 0.10);
     if head_a > 0.01 {
-        stack = stack.push(Positioned::new().left(1350.0).top(324.0).width(500.0).height(110.0).child(
+        stack = stack.push(Positioned::new().left(1440.0).top(300.0).width(420.0).height(110.0).child(
             Opacity::new(head_a).child(Text::new(format!("{filled}"))
                 .style(pf::geist(92.0).bold().letter_spacing(-2.0).color(pf::alpha(INK, 0.98)))),
         ));
-        stack = stack.push(Positioned::new().left(1350.0).top(432.0).width(500.0).height(32.0).child(
-            Opacity::new(head_a).child(Text::new("crates, named".to_string())
-                .style(pf::geist_mono(19.0).letter_spacing(2.0).color(pf::alpha(ACCENT, 0.95)))),
+        stack = stack.push(Positioned::new().left(1440.0).top(410.0).width(420.0).height(34.0).child(
+            Opacity::new(head_a).child(Text::new("building blocks".to_string())
+                .style(pf::geist_mono(23.0).letter_spacing(1.4).color(pf::alpha(ACCENT, 0.97)))),
         ));
     }
 
     // The certification's breakdown, under the count — the rows the
     // ledger's hero cards summarised.
     const ROWS: [(&str, &str); 4] = [
-        ("unit + integration", "the workspace's own suite"),
-        ("vulkan conformance", "37 device tests"),
-        ("golden frames", "pixel-compared, every run"),
-        ("allocation probes", "60 steady frames, zero"),
+        ("automated tests", "run on every change"),
+        ("graphics checks", "37 on real GPU paths"),
+        ("picture checks", "compared pixel by pixel"),
+        ("memory checks", "zero hiccups while animating"),
     ];
     for (i, (label, note)) in ROWS.iter().enumerate() {
         let p = ease_out_cubic(pf::clamp01((t - 0.42 - i as f32 * 0.05) / 0.16));
         if p <= 0.01 {
             continue;
         }
-        let y = 512.0 + i as f32 * 82.0;
-        stack = stack.push(Positioned::new().left(1350.0).top(y).width(520.0).height(30.0).child(
+        let y = 486.0 + i as f32 * 84.0;
+        stack = stack.push(Positioned::new().left(1440.0).top(y).width(420.0).height(32.0).child(
             Opacity::new(p).child(Text::new((*label).to_string())
-                .style(pf::geist_mono(19.0).letter_spacing(1.0).color(pf::alpha(INK, 0.94)))),
+                .style(pf::geist_mono(22.0).letter_spacing(0.6).color(pf::alpha(INK, 0.96)))),
         ));
-        stack = stack.push(Positioned::new().left(1350.0).top(y + 30.0).width(520.0).height(26.0).child(
+        stack = stack.push(Positioned::new().left(1440.0).top(y + 34.0).width(420.0).height(28.0).child(
             Opacity::new(p * 0.85).child(Text::new((*note).to_string())
-                .style(pf::geist_mono(14.0).letter_spacing(0.9).color(pf::alpha(MUTED, 0.88)))),
+                .style(pf::geist_mono(18.0).letter_spacing(0.4).color(pf::alpha(MUTED, 0.92)))),
         ));
-        stack = stack.push(Positioned::new().left(1350.0).top(y + 58.0).width(500.0).height(2.0).child(
+        stack = stack.push(Positioned::new().left(1440.0).top(y + 70.0).width(420.0).height(2.0).child(
             Opacity::new(p * 0.5).child(Painting::sized(Size::new(500.0, 2.0), PaintWith::new(
                 move |book: &mut Sketchbook, _s: Size| {
                     book.rect(Rect::new(0.0, 0.0, 500.0, 1.0), pf::alpha(Color::WHITE, 0.08));
@@ -502,18 +524,17 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
     // The film's own line, last.
     let film_a = pf::clamp01((t - 0.74) / 0.12);
     if film_a > 0.01 && probe.frames > 0 {
-        stack = stack.push(Positioned::new().left(1350.0).top(852.0).width(540.0).height(30.0).child(
+        stack = stack.push(Positioned::new().left(GRID_X).top(GRID_Y + 6.0 * (TILE_H + GAP) + 14.0).width(1760.0).height(32.0).child(
             Opacity::new(film_a).child(Text::new(format!(
                 "and {} frames of this film, counted by its own census",
                 pf::group_commas(probe.frames)
             ))
-            .style(pf::geist_mono(15.0).letter_spacing(0.9).color(pf::alpha(LEDGER, 0.9)))),
+            .style(pf::geist_mono(21.0).letter_spacing(0.6).color(pf::alpha(LEDGER, 0.95)))),
         ));
     }
 
-    stack = stack.push(pf::caption("thirty-six crates, one core — and here they are.", 1002.0, pf::clamp01((t - 0.05) / 0.10)));
-    stack = stack.push(pf::caption("a number you can check is worth more than a number you can read.", 966.0, pf::clamp01((t - 0.60) / 0.10)));
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    stack = stack.push(super::frame::caption("36 building blocks — and here they are.", 1002.0, pf::clamp01((t - 0.05) / 0.10)));
+    stack = stack.push(super::frame::caption("A number you can check beats a number you're told.", 966.0, pf::clamp01((t - 0.60) / 0.10)));
     let _ = sec;
     stack.into()
 }

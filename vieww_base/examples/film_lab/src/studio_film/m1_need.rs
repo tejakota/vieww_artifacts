@@ -21,30 +21,30 @@ use super::{
 /// ship. Centered on the canvas, below the caption band.
 // Re-pitched into the body band (300–900): the header and footer are
 // the film's own type, and nothing in a scene may draw into them.
-const CARD: Rect = Rect::new(740.0, 344.0, 1180.0, 844.0);
+const CARD: Rect = Rect::new(740.0, 340.0, 1180.0, 840.0);
 
 /// The four ports' stations, clockwise from top-left.
 const STATIONS: [Rect; 4] = [
-    Rect::new(112.0, 300.0, 424.0, 472.0),
-    Rect::new(1496.0, 300.0, 1808.0, 472.0),
-    Rect::new(112.0, 764.0, 424.0, 936.0),
-    Rect::new(1496.0, 764.0, 1808.0, 936.0),
+    Rect::new(150.0, 330.0, 490.0, 520.0),
+    Rect::new(1430.0, 330.0, 1770.0, 520.0),
+    Rect::new(150.0, 680.0, 490.0, 870.0),
+    Rect::new(1430.0, 680.0, 1770.0, 870.0),
 ];
 
 /// Where each rail leaves the truth card's edge.
 const CARD_ANCHORS: [Offset; 4] = [
-    Offset::new(740.0, 420.0),
-    Offset::new(1180.0, 420.0),
-    Offset::new(740.0, 768.0),
-    Offset::new(1180.0, 768.0),
+    Offset::new(740.0, 425.0),
+    Offset::new(1180.0, 425.0),
+    Offset::new(740.0, 775.0),
+    Offset::new(1180.0, 775.0),
 ];
 
 /// What each port gets wrong — the drift is specific, not generic.
 const FLAWS: [&str; 4] = [
-    "hue drifted, chrome added",
-    "spacing cramped, radius gone",
-    "radius a pill, button overflows",
-    "brand rendered as grey",
+    "colours drifted",
+    "spacing squashed",
+    "everything turned into pills",
+    "the brand went grey",
 ];
 
 pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
@@ -54,7 +54,7 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
     let mut stack = Stack::new();
 
     // The room — the film's warmest dark; the picture deserves a stage.
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
@@ -66,6 +66,13 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
                     (1.0, Color::rgb(13, 11, 16)),
                 ]),
             );
+            pf::stars(book, w, h, 0x5E51, 60, t, 0.05);
+            pf::vignette(book, w, h, 0.5);
+        }),
+    )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             // A soft stage light behind the truth card — one blurred
             // group, breathing with the card it lifts.
             let stage_a = ease_out_cubic(clamp01(t / 0.10));
@@ -84,8 +91,6 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
                     );
                 });
             }
-            pf::stars(book, w, h, 0x5E51, 60, t, 0.05);
-            pf::vignette(book, w, h, 0.5);
         }),
     )));
 
@@ -125,7 +130,9 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
                 // landed, it *flows*: the picture is in transit, and
                 // the dashes say so.
                 if rail_p > 0.01 {
-                    let pts = fk::thread_pts(anchor, station_center(station), -150.0);
+                    let sc = station_center(station);
+                    let end = if station.left < 900.0 { Offset::new(station.right, sc.dy) } else { Offset::new(station.left, sc.dy) };
+                    let pts = fk::thread_pts(anchor, end, 0.0);
                     fk::grow_stroke(book, &pts, rail_p, ACCENT, 1.5, 0.30 + 0.45 * rail_p);
                     let flow = clamp01((rail_p - 0.85) * 7.0);
                     if flow > 0.01 {
@@ -138,28 +145,23 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
                 }
             },
         )));
-        // The port's name and its flaw — text, so the drift is legible.
+        // The port's name and its flaw — under the card, never on it: a
+        // label laid over the picture it names hides the very drift it is
+        // pointing at.
         if card_p > 0.01 {
             let rise = (1.0 - card_p) * 10.0;
-            stack = stack.push(
-                Positioned::new()
-                    .left(station.left + 16.0)
-                    .top(station.top + 8.0 + rise)
-                    .width(station.width() - 24.0)
-                    .height(44.0)
-                    .child(Opacity::new(card_p).child(
-                        Flex::column()
-                            .spacing(3.0)
-                            .push(
-                                Text::new(port.to_string())
-                                    .style(pf::geist_mono(14.0).letter_spacing(2.0).color(pf::alpha(INK, 0.92))),
-                            )
-                            .push(
-                                Text::new(flaw.to_string())
-                                    .style(pf::geist_mono(12.0).letter_spacing(0.6).color(pf::alpha(BREAK_RED, 0.16 + 0.74 * flaw_p))),
-                            ),
-                    )),
-            );
+            stack = stack.push(super::frame::label(
+                station.left, station.bottom + 12.0 + rise, station.width(), 30.0,
+                port.to_string(),
+                pf::geist_mono(21.0).letter_spacing(2.0).color(pf::alpha(INK, 0.94)),
+                TextAlign::Center, card_p,
+            ));
+            stack = stack.push(super::frame::label(
+                station.left - 30.0, station.bottom + 44.0 + rise, station.width() + 60.0, 26.0,
+                flaw.to_string(),
+                pf::geist_mono(17.0).letter_spacing(0.6).color(pf::alpha(BREAK_RED, 0.95)),
+                TextAlign::Center, card_p * (0.18 + 0.82 * flaw_p),
+            ));
         }
     }
 
@@ -171,24 +173,17 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         .filter(|(i, _)| t > 0.14 + *i as f32 * 0.06 + 0.05)
         .count();
     if ports_in > 0 {
-        stack = stack.push(
-            Positioned::new()
-                .left(620.0)
-                .top(866.0)
-                .width(680.0)
-                .height(32.0)
-                .child(
-                    Text::new(format!("rewrite № {ports_in} of 4 — same picture, four codes"))
-                        .style(pf::geist_mono(18.0).letter_spacing(1.4).color(pf::alpha(MUTED, 0.9)))
-                        .align(TextAlign::Center),
-                ),
-        );
+        stack = stack.push(super::frame::label(
+            560.0, 870.0, 800.0, 36.0,
+            format!("rebuild {ports_in} of 4 — same design, four separate codebases"),
+            pf::geist_mono(22.0).letter_spacing(1.2).color(pf::alpha(MUTED, 0.95)),
+            TextAlign::Center, 1.0,
+        ));
     }
 
     // The film's voice.
-    stack = stack.push(pf::caption("one picture. five codebases.", 1002.0, clamp01((t - 0.10) / 0.10)));
-    stack = stack.push(pf::caption("every release, shipped five times — and none of them the same.", 966.0, clamp01((t - 0.55) / 0.12)));
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    stack = stack.push(super::frame::caption("One design. Five separate codebases.", 1002.0, clamp01((t - 0.10) / 0.10)));
+    stack = stack.push(super::frame::caption("Every app is rebuilt for each platform — and each ends up different.", 966.0, clamp01((t - 0.55) / 0.12)));
     stack.into()
 }
 
@@ -298,20 +293,20 @@ fn draw_port_card(book: &mut Sketchbook, r: Rect, i: usize, a: f32) {
             }
             book.rrect(pf::xywh(r.left + 14.0, r.top + r.height() - 26.0, r.width() - 28.0, 18.0), 0.0, pf::alpha(BRAND_NEAR, 0.65 * a));
         }
-        // ios — everything is a pill, and the button overflows the card.
+        // ios — everything is a pill.
         2 => {
             book.rrect(body, 44.0, pf::alpha(pf::SURFACE, a));
             book.rrect(pf::xywh(r.left + 20.0, r.top + 18.0, r.width() - 40.0, 44.0), 22.0, pf::alpha(BRAND_FAR, 0.5 * a));
             for row in 0..2 {
                 book.rrect(
-                    pf::xywh(r.left + 20.0, r.top + 76.0 + row as f32 * 40.0, r.width() - 40.0, 30.0),
-                    15.0,
+                    pf::xywh(r.left + 20.0, r.top + 72.0 + row as f32 * 36.0, r.width() - 40.0, 28.0),
+                    14.0,
                     pf::alpha(pf::SURFACE_2, a),
                 );
             }
-            // The overflow — the button escapes the card's right edge.
+            // The button — a pill too, like everything else here.
             book.rrect(
-                pf::xywh(r.left + 20.0, r.top + r.height() - 44.0, r.width() - 4.0, 30.0),
+                pf::xywh(r.left + 20.0, r.top + r.height() - 46.0, r.width() - 40.0, 30.0),
                 15.0,
                 pf::alpha(BRAND_NEAR, 0.65 * a),
             );
@@ -342,11 +337,32 @@ fn draw_port_card(book: &mut Sketchbook, r: Rect, i: usize, a: f32) {
 /// The tolls — what every port pays. One gate per line, each paid in
 /// the currency the first scene established: rewrites, drift, jank.
 const GATES: [(&str, &str); 4] = [
-    ("60 fps on a mid phone", "dropped frames"),
-    ("motion design", "bolted on"),
-    ("accessibility", "later"),
-    ("one brand, every device", "re-translated"),
+    ("smooth on an everyday phone", "stutters"),
+    ("polished animation", "added later"),
+    ("accessibility", "someday"),
+    ("one look on every device", "redone each time"),
 ];
+
+/// The jar the tolls pay into (inner walls), in scene units.
+const JAR: super::models::Jar = super::models::Jar { left: 1380.0, top: 400.0, right: 1700.0, bottom: 790.0 };
+
+/// This scene's length — the coin drops are timed in seconds.
+const Z02_SECONDS: f32 = 12.0;
+
+/// Every coin the tolls drop: eight per gate, from the moment it pays.
+fn toll_drops() -> Vec<super::models::Drop> {
+    let mut out = Vec::new();
+    let mut rng = Rng::new(0xC01A);
+    for gate in 0..4 {
+        let pay = (0.14 + gate as f32 * 0.14 + 0.22) * Z02_SECONDS;
+        for k in 0..8 {
+            let r = 19.0 + rng.f01() * 7.0;
+            let x = JAR.left + r + 4.0 + rng.f01() * (JAR.right - JAR.left - 2.0 * r - 8.0);
+            out.push(super::models::Drop { at: pay + k as f32 * 0.07, x, r, gate });
+        }
+    }
+    out
+}
 
 pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
@@ -355,7 +371,7 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
 
     // The room — colder than Z01: vertical light shafts, one blurred
     // group (the blur economy: group early, blur once).
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
@@ -369,68 +385,54 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         }),
     )));
 
-    // The gauge — the film's cost meter, an arc filling toward red as
-    // the gates pay.
+    // The cost jar — every paid toll drops a handful of coins into it,
+    // and they fall, bounce and pile through vieww-physics: a real
+    // rigid-body world, replayed from the scene's start each frame.
+    let sec = ctx.sec;
+    let drops = toll_drops();
+    let coins = super::models::coins_at(JAR, &drops, sec);
     let paid_n = GATES.iter().enumerate().filter(|(i, _)| t > 0.14 + *i as f32 * 0.14 + 0.22).count();
-    let paid = paid_n as f32;
-    stack = stack.push(Positioned::new().left(1330.0).top(370.0).width(400.0).height(400.0).child(
-        Painting::sized(Size::new(400.0, 400.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            let cx = 200.0;
-            let cy = 200.0;
-            // The track — three quarters of a turn, from twelve o'clock.
-            let start = -std::f32::consts::FRAC_PI_2;
-            let full = std::f32::consts::TAU * 0.75;
-            book.arc(Offset::new(cx, cy), 150.0, 10.0, start, full, pf::alpha(Color::WHITE, 0.06));
-            // The fill — a slice per paid toll, amber shading to red.
-            if paid > 0.01 {
-                let sweep = full * (paid / 4.0);
-                book.arc(
-                    Offset::new(cx, cy),
-                    150.0,
-                    10.0,
-                    start,
-                    sweep,
-                    Gradient::sweep(Offset::new(0.5, 0.5), start, start + sweep)
-                        .with_stops(&[(0.0, pf::SYN_MACRO), (1.0, BREAK_RED)]),
-                );
+    let jar_a = ease_out_cubic(clamp01((t - 0.08) / 0.12));
+    stack = stack.push(Positioned::fill().child(
+        Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+            let j = JAR;
+            // The glass: a soft fill and a U-shaped rim.
+            book.rrect(pf::xywh(j.left - 10.0, j.top, j.right - j.left + 20.0, j.bottom - j.top + 10.0), 22.0, pf::alpha(Color::WHITE, 0.03 * jar_a));
+            let mut rim = Path::new();
+            rim.move_to(Offset::new(j.left - 10.0, j.top - 6.0))
+                .line_to(Offset::new(j.left - 10.0, j.bottom - 12.0))
+                .cubic_to(Offset::new(j.left - 10.0, j.bottom), Offset::new(j.left - 2.0, j.bottom + 10.0), Offset::new(j.left + 12.0, j.bottom + 10.0))
+                .line_to(Offset::new(j.right - 12.0, j.bottom + 10.0))
+                .cubic_to(Offset::new(j.right + 2.0, j.bottom + 10.0), Offset::new(j.right + 10.0, j.bottom), Offset::new(j.right + 10.0, j.bottom - 12.0))
+                .line_to(Offset::new(j.right + 10.0, j.top - 6.0));
+            book.stroke(rim, pf::alpha(Color::WHITE, 0.22 * jar_a), 2.0);
+            for (di, at) in &coins {
+                let d = drops[*di];
+                let a = clamp01((at.dy - (j.top - 40.0)) / 36.0) * jar_a;
+                if a <= 0.01 {
+                    continue;
+                }
+                let warm = [pf::SYN_MACRO, Color::rgb(240, 138, 76), Color::rgb(232, 98, 82), BREAK_RED][d.gate];
+                book.circle(*at, d.r, pf::alpha(pf::mix(warm, Color::BLACK, 0.25), a));
+                book.circle(*at, d.r - 3.0, pf::alpha(warm, a));
+                book.ring(*at, d.r * 0.55, 1.4, pf::alpha(pf::mix(warm, Color::WHITE, 0.45), 0.8 * a));
+                book.circle(Offset::new(at.dx - d.r * 0.35, at.dy - d.r * 0.4), d.r * 0.18, pf::alpha(Color::WHITE, 0.35 * a));
             }
-            // The gauge's orbit — cost particles circling the dial, the
-            // meter alive between payments.
-            fk::orbit_dots(
-                book,
-                Offset::new(cx, cy),
-                168.0,
-                168.0,
-                5,
-                t * 10.0,
-                0.55,
-                BREAK_RED,
-                0.30 + 0.45 * (paid / 4.0),
-                2.2,
-            );
         })),
     ));
-    // The gauge's numerals — a widget over the painting.
-    stack = stack.push(
-        Positioned::new()
-            .left(1330.0)
-            .top(522.0)
-            .width(400.0)
-            .height(80.0)
-            .child(
-                Flex::column()
-                    .push(
-                        Text::new(format!("{paid_n} of 4 tolls"))
-                            .style(pf::geist(30.0).bold().color(pf::alpha(INK, 0.95)))
-                            .align(TextAlign::Center),
-                    )
-                    .push(
-                        Text::new("paid on every port, every release".to_string())
-                            .style(pf::geist_mono(13.0).letter_spacing(1.2).color(pf::alpha(MUTED, 0.85)))
-                            .align(TextAlign::Center),
-                    ),
-            ),
-    );
+    // The count — above the jar; the reading — under it.
+    stack = stack.push(super::frame::label(
+        JAR.left - 60.0, 318.0, JAR.right - JAR.left + 120.0, 52.0,
+        format!("{paid_n} of 4 costs"),
+        pf::geist(40.0).bold().color(pf::alpha(INK, 0.97)),
+        TextAlign::Center, jar_a,
+    ));
+    stack = stack.push(super::frame::label(
+        JAR.left - 80.0, JAR.bottom + 26.0, JAR.right - JAR.left + 160.0, 30.0,
+        "paid again on every platform".to_string(),
+        pf::geist_mono(19.0).color(pf::alpha(MUTED, 0.92)),
+        TextAlign::Center, jar_a,
+    ));
 
     // The gates — each bar slides in, holds, then pays.
     for (i, (gate, toll)) in GATES.iter().enumerate() {
@@ -448,7 +450,7 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         let flow_a = clamp01((pay_p - 0.6) * 2.5);
         if flow_a > 0.01 {
             let from = Offset::new(160.0 + gate_w, y + 48.0);
-            let to = Offset::new(1368.0, 452.0 + i as f32 * 58.0);
+            let to = Offset::new(JAR.left + 40.0 + i as f32 * 60.0, JAR.top - 20.0);
             let phase = t * 1.0 + i as f32 * 0.9;
             stack = stack.push(Positioned::fill().child(
                 Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
@@ -477,43 +479,32 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
                         // The toll's stamp, right-aligned inside the bar.
                         if pay_p > 0.5 && w > 220.0 {
                             let stamp_a = (pay_p - 0.5) * 2.0;
-                            book.rrect(pf::xywh(w - 208.0, 26.0, 186.0, 44.0), 9.0, pf::alpha(BREAK_RED, 0.14 * stamp_a));
-                            book.stroke_rrect(pf::xywh(w - 208.0, 26.0, 186.0, 44.0), 9.0, pf::alpha(BREAK_RED, 0.65 * stamp_a), 1.2);
+                            book.rrect(pf::xywh(w - 238.0, 22.0, 216.0, 52.0), 10.0, pf::alpha(BREAK_RED, 0.14 * stamp_a));
+                            book.stroke_rrect(pf::xywh(w - 238.0, 22.0, 216.0, 52.0), 10.0, pf::alpha(BREAK_RED, 0.65 * stamp_a), 1.2);
                         }
                     },
                 ))),
         );
         // The gate's words.
-        stack = stack.push(
-            Positioned::new()
-                .left(160.0 + 28.0)
-                .top(y + 32.0)
-                .width(560.0)
-                .height(48.0)
-                .child(Opacity::new(in_p).child(
-                    Text::new(gate.to_string())
-                        .style(pf::geist(22.0).color(pf::alpha(INK, 0.92))),
-                )),
-        );
+        stack = stack.push(super::frame::label(
+            160.0 + 32.0, y + 8.0, 620.0, 80.0,
+            gate.to_string(),
+            pf::geist(30.0).color(pf::alpha(INK, 0.95)),
+            TextAlign::Left, in_p,
+        ));
         if pay_p > 0.5 && gate_w > 220.0 {
-            stack = stack.push(
-                Positioned::new()
-                    .left(160.0 + gate_w - 208.0 + 18.0)
-                    .top(y + 44.0)
-                    .width(180.0)
-                    .height(28.0)
-                    .child(Opacity::new((pay_p - 0.5) * 2.0).child(
-                        Text::new(toll.to_string())
-                            .style(pf::geist_mono(13.0).letter_spacing(1.0).color(BREAK_RED)),
-                    )),
-            );
+            stack = stack.push(super::frame::label(
+                160.0 + gate_w - 238.0, y + 22.0, 216.0, 52.0,
+                toll.to_string(),
+                pf::geist_mono(18.0).letter_spacing(0.8).color(BREAK_RED),
+                TextAlign::Center, (pay_p - 0.5) * 2.0,
+            ));
         }
     }
 
     // The film's voice.
-    stack = stack.push(pf::caption("the gaps are not bugs. they are the architecture.", 1002.0, clamp01((t - 0.10) / 0.10)));
-    stack = stack.push(pf::caption("every port pays again — in rewrites, drift, and dropped frames.", 966.0, clamp01((t - 0.62) / 0.12)));
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    stack = stack.push(super::frame::caption("The gaps aren't bugs. They're built in.", 1002.0, clamp01((t - 0.10) / 0.10)));
+    stack = stack.push(super::frame::caption("Every platform pays again — in rewrites, mismatches and slow screens.", 966.0, clamp01((t - 0.62) / 0.12)));
     stack.into()
 }
 
@@ -529,7 +520,7 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
     // The room — the film's darkest: a point of light in it, and
     // beneath it, a real 3D floor — a perspective grid the camera
     // dollies over as the question lands. Depth, not decoration.
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
@@ -588,7 +579,7 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
             // gathers. This is the scene's second half, which the v2
             // cut spent holding a still frame.
             let charge = clamp01((t - 0.60) / 0.34);
-            let centre = Offset::new(w * 0.5, h * 0.345);
+            let centre = Offset::new(w * 0.5, 400.0);
             if grow > 0.01 {
                 book.layer(grow, 60.0, None, |glow_book| {
                     glow_book.circle(
@@ -611,7 +602,7 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
                     if ph <= 0.01 || ph >= 1.0 {
                         continue;
                     }
-                    let r = 44.0 + 460.0 * ease_out_expo(ph);
+                    let r = 44.0 + 190.0 * ease_out_expo(ph);
                     book.ring(centre, r, 1.4, pf::alpha(BRAND_FAR, 0.34 * (1.0 - ph)));
                 }
             }
@@ -622,7 +613,7 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
     // The question — types on, one line, then its consequence. The
     // caret is the house `type_on`, so it cannot drift.
     stack = stack.push(pf::type_on(
-        "what if the distance were the bug?",
+        "What if you built it once…",
         pf::TypeAt::CenteredOn(W as i32 / 2),
         532.0,
         pf::geist(68.0).letter_spacing(0.4).color(pf::alpha(INK, 0.97)),
@@ -630,7 +621,7 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
         sec,
     ));
     stack = stack.push(pf::type_on(
-        "and the fix were the framework?",
+        "…and it looked right everywhere?",
         pf::TypeAt::CenteredOn(W as i32 / 2),
         636.0,
         pf::geist(62.0).letter_spacing(0.4).color(pf::alpha(ACCENT, 0.95)),
@@ -638,8 +629,7 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
         sec - 3.5,
     ));
 
-    stack = stack.push(pf::caption("the question every stack answers differently.", 966.0, clamp01((t - 0.72) / 0.12)));
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    stack = stack.push(super::frame::caption("The question every team eventually asks.", 1002.0, clamp01((t - 0.72) / 0.12)));
     stack.into()
 }
 
@@ -663,7 +653,7 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     const RELEASES: usize = 6;
     const X0: f32 = 300.0;
     const X1: f32 = 1700.0;
-    const BASE_Y: f32 = 560.0;
+    const BASE_Y: f32 = 580.0;
     /// How far each port has wandered by release `k`, in pixels. Not a
     /// formula — four different stacks drift four different ways, and a
     /// smooth curve would say they drift alike.
@@ -675,7 +665,7 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     ];
     const COLORS: [Color; 4] = [SYN_TYPE, ACCENT, super::LEDGER, BREAK_RED];
 
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
@@ -687,6 +677,12 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
                     (1.0, Color::rgb(10, 9, 13)),
                 ]),
             );
+            pf::vignette(book, w, h, 0.52);
+        }),
+    )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
 
             // The design's own baseline — where every port was supposed
             // to stay. Drawn first, held all scene, never moves.
@@ -741,7 +737,6 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
                 }
                 book.circle(pts[0], 4.4, pf::alpha(color, 0.9));
             }
-            pf::vignette(book, w, h, 0.52);
         }),
     )));
 
@@ -751,18 +746,18 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     if axis_a > 0.01 {
         for k in 0..RELEASES {
             let x = X0 + (X1 - X0) * (k as f32 / (RELEASES - 1) as f32);
-            stack = stack.push(Positioned::new().left(x - 60.0).top(898.0).width(120.0).height(28.0).child(
+            stack = stack.push(Positioned::new().left(x - 60.0).top(BASE_Y + 176.0).width(120.0).height(30.0).child(
                 Opacity::new(axis_a * clamp01((t - 0.10 - k as f32 * 0.02) / 0.14)).child(
                     Text::new(format!("r{}", k + 1))
-                        .style(pf::geist_mono(17.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.75)))
+                        .style(pf::geist_mono(21.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.85)))
                         .align(TextAlign::Center),
                 ),
             ));
         }
-        stack = stack.push(Positioned::new().left(X0).top(928.0).width(1400.0).height(26.0).child(
+        stack = stack.push(Positioned::new().left(X0).top(BASE_Y + 214.0).width(1400.0).height(28.0).child(
             Opacity::new(axis_a).child(
                 Text::new("six releases · one year".to_string())
-                    .style(pf::geist_mono(15.0).letter_spacing(2.6).color(pf::alpha(pf::FAINT, 0.8)))
+                    .style(pf::geist_mono(18.0).letter_spacing(2.6).color(pf::alpha(pf::FAINT, 0.9)))
                     .align(TextAlign::Center),
             ),
         ));
@@ -771,10 +766,10 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     // The baseline's own label, and the four ports'.
     let lab_a = ease_out_cubic(clamp01((t - 0.14) / 0.14));
     if lab_a > 0.01 {
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(BASE_Y - 16.0).width(200.0).height(30.0).child(
+        stack = stack.push(Positioned::new().left(super::MARGIN).top(BASE_Y - 17.0).width(220.0).height(34.0).child(
             Opacity::new(lab_a).child(
                 Text::new("the design".to_string())
-                    .style(pf::geist_mono(18.0).letter_spacing(1.6).color(pf::alpha(INK, 0.9))),
+                    .style(pf::geist_mono(23.0).letter_spacing(1.4).color(pf::alpha(INK, 0.94))),
             ),
         ));
     }
@@ -787,7 +782,7 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     let mut placed: Vec<(usize, f32)> = Vec::new();
     for (i, y) in ends {
         let y = match placed.last() {
-            Some((_, prev)) if y - prev < 40.0 => prev + 40.0,
+            Some((_, prev)) if y - prev < 42.0 => prev + 42.0,
             _ => y,
         };
         placed.push((i, y));
@@ -798,10 +793,10 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
             continue;
         }
         let end_y = placed.iter().find(|(k, _)| *k == i).map(|(_, y)| *y).unwrap_or(BASE_Y);
-        stack = stack.push(Positioned::new().left(X1 + 18.0).top(end_y - 14.0).width(220.0).height(30.0).child(
+        stack = stack.push(Positioned::new().left(X1 + 20.0).top(end_y - 16.0).width(240.0).height(34.0).child(
             Opacity::new(a).child(
                 Text::new((*port).to_string())
-                    .style(pf::geist_mono(17.0).letter_spacing(1.2).color(pf::alpha(COLORS[i], 0.95))),
+                    .style(pf::geist_mono(22.0).letter_spacing(1.0).color(pf::alpha(COLORS[i], 0.97))),
             ),
         ));
     }
@@ -811,23 +806,22 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     if sum_a > 0.01 {
         let total: f32 = DRIFT.iter().map(|d| d[RELEASES - 1].abs()).sum();
         let shown = pf::count_up(total as u64, clamp01((t - 0.56) / 0.26));
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(306.0).width(760.0).height(96.0).child(
+        stack = stack.push(Positioned::new().left(super::MARGIN).top(296.0).width(900.0).height(96.0).child(
             Opacity::new(sum_a).child(
                 Text::new(format!("{shown} px apart"))
                     .style(pf::geist(76.0).bold().letter_spacing(-1.0).color(pf::alpha(INK, 0.97))),
             ),
         ));
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(406.0).width(900.0).height(30.0).child(
+        stack = stack.push(Positioned::new().left(super::MARGIN).top(396.0).width(1100.0).height(32.0).child(
             Opacity::new(sum_a).child(
-                Text::new("after a year — and not one of the four is wrong on its own platform.".to_string())
-                    .style(pf::geist_mono(18.0).letter_spacing(1.1).color(pf::alpha(MUTED, 0.9))),
+                Text::new("after one year — and each version looked fine on its own.".to_string())
+                    .style(pf::geist_mono(21.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.92))),
             ),
         ));
     }
 
-    pf::caption("the same screen, four ports, six releases.", 1002.0, clamp01((t - 0.06) / 0.10));
-    pf::caption("nobody drifts on purpose. everybody drifts.", 966.0, clamp01((t - 0.60) / 0.10));
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    super::frame::caption("The same screen, on four platforms, a year later.", 1002.0, clamp01((t - 0.06) / 0.10));
+    super::frame::caption("Nobody means to drift apart. Everybody does.", 966.0, clamp01((t - 0.60) / 0.10));
     let _ = sec;
     stack.into()
 }
@@ -848,15 +842,15 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let mut stack = Stack::new();
 
-    const LEFT_X: f32 = 250.0;
-    const RIGHT_X: f32 = 1670.0;
-    const MID_Y: f32 = 590.0;
+    const LEFT_X: f32 = 300.0;
+    const RIGHT_X: f32 = 1620.0;
+    const MID_Y: f32 = 610.0;
     /// The four things that sit in the gap, named.
     const TOLLBOOTHS: [(&str, f32); 4] = [
-        ("serialize", 0.18),
-        ("bridge", 0.40),
+        ("convert", 0.18),
+        ("hand over", 0.40),
         ("interpret", 0.62),
-        ("reflow", 0.84),
+        ("re-layout", 0.84),
     ];
 
     let shore_p = ease_out_expo(clamp01(t / 0.14));
@@ -864,7 +858,7 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
     // A packet every 0.42 s; a frame's budget is up 0.34 s after it left.
     let dropped = ((sec - 2.6).max(0.0) / 1.15).floor().max(0.0) as u64;
 
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
@@ -876,11 +870,17 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
                     (1.0, Color::rgb(10, 9, 12)),
                 ]),
             );
+            pf::vignette(book, w, h, 0.54);
+        }),
+    )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
 
             // The two shores — your program on the left, the screen on
             // the right, both solid, both fine. The problem is between.
             for (x, right) in [(LEFT_X, false), (RIGHT_X, true)] {
-                let wdt = 210.0 * shore_p;
+                let wdt = 190.0 * shore_p;
                 let r = if right {
                     pf::xywh(x, MID_Y - 150.0, wdt, 300.0)
                 } else {
@@ -942,21 +942,20 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
                     }
                 }
             }
-            pf::vignette(book, w, h, 0.54);
         }),
     )));
 
     // The shores' names, and the booths'.
     let lab = ease_out_cubic(clamp01((t - 0.10) / 0.14));
     if lab > 0.01 {
-        stack = stack.push(Positioned::new().left(LEFT_X - 210.0).top(MID_Y + 168.0).width(210.0).height(30.0).child(
-            Opacity::new(lab).child(Text::new("your program".to_string())
-                .style(pf::geist_mono(18.0).letter_spacing(1.4).color(pf::alpha(ACCENT, 0.95)))
+        stack = stack.push(Positioned::new().left(LEFT_X - 190.0).top(MID_Y + 166.0).width(190.0).height(34.0).child(
+            Opacity::new(lab).child(Text::new("your app".to_string())
+                .style(pf::geist_mono(23.0).letter_spacing(1.2).color(pf::alpha(ACCENT, 0.97)))
                 .align(TextAlign::Center)),
         ));
-        stack = stack.push(Positioned::new().left(RIGHT_X).top(MID_Y + 168.0).width(210.0).height(30.0).child(
+        stack = stack.push(Positioned::new().left(RIGHT_X).top(MID_Y + 166.0).width(190.0).height(34.0).child(
             Opacity::new(lab).child(Text::new("the screen".to_string())
-                .style(pf::geist_mono(18.0).letter_spacing(1.4).color(pf::alpha(SYN_TYPE, 0.95)))
+                .style(pf::geist_mono(23.0).letter_spacing(1.2).color(pf::alpha(SYN_TYPE, 0.97)))
                 .align(TextAlign::Center)),
         ));
     }
@@ -966,9 +965,9 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
             continue;
         }
         let x = LEFT_X + 14.0 + (RIGHT_X - LEFT_X - 28.0) * at;
-        stack = stack.push(Positioned::new().left(x - 100.0).top(MID_Y - 136.0).width(200.0).height(28.0).child(
+        stack = stack.push(Positioned::new().left(x - 110.0).top(MID_Y - 142.0).width(220.0).height(32.0).child(
             Opacity::new(a).child(Text::new((*name).to_string())
-                .style(pf::geist_mono(17.0).letter_spacing(1.4).color(pf::alpha(BREAK_RED, 0.9)))
+                .style(pf::geist_mono(21.0).letter_spacing(1.2).color(pf::alpha(BREAK_RED, 0.95)))
                 .align(TextAlign::Center)),
         ));
     }
@@ -978,20 +977,19 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
     if tally_a > 0.01 {
         stack = stack.push(Positioned::new().left(super::MARGIN).top(300.0).width(900.0).height(96.0).child(
             Opacity::new(tally_a).child(
-                Text::new(format!("{dropped} frame{} dropped", if dropped == 1 { "" } else { "s" }))
+                Text::new(format!("{dropped} frame{} lost", if dropped == 1 { "" } else { "s" }))
                     .style(pf::geist(72.0).bold().letter_spacing(-1.0).color(pf::alpha(BREAK_RED, 0.96))),
             ),
         ));
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(400.0).width(1000.0).height(30.0).child(
+        stack = stack.push(Positioned::new().left(super::MARGIN).top(392.0).width(1200.0).height(32.0).child(
             Opacity::new(tally_a).child(
-                Text::new("every one of them crossed a boundary your program did not ask for.".to_string())
-                    .style(pf::geist_mono(18.0).letter_spacing(1.1).color(pf::alpha(MUTED, 0.9))),
+                Text::new("each one got stuck crossing a gap your app never asked for.".to_string())
+                    .style(pf::geist_mono(21.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.92))),
             ),
         ));
     }
 
-    pf::caption("between the program and the pixels, something else.", 1002.0, clamp01((t - 0.06) / 0.10));
-    pf::caption("a frame that has to be translated is a frame you can lose.", 966.0, clamp01((t - 0.52) / 0.10));
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    super::frame::caption("Many frameworks put a translator in the middle.", 1002.0, clamp01((t - 0.06) / 0.10));
+    super::frame::caption("Every translation costs time — and users feel it as stutter.", 966.0, clamp01((t - 0.52) / 0.10));
     stack.into()
 }

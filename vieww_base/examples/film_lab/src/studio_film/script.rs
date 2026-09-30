@@ -1,66 +1,190 @@
 //! The studio session — this film's script for the **actual**
-//! `viewwstudio`, one `Vec<(f32, Action)>` in absolute film seconds.
+//! `viewwstudio`, one list of `(film seconds, action)`.
 //!
-//! The times are the film's, not the product film's: this film is
-//! 136 s and its studio act runs 56–98 s. The action vocabulary and the
-//! applier are the product film's — [`Action`] and `pf::apply_list` —
-//! so both films drive the app through one door, and the pointer-pair
-//! atomicity rule (a `PointerDown` waits for its `PointerUp`, and both
-//! land in one frame) holds here too, by construction rather than by
-//! discipline.
+//! The studio act is seven scenes long and every one of them rides the
+//! real application: Z11 shows it whole, Z12–Z17 quote it — as plates of
+//! its own draw list, magnified, taken apart, or captured in a state the
+//! scene needs (a platform, a device, the dark theme). The session is what
+//! the application actually does across those scenes.
+//!
+//! The vocabulary is the product film's [`Action`] plus a few of this
+//! film's own ([`Sf`]): an edit that puts the caret where the edit
+//! happened (so the editor does not scroll away from it), the preview's
+//! dark switch, and the Devices tab's presets.
 
 use crate::product_film as pf;
 use crate::product_film::script::{apply_list, Action, TAB_LIVE};
-use vieww_foundation::Offset;
+use vieww_foundation::{TextEditingValue, TextSelection};
 use viewwstudio::command::Command;
-use viewwstudio::state::{Platform, Studio, View};
+use viewwstudio::state::{Device, Platform, RightTab, Studio};
 
-/// Where the studio session begins on this film's clock.
-pub const STUDIO_OPEN: f32 = 126.0;
+/// One touch of the real studio.
+#[derive(Clone)]
+pub enum Sf {
+    /// The product film's vocabulary.
+    Pf(Action),
+    /// Replace `from` with `to` in live.rs, caret left after the edit.
+    EditLive(&'static str, &'static str),
+    /// Make the named buffer the active tab.
+    Tab(&'static str),
+    /// The preview's Dark switch.
+    PreviewDark(bool),
+    /// A Devices-tab preset by index into `Device::ALL`, or the platform
+    /// default.
+    Device(Option<usize>),
+}
 
-/// The counter's **Add one** button, hit-tested against this film's own
-/// session state (panel open, counter.say rendered, iOS 393×852 at the
-/// pane's 66% zoom).
-pub const TAP_ADD_ONE: Offset = Offset::new(1593.0, 254.0);
+/// The start of scene `id` on the film's clock.
+fn at(id: &str) -> f32 {
+    let list = super::scenes();
+    let i = list.iter().position(|s| s.id == id).expect("scene id");
+    super::scene_start(i)
+}
 
 /// The session — every action, in order, at absolute film seconds.
-///
-/// **The studio act is one scene long now.** In the v3 cut four scenes
-/// rode the live application and the film annotated it; the review asked
-/// for the product on the first frame and animation for the explanation,
-/// so Z11 is the only scene the app renders in. The session is what that
-/// one scene does — sixteen seconds of real work, no more scripted than
-/// it has to be: a file opens, the panel breathes, live preview is
-/// accepted, the damage overlay goes on, and two real edits land while it
-/// is on.
-///
-/// Everything after Z11 — the compile pipeline, the fleet, the tokens —
-/// is the film's own drawing, and says so.
-pub fn session() -> Vec<(f32, Action)> {
-    let t0 = STUDIO_OPEN;
+pub fn session() -> Vec<(f32, Sf)> {
+    let z11 = at("Z11");
+    let z13 = at("Z13");
+    let z14 = at("Z14");
+    let z15 = at("Z15");
+    let z16 = at("Z16");
+    let z17 = at("Z17");
     vec![
-        (t0 + 0.4, Action::OpenPath("counter.say".into())),
-        (t0 + 3.6, Action::PanelOpen(false)),
-        (t0 + 6.2, Action::PanelOpen(true)),
-        (t0 + 7.4, Action::ActiveTab(TAB_LIVE)),
-        (t0 + 8.0, Action::Run(Command::LivePreview)),
-        (t0 + 9.4, Action::AcceptLive),
-        (t0 + 10.6, Action::ShowDamage(true)),
-        (t0 + 11.8, Action::SetLiveTitle("My own inbox".into())),
-        (t0 + 13.6, Action::SetLiveRow("Shipped the beta today".into())),
-        (t0 + 15.2, Action::ShowDamage(false)),
+        // Z11 — the studio opens: a file, the live preview's own dialog,
+        // and the sketch running on a simulated phone.
+        (z11 + 1.6, Sf::Pf(Action::ActiveTab(TAB_LIVE))),
+        (z11 + 3.6, Sf::Pf(Action::Run(Command::LivePreview))),
+        (z11 + 6.4, Sf::Pf(Action::AcceptLive)),
+        // Z13 — two real edits with the studio's damage overlay on.
+        (z13 + 1.2, Sf::Pf(Action::ShowDamage(true))),
+        (z13 + 3.4, Sf::EditLive("title \"Inbox\"", "title \"My own inbox\"")),
+        (z13 + 7.6, Sf::EditLive("Draft for v0.3 is ready to review", "Shipped the beta today")),
+        (z13 + 13.4, Sf::Pf(Action::ShowDamage(false))),
+        // Z14 — the say program opens in the real editor.
+        (z14 + 0.3, Sf::Pf(Action::OpenPath("counter.say".into()))),
+        // Z15 — back to the sketch (before the cut, so Z15's snapshots
+        // see it); the platforms are snapshots.
+        (z15 - 0.4, Sf::Tab("live.rs")),
+        // Z16 — the Devices tab, walked through its presets.
+        (z16 + 0.6, Sf::Pf(Action::RightTab(RightTab::Devices))),
+        (z16 + 2.4, Sf::Device(Some(0))),
+        (z16 + 5.0, Sf::Device(Some(3))),
+        (z16 + 7.6, Sf::Device(Some(6))),
+        (z16 + 10.2, Sf::Device(Some(4))),
+        // Back to the preview, platform default — before Z17 is entered,
+        // so its snapshots quote the preview and not the Devices list.
+        (z17 - 0.4, Sf::Device(None)),
+        (z17 - 0.4, Sf::Pf(Action::RightTab(RightTab::Preview))),
     ]
 }
 
+/// The Devices presets Z16 steps through, in order, with when.
+pub fn z16_devices() -> [(f32, Option<usize>); 5] {
+    [(0.0, None), (2.4, Some(0)), (5.0, Some(3)), (7.6, Some(6)), (10.2, Some(4))]
+}
+
+/// Apply one action to the real studio.
+pub fn apply_one(driver: &mut vieww_render::FrameDriver, studio: &Studio, action: &Sf, abs: f32) {
+    match action {
+        Sf::Pf(a) => {
+            let mut c = 0usize;
+            apply_list(driver, studio, &[(abs, a.clone())], abs, &mut c);
+        }
+        Sf::EditLive(from, to) => {
+            let buffers = studio.buffers.get();
+            let Some(i) = buffers.iter().position(|b| b.name == "live.rs") else { return };
+            studio.active_buffer.set(i);
+            let Some(buffer) = studio.active() else { return };
+            let text = buffer.value.text.clone();
+            let Some(pos) = text.find(from) else { return };
+            let new_text = format!("{}{}{}", &text[..pos], to, &text[pos + from.len()..]);
+            let caret = new_text[..pos + to.len()].chars().count();
+            studio.edit(TextEditingValue {
+                text: new_text,
+                selection: TextSelection::collapsed(caret),
+                ..Default::default()
+            });
+        }
+        Sf::Tab(name) => {
+            let buffers = studio.buffers.get();
+            if let Some(i) = buffers.iter().position(|b| b.name == *name) {
+                studio.active_buffer.set(i);
+            }
+        }
+        Sf::PreviewDark(on) => studio.preview_dark.set(*on),
+        Sf::Device(Some(i)) => studio.choose_device(Device::ALL[*i]),
+        Sf::Device(None) => studio.clear_device(),
+    }
+}
+
 /// Apply the session up to `abs`, resuming from `cursor`.
-///
-/// A thin wrapper over the product film's `apply_list` — one door, one
-/// set of rules for driving the real app.
 pub fn apply_session_up_to(
     driver: &mut vieww_render::FrameDriver,
     studio: &Studio,
     abs: f32,
     cursor: &mut usize,
 ) {
-    apply_list(driver, studio, &session(), abs, cursor);
+    let list = session();
+    while *cursor < list.len() && list[*cursor].0 <= abs {
+        apply_one(driver, studio, &list[*cursor].1, list[*cursor].0);
+        *cursor += 1;
+    }
+}
+
+/// A named snapshot of the studio: the actions that put it in the state
+/// the snapshot quotes, and the actions that put the live session back.
+pub struct Snap {
+    pub key: &'static str,
+    pub apply: Vec<Sf>,
+    pub restore: Vec<Sf>,
+}
+
+/// The snapshots a studio scene quotes, taken once when it is entered.
+pub fn snapshots(id: &str) -> Vec<Snap> {
+    let plat = |key: &'static str, p: Platform, dark: bool| Snap {
+        key,
+        apply: vec![Sf::Pf(Action::Platform(p)), Sf::PreviewDark(dark)],
+        restore: vec![Sf::Pf(Action::Platform(Platform::Ios)), Sf::PreviewDark(false)],
+    };
+    match id {
+        "Z15" | "Z17" => vec![
+            plat("ios", Platform::Ios, false),
+            plat("android", Platform::Android, false),
+            plat("desktop", Platform::Desktop, false),
+            plat("ios_dark", Platform::Ios, true),
+            plat("android_dark", Platform::Android, true),
+            plat("desktop_dark", Platform::Desktop, true),
+        ],
+        "Z16" => z16_devices()
+            .iter()
+            .map(|(_, d)| Snap {
+                key: device_key(*d),
+                apply: vec![Sf::Device(*d)],
+                restore: vec![Sf::Device(None)],
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The snapshot key for a Devices preset.
+pub fn device_key(d: Option<usize>) -> &'static str {
+    match d {
+        None => "dev_default",
+        Some(0) => "dev_0",
+        Some(1) => "dev_1",
+        Some(2) => "dev_2",
+        Some(3) => "dev_3",
+        Some(4) => "dev_4",
+        Some(5) => "dev_5",
+        Some(6) => "dev_6",
+        _ => "dev_7",
+    }
+}
+
+/// Silence the lint for the product-film re-export this module keeps in
+/// scope for the scenes.
+#[allow(unused)]
+fn _reserved() {
+    let _ = pf::W;
 }

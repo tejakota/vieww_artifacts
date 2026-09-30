@@ -35,10 +35,11 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     // margin, because this scene's camera is the one move allowed to
     // leave the canvas — a real dolly-out, past zoom 1.0.
     const MARGIN: f32 = 260.0;
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
+            let _ = (w, h);
             fk::room(
                 book,
                 w,
@@ -52,7 +53,27 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
             if star_a > 0.01 {
                 fk::stars_wide(book, w, h, MARGIN, 0xC0DE, 110, t, 0.10 * star_a);
             }
+            // A 3D floor opens beneath the studio as the camera pulls
+            // back — the same perspective grid the question stood on.
+            let floor_p = ease_in_out(clamp01(t / 0.9));
+            if floor_p > 0.01 {
+                let cam3 = crate::three_d::Camera {
+                    eye: crate::three_d::Vec3::new(0.0, 60.0, -120.0 - 420.0 * floor_p),
+                    target: crate::three_d::Vec3::new(0.0, 170.0, 420.0),
+                    fov: 0.72,
+                };
+                fk::grid_floor_lines(book, &cam3, s, 1700.0, 30.0, 2100.0, 180.0, BRAND_NEAR, 0.75 * floor_p, 120.0, 1500.0);
+            }
             pf::vignette(book, w, h, 0.55);
+        }),
+    )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            let _ = (w, h, &s);
+
+
         }),
     )));
 
@@ -61,29 +82,20 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     // back in true perspective as it goes, and gives its light back to
     // the stars.
     let panel_p = ease_in_out(clamp01(t / 0.9));
-    let scale = 1.14 - 0.52 * panel_p;
-    let alpha = 1.0 - 0.82 * panel_p;
+    // The real studio — the same live application the act showed — as
+    // one plate that shrinks into the dark and gives its light back.
+    let k = 1.0 - 0.60 * panel_p;
+    let alpha = 1.0 - 0.85 * panel_p;
     if alpha > 0.02 {
-        let yaw = 0.34 * panel_p;
-        let pitch = -0.16 * panel_p;
-        stack = stack.push(Transformed::translate(Offset::new(0.0, -18.0 * panel_p)).child(
-            Opacity::new(alpha).child(Painting::sized(CANVAS, PaintWith::new(
-                move |book: &mut Sketchbook, _s: Size| {
-                    // The tilt: the ghost falls away into the depth it
-                    // came from, projected by the framework's own
-                    // quadrant projector.
-                    pf::panel_3d(
-                        book,
-                        Rect::new(470.0, 306.0, 1450.0, 930.0),
-                        yaw,
-                        pitch,
-                        1150.0,
-                        1.0,
-                        |b| draw_studio_ghost(b, scale, panel_p),
-                    );
-                },
-            ))),
-        ));
+        let (w, h) = (1920.0 * k, 1080.0 * k);
+        super::frame::plate(super::frame::Plate {
+            src: super::layout::APP,
+            dst: Rect::new(960.0 - w * 0.5, 540.0 - h * 0.5, 960.0 + w * 0.5, 540.0 + h * 0.5),
+            alpha,
+            radius: 14.0,
+            snap: None,
+            card: true,
+        });
     }
 
     // The light gives itself back — thin threads converging on the spot
@@ -93,7 +105,7 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                let centre = Offset::new(W * 0.5, H * 0.5 - 18.0 * panel_p);
+                let centre = Offset::new(W * 0.5, H * 0.5);
                 for k in 0..rays {
                     let ang = k as f32 * std::f32::consts::TAU / rays as f32 + 0.4;
                     let from = Offset::new(
@@ -110,9 +122,7 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     }
 
     // The words — what the recede means.
-    stack = stack.push(pf::caption("the studio recedes — the engine stays.", 98.0, clamp01((t - 0.55) / 0.14)));
-
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
+    stack = stack.push(super::frame::caption("The studio steps back. The engine stays.", 1002.0, clamp01((t - 0.55) / 0.14)));
     let _ = sec;
     stack.into()
 }
@@ -193,10 +203,11 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
     let mut stack = Stack::new();
 
     // The ground — the calmest register in the film.
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
+            let _ = (w, h);
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
                 Gradient::vertical().with_dither().with_stops(&[
@@ -209,6 +220,16 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
             pf::vignette(book, w, h, 0.5);
         }),
     )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            let _ = (w, h, &s);
+
+
+
+        }),
+    )));
 
     // The mark — the studio's own, revealing panel by panel: the
     // editor panel first, the preview panel over it, the ground
@@ -219,7 +240,7 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-                fk::ring3(book, s, Offset::new(W * 0.5, 424.0), 248.0, sec, ring_a);
+                fk::ring3(book, s, Offset::new(W * 0.5, 424.0), 100.0, sec, ring_a);
             }),
         )));
     }
@@ -320,7 +341,7 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                 .height(34.0)
                 .child(Opacity::new(repo_a).child(
                     Text::new(REPO.to_string())
-                        .style(pf::geist_mono(20.0).letter_spacing(2.0).color(pf::alpha(MUTED, 0.95)))
+                        .style(pf::geist_mono(23.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.97)))
                         .align(TextAlign::Center),
                 )),
         );
@@ -342,23 +363,21 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                         pf::group_commas(probe.frames),
                         probe.frame_ms
                     ))
-                    .style(pf::geist_mono(17.0).letter_spacing(1.4).color(pf::alpha(SYN_TYPE, 0.88)))
+                    .style(pf::geist_mono(20.0).letter_spacing(1.0).color(pf::alpha(SYN_TYPE, 0.92)))
                     .align(TextAlign::Center),
                 ),
             ),
         );
         stack = stack.push(
-            Positioned::new().left(0.0).top(908.0).width(W).height(28.0).child(
+            Positioned::new().left(0.0).top(912.0).width(W).height(30.0).child(
                 Opacity::new(contract_a * 0.9).child(
                     Text::new(probe.bench.clone())
-                        .style(pf::geist_mono(14.0).letter_spacing(1.0).color(pf::alpha(pf::FAINT, 0.9)))
+                        .style(pf::geist_mono(17.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.85)))
                         .align(TextAlign::Center),
                 ),
             ),
         );
     }
-
-    stack = stack.push(pf::chrome(super::progress_rail(ctx.abs)));
     stack.into()
 }
 
@@ -372,10 +391,11 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     let mut stack = Stack::new();
 
     // The same ground, breathing.
-    stack = stack.push(Positioned::fill().child(Painting::sized(
+    super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
+            let _ = (w, h);
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
                 Gradient::vertical().with_dither().with_stops(&[
@@ -385,11 +405,21 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
                 ]),
             );
             pf::stars(book, w, h, 0xE2D1, 90, t + 11.0, 0.09);
+            pf::vignette(book, w, h, 0.5);
+        }),
+    )));
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let (w, h) = (s.width, s.height);
+            let _ = (w, h, &s);
+
+
             let pulse = 1.0 + 0.08 * (sec * 1.2).sin();
             book.layer(0.8, 44.0, None, |b| {
                 b.circle(Offset::new(w * 0.5, 424.0), 178.0 * pulse, pf::alpha(BRAND_NEAR, 0.11));
             });
-            pf::vignette(book, w, h, 0.5);
+
         }),
     )));
 
@@ -398,7 +428,7 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-            fk::ring3(book, s, Offset::new(W * 0.5, 424.0), 248.0, sec + 11.0, 0.9);
+            fk::ring3(book, s, Offset::new(W * 0.5, 424.0), 100.0, sec + 18.0, 0.9);
         }),
     )));
     stack = stack.push(Positioned::new().left((W - 184.0) * 0.5).top(332.0).width(184.0).height(184.0).child(
@@ -448,7 +478,7 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
             .height(34.0)
             .child(
                 Text::new(REPO.to_string())
-                    .style(pf::geist_mono(20.0).letter_spacing(2.0).color(pf::alpha(MUTED, 0.95)))
+                    .style(pf::geist_mono(23.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.97)))
                     .align(TextAlign::Center),
             ),
     );
@@ -465,14 +495,14 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
                         pf::group_commas(probe.frames),
                         probe.frame_ms
                     ))
-                    .style(pf::geist_mono(17.0).letter_spacing(1.4).color(pf::alpha(SYN_TYPE, 0.88)))
+                    .style(pf::geist_mono(20.0).letter_spacing(1.0).color(pf::alpha(SYN_TYPE, 0.92)))
                     .align(TextAlign::Center),
                 ),
         );
         stack = stack.push(
-            Positioned::new().left(0.0).top(908.0).width(W).height(28.0).child(
+            Positioned::new().left(0.0).top(912.0).width(W).height(30.0).child(
                 Text::new(probe.bench.clone())
-                    .style(pf::geist_mono(14.0).letter_spacing(1.0).color(pf::alpha(pf::FAINT, 0.9)))
+                    .style(pf::geist_mono(17.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.85)))
                     .align(TextAlign::Center),
             ),
         );

@@ -10,6 +10,7 @@ rust-version.workspace = true
 vieww-foundation = { workspace = true }
 vieww-widget = { workspace = true }
 vieww-element = { workspace = true }
+vieww-embed = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"

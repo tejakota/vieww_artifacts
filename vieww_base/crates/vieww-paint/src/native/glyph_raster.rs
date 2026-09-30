@@ -396,14 +396,28 @@ impl GlyphRasterCache {
     /// dropping `keep` — which is the entry the caller is about to return a
     /// reference to.
     fn evict_to_budget(&mut self, keep: GlyphKey) {
-        while self.bytes > self.budget && self.entries.len() > 1 {
-            let victim = self
-                .entries
-                .iter()
-                .filter(|(k, _)| **k != keep)
-                .min_by_key(|(_, e)| e.used)
-                .map(|(k, _)| *k);
-            let Some(victim) = victim else { break };
+        if self.bytes <= self.budget || self.entries.len() <= 1 {
+            return;
+        }
+        // One sorted pass, down to three quarters of the budget. Evicting
+        // a single least-recently-used entry per insert scanned the whole
+        // map each time, so a frame that needed more glyphs than the
+        // budget holds — type at a size that changes every frame, as a
+        // zoom does — went quadratic: one full scan per glyph drawn. The
+        // headroom means the next inserts do not immediately trip the
+        // budget again.
+        let target = self.budget / 4 * 3;
+        let mut order: Vec<(u64, GlyphKey)> = self
+            .entries
+            .iter()
+            .filter(|(k, _)| **k != keep)
+            .map(|(k, e)| (e.used, *k))
+            .collect();
+        order.sort_unstable_by_key(|(used, _)| *used);
+        for (_, victim) in order {
+            if self.bytes <= target {
+                break;
+            }
             if let Some(entry) = self.entries.remove(&victim) {
                 self.bytes = self.bytes.saturating_sub(entry.cost);
             }
