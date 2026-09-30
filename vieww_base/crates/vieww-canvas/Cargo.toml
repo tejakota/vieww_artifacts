@@ -1,0 +1,17 @@
+[package]
+name = "vieww-canvas"
+description = "The vieww canvas layer: a Konva/Fabric-style retained shape stage — node tree, exact hit testing, event bubbling, dragging, a Transformer, filters and JSON serialisation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+vieww-foundation.workspace = true
+vieww-widget.workspace = true
+
+[lints]
+workspace = true

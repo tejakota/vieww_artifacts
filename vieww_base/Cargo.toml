@@ -12,6 +12,12 @@ members = [
     "crates/vieww-video",
     "crates/vieww-mesh",
     "crates/vieww-3d",
+    "crates/vieww-canvas",
+    "crates/vieww-dataviz",
+    "crates/vieww-graph",
+    "crates/vieww-game",
+    "crates/vieww-collab",
+    "crates/vieww-lottie",
     "crates/vieww-network",
     "crates/vieww-physics",
     "crates/vieww-embed",
@@ -159,6 +165,12 @@ vieww-audio = { path = "crates/vieww-audio", version = "0.1.0" }
 vieww-video = { path = "crates/vieww-video", version = "0.1.0" }
 vieww-mesh = { path = "crates/vieww-mesh", version = "0.1.0" }
 vieww-3d = { path = "crates/vieww-3d", version = "0.1.0" }
+vieww-canvas = { path = "crates/vieww-canvas", version = "0.1.0" }
+vieww-dataviz = { path = "crates/vieww-dataviz", version = "0.1.0" }
+vieww-graph = { path = "crates/vieww-graph", version = "0.1.0" }
+vieww-game = { path = "crates/vieww-game", version = "0.1.0" }
+vieww-collab = { path = "crates/vieww-collab", version = "0.1.0" }
+vieww-lottie = { path = "crates/vieww-lottie", version = "0.1.0" }
 vieww-network = { path = "crates/vieww-network", version = "0.1.0" }
 vieww-physics = { path = "crates/vieww-physics", version = "0.1.0" }
 vieww-embed = { path = "crates/vieww-embed", version = "0.1.0" }

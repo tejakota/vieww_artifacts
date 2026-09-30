@@ -5090,11 +5090,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "vieww-canvas"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
 name = "vieww-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
  "vieww-build",
+]
+
+[[package]]
+name = "vieww-collab"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-dataviz"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
 ]
 
 [[package]]
@@ -5148,6 +5170,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "vieww-game"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+]
+
+[[package]]
 name = "vieww-gestures"
 version = "0.1.0"
 dependencies = [
@@ -5162,6 +5191,13 @@ dependencies = [
  "lyon_tessellation",
  "vieww-foundation",
  "vieww-paint",
+]
+
+[[package]]
+name = "vieww-graph"
+version = "0.1.0"
+dependencies = [
+ "vieww-animation",
 ]
 
 [[package]]
@@ -5198,6 +5234,13 @@ dependencies = [
 
 [[package]]
 name = "vieww-interaction"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+]
+
+[[package]]
+name = "vieww-lottie"
 version = "0.1.0"
 dependencies = [
  "vieww-foundation",
