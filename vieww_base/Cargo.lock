@@ -1493,6 +1493,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-code-binding-sprites"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-element",
+ "vieww-foundation",
+ "vieww-image",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-colors-rgb"
 version = "0.1.0"
 dependencies = [
