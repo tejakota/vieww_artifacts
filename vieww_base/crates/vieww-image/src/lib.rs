@@ -30,3 +30,4 @@ pub mod mipmap;
 pub mod profile;
 pub mod residency;
 pub mod sequence;
+pub mod sprite;

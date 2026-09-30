@@ -912,3 +912,333 @@ mod tests {
         assert!(tip.dy.abs() < 15.0, "tip at {tip:?}");
     }
 }
+
+// ---------------------------------------------------------------------
+// Two-bone inverse kinematics.
+//
+// The module doc above used to end at "no inverse kinematics", and the
+// reasoning it gave — a numerical method with convergence behaviour, against
+// the crate's everything-is-a-pure-function contract — was correct for the
+// *iterative* solvers (FABRIK, CCD, damped least squares) that N-bone IK
+// means. Two-bone IK is not that: it is the law of cosines, a closed form
+// with no iteration, no convergence and no tuning, as pure a function of its
+// inputs as a spring. The arm every 2D rig actually has — upper arm, forearm,
+// a hand that should be *here* — gets the analytic solver; the leg chains of
+// a spider still do not, and that is where the original reasoning still
+// applies, unchanged.
+// ---------------------------------------------------------------------
+
+/// Which way the middle joint bends — the elbow's answer to "up or down".
+///
+/// An IK solver that does not let the caller choose this is a solver that
+/// chose it for them, and half the rigs in the wild need the other half's
+/// answer: an arm bends one way, a leg the other, and a crab's bends both
+/// ways from the midline.
+///
+/// The names are **visual**, in the screen space this crate draws in (y
+/// grows down): `Clockwise` bends the first bone clockwise from the
+/// root-to-target direction, which on a horizontal reach puts the joint
+/// *below* the line; `CounterClockwise` puts it *above*.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bend {
+    /// The joint sits clockwise of the root-to-target line — below a
+    /// horizontal reach, in y-down screen space.
+    Clockwise,
+    /// The joint sits counter-clockwise of the line — above a horizontal
+    /// reach, in y-down screen space.
+    CounterClockwise,
+}
+
+impl Bend {
+    /// The sign the interior angle is applied with: +1 for clockwise, −1 for
+    /// counter-clockwise, in the screen convention (y-down, angle positive
+    /// clockwise) the rest of this crate uses. One place for the convention,
+    /// so every formula below reads as its mirror image rather than as a
+    /// differently-signed twin.
+    fn sign(self) -> f32 {
+        match self {
+            Self::Clockwise => 1.0,
+            Self::CounterClockwise => -1.0,
+        }
+    }
+}
+
+/// Two-bone IK, solved: the world-space rotations of both bones, and where
+/// the chain actually ended up.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TwoBoneIk {
+    /// The first bone's world rotation, in radians — the angle from +x of
+    /// the root-to-joint segment, in the screen convention (y-down, positive
+    /// clockwise) the rest of this crate uses.
+    pub bone_a: f32,
+    /// The second bone's world rotation: the angle of the joint-to-effector
+    /// segment. Relative to bone_a it is the elbow; in absolute terms it is
+    /// what a flat two-bone rig paints.
+    pub bone_b: f32,
+    /// Whether the target was reachable. `false` means the chain is fully
+    /// extended (or folded) toward it and `effector` is the closest point on
+    /// that line — the honest answer rather than an error, because a target
+    /// out of reach is a normal animated state (a hand reaching past full
+    /// extension), not a caller's bug.
+    pub reachable: bool,
+    /// Where the chain's end landed — equal to the target when
+    /// `reachable`, the clamped closest approach when not.
+    pub effector: Offset,
+}
+
+/// Solve a two-bone chain for a target: closed-form, no iteration.
+///
+/// * `root` — where the first bone starts.
+/// * `lengths` — `(first, second)` bone lengths, both strictly positive: a
+///   zero-length bone has no direction for an angle to describe, and a
+///   negative one is a sign error wearing a costume.
+/// * `target` — where the chain's end should be.
+/// * `bend` — which side the middle joint sits on.
+///
+/// # Panics
+///
+/// If either length is not finite and positive — see above.
+///
+/// ```
+/// use vieww_animation::skeletal::{solve_two_bone, Bend};
+/// use vieww_foundation::Offset;
+///
+/// // An arm of 60 + 60, reaching a point 100 away, elbow up.
+/// let arm = solve_two_bone(
+///     Offset::new(0.0, 0.0),
+///     (60.0, 60.0),
+///     Offset::new(100.0, 0.0),
+///     Bend::CounterClockwise,
+/// );
+/// assert!(arm.reachable);
+/// // Equal bones reaching symmetrically: the elbow is exactly over the
+/// // midline, 50 units out and √(60² − 50²) above the line (y-down).
+/// let reach_y = (60.0_f32 * 60.0 - 50.0 * 50.0).sqrt();
+/// let elbow = arm.joint(Offset::new(0.0, 0.0), (60.0, 60.0));
+/// assert!((elbow.dy + reach_y).abs() < 1e-3, "elbow off midline");
+///
+/// // And unreachable targets extend toward the target rather than failing:
+/// let far = solve_two_bone(
+///     Offset::new(0.0, 0.0),
+///     (60.0, 60.0),
+///     Offset::new(200.0, 0.0),
+///     Bend::CounterClockwise,
+/// );
+/// assert!(!far.reachable);
+/// assert!((far.effector.dx - 120.0).abs() < 1e-3, "fully extended");
+/// ```
+pub fn solve_two_bone(
+    root: Offset,
+    lengths: (f32, f32),
+    target: Offset,
+    bend: Bend,
+) -> TwoBoneIk {
+    let (l1, l2) = lengths;
+    assert!(
+        l1.is_finite() && l1 > 0.0 && l2.is_finite() && l2 > 0.0,
+        "bone lengths must be positive and finite, not {lengths:?}"
+    );
+
+    let dx = target.dx - root.dx;
+    let dy = target.dy - root.dy;
+    let reach = (dx * dx + dy * dy).sqrt();
+
+    // The clamp band: the chain can reach from |L1 − L2| (folded) to
+    // L1 + L2 (extended). Clamping the *distance* rather than erroring is
+    // what makes an out-of-reach target a normal state.
+    let max_reach = l1 + l2;
+    let min_reach = (l1 - l2).abs();
+    let reachable = reach <= max_reach && reach >= min_reach;
+    let d = reach.clamp(min_reach, max_reach).max(1e-6);
+
+    // The direction the chain points when it cannot reach — toward the
+    // target, scaled to the clamped distance. When it can reach, this is the
+    // target itself and the arithmetic below is exact.
+    let dir_x = dx / reach.max(1e-6);
+    let dir_y = dy / reach.max(1e-6);
+
+    // Law of cosines, twice: the interior angles of the root-joint-effector
+    // triangle. Clamped to ±1 against float rounding at the band's edges,
+    // where the triangle degenerates to a line and acos of 1.0000001 is NaN.
+    let cos_a = ((l1 * l1 + d * d - l2 * l2) / (2.0 * l1 * d)).clamp(-1.0, 1.0);
+    let cos_b = ((l1 * l1 + l2 * l2 - d * d) / (2.0 * l1 * l2)).clamp(-1.0, 1.0);
+    let interior_a = cos_a.acos();
+    let interior_b = cos_b.acos();
+
+    // The root-to-target direction, and the first bone off it by the bend's
+    // signed interior angle. The second bone's rotation is applied with the
+    // *opposite* sign — the chain zig-zags: out to the elbow, back in to the
+    // target. Applying the same sign to both is the classic mistake and
+    // produces a chain that opens *away* from the target, which the
+    // round-trip test in `ik_tests` catches on its first case.
+    let aim = dy.atan2(dx);
+    let bone_a = aim + bend.sign() * interior_a;
+    let bone_b = bone_a - bend.sign() * (std::f32::consts::PI - interior_b);
+
+    let effector = if reachable {
+        target
+    } else {
+        // Extended (or folded) along the clamped direction: the closest the
+        // chain gets to the target, which is exactly what "reaching for it"
+        // looks like.
+        Offset::new(root.dx + dir_x * d, root.dy + dir_y * d)
+    };
+
+    TwoBoneIk {
+        bone_a,
+        bone_b,
+        reachable,
+        effector,
+    }
+}
+
+impl TwoBoneIk {
+    /// Where the middle joint (the elbow) sits — derived, not stored, so
+    /// there is exactly one copy of the forward kinematics to trust.
+    pub fn joint(&self, root: Offset, lengths: (f32, f32)) -> Offset {
+        Offset::new(
+            root.dx + lengths.0 * self.bone_a.cos(),
+            root.dy + lengths.0 * self.bone_a.sin(),
+        )
+    }
+}
+
+#[cfg(test)]
+mod ik_tests {
+    use super::*;
+
+    const EPS: f32 = 1e-3;
+
+    /// Round-trip: solve, then run the forward kinematics by hand and check
+    /// the chain lands on the effector. The property every caller actually
+    /// needs, and the one a sign error in one of the four angles breaks.
+    fn lands_on_target(
+        root: Offset,
+        lengths: (f32, f32),
+        target: Offset,
+        bend: Bend,
+    ) -> (Offset, bool) {
+        let solution = solve_two_bone(root, lengths, target, bend);
+        let joint = solution.joint(root, lengths);
+        let end = Offset::new(
+            joint.dx + lengths.1 * solution.bone_b.cos(),
+            joint.dy + lengths.1 * solution.bone_b.sin(),
+        );
+        (end, solution.reachable)
+    }
+
+    #[test]
+    fn the_chain_lands_on_reachable_targets() {
+        let root = Offset::new(10.0, 20.0);
+        for target in [
+            Offset::new(100.0, 20.0),
+            Offset::new(10.0, 90.0),
+            Offset::new(60.0, 60.0),
+            Offset::new(-30.0, 25.0),
+            Offset::new(10.0, -20.0),
+        ] {
+            for bend in [Bend::Clockwise, Bend::CounterClockwise] {
+                let (end, reachable) = lands_on_target(root, (50.0, 70.0), target, bend);
+                assert!(reachable, "{target:?} should be in reach");
+                assert!(
+                    (end.dx - target.dx).abs() < EPS && (end.dy - target.dy).abs() < EPS,
+                    "bend {bend:?}: end {end:?} missed target {target:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unreachable_targets_fully_extend_toward_themselves() {
+        let solution = solve_two_bone(
+            Offset::new(0.0, 0.0),
+            (50.0, 50.0),
+            Offset::new(300.0, 400.0), // 500 away, 100 reachable
+            Bend::Clockwise,
+        );
+        assert!(!solution.reachable);
+        assert!((solution.effector.dx - 60.0).abs() < EPS);
+        assert!((solution.effector.dy - 80.0).abs() < EPS, "toward the target");
+        // The FK round trip still lands on the (clamped) effector.
+        let joint = solution.joint(Offset::new(0.0, 0.0), (50.0, 50.0));
+        let end = Offset::new(
+            joint.dx + 50.0 * solution.bone_b.cos(),
+            joint.dy + 50.0 * solution.bone_b.sin(),
+        );
+        assert!((end.dx - solution.effector.dx).abs() < EPS);
+    }
+
+    #[test]
+    fn the_bend_side_is_choosable() {
+        let root = Offset::new(0.0, 0.0);
+        let target = Offset::new(90.0, 0.0);
+        let ccw = solve_two_bone(root, (50.0, 50.0), target, Bend::CounterClockwise);
+        let cw = solve_two_bone(root, (50.0, 50.0), target, Bend::Clockwise);
+        let elbow_ccw = ccw.joint(root, (50.0, 50.0));
+        let elbow_cw = cw.joint(root, (50.0, 50.0));
+        // Same distance out (symmetric bones), opposite sides of the line.
+        assert!(elbow_ccw.dy < 0.0, "CCW elbow above the line (y-down)");
+        assert!(elbow_cw.dy > 0.0, "CW elbow below the line");
+        assert!((elbow_ccw.dx - elbow_cw.dx).abs() < EPS);
+    }
+
+    #[test]
+    fn a_collinear_target_is_a_straight_arm() {
+        let solution = solve_two_bone(
+            Offset::new(0.0, 0.0),
+            (40.0, 60.0),
+            Offset::new(100.0, 0.0),
+            Bend::CounterClockwise,
+        );
+        // Degenerate triangle: both bones lie along +x. acos at the clamp
+        // band's edge must not produce NaN — this test is the one that
+        // catches a missing clamp.
+        assert!(solution.bone_a.is_finite());
+        assert!(solution.bone_b.is_finite());
+        assert!(solution.bone_a.abs() < EPS);
+        assert!(solution.bone_b.abs() < EPS);
+        let joint = solution.joint(Offset::new(0.0, 0.0), (40.0, 60.0));
+        assert!((joint.dx - 40.0).abs() < EPS && joint.dy.abs() < EPS);
+    }
+
+    #[test]
+    fn a_folded_target_is_a_closed_arm() {
+        // Target inside the fold band: the chain folds onto itself.
+        let solution = solve_two_bone(
+            Offset::new(0.0, 0.0),
+            (40.0, 60.0),
+            Offset::new(15.0, 0.0), // |40 − 60| = 20 minimum; 15 is inside
+            Bend::CounterClockwise,
+        );
+        assert!(!solution.reachable);
+        assert!((solution.effector.dx - 20.0).abs() < EPS, "folded to the minimum");
+    }
+
+    #[test]
+    #[should_panic(expected = "bone lengths must be positive")]
+    fn zero_length_bones_are_refused() {
+        let _ = solve_two_bone(
+            Offset::new(0.0, 0.0),
+            (0.0, 50.0),
+            Offset::new(10.0, 0.0),
+            Bend::Clockwise,
+        );
+    }
+
+    #[test]
+    fn the_solution_is_a_pure_function_of_its_inputs() {
+        let ask = |t: f32| {
+            solve_two_bone(
+                Offset::new(0.0, 0.0),
+                (55.0, 45.0),
+                Offset::new(60.0 * t.cos(), 60.0 * t.sin()),
+                Bend::Clockwise,
+            )
+        };
+        let a = ask(0.7);
+        let b = ask(0.3);
+        let a_again = ask(0.7);
+        assert_eq!(a, a_again);
+        assert_ne!(a, b);
+    }
+}

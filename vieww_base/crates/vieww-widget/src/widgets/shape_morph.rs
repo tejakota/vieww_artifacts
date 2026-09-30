@@ -262,6 +262,142 @@ impl Widget for ShapeMorph {
 
 widget_node_from!(ShapeMorph);
 
+
+/// A regular n-gon: triangle, square (as a shape, not a rect), pentagon …
+///
+/// MorphSVG's bread and butter — a morph between two polygon shapes is the
+/// cleanest demo of point-to-point interpolation there is, and a pentagon
+/// becoming a triangle shows the fan-out that fixed sample counts make
+/// possible.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Polygon {
+    /// The number of sides. Three or more; fewer is a line, which a caller
+    /// can have from a path and which this shape refuses to pretend to be.
+    pub sides: u32,
+}
+
+impl Polygon {
+    /// An `n`-sided regular polygon.
+    #[must_use]
+    pub const fn new(sides: u32) -> Self {
+        Self { sides }
+    }
+}
+
+impl MorphShape for Polygon {
+    fn clone_shape(&self) -> Box<dyn MorphShape> {
+        Box::new(Polygon { sides: self.sides })
+    }
+
+    fn sample(&self, bounds: Rect) -> [Point; SAMPLES] {
+        // Corners, then straight edges between them: each sample is the
+        // linear interpolation between its two bracketing corners, which
+        // makes the flanks *exactly* straight (no polar approximation, no
+        // rounding at the corners) and puts sample 0 on the top corner —
+        // the same start as `Circle`, so morphs between the two do not
+        // twist.
+        let cx = (bounds.left + bounds.right) / 2.0;
+        let cy = (bounds.top + bounds.bottom) / 2.0;
+        let rx = (bounds.right - bounds.left) / 2.0;
+        let ry = (bounds.bottom - bounds.top) / 2.0;
+        let sides = self.sides.max(3) as f32;
+
+        let corner = |k: f32| -> Point {
+            let angle = k * (std::f32::consts::TAU / sides) - std::f32::consts::FRAC_PI_2;
+            Point::new(cx + rx * angle.cos(), cy + ry * angle.sin())
+        };
+
+        let mut points = [Point::new(0.0, 0.0); SAMPLES];
+        for (i, point) in points.iter_mut().enumerate() {
+            let c = i as f32 / SAMPLES as f32 * sides;
+            let a = corner(c.floor());
+            let b = corner(c.floor() + 1.0);
+            let frac = c - c.floor();
+            *point = Point::new(
+                a.dx + (b.dx - a.dx) * frac,
+                a.dy + (b.dy - a.dy) * frac,
+            );
+        }
+        points
+    }
+}
+
+/// A star: `points` spikes, alternating outer and inner radius.
+///
+/// The inner radius is a fraction of the outer (0.5 is the classic
+/// five-pointed star); 1.0 is a `Polygon` with `2·points` sides, 0.0 is
+/// spikes, and the range between is every star a badge has ever drawn.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Star {
+    /// The number of outer points. Five is a star; six is a Star of David
+    /// outline; anything above twelve is a gear.
+    pub points: u32,
+    /// The inner radius as a fraction of the outer, in `0.05..=1.0`.
+    /// Clamped rather than refused — see [`Polygon`](Polygon) for the same
+    /// decision — because the degenerate ends are still drawable shapes.
+    pub inner: f32,
+}
+
+impl Star {
+    /// A star of `points` spikes with the classic inner radius.
+    #[must_use]
+    pub const fn new(points: u32) -> Self {
+        Self {
+            points,
+            inner: 0.5,
+        }
+    }
+
+    /// Set the inner radius fraction.
+    #[must_use]
+    pub const fn inner(mut self, inner: f32) -> Self {
+        self.inner = if inner < 0.05 {
+            0.05
+        } else if inner > 1.0 {
+            1.0
+        } else {
+            inner
+        };
+        self
+    }
+}
+
+impl MorphShape for Star {
+    fn clone_shape(&self) -> Box<dyn MorphShape> {
+        Box::new(Star {
+            points: self.points,
+            inner: self.inner,
+        })
+    }
+
+    fn sample(&self, bounds: Rect) -> [Point; SAMPLES] {
+        let cx = (bounds.left + bounds.right) / 2.0;
+        let cy = (bounds.top + bounds.bottom) / 2.0;
+        let rx = (bounds.right - bounds.left) / 2.0;
+        let ry = (bounds.bottom - bounds.top) / 2.0;
+        let spikes = self.points.max(3) as f32;
+        let inner = self.inner.clamp(0.05, 1.0);
+
+        let mut points = [Point::new(0.0, 0.0); SAMPLES];
+        for (i, point) in points.iter_mut().enumerate() {
+            let t = i as f32 / SAMPLES as f32;
+            let angle = t * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
+            // The radius alternates between 1 (at a spike) and `inner` (at
+            // a valley) on a triangle wave of period 1/spikes — linear in
+            // the *angle*, so the spikes have straight flanks exactly as a
+            // drawn star does, rather than a cosine that rounds them.
+            let phase = (t * spikes).fract();
+            let wave = if phase < 0.5 { 1.0 - 2.0 * phase } else { 2.0 * phase - 1.0 };
+            let r = inner + (1.0 - inner) * wave;
+            *point = Point::new(
+                cx + rx * r * angle.cos(),
+                cy + ry * r * angle.sin(),
+            );
+        }
+        points
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +467,107 @@ mod tests {
         // We can't easily inspect Path internals, but construction
         // should not panic.
         let _ = path;
+    }
+}
+
+#[cfg(test)]
+mod more_shape_tests {
+    use super::*;
+
+    const EPS: f32 = 1e-4;
+
+    fn square_bounds() -> Rect {
+        Rect::new(0.0, 0.0, 100.0, 100.0)
+    }
+
+    #[test]
+    fn a_polygon_has_flat_sides() {
+        // The apothem quantisation: every sample on a hexagon sits at
+        // either the circumradius (a corner) or the apothem (mid-edge) or
+        // between the two on a straight flank — never outside the
+        // circumradius, never inside the apothem.
+        let hexagon = Polygon::new(6);
+        let points = hexagon.sample(square_bounds());
+        let circum = 50.0_f32;
+        let apothem = circum * (std::f32::consts::PI / 6.0).cos();
+        for point in &points {
+            let r = ((point.dx - 50.0).powi(2) + (point.dy - 50.0).powi(2)).sqrt();
+            assert!(
+                r <= circum + EPS && r >= apothem - EPS,
+                "radius {r} outside [{apothem}, {circum}]"
+            );
+        }
+    }
+
+    #[test]
+    fn a_polygon_starts_at_the_top() {
+        let triangle = Polygon::new(3);
+        let points = triangle.sample(square_bounds());
+        // The first sample is the top-centre, the convention every morph
+        // depends on (see `MorphShape`'s docs).
+        assert!((points[0].dx - 50.0).abs() < EPS);
+        assert!((points[0].dy - 0.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn a_star_alternates_spikes_and_valleys() {
+        let star = Star::new(5);
+        let points = star.sample(square_bounds());
+        let radii: Vec<f32> = points
+            .iter()
+            .map(|p| ((p.dx - 50.0).powi(2) + (p.dy - 50.0).powi(2)).sqrt())
+            .collect();
+        // The outer radius is 50 (the bounds' half); the inner is 25 at
+        // inner = 0.5. Samples do not land exactly on the extrema (32
+        // samples, 10 extrema), but the *envelope* must hold.
+        let max_r = radii.iter().copied().fold(f32::MIN, f32::max);
+        let min_r = radii.iter().copied().fold(f32::MAX, f32::min);
+        assert!(max_r <= 50.0 + EPS && max_r > 48.0, "spikes reach the edge: {max_r}");
+        assert!(min_r < 27.0 && min_r > 23.0, "valleys pull in: {min_r}");
+    }
+
+    #[test]
+    fn a_star_with_full_inner_radius_is_the_polygon() {
+        // inner = 1.0 means no valleys: the wave is pinned at 1 and the
+        // sample is a plain (rounded) circle of the bounds' radius.
+        let flat = Star::new(5).inner(1.0);
+        let points = flat.sample(square_bounds());
+        for point in &points {
+            let r = ((point.dx - 50.0).powi(2) + (point.dy - 50.0).powi(2)).sqrt();
+            assert!((r - 50.0).abs() < 0.6, "flat star is round: {r}");
+        }
+    }
+
+    #[test]
+    fn morphing_star_to_polygon_interpolates() {
+        // The module's contract on new shapes: point i morphs to point i,
+        // and the halfway sample of two shapes is the mean of their
+        // samples.
+        let star = Star::new(5).sample(square_bounds());
+        let circle = Circle.sample(square_bounds());
+        let mid = lerp_shapes(&star, &circle, 0.5);
+        for i in 0..SAMPLES {
+            let want_dx = (star[i].dx + circle[i].dx) / 2.0;
+            assert!(
+                (mid[i].dx - want_dx).abs() < EPS,
+                "sample {i}: {} vs {want_dx}",
+                mid[i].dx
+            );
+        }
+    }
+
+    #[test]
+    fn inner_radius_is_clamped() {
+        assert_eq!(Star::new(5).inner(-1.0).inner, 0.05);
+        assert_eq!(Star::new(5).inner(2.0).inner, 1.0);
+        assert_eq!(Star::new(5).inner(0.7).inner, 0.7);
+    }
+
+    #[test]
+    fn degenerate_sides_and_points_are_refused() {
+        // Two sides is a line, two spikes is a lens; both clamp to the
+        // least drawable shape rather than producing NaN geometry.
+        let _ = Polygon::new(2).sample(square_bounds());
+        let _ = Star::new(2).sample(square_bounds());
     }
 }

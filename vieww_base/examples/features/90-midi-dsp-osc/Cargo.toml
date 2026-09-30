@@ -1,0 +1,17 @@
+[package]
+name = "feature-midi-dsp-osc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+vieww = { workspace = true, features = ["native"] }
+vieww-foundation.workspace = true
+vieww-widget.workspace = true
+feature-harness = { path = "../harness" }
+vieww-audio.workspace = true
+vieww-network.workspace = true
+
+[lints]
+workspace = true

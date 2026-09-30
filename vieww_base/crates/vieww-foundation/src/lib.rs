@@ -38,6 +38,7 @@ pub mod hdr;
 mod icon;
 mod image;
 pub mod intl;
+pub mod json;
 mod key;
 mod keyboard;
 mod locale;
@@ -45,11 +46,13 @@ mod memory;
 pub mod mobile;
 mod paint;
 mod path;
+mod path_ops;
 pub mod permission;
 mod platform;
 mod pointer;
 pub mod service;
 mod sketch;
+mod sketch_export;
 pub mod stream;
 mod svg;
 pub mod task;
@@ -92,6 +95,7 @@ pub use paint::{
     StrokeStyle, MAX_GRADIENT_STOPS,
 };
 pub use path::{Path, PathVerb};
+pub use path_ops::{signed_area, Contour, FillRule, PathMeasure, PathOp, PathPoint, DEFAULT_TOLERANCE};
 pub use permission::{
     AlwaysDenied, AlwaysGranted, AlwaysRestricted, Gate, Grant, Guarded, Permission,
     PermissionState, Permissions, ScriptedPermissions,

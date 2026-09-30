@@ -49,6 +49,7 @@ use crate::transform::Transform;
 /// distinguishes: everything downstream either resolves to one colour or to a
 /// gradient ramp, and a third case here would be a third case in every backend.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)] // a gradient is inline on purpose: brushes are built per frame
 pub enum Brush {
     Solid(Color),
     Gradient(Gradient),
@@ -317,7 +318,7 @@ impl Sketchbook {
     /// (todo-upgrades U-06). The expensive and the cheap version look
     /// identical at the call site, and the expensive one is the one you write
     /// first, because you are thinking about one shaft at a time — so the
-    /// receipt is [`SceneReport::filtered_layers`]
+    /// receipt is `SceneReport::filtered_layers`
     /// (vieww_paint::native::reference), which counts what you actually
     /// bought. Group early, blur once.
     ///
@@ -454,7 +455,7 @@ impl Sketchbook {
     /// reveal and split-screen transition.
     ///
     /// A painter cannot read what has already been painted beneath it —
-    /// [`Filtered::with_backdrop`](vieww_widget::Filtered) is the one thing in
+    /// `vieww_widget::Filtered::with_backdrop` is the one thing in
     /// the tree that can — so each window redraws the source, clipped to the
     /// window's own outline: N windows means N redraws of the source, real
     /// but affordable (eighty shards of a fifteen-shape drawing: 67 ms).

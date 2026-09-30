@@ -69,7 +69,7 @@
 //! * a keyframe at the same time as one already there **replaces** it, the way
 //!   every timeline editor does, rather than making `at` return either.
 //!
-//! [`Timeline`](Timeline) then lifts one of these to a *set of named tracks*
+//! [`Timeline`] then lifts one of these to a *set of named tracks*
 //! with per-track delays — the staggered reveal pattern, in one type.
 
 use std::time::Duration;
@@ -149,6 +149,31 @@ impl<T> Keyframe<T> {
     }
 }
 
+/// What a track does when the clock passes its last keyframe.
+///
+/// The default is [`Clamp`](LoopMode::Clamp) — hold the last value — because
+/// that is the only answer that is always a *finished* animation. The other
+/// two are the spellings every animation tool names: **loop** (GSAP `repeat:
+/// -1`, Godot and Unity clips, a spinner, a breathing light) wraps the clock
+/// back to the first keyframe and plays again; **ping-pong** (GSAP `yoyo`,
+/// a shuttle, a sweeping radar) plays it backwards from the end instead.
+///
+/// ```text
+/// Clamp:    0 ──▶ 1 ──────▶ (holds 1)
+/// Loop:     0 ──▶ 1 ──▶ 0 ──▶ 1 ──▶ ...
+/// PingPong: 0 ──▶ 1 ──▶ 0 ──▶ 1 ──▶ ... (the way back is the same track)
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LoopMode {
+    /// Hold the last keyframe's value forever. The default.
+    #[default]
+    Clamp,
+    /// Wrap to the first keyframe and play again, forever.
+    Loop,
+    /// Play to the end, then backwards to the start, forever.
+    PingPong,
+}
+
 /// A keyframed value: any number of points, in any order, sampled by time.
 ///
 /// The first value is the value at `t = 0`, and it is a constructor argument
@@ -166,6 +191,10 @@ pub struct Keyframes<T> {
     /// Sorted by `time`, always — [`insert`](Self::insert) keeps it so.
     /// Never empty: the constructor's first value sits at `t = 0`.
     frames: Vec<Keyframe<T>>,
+    /// What happens past the end — see [`LoopMode`]. It changes only how the
+    /// clock is *read*, never the keyframes themselves, so a looping track
+    /// and its clamped twin share one authored list.
+    mode: LoopMode,
 }
 
 impl<T> Keyframes<T> {
@@ -174,7 +203,33 @@ impl<T> Keyframes<T> {
     pub fn new(first: T) -> Self {
         Self {
             frames: vec![Keyframe::hold(0.0, first)],
+            mode: LoopMode::Clamp,
         }
+    }
+
+    /// Loop forever: at the end, wrap to the start. GSAP's `repeat: -1`,
+    /// every engine's clip loop. Returns `self` for builder chains.
+    ///
+    /// A one-keyframe track loops as itself — the mode is harmless there,
+    /// and refusing it would be a special case a builder does not need.
+    #[must_use]
+    pub const fn looping(mut self) -> Self {
+        self.mode = LoopMode::Loop;
+        self
+    }
+
+    /// Loop by bouncing: play forwards, then backwards, forever. GSAP's
+    /// `yoyo`, a shuttle, a radar sweep. Returns `self` for builder chains.
+    #[must_use]
+    pub const fn ping_pong(mut self) -> Self {
+        self.mode = LoopMode::PingPong;
+        self
+    }
+
+    /// The track's loop mode — an editor's view of how it was authored.
+    #[must_use]
+    pub const fn mode(&self) -> LoopMode {
+        self.mode
     }
 
     /// Add a keyframe, keeping the list time-sorted. Returns `self`, for
@@ -245,10 +300,19 @@ impl<T: Lerp> Keyframes<T> {
     /// The value at `elapsed`.
     ///
     /// Holds before the first and after the last keyframe — see the type's
-    /// docs for why holding is the only defensible answer at both ends.
+    /// docs for why holding is the only defensible answer at both ends —
+    /// unless the track is [`looping`](Self::looping) or
+    /// [`ping_pong`](Self::ping_pong), in which case the clock is folded
+    /// back into the track's span first and the answer never leaves it.
     #[must_use]
     pub fn at(&self, elapsed: Duration) -> T {
-        let t = elapsed.as_secs_f32();
+        let end = self.frames[self.frames.len() - 1].time;
+        let t = fold(self.mode, elapsed.as_secs_f32(), end);
+        self.at_inside(t)
+    }
+
+    /// The sampling body: `t` is already inside the track's span.
+    fn at_inside(&self, t: f32) -> T {
         let last = self.frames.len() - 1;
         if t <= self.frames[0].time || last == 0 {
             return self.frames[0].value.clone();
@@ -632,5 +696,155 @@ mod tests {
         assert_eq!(names, vec!["a", "b"]);
         assert_eq!(frame.values()[0].1, 1.0);
         assert_eq!(frame.values()[1].1, 2.0);
+    }
+}
+
+/// Fold the clock into the track's span, per the mode.
+///
+/// Free-standing because the arithmetic is the whole of what "loop" and
+/// "ping-pong" mean, and a named function says it once:
+///
+/// * `Clamp` — the clock, unchanged; the sampling body holds past the end.
+/// * `Loop` — the clock modulo the span. Exactly at a multiple of the span
+///   the remainder is zero, so the *first* keyframe is shown: a loop is a
+///   cut, and cutting back to frame zero is what cutting back means.
+/// * `PingPong` — the clock modulo *twice* the span, mirrored over the
+///   second half. The mirror is `2·span − phase`, which is continuous at the
+///   turn (phase = span gives span) and lands on zero at the far end.
+///
+/// A span of zero (a one-keyframe track) folds to zero under every mode —
+/// there is no span to be inside, and the value is the only value either way.
+fn fold(mode: LoopMode, t: f32, span: f32) -> f32 {
+    if span <= 0.0 {
+        return t.min(0.0);
+    }
+    match mode {
+        LoopMode::Clamp => t,
+        LoopMode::Loop => t.rem_euclid(span),
+        LoopMode::PingPong => {
+            let phase = t.rem_euclid(2.0 * span);
+            if phase > span {
+                2.0 * span - phase
+            } else {
+                phase
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod loop_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn ms(ms: u64) -> Duration {
+        Duration::from_millis(ms)
+    }
+
+    fn ramp() -> Keyframes<f32> {
+        // 0 → 1 over one second, eased in-out.
+        Keyframes::new(0.0).with(Keyframe::to(1.0, 1.0))
+    }
+
+    #[test]
+    fn clamped_tracks_hold_their_last_value() {
+        let track = ramp();
+        assert_eq!(track.at(ms(1500)), 1.0);
+        assert_eq!(track.at(ms(60_000)), 1.0);
+        assert_eq!(track.mode(), LoopMode::Clamp);
+    }
+
+    #[test]
+    fn looping_tracks_wrap_the_clock() {
+        let track = ramp().looping();
+        // A quarter past the end behaves like a quarter from the start.
+        let over = track.at(ms(1250));
+        let from = track.at(ms(250));
+        assert!((over - from).abs() < 1e-4, "{over} vs {from}");
+        assert_eq!(track.mode(), LoopMode::Loop);
+    }
+
+    #[test]
+    fn a_loop_boundary_lands_on_the_first_keyframe() {
+        let track = ramp().looping();
+        // Exactly one span in: the cut back to frame zero.
+        assert_eq!(track.at(ms(1000)), 0.0);
+        assert_eq!(track.at(ms(2000)), 0.0);
+        // And just *before* the cut, the last value.
+        assert!((track.at(ms(999)) - 1.0).abs() < 1e-2);
+    }
+
+    #[test]
+    fn ping_pong_plays_backwards_after_the_end() {
+        let track = ramp().ping_pong();
+        // 0.75 s past the start of the return journey is 0.25 s *into* it:
+        // the value the forward pass had at 0.75 s... read back from the end.
+        let returning = track.at(ms(1750));
+        let forward_equivalent = track.at(ms(250));
+        assert!(
+            (returning - forward_equivalent).abs() < 1e-4,
+            "{returning} vs {forward_equivalent}"
+        );
+        assert_eq!(track.mode(), LoopMode::PingPong);
+    }
+
+    #[test]
+    fn ping_pong_is_continuous_at_the_turn() {
+        let track = ramp().ping_pong();
+        let before = track.at(ms(999));
+        let at = track.at(ms(1000));
+        let after = track.at(ms(1001));
+        // No jump at the reversal: the values at ±1 ms straddle the endpoint
+        // within a frame's worth of easing.
+        assert!((before - 1.0).abs() < 2e-2);
+        assert!((at - 1.0).abs() < 1e-3);
+        assert!((after - 1.0).abs() < 2e-2);
+    }
+
+    #[test]
+    fn ping_pong_returns_home() {
+        let track = ramp().ping_pong();
+        // Two spans in: back at the start.
+        assert!(track.at(ms(2000)).abs() < 1e-3);
+        assert!(track.at(ms(1999)) > 0.0, "approaching home from above");
+    }
+
+    #[test]
+    fn looping_before_the_start_is_unchanged() {
+        // The fold only affects the far end; before the first keyframe a
+        // track holds its first value whatever its mode.
+        let track = ramp().looping();
+        assert_eq!(track.at(Duration::ZERO), 0.0);
+        let _ = track.ping_pong().at(Duration::ZERO);
+    }
+
+    #[test]
+    fn one_keyframe_tracks_survive_every_mode() {
+        for track in [
+            Keyframes::new(5.0),
+            Keyframes::new(5.0).looping(),
+            Keyframes::new(5.0).ping_pong(),
+        ] {
+            assert_eq!(track.at(ms(0)), 5.0);
+            assert_eq!(track.at(ms(10_000)), 5.0);
+        }
+    }
+
+    #[test]
+    fn held_keyframes_loop_as_cuts() {
+        // A hold-hold track is a square wave once looping: 0 for the first
+        // half of the span, 1 for the second, cutting back to 0 at the wrap.
+        // (A track that only *ends* on a hold has no second half — the value
+        // 1 exists for one instant — so the track here returns to 0 at the
+        // span's end, which is what a square wave actually is.)
+        let track = Keyframes::new(0.0)
+            .with(Keyframe::hold(0.25, 1.0))
+            .with(Keyframe::hold(0.5, 0.0))
+            .looping();
+        assert_eq!(track.at(ms(100)), 0.0);
+        assert_eq!(track.at(ms(300)), 1.0);
+        assert_eq!(track.at(ms(600)), 0.0, "wrapped back to the hold");
+        assert_eq!(track.at(ms(800)), 1.0);
+        assert_eq!(track.at(ms(1100)), 0.0);
     }
 }

@@ -39,6 +39,7 @@
 //! positional hooks.
 
 mod animation;
+pub mod binding;
 mod drag;
 mod element;
 mod error;
@@ -54,6 +55,7 @@ pub mod transition;
 mod tree;
 
 pub use animation::Animation;
+pub use binding::{Binding, Command, TextBinding, Value as VmValue, ViewModel};
 pub use drag::{DragController, DragTargetId, Dropped};
 pub use element::Element;
 pub use error::{BuildError, ErrorPolicy};

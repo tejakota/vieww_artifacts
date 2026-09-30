@@ -80,9 +80,38 @@ rasterizer would have made that suite unable to catch anything at all.
 
 Cutting across that stack: `vieww-foundation` (geometry, color, input,
 accessibility preferences, capability types — no dependency on anything
-above it), `vieww-gestures`, `vieww-animation`, `vieww-text`, `vieww-asset`,
-`vieww-image`, and the platform bridge (`vieww-platform`,
-`vieww-platform-winit`, `vieww-hardware`).
+above it), `vieww-gestures`, `vieww-animation` (springs, tweens, and — since
+the gap-closure pass — keyframes, state machines and skeletal animation),
+`vieww-text`, `vieww-asset`, `vieww-image`, and the platform bridge
+(`vieww-platform`, `vieww-platform-winit`, `vieww-hardware`).
+
+Beside those, six service-shaped layers with the same rule as the platform
+bridge: the framework owns the deterministic half, a platform crate owns the
+device half, and a trait decides the border — `vieww-audio` (synthesis,
+mixing, WAV, the `AudioPlayer` seam), `vieww-video` (sources and a
+delta-driven player, the `VideoSource` seam), `vieww-mesh` (OBJ and STL into
+triangles), `vieww-network` (requests, responses and the `HttpClient` seam
+on the frame-aligned `Task`), `vieww-physics` (2D bodies, collisions and an
+impulse solver, fixed-step deterministic), and `vieww-embed` (web content in
+the tree — a real `<iframe>` on the DOM backend, a placeholder elsewhere).
+
+The creative-tool layer sits on the same rule:
+
+- `vieww-3d` is a scene graph, software renderer, path tracer and glTF
+  importer.
+- `vieww-canvas` is a Konva-style retained stage.
+- `vieww-dataviz` is D3's scales, joins, shapes, layouts and force
+  simulation.
+- `vieww-graph` is a cooking node graph and a Blueprint-style event graph.
+- `vieww-game` is an ECS game loop.
+- `vieww-collab` is a CRDT document with presence.
+- `vieww-lottie` plays Bodymovin files.
+
+The media and animation crates carry the After Effects/Blender/TouchDesigner
+vocabulary: GSAP-style sequences, Mecanim-style animators, F-curves,
+constraints, expressions, NLA, CHOPs, compositions, keying, tracking,
+export, MIDI, DSP, OSC and pixel effects. Examples 80–91 photograph all of
+it; see `examples/shots/`.
 
 ## Quick start
 

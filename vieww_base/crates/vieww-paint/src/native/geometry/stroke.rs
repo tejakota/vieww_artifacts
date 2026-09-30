@@ -43,6 +43,24 @@ pub(crate) fn stroke_to_polygons(
         }
     }
 
+    // One orientation for every piece. The pieces are unioned by the
+    // nonzero rule, which only holds when overlapping pieces wind the same
+    // way: a clockwise segment quad under a counter-clockwise join disc sums
+    // to winding zero and punches a hole at every round join — a thick
+    // curved stroke came out beaded. Reversing the positive-area pieces makes
+    // the union what the stamping design above assumes.
+    for polygon in &mut polygons {
+        let pts = &polygon.points;
+        let mut area = 0.0f32;
+        for i in 0..pts.len() {
+            let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+            area += a.0 * b.1 - b.0 * a.1;
+        }
+        if area > 0.0 {
+            polygon.points.reverse();
+        }
+    }
+
     // Lift every polygon from local space into device space as the very last
     // step.
     for polygon in &mut polygons {
@@ -318,4 +336,30 @@ fn line_intersection(
     }
     let t = ((p2.0 - p1.0) * d2.1 - (p2.1 - p1.1) * d2.0) / denom;
     Some((p1.0 + d1.0 * t, p1.1 + d1.1 * t))
+}
+
+#[cfg(test)]
+mod orientation_tests {
+    use super::*;
+    use vieww_foundation::{Offset, Path, Rect};
+
+    /// A thick zig-zag with round joins must be solid at every join: the
+    /// join discs and the segment quads are unioned, not cancelled.
+    #[test]
+    fn round_joins_do_not_punch_holes() {
+        let mut p = Path::new();
+        p.move_to(Offset::new(10.0, 40.0)).line_to(Offset::new(40.0, 10.0)).line_to(Offset::new(70.0, 40.0)).line_to(Offset::new(100.0, 10.0));
+        let polys = stroke_to_polygons(&p, 12.0, &StrokeStyle::rounded(), Transform::IDENTITY);
+        for poly in &polys {
+            let pts = &poly.points;
+            let area: f32 = (0..pts.len()).map(|i| pts[i].0 * pts[(i + 1) % pts.len()].1 - pts[(i + 1) % pts.len()].0 * pts[i].1).sum();
+            assert!(area <= 0.0, "every piece winds the same way");
+        }
+        let mask = super::super::fill::rasterize(&polys, Rect::new(0.0, 0.0, 120.0, 60.0));
+        let view = mask.view();
+        let at = |x: i32, y: i32| view.row((y - view.y0) as u32)[(x - view.x0) as usize];
+        for (x, y) in [(40, 10), (70, 40), (40, 12), (70, 38)] {
+            assert!(at(x, y) > 0.99, "join at ({x},{y}) covered: {}", at(x, y));
+        }
+    }
 }

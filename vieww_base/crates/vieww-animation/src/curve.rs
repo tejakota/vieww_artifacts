@@ -77,6 +77,111 @@ impl Curve {
     /// The standard emphasised easing — leaves quickly, arrives slowly.
     pub const FAST_OUT_SLOW_IN: Self = Self::cubic(0.4, 0.0, 0.2, 1.0);
 
+    // ---------------------------------------------------------------------
+    // The named library: GSAP's easing families (Power, Sine, Expo, Circ,
+    // Back, Elastic, Bounce, Steps) — the curves every animation tool names
+    // the same way, spelled here so "give me a bounce" is one identifier
+    // rather than a cubic-bezier guess.
+    //
+    // Each family comes in `_IN`, `_OUT` and `_IN_OUT`, and each is built on
+    // `custom` because none of them is a cubic bézier — a bounce and an
+    // elastic overshoot leave the unit interval, and a bézier pinned to
+    // `f(0)=0, f(1)=1` with monotone control x cannot. Where a family's out
+    // really is the mirror of its in (the power family), the in is spelled
+    // and the out is `.flipped()` — one function, two curves, no second copy
+    // to drift. Where it is not (elastic, bounce), both are spelled.
+    // ---------------------------------------------------------------------
+
+    /// GSAP `power1` / CSS `quad` — squared progress. Gentle, and the
+    /// softest curve that still reads as accelerating.
+    pub const POWER1_IN: Self = Self::custom(power1_in);
+    /// `power1` out: fast, then a long gentle landing.
+    pub const POWER1_OUT: Self = Self::custom(power1_in).flipped();
+    /// `power1` both ways.
+    pub const POWER1_IN_OUT: Self = Self::custom(power1_in_out);
+
+    /// GSAP `power2` / CSS `cubic` — cubed progress. The default "emphatic"
+    /// family for content that should feel deliberate.
+    pub const POWER2_IN: Self = Self::custom(power2_in);
+    /// `power2` out.
+    pub const POWER2_OUT: Self = Self::custom(power2_in).flipped();
+    /// `power2` both ways.
+    pub const POWER2_IN_OUT: Self = Self::custom(power2_in_out);
+
+    /// GSAP `power3` / CSS `quart`.
+    pub const POWER3_IN: Self = Self::custom(power3_in);
+    /// `power3` out.
+    pub const POWER3_OUT: Self = Self::custom(power3_in).flipped();
+    /// `power3` both ways.
+    pub const POWER3_IN_OUT: Self = Self::custom(power3_in_out);
+
+    /// GSAP `power4` / CSS `quint` — the sharpest power curve that does not
+    /// look broken; `power5`+ is GSAP's own advice to stop at.
+    pub const POWER4_IN: Self = Self::custom(power4_in);
+    /// `power4` out.
+    pub const POWER4_OUT: Self = Self::custom(power4_in).flipped();
+    /// `power4` both ways.
+    pub const POWER4_IN_OUT: Self = Self::custom(power4_in_out);
+
+    /// Sine — the softest in the library; the shape of a pendulum's speed at
+    /// the bottom of its swing.
+    pub const SINE_IN: Self = Self::custom(sine_in);
+    /// Sine out.
+    pub const SINE_OUT: Self = Self::custom(sine_in).flipped();
+    /// Sine both ways — a breath, a pulse, anything organic.
+    pub const SINE_IN_OUT: Self = Self::custom(sine_in_out);
+
+    /// Exponential — starts at nothing, arrives at full speed. For exits that
+    /// should feel like being pulled off stage.
+    pub const EXPO_IN: Self = Self::custom(expo_in);
+    /// Exponential out — the classic "reveal": instant momentum, long glide.
+    pub const EXPO_OUT: Self = Self::custom(expo_in).flipped();
+    /// Exponential both ways.
+    pub const EXPO_IN_OUT: Self = Self::custom(expo_in_out);
+
+    /// Circular — an arc rather than a ramp; snappier than `sine`, softer
+    /// than `expo`.
+    pub const CIRC_IN: Self = Self::custom(circ_in);
+    /// Circular out.
+    pub const CIRC_OUT: Self = Self::custom(circ_in).flipped();
+    /// Circular both ways.
+    pub const CIRC_IN_OUT: Self = Self::custom(circ_in_out);
+
+    /// Back — overshoots, then settles back. The constant is Penner's
+    /// 1.70158, tuned once and kept: changing it changes the *personality*,
+    /// not the family.
+    pub const BACK_IN: Self = Self::custom(back_in);
+    /// Back out — overshoots on arrival, which is the direction a "pop"
+    /// entrance wants.
+    pub const BACK_OUT: Self = Self::custom(back_out);
+    /// Back both ways.
+    pub const BACK_IN_OUT: Self = Self::custom(back_in_out);
+
+    /// Elastic — wobbles like a released spring. `ELASTIC_OUT` is the one a
+    /// playful entrance wants; the others complete the family.
+    pub const ELASTIC_IN: Self = Self::custom(elastic_in);
+    /// Elastic out: the bounce-in of a slingshot.
+    pub const ELASTIC_OUT: Self = Self::custom(elastic_out);
+    /// Elastic both ways.
+    pub const ELASTIC_IN_OUT: Self = Self::custom(elastic_in_out);
+
+    /// Bounce — a ball landing: N diminishing parabolic hops.
+    pub const BOUNCE_IN: Self = Self::custom(bounce_out).flipped();
+    /// Bounce out — the standard direction: arrives by falling.
+    pub const BOUNCE_OUT: Self = Self::custom(bounce_out);
+    /// Bounce both ways.
+    pub const BOUNCE_IN_OUT: Self = Self::custom(bounce_in_out);
+
+    /// Two discrete jumps — GSAP `steps(2)`. A binary state, a half-filled
+    /// tally.
+    pub const STEPS_2: Self = Self::custom(steps_2);
+    /// Four discrete jumps — `steps(4)`. A quartered progress bar.
+    pub const STEPS_4: Self = Self::custom(steps_4);
+    /// Five discrete jumps — `steps(5)`. A star filling point by point.
+    pub const STEPS_5: Self = Self::custom(steps_5);
+    /// Eight discrete jumps — `steps(8)`. A loading bar that ticks.
+    pub const STEPS_8: Self = Self::custom(steps_8);
+
     /// A cubic bézier from its two control points.
     ///
     /// # Panics
@@ -550,5 +655,383 @@ mod tests {
     #[test]
     fn the_default_curve_is_linear() {
         assert_eq!(Curve::default(), Curve::Linear);
+    }
+}
+
+// ---------------------------------------------------------------------
+// The named-library functions behind the constants above.
+//
+// These are Penner's equations — the 2002 set that GSAP, CSS, jQuery and
+// every other easing library derive from, which is why the shapes here will
+// match what a designer already knows by name. The `in` of each family is
+// spelled; where the out is the mirror (powers, sine, expo, circ), the
+// constant uses `.flipped()` instead of a second function.
+// ---------------------------------------------------------------------
+
+/// The `in` half of an in-out curve, scaled — the standard construction for
+/// every symmetric family: run the in at double speed over the first half,
+/// and its mirror over the second.
+fn in_out_of(in_fn: fn(f32) -> f32, t: f32) -> f32 {
+    if t < 0.5 {
+        in_fn(2.0 * t) / 2.0
+    } else {
+        (2.0 - in_fn(2.0 - 2.0 * t)) / 2.0
+    }
+}
+
+fn power1_in(t: f32) -> f32 {
+    t * t
+}
+fn power1_in_out(t: f32) -> f32 {
+    in_out_of(power1_in, t)
+}
+
+fn power2_in(t: f32) -> f32 {
+    t * t * t
+}
+fn power2_in_out(t: f32) -> f32 {
+    in_out_of(power2_in, t)
+}
+
+fn power3_in(t: f32) -> f32 {
+    t * t * t * t
+}
+fn power3_in_out(t: f32) -> f32 {
+    in_out_of(power3_in, t)
+}
+
+fn power4_in(t: f32) -> f32 {
+    t * t * t * t * t
+}
+fn power4_in_out(t: f32) -> f32 {
+    in_out_of(power4_in, t)
+}
+
+fn sine_in(t: f32) -> f32 {
+    1.0 - (t * std::f32::consts::FRAC_PI_2).cos()
+}
+fn sine_in_out(t: f32) -> f32 {
+    (1.0 - (std::f32::consts::PI * t).cos()) / 2.0
+}
+
+fn expo_in(t: f32) -> f32 {
+    // t = 0 exactly: 2^-10 is 0.0009765, not 0, and the jump from nothing to
+    // something in one frame is what an expo *is* — but t = 0 is the value
+    // every animation starts from, and 0.001 there is a visible snap. The
+    // endpoint is exact by special case, the way easings.net spells it.
+    if t <= 0.0 {
+        0.0
+    } else {
+        2.0_f32.powf(10.0 * (t - 1.0))
+    }
+}
+fn expo_in_out(t: f32) -> f32 {
+    if t <= 0.0 {
+        0.0
+    } else if t >= 1.0 {
+        1.0
+    } else if t < 0.5 {
+        2.0_f32.powf(20.0 * t - 10.0) / 2.0
+    } else {
+        (2.0 - 2.0_f32.powf(-20.0 * t + 10.0)) / 2.0
+    }
+}
+
+fn circ_in(t: f32) -> f32 {
+    1.0 - (1.0 - t * t).sqrt()
+}
+fn circ_in_out(t: f32) -> f32 {
+    if t < 0.5 {
+        (1.0 - (1.0 - 4.0 * t * t).sqrt()) / 2.0
+    } else {
+        let u = -2.0 * t + 2.0;
+        ((1.0 - u * u).sqrt() + 1.0) / 2.0
+    }
+}
+
+/// Penner's back constant — the overshoot amount, tuned by hand in 2002 and
+/// copied by every library since.
+const BACK_K: f32 = 1.70158;
+
+fn back_in(t: f32) -> f32 {
+    let c3 = BACK_K + 1.0;
+    c3 * t * t * t - BACK_K * t * t
+}
+fn back_out(t: f32) -> f32 {
+    let c3 = BACK_K + 1.0;
+    let u = t - 1.0;
+    1.0 + c3 * u * u * u + BACK_K * u * u
+}
+fn back_in_out(t: f32) -> f32 {
+    // Penner's in-out uses a larger constant (k·1.525) because the halves run
+    // at double speed and would otherwise overshoot half as far each.
+    let c2 = BACK_K * 1.525;
+    if t < 0.5 {
+        let u = 2.0 * t;
+        (u * u * ((c2 + 1.0) * u - c2)) / 2.0
+    } else {
+        let u = 2.0 * t - 2.0;
+        (u * u * ((c2 + 1.0) * u + c2)) / 2.0 + 1.0
+    }
+}
+
+/// The elastic period constant — `(2π)/3`, the frequency Penner chose: fast
+/// enough to read as a wobble, slow enough that the first swing is visible.
+const ELASTIC_C: f32 = 2.0 * std::f32::consts::FRAC_PI_3;
+
+fn elastic_in(t: f32) -> f32 {
+    if t <= 0.0 {
+        0.0
+    } else if t >= 1.0 {
+        1.0
+    } else {
+        -(2.0_f32.powf(10.0 * t - 10.0) * ((10.0 * t - 10.75) * ELASTIC_C).sin())
+    }
+}
+fn elastic_out(t: f32) -> f32 {
+    if t <= 0.0 {
+        0.0
+    } else if t >= 1.0 {
+        1.0
+    } else {
+        2.0_f32.powf(-10.0 * t) * ((10.0 * t - 0.75) * ELASTIC_C).sin() + 1.0
+    }
+}
+fn elastic_in_out(t: f32) -> f32 {
+    // Built with the same `in_out_of` construction as every other symmetric
+    // family — the halves run at double speed and mirror — rather than
+    // Penner's separately-constant form: one construction guarantees the
+    // in-out symmetry the test checks, where hand-tuned phase constants
+    // have to be *checked* for it.
+    if t <= 0.0 {
+        0.0
+    } else if t >= 1.0 {
+        1.0
+    } else {
+        in_out_of(elastic_in, t)
+    }
+}
+
+/// Penner's bounce: four parabolic arcs of geometrically shrinking width,
+/// landing at 0.75, 0.9375, 0.984375 — each hop a quarter of the height of
+/// the one before it.
+fn bounce_out(t: f32) -> f32 {
+    const N1: f32 = 7.5625;
+    const D1: f32 = 2.75;
+    if t < 1.0 / D1 {
+        N1 * t * t
+    } else if t < 2.0 / D1 {
+        let u = t - 1.5 / D1;
+        N1 * u * u + 0.75
+    } else if t < 2.5 / D1 {
+        let u = t - 2.25 / D1;
+        N1 * u * u + 0.9375
+    } else {
+        let u = t - 2.625 / D1;
+        N1 * u * u + 0.984375
+    }
+}
+fn bounce_in_out(t: f32) -> f32 {
+    if t < 0.5 {
+        (1.0 - bounce_out(1.0 - 2.0 * t)) / 2.0
+    } else {
+        (bounce_out(2.0 * t - 1.0) + 1.0) / 2.0
+    }
+}
+
+/// `n` discrete equal jumps, holding between — a closure can't become a `fn`
+/// pointer, so each published count is its own named function. `min(n)` so
+/// the last step's top edge lands on exactly 1 rather than 1 − ε.
+fn step_of(n: f32) -> impl Fn(f32) -> f32 {
+    move |t: f32| (t * n).floor().min(n) / n
+}
+fn steps_2(t: f32) -> f32 {
+    step_of(2.0)(t)
+}
+fn steps_4(t: f32) -> f32 {
+    step_of(4.0)(t)
+}
+fn steps_5(t: f32) -> f32 {
+    step_of(5.0)(t)
+}
+fn steps_8(t: f32) -> f32 {
+    step_of(8.0)(t)
+}
+
+#[cfg(test)]
+mod preset_tests {
+    use super::Curve;
+
+    const EPS: f32 = 1e-4;
+
+    #[test]
+    fn every_preset_lands_on_both_endpoints() {
+        // The contract `custom` documents but cannot check: f(0) = 0 and
+        // f(1) = 1. A preset is this crate's own code, so here it *is*
+        // checked — and the flipped variants need their mirror checked too,
+        // because a flipped curve that was already landing on 1 at t = 1
+        // lands on 0 there instead, and no caller can tell which end broke.
+        let all = [
+            Curve::POWER1_IN,
+            Curve::POWER1_OUT,
+            Curve::POWER1_IN_OUT,
+            Curve::POWER2_IN,
+            Curve::POWER2_OUT,
+            Curve::POWER2_IN_OUT,
+            Curve::POWER3_IN,
+            Curve::POWER3_OUT,
+            Curve::POWER3_IN_OUT,
+            Curve::POWER4_IN,
+            Curve::POWER4_OUT,
+            Curve::POWER4_IN_OUT,
+            Curve::SINE_IN,
+            Curve::SINE_OUT,
+            Curve::SINE_IN_OUT,
+            Curve::EXPO_IN,
+            Curve::EXPO_OUT,
+            Curve::EXPO_IN_OUT,
+            Curve::CIRC_IN,
+            Curve::CIRC_OUT,
+            Curve::CIRC_IN_OUT,
+            Curve::BACK_IN,
+            Curve::BACK_OUT,
+            Curve::BACK_IN_OUT,
+            Curve::ELASTIC_IN,
+            Curve::ELASTIC_OUT,
+            Curve::ELASTIC_IN_OUT,
+            Curve::BOUNCE_IN,
+            Curve::BOUNCE_OUT,
+            Curve::BOUNCE_IN_OUT,
+            Curve::STEPS_2,
+            Curve::STEPS_4,
+            Curve::STEPS_5,
+            Curve::STEPS_8,
+        ];
+        for curve in all {
+            assert!(
+                curve.transform(0.0).abs() < EPS,
+                "{curve:?} does not start at 0"
+            );
+            assert!(
+                (curve.transform(1.0) - 1.0).abs() < EPS,
+                "{curve:?} does not finish at 1"
+            );
+        }
+    }
+
+    #[test]
+    fn in_and_out_sum_to_one_where_the_family_is_symmetric() {
+        // The mirror relation: an ease-out at (1 − t) is 1 − the ease-in at
+        // t. Checking the *sum* is checking the mirror; checking equality
+        // would be checking that the curve is its own flip, which none of
+        // these are.
+        for family in [Curve::POWER2_IN, Curve::SINE_IN, Curve::EXPO_IN, Curve::CIRC_IN] {
+            let out = family.flipped();
+            for i in 1..10 {
+                let t = i as f32 / 10.0;
+                let a = family.transform(t);
+                let b = out.transform(1.0 - t);
+                assert!((a + b - 1.0).abs() < EPS, "{family:?} and its flip disagree at {t}");
+            }
+        }
+    }
+
+    #[test]
+    fn back_and_elastic_leave_the_interval() {
+        // The reason these exist as `custom` curves: they overshoot. A
+        // bezier could not, and a curve that never leaves 0..=1 cannot be a
+        // back or an elastic.
+        let mut back_max: f32 = 0.0;
+        for i in 0..=100 {
+            let t = i as f32 / 100.0;
+            back_max = back_max.max(Curve::BACK_OUT.transform(t));
+        }
+        assert!(back_max > 1.0, "BACK_OUT never overshot: {back_max}");
+        let mut elastic_min: f32 = 0.0;
+        for i in 0..=100 {
+            let t = i as f32 / 100.0;
+            elastic_min = elastic_min.min(Curve::ELASTIC_IN.transform(t));
+        }
+        assert!(elastic_min < 0.0, "ELASTIC_IN never undershot: {elastic_min}");
+    }
+
+    #[test]
+    fn bounce_out_is_penneres_quarter_landing() {
+        // The troughs of the classic bounce — the instants the parabolic
+        // arcs bottom out — at 1.5/d, 2.25/d and 2.625/d for d = 2.75:
+        // the values Penner's constants produce by construction.
+        const D: f32 = 2.75;
+        assert!((Curve::BOUNCE_OUT.transform(1.5 / D) - 0.75).abs() < 1e-3);
+        assert!((Curve::BOUNCE_OUT.transform(2.25 / D) - 0.9375).abs() < 1e-3);
+        assert!((Curve::BOUNCE_OUT.transform(2.625 / D) - 0.984375).abs() < 1e-3);
+        assert!((Curve::BOUNCE_OUT.transform(1.0) - 1.0).abs() < EPS);
+    }
+
+    #[test]
+    fn steps_jump_and_hold() {
+        let four = Curve::STEPS_4;
+        // Holds *at* the step value across each quarter, jumps at the edge.
+        assert_eq!(four.transform(0.24), 0.0);
+        assert_eq!(four.transform(0.26), 0.25);
+        assert_eq!(four.transform(0.49), 0.25);
+        assert_eq!(four.transform(0.51), 0.5);
+        assert_eq!(four.transform(0.99), 0.75);
+        assert_eq!(four.transform(1.0), 1.0);
+    }
+
+    #[test]
+    fn in_out_symmetry() {
+        // An in-out curve is mirror-symmetric about its centre: the value at
+        // t and at 1 − t add to 1. Checked on every family, because it is
+        // the property that makes "in-out" mean one thing rather than
+        // "roughly in then roughly out".
+        for curve in [
+            Curve::POWER2_IN_OUT,
+            Curve::SINE_IN_OUT,
+            Curve::EXPO_IN_OUT,
+            Curve::CIRC_IN_OUT,
+            Curve::BACK_IN_OUT,
+            Curve::ELASTIC_IN_OUT,
+            Curve::BOUNCE_IN_OUT,
+        ] {
+            for i in 1..10 {
+                let t = i as f32 / 10.0;
+                let a = curve.transform(t);
+                let b = curve.transform(1.0 - t);
+                assert!(
+                    (a + b - 1.0).abs() < 1e-3,
+                    "{curve:?} not symmetric at {t}: {a} + {b}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn monotone_families_actually_monotone() {
+        // The families that promise monotone progress must deliver it — a
+        // non-monotone "power" would be an elastic with the personality
+        // filed off.
+        for curve in [
+            Curve::POWER1_IN,
+            Curve::POWER2_IN,
+            Curve::POWER3_IN,
+            Curve::POWER4_IN,
+            Curve::POWER2_OUT,
+            Curve::SINE_IN,
+            Curve::EXPO_IN,
+            Curve::CIRC_IN,
+            Curve::STEPS_8,
+        ] {
+            let mut last = curve.transform(0.0);
+            for i in 1..=200 {
+                let t = i as f32 / 200.0;
+                let now = curve.transform(t);
+                assert!(
+                    now >= last - 1e-6,
+                    "{curve:?} went backwards at {t}: {last} -> {now}"
+                );
+                last = now;
+            }
+        }
     }
 }

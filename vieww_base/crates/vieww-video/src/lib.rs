@@ -70,6 +70,11 @@ use vieww_foundation::Image;
 
 pub use vieww_foundation as foundation;
 
+pub mod comp;
+pub mod export;
+pub mod matte;
+pub mod track;
+
 /// A frame's pixels, decoded and drawable.
 ///
 /// `Image` from foundation, under a name that says what it is here. The
@@ -403,7 +408,7 @@ impl VideoPlayer {
     /// player happens *after* construction — a pause button, a loop toggle,
     /// a speed setting — and a builder that moves the player would hand
     /// each of those a player it has to give back. This is the
-    /// [`AnimationController`](vieww_animation::AnimationController)
+    /// `vieww_animation::AnimationController`
     /// spelling: mutate, chain in one statement, keep the binding.
     pub fn play(&mut self) -> &mut Self {
         self.playing = true;

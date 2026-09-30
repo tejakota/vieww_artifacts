@@ -38,18 +38,15 @@ pub enum PathVerb {
 /// Cubics only — quadratics are representable as cubics, and carrying one curve
 /// type instead of two halves the match arms in every backend for no loss.
 ///
-/// # No boolean operations — and where to look instead
+/// # Boolean operations, measuring, trimming, hit-testing
 ///
-/// There is no union, intersection or difference: `extend` concatenates,
-/// `reversed` flips, and nothing combines. This is almost certainly the right
-/// scope for a UI framework, and it is written here so nobody spends an
-/// afternoon looking for `Path::intersect` (todo-upgrades U-13). The two clean
-/// substitutes the film bench settled on:
-///
-/// * **Convex clipping by half-plane** (Sutherland–Hodgman, ~25 lines in the
-///   caller) gives real Voronoi cells.
-/// * **Marching squares over an implicit field** gives arbitrary organic
-///   contours — liquid, ink, damage regions that are not rectangles.
+/// These live in `path_ops.rs`: [`Path::boolean`] (union, intersect,
+/// difference, xor — Paper.js' four), [`Path::measure`] / [`Path::trim`]
+/// (draw-on, motion paths), [`Path::contains`] (exact hit-testing) and
+/// [`Path::to_svg_data`]. This header used to say "no boolean operations" and
+/// point at two substitutes (todo-upgrades U-13); the cross-framework audit
+/// closed that — Paper.js and After Effects' merge paths are in the comparison
+/// set, and the substitutes are still valid for what they were for.
 ///
 /// Also worth knowing before it costs a blank frame: a `fill` of an **open**
 /// subpath is silent — a path that is 99% correct and missing its `close()`
@@ -169,7 +166,7 @@ impl Path {
 
     /// How many subpaths carry geometry but no `close()` — the ones a `fill`
     /// will silently close along the straight chord, and the ones
-    /// [`SceneReport::open_subpath_fills`](vieww_paint::native::SceneReport)
+    /// `vieww_paint::native::SceneReport::open_subpath_fills`
     /// counts at replay.
     ///
     /// A subpath counts when it has at least one drawing verb (`line_to` /
@@ -428,6 +425,11 @@ impl Path {
 
         if open {
             self.move_to(at(start));
+        } else {
+            // Continuing a subpath: a straight edge to where the arc begins
+            // (the side of a wedge, the end of a band). Without it the first
+            // cubic would start from wherever the pen was and bulge.
+            self.line_to(at(start));
         }
         if sweep == 0.0 || radius <= 0.0 {
             return;

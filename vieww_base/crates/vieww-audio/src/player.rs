@@ -4,7 +4,7 @@
 //! add a service without editing foundation — and the first-party proof is
 //! right here: **the [`AudioPlayer`] trait lives in this crate, not in
 //! foundation's `capability` module**, and a platform crate registers an
-//! implementation into the same [`Services`] registry every other capability
+//! implementation into the same `Services` registry every other capability
 //! uses. Nothing in foundation knows audio exists.
 //!
 //! ```

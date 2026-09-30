@@ -5,15 +5,17 @@
 //! The framework's own comparison table lists "3D mesh loading" as a gap,
 //! naming GLTF and OBJ. This crate answers it for **OBJ** — the format
 //! every 3D tool on earth exports, text, human-readable, twenty years
-//! stable — and **STL**, the 3D-printing lingua franca, in both its binary
-//! and ASCII spellings. GLTF is *not* here, and that is a decision rather
-//! than an oversight: GLTF is a JSON scene graph wrapping one or more
-//! binary buffers, and loading it honestly means a JSON parser, a base64
-//! decoder, a scene hierarchy and a material system — four subsystems, each
-//! with its own failure modes, for a format whose *geometry* is exactly
-//! what OBJ already says. The [`Mesh`] this crate produces is the seam a
-//! GLTF loader would target anyway; when one is worth its dependencies, it
-//! lands there.
+//! stable — **STL**, the 3D-printing lingua franca, in both its binary
+//! and ASCII spellings, and **glTF 2.0** ([`gltf`]: `.gltf` and `.glb`,
+//! hierarchy, PBR material factors and TRS animations). glTF was deferred
+//! at first because loading it honestly needs a JSON parser, a base64
+//! decoder, a scene hierarchy and a material system; the foundation's
+//! `json` module and `vieww-3d`'s scene graph have since paid for all four,
+//! so the loader is now only the format itself.
+//!
+//! [`modifiers`] is Blender's modifier stack over the same [`Mesh`] type —
+//! mirror, array, (Loop) subdivision, displace, the simple-deform family,
+//! smooth, decimate, weld.
 //!
 //! # The output, in one paragraph
 //!
@@ -71,6 +73,9 @@
 //! one trap in the format, and the reason the length check runs first.
 
 use std::fmt;
+
+pub mod gltf;
+pub mod modifiers;
 
 /// A point in three dimensions.
 pub type Point3 = [f32; 3];

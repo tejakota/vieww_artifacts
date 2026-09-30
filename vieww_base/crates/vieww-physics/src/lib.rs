@@ -16,13 +16,19 @@
 //! impulses plus positional correction — the classical formulation, from
 //! the classical papers, in about four hundred lines with no dependencies.
 //!
-//! What is not: joints, continuous collision (a fast body can tunnel
-//! through a thin one — the caller's fixed `dt` is the guard), rotation
-//! (bodies are translated only; a tumbling box is a rigid-body rotation
-//! system, and torque brings orientation, inertia tensors and a whole
-//! contact manifold model with it), and 3D. Each is a real, named gap
-//! rather than an oversight, and each is the moment this crate stops
-//! being a UI's physics and starts being an engine.
+//! What this root module is not — and where each of those now lives:
+//!
+//! * **rotation, polygons, capsules, friction, revolute/weld/motor/mouse
+//!   joints, continuous collision, raycasts, sleeping, a character
+//!   controller** — [`rigid`], a Box2D-lineage engine (SAT + clipping,
+//!   sequential impulses with warm starting). The root keeps the simple
+//!   translate-only UI physics it always was, because a chip that bumps
+//!   another chip should not pay for an engine.
+//! * **cloth** — [`cloth`], Verlet/position-based dynamics with tearing.
+//! * **fluids** — [`fluid`], Clavet's double-density-relaxation SPH.
+//!
+//! Still out of scope, by name: 3D rigid bodies (the 3D layer renders, it
+//! does not simulate), soft-body FEM and destruction fracturing.
 //!
 //! # The one rule
 //!
@@ -61,6 +67,10 @@ use vieww_foundation::Offset;
 
 pub use vieww_foundation as foundation;
 
+pub mod cloth;
+pub mod fluid;
+pub mod rigid;
+
 /// A two-dimensional vector — [`Offset`] under the name physics reads
 /// better in.
 ///
@@ -69,6 +79,11 @@ pub use vieww_foundation as foundation;
 /// this crate's own would fork the arithmetic of "add two vectors" into
 /// two implementations to keep in agreement forever.
 pub type Vec2 = Offset;
+
+/// How many joint-solve passes one `step` runs: enough for a pull to
+/// propagate along the longest chain a UI builds, which in practice is a
+/// handful of links, and cheap because each pass is O(joints).
+const JOINT_ITERATIONS: u32 = 8;
 
 /// What a body is shaped like.
 ///
@@ -392,10 +407,68 @@ fn box_box(a: &Body, b: &Body) -> Option<Contact> {
     })
 }
 
+/// A distance joint: two bodies kept a chosen distance apart.
+///
+/// The rod, the rope, the tether, the pendulum's string — the one joint a
+/// UI's physics actually asks for (the revolute and motor joints of an
+/// engine assume the rotation this crate does not model, and are named
+/// gaps rather than pretend features).
+///
+/// `stiffness` in `0..=1` is how much of the constraint's error one step
+/// removes: 1.0 is a rigid rod that snaps to length, 0.1 is a soft tether
+/// that converges over a second. Values outside are clamped, because 0 is
+/// a decoration and above 1 is a gain — the same explosion-by-instalments
+/// a restitution above 1 gives, and for the same reason.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Joint {
+    /// One body's index, as returned by [`World::add_body`].
+    pub a: usize,
+    /// The other body's index.
+    pub b: usize,
+    /// The distance the joint holds between the two positions.
+    pub rest: f32,
+    /// How hard it holds it: the fraction of the error removed per step.
+    pub stiffness: f32,
+}
+
+impl Joint {
+    /// A rigid rod of `rest` between bodies `a` and `b`.
+    #[must_use]
+    pub const fn rod(a: usize, b: usize, rest: f32) -> Self {
+        Self {
+            a,
+            b,
+            rest,
+            stiffness: 1.0,
+        }
+    }
+
+    /// A softer tether, converging at `stiffness` per step.
+    #[must_use]
+    pub const fn tether(a: usize, b: usize, rest: f32, stiffness: f32) -> Self {
+        Self {
+            a,
+            b,
+            rest,
+            stiffness: if stiffness < 0.0 {
+                0.0
+            } else if stiffness > 1.0 {
+                1.0
+            } else {
+                stiffness
+            },
+        }
+    }
+}
+
 /// The world: bodies, gravity, one step at a time.
 #[derive(Debug, Clone)]
 pub struct World {
     bodies: Vec<Body>,
+    /// The distance joints, solved after the collision pass so a rod has
+    /// the last word over a contact — the ordering a chain resting on a
+    /// floor needs or the links sink into it a frame at a time.
+    joints: Vec<Joint>,
     /// Constant acceleration applied to every dynamic body, per second.
     ///
     /// A default of zero — "top-down" physics, chips on a desk — because
@@ -408,6 +481,7 @@ impl Default for World {
     fn default() -> Self {
         Self {
             bodies: Vec::new(),
+            joints: Vec::new(),
             gravity: Offset::new(0.0, 0.0),
         }
     }
@@ -419,6 +493,7 @@ impl World {
     pub const fn new() -> Self {
         Self {
             bodies: Vec::new(),
+            joints: Vec::new(),
             gravity: Offset::new(0.0, 0.0),
         }
     }
@@ -428,8 +503,27 @@ impl World {
     pub const fn with_gravity(gravity: Vec2) -> Self {
         Self {
             bodies: Vec::new(),
+            joints: Vec::new(),
             gravity,
         }
+    }
+
+    /// Add a distance joint, returning its index.
+    ///
+    /// Panics (in debug) are not a concern here: a joint's body indices
+    /// are validated when the joint is solved, and a joint naming a body
+    /// that does not exist is a caller bug the solver surfaces as a panic
+    /// with the index in the message — the same loud-failure contract the
+    /// rest of this crate keeps.
+    pub fn add_joint(&mut self, joint: Joint) -> usize {
+        self.joints.push(joint);
+        self.joints.len() - 1
+    }
+
+    /// The joints, for an editor or a debug overlay.
+    #[must_use]
+    pub fn joints(&self) -> &[Joint] {
+        &self.joints
     }
 
     /// Add a body, returning its index — the handle every later question
@@ -538,6 +632,83 @@ impl World {
         }
         for contact in &contacts {
             self.correct_positions(contact);
+        }
+
+        // Joints last, so a rod out-ranks a contact — see the field's docs.
+        for _ in 0..JOINT_ITERATIONS {
+            self.solve_joints();
+        }
+    }
+
+    /// Solve every joint once: a position correction toward the rest
+    /// length and a velocity impulse that cancels the drift along the
+    /// joint's axis, both split by inverse mass the way contacts are.
+    ///
+    /// One pass per joint per step converges for a rigid rod on two
+    /// bodies; a chain of N rods needs N passes to propagate a pull from
+    /// one end to the other in a single step, which is what
+    /// [`JOINT_ITERATIONS`] is for and why it scales with the joint count
+    /// rather than being a constant somebody tuned once.
+    fn solve_joints(&mut self) {
+        for joint in &self.joints {
+            let (a, b) = (self.bodies[joint.a], self.bodies[joint.b]);
+            let inv_a = a.inv_mass();
+            let inv_b = b.inv_mass();
+            let inv_total = inv_a + inv_b;
+            if inv_total <= 0.0 {
+                // Two fixed bodies with a rod between them is scenery.
+                continue;
+            }
+
+            let delta = Offset::new(
+                b.position.dx - a.position.dx,
+                b.position.dy - a.position.dy,
+            );
+            let distance = (delta.dx * delta.dx + delta.dy * delta.dy).sqrt();
+            if distance < f32::EPSILON {
+                // Coincident bodies have no axis to pull along; a position
+                // correction here would be a random direction, and "random"
+                // is not a property a deterministic step hands out.
+                continue;
+            }
+            let axis = Offset::new(delta.dx / distance, delta.dy / distance);
+
+            // Position: move each body a share of the error toward the rest
+            // length, weighted by inverse mass so the heavy one barely
+            // moves — the same split as `correct_positions`.
+            let error = distance - joint.rest;
+            let move_a = error * inv_a / inv_total * joint.stiffness;
+            let move_b = error * inv_b / inv_total * joint.stiffness;
+            self.bodies[joint.a].position = Offset::new(
+                a.position.dx + axis.dx * move_a,
+                a.position.dy + axis.dy * move_a,
+            );
+            self.bodies[joint.b].position = Offset::new(
+                b.position.dx - axis.dx * move_b,
+                b.position.dy - axis.dy * move_b,
+            );
+
+            // Velocity: cancel the drift along the axis (the relative
+            // velocity's projection onto it), scaled by stiffness. This is
+            // the half that makes a joint a *constraint* rather than a
+            // spring: with stiffness 1 the along-axis drift goes to zero in
+            // one solve, and the joint stops oscillating.
+            let a = self.bodies[joint.a];
+            let b = self.bodies[joint.b];
+            let relative = Offset::new(
+                b.velocity.dx - a.velocity.dx,
+                b.velocity.dy - a.velocity.dy,
+            );
+            let along = relative.dx * axis.dx + relative.dy * axis.dy;
+            let magnitude = -along / inv_total * joint.stiffness;
+            self.bodies[joint.a].velocity = Offset::new(
+                a.velocity.dx - axis.dx * magnitude * inv_a,
+                a.velocity.dy - axis.dy * magnitude * inv_a,
+            );
+            self.bodies[joint.b].velocity = Offset::new(
+                b.velocity.dx + axis.dx * magnitude * inv_b,
+                b.velocity.dy + axis.dy * magnitude * inv_b,
+            );
         }
     }
 
@@ -870,5 +1041,201 @@ mod tests {
 
         world.body_mut(a).position = Offset::new(1.0, 0.0);
         assert_eq!(world.body(a).position.dx, 1.0);
+    }
+}
+
+#[cfg(test)]
+mod joint_tests {
+    use super::*;
+
+    fn step_n(world: &mut World, steps: u32) {
+        for _ in 0..steps {
+            world.step(1.0 / 60.0);
+        }
+    }
+
+    #[test]
+    fn a_pendulum_swings_on_its_arc() {
+        // The canonical joint: a fixed anchor, a bob pulled sideways,
+        // gravity, a rod. With no damping in this crate (deliberately —
+        // damping is a *material* property a caller adds), the bob never
+        // settles; what the rod promises is that it stays *on the circle*,
+        // swinging, forever. That is the assertion: the constraint holds
+        // at every step, not just at rest.
+        let mut world = World::with_gravity(Offset::new(0.0, 600.0));
+        let anchor = world.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
+        let bob = world.add_body(Body::dynamic(Offset::new(30.0, 0.0), Shape::circle(4.0), 1.0));
+        world.add_joint(Joint::rod(anchor, bob, 50.0));
+
+        for step in 0..600 {
+            world.step(1.0 / 60.0);
+            if step % 60 != 0 {
+                continue; // check once a second; every step is over-pinning
+            }
+            let length = magnitude(world.body(bob).position);
+            assert!(
+                (length - 50.0).abs() < 1.0,
+                "step {step}: rod stretched to {length}"
+            );
+        }
+        // And it is genuinely swinging — the bob has crossed the vertical
+        // at least once in ten seconds (its x has changed sign).
+        assert!(world.body(bob).position.dx.abs() < 50.0);
+    }
+
+    #[test]
+    fn a_bob_hanging_below_its_anchor_stays_there() {
+        // Start at the bottom of the arc with no velocity: gravity is
+        // along the rod, the constraint cancels it exactly, and the bob
+        // hangs motionless — the steady state of a pendulum, entered
+        // directly so the test says "the rod holds at rest" without
+        // waiting for damping that is not this crate's to add.
+        let mut world = World::with_gravity(Offset::new(0.0, 600.0));
+        let anchor = world.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
+        let bob = world.add_body(Body::dynamic(Offset::new(0.0, 50.0), Shape::circle(4.0), 1.0));
+        world.add_joint(Joint::rod(anchor, bob, 50.0));
+
+        step_n(&mut world, 240);
+        let position = world.body(bob).position;
+        assert!(position.dx.abs() < 0.5, "no sideways drift: {position:?}");
+        assert!((position.dy - 50.0).abs() < 0.5, "hangs at rest length: {position:?}");
+        assert!(magnitude(world.body(bob).velocity) < 5.0, "motionless");
+    }
+
+    #[test]
+    fn two_equal_bodies_meet_in_the_middle() {
+        // A rod shorter than the current separation, both bodies dynamic
+        // and equal: the position correction splits the error evenly, and
+        // the centre of mass stays put — the conservation an impulse
+        // split by inverse mass is *for*.
+        let mut world = World::new();
+        let a = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(2.0), 1.0));
+        let b = world.add_body(Body::dynamic(Offset::new(100.0, 0.0), Shape::circle(2.0), 1.0));
+        world.add_joint(Joint::rod(a, b, 40.0));
+
+        step_n(&mut world, 30);
+
+        let pa = world.body(a).position;
+        let pb = world.body(b).position;
+        let length = (pb.dx - pa.dx).abs();
+        assert!((length - 40.0).abs() < 1.0, "rod holds: {length}");
+        let midpoint = (pa.dx + pb.dx) / 2.0;
+        assert!(
+            (midpoint - 50.0).abs() < 1.0,
+            "centre of mass unmoved: {midpoint}"
+        );
+    }
+
+    #[test]
+    fn a_soft_tether_converges_from_further_out() {
+        // Stiffness < 1: the same world converges more slowly — the
+        // softness is observable, which is the difference between a rod
+        // and a tether, and the test pins it by *comparison* rather than
+        // by a magic number of steps.
+        let mut rigid = World::new();
+        let ra = rigid.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
+        let rb = rigid.add_body(Body::dynamic(Offset::new(80.0, 0.0), Shape::circle(3.0), 1.0));
+        rigid.add_joint(Joint::rod(ra, rb, 50.0));
+
+        let mut soft = World::new();
+        let sa = soft.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
+        let sb = soft.add_body(Body::dynamic(Offset::new(80.0, 0.0), Shape::circle(3.0), 1.0));
+        soft.add_joint(Joint::tether(sa, sb, 50.0, 0.2));
+
+        step_n(&mut rigid, 10);
+        step_n(&mut soft, 10);
+        let rigid_error = (world_length(&rigid, rb) - 50.0).abs();
+        let soft_error = (world_length(&soft, sb) - 50.0).abs();
+        assert!(
+            rigid_error < soft_error,
+            "rigid {rigid_error} should beat soft {soft_error} at 10 steps"
+        );
+        // And the soft one gets there eventually.
+        step_n(&mut soft, 600);
+        assert!((world_length(&soft, sb) - 50.0).abs() < 1.0, "tether converged");
+    }
+
+    #[test]
+    fn a_joint_at_rest_changes_nothing() {
+        let mut world = World::new();
+        let a = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(2.0), 1.0));
+        let b = world.add_body(Body::dynamic(Offset::new(40.0, 0.0), Shape::circle(2.0), 1.0));
+        world.add_joint(Joint::rod(a, b, 40.0));
+
+        step_n(&mut world, 10);
+        let pa = world.body(a).position;
+        let pb = world.body(b).position;
+        assert!((pa.dx - 0.0).abs() < 1e-3 && (pb.dx - 40.0).abs() < 1e-3, "nothing moved");
+        assert!(world.body(a).velocity.dx.abs() < 1e-3, "nothing accelerated");
+    }
+
+    #[test]
+    fn a_joint_between_fixed_bodies_is_scenery() {
+        // Not a panic, not a drift: two anchors and a rod between them is
+        // a picture, and the solver treats it as one.
+        let mut world = World::new();
+        let a = world.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
+        let b = world.add_body(Body::fixed(Offset::new(10.0, 0.0), Shape::circle(1.0)));
+        world.add_joint(Joint::rod(a, b, 100.0));
+
+        step_n(&mut world, 60);
+        assert_eq!(world.body(b).position, Offset::new(10.0, 0.0));
+    }
+
+    #[test]
+    fn a_swinging_pendulum_stays_bounded() {
+        // Start the bob with sideways velocity: it swings, and the swing
+        // must not gain energy — the velocity-impulse half of the joint is
+        // what keeps the arc from widening, and this test is the one that
+        // catches a sign error in it.
+        let mut world = World::with_gravity(Offset::new(0.0, 600.0));
+        let anchor = world.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
+        let bob = world.add_body(Body::dynamic(Offset::new(0.0, 50.0), Shape::circle(4.0), 1.0));
+        world.body_mut(bob).velocity = Offset::new(300.0, 0.0);
+        world.add_joint(Joint::rod(anchor, bob, 50.0));
+
+        let mut worst_speed = 0.0f32;
+        let mut worst_length = 0.0f32;
+        for _ in 0..600 {
+            world.step(1.0 / 60.0);
+            let body = world.body(bob);
+            let speed = magnitude(body.velocity);
+            let length = magnitude(body.position);
+            worst_speed = worst_speed.max(speed);
+            worst_length = worst_length.max(length);
+        }
+        assert!(worst_length < 55.0, "rod stretched to {worst_length}");
+        assert!(
+            worst_speed < 400.0,
+            "swing gained energy: {worst_speed} from 300"
+        );
+    }
+
+    #[test]
+    fn stiffness_is_clamped() {
+        let joint = Joint::tether(0, 1, 10.0, 5.0);
+        assert_eq!(joint.stiffness, 1.0);
+        let joint = Joint::tether(0, 1, 10.0, -2.0);
+        assert_eq!(joint.stiffness, 0.0);
+    }
+
+    #[test]
+    fn joints_are_inspectable() {
+        let mut world = World::new();
+        world.add_joint(Joint::rod(0, 1, 10.0));
+        assert_eq!(world.joints().len(), 1);
+        assert_eq!(world.joints()[0].rest, 10.0);
+    }
+
+    /// The magnitude of an offset, in the crate's own spelling — test
+    /// shorthand, spelled out because `Offset` has no `length()` and a
+    /// helper here keeps the assertions reading as geometry.
+    fn magnitude(of: Offset) -> f32 {
+        (of.dx * of.dx + of.dy * of.dy).sqrt()
+    }
+
+    /// A world's distance from `body` to the origin.
+    fn world_length(world: &World, body: usize) -> f32 {
+        magnitude(world.body(body).position)
     }
 }

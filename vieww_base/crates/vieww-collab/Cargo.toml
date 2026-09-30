@@ -1,0 +1,17 @@
+[package]
+name = "vieww-collab"
+description = "The vieww collaboration layer: operation-based CRDTs (LWW registers and maps, OR-sets, counters, RGA text) with vector-clock sync and presence."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# JSON: the wire format for operations.
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

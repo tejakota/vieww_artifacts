@@ -77,6 +77,9 @@ const fn as_f32(rate: u32) -> f32 {
     rate as f32
 }
 
+pub mod analysis;
+pub mod dsp;
+pub mod midi;
 pub mod player;
 pub mod wav;
 
