@@ -16,16 +16,19 @@
 //! impulses plus positional correction — the classical formulation, from
 //! the classical papers, in about four hundred lines with no dependencies.
 //!
-//! What is not: revolute and motor joints (a [`Joint`] here is the
-//! distance kind — a rod of a chosen length, which is the one a UI's
-//! physics wants: a pendulum, a chain, a tether), continuous collision
-//! (a fast body can tunnel through a thin one — the caller's fixed `dt`
-//! is the guard), rotation (bodies are translated only; a tumbling box
-//! is a rigid-body rotation system, and torque brings orientation,
-//! inertia tensors and a whole contact manifold model with it), and 3D.
-//! Each is a real, named gap rather than an oversight, and each is the
-//! moment this crate stops being a UI's physics and starts being an
-//! engine.
+//! What this root module is not — and where each of those now lives:
+//!
+//! * **rotation, polygons, capsules, friction, revolute/weld/motor/mouse
+//!   joints, continuous collision, raycasts, sleeping, a character
+//!   controller** — [`rigid`], a Box2D-lineage engine (SAT + clipping,
+//!   sequential impulses with warm starting). The root keeps the simple
+//!   translate-only UI physics it always was, because a chip that bumps
+//!   another chip should not pay for an engine.
+//! * **cloth** — [`cloth`], Verlet/position-based dynamics with tearing.
+//! * **fluids** — [`fluid`], Clavet's double-density-relaxation SPH.
+//!
+//! Still out of scope, by name: 3D rigid bodies (the 3D layer renders, it
+//! does not simulate), soft-body FEM and destruction fracturing.
 //!
 //! # The one rule
 //!
@@ -63,6 +66,10 @@
 use vieww_foundation::Offset;
 
 pub use vieww_foundation as foundation;
+
+pub mod cloth;
+pub mod fluid;
+pub mod rigid;
 
 /// A two-dimensional vector — [`Offset`] under the name physics reads
 /// better in.

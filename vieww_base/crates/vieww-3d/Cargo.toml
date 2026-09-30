@@ -1,0 +1,22 @@
+[package]
+name = "vieww-3d"
+description = "The vieww 3D layer: a scene graph, cameras, lights, materials, a depth-buffered software rasterizer, shadows, ray picking and a path tracer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# `Image` (the RGBA8 buffer every render returns) and the colour type.
+vieww-foundation.workspace = true
+# `Mesh` is the geometry currency: an OBJ, an STL, a glTF primitive and a
+# generated box are all the same struct by the time they reach a renderer.
+vieww-mesh.workspace = true
+# For the `Viewport3D` widget: a render lands in the tree as an `Image`.
+vieww-widget.workspace = true
+
+[lints]
+workspace = true

@@ -13,6 +13,7 @@ publish = false
 # the only way the repository's "look at a picture of it" rule can be kept
 # for forty examples in CI.
 vieww = { workspace = true, features = ["native"] }
+vieww-animation.workspace = true
 vieww-element.workspace = true
 vieww-foundation.workspace = true
 vieww-paint = { workspace = true, features = ["native"] }

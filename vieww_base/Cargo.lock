@@ -1267,6 +1267,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-3d-scene"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-3d",
+ "vieww-foundation",
+ "vieww-mesh",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-accessibility-audit"
 version = "0.1.0"
 dependencies = [
@@ -1665,6 +1677,7 @@ name = "feature-harness"
 version = "0.1.0"
 dependencies = [
  "vieww",
+ "vieww-animation",
  "vieww-element",
  "vieww-foundation",
  "vieww-paint",
@@ -5023,6 +5036,15 @@ dependencies = [
  "vieww-test-harness",
  "vieww-text",
  "vieww-video",
+ "vieww-widget",
+]
+
+[[package]]
+name = "vieww-3d"
+version = "0.1.0"
+dependencies = [
+ "vieww-foundation",
+ "vieww-mesh",
  "vieww-widget",
 ]
 

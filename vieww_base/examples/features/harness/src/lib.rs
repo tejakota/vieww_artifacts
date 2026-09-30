@@ -40,7 +40,9 @@ use vieww_paint::native::NativeRenderer;
 use vieww_platform_winit::App;
 use vieww_render::FrameDriver;
 
+mod clock;
 mod page;
+pub use clock::{caption, clocked, Clocked};
 pub use page::{fits, set_page};
 
 /// The error every example's `main` returns.

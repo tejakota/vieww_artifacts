@@ -190,7 +190,7 @@ impl Simulation for Lfo {
                 let t = turns.fract();
                 if (t - 0.25).abs() < 1e-6 || (t - 0.75).abs() < 1e-6 {
                     0.0
-                } else if t < 0.25 || t > 0.75 {
+                } else if !(0.25..=0.75).contains(&t) {
                     4.0
                 } else {
                     -4.0

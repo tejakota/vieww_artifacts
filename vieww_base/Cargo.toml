@@ -11,6 +11,7 @@ members = [
     "crates/vieww-audio",
     "crates/vieww-video",
     "crates/vieww-mesh",
+    "crates/vieww-3d",
     "crates/vieww-network",
     "crates/vieww-physics",
     "crates/vieww-embed",
@@ -157,6 +158,7 @@ vieww-animation = { path = "crates/vieww-animation", version = "0.1.0" }
 vieww-audio = { path = "crates/vieww-audio", version = "0.1.0" }
 vieww-video = { path = "crates/vieww-video", version = "0.1.0" }
 vieww-mesh = { path = "crates/vieww-mesh", version = "0.1.0" }
+vieww-3d = { path = "crates/vieww-3d", version = "0.1.0" }
 vieww-network = { path = "crates/vieww-network", version = "0.1.0" }
 vieww-physics = { path = "crates/vieww-physics", version = "0.1.0" }
 vieww-embed = { path = "crates/vieww-embed", version = "0.1.0" }

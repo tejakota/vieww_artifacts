@@ -49,6 +49,7 @@ use crate::transform::Transform;
 /// distinguishes: everything downstream either resolves to one colour or to a
 /// gradient ramp, and a third case here would be a third case in every backend.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)] // a gradient is inline on purpose: brushes are built per frame
 pub enum Brush {
     Solid(Color),
     Gradient(Gradient),
