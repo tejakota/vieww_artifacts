@@ -70,6 +70,11 @@ use vieww_foundation::Image;
 
 pub use vieww_foundation as foundation;
 
+pub mod comp;
+pub mod export;
+pub mod matte;
+pub mod track;
+
 /// A frame's pixels, decoded and drawable.
 ///
 /// `Image` from foundation, under a name that says what it is here. The
