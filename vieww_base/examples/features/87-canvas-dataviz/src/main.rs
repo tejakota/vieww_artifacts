@@ -6,10 +6,10 @@
 //!    bubble), hover hit-testing highlights whatever is under the cursor, a
 //!    `Transformer` rotates and resizes the card by its anchors, and the
 //!    stage is round-tripped through JSON.
-//! 2–8. `vieww-dataviz`: band + linear scales with nice ticks and keyed
-//!    enter/update/exit transitions (`Marks`); curves and a stacked area;
-//!    a squarified treemap; a tidy tree; a Barnes–Hut force layout; marching-
-//!    squares contours coloured with viridis; pie arcs with padding.
+//! 2. `vieww-dataviz` for the rest: band + linear scales with nice ticks
+//!    and keyed enter/update/exit transitions (`Marks`); curves and a
+//!    stacked area; a squarified treemap; a tidy tree; a Barnes–Hut force
+//!    layout; marching-squares contours coloured with viridis; pie arcs.
 
 use std::cell::Cell;
 use std::f32::consts::TAU;

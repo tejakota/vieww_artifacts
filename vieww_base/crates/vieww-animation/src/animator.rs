@@ -24,7 +24,7 @@
 //! `"arm.rotation"`, `"opacity"`, `"knob.x"`. Unity masks bones and Rive
 //! drives arbitrary properties; a flat channel map serves both, a mask is a
 //! set of channel-name prefixes, and a skeletal [`Pose`](crate::Pose) goes in
-//! and out through [`skeletal::pose_to_channels`](crate::skeletal::pose_to_channels)
+//! and out through [`retarget::pose_to_channels`](crate::retarget::pose_to_channels)
 //! and its inverse. Additive layers are defined per channel exactly as Unity
 //! defines them: the layer's value *minus its reference* (the current clip's
 //! first frame), scaled by weight, added on top.

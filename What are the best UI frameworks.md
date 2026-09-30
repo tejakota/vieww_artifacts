@@ -1282,13 +1282,51 @@ The 36 crates are: `vieww-accessibility`, `vieww-animation`, `vieww-asset`, `vie
 
 Alongside the thirteen, the recheck also filled an examples debt: the first gap-closure pass shipped six crates and **no feature examples for any of them** — nothing in `examples/features/` exercised audio, video, mesh, network, physics, embed, skeletal, state machines, keyframes, or the three new charts. Examples 56–79 close that: twenty-four new numbered examples, every capability above plus the example-less crates, each one run headless through the CPU rasteriser (`VIEWW_SHOT`, the `ci/certify/shot-suite.sh` path) with its PNG strip and per-frame counters recorded — 76 shots, animated examples verified frame-different, no frozen strips, no blank sheets.
 
+### Third pass: the layer tables read line by line, and the deeper capabilities closed
+
+**The second pass closed the capabilities that appear in the Core Capability Matrix. A third audit read every row of every per-framework layer table in Part 2 — all seven layers of all twenty-two frameworks — and asked of each line "can a vieww program do this today?"** The answer was *no* for a longer list than the matrix suggested, mostly in the creative-tool frameworks (After Effects, Blender, TouchDesigner, Unity, Unreal, GSAP, Motion Canvas, Manim, D3, Konva, Three.js) whose layer tables name whole subsystems. Every one is now implemented on `feature/vieww_code_base`, tested, and exercised by a numbered example photographed headless (`vieww_base/examples/shots/81…91`).
+
+| Capability (who had it) | Closed by | Example |
+|---|---|---|
+| **3D scene graph + renderer** (Three.js, Unity, Unreal, Godot, Blender) | New crate `vieww-3d`: `Vec3/Quat/Mat4`, primitives, a scene graph with dirty world matrices and keyed `reconcile`, cameras + orbit controls, a z-buffered software rasteriser (SSAA, shadow map, frustum culling, Lambert/Phong/GGX/Toon/unlit, textures, fog, instancing, LOD), raycast picking, and a BVH path tracer (GGX, emissive surfaces, next-event estimation, progressive accumulation); the `Viewport3D` widget | `80-3d-scene`, `85-3d-advanced` |
+| **glTF** (Three.js, Unity, Godot, Blender) | `vieww-mesh::gltf` — `.gltf` and `.glb`, node hierarchy, materials, TRS animations (linear/step/cubic-spline); a writer; `vieww-3d::import_gltf` / `apply_animation` | `85-3d-advanced` |
+| **Modifier stacks** (Blender) | `vieww-mesh::modifiers` — mirror, array, subdivide (midpoint/Loop), displace, twist, bend, taper, smooth, decimate, weld, flip normals, in a `ModifierStack` | `85-3d-advanced` |
+| **Path operations** (Paper.js, Skia, Figma, AE Trim Paths) | `vieww-foundation::path_ops` — booleans with fill rules, flattening, `PathMeasure` (length, point + tangent at a distance), trim / trim-offset, dashes, winding and stroke hit-tests, SVG path data | `81-path-ops` |
+| **Vector export** (Skia PDF/SVG, Illustrator, Figma) | `Sketchbook::to_svg` and `to_pdf` | `81-path-ops` |
+| **GSAP timelines** (position parameters, labels, stagger, nesting, repeat/yoyo, timeScale, callbacks) | `vieww-animation::sequence` | `82-timelines` |
+| **Generator-style flows** (Motion Canvas `all`/`any`/`chain`/`waitUntil`, Manim `play`) | `vieww-animation::flow`, compiled to a `Sequence` | `82-timelines` |
+| **F-curves** (Blender Graph Editor, AE value graph) | `vieww-animation::fcurve` — Bézier keys with auto/auto-clamped/vector/free handles, interpolation modes, extrapolation, cycles/noise/stepped/limits modifiers | `82-timelines` |
+| **Mecanim layers + parameters** (Unity Animator, Rive, Unreal AnimBP) | `vieww-animation::animator` — float/int/bool/trigger params, Any State, exit times, cross-fades, 1D blend trees, override/additive layers with masks, JSON round-trip | `83-rigging` |
+| **Constraints, drivers, expressions** (Blender, After Effects) | `vieww-animation::constraints`, `expr` (an expression language with `wiggle`, `loopOut`, `valueAtTime`, easing, noise), `Driver` | `83-rigging` |
+| **NLA, montages, event tracks** (Blender NLA, Unreal montages/notifies) | `vieww-animation::nla` | `83-rigging` |
+| **CHOPs** (TouchDesigner Lag, Filter/1€, Speed, Slope, Envelope, Remap, Limit, Hold, Delay) | `vieww-animation::channels` | `83-rigging` |
+| **Particle forces** (Unity/VFX Graph, Niagara, TouchDesigner POPs) | `vieww-animation::particle_system` — emitter shapes, gravity, drag, turbulence, attractors, vortices, bounce/kill collisions | `84-particles-retarget` |
+| **Retargeting + root motion** (Unity Humanoid, Unreal IK Retargeter) | `vieww-animation::retarget` | `84-particles-retarget` |
+| **UI-thread animation** (Reanimated worklets, Core Animation) | `vieww-animation::shared` — `SharedValue`, `with_timing` / `with_spring`, a dedicated `UiThread` | `84-particles-retarget` |
+| **Rigid bodies with rotation, joints, CCD, raycasts, character controllers** (Box2D, Rapier, Matter.js, Unity, Godot) | `vieww-physics::rigid` — circles/convex polygons/capsules, SAT + clipped manifolds, warm-started sequential impulses, revolute (limits, motors), distance/spring, weld and mouse joints, CCD for bullets, sleeping, contact events, queries, `CharacterController::move_and_slide` | `86-physics` |
+| **Cloth and fluids** (Unity Cloth, Houdini, Blender) | `vieww-physics::cloth` (Verlet, pins, wind, colliders, tearing), `fluid` (double-density-relaxation SPH) | `86-physics` |
+| **A retained 2D stage** (Konva, Fabric, Pixi) | New crate `vieww-canvas` — layers/groups/shapes, selectors, z-order, exact hit-testing, bubbling pointer + drag events, a `Transformer` (resize, rotate with snaps), filters, JSON, the `CanvasView` widget | `87-canvas-dataviz` |
+| **D3's toolkit** | New crate `vieww-dataviz` — scales with nice ticks, keyed joins with enter/update/exit transitions, line/area/arc/pie/stack generators with d3's curves, stratify/treemap/partition/tidy tree, Barnes–Hut force layout, marching-squares contours, colour ramps | `87-canvas-dataviz` |
+| **Node graphs + Blueprints** (TouchDesigner, Houdini, Unreal, Nuke) | New crate `vieww-graph` — pull-cooked dataflow with dirty propagation; a Blueprint-style `ExecGraph` | `88-graph-game-collab-lottie` |
+| **A game loop / ECS** (Unity, Godot, Bevy) | New crate `vieww-game` — entities + components, hierarchy propagation, behaviours with lifecycle, coroutines, signals, prefabs, scenes, input maps, fixed timestep | `88-graph-game-collab-lottie` |
+| **Real-time collaboration** (Figma multiplayer, Yjs) | New crate `vieww-collab` — CRDT document (LWW map, OR-set, counter, RGA text), JSON ops, vector clocks, presence | `88-graph-game-collab-lottie` |
+| **Lottie playback** | New crate `vieww-lottie` — shape/solid/null/precomp layers, parenting, eased keyframes, rect/ellipse/path/star, fill/stroke, trim paths | `88-graph-game-collab-lottie` |
+| **Compositions, keying, tracking, render queue** (After Effects, Nuke) | `vieww-video::comp` (layers with in/out, time remap, parenting, blend modes, track mattes, adjustment layers, precomps, expression properties), `matte` (chroma/luma/difference keys), `track` (NCC point tracker, stabilisation), `export` (Y4M, GIF, PNG sequence, an ffmpeg pipe, SMPTE timecode) | `89-video-effects` |
+| **Pixel shaders / TOPs** (TouchDesigner, Processing `filter()`, ShaderToy) | `vieww-effects::cpu::pixel` — posterize, threshold, grain, vignette, convolution, Sobel, pixelate, displacement, chromatic aberration, kaleidoscope, halftone, a CPU `shader` closure, and a `Feedback` loop | `89-video-effects` |
+| **MIDI, DSP, OSC** (TouchDesigner, openFrameworks, Processing, Web Audio, Max) | `vieww-audio::midi` (messages, running-status parser, held state, Standard MIDI Files with tempo maps), `vieww-audio::dsp` (RBJ biquads, delay, compressor, envelope follower, spectral-flux onsets, tempo estimate), `vieww-network::osc` (codec, bundles, address patterns, router, UDP socket) | `90-midi-dsp-osc` |
+| **Code blocks and code transitions** (Motion Canvas `Code`, Manim `Code`) | `vieww-widget::CodeBlock` (dependency-free highlighting for Rust/JS/Python/JSON) and `CodeMorph` (LCS line diff, animated) | `91-code-binding-sprites` |
+| **Two-way binding and view models** (WPF, SwiftUI `$binding`, Rive data binding) | `vieww-element::binding` — `Binding` (map/lens), `TextBinding` (parse + validation), `Command`, `ViewModel` with dotted paths, triggers and JSON | `91-code-binding-sprites` |
+| **Sprite sheets** (Unity, Godot, Phaser, Aseprite) | `vieww-image::sprite` — grids, TexturePacker/Aseprite JSON with frame tags, atlas packing, `AnimatedSprite` (loop/once/ping-pong/reverse, events) | `91-code-binding-sprites` |
+
+Looking at every capability, rather than only testing it, found two real rendering bugs in code that predates this pass. Both are fixed, with regression tests that fail without the fix. First, `Path::arc_ring` started each band's inner arc from the wrong pen position, so donuts and pie wedges bulged; every `DonutChart`, progress ring and wedge was slightly wrong. Second, the native stroker drew round-join discs with the opposite winding to its segment quads, so thick round-joined strokes came out *beaded*, with a hole at every join. After the pass, the framework crates run **3,912 tests green** and the studio app runs **911**. All new code is clippy-clean under `-D warnings`.
+
 ### What honestly remains
 
 1. **iOS on device** — code exists, CI cross-compiles it, and nothing has executed it. That is `PENDING.md` §1.4's item, closed by a machine, not by a commit.
-2. **GLTF** — a deliberate scope decision recorded in `vieww-mesh`'s docs, not an oversight. The `Mesh` type is the seam a loader targets.
-3. **Audio/video transports** — the shapes, the clocks, the service seams and the test doubles are here; the device I/O is platform crates' work, exactly as the capability model draws it.
-4. **Physics beyond 2D translation** — rotation, revolute/motor joints and continuous collision are named gaps with reasons, in `vieww-physics`'s module docs. (Distance joints *are* in: `Joint`, the rod/tether kind. The others still assume the rotation model the crate does not have.)
-5. **The GPU and platform items from `PENDING.md`** — untouched by this pass, unchanged: geometry-edge antialiasing, a GPU frame in a window, macOS/Windows backends, and the rest of the hardware-blocked list.
+2. **Device transports** — audio output, camera/video decode, MIDI ports and HTTP sockets remain platform crates' work behind the existing seams (OSC's UDP socket is the one transport shipped, because `std` provides it). Video *export* to H.264 goes through an `ffmpeg` pipe rather than an in-process encoder.
+3. **Learned features** — Roto Brush-style segmentation, AI upscaling and similar model-driven tools are not claimed.
+4. **3D is a software renderer** — correct and deterministic, not a GPU pipeline; skinned glTF meshes import their node hierarchy and animations, but vertex skinning in 3D is not implemented.
+5. **The GPU and platform items from `PENDING.md`** — unchanged: geometry-edge antialiasing, a GPU frame in a window, macOS/Windows backends, and the rest of the hardware-blocked list.
 
 ---
 
@@ -1300,6 +1338,19 @@ The framework is clearly optimized for **deterministic, high-performance 2D rend
 
 The gap-closure passes kept that character rather than trading it away: every new layer is a pure function of its inputs (a keyframe track of time, a mixer of a sample rate, a player of accumulated deltas, a physics world of fixed steps, a particle field of a clock, a blend tree of a parameter, an FFT of a buffer), testable by handing it a `Duration` and nothing else, and every platform-shaped half (audio device I/O, video decode, HTTP transport, native web views) sits behind a trait the existing services registry already knows how to hold. And where the first pass shipped code, the second shipped *evidence*: twenty-four numbered feature examples (56–79), each photographed headless through vieww's own rasteriser — 76 PNGs with per-frame counters, animated strips verified frame-different — which is the same standard the repository's `ci/certify/shot-suite.sh` applies to every other feature it claims.
 
-What remains is hardware, not architecture: an iOS device to run the written-and-cross-compiled iOS path, the GLTF decision to revisit when its dependencies are worth their weight, and the GPU/platform worklist `PENDING.md` has always carried.
+A third pass went a level deeper: every line of every framework's layer table. It added the creative-tool subsystems those tables name:
+
+- a 3D scene graph, software renderer and path tracer, with glTF;
+- path booleans and vector export;
+- GSAP timelines, generator flows, Mecanim layers, F-curves, constraints, expressions, NLA, CHOPs, particle forces, retargeting and UI-thread worklets;
+- rotating rigid bodies with joints, cloth and fluid;
+- a Konva stage, D3's toolkit, node graphs, an ECS game loop, CRDT collaboration and Lottie;
+- AE-style compositing, keying, tracking and export;
+- MIDI, DSP and OSC;
+- pixel effects, code blocks, two-way binding and sprite sheets.
+
+Eleven more examples (81–91) photograph all of it.
+
+What remains is hardware and transports, not architecture. That means an iOS device to run the written-and-cross-compiled iOS path, platform device I/O behind the seams that already exist, and the GPU/platform worklist `PENDING.md` has always carried.
 
 

@@ -29,7 +29,7 @@
 //! # One clock, driven by deltas
 //!
 //! The machine owns its own clock and advances it by frame deltas through
-//! [`advance`](Self::advance); [`sample`](Self::sample) reads it. No method
+//! `advance`; `sample` reads it. No method
 //! here reads a wall clock, for the same reason as every other type in this
 //! crate — the frame scheduler owns time, and a type that sampled its own
 //! would drift from the frame it was drawn on. The clock also drives each

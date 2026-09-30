@@ -21,7 +21,7 @@
 //!
 //! # As a `Simulation`
 //!
-//! [`Lfo`](struct.Lfo.html) implements [`Simulation`](crate::Simulation) so
+//! [`Lfo`](struct.Lfo.html) implements [`crate::Simulation`] so
 //! it can drive an [`AnimationController`](crate::AnimationController) — with
 //! one honest wrinkle: an oscillator never finishes, so
 //! [`duration`](crate::Simulation::duration) reports "forever" and
@@ -163,7 +163,7 @@ impl Lfo {
     }
 
     /// The oscillator's value at `t`, in one line, for callers with their own
-    /// clock — the same maths [`Simulation::position`](crate::Simulation::position)
+    /// clock — the same maths [`crate::Simulation::position`]
     /// hands a controller.
     pub fn at(&self, t: Duration) -> f32 {
         let turns = t.as_secs_f32() * self.frequency + self.phase;

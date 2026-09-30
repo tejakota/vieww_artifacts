@@ -6,7 +6,7 @@
 //! pattern + typed [`Arg`]s) or a [`Bundle`] (an NTP timetag and nested
 //! packets). [`Packet::encode`]/[`Packet::decode`] are byte-exact to the
 //! spec (4-byte alignment, big-endian, `,iffs`-style type tags);
-//! [`matches`] implements address-pattern matching (`?`, `*`, `[a-z]`,
+//! [`matches`](fn@matches) implements address-pattern matching (`?`, `*`, `[a-z]`,
 //! `[!…]`, `{foo,bar}`), and [`Router`] dispatches to handlers by pattern.
 //! [`OscSocket`] is the UDP transport.
 

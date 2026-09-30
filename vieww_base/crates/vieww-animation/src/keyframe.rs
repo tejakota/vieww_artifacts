@@ -69,7 +69,7 @@
 //! * a keyframe at the same time as one already there **replaces** it, the way
 //!   every timeline editor does, rather than making `at` return either.
 //!
-//! [`Timeline`](Timeline) then lifts one of these to a *set of named tracks*
+//! [`Timeline`] then lifts one of these to a *set of named tracks*
 //! with per-track delays — the staggered reveal pattern, in one type.
 
 use std::time::Duration;

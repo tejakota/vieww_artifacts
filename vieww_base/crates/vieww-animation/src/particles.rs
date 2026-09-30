@@ -9,7 +9,7 @@
 //! `update(dt)`, no internal clock, no order-of-sampling effects: asking
 //! `sample(t)` for the state of the field at second three gives the same
 //! answer whether you asked it first, last, or twice. That is the same
-//! contract the rest of this crate makes ([`crate::simulation`], the
+//! contract the rest of this crate makes (`crate::simulation`, the
 //! keyframes, the LFO), and it is what makes a field *testable* — a test
 //! hands it a `Duration` and asserts on positions, exactly like a spring.
 //!

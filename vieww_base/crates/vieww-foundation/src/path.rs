@@ -166,7 +166,7 @@ impl Path {
 
     /// How many subpaths carry geometry but no `close()` — the ones a `fill`
     /// will silently close along the straight chord, and the ones
-    /// [`SceneReport::open_subpath_fills`](vieww_paint::native::SceneReport)
+    /// `vieww_paint::native::SceneReport::open_subpath_fills`
     /// counts at replay.
     ///
     /// A subpath counts when it has at least one drawing verb (`line_to` /

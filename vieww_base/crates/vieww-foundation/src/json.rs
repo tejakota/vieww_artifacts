@@ -18,7 +18,7 @@
 //!
 //! A [`Json`] value tree, [`Json::parse`] (RFC 8259, including `\u` escapes
 //! and surrogate pairs, with the byte offset of the first error), and
-//! [`Json::to_string`] / [`Json::pretty`] writers whose output parses back to
+//! `Json::to_string` (via `Display`) / [`Json::pretty`] writers whose output parses back to
 //! an equal value. Objects keep **source order** in a `Vec` — asset formats
 //! have a handful of keys per object, a linear scan beats hashing there, and
 //! a round-tripped file then diffs cleanly against its original.

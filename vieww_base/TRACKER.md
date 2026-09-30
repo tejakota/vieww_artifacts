@@ -11,7 +11,79 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
-## The most recent effort (2026-09-29, later): the cross-framework capability recheck — thirteen capabilities, physics joints, twenty-four photographed examples
+## The most recent effort (2026-09-30): the layer-table audit — eight new crates, thirty-odd subsystems, eleven photographed examples, two rendering bugs fixed
+
+Scope: every line of every per-framework layer table in the repository-root
+document, asked "can a vieww program do this today?". The creative-tool
+frameworks (After Effects, Blender, TouchDesigner, Unity, Unreal, GSAP,
+Motion Canvas, Manim, D3, Konva, Three.js) name whole subsystems there that
+vieww did not have. The root document's "Third pass" table lists each one
+and what closed it.
+
+**Verified, by things that ran (stable rustc 1.95 on this machine; the pinned
+1.98.1 toolchain could not be downloaded through the sandbox proxy):**
+
+1. **New crates:** `vieww-3d` (scene graph, software rasteriser with
+   shadows/SSAA/culling/LOD/instancing, raycast picking, BVH path tracer,
+   glTF import, `Viewport3D`), `vieww-canvas` (Konva-style stage,
+   hit-testing, events, `Transformer`, JSON), `vieww-dataviz` (D3 scales,
+   joins, shapes, hierarchy layouts, force, contours, colour),
+   `vieww-graph` (cooking node graph + Blueprint exec graph), `vieww-game`
+   (ECS, behaviours, coroutines, prefabs, scenes, input), `vieww-collab`
+   (CRDT doc, ops as JSON, presence), `vieww-lottie` (Bodymovin playback).
+2. **New modules in existing crates:**
+   - `vieww-foundation`: `json`, `path_ops` (booleans, measure, trim,
+     dashes, hit-tests, SVG data) and `sketch_export` (SVG/PDF).
+   - `vieww-animation`: `sequence`, `flow`, `animator`, `fcurve`,
+     `constraints`, `nla`, `expr`, `channels`, `particle_system`,
+     `retarget` and `shared`.
+   - `vieww-mesh`: `gltf` and `modifiers`.
+   - `vieww-physics`: `rigid` (rotation, SAT, joints with limits and
+     motors, CCD, sleeping, queries, character controller), `cloth` and
+     `fluid`.
+   - `vieww-video`: `comp`, `matte`, `track` and `export`.
+   - `vieww-audio`: `midi` and `dsp`.
+   - `vieww-network`: `osc`.
+   - `vieww-effects`: `cpu::pixel`.
+   - `vieww-widget`: `CodeBlock` and `CodeMorph`.
+   - `vieww-element`: `binding`.
+   - `vieww-image`: `sprite`.
+3. **Two pre-existing rendering bugs, found by looking at the pictures and
+   fixed with failing-first regression tests:**
+   - `Path::arc_ring` began its inner arc (and a wedge's arc) from the
+     wrong pen position, so donuts, pie wedges and progress rings bulged.
+     The test is `path_ops::tests::arc_ring_band_and_wedge_have_straight_sides`.
+   - The native stroker stamped round-join discs with the opposite winding
+     to its segment quads, so under nonzero fill every round join became a
+     hole and thick curved strokes rendered beaded. The test is
+     `stroke::orientation_tests::round_joins_do_not_punch_holes`.
+4. **Tests:** every framework crate's tests pass: 3,912 tests across
+   `crates/*`, plus 911 in `apps/viewwstudio`, 0 failed. The one failure
+   found on the way was an overflow in a test's own arithmetic, now fixed.
+   `cargo clippy --workspace --all-targets -D warnings` is clean for
+   everything this pass touched. Clippy still reports some pre-existing
+   warnings in `examples/film_lab`, `examples/test-text-fidelity` and
+   `vieww-paint/src/native/glyph.rs`; this pass did not change those.
+5. **Eleven new feature examples, 81–91,** each run headless through the
+   CPU rasteriser (`VIEWW_SHOT`). Every frame was looked at, and one
+   representative PNG per example is kept in `examples/shots/`:
+   - `81-path-ops`
+   - `82-timelines`
+   - `83-rigging`
+   - `84-particles-retarget`
+   - `85-3d-advanced`
+   - `86-physics`
+   - `87-canvas-dataviz`
+   - `88-graph-game-collab-lottie`
+   - `89-video-effects`
+   - `90-midi-dsp-osc`
+   - `91-code-binding-sprites`
+
+   Example `80-3d-scene` came from the same pass. Shared drawing helpers
+   (a closure painter, captioned panels, grids, shapes) live in the feature
+   harness's `draw` module.
+
+## Previous effort (2026-09-29, later): the cross-framework capability recheck — thirteen capabilities, physics joints, twenty-four photographed examples
 
 Scope was the harder reading of the repository-root document: not "what did
 the gap list say," but "what capability does *every* framework in the

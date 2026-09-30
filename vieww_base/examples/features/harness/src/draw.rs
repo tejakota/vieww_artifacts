@@ -9,9 +9,12 @@ use vieww_foundation::{Color, EdgeInsets, Offset, Path, Size, Sketchbook};
 use vieww_widget::prelude::*;
 use vieww_widget::{Painter, Painting};
 
+/// A painting closure.
+type PaintFn = Rc<dyn Fn(&mut Sketchbook, Size)>;
+
 /// A [`Painter`] from a closure.
 #[derive(Clone)]
-pub struct FnPainter(Rc<dyn Fn(&mut Sketchbook, Size)>);
+pub struct FnPainter(PaintFn);
 
 impl fmt::Debug for FnPainter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

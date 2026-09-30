@@ -4,7 +4,7 @@
 //!
 //! `vieww-element`'s `Timeline` sequences *springs*, and a spring cannot be
 //! scrubbed: its settle time is not known in advance, so it can be played
-//! but not seeked, reversed or dragged by a scroll position. [`keyframe`]'s
+//! but not seeked, reversed or dragged by a scroll position. [`keyframe`](crate::keyframe)'s
 //! `Timeline` is seekable but is a set of independent tracks with delays.
 //! Neither is what the comparison document means by "timeline sequencing" in
 //! GSAP, After Effects or Motion Canvas:

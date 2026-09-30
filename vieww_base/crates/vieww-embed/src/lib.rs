@@ -42,7 +42,7 @@
 //! `PlatformViews` is the seam for backends that can host a *native* view:
 //! a Kotlin `WebView` on Android, a `WKWebView` on iOS, a `webview` crate
 //! on the desktop. A host application registers a factory under
-//! `"webview"` and mounts [`WebViewSpec`]s through the existing
+//! `"webview"` and mounts `WebViewSpec`s through the existing
 //! `PlatformView` capability — [`WebContent::spec`] produces exactly the
 //! parameters that registry entry expects, so the asking side never has
 //! to know which platform answered.

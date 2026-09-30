@@ -168,7 +168,9 @@ fn exchange(a: &mut Doc, b: &mut Doc) -> usize {
     wire.len() + back.len()
 }
 
-fn collab(t: f32) -> (String, String, usize, String, Vec<(u32, String, usize)>) {
+type Cursors = Vec<(u32, String, usize)>;
+
+fn collab(t: f32) -> (String, String, usize, String, Cursors) {
     let mut a = Doc::new(1);
     let mut b = Doc::new(2);
     a.insert(0, "Hello world");
@@ -227,11 +229,14 @@ const LOTTIE: &str = r##"{
   ]
 }"##;
 
+/// Clock, graph, game, last event-graph trace.
+type Run = (f32, Net, Game, Vec<String>);
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let comp = Rc::new(Composition::parse(LOTTIE).map_err(|e| e.0)?);
     feature_harness::launch("88 — graph, game, collab, lottie", Size::new(1160.0, 330.0), move |d| {
         let comp = comp.clone();
-        let state: Rc<RefCell<(f32, Net, Game, Vec<String>)>> = Rc::new(RefCell::new((0.0, net(), game(), Vec::new())));
+        let state: Rc<RefCell<Run>> = Rc::new(RefCell::new((0.0, net(), game(), Vec::new())));
         let view = feature_harness::clocked(d, SPAN, move |t| {
             let mut st = state.borrow_mut();
             if t < st.0 {

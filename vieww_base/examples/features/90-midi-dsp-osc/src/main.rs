@@ -187,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let black = matches!(key % 12, 1 | 3 | 6 | 8 | 10);
                     let held = st2.notes.contains_key(&(0, key));
                     let c = if held { HUES[3] } else if black { vieww_foundation::Color::rgb(30, 32, 40) } else { vieww_foundation::Color::rgb(220, 224, 232) };
-                    g.rrect(xywh(x, if black { 10.0 } else { 10.0 }, 10.6, if black { 60.0 } else { 90.0 }), 2.0, c);
+                    g.rrect(xywh(x, 10.0, 10.6, if black { 60.0 } else { 90.0 }), 2.0, c);
                 }
                 let cc = st2.cc01(0, 1);
                 g.rrect(xywh(5.0, 115.0, 290.0, 10.0), 5.0, DIM.with_alpha(60));

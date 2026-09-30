@@ -15,7 +15,7 @@
 //!    the caption).
 
 use std::f32::consts::{FRAC_PI_2, TAU};
-use std::sync::Arc;
+use std::rc::Rc;
 use std::time::Duration;
 
 use feature_harness::draw::{grid, page, painted, xywh, DIM, HUES, INK};
@@ -105,9 +105,12 @@ fn draw_rig(g: &mut Sketchbook, sk: &Skeleton, pose: &Pose, at: Offset, c: Color
     }
 }
 
+/// Builds a worklet over a shared value.
+type MakeWorklet = Box<dyn Fn(&SharedValue) -> vieww_animation::shared::Worklet>;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // A real off-main-thread animation loop, running for the life of the app.
-    let ui = Arc::new(UiThread::start(Duration::from_micros(16_667)));
+    let ui = Rc::new(UiThread::start(Duration::from_micros(16_667)));
     let live = SharedValue::new(0.0);
     ui.run(with_spring(&live, 1.0, 120.0, 6.0));
     feature_harness::launch("84 — particles & retarget", Size::new(1080.0, 330.0), move |d| {
@@ -140,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let frames = ui.frames();
             let now = live.get();
             let p4 = painted("worklets · shared values", &format!("UiThread frames {frames} · live spring {now:.3}"), Size::new(200.0, 190.0), move |g, _| {
-                let specs: [(&str, Box<dyn Fn(&SharedValue) -> vieww_animation::shared::Worklet>); 3] = [
+                let specs: [(&str, MakeWorklet); 3] = [
                     ("spring k120 c6", Box::new(|v| with_spring(v, 1.0, 120.0, 6.0))),
                     ("spring k300 c30", Box::new(|v| with_spring(v, 1.0, 300.0, 30.0))),
                     ("timing 0.8s", Box::new(|v| with_timing(v, 1.0, Duration::from_millis(800), Curve::EASE_IN_OUT))),

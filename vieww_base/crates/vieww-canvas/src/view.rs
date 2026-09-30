@@ -16,7 +16,7 @@ use vieww_widget::prelude::*;
 
 use crate::{Stage, Transformer};
 
-/// See the [module docs](self).
+/// See the crate docs.
 #[derive(Clone)]
 pub struct CanvasView {
     stage: Rc<RefCell<Stage>>,

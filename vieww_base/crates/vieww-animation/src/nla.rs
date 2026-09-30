@@ -14,8 +14,8 @@
 //!   *sections* with next-section links, so gameplay can jump to "Attack2"
 //!   and have "Recover" follow, or loop "Hold" until released. [`Montage`].
 //!
-//! Everything samples [`Clip`](crate::animator::Clip)s into
-//! [`Channels`](crate::animator::Channels), the same currency the
+//! Everything samples [`crate::animator::Clip`]s into
+//! [`crate::animator::Channels`], the same currency the
 //! [`Animator`](crate::animator::Animator) uses, so an NLA stack can feed a
 //! layer and vice versa.
 

@@ -179,7 +179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut tr = PointTracker::new(&f0, p0, 7, 12);
         (0..48).map(|i| if i == 0 { p0 } else { tr.track(&shaky(i).0) }).collect()
     };
-    let fixes = stabilize(&[track.clone()]);
+    let fixes = stabilize(std::slice::from_ref(&track));
 
     feature_harness::launch("89 — video & effects", Size::new(1000.0, 680.0), move |d| {
         let c = comp();

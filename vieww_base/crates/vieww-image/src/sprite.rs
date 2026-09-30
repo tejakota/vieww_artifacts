@@ -7,7 +7,7 @@
 //! from a uniform grid ([`SpriteSheet::grid`]), from TexturePacker /
 //! Aseprite "JSON hash/array" exports ([`SpriteSheet::from_json`]), or pack
 //! loose frames into a new atlas ([`SpriteSheet::pack`], via
-//! [`AtlasPacker`](crate::atlas::AtlasPacker)). [`AnimatedSprite`] plays a
+//! [`crate::atlas::AtlasPacker`]). [`AnimatedSprite`] plays a
 //! clip — loop, once, ping-pong, reverse — with speed, and reports frame
 //! events (a footstep on frame 3).
 

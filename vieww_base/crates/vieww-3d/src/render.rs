@@ -771,7 +771,7 @@ mod tests {
         let darker = (0..64u32).flat_map(|y| (0..64u32).map(move |x| (x, y))).any(|(x, y)| {
             let a = pixel(&with, x, y);
             let b = pixel(&without, x, y);
-            a[1] + 30 < b[1]
+            u16::from(a[1]) + 30 < u16::from(b[1])
         });
         assert!(darker);
     }

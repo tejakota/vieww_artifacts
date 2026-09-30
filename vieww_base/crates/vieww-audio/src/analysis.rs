@@ -11,7 +11,7 @@
 //! band in a buffer, which is exactly the input a spectrum analyser, a
 //! VU bar, a waveform-reactive glow or a beat detector wants. Synthesis and
 //! analysis in one crate is also the cheapest complete test: render a
-//! [`Tone`] at a known frequency, analyse it, and the peak bin *is* the
+//! [`Tone`](crate::Tone) at a known frequency, analyse it, and the peak bin *is* the
 //! frequency — no fixture file, no golden sample, no trust.
 //!
 //! # The one rule

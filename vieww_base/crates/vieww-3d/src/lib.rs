@@ -33,7 +33,7 @@
 //! | glTF import and animation (`useGLTF`, `AnimationMixer`) | [`import`] |
 //! | scene graph, materials, textures, lights, cameras, reconciler | [`scene`] |
 //! | rasterizer, shadows, culling, stats | [`render`] |
-//! | picking, projection | [`raycast`] |
+//! | picking, projection | [`raycast`](mod@raycast) |
 //! | path tracing | [`pathtrace`] |
 //! | the widget | [`widget`] |
 //!
