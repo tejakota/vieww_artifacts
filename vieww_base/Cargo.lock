@@ -1866,6 +1866,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-midi-dsp-osc"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-audio",
+ "vieww-foundation",
+ "vieww-network",
+ "vieww-widget",
+]
+
+[[package]]
 name = "feature-motion-tokens"
 version = "0.1.0"
 dependencies = [
@@ -2295,6 +2307,18 @@ dependencies = [
  "vieww-animation",
  "vieww-element",
  "vieww-foundation",
+ "vieww-widget",
+]
+
+[[package]]
+name = "feature-video-effects"
+version = "0.1.0"
+dependencies = [
+ "feature-harness",
+ "vieww",
+ "vieww-effects",
+ "vieww-foundation",
+ "vieww-video",
  "vieww-widget",
 ]
 
