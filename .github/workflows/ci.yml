@@ -4,19 +4,20 @@ name: Build Mobile Apps
 # for Android (APK) and iOS (IPA), uploads each as a downloadable artifact,
 # then scrubs the build memory so the runner stays under its disk budget.
 #
-# App readiness for each platform:
+# App packaging for each platform:
 #
-#   app        | Android APK                         | iOS IPA
-#   -----------|-------------------------------------|--------------------------
-#   vavlt      | vavlt-android cdylib, cargo-apk cfg | vavlt-ios binary crate
-#   snapsearch | [package.metadata.android] in root  | main.rs (iOS calls main)
-#   upxcale    | android_main fn but no cdylib/cfg   | main.rs works on iOS
-#   three      | no android_main in social-app       | social-app binary
+#   app        | Android APK                              | iOS IPA
+#   -----------|------------------------------------------|--------------------------
+#   vavlt      | vavlt-android cdylib crate               | vavlt-ios binary crate
+#   snapsearch | cdylib + bin, [package.metadata.android] | main.rs (iOS calls main)
+#   upxcale    | cdylib + rlib + bin, android_main in lib | main.rs works on iOS
+#   three      | cdylib + rlib + bin, android_main in lib | main.rs works on iOS
 #
-# upxcale and three are kept in the Android matrix with continue-on-error so
-# the workflow still produces vavlt + snapsearch APKs; add the missing
-# [package.metadata.android] (and a [lib] crate-type = ["cdylib"] for upxcale)
-# to those crates and those jobs turn green without any other change here.
+# All four apps build on both platforms. The Android APKs are signed with a
+# debug keystore generated on the runner (good enough for a device cloud or
+# `adb install`; a release keystore would need to be injected as a secret).
+# The iOS IPAs are ad-hoc signed — a device cloud re-signs them on upload.
+
 
 on:
   push:
@@ -52,35 +53,33 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # vavlt: dedicated vavlt-android cdylib crate with full
+          # vavlt: dedicated vavlt-android cdylib crate (crates/android/) with
           # [package.metadata.android] (dev.vavlt.app, apk_name=vavlt).
           - app: vavlt
             package: vavlt-android
             workdir: apps/vavlt
             apk_name: vavlt
-            has_config: true
-          # snapsearch: single crate, cdylib output, [package.metadata.android]
+          # snapsearch: single crate with cdylib + bin, [package.metadata.android]
           # in the root Cargo.toml (dev.snapsearch.app, apk_name=snapsearch).
           - app: snapsearch
             package: snapsearch
             workdir: apps/snapsearch
             apk_name: snapsearch
-            has_config: true
-          # upxcale: android_main fn exists in src/main.rs but the crate is
-          # binary-only (no [lib] crate-type = ["cdylib"]) and has no
-          # [package.metadata.android]. cargo-apk cannot package it yet.
+          # upxcale: lib (cdylib + rlib) + bin. The [package.metadata.android]
+          # block and [lib] crate-type were added to Cargo.toml, and the
+          # android_main fn lives in src/entry.rs (moved out of main.rs so it
+          # is exported from the cdylib, which is what cargo-apk builds).
           - app: upxcale
             package: upxcale
             workdir: apps/upxcale
             apk_name: upxcale
-            has_config: false
-          # three: the social-app example binary has no android_main fn and no
-          # [package.metadata.android]. cargo-apk cannot package it yet.
+          # three: the social-app package now has a [lib] crate-type =
+          # ["cdylib", "rlib"] with android_main in src/lib.rs. cargo-apk
+          # builds the lib target of the three-social-app package.
           - app: three
             package: three-social-app
             workdir: apps/three
             apk_name: three
-            has_config: false
 
     defaults:
       run:
@@ -146,17 +145,13 @@ jobs:
           # legacy `tools` package — it was removed from the repository and
           # its absence is what breaks setup-android@v3.
           #
-          # Two platforms are installed:
-          #   - android-34: the target_sdk_version that vavlt and snapsearch
-          #     declare in their [package.metadata.android.sdk].
-          #   - android-30: cargo-apk's default min_sdk_version, used when a
-          #     crate has no [package.metadata.android] block (upxcale, three).
-          #     Without platform 30 installed, cargo-apk dies with
-          #     "Error: Platform `30` is not installed." before it even compiles.
+          # Only android-34 is needed: all four apps now declare
+          # min_sdk_version = 24 and target_sdk_version = 34 in their
+          # [package.metadata.android.sdk], so cargo-apk no longer falls back
+          # to its default min_sdk_version = 30.
           "$sdkmanager" \
             "platform-tools" \
             "platforms;android-${ANDROID_PLATFORM}" \
-            "platforms;android-30" \
             "build-tools;${ANDROID_BUILD_TOOLS}" \
             "ndk;${ANDROID_NDK_VERSION}"
 
@@ -173,7 +168,7 @@ jobs:
       - name: Install cargo-apk
         run: cargo install cargo-apk --locked
 
-      - name: Resolve Android environment
+      - name: Resolve Android environment and keystore
         working-directory: ${{ matrix.workdir }}
         run: |
           # vavlt ships its own ci/android-env.sh; for the other apps we
@@ -189,51 +184,54 @@ jobs:
             android_env "github-actions" || true
           fi
 
-          # cargo-apk refuses to guess a release keystore. The debug keystore
-          # that setup-android created is the cheapest available; use it.
-          if [ -z "${CARGO_APK_RELEASE_KEYSTORE:-}" ] && [ -f "$HOME/.android/debug.keystore" ]; then
-            export CARGO_APK_RELEASE_KEYSTORE="$HOME/.android/debug.keystore"
-            export CARGO_APK_RELEASE_KEYSTORE_PASSWORD="${CARGO_APK_RELEASE_KEYSTORE_PASSWORD:-android}"
+          # cargo-apk refuses to guess a release keystore and dies with
+          # `java.io.FileNotFoundException: ` (empty path) if none is set.
+          # The ubuntu runner does not ship with a debug.keystore by default,
+          # so generate one with keytool (ships with the JDK). The debug
+          # keystore's well-known alias/password (androiddebugkey/android)
+          # is what cargo-apk and the Android build tools expect.
+          keystore="$HOME/.android/debug.keystore"
+          if [ ! -f "$keystore" ]; then
+            mkdir -p "$(dirname "$keystore")"
+            echo "Generating debug keystore at $keystore..."
+            keytool -genkey -v \
+              -keystore "$keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "Using existing debug keystore at $keystore"
           fi
+
+          export CARGO_APK_RELEASE_KEYSTORE="$keystore"
+          export CARGO_APK_RELEASE_KEYSTORE_PASSWORD="android"
+          # cargo-apk also reads the key alias and password; the debug
+          # keystore's well-known values are androiddebugkey/android.
+          export CARGO_APK_RELEASE_KEY_ALIAS="androiddebugkey"
+          export CARGO_APK_RELEASE_KEY_PASSWORD="android"
 
           {
             echo "ANDROID_HOME=$ANDROID_HOME"
             echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
             echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
             echo "CARGO_APK_RELEASE_KEYSTORE=$CARGO_APK_RELEASE_KEYSTORE"
-            echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=${CARGO_APK_RELEASE_KEYSTORE_PASSWORD:-}"
+            echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$CARGO_APK_RELEASE_KEYSTORE_PASSWORD"
+            echo "CARGO_APK_RELEASE_KEY_ALIAS=$CARGO_APK_RELEASE_KEY_ALIAS"
+            echo "CARGO_APK_RELEASE_KEY_PASSWORD=$CARGO_APK_RELEASE_KEY_PASSWORD"
           } >> "$GITHUB_ENV"
 
       - name: Build Android APK
         id: build_apk
         working-directory: ${{ matrix.workdir }}
-        # Skip the build entirely for apps without cargo-apk config. Running
-        # `cargo apk build` on a crate with no [package.metadata.android] lets
-        # cargo-apk fall back to its default min_sdk_version=30, compile
-        # partway, then fail with a confusing error (no android_main symbol,
-        # wrong crate-type, etc.). Skipping here emits one clear warning
-        # instead of a wall of cargo errors.
-        if: ${{ matrix.has_config == true }}
         run: |
           cargo apk build -p ${{ matrix.package }} --release
 
-      - name: Skip — no cargo-apk config
-        if: ${{ matrix.has_config == false }}
-        working-directory: ${{ matrix.workdir }}
-        run: |
-          echo "::warning::${{ matrix.app }} has no [package.metadata.android] in its Cargo.toml — Android APK build skipped."
-          echo "  To enable it, add to ${{ matrix.workdir }}/Cargo.toml:"
-          echo "    [package.metadata.android]"
-          echo "    package = \"dev.${{ matrix.app }}.app\""
-          echo "    apk_name = \"${{ matrix.app }}\""
-          echo "    build_targets = [\"aarch64-linux-android\"]"
-          echo "    [package.metadata.android.sdk]"
-          echo "    min_sdk_version = 24"
-          echo "    target_sdk_version = 34"
-          echo "  And ensure the crate is a cdylib with an android_main fn."
-
       - name: Locate and stage APK
-        if: ${{ success() && matrix.has_config == true }}
+        if: ${{ success() }}
         working-directory: ${{ matrix.workdir }}
         run: |
           set -e
@@ -541,5 +539,6 @@ jobs:
             echo ""
             echo "Download artifacts from the workflow run page — scroll to the bottom of the run and click an artifact to download it."
             echo ""
-            echo "> **Note:** upxcale and three do not yet have \`[package.metadata.android]\` in their Cargo.toml, so their Android APKs will be empty. Add the cargo-apk config to those crates and the APKs appear on the next run."
+            echo "> **Android APKs** are signed with a debug keystore generated on the runner — install with \`adb install\` or upload to a device cloud. For Play Store distribution, inject a release keystore as a repository secret and set \`CARGO_APK_RELEASE_KEYSTORE\` / \`CARGO_APK_RELEASE_KEYSTORE_PASSWORD\`."
+            echo "> **iOS IPAs** are ad-hoc signed — a device cloud (BrowserStack, Firebase Test Lab) re-signs them on upload. They will not install directly on a phone."
           } >> "$GITHUB_STEP_SUMMARY"
