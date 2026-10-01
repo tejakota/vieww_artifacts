@@ -1289,6 +1289,7 @@ impl WindowState {
             damage,
             self.background,
             logical_size,
+            self.scale,
         );
 
         match presented {

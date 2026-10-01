@@ -205,6 +205,32 @@ impl ImageFilter {
             (self.blur_sigma * 3.0).ceil()
         }
     }
+
+    /// This filter as it must read in a space scaled by `factor` about the
+    /// origin.
+    ///
+    /// A filter's blur runs on the layer's **device-pixel** buffer, not on the
+    /// scene's logical geometry — so a scene lifted into physical pixels by
+    /// `vieww_paint::Scene::scaled` (a phone, where the ratio is ~3) has to
+    /// scale the σ with it, or a frosted panel's blur comes out a third of
+    /// its designed radius: sharp on a phone, soft on a desktop, from one
+    /// code path. The colour matrix is dimensionless and passes through
+    /// untouched.
+    ///
+    /// `factor` `1.0` returns the filter unchanged, so a caller scaling a
+    /// scene that is already physical pays nothing.
+    #[must_use]
+    pub fn scaled(self, factor: f32) -> Self {
+        if self.blur_sigma <= 0.0 || (factor - 1.0).abs() < f32::EPSILON {
+            return self;
+        }
+        Self {
+            blur_sigma: self.blur_sigma * factor,
+            blur_angle: self.blur_angle,
+            color_matrix: self.color_matrix,
+            backdrop: self.backdrop,
+        }
+    }
 }
 
 impl Default for ImageFilter {
@@ -590,6 +616,34 @@ mod tests {
     fn a_blur_reaches_three_sigma_and_no_filter_reaches_nothing() {
         assert_eq!(ImageFilter::NONE.bounds_expansion(), 0.0);
         assert_eq!(ImageFilter::blur(8.0).bounds_expansion(), 24.0);
+    }
+
+    /// The phone case: a frosted panel designed at σ 8 must blur σ 24 in a
+    /// space three times denser, with everything else about the filter — the
+    /// direction, the matrix, the backdrop flag — carried across unchanged.
+    #[test]
+    fn scaling_a_filter_scales_the_sigma_and_nothing_else() {
+        let filter = ImageFilter::directional_blur(8.0, 0.75)
+            .with_color(saturation_matrix(0.5))
+            .with_backdrop();
+
+        let scaled = filter.scaled(3.0);
+        assert_eq!(scaled.blur_sigma, 24.0, "the σ travels with the extent");
+        assert_eq!(scaled.blur_angle, filter.blur_angle);
+        assert_eq!(scaled.color_matrix, filter.color_matrix);
+        assert_eq!(scaled.backdrop, filter.backdrop);
+    }
+
+    /// The desktop case, and the one an unfiltered layer takes on every
+    /// phone: scaling has to be free, not a copy that reads as a change.
+    #[test]
+    fn scaling_by_one_or_with_no_blur_changes_nothing() {
+        let blurred = ImageFilter::blur(8.0);
+        assert_eq!(blurred.scaled(1.0), blurred);
+        assert_eq!(ImageFilter::NONE.scaled(3.0), ImageFilter::NONE);
+
+        let matrix_only = ImageFilter::color(grayscale_matrix());
+        assert_eq!(matrix_only.scaled(3.0), matrix_only);
     }
 
     #[test]

@@ -643,7 +643,12 @@ impl Scene {
                     alpha,
                     blend,
                     clip: clip.scaled(factor),
-                    filter,
+                    // The blur runs on the layer's device-pixel buffer, so the
+                    // σ travels with the extent: unscaled, a frosted panel on
+                    // a ~3x phone renders a third of its designed softness
+                    // through this one path while a desktop stays true. See
+                    // `ImageFilter::scaled`.
+                    filter: filter.scaled(factor),
                 },
                 Command::PopLayer => Command::PopLayer,
             })
@@ -1364,6 +1369,35 @@ mod tests {
         let mut scene = Scene::new();
         scene.fill_rect(Rect::new(0.0, 0.0, 10.0, 10.0), Color::RED.into());
         assert_eq!(scene.scaled(1.0).fills()[0].0, scene.fills()[0].0);
+    }
+
+    /// The phone case for filters, which the fill-only test above cannot see:
+    /// a layer's blur runs on its device-pixel buffer, so a scene lifted into
+    /// a denser space has to scale the σ with the geometry. Unscaled, a
+    /// frosted panel designed at σ 8 blurs at σ 8 in a 3x buffer — a third of
+    /// its designed softness, and a panel that looks right on a desktop and
+    /// wrong on a phone through the one code path both now share.
+    #[test]
+    fn scaling_a_scene_scales_a_filtered_layer_sigma_with_its_bounds() {
+        let mut scene = Scene::new();
+        scene.push_filtered_layer(
+            Rect::new(0.0, 0.0, 100.0, 50.0),
+            1.0,
+            BlendMode::Normal,
+            ImageFilter::blur(8.0),
+        );
+        scene.fill_rect(Rect::new(0.0, 0.0, 100.0, 50.0), Color::WHITE.into());
+        scene.pop_layer();
+
+        let scaled = scene.scaled(3.0);
+        let Command::PushLayer { bounds, filter, .. } = &scaled.commands()[0] else {
+            panic!("the first command should be the layer");
+        };
+        assert_eq!(filter.blur_sigma, 24.0, "the σ travels with the extent");
+        // The recorded bounds were grown by the unscaled blur's reach (24 =
+        // ceil(3σ)) before scaling, and the scaled reach is exactly 3x that —
+        // so the growth stays proportional rather than compounding.
+        assert_eq!(bounds, &Rect::new(-72.0, -72.0, 372.0, 222.0));
     }
 
     #[test]
