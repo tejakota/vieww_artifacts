@@ -80,7 +80,10 @@ mod device {
     use super::*;
 
     use objc2::rc::Retained;
-    use objc2_foundation::{NSSearchPathDirectory, NSSearchPathDomainMask, NSString};
+    use objc2::runtime::Bool;
+    use objc2_foundation::{
+        NSArray, NSSearchPathDirectory, NSSearchPathDomainMask, NSString,
+    };
 
     /// `~/Library/Application Support`, inside this app's sandbox container.
     ///
@@ -90,13 +93,20 @@ mod device {
     /// that does not survive a device migration is a hash chain that ends every
     /// time somebody buys a phone.
     pub fn app_support_dir() -> PathBuf {
-        let paths = unsafe {
+        // NSSearchPathForDirectoriesInDomains returns NonNull<NSArray<NSString>>
+        // (a raw pointer), not Retained<NSArray>. We retain it into a Retained
+        // so we can call NSArray::firstObject(). The function's third argument
+        // is objc2::runtime::Bool, not Rust bool — hence Bool::YES.
+        let paths_ptr = unsafe {
             objc2_foundation::NSSearchPathForDirectoriesInDomains(
                 NSSearchPathDirectory::NSApplicationSupportDirectory,
                 NSSearchPathDomainMask::NSUserDomainMask,
-                true,
+                Bool::YES,
             )
         };
+        let paths: Retained<NSArray<NSString>> =
+            unsafe { Retained::retain(paths_ptr.as_ptr()) }
+                .expect("NSSearchPathForDirectoriesInDomains returned a non-null array");
 
         let first: Option<Retained<NSString>> = paths.firstObject();
         match first {
