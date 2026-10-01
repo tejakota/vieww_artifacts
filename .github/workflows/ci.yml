@@ -228,7 +228,11 @@ jobs:
         id: build_apk
         working-directory: ${{ matrix.workdir }}
         run: |
-          cargo apk build -p ${{ matrix.package }} --release
+          # --lib tells cargo-apk to build only the library target (the
+          # cdylib). Without it, cargo-apk sees both the [[bin]] and [lib]
+          # targets in packages like three-social-app and upxcale, picks the
+          # bin, and panics with "Bin is not compatible with Cdylib".
+          cargo apk build -p ${{ matrix.package }} --lib --release
 
       - name: Locate and stage APK
         if: ${{ success() }}
