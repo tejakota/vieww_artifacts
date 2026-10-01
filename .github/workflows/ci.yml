@@ -116,7 +116,9 @@ jobs:
         run: |
           set -e
           export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          # ANDROID_SDK_ROOT is deprecated (cargo-apk warns about it). Unset
+          # it so only ANDROID_HOME is used.
+          unset ANDROID_SDK_ROOT || true
 
           # Find the sdkmanager binary — the runner may have it under
           # cmdline-tools/latest or cmdline-tools/<version>.
@@ -143,15 +145,23 @@ jobs:
           # Install only the components this build needs. Do NOT install the
           # legacy `tools` package — it was removed from the repository and
           # its absence is what breaks setup-android@v3.
+          #
+          # Two platforms are installed:
+          #   - android-34: the target_sdk_version that vavlt and snapsearch
+          #     declare in their [package.metadata.android.sdk].
+          #   - android-30: cargo-apk's default min_sdk_version, used when a
+          #     crate has no [package.metadata.android] block (upxcale, three).
+          #     Without platform 30 installed, cargo-apk dies with
+          #     "Error: Platform `30` is not installed." before it even compiles.
           "$sdkmanager" \
             "platform-tools" \
             "platforms;android-${ANDROID_PLATFORM}" \
+            "platforms;android-30" \
             "build-tools;${ANDROID_BUILD_TOOLS}" \
             "ndk;${ANDROID_NDK_VERSION}"
 
           {
             echo "ANDROID_HOME=$ANDROID_HOME"
-            echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           } >> "$GITHUB_ENV"
 
       - name: Setup Java 17
@@ -197,12 +207,33 @@ jobs:
       - name: Build Android APK
         id: build_apk
         working-directory: ${{ matrix.workdir }}
-        continue-on-error: ${{ matrix.has_config == false }}
+        # Skip the build entirely for apps without cargo-apk config. Running
+        # `cargo apk build` on a crate with no [package.metadata.android] lets
+        # cargo-apk fall back to its default min_sdk_version=30, compile
+        # partway, then fail with a confusing error (no android_main symbol,
+        # wrong crate-type, etc.). Skipping here emits one clear warning
+        # instead of a wall of cargo errors.
+        if: ${{ matrix.has_config == true }}
         run: |
           cargo apk build -p ${{ matrix.package }} --release
 
+      - name: Skip — no cargo-apk config
+        if: ${{ matrix.has_config == false }}
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          echo "::warning::${{ matrix.app }} has no [package.metadata.android] in its Cargo.toml — Android APK build skipped."
+          echo "  To enable it, add to ${{ matrix.workdir }}/Cargo.toml:"
+          echo "    [package.metadata.android]"
+          echo "    package = \"dev.${{ matrix.app }}.app\""
+          echo "    apk_name = \"${{ matrix.app }}\""
+          echo "    build_targets = [\"aarch64-linux-android\"]"
+          echo "    [package.metadata.android.sdk]"
+          echo "    min_sdk_version = 24"
+          echo "    target_sdk_version = 34"
+          echo "  And ensure the crate is a cdylib with an android_main fn."
+
       - name: Locate and stage APK
-        if: ${{ success() || (steps.build_apk.outcome == 'failure' && matrix.has_config == false) }}
+        if: ${{ success() && matrix.has_config == true }}
         working-directory: ${{ matrix.workdir }}
         run: |
           set -e
@@ -213,12 +244,6 @@ jobs:
           apk="$(find target -type f -name "*.apk" 2>/dev/null | head -n 1)"
 
           if [ -z "$apk" ]; then
-            if [ "${{ matrix.has_config }}" = "false" ]; then
-              echo "::warning::${{ matrix.app }} has no cargo-apk config yet — skipping APK upload."
-              echo "  Add [package.metadata.android] (and [lib] crate-type = [\"cdylib\"] for a"
-              echo "  binary crate) to ${{ matrix.workdir }}/Cargo.toml to enable this build."
-              exit 0
-            fi
             echo "::error::No APK was generated for ${{ matrix.app }}."
             exit 1
           fi
