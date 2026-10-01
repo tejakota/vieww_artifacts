@@ -1,0 +1,258 @@
+name: Build Mobile Apps
+
+on:
+  push:
+    branches:
+      - feature/vieww_code_base
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================
+  # Android APK
+  # ============================================================
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: vieww_base
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # The repository pins Rust through rust-toolchain.toml.
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup default 1.98.1
+          rustc --version
+          cargo --version
+
+      - name: Install Android target
+        run: |
+          rustup target add \
+            --toolchain 1.98.1 \
+            aarch64-linux-android
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-34"
+          sdkmanager "build-tools;34.0.0"
+          sdkmanager "ndk;27.3.13750724"
+
+      - name: Accept Android licenses
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install cargo-apk
+        run: |
+          cargo install cargo-apk --locked
+
+      - name: Resolve Android environment
+        run: |
+          source ci/mobile/android-env.sh
+          android_env "github-actions"
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+
+      - name: Build Android APK
+        run: |
+          source ci/mobile/android-env.sh
+          android_env "android-build"
+
+          cargo apk build \
+            -p vieww-platform-winit \
+            --example android \
+            --release
+
+      - name: Locate APK
+        run: |
+          set -e
+
+          echo "APK files produced:"
+          find target -type f -name "*.apk" -print
+
+          apk="$(find target -type f -name "*.apk" | head -n 1)"
+
+          if [ -z "$apk" ]; then
+            echo "ERROR: No APK was generated."
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/vieww-android"
+
+          cp "$apk" "$RUNNER_TEMP/vieww-android/vieww.apk"
+
+          sha256sum \
+            "$RUNNER_TEMP/vieww-android/vieww.apk" \
+            > "$RUNNER_TEMP/vieww-android/SHA256SUMS"
+
+          ls -lah "$RUNNER_TEMP/vieww-android"
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: vieww-android-apk
+          path: ${{ runner.temp }}/vieww-android/
+          if-no-files-found: error
+          retention-days: 30
+
+      # ----------------------------------------------------------
+      # Cleanup
+      # ----------------------------------------------------------
+      - name: Cleanup Android build memory
+        if: always()
+        run: |
+          echo "Cleaning Android/Rust build data..."
+
+          rm -rf target
+          rm -rf "$HOME/.gradle/caches"
+          rm -rf "$HOME/.gradle/wrapper"
+          rm -rf "$RUNNER_TEMP/vieww-android"
+
+          # Remove cargo build caches created by this job.
+          rm -rf "$HOME/.cargo/registry/cache"
+          rm -rf "$HOME/.cargo/git/checkouts"
+
+          sync
+
+          echo "Remaining workspace:"
+          du -sh . 2>/dev/null || true
+
+          echo "Cleanup complete."
+
+  # ============================================================
+  # iOS IPA
+  # ============================================================
+  ios:
+    name: iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: vieww_base
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # The repository pins Rust through rust-toolchain.toml.
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup default 1.98.1
+          rustc --version
+          cargo --version
+
+      - name: Install iOS targets
+        run: |
+          rustup target add \
+            --toolchain 1.98.1 \
+            aarch64-apple-ios \
+            aarch64-apple-ios-sim
+
+      - name: Verify Xcode
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Build iOS IPA
+        run: |
+          chmod +x ci/mobile/ios-app.sh
+
+          ci/mobile/ios-app.sh \
+            --ipa \
+            --release
+
+      - name: Locate IPA
+        run: |
+          set -e
+
+          if [ ! -f target/ios/vieww.ipa ]; then
+            echo "ERROR: target/ios/vieww.ipa was not generated."
+            echo
+            echo "Contents of target/ios:"
+            find target/ios -maxdepth 3 -print 2>/dev/null || true
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/vieww-ios"
+
+          cp \
+            target/ios/vieww.ipa \
+            "$RUNNER_TEMP/vieww-ios/vieww.ipa"
+
+          shasum -a 256 \
+            "$RUNNER_TEMP/vieww-ios/vieww.ipa" \
+            > "$RUNNER_TEMP/vieww-ios/SHA256SUMS"
+
+          ls -lah "$RUNNER_TEMP/vieww-ios"
+
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: vieww-ios-ipa
+          path: ${{ runner.temp }}/vieww-ios/
+          if-no-files-found: error
+          retention-days: 30
+
+      # ----------------------------------------------------------
+      # Cleanup
+      # ----------------------------------------------------------
+      - name: Cleanup iOS build memory
+        if: always()
+        run: |
+          echo "Cleaning iOS/Rust build data..."
+
+          rm -rf target
+          rm -rf "$RUNNER_TEMP/vieww-ios"
+
+          # Remove Xcode temporary build products generated by this job.
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+
+          # Remove cargo build caches created by this job.
+          rm -rf "$HOME/.cargo/registry/cache"
+          rm -rf "$HOME/.cargo/git/checkouts"
+
+          sync
+
+          echo "Remaining workspace:"
+          du -sh . 2>/dev/null || true
+
+          echo "Cleanup complete."
