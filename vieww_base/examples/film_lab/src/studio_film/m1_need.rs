@@ -353,18 +353,28 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
 
     let mut stack = Stack::new();
 
-    // The room — colder than Z01: vertical light shafts, one blurred
-    // group (the blur economy: group early, blur once).
+    // The room — colder than Z01: the dithered linear gradient and the
+    // vignette, and nothing else. This scene once drew vertical light
+    // shafts — three blurred rects at alphas 0.035–0.05 over BG_DEEP —
+    // which quantised to two or three 8-bit steps and read as vertical
+    // bars of patches, exactly the low-alpha dark-ground content the
+    // light rule banishes (`mod.rs`): H.264's yuv420p spends its fewest
+    // bits there and turns them into visible macroblock steps. Light in
+    // this film is drawn the vector way or not at all; the tolls scene
+    // needs no light of its own — the coins and the stamps carry the
+    // warmth, and the room stays out of the way.
     super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s: Size| {
             let (w, h) = (s.width, s.height);
-            book.rect(Rect::new(0.0, 0.0, w, h), BG_DEEP);
-            book.layer(0.5, 40.0, None, |shafts| {
-                for (x, wd, al) in [(280.0, 130.0, 0.05), (960.0, 220.0, 0.035), (1660.0, 130.0, 0.05)] {
-                    shafts.rect(pf::xywh(x - wd * 0.5, 0.0, wd, h), pf::alpha(ACCENT, al));
-                }
-            });
+            book.rect(
+                Rect::new(0.0, 0.0, w, h),
+                Gradient::vertical().with_dither().with_stops(&[
+                    (0.0, Color::rgb(15, 13, 18)),
+                    (0.55, BG_DEEP),
+                    (1.0, Color::rgb(11, 10, 14)),
+                ]),
+            );
             pf::vignette(book, w, h, 0.55);
         }),
     )));

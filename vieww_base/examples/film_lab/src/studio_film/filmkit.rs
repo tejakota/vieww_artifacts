@@ -703,12 +703,12 @@ pub fn budget_bar(
                 (1.0, pf::alpha(color, 0.95 * a)),
             ]),
         );
-        // The head — a bright cap where the bar stops growing: a solid
-        // dot in the colour lifted toward white, plus a crisp ring. A
-        // soft bloom here would band on the encode (no radial glows).
-        let head_c = Offset::new(r.left + w, r.top + r.height() * 0.5);
-        book.ring(head_c, r.height() * 0.72, 1.0, pf::alpha(color, 0.45 * a));
-        book.circle(head_c, r.height() * 0.42, pf::alpha(pf::mix(color, Color::WHITE, 0.35), 0.9 * a));
+        // No head: the bar ends where the bar ends. A dot after a
+        // horizontal bar reads as a stray mark — the same reading the
+        // rail's playhead got (a circle at its tip read as a bug: two
+        // bars and a dot) — and the ms value beside the bar already
+        // says where it stopped. The bar's own solid fill, run through
+        // the dithered gradient, is the whole instrument.
     }
     // The budget line — where the frame's 60 fps allowance actually is.
     let bx = r.left + r.width() * (budget / scale).clamp(0.0, 1.0);
