@@ -108,7 +108,10 @@ mod device {
             unsafe { Retained::retain(paths_ptr.as_ptr()) }
                 .expect("NSSearchPathForDirectoriesInDomains returned a non-null array");
 
-        let first: Option<Retained<NSString>> = paths.firstObject();
+        // firstObject() is `unsafe` in objc2 0.5 (the method itself is
+        // marked unsafe because it returns a Retained whose lifetime depends
+        // on the array not being mutated concurrently).
+        let first: Option<Retained<NSString>> = unsafe { paths.firstObject() };
         match first {
             Some(path) => PathBuf::from(path.to_string()).join("vavlt"),
             // A sandboxed app always has this directory. If Foundation ever
