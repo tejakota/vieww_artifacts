@@ -14,6 +14,34 @@ publish = false
 # root.
 [workspace]
 
+# cargo-apk needs a `cdylib` to package an Android APK — the `android_main`
+# fn in `src/main.rs` is the entry point cargo-apk looks for, and it can only
+# be exported from a dynamic library. `rlib` is kept alongside so the crate
+# still links normally for the desktop binary.
+[lib]
+name = "upxcale"
+crate-type = ["cdylib", "rlib"]
+
+# cargo-apk packaging config — mirrors snapsearch's and vavlt's. No
+# <uses-permission> entries: the app receives photos only as content URIs
+# from the out-of-process system photo picker, same as vavlt.
+[package.metadata.android]
+package = "dev.upxcale.app"
+apk_name = "upxcale"
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 24
+target_sdk_version = 34
+
+[package.metadata.android.application]
+label = "upxcale"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar"
+
+[package.metadata.android.application.activity]
+orientation = "portrait"
+config_changes = "orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout|density"
+
 [dependencies]
 # The framework, by path. `upxcale/` expects the vieww checkout at
 # `../../vieww_base/` — the in-repo copy of the framework this app migrates to

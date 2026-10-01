@@ -21,3 +21,35 @@ vieww-platform-winit.workspace = true
 # app's five screens to PNGs through the native rasteriser — no display,
 # no window, the same tree the `App` runs.
 vieww-test-harness.workspace = true
+
+# The Android entry point (`android_main`) lives in `src/lib.rs`. Android does
+# not call `main` — the activity loads a shared library and calls `android_main`
+# in it — so this crate produces a `cdylib` (for the phone) alongside its normal
+# `bin` (for the desktop). The `rlib` lets the desktop binary and the Android
+# library share the same code without duplicating it.
+[lib]
+name = "three_social_app"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "three-social-app"
+path = "src/main.rs"
+
+# Read by `cargo apk`, ignored by every other build.
+[package.metadata.android]
+package = "dev.three.app"
+apk_name = "three"
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 24
+target_sdk_version = 34
+
+[package.metadata.android.application]
+label = "3"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar"
+
+[package.metadata.android.application.activity]
+orientation = "portrait"
+config_changes = "orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout|density"

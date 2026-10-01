@@ -29,6 +29,7 @@
 //! the frame thread, and [`icons`] draws the glyphs the framework does not
 //! ship.
 
+pub mod entry;
 pub mod export;
 pub mod icons;
 pub mod photos;
@@ -46,3 +47,4 @@ pub const SURFACE: vieww_foundation::Size = vieww_foundation::Size {
     width: 414.0,
     height: 896.0,
 };
+

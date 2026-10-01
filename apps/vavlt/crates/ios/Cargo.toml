@@ -39,6 +39,11 @@ objc2-foundation = { version = "0.2", features = [
     "NSData",
     "NSFileManager",
     "NSError",
+    # NSSearchPathDirectory, NSSearchPathDomainMask and
+    # NSSearchPathForDirectoriesInDomains live behind this feature in
+    # objc2-foundation 0.2.x; without it the iOS build fails with
+    # E0432/E0425 on picker.rs.
+    "NSPathUtilities",
 ] }
 objc2-ui-kit = { version = "0.2", features = [
     "UIResponder",
