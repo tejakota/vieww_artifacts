@@ -1,5 +1,23 @@
 name: Build Mobile Apps
 
+# Builds the four real apps under ./apps/ — vavlt, snapsearch, upxcale, three —
+# for Android (APK) and iOS (IPA), uploads each as a downloadable artifact,
+# then scrubs the build memory so the runner stays under its disk budget.
+#
+# App readiness for each platform:
+#
+#   app        | Android APK                         | iOS IPA
+#   -----------|-------------------------------------|--------------------------
+#   vavlt      | vavlt-android cdylib, cargo-apk cfg | vavlt-ios binary crate
+#   snapsearch | [package.metadata.android] in root  | main.rs (iOS calls main)
+#   upxcale    | android_main fn but no cdylib/cfg   | main.rs works on iOS
+#   three      | no android_main in social-app       | social-app binary
+#
+# upxcale and three are kept in the Android matrix with continue-on-error so
+# the workflow still produces vavlt + snapsearch APKs; add the missing
+# [package.metadata.android] (and a [lib] crate-type = ["cdylib"] for upxcale)
+# to those crates and those jobs turn green without any other change here.
+
 on:
   push:
     branches:
@@ -16,20 +34,57 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  RUST_VERSION: "1.98.1"
+  ANDROID_NDK_VERSION: "27.3.13750724"
+  ANDROID_PLATFORM: "34"
+  ANDROID_BUILD_TOOLS: "34.0.0"
 
 jobs:
   # ============================================================
-  # Android APK
+  # Android APKs — one per app
   # ============================================================
   android:
-    name: Android APK
+    name: Android APK - ${{ matrix.app }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # vavlt: dedicated vavlt-android cdylib crate with full
+          # [package.metadata.android] (dev.vavlt.app, apk_name=vavlt).
+          - app: vavlt
+            package: vavlt-android
+            workdir: apps/vavlt
+            apk_name: vavlt
+            has_config: true
+          # snapsearch: single crate, cdylib output, [package.metadata.android]
+          # in the root Cargo.toml (dev.snapsearch.app, apk_name=snapsearch).
+          - app: snapsearch
+            package: snapsearch
+            workdir: apps/snapsearch
+            apk_name: snapsearch
+            has_config: true
+          # upxcale: android_main fn exists in src/main.rs but the crate is
+          # binary-only (no [lib] crate-type = ["cdylib"]) and has no
+          # [package.metadata.android]. cargo-apk cannot package it yet.
+          - app: upxcale
+            package: upxcale
+            workdir: apps/upxcale
+            apk_name: upxcale
+            has_config: false
+          # three: the social-app example binary has no android_main fn and no
+          # [package.metadata.android]. cargo-apk cannot package it yet.
+          - app: three
+            package: three-social-app
+            workdir: apps/three
+            apk_name: three
+            has_config: false
 
     defaults:
       run:
         shell: bash
-        working-directory: vieww_base
 
     steps:
       - name: Checkout
@@ -38,33 +93,29 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      # The repository pins Rust through rust-toolchain.toml.
+      # The repo pins Rust through rust-toolchain.toml (vieww_base/ and
+      # apps/three/). Install it explicitly so targets can be added in one step
+      # and so apps without a rust-toolchain.toml (upxcale, snapsearch) resolve
+      # to the same version.
       - name: Install Rust toolchain
         run: |
-          rustup toolchain install 1.98.1 --profile minimal
-          rustup default 1.98.1
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustup target add --toolchain "$RUST_VERSION" aarch64-linux-android
           rustc --version
           cargo --version
-
-      - name: Install Android target
-        run: |
-          rustup target add \
-            --toolchain 1.98.1 \
-            aarch64-linux-android
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK components
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-34"
-          sdkmanager "build-tools;34.0.0"
-          sdkmanager "ndk;27.3.13750724"
-
-      - name: Accept Android licenses
-        run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}"
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -73,96 +124,165 @@ jobs:
           java-version: "17"
 
       - name: Install cargo-apk
-        run: |
-          cargo install cargo-apk --locked
+        run: cargo install cargo-apk --locked
 
       - name: Resolve Android environment
+        working-directory: ${{ matrix.workdir }}
         run: |
-          source ci/mobile/android-env.sh
-          android_env "github-actions"
+          # vavlt ships its own ci/android-env.sh; for the other apps we
+          # replicate the essential resolution inline so the build does not
+          # depend on a script that lives in another app's tree.
+          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}"
+          export ANDROID_NDK_HOME="$ANDROID_NDK_ROOT"
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          if [ -f ci/android-env.sh ]; then
+            # shellcheck disable=SC1091
+            source ci/android-env.sh
+            android_env "github-actions" || true
+          fi
+
+          # cargo-apk refuses to guess a release keystore. The debug keystore
+          # that setup-android created is the cheapest available; use it.
+          if [ -z "${CARGO_APK_RELEASE_KEYSTORE:-}" ] && [ -f "$HOME/.android/debug.keystore" ]; then
+            export CARGO_APK_RELEASE_KEYSTORE="$HOME/.android/debug.keystore"
+            export CARGO_APK_RELEASE_KEYSTORE_PASSWORD="${CARGO_APK_RELEASE_KEYSTORE_PASSWORD:-android}"
+          fi
+
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
+            echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+            echo "CARGO_APK_RELEASE_KEYSTORE=$CARGO_APK_RELEASE_KEYSTORE"
+            echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=${CARGO_APK_RELEASE_KEYSTORE_PASSWORD:-}"
+          } >> "$GITHUB_ENV"
 
       - name: Build Android APK
+        id: build_apk
+        working-directory: ${{ matrix.workdir }}
+        continue-on-error: ${{ matrix.has_config == false }}
         run: |
-          source ci/mobile/android-env.sh
-          android_env "android-build"
+          cargo apk build -p ${{ matrix.package }} --release
 
-          cargo apk build \
-            -p vieww-platform-winit \
-            --example android \
-            --release
-
-      - name: Locate APK
+      - name: Locate and stage APK
+        if: ${{ success() || (steps.build_apk.outcome == 'failure' && matrix.has_config == false) }}
+        working-directory: ${{ matrix.workdir }}
         run: |
           set -e
 
           echo "APK files produced:"
-          find target -type f -name "*.apk" -print
+          find target -type f -name "*.apk" -print 2>/dev/null || true
 
-          apk="$(find target -type f -name "*.apk" | head -n 1)"
+          apk="$(find target -type f -name "*.apk" 2>/dev/null | head -n 1)"
 
           if [ -z "$apk" ]; then
-            echo "ERROR: No APK was generated."
+            if [ "${{ matrix.has_config }}" = "false" ]; then
+              echo "::warning::${{ matrix.app }} has no cargo-apk config yet — skipping APK upload."
+              echo "  Add [package.metadata.android] (and [lib] crate-type = [\"cdylib\"] for a"
+              echo "  binary crate) to ${{ matrix.workdir }}/Cargo.toml to enable this build."
+              exit 0
+            fi
+            echo "::error::No APK was generated for ${{ matrix.app }}."
             exit 1
           fi
 
-          mkdir -p "$RUNNER_TEMP/vieww-android"
-
-          cp "$apk" "$RUNNER_TEMP/vieww-android/vieww.apk"
-
-          sha256sum \
-            "$RUNNER_TEMP/vieww-android/vieww.apk" \
-            > "$RUNNER_TEMP/vieww-android/SHA256SUMS"
-
-          ls -lah "$RUNNER_TEMP/vieww-android"
+          stage="$RUNNER_TEMP/${{ matrix.app }}-android"
+          mkdir -p "$stage"
+          cp "$apk" "$stage/${{ matrix.apk_name }}.apk"
+          (cd "$stage" && sha256sum "${{ matrix.apk_name }}.apk" > SHA256SUMS)
+          ls -lah "$stage"
 
       - name: Upload Android APK
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: vieww-android-apk
-          path: ${{ runner.temp }}/vieww-android/
-          if-no-files-found: error
+          name: ${{ matrix.app }}-android-apk
+          path: ${{ runner.temp }}/${{ matrix.app }}-android/
+          if-no-files-found: warn
           retention-days: 30
 
       # ----------------------------------------------------------
-      # Cleanup
+      # Cleanup — free the build memory before the runner shuts down
       # ----------------------------------------------------------
       - name: Cleanup Android build memory
         if: always()
         run: |
-          echo "Cleaning Android/Rust build data..."
+          echo "Cleaning Android/Rust build data for ${{ matrix.app }}..."
 
-          rm -rf target
-          rm -rf "$HOME/.gradle/caches"
-          rm -rf "$HOME/.gradle/wrapper"
-          rm -rf "$RUNNER_TEMP/vieww-android"
+          # The cargo target directory is by far the largest consumer — a
+          # release APK build leaves several GB of intermediate artifacts.
+          rm -rf ${{ matrix.workdir }}/target
 
-          # Remove cargo build caches created by this job.
+          # Gradle caches appear even though there is no Gradle project;
+          # cargo-apk shells out to the Android build tools which use them.
+          rm -rf "$HOME/.gradle/caches" "$HOME/.gradle/wrapper"
+
+          # The staged artifact was already uploaded; remove the local copy.
+          rm -rf "$RUNNER_TEMP/${{ matrix.app }}-android"
+
+          # Cargo's own download/checkout caches grow fast across multiple
+          # workspace builds and are not worth keeping between jobs.
           rm -rf "$HOME/.cargo/registry/cache"
           rm -rf "$HOME/.cargo/git/checkouts"
+
+          # The Android SDK manager cache and NDK build caches can be large
+          # after a release build; the SDK itself stays for the next job
+          # because setup-android caches it, but the per-build spillover does
+          # not need to.
+          rm -rf "$HOME/.android/build-cache" 2>/dev/null || true
 
           sync
 
           echo "Remaining workspace:"
           du -sh . 2>/dev/null || true
-
           echo "Cleanup complete."
 
   # ============================================================
-  # iOS IPA
+  # iOS IPAs — one per app
   # ============================================================
   ios:
-    name: iOS IPA
+    name: iOS IPA - ${{ matrix.app }}
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # vavlt: dedicated vavlt-ios binary crate (crates/ios/).
+          - app: vavlt
+            package: vavlt-ios
+            workdir: apps/vavlt
+            bundle_id: dev.vavlt.app
+            binary: vavlt-ios
+            app_name: vavlt
+          # snapsearch: main.rs is the iOS entry point — iOS calls main directly
+          # (UIApplicationMain is started inside App::run by winit).
+          - app: snapsearch
+            package: snapsearch
+            workdir: apps/snapsearch
+            bundle_id: dev.snapsearch.app
+            binary: snapsearch
+            app_name: snapsearch
+          # upxcale: main.rs is desktop + iOS compatible (same winit App::run).
+          - app: upxcale
+            package: upxcale
+            workdir: apps/upxcale
+            bundle_id: dev.upxcale.app
+            binary: upxcale
+            app_name: upxcale
+          # three: the social-app example is the UI binary (a workspace member,
+          # not a traditional example, so -p three-social-app selects it).
+          - app: three
+            package: three-social-app
+            workdir: apps/three
+            bundle_id: dev.three.app
+            binary: three-social-app
+            app_name: three
 
     defaults:
       run:
         shell: bash
-        working-directory: vieww_base
 
     steps:
       - name: Checkout
@@ -171,20 +291,16 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      # The repository pins Rust through rust-toolchain.toml.
       - name: Install Rust toolchain
         run: |
-          rustup toolchain install 1.98.1 --profile minimal
-          rustup default 1.98.1
-          rustc --version
-          cargo --version
-
-      - name: Install iOS targets
-        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
           rustup target add \
-            --toolchain 1.98.1 \
+            --toolchain "$RUST_VERSION" \
             aarch64-apple-ios \
             aarch64-apple-ios-sim
+          rustc --version
+          cargo --version
 
       - name: Verify Xcode
         run: |
@@ -192,67 +308,176 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-path
 
-      - name: Build iOS IPA
+      - name: Build iOS binary
+        working-directory: ${{ matrix.workdir }}
         run: |
-          chmod +x ci/mobile/ios-app.sh
-
-          ci/mobile/ios-app.sh \
-            --ipa \
+          cargo build \
+            -p ${{ matrix.package }} \
+            --target aarch64-apple-ios \
             --release
 
-      - name: Locate IPA
+      # ----------------------------------------------------------
+      # Bundle the binary into a .app, ad-hoc sign it, and zip a .ipa.
+      # This mirrors vieww_base/ci/mobile/ios-app.sh --ipa but is app-generic:
+      # the bundle id, executable name, and display name come from the matrix.
+      # An ad-hoc signature (-) carries no provisioning profile, so the .ipa
+      # will not install on a phone directly — a device cloud (BrowserStack,
+      # Firebase Test Lab, AWS Device Farm) re-signs it on upload.
+      # ----------------------------------------------------------
+      - name: Bundle and sign IPA
+        working-directory: ${{ matrix.workdir }}
+        env:
+          APP_NAME: ${{ matrix.app_name }}
+          BUNDLE_ID: ${{ matrix.bundle_id }}
+          BINARY: ${{ matrix.binary }}
+        run: |
+          set -euo pipefail
+
+          triple="aarch64-apple-ios"
+          profile="release"
+          binary="target/$triple/$profile/$BINARY"
+
+          if [ ! -f "$binary" ]; then
+            echo "::error::Expected binary at $binary and there is none."
+            echo "  Contents of target/$triple/$profile:"
+            find "target/$triple/$profile" -maxdepth 2 -type f -perm /111 2>/dev/null | head -20 || true
+            exit 1
+          fi
+
+          app_dir="target/ios/$APP_NAME.app"
+          rm -rf "$app_dir"
+          mkdir -p "$app_dir"
+
+          # The executable's name inside the bundle must match CFBundleExecutable.
+          cp "$binary" "$app_dir/$APP_NAME"
+
+          # UILaunchScreen is mandatory: without it iOS runs in a compatibility
+          # mode with black bars, which looks like a layout bug but is not.
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            "    <key>CFBundleName</key><string>$APP_NAME</string>" \
+            "    <key>CFBundleDisplayName</key><string>$APP_NAME</string>" \
+            "    <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>" \
+            "    <key>CFBundleExecutable</key><string>$APP_NAME</string>" \
+            '    <key>CFBundlePackageType</key><string>APPL</string>' \
+            '    <key>CFBundleVersion</key><string>1</string>' \
+            '    <key>CFBundleShortVersionString</key><string>0.1</string>' \
+            '    <key>LSRequiresIPhoneOS</key><true/>' \
+            '    <key>MinimumOSVersion</key><string>13.0</string>' \
+            '    <key>UILaunchScreen</key><dict/>' \
+            '    <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>' \
+            '    <key>UISupportedInterfaceOrientations</key>' \
+            '    <array><string>UIInterfaceOrientationPortrait</string></array>' \
+            '</dict>' \
+            '</plist>' \
+            > "$app_dir/Info.plist"
+
+          echo "==> bundled $app_dir"
+
+          # Ad-hoc sign: available on any Mac with Xcode, no Apple account
+          # needed. A device cloud re-signs this on upload.
+          codesign --force --sign - --timestamp=none "$app_dir"
+          echo "==> ad-hoc signed (a device cloud will re-sign this)"
+
+          # An .ipa is a zip with the bundle under Payload/.
+          payload="target/ios/Payload"
+          ipa="target/ios/$APP_NAME.ipa"
+          rm -rf "$payload" "$ipa"
+          mkdir -p "$payload"
+          cp -R "$app_dir" "$payload/"
+          (cd target/ios && zip -qry "$APP_NAME.ipa" Payload)
+          rm -rf "$payload"
+
+          echo "==> $ipa"
+
+      - name: Locate and stage IPA
+        working-directory: ${{ matrix.workdir }}
         run: |
           set -e
 
-          if [ ! -f target/ios/vieww.ipa ]; then
-            echo "ERROR: target/ios/vieww.ipa was not generated."
-            echo
-            echo "Contents of target/ios:"
+          ipa="target/ios/${{ matrix.app_name }}.ipa"
+          if [ ! -f "$ipa" ]; then
+            echo "::error::$ipa was not generated."
             find target/ios -maxdepth 3 -print 2>/dev/null || true
             exit 1
           fi
 
-          mkdir -p "$RUNNER_TEMP/vieww-ios"
-
-          cp \
-            target/ios/vieww.ipa \
-            "$RUNNER_TEMP/vieww-ios/vieww.ipa"
-
-          shasum -a 256 \
-            "$RUNNER_TEMP/vieww-ios/vieww.ipa" \
-            > "$RUNNER_TEMP/vieww-ios/SHA256SUMS"
-
-          ls -lah "$RUNNER_TEMP/vieww-ios"
+          stage="$RUNNER_TEMP/${{ matrix.app }}-ios"
+          mkdir -p "$stage"
+          cp "$ipa" "$stage/${{ matrix.app_name }}.ipa"
+          (cd "$stage" && shasum -a 256 "${{ matrix.app_name }}.ipa" > SHA256SUMS)
+          ls -lah "$stage"
 
       - name: Upload iOS IPA
         uses: actions/upload-artifact@v4
         with:
-          name: vieww-ios-ipa
-          path: ${{ runner.temp }}/vieww-ios/
+          name: ${{ matrix.app }}-ios-ipa
+          path: ${{ runner.temp }}/${{ matrix.app }}-ios/
           if-no-files-found: error
           retention-days: 30
 
       # ----------------------------------------------------------
-      # Cleanup
+      # Cleanup — free the build memory before the runner shuts down
       # ----------------------------------------------------------
       - name: Cleanup iOS build memory
         if: always()
         run: |
-          echo "Cleaning iOS/Rust build data..."
+          echo "Cleaning iOS/Rust build data for ${{ matrix.app }}..."
 
-          rm -rf target
-          rm -rf "$RUNNER_TEMP/vieww-ios"
+          # The cargo target directory — a release iOS build of the vieww
+          # framework + app leaves several GB here.
+          rm -rf ${{ matrix.workdir }}/target
 
-          # Remove Xcode temporary build products generated by this job.
+          # The staged artifact was already uploaded.
+          rm -rf "$RUNNER_TEMP/${{ matrix.app }}-ios"
+
+          # Xcode's DerivedData accumulates across builds and is not needed
+          # after the .ipa is staged.
           rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
 
-          # Remove cargo build caches created by this job.
+          # Cargo's download/checkout caches.
           rm -rf "$HOME/.cargo/registry/cache"
           rm -rf "$HOME/.cargo/git/checkouts"
+
+          # The cargo-apk and rustup component caches are not used on the iOS
+          # job but may exist from a shared runner image; safe to remove.
+          rm -rf "$HOME/.rustup/downloads" 2>/dev/null || true
 
           sync
 
           echo "Remaining workspace:"
           du -sh . 2>/dev/null || true
-
           echo "Cleanup complete."
+
+  # ============================================================
+  # Summary — a single index of every artifact produced by this run
+  # ============================================================
+  summary:
+    name: Build summary
+    runs-on: ubuntu-latest
+    needs: [android, ios]
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: Report
+        run: |
+          {
+            echo "## Mobile build summary"
+            echo ""
+            echo "Android job overall: ${{ needs.android.result }}"
+            echo "iOS job overall: ${{ needs.ios.result }}"
+            echo ""
+            echo "| app | Android APK artifact | iOS IPA artifact |"
+            echo "|-----|----------------------|------------------|"
+            for app in vavlt snapsearch upxcale three; do
+              echo "| $app | \`${app}-android-apk\` | \`${app}-ios-ipa\` |"
+            done
+            echo ""
+            echo "Download artifacts from the workflow run page — scroll to the bottom of the run and click an artifact to download it."
+            echo ""
+            echo "> **Note:** upxcale and three do not yet have \`[package.metadata.android]\` in their Cargo.toml, so their Android APKs will be empty. Add the cargo-apk config to those crates and the APKs appear on the next run."
+          } >> "$GITHUB_STEP_SUMMARY"
