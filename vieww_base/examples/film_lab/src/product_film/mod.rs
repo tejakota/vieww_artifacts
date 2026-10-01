@@ -426,16 +426,20 @@ pub const CERT_P95_MS: f32 = 11.4;
 pub const CERT_WORST_MS: f32 = 13.1;
 pub const CERT_TESTS: u64 = 4_225;
 pub const CERT_VULKAN_TESTS: u64 = 37;
-pub const CERT_CRATES: usize = 36;
+pub const CERT_CRATES: usize = 49;
 pub const CERT_FRAMES_STEADY: u64 = 60;
 pub const CERT_ALLOCS_STEADY: u64 = 0;
 
-// ── The 36 crates — the engine scene's manifest, quoted ─────────────────────
+// ── The 49 crates — the engine scene's manifest, quoted ─────────────────────
 
-/// The workspace's 36 crates, verbatim from `vieww_base/Cargo.toml`.
-/// B02 counts this list at runtime; the count on screen is the list's
-/// own length.
-pub const CRATES: [&str; 36] = [
+/// The workspace's 49 crates, verbatim from `vieww_base/Cargo.toml`
+/// (the `crates/` members; the two `apps/` are the products built on them,
+/// not the engine). B02 and the receipts scene count this list at runtime;
+/// the count on screen is the list's own length. The thirteen additions
+/// over the first cut — audio, video, mesh, 3d, canvas, dataviz, graph,
+/// game, collab, lottie, network, physics, embed — are the capabilities
+/// Z10B shows running live.
+pub const CRATES: [&str; 49] = [
     "vieww-foundation",
     "vieww-widget",
     "vieww-element",
@@ -443,6 +447,19 @@ pub const CRATES: [&str; 36] = [
     "vieww-hal",
     "vieww-text",
     "vieww-animation",
+    "vieww-audio",
+    "vieww-video",
+    "vieww-mesh",
+    "vieww-3d",
+    "vieww-canvas",
+    "vieww-dataviz",
+    "vieww-graph",
+    "vieww-game",
+    "vieww-collab",
+    "vieww-lottie",
+    "vieww-network",
+    "vieww-physics",
+    "vieww-embed",
     "vieww-asset",
     "vieww-gestures",
     "vieww-render",
@@ -1083,8 +1100,16 @@ pub enum TypeAt {
 ///
 /// Here the text and the caret are computed from **one** `x0` and **one**
 /// tracked measurement, so they cannot disagree by construction, and the
-/// blink is suppressed while a character is actually landing — a real
-/// caret is solid while you type and only blinks once you stop.
+/// caret is solid while a character is actually landing — a real
+/// caret is solid while you type.
+///
+/// 4. **The caret outstays its welcome.** The caret used to blink on a
+///    finished line for the rest of the scene — a caret that keeps
+///    blinking after the typing is done reads as a stuck input, not a
+///    live one. It now leaves the moment the line is whole: the last
+///    character's landing masks the departure, and the line rests as
+///    type. (`clock` stays in the signature — the blink phase it drove
+///    is retired, and callers keep their call sites.)
 pub fn type_on(
     full: &str,
     at: TypeAt,
@@ -1127,10 +1152,12 @@ pub fn type_on(
     );
 
     // The caret sits one advance past the last glyph — solid while the line
-    // is still landing, blinking once it has settled.
+    // is still landing, gone the moment it is whole. The last character's
+    // arrival masks the departure, so the line settles as finished type
+    // rather than as an input still waiting.
     let done = typed_n >= total;
-    let settled = (clock * 2.4).fract() < 0.55;
-    if !done || settled {
+    let _ = clock;
+    if !done {
         stack = stack.push(
             Positioned::new()
                 .left(x0 + caret_x)
@@ -1139,7 +1166,7 @@ pub fn type_on(
                 .height(size * 1.02)
                 .child(
                     Container::new()
-                        .color(alpha(style.color, if done { 0.75 } else { 0.95 }))
+                        .color(alpha(style.color, 0.95))
                         .radius(1.5),
                 ),
         );

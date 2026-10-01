@@ -104,6 +104,12 @@ pub struct Plate {
     pub snap: Option<&'static str>,
     /// Lift the plate off the ground: a card, a shadow and a hairline.
     pub card: bool,
+    /// Place the pixels **directly**: no card, no backdrop fill, no
+    /// hairline — the plate's own silhouette on the scene's ground.
+    /// For devices, whose bezels are their own frame: wrapping a phone
+    /// in a second box drew a box around a box. `radius` still clips —
+    /// set it to the device's own corner at destination scale.
+    pub bare: bool,
 }
 
 #[derive(Default)]
@@ -221,6 +227,15 @@ pub fn fit(content: Rect, max_scale: f32) -> (f32, Offset) {
     let bx = (SAFE.left + SAFE.right) * 0.5;
     let by = (SAFE.top + SAFE.bottom) * 0.5;
     (s, Offset::new(bx - cx * s, by - cy * s))
+}
+
+/// The fit the master will apply to scene `id` — the same arithmetic,
+/// exposed so a scene can translate a rectangle between worlds. The
+/// pullback uses it to hand the mark's rect to the end card across the
+/// cut: a rect is anchored where the *incoming* scene's fit will put it,
+/// which is the only place a transform across a dissolve can continue.
+pub fn fit_of(id: &str) -> (f32, Offset) {
+    fit(content_box(id), super::layout::MAX_SCALE)
 }
 
 // ── The header and footer ───────────────────────────────────────────────────

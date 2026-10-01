@@ -92,12 +92,22 @@ fn a2s(r: Rect) -> Rect {
 
 /// A plate of the live studio.
 fn plate(src: Rect, dst: Rect, alpha: f32, radius: f32, card: bool) {
-    frame::plate(Plate { src, dst, alpha, radius, snap: None, card });
+    frame::plate(Plate { src, dst, alpha, radius, snap: None, card, bare: false });
 }
 
-/// A plate of a named snapshot.
-fn snap_plate(key: &'static str, src: Rect, dst: Rect, alpha: f32, radius: f32) {
-    frame::plate(Plate { src, dst, alpha, radius, snap: Some(key), card: true });
+/// A snapshot placed **directly** — no card, no backdrop, no rim. For
+/// devices: a phone's bezel is already its frame, and a box around a
+/// box reads as wrapping, not as placement. `radius` clips to the
+/// device's own corner at destination scale, so the plate's silhouette
+/// is the device's.
+fn snap_bare(key: &'static str, src: Rect, dst: Rect, alpha: f32, radius: f32) {
+    frame::plate(Plate { src, dst, alpha, radius, snap: Some(key), card: false, bare: true });
+}
+
+/// A live-region plate placed directly — same grammar as [`snap_bare`],
+/// for a device quoted from the live frame rather than a snapshot.
+fn bare_plate(src: Rect, dst: Rect, alpha: f32, radius: f32) {
+    frame::plate(Plate { src, dst, alpha, radius, snap: None, card: false, bare: true });
 }
 
 /// `src` scaled by `s` with its top-left at `at`.
@@ -341,7 +351,8 @@ pub fn live_compose(ctx: &pf::Ctx) -> WidgetNode {
     let in_e = ease_out_expo(clamp01((sec - 0.1) / 0.6));
     let in_p = ease_out_expo(clamp01((sec - 0.3) / 0.6));
     plate(app::LIVE_HOME, ed, in_e, 14.0, true);
-    plate(app::PHONE, pd, in_p, 30.0, false);
+    // The phone, placed directly — its bezel is its own frame.
+    bare_plate(app::PHONE, pd, in_p, 46.0);
 
     let mut stack = Stack::new();
     stack = stack.push(tag(ed.left, ed.top - 50.0, "your code", 20.0, SYN_TYPE, in_e));
@@ -445,7 +456,9 @@ pub fn say_to_rust(ctx: &pf::Ctx) -> WidgetNode {
     let ps = 1.10;
     let pd = place(app::PHONE, Offset::new(BODY.right - 10.0 - app::PHONE.width() * ps, cy - app::PHONE.height() * ps * 0.5), ps);
     let in_p = ease_out_expo(clamp01((sec - 0.8) / 0.6));
-    frame::plate(Plate { src: app::PHONE, dst: pd, alpha: in_p, radius: 30.0, snap: Some("blank"), card: false });
+    // The phone before anything was rendered into it — placed directly,
+    // its bezel its own frame.
+    frame::plate(Plate { src: app::PHONE, dst: pd, alpha: in_p, radius: 40.0, snap: Some("blank"), card: false, bare: true });
     let screen = Rect::new(
         pd.left + (app::PHONE_SCREEN.left - app::PHONE.left) * ps,
         pd.top + (app::PHONE_SCREEN.top - app::PHONE.top) * ps,
@@ -563,6 +576,9 @@ pub fn device_src(key: &str) -> Rect {
 /// studio's three platforms — the same sketch, re-framed by the platform
 /// the studio tells it it is on. Then the preview's Dark switch, all three
 /// at once.
+///
+/// The devices are placed directly ([`snap_bare`]): a bezel is already
+/// a frame, and the scene's ground is where a device sits.
 pub fn ships_everywhere(ctx: &pf::Ctx) -> WidgetNode {
     use viewwstudio::state::Platform;
     let sec = ctx.sec;
@@ -574,6 +590,13 @@ pub fn ships_everywhere(ctx: &pf::Ctx) -> WidgetNode {
         (8.0, "Flip to dark mode — all three follow."),
     ]);
     let dark = ease_in_out(clamp01((sec - 8.0) / 0.9));
+    // Each platform's own corner, at destination scale — the clip that
+    // gives a bare plate the device's silhouette.
+    let corner = |key: &str, s: f32| match key {
+        "android" | "android_dark" => 21.0 * s,
+        "desktop" | "desktop_dark" => 12.0 * s,
+        _ => 37.0 * s,
+    };
     let devs: [(&'static str, &'static str, &str, Platform, f32); 3] = [
         ("ios", "ios_dark", "iOS", Platform::Ios, 0.4),
         ("android", "android_dark", "Android", Platform::Android, 1.4),
@@ -602,11 +625,12 @@ pub fn ships_everywhere(ctx: &pf::Ctx) -> WidgetNode {
         let p = ease_out_expo(clamp01((sec - at) / 0.7));
         let rise = (1.0 - p) * 30.0;
         let dst = Rect::new(x, y + rise, x + w, y + h + rise);
+        let cr = corner(light, s);
         if dark < 0.999 {
-            snap_plate(light, src, dst, p, 18.0);
+            snap_bare(light, src, dst, p, cr);
         }
         if dark > 0.001 {
-            snap_plate(darkk, src, dst, p * dark, 18.0);
+            snap_bare(darkk, src, dst, p * dark, cr);
         }
         let la = ease_out_cubic(clamp01((sec - at - 0.4) / 0.4));
         stack = stack.push(frame::label(x - 60.0, top + h_phone + 24.0, w + 120.0, 44.0, name.to_string(),
@@ -642,17 +666,19 @@ pub fn the_devices(ctx: &pf::Ctx) -> WidgetNode {
     let in_l = ease_out_expo(clamp01((sec - 0.7) / 0.6));
     plate(app::DEVICES_LIST, ld, in_l, 14.0, true);
 
-    // The preview for the current choice, crossfading from the last.
+    // The preview for the current choice, crossfading from the last —
+    // placed directly: the preview's own pixels, straight onto the
+    // scene's ground, no box drawn around them.
     let cur = devs.iter().rposition(|(at, _)| sec >= *at).unwrap_or(0);
     let since = sec - devs[cur].0;
     let ps = 1.22;
     let pd = centred(app::STAGE, Offset::new((ld.right + BODY.right) * 0.5 + 10.0, (BODY.top + BODY.bottom) * 0.5 + 20.0), ps);
     let fade = ease_in_out(clamp01(since / 0.5));
     if cur > 0 && fade < 0.999 {
-        snap_plate(super::script::device_key(devs[cur - 1].1), app::STAGE, pd, 1.0 - fade, 18.0);
+        snap_bare(super::script::device_key(devs[cur - 1].1), app::STAGE, pd, 1.0 - fade, 0.0);
     }
     let a_now = if cur > 0 { fade } else { ease_out_expo(clamp01(sec / 0.6)) };
-    snap_plate(super::script::device_key(devs[cur].1), app::STAGE, pd, a_now, 18.0);
+    snap_bare(super::script::device_key(devs[cur].1), app::STAGE, pd, a_now, 0.0);
 
     let mut stack = Stack::new();
     stack = stack.push(tag(ld.left, ld.top - 50.0, "device sizes", 20.0, SYN_TYPE, in_l));
@@ -685,7 +711,7 @@ pub fn build_and_ship(ctx: &pf::Ctx) -> WidgetNode {
         (Ico::Export, "package", 8.0, 9.2),
     ];
     const LOG: [(u8, &str); 22] = [
-        (0, "resolving workspace · 36 crates"),
+        (0, "resolving workspace · 49 crates"),
         (2, "lockfile up to date"),
         (0, "compiling vieww-foundation v0.1.0"),
         (1, "compiling vieww-paint v0.1.0"),
@@ -717,7 +743,7 @@ pub fn build_and_ship(ctx: &pf::Ctx) -> WidgetNode {
     let ps = 1.4;
     let panel = Rect::new(BODY.left + 30.0, BODY.top + 130.0, BODY.left + 30.0 + pw, BODY.bottom - 20.0);
     let tabs = Rect::new(panel.left + 2.0, panel.top + 2.0, panel.left + 2.0 + app::PANEL_TABS.width() * ps, panel.top + 2.0 + app::PANEL_TABS.height() * ps);
-    let in_p = ease_out_expo(clamp01((sec - 0.2) / 0.6));
+    let in_p = ease_out_expo(clamp01((sec - 0.05) / 0.35));
     let body_bg = theme.chrome_1;
     let mut stack = Stack::new();
     frame::under(paint(move |book| {
@@ -799,7 +825,15 @@ pub fn build_and_ship(ctx: &pf::Ctx) -> WidgetNode {
             (Rect::new(cx - w * 0.5, y, cx + w * 0.5, y + h), y + h + 10.0)
         };
         let dst = Rect::new(dst.left, dst.top + (1.0 - p) * 24.0, dst.right, dst.bottom + (1.0 - p) * 24.0);
-        snap_plate(key, src, dst, p, 16.0);
+        // The artifact on its platform's own preview — the device placed
+        // directly, its silhouette its own. The corner is the platform's
+        // own, in source pixels, scaled to the destination.
+        let cr = match *key {
+            "android" => 21.0,
+            "desktop" => 12.0,
+            _ => 36.0,
+        } * if i < 2 { dst.height() / src.height() } else { dst.width() / src.width() };
+        snap_bare(key, src, dst, p, cr);
         let cx = (dst.left + dst.right) * 0.5;
         stack = stack.push(frame::label(cx - 150.0, lab_y, 300.0, 32.0, file.to_string(),
             pf::geist_mono(22.0).color(pf::alpha(INK, 0.97)), TextAlign::Center, p));

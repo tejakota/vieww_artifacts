@@ -17,7 +17,9 @@ use super::filmkit as fk;
 use super::{ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, ENGINE, INK, LEDGER, MUTED, SYN_TYPE, CERT_CRATES};
 
 /// The engine's headline crates — the ones a film can name without
-/// lying. The full count is the workspace's own 36.
+/// lying. The full count is the workspace's own 49 (see Z19, which shows
+/// every one of them by name); these twelve are the load-bearing ones
+/// the graph can name at label size.
 const GRAPH: [(&str, f32); 12] = [
     ("foundation", 0.0),
     ("text", 0.52),
@@ -217,6 +219,7 @@ const STOPS: [(&str, &str); 5] = [
 
 pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
+    let sec = ctx.sec;
 
     let mut stack = Stack::new();
 
@@ -306,25 +309,33 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         }
     }
 
-    // The packets — small lights riding the line, on a fixed beat.
-    let beat = t * 4.0;
-    let packets = 3;
-    stack = stack.push(Positioned::new().left(150.0).top(284.0).width(1680.0).height(676.0).child(
-        Painting::sized(Size::new(1680.0, 1080.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            for k in 0..packets {
-                let ph = beat + k as f32 * 0.33;
-                let pos = ph.fract();
-                let x = pos * (5.0 * 336.0 - 72.0);
-                let a = (pos * 4.0).min(1.0) * ((1.0 - pos) * 4.0).min(1.0);
-                if a <= 0.01 {
-                    continue;
+    // The packets — small lights riding the line, on a fixed beat. They
+    // wait for the line to exist: the stations land first (the last of
+    // them settles at ~7.9 s), then the traffic starts. Riding the wire
+    // from the scene's first frame put moving circles on a dark screen
+    // no box had arrived at yet — traffic before the road. The gate runs
+    // on `sec`, the real clock, not the scene's normalised `t`.
+    let line_ready = clamp01((sec - 8.4) / 0.6);
+    if line_ready > 0.01 {
+        let beat = (sec - 8.4) * 4.0;
+        let packets = 3;
+        stack = stack.push(Positioned::new().left(150.0).top(284.0).width(1680.0).height(676.0).child(
+            Painting::sized(Size::new(1680.0, 1080.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                for k in 0..packets {
+                    let ph = beat + k as f32 * 0.33;
+                    let pos = ph.fract();
+                    let x = pos * (5.0 * 336.0 - 72.0);
+                    let a = (pos * 4.0).min(1.0) * ((1.0 - pos) * 4.0).min(1.0) * line_ready;
+                    if a <= 0.01 {
+                        continue;
+                    }
+                    // A crisp signal dot — core plus ring, no blur.
+                    book.ring(Offset::new(x, 110.0), 8.0, 1.1, pf::alpha(BRAND_FAR, 0.55 * a));
+                    book.circle(Offset::new(x, 110.0), 3.4, pf::alpha(BRAND_FAR, 0.9 * a));
                 }
-                // A crisp signal dot — core plus ring, no blur.
-                book.ring(Offset::new(x, 110.0), 8.0, 1.1, pf::alpha(BRAND_FAR, 0.55 * a));
-                book.circle(Offset::new(x, 110.0), 3.4, pf::alpha(BRAND_FAR, 0.9 * a));
-            }
-        })),
-    ));
+            })),
+        ));
+    }
 
     // The budget bar — the worst certified frame against the 16.6 ms
     // budget. Real numbers, from the repo's own audit.

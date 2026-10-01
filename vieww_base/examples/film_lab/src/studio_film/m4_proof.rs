@@ -388,25 +388,31 @@ pub fn the_ledger(ctx: &pf::Ctx) -> WidgetNode {
 // ── Z19 · the_receipts ──────────────────────────────────────────────────────
 
 /// **Where the numbers come from.** The ledger gave the headline figures;
-/// this scene gives their provenance — the 36 crates as 36 real tiles,
+/// this scene gives their provenance — the 49 crates as 49 real tiles,
 /// each named, filling in as the count runs, and the certification's own
 /// breakdown beside them.
 ///
 /// The crate names are `pf::CRATES`, quoted from the workspace manifest.
-/// A film that says "36 crates" and then shows 36 named crates is making
+/// A film that says "49 crates" and then shows 49 named crates is making
 /// a checkable claim; one that shows a number is making a decorative one.
+/// (The grid grew with the workspace: six columns held the first 36, seven
+/// hold the 49 — and the scene's arithmetic is driven by the list's own
+/// length, so the next crate to land needs no edit here.)
 pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let probe = ctx.probe;
     let mut stack = Stack::new();
 
-    const COLS: usize = 6;
-    const TILE_W: f32 = 200.0;
+    const COLS: usize = 7;
+    const TILE_W: f32 = 174.0;
     const TILE_H: f32 = 62.0;
     const GAP: f32 = 14.0;
     const GRID_X: f32 = 96.0;
     const GRID_Y: f32 = 330.0;
+    /// The grid's rows, derived — 49 tiles in 7 columns is 7 rows exactly,
+    /// and a future crate re-decides this on its own.
+    const GRID_ROWS: usize = (pf::CERT_CRATES + COLS - 1) / COLS;
 
     super::frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
@@ -451,7 +457,9 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
         }),
     )));
 
-    // The crate names, as type, at the tiles' own coordinates.
+    // The crate names, as type, at the tiles' own coordinates. The tile is
+    // narrower than the first cut's (seven columns where six were), so the
+    // long names take the smaller size — the grid's density is the point.
     for (i, name) in pf::CRATES.iter().enumerate().take(pf::CERT_CRATES) {
         let p = ease_out_cubic(pf::clamp01((t - 0.08 - i as f32 * 0.012) / 0.14));
         if p <= 0.01 {
@@ -464,8 +472,8 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
         // tile carries the part that tells the crates apart, at a size
         // that fits the tile on one line.
         let short = name.strip_prefix("vieww-").unwrap_or(name);
-        stack = stack.push(super::frame::label(x + 16.0, y + (1.0 - p) * 8.0, TILE_W - 22.0, TILE_H, short.to_string(),
-            pf::geist_mono(if short.len() > 15 { 17.0 } else { 20.0 }).color(pf::alpha(INK, 0.94)), TextAlign::Left, p));
+        stack = stack.push(super::frame::label(x + 14.0, y + (1.0 - p) * 8.0, TILE_W - 20.0, TILE_H, short.to_string(),
+            pf::geist_mono(if short.len() > 11 { 15.0 } else { 18.0 }).color(pf::alpha(INK, 0.94)), TextAlign::Left, p));
     }
 
     stack = stack.push(super::frame::label(GRID_X, GRID_Y - 44.0, 800.0, 32.0, "every part of vieww, by name".to_string(),
@@ -524,7 +532,7 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
     // The film's own line, last.
     let film_a = pf::clamp01((t - 0.74) / 0.12);
     if film_a > 0.01 && probe.frames > 0 {
-        stack = stack.push(Positioned::new().left(GRID_X).top(GRID_Y + 6.0 * (TILE_H + GAP) + 14.0).width(1760.0).height(32.0).child(
+        stack = stack.push(Positioned::new().left(GRID_X).top(GRID_Y + GRID_ROWS as f32 * (TILE_H + GAP) + 14.0).width(1760.0).height(32.0).child(
             Opacity::new(film_a).child(Text::new(format!(
                 "and {} frames of this film, counted by its own census",
                 pf::group_commas(probe.frames)
@@ -533,7 +541,7 @@ pub fn the_receipts(ctx: &pf::Ctx) -> WidgetNode {
         ));
     }
 
-    stack = stack.push(super::frame::caption("36 building blocks — and here they are.", 1002.0, pf::clamp01((t - 0.05) / 0.10)));
+    stack = stack.push(super::frame::caption(&format!("{} building blocks — and here they are.", pf::CERT_CRATES), 1002.0, pf::clamp01((t - 0.05) / 0.10)));
     stack = stack.push(super::frame::caption("A number you can check beats a number you're told.", 966.0, pf::clamp01((t - 0.60) / 0.10)));
     let _ = sec;
     stack.into()

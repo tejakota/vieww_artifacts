@@ -131,7 +131,10 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         )));
         // The port's name and its flaw — under the card, never on it: a
         // label laid over the picture it names hides the very drift it is
-        // pointing at.
+        // pointing at. The flaw does not arrive dim and wait to be
+        // highlighted: nothing is on screen, then the accusation is — a
+        // direct blank-to-red landing, timed to its own beat after the
+        // card has settled.
         if card_p > 0.01 {
             let rise = (1.0 - card_p) * 10.0;
             stack = stack.push(super::frame::label(
@@ -144,7 +147,7 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
                 station.left - 30.0, station.bottom + 44.0 + rise, station.width() + 60.0, 26.0,
                 flaw.to_string(),
                 pf::geist_mono(17.0).letter_spacing(0.6).color(pf::alpha(BREAK_RED, 0.95)),
-                TextAlign::Center, card_p * (0.18 + 0.82 * flaw_p),
+                TextAlign::Center, card_p * flaw_p,
             ));
         }
     }
@@ -333,6 +336,68 @@ const JAR: super::models::Jar = super::models::Jar { left: 1380.0, top: 400.0, r
 /// This scene's length — the coin drops are timed in seconds.
 const Z02_SECONDS: f32 = 12.0;
 
+// ── The toll's stamp — a rubber stamp, not a fade ───────────────────────
+
+/// The stamp's state `s` seconds after its gate paid. The toll used to
+/// fade in behind a soft flash — two opacity moves, nothing physical.
+/// It now arrives the way a toll actually arrives: **stamped.** The
+/// stamp descends inflated from above, lands at 0.14 s, squashes on the
+/// bar and recovers, throws two crisp impact rings and six flecks of
+/// ink, and its ink sets to rest by 0.45 s. The bar itself takes the
+/// hit — a two-pixel judder the landing prints on it.
+#[derive(Clone, Copy)]
+struct StampLife {
+    on: bool,
+    landed: bool,
+    /// Scale about the stamp's own centre.
+    sx: f32,
+    sy: f32,
+    /// Vertical offset — the descent.
+    dy: f32,
+    /// The thrown ink's flight, 0..1.
+    fly: f32,
+    /// The ink setting — the fill darkening to rest, 0..1.
+    ink: f32,
+    /// The impact rings' progress, 0..1.
+    ring: f32,
+}
+
+const STAMP_AIRBORNE: f32 = 0.14;
+
+fn stamp_life(s: f32) -> StampLife {
+    let mut st = StampLife {
+        on: s > 0.0,
+        landed: s >= STAMP_AIRBORNE,
+        sx: 1.0,
+        sy: 1.0,
+        dy: 0.0,
+        fly: 0.0,
+        ink: 0.0,
+        ring: 0.0,
+    };
+    if !st.on {
+        return st;
+    }
+    if !st.landed {
+        // The descent — inflated and dropping in from above.
+        let u = ease_out_cubic(s / STAMP_AIRBORNE);
+        st.sx = 1.0 + 0.45 * (1.0 - u);
+        st.sy = st.sx;
+        st.dy = -(1.0 - u) * 26.0;
+    } else {
+        // The landing squash, then recovery.
+        let u = clamp01((s - STAMP_AIRBORNE) / 0.16);
+        let sq = 0.10 * (u * std::f32::consts::PI).sin();
+        st.sx = 1.0 + sq * 0.4;
+        st.sy = 1.0 - sq;
+        // Everything the hit throws, keyed to the landing.
+        st.ink = ease_out_cubic(clamp01((s - STAMP_AIRBORNE) / 0.30));
+        st.fly = ease_out_expo(clamp01((s - STAMP_AIRBORNE + 0.02) / 0.46));
+        st.ring = clamp01((s - STAMP_AIRBORNE + 0.02) / 0.50);
+    }
+    st
+}
+
 /// Every coin the tolls drop: eight per gate, from the moment it pays.
 fn toll_drops() -> Vec<super::models::Drop> {
     let mut out = Vec::new();
@@ -428,20 +493,31 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         TextAlign::Center, jar_a,
     ));
 
-    // The gates — each bar slides in, holds, then pays.
+    // The gates — each bar slides in, holds, then pays: the toll is
+    // stamped on (see [`stamp_life`]) and its cost flows to the jar.
+    // `t` is the scene's normalised clock; the stamp's own life runs in
+    // **seconds**, so the slam is fast where the scene is slow.
     for (i, (gate, toll)) in GATES.iter().enumerate() {
         let t0 = 0.14 + i as f32 * 0.14;
         let in_p = ease_out_cubic(clamp01((t - t0) / 0.18));
-        let pay_p = clamp01((t - t0 - 0.22) / 0.10);
+        let since_pay = (t - t0 - 0.22) * Z02_SECONDS;
         if in_p <= 0.01 {
             continue;
         }
         let y = 320.0 + i as f32 * 134.0;
         let gate_w = 980.0 * ease_out_expo(in_p);
         let (gate, toll) = (*gate, *toll);
-        let flash = if pay_p > 0.0 && pay_p < 1.0 { 1.0 - pay_p } else { 0.0 };
-        // The toll, paid, flows to the gauge — every cost travels.
-        let flow_a = clamp01((pay_p - 0.6) * 2.5);
+        let stamp = stamp_life(since_pay);
+        // The judder the landing prints on the bar (and its words).
+        let judder = if (0.10..0.30).contains(&since_pay) {
+            let u = (since_pay - 0.10) / 0.20;
+            (u * std::f32::consts::TAU * 2.0).sin() * 2.4 * (1.0 - u)
+        } else {
+            0.0
+        };
+        // The toll, paid, flows to the gauge — every cost travels, from
+        // the moment the stamp lands.
+        let flow_a = clamp01((since_pay - 0.16) / 0.40);
         if flow_a > 0.01 {
             let from = Offset::new(160.0 + gate_w, y + 48.0);
             let to = Offset::new(JAR.left + 40.0 + i as f32 * 60.0, JAR.top - 20.0);
@@ -455,7 +531,7 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::new()
                 .left(160.0)
-                .top(y)
+                .top(y + judder)
                 .width(1060.0)
                 .height(96.0)
                 .child(Painting::sized(Size::new(1060.0, 96.0), PaintWith::new(
@@ -464,34 +540,58 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
                         let w = gate_w.max(0.0);
                         book.rrect(pf::xywh(0.0, 8.0, w, 80.0), 14.0, pf::alpha(pf::SURFACE, 0.92));
                         book.stroke_rrect(pf::xywh(0.0, 8.0, w, 80.0), 14.0, pf::alpha(Color::WHITE, 0.05), 1.0);
-                        // The pay flash — one warm bloom on the gate.
-                        if flash > 0.01 && w > 220.0 {
-                            book.layer(flash * 0.8, 18.0, None, |b| {
-                                b.rrect(pf::xywh(w - 200.0, 8.0, 200.0, 80.0), 14.0, pf::alpha(BREAK_RED, 0.35 * flash));
-                            });
-                        }
-                        // The toll's stamp, right-aligned inside the bar.
-                        if pay_p > 0.5 && w > 220.0 {
-                            let stamp_a = (pay_p - 0.5) * 2.0;
-                            book.rrect(pf::xywh(w - 238.0, 22.0, 216.0, 52.0), 10.0, pf::alpha(BREAK_RED, 0.14 * stamp_a));
-                            book.stroke_rrect(pf::xywh(w - 238.0, 22.0, 216.0, 52.0), 10.0, pf::alpha(BREAK_RED, 0.65 * stamp_a), 1.2);
+                        // The toll's stamp — right-aligned inside the bar,
+                        // arriving the way a toll does.
+                        if stamp.on && w > 220.0 {
+                            let centre = Offset::new(w - 130.0, 48.0 + stamp.dy);
+                            let (sw, sh) = (216.0 * stamp.sx, 52.0 * stamp.sy);
+                            let r = Rect::new(
+                                centre.dx - sw * 0.5,
+                                centre.dy - sh * 0.5,
+                                centre.dx + sw * 0.5,
+                                centre.dy + sh * 0.5,
+                            );
+                            // The impact — two crisp rings, drawn light the
+                            // vector way (the soft flash this replaces was
+                            // the one blurred bloom left in the scene).
+                            if stamp.ring > 0.0 && stamp.ring < 1.0 {
+                                let e = ease_out_expo(stamp.ring);
+                                book.ring(centre, 60.0 + 72.0 * e, 1.6, pf::alpha(BREAK_RED, 0.55 * (1.0 - stamp.ring)));
+                                book.ring(centre, 44.0 + 42.0 * e, 1.0, pf::alpha(BREAK_RED, 0.35 * (1.0 - stamp.ring)));
+                            }
+                            // The flecks of ink the hit throws.
+                            if stamp.fly > 0.0 && stamp.fly < 1.0 {
+                                for k in 0..6 {
+                                    let ang = k as f32 * std::f32::consts::TAU / 6.0 + 0.35;
+                                    let d = 42.0 + 60.0 * ease_out_expo(stamp.fly);
+                                    book.circle(
+                                        Offset::new(centre.dx + ang.cos() * d * 1.3, centre.dy + ang.sin() * d * 0.6),
+                                        (2.6 - 1.8 * stamp.fly).max(0.6),
+                                        pf::alpha(BREAK_RED, 0.9 * (1.0 - stamp.fly)),
+                                    );
+                                }
+                            }
+                            // The stamp itself, its ink setting to rest.
+                            book.rrect(r, 10.0, pf::alpha(BREAK_RED, 0.10 + 0.07 * stamp.ink));
+                            book.stroke_rrect(r, 10.0, pf::alpha(BREAK_RED, 0.70 + 0.25 * stamp.ink), 1.2);
                         }
                     },
                 ))),
         );
         // The gate's words.
         stack = stack.push(super::frame::label(
-            160.0 + 32.0, y + 8.0, 620.0, 80.0,
+            160.0 + 32.0, y + 8.0 + judder, 620.0, 80.0,
             gate.to_string(),
             pf::geist(30.0).color(pf::alpha(INK, 0.95)),
             TextAlign::Left, in_p,
         ));
-        if pay_p > 0.5 && gate_w > 220.0 {
+        // The toll's own word — printed the instant the stamp lands.
+        if stamp.landed && gate_w > 220.0 {
             stack = stack.push(super::frame::label(
-                160.0 + gate_w - 238.0, y + 22.0, 216.0, 52.0,
+                160.0 + gate_w - 238.0, y + 22.0 + judder, 216.0, 52.0,
                 toll.to_string(),
                 pf::geist_mono(18.0).letter_spacing(0.8).color(BREAK_RED),
-                TextAlign::Center, (pay_p - 0.5) * 2.0,
+                TextAlign::Center, clamp01((since_pay - STAMP_AIRBORNE) / 0.12),
             ));
         }
     }

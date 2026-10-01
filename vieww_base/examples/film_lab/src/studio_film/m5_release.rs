@@ -14,7 +14,7 @@ use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, sprin
 use crate::product_film as pf;
 use super::filmkit as fk;
 use super::{
-    ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, H, INK, MUTED, SYN_TYPE, TERM_GREEN, W,
+    ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, INK, MUTED, SYN_TYPE, TERM_GREEN, W,
 };
 
 /// The repository — the call to action.
@@ -24,6 +24,38 @@ const REPO: &str = "github.com/tejakota/vieww_artifacts";
 const RELEASE: &str = "beta release available today";
 
 // ── Z12 · the_pullback ──────────────────────────────────────────────────────
+
+/// Where the end card's mark sits on screen — the rect `the_endcard`
+/// places it at, in *its* world coordinates.
+fn endcard_mark() -> Rect {
+    Rect::new((W - 184.0) * 0.5, 332.0, (W - 184.0) * 0.5 + 184.0, 516.0)
+}
+
+/// The end card's mark, translated into **this** scene's world — the
+/// anchor the studio collapses onto. [`frame::fit_of`] is the master's
+/// own fit arithmetic, so the anchor is where the incoming scene's fit
+/// will actually put the mark on screen; handing the studio's collapse
+/// to that exact rect is what makes the cut read as a *transform* rather
+/// than as one thing fading out and another fading in.
+fn mark_anchor() -> Rect {
+    let (s_t, o_t) = super::frame::fit_of("Z20");
+    let (s_e, o_e) = super::frame::fit_of("Z21");
+    let m = endcard_mark();
+    // The mark's rect on screen, through the end card's fit…
+    let scr = Rect::new(
+        m.left * s_e + o_e.dx,
+        m.top * s_e + o_e.dy,
+        m.right * s_e + o_e.dx,
+        m.bottom * s_e + o_e.dy,
+    );
+    // …and back through this scene's, into this scene's world.
+    Rect::new(
+        (scr.left - o_t.dx) / s_t,
+        (scr.top - o_t.dy) / s_t,
+        (scr.right - o_t.dx) / s_t,
+        (scr.bottom - o_t.dy) / s_t,
+    )
+}
 
 pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
@@ -68,45 +100,78 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
             pf::vignette(book, w, h, 0.55);
         }),
     )));
-    stack = stack.push(Positioned::fill().child(Painting::sized(
-        CANVAS,
-        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-            let (w, h) = (s.width, s.height);
-            let _ = (w, h, &s);
 
-
-        }),
-    )));
-
-    // The studio, receding — a panel that carries the act's shape: a
-    // sidebar, code lines, a preview. It shrinks toward the dark, tilts
-    // back in true perspective as it goes, and gives its light back to
-    // the stars.
+    // ── The studio becomes the mark ───────────────────────────────────
+    //
+    // The window does not merely shrink and fade — it collapses onto the
+    // exact rect where the end card's mark lives, its corners rounding to
+    // the mark's own, while the mark itself cross-dissolves in over it,
+    // panel by panel. What the audience sees across the cut is one
+    // object turning into another: the product, becoming its brand.
+    // Z21 then opens on the mark *already whole* — the handoff is the
+    // dissolve, and the transform continues instead of restarting.
     let panel_p = ease_in_out(clamp01(t / 0.9));
-    // The real studio — the same live application the act showed — as
-    // one plate that shrinks into the dark and gives its light back.
-    let k = 1.0 - 0.60 * panel_p;
-    let alpha = 1.0 - 0.85 * panel_p;
-    if alpha > 0.02 {
-        let (w, h) = (1920.0 * k, 1080.0 * k);
-        super::frame::plate(super::frame::Plate {
-            src: super::layout::APP,
-            dst: Rect::new(960.0 - w * 0.5, 540.0 - h * 0.5, 960.0 + w * 0.5, 540.0 + h * 0.5),
-            alpha,
-            radius: 14.0,
-            snap: None,
-            card: true,
-        });
+    let anchor = mark_anchor();
+    let app_world = super::layout::APP;
+    let shrink = ease_in_out(clamp01(t / 0.88));
+    let lerp = |a: f32, b: f32, u: f32| a + (b - a) * u;
+    let dst = Rect::new(
+        lerp(app_world.left, anchor.left, shrink),
+        lerp(app_world.top, anchor.top, shrink),
+        lerp(app_world.right, anchor.right, shrink),
+        lerp(app_world.bottom, anchor.bottom, shrink),
+    );
+    // The studio's fade is the mark's gain — a cross-dissolve at the
+    // same rect, the total light held. The plate is registered at every
+    // opacity, **including zero**: a studio scene that registers no plate
+    // at all gets the master's whole-window auto-plate, and this scene's
+    // studio being gone at its end is a choice, not an omission — the
+    // mark has taken its place.
+    let studio_a = 1.0 - ease_in_out(clamp01((t - 0.40) / 0.42));
+    super::frame::plate(super::frame::Plate {
+        src: super::layout::APP,
+        dst,
+        alpha: studio_a.max(0.0),
+        // The window's corners round into the mark's own as it
+        // collapses — 0.22 of a side is `brand::revealed`'s ground.
+        radius: lerp(14.0, anchor.width() * 0.22, shrink),
+        snap: None,
+        card: true,
+        bare: false,
+    });
+
+    // The mark, taking the studio's place panel by panel — the studio's
+    // own `brand::revealed`, so the film's logo and the product's cannot
+    // drift. It lands whole before the cut, and the end card receives it
+    // whole.
+    let mark_a = ease_out_expo(clamp01((t - 0.48) / 0.24));
+    let editor = ease_out_expo(clamp01((t - 0.55) / 0.18));
+    let preview = spring_out(clamp01((t - 0.70) / 0.18), 9.0, 0.62).clamp(0.0, 1.0);
+    if mark_a > 0.01 {
+        let side = anchor.width();
+        let at = Offset::new(anchor.left, anchor.top);
+        stack = stack.push(
+            Positioned::new()
+                .left(at.dx)
+                .top(at.dy)
+                .width(side)
+                .height(side)
+                .child(Opacity::new(mark_a).child(
+                    pf::brand_mark(side, editor, preview),
+                )),
+        );
     }
 
     // The light gives itself back — thin threads converging on the spot
-    // the studio left, riders flowing inward, the room absorbing it.
+    // the studio is becoming, riders flowing inward, the room absorbing
+    // it. Their centre is the mark's own: the rays feed the thing that
+    // is taking the studio's place.
     if panel_p > 0.05 {
         let rays = 7;
+        let centre = Offset::new((anchor.left + anchor.right) * 0.5, (anchor.top + anchor.bottom) * 0.5);
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                let centre = Offset::new(W * 0.5, H * 0.5);
                 for k in 0..rays {
                     let ang = k as f32 * std::f32::consts::TAU / rays as f32 + 0.4;
                     let from = Offset::new(
@@ -126,72 +191,6 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(super::frame::caption("The studio steps back. The engine stays.", 1002.0, clamp01((t - 0.55) / 0.14)));
     let _ = sec;
     stack.into()
-}
-
-/// The studio's ghost — sidebar, code, preview — drawn at `scale`
-/// about the canvas centre, its details dimming as it recedes.
-fn draw_studio_ghost(book: &mut Sketchbook, scale: f32, p: f32) {
-    let w = 980.0 * scale;
-    let h = 620.0 * scale;
-    let x0 = (W - w) * 0.5;
-    let y0 = (1080.0 - h) * 0.5;
-    let body = pf::xywh(x0, y0, w, h);
-    book.shadow(body, 24.0 * scale, vieww_foundation::Shadow::new(pf::alpha(Color::BLACK, 0.5), Offset::new(0.0, 12.0 * scale), 40.0));
-    book.rrect(body, 14.0 * scale, pf::alpha(viewwstudio_chrome(), 0.96));
-    book.stroke_rrect(body, 14.0 * scale, pf::alpha(Color::WHITE, 0.05), 1.0);
-
-    // The sidebar.
-    let side_w = 190.0 * scale;
-    book.rrect(pf::xywh(x0, y0, side_w, h), 14.0 * scale, pf::alpha(viewwstudio_chrome_1(), 0.9));
-    for row in 0..7 {
-        let rw = (60.0 + (row as f32 * 37.0) % 90.0) * scale;
-        book.rrect(
-            pf::xywh(x0 + 16.0 * scale, y0 + (26.0 + row as f32 * 30.0) * scale, rw, 9.0 * scale),
-            4.0 * scale,
-            pf::alpha(pf::FAINT, 0.5),
-        );
-    }
-
-    // The editor — code lines, one of them the accent (the edit).
-    let code_x = x0 + side_w + 22.0 * scale;
-    for row in 0..9 {
-        let cw = (110.0 + (row as f32 * 63.0) % 300.0) * scale;
-        let accent_row = row == 4;
-        book.rrect(
-            pf::xywh(code_x, y0 + (24.0 + row as f32 * 34.0) * scale, cw, 10.0 * scale),
-            5.0 * scale,
-            pf::alpha(if accent_row { ACCENT } else { pf::MUTED }, if accent_row { 0.7 - 0.4 * p } else { 0.35 }),
-        );
-    }
-
-    // The preview — the device frame with the truth card inside,
-    // small. The picture from Movement I, come home.
-    let pv_w = 300.0 * scale;
-    let pv = pf::xywh(x0 + w - pv_w - 24.0 * scale, y0 + 22.0 * scale, pv_w, h - 44.0 * scale);
-    book.rrect(pv, 12.0 * scale, pf::alpha(pf::MARK_GROUND, 0.95));
-    let card = pf::xywh(pv.left + 26.0 * scale, pv.top + 26.0 * scale, pv.width() - 52.0 * scale, (pv.height() - 52.0 * scale).min(pv.width() * 1.3));
-    book.rrect(card, 10.0 * scale, pf::alpha(pf::SURFACE, 0.9));
-    book.rrect(
-        pf::xywh(card.left, card.top, card.width(), 44.0 * scale),
-        10.0 * scale,
-        Gradient::vertical().with_dither().with_stops(&[(0.0, BRAND_FAR), (1.0, BRAND_NEAR)]),
-    );
-    for row in 0..3 {
-        book.rrect(
-            pf::xywh(card.left + 12.0 * scale, card.top + (58.0 + row as f32 * 26.0) * scale, card.width() - 24.0 * scale, 14.0 * scale),
-            6.0 * scale,
-            pf::alpha(pf::SURFACE_2, 0.9),
-        );
-    }
-}
-
-/// The studio's window chrome, spelled from the theme itself.
-fn viewwstudio_chrome() -> Color {
-    viewwstudio::StudioTheme::dark().window
-}
-
-fn viewwstudio_chrome_1() -> Color {
-    viewwstudio::StudioTheme::dark().chrome_1
 }
 
 // ── Z13 · the_endcard ───────────────────────────────────────────────────────
@@ -221,21 +220,17 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
             pf::vignette(book, w, h, 0.5);
         }),
     )));
-    stack = stack.push(Positioned::fill().child(Painting::sized(
-        CANVAS,
-        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-            let (w, h) = (s.width, s.height);
-            let _ = (w, h, &s);
 
-
-
-        }),
-    )));
-
-    // The mark — the studio's own, revealing panel by panel: the
-    // editor panel first, the preview panel over it, the ground
-    // always whole. `revealed` is the brand's own door. Behind it, a
-    // 3D halo — a ring in real perspective, riders orbiting it.
+    // The mark — **already whole.** The pullback ended with the studio
+    // collapsed onto this exact rect, the mark cross-dissolved in over
+    // it, panel by panel, and landed whole; the cut's dissolve hands it
+    // over mid-breath. Re-running the panel reveal here would restart
+    // the very transform the previous scene just completed — so the
+    // mark arrives as one object, settling the last few percent of the
+    // landing, and the scene spends its entrance budget on the name and
+    // the promise instead. Behind it, the 3D halo — a ring in real
+    // perspective, riders orbiting it — fades up around what the rays
+    // were feeding a cut ago.
     let ring_a = clamp01((t - 0.02) / 0.4) * 0.9;
     if ring_a > 0.01 {
         stack = stack.push(Positioned::fill().child(Painting::sized(
@@ -245,12 +240,30 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
             }),
         )));
     }
-    let editor_a = ease_out_expo(clamp01((t - 0.04) / 0.12));
-    let preview_a = spring_out(clamp01((t - 0.10) / 0.16), 9.0, 0.62);
-    if editor_a > 0.01 {
-        stack = stack.push(Positioned::new().left((W - 184.0) * 0.5).top(332.0).width(184.0).height(184.0).child(
-            pf::brand_mark(184.0, editor_a, preview_a.clamp(0.0, 1.0)),
-        ));
+    let mark_in = ease_out_expo(clamp01((sec - 0.05) / 0.15));
+    if mark_in > 0.01 {
+        // The landing's last breath: the mark settles from a hair under
+        // its own size, about its own centre — the physical receipt of
+        // the handoff, gone in half a second. (Timed on `sec`, the real
+        // clock: this scene is 18 s and its `t` crawls.)
+        let settle = spring_out(clamp01(sec / 0.55), 9.0, 0.62);
+        let k = 0.94 + 0.06 * settle;
+        let side = 184.0;
+        let inset = Offset::new(side * (1.0 - k) * 0.5, side * (1.0 - k) * 0.5);
+        stack = stack.push(
+            Positioned::new()
+                .left((W - side) * 0.5)
+                .top(332.0)
+                .width(side)
+                .height(side)
+                .child(Opacity::new(mark_in).child(
+                    Transformed::translate(inset).child(
+                        Transformed::scale(k, k).child(
+                            pf::brand_mark(side, 1.0, 1.0),
+                        ),
+                    ),
+                )),
+        );
         // (The sting's breathing glow behind the mark is gone with the
         // film's radial glows — the orbiting 3D ring above and the
         // underline below carry the release's altitude on their own.)

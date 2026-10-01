@@ -149,6 +149,15 @@ struct Cut {
     /// The dissolve's eased progress this frame: 0 = the previous frame
     /// whole, 1 = the new frame whole.
     e: f32,
+    /// Whether the window morph runs. It is for *entering* a carded
+    /// world — a studio window growing out of a pure scene's content
+    /// box. Studio→studio cuts morph every incoming plate out of the
+    /// predecessor's whole-window box, which reads as the new scene's
+    /// panes exploding out of a frame the audience already left — and,
+    /// with the pixel blend running on top, as stray content from the
+    /// scene before (Z16's device list ghosting through Z17's panel).
+    /// Inside the act the dissolve carries the cut alone.
+    morph: bool,
 }
 
 /// How long scene `si`'s entrance dissolve runs — `CUT_IN`, widened at
@@ -420,6 +429,7 @@ impl Rig {
                 radius: 14.0,
                 snap: None,
                 card: true,
+                bare: false,
             });
         }
 
@@ -433,14 +443,18 @@ impl Rig {
         // The cut: every scene after the cold open dissolves out of its
         // predecessor's final frame — the pixel blend in `finish_frame`
         // carries the A→B, and a carded world grows out of the previous
-        // scene's content box while it runs (see `compose`). The hold is
+        // scene's content box while it runs (see `compose`) — but only
+        // when the previous scene was not itself a carded world: inside
+        // the studio act the dissolve alone carries the cut. The hold is
         // seamless: it continues the end card's picture without a cut.
         let seamless = s.id == "Z22";
         let len = cut_len(si);
+        let morph = si > 0 && scenes()[si - 1].kind != Kind::Studio;
         self.cut = (si > 0 && !seamless && sec < len).then(|| Cut {
             prev_box: prev_window(si),
             prev_radius: prev_radius(si),
             e: ease_out_cubic(clamp01(sec / len)),
+            morph,
         });
 
         // The ground.
@@ -555,10 +569,11 @@ fn compose(rig: &Rig) -> Scene {
             // morph: a carded world begins as the previous scene's
             // content box (a sharp rectangle) and grows into its own
             // curved window, corners easing in, contents scaling within.
+            // Bare plates never morph — they are placed, not windowed.
             let mut dst = w.apply_rect(p.dst);
             let mut r = p.radius * w.a;
             if let Some(cut) = &rig.cut {
-                if p.card && cut.e < 0.999 {
+                if p.card && cut.morph && cut.e < 0.999 {
                     dst = lerp_rect(cut.prev_box, dst, cut.e);
                     r = cut.prev_radius + (r - cut.prev_radius) * cut.e;
                 }
@@ -576,7 +591,11 @@ fn compose(rig: &Rig) -> Scene {
                     Shadow::new(pf::alpha(Color::BLACK, 0.55), Offset::new(0.0, 14.0), 40.0),
                 );
             }
-            f.fill_rrect(dst, r, window_color().into());
+            // A bare plate places its pixels directly — no backdrop, no
+            // rim: the device's own silhouette on the scene's ground.
+            if !p.bare {
+                f.fill_rrect(dst, r, window_color().into());
+            }
             f.append(&round_clip(src_scene, t, dst, r), Transform::IDENTITY);
             if p.card {
                 f.stroke_rrect(dst, r, Stroke::new(1.0), pf::alpha(Color::WHITE, 0.10).into());
