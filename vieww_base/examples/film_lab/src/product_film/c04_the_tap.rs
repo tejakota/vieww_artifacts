@@ -12,16 +12,15 @@
 //! the proof.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{Ctx, LEDGER, W, alpha, caption, chip_row, clamp01, studio_chrome, tap_ring_at};
 use super::script::TAP_LIVE_ROW;
+use super::{alpha, caption, chip_row, clamp01, studio_chrome, tap_ring_at, Ctx, LEDGER, W};
 
 /// The tap's film-time (the script's own: up at 166.5).
 const TAP_AT: f32 = 166.5;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let _sec = ctx.sec;
 
@@ -40,7 +39,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(pre).child(
                         vieww_widget::Text::new("a real tap, through the real input pipeline")
-                            .style(super::geist_mono(22.0).letter_spacing(2.0).color(alpha(super::INK, 0.95)))
+                            .style(
+                                super::geist_mono(22.0)
+                                    .letter_spacing(2.0)
+                                    .color(alpha(super::INK, 0.95)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),
@@ -57,7 +60,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(post).child(
                         vieww_widget::Text::new("the route changed — the demo navigated, for real")
-                            .style(super::geist_mono(22.0).letter_spacing(2.0).color(alpha(LEDGER, 0.95)))
+                            .style(
+                                super::geist_mono(22.0)
+                                    .letter_spacing(2.0)
+                                    .color(alpha(LEDGER, 0.95)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),

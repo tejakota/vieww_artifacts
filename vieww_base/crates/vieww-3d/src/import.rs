@@ -35,22 +35,46 @@ fn decompose(m: &[f32; 16]) -> (Vec3, Quat, Vec3) {
     let mat = Mat4::from_cols_array(m);
     let col = |c: usize| Vec3::new(mat.m[c][0], mat.m[c][1], mat.m[c][2]);
     let s = Vec3::new(col(0).length(), col(1).length(), col(2).length());
-    let r = [col(0) / s.x.max(1e-12), col(1) / s.y.max(1e-12), col(2) / s.z.max(1e-12)];
+    let r = [
+        col(0) / s.x.max(1e-12),
+        col(1) / s.y.max(1e-12),
+        col(2) / s.z.max(1e-12),
+    ];
     // Rotation matrix → quaternion (Shepperd).
     let (m00, m11, m22) = (r[0].x, r[1].y, r[2].z);
     let trace = m00 + m11 + m22;
     let q = if trace > 0.0 {
         let s4 = (trace + 1.0).sqrt() * 2.0;
-        Quat::new((r[1].z - r[2].y) / s4, (r[2].x - r[0].z) / s4, (r[0].y - r[1].x) / s4, 0.25 * s4)
+        Quat::new(
+            (r[1].z - r[2].y) / s4,
+            (r[2].x - r[0].z) / s4,
+            (r[0].y - r[1].x) / s4,
+            0.25 * s4,
+        )
     } else if m00 > m11 && m00 > m22 {
         let s4 = (1.0 + m00 - m11 - m22).sqrt() * 2.0;
-        Quat::new(0.25 * s4, (r[1].x + r[0].y) / s4, (r[2].x + r[0].z) / s4, (r[1].z - r[2].y) / s4)
+        Quat::new(
+            0.25 * s4,
+            (r[1].x + r[0].y) / s4,
+            (r[2].x + r[0].z) / s4,
+            (r[1].z - r[2].y) / s4,
+        )
     } else if m11 > m22 {
         let s4 = (1.0 + m11 - m00 - m22).sqrt() * 2.0;
-        Quat::new((r[1].x + r[0].y) / s4, 0.25 * s4, (r[2].y + r[1].z) / s4, (r[2].x - r[0].z) / s4)
+        Quat::new(
+            (r[1].x + r[0].y) / s4,
+            0.25 * s4,
+            (r[2].y + r[1].z) / s4,
+            (r[2].x - r[0].z) / s4,
+        )
     } else {
         let s4 = (1.0 + m22 - m00 - m11).sqrt() * 2.0;
-        Quat::new((r[2].x + r[0].z) / s4, (r[2].y + r[1].z) / s4, 0.25 * s4, (r[0].y - r[1].x) / s4)
+        Quat::new(
+            (r[2].x + r[0].z) / s4,
+            (r[2].y + r[1].z) / s4,
+            0.25 * s4,
+            (r[0].y - r[1].x) / s4,
+        )
     };
     (mat.get_translation(), q.normalize(), s)
 }
@@ -59,7 +83,8 @@ fn decompose(m: &[f32; 16]) -> (Vec3, Quat, Vec3) {
 /// each glTF node (indexed like `g.nodes`).
 pub fn import_gltf(scene: &mut Scene, g: &Gltf, parent: Option<NodeId>) -> Vec<Option<NodeId>> {
     let mut ids = vec![None; g.nodes.len()];
-    let mut stack: Vec<(usize, Option<NodeId>)> = g.roots().into_iter().rev().map(|r| (r, parent)).collect();
+    let mut stack: Vec<(usize, Option<NodeId>)> =
+        g.roots().into_iter().rev().map(|r| (r, parent)).collect();
     while let Some((i, par)) = stack.pop() {
         let n = &g.nodes[i];
         let (t, r, s) = match &n.matrix {
@@ -70,8 +95,15 @@ pub fn import_gltf(scene: &mut Scene, g: &Gltf, parent: Option<NodeId>) -> Vec<O
                 Vec3::from_array(n.scale),
             ),
         };
-        let name = if n.name.is_empty() { format!("node{i}") } else { n.name.clone() };
-        let id = scene.add(Node::new(&name, Content::Empty).at(t).rotated(r).scaled(s), par);
+        let name = if n.name.is_empty() {
+            format!("node{i}")
+        } else {
+            n.name.clone()
+        };
+        let id = scene.add(
+            Node::new(&name, Content::Empty).at(t).rotated(r).scaled(s),
+            par,
+        );
         ids[i] = Some(id);
         if let Some(mesh) = n.mesh.and_then(|m| g.meshes.get(m)) {
             for (k, p) in mesh.primitives.iter().enumerate() {

@@ -553,7 +553,11 @@ mod tests {
     fn holds_before_first_after_last() {
         let track = Keyframes::new(1.0).with(Keyframe::to(1.0, 2.0));
         assert_eq!(track.at(ms(500)), 1.5);
-        assert_eq!(track.at(ms(5000)), 2.0, "past the end: the last value holds");
+        assert_eq!(
+            track.at(ms(5000)),
+            2.0,
+            "past the end: the last value holds"
+        );
     }
 
     #[test]
@@ -592,7 +596,11 @@ mod tests {
     fn a_keyframe_at_or_before_zero_takes_the_start() {
         let mut track = Keyframes::new(5.0);
         track.insert(Keyframe::to(-1.0, 1.0));
-        assert_eq!(track.frames().len(), 1, "the start was replaced, not stacked");
+        assert_eq!(
+            track.frames().len(),
+            1,
+            "the start was replaced, not stacked"
+        );
         assert_eq!(track.frames()[0].time, 0.0);
         assert_eq!(
             track.at(ms(0)),

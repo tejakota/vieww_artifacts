@@ -62,7 +62,7 @@ const LIT: usize = 7;
 
 /// The colour a row starts at.
 fn resting(index: usize) -> Color {
-    if index % 2 == 0 {
+    if index.is_multiple_of(2) {
         Color::rgb(226, 232, 240)
     } else {
         Color::rgb(237, 241, 247)

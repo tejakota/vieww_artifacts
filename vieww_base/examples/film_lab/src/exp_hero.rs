@@ -33,22 +33,22 @@ use vieww_foundation::{
     Transform3,
 };
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Opacity, Painting, PaintWith};
+use vieww_widget::{Filtered, Opacity, PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, tint, BG_DEEP, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_DEEP, VIOLET_SOFT,
+    alpha, clamp01, mix, tint, Rng, BG_DEEP, FAINT, INK, MUTED, VIOLET, VIOLET_DEEP, VIOLET_SOFT,
 };
 use crate::three_d::{draw_mesh, Camera, Mesh, MeshStyle, Vec3};
 
 use crate::exp_wordmark::{chrome_stops, Mark as Wordmark};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// Master resolution — the whole point of this plate.
-pub const HERO_W: f32 = 1920.0;
-pub const HERO_H: f32 = 1080.0;
-pub const HERO: Size = Size::new(HERO_W, HERO_H);
+pub(crate) const HERO_W: f32 = 1920.0;
+pub(crate) const HERO_H: f32 = 1080.0;
+pub(crate) const HERO: Size = Size::new(HERO_W, HERO_H);
 
 /// The shaft count and dust count — printed from the code's own values.
 const SHAFTS: usize = 11;
@@ -230,8 +230,10 @@ fn lq_contour(t: f32) -> Vec<((f32, f32), (u8, i32, i32), (f32, f32), (u8, i32, 
             let v10 = at(i + 1, j);
             let v11 = at(i + 1, j + 1);
             let v01 = at(i, j + 1);
-            let code = (v00 > 0.0) as u8 | ((v10 > 0.0) as u8) << 1
-                | ((v11 > 0.0) as u8) << 2 | ((v01 > 0.0) as u8) << 3;
+            let code = (v00 > 0.0) as u8
+                | ((v10 > 0.0) as u8) << 1
+                | ((v11 > 0.0) as u8) << 2
+                | ((v01 > 0.0) as u8) << 3;
             if code == 0 || code == 15 {
                 continue;
             }
@@ -318,7 +320,7 @@ fn lq_chain(
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let fan = shafts();
     let word = Wordmark::get();
     let knot = knot();
@@ -330,260 +332,278 @@ pub fn frame(t: f32) -> WidgetNode {
             let fan = fan.clone();
             let lq_loops = lq_loops.clone();
             move |book: &mut Sketchbook, size: Size| {
-            let w = size.width;
-            let h = size.height;
+                let w = size.width;
+                let h = size.height;
 
-            // The stage.
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (0.5, BG_DEEP),
-                    (1.0, Color::rgb(9, 9, 14)),
-                ]),
-            );
-
-            // Stars.
-            let mut rng = Rng::new(0x916);
-            for _ in 0..110 {
-                let x = rng.f01() * w;
-                let y = rng.f01() * h;
-                book.circle(Offset::new(x, y), 0.4 + rng.f01() * 0.9, alpha(Color::WHITE, 0.035));
-            }
-
-            // ── The floor grid (Transform3) ──
-            let horizon = 780.0;
-            let grid_t = Transform3::translation(0.0, -horizon, 0.0)
-                .then(Transform3::perspective(1100.0))
-                .then(Transform3::translation(0.0, horizon, 0.0));
-            let fade = clamp01(t / 0.10);
-            for zi in 0..14 {
-                let z = 30.0 + zi as f32 * 95.0;
-                for xi in -13..=13 {
-                    let x = xi as f32 * 150.0;
-                    if let (Some(a), Some(b)) = (
-                        grid_t.project(Offset::new(x, 1010.0), z),
-                        grid_t.project(Offset::new(x, 1010.0), z + 95.0),
-                    ) {
-                        let deep = 1.0 - z / 1400.0;
-                        book.line(a, b, alpha(VIOLET, 0.22 * fade * deep), 1.0);
-                    }
-                }
-                if let (Some(a), Some(b)) = (
-                    grid_t.project(Offset::new(-1950.0, 1010.0), z),
-                    grid_t.project(Offset::new(1950.0, 1010.0), z),
-                ) {
-                    let deep = 1.0 - z / 1400.0;
-                    book.line(a, b, alpha(FAINT, 0.14 * fade * deep), 1.0);
-                }
-            }
-
-            // ── The shafts: one Plus-blended blurred group (U-01/U-06) ──
-            let sway = (t * 0.8).sin();
-            let breath = 0.84 + 0.16 * (t * 1.6).sin();
-            book.blended_layer(fade, 12.0, BlendMode::Plus, None, |g| {
-                for s in &fan {
-                    let a = s.angle + sway * 0.08;
-                    let (sin, cos) = a.sin_cos();
-                    let len = (FLOOR - PIVOT.dy) / cos.max(0.2);
-                    let foot_x = PIVOT.dx + sin * len;
-                    let apex = 2.5;
-                    let mut quad = Path::new();
-                    quad.move_to(Offset::new(PIVOT.dx - apex, PIVOT.dy));
-                    quad.line_to(Offset::new(PIVOT.dx + apex, PIVOT.dy));
-                    quad.line_to(Offset::new(foot_x + s.spread, FLOOR));
-                    quad.line_to(Offset::new(foot_x - s.spread, FLOOR));
-                    quad.close();
-                    let bright = 0.15 * s.gain * breath;
-                    g.fill(
-                        quad,
-                        Gradient::vertical().with_dither().with_stops(&[
-                            (0.0, alpha(mix(Color::WHITE, VIOLET_SOFT, 0.25), bright * 1.5)),
-                            (0.35, alpha(VIOLET_SOFT, bright)),
-                            (1.0, alpha(VIOLET, bright * 0.12)),
-                        ]),
-                    );
-                    g.circle(
-                        Offset::new(foot_x, FLOOR + 8.0),
-                        s.spread * 1.9,
-                        Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.2), bright)),
-                            (1.0, alpha(VIOLET, 0.0)),
-                        ]),
-                    );
-                }
-            });
-
-            // ── The dust: 6,000 motes, lit by their own cone depth ──
-            book.blended_layer(fade, 0.0, BlendMode::Plus, None, |g| {
-                let mut rng = Rng::new(0x917);
-                for _ in 0..MOTES {
-                    let x0 = rng.f01() * w;
-                    let depth = 0.25 + rng.f01() * 0.75;
-                    let y0 = rng.f01() * h;
-                    let x = (x0 + t * 40.0 * depth) % w;
-                    let y = y0 + t * 14.0 * depth;
-                    let lit = beam_light(x, y, sway, &fan);
-                    if lit <= 0.015 {
-                        continue;
-                    }
-                    g.circle(
-                        Offset::new(x, y),
-                        0.7 + depth * 1.5,
-                        alpha(tint(VIOLET_SOFT, lit * 0.55), (lit * 1.15).min(1.0) * breath),
-                    );
-                }
-            });
-
-            // ── The source core ──
-            book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
-                g.circle(PIVOT, 6.0 * breath, alpha(Color::WHITE, 0.95 * fade));
-                g.circle(PIVOT, 14.0, alpha(tint(VIOLET_SOFT, 0.5), 0.6 * fade));
-            });
-            book.layer(1.0, 16.0, None, |g| {
-                g.circle(
-                    PIVOT,
-                    54.0 + 9.0 * (t * 1.6).sin(),
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(tint(Color::WHITE, 0.2), 0.28 * fade * breath)),
-                        (0.45, alpha(VIOLET_SOFT, 0.11 * fade)),
-                        (1.0, alpha(VIOLET, 0.0)),
+                // The stage.
+                book.rect(
+                    Rect::new(0.0, 0.0, w, h),
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, Color::rgb(6, 6, 10)),
+                        (0.5, BG_DEEP),
+                        (1.0, Color::rgb(9, 9, 14)),
                     ]),
                 );
-            });
 
-            // ── The knot: 3,200 quads through the manual camera ──
-            let spin = t * 0.55;
-            let mut cam = Camera {
-                eye: Vec3::new(0.0, 1.9, 6.4),
-                target: Vec3::new(0.62, 0.12, 0.0),
-                fov: 0.92,
-            };
-            // Slow orbital drift — the camera is the film's eye.
-            let orb = (t * 0.22).sin() * 0.55;
-            cam.eye = Vec3::new(6.4 * (0.35 + orb).sin(), 1.9, 6.4 * (0.35 + orb).cos());
-            // The knot's own rotation about Y.
-            let mut rotated = Mesh::new();
-            rotated.verts = knot
-                .verts
-                .iter()
-                .map(|v| Vec3::new(v.x * spin.cos() + v.z * spin.sin(), v.y,
-                    -v.x * spin.sin() + v.z * spin.cos()))
-                .collect();
-            rotated.quads = knot.quads.clone();
-            rotated.colors = knot.colors.clone();
-            let style = MeshStyle {
-                specular: 0.55,
-                shininess: 34.0,
-                ramp_light: 0.16,
-                ramp_dark: 0.34,
-                edge_alpha: 0.10,
-                ..MeshStyle::default()
-            };
-            // Shift the knot into frame-left position via an eye offset —
-            // cheap and honest: the camera looks at it.
-            cam.target = Vec3::new(0.62, 0.12, 0.0);
-            draw_mesh(book, &rotated, &cam, size, &style);
+                // Stars.
+                let mut rng = Rng::new(0x916);
+                for _ in 0..110 {
+                    let x = rng.f01() * w;
+                    let y = rng.f01() * h;
+                    book.circle(
+                        Offset::new(x, y),
+                        0.4 + rng.f01() * 0.9,
+                        alpha(Color::WHITE, 0.035),
+                    );
+                }
 
-            // ── The liquid mass: chained contours, glass fill, under-glow ──
-            if !lq_loops.is_empty() {
-                let mut bmin = (f32::MAX, f32::MAX);
-                let mut bmax = (f32::MIN, f32::MIN);
-                for l in &lq_loops {
-                    for p in l {
-                        bmin.0 = bmin.0.min(p.0);
-                        bmin.1 = bmin.1.min(p.1);
-                        bmax.0 = bmax.0.max(p.0);
-                        bmax.1 = bmax.1.max(p.1);
+                // ── The floor grid (Transform3) ──
+                let horizon = 780.0;
+                let grid_t = Transform3::translation(0.0, -horizon, 0.0)
+                    .then(Transform3::perspective(1100.0))
+                    .then(Transform3::translation(0.0, horizon, 0.0));
+                let fade = clamp01(t / 0.10);
+                for zi in 0..14 {
+                    let z = 30.0 + zi as f32 * 95.0;
+                    for xi in -13..=13 {
+                        let x = xi as f32 * 150.0;
+                        if let (Some(a), Some(b)) = (
+                            grid_t.project(Offset::new(x, 1010.0), z),
+                            grid_t.project(Offset::new(x, 1010.0), z + 95.0),
+                        ) {
+                            let deep = 1.0 - z / 1400.0;
+                            book.line(a, b, alpha(VIOLET, 0.22 * fade * deep), 1.0);
+                        }
+                    }
+                    if let (Some(a), Some(b)) = (
+                        grid_t.project(Offset::new(-1950.0, 1010.0), z),
+                        grid_t.project(Offset::new(1950.0, 1010.0), z),
+                    ) {
+                        let deep = 1.0 - z / 1400.0;
+                        book.line(a, b, alpha(FAINT, 0.14 * fade * deep), 1.0);
                     }
                 }
-                book.blended_layer(1.0, 18.0, BlendMode::Plus, None, |g| {
+
+                // ── The shafts: one Plus-blended blurred group (U-01/U-06) ──
+                let sway = (t * 0.8).sin();
+                let breath = 0.84 + 0.16 * (t * 1.6).sin();
+                book.blended_layer(fade, 12.0, BlendMode::Plus, None, |g| {
+                    for s in &fan {
+                        let a = s.angle + sway * 0.08;
+                        let (sin, cos) = a.sin_cos();
+                        let len = (FLOOR - PIVOT.dy) / cos.max(0.2);
+                        let foot_x = PIVOT.dx + sin * len;
+                        let apex = 2.5;
+                        let mut quad = Path::new();
+                        quad.move_to(Offset::new(PIVOT.dx - apex, PIVOT.dy));
+                        quad.line_to(Offset::new(PIVOT.dx + apex, PIVOT.dy));
+                        quad.line_to(Offset::new(foot_x + s.spread, FLOOR));
+                        quad.line_to(Offset::new(foot_x - s.spread, FLOOR));
+                        quad.close();
+                        let bright = 0.15 * s.gain * breath;
+                        g.fill(
+                            quad,
+                            Gradient::vertical().with_dither().with_stops(&[
+                                (
+                                    0.0,
+                                    alpha(mix(Color::WHITE, VIOLET_SOFT, 0.25), bright * 1.5),
+                                ),
+                                (0.35, alpha(VIOLET_SOFT, bright)),
+                                (1.0, alpha(VIOLET, bright * 0.12)),
+                            ]),
+                        );
+                        g.circle(
+                            Offset::new(foot_x, FLOOR + 8.0),
+                            s.spread * 1.9,
+                            Gradient::radial_fill().with_dither().with_stops(&[
+                                (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.2), bright)),
+                                (1.0, alpha(VIOLET, 0.0)),
+                            ]),
+                        );
+                    }
+                });
+
+                // ── The dust: 6,000 motes, lit by their own cone depth ──
+                book.blended_layer(fade, 0.0, BlendMode::Plus, None, |g| {
+                    let mut rng = Rng::new(0x917);
+                    for _ in 0..MOTES {
+                        let x0 = rng.f01() * w;
+                        let depth = 0.25 + rng.f01() * 0.75;
+                        let y0 = rng.f01() * h;
+                        let x = (x0 + t * 40.0 * depth) % w;
+                        let y = y0 + t * 14.0 * depth;
+                        let lit = beam_light(x, y, sway, &fan);
+                        if lit <= 0.015 {
+                            continue;
+                        }
+                        g.circle(
+                            Offset::new(x, y),
+                            0.7 + depth * 1.5,
+                            alpha(
+                                tint(VIOLET_SOFT, lit * 0.55),
+                                (lit * 1.15).min(1.0) * breath,
+                            ),
+                        );
+                    }
+                });
+
+                // ── The source core ──
+                book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
+                    g.circle(PIVOT, 6.0 * breath, alpha(Color::WHITE, 0.95 * fade));
+                    g.circle(PIVOT, 14.0, alpha(tint(VIOLET_SOFT, 0.5), 0.6 * fade));
+                });
+                book.layer(1.0, 16.0, None, |g| {
                     g.circle(
-                        Offset::new((bmin.0 + bmax.0) * 0.5, bmax.1 + 16.0),
-                        (bmax.0 - bmin.0) * 0.55,
+                        PIVOT,
+                        54.0 + 9.0 * (t * 1.6).sin(),
                         Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(VIOLET, 0.20)),
+                            (0.0, alpha(tint(Color::WHITE, 0.2), 0.28 * fade * breath)),
+                            (0.45, alpha(VIOLET_SOFT, 0.11 * fade)),
                             (1.0, alpha(VIOLET, 0.0)),
                         ]),
                     );
                 });
-                for l in &lq_loops {
-                    let mut p = Path::new();
-                    p.move_to(Offset::new(l[0].0, l[0].1));
-                    for q in &l[1..] {
-                        p.line_to(Offset::new(q.0, q.1));
+
+                // ── The knot: 3,200 quads through the manual camera ──
+                let spin = t * 0.55;
+                let mut cam = Camera {
+                    eye: Vec3::new(0.0, 1.9, 6.4),
+                    target: Vec3::new(0.62, 0.12, 0.0),
+                    fov: 0.92,
+                };
+                // Slow orbital drift — the camera is the film's eye.
+                let orb = (t * 0.22).sin() * 0.55;
+                cam.eye = Vec3::new(6.4 * (0.35 + orb).sin(), 1.9, 6.4 * (0.35 + orb).cos());
+                // The knot's own rotation about Y.
+                let mut rotated = Mesh::new();
+                rotated.verts = knot
+                    .verts
+                    .iter()
+                    .map(|v| {
+                        Vec3::new(
+                            v.x * spin.cos() + v.z * spin.sin(),
+                            v.y,
+                            -v.x * spin.sin() + v.z * spin.cos(),
+                        )
+                    })
+                    .collect();
+                rotated.quads = knot.quads.clone();
+                rotated.colors = knot.colors.clone();
+                let style = MeshStyle {
+                    specular: 0.55,
+                    shininess: 34.0,
+                    ramp_light: 0.16,
+                    ramp_dark: 0.34,
+                    edge_alpha: 0.10,
+                    ..MeshStyle::default()
+                };
+                // Shift the knot into frame-left position via an eye offset —
+                // cheap and honest: the camera looks at it.
+                cam.target = Vec3::new(0.62, 0.12, 0.0);
+                draw_mesh(book, &rotated, &cam, size, &style);
+
+                // ── The liquid mass: chained contours, glass fill, under-glow ──
+                if !lq_loops.is_empty() {
+                    let mut bmin = (f32::MAX, f32::MAX);
+                    let mut bmax = (f32::MIN, f32::MIN);
+                    for l in &lq_loops {
+                        for p in l {
+                            bmin.0 = bmin.0.min(p.0);
+                            bmin.1 = bmin.1.min(p.1);
+                            bmax.0 = bmax.0.max(p.0);
+                            bmax.1 = bmax.1.max(p.1);
+                        }
                     }
-                    p.close();
-                    book.layer(1.0, 0.0, None, |g| {
-                        g.fill(
-                            p.clone(),
-                            Gradient::vertical().with_dither().with_stops(&[
-                                (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.25), 0.50)),
-                                (0.45, alpha(VIOLET, 0.44)),
-                                (1.0, alpha(mix(VIOLET, BG_DEEP, 0.45), 0.54)),
+                    book.blended_layer(1.0, 18.0, BlendMode::Plus, None, |g| {
+                        g.circle(
+                            Offset::new((bmin.0 + bmax.0) * 0.5, bmax.1 + 16.0),
+                            (bmax.0 - bmin.0) * 0.55,
+                            Gradient::radial_fill().with_dither().with_stops(&[
+                                (0.0, alpha(VIOLET, 0.20)),
+                                (1.0, alpha(VIOLET, 0.0)),
                             ]),
                         );
                     });
-                    book.stroke(p, alpha(tint(VIOLET_SOFT, 0.35), 0.5), 1.5);
+                    for l in &lq_loops {
+                        let mut p = Path::new();
+                        p.move_to(Offset::new(l[0].0, l[0].1));
+                        for q in &l[1..] {
+                            p.line_to(Offset::new(q.0, q.1));
+                        }
+                        p.close();
+                        book.layer(1.0, 0.0, None, |g| {
+                            g.fill(
+                                p.clone(),
+                                Gradient::vertical().with_dither().with_stops(&[
+                                    (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.25), 0.50)),
+                                    (0.45, alpha(VIOLET, 0.44)),
+                                    (1.0, alpha(mix(VIOLET, BG_DEEP, 0.45), 0.54)),
+                                ]),
+                            );
+                        });
+                        book.stroke(p, alpha(tint(VIOLET_SOFT, 0.35), 0.5), 1.5);
+                    }
                 }
+
+                // ── The wordmark: outline door + chrome, placed left-low ──
+                let phase = (t * SECONDS / 6.0).fract();
+                let mark_left = 140.0;
+                let mark_y = 812.0;
+                // The Mark's letters carry their baseline at exp_wordmark::BASELINE
+                // baked in — offset by it, then the board's own line.
+                let placed = word.all.transformed(Transform::translate(Offset::new(
+                    mark_left,
+                    mark_y - crate::exp_wordmark::BASELINE,
+                )));
+                let (stops, _wrapped) = chrome_stops(phase);
+                let mut chrome = Gradient::horizontal().with_dither();
+                chrome = chrome.with_stops(&stops);
+                let fill_a = clamp01(t / 0.18) * clamp01((0.92 - t) / 0.08 + 1.0).min(1.0);
+                book.layer(fill_a, 0.0, None, |g| {
+                    g.fill(placed.clone(), chrome);
+                });
+                // The reflection — the placed path, mirrored about the floor line.
+                let mirror = Transform::scale(1.0, -1.0)
+                    .then(Transform::translate(Offset::new(0.0, 2.0 * (mark_y + 8.0))));
+                let flipped = placed.clone().transformed(mirror);
+                book.layer(fill_a * 0.8, 3.0, None, |g| {
+                    g.fill(flipped, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.2), 0.13));
+                });
+                book.rect(
+                    Rect::new(0.0, mark_y + 24.0, w, mark_y + 150.0),
+                    Gradient::vertical().with_stops(&[
+                        (0.0, alpha(BG_DEEP, 0.0)),
+                        (0.5, alpha(BG_DEEP, 0.7)),
+                        (1.0, alpha(BG_DEEP, 1.0)),
+                    ]),
+                );
+                book.line(
+                    Offset::new(mark_left - 40.0, mark_y + 5.0),
+                    Offset::new(mark_left + word.advance + 40.0, mark_y + 5.0),
+                    alpha(FAINT, 0.3 * fill_a),
+                    1.0,
+                );
+
+                // The floor line.
+                book.line(
+                    Offset::new(0.0, FLOOR),
+                    Offset::new(w, FLOOR),
+                    alpha(FAINT, 0.14 * fade),
+                    1.0,
+                );
+
+                // The vignette — heavier: a stage, not a page.
+                book.rect(
+                    Rect::new(0.0, 0.0, w, h),
+                    Gradient::radial(Offset::new(0.5, 0.46), 0.95)
+                        .with_dither()
+                        .with_stops(&[
+                            (0.45, alpha(Color::BLACK, 0.0)),
+                            (1.0, alpha(Color::BLACK, 0.48)),
+                        ]),
+                );
             }
-
-            // ── The wordmark: outline door + chrome, placed left-low ──
-            let phase = (t * SECONDS / 6.0).fract();
-            let mark_left = 140.0;
-            let mark_y = 812.0;
-            // The Mark's letters carry their baseline at exp_wordmark::BASELINE
-            // baked in — offset by it, then the board's own line.
-            let placed = word.all.transformed(Transform::translate(Offset::new(
-                mark_left,
-                mark_y - crate::exp_wordmark::BASELINE,
-            )));
-            let (stops, _wrapped) = chrome_stops(phase);
-            let mut chrome = Gradient::horizontal().with_dither();
-            chrome = chrome.with_stops(&stops);
-            let fill_a = clamp01(t / 0.18) * clamp01((0.92 - t) / 0.08 + 1.0).min(1.0);
-            book.layer(fill_a, 0.0, None, |g| {
-                g.fill(placed.clone(), chrome);
-            });
-            // The reflection — the placed path, mirrored about the floor line.
-            let mirror = Transform::scale(1.0, -1.0)
-                .then(Transform::translate(Offset::new(0.0, 2.0 * (mark_y + 8.0))));
-            let flipped = placed.clone().transformed(mirror);
-            book.layer(fill_a * 0.8, 3.0, None, |g| {
-                g.fill(flipped, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.2), 0.13));
-            });
-            book.rect(
-                Rect::new(0.0, mark_y + 24.0, w, mark_y + 150.0),
-                Gradient::vertical().with_stops(&[
-                    (0.0, alpha(BG_DEEP, 0.0)),
-                    (0.5, alpha(BG_DEEP, 0.7)),
-                    (1.0, alpha(BG_DEEP, 1.0)),
-                ]),
-            );
-            book.line(
-                Offset::new(mark_left - 40.0, mark_y + 5.0),
-                Offset::new(mark_left + word.advance + 40.0, mark_y + 5.0),
-                alpha(FAINT, 0.3 * fill_a),
-                1.0,
-            );
-
-            // The floor line.
-            book.line(
-                Offset::new(0.0, FLOOR),
-                Offset::new(w, FLOOR),
-                alpha(FAINT, 0.14 * fade),
-                1.0,
-            );
-
-            // The vignette — heavier: a stage, not a page.
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.46), 0.95).with_dither().with_stops(&[
-                    (0.45, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.48)),
-                ]),
-            );
-        }}),
+        }),
     );
 
     Stack::new()

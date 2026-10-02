@@ -20,15 +20,19 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, mix, tint, BG_DEEP, CANVAS, FAINT, INK, MUTED,
-    Rng, VIOLET, VIOLET_DEEP, VIOLET_SOFT};
-use crate::three_d::{box_mesh, displace_y, draw_dot3, draw_mesh, grid_mesh, horizon, torus_mesh,
-    Camera, Mesh, MeshStyle, Vec3};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, mix, tint, Rng, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET,
+    VIOLET_DEEP, VIOLET_SOFT,
+};
+use crate::three_d::{
+    box_mesh, displace_y, draw_dot3, draw_mesh, grid_mesh, horizon, torus_mesh, Camera, Mesh,
+    MeshStyle, Vec3,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The subject: a torus at this height, this size.
 const SUBJECT: Vec3 = Vec3::new(0.0, 3.4, 0.0);
@@ -69,11 +73,14 @@ fn pylons() -> Mesh {
         let center = Vec3::new(a.cos() * r, h * 0.5, a.sin() * r);
         let half = Vec3::new(0.45 + rng.f01() * 0.5, h, 0.45 + rng.f01() * 0.5);
         let shade = 0.7 + rng.f01() * 0.4;
-        m = m_join(m, box_mesh(
-            center,
-            half,
-            mix(VIOLET_DEEP, Color::rgb(38, 33, 56), shade),
-        ));
+        m = m_join(
+            m,
+            box_mesh(
+                center,
+                half,
+                mix(VIOLET_DEEP, Color::rgb(38, 33, 56), shade),
+            ),
+        );
     }
     m
 }
@@ -103,7 +110,8 @@ fn m_join(mut a: Mesh, b: Mesh) -> Mesh {
     let off = a.verts.len();
     a.verts.extend(b.verts);
     for q in b.quads {
-        a.quads.push([q[0] + off, q[1] + off, q[2] + off, q[3] + off]);
+        a.quads
+            .push([q[0] + off, q[1] + off, q[2] + off, q[3] + off]);
     }
     a.colors.extend(b.colors);
     a
@@ -133,7 +141,7 @@ fn dist_at(t: f32) -> f32 {
 
 /// The FOV that pins the subject: `2·atan(k/dist)`.
 #[must_use]
-pub fn fov_at(t: f32) -> f32 {
+pub(crate) fn fov_at(t: f32) -> f32 {
     2.0 * (k_comp() / dist_at(t)).atan()
 }
 
@@ -175,7 +183,7 @@ fn floor_span_px(cam: &Camera) -> f32 {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let cam = Camera {
         eye: eye_at(t),
         target: SUBJECT,
@@ -225,7 +233,14 @@ pub fn frame(t: f32) -> WidgetNode {
             // The dust — parallax is the retreat.
             for p in &dust {
                 let a = 0.16 + 0.28 * (1.0 - clamp01((p.y - 4.0) / 18.0));
-                draw_dot3(book, *p, 0.05, &cam, CANVAS, alpha(tint(VIOLET_SOFT, 0.45), a));
+                draw_dot3(
+                    book,
+                    *p,
+                    0.05,
+                    &cam,
+                    CANVAS,
+                    alpha(tint(VIOLET_SOFT, 0.45), a),
+                );
             }
 
             // The Plus glow pinned behind the subject — constant, because
@@ -254,10 +269,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.92).with_dither().with_stops(&[
-                    (0.6, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.92)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.6, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );
@@ -292,12 +309,25 @@ fn receipt_panel(t: f32, quads: usize) -> WidgetNode {
 
     let lines = [
         "DOLLY · THE VERTIGO · SUBJECT PINNED (U-04)".to_string(),
-        format!("dist {:.1} → {:.1} · fov {:.1}° → {:.1}°", dist_at(0.0), dist_at(t),
-            fov_at(0.0) * 360.0 / std::f32::consts::TAU, fov_at(t) * 360.0 / std::f32::consts::TAU),
-        format!("subject {:.1} px (t₀ {:.1}) · drift {:+.1} px", px_now, px0, px_now - px0),
+        format!(
+            "dist {:.1} → {:.1} · fov {:.1}° → {:.1}°",
+            dist_at(0.0),
+            dist_at(t),
+            fov_at(0.0) * 360.0 / std::f32::consts::TAU,
+            fov_at(t) * 360.0 / std::f32::consts::TAU
+        ),
+        format!(
+            "subject {:.1} px (t₀ {:.1}) · drift {:+.1} px",
+            px_now,
+            px0,
+            px_now - px0
+        ),
         format!("floor stretch ×{:.2} — measured, same projection", stretch),
-        format!("quads {} · dust 260 · push {:.0}%", quads,
-            clamp01((t - 0.12) / 0.68) * 100.0),
+        format!(
+            "quads {} · dust 260 · push {:.0}%",
+            quads,
+            clamp01((t - 0.12) / 0.68) * 100.0
+        ),
     ];
 
     let mut stack = Stack::new().push(
@@ -324,7 +354,9 @@ fn receipt_panel(t: f32, quads: usize) -> WidgetNode {
                 .height(15.0)
                 .child(
                     Text::new(line.clone()).style(
-                        TextStyle::new(11.0).monospace().color(alpha(mix(MUTED, INK, 0.4), 0.95)),
+                        TextStyle::new(11.0)
+                            .monospace()
+                            .color(alpha(mix(MUTED, INK, 0.4), 0.95)),
                     ),
                 ),
         );
@@ -359,10 +391,7 @@ fn receipt_panel(t: f32, quads: usize) -> WidgetNode {
                 let right = Vec3::new(-f.z, 0.0, f.x).norm();
                 let df = rel.dot(f);
                 let dr = rel.dot(right);
-                Offset::new(
-                    subj.dx + df / 46.0,
-                    (subj.dy - dr / 46.0).clamp(12.0, 88.0),
-                )
+                Offset::new(subj.dx + df / 46.0, (subj.dy - dr / 46.0).clamp(12.0, 88.0))
             };
 
             // The floor grid, in plan.

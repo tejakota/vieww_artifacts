@@ -34,15 +34,16 @@
 //! The plate prints the wavelength at which classical physics is already
 //! wrong by a factor of two.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, INK, MINT, MUTED, RED};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The constants, and nothing else typed ───────────────────────────────────
 
@@ -160,7 +161,7 @@ fn body_colour(t: f64) -> Color {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let temps = temperatures();
     let shown = ((t * temps.len() as f32 * 1.25).floor() as usize + 1).min(temps.len());
 
@@ -216,10 +217,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(5, 5, 9)),
-                    (1.0, Color::rgb(10, 10, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(5, 5, 9)), (1.0, Color::rgb(10, 10, 15))]),
             );
 
             // ── the star field, coloured by the spectra themselves ──
@@ -256,8 +256,7 @@ pub fn frame(t: f32) -> WidgetNode {
             let b_hi = 1e18_f64.ln();
             let mx = |l: f64| gx + ((l.ln() - l_lo) / (l_hi - l_lo)).clamp(0.0, 1.0) as f32 * gw;
             let my = |b: f64| {
-                gy + gh
-                    - ((b.max(1e-30).ln() - b_lo) / (b_hi - b_lo)).clamp(0.0, 1.0) as f32 * gh
+                gy + gh - ((b.max(1e-30).ln() - b_lo) / (b_hi - b_lo)).clamp(0.0, 1.0) as f32 * gh
             };
             // the visible band, marked
             book.rect(
@@ -331,14 +330,12 @@ pub fn frame(t: f32) -> WidgetNode {
             };
             let mmin = ms_c.first().copied().unwrap_or(1.0).ln();
             let mmax = ms_c.last().copied().unwrap_or(1.0).ln();
-            let ty = |m: f64| sy + sh - ((m.ln() - mmin) / (mmax - mmin)).clamp(0.0, 1.0) as f32 * sh;
+            let ty =
+                |m: f64| sy + sh - ((m.ln() - mmin) / (mmax - mmin)).clamp(0.0, 1.0) as f32 * sh;
             // the T⁴ law, anchored at the coolest measured point
             book.line(
                 Offset::new(tx(temps_c[0]), ty(ms_c[0])),
-                Offset::new(
-                    tx(30000.0),
-                    ty(ms_c[0] * (30000.0 / temps_c[0]).powi(4)),
-                ),
+                Offset::new(tx(30000.0), ty(ms_c[0] * (30000.0 / temps_c[0]).powi(4))),
                 alpha(MUTED, 0.45),
                 1.2,
             );
@@ -379,8 +376,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let lines = vec![
-        "PLANCK · THE RADIATION AXIS · THE CURVE THAT BROKE CLASSICAL PHYSICS".to_string(),
+    let lines = ["PLANCK · THE RADIATION AXIS · THE CURVE THAT BROKE CLASSICAL PHYSICS".to_string(),
         format!(
             "B_λ(T) = 2hc²/λ⁵ · 1/(e^(hc/λk_BT) − 1) evaluated at {shown}/{} temperatures, 1,000 K → 30,000 K · h, c, k_B are the exact SI values and nothing else is typed",
             temps.len()
@@ -406,8 +402,7 @@ pub fn frame(t: f32) -> WidgetNode {
         format!(
             "THE ULTRAVIOLET CATASTROPHE (red curve, the Sun at {t_uv} K): Rayleigh–Jeans is already 2× too large at λ = {:.0} nm — and rises without limit below it",
             uv_lambda * 1e9
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -422,7 +417,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

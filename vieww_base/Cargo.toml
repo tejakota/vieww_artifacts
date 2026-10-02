@@ -351,55 +351,28 @@ unreachable_pub = "warn"
 [workspace.lints.clippy]
 doc_markdown = "allow"
 
-# Broken in clippy 0.1.96 (rustc 1.96.1): it fires on initializers that are
-# *already* `const`, so it asks for the thing that is written on the line it
-# points at. Every `thread_local!` in this workspace that can be `const` already
-# is — `frame.rs`, `sliver_refresh.rs`, `app.rs`, `gallery.rs` — and the one that
-# cannot, `theme.rs`'s `Rc::new(ThemeData::light())`, is correctly left alone.
-#
-# Allowed workspace-wide rather than at the four sites because a lint that no
-# edit can satisfy carries no signal anywhere, and four `#[allow]`s would each
-# have to repeat this paragraph. **Delete this the next time the toolchain moves**
-# and let the four sites prove the lint is honest again.
-missing_const_for_thread_local = "allow"
-
-# ── Lints the corrected MSRV switched on ──────────────────────────────────
+# ── Lints the corrected MSRV switched on — and have since been applied ─────
 #
 # Clippy gates a lint on `rust-version`: it will not tell you to use an API your
 # declared minimum cannot compile. While this workspace claimed 1.85 — a figure
 # nothing could build on, see the note in `[workspace.package]` — every lint that
-# suggests a 1.86-to-1.89 API was suppressed everywhere, silently. Correcting the
-# figure to 1.89 turned all of them on at once.
+# suggests a 1.86-to-1.89 API was suppressed everywhere, silently. Correcting
+# the figure to 1.89 turned them all on at once, and they were allowed here
+# rather than applied so no mass edit rode along with the MSRV correction.
 #
-# They are real suggestions, not false positives, and none of them changes
-# behaviour. They are allowed here rather than applied because each is a *mass*
-# edit to code that is worth reading carefully, and doing several of those in the
-# same change as an MSRV correction is how a real defect hides in the diff.
+# **All three have now been applied, and this block is the receipt.**
 #
-# **Each is its own change, with the test suite as the check, and each entry
-# below is deleted when its last call site is gone.**
+# * `chunks_exact_to_as_chunks` — every `chunks_exact(4)`/`chunks_exact(3)`
+#   per-pixel and per-triangle loop now walks `as_chunks::<N>().0`, verified
+#   against the parity, retained-repaint and native suites (`vieww-paint`
+#   `--features native`, 269 tests; 884 across the effects/video/mesh/3d
+#   crates that carry the rest of the pixel loops).
+# * `manual_is_multiple_of` — the unsigned `% n == 0` sites now read
+#   `.is_multiple_of(n)`; the signed sites keep `%` because the method does
+#   not exist there.
+# * `missing_const_for_thread_local` — the clippy 1.96 false positive never
+#   fired again on 1.98, so the allow came out without touching a site.
+#
+# The rule the old block stated still stands: a lint allowed workspace-wide is
+# deleted when its last call site is gone, not left to rot.
 
-# `slice::as_chunks`, stabilised in 1.88. **Seventeen** call sites, every one a
-# per-pixel loop: `vieww-effects`' blend and matrix passes, `vieww-paint`'s
-# target readback, `vieww-image`'s atlas and mipmap chains, `vieww-hal`'s
-# swapchain copy.
-#
-# The rewrite is not the substitution the lint's `help` line offers.
-# `as_chunks_mut::<4>()` returns a `(&mut [[u8; 4]], &mut [u8])` pair, so a
-# `.zip()` over two of them changes shape as well as type, and the remainder
-# slice becomes something the loop must use or explicitly discard. Seventeen of
-# those, at once, in the code that writes every pixel this framework draws, on
-# the strength of a style lint — that is how a subtle blend bug gets in. Do them
-# against the parity and retained-repaint suites.
-chunks_exact_to_as_chunks = "allow"
-
-# `u*::is_multiple_of`, stabilised in 1.87 for unsigned integers. **Thirty-nine**
-# `% n == 0` sites, spread across `vieww-foundation`'s leap-year rule and blur
-# kernel sizing, `vieww-paint`'s dash phase, the studio's image budget, and a
-# long tail of `index % 2 == 0` row striping in tests and gallery examples.
-#
-# `.is_multiple_of(n)` reads better than `% n == 0` and this list should shrink
-# to nothing. It is one mechanical pass — but only over the *unsigned* sites,
-# because the method does not exist for signed integers, and telling those apart
-# is per-site work rather than a search and replace.
-manual_is_multiple_of = "allow"

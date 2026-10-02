@@ -15,7 +15,7 @@ use vieww_foundation::TextAlign;
 use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{Ctx, LEDGER, MUTED, W, alpha, caption, chip_row, clamp01, studio_chrome, xywh};
+use super::{alpha, caption, chip_row, clamp01, studio_chrome, xywh, Ctx, LEDGER, MUTED, W};
 
 /// The accent swaps' film-times (the script's own).
 const TEAL_AT: f32 = 214.5;
@@ -30,7 +30,7 @@ const ACCENTS: [(&str, [u8; 3], f32); 4] = [
     ("Rose", [0xC0, 0x28, 53], 0.0),
 ];
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -48,7 +48,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(head_a).child(
                         vieww_widget::Text::new("one accent, the whole product re-themed")
-                            .style(super::geist(26.0).letter_spacing(1.6).color(alpha(super::INK, 0.95)))
+                            .style(
+                                super::geist(26.0)
+                                    .letter_spacing(1.6)
+                                    .color(alpha(super::INK, 0.95)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),
@@ -75,27 +79,28 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(240.0)
                     .width(96.0)
                     .height(96.0)
-                    .child(
-                        vieww_widget::Opacity::new(rail_a).child(Painting::sized(
-                            Size::new(96.0, 96.0),
-                            PaintWith::new(move |book: &mut vieww_foundation::Sketchbook, _s: Size| {
-                                // The swatch — the accent's ramp, as the
-                                // studio draws its own buttons.
-                                book.rrect(
-                                    xywh(14.0, 14.0, 68.0, 68.0),
-                                    14.0,
-                                    vieww_foundation::Gradient::vertical().with_stops(&[
-                                        (0.0, color),
-                                        (1.0, alpha(color, 0.75)),
-                                    ]),
+                    .child(vieww_widget::Opacity::new(rail_a).child(Painting::sized(
+                        Size::new(96.0, 96.0),
+                        PaintWith::new(move |book: &mut vieww_foundation::Sketchbook, _s: Size| {
+                            // The swatch — the accent's ramp, as the
+                            // studio draws its own buttons.
+                            book.rrect(
+                                xywh(14.0, 14.0, 68.0, 68.0),
+                                14.0,
+                                vieww_foundation::Gradient::vertical()
+                                    .with_stops(&[(0.0, color), (1.0, alpha(color, 0.75))]),
+                            );
+                            // The current one's ring.
+                            if is_current {
+                                book.ring(
+                                    Offset::new(48.0, 48.0),
+                                    44.0,
+                                    2.4,
+                                    alpha(super::INK, 0.9),
                                 );
-                                // The current one's ring.
-                                if is_current {
-                                    book.ring(Offset::new(48.0, 48.0), 44.0, 2.4, alpha(super::INK, 0.9));
-                                }
-                            }),
-                        )),
-                    ),
+                            }
+                        }),
+                    ))),
             );
             // The name.
             stack = stack.push(
@@ -107,11 +112,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         vieww_widget::Opacity::new(rail_a).child(
                             vieww_widget::Text::new(name.to_string())
-                                .style(
-                                    super::geist_mono(13.0)
-                                        .letter_spacing(1.4)
-                                        .color(alpha(if is_current { super::INK } else { MUTED }, if is_current { 0.95 } else { 0.7 })),
-                                )
+                                .style(super::geist_mono(13.0).letter_spacing(1.4).color(alpha(
+                                    if is_current { super::INK } else { MUTED },
+                                    if is_current { 0.95 } else { 0.7 },
+                                )))
                                 .align(TextAlign::Center),
                         ),
                     ),
@@ -136,7 +140,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         vieww_widget::Opacity::new(a).child(
                             vieww_widget::Text::new(text)
-                                .style(super::geist_mono(16.0).letter_spacing(1.6).color(alpha(LEDGER, 0.95)))
+                                .style(
+                                    super::geist_mono(16.0)
+                                        .letter_spacing(1.6)
+                                        .color(alpha(LEDGER, 0.95)),
+                                )
                                 .align(TextAlign::Center),
                         ),
                     ),

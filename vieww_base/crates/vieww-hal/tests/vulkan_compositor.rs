@@ -87,8 +87,10 @@ fn assert_parity(name: &str, scene: &Scene, clear: Color, tolerance: u8, allowed
     let mut worst = (0u8, 0usize, 0usize, [0u8; 4], [0u8; 4]);
     let mut over = 0usize;
     for (i, (g, c)) in gpu_pixels
-        .chunks_exact(4)
-        .zip(cpu_pixels.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(cpu_pixels.as_chunks::<4>().0)
         .enumerate()
     {
         let d = (0..4).map(|k| g[k].abs_diff(c[k])).max().unwrap_or(0);
@@ -835,8 +837,10 @@ fn a_renderer_shared_between_planners_never_draws_a_stale_atlas() {
             .render_to_pixels(scene, WIDTH, HEIGHT, Color::WHITE)
             .unwrap();
         let over = pixels
-            .chunks_exact(4)
-            .zip(cpu.data().chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(cpu.data().as_chunks::<4>().0)
             .filter(|(g, c)| (0..4).any(|k| g[k].abs_diff(c[k]) > 2))
             .count();
         assert_eq!(

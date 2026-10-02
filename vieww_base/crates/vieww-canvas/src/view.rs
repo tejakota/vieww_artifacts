@@ -25,14 +25,19 @@ pub struct CanvasView {
 
 impl fmt::Debug for CanvasView {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CanvasView").field("stage", &self.stage.borrow()).finish_non_exhaustive()
+        f.debug_struct("CanvasView")
+            .field("stage", &self.stage.borrow())
+            .finish_non_exhaustive()
     }
 }
 
 impl CanvasView {
     #[must_use]
     pub fn new(stage: Rc<RefCell<Stage>>) -> Self {
-        Self { stage, transformer: None }
+        Self {
+            stage,
+            transformer: None,
+        }
     }
 
     /// Draw a transformer's handles over the stage.
@@ -79,12 +84,17 @@ impl Widget for CanvasView {
         let mut layers: Vec<WidgetNode> = vec![Painting::sized(size, Recorded(book)).into()];
         for t in texts {
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let color = t.color.with_alpha((f32::from(t.color.a) * t.opacity).round().clamp(0.0, 255.0) as u8);
+            let color = t
+                .color
+                .with_alpha((f32::from(t.color.a) * t.opacity).round().clamp(0.0, 255.0) as u8);
             layers.push(
                 Positioned::new()
                     .left(0.0)
                     .top(0.0)
-                    .child(Transformed::new(t.transform).child(Text::new(t.text).size(t.size).color(color)))
+                    .child(
+                        Transformed::new(t.transform)
+                            .child(Text::new(t.text).size(t.size).color(color)),
+                    )
                     .into(),
             );
         }

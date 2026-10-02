@@ -22,15 +22,16 @@
 
 use std::f64::consts::PI;
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The law ─────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ const CX: f32 = 560.0; // dial centre
 const CY: f32 = 420.0;
 const R_DIAL: f32 = 235.0; // floor dial radius
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let t = t as f64;
     let hours = t * 24.0;
     let theta = plane_angle(t);
@@ -92,26 +93,15 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the Panthéon's interior at blue hour.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 7, 11)),
-                    (1.0, Color::rgb(13, 13, 18)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(7, 7, 11)), (1.0, Color::rgb(13, 13, 18))]),
             );
 
             // The dome hint — a great arc overhead.
             book.blended_layer(0.7, 0.0, BlendMode::Plus, None, |g| {
-                g.ring(
-                    Offset::new(CX, 1180.0),
-                    1040.0,
-                    90.0,
-                    alpha(VIOLET, 0.055),
-                );
-                g.ring(
-                    Offset::new(CX, 1180.0),
-                    970.0,
-                    60.0,
-                    alpha(VIOLET, 0.04),
-                );
+                g.ring(Offset::new(CX, 1180.0), 1040.0, 90.0, alpha(VIOLET, 0.055));
+                g.ring(Offset::new(CX, 1180.0), 970.0, 60.0, alpha(VIOLET, 0.04));
             });
 
             // ── The floor dial: 24 hour marks, roman every second ──
@@ -125,8 +115,10 @@ pub fn frame(t: f32) -> WidgetNode {
                 book.line(
                     Offset::new(CX + ox * r0, CY + oy * r0),
                     Offset::new(CX + ox * R_DIAL, CY + oy * R_DIAL),
-                    alpha(if major { MUTED } else { Color::rgb(70, 78, 92) },
-                          if major { 0.8 } else { 0.6 }),
+                    alpha(
+                        if major { MUTED } else { Color::rgb(70, 78, 92) },
+                        if major { 0.8 } else { 0.6 },
+                    ),
                     if major { 1.6 } else { 1.0 },
                 );
             }
@@ -198,7 +190,16 @@ pub fn frame(t: f32) -> WidgetNode {
             book.circle(bob, 13.0, Color::rgb(232, 230, 238));
             book.ring(bob, 13.0, 1.6, alpha(INK, 0.9));
             // the mount
-            book.rrect(Rect::new(anchor.dx - 26.0, anchor.dy - 14.0, anchor.dx + 26.0, anchor.dy + 6.0), 4.0, Color::rgb(24, 24, 32));
+            book.rrect(
+                Rect::new(
+                    anchor.dx - 26.0,
+                    anchor.dy - 14.0,
+                    anchor.dx + 26.0,
+                    anchor.dy + 6.0,
+                ),
+                4.0,
+                Color::rgb(24, 24, 32),
+            );
 
             // ── The counter-dial: the star field turning +360°, right ──
             let (dx, dy, dr) = (1075.0, 260.0, 108.0);
@@ -214,7 +215,7 @@ pub fn frame(t: f32) -> WidgetNode {
             let mut star_pts: Vec<(f32, f32, f32)> = Vec::new();
             for _ in 0..90 {
                 let a0 = rng.f01() as f64 * std::f64::consts::TAU;
-                let rr = (rng.f01() as f32).powf(0.5) * dr * 0.92;
+                let rr = rng.f01().powf(0.5) * dr * 0.92;
                 let b = rng.f01();
                 star_pts.push((a0 as f32, rr, b));
             }
@@ -317,7 +318,10 @@ fn receipt_panel(hours: f64, rate_fit: f64) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

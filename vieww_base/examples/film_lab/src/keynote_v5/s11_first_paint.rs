@@ -11,14 +11,14 @@
 //!
 //! Taps 1 (first paint, t≈0.58) and 2 (the button, t≈0.86) fire here.
 
-use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle, FontWeight};
+use vieww_foundation::{Offset, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, spring_out, tint, xywh, INK, MUTED, VIOLET, VIOLET_SOFT, MINT};
+use crate::film_lib::{alpha, clamp01, ease_out_cubic, spring_out, tint, MINT, VIOLET_SOFT};
 
 use super::studio;
-use super::{Ctx};
+use super::Ctx;
 
 /// The type-on window (scene fraction).
 const TYPE_T0: f32 = 0.08;
@@ -28,15 +28,13 @@ const PAINT_T: f32 = 0.58;
 /// The button tap — tap 2.
 const TAP_T: f32 = 0.86;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
     let ladder = ctx.ladder;
 
     // The typing progress — bursts and pauses (the keystroke rhythm).
-    let typed = crate::film_lib::clamp01(
-        (t - TYPE_T0) / (TYPE_T1 - TYPE_T0),
-    );
+    let typed = crate::film_lib::clamp01((t - TYPE_T0) / (TYPE_T1 - TYPE_T0));
     let typed_eased = super::ease_out_type(typed);
 
     // The alive curve: blooms at PAINT_T over ~0.5s.
@@ -53,7 +51,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     };
 
     let mut spec = studio::Spec {
-        code: studio::Code::Say { typed: typed_eased, blink: ctx.sec },
+        code: studio::Code::Say {
+            typed: typed_eased,
+            blink: ctx.sec,
+        },
         app: {
             let mut app = studio::App::new(if t >= TAP_T { 1 } else { 0 }, flash, abs);
             app.alive = alive;
@@ -84,7 +85,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                             .top(studio::TITLE_H + 120.0 + rise - (1.0 - a) * 20.0)
                             .width(340.0)
                             .height(44.0)
-                            .child(Opacity::new(a.max(0.01)).child(super::chip(alive_txt, 16.0, tint(MINT, 0.1)))),
+                            .child(Opacity::new(a.max(0.01)).child(super::chip(
+                                alive_txt,
+                                16.0,
+                                tint(MINT, 0.1),
+                            ))),
                     )
                     .into(),
             ),
@@ -92,8 +97,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         };
     }
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
+    let mut stack = Stack::new().push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
 
     // The button-tap flourish — a ring blooming from the button when the
     // witness counter is born (tap 2).
@@ -108,7 +112,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             stack = stack.push(Positioned::fill().child(Painting::sized(
                 super::CANVAS,
                 PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    book.ring(Offset::new(cx, cy), r, 2.4, alpha(VIOLET_SOFT, ring_a * 0.8));
+                    book.ring(
+                        Offset::new(cx, cy),
+                        r,
+                        2.4,
+                        alpha(VIOLET_SOFT, ring_a * 0.8),
+                    );
                 }),
             )));
         }

@@ -19,9 +19,9 @@ use vieww_paint::native::NativeRenderer;
 use vieww_render::FrameDriver;
 use vieww_widget::WidgetNode;
 
-pub const CANVAS_W: f32 = 1280.0;
-pub const CANVAS_H: f32 = 720.0;
-pub const CANVAS: Size = Size::new(CANVAS_W, CANVAS_H);
+pub(crate) const CANVAS_W: f32 = 1280.0;
+pub(crate) const CANVAS_H: f32 = 720.0;
+pub(crate) const CANVAS: Size = Size::new(CANVAS_W, CANVAS_H);
 
 // ── The palette — from the author's own reference sheets ───────────────────
 //
@@ -29,28 +29,28 @@ pub const CANVAS: Size = Size::new(CANVAS_W, CANVAS_H);
 // violet accent, deep purple / magenta / cyan nebula tones. These constants
 // are the film's; scenes may vary them, experiments should not.
 
-pub const BG: Color = Color::rgb(10, 10, 12);
-pub const BG_DEEP: Color = Color::rgb(6, 6, 9);
-pub const SURFACE: Color = Color::rgb(18, 18, 22);
-pub const INK: Color = Color::rgb(240, 240, 242);
-pub const MUTED: Color = Color::rgb(139, 148, 158);
-pub const FAINT: Color = Color::rgb(90, 98, 110);
+pub(crate) const BG: Color = Color::rgb(10, 10, 12);
+pub(crate) const BG_DEEP: Color = Color::rgb(6, 6, 9);
+pub(crate) const SURFACE: Color = Color::rgb(18, 18, 22);
+pub(crate) const INK: Color = Color::rgb(240, 240, 242);
+pub(crate) const MUTED: Color = Color::rgb(139, 148, 158);
+pub(crate) const FAINT: Color = Color::rgb(90, 98, 110);
 
-pub const VIOLET: Color = Color::rgb(139, 92, 246);
-pub const VIOLET_SOFT: Color = Color::rgb(167, 139, 250);
-pub const VIOLET_DEEP: Color = Color::rgb(76, 29, 149);
-pub const MAGENTA: Color = Color::rgb(190, 24, 93);
-pub const CYAN: Color = Color::rgb(14, 165, 233);
-pub const CYAN_SOFT: Color = Color::rgb(103, 232, 249);
-pub const MINT: Color = Color::rgb(52, 211, 153);
-pub const AMBER: Color = Color::rgb(245, 158, 11);
-pub const RED: Color = Color::rgb(248, 81, 73);
+pub(crate) const VIOLET: Color = Color::rgb(139, 92, 246);
+pub(crate) const VIOLET_SOFT: Color = Color::rgb(167, 139, 250);
+pub(crate) const VIOLET_DEEP: Color = Color::rgb(76, 29, 149);
+pub(crate) const MAGENTA: Color = Color::rgb(190, 24, 93);
+pub(crate) const CYAN: Color = Color::rgb(14, 165, 233);
+pub(crate) const CYAN_SOFT: Color = Color::rgb(103, 232, 249);
+pub(crate) const MINT: Color = Color::rgb(52, 211, 153);
+pub(crate) const AMBER: Color = Color::rgb(245, 158, 11);
+pub(crate) const RED: Color = Color::rgb(248, 81, 73);
 
-pub fn alpha(c: Color, a: f32) -> Color {
+pub(crate) fn alpha(c: Color, a: f32) -> Color {
     Color::rgba(c.r, c.g, c.b, (a * 255.0).clamp(0.0, 255.0) as u8)
 }
 
-pub fn mix(a: Color, b: Color, t: f32) -> Color {
+pub(crate) fn mix(a: Color, b: Color, t: f32) -> Color {
     a.lerp(b, t.clamp(0.0, 1.0))
 }
 
@@ -58,22 +58,22 @@ pub fn mix(a: Color, b: Color, t: f32) -> Color {
 /// *edges* (left, top, right, bottom); this is the conversion the film's
 /// own boards keep needing. (Origin-anchored rects are identical either
 /// way; offset rects are not — this is the safe spelling.)
-pub fn xywh(x: f32, y: f32, w: f32, h: f32) -> vieww_foundation::Rect {
+pub(crate) fn xywh(x: f32, y: f32, w: f32, h: f32) -> vieww_foundation::Rect {
     vieww_foundation::Rect::new(x, y, x + w.max(0.0), y + h.max(0.0))
 }
 
 /// Lighten toward white (a "tint").
-pub fn tint(c: Color, t: f32) -> Color {
+pub(crate) fn tint(c: Color, t: f32) -> Color {
     mix(c, Color::WHITE, t)
 }
 
 /// Darken toward black (a "shade").
-pub fn shade(c: Color, t: f32) -> Color {
+pub(crate) fn shade(c: Color, t: f32) -> Color {
     mix(c, Color::BLACK, t)
 }
 
 /// Multiply a color's channels by a scalar — the Lambert term's friend.
-pub fn scaled(c: Color, k: f32) -> Color {
+pub(crate) fn scaled(c: Color, k: f32) -> Color {
     Color::rgb(
         (c.r as f32 * k).clamp(0.0, 255.0) as u8,
         (c.g as f32 * k).clamp(0.0, 255.0) as u8,
@@ -90,7 +90,7 @@ pub fn scaled(c: Color, k: f32) -> Color {
 /// The wait's cadence: a 24 Hz clock sampled inside a 60 Hz render.
 /// Returns the *held* 24 Hz value for film-time `t` (seconds) — the judder
 /// is real 2-3-2-3 hold pattern, not a rate change.
-pub fn held_24_in_60(t: f32) -> f32 {
+pub(crate) fn held_24_in_60(t: f32) -> f32 {
     let step = (t * 24.0).floor() / 24.0;
     (step * 60.0).round() / 60.0
 }
@@ -100,18 +100,16 @@ pub fn held_24_in_60(t: f32) -> f32 {
 /// xorshift64* — tiny, seedable, reproducible. The film's noise never comes
 /// from the machine's entropy; grain re-renders to the byte.
 #[derive(Clone)]
-pub struct Rng {
+pub(crate) struct Rng {
     state: u64,
 }
 
 impl Rng {
-    pub fn new(seed: u64) -> Self {
-        Self {
-            state: seed | 1,
-        }
+    pub(crate) fn new(seed: u64) -> Self {
+        Self { state: seed | 1 }
     }
 
-    pub fn u64(&mut self) -> u64 {
+    pub(crate) fn u64(&mut self) -> u64 {
         let mut x = self.state;
         x ^= x << 13;
         x ^= x >> 7;
@@ -121,43 +119,51 @@ impl Rng {
     }
 
     /// Uniform in `[0, 1)`.
-    pub fn f01(&mut self) -> f32 {
+    pub(crate) fn f01(&mut self) -> f32 {
         (self.u64() >> 11) as f32 / (1u64 << 53) as f32
     }
 
     /// Uniform in `[-1, 1]`.
-    pub fn sym(&mut self) -> f32 {
+    pub(crate) fn sym(&mut self) -> f32 {
         self.f01() * 2.0 - 1.0
     }
 }
 
 // ── Easing ──────────────────────────────────────────────────────────────────
 
-pub fn clamp01(t: f32) -> f32 {
+pub(crate) fn clamp01(t: f32) -> f32 {
     t.clamp(0.0, 1.0)
 }
 
-pub fn smoothstep(t: f32) -> f32 {
+pub(crate) fn smoothstep(t: f32) -> f32 {
     let t = clamp01(t);
     t * t * (3.0 - 2.0 * t)
 }
 
-pub fn ease_out_cubic(t: f32) -> f32 {
+pub(crate) fn ease_out_cubic(t: f32) -> f32 {
     let t = clamp01(t);
     1.0 - (1.0 - t).powi(3)
 }
 
-pub fn ease_out_expo(t: f32) -> f32 {
+pub(crate) fn ease_out_expo(t: f32) -> f32 {
     let t = clamp01(t);
-    if t >= 1.0 { 1.0 } else { 1.0 - 2.0f32.powf(-10.0 * t) }
+    if t >= 1.0 {
+        1.0
+    } else {
+        1.0 - 2.0f32.powf(-10.0 * t)
+    }
 }
 
-pub fn ease_in_out(t: f32) -> f32 {
+pub(crate) fn ease_in_out(t: f32) -> f32 {
     let t = clamp01(t);
-    if t < 0.5 { 2.0 * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(2) / 2.0 }
+    if t < 0.5 {
+        2.0 * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+    }
 }
 
-pub fn ease_out_back(t: f32) -> f32 {
+pub(crate) fn ease_out_back(t: f32) -> f32 {
     let t = clamp01(t);
     let c1 = 1.70158;
     let c3 = c1 + 1.0;
@@ -167,22 +173,26 @@ pub fn ease_out_back(t: f32) -> f32 {
 /// An *analytic* underdamped spring settle — for when a closed form beats a
 /// ticker (scrub windows, dash-phase ramps). The real `SpringAnimation` is
 /// used wherever interruptibility matters; this is its scrub-safe shadow.
-pub fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
+pub(crate) fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
     let t = clamp01(t);
     let decay = (-zeta * omega * t).exp();
     1.0 - decay * ((1.0 - zeta * zeta).sqrt() * omega * t).cos()
 }
 
 /// Triangle window in `[0, 1]` — the ripple envelope.
-pub fn tri(t: f32) -> f32 {
+pub(crate) fn tri(t: f32) -> f32 {
     let t = t.fract();
-    if t < 0.5 { t * 2.0 } else { 2.0 - t * 2.0 }
+    if t < 0.5 {
+        t * 2.0
+    } else {
+        2.0 - t * 2.0
+    }
 }
 
 // ── The render harness ──────────────────────────────────────────────────────
 
 /// One experiment in the registry.
-pub struct Experiment {
+pub(crate) struct Experiment {
     pub name: &'static str,
     /// Film-time seconds this experiment spans.
     pub seconds: f32,
@@ -206,7 +216,7 @@ pub struct Experiment {
 
 impl Experiment {
     /// The usual spelling — no probe, no series.
-    pub const fn plain(
+    pub(crate) const fn plain(
         name: &'static str,
         seconds: f32,
         frames: usize,
@@ -227,7 +237,7 @@ impl Experiment {
 /// ground truth. `0` off Linux (the bench is Linux; the number is honest
 /// about its own absence rather than about someone else's kernel).
 #[must_use]
-pub fn rss_kib() -> u64 {
+pub(crate) fn rss_kib() -> u64 {
     let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
         return 0;
     };
@@ -247,7 +257,7 @@ pub fn rss_kib() -> u64 {
 
 /// The measured outcome of one rendered experiment — printed, never guessed.
 #[derive(Default)]
-pub struct Receipt {
+pub(crate) struct Receipt {
     pub frames: usize,
     pub shapes: u64,
     pub glyph_runs: u64,
@@ -273,7 +283,7 @@ pub struct Receipt {
 }
 
 impl Receipt {
-    pub fn print(&self, name: &str) {
+    pub(crate) fn print(&self, name: &str) {
         println!("  {name}");
         println!(
             "    frames {}/{} · shapes {} (mean {:.1}) · glyph_runs {} · layers {}",
@@ -303,7 +313,7 @@ impl Receipt {
         );
     }
 
-    pub fn save(&self, dir: &Path) -> std::io::Result<()> {
+    pub(crate) fn save(&self, dir: &Path) -> std::io::Result<()> {
         let mut body = format!(
             "frames={}\nshapes={}\nglyph_runs={}\nlayers={}\nfiltered_layers={}\nopen_subpath_fills={}\nbuild_mean_ms={:.3}\nbuild_worst_ms={:.3}\nrender_mean_ms={:.3}\nrender_worst_ms={:.3}\n",
             self.frames, self.shapes, self.glyph_runs, self.layers,
@@ -325,13 +335,16 @@ impl Receipt {
 
 /// Render one experiment end-to-end: frames → PNGs → metrics.
 /// Returns the receipt; the caller owns contact-sheet assembly (ffmpeg).
-pub fn render(experiment: &Experiment, out_dir: &Path) -> Result<Receipt, Box<dyn std::error::Error>> {
+pub(crate) fn render(
+    experiment: &Experiment,
+    out_dir: &Path,
+) -> Result<Receipt, Box<dyn std::error::Error>> {
     render_with(experiment, out_dir, CANVAS)
 }
 
 /// Render at a chosen canvas size — the hero frame's 1920×1080 path; every
 /// other experiment goes through [`render`] at the lab standard.
-pub fn render_with(
+pub(crate) fn render_with(
     experiment: &Experiment,
     out_dir: &Path,
     canvas: Size,
@@ -428,7 +441,7 @@ pub fn render_with(
             canvas.height as u32,
             pixels.data().to_vec(),
         )
-            .ok_or("invalid RGBA frame dimensions")?;
+        .ok_or("invalid RGBA frame dimensions")?;
         image.save(out_dir.join(format!("frame_{i:03}.png")))?;
 
         // The pixel probe, on the last frame only — one read of the real
@@ -448,7 +461,7 @@ pub fn render_with(
 /// (`fps=10, scale=480:-1, tile=4x4`), straight from the collaboration
 /// protocol. Runs ffmpeg as a subprocess; ignores failure (the frames are
 /// the artifact, the sheet is the review aid).
-pub fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
+pub(crate) fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
     contact_sheet_strided(out_dir, tile, 1)
 }
 
@@ -464,15 +477,18 @@ pub fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
 /// master: **chunk the pass**. The strided subset is hardlinked into a
 /// temp dir (no data duplicated, no cache doubled) and the ordinary
 /// one-pass recipe runs on that.
-pub fn contact_sheet_strided(out_dir: &Path, tile: &str, stride: usize) -> Option<PathBuf> {
+pub(crate) fn contact_sheet_strided(out_dir: &Path, tile: &str, stride: usize) -> Option<PathBuf> {
     let sheet = out_dir.join("sheet.png");
     if stride <= 1 {
         let frames = out_dir.join("frame_%03d.png");
         let status = std::process::Command::new("ffmpeg")
             .args(["-y", "-loglevel", "error", "-framerate", "10"])
-            .arg("-i").arg(&frames)
-            .arg("-vf").arg(format!("scale=480:-1,tile={tile}"))
-            .arg("-frames:v").arg("1")
+            .arg("-i")
+            .arg(&frames)
+            .arg("-vf")
+            .arg(format!("scale=480:-1,tile={tile}"))
+            .arg("-frames:v")
+            .arg("1")
             .arg(&sheet)
             .status();
         return matches!(status, Ok(s) if s.success()).then_some(sheet);
@@ -485,9 +501,12 @@ pub fn contact_sheet_strided(out_dir: &Path, tile: &str, stride: usize) -> Optio
     let frames = tmp.join("frame_%03d.png");
     let status = std::process::Command::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-framerate", "10"])
-        .arg("-i").arg(&frames)
-        .arg("-vf").arg(format!("scale=480:-1,tile={tile}"))
-        .arg("-frames:v").arg("1")
+        .arg("-i")
+        .arg(&frames)
+        .arg("-vf")
+        .arg(format!("scale=480:-1,tile={tile}"))
+        .arg("-frames:v")
+        .arg("1")
         .arg(&sheet)
         .status();
     let _ = std::fs::remove_dir_all(&tmp);
@@ -551,7 +570,7 @@ fn hardlink_strided(out_dir: &Path, tmp: &Path, stride: usize) -> Option<usize> 
 /// three artifacts — the byte count is read off the file, never
 /// guessed. The mirror of this for already-rendered frame dirs is
 /// `film_lab/tools/make_gifs.sh`.
-pub fn anim_gif(out_dir: &Path, fps: u32, width: u32) -> Option<PathBuf> {
+pub(crate) fn anim_gif(out_dir: &Path, fps: u32, width: u32) -> Option<PathBuf> {
     anim_gif_strided(out_dir, fps, width, 1)
 }
 
@@ -560,7 +579,12 @@ pub fn anim_gif(out_dir: &Path, fps: u32, width: u32) -> Option<PathBuf> {
 /// nobody mistakes the decimation for the render. Same house recipe
 /// otherwise; the strided subset rides the same hardlink detour the
 /// strided sheet does (the cgroup OOM, avoided rather than met).
-pub fn anim_gif_strided(out_dir: &Path, fps: u32, width: u32, stride: usize) -> Option<PathBuf> {
+pub(crate) fn anim_gif_strided(
+    out_dir: &Path,
+    fps: u32,
+    width: u32,
+    stride: usize,
+) -> Option<PathBuf> {
     let gif = out_dir.join("anim.gif");
     let src_dir;
     let tmp;
@@ -584,10 +608,14 @@ pub fn anim_gif_strided(out_dir: &Path, fps: u32, width: u32, stride: usize) -> 
     let palette = out_dir.join("palette.png");
     let status = std::process::Command::new("ffmpeg")
         .args(["-y", "-loglevel", "error"])
-        .arg("-framerate").arg(fps.to_string())
-        .arg("-i").arg(&frames)
-        .arg("-vf").arg(format!(
-            "scale={width}:-1:flags=lanczos,palettegen=stats_mode=full"))
+        .arg("-framerate")
+        .arg(fps.to_string())
+        .arg("-i")
+        .arg(&frames)
+        .arg("-vf")
+        .arg(format!(
+            "scale={width}:-1:flags=lanczos,palettegen=stats_mode=full"
+        ))
         .arg(&palette)
         .status();
     if !matches!(status, Ok(s) if s.success()) {
@@ -638,6 +666,6 @@ pub fn anim_gif_strided(out_dir: &Path, fps: u32, width: u32, stride: usize) -> 
 }
 
 /// Where experiment output lives: /home/z/my-project/download/film_lab/<name>.
-pub fn out_root() -> PathBuf {
+pub(crate) fn out_root() -> PathBuf {
     PathBuf::from("/home/z/my-project/download/film_lab")
 }

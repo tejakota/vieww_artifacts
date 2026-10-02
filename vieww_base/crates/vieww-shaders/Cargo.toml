@@ -18,7 +18,7 @@ categories.workspace = true
 # backends are pure Rust codegen with no host dependency: an HLSL string can
 # be produced on Linux with no D3D12 present, an MSL string with no macOS
 # present — that's what makes this crate fully testable in this sandbox.
-naga = { version = "29", features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"] }
+naga = { version = "30", features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"] }
 
 # Pipeline cache keys need real collision resistance — two different shader
 # variants silently sharing one GPU pipeline cache slot is a correctness bug,

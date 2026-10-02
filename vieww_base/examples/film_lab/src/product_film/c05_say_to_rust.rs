@@ -16,11 +16,11 @@ use vieww_foundation::TextAlign;
 use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{
-    ACCENT, Ctx, INK, LEDGER, SYN_FUNCTION, SYN_KEYWORD, SYN_MACRO, SYN_TYPE, W, alpha, caption,
-    chip_row, clamp01, studio_chrome, tap_ring_at,
-};
 use super::script::TAP_ADD_ONE;
+use super::{
+    alpha, caption, chip_row, clamp01, studio_chrome, tap_ring_at, Ctx, ACCENT, INK, LEDGER,
+    SYN_FUNCTION, SYN_KEYWORD, SYN_MACRO, SYN_TYPE, W,
+};
 
 /// The pipeline's stages, and the film-times they light at.
 const STAGES: [(&str, f32); 5] = [
@@ -36,7 +36,7 @@ const RENDER_AT: f32 = 176.2;
 /// The Add-one tap's film-time.
 const ADD_ONE_AT: f32 = 178.62;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -47,7 +47,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let say_a = clamp01((t - 0.04) / 0.12);
     if say_a > 0.01 {
         let lines = [
-            ("keep a whole number called count starting at 0", SYN_KEYWORD),
+            (
+                "keep a whole number called count starting at 0",
+                SYN_KEYWORD,
+            ),
             ("", INK),
             ("screen \"Home\":", SYN_FUNCTION),
             ("    a column, spaced 16:", SYN_TYPE),
@@ -92,42 +95,44 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(470.0)
                 .width(1320.0)
                 .height(60.0)
-                .child(
-                    vieww_widget::Opacity::new(rail_a).child(Painting::sized(
-                        Size::new(1320.0, 60.0),
-                        PaintWith::new(move |book: &mut vieww_foundation::Sketchbook, _s: Size| {
-                            let stages: [(&str, f32); 5] = [
-                                ("say-codegen", 176.2),
-                                ("rustc", 176.7),
-                                ("cdylib", 177.2),
-                                ("dlopen", 177.6),
-                                ("preview", 178.0),
-                            ];
-                            let step = 1320.0 / (stages.len() as f32 - 1.0);
-                            let lit_through = ctx_abs_stage(stages, ctx_abs);
-                            // The connecting line — drawn to the furthest
-                            // lit stage.
-                            let full = (stages.len() - 1) as f32;
-                            let lit_f = lit_through.min(full);
-                            book.line(
-                                Offset::new(30.0, 30.0),
-                                Offset::new(30.0 + step * lit_f, 30.0),
-                                alpha(LEDGER, 0.6),
-                                2.0,
+                .child(vieww_widget::Opacity::new(rail_a).child(Painting::sized(
+                    Size::new(1320.0, 60.0),
+                    PaintWith::new(move |book: &mut vieww_foundation::Sketchbook, _s: Size| {
+                        let stages: [(&str, f32); 5] = [
+                            ("say-codegen", 176.2),
+                            ("rustc", 176.7),
+                            ("cdylib", 177.2),
+                            ("dlopen", 177.6),
+                            ("preview", 178.0),
+                        ];
+                        let step = 1320.0 / (stages.len() as f32 - 1.0);
+                        let lit_through = ctx_abs_stage(stages, ctx_abs);
+                        // The connecting line — drawn to the furthest
+                        // lit stage.
+                        let full = (stages.len() - 1) as f32;
+                        let lit_f = lit_through.min(full);
+                        book.line(
+                            Offset::new(30.0, 30.0),
+                            Offset::new(30.0 + step * lit_f, 30.0),
+                            alpha(LEDGER, 0.6),
+                            2.0,
+                        );
+                        for (i, (name, at)) in stages.iter().enumerate() {
+                            let x = 30.0 + step * i as f32;
+                            let lit = ctx_abs >= *at;
+                            let c = if lit { LEDGER } else { super::MUTED };
+                            book.circle(
+                                Offset::new(x, 30.0),
+                                if lit { 6.0 } else { 4.0 },
+                                alpha(c, if lit { 0.95 } else { 0.4 }),
                             );
-                            for (i, (name, at)) in stages.iter().enumerate() {
-                                let x = 30.0 + step * i as f32;
-                                let lit = ctx_abs >= *at;
-                                let c = if lit { LEDGER } else { super::MUTED };
-                                book.circle(Offset::new(x, 30.0), if lit { 6.0 } else { 4.0 }, alpha(c, if lit { 0.95 } else { 0.4 }));
-                                if lit {
-                                    book.ring(Offset::new(x, 30.0), 10.0, 1.2, alpha(c, 0.4));
-                                }
-                                let _ = name;
+                            if lit {
+                                book.ring(Offset::new(x, 30.0), 10.0, 1.2, alpha(c, 0.4));
                             }
-                        }),
-                    )),
-                ),
+                            let _ = name;
+                        }
+                    }),
+                ))),
         );
         // The stage labels — as text over the painting's nodes.
         for (i, (name, at)) in [
@@ -151,11 +156,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         vieww_widget::Opacity::new(rail_a).child(
                             vieww_widget::Text::new(name.to_string())
-                                .style(
-                                    super::geist_mono(14.0)
-                                        .letter_spacing(1.2)
-                                        .color(alpha(if lit { LEDGER } else { super::MUTED }, if lit { 0.95 } else { 0.6 })),
-                                )
+                                .style(super::geist_mono(14.0).letter_spacing(1.2).color(alpha(
+                                    if lit { LEDGER } else { super::MUTED },
+                                    if lit { 0.95 } else { 0.6 },
+                                )))
                                 .align(TextAlign::Center),
                         ),
                     ),
@@ -174,9 +178,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .width(W)
                 .height(30.0)
                 .child(
-                    vieww_widget::Text::new("rustc is running — a real compile, held on the film's clock")
-                        .style(super::geist_mono(16.0).letter_spacing(1.6).color(alpha(SYN_FUNCTION, 0.95)))
-                        .align(TextAlign::Center),
+                    vieww_widget::Text::new(
+                        "rustc is running — a real compile, held on the film's clock",
+                    )
+                    .style(
+                        super::geist_mono(16.0)
+                            .letter_spacing(1.6)
+                            .color(alpha(SYN_FUNCTION, 0.95)),
+                    )
+                    .align(TextAlign::Center),
                 ),
         );
     }
@@ -197,9 +207,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(30.0)
                 .child(
                     vieww_widget::Opacity::new(a).child(
-                        vieww_widget::Text::new("count: 0 → 1 — a real tap, on a really compiled screen")
-                            .style(super::geist_mono(16.0).letter_spacing(1.6).color(alpha(LEDGER, 0.95)))
-                            .align(TextAlign::Center),
+                        vieww_widget::Text::new(
+                            "count: 0 → 1 — a real tap, on a really compiled screen",
+                        )
+                        .style(
+                            super::geist_mono(16.0)
+                                .letter_spacing(1.6)
+                                .color(alpha(LEDGER, 0.95)),
+                        )
+                        .align(TextAlign::Center),
                     ),
                 ),
         );

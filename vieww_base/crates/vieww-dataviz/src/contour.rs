@@ -25,7 +25,13 @@ pub fn isoline(values: &[f32], cols: usize, rows: usize, threshold: f32) -> Vec<
                 continue;
             }
             let (fx, fy) = (x as f32, y as f32);
-            let lerp = |p: f32, q: f32| if (q - p).abs() < 1e-12 { 0.5 } else { (threshold - p) / (q - p) };
+            let lerp = |p: f32, q: f32| {
+                if (q - p).abs() < 1e-12 {
+                    0.5
+                } else {
+                    (threshold - p) / (q - p)
+                }
+            };
             let top = Offset::new(fx + lerp(a, b), fy);
             let right = Offset::new(fx + 1.0, fy + lerp(b, c));
             let bottom = Offset::new(fx + lerp(d, c), fy + 1.0);
@@ -62,7 +68,14 @@ pub fn isoline(values: &[f32], cols: usize, rows: usize, threshold: f32) -> Vec<
 
 /// The segments as one path, scaled by `cell` and offset by `origin`.
 #[must_use]
-pub fn isoline_path(values: &[f32], cols: usize, rows: usize, threshold: f32, cell: f32, origin: Offset) -> Path {
+pub fn isoline_path(
+    values: &[f32],
+    cols: usize,
+    rows: usize,
+    threshold: f32,
+    cell: f32,
+    origin: Offset,
+) -> Path {
     let mut p = Path::new();
     for (a, b) in isoline(values, cols, rows, threshold) {
         p.move_to(origin + a.scale(cell));

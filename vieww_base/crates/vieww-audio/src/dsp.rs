@@ -65,14 +65,42 @@ impl Biquad {
         let (s, c) = w.sin_cos();
         let alpha = s / (2.0 * q.max(1e-4));
         let (b0, b1, b2, a0, a1, a2) = match kind {
-            FilterKind::LowPass => ((1.0 - c) / 2.0, 1.0 - c, (1.0 - c) / 2.0, 1.0 + alpha, -2.0 * c, 1.0 - alpha),
-            FilterKind::HighPass => ((1.0 + c) / 2.0, -(1.0 + c), (1.0 + c) / 2.0, 1.0 + alpha, -2.0 * c, 1.0 - alpha),
+            FilterKind::LowPass => (
+                (1.0 - c) / 2.0,
+                1.0 - c,
+                (1.0 - c) / 2.0,
+                1.0 + alpha,
+                -2.0 * c,
+                1.0 - alpha,
+            ),
+            FilterKind::HighPass => (
+                (1.0 + c) / 2.0,
+                -(1.0 + c),
+                (1.0 + c) / 2.0,
+                1.0 + alpha,
+                -2.0 * c,
+                1.0 - alpha,
+            ),
             FilterKind::BandPass => (alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * c, 1.0 - alpha),
             FilterKind::Notch => (1.0, -2.0 * c, 1.0, 1.0 + alpha, -2.0 * c, 1.0 - alpha),
-            FilterKind::AllPass => (1.0 - alpha, -2.0 * c, 1.0 + alpha, 1.0 + alpha, -2.0 * c, 1.0 - alpha),
+            FilterKind::AllPass => (
+                1.0 - alpha,
+                -2.0 * c,
+                1.0 + alpha,
+                1.0 + alpha,
+                -2.0 * c,
+                1.0 - alpha,
+            ),
             FilterKind::Peaking(db) => {
                 let a = 10f32.powf(db / 40.0);
-                (1.0 + alpha * a, -2.0 * c, 1.0 - alpha * a, 1.0 + alpha / a, -2.0 * c, 1.0 - alpha / a)
+                (
+                    1.0 + alpha * a,
+                    -2.0 * c,
+                    1.0 - alpha * a,
+                    1.0 + alpha / a,
+                    -2.0 * c,
+                    1.0 - alpha / a,
+                )
             }
             FilterKind::LowShelf(db) => {
                 let a = 10f32.powf(db / 40.0);
@@ -196,7 +224,11 @@ impl EnvelopeFollower {
 impl Processor for EnvelopeFollower {
     fn process(&mut self, x: f32) -> f32 {
         let a = x.abs();
-        let k = if a > self.level { self.attack } else { self.release };
+        let k = if a > self.level {
+            self.attack
+        } else {
+            self.release
+        };
         self.level = a + k * (self.level - a);
         self.level
     }
@@ -249,7 +281,11 @@ impl Processor for Compressor {
     fn process(&mut self, x: f32) -> f32 {
         let db = 20.0 * x.abs().max(1e-6).log10();
         let target = self.curve(db) - db;
-        let k = if target < self.reduction_db { self.attack } else { self.release };
+        let k = if target < self.reduction_db {
+            self.attack
+        } else {
+            self.release
+        };
         self.reduction_db = target + k * (self.reduction_db - target);
         self.env_db = db;
         x * 10f32.powf((self.reduction_db + self.makeup_db) / 20.0)
@@ -290,7 +326,12 @@ impl Processor for Chain {
 pub fn apply<P: Processor>(samples: &Samples, mut make: impl FnMut() -> P) -> Samples {
     let ch = usize::from(samples.channels.max(1));
     let mut procs: Vec<P> = (0..ch).map(|_| make()).collect();
-    let data = samples.data.iter().enumerate().map(|(i, &x)| procs[i % ch].process(x)).collect();
+    let data = samples
+        .data
+        .iter()
+        .enumerate()
+        .map(|(i, &x)| procs[i % ch].process(x))
+        .collect();
     Samples {
         data,
         channels: samples.channels,
@@ -330,9 +371,14 @@ impl OnsetDetector {
         let mut out = Vec::new();
         let mut i = 0;
         while i + self.frame <= mono.len() {
-            let spec = Spectrum::analyze(&Samples::mono(mono[i..i + self.frame].to_vec(), rate), crate::analysis::Window::Hann);
+            let spec = Spectrum::analyze(
+                &Samples::mono(mono[i..i + self.frame].to_vec(), rate),
+                crate::analysis::Window::Hann,
+            );
             let mags: Vec<f32> = spec.magnitudes().to_vec();
-            let f = prev.as_ref().map_or(0.0, |p| mags.iter().zip(p).map(|(m, q)| (m - q).max(0.0)).sum());
+            let f = prev.as_ref().map_or(0.0, |p| {
+                mags.iter().zip(p).map(|(m, q)| (m - q).max(0.0)).sum()
+            });
             out.push(f);
             prev = Some(mags);
             i += self.hop;
@@ -345,7 +391,11 @@ impl OnsetDetector {
     pub fn detect(&self, samples: &Samples) -> Vec<f32> {
         let ch = usize::from(samples.channels.max(1));
         #[allow(clippy::cast_precision_loss)]
-        let mono: Vec<f32> = samples.data.chunks(ch).map(|c| c.iter().sum::<f32>() / ch as f32).collect();
+        let mono: Vec<f32> = samples
+            .data
+            .chunks(ch)
+            .map(|c| c.iter().sum::<f32>() / ch as f32)
+            .collect();
         let flux = self.flux(&mono, samples.rate);
         let peak = flux.iter().copied().fold(0.0f32, f32::max).max(1e-9);
         let flux: Vec<f32> = flux.iter().map(|f| f / peak).collect();
@@ -398,7 +448,9 @@ mod tests {
     use super::*;
 
     fn sine(freq: f32, rate: f32, n: usize) -> Vec<f32> {
-        (0..n).map(|i| (2.0 * PI * freq * i as f32 / rate).sin()).collect()
+        (0..n)
+            .map(|i| (2.0 * PI * freq * i as f32 / rate).sin())
+            .collect()
     }
 
     fn rms(v: &[f32]) -> f32 {
@@ -449,7 +501,11 @@ mod tests {
         assert!((c.curve(0.0) - (-15.0)).abs() < 1e-4);
         let mut loud = vec![1.0f32; 4800];
         c.run(&mut loud);
-        assert!((20.0 * loud[4799].log10() + 15.0).abs() < 0.1, "{}", 20.0 * loud[4799].log10());
+        assert!(
+            (20.0 * loud[4799].log10() + 15.0).abs() < 0.1,
+            "{}",
+            20.0 * loud[4799].log10()
+        );
     }
 
     #[test]
@@ -495,7 +551,9 @@ mod tests {
     #[test]
     fn chain_and_stereo_apply() {
         let s = Samples::stereo(vec![1.0, -1.0, 0.0, 0.0, 0.0, 0.0], 1000);
-        let out = apply(&s, || Chain::new().then(Delay::new(0.001, 1000.0, 0.0, 1.0)));
+        let out = apply(&s, || {
+            Chain::new().then(Delay::new(0.001, 1000.0, 0.0, 1.0))
+        });
         assert_eq!(out.data, vec![0.0, 0.0, 1.0, -1.0, 0.0, 0.0]);
     }
 }

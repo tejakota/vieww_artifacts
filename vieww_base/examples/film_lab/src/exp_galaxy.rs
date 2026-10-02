@@ -20,16 +20,15 @@ use std::sync::OnceLock;
 
 use vieww_foundation::{BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, tint, FAINT, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT, AMBER,
-    RED, BG_DEEP,
+    alpha, mix, Rng, AMBER, BG_DEEP, CYAN_SOFT, FAINT, MUTED, RED, VIOLET, VIOLET_SOFT,
 };
 use crate::three_d::{Camera, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 9.0;
+pub(crate) const SECONDS: f32 = 9.0;
 
 /// The star count — the record attempt, printed by the receipt.
 const STARS: usize = 60_000;
@@ -63,7 +62,9 @@ fn stars() -> &'static Vec<Star> {
             let r = 0.25 + u * 5.6;
             // The arm: a logarithmic spiral, with gaussian scatter across it.
             let arm = (i % ARMS) as f32;
-            let arm_angle = r.log(std::f32::consts::E).mul_add(WIND, arm * std::f32::consts::TAU / ARMS as f32);
+            let arm_angle = r
+                .log(std::f32::consts::E)
+                .mul_add(WIND, arm * std::f32::consts::TAU / ARMS as f32);
             // Scatter grows with radius (arms are loose at the rim).
             let spread = 0.10 + 0.16 * u;
             let th = arm_angle + rng.sym() * spread;
@@ -119,13 +120,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // Deep sky.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(4, 4, 8)),
-                (0.6, BG_DEEP),
-                (1.0, Color::rgb(3, 3, 6)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(4, 4, 8)),
+            (0.6, BG_DEEP),
+            (1.0, Color::rgb(3, 3, 6)),
+        ]),
     );
 
     // The camera: an inclined view, drifting in azimuth.
@@ -149,7 +148,10 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                     pt,
                     rr * sc * 900.0,
                     Gradient::radial_fill().with_stops(&[
-                        (0.0, alpha(mix(AMBER, VIOLET, k as f32 / 3.0), 0.055 / scale)),
+                        (
+                            0.0,
+                            alpha(mix(AMBER, VIOLET, k as f32 / 3.0), 0.055 / scale),
+                        ),
                         (1.0, alpha(VIOLET, 0.0)),
                     ]),
                 );
@@ -185,7 +187,12 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 // The faint multitude: rects, no arcs.
                 let r = (s.size * 1.15).max(1.1);
                 g.rect(
-                    Rect::new(pt.dx - r * 0.5, pt.dy - r * 0.5, pt.dx + r * 0.5, pt.dy + r * 0.5),
+                    Rect::new(
+                        pt.dx - r * 0.5,
+                        pt.dy - r * 0.5,
+                        pt.dx + r * 0.5,
+                        pt.dy + r * 0.5,
+                    ),
                     alpha(col, a * 0.85),
                 );
             } else {
@@ -206,7 +213,9 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let u = 1.0 - (1.0 - rng.f01()).powf(1.0 / 2.2);
             let r = 0.9 + u * 4.6;
             let arm = (k % ARMS) as f32;
-            let ang = r.log(std::f32::consts::E).mul_add(WIND, arm * std::f32::consts::TAU / ARMS as f32)
+            let ang = r
+                .log(std::f32::consts::E)
+                .mul_add(WIND, arm * std::f32::consts::TAU / ARMS as f32)
                 + rng.sym() * 0.07;
             let spin = turn(r) * t * 2.4;
             let x = r * ang.cos();
@@ -217,11 +226,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let rz = x * sn + z * c;
             if let Some((pt, _, scale)) = cam.project(Vec3::new(rx, 0.0, rz), canvas) {
                 let rr = (0.22 + rng.f01() * 0.30) * scale * 900.0;
-                book.circle(
-                    pt,
-                    rr,
-                    alpha(Color::rgb(8, 5, 12), 0.21),
-                );
+                book.circle(pt, rr, alpha(Color::rgb(8, 5, 12), 0.21));
             }
         }
     }
@@ -233,7 +238,9 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let u = 0.35 + rng.f01() * 0.6;
             let r = 0.9 + u * 4.3;
             let arm = (rng.u64() % ARMS as u64) as f32;
-            let ang = r.log(std::f32::consts::E).mul_add(WIND, arm * std::f32::consts::TAU / ARMS as f32)
+            let ang = r
+                .log(std::f32::consts::E)
+                .mul_add(WIND, arm * std::f32::consts::TAU / ARMS as f32)
                 + rng.sym() * 0.05;
             let spin = turn(r) * t * 2.4;
             let x = r * ang.cos();
@@ -314,7 +321,7 @@ fn drawn_at(t: f32) -> usize {
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

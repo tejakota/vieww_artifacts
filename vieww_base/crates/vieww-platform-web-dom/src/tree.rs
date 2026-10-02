@@ -212,7 +212,10 @@ fn walk_with(tree: &ElementTree, id: ElementId, mut pending: Pending) -> Vec<VNo
         node.iframe = Some(Iframe {
             src: embed.content().as_url().map(str::to_string),
             srcdoc: embed.content().as_html().map(str::to_string),
-            title: format!("web content: {}", embed.content().as_url().unwrap_or("inline HTML")),
+            title: format!(
+                "web content: {}",
+                embed.content().as_url().unwrap_or("inline HTML")
+            ),
         });
         node.css.push_str(&format!(
             "display:block;border:none;width:{};height:{};",

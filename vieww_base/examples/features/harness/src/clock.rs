@@ -45,7 +45,9 @@ pub struct Clocked {
 
 impl fmt::Debug for Clocked {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Clocked").field("time", &self.time.peek()).finish()
+        f.debug_struct("Clocked")
+            .field("time", &self.time.peek())
+            .finish()
     }
 }
 
@@ -66,7 +68,11 @@ impl Widget for Clocked {
 widget_node_from!(Clocked);
 
 /// A widget built by `build(t)` with `t` looping over `0..span` seconds.
-pub fn clocked(driver: &mut FrameDriver, span: f32, build: impl Fn(f32) -> WidgetNode + 'static) -> Clocked {
+pub fn clocked(
+    driver: &mut FrameDriver,
+    span: f32,
+    build: impl Fn(f32) -> WidgetNode + 'static,
+) -> Clocked {
     let time = driver.elements().runtime().signal(0.0_f32);
     let clock = Rc::new(RefCell::new(LoopClock {
         time: time.clone(),
@@ -89,6 +95,9 @@ pub fn caption(title: &str, detail: &str, dark: bool) -> WidgetNode {
         (Color::rgb(24, 28, 40), Color::rgb(96, 102, 120))
     };
     Flex::column()
-        .children(children![Text::new(title).size(17.0).bold().color(a), Text::new(detail).size(12.0).color(b),])
+        .children(children![
+            Text::new(title).size(17.0).bold().color(a),
+            Text::new(detail).size(12.0).color(b),
+        ])
         .into()
 }

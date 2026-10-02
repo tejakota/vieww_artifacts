@@ -925,13 +925,21 @@ mod preset_tests {
         // t. Checking the *sum* is checking the mirror; checking equality
         // would be checking that the curve is its own flip, which none of
         // these are.
-        for family in [Curve::POWER2_IN, Curve::SINE_IN, Curve::EXPO_IN, Curve::CIRC_IN] {
+        for family in [
+            Curve::POWER2_IN,
+            Curve::SINE_IN,
+            Curve::EXPO_IN,
+            Curve::CIRC_IN,
+        ] {
             let out = family.flipped();
             for i in 1..10 {
                 let t = i as f32 / 10.0;
                 let a = family.transform(t);
                 let b = out.transform(1.0 - t);
-                assert!((a + b - 1.0).abs() < EPS, "{family:?} and its flip disagree at {t}");
+                assert!(
+                    (a + b - 1.0).abs() < EPS,
+                    "{family:?} and its flip disagree at {t}"
+                );
             }
         }
     }
@@ -952,7 +960,10 @@ mod preset_tests {
             let t = i as f32 / 100.0;
             elastic_min = elastic_min.min(Curve::ELASTIC_IN.transform(t));
         }
-        assert!(elastic_min < 0.0, "ELASTIC_IN never undershot: {elastic_min}");
+        assert!(
+            elastic_min < 0.0,
+            "ELASTIC_IN never undershot: {elastic_min}"
+        );
     }
 
     #[test]

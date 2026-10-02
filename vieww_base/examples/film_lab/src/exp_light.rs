@@ -12,15 +12,15 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, mix, CANVAS, CANVAS_H, CANVAS_W, CYAN, CYAN_SOFT, INK, MAGENTA,
-    MUTED, Rng, VIOLET, VIOLET_DEEP, VIOLET_SOFT,
+    alpha, clamp01, ease_in_out, mix, Rng, CANVAS, CANVAS_H, CANVAS_W, CYAN, CYAN_SOFT, INK,
+    MAGENTA, MUTED, VIOLET, VIOLET_DEEP, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 4.0;
+pub(crate) const SECONDS: f32 = 4.0;
 
 /// The nebula — layered radial gradients inside one painter, with a blurred
 /// core group for that "liquid light" softness. Pure function of `t`.
@@ -47,9 +47,30 @@ fn nebula(book: &mut Sketchbook, canvas: Size, t: f32) {
     let drift = (t * std::f32::consts::TAU).sin();
     let drift2 = (t * std::f32::consts::TAU + 1.7).sin();
     let nebula_blobs = |book: &mut Sketchbook| {
-        blob(book, w * 0.26 + drift * 26.0, h * 0.40, w * 0.38, MAGENTA, 0.26);
-        blob(book, w * 0.70 + drift2 * 20.0, h * 0.28, w * 0.34, VIOLET, 0.30);
-        blob(book, w * 0.52, h * 0.62 - drift * 16.0, w * 0.44, VIOLET_DEEP, 0.34);
+        blob(
+            book,
+            w * 0.26 + drift * 26.0,
+            h * 0.40,
+            w * 0.38,
+            MAGENTA,
+            0.26,
+        );
+        blob(
+            book,
+            w * 0.70 + drift2 * 20.0,
+            h * 0.28,
+            w * 0.34,
+            VIOLET,
+            0.30,
+        );
+        blob(
+            book,
+            w * 0.52,
+            h * 0.62 - drift * 16.0,
+            w * 0.44,
+            VIOLET_DEEP,
+            0.34,
+        );
         blob(book, w * 0.80, h * 0.52, w * 0.26, CYAN, 0.20);
     };
     if flat {
@@ -60,8 +81,22 @@ fn nebula(book: &mut Sketchbook, canvas: Size, t: f32) {
 
     // A second, sharper veil of color over the blur — the "mesh" feel.
     let veil = |book: &mut Sketchbook| {
-        blob(book, w * 0.42 - drift2 * 18.0, h * 0.46, w * 0.26, CYAN_SOFT, 0.10);
-        blob(book, w * 0.60 + drift * 12.0, h * 0.40, w * 0.20, VIOLET_SOFT, 0.12);
+        blob(
+            book,
+            w * 0.42 - drift2 * 18.0,
+            h * 0.46,
+            w * 0.26,
+            CYAN_SOFT,
+            0.10,
+        );
+        blob(
+            book,
+            w * 0.60 + drift * 12.0,
+            h * 0.40,
+            w * 0.20,
+            VIOLET_SOFT,
+            0.12,
+        );
     };
     if flat {
         veil(book);
@@ -75,13 +110,11 @@ fn nebula(book: &mut Sketchbook, canvas: Size, t: f32) {
     book.circle(
         Offset::new(w * 0.5, h * 0.5),
         w * 0.30,
-        Gradient::radial_fill()
-            .with_dither()
-            .with_stops(&[
-                (0.0, alpha(mix(VIOLET_DEEP, VIOLET, 0.4), 0.85)),
-                (0.6, alpha(VIOLET_DEEP, 0.55)),
-                (1.0, alpha(VIOLET_DEEP, 0.0)),
-            ]),
+        Gradient::radial_fill().with_dither().with_stops(&[
+            (0.0, alpha(mix(VIOLET_DEEP, VIOLET, 0.4), 0.85)),
+            (0.6, alpha(VIOLET_DEEP, 0.55)),
+            (1.0, alpha(VIOLET_DEEP, 0.0)),
+        ]),
     );
 
     // Star-dust: deterministic pinpoints, most visible in the dark corners.
@@ -130,9 +163,30 @@ fn glow(book: &mut Sketchbook, canvas: Size, t: f32) {
             VIOLET_SOFT,
             0.55,
         );
-        blob(book, cx - 100.0, cy - 60.0, canvas.width * 0.12, CYAN_SOFT, 0.30);
-        blob(book, cx + 130.0, cy - 20.0, canvas.width * 0.10, MAGENTA, 0.22);
-        blob(book, cx + 40.0, cy + 80.0, canvas.width * 0.09, mix(MAGENTA, VIOLET, 0.5), 0.18);
+        blob(
+            book,
+            cx - 100.0,
+            cy - 60.0,
+            canvas.width * 0.12,
+            CYAN_SOFT,
+            0.30,
+        );
+        blob(
+            book,
+            cx + 130.0,
+            cy - 20.0,
+            canvas.width * 0.10,
+            MAGENTA,
+            0.22,
+        );
+        blob(
+            book,
+            cx + 40.0,
+            cy + 80.0,
+            canvas.width * 0.09,
+            mix(MAGENTA, VIOLET, 0.5),
+            0.18,
+        );
     };
     if flat {
         bloom(book);
@@ -150,28 +204,39 @@ fn rim(book: &mut Sketchbook, canvas: Size, t: f32, card: Rect) {
     // outward into the void (the bloom). Strokes, not a filled halo: the
     // card's interior stays clean.
     book.layer(1.0, 36.0, None, |inner| {
-        let e1 = Rect::new(card.left - 5.0, card.top - 5.0, card.right + 5.0, card.bottom + 5.0);
+        let e1 = Rect::new(
+            card.left - 5.0,
+            card.top - 5.0,
+            card.right + 5.0,
+            card.bottom + 5.0,
+        );
         inner.stroke_rrect(e1, 26.0, alpha(VIOLET_SOFT, 0.60 + 0.10 * breathe), 3.5);
-        let e2 = Rect::new(card.left - 14.0, card.top - 14.0, card.right + 14.0, card.bottom + 14.0);
+        let e2 = Rect::new(
+            card.left - 14.0,
+            card.top - 14.0,
+            card.right + 14.0,
+            card.bottom + 14.0,
+        );
         inner.stroke_rrect(e2, 34.0, alpha(mix(VIOLET, CYAN, 0.35), 0.34), 2.5);
-        let e3 = Rect::new(card.left - 26.0, card.top - 26.0, card.right + 26.0, card.bottom + 26.0);
+        let e3 = Rect::new(
+            card.left - 26.0,
+            card.top - 26.0,
+            card.right + 26.0,
+            card.bottom + 26.0,
+        );
         inner.stroke_rrect(e3, 46.0, alpha(VIOLET, 0.16), 2.0);
         // Accent light pooling at two corners, as if the nebula touches there.
         inner.circle(
             Offset::new(card.left + 24.0, card.bottom - 18.0),
             110.0,
-            Gradient::radial_fill().with_stops(&[
-                (0.0, alpha(CYAN_SOFT, 0.22)),
-                (1.0, alpha(CYAN, 0.0)),
-            ]),
+            Gradient::radial_fill()
+                .with_stops(&[(0.0, alpha(CYAN_SOFT, 0.22)), (1.0, alpha(CYAN, 0.0))]),
         );
         inner.circle(
             Offset::new(card.right - 30.0, card.top + 22.0),
             130.0,
-            Gradient::radial_fill().with_stops(&[
-                (0.0, alpha(MAGENTA, 0.18)),
-                (1.0, alpha(MAGENTA, 0.0)),
-            ]),
+            Gradient::radial_fill()
+                .with_stops(&[(0.0, alpha(MAGENTA, 0.18)), (1.0, alpha(MAGENTA, 0.0))]),
         );
     });
     let _ = canvas;
@@ -194,7 +259,7 @@ fn vignette(book: &mut Sketchbook, canvas: Size) {
 ///
 /// `FILM_BISECT` (env) drops named layers for debugging the composition:
 /// "noglow", "noglass", "norim", "nosweep" — comma-separated.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let float = (t * std::f32::consts::TAU).sin() * 9.0;
     let card_y = CANVAS_H * 0.5 - 150.0 + float;
     let appear = ease_in_out(clamp01(t * 2.4));
@@ -215,10 +280,8 @@ pub fn frame(t: f32) -> WidgetNode {
             PaintWith::new(|book: &mut Sketchbook, size: Size| {
                 book.rect(
                     Rect::new(0.0, 0.0, size.width, size.height),
-                    Gradient::radial_fill().with_stops(&[
-                        (0.0, Color::rgb(60, 30, 120)),
-                        (1.0, Color::rgb(8, 6, 14)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_stops(&[(0.0, Color::rgb(60, 30, 120)), (1.0, Color::rgb(8, 6, 14))]),
                 );
                 let y = 300.0;
                 let sw = 130.0;
@@ -226,13 +289,23 @@ pub fn frame(t: f32) -> WidgetNode {
                 // white at descending alpha
                 for (i, a) in [1.0, 0.784, 0.392, 0.157, 0.039].iter().enumerate() {
                     book.rect(
-                        Rect::new(xs + i as f32 * (sw + 20.0), y, xs + i as f32 * (sw + 20.0) + sw, y + 140.0),
+                        Rect::new(
+                            xs + i as f32 * (sw + 20.0),
+                            y,
+                            xs + i as f32 * (sw + 20.0) + sw,
+                            y + 140.0,
+                        ),
                         alpha(Color::WHITE, *a),
                     );
                 }
                 // magenta 40
                 book.rect(
-                    Rect::new(xs + 5.0 * (sw + 20.0), y, xs + 5.0 * (sw + 20.0) + sw, y + 140.0),
+                    Rect::new(
+                        xs + 5.0 * (sw + 20.0),
+                        y,
+                        xs + 5.0 * (sw + 20.0) + sw,
+                        y + 140.0,
+                    ),
                     alpha(MAGENTA, 0.157),
                 );
                 // radial white-40
@@ -246,9 +319,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 );
             }),
         );
-        return Stack::new()
-            .push(Positioned::fill().child(bg))
-            .into();
+        return Stack::new().push(Positioned::fill().child(bg)).into();
     }
 
     // MICRO2: the same translucency, three ways, over a dark painting:
@@ -260,13 +331,14 @@ pub fn frame(t: f32) -> WidgetNode {
             PaintWith::new(|book: &mut Sketchbook, size: Size| {
                 book.rect(
                     Rect::new(0.0, 0.0, size.width, size.height),
-                    Gradient::radial_fill().with_stops(&[
-                        (0.0, Color::rgb(60, 30, 120)),
-                        (1.0, Color::rgb(8, 6, 14)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_stops(&[(0.0, Color::rgb(60, 30, 120)), (1.0, Color::rgb(8, 6, 14))]),
                 );
                 // (2) solid translucent white via the painting API
-                book.rect(Rect::new(60.0, 260.0, 260.0, 460.0), alpha(Color::WHITE, 0.157));
+                book.rect(
+                    Rect::new(60.0, 260.0, 260.0, 460.0),
+                    alpha(Color::WHITE, 0.157),
+                );
                 // (3) gradient translucent white
                 book.rect(
                     Rect::new(360.0, 260.0, 560.0, 460.0),
@@ -277,14 +349,11 @@ pub fn frame(t: f32) -> WidgetNode {
                 );
             }),
         );
-        let widget_card = Positioned::new()
-            .left(660.0)
-            .top(260.0)
-            .child(
-                Container::new()
-                    .size(200.0, 200.0)
-                    .color(alpha(Color::WHITE, 0.157)),
-            );
+        let widget_card = Positioned::new().left(660.0).top(260.0).child(
+            Container::new()
+                .size(200.0, 200.0)
+                .color(alpha(Color::WHITE, 0.157)),
+        );
         return Stack::new()
             .push(Positioned::fill().child(bg))
             .push(widget_card)
@@ -295,48 +364,41 @@ pub fn frame(t: f32) -> WidgetNode {
     // (a) empty, alpha 10; (b) empty, alpha 120; (c) with child, alpha 10;
     // (d) empty, alpha 10, no radius, no border. Where does white appear?
     if off("micro") {
-        let bg = Container::new()
-            .size(CANVAS_W, CANVAS_H)
-            .gradient(
-                Gradient::radial_fill().with_stops(&[
-                    (0.0, Color::rgb(60, 30, 120)),
-                    (1.0, Color::rgb(8, 6, 14)),
-                ]),
-            );
+        let bg = Container::new().size(CANVAS_W, CANVAS_H).gradient(
+            Gradient::radial_fill()
+                .with_stops(&[(0.0, Color::rgb(60, 30, 120)), (1.0, Color::rgb(8, 6, 14))]),
+        );
         let card = |x: f32| {
-            Positioned::new()
-                .left(x)
-                .top(260.0)
-                .child(
-                    Container::new()
-                        .size(200.0, 200.0)
-                        .color(alpha(Color::WHITE, 0.039))
-                        .radius(22.0)
-                        .border(vieww_foundation::Border::new(alpha(Color::WHITE, 0.282), 1.0)),
-                )
+            Positioned::new().left(x).top(260.0).child(
+                Container::new()
+                    .size(200.0, 200.0)
+                    .color(alpha(Color::WHITE, 0.039))
+                    .radius(22.0)
+                    .border(vieww_foundation::Border::new(
+                        alpha(Color::WHITE, 0.282),
+                        1.0,
+                    )),
+            )
         };
         let card_child = |x: f32| {
-            Positioned::new()
-                .left(x)
-                .top(260.0)
-                .child(
-                    Container::new()
-                        .size(200.0, 200.0)
-                        .color(alpha(Color::WHITE, 0.039))
-                        .radius(22.0)
-                        .border(vieww_foundation::Border::new(alpha(Color::WHITE, 0.282), 1.0))
-                        .child(SizedBox::from_size(Size::new(100.0, 100.0))),
-                )
+            Positioned::new().left(x).top(260.0).child(
+                Container::new()
+                    .size(200.0, 200.0)
+                    .color(alpha(Color::WHITE, 0.039))
+                    .radius(22.0)
+                    .border(vieww_foundation::Border::new(
+                        alpha(Color::WHITE, 0.282),
+                        1.0,
+                    ))
+                    .child(SizedBox::from_size(Size::new(100.0, 100.0))),
+            )
         };
         let card_plain = |x: f32| {
-            Positioned::new()
-                .left(x)
-                .top(260.0)
-                .child(
-                    Container::new()
-                        .size(200.0, 200.0)
-                        .color(alpha(Color::WHITE, 0.039)),
-                )
+            Positioned::new().left(x).top(260.0).child(
+                Container::new()
+                    .size(200.0, 200.0)
+                    .color(alpha(Color::WHITE, 0.039)),
+            )
         };
         return Stack::new()
             .push(Positioned::fill().child(bg))
@@ -354,10 +416,8 @@ pub fn frame(t: f32) -> WidgetNode {
             Container::new()
                 .size(CANVAS_W, CANVAS_H)
                 .gradient(
-                    Gradient::radial_fill().with_stops(&[
-                        (0.0, Color::rgb(60, 30, 120)),
-                        (1.0, Color::rgb(8, 6, 14)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_stops(&[(0.0, Color::rgb(60, 30, 120)), (1.0, Color::rgb(8, 6, 14))]),
                 )
                 .into()
         } else {
@@ -379,7 +439,10 @@ pub fn frame(t: f32) -> WidgetNode {
             .size(640.0, 300.0)
             .color(alpha(Color::WHITE, 0.039))
             .radius(22.0)
-            .border(vieww_foundation::Border::new(alpha(Color::WHITE, 0.282), 1.0));
+            .border(vieww_foundation::Border::new(
+                alpha(Color::WHITE, 0.282),
+                1.0,
+            ));
         // Stage split:
         //   mini          — backdrop + blur + tint (the white case)
         //   mini_nofilt   — no Filtered at all (control)
@@ -420,29 +483,21 @@ pub fn frame(t: f32) -> WidgetNode {
     let mut stack = Stack::new();
 
     // 1 · the nebula (always on)
-    stack = stack.push(
-        Positioned::fill().child(
-            Painting::sized(
-                CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, size: Size| {
-                    nebula(book, size, t);
-                }),
-            ),
-        ),
-    );
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, size: Size| {
+            nebula(book, size, t);
+        }),
+    )));
 
     // 2 · the bloom behind the word
     if !off("noglow") {
-        stack = stack.push(
-            Positioned::fill().child(
-                Painting::sized(
-                    CANVAS,
-                    PaintWith::new(move |book: &mut Sketchbook, size: Size| {
-                        glow(book, size, t);
-                    }),
-                )
-            ),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, size: Size| {
+                glow(book, size, t);
+            }),
+        )));
     }
 
     // 3 · the glass card — frosted, tinted, shadowed, bordered
@@ -455,21 +510,15 @@ pub fn frame(t: f32) -> WidgetNode {
         let noshadow = off("noshadow") || plastic;
         let nograd = off("nograd") || plastic;
 
-        let body = Container::new()
-            .size(640.0, 300.0)
-            .radius(22.0);
+        let body = Container::new().size(640.0, 300.0).radius(22.0);
         let body = if nograd {
             body.color(alpha(Color::WHITE, 0.039))
         } else {
-            body.gradient(
-                Gradient::vertical()
-                    .with_dither()
-                    .with_stops(&[
-                        (0.0, alpha(mix(Color::WHITE, VIOLET_SOFT, 0.25), 0.102)),
-                        (0.55, alpha(Color::WHITE, 0.039)),
-                        (1.0, alpha(mix(Color::WHITE, CYAN_SOFT, 0.3), 0.063)),
-                    ]),
-            )
+            body.gradient(Gradient::vertical().with_dither().with_stops(&[
+                (0.0, alpha(mix(Color::WHITE, VIOLET_SOFT, 0.25), 0.102)),
+                (0.55, alpha(Color::WHITE, 0.039)),
+                (1.0, alpha(mix(Color::WHITE, CYAN_SOFT, 0.3), 0.063)),
+            ]))
         };
         let body = if noshadow {
             body
@@ -484,7 +533,10 @@ pub fn frame(t: f32) -> WidgetNode {
             )
         };
         let body = body
-            .border(vieww_foundation::Border::new(alpha(Color::WHITE, 0.282), 1.0))
+            .border(vieww_foundation::Border::new(
+                alpha(Color::WHITE, 0.282),
+                1.0,
+            ))
             .child(
                 Container::new()
                     .padding(vieww_foundation::EdgeInsets::all(30.0))
@@ -495,10 +547,7 @@ pub fn frame(t: f32) -> WidgetNode {
                                 .spacing(14.0)
                                 .children(children![
                                     tags_row(),
-                                    Text::new("Light.")
-                                        .color(INK)
-                                        .size(120.0)
-                                        .bold(),
+                                    Text::new("Light.").color(INK).size(120.0).bold(),
                                     Text::new(
                                         "the material beneath every surface \
                                          in this film — rendered, not faked",
@@ -525,22 +574,18 @@ pub fn frame(t: f32) -> WidgetNode {
 
     // 4 · the rim — light escaping the card's edges, above the glass
     if !off("norim") {
-        stack = stack.push(
-            Positioned::fill().child(
-                Painting::sized(
-                    CANVAS,
-                    PaintWith::new(move |book: &mut Sketchbook, size: Size| {
-                        let card = Rect::new(
-                            CANVAS_W * 0.5 - 320.0,
-                            card_y,
-                            CANVAS_W * 0.5 + 320.0,
-                            card_y + 300.0,
-                        );
-                        rim(book, size, t, card);
-                    }),
-                )
-            ),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, size: Size| {
+                let card = Rect::new(
+                    CANVAS_W * 0.5 - 320.0,
+                    card_y,
+                    CANVAS_W * 0.5 + 320.0,
+                    card_y + 300.0,
+                );
+                rim(book, size, t, card);
+            }),
+        )));
     }
 
     // 5 · the sweep — a reflection crossing the glass
@@ -549,48 +594,40 @@ pub fn frame(t: f32) -> WidgetNode {
             Positioned::new()
                 .left(CANVAS_W * 0.5 - 320.0)
                 .top(card_y)
-                .child(
-                    Clip::rounded(22.0).child(
-                        Painting::sized(
-                            Size::new(640.0, 300.0),
-                            PaintWith::new(move |book: &mut Sketchbook, size: Size| {
-                                if (0.0..1.0).contains(&sweep) {
-                                    let x = sweep * (size.width + 260.0) - 130.0;
-                                    book.layer(1.0, 0.0, None, |inner| {
-                                        let mut p = vieww_foundation::Path::new();
-                                        p.move_to(Offset::new(x - 130.0, size.height));
-                                        p.line_to(Offset::new(x + 60.0, 0.0));
-                                        p.line_to(Offset::new(x + 130.0, 0.0));
-                                        p.line_to(Offset::new(x - 60.0, size.height));
-                                        p.close();
-                                        inner.fill(
-                                            p,
-                                            Gradient::horizontal().with_stops(&[
-                                                (0.0, alpha(Color::WHITE, 0.0)),
-                                                (0.5, alpha(Color::WHITE, 0.118)),
-                                                (1.0, alpha(Color::WHITE, 0.0)),
-                                            ]),
-                                        );
-                                    });
-                                }
-                            }),
-                        ),
-                    ),
-                ),
+                .child(Clip::rounded(22.0).child(Painting::sized(
+                    Size::new(640.0, 300.0),
+                    PaintWith::new(move |book: &mut Sketchbook, size: Size| {
+                        if (0.0..1.0).contains(&sweep) {
+                            let x = sweep * (size.width + 260.0) - 130.0;
+                            book.layer(1.0, 0.0, None, |inner| {
+                                let mut p = vieww_foundation::Path::new();
+                                p.move_to(Offset::new(x - 130.0, size.height));
+                                p.line_to(Offset::new(x + 60.0, 0.0));
+                                p.line_to(Offset::new(x + 130.0, 0.0));
+                                p.line_to(Offset::new(x - 60.0, size.height));
+                                p.close();
+                                inner.fill(
+                                    p,
+                                    Gradient::horizontal().with_stops(&[
+                                        (0.0, alpha(Color::WHITE, 0.0)),
+                                        (0.5, alpha(Color::WHITE, 0.118)),
+                                        (1.0, alpha(Color::WHITE, 0.0)),
+                                    ]),
+                                );
+                            });
+                        }
+                    }),
+                ))),
         );
     }
 
     // 6 · the vignette
-    stack = stack.push(
-        Positioned::fill().child(
-            Painting::sized(
-                CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, size: Size| {
-                    vignette(book, size);
-                }),
-            ),
-        ),
-    );
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, size: Size| {
+            vignette(book, size);
+        }),
+    )));
 
     stack.into()
 }
@@ -598,20 +635,12 @@ pub fn frame(t: f32) -> WidgetNode {
 fn tags_row() -> WidgetNode {
     Flex::row()
         .spacing(10.0)
-        .children(children![
-            tag("material"),
-            tag("curved"),
-            tag("blurred"),
-        ])
+        .children(children![tag("material"), tag("curved"), tag("blurred"),])
         .into()
 }
 
 fn tag(label: &str) -> WidgetNode {
-    Text::new(label)
-        .color(MUTED)
-        .size(11.0)
-        .bold()
-        .into()
+    Text::new(label).color(MUTED).size(11.0).bold().into()
 }
 
 /// The path import keeps rustc honest about unused items in some builds.

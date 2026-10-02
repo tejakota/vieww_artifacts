@@ -11,17 +11,19 @@
 //! The film marks the moment with a "still 1" receipt chip.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{ACCENT, Ctx, INK, LEDGER, MUTED, SYN_KEYWORD, W, alpha, caption, chip_row, clamp01, studio_chrome};
+use super::{
+    alpha, caption, chip_row, clamp01, studio_chrome, Ctx, ACCENT, INK, LEDGER, MUTED, SYN_KEYWORD,
+    W,
+};
 
 /// The second Render's film-time (the script's own).
 const RENDER2_AT: f32 = 188.1;
 /// The settle — the screen is back, at 189.0.
 const BACK_AT: f32 = 189.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let _sec = ctx.sec;
 
@@ -90,7 +92,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(30.0)
                 .child(
                     vieww_widget::Text::new("recompiling — a different screen is being built")
-                        .style(super::geist_mono(16.0).letter_spacing(1.6).color(alpha(super::SYN_FUNCTION, 0.95)))
+                        .style(
+                            super::geist_mono(16.0)
+                                .letter_spacing(1.6)
+                                .color(alpha(super::SYN_FUNCTION, 0.95)),
+                        )
                         .align(TextAlign::Center),
                 ),
         );
@@ -109,7 +115,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(a).child(
                         vieww_widget::Text::new("the screen is new. the count is still 1.")
-                            .style(super::geist_mono(17.0).letter_spacing(1.8).color(alpha(LEDGER, 0.98)))
+                            .style(
+                                super::geist_mono(17.0)
+                                    .letter_spacing(1.8)
+                                    .color(alpha(LEDGER, 0.98)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),

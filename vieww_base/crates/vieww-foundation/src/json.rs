@@ -581,7 +581,10 @@ mod tests {
         assert_eq!(Json::parse("null").unwrap(), Json::Null);
         assert_eq!(Json::parse(" true ").unwrap(), Json::Bool(true));
         assert_eq!(Json::parse("-0.5e1").unwrap(), Json::Number(-5.0));
-        assert_eq!(Json::parse("\"a\\u00e9\\n\"").unwrap(), Json::String("aé\n".into()));
+        assert_eq!(
+            Json::parse("\"a\\u00e9\\n\"").unwrap(),
+            Json::String("aé\n".into())
+        );
     }
 
     #[test]
@@ -625,7 +628,11 @@ mod tests {
         assert_eq!(doc.get("n").and_then(Json::as_usize), None);
         assert_eq!(doc.get("f").and_then(Json::as_usize), None);
         assert_eq!(doc.get("i").and_then(Json::as_usize), Some(7));
-        assert_eq!(doc.get("k").and_then(Json::as_str), Some("w"), "last duplicate wins");
+        assert_eq!(
+            doc.get("k").and_then(Json::as_str),
+            Some("w"),
+            "last duplicate wins"
+        );
         assert_eq!(doc.get("missing"), None);
         assert_eq!(Json::Null.get("x"), None);
     }

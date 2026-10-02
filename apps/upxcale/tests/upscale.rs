@@ -22,7 +22,7 @@ fn checker(w: u32, h: u32, cell: u32) -> Image {
     let mut px = Vec::with_capacity((w * h * 4) as usize);
     for y in 0..h {
         for x in 0..w {
-            let on = ((x / cell) + (y / cell)) % 2 == 0;
+            let on = ((x / cell) + (y / cell)).is_multiple_of(2);
             let v = if on { 235 } else { 20 };
             px.extend_from_slice(&[v, v, v, 255]);
         }
@@ -44,7 +44,7 @@ fn checker(w: u32, h: u32, cell: u32) -> Image {
 /// itself, which is what this test is actually about.
 fn impulse(size: u32) -> Image {
     let mut px = vec![0_u8; (size * size * 4) as usize];
-    for pixel in px.chunks_exact_mut(4) {
+    for pixel in px.as_chunks_mut::<4>().0 {
         pixel[3] = 255;
     }
     let centre = ((size / 2 * size + size / 2) * 4) as usize;
@@ -84,7 +84,7 @@ fn upscale_multiplies_both_axes() {
 fn flat_fields_stay_flat() {
     let source = flat(16, 16, [120, 64, 200, 255]);
     let out = resample(&source, 64, 64);
-    for chunk in out.pixels().chunks_exact(4) {
+    for chunk in out.pixels().as_chunks::<4>().0 {
         // One level of slack for the rounding to u8.
         assert!(
             (i32::from(chunk[0]) - 120).abs() <= 1

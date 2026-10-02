@@ -38,11 +38,23 @@ fn q(v: f32) -> u8 {
 /// become transparent, fading to opaque over `softness`; green/blue spill
 /// on the survivors is clamped.
 #[must_use]
-pub fn chroma_key(frame: &Image, key: Color, tolerance: f32, softness: f32, despill: bool) -> Image {
+pub fn chroma_key(
+    frame: &Image,
+    key: Color,
+    tolerance: f32,
+    softness: f32,
+    despill: bool,
+) -> Image {
     let (kb, kr) = cbcr(f32::from(key.r), f32::from(key.g), f32::from(key.b));
-    let spill = if key.g >= key.b && key.g >= key.r { 1 } else if key.b >= key.r { 2 } else { 0 };
+    let spill = if key.g >= key.b && key.g >= key.r {
+        1
+    } else if key.b >= key.r {
+        2
+    } else {
+        0
+    };
     let mut out = frame.pixels().to_vec();
-    for px in out.chunks_exact_mut(4) {
+    for px in out.as_chunks_mut::<4>().0 {
         let (r, g, b) = (f32::from(px[0]), f32::from(px[1]), f32::from(px[2]));
         let (cb, cr) = cbcr(r, g, b);
         let d = ((cb - kb).powi(2) + (cr - kr).powi(2)).sqrt();
@@ -67,7 +79,7 @@ pub fn chroma_key(frame: &Image, key: Color, tolerance: f32, softness: f32, desp
 #[must_use]
 pub fn luma_key(frame: &Image, threshold: f32, softness: f32, invert: bool) -> Image {
     let mut out = frame.pixels().to_vec();
-    for px in out.chunks_exact_mut(4) {
+    for px in out.as_chunks_mut::<4>().0 {
         let l = 0.2126 * f32::from(px[0]) + 0.7152 * f32::from(px[1]) + 0.0722 * f32::from(px[2]);
         let mut a = smooth(threshold - softness, threshold + softness, l);
         if invert {
@@ -83,8 +95,15 @@ pub fn luma_key(frame: &Image, threshold: f32, softness: f32, invert: bool) -> I
 #[must_use]
 pub fn difference_key(frame: &Image, plate: &Image, tolerance: f32, softness: f32) -> Image {
     let mut out = frame.pixels().to_vec();
-    for (px, pl) in out.chunks_exact_mut(4).zip(plate.pixels().chunks_exact(4)) {
-        let d = (0..3).map(|k| (f32::from(px[k]) - f32::from(pl[k])).abs()).fold(0.0, f32::max);
+    for (px, pl) in out
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(plate.pixels().as_chunks::<4>().0)
+    {
+        let d = (0..3)
+            .map(|k| (f32::from(px[k]) - f32::from(pl[k])).abs())
+            .fold(0.0, f32::max);
         px[3] = q(f32::from(px[3]) * smooth(tolerance, tolerance + softness, d));
     }
     Image::from_rgba8(out, frame.width(), frame.height())
@@ -103,9 +122,16 @@ pub enum MatteMode {
 #[must_use]
 pub fn track_matte(layer: &Image, matte: &Image, mode: MatteMode) -> Image {
     let mut out = layer.pixels().to_vec();
-    for (px, m) in out.chunks_exact_mut(4).zip(matte.pixels().chunks_exact(4)) {
+    for (px, m) in out
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(matte.pixels().as_chunks::<4>().0)
+    {
         let ma = f32::from(m[3]) / 255.0;
-        let luma = (0.2126 * f32::from(m[0]) + 0.7152 * f32::from(m[1]) + 0.0722 * f32::from(m[2])) / 255.0 * ma;
+        let luma = (0.2126 * f32::from(m[0]) + 0.7152 * f32::from(m[1]) + 0.0722 * f32::from(m[2]))
+            / 255.0
+            * ma;
         let k = match mode {
             MatteMode::Alpha => ma,
             MatteMode::AlphaInverted => 1.0 - ma,
@@ -123,7 +149,11 @@ mod tests {
 
     fn img(colors: &[[u8; 4]]) -> Image {
         #[allow(clippy::cast_possible_truncation)]
-        Image::from_rgba8(colors.iter().flatten().copied().collect(), colors.len() as u32, 1)
+        Image::from_rgba8(
+            colors.iter().flatten().copied().collect(),
+            colors.len() as u32,
+            1,
+        )
     }
 
     #[test]
@@ -157,7 +187,13 @@ mod tests {
     fn track_mattes_in_all_four_modes() {
         let layer = img(&[[255, 0, 0, 255], [255, 0, 0, 255]]);
         let matte = img(&[[255, 255, 255, 255], [0, 0, 0, 0]]);
-        let a = |m| track_matte(&layer, &matte, m).pixels().chunks(4).map(|p| p[3]).collect::<Vec<_>>();
+        let a = |m| {
+            track_matte(&layer, &matte, m)
+                .pixels()
+                .chunks(4)
+                .map(|p| p[3])
+                .collect::<Vec<_>>()
+        };
         assert_eq!(a(MatteMode::Alpha), [255, 0]);
         assert_eq!(a(MatteMode::AlphaInverted), [0, 255]);
         assert_eq!(a(MatteMode::Luma), [255, 0]);

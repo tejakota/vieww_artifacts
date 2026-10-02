@@ -11,17 +11,18 @@
 //! frame's real size, wrapped wrong nowhere.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{ACCENT, Ctx, LEDGER, MUTED, SYN_TYPE, W, alpha, caption, chip_row, clamp01, studio_chrome};
+use super::{
+    alpha, caption, chip_row, clamp01, studio_chrome, Ctx, ACCENT, LEDGER, MUTED, SYN_TYPE, W,
+};
 
 /// The platforms' arrival times (the script's own).
 const ANDROID_AT: f32 = 200.5;
 const IOS_AT: f32 = 203.0;
 const DESKTOP_AT: f32 = 205.5;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -39,7 +40,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(head_a).child(
                         vieww_widget::Text::new("one screen, three truths reconciled")
-                            .style(super::geist(26.0).letter_spacing(1.6).color(alpha(super::INK, 0.95)))
+                            .style(
+                                super::geist(26.0)
+                                    .letter_spacing(1.6)
+                                    .color(alpha(super::INK, 0.95)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),
@@ -76,7 +81,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         vieww_widget::Opacity::new(rail_a).child(
                             vieww_widget::Container::new()
-                                .color(alpha(if is_current { super::WASH } else { super::SURFACE_2 }, 0.9))
+                                .color(alpha(
+                                    if is_current {
+                                        super::WASH
+                                    } else {
+                                        super::SURFACE_2
+                                    },
+                                    0.9,
+                                ))
                                 .radius(9.0)
                                 .border(vieww_foundation::Border::new(
                                     alpha(*color, if is_current { 0.6 } else { 0.2 }),
@@ -85,11 +97,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 .padding(vieww_foundation::EdgeInsets::symmetric(7.0, 13.0))
                                 .child(
                                     vieww_widget::Text::new(name.to_string())
-                                        .style(
-                                            super::geist_mono(14.0)
-                                                .letter_spacing(1.6)
-                                                .color(alpha(if lit { *color } else { MUTED }, if is_current { 1.0 } else { 0.7 })),
-                                        )
+                                        .style(super::geist_mono(14.0).letter_spacing(1.6).color(
+                                            alpha(
+                                                if lit { *color } else { MUTED },
+                                                if is_current { 1.0 } else { 0.7 },
+                                            ),
+                                        ))
                                         .align(TextAlign::Center),
                                 ),
                         ),
@@ -113,7 +126,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         vieww_widget::Opacity::new(a).child(
                             vieww_widget::Text::new(metrics)
-                                .style(super::geist_mono(15.0).letter_spacing(1.4).color(alpha(MUTED, 0.95)))
+                                .style(
+                                    super::geist_mono(15.0)
+                                        .letter_spacing(1.4)
+                                        .color(alpha(MUTED, 0.95)),
+                                )
                                 .align(TextAlign::Center),
                         ),
                     ),

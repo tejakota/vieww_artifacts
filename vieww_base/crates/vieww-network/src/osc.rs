@@ -112,7 +112,7 @@ pub fn timetag_to_unix(t: u64) -> f64 {
 }
 
 fn pad(out: &mut Vec<u8>) {
-    while out.len() % 4 != 0 {
+    while !out.len().is_multiple_of(4) {
         out.push(0);
     }
 }
@@ -207,7 +207,10 @@ impl Reader<'_> {
 
     fn string(&mut self) -> Result<String, String> {
         let rest = &self.b[self.i..];
-        let end = rest.iter().position(|&c| c == 0).ok_or("unterminated string")?;
+        let end = rest
+            .iter()
+            .position(|&c| c == 0)
+            .ok_or("unterminated string")?;
         let s = String::from_utf8_lossy(&rest[..end]).into_owned();
         self.i += (end + 4) & !3;
         if self.i > self.b.len() {
@@ -252,7 +255,7 @@ impl Packet {
     /// # Errors
     /// On malformed packets.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
-        if b.len() % 4 != 0 {
+        if !b.len().is_multiple_of(4) {
             return Err("OSC packets are 4-byte aligned".into());
         }
         let mut r = Reader { b, i: 0 };
@@ -269,7 +272,11 @@ impl Packet {
         if !head.starts_with('/') {
             return Err(format!("bad address {head:?}"));
         }
-        let tags = if r.i < b.len() { r.string()? } else { ",".into() };
+        let tags = if r.i < b.len() {
+            r.string()?
+        } else {
+            ",".into()
+        };
         let mut stack: Vec<Vec<Arg>> = vec![Vec::new()];
         for t in tags.chars().skip(1) {
             let a = match t {
@@ -337,7 +344,8 @@ impl Packet {
 /// OSC address-pattern match of `pattern` against a concrete `address`.
 #[must_use]
 pub fn matches(pattern: &str, address: &str) -> bool {
-    let (p, a): (Vec<&str>, Vec<&str>) = (pattern.split('/').collect(), address.split('/').collect());
+    let (p, a): (Vec<&str>, Vec<&str>) =
+        (pattern.split('/').collect(), address.split('/').collect());
     // OSC 1.1 `//` wildcard: an empty part after the root matches any
     // number of address parts.
     fn parts(p: &[&str], a: &[&str]) -> bool {
@@ -357,7 +365,9 @@ fn part(p: &[u8], s: &[u8]) -> bool {
         Some(b'*') => (0..=s.len()).any(|k| part(&p[1..], &s[k..])),
         Some(b'?') => !s.is_empty() && part(&p[1..], &s[1..]),
         Some(b'[') => {
-            let Some(end) = p.iter().position(|&c| c == b']') else { return false };
+            let Some(end) = p.iter().position(|&c| c == b']') else {
+                return false;
+            };
             let Some(&c) = s.first() else { return false };
             let mut set = &p[1..end];
             let neg = set.first() == Some(&b'!');
@@ -378,8 +388,12 @@ fn part(p: &[u8], s: &[u8]) -> bool {
             hit != neg && part(&p[end + 1..], &s[1..])
         }
         Some(b'{') => {
-            let Some(end) = p.iter().position(|&c| c == b'}') else { return false };
-            p[1..end].split(|&c| c == b',').any(|alt| s.starts_with(alt) && part(&p[end + 1..], &s[alt.len()..]))
+            let Some(end) = p.iter().position(|&c| c == b'}') else {
+                return false;
+            };
+            p[1..end]
+                .split(|&c| c == b',')
+                .any(|alt| s.starts_with(alt) && part(&p[end + 1..], &s[alt.len()..]))
         }
         Some(&c) => s.first() == Some(&c) && part(&p[1..], &s[1..]),
     }
@@ -395,7 +409,9 @@ pub struct Router {
 
 impl std::fmt::Debug for Router {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(self.routes.iter().map(|r| &r.0)).finish()
+        f.debug_list()
+            .entries(self.routes.iter().map(|r| &r.0))
+            .finish()
     }
 }
 
@@ -438,7 +454,9 @@ impl OscSocket {
     /// # Errors
     /// If the bind fails.
     pub fn bind(addr: impl ToSocketAddrs) -> io::Result<Self> {
-        Ok(Self { socket: UdpSocket::bind(addr)? })
+        Ok(Self {
+            socket: UdpSocket::bind(addr)?,
+        })
     }
 
     /// The bound address.
@@ -465,7 +483,8 @@ impl OscSocket {
     pub fn recv(&self) -> io::Result<(Packet, SocketAddr)> {
         let mut buf = vec![0u8; 65_536];
         let (n, from) = self.socket.recv_from(&mut buf)?;
-        let p = Packet::decode(&buf[..n]).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let p =
+            Packet::decode(&buf[..n]).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         Ok((p, from))
     }
 
@@ -511,7 +530,10 @@ mod tests {
     #[test]
     fn spec_example_bytes() {
         // The OSC 1.0 spec's "/oscillator/4/frequency" ,f 440.0 example.
-        let p = Packet::Message(Message::new("/oscillator/4/frequency", vec![Arg::Float(440.0)]));
+        let p = Packet::Message(Message::new(
+            "/oscillator/4/frequency",
+            vec![Arg::Float(440.0)],
+        ));
         let b = p.encode();
         let mut expect = b"/oscillator/4/frequency\0,f\0\0".to_vec();
         expect.extend([0x43, 0xdc, 0x00, 0x00]);
@@ -543,7 +565,13 @@ mod tests {
         );
         let p = Packet::Bundle(Bundle {
             time: timetag_from_unix(1_700_000_000.25),
-            content: vec![Packet::Message(m), Packet::Bundle(Bundle { time: IMMEDIATELY, content: vec![Packet::Message(Message::new("/x", vec![]))] })],
+            content: vec![
+                Packet::Message(m),
+                Packet::Bundle(Bundle {
+                    time: IMMEDIATELY,
+                    content: vec![Packet::Message(Message::new("/x", vec![]))],
+                }),
+            ],
         });
         let b = p.encode();
         assert_eq!(b.len() % 4, 0);
@@ -574,7 +602,10 @@ mod tests {
         let got = Rc::new(RefCell::new(Vec::new()));
         let mut r = Router::new();
         let g = got.clone();
-        r.on("/fader/*", move |m| g.borrow_mut().push((m.address.clone(), m.args[0].as_f32().unwrap())));
+        r.on("/fader/*", move |m| {
+            g.borrow_mut()
+                .push((m.address.clone(), m.args[0].as_f32().unwrap()))
+        });
         let p = Packet::Bundle(Bundle {
             time: IMMEDIATELY,
             content: vec![
@@ -584,14 +615,18 @@ mod tests {
             ],
         });
         assert_eq!(r.dispatch(&p), 2);
-        assert_eq!(*got.borrow(), vec![("/fader/1".into(), 0.5), ("/fader/2".into(), 1.0)]);
+        assert_eq!(
+            *got.borrow(),
+            vec![("/fader/1".into(), 0.5), ("/fader/2".into(), 1.0)]
+        );
     }
 
     #[test]
     fn udp_loopback() {
         let a = OscSocket::bind("127.0.0.1:0").unwrap();
         let b = OscSocket::bind("127.0.0.1:0").unwrap();
-        b.set_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+        b.set_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
         let p = Packet::Message(Message::new("/ping", vec![Arg::Int(7)]));
         a.send_to(&p, b.local_addr().unwrap()).unwrap();
         let (got, from) = b.recv().unwrap();
@@ -601,7 +636,13 @@ mod tests {
 
     #[test]
     fn malformed_input_is_an_error_not_a_panic() {
-        for bad in [&b"/a\0"[..], b"/a\0\0,i\0\0", b"nope", b"/a\0\0,[\0\0", b"#bundle\0\0\0\0\0"] {
+        for bad in [
+            &b"/a\0"[..],
+            b"/a\0\0,i\0\0",
+            b"nope",
+            b"/a\0\0,[\0\0",
+            b"#bundle\0\0\0\0\0",
+        ] {
             assert!(Packet::decode(bad).is_err(), "{bad:?}");
         }
     }

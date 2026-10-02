@@ -11,11 +11,11 @@
 //!
 //! Tap → **3**. Twenty seconds, one breath, no cuts — Shō deepens.
 
-use vieww_foundation::{Color, Offset, Sketchbook, Size};
+use vieww_foundation::{Offset, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, smoothstep, xywh, MUTED, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, smoothstep, MUTED, VIOLET_SOFT};
 
 use super::studio::{studio, App, Code, Seg, Spec, CODE_PLAIN};
 use super::{caption, ease_out_type, Ctx};
@@ -39,7 +39,7 @@ fn leak(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -50,7 +50,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let dial_full = DIAL.chars().count();
     let spring_full = SPRING.chars().count();
     let dial_n = (dial_full as f32 * ease_out_type(clamp01((t - 0.08) / 0.22))).round() as usize;
-    let spring_n = (spring_full as f32 * ease_out_type(clamp01((t - 0.32) / 0.16))).round() as usize;
+    let spring_n =
+        (spring_full as f32 * ease_out_type(clamp01((t - 0.32) / 0.16))).round() as usize;
 
     let err_in = smoothstep(clamp01((t - 0.55) / 0.05));
     let fix_step = clamp01((t - 0.65) / 0.07);
@@ -77,7 +78,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         extras.push(seg_line(SPRING, spring_n));
     }
 
-    let code = Code::SayExt { blink: ctx.sec, lines: extras };
+    let code = Code::SayExt {
+        blink: ctx.sec,
+        lines: extras,
+    };
 
     // The app grows with the typing — per-keystroke compose.
     let mut app = App::new(ctx.ladder, super::tap_pulse(abs), abs);
@@ -106,15 +110,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // The fix lands with a pop — a brief ring at the preview's label.
     if (0.72..0.82).contains(&t) {
         let pop = clamp01((t - 0.72) / 0.08);
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    let c = Offset::new(1160.0, 330.0);
-                    book.ring(c, 20.0 + 60.0 * pop, 2.0, alpha(VIOLET_SOFT, 0.6 * (1.0 - pop)));
-                }),
-            )),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                let c = Offset::new(1160.0, 330.0);
+                book.ring(
+                    c,
+                    20.0 + 60.0 * pop,
+                    2.0,
+                    alpha(VIOLET_SOFT, 0.6 * (1.0 - pop)),
+                );
+            }),
+        )));
     }
 
     stack.into()

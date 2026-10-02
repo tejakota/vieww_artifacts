@@ -89,7 +89,10 @@ impl Quad {
 
     fn insert(&mut self, i: usize, p: Offset, depth: u32, all: &[Offset]) {
         let total = self.mass + 1.0;
-        self.center = Offset::new((self.center.dx * self.mass + p.dx) / total, (self.center.dy * self.mass + p.dy) / total);
+        self.center = Offset::new(
+            (self.center.dx * self.mass + p.dx) / total,
+            (self.center.dy * self.mass + p.dy) / total,
+        );
         self.mass = total;
         if self.is_leaf() && (self.points.is_empty() || depth > 32) {
             // An empty leaf takes the body; past the depth limit coincident
@@ -143,7 +146,12 @@ impl Simulation {
 
     /// Add a link with D3's default strength.
     pub fn link(&mut self, source: usize, target: usize, distance: f32) {
-        self.links.push(Link { source, target, distance, strength: None });
+        self.links.push(Link {
+            source,
+            target,
+            distance,
+            strength: None,
+        });
     }
 
     /// Whether alpha has cooled below `alpha_min`.
@@ -153,7 +161,10 @@ impl Simulation {
     }
 
     fn build_tree(&self) -> Quad {
-        let (mut lo, mut hi) = (Offset::new(f32::MAX, f32::MAX), Offset::new(f32::MIN, f32::MIN));
+        let (mut lo, mut hi) = (
+            Offset::new(f32::MAX, f32::MAX),
+            Offset::new(f32::MIN, f32::MIN),
+        );
         for n in &self.nodes {
             lo = Offset::new(lo.dx.min(n.position.dx), lo.dy.min(n.position.dy));
             hi = Offset::new(hi.dx.max(n.position.dx), hi.dy.max(n.position.dy));
@@ -170,7 +181,11 @@ impl Simulation {
     fn many_body(&self, q: &Quad, i: usize, p: Offset, alpha: f32, visits: &mut usize) -> Offset {
         *visits += 1;
         let is_leaf = q.is_leaf();
-        let own = if is_leaf { q.points.iter().filter(|&&j| j == i).count() } else { 0 };
+        let own = if is_leaf {
+            q.points.iter().filter(|&&j| j == i).count()
+        } else {
+            0
+        };
         #[allow(clippy::cast_precision_loss)]
         let mass = q.mass - own as f32;
         if mass <= 0.0 {
@@ -210,7 +225,9 @@ impl Simulation {
             }
             let len = d.distance();
             #[allow(clippy::cast_precision_loss)]
-            let strength = l.strength.unwrap_or(1.0 / degree[l.source].min(degree[l.target]).max(1) as f32);
+            let strength = l
+                .strength
+                .unwrap_or(1.0 / degree[l.source].min(degree[l.target]).max(1) as f32);
             let k = (len - l.distance) / len * alpha * strength;
             #[allow(clippy::cast_precision_loss)]
             let bias = degree[l.source] as f32 / (degree[l.source] + degree[l.target]) as f32;
@@ -222,7 +239,9 @@ impl Simulation {
         if self.charge != 0.0 && n > 1 {
             let tree = self.build_tree();
             let mut visits = 0;
-            let forces: Vec<Offset> = (0..n).map(|i| self.many_body(&tree, i, self.nodes[i].position, alpha, &mut visits)).collect();
+            let forces: Vec<Offset> = (0..n)
+                .map(|i| self.many_body(&tree, i, self.nodes[i].position, alpha, &mut visits))
+                .collect();
             for (node, f) in self.nodes.iter_mut().zip(forces) {
                 node.velocity = node.velocity + f;
             }
@@ -270,7 +289,11 @@ impl Simulation {
         if let Some(c) = self.center {
             #[allow(clippy::cast_precision_loss)]
             let inv = 1.0 / n.max(1) as f32;
-            let mean = self.nodes.iter().fold(Offset::ZERO, |acc, nd| acc + nd.position).scale(inv);
+            let mean = self
+                .nodes
+                .iter()
+                .fold(Offset::ZERO, |acc, nd| acc + nd.position)
+                .scale(inv);
             let shift = c - mean;
             for node in &mut self.nodes {
                 if node.fixed.is_none() {
@@ -312,11 +335,23 @@ mod tests {
     #[test]
     fn charge_spreads_nodes_and_centre_holds_the_mean() {
         let mut s = Simulation::new(30);
-        let r0 = s.nodes.iter().map(|n| n.position.distance()).fold(0.0f32, f32::max);
+        let r0 = s
+            .nodes
+            .iter()
+            .map(|n| n.position.distance())
+            .fold(0.0f32, f32::max);
         s.run(500);
-        let r1 = s.nodes.iter().map(|n| n.position.distance()).fold(0.0f32, f32::max);
+        let r1 = s
+            .nodes
+            .iter()
+            .map(|n| n.position.distance())
+            .fold(0.0f32, f32::max);
         assert!(r1 > r0, "repelled outward: {r0} → {r1}");
-        let mean = s.nodes.iter().fold(Offset::ZERO, |a, n| a + n.position).scale(1.0 / 30.0);
+        let mean = s
+            .nodes
+            .iter()
+            .fold(Offset::ZERO, |a, n| a + n.position)
+            .scale(1.0 / 30.0);
         assert!(mean.distance() < 1e-3);
     }
 

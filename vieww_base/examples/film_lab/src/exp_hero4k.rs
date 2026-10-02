@@ -13,10 +13,10 @@ use vieww_widget::Transformed;
 use crate::exp_hero;
 
 /// Film-time this experiment spans (same as the hero).
-pub const SECONDS: f32 = exp_hero::SECONDS;
+pub(crate) const SECONDS: f32 = exp_hero::SECONDS;
 
 /// The frame: the hero tree, doubled.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     Transformed::new(Transform::scale(2.0, 2.0))
         .child(exp_hero::frame(t))
         .into()

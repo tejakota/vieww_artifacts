@@ -32,15 +32,16 @@
 //! collision on an already-separating overlapping pair impossible. Energy
 //! then closed at 10⁻¹³ and stayed there for the whole run.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The box and the gas ─────────────────────────────────────────────────────
 
@@ -314,7 +315,7 @@ fn pressure_z(run: &Run, temp: f64) -> f64 {
 const BX: f32 = 56.0;
 const BY: f32 = 150.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let run = run_to(t as f64);
 
     // T, measured from the same discs that are about to be drawn.
@@ -342,7 +343,11 @@ pub fn frame(t: f32) -> WidgetNode {
             dof += 1;
         }
     }
-    let chi2_dof = if dof > 1 { chi2 / (dof - 1) as f64 } else { 0.0 };
+    let chi2_dof = if dof > 1 {
+        chi2 / (dof - 1) as f64
+    } else {
+        0.0
+    };
 
     // The equilibrium H is NOT a remembered number: it is Σ p ln p over the
     // Maxwell–Boltzmann density at the measured T, binned exactly as the
@@ -373,15 +378,19 @@ pub fn frame(t: f32) -> WidgetNode {
             let h = size.height;
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(12, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(12, 11, 16))]),
             );
 
             // ── the box ──
             book.rrect(
-                Rect::new(BX - 14.0, BY - 14.0, BX + BOX_W as f32 + 14.0, BY + BOX_H as f32 + 14.0),
+                Rect::new(
+                    BX - 14.0,
+                    BY - 14.0,
+                    BX + BOX_W as f32 + 14.0,
+                    BY + BOX_H as f32 + 14.0,
+                ),
                 10.0,
                 alpha(Color::rgb(13, 13, 19), 0.95),
             );
@@ -536,26 +545,42 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
     }
     // the three meter labels
     for (x, y, s) in [
-        (756.0_f32, 168.0_f32, "SPEED HISTOGRAM vs MAXWELL–BOLTZMANN".to_string()),
-        (756.0, 472.0, "BOLTZMANN'S H = Σ p ln p — the theorem, descending".to_string()),
+        (
+            756.0_f32,
+            168.0_f32,
+            "SPEED HISTOGRAM vs MAXWELL–BOLTZMANN".to_string(),
+        ),
+        (
+            756.0,
+            472.0,
+            "BOLTZMANN'S H = Σ p ln p — the theorem, descending".to_string(),
+        ),
         (1100.0, 168.0, "LEFT HALF → ½".to_string()),
     ] {
         stack = stack.push(
-            Positioned::new().left(x).top(y).width(360.0).height(14.0).child(
-                Text::new(s).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .letter_spacing(0.9)
-                        .color(alpha(MUTED, 0.85)),
+            Positioned::new()
+                .left(x)
+                .top(y)
+                .width(360.0)
+                .height(14.0)
+                .child(
+                    Text::new(s).style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()

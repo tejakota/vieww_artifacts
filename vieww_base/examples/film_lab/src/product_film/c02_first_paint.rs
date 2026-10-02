@@ -14,19 +14,18 @@
 //! relief begins: the loop the studio exists to shorten, shortened.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{
-    ACCENT, Ctx, INK, LEDGER, MUTED, SYN_TYPE, W, alpha, caption, chip_row, clamp01,
-    studio_chrome, tap_ring_at,
-};
 use super::script::TAP_LIVE_ROW;
+use super::{
+    alpha, caption, chip_row, clamp01, studio_chrome, tap_ring_at, Ctx, ACCENT, INK, LEDGER, MUTED,
+    SYN_TYPE, W,
+};
 
 /// The acceptance moment — the tap lands at 140.2 (film seconds).
 const ACCEPT_AT: f32 = 140.2;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -124,7 +123,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                             "measured, this bench: edit → pixels in {} ms",
                             ms
                         ))
-                        .style(super::geist_mono(14.0).letter_spacing(1.4).color(alpha(LEDGER, 0.9)))
+                        .style(
+                            super::geist_mono(14.0)
+                                .letter_spacing(1.4)
+                                .color(alpha(LEDGER, 0.9)),
+                        )
                         .align(TextAlign::Center),
                     ),
                 ),

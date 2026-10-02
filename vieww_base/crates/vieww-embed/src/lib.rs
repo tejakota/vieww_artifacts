@@ -217,13 +217,11 @@ struct WebViewPainter {
 
 impl CustomPainter for WebViewPainter {
     fn paint(&self, size: Size) -> Vec<DrawInstruction> {
-        let mut instructions = vec![
-            DrawInstruction::FillRoundedRect {
-                rect: Rect::new(0.0, 0.0, size.width, size.height),
-                radius: 8.0,
-                color: self.frame.with_alpha(0x60),
-            },
-        ];
+        let mut instructions = vec![DrawInstruction::FillRoundedRect {
+            rect: Rect::new(0.0, 0.0, size.width, size.height),
+            radius: 8.0,
+            color: self.frame.with_alpha(0x60),
+        }];
         // The cross-hatch: corner-to-corner hairlines, the universal
         // "reserved space" mark from paper forms to CAD.
         let inset = 6.0;
@@ -274,7 +272,10 @@ mod tests {
     fn the_spec_speaks_the_registrys_language() {
         let spec = WebContent::url("https://example.test/").spec();
         assert_eq!(spec.kind, WEB_VIEW_KIND);
-        assert_eq!(spec.parameters.get("url").map(String::as_str), Some("https://example.test/"));
+        assert_eq!(
+            spec.parameters.get("url").map(String::as_str),
+            Some("https://example.test/")
+        );
         assert!(!spec.parameters.contains_key("srcdoc"));
 
         let spec = WebContent::html("<em>hi</em>").spec();
@@ -304,6 +305,9 @@ mod tests {
         let view = WebView::new(WebContent::url("https://example.test/"));
         let node = inflate(view);
         let rendered = format!("{node:?}");
-        assert!(rendered.contains("WebView"), "the placeholder is built: {rendered}");
+        assert!(
+            rendered.contains("WebView"),
+            "the placeholder is built: {rendered}"
+        );
     }
 }

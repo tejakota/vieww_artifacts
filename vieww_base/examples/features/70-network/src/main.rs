@@ -15,9 +15,7 @@ use vieww_widget::prelude::*;
 fn client() -> MemoryClient {
     MemoryClient::new()
         .route("/api/devices", |_| {
-            HttpResponse::ok(
-                "Speaker,Living room,82\nLamp,Bedroom,15\nThermostat,Hall,64",
-            )
+            HttpResponse::ok("Speaker,Living room,82\nLamp,Bedroom,15\nThermostat,Hall,64")
         })
         .route("/api/status", |_| {
             HttpResponse::ok("ok, uptime 4h 12m, 3 clients")
@@ -80,12 +78,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }))
                     .into();
             }
-            Text::new(value).style(TextStyle {
-                size: 13.0,
-                color: Color::rgb(50, 56, 70),
-                ..TextStyle::default()
-            })
-            .into()
+            Text::new(value)
+                .style(TextStyle {
+                    size: 13.0,
+                    color: Color::rgb(50, 56, 70),
+                    ..TextStyle::default()
+                })
+                .into()
         };
 
         feature_harness::set_page(
@@ -93,10 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(
-                    Flex::column()
-                        .spacing(14.0)
-                        .children(children![
+                .child(Flex::column().spacing(14.0).children(children![
                             Text::new("GET /api/devices → 200").style(TextStyle {
                                 size: 13.0,
                                 color: Color::rgb(90, 100, 120),
@@ -118,8 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 color: Color::rgb(150, 158, 172),
                                 ..TextStyle::default()
                             }),
-                        ]),
-                ),
+                        ])),
         );
     })
 }

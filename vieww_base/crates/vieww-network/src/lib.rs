@@ -165,15 +165,15 @@ impl Url {
             Some(("http", rest)) => (Scheme::Http, rest),
             Some(("https", rest)) => (Scheme::Https, rest),
             Some((other, _)) => {
-                return Err(NetError::NotAUrl(format!("scheme `{other}` is not http or https")))
+                return Err(NetError::NotAUrl(format!(
+                    "scheme `{other}` is not http or https"
+                )))
             }
             None => return Err(NetError::NotAUrl("no `://` in it".into())),
         };
 
         // The authority ends at the first `/`, `?`, or the end of the text.
-        let authority_end = rest
-            .find(['/', '?'])
-            .unwrap_or(rest.len());
+        let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
         let authority = &rest[..authority_end];
         let after = &rest[authority_end..];
 
@@ -190,9 +190,9 @@ impl Url {
             // A `host:port` split — but only when the tail is a port, not
             // an IPv6 literal's colon.
             Some((host, tail)) if !host.is_empty() && !host.starts_with('[') => {
-                let port = tail.parse::<u16>().map_err(|_| {
-                    NetError::NotAUrl(format!("port `{tail}` is not a number"))
-                })?;
+                let port = tail
+                    .parse::<u16>()
+                    .map_err(|_| NetError::NotAUrl(format!("port `{tail}` is not a number")))?;
                 (host.to_ascii_lowercase(), port)
             }
             _ => (authority.to_ascii_lowercase(), scheme.default_port()),
@@ -200,10 +200,21 @@ impl Url {
 
         let (path, query) = match after.split_once('?') {
             Some((path, query)) => (
-                if path.is_empty() { "/".to_string() } else { path.to_string() },
+                if path.is_empty() {
+                    "/".to_string()
+                } else {
+                    path.to_string()
+                },
                 Some(query.to_string()),
             ),
-            None => (if after.is_empty() { "/".to_string() } else { after.to_string() }, None),
+            None => (
+                if after.is_empty() {
+                    "/".to_string()
+                } else {
+                    after.to_string()
+                },
+                None,
+            ),
         };
 
         Ok(Self {
@@ -255,8 +266,21 @@ impl Url {
             format!(":{}", self.port)
         };
         match &self.query {
-            Some(query) => format!("{}://{}{}{}?{}", self.scheme.as_str(), self.host, port, self.path, query),
-            None => format!("{}://{}{}{}", self.scheme.as_str(), self.host, port, self.path),
+            Some(query) => format!(
+                "{}://{}{}{}?{}",
+                self.scheme.as_str(),
+                self.host,
+                port,
+                self.path,
+                query
+            ),
+            None => format!(
+                "{}://{}{}{}",
+                self.scheme.as_str(),
+                self.host,
+                port,
+                self.path
+            ),
         }
     }
 }
@@ -608,7 +632,10 @@ mod tests {
 
         assert_eq!(request.method, Method::Patch);
         assert_eq!(request.method.as_str(), "PATCH");
-        assert_eq!(request.header_value("content-type"), Some("application/json"));
+        assert_eq!(
+            request.header_value("content-type"),
+            Some("application/json")
+        );
         assert_eq!(request.header_value("X-CUSTOM"), Some("1"));
         assert_eq!(request.header_value("missing"), None);
         assert_eq!(request.body, br#"{"a":1}"#.to_vec());
@@ -711,6 +738,9 @@ mod tests {
             NetError::NotAUrl("no host".into()).to_string(),
             "not a URL this layer sends: no host"
         );
-        assert_eq!(NetError::Unsupported.to_string(), "no network client on this platform");
+        assert_eq!(
+            NetError::Unsupported.to_string(),
+            "no network client on this platform"
+        );
     }
 }

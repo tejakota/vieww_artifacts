@@ -146,7 +146,14 @@ impl<T> std::fmt::Debug for StateMachine<T> {
         // printable — a `Box<dyn Fn>` has no `Debug` — and a machine's useful
         // debugging identity is *where it is*, not what it is carrying.
         f.debug_struct("StateMachine")
-            .field("states", &self.states.iter().map(|state| state.name).collect::<Vec<_>>())
+            .field(
+                "states",
+                &self
+                    .states
+                    .iter()
+                    .map(|state| state.name)
+                    .collect::<Vec<_>>(),
+            )
             .field("current", &self.current)
             .field("destination", &self.destination())
             .field("now", &self.now)
@@ -324,8 +331,8 @@ impl<T: Lerp> StateMachine<T> {
             // contradiction this type resolves in favour of the destination.
             return to;
         }
-        let alpha = ((self.now - flight.started).as_secs_f32() / duration.as_secs_f32())
-            .clamp(0.0, 1.0);
+        let alpha =
+            ((self.now - flight.started).as_secs_f32() / duration.as_secs_f32()).clamp(0.0, 1.0);
         from.lerp(to, Curve::EASE_IN_OUT.transform(alpha))
     }
 
@@ -404,7 +411,10 @@ mod tests {
         let mut machine: StateMachine<f32> = StateMachine::new("walk", rising());
         machine.advance(ms(250));
         let sample = machine.sample();
-        assert!((sample - 0.5).abs() < 0.001, "2.5 loops in: half way again, got {sample}");
+        assert!(
+            (sample - 0.5).abs() < 0.001,
+            "2.5 loops in: half way again, got {sample}"
+        );
         assert_eq!(machine.states().len(), 1);
     }
 
@@ -431,7 +441,10 @@ mod tests {
         assert_eq!(machine.current(), "on", "no fade: the state moved now");
         assert_eq!(machine.entered_at, ms(37), "the clock starts at the cut");
         machine.advance(ms(50));
-        assert!((machine.sample() - 0.5).abs() < 0.001, "50 ms into the new state's track");
+        assert!(
+            (machine.sample() - 0.5).abs() < 0.001,
+            "50 ms into the new state's track"
+        );
     }
 
     #[test]
@@ -496,8 +509,14 @@ mod tests {
         // If the walk had frozen at the moment of the event, both samples
         // would be the fade's alpha apart (a sliver over 1000 ms). They are
         // half the walk's range apart, because the from-state kept playing.
-        assert!((0.2..0.3).contains(&first), "walk at phase 0.25, got {first}");
-        assert!((0.7..0.8).contains(&second), "walk at phase 0.75, got {second}");
+        assert!(
+            (0.2..0.3).contains(&first),
+            "walk at phase 0.25, got {first}"
+        );
+        assert!(
+            (0.7..0.8).contains(&second),
+            "walk at phase 0.75, got {second}"
+        );
     }
 
     #[test]
@@ -532,7 +551,10 @@ mod tests {
         // The target clock began at the fade's start: 350 ms in, wrapped once
         // past its 100 ms loop point — the state never "restarts" on landing.
         let sample = machine.sample();
-        assert!((sample - 0.5).abs() < 0.001, "350 ms into a 100 ms loop: half way, got {sample}");
+        assert!(
+            (sample - 0.5).abs() < 0.001,
+            "350 ms into a 100 ms loop: half way, got {sample}"
+        );
     }
 
     #[test]

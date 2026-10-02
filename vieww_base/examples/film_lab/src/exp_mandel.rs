@@ -23,12 +23,12 @@ use std::sync::OnceLock;
 
 use vieww_foundation::{Color, Gradient, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, mix, tint, FAINT, MUTED, VIOLET, VIOLET_DEEP, MAGENTA, AMBER, BG_DEEP};
+use crate::film_lib::{alpha, mix, tint, AMBER, BG_DEEP, MAGENTA, VIOLET, VIOLET_DEEP};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 8.0;
+pub(crate) const SECONDS: f32 = 8.0;
 
 /// Cell grid — 320 × 180 = 57,600 rects per frame.
 const GX: usize = 320;
@@ -97,7 +97,7 @@ fn escape(c_re: f64, c_im: f64, budget: u32) -> Option<f32> {
         if z_re2 + z_im2 > 256.0 {
             // Smooth colouring: interpolate the escape.
             let mag2 = z_re2 + z_im2;
-            let nu = (mag2.log2().log2());
+            let nu = mag2.log2().log2();
             return Some(i as f32 + 1.0 - nu as f32);
         }
         z_im = 2.0 * z_re * z_im + c_im;
@@ -118,10 +118,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
         Rect::new(0.0, 0.0, w, h),
         Gradient::vertical()
             .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(4, 4, 8)),
-                (1.0, BG_DEEP),
-            ]),
+            .with_stops(&[(0.0, Color::rgb(4, 4, 8)), (1.0, BG_DEEP)]),
     );
 
     let zoom = zoom_at(t);
@@ -153,10 +150,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 }
                 None => {
                     // Inside the set: pure black, still counted.
-                    book.rect(
-                        Rect::new(x, y, x + cell_w, y + cell_h),
-                        Color::rgb(2, 2, 5),
-                    );
+                    book.rect(Rect::new(x, y, x + cell_w, y + cell_h), Color::rgb(2, 2, 5));
                 }
             }
             rects += 1;
@@ -175,7 +169,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

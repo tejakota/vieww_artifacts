@@ -42,7 +42,7 @@ fn checkerboard(size: u32) -> Image {
 
 fn solid(width: u32, height: u32, color: [u8; 4]) -> Image {
     let mut pixels = vec![0u8; width as usize * height as usize * 4];
-    for chunk in pixels.chunks_exact_mut(4) {
+    for chunk in pixels.as_chunks_mut::<4>().0 {
         chunk.copy_from_slice(&color);
     }
     Image::from_rgba8(pixels, width, height)

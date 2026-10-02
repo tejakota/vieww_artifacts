@@ -14,17 +14,16 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, Ctx, ENGINE, MUTED, W, alpha, caption, clamp01, distance_chip, gap_line, glow, grain,
-    ground, pole_caret, pole_screen, progress_rail, spring_out, tint, vignette,
+    alpha, caption, clamp01, distance_chip, gap_line, glow, grain, ground, pole_caret, pole_screen,
+    progress_rail, spring_out, tint, vignette, Ctx, ACCENT, ENGINE, MUTED, W,
 };
-use crate::film_lib::{Rng, ease_out_cubic};
+use crate::film_lib::{ease_out_cubic, Rng};
 
 /// The three trees — name, sub, colour, x position.
 const TREES: [(&str, &str, f32); 3] = [
     ("WIDGET", "what you mean", 700.0),
     ("ELEMENT", "what persists", 960.0),
     ("RENDER", "what draws", 1220.0),
-
 ];
 /// The tree glyph's home y.
 const TREE_Y: f32 = 470.0;
@@ -63,8 +62,24 @@ fn tree_glyph(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, t: f32, a: f32, c
             let dx = span * 0.5 * dir * (1.0 + sway * 10.0);
             let x1 = x0 + dx;
             let y1 = y0 + dy * grow;
-            book.line(Offset::new(x0, y0), Offset::new(x1, y1), alpha(color, a * 0.8), 2.2);
-            fan(book, x1, y1, span * 0.5, level + 1, depth, sway + k * 0.1, t, a, color);
+            book.line(
+                Offset::new(x0, y0),
+                Offset::new(x1, y1),
+                alpha(color, a * 0.8),
+                2.2,
+            );
+            fan(
+                book,
+                x1,
+                y1,
+                span * 0.5,
+                level + 1,
+                depth,
+                sway + k * 0.1,
+                t,
+                a,
+                color,
+            );
         }
         if level == 0 {
             book.circle(Offset::new(x0, y0), 5.5, alpha(tint(color, 0.3), a));
@@ -75,7 +90,7 @@ fn tree_glyph(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, t: f32, a: f32, c
     glow(book, cx, cy, r * 1.7, color, a * 0.10);
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -96,11 +111,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     let bx = 800.0 + rng.f01() * 320.0;
                     let by = 560.0 - rng.f01() * 380.0 * dissolve - dissolve * 160.0;
                     let r = 0.8 + rng.f01() * 2.2;
-                    book.circle(
-                        Offset::new(bx, by),
-                        r,
-                        alpha(MUTED, 0.5 * (1.0 - dissolve)),
-                    );
+                    book.circle(Offset::new(bx, by), r, alpha(MUTED, 0.5 * (1.0 - dissolve)));
                 }
             }
         }),
@@ -132,7 +143,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         stack = stack.push(Positioned::fill().child(Painting::sized(
             super::CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                tree_glyph(book, x, TREE_Y, TREE_R * grow.max(0.08), sec, tree_a, ENGINE);
+                tree_glyph(
+                    book,
+                    x,
+                    TREE_Y,
+                    TREE_R * grow.max(0.08),
+                    sec,
+                    tree_a,
+                    ENGINE,
+                );
             }),
         )));
         // The name + role, under each tree.
@@ -192,14 +211,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     let y = 430.0 + 12.0 * (phase * std::f32::consts::PI).sin();
                     let trail = 0.4 + 0.6 * (phase * std::f32::consts::PI).sin();
                     glow(book, x, y, 26.0, ENGINE, flow_a * 0.5 * trail);
-                    book.circle(Offset::new(x, y), 3.4, alpha(tint(ENGINE, 0.3), flow_a * trail));
+                    book.circle(
+                        Offset::new(x, y),
+                        3.4,
+                        alpha(tint(ENGINE, 0.3), flow_a * trail),
+                    );
                 }
             }
         }),
     )));
 
     // The caption + the act chip — movement II opens.
-    stack = stack.push(super::act_chip("MOVEMENT II", "THE ENGINE", clamp01((t - 0.04) / 0.10)));
+    stack = stack.push(super::act_chip(
+        "MOVEMENT II",
+        "THE ENGINE",
+        clamp01((t - 0.04) / 0.10),
+    ));
     stack = stack.push(caption(
         "vieww: three trees, one job each — and nothing between them and the pixels",
         1002.0,

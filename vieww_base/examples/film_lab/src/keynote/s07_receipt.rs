@@ -9,11 +9,13 @@
 //! Ten signal writes land as ticks; one rebuild bar answers. The ratio is
 //! counted live from the strip's own script, not asserted.
 
-use vieww_foundation::{Color, Offset, Sketchbook, Size};
+use vieww_foundation::{Color, Offset, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_cubic, mix, spring_out, tint, xywh, INK, MUTED, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, spring_out, xywh, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 use super::studio::{studio, App, Code, Spec};
 use super::{caption, Ctx};
@@ -22,7 +24,7 @@ use super::{caption, Ctx};
 const RACK_T0: f32 = 0.02;
 const RACK_T1: f32 = 0.20;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -37,10 +39,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     app.spring = 1.0;
 
     // The build badge — frames built, the harness's own count (E-09).
-    let badge = if t > 0.20 { Some((abs * 60.0) as u64) } else { None };
+    let badge = if t > 0.20 {
+        Some((abs * 60.0) as u64)
+    } else {
+        None
+    };
 
     let spec = Spec {
-        code: Code::Say { typed: 1.0, blink: ctx.sec },
+        code: Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app,
         editor_blur,
         preview_blur,
@@ -57,25 +66,46 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let p_txt = format!("σ {:.1}", preview_blur);
         stack = stack
             .push(
-                Positioned::new().left(604.0).top(96.0).width(160.0).height(24.0).child(
-                    Text::new(e_txt).style(
-                        vieww_foundation::TextStyle::new(15.0).monospace().color(alpha(MUTED, 0.9)),
+                Positioned::new()
+                    .left(604.0)
+                    .top(96.0)
+                    .width(160.0)
+                    .height(24.0)
+                    .child(
+                        Text::new(e_txt).style(
+                            vieww_foundation::TextStyle::new(15.0)
+                                .monospace()
+                                .color(alpha(MUTED, 0.9)),
+                        ),
                     ),
-                ),
             )
             .push(
-                Positioned::new().left(976.0).top(96.0).width(160.0).height(24.0).child(
-                    Text::new(p_txt).style(
-                        vieww_foundation::TextStyle::new(15.0).monospace().color(alpha(MUTED, 0.9)),
+                Positioned::new()
+                    .left(976.0)
+                    .top(96.0)
+                    .width(160.0)
+                    .height(24.0)
+                    .child(
+                        Text::new(p_txt).style(
+                            vieww_foundation::TextStyle::new(15.0)
+                                .monospace()
+                                .color(alpha(MUTED, 0.9)),
+                        ),
                     ),
-                ),
             );
     }
 
     // The scrub strip — ten writes, one rebuild. Laid over the studio's
     // lower margin, the coalescing scheduler made visible (E-08).
     let scrub = scrub_strip(t);
-    stack = stack.push(Positioned::new().left(0.0).top(760.0).width(1920.0).height(220.0).child(scrub));
+    stack = stack.push(
+        Positioned::new()
+            .left(0.0)
+            .top(760.0)
+            .width(1920.0)
+            .height(220.0)
+            .child(scrub),
+    );
 
     stack = stack.push(caption(
         "ten writes · one rebuild",
@@ -105,7 +135,12 @@ fn scrub_strip(t: f32) -> WidgetNode {
             let n = 10usize; // the writes — counted by this very loop
 
             // The rail.
-            book.line(Offset::new(x0, y + 46.0), Offset::new(x1, y + 46.0), alpha(Color::WHITE, 0.08), 1.0);
+            book.line(
+                Offset::new(x0, y + 46.0),
+                Offset::new(x1, y + 46.0),
+                alpha(Color::WHITE, 0.08),
+                1.0,
+            );
 
             // The write ticks — one per signal write, each with its pulse.
             let mut landed = 0usize;
@@ -119,7 +154,12 @@ fn scrub_strip(t: f32) -> WidgetNode {
                     // Its settling pulse.
                     let age = ((t - wi) / 0.24).min(1.0);
                     if age < 1.0 {
-                        book.ring(Offset::new(x, y + 32.0), 8.0 + 16.0 * age, 1.6, alpha(VIOLET, (1.0 - age) * 0.7));
+                        book.ring(
+                            Offset::new(x, y + 32.0),
+                            8.0 + 16.0 * age,
+                            1.6,
+                            alpha(VIOLET, (1.0 - age) * 0.7),
+                        );
                     }
                 } else {
                     book.circle(Offset::new(x, y + 32.0), 3.0, alpha(MUTED, 0.25));

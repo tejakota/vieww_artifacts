@@ -137,7 +137,7 @@ fn read_exact<const N:usize>(c:&mut Cursor<&[u8]>)->Result<[u8;N],FormatError>{l
 #[cfg(test)]
 mod tests {
     use super::*;
-    use three_core::*;
+    
 
     fn sample() -> Capture3D {
         Capture3D {

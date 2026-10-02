@@ -49,20 +49,50 @@ impl Axis {
 /// One step of a stack.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Modifier {
-    Transform { translate: [f32; 3], scale: [f32; 3], rotate_y: f32 },
-    Mirror { axis: Axis, merge: f32 },
-    Array { count: usize, offset: [f32; 3] },
-    Subdivide { levels: u32, smooth: bool },
-    Displace { strength: f32, scale: f32, seed: u32 },
+    Transform {
+        translate: [f32; 3],
+        scale: [f32; 3],
+        rotate_y: f32,
+    },
+    Mirror {
+        axis: Axis,
+        merge: f32,
+    },
+    Array {
+        count: usize,
+        offset: [f32; 3],
+    },
+    Subdivide {
+        levels: u32,
+        smooth: bool,
+    },
+    Displace {
+        strength: f32,
+        scale: f32,
+        seed: u32,
+    },
     /// Rotate about Y by `angle` radians per unit of height.
-    Twist { angle: f32 },
+    Twist {
+        angle: f32,
+    },
     /// Bend the Y axis into an arc of `angle` radians over the mesh's height.
-    Bend { angle: f32 },
+    Bend {
+        angle: f32,
+    },
     /// Scale XZ from 1 at the bottom to `factor` at the top.
-    Taper { factor: f32 },
-    Smooth { factor: f32, iterations: u32 },
-    Decimate { cell: f32 },
-    Weld { distance: f32 },
+    Taper {
+        factor: f32,
+    },
+    Smooth {
+        factor: f32,
+        iterations: u32,
+    },
+    Decimate {
+        cell: f32,
+    },
+    Weld {
+        distance: f32,
+    },
     FlipNormals,
 }
 
@@ -87,7 +117,9 @@ impl ModifierStack {
     /// Evaluate the stack over `base`.
     #[must_use]
     pub fn apply(&self, base: &Mesh) -> Mesh {
-        self.modifiers.iter().fold(base.clone(), |m, md| md.apply(&m))
+        self.modifiers
+            .iter()
+            .fold(base.clone(), |m, md| md.apply(&m))
     }
 }
 
@@ -127,8 +159,12 @@ pub fn weld(mesh: &Mesh, distance: f32) -> Mesh {
         });
         remap.push(i);
     }
-    for t in mesh.indices.chunks_exact(3) {
-        let (a, b, c) = (remap[t[0] as usize], remap[t[1] as usize], remap[t[2] as usize]);
+    for t in mesh.indices.as_chunks::<3>().0 {
+        let (a, b, c) = (
+            remap[t[0] as usize],
+            remap[t[1] as usize],
+            remap[t[2] as usize],
+        );
         if a != b && b != c && a != c {
             out.indices.extend_from_slice(&[a, b, c]);
         }
@@ -139,7 +175,10 @@ pub fn weld(mesh: &Mesh, distance: f32) -> Mesh {
 
 fn hash3(x: i32, y: i32, z: i32, seed: u32) -> f32 {
     #[allow(clippy::cast_sign_loss)]
-    let mut h = (x as u32).wrapping_mul(0x8da6_b343) ^ (y as u32).wrapping_mul(0xd816_3841) ^ (z as u32).wrapping_mul(0xcb1a_b31f) ^ seed;
+    let mut h = (x as u32).wrapping_mul(0x8da6_b343)
+        ^ (y as u32).wrapping_mul(0xd816_3841)
+        ^ (z as u32).wrapping_mul(0xcb1a_b31f)
+        ^ seed;
     h ^= h >> 13;
     h = h.wrapping_mul(0x5bd1_e995);
     h ^= h >> 15;
@@ -152,7 +191,12 @@ fn hash3(x: i32, y: i32, z: i32, seed: u32) -> f32 {
 fn value_noise(p: [f32; 3], seed: u32) -> f32 {
     #[allow(clippy::cast_possible_truncation)]
     let f = p.map(|v| v.floor() as i32);
-    let t = [p[0] - p[0].floor(), p[1] - p[1].floor(), p[2] - p[2].floor()].map(|v| v * v * (3.0 - 2.0 * v));
+    let t = [
+        p[0] - p[0].floor(),
+        p[1] - p[1].floor(),
+        p[2] - p[2].floor(),
+    ]
+    .map(|v| v * v * (3.0 - 2.0 * v));
     let mut acc = 0.0;
     for dz in 0..2 {
         for dy in 0..2 {
@@ -170,18 +214,38 @@ fn value_noise(p: [f32; 3], seed: u32) -> f32 {
 fn midpoint_subdivide(mesh: &Mesh) -> Mesh {
     let mut out = Mesh::default();
     let has_uv = mesh.has_uvs();
-    let mid3 = |a: [f32; 3], b: [f32; 3]| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0, (a[2] + b[2]) / 2.0];
+    let mid3 = |a: [f32; 3], b: [f32; 3]| {
+        [
+            (a[0] + b[0]) / 2.0,
+            (a[1] + b[1]) / 2.0,
+            (a[2] + b[2]) / 2.0,
+        ]
+    };
     let mid2 = |a: [f32; 2], b: [f32; 2]| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
-    for t in mesh.indices.chunks_exact(3) {
+    for t in mesh.indices.as_chunks::<3>().0 {
         let v = [t[0] as usize, t[1] as usize, t[2] as usize];
         let p = v.map(|i| mesh.positions[i]);
-        let pts = [p[0], p[1], p[2], mid3(p[0], p[1]), mid3(p[1], p[2]), mid3(p[2], p[0])];
+        let pts = [
+            p[0],
+            p[1],
+            p[2],
+            mid3(p[0], p[1]),
+            mid3(p[1], p[2]),
+            mid3(p[2], p[0]),
+        ];
         #[allow(clippy::cast_possible_truncation)]
         let base = out.positions.len() as u32;
         out.positions.extend_from_slice(&pts);
         if has_uv {
             let u = v.map(|i| mesh.uvs[i]);
-            out.uvs.extend_from_slice(&[u[0], u[1], u[2], mid2(u[0], u[1]), mid2(u[1], u[2]), mid2(u[2], u[0])]);
+            out.uvs.extend_from_slice(&[
+                u[0],
+                u[1],
+                u[2],
+                mid2(u[0], u[1]),
+                mid2(u[1], u[2]),
+                mid2(u[2], u[0]),
+            ]);
         }
         for tri in [[0, 3, 5], [3, 1, 4], [5, 4, 2], [3, 4, 5]] {
             out.indices.extend(tri.iter().map(|k| base + k));
@@ -198,7 +262,7 @@ fn loop_subdivide(mesh: &Mesh) -> Mesh {
     let n = m.positions.len();
     // Edge → (new vertex index, opposite vertices).
     let mut edges: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
-    for t in m.indices.chunks_exact(3) {
+    for t in m.indices.as_chunks::<3>().0 {
         for k in 0..3 {
             let (a, b, c) = (t[k], t[(k + 1) % 3], t[(k + 2) % 3]);
             edges.entry((a.min(b), a.max(b))).or_default().push(c);
@@ -259,11 +323,12 @@ fn loop_subdivide(mesh: &Mesh) -> Mesh {
         edge_vertex.insert((a, b), out.positions.len() as u32);
         out.positions.push(acc);
     }
-    for t in m.indices.chunks_exact(3) {
+    for t in m.indices.as_chunks::<3>().0 {
         let e = |a: u32, b: u32| edge_vertex[&(a.min(b), a.max(b))];
         let (a, b, c) = (t[0], t[1], t[2]);
         let (ab, bc, ca) = (e(a, b), e(b, c), e(c, a));
-        out.indices.extend_from_slice(&[a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca]);
+        out.indices
+            .extend_from_slice(&[a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca]);
     }
     out.compute_normals();
     out
@@ -275,11 +340,19 @@ impl Modifier {
     #[allow(clippy::too_many_lines)]
     pub fn apply(&self, mesh: &Mesh) -> Mesh {
         match *self {
-            Self::Transform { translate, scale, rotate_y } => {
+            Self::Transform {
+                translate,
+                scale,
+                rotate_y,
+            } => {
                 let (s, c) = rotate_y.sin_cos();
                 map_positions(mesh, |p| {
                     let q = [p[0] * scale[0], p[1] * scale[1], p[2] * scale[2]];
-                    [q[0] * c + q[2] * s + translate[0], q[1] + translate[1], -q[0] * s + q[2] * c + translate[2]]
+                    [
+                        q[0] * c + q[2] * s + translate[0],
+                        q[1] + translate[1],
+                        -q[0] * s + q[2] * c + translate[2],
+                    ]
                 })
             }
             Self::Mirror { axis, merge } => {
@@ -300,9 +373,10 @@ impl Modifier {
                         out.uvs.push(mesh.uvs[i]);
                     }
                 }
-                for t in mesh.indices.chunks_exact(3) {
+                for t in mesh.indices.as_chunks::<3>().0 {
                     // Reflection flips handedness: reverse the winding.
-                    out.indices.extend_from_slice(&[base + t[0], base + t[2], base + t[1]]);
+                    out.indices
+                        .extend_from_slice(&[base + t[0], base + t[2], base + t[1]]);
                 }
                 if merge > 0.0 {
                     weld(&out, merge)
@@ -317,24 +391,37 @@ impl Modifier {
                     let d = offset.map(|o| o * k as f32);
                     #[allow(clippy::cast_possible_truncation)]
                     let base = out.positions.len() as u32;
-                    out.positions.extend(mesh.positions.iter().map(|p| [p[0] + d[0], p[1] + d[1], p[2] + d[2]]));
+                    out.positions.extend(
+                        mesh.positions
+                            .iter()
+                            .map(|p| [p[0] + d[0], p[1] + d[1], p[2] + d[2]]),
+                    );
                     out.normals.extend_from_slice(&mesh.normals);
                     out.uvs.extend_from_slice(&mesh.uvs);
                     out.indices.extend(mesh.indices.iter().map(|i| i + base));
                 }
                 out
             }
-            Self::Subdivide { levels, smooth } => {
-                (0..levels).fold(mesh.clone(), |m, _| if smooth { loop_subdivide(&m) } else { midpoint_subdivide(&m) })
-            }
-            Self::Displace { strength, scale, seed } => {
+            Self::Subdivide { levels, smooth } => (0..levels).fold(mesh.clone(), |m, _| {
+                if smooth {
+                    loop_subdivide(&m)
+                } else {
+                    midpoint_subdivide(&m)
+                }
+            }),
+            Self::Displace {
+                strength,
+                scale,
+                seed,
+            } => {
                 let mut src = mesh.clone();
                 if !src.has_normals() {
                     src.compute_normals();
                 }
                 let mut out = src.clone();
                 for (i, p) in out.positions.iter_mut().enumerate() {
-                    let d = value_noise([p[0] / scale, p[1] / scale, p[2] / scale], seed) * strength;
+                    let d =
+                        value_noise([p[0] / scale, p[1] / scale, p[2] / scale], seed) * strength;
                     let n = src.normals[i];
                     *p = [p[0] + n[0] * d, p[1] + n[1] * d, p[2] + n[2] * d];
                 }
@@ -370,7 +457,7 @@ impl Modifier {
                 let mut m = weld(mesh, 1e-5);
                 let n = m.positions.len();
                 let mut nb: Vec<Vec<u32>> = vec![Vec::new(); n];
-                for t in m.indices.chunks_exact(3) {
+                for t in m.indices.as_chunks::<3>().0 {
                     for k in 0..3 {
                         let (a, b) = (t[k], t[(k + 1) % 3]);
                         if !nb[a as usize].contains(&b) {
@@ -430,8 +517,12 @@ impl Modifier {
                 for (sum, count, i) in sums.values() {
                     out.positions[*i as usize] = sum.map(|v| v / count);
                 }
-                for t in m.indices.chunks_exact(3) {
-                    let (a, b, c) = (remap[t[0] as usize], remap[t[1] as usize], remap[t[2] as usize]);
+                for t in m.indices.as_chunks::<3>().0 {
+                    let (a, b, c) = (
+                        remap[t[0] as usize],
+                        remap[t[1] as usize],
+                        remap[t[2] as usize],
+                    );
                     if a != b && b != c && a != c {
                         out.indices.extend_from_slice(&[a, b, c]);
                     }
@@ -442,7 +533,7 @@ impl Modifier {
             Self::Weld { distance } => weld(mesh, distance),
             Self::FlipNormals => {
                 let mut out = mesh.clone();
-                for t in out.indices.chunks_exact_mut(3) {
+                for t in out.indices.as_chunks_mut::<3>().0.iter_mut() {
                     t.swap(1, 2);
                 }
                 for n in &mut out.normals {
@@ -473,10 +564,12 @@ mod tests {
             #[allow(clippy::cast_possible_truncation)]
             let base = m.positions.len() as u32;
             for (a, b) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
-                m.positions.push([0, 1, 2].map(|k| (n[k] + u[k] * a + v[k] * b) * 0.5));
+                m.positions
+                    .push([0, 1, 2].map(|k| (n[k] + u[k] * a + v[k] * b) * 0.5));
                 m.uvs.push([f32::midpoint(a, 1.0), f32::midpoint(b, 1.0)]);
             }
-            m.indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+            m.indices
+                .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
         }
         m.compute_normals();
         m
@@ -484,10 +577,14 @@ mod tests {
 
     fn volume(m: &Mesh) -> f32 {
         m.indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|t| {
                 let [a, b, c] = [0, 1, 2].map(|k| m.positions[t[k] as usize]);
-                (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6.0
+                (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+                    + a[2] * (b[0] * c[1] - b[1] * c[0]))
+                    / 6.0
             })
             .sum()
     }
@@ -502,7 +599,11 @@ mod tests {
 
     #[test]
     fn midpoint_subdivision_quadruples_and_keeps_shape() {
-        let s = Modifier::Subdivide { levels: 2, smooth: false }.apply(&cube());
+        let s = Modifier::Subdivide {
+            levels: 2,
+            smooth: false,
+        }
+        .apply(&cube());
         assert_eq!(s.triangles(), 12 * 16);
         assert!((volume(&s) - 1.0).abs() < 1e-4);
         assert!(s.has_uvs());
@@ -510,45 +611,109 @@ mod tests {
 
     #[test]
     fn loop_subdivision_rounds_a_cube_toward_a_sphere() {
-        let s = Modifier::Subdivide { levels: 3, smooth: true }.apply(&cube());
+        let s = Modifier::Subdivide {
+            levels: 3,
+            smooth: true,
+        }
+        .apply(&cube());
         assert_eq!(s.triangles(), 12 * 64);
         let v = volume(&s);
         assert!(v < 1.0 && v > 0.3, "shrinks inside its hull: {v}");
         // Distances from the centre even out.
-        let d: Vec<f32> = s.positions.iter().map(|p| (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt()).collect();
-        let (lo, hi) = d.iter().fold((f32::MAX, 0.0f32), |(a, b), &x| (a.min(x), b.max(x)));
+        let d: Vec<f32> = s
+            .positions
+            .iter()
+            .map(|p| (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt())
+            .collect();
+        let (lo, hi) = d
+            .iter()
+            .fold((f32::MAX, 0.0f32), |(a, b), &x| (a.min(x), b.max(x)));
         assert!(hi / lo < 1.35, "{lo} .. {hi}");
     }
 
     #[test]
     fn mirror_array_and_flip() {
-        let half = Modifier::Transform { translate: [1.0, 0.0, 0.0], scale: [1.0; 3], rotate_y: 0.0 }.apply(&cube());
-        let both = Modifier::Mirror { axis: Axis::X, merge: 0.0 }.apply(&half);
+        let half = Modifier::Transform {
+            translate: [1.0, 0.0, 0.0],
+            scale: [1.0; 3],
+            rotate_y: 0.0,
+        }
+        .apply(&cube());
+        let both = Modifier::Mirror {
+            axis: Axis::X,
+            merge: 0.0,
+        }
+        .apply(&half);
         assert_eq!(both.triangles(), 24);
-        assert!((volume(&both) - 2.0).abs() < 1e-4, "mirror keeps outward winding");
-        let row = Modifier::Array { count: 3, offset: [2.0, 0.0, 0.0] }.apply(&cube());
+        assert!(
+            (volume(&both) - 2.0).abs() < 1e-4,
+            "mirror keeps outward winding"
+        );
+        let row = Modifier::Array {
+            count: 3,
+            offset: [2.0, 0.0, 0.0],
+        }
+        .apply(&cube());
         assert!((volume(&row) - 3.0).abs() < 1e-4);
         assert!((volume(&Modifier::FlipNormals.apply(&cube())) + 1.0).abs() < 1e-5);
     }
 
     #[test]
     fn deforms_move_what_they_should() {
-        let tall = Modifier::Transform { translate: [0.0, 0.5, 0.0], scale: [1.0, 1.0, 1.0], rotate_y: 0.0 }.apply(&cube());
+        let tall = Modifier::Transform {
+            translate: [0.0, 0.5, 0.0],
+            scale: [1.0, 1.0, 1.0],
+            rotate_y: 0.0,
+        }
+        .apply(&cube());
         let tapered = Modifier::Taper { factor: 0.0 }.apply(&tall);
-        let top = tapered.positions.iter().filter(|p| p[1] > 0.99).all(|p| p[0].abs() < 1e-5 && p[2].abs() < 1e-5);
+        let top = tapered
+            .positions
+            .iter()
+            .filter(|p| p[1] > 0.99)
+            .all(|p| p[0].abs() < 1e-5 && p[2].abs() < 1e-5);
         assert!(top, "tapered to a point");
-        let twisted = Modifier::Twist { angle: std::f32::consts::FRAC_PI_2 }.apply(&tall);
-        assert!((volume(&twisted) - 1.0).abs() < 0.2, "twist roughly preserves volume");
-        let bent = Modifier::Bend { angle: std::f32::consts::PI }.apply(&Modifier::Subdivide { levels: 2, smooth: false }.apply(&tall));
+        let twisted = Modifier::Twist {
+            angle: std::f32::consts::FRAC_PI_2,
+        }
+        .apply(&tall);
+        assert!(
+            (volume(&twisted) - 1.0).abs() < 0.2,
+            "twist roughly preserves volume"
+        );
+        let bent = Modifier::Bend {
+            angle: std::f32::consts::PI,
+        }
+        .apply(
+            &Modifier::Subdivide {
+                levels: 2,
+                smooth: false,
+            }
+            .apply(&tall),
+        );
         let (lo, hi) = bent.bounds().unwrap();
         assert!(hi[0] - lo[0] > 1.2, "bent sideways: {lo:?} {hi:?}");
     }
 
     #[test]
     fn displace_is_seeded_and_bounded() {
-        let base = Modifier::Subdivide { levels: 2, smooth: false }.apply(&weld(&cube(), 1e-5));
-        let a = Modifier::Displace { strength: 0.1, scale: 0.3, seed: 1 }.apply(&base);
-        let b = Modifier::Displace { strength: 0.1, scale: 0.3, seed: 1 }.apply(&base);
+        let base = Modifier::Subdivide {
+            levels: 2,
+            smooth: false,
+        }
+        .apply(&weld(&cube(), 1e-5));
+        let a = Modifier::Displace {
+            strength: 0.1,
+            scale: 0.3,
+            seed: 1,
+        }
+        .apply(&base);
+        let b = Modifier::Displace {
+            strength: 0.1,
+            scale: 0.3,
+            seed: 1,
+        }
+        .apply(&base);
         assert_eq!(a, b);
         for (p, q) in a.positions.iter().zip(&base.positions) {
             let d = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
@@ -558,17 +723,33 @@ mod tests {
 
     #[test]
     fn smooth_and_decimate_simplify() {
-        let dense = Modifier::Subdivide { levels: 3, smooth: false }.apply(&cube());
+        let dense = Modifier::Subdivide {
+            levels: 3,
+            smooth: false,
+        }
+        .apply(&cube());
         let dec = Modifier::Decimate { cell: 0.26 }.apply(&dense);
-        assert!(dec.triangles() < dense.triangles() / 4, "{} → {}", dense.triangles(), dec.triangles());
-        let sm = Modifier::Smooth { factor: 0.5, iterations: 10 }.apply(&dense);
+        assert!(
+            dec.triangles() < dense.triangles() / 4,
+            "{} → {}",
+            dense.triangles(),
+            dec.triangles()
+        );
+        let sm = Modifier::Smooth {
+            factor: 0.5,
+            iterations: 10,
+        }
+        .apply(&dense);
         assert!(volume(&sm) < 1.0);
     }
 
     #[test]
     fn stacks_fold_in_order() {
         let s = ModifierStack::new()
-            .with(Modifier::Array { count: 2, offset: [1.0, 0.0, 0.0] })
+            .with(Modifier::Array {
+                count: 2,
+                offset: [1.0, 0.0, 0.0],
+            })
             .with(Modifier::Weld { distance: 1e-4 });
         let out = s.apply(&cube());
         assert_eq!(out.positions.len(), 12, "the shared face welded");

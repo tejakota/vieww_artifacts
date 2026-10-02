@@ -9,16 +9,16 @@
 //! Tap → **4**. The tether glow between buffer and preview is the only
 //! ornament — and it is the point.
 
-use vieww_foundation::{Color, Offset, Sketchbook, Size};
+use vieww_foundation::{Offset, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{alpha, clamp01, ease_in_out, xywh, VIOLET, VIOLET_SOFT};
 
 use super::studio::{studio, App, Code, Spec};
 use super::{caption, Ctx};
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -33,7 +33,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     app.spacing = edit;
 
     let spec = Spec {
-        code: Code::Say { typed: 1.0, blink: ctx.sec },
+        code: Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app,
         session_line: clamp01((abs - 26.0) / 99.0),
         ..Spec::default()
@@ -45,16 +48,24 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     if edit > 0.0 && edit < 1.0 {
         let x = 118.0 + edit * 780.0;
         stack = stack.push(
-            Positioned::new().left(0.0).top(94.0).width(940.0).height(940.0).child(
-                Painting::sized(Size::new(940.0, 940.0), PaintWith::new(
-                    move |book: &mut Sketchbook, _s: Size| {
+            Positioned::new()
+                .left(0.0)
+                .top(94.0)
+                .width(940.0)
+                .height(940.0)
+                .child(Painting::sized(
+                    Size::new(940.0, 940.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                         let band_y = 10.0 + 3.0 * 37.0 + 8.0;
                         book.layer(1.0, 0.0, None, |g| {
-                            g.rrect(xywh(x - 40.0, band_y, 130.0, 26.0), 6.0, alpha(VIOLET, 0.16));
+                            g.rrect(
+                                xywh(x - 40.0, band_y, 130.0, 26.0),
+                                6.0,
+                                alpha(VIOLET, 0.16),
+                            );
                         });
-                    },
+                    }),
                 )),
-            ),
         );
     }
 
@@ -62,24 +73,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // the preview's column, with a slow pulse riding it.
     {
         let pulse = (t * 2.4).fract();
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    let a = Offset::new(906.0, 240.0);
-                    let b = Offset::new(1300.0, 300.0);
-                    let mut p = vieww_foundation::Path::new();
-                    p.move_to(a);
-                    p.line_to(Offset::new(1080.0, 208.0));
-                    p.line_to(b);
-                    book.stroke(p, alpha(VIOLET_SOFT, 0.35), 1.4);
-                    // The riding pulse.
-                    let px = a.dx + (b.dx - a.dx) * pulse;
-                    let py = a.dy + (b.dy - a.dy) * pulse - 26.0 * (pulse * (1.0 - pulse) * 4.0);
-                    book.circle(Offset::new(px, py), 4.0, alpha(VIOLET_SOFT, 0.9));
-                }),
-            )),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                let a = Offset::new(906.0, 240.0);
+                let b = Offset::new(1300.0, 300.0);
+                let mut p = vieww_foundation::Path::new();
+                p.move_to(a);
+                p.line_to(Offset::new(1080.0, 208.0));
+                p.line_to(b);
+                book.stroke(p, alpha(VIOLET_SOFT, 0.35), 1.4);
+                // The riding pulse.
+                let px = a.dx + (b.dx - a.dx) * pulse;
+                let py = a.dy + (b.dy - a.dy) * pulse - 26.0 * (pulse * (1.0 - pulse) * 4.0);
+                book.circle(Offset::new(px, py), 4.0, alpha(VIOLET_SOFT, 0.9));
+            }),
+        )));
     }
 
     stack = stack.push(caption(

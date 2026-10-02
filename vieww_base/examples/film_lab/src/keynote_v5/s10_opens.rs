@@ -10,16 +10,18 @@
 //!
 //! Caption: **this is where you'll build.**
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle, FontWeight};
+use vieww_foundation::{Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_back, ease_out_cubic, mix, spring_out, tint, xywh, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, ease_out_back, xywh, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 use super::studio;
-use super::{Ctx};
+use super::Ctx;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
     let ladder = ctx.ladder;
@@ -33,7 +35,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // The studio spec — everything arriving.
     let chrome_in = ease_out_back(clamp01((t - 0.36) / 0.26));
     let spec = studio::Spec {
-        code: studio::Code::Say { typed: 0.0, blink: ctx.sec },
+        code: studio::Code::Say {
+            typed: 0.0,
+            blink: ctx.sec,
+        },
         app: {
             let mut app = studio::App::new(0, 0.0, abs);
             app.alive = 0.0;
@@ -72,51 +77,72 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let a = splash_a * (1.0 - splash_out);
         let scale = 1.0 + splash_out * 0.5;
         let y = 400.0 - splash_out * 120.0;
-        stack = stack.push(Positioned::fill().child(Opacity::new(a).child(
-            Positioned::new()
-                .left(0.0)
-                .top(y)
-                .width(1920.0)
-                .height(320.0)
-                .child(Painting::sized(
-                    Size::new(1920.0, 320.0),
-                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        // The mark — stroke-on, at splash scale.
-                        let cx = 960.0;
-                        let cy = 90.0;
-                        let sz = 120.0 * scale;
-                        studio::draw_mark(book, cx, cy, sz, VIOLET_SOFT, draw_mark);
-                        // The splash glow behind it.
-                        super::glow(book, cx, cy, 320.0 * scale, VIOLET, 0.20);
-                    }),
-                )),
-        )));
+        stack = stack.push(
+            Positioned::fill().child(
+                Opacity::new(a).child(
+                    Positioned::new()
+                        .left(0.0)
+                        .top(y)
+                        .width(1920.0)
+                        .height(320.0)
+                        .child(Painting::sized(
+                            Size::new(1920.0, 320.0),
+                            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                                // The mark — stroke-on, at splash scale.
+                                let cx = 960.0;
+                                let cy = 90.0;
+                                let sz = 120.0 * scale;
+                                studio::draw_mark(book, cx, cy, sz, VIOLET_SOFT, draw_mark);
+                                // The splash glow behind it.
+                                super::glow(book, cx, cy, 320.0 * scale, VIOLET, 0.20);
+                            }),
+                        )),
+                ),
+            ),
+        );
         // The name.
-        stack = stack.push(Positioned::fill().child(Opacity::new(a).child(
-            Positioned::new()
-                .left(0.0)
-                .top(y + 190.0)
-                .width(1920.0)
-                .height(60.0)
-                .child(
-                    Text::new("viewwstudio")
-                        .style(TextStyle::new(56.0).letter_spacing(6.0).color(alpha(INK, name_a)))
-                        .align(TextAlign::Center),
+        stack = stack.push(
+            Positioned::fill().child(
+                Opacity::new(a).child(
+                    Positioned::new()
+                        .left(0.0)
+                        .top(y + 190.0)
+                        .width(1920.0)
+                        .height(60.0)
+                        .child(
+                            Text::new("viewwstudio")
+                                .style(
+                                    TextStyle::new(56.0)
+                                        .letter_spacing(6.0)
+                                        .color(alpha(INK, name_a)),
+                                )
+                                .align(TextAlign::Center),
+                        ),
                 ),
-        )));
+            ),
+        );
         // The tagline.
-        stack = stack.push(Positioned::fill().child(Opacity::new(a).child(
-            Positioned::new()
-                .left(0.0)
-                .top(y + 262.0)
-                .width(1920.0)
-                .height(34.0)
-                .child(
-                    Text::new("build the picture. see the picture.")
-                        .style(TextStyle::new(20.0).monospace().letter_spacing(3.0).color(alpha(MUTED, name_a)))
-                        .align(TextAlign::Center),
+        stack = stack.push(
+            Positioned::fill().child(
+                Opacity::new(a).child(
+                    Positioned::new()
+                        .left(0.0)
+                        .top(y + 262.0)
+                        .width(1920.0)
+                        .height(34.0)
+                        .child(
+                            Text::new("build the picture. see the picture.")
+                                .style(
+                                    TextStyle::new(20.0)
+                                        .monospace()
+                                        .letter_spacing(3.0)
+                                        .color(alpha(MUTED, name_a)),
+                                )
+                                .align(TextAlign::Center),
+                        ),
                 ),
-        )));
+            ),
+        );
     }
 
     // The welcome breath — a light wash crossing the assembled studio.
@@ -133,7 +159,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         )));
     }
 
-    stack = stack.push(super::act_chip("III", "THE STUDIO", clamp01((t - 0.40) / 0.4)));
+    stack = stack.push(super::act_chip(
+        "III",
+        "THE STUDIO",
+        clamp01((t - 0.40) / 0.4),
+    ));
     stack = stack.push(super::caption(
         "viewwstudio. this is where you build.",
         1000.0,

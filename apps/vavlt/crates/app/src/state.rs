@@ -658,7 +658,7 @@ impl VavltState {
                         // thumbnail is expensive on Android. Four thumbnails
                         // per UI wake keeps progressive loading while cutting
                         // rebuilds by roughly 4x for a large selection.
-                        if sent % 4 == 0 {
+                        if sent.is_multiple_of(4) {
                             waker.wake();
                         }
                     }
@@ -668,7 +668,7 @@ impl VavltState {
                 }
             }
             // Flush the final partial batch.
-            if sent % 4 != 0 {
+            if !sent.is_multiple_of(4) {
                 waker.wake();
             }
         }));

@@ -14,9 +14,11 @@
 //! Witness taps 1 (the demo mounts, 103.2 s) and 2 (the keystroke,
 //! 106.4 s) fire here.
 
-use vieww_widget::prelude::*;
+use super::{
+    caption, chip, clamp01, glow, spring_out, studio_chrome, tint, Ctx, ACCENT, MINT, SYN_TYPE,
+    VIOLET_SOFT,
+};
 use vieww_widget::WidgetNode;
-use super::{ACCENT, Ctx, MINT, MUTED, SYN_TYPE, VIOLET_SOFT, W, caption, chip, clamp01, glow, spark, spring_out, studio_chrome, tint};
 
 /// The caution dialog's beat (scene fraction ≈ 102.0–103.2 s → 0.42–0.52).
 const CAUTION_T: f32 = 0.42;
@@ -25,7 +27,7 @@ const ACCEPT_T: f32 = 0.52;
 /// The keystroke — tap 2.
 const EDIT_T: f32 = 0.78;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -98,9 +100,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y + 44.0)
                 .width(430.0)
                 .height(22.0)
-                .child(super::Opacity::new(a.max(0.01)).child(
-                    super::mono_tracked("the census's probe: edit → pixels, this bench", 12.0, super::MUTED, 1.0),
-                )),
+                .child(super::Opacity::new(a.max(0.01)).child(super::mono_tracked(
+                    "the census's probe: edit → pixels, this bench",
+                    12.0,
+                    super::MUTED,
+                    1.0,
+                ))),
         );
     }
 

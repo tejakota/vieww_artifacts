@@ -95,7 +95,9 @@ pub use paint::{
     StrokeStyle, MAX_GRADIENT_STOPS,
 };
 pub use path::{Path, PathVerb};
-pub use path_ops::{signed_area, Contour, FillRule, PathMeasure, PathOp, PathPoint, DEFAULT_TOLERANCE};
+pub use path_ops::{
+    signed_area, Contour, FillRule, PathMeasure, PathOp, PathPoint, DEFAULT_TOLERANCE,
+};
 pub use permission::{
     AlwaysDenied, AlwaysGranted, AlwaysRestricted, Gate, Grant, Guarded, Permission,
     PermissionState, Permissions, ScriptedPermissions,

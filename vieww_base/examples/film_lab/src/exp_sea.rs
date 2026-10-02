@@ -23,19 +23,17 @@
 //! Receipts: ring count × segments (the mesh's own quads), glints drawn
 //! (counted from the spec test, not the sample), camera altitude.
 
-use vieww_foundation::{
-    Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
-};
+use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, mix, tint, FAINT, MUTED, Rng, CYAN, CYAN_SOFT, AMBER,
+    alpha, clamp01, ease_in_out, mix, tint, Rng, AMBER, CYAN, CYAN_SOFT, FAINT, MUTED,
 };
 use crate::three_d::{Camera, Mesh, MeshStyle, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 9.0;
+pub(crate) const SECONDS: f32 = 9.0;
 
 /// Radial segments around the drop point.
 const SEG: usize = 88;
@@ -66,8 +64,8 @@ fn water_height(x: f32, z: f32, t: f32, ripple: f32, wind: f32) -> f32 {
     // The wind field — crossing swells + chop, steady state.
     let swell = (0.42 * x + 0.86 * z + t * 3.2).sin() * 0.30
         + (-0.77 * x + 0.30 * z + t * 2.1).sin() * 0.19;
-    let chop = (2.9 * x + 1.7 * z + t * 6.4).sin() * 0.055
-        + (-1.9 * x + 3.3 * z + t * 5.2).sin() * 0.048;
+    let chop =
+        (2.9 * x + 1.7 * z + t * 6.4).sin() * 0.055 + (-1.9 * x + 3.3 * z + t * 5.2).sin() * 0.048;
     (h_ripple + (swell + chop) * wind) * (1.0 - (r / FAR).powi(6) * 0.0)
 }
 
@@ -88,7 +86,8 @@ fn water_mesh(t: f32, ripple: f32, wind: f32) -> Mesh {
             let (s, c) = th.sin_cos();
             let x = r * c;
             let z = r * s;
-            m.verts.push(Vec3::new(x, water_height(x, z, t, ripple, wind), z));
+            m.verts
+                .push(Vec3::new(x, water_height(x, z, t, ripple, wind), z));
         }
     }
     let row = SEG;
@@ -116,7 +115,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     let h = canvas.height;
 
     // Stage gates.
-    let fall_t = clamp01(t / IMPACT);
+    let _fall_t = clamp01(t / IMPACT);
     let strike_t = clamp01((t - IMPACT) / 0.15);
     let pull_t = clamp01((t - 0.26) / 0.34);
     let horizon_t = clamp01((t - 0.58) / 0.42);
@@ -125,13 +124,13 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
 
     // ── The camera: one continuous move, down-looking → horizon ───────────
     let rise = ease_in_out(pull_t);
-    let eye = Vec3::new(
-        0.0,
-        5.2 + rise * 42.0 + horizon_t * 4.0,
-        0.01 + rise * 78.0,
-    );
+    let eye = Vec3::new(0.0, 5.2 + rise * 42.0 + horizon_t * 4.0, 0.01 + rise * 78.0);
     let target = Vec3::new(0.0, 0.0, rise * -110.0);
-    let cam = Camera { eye, target, fov: 0.95 };
+    let cam = Camera {
+        eye,
+        target,
+        fov: 0.95,
+    };
     let sun_dir = Vec3::new(-0.42, 0.26, -0.87).norm();
 
     // ── The sky: dusk gradient + low sun + haze band ──────────────────────
@@ -144,14 +143,12 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     let sky_h = (horizon_y + 30.0).clamp(0.0, h);
     book.rect(
         Rect::new(0.0, 0.0, w, sky_h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(7, 8, 16)),
-                (0.55, Color::rgb(18, 14, 28)),
-                (0.85, Color::rgb(46, 22, 34)),
-                (1.0, Color::rgb(94, 42, 38)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(7, 8, 16)),
+            (0.55, Color::rgb(18, 14, 28)),
+            (0.85, Color::rgb(46, 22, 34)),
+            (1.0, Color::rgb(94, 42, 38)),
+        ]),
     );
     // The sun: project its direction to the sky.
     let sun_world = eye.add(sun_dir.scale(600.0));
@@ -182,7 +179,18 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 let a = 0.05 + rng.f01() * 0.05 + horizon_t * 0.05;
                 let ch = 7.0 + rng.f01() * 7.0;
                 let rect = Rect::new(cx - cw * 0.5, cy - ch, cx + cw * 0.5, cy + ch);
-                g.rrect(rect, ch, alpha(mix(Color::rgb(60, 30, 44), Color::rgb(110, 60, 50), i as f32 / 7.0), a));
+                g.rrect(
+                    rect,
+                    ch,
+                    alpha(
+                        mix(
+                            Color::rgb(60, 30, 44),
+                            Color::rgb(110, 60, 50),
+                            i as f32 / 7.0,
+                        ),
+                        a,
+                    ),
+                );
             }
         });
     }
@@ -247,7 +255,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
         if let Some((p, _, scale)) = cam.project(Vec3::new(0.0, 0.0, 0.0), canvas) {
             let flash = (1.0 - strike_t).powi(2);
             book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
-                g.circle(p, (14.0 + 60.0 * (1.0 - flash)) * scale * 900.0, alpha(tint(CYAN, 0.5), 0.4 * flash));
+                g.circle(
+                    p,
+                    (14.0 + 60.0 * (1.0 - flash)) * scale * 900.0,
+                    alpha(tint(CYAN, 0.5), 0.4 * flash),
+                );
             });
         }
     }
@@ -296,12 +308,14 @@ fn glint_samples(
         let spread = 0.55 * (1.0 - u * 0.4);
         let az = -0.45 + rng.sym() * spread;
         let x = r * az.sin();
-        let z = r * az.cos() * -1.0;
+        let z = -(r * az.cos());
         // Specular test: wave normal · halfway(sun, eye).
         let e = 0.4;
-        let hx = (water_height(x + e, z, t, ripple, wind) - water_height(x - e, z, t, ripple, wind))
+        let hx = (water_height(x + e, z, t, ripple, wind)
+            - water_height(x - e, z, t, ripple, wind))
             / (2.0 * e);
-        let hz = (water_height(x, z + e, t, ripple, wind) - water_height(x, z - e, t, ripple, wind))
+        let hz = (water_height(x, z + e, t, ripple, wind)
+            - water_height(x, z - e, t, ripple, wind))
             / (2.0 * e);
         let nrm = Vec3::new(-hx, 1.0, -hz).norm();
         let view = eye.sub(Vec3::new(x, 0.0, z)).norm();
@@ -314,7 +328,7 @@ fn glint_samples(
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

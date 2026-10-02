@@ -106,7 +106,12 @@ fn linear_channel_to_srgb(linear: f32) -> f32 {
 fn map_channels(image: &Image, transfer: impl Fn(f32) -> f32) -> Image {
     let src = image.pixels();
     let mut out = vec![0u8; src.len()];
-    for (input, output) in src.chunks_exact(4).zip(out.chunks_exact_mut(4)) {
+    for (input, output) in src
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(out.as_chunks_mut::<4>().0)
+    {
         for channel in 0..3 {
             let encoded = f32::from(input[channel]) / 255.0;
             let mapped = transfer(encoded);

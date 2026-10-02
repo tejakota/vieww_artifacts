@@ -13,16 +13,18 @@
 //! stopwatch around the keystroke → the next frame's raster.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{ACCENT, Ctx, INK, LEDGER, MUTED, alpha, caption, chip_row, clamp01, distance_chip, studio_chrome};
+use super::{
+    alpha, caption, chip_row, clamp01, distance_chip, studio_chrome, Ctx, ACCENT, INK, LEDGER,
+    MUTED,
+};
 
 /// The edit's film-times (the script's own).
 const EDIT_TITLE_AT: f32 = 154.0;
 const EDIT_ROW_AT: f32 = 157.5;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 

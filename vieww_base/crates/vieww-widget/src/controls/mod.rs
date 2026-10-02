@@ -96,7 +96,9 @@ pub use breadcrumbs::Breadcrumbs;
 pub use button::{Button, ButtonStyle};
 pub use checkbox::Checkbox;
 pub use chip::Chip;
-pub use code_block::{diff_lines, highlight, CodeBlock, CodeMorph, CodeTheme, Language, LineOp, Token, TokenKind};
+pub use code_block::{
+    diff_lines, highlight, CodeBlock, CodeMorph, CodeTheme, Language, LineOp, Token, TokenKind,
+};
 pub use confirmation::Confirmation;
 pub use data_table::{DataColumn, DataTable, SelectionMode, SortDirection};
 pub use date_picker::DatePicker;

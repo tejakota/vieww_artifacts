@@ -11,14 +11,14 @@
 //!
 //! Taps 3 (heading, t≈0.30) and 4 (spacing, t≈0.62) fire here.
 
-use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_cubic, mix, tint, xywh, INK, MUTED, MINT, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, ease_in_out, tint, xywh, INK, MINT, VIOLET_SOFT};
 
 use super::studio;
-use super::{Ctx, C_DAMAGE};
+use super::Ctx;
 
 /// The heading edit window (scene fraction).
 const HEAD_T0: f32 = 0.30;
@@ -27,7 +27,7 @@ const HEAD_T1: f32 = 0.50;
 const SPACE_T0: f32 = 0.62;
 const SPACE_T1: f32 = 0.74;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let abs = ctx.abs;
@@ -43,7 +43,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let _ = &mut err;
 
     let mut spec = studio::Spec {
-        code: studio::Code::Say { typed: 1.0, blink: ctx.sec },
+        code: studio::Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app: {
             let mut app = studio::App::new(1, super::tap_pulse(abs), abs);
             app.heading = head_p;
@@ -78,8 +81,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         spec.damage = Some((damage, label));
     }
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
+    let mut stack = Stack::new().push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
 
     // The coalescing receipt — writes vs rebuilds, live: a small strip
     // under the editor showing the last ten writes folding into one build
@@ -96,8 +98,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(Opacity::new(strip_a).child(Painting::sized(
                     Size::new(560.0, 84.0),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.rrect(xywh(0.0, 0.0, 560.0, 84.0), 10.0, alpha(Color::rgb(14, 14, 19), 0.92));
-                        book.stroke_rrect(xywh(0.0, 0.0, 560.0, 84.0), 10.0, alpha(Color::WHITE, 0.08), 1.0);
+                        book.rrect(
+                            xywh(0.0, 0.0, 560.0, 84.0),
+                            10.0,
+                            alpha(Color::rgb(14, 14, 19), 0.92),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, 560.0, 84.0),
+                            10.0,
+                            alpha(Color::WHITE, 0.08),
+                            1.0,
+                        );
                         // The write ticks — ten, landing in the strip.
                         for (i, wt) in writes.iter().enumerate() {
                             let age = (sec - wt).max(0.0);
@@ -107,7 +118,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         }
                         // The one rebuild they fold into.
                         let built = build_count(t);
-                        book.rrect(xywh(20.0, 52.0, 220.0 * (built as f32 / 3.0).min(1.0), 14.0), 7.0, alpha(tint(MINT, 0.05), 0.9));
+                        book.rrect(
+                            xywh(20.0, 52.0, 220.0 * (built as f32 / 3.0).min(1.0), 14.0),
+                            7.0,
+                            alpha(tint(MINT, 0.05), 0.9),
+                        );
                         let _ = built;
                     }),
                 ))),
@@ -119,10 +134,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(946.0)
                 .width(340.0)
                 .height(26.0)
-                .child(Opacity::new(strip_a).child(
-                    Text::new(format!("{} writes · {} rebuild", wr, build_count(t)))
-                        .style(TextStyle::new(15.0).monospace().letter_spacing(1.2).color(alpha(INK, 0.85))),
-                )),
+                .child(
+                    Opacity::new(strip_a).child(
+                        Text::new(format!("{} writes · {} rebuild", wr, build_count(t))).style(
+                            TextStyle::new(15.0)
+                                .monospace()
+                                .letter_spacing(1.2)
+                                .color(alpha(INK, 0.85)),
+                        ),
+                    ),
+                ),
         );
     }
 

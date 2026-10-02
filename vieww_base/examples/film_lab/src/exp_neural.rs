@@ -21,13 +21,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, tint, AMBER, CYAN, INK, MUTED, VIOLET,
-    VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, mix, tint, AMBER, CYAN, INK, MUTED, VIOLET, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The dataset ─────────────────────────────────────────────────────────────
 
@@ -99,9 +98,8 @@ struct Net {
 impl Net {
     fn seeded() -> Self {
         let mut rng = crate::film_lib::Rng::new(0x4E7);
-        let mut init = |n: usize, scale: f32| -> Vec<f32> {
-            (0..n).map(|_| rng.sym() * scale).collect()
-        };
+        let mut init =
+            |n: usize, scale: f32| -> Vec<f32> { (0..n).map(|_| rng.sym() * scale).collect() };
         Self {
             w1: init(L1 * L0, 0.7),
             b1: vec![0.0; L1],
@@ -139,7 +137,13 @@ impl Net {
     /// One mini-batch epoch: a deterministic Fisher–Yates shuffle (seeded
     /// — the replay stays a pure function of the seed), then gradient
     /// steps per batch. Returns the mean logistic loss over the epoch.
-    fn train_epoch(&mut self, pts: &[Pt], vw: &mut [f32], vb: &mut [f32], shuf: &mut crate::film_lib::Rng) -> f32 {
+    fn train_epoch(
+        &mut self,
+        pts: &[Pt],
+        vw: &mut [f32],
+        vb: &mut [f32],
+        shuf: &mut crate::film_lib::Rng,
+    ) -> f32 {
         let mut order: Vec<usize> = (0..pts.len()).collect();
         for i in (1..order.len()).rev() {
             let j = (shuf.f01() * (i + 1) as f32) as usize % (i + 1);
@@ -183,7 +187,7 @@ impl Net {
             }
             gb3[0] += d3;
             // Layer 2.
-            let mut d2 = vec![0.0_f32; L2];
+            let mut d2 = [0.0_f32; L2];
             for j in 0..L2 {
                 d2[j] = d3 * self.w3[j] * (1.0 - h2[j] * h2[j]);
                 for i in 0..L1 {
@@ -192,7 +196,7 @@ impl Net {
                 gb2[j] += d2[j];
             }
             // Layer 1.
-            let mut d1 = vec![0.0_f32; L1];
+            let mut d1 = [0.0_f32; L1];
             for j in 0..L1 {
                 let mut acc = 0.0;
                 for k in 0..L2 {
@@ -287,7 +291,7 @@ fn replay(epochs: usize) -> (Net, Vec<(usize, f32)>, f32, f32) {
 /// The data window.
 const WIN: (f32, f32, f32, f32) = (326.0, 84.0, 620.0, 556.0); // x, y, w, h
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let epochs = ((clamp01(t) * EPOCHS as f32).round() as usize).max(1);
     let (net, curve, loss, acc) = replay(epochs);
     let pts = dataset();
@@ -302,10 +306,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the training room.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 15))]),
             );
 
             // ── The decision field — a 128×72 lattice of forward passes ──
@@ -325,7 +328,11 @@ pub fn frame(t: f32) -> WidgetNode {
                     let col = if conf >= 0.0 {
                         mix(Color::rgb(14, 11, 24), mix(VIOLET, VIOLET_SOFT, 0.4), conf)
                     } else {
-                        mix(Color::rgb(20, 14, 9), mix(AMBER, tint(AMBER, 0.4), -conf), -conf)
+                        mix(
+                            Color::rgb(20, 14, 9),
+                            mix(AMBER, tint(AMBER, 0.4), -conf),
+                            -conf,
+                        )
                     };
                     let cw = fw / cols as f32;
                     let chh = fh / rows as f32;
@@ -486,7 +493,10 @@ fn receipt_panel(epochs: usize, loss: f32, acc: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

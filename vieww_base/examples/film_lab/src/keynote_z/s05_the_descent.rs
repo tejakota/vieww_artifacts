@@ -13,17 +13,23 @@
 
 use vieww_foundation::{Color, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
+use super::{
+    alpha, caption, clamp01, tint, xywh, Ctx, CYAN, H, INK, MUTED, VIOLET, VIOLET_SOFT, W,
+};
 use crate::film_lib::{ease_in_out, ease_out_cubic};
-use super::{CANVAS, CYAN, Ctx, H, INK, MUTED, VIOLET, VIOLET_SOFT, W, act_chip, alpha, caption, clamp01, glow, grain, grid_plane, ground, spark, stars, stars_parallax, tint, vignette, xywh};
-
 
 /// The four planes the dive passes — the frame's own path through the
 /// stack, named as it crosses each.
-const PLANES: [&str; 4] = ["vieww-widget", "vieww-element", "vieww-render", "vieww-paint"];
+const PLANES: [&str; 4] = [
+    "vieww-widget",
+    "vieww-element",
+    "vieww-render",
+    "vieww-paint",
+];
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -47,11 +53,13 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             // A deeper ground than the sky's — we are inside the machine.
             book.rect(
                 xywh(0.0, 0.0, w, h),
-                vieww_foundation::Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(8, 8, 12)),
-                    (0.5, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(9, 8, 14)),
-                ]),
+                vieww_foundation::Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, Color::rgb(8, 8, 12)),
+                        (0.5, Color::rgb(6, 6, 10)),
+                        (1.0, Color::rgb(9, 8, 14)),
+                    ]),
             );
             // Stars, rushing upward — the fall made visible.
             super::stars_parallax(book, w, h, 0x05DE, 110, t, 0.14, 0.0, cam_y);
@@ -96,22 +104,41 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 Size::new(620.0, 90.0),
                 PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                     // The tick — a bracket, the inspector's grammar.
-                    book.line(Offset::new(10.0, 12.0), Offset::new(10.0, 74.0), alpha(CYAN, label_a * 0.8), 2.4);
+                    book.line(
+                        Offset::new(10.0, 12.0),
+                        Offset::new(10.0, 74.0),
+                        alpha(CYAN, label_a * 0.8),
+                        2.4,
+                    );
                     super::glow(book, 60.0, 45.0, 160.0, CYAN, label_a * 0.25);
                 }),
             );
-            stack = stack.push(Positioned::new().left(lx).top(ly).width(620.0).height(90.0).child(label));
+            stack = stack.push(
+                Positioned::new()
+                    .left(lx)
+                    .top(ly)
+                    .width(620.0)
+                    .height(90.0)
+                    .child(label),
+            );
             stack = stack.push(
                 Positioned::new()
                     .left(lx + 26.0)
                     .top(ly + 22.0)
                     .width(420.0)
                     .height(40.0)
-                    .child(Opacity::new(clamp01(label_a)).child(
-                        Text::new(*name)
-                            .style(TextStyle::new(26.0).monospace().letter_spacing(2.6).color(alpha(tint(CYAN, 0.25), 0.98)))
-                            .align(TextAlign::Left),
-                    )),
+                    .child(
+                        Opacity::new(clamp01(label_a)).child(
+                            Text::new(*name)
+                                .style(
+                                    TextStyle::new(26.0)
+                                        .monospace()
+                                        .letter_spacing(2.6)
+                                        .color(alpha(tint(CYAN, 0.25), 0.98)),
+                                )
+                                .align(TextAlign::Left),
+                        ),
+                    ),
             );
         }
     }
@@ -126,7 +153,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             super::spark(book, 60.0, 60.0, spark_r, sec, 1.0, VIOLET_SOFT);
         }),
     );
-    stack = stack.push(Positioned::new().left(W * 0.5 - 60.0).top(spark_y - 60.0).width(120.0).height(120.0).child(light));
+    stack = stack.push(
+        Positioned::new()
+            .left(W * 0.5 - 60.0)
+            .top(spark_y - 60.0)
+            .width(120.0)
+            .height(120.0)
+            .child(light),
+    );
 
     // The landing — the last quarter: the grid flattens into S06's
     // isometric plane, rising to meet the camera.
@@ -157,7 +191,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     }
 
     // The captions — the descent's beats.
-    stack = stack.push(super::act_chip("II", "THE MACHINE", clamp01((sec - 0.3) / 0.5)));
+    stack = stack.push(super::act_chip(
+        "II",
+        "THE MACHINE",
+        clamp01((sec - 0.3) / 0.5),
+    ));
     stack = stack.push(caption(
         "beneath the light — the machine",
         1002.0,

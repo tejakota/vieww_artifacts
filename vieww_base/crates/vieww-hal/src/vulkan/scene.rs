@@ -1392,7 +1392,12 @@ impl SceneRenderer {
         let mut out = vec![0u8; texels * 4];
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let byte = |v: f32| (v * 255.0 + 0.5) as u8;
-        for (pixel, slot) in half.chunks_exact(4).zip(out.chunks_exact_mut(4)) {
+        for (pixel, slot) in half
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(out.as_chunks_mut::<4>().0)
+        {
             let [r, g, b, a] = [pixel[0], pixel[1], pixel[2], pixel[3]].map(half_to_f32);
             let inv = if a > 0.0 { 1.0 / a } else { 0.0 };
             slot.copy_from_slice(&[byte(r * inv), byte(g * inv), byte(b * inv), byte(a)]);

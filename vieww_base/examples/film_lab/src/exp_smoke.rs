@@ -28,12 +28,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, clamp01, mix, tint, AMBER, CYAN, FAINT, INK, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The machine ─────────────────────────────────────────────────────────────
 
@@ -200,13 +200,17 @@ impl Sim {
         // ── Project: ∇²p = ∇·u, Gauss–Seidel, staggered differences ────
         for y in 0..GY {
             for x in 0..GX {
-                self.div[ci(x, y)] =
-                    -(self.u[ui(x + 1, y)] - self.u[ui(x, y)] + self.v[vi(x, y + 1)] - self.v[vi(x, y)]);
+                self.div[ci(x, y)] = -(self.u[ui(x + 1, y)] - self.u[ui(x, y)]
+                    + self.v[vi(x, y + 1)]
+                    - self.v[vi(x, y)]);
                 self.p[ci(x, y)] = 0.0;
             }
         }
         let pc = |p: &[f32], x: i32, y: i32| -> f32 {
-            p[ci(x.clamp(0, GX as i32 - 1) as usize, y.clamp(0, GY as i32 - 1) as usize)]
+            p[ci(
+                x.clamp(0, GX as i32 - 1) as usize,
+                y.clamp(0, GY as i32 - 1) as usize,
+            )]
         };
         for _ in 0..P_ITERS {
             for y in 0..GY {
@@ -245,8 +249,10 @@ impl Sim {
             for y in 1..GY - 1 {
                 for x in 1..GX - 1 {
                     om[ci(x, y)] = 0.5
-                        * ((self.v[vi((x + 1).min(GX - 1), y)] - self.v[vi(x.saturating_sub(1), y)])
-                            - (self.u[ui(x, (y + 1).min(GY - 1))] - self.u[ui(x, y.saturating_sub(1))]));
+                        * ((self.v[vi((x + 1).min(GX - 1), y)]
+                            - self.v[vi(x.saturating_sub(1), y)])
+                            - (self.u[ui(x, (y + 1).min(GY - 1))]
+                                - self.u[ui(x, y.saturating_sub(1))]));
                 }
             }
             for y in 1..GY - 1 {
@@ -279,8 +285,7 @@ impl Sim {
             self.u[ui(0, y)] = U_IN;
         }
         for y in 0..=GY {
-            self.v[vi(0, y)] =
-                bow * U_IN * (-((y as f32 - CYL.1 as f32 - 0.5).abs() / 10.0)).exp();
+            self.v[vi(0, y)] = bow * U_IN * (-((y as f32 - CYL.1 as f32 - 0.5).abs() / 10.0)).exp();
         }
         // Outflow: copy.
         for y in 0..GY {
@@ -332,7 +337,8 @@ impl Sim {
                 let mut hi = f32::NEG_INFINITY;
                 for dy in 0..=1isize {
                     for dx in 0..=1isize {
-                        let c = self.dye0[ci((ix as isize + dx) as usize, (iy as isize + dy) as usize)];
+                        let c =
+                            self.dye0[ci((ix as isize + dx) as usize, (iy as isize + dy) as usize)];
                         lo = lo.min(c);
                         hi = hi.max(c);
                     }
@@ -409,7 +415,7 @@ fn shedding(lift: &[f32]) -> Option<(f32, f32, f32)> {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The replay: from still fluid to t — pure function of the constants.
     let steps = (TOTAL_STEPS as f32 * t) as usize;
     let mut sim = Sim::new();
@@ -435,10 +441,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the wind tunnel at night.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(5, 6, 9)),
-                    (1.0, Color::rgb(10, 11, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(5, 6, 9)), (1.0, Color::rgb(10, 11, 15))]),
             );
 
             // The channel interior.
@@ -460,9 +465,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         if d < 0.02 {
                             continue;
                         }
-                        let vort = sim
-                            .curl(fx.round().clamp(0.0, (GX - 1) as f32) as usize,
-                                  fy.round().clamp(0.0, (GY - 1) as f32) as usize);
+                        let vort = sim.curl(
+                            fx.round().clamp(0.0, (GX - 1) as f32) as usize,
+                            fy.round().clamp(0.0, (GY - 1) as f32) as usize,
+                        );
                         let warm = clamp01(vort * 2.6 + 0.5);
                         let col = mix(
                             mix(tint(CYAN, 0.25), Color::rgb(228, 238, 250), 0.3),
@@ -481,10 +487,7 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // ── The cylinder ───────────────────────────────────────────
             let (cgx, cgy, cr) = CYL;
-            let cc = Offset::new(
-                X0 + (cgx as f32 + 0.5) * cw,
-                Y0 + (cgy as f32 + 0.5) * ch,
-            );
+            let cc = Offset::new(X0 + (cgx as f32 + 0.5) * cw, Y0 + (cgy as f32 + 0.5) * ch);
             let pr = cr * cw;
             book.circle(cc, pr + 1.5, Color::rgb(16, 16, 22));
             book.ring(cc, pr, 2.2, alpha(VIOLET, 0.9));
@@ -492,10 +495,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 g.circle(
                     cc,
                     pr + 12.0,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.22)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.22)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
 
@@ -512,7 +514,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 alpha(mix(FAINT, CYAN, 0.2), 0.55),
                 2.0,
             );
-            let march = (t * 6.2832 * 2.0) % 1.0;
+            let march = (t * std::f32::consts::TAU * 2.0) % 1.0;
             for k in 0..7 {
                 let yy = Y0 + HT * (0.18 + 0.64 * (k as f32 / 6.0));
                 let xx = X0 + 22.0 + march * 26.0;
@@ -533,9 +535,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 alpha(Color::rgb(10, 10, 15), 0.85),
             );
             let series = &sim.lift[sim.lift.len().saturating_sub(180)..];
-            let maxa = series
-                .iter()
-                .fold(1e-9_f32, |m, v| m.max(v.abs()));
+            let maxa = series.iter().fold(1e-9_f32, |m, v| m.max(v.abs()));
             if series.len() > 1 {
                 let mut path = Path::new();
                 for (i, &l) in series.iter().enumerate() {
@@ -613,7 +613,10 @@ fn receipt_panel(steps: usize, shed: Option<(f32, f32, f32)>) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

@@ -73,7 +73,11 @@ fn ramp(value: f32) -> Color {
     let deep = (12.0_f32, 26.0_f32, 66.0_f32);
     let high = (208.0_f32, 226.0_f32, 245.0_f32);
     let mix = |a: f32, b: f32| (a + (b - a) * v) as u8;
-    Color::rgb(mix(deep.0, high.0), mix(deep.1, high.1), mix(deep.2, high.2))
+    Color::rgb(
+        mix(deep.0, high.0),
+        mix(deep.1, high.1),
+        mix(deep.2, high.2),
+    )
 }
 
 struct FieldPainter {
@@ -153,7 +157,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::rgb(10, 12, 20))
                 .padding(EdgeInsets::all(20.0))
-                .child(Field { time, _clock: clock }),
+                .child(Field {
+                    time,
+                    _clock: clock,
+                }),
         );
     })
 }

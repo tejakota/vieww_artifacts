@@ -199,7 +199,13 @@ impl Channel {
             return [0.0; 4];
         }
         let cubic = self.interpolation == Interpolation::CubicSpline;
-        let value = |k: usize| if cubic { self.values[k * 3 + 1] } else { self.values[k] };
+        let value = |k: usize| {
+            if cubic {
+                self.values[k * 3 + 1]
+            } else {
+                self.values[k]
+            }
+        };
         if t <= self.times[0] {
             return value(0);
         }
@@ -254,9 +260,13 @@ impl Gltf {
     #[must_use]
     pub fn sample(&self, index: usize, t: f32) -> Vec<NodePose> {
         let mut out = vec![NodePose::default(); self.nodes.len()];
-        let Some(anim) = self.animations.get(index) else { return out };
+        let Some(anim) = self.animations.get(index) else {
+            return out;
+        };
         for c in &anim.channels {
-            let Some(pose) = out.get_mut(c.node) else { continue };
+            let Some(pose) = out.get_mut(c.node) else {
+                continue;
+            };
             let v = c.sample(t);
             match c.path {
                 Path::Translation => pose.translation = Some([v[0], v[1], v[2]]),
@@ -271,7 +281,11 @@ impl Gltf {
     /// if the file declares no scenes.
     #[must_use]
     pub fn roots(&self) -> Vec<usize> {
-        if let Some(s) = self.default_scene.and_then(|i| self.scenes.get(i)).or_else(|| self.scenes.first()) {
+        if let Some(s) = self
+            .default_scene
+            .and_then(|i| self.scenes.get(i))
+            .or_else(|| self.scenes.first())
+        {
             return s.clone();
         }
         let mut child = vec![false; self.nodes.len()];
@@ -323,7 +337,11 @@ pub fn base64_encode(bytes: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         for i in 0..4 {
             if i <= chunk.len() {
@@ -343,7 +361,10 @@ pub fn base64_encode(bytes: &[u8]) -> String {
 ///
 /// Malformed JSON, missing required fields, out-of-range indices or
 /// accessor reads past their buffer.
-pub fn parse_gltf(text: &str, resolve: &dyn Fn(&str) -> Option<Vec<u8>>) -> Result<Gltf, GltfError> {
+pub fn parse_gltf(
+    text: &str,
+    resolve: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Result<Gltf, GltfError> {
     let doc = Json::parse(text).map_err(|e| GltfError(e.to_string()))?;
     load(&doc, None, resolve)
 }
@@ -375,7 +396,9 @@ pub fn parse_glb(bytes: &[u8]) -> Result<Gltf, GltfError> {
     while at + 8 <= total {
         let len = u32_at(at)? as usize;
         let kind = u32_at(at + 4)?;
-        let data = bytes.get(at + 8..at + 8 + len).ok_or_else(|| GltfError("chunk past the end".into()))?;
+        let data = bytes
+            .get(at + 8..at + 8 + len)
+            .ok_or_else(|| GltfError("chunk past the end".into()))?;
         match kind {
             0x4E4F_534A => json = Some(data),
             0x004E_4942 => bin = Some(data.to_vec()),
@@ -384,8 +407,10 @@ pub fn parse_glb(bytes: &[u8]) -> Result<Gltf, GltfError> {
         at += 8 + len.div_ceil(4) * 4;
     }
     let json = json.ok_or_else(|| GltfError("GLB without a JSON chunk".into()))?;
-    let text = std::str::from_utf8(json).map_err(|_| GltfError("JSON chunk is not UTF-8".into()))?;
-    let doc = Json::parse(text.trim_end_matches(['\0', ' '])).map_err(|e| GltfError(e.to_string()))?;
+    let text =
+        std::str::from_utf8(json).map_err(|_| GltfError("JSON chunk is not UTF-8".into()))?;
+    let doc =
+        Json::parse(text.trim_end_matches(['\0', ' '])).map_err(|e| GltfError(e.to_string()))?;
     load(&doc, bin, &|_| None)
 }
 
@@ -442,9 +467,14 @@ impl Buffers {
             // Sparse-only or zero-filled accessor.
             return Ok((vec![0.0; count * width], width));
         };
-        let &(buffer, view_offset, view_len, stride) =
-            self.views.get(view).ok_or_else(|| GltfError(format!("bufferView {view} out of range")))?;
-        let data = self.buffers.get(buffer).ok_or_else(|| GltfError(format!("buffer {buffer} missing")))?;
+        let &(buffer, view_offset, view_len, stride) = self
+            .views
+            .get(view)
+            .ok_or_else(|| GltfError(format!("bufferView {view} out of range")))?;
+        let data = self
+            .buffers
+            .get(buffer)
+            .ok_or_else(|| GltfError(format!("buffer {buffer} missing")))?;
         let base = view_offset + idx(a, "byteOffset").unwrap_or(0);
         let stride = stride.unwrap_or(size * width);
         let mut out = Vec::with_capacity(count * width);
@@ -458,19 +488,35 @@ impl Buffers {
                 let v = match ctype {
                     5120 => {
                         let x = f32::from(i8::from_le_bytes([b[0]]));
-                        if normalized { (x / 127.0).max(-1.0) } else { x }
+                        if normalized {
+                            (x / 127.0).max(-1.0)
+                        } else {
+                            x
+                        }
                     }
                     5121 => {
                         let x = f32::from(b[0]);
-                        if normalized { x / 255.0 } else { x }
+                        if normalized {
+                            x / 255.0
+                        } else {
+                            x
+                        }
                     }
                     5122 => {
                         let x = f32::from(i16::from_le_bytes([b[0], b[1]]));
-                        if normalized { (x / 32767.0).max(-1.0) } else { x }
+                        if normalized {
+                            (x / 32767.0).max(-1.0)
+                        } else {
+                            x
+                        }
                     }
                     5123 => {
                         let x = f32::from(u16::from_le_bytes([b[0], b[1]]));
-                        if normalized { x / 65535.0 } else { x }
+                        if normalized {
+                            x / 65535.0
+                        } else {
+                            x
+                        }
                     }
                     5125 => u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as f32,
                     _ => f32::from_le_bytes([b[0], b[1], b[2], b[3]]),
@@ -483,8 +529,16 @@ impl Buffers {
 }
 
 #[allow(clippy::too_many_lines)]
-fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<Vec<u8>>) -> Result<Gltf, GltfError> {
-    if let Some(v) = doc.get("asset").and_then(|a| a.get("version")).and_then(Json::as_str) {
+fn load(
+    doc: &Json,
+    glb_bin: Option<Vec<u8>>,
+    resolve: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Result<Gltf, GltfError> {
+    if let Some(v) = doc
+        .get("asset")
+        .and_then(|a| a.get("version"))
+        .and_then(Json::as_str)
+    {
         if !v.starts_with('2') {
             return err(format!("asset version {v} is not glTF 2"));
         }
@@ -492,15 +546,20 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
     let mut buffers = Vec::new();
     for (i, b) in arr(doc, "buffers").iter().enumerate() {
         let data = match b.get("uri").and_then(Json::as_str) {
-            None => glb_bin.clone().ok_or_else(|| GltfError(format!("buffer {i} has no uri and there is no GLB chunk")))?,
+            None => glb_bin.clone().ok_or_else(|| {
+                GltfError(format!("buffer {i} has no uri and there is no GLB chunk"))
+            })?,
             Some(uri) if uri.starts_with("data:") => {
-                let comma = uri.find(',').ok_or_else(|| GltfError("malformed data URI".into()))?;
+                let comma = uri
+                    .find(',')
+                    .ok_or_else(|| GltfError("malformed data URI".into()))?;
                 if !uri[..comma].ends_with(";base64") {
                     return err("only base64 data URIs are supported");
                 }
                 base64_decode(&uri[comma + 1..])?
             }
-            Some(uri) => resolve(uri).ok_or_else(|| GltfError(format!("buffer {uri} could not be loaded")))?,
+            Some(uri) => resolve(uri)
+                .ok_or_else(|| GltfError(format!("buffer {uri} could not be loaded")))?,
         };
         buffers.push(data);
     }
@@ -522,12 +581,25 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
         .map(|m| {
             let pbr = m.get("pbrMetallicRoughness").cloned().unwrap_or_default();
             GltfMaterial {
-                name: m.get("name").and_then(Json::as_str).unwrap_or("").to_owned(),
+                name: m
+                    .get("name")
+                    .and_then(Json::as_str)
+                    .unwrap_or("")
+                    .to_owned(),
                 base_color: floats(&pbr, "baseColorFactor", [1.0; 4]),
-                metallic: pbr.get("metallicFactor").and_then(Json::as_f32).unwrap_or(1.0),
-                roughness: pbr.get("roughnessFactor").and_then(Json::as_f32).unwrap_or(1.0),
+                metallic: pbr
+                    .get("metallicFactor")
+                    .and_then(Json::as_f32)
+                    .unwrap_or(1.0),
+                roughness: pbr
+                    .get("roughnessFactor")
+                    .and_then(Json::as_f32)
+                    .unwrap_or(1.0),
                 emissive: floats(m, "emissiveFactor", [0.0; 3]),
-                double_sided: m.get("doubleSided").and_then(Json::as_bool).unwrap_or(false),
+                double_sided: m
+                    .get("doubleSided")
+                    .and_then(Json::as_bool)
+                    .unwrap_or(false),
                 blend: m.get("alphaMode").and_then(Json::as_str) == Some("BLEND"),
                 base_color_texture: pbr.get("baseColorTexture").and_then(|t| idx(t, "index")),
             }
@@ -538,18 +610,40 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
     for m in arr(doc, "meshes") {
         let mut primitives = Vec::new();
         for p in arr(m, "primitives") {
-            let attrs = p.get("attributes").ok_or_else(|| GltfError("primitive without attributes".into()))?;
-            let pos_acc = idx(attrs, "POSITION").ok_or_else(|| GltfError("primitive without POSITION".into()))?;
+            let attrs = p
+                .get("attributes")
+                .ok_or_else(|| GltfError("primitive without attributes".into()))?;
+            let pos_acc = idx(attrs, "POSITION")
+                .ok_or_else(|| GltfError("primitive without POSITION".into()))?;
             let (pos, _) = bufs.read(doc, pos_acc)?;
             let mut mesh = Mesh {
-                positions: pos.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+                positions: pos
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .map(|c| [c[0], c[1], c[2]])
+                    .collect(),
                 ..Mesh::default()
             };
             if let Some(a) = idx(attrs, "NORMAL") {
-                mesh.normals = bufs.read(doc, a)?.0.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+                mesh.normals = bufs
+                    .read(doc, a)?
+                    .0
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .map(|c| [c[0], c[1], c[2]])
+                    .collect();
             }
             if let Some(a) = idx(attrs, "TEXCOORD_0") {
-                mesh.uvs = bufs.read(doc, a)?.0.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
+                mesh.uvs = bufs
+                    .read(doc, a)?
+                    .0
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|c| [c[0], c[1]])
+                    .collect();
             }
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let raw: Vec<u32> = match idx(p, "indices") {
@@ -563,10 +657,22 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
             mesh.indices = match idx(p, "mode").unwrap_or(4) {
                 4 => raw,
                 5 => (2..raw.len())
-                    .flat_map(|i| if i % 2 == 0 { [raw[i - 2], raw[i - 1], raw[i]] } else { [raw[i - 1], raw[i - 2], raw[i]] })
+                    .flat_map(|i| {
+                        if i % 2 == 0 {
+                            [raw[i - 2], raw[i - 1], raw[i]]
+                        } else {
+                            [raw[i - 1], raw[i - 2], raw[i]]
+                        }
+                    })
                     .collect(),
-                6 => (2..raw.len()).flat_map(|i| [raw[0], raw[i - 1], raw[i]]).collect(),
-                m => return err(format!("primitive mode {m} (points/lines) is not triangles")),
+                6 => (2..raw.len())
+                    .flat_map(|i| [raw[0], raw[i - 1], raw[i]])
+                    .collect(),
+                m => {
+                    return err(format!(
+                        "primitive mode {m} (points/lines) is not triangles"
+                    ))
+                }
             };
             if !mesh.has_normals() {
                 mesh.compute_normals();
@@ -577,7 +683,11 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
             });
         }
         meshes.push(GltfMesh {
-            name: m.get("name").and_then(Json::as_str).unwrap_or("").to_owned(),
+            name: m
+                .get("name")
+                .and_then(Json::as_str)
+                .unwrap_or("")
+                .to_owned(),
             primitives,
         });
     }
@@ -593,9 +703,16 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
                 })
             });
             GltfNode {
-                name: n.get("name").and_then(Json::as_str).unwrap_or("").to_owned(),
+                name: n
+                    .get("name")
+                    .and_then(Json::as_str)
+                    .unwrap_or("")
+                    .to_owned(),
                 mesh: idx(n, "mesh"),
-                children: arr(n, "children").iter().filter_map(Json::as_usize).collect(),
+                children: arr(n, "children")
+                    .iter()
+                    .filter_map(Json::as_usize)
+                    .collect(),
                 translation: floats(n, "translation", [0.0; 3]),
                 rotation: floats(n, "rotation", [0.0, 0.0, 0.0, 1.0]),
                 scale: floats(n, "scale", [1.0; 3]),
@@ -604,7 +721,8 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
         })
         .collect::<Vec<_>>();
     for n in &nodes {
-        if n.mesh.is_some_and(|m| m >= meshes.len()) || n.children.iter().any(|&c| c >= nodes.len()) {
+        if n.mesh.is_some_and(|m| m >= meshes.len()) || n.children.iter().any(|&c| c >= nodes.len())
+        {
             return err(format!("node {} refers past the end of a list", n.name));
         }
     }
@@ -619,14 +737,18 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
         let samplers = arr(a, "samplers");
         let mut channels = Vec::new();
         for c in arr(a, "channels") {
-            let target = c.get("target").ok_or_else(|| GltfError("channel without target".into()))?;
+            let target = c
+                .get("target")
+                .ok_or_else(|| GltfError("channel without target".into()))?;
             let path = match target.get("path").and_then(Json::as_str) {
                 Some("translation") => Path::Translation,
                 Some("rotation") => Path::Rotation,
                 Some("scale") => Path::Scale,
                 _ => continue, // morph-target weights: not supported
             };
-            let Some(node) = idx(target, "node") else { continue };
+            let Some(node) = idx(target, "node") else {
+                continue;
+            };
             let s = samplers
                 .get(idx(c, "sampler").ok_or_else(|| GltfError("channel.sampler".into()))?)
                 .ok_or_else(|| GltfError("sampler out of range".into()))?;
@@ -635,8 +757,14 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
                 Some("CUBICSPLINE") => Interpolation::CubicSpline,
                 _ => Interpolation::Linear,
             };
-            let (times, _) = bufs.read(doc, idx(s, "input").ok_or_else(|| GltfError("sampler.input".into()))?)?;
-            let (vals, width) = bufs.read(doc, idx(s, "output").ok_or_else(|| GltfError("sampler.output".into()))?)?;
+            let (times, _) = bufs.read(
+                doc,
+                idx(s, "input").ok_or_else(|| GltfError("sampler.input".into()))?,
+            )?;
+            let (vals, width) = bufs.read(
+                doc,
+                idx(s, "output").ok_or_else(|| GltfError("sampler.output".into()))?,
+            )?;
             let values = vals
                 .chunks_exact(width)
                 .map(|c| {
@@ -645,7 +773,12 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
                     v
                 })
                 .collect::<Vec<_>>();
-            let expect = times.len() * if interpolation == Interpolation::CubicSpline { 3 } else { 1 };
+            let expect = times.len()
+                * if interpolation == Interpolation::CubicSpline {
+                    3
+                } else {
+                    1
+                };
             if values.len() != expect {
                 return err("animation sampler input/output lengths disagree");
             }
@@ -658,7 +791,11 @@ fn load(doc: &Json, glb_bin: Option<Vec<u8>>, resolve: &dyn Fn(&str) -> Option<V
             });
         }
         animations.push(Animation {
-            name: a.get("name").and_then(Json::as_str).unwrap_or("").to_owned(),
+            name: a
+                .get("name")
+                .and_then(Json::as_str)
+                .unwrap_or("")
+                .to_owned(),
             channels,
         });
     }
@@ -702,7 +839,11 @@ pub fn write_gltf(mesh: &Mesh, name: &str, base_color: [f32; 4]) -> String {
     if has_n {
         attrs.push(("NORMAL", Json::from(1usize)));
     }
-    let mut views = vec![Json::object([("buffer", Json::from(0usize)), ("byteOffset", Json::from(0usize)), ("byteLength", Json::from(pos_len))])];
+    let mut views = vec![Json::object([
+        ("buffer", Json::from(0usize)),
+        ("byteOffset", Json::from(0usize)),
+        ("byteLength", Json::from(pos_len)),
+    ])];
     let mut accessors = vec![Json::object([
         ("bufferView", Json::from(0usize)),
         ("componentType", Json::from(5126usize)),
@@ -712,7 +853,11 @@ pub fn write_gltf(mesh: &Mesh, name: &str, base_color: [f32; 4]) -> String {
         ("max", Json::numbers(hi.iter().map(|v| f64::from(*v)))),
     ])];
     if has_n {
-        views.push(Json::object([("buffer", Json::from(0usize)), ("byteOffset", Json::from(pos_len)), ("byteLength", Json::from(nrm_len))]));
+        views.push(Json::object([
+            ("buffer", Json::from(0usize)),
+            ("byteOffset", Json::from(pos_len)),
+            ("byteLength", Json::from(nrm_len)),
+        ]));
         accessors.push(Json::object([
             ("bufferView", Json::from(1usize)),
             ("componentType", Json::from(5126usize)),
@@ -734,10 +879,28 @@ pub fn write_gltf(mesh: &Mesh, name: &str, base_color: [f32; 4]) -> String {
         ("type", Json::from("SCALAR")),
     ]));
     let doc = Json::object([
-        ("asset", Json::object([("version", Json::from("2.0")), ("generator", Json::from("vieww-mesh"))])),
+        (
+            "asset",
+            Json::object([
+                ("version", Json::from("2.0")),
+                ("generator", Json::from("vieww-mesh")),
+            ]),
+        ),
         ("scene", Json::from(0usize)),
-        ("scenes", Json::Array(vec![Json::object([("nodes", Json::Array(vec![Json::from(0usize)]))])])),
-        ("nodes", Json::Array(vec![Json::object([("name", Json::from(name)), ("mesh", Json::from(0usize))])])),
+        (
+            "scenes",
+            Json::Array(vec![Json::object([(
+                "nodes",
+                Json::Array(vec![Json::from(0usize)]),
+            )])]),
+        ),
+        (
+            "nodes",
+            Json::Array(vec![Json::object([
+                ("name", Json::from(name)),
+                ("mesh", Json::from(0usize)),
+            ])]),
+        ),
         (
             "meshes",
             Json::Array(vec![Json::object([
@@ -757,7 +920,10 @@ pub fn write_gltf(mesh: &Mesh, name: &str, base_color: [f32; 4]) -> String {
             Json::Array(vec![Json::object([(
                 "pbrMetallicRoughness",
                 Json::object([
-                    ("baseColorFactor", Json::numbers(base_color.iter().map(|v| f64::from(*v)))),
+                    (
+                        "baseColorFactor",
+                        Json::numbers(base_color.iter().map(|v| f64::from(*v))),
+                    ),
                     ("metallicFactor", Json::from(0.0f32)),
                     ("roughnessFactor", Json::from(0.6f32)),
                 ]),
@@ -767,7 +933,13 @@ pub fn write_gltf(mesh: &Mesh, name: &str, base_color: [f32; 4]) -> String {
             "buffers",
             Json::Array(vec![Json::object([
                 ("byteLength", Json::from(bin.len())),
-                ("uri", Json::from(format!("data:application/octet-stream;base64,{}", base64_encode(&bin)))),
+                (
+                    "uri",
+                    Json::from(format!(
+                        "data:application/octet-stream;base64,{}",
+                        base64_encode(&bin)
+                    )),
+                ),
             ])]),
         ),
         ("bufferViews", Json::Array(views)),
@@ -837,7 +1009,16 @@ mod tests {
 
     #[test]
     fn base64_round_trips() {
-        for s in [&b""[..], b"f", b"fo", b"foo", b"foob", b"fooba", b"foobar", &[0, 255, 7, 128]] {
+        for s in [
+            &b""[..],
+            b"f",
+            b"fo",
+            b"foo",
+            b"foob",
+            b"fooba",
+            b"foobar",
+            &[0, 255, 7, 128],
+        ] {
             assert_eq!(base64_decode(&base64_encode(s)).unwrap(), s);
         }
         assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
@@ -848,7 +1029,10 @@ mod tests {
     fn a_triangle_loads_with_hierarchy_and_material() {
         let g = parse_gltf(&triangle_gltf(None, false), &|_| None).unwrap();
         assert_eq!(g.meshes[0].primitives[0].mesh.triangles(), 1);
-        assert!(g.meshes[0].primitives[0].mesh.has_normals(), "normals computed when absent");
+        assert!(
+            g.meshes[0].primitives[0].mesh.has_normals(),
+            "normals computed when absent"
+        );
         assert_eq!(g.nodes[0].children, [1]);
         assert_eq!(g.nodes[0].translation, [0.0, 0.0, -5.0]);
         assert_eq!(g.nodes[1].scale, [2.0, 2.0, 2.0]);
@@ -882,7 +1066,10 @@ mod tests {
         let len = q.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!((len - 1.0).abs() < 1e-5);
         assert!((q[2] - q[3]).abs() < 1e-5, "halfway: 90° about z");
-        let step = Channel { interpolation: Interpolation::Step, ..c };
+        let step = Channel {
+            interpolation: Interpolation::Step,
+            ..c
+        };
         assert_eq!(step.sample(0.9), [0.0, 0.0, 0.0, 1.0]);
     }
 
@@ -890,7 +1077,10 @@ mod tests {
     fn strips_and_fans_triangulate() {
         let g = parse_gltf(&triangle_gltf(Some(5), false), &|_| None).unwrap();
         assert_eq!(g.meshes[0].primitives[0].mesh.triangles(), 1);
-        assert!(parse_gltf(&triangle_gltf(Some(1), false), &|_| None).is_err(), "lines are refused");
+        assert!(
+            parse_gltf(&triangle_gltf(Some(1), false), &|_| None).is_err(),
+            "lines are refused"
+        );
     }
 
     #[test]
@@ -898,7 +1088,12 @@ mod tests {
         let text = triangle_gltf(None, false);
         let doc = Json::parse(&text).unwrap();
         // Move the embedded buffer into the BIN chunk.
-        let b64 = doc.get("buffers").and_then(|b| b.index(0)).and_then(|b| b.get("uri")).and_then(Json::as_str).unwrap();
+        let b64 = doc
+            .get("buffers")
+            .and_then(|b| b.index(0))
+            .and_then(|b| b.get("uri"))
+            .and_then(Json::as_str)
+            .unwrap();
         let bin = base64_decode(&b64[b64.find(',').unwrap() + 1..]).unwrap();
         let json = text.replace(&format!(", \"uri\": \"{b64}\""), "");
         let mut json_bytes = json.into_bytes();
@@ -906,7 +1101,7 @@ mod tests {
             json_bytes.push(b' ');
         }
         let mut bin_padded = bin.clone();
-        while bin_padded.len() % 4 != 0 {
+        while !bin_padded.len().is_multiple_of(4) {
             bin_padded.push(0);
         }
         let total = 12 + 8 + json_bytes.len() + 8 + bin_padded.len();
@@ -928,7 +1123,13 @@ mod tests {
     fn external_buffers_go_through_the_resolver() {
         let text = triangle_gltf(None, false);
         let doc = Json::parse(&text).unwrap();
-        let b64 = doc.get("buffers").and_then(|b| b.index(0)).and_then(|b| b.get("uri")).and_then(Json::as_str).unwrap().to_owned();
+        let b64 = doc
+            .get("buffers")
+            .and_then(|b| b.index(0))
+            .and_then(|b| b.get("uri"))
+            .and_then(Json::as_str)
+            .unwrap()
+            .to_owned();
         let bin = base64_decode(&b64[b64.find(',').unwrap() + 1..]).unwrap();
         let ext = text.replace(&b64, "tri.bin");
         assert!(parse_gltf(&ext, &|_| None).is_err());
@@ -938,7 +1139,10 @@ mod tests {
 
     #[test]
     fn corrupt_files_are_errors() {
-        let text = triangle_gltf(None, false).replace("\"count\": 3, \"type\": \"VEC3\"", "\"count\": 30, \"type\": \"VEC3\"");
+        let text = triangle_gltf(None, false).replace(
+            "\"count\": 3, \"type\": \"VEC3\"",
+            "\"count\": 30, \"type\": \"VEC3\"",
+        );
         assert!(parse_gltf(&text, &|_| None).is_err(), "reads past the view");
         assert!(parse_gltf("{\"asset\": {\"version\": \"1.0\"}}", &|_| None).is_err());
         assert!(parse_gltf("not json", &|_| None).is_err());
@@ -947,7 +1151,12 @@ mod tests {
     #[test]
     fn written_gltf_parses_back() {
         let mut m = Mesh {
-            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]],
+            positions: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],
+            ],
             indices: vec![0, 1, 2, 2, 1, 3],
             ..Mesh::default()
         };

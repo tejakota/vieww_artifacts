@@ -426,7 +426,13 @@ fn measure(left: &Image, right: &Image) -> Option<Difference> {
     let mut alpha_only = true;
     let (mut min_x, mut min_y, mut max_x, mut max_y) = (u32::MAX, u32::MAX, 0_u32, 0_u32);
 
-    for (index, (a, b)) in left.chunks_exact(4).zip(right.chunks_exact(4)).enumerate() {
+    for (index, (a, b)) in left
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(right.as_chunks::<4>().0)
+        .enumerate()
+    {
         if a == b {
             continue;
         }
@@ -493,8 +499,10 @@ fn write_diff(name: &str, left: &Image, right: &Image, out: &Path) -> Result<(),
 
     for (a, b) in left
         .pixels()
-        .chunks_exact(4)
-        .zip(right.pixels().chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(right.pixels().as_chunks::<4>().0)
     {
         let delta = (0..4).map(|c| a[c].abs_diff(b[c])).max().unwrap_or(0);
         if delta == 0 {

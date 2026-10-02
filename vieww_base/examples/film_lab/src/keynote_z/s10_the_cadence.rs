@@ -14,11 +14,12 @@
 
 use vieww_foundation::{Color, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{ease_out_cubic};
-use super::{CANVAS, CYAN_SOFT, Ctx, H, INK, MUTED, VIOLET, VIOLET_SOFT, W, alpha, caption, clamp01, glow, grain, ground, mono, spark, tint, vignette, xywh};
-
+use super::{
+    alpha, caption, clamp01, tint, xywh, Ctx, CYAN_SOFT, INK, MUTED, VIOLET, VIOLET_SOFT, W,
+};
+use crate::film_lib::ease_out_cubic;
 
 /// The strips' geometry.
 const X0: f32 = 320.0;
@@ -26,7 +27,7 @@ const X1: f32 = 1600.0;
 const Y24: f32 = 470.0;
 const Y60: f32 = 620.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -55,13 +56,33 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             // The base lines.
-            book.line(Offset::new(X0, Y24), Offset::new(X1, Y24), alpha(Color::WHITE, 0.10), 1.0);
-            book.line(Offset::new(X0, Y60), Offset::new(X1, Y60), alpha(Color::WHITE, 0.10), 1.0);
+            book.line(
+                Offset::new(X0, Y24),
+                Offset::new(X1, Y24),
+                alpha(Color::WHITE, 0.10),
+                1.0,
+            );
+            book.line(
+                Offset::new(X0, Y60),
+                Offset::new(X1, Y60),
+                alpha(Color::WHITE, 0.10),
+                1.0,
+            );
             // The second's ticks — 12 major marks, both strips.
             for i in 0..=12 {
                 let x = X0 + (X1 - X0) * i as f32 / 12.0;
-                book.line(Offset::new(x, Y24 - 6.0), Offset::new(x, Y24 + 6.0), alpha(Color::WHITE, 0.14), 1.0);
-                book.line(Offset::new(x, Y60 - 6.0), Offset::new(x, Y60 + 6.0), alpha(Color::WHITE, 0.14), 1.0);
+                book.line(
+                    Offset::new(x, Y24 - 6.0),
+                    Offset::new(x, Y24 + 6.0),
+                    alpha(Color::WHITE, 0.14),
+                    1.0,
+                );
+                book.line(
+                    Offset::new(x, Y60 - 6.0),
+                    Offset::new(x, Y60 + 6.0),
+                    alpha(Color::WHITE, 0.14),
+                    1.0,
+                );
             }
             // The playhead's position, in strip x.
             let px = X0 + (X1 - X0) * sweep;
@@ -73,10 +94,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let bx = X0 + (X1 - X0) * slot;
                 let lit = sweep >= slot;
                 let decay = ((sweep - slot) / 0.9).min(1.0);
-                let a = if lit { (1.0 - decay * 0.6) } else { 0.10 };
+                let a = if lit { 1.0 - decay * 0.6 } else { 0.10 };
                 book.circle(Offset::new(bx, Y24), 4.0, alpha(MUTED, a));
                 if lit && decay < 0.2 {
-                    book.ring(Offset::new(bx, Y24), 8.0, 1.0, alpha(MUTED, 0.5 * (1.0 - decay * 5.0)));
+                    book.ring(
+                        Offset::new(bx, Y24),
+                        8.0,
+                        1.0,
+                        alpha(MUTED, 0.5 * (1.0 - decay * 5.0)),
+                    );
                 }
             }
             // THE 60 STRIP — blips at 1/60 spacing, every one a spark:
@@ -93,13 +119,24 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 }
             }
             // The playhead — one line through both strips.
-            book.line(Offset::new(px, Y24 - 26.0), Offset::new(px, Y60 + 26.0), alpha(tint(VIOLET_SOFT, 0.3), 0.8), 1.6);
+            book.line(
+                Offset::new(px, Y24 - 26.0),
+                Offset::new(px, Y60 + 26.0),
+                alpha(tint(VIOLET_SOFT, 0.3), 0.8),
+                1.6,
+            );
             book.circle(Offset::new(px, Y60 + 30.0), 3.4, alpha(VIOLET_SOFT, 0.95));
             // The strip counts — live, right of the lines.
             let n24 = ((sweep * 24.0).floor() as u32).min(24);
             let n60 = ((sweep * 60.0).floor() as u32).min(60);
-            book.rect(xywh(X1 + 8.0, Y24 - 12.0, 84.0, 24.0), alpha(Color::rgb(16, 16, 21), 0.8));
-            book.rect(xywh(X1 + 8.0, Y60 - 12.0, 84.0, 24.0), alpha(Color::rgb(16, 16, 21), 0.8));
+            book.rect(
+                xywh(X1 + 8.0, Y24 - 12.0, 84.0, 24.0),
+                alpha(Color::rgb(16, 16, 21), 0.8),
+            );
+            book.rect(
+                xywh(X1 + 8.0, Y60 - 12.0, 84.0, 24.0),
+                alpha(Color::rgb(16, 16, 21), 0.8),
+            );
             let _ = (n24, n60);
         }),
     );
@@ -120,7 +157,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(30.0)
                 .child(
                     Text::new(label)
-                        .style(TextStyle::new(22.0).monospace().letter_spacing(2.6).color(alpha(color, 0.95)))
+                        .style(
+                            TextStyle::new(22.0)
+                                .monospace()
+                                .letter_spacing(2.6)
+                                .color(alpha(color, 0.95)),
+                        )
                         .align(TextAlign::Left),
                 ),
         );
@@ -132,7 +174,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(28.0)
                 .child(
                     Text::new(format!("{:>2}", val))
-                        .style(TextStyle::new(22.0).monospace().letter_spacing(1.0).color(alpha(color, 0.95)))
+                        .style(
+                            TextStyle::new(22.0)
+                                .monospace()
+                                .letter_spacing(1.0)
+                                .color(alpha(color, 0.95)),
+                        )
                         .align(TextAlign::Left),
                 ),
         );
@@ -146,11 +193,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(280.0)
             .width(W)
             .height(60.0)
-            .child(Opacity::new(title_a).child(
-                Text::new("one second, twice-annotated")
-                    .style(TextStyle::new(34.0).weight(vieww_foundation::FontWeight::Medium).letter_spacing(2.0).color(alpha(INK, 0.96)))
-                    .align(TextAlign::Center),
-            )),
+            .child(
+                Opacity::new(title_a).child(
+                    Text::new("one second, twice-annotated")
+                        .style(
+                            TextStyle::new(34.0)
+                                .weight(vieww_foundation::FontWeight::Medium)
+                                .letter_spacing(2.0)
+                                .color(alpha(INK, 0.96)),
+                        )
+                        .align(TextAlign::Center),
+                ),
+            ),
     );
 
     // The caption — the cadence's beat.
@@ -171,7 +225,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 // The strip's glow band, easing toward a hairline.
                 let band_h = 40.0 * (1.0 - collapse) + 2.0;
                 book.rect(
-                    xywh(X0, Y60 - band_h * 0.5, (X1 - X0), band_h),
+                    xywh(X0, Y60 - band_h * 0.5, X1 - X0, band_h),
                     alpha(VIOLET, 0.10 * (1.0 - collapse * 0.5)),
                 );
             }),

@@ -150,7 +150,7 @@ fn entry(theme: &VavltTheme, row: &AuditRow, index: usize) -> WidgetNode {
     // within a couple of points of `card` in dark and are invisible in light
     // (where card and view are both white). The rule rides inside the plate,
     // clear of its corner.
-    let plate = if index % 2 == 0 {
+    let plate = if index.is_multiple_of(2) {
         theme.colors.card
     } else {
         Color::rgba(0, 0, 0, 0)

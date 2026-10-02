@@ -13,23 +13,35 @@
 //! Nothing is named. The hour-counter's number is emitted by the overlay's
 //! own clock — 1,852 hours and counting, on the wait's held cadence.
 
+use vieww_effects::{Filter, FilterChain};
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
-use vieww_effects::{Filter, FilterChain};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, held_24_in_60, mix, shade, xywh, BG_DEEP, FAINT, INK, MUTED};
+use crate::film_lib::{alpha, clamp01, ease_in_out, held_24_in_60, xywh, INK, MUTED};
 
 use super::{dust, grain, vignette, Ctx};
 
 /// A terminal window of the wait — chrome, log lines, a live cursor.
-fn terminal(book: &mut Sketchbook, x: f32, y: f32, w: f32, h: f32, tq: f32, seed: u64, which: usize) {
+fn terminal(
+    book: &mut Sketchbook,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    tq: f32,
+    seed: u64,
+    which: usize,
+) {
     let mut rng = crate::film_lib::Rng::new(seed);
     // The window body.
     book.rrect(xywh(x, y, w, h), 10.0, alpha(Color::rgb(16, 17, 20), 0.96));
     book.stroke_rrect(xywh(x, y, w, h), 10.0, alpha(Color::WHITE, 0.07), 1.0);
     // Title bar.
-    book.rect(xywh(x + 1.0, y + 1.0, w - 2.0, 30.0), alpha(Color::rgb(22, 23, 27), 0.95));
+    book.rect(
+        xywh(x + 1.0, y + 1.0, w - 2.0, 30.0),
+        alpha(Color::rgb(22, 23, 27), 0.95),
+    );
     for (i, c) in [Color::rgb(70, 72, 78); 3].iter().enumerate() {
         book.circle(Offset::new(x + 20.0 + i as f32 * 17.0, y + 15.0), 4.5, *c);
     }
@@ -48,10 +60,14 @@ fn terminal(book: &mut Sketchbook, x: f32, y: f32, w: f32, h: f32, tq: f32, seed
     ];
     let scroll = ((tq * 13.0) * 2.4) as i32;
     for i in 0..6 {
-        let li = ((i + scroll) .rem_euclid(6)) as usize;
+        let li = ((i + scroll).rem_euclid(6)) as usize;
         let ly = y + 52.0 + i as f32 * 34.0;
         let bright = li == 3;
-        let a = if bright { 0.42 } else { 0.20 + rng.f01() * 0.06 };
+        let a = if bright {
+            0.42
+        } else {
+            0.20 + rng.f01() * 0.06
+        };
         let _ = a;
         let _ = (ly, lines[li]);
     }
@@ -72,13 +88,18 @@ fn hour_counter(tq_sec: f32) -> WidgetNode {
         .height(64.0)
         .child(
             Text::new(text)
-                .style(TextStyle::new(44.0).monospace().letter_spacing(1.5).color(alpha(MUTED, 0.85)))
+                .style(
+                    TextStyle::new(44.0)
+                        .monospace()
+                        .letter_spacing(1.5)
+                        .color(alpha(MUTED, 0.85)),
+                )
                 .align(TextAlign::Right),
         )
         .into()
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     // The wait's clock: everything moves on the held 24 Hz step. The
     // judder is the mechanism (E-01's cadence, E-21's crafted poverty).
     let tq = held_24_in_60(ctx.sec);
@@ -167,9 +188,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .width(580.0)
                 .height(26.0)
                 .child(
-                    Text::new(lines[li]).style(
-                        TextStyle::new(17.0).monospace().color(alpha(INK, a)),
-                    ),
+                    Text::new(lines[li])
+                        .style(TextStyle::new(17.0).monospace().color(alpha(INK, a))),
                 ),
         );
     }
@@ -193,8 +213,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(500.0)
             .width(72.0)
             .height(72.0)
-            .child(Painting::sized(Size::new(72.0, 72.0), PaintWith::new(
-                move |book: &mut Sketchbook, _s: Size| {
+            .child(Painting::sized(
+                Size::new(72.0, 72.0),
+                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                     let phase = tq * 260.0;
                     book.stroke_styled(
                         super::circle_path(36.0, 36.0, 22.0, 40),
@@ -203,8 +224,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         vieww_foundation::StrokeStyle::rounded()
                             .dash(vieww_foundation::Dash::even(9.0).offset(phase)),
                     );
-                },
-            ))),
+                }),
+            )),
     );
 
     // The hour-counter — the wait's receipt.
@@ -215,9 +236,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     if fade < 1.0 {
         stack = stack.push(
             Positioned::fill().child(
-                Opacity::new(1.0 - fade).child(
-                    Container::new().size(1920.0, 1080.0).color(Color::BLACK),
-                ),
+                Opacity::new(1.0 - fade)
+                    .child(Container::new().size(1920.0, 1080.0).color(Color::BLACK)),
             ),
         );
     }

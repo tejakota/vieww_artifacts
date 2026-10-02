@@ -48,7 +48,12 @@ pub enum DistanceMode {
 #[derive(Debug, Clone)]
 pub enum Constraint {
     /// Take the target's position (per axis), optionally *added* to our own.
-    CopyLocation { target: String, x: bool, y: bool, offset: bool },
+    CopyLocation {
+        target: String,
+        x: bool,
+        y: bool,
+        offset: bool,
+    },
     /// Take the target's rotation, optionally added.
     CopyRotation { target: String, offset: bool },
     /// Take the target's scale.
@@ -58,7 +63,11 @@ pub enum Constraint {
     /// Clamp rotation (radians).
     LimitRotation { min: f32, max: f32 },
     /// Keep a distance from the target.
-    LimitDistance { target: String, distance: f32, mode: DistanceMode },
+    LimitDistance {
+        target: String,
+        distance: f32,
+        mode: DistanceMode,
+    },
     /// Rotate so the +x axis points at the target (plus `offset` radians) —
     /// Track To / Damped Track / LookAt.
     TrackTo { target: String, offset: f32 },
@@ -66,10 +75,17 @@ pub enum Constraint {
     /// `rest` is the length at scale 1 — Stretch To.
     StretchTo { target: String, rest: f32 },
     /// Ride a path at `fraction` of its length; with `follow`, turn with it.
-    FollowPath { path: Box<PathMeasure>, fraction: f32, follow: bool },
+    FollowPath {
+        path: Box<PathMeasure>,
+        fraction: f32,
+        follow: bool,
+    },
     /// Be carried by the target as if parented to it, from the relative
     /// placement `inverse` records (Blender's "Set Inverse").
-    ChildOf { target: String, inverse: BoneTransform },
+    ChildOf {
+        target: String,
+        inverse: BoneTransform,
+    },
     /// Stay above (y ≤ `height`, Y-down) a floor.
     Floor { height: f32 },
 }
@@ -89,13 +105,20 @@ impl Constraint {
         let mut out = input;
         let target = |name: &str| targets.get(name).copied();
         match self {
-            Self::CopyLocation { target: t, x, y, offset } => {
+            Self::CopyLocation {
+                target: t,
+                x,
+                y,
+                offset,
+            } => {
                 if let Some(tt) = target(t) {
                     if *x {
-                        out.translation.dx = tt.translation.dx + if *offset { input.translation.dx } else { 0.0 };
+                        out.translation.dx =
+                            tt.translation.dx + if *offset { input.translation.dx } else { 0.0 };
                     }
                     if *y {
-                        out.translation.dy = tt.translation.dy + if *offset { input.translation.dy } else { 0.0 };
+                        out.translation.dy =
+                            tt.translation.dy + if *offset { input.translation.dy } else { 0.0 };
                     }
                 }
             }
@@ -116,7 +139,11 @@ impl Constraint {
                 );
             }
             Self::LimitRotation { min, max } => out.rotation = input.rotation.clamp(*min, *max),
-            Self::LimitDistance { target: t, distance, mode } => {
+            Self::LimitDistance {
+                target: t,
+                distance,
+                mode,
+            } => {
                 if let Some(tt) = target(t) {
                     let d = input.translation - tt.translation;
                     let len = d.distance();
@@ -150,7 +177,11 @@ impl Constraint {
                     }
                 }
             }
-            Self::FollowPath { path, fraction, follow } => {
+            Self::FollowPath {
+                path,
+                fraction,
+                follow,
+            } => {
                 if let Some(p) = path.point_at_fraction(*fraction) {
                     out.translation = p.position + input.translation;
                     if *follow {
@@ -186,7 +217,10 @@ pub fn compose(outer: BoneTransform, inner: BoneTransform) -> BoneTransform {
 /// like in `parent`'s frame right now, so parenting does not jump.
 #[must_use]
 pub fn set_inverse(parent: BoneTransform, child: BoneTransform) -> BoneTransform {
-    let inv = parent.to_transform().invert().unwrap_or(vieww_foundation::Transform::IDENTITY);
+    let inv = parent
+        .to_transform()
+        .invert()
+        .unwrap_or(vieww_foundation::Transform::IDENTITY);
     BoneTransform {
         translation: inv.apply(child.translation),
         rotation: child.rotation - parent.rotation,
@@ -233,7 +267,9 @@ impl ConstraintStack {
     /// Run the stack over `input`.
     #[must_use]
     pub fn evaluate(&self, input: BoneTransform, targets: &Targets) -> BoneTransform {
-        self.items.iter().fold(input, |acc, (c, w)| acc.lerp(c.apply(acc, targets), *w))
+        self.items
+            .iter()
+            .fold(input, |acc, (c, w)| acc.lerp(c.apply(acc, targets), *w))
     }
 }
 
@@ -249,7 +285,13 @@ mod tests {
     fn targets() -> Targets {
         let mut t = Targets::new();
         t.insert("ball".into(), at(10.0, 10.0));
-        t.insert("hand".into(), BoneTransform { rotation: 0.5, ..at(5.0, 0.0) });
+        t.insert(
+            "hand".into(),
+            BoneTransform {
+                rotation: 0.5,
+                ..at(5.0, 0.0)
+            },
+        );
         t
     }
 
@@ -259,7 +301,10 @@ mod tests {
 
     #[test]
     fn track_to_points_at_the_target() {
-        let s = ConstraintStack::new().with(Constraint::TrackTo { target: "ball".into(), offset: 0.0 });
+        let s = ConstraintStack::new().with(Constraint::TrackTo {
+            target: "ball".into(),
+            offset: 0.0,
+        });
         let r = s.evaluate(at(0.0, 0.0), &targets());
         assert!(close(r.rotation, PI / 4.0));
     }
@@ -267,7 +312,12 @@ mod tests {
     #[test]
     fn influence_blends_with_the_input() {
         let s = ConstraintStack::new().with_influence(
-            Constraint::CopyLocation { target: "ball".into(), x: true, y: true, offset: false },
+            Constraint::CopyLocation {
+                target: "ball".into(),
+                x: true,
+                y: true,
+                offset: false,
+            },
             0.5,
         );
         let r = s.evaluate(at(0.0, 0.0), &targets());
@@ -277,9 +327,20 @@ mod tests {
     #[test]
     fn later_constraints_see_earlier_results() {
         let s = ConstraintStack::new()
-            .with(Constraint::CopyLocation { target: "ball".into(), x: true, y: true, offset: false })
-            .with(Constraint::LimitLocation { min: Offset::new(0.0, 0.0), max: Offset::new(8.0, 100.0) });
-        assert_eq!(s.evaluate(at(0.0, 0.0), &targets()).translation, Offset::new(8.0, 10.0));
+            .with(Constraint::CopyLocation {
+                target: "ball".into(),
+                x: true,
+                y: true,
+                offset: false,
+            })
+            .with(Constraint::LimitLocation {
+                min: Offset::new(0.0, 0.0),
+                max: Offset::new(8.0, 100.0),
+            });
+        assert_eq!(
+            s.evaluate(at(0.0, 0.0), &targets()).translation,
+            Offset::new(8.0, 10.0)
+        );
     }
 
     #[test]
@@ -291,18 +352,27 @@ mod tests {
             mode: DistanceMode::Inside,
         });
         let r = leash.evaluate(at(10.0, 30.0), &t);
-        assert!(close((r.translation - Offset::new(10.0, 10.0)).distance(), 5.0));
+        assert!(close(
+            (r.translation - Offset::new(10.0, 10.0)).distance(),
+            5.0
+        ));
         let repel = ConstraintStack::new().with(Constraint::LimitDistance {
             target: "ball".into(),
             distance: 5.0,
             mode: DistanceMode::Outside,
         });
-        assert_eq!(repel.evaluate(at(10.0, 30.0), &t).translation, Offset::new(10.0, 30.0));
+        assert_eq!(
+            repel.evaluate(at(10.0, 30.0), &t).translation,
+            Offset::new(10.0, 30.0)
+        );
     }
 
     #[test]
     fn stretch_to_reaches_and_preserves_volume() {
-        let s = ConstraintStack::new().with(Constraint::StretchTo { target: "ball".into(), rest: 10.0 });
+        let s = ConstraintStack::new().with(Constraint::StretchTo {
+            target: "ball".into(),
+            rest: 10.0,
+        });
         let r = s.evaluate(at(10.0, 0.0), &targets());
         assert!(close(r.rotation, FRAC_PI_2));
         assert!(close(r.scale.0, 1.0));
@@ -313,7 +383,9 @@ mod tests {
     #[test]
     fn follow_path_rides_and_turns() {
         let mut p = Path::new();
-        p.move_to(Offset::ZERO).line_to(Offset::new(100.0, 0.0)).line_to(Offset::new(100.0, 100.0));
+        p.move_to(Offset::ZERO)
+            .line_to(Offset::new(100.0, 0.0))
+            .line_to(Offset::new(100.0, 100.0));
         let s = ConstraintStack::new().with(Constraint::follow_path(&p, 0.75, true));
         let r = s.evaluate(BoneTransform::default(), &Targets::new());
         assert!(close(r.translation.dx, 100.0) && close(r.translation.dy, 50.0));
@@ -325,11 +397,23 @@ mod tests {
         let mut t = targets();
         let child = at(20.0, 0.0);
         let inverse = set_inverse(t["hand"], child);
-        let s = ConstraintStack::new().with(Constraint::ChildOf { target: "hand".into(), inverse });
+        let s = ConstraintStack::new().with(Constraint::ChildOf {
+            target: "hand".into(),
+            inverse,
+        });
         let r = s.evaluate(BoneTransform::default(), &t);
-        assert!(close(r.translation.dx, 20.0) && close(r.translation.dy, 0.0), "{r:?}");
+        assert!(
+            close(r.translation.dx, 20.0) && close(r.translation.dy, 0.0),
+            "{r:?}"
+        );
         // Move the hand: the child is carried.
-        t.insert("hand".into(), BoneTransform { rotation: 0.5, ..at(15.0, 0.0) });
+        t.insert(
+            "hand".into(),
+            BoneTransform {
+                rotation: 0.5,
+                ..at(15.0, 0.0)
+            },
+        );
         let moved = s.evaluate(BoneTransform::default(), &t);
         assert!(close(moved.translation.dx, 30.0), "{moved:?}");
     }
@@ -338,8 +422,17 @@ mod tests {
     fn floor_and_limit_rotation() {
         let s = ConstraintStack::new()
             .with(Constraint::Floor { height: 50.0 })
-            .with(Constraint::LimitRotation { min: -0.5, max: 0.5 });
-        let r = s.evaluate(BoneTransform { rotation: 2.0, ..at(0.0, 80.0) }, &Targets::new());
+            .with(Constraint::LimitRotation {
+                min: -0.5,
+                max: 0.5,
+            });
+        let r = s.evaluate(
+            BoneTransform {
+                rotation: 2.0,
+                ..at(0.0, 80.0)
+            },
+            &Targets::new(),
+        );
         assert!(close(r.translation.dy, 50.0) && close(r.rotation, 0.5));
     }
 }

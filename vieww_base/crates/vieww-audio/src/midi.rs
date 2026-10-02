@@ -16,14 +16,39 @@ use std::collections::BTreeMap;
 /// A MIDI message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
-    NoteOff { channel: u8, key: u8, velocity: u8 },
-    NoteOn { channel: u8, key: u8, velocity: u8 },
-    PolyPressure { channel: u8, key: u8, pressure: u8 },
-    ControlChange { channel: u8, controller: u8, value: u8 },
-    ProgramChange { channel: u8, program: u8 },
-    ChannelPressure { channel: u8, pressure: u8 },
+    NoteOff {
+        channel: u8,
+        key: u8,
+        velocity: u8,
+    },
+    NoteOn {
+        channel: u8,
+        key: u8,
+        velocity: u8,
+    },
+    PolyPressure {
+        channel: u8,
+        key: u8,
+        pressure: u8,
+    },
+    ControlChange {
+        channel: u8,
+        controller: u8,
+        value: u8,
+    },
+    ProgramChange {
+        channel: u8,
+        program: u8,
+    },
+    ChannelPressure {
+        channel: u8,
+        pressure: u8,
+    },
     /// −8192..=8191.
-    PitchBend { channel: u8, value: i16 },
+    PitchBend {
+        channel: u8,
+        value: i16,
+    },
     SysEx(Vec<u8>),
     TimingClock,
     Start,
@@ -40,12 +65,30 @@ impl Message {
     pub fn to_bytes(&self) -> Vec<u8> {
         let ch = |s: u8, c: &u8| s | (c & 0x0f);
         match self {
-            Self::NoteOff { channel, key, velocity } => vec![ch(0x80, channel), *key & 0x7f, *velocity & 0x7f],
-            Self::NoteOn { channel, key, velocity } => vec![ch(0x90, channel), *key & 0x7f, *velocity & 0x7f],
-            Self::PolyPressure { channel, key, pressure } => vec![ch(0xa0, channel), *key & 0x7f, *pressure & 0x7f],
-            Self::ControlChange { channel, controller, value } => vec![ch(0xb0, channel), *controller & 0x7f, *value & 0x7f],
+            Self::NoteOff {
+                channel,
+                key,
+                velocity,
+            } => vec![ch(0x80, channel), *key & 0x7f, *velocity & 0x7f],
+            Self::NoteOn {
+                channel,
+                key,
+                velocity,
+            } => vec![ch(0x90, channel), *key & 0x7f, *velocity & 0x7f],
+            Self::PolyPressure {
+                channel,
+                key,
+                pressure,
+            } => vec![ch(0xa0, channel), *key & 0x7f, *pressure & 0x7f],
+            Self::ControlChange {
+                channel,
+                controller,
+                value,
+            } => vec![ch(0xb0, channel), *controller & 0x7f, *value & 0x7f],
             Self::ProgramChange { channel, program } => vec![ch(0xc0, channel), *program & 0x7f],
-            Self::ChannelPressure { channel, pressure } => vec![ch(0xd0, channel), *pressure & 0x7f],
+            Self::ChannelPressure { channel, pressure } => {
+                vec![ch(0xd0, channel), *pressure & 0x7f]
+            }
             Self::PitchBend { channel, value } => {
                 #[allow(clippy::cast_sign_loss)]
                 let v = (i32::from(*value) + 8192).clamp(0, 16383) as u16;
@@ -77,7 +120,15 @@ impl Message {
     #[must_use]
     pub fn normalized(self) -> Self {
         match self {
-            Self::NoteOn { channel, key, velocity: 0 } => Self::NoteOff { channel, key, velocity: 64 },
+            Self::NoteOn {
+                channel,
+                key,
+                velocity: 0,
+            } => Self::NoteOff {
+                channel,
+                key,
+                velocity: 64,
+            },
             m => m,
         }
     }
@@ -97,16 +148,41 @@ impl Message {
     fn from_parts(status: u8, d: &[u8]) -> Option<Self> {
         let c = status & 0x0f;
         Some(match status & 0xf0 {
-            0x80 => Self::NoteOff { channel: c, key: d[0], velocity: d[1] },
-            0x90 => Self::NoteOn { channel: c, key: d[0], velocity: d[1] },
-            0xa0 => Self::PolyPressure { channel: c, key: d[0], pressure: d[1] },
-            0xb0 => Self::ControlChange { channel: c, controller: d[0], value: d[1] },
-            0xc0 => Self::ProgramChange { channel: c, program: d[0] },
-            0xd0 => Self::ChannelPressure { channel: c, pressure: d[0] },
+            0x80 => Self::NoteOff {
+                channel: c,
+                key: d[0],
+                velocity: d[1],
+            },
+            0x90 => Self::NoteOn {
+                channel: c,
+                key: d[0],
+                velocity: d[1],
+            },
+            0xa0 => Self::PolyPressure {
+                channel: c,
+                key: d[0],
+                pressure: d[1],
+            },
+            0xb0 => Self::ControlChange {
+                channel: c,
+                controller: d[0],
+                value: d[1],
+            },
+            0xc0 => Self::ProgramChange {
+                channel: c,
+                program: d[0],
+            },
+            0xd0 => Self::ChannelPressure {
+                channel: c,
+                pressure: d[0],
+            },
             0xe0 => {
                 #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
                 let v = ((u16::from(d[1]) << 7 | u16::from(d[0])) as i32 - 8192) as i16;
-                Self::PitchBend { channel: c, value: v }
+                Self::PitchBend {
+                    channel: c,
+                    value: v,
+                }
             }
             _ => match status {
                 0xf2 => Self::SongPosition(u16::from(d[1]) << 7 | u16::from(d[0])),
@@ -131,7 +207,9 @@ pub fn note_to_hz(note: f32) -> f32 {
 /// Note number → name ("C4" is 60).
 #[must_use]
 pub fn note_name(note: u8) -> String {
-    const N: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const N: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
     format!("{}{}", N[usize::from(note % 12)], i32::from(note / 12) - 1)
 }
 
@@ -216,13 +294,21 @@ pub struct MidiState {
 impl MidiState {
     pub fn apply(&mut self, m: &Message) {
         match m.clone().normalized() {
-            Message::NoteOn { channel, key, velocity } => {
+            Message::NoteOn {
+                channel,
+                key,
+                velocity,
+            } => {
                 self.notes.insert((channel, key), velocity);
             }
             Message::NoteOff { channel, key, .. } => {
                 self.notes.remove(&(channel, key));
             }
-            Message::ControlChange { channel, controller, value } => {
+            Message::ControlChange {
+                channel,
+                controller,
+                value,
+            } => {
                 self.cc.insert((channel, controller), value);
             }
             Message::PitchBend { channel, value } => {
@@ -252,12 +338,18 @@ pub enum TrackEvent {
     Midi(Message),
     /// Microseconds per quarter note.
     Tempo(u32),
-    TimeSignature { numerator: u8, denominator_pow2: u8 },
+    TimeSignature {
+        numerator: u8,
+        denominator_pow2: u8,
+    },
     TrackName(String),
     Text(String),
     Marker(String),
     /// Another meta event, kept as raw.
-    Meta { kind: u8, data: Vec<u8> },
+    Meta {
+        kind: u8,
+        data: Vec<u8>,
+    },
 }
 
 /// A Standard MIDI File.
@@ -331,7 +423,11 @@ impl Smf {
             }
             tracks.push(Self::parse_track(body)?);
         }
-        Ok(Self { format, division, tracks })
+        Ok(Self {
+            format,
+            division,
+            tracks,
+        })
     }
 
     fn parse_track(b: &[u8]) -> Result<Vec<(u64, TrackEvent)>, String> {
@@ -357,8 +453,13 @@ impl Smf {
                     let text = || String::from_utf8_lossy(&d).into_owned();
                     let e = match kind {
                         0x2f => break,
-                        0x51 if len == 3 => TrackEvent::Tempo(u32::from(d[0]) << 16 | u32::from(d[1]) << 8 | u32::from(d[2])),
-                        0x58 if len >= 2 => TrackEvent::TimeSignature { numerator: d[0], denominator_pow2: d[1] },
+                        0x51 if len == 3 => TrackEvent::Tempo(
+                            u32::from(d[0]) << 16 | u32::from(d[1]) << 8 | u32::from(d[2]),
+                        ),
+                        0x58 if len >= 2 => TrackEvent::TimeSignature {
+                            numerator: d[0],
+                            denominator_pow2: d[1],
+                        },
                         0x03 => TrackEvent::TrackName(text()),
                         0x01 => TrackEvent::Text(text()),
                         0x06 => TrackEvent::Marker(text()),
@@ -424,7 +525,10 @@ impl Smf {
                     }
                     TrackEvent::Midi(m) => body.extend(m.to_bytes()),
                     TrackEvent::Tempo(us) => meta(0x51, &us.to_be_bytes()[1..], &mut body),
-                    TrackEvent::TimeSignature { numerator, denominator_pow2 } => meta(0x58, &[*numerator, *denominator_pow2, 24, 8], &mut body),
+                    TrackEvent::TimeSignature {
+                        numerator,
+                        denominator_pow2,
+                    } => meta(0x58, &[*numerator, *denominator_pow2, 24, 8], &mut body),
                     TrackEvent::TrackName(s) => meta(0x03, s.as_bytes(), &mut body),
                     TrackEvent::Text(s) => meta(0x01, s.as_bytes(), &mut body),
                     TrackEvent::Marker(s) => meta(0x06, s.as_bytes(), &mut body),
@@ -484,7 +588,11 @@ impl Smf {
             for (tick, e) in t {
                 if let TrackEvent::Midi(m) = e {
                     match m.clone().normalized() {
-                        Message::NoteOn { channel, key, velocity } => {
+                        Message::NoteOn {
+                            channel,
+                            key,
+                            velocity,
+                        } => {
                             open.insert((channel, key), (*tick, velocity));
                         }
                         Message::NoteOff { channel, key, .. } => {
@@ -510,11 +618,25 @@ mod tests {
     #[test]
     fn messages_round_trip_through_the_parser_with_running_status() {
         let msgs = [
-            Message::NoteOn { channel: 2, key: 60, velocity: 100 },
-            Message::ControlChange { channel: 0, controller: 7, value: 99 },
-            Message::PitchBend { channel: 1, value: -4000 },
+            Message::NoteOn {
+                channel: 2,
+                key: 60,
+                velocity: 100,
+            },
+            Message::ControlChange {
+                channel: 0,
+                controller: 7,
+                value: 99,
+            },
+            Message::PitchBend {
+                channel: 1,
+                value: -4000,
+            },
             Message::SysEx(vec![0x7e, 0x01]),
-            Message::ProgramChange { channel: 9, program: 5 },
+            Message::ProgramChange {
+                channel: 9,
+                program: 5,
+            },
         ];
         let bytes: Vec<u8> = msgs.iter().flat_map(Message::to_bytes).collect();
         assert_eq!(Parser::new().feed(&bytes), msgs);
@@ -522,13 +644,22 @@ mod tests {
         let got = Parser::new().feed(&[0x90, 60, 100, 0xf8, 64, 90, 67, 0]);
         assert_eq!(got.len(), 4);
         assert_eq!(got[1], Message::TimingClock);
-        assert_eq!(got[3].clone().normalized(), Message::NoteOff { channel: 0, key: 67, velocity: 64 });
+        assert_eq!(
+            got[3].clone().normalized(),
+            Message::NoteOff {
+                channel: 0,
+                key: 67,
+                velocity: 64
+            }
+        );
     }
 
     #[test]
     fn state_tracks_held_notes_cc_and_bend() {
         let mut s = MidiState::default();
-        for m in Parser::new().feed(&[0x90, 60, 100, 0x90, 64, 80, 0x80, 60, 0, 0xb0, 1, 127, 0xe0, 0, 0x60]) {
+        for m in Parser::new().feed(&[
+            0x90, 60, 100, 0x90, 64, 80, 0x80, 60, 0, 0xb0, 1, 127, 0xe0, 0, 0x60,
+        ]) {
             s.apply(&m);
         }
         assert_eq!(s.notes.keys().copied().collect::<Vec<_>>(), [(0, 64)]);
@@ -542,17 +673,48 @@ mod tests {
         f.tracks.push(vec![
             (0, TrackEvent::TrackName("lead".into())),
             (0, TrackEvent::Tempo(500_000)),
-            (0, TrackEvent::Midi(Message::NoteOn { channel: 0, key: 60, velocity: 90 })),
-            (480, TrackEvent::Midi(Message::NoteOff { channel: 0, key: 60, velocity: 0 })),
+            (
+                0,
+                TrackEvent::Midi(Message::NoteOn {
+                    channel: 0,
+                    key: 60,
+                    velocity: 90,
+                }),
+            ),
+            (
+                480,
+                TrackEvent::Midi(Message::NoteOff {
+                    channel: 0,
+                    key: 60,
+                    velocity: 0,
+                }),
+            ),
             (960, TrackEvent::Tempo(250_000)),
-            (960, TrackEvent::Midi(Message::NoteOn { channel: 0, key: 67, velocity: 70 })),
-            (1440, TrackEvent::Midi(Message::NoteOn { channel: 0, key: 67, velocity: 0 })),
+            (
+                960,
+                TrackEvent::Midi(Message::NoteOn {
+                    channel: 0,
+                    key: 67,
+                    velocity: 70,
+                }),
+            ),
+            (
+                1440,
+                TrackEvent::Midi(Message::NoteOn {
+                    channel: 0,
+                    key: 67,
+                    velocity: 0,
+                }),
+            ),
         ]);
         let bytes = f.to_bytes();
         let back = Smf::parse(&bytes).unwrap();
         assert_eq!(back, f);
         assert!((back.tick_to_seconds(960) - 1.0).abs() < 1e-9);
-        assert!((back.tick_to_seconds(1440) - 1.25).abs() < 1e-9, "doubled tempo after 1 s");
+        assert!(
+            (back.tick_to_seconds(1440) - 1.25).abs() < 1e-9,
+            "doubled tempo after 1 s"
+        );
         let n = back.notes();
         assert_eq!(n.len(), 2);
         assert!((n[1].1 - 0.25).abs() < 1e-9);

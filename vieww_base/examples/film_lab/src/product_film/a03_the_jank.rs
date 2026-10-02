@@ -15,10 +15,10 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    BREAK_RED, Ctx, MUTED, TERM_GREEN, W, alpha, caption, clamp01, distance_chip, gap_line, grain,
-    ground, pole_caret, pole_screen, progress_rail, tint, vignette, xywh,
+    alpha, caption, clamp01, distance_chip, gap_line, grain, ground, pole_caret, pole_screen,
+    progress_rail, tint, vignette, xywh, Ctx, BREAK_RED, MUTED, TERM_GREEN, W,
 };
-use crate::film_lib::{Rng, ease_out_cubic, held_24_in_60};
+use crate::film_lib::{ease_out_cubic, held_24_in_60, Rng};
 
 /// The budget, in ms — the promise.
 const BUDGET_MS: f32 = 16.6;
@@ -50,7 +50,7 @@ fn frame_cost(i: usize, sec: f32) -> f32 {
     }
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -74,12 +74,21 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     stack = stack.push(Positioned::fill().child(Painting::sized(
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            gap_line(book, 430.0, 560.0, 1360.0, 0.0, judder_t, 8.0, 0.0, MUTED, 0.9);
+            gap_line(
+                book, 430.0, 560.0, 1360.0, 0.0, judder_t, 8.0, 0.0, MUTED, 0.9,
+            );
             pole_caret(book, 560.0, 430.0, sec, 1.0);
             // The screen pole — lit *out of phase*: its flicker uses a
             // different hold, so the two ends visibly disagree.
             let lit = (held_24_in_60(sec * 1.31) * 2.0).fract() < 0.6;
-            pole_screen(book, 1360.0, 430.0, if lit { 0.5 } else { 0.1 }, 0.85, BREAK_RED);
+            pole_screen(
+                book,
+                1360.0,
+                430.0,
+                if lit { 0.5 } else { 0.1 },
+                0.85,
+                BREAK_RED,
+            );
         }),
     )));
 
@@ -97,54 +106,56 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(TL_Y - full_h - 40.0)
                 .width(TL_W)
                 .height(full_h + 80.0)
-                .child(
-                    super::Opacity::new(tl_a).child(Painting::sized(
-                        Size::new(TL_W, full_h + 80.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // The budget line — the promise, drawn first.
-                            let by = full_h + 20.0 - (BUDGET_MS / scale_ms) * full_h;
-                            book.line(
-                                Offset::new(0.0, by),
-                                Offset::new(TL_W, by),
-                                alpha(TERM_GREEN, 0.55),
-                                1.4,
+                .child(super::Opacity::new(tl_a).child(Painting::sized(
+                    Size::new(TL_W, full_h + 80.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The budget line — the promise, drawn first.
+                        let by = full_h + 20.0 - (BUDGET_MS / scale_ms) * full_h;
+                        book.line(
+                            Offset::new(0.0, by),
+                            Offset::new(TL_W, by),
+                            alpha(TERM_GREEN, 0.55),
+                            1.4,
+                        );
+                        // The bars — arrived ones only.
+                        for i in 0..arrived.min(N_BARS) {
+                            let cost = frame_cost(i, sec);
+                            let h = (cost / scale_ms * full_h).min(full_h);
+                            let x = i as f32 * (BAR_W + BAR_GAP);
+                            let over = cost > BUDGET_MS;
+                            let c = if over {
+                                BREAK_RED
+                            } else {
+                                tint(TERM_GREEN, 0.25)
+                            };
+                            // A dropped frame is a *hole*: the bar
+                            // drops below the timeline with a gap.
+                            let gap = if over { 6.0 } else { 0.0 };
+                            book.rrect(
+                                xywh(x, full_h + 20.0 - h, BAR_W, h.max(3.0)),
+                                3.0,
+                                alpha(c, if over { 0.95 } else { 0.55 }),
                             );
-                            // The bars — arrived ones only.
-                            for i in 0..arrived.min(N_BARS) {
-                                let cost = frame_cost(i, sec);
-                                let h = (cost / scale_ms * full_h).min(full_h);
-                                let x = i as f32 * (BAR_W + BAR_GAP);
-                                let over = cost > BUDGET_MS;
-                                let c = if over { BREAK_RED } else { tint(TERM_GREEN, 0.25) };
-                                // A dropped frame is a *hole*: the bar
-                                // drops below the timeline with a gap.
-                                let gap = if over { 6.0 } else { 0.0 };
-                                book.rrect(
-                                    xywh(x, full_h + 20.0 - h, BAR_W, h.max(3.0)),
-                                    3.0,
-                                    alpha(c, if over { 0.95 } else { 0.55 }),
+                            if over {
+                                book.line(
+                                    Offset::new(x, full_h + 22.0 + gap),
+                                    Offset::new(x + BAR_W, full_h + 22.0 + gap),
+                                    alpha(BREAK_RED, 0.5),
+                                    2.0,
                                 );
-                                if over {
-                                    book.line(
-                                        Offset::new(x, full_h + 22.0 + gap),
-                                        Offset::new(x + BAR_W, full_h + 22.0 + gap),
-                                        alpha(BREAK_RED, 0.5),
-                                        2.0,
-                                    );
-                                }
                             }
-                            // The baseline.
-                            book.line(
-                                Offset::new(0.0, full_h + 20.0),
-                                Offset::new(TL_W, full_h + 20.0),
-                                alpha(Color::WHITE, 0.14),
-                                1.0,
-                            );
-                            // The budget label, at the line's right end.
-                            book.circle(Offset::new(TL_W - 6.0, by), 3.0, alpha(TERM_GREEN, 0.8));
-                        }),
-                    )),
-                ),
+                        }
+                        // The baseline.
+                        book.line(
+                            Offset::new(0.0, full_h + 20.0),
+                            Offset::new(TL_W, full_h + 20.0),
+                            alpha(Color::WHITE, 0.14),
+                            1.0,
+                        );
+                        // The budget label, at the line's right end.
+                        book.circle(Offset::new(TL_W - 6.0, by), 3.0, alpha(TERM_GREEN, 0.8));
+                    }),
+                ))),
         );
         // The budget's label — the promise, spelled.
         stack = stack.push(

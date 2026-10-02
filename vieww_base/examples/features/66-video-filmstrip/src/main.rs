@@ -45,10 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(
-                    Flex::column()
-                        .spacing(14.0)
-                        .children(children![
+                .child(Flex::column().spacing(14.0).children(children![
                             thumbs,
                             Text::new(format!(
                                 "24 frames at 12 fps — {:.1} s, sampled at 8 instants",
@@ -59,8 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 color: Color::rgb(130, 140, 160),
                                 ..TextStyle::default()
                             }),
-                        ]),
-                ),
+                        ])),
         );
     })
 }

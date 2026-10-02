@@ -20,16 +20,16 @@
 
 use std::f64::consts::PI;
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, AMBER, CYAN, INK,
-    MUTED, VIOLET_SOFT};
+use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The law, in numbers ─────────────────────────────────────────────────────
 
@@ -146,12 +146,16 @@ fn chirp_fit() -> (f64, f64, usize) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let t = t.min(1.0) as f64;
     let secs = t * SECONDS as f64;
 
     let (slope, r2, npts) = chirp_fit();
-    let f_now = if secs < TC { f_ins(secs).min(F_MERGER) } else { F_RING };
+    let f_now = if secs < TC {
+        f_ins(secs).min(F_MERGER)
+    } else {
+        F_RING
+    };
     let strain_now = strain(secs);
 
     // Stride for the drawn polyline: pixels, not samples.
@@ -164,10 +168,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — deep field.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(10, 10, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(10, 10, 15))]),
             );
 
             // ── Stage one: the orbit, upper band ──
@@ -209,24 +212,38 @@ pub fn frame(t: f32) -> WidgetNode {
                     let e = ((secs - TC) / 0.6).min(1.0);
                     let r = (18.0 + 130.0 * e) as f32;
                     let a = (1.0 - e) as f32;
-                    g.ring(Offset::new(cx as f32, cy as f32), r, 26.0, alpha(INK, 0.55 * a));
-                    g.ring(Offset::new(cx as f32, cy as f32), r * 0.6, 14.0, alpha(CYAN, 0.5 * a));
+                    g.ring(
+                        Offset::new(cx as f32, cy as f32),
+                        r,
+                        26.0,
+                        alpha(INK, 0.55 * a),
+                    );
+                    g.ring(
+                        Offset::new(cx as f32, cy as f32),
+                        r * 0.6,
+                        14.0,
+                        alpha(CYAN, 0.5 * a),
+                    );
                 }
                 for &(bx, by) in &[(bx1, by1), (bx2, by2)] {
                     if merged {
                         continue;
                     }
-                    g.ring(
-                        Offset::new(bx, by),
-                        26.0,
-                        18.0,
-                        alpha(VIOLET_SOFT, 0.34),
-                    );
+                    g.ring(Offset::new(bx, by), 26.0, 18.0, alpha(VIOLET_SOFT, 0.34));
                     g.circle(Offset::new(bx, by), 9.0, Color::rgb(16, 10, 28));
                 }
                 if merged {
-                    g.ring(Offset::new(cx as f32, cy as f32), 24.0, 14.0, alpha(VIOLET_SOFT, 0.35));
-                    g.circle(Offset::new(cx as f32, cy as f32), 10.0, Color::rgb(16, 10, 28));
+                    g.ring(
+                        Offset::new(cx as f32, cy as f32),
+                        24.0,
+                        14.0,
+                        alpha(VIOLET_SOFT, 0.35),
+                    );
+                    g.circle(
+                        Offset::new(cx as f32, cy as f32),
+                        10.0,
+                        Color::rgb(16, 10, 28),
+                    );
                 }
             });
             for &(bx, by) in &[(bx1, by1), (bx2, by2)] {
@@ -236,8 +253,17 @@ pub fn frame(t: f32) -> WidgetNode {
                 }
             }
             if merged {
-                book.circle(Offset::new(cx as f32, cy as f32), 8.5, Color::rgb(22, 14, 36));
-                book.ring(Offset::new(cx as f32, cy as f32), 8.5, 1.3, alpha(INK, 0.95));
+                book.circle(
+                    Offset::new(cx as f32, cy as f32),
+                    8.5,
+                    Color::rgb(22, 14, 36),
+                );
+                book.ring(
+                    Offset::new(cx as f32, cy as f32),
+                    8.5,
+                    1.3,
+                    alpha(INK, 0.95),
+                );
             }
 
             // ── Stage two: the strain strip, lower band ──
@@ -279,7 +305,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 let s = strain(tt);
                 // amplitude envelope grows f^(2/3) — normalise to fit
                 let env = (f_ins(tt.min(TC)) / F0).powf(2.0 / 3.0).min(7.0);
-                let y = wave_cy - (s * wave_h as f64 * 0.16 * env.max(1.0)).min(wave_h as f64) as f32;
+                let y = wave_cy - (s * wave_h * 0.16 * env.max(1.0)).min(wave_h) as f32;
                 if !started {
                     path.move_to(Offset::new(x, y));
                     started = true;
@@ -308,10 +334,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 let env = if tt < TC {
                     (f_ins(tt) / F0).powf(2.0 / 3.0).min(7.0)
                 } else {
-                    (F_MERGER / F0).powf(2.0 / 3.0)
-                        * (-(tt - TC) / TAU_RING).exp()
+                    (F_MERGER / F0).powf(2.0 / 3.0) * (-(tt - TC) / TAU_RING).exp()
                 };
-                let e = (env * wave_h as f64 * 0.16).min(wave_h as f64) as f32;
+                let e = (env * wave_h * 0.16).min(wave_h) as f32;
                 if !top_started {
                     env_top.move_to(Offset::new(x, wave_cy - e));
                     env_bot.move_to(Offset::new(x, wave_cy + e));
@@ -384,14 +409,7 @@ pub fn frame(t: f32) -> WidgetNode {
     );
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack = stack.push(receipt_panel(
-        f_now,
-        strain_now,
-        slope,
-        r2,
-        npts,
-        secs,
-    ));
+    stack = stack.push(receipt_panel(f_now, strain_now, slope, r2, npts, secs));
     stack.into()
 }
 
@@ -474,7 +492,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

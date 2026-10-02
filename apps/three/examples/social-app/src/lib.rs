@@ -33,7 +33,7 @@ mod icons {
     use vieww::foundation::{IconData, Offset, Path};
 
     /// The circle-to-Bézier constant for hand-drawn arcs.
-    const KAPPA: f32 = 0.552_284_75;
+    const KAPPA: f32 = 0.552_284_8;
 
     fn circle(path: &mut Path, cx: f32, cy: f32, r: f32, clockwise: bool) {
         let k = KAPPA * r;
@@ -469,10 +469,11 @@ fn person_card(theme:&ThemeData,person:&Profile,initials:&str,following:bool,on_
         .push(Text::new(format!("{} · {} followers",person.handle,person.followers)).style(theme.text.label).color(theme.colors.on_surface_variant));
 
     let button=if following{
-        Button::new("Following").on_pressed(move||on_follow())
+        Button::new("Following")
     }else{
-        Button::new("Follow").style(ButtonStyle::Filled).on_pressed(move||on_follow())
+        Button::new("Follow").style(ButtonStyle::Filled)
     };
+    let button=button.on_pressed(on_follow);
 
     Container::new()
         .color(theme.colors.surface_variant)
@@ -489,7 +490,7 @@ fn person_card(theme:&ThemeData,person:&Profile,initials:&str,following:bool,on_
 /// the handle, so a feed of people is a feed of distinguishable people
 /// without inventing a colour system the theme does not carry.
 fn accent_for(handle:&str)->Gradient{
-    let hash=handle.bytes().fold(0x811c9dc5u32,|h,b|((h^b as u32).wrapping_mul(0x01000193))&0xffff_ffff);
+    let hash=handle.bytes().fold(0x811c9dc5u32,|h,b|(h^b as u32).wrapping_mul(0x01000193));
     let hue=(hash%360) as f32;
     let top=hsl(hue,0.62,0.62);
     let bottom=hsl(hue+34.0,0.66,0.42);
@@ -770,7 +771,7 @@ mod receipts {
     fn mounted_app() -> TestHarness {
         let mut harness = TestHarness::new(WINDOW);
         harness.mount(Theme::new(ThemeData::dark()).child(WidgetNode::new(SocialScreen)));
-        return harness;
+        harness
     }
 
     /// Walk the social state the way a tap would, then let a frame happen.

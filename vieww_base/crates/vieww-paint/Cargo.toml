@@ -29,12 +29,14 @@ vieww-foundation.workspace = true
 # variable font's outlines silently rasterize at the default instance, which
 # is exactly the bug the `wght` plumbing in `glyph.rs` exists to fix.
 ttf-parser = { version = "0.25", optional = true, features = ["variable-fonts"] }
-png = { version = "0.17", optional = true }
+# Version-matched to the copy `image` pulls into the lock, so enabling this
+# adds no second copy of the crate to the tree.
+png = { version = "0.18", optional = true }
 # Variable-font axes (fvar/avar normalization), colour-glyph tables (COLR/CPAL
 # through `raw::tables`) and CBDT/sbix bitmap strikes for colour emoji — the
 # three things `ttf-parser` does not read. Version-matched to the copy already
 # in the lock via `cosmic-text`, so enabling this adds no new downloads.
-skrifa = { version = "0.40", optional = true, default-features = false, features = ["std"] }
+skrifa = { version = "0.44", optional = true, default-features = false, features = ["std"] }
 
 [dev-dependencies]
 # Tests only, and no dependency cycle: `vieww-text` depends on

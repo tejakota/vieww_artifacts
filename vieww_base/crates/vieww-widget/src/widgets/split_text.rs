@@ -197,7 +197,15 @@ impl Widget for SplitText {
                 .chars()
                 .enumerate()
                 .map(|(i, c)| {
-                    atom_widget(c.to_string(), i, count, progress, self.stagger, self.rise, style)
+                    atom_widget(
+                        c.to_string(),
+                        i,
+                        count,
+                        progress,
+                        self.stagger,
+                        self.rise,
+                        style,
+                    )
                 })
                 .collect(),
             Split::Words => self
@@ -237,10 +245,7 @@ impl Widget for SplitText {
             }
         }
 
-        Semantics::new()
-            .label(self.text.clone())
-            .child(row)
-            .into()
+        Semantics::new().label(self.text.clone()).child(row).into()
     }
 }
 
@@ -278,9 +283,7 @@ fn atom_widget(
         return Text::new(text).style(style).into();
     }
     Opacity::new(opacity.max(0.0))
-        .child(Transformed::translate(Offset::new(0.0, dy)).child(
-            Text::new(text).style(style),
-        ))
+        .child(Transformed::translate(Offset::new(0.0, dy)).child(Text::new(text).style(style)))
         .into()
 }
 

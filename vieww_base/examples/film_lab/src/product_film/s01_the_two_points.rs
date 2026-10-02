@@ -14,8 +14,8 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, Ctx, GROUND, INK, MUTED, W, alpha, caption, clamp01, distance_chip, dust,
-    gap_line, glow, grain, ground, pole_caret, pole_screen, progress_rail, vignette,
+    alpha, caption, clamp01, distance_chip, dust, gap_line, glow, grain, ground, pole_caret,
+    pole_screen, progress_rail, vignette, Ctx, ACCENT, GROUND, INK, MUTED, W,
 };
 use crate::film_lib::ease_out_cubic;
 
@@ -24,11 +24,11 @@ const QUESTION: &str = "how far is a thought from a screen?";
 
 /// The poles' positions — the film's whole geography, set here.
 /// Every later scene inherits these two x positions.
-pub const CARET_X: f32 = 560.0;
-pub const SCREEN_X: f32 = 1360.0;
-pub const POLE_Y: f32 = 430.0;
+pub(super) const CARET_X: f32 = 560.0;
+pub(super) const SCREEN_X: f32 = 1360.0;
+pub(super) const POLE_Y: f32 = 430.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -60,7 +60,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     stack = stack.push(Positioned::fill().child(Painting::sized(
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            gap_line(book, POLE_Y, CARET_X, SCREEN_X, 0.0, sec, 0.0, 0.0, ACCENT, line_a2);
+            gap_line(
+                book, POLE_Y, CARET_X, SCREEN_X, 0.0, sec, 0.0, 0.0, ACCENT, line_a2,
+            );
             pole_caret(book, CARET_X, POLE_Y, sec, caret_a);
             pole_screen(book, SCREEN_X, POLE_Y, 0.0, screen_a, MUTED);
             // The measurement halo — the room registers the distance.

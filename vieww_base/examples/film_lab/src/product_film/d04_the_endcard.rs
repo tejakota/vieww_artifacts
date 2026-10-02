@@ -16,11 +16,11 @@
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
-use crate::film_lib::{ease_in_out, ease_out_cubic};
 use super::{
-    ACCENT, CERT_ALLOCS_STEADY, CERT_TESTS, Ctx, INK, LEDGER, MARK_GROUND, MUTED, W, alpha,
-    brand_mark, caption, clamp01, group_commas, mix, stars, tint, vignette, xywh,
+    alpha, brand_mark, caption, clamp01, group_commas, mix, stars, tint, vignette, xywh, Ctx,
+    ACCENT, CERT_ALLOCS_STEADY, CERT_TESTS, INK, LEDGER, MARK_GROUND, MUTED, W,
 };
+use crate::film_lib::{ease_in_out, ease_out_cubic};
 
 /// The repository — the call to action.
 const REPO: &str = "github.com/tejakota/vieww_artifacts";
@@ -28,7 +28,7 @@ const REPO: &str = "github.com/tejakota/vieww_artifacts";
 /// The release line — the one the film exists to say.
 const RELEASE: &str = "beta release available today";
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let probe = ctx.probe;
@@ -65,12 +65,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(246.0)
                 .width(side)
                 .height(side)
-                .child(
-                    super::Opacity::new(mark_a).child(
-                        // The real mark — the studio's own drawing of it.
-                        brand_mark(side, 1.0, 1.0),
-                    ),
-                ),
+                .child(super::Opacity::new(mark_a).child(
+                    // The real mark — the studio's own drawing of it.
+                    brand_mark(side, 1.0, 1.0),
+                )),
         );
         stack = stack.push(
             Positioned::new()
@@ -130,16 +128,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         // caret could only ever be approximately wrong. The line moves to
         // the film's mono instrument voice, which is the voice a caret
         // belongs to anyway, and the measurement becomes exact.
-        stack = stack.push(super::Opacity::new(release_a).child(super::type_on(
-            RELEASE,
-            super::TypeAt::CenteredOn((W * 0.5) as i32),
-            518.0,
-            super::geist(30.0)
-                .letter_spacing(2.4)
-                .color(alpha(ACCENT, 1.0)),
-            clamp01((t - 0.24) / 0.30),
-            sec,
-        )));
+        stack = stack.push(
+            super::Opacity::new(release_a).child(super::type_on(
+                RELEASE,
+                super::TypeAt::CenteredOn((W * 0.5) as i32),
+                518.0,
+                super::geist(30.0)
+                    .letter_spacing(2.4)
+                    .color(alpha(ACCENT, 1.0)),
+                clamp01((t - 0.24) / 0.30),
+                sec,
+            )),
+        );
     }
 
     // The facts row — the release's own metadata, centered under the line.
@@ -174,17 +174,19 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let chars = REPO.chars().count();
         let typed = (chars as f32 * clamp01((t - 0.68) / 0.26)) as usize;
         let done = typed >= chars;
-        stack = stack.push(super::Opacity::new(repo_a).child(super::type_on(
-            REPO,
-            super::TypeAt::CenteredOn((W * 0.5) as i32),
-            648.0,
-            TextStyle::new(24.0)
-                .monospace()
-                .letter_spacing(2.2)
-                .color(alpha(tint(ACCENT, 0.15), 1.0)),
-            clamp01((t - 0.68) / 0.26),
-            sec,
-        )));
+        stack = stack.push(
+            super::Opacity::new(repo_a).child(super::type_on(
+                REPO,
+                super::TypeAt::CenteredOn((W * 0.5) as i32),
+                648.0,
+                TextStyle::new(24.0)
+                    .monospace()
+                    .letter_spacing(2.2)
+                    .color(alpha(tint(ACCENT, 0.15), 1.0)),
+                clamp01((t - 0.68) / 0.26),
+                sec,
+            )),
+        );
         if done {
             // The underline — springs under the repo.
             let u = super::spring_out(clamp01((t - 0.94) / 0.30), 13.0, 0.45);
@@ -229,19 +231,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(740.0)
                 .width(W)
                 .height(150.0)
-                .child(
-                    super::Opacity::new(bars_a).child(Painting::sized(
-                        Size::new(W, 150.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            for (i, (_label, v)) in bars.iter().enumerate() {
-                                let x = x0 + i as f32 * (bw + gap);
-                                let h = 84.0 * (*v as f32 / max_v) * grow;
-                                let c = if i == 0 { tint(ACCENT, 0.2) } else { ACCENT };
-                                book.rrect(xywh(x, 120.0 - h, bw, h.max(3.0)), 4.0, alpha(c, 0.55));
-                            }
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(bars_a).child(Painting::sized(
+                    Size::new(W, 150.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        for (i, (_label, v)) in bars.iter().enumerate() {
+                            let x = x0 + i as f32 * (bw + gap);
+                            let h = 84.0 * (*v as f32 / max_v) * grow;
+                            let c = if i == 0 { tint(ACCENT, 0.2) } else { ACCENT };
+                            book.rrect(xywh(x, 120.0 - h, bw, h.max(3.0)), 4.0, alpha(c, 0.55));
+                        }
+                    }),
+                ))),
         );
         // The bars' labels + values, as text (two rows).
         for (i, (label, v)) in [
@@ -297,7 +297,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 book.layer(1.0, 30.0, None, |g| {
                     g.rect(xywh(x - 160.0, 0.0, 320.0, 560.0), alpha(ACCENT, 0.08));
                 });
-                book.rrect(xywh(x - 1.5, 200.0, 3.0, 260.0), 1.5, alpha(tint(ACCENT, 0.5), 0.9));
+                book.rrect(
+                    xywh(x - 1.5, 200.0, 3.0, 260.0),
+                    1.5,
+                    alpha(tint(ACCENT, 0.5), 0.9),
+                );
             }),
         )));
     }
@@ -314,7 +318,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     super::Opacity::new(sting_line_a).child(
                         Text::new("this film was rendered with vieww")
-                            .style(TextStyle::new(23.0).monospace().letter_spacing(4.0).color(alpha(INK, 0.95)))
+                            .style(
+                                TextStyle::new(23.0)
+                                    .monospace()
+                                    .letter_spacing(4.0)
+                                    .color(alpha(INK, 0.95)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),
@@ -330,7 +339,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         super::Opacity::new(sting_line_a * 0.8).child(
                             Text::new(probe.bench.clone())
-                                .style(TextStyle::new(14.5).monospace().letter_spacing(1.4).color(alpha(MUTED, 0.85)))
+                                .style(
+                                    TextStyle::new(14.5)
+                                        .monospace()
+                                        .letter_spacing(1.4)
+                                        .color(alpha(MUTED, 0.85)),
+                                )
                                 .align(TextAlign::Center),
                         ),
                     ),
@@ -351,7 +365,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                             CERT_ALLOCS_STEADY,
                             ctx_scale(),
                         ))
-                        .style(TextStyle::new(14.5).monospace().letter_spacing(1.4).color(alpha(LEDGER, 0.8)))
+                        .style(
+                            TextStyle::new(14.5)
+                                .monospace()
+                                .letter_spacing(1.4)
+                                .color(alpha(LEDGER, 0.8)),
+                        )
                         .align(TextAlign::Center),
                     ),
                 ),

@@ -7,11 +7,13 @@
 //! never typed), and the sting, one accent firing: **this film was
 //! rendered with vieww.**
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle, FontWeight};
+use vieww_foundation::{Color, Gradient, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_back, ease_out_cubic, mix, spring_out, tint, xywh, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN_SOFT, MINT};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, spring_out, tint, xywh, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 use super::studio;
 use super::{group_commas, Ctx};
@@ -19,7 +21,7 @@ use super::{group_commas, Ctx};
 /// The registry — the reference's call to action, verbatim.
 const REPO: &str = "github.com/tejakota/vieww_artifacts";
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let probe = ctx.probe;
@@ -48,24 +50,32 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // The mark + the wordmark — top third.
     let mark_a = clamp01(t / 0.10);
     if mark_a > 0.0 {
-        stack = stack.push(Positioned::fill().child(Opacity::new(mark_a).child(Painting::sized(
-            super::CANVAS,
-            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                studio::draw_mark(book, 960.0, 300.0, 96.0, VIOLET_SOFT, 1.0);
-                super::glow(book, 960.0, 300.0, 260.0, VIOLET, 0.14);
-            }),
-        ))));
+        stack = stack.push(
+            Positioned::fill().child(Opacity::new(mark_a).child(Painting::sized(
+                super::CANVAS,
+                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                    studio::draw_mark(book, 960.0, 300.0, 96.0, VIOLET_SOFT, 1.0);
+                    super::glow(book, 960.0, 300.0, 260.0, VIOLET, 0.14);
+                }),
+            ))),
+        );
         stack = stack.push(
             Positioned::new()
                 .left(0.0)
                 .top(382.0)
                 .width(1920.0)
                 .height(60.0)
-                .child(Opacity::new(clamp01((t - 0.08) / 0.12)).child(
-                    Text::new("viewwstudio")
-                        .style(TextStyle::new(54.0).letter_spacing(6.0).color(alpha(INK, 0.97)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(clamp01((t - 0.08) / 0.12)).child(
+                        Text::new("viewwstudio")
+                            .style(
+                                TextStyle::new(54.0)
+                                    .letter_spacing(6.0)
+                                    .color(alpha(INK, 0.97)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
 
@@ -82,11 +92,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(500.0)
                 .width(1920.0)
                 .height(44.0)
-                .child(Opacity::new(repo_a).child(
-                    Text::new(shown)
-                        .style(TextStyle::new(30.0).monospace().letter_spacing(2.4).color(alpha(tint(VIOLET_SOFT, 0.15), 1.0)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(repo_a).child(
+                        Text::new(shown)
+                            .style(
+                                TextStyle::new(30.0)
+                                    .monospace()
+                                    .letter_spacing(2.4)
+                                    .color(alpha(tint(VIOLET_SOFT, 0.15), 1.0)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
         // The caret, until the line completes.
         if !done {
@@ -112,11 +129,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(552.0)
                     .width(w.max(2.0))
                     .height(8.0)
-                    .child(Painting::sized(Size::new(w.max(2.0), 8.0), PaintWith::new(
-                        move |book: &mut Sketchbook, _sz: Size| {
-                            book.rrect(xywh(0.0, 0.0, w, 3.0), 1.5, alpha(tint(VIOLET_SOFT, 0.2), 0.9));
-                        },
-                    ))),
+                    .child(Painting::sized(
+                        Size::new(w.max(2.0), 8.0),
+                        PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                            book.rrect(
+                                xywh(0.0, 0.0, w, 3.0),
+                                1.5,
+                                alpha(tint(VIOLET_SOFT, 0.2), 0.9),
+                            );
+                        }),
+                    )),
             );
         }
     }
@@ -150,7 +172,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         for (i, (label, v)) in bars.iter().enumerate() {
                             let x = x0 + i as f32 * (bw + gap);
                             let h = 96.0 * (*v as f32 / max_v) * grow;
-                            let c = if i == 0 { tint(VIOLET_SOFT, 0.2) } else { VIOLET_SOFT };
+                            let c = if i == 0 {
+                                tint(VIOLET_SOFT, 0.2)
+                            } else {
+                                VIOLET_SOFT
+                            };
                             // The bar.
                             book.rrect(xywh(x, 120.0 - h, bw, h.max(3.0)), 4.0, alpha(c, 0.55));
                             // The value, above.
@@ -181,11 +207,13 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(620.0 + 128.0)
                     .width(bw + 40.0)
                     .height(22.0)
-                    .child(Opacity::new(bars_a).child(
-                        Text::new(*label)
-                            .style(TextStyle::new(13.5).monospace().color(alpha(MUTED, 0.9)))
-                            .align(TextAlign::Center),
-                    )),
+                    .child(
+                        Opacity::new(bars_a).child(
+                            Text::new(*label)
+                                .style(TextStyle::new(13.5).monospace().color(alpha(MUTED, 0.9)))
+                                .align(TextAlign::Center),
+                        ),
+                    ),
             );
             stack = stack.push(
                 Positioned::new()
@@ -193,11 +221,13 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(620.0 - 4.0)
                     .width(bw + 60.0)
                     .height(22.0)
-                    .child(Opacity::new(bars_a).child(
-                        Text::new(group_commas(*v))
-                            .style(TextStyle::new(15.0).monospace().color(alpha(INK, 0.92)))
-                            .align(TextAlign::Center),
-                    )),
+                    .child(
+                        Opacity::new(bars_a).child(
+                            Text::new(group_commas(*v))
+                                .style(TextStyle::new(15.0).monospace().color(alpha(INK, 0.92)))
+                                .align(TextAlign::Center),
+                        ),
+                    ),
             );
         }
     }
@@ -212,7 +242,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 book.layer(1.0, 30.0, None, |g| {
                     g.rect(xywh(x - 160.0, 0.0, 320.0, 620.0), alpha(VIOLET, 0.08));
                 });
-                book.rrect(xywh(x - 1.5, 240.0, 3.0, 240.0), 1.5, alpha(tint(VIOLET_SOFT, 0.5), 0.9));
+                book.rrect(
+                    xywh(x - 1.5, 240.0, 3.0, 240.0),
+                    1.5,
+                    alpha(tint(VIOLET_SOFT, 0.5), 0.9),
+                );
             }),
         )));
     }
@@ -226,11 +260,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(852.0)
                 .width(1920.0)
                 .height(36.0)
-                .child(Opacity::new(sting_line_a).child(
-                    Text::new("this film was rendered with vieww")
-                        .style(TextStyle::new(23.0).monospace().letter_spacing(4.0).color(alpha(INK, 0.95)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(sting_line_a).child(
+                        Text::new("this film was rendered with vieww")
+                            .style(
+                                TextStyle::new(23.0)
+                                    .monospace()
+                                    .letter_spacing(4.0)
+                                    .color(alpha(INK, 0.95)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
         // The bench line — the manifest's own identity, quoted.
         if !probe.bench.is_empty() {
@@ -240,11 +281,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(892.0)
                     .width(1920.0)
                     .height(26.0)
-                    .child(Opacity::new(sting_line_a * 0.8).child(
-                        Text::new(probe.bench.clone())
-                            .style(TextStyle::new(14.5).monospace().letter_spacing(1.4).color(alpha(MUTED, 0.85)))
-                            .align(TextAlign::Center),
-                    )),
+                    .child(
+                        Opacity::new(sting_line_a * 0.8).child(
+                            Text::new(probe.bench.clone())
+                                .style(
+                                    TextStyle::new(14.5)
+                                        .monospace()
+                                        .letter_spacing(1.4)
+                                        .color(alpha(MUTED, 0.85)),
+                                )
+                                .align(TextAlign::Center),
+                        ),
+                    ),
             );
         }
     }

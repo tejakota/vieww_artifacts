@@ -172,7 +172,11 @@ impl Position {
             return Self::End(-num(rest).unwrap_or(0.0));
         }
         if let Some(rest) = t.strip_prefix('<') {
-            return Self::PreviousStart(if rest.is_empty() { 0.0 } else { num(rest).unwrap_or(0.0) });
+            return Self::PreviousStart(if rest.is_empty() {
+                0.0
+            } else {
+                num(rest).unwrap_or(0.0)
+            });
         }
         if let Some(rest) = t.strip_prefix('>') {
             return Self::PreviousEnd(num(rest).unwrap_or(0.0));
@@ -354,7 +358,12 @@ impl Sequence {
     }
 
     /// Jump `channel` to `value` at a point — a zero-length tween.
-    pub fn set(&mut self, channel: &str, value: impl Into<Value>, position: impl Into<Position>) -> &mut Self {
+    pub fn set(
+        &mut self,
+        channel: &str,
+        value: impl Into<Value>,
+        position: impl Into<Position>,
+    ) -> &mut Self {
         self.to(channel, value, 0.0, Curve::Linear, position)
     }
 
@@ -412,9 +421,18 @@ impl Sequence {
     /// Nest `child` at `position`: its tweens, labels (prefixed
     /// `child_name/`) and callbacks, shifted and scaled by its own
     /// `time_scale`.
-    pub fn add(&mut self, child_name: &str, child: &Self, position: impl Into<Position>) -> &mut Self {
+    pub fn add(
+        &mut self,
+        child_name: &str,
+        child: &Self,
+        position: impl Into<Position>,
+    ) -> &mut Self {
         let base = self.resolve(&position.into());
-        let scale = if child.time_scale > 0.0 { 1.0 / child.time_scale } else { 1.0 };
+        let scale = if child.time_scale > 0.0 {
+            1.0 / child.time_scale
+        } else {
+            1.0
+        };
         for t in &child.tweens {
             let mut t = t.clone();
             t.start = base + t.start * scale;
@@ -425,7 +443,8 @@ impl Sequence {
             self.calls.push((base + t * scale, name.clone()));
         }
         for (name, t) in &child.labels {
-            self.labels.insert(format!("{child_name}/{name}"), base + t * scale);
+            self.labels
+                .insert(format!("{child_name}/{name}"), base + t * scale);
         }
         for (ch, v) in &child.initial {
             self.initial.entry(ch.clone()).or_insert(*v);
@@ -585,7 +604,11 @@ impl Sequence {
             return (0.0, 0);
         }
         let cycle_len = self.duration + self.repeat_delay;
-        let max_cycle = if self.repeat < 0 { i32::MAX } else { self.repeat };
+        let max_cycle = if self.repeat < 0 {
+            i32::MAX
+        } else {
+            self.repeat
+        };
         let mut cycle = (global / cycle_len).floor() as i32;
         cycle = cycle.clamp(0, max_cycle);
         let mut local = (global - cycle as f32 * cycle_len).clamp(0.0, self.duration);
@@ -699,7 +722,11 @@ impl Sequence {
     /// The value of `channel` at local time `t` within one pass.
     #[must_use]
     pub fn value_at(&self, channel: &str, t: f32) -> Option<Value> {
-        let mut tweens: Vec<&Tween> = self.tweens.iter().filter(|w| w.channel == channel).collect();
+        let mut tweens: Vec<&Tween> = self
+            .tweens
+            .iter()
+            .filter(|w| w.channel == channel)
+            .collect();
         if tweens.is_empty() {
             return self.initial.get(channel).copied();
         }
@@ -780,8 +807,14 @@ mod tests {
         assert_eq!(Position::parse("<0.2"), Position::PreviousStart(0.2));
         assert_eq!(Position::parse(">0.3"), Position::PreviousEnd(0.3));
         assert_eq!(Position::parse("2"), Position::At(2.0));
-        assert_eq!(Position::parse("intro+=1"), Position::Label("intro".into(), 1.0));
-        assert_eq!(Position::parse("intro"), Position::Label("intro".into(), 0.0));
+        assert_eq!(
+            Position::parse("intro+=1"),
+            Position::Label("intro".into(), 1.0)
+        );
+        assert_eq!(
+            Position::parse("intro"),
+            Position::Label("intro".into(), 0.0)
+        );
     }
 
     #[test]
@@ -829,7 +862,16 @@ mod tests {
     fn stagger_orders_by_from() {
         let mut tl = Sequence::new();
         let ch = ["a", "b", "c", "d", "e"];
-        tl.stagger(&ch, 0.0, 1.0, 1.0, 0.1, StaggerFrom::Center, Curve::Linear, 0.0);
+        tl.stagger(
+            &ch,
+            0.0,
+            1.0,
+            1.0,
+            0.1,
+            StaggerFrom::Center,
+            Curve::Linear,
+            0.0,
+        );
         tl.seek(0.2);
         // centre starts first
         assert!(tl.scalar("c") > tl.scalar("b"));
@@ -840,10 +882,14 @@ mod tests {
     #[test]
     fn nesting_shifts_scales_and_prefixes_labels() {
         let mut child = Sequence::new();
-        child.from_to("x", 0.0, 1.0, 1.0, Curve::Linear, 0.0).label("end", ">");
+        child
+            .from_to("x", 0.0, 1.0, 1.0, Curve::Linear, 0.0)
+            .label("end", ">");
         child.time_scale(2.0);
         let mut parent = Sequence::new();
-        parent.to("y", 1.0, 1.0, Curve::Linear, ">").add("child", &child, ">");
+        parent
+            .to("y", 1.0, 1.0, Curve::Linear, ">")
+            .add("child", &child, ">");
         assert!(close(parent.duration(), 1.5));
         assert_eq!(parent.label_time("child/end"), Some(1.5));
         parent.seek(1.25);
@@ -854,10 +900,16 @@ mod tests {
     fn calls_fire_once_in_either_direction() {
         let mut tl = Sequence::new();
         tl.to("x", 1.0, 2.0, Curve::Linear, ">").call("ping", 1.0);
-        let fwd: Vec<String> = (0..30).flat_map(|_| tl.advance(0.1)).map(|e| e.name).collect();
+        let fwd: Vec<String> = (0..30)
+            .flat_map(|_| tl.advance(0.1))
+            .map(|e| e.name)
+            .collect();
         assert_eq!(fwd, ["start", "ping", "complete"]);
         tl.reverse();
-        let back: Vec<String> = (0..30).flat_map(|_| tl.advance(0.1)).map(|e| e.name).collect();
+        let back: Vec<String> = (0..30)
+            .flat_map(|_| tl.advance(0.1))
+            .map(|e| e.name)
+            .collect();
         assert_eq!(back, ["ping", "reverse-complete"]);
     }
 
@@ -872,15 +924,25 @@ mod tests {
         tl.seek(1.25);
         assert!(close(tl.scalar("x"), 0.75), "second pass runs backwards");
         tl.seek(0.0);
-        let names: Vec<String> = (0..40).flat_map(|_| tl.advance(0.1)).map(|e| e.name).collect();
-        assert_eq!(names, ["start", "mid", "repeat", "mid", "repeat", "mid", "complete"]);
-        assert!(close(tl.scalar("x"), 1.0), "odd number of passes ends at the end");
+        let names: Vec<String> = (0..40)
+            .flat_map(|_| tl.advance(0.1))
+            .map(|e| e.name)
+            .collect();
+        assert_eq!(
+            names,
+            ["start", "mid", "repeat", "mid", "repeat", "mid", "complete"]
+        );
+        assert!(
+            close(tl.scalar("x"), 1.0),
+            "odd number of passes ends at the end"
+        );
     }
 
     #[test]
     fn time_scale_and_pause() {
         let mut tl = Sequence::new();
-        tl.from_to("x", 0.0, 1.0, 1.0, Curve::Linear, 0.0).time_scale(2.0);
+        tl.from_to("x", 0.0, 1.0, 1.0, Curve::Linear, 0.0)
+            .time_scale(2.0);
         tl.advance(0.25);
         assert!(close(tl.scalar("x"), 0.5));
         tl.pause();
@@ -891,8 +953,13 @@ mod tests {
     #[test]
     fn stepped_and_sought_agree() {
         let mut a = Sequence::new();
-        a.from_to("x", 0.0, 5.0, 1.0, Curve::EASE_IN_OUT, 0.0)
-            .to("x", -3.0, 0.7, Curve::BOUNCE_OUT, ">0.2");
+        a.from_to("x", 0.0, 5.0, 1.0, Curve::EASE_IN_OUT, 0.0).to(
+            "x",
+            -3.0,
+            0.7,
+            Curve::BOUNCE_OUT,
+            ">0.2",
+        );
         let mut b = a.clone();
         for _ in 0..100 {
             a.advance(0.013);
@@ -904,10 +971,23 @@ mod tests {
     #[test]
     fn values_of_other_kinds_interpolate() {
         let mut tl = Sequence::new();
-        tl.from_to("p", Offset::new(0.0, 0.0), Offset::new(10.0, 20.0), 1.0, Curve::Linear, 0.0)
-            .from_to("c", Color::BLACK, Color::WHITE, 1.0, Curve::Linear, 0.0);
+        tl.from_to(
+            "p",
+            Offset::new(0.0, 0.0),
+            Offset::new(10.0, 20.0),
+            1.0,
+            Curve::Linear,
+            0.0,
+        )
+        .from_to("c", Color::BLACK, Color::WHITE, 1.0, Curve::Linear, 0.0);
         tl.seek(0.5);
-        assert_eq!(tl.value("p").and_then(Value::point), Some(Offset::new(5.0, 10.0)));
-        assert_eq!(tl.value("c").and_then(Value::color), Some(Color::rgb(128, 128, 128)));
+        assert_eq!(
+            tl.value("p").and_then(Value::point),
+            Some(Offset::new(5.0, 10.0))
+        );
+        assert_eq!(
+            tl.value("c").and_then(Value::color),
+            Some(Color::rgb(128, 128, 128))
+        );
     }
 }

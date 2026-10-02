@@ -7,9 +7,9 @@
 //! this one — an easing curve is a *function*, and the picture of a
 //! function is its graph.
 
+use vieww_animation::Curve;
 use vieww_foundation::{Color, Offset, Size, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_animation::Curve;
 
 /// One card: the curve's graph, on a unit square.
 #[derive(Clone)]
@@ -26,7 +26,9 @@ impl EaseCard {
 
 impl std::fmt::Debug for EaseCard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("EaseCard").field("name", &self.name).finish()
+        f.debug_struct("EaseCard")
+            .field("name", &self.name)
+            .finish()
     }
 }
 
@@ -44,9 +46,7 @@ impl Widget for EaseCard {
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .spacing(6.0)
             .children(children![
-                CustomPaint::sized(Size::new(120.0, 90.0), EaseGraph {
-                    curve: self.curve,
-                }),
+                CustomPaint::sized(Size::new(120.0, 90.0), EaseGraph { curve: self.curve }),
                 Text::new(self.name).style(TextStyle {
                     size: 11.0,
                     color: Color::rgb(90, 100, 120),

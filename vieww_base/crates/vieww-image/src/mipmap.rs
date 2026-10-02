@@ -320,7 +320,7 @@ mod tests {
 
         for level in &chain {
             let px = level.pixels();
-            for chunk in px.chunks_exact(4) {
+            for chunk in px.as_chunks::<4>().0 {
                 assert_eq!(
                     (chunk[0], chunk[1], chunk[2], chunk[3]),
                     (color.0, color.1, color.2, 255),

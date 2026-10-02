@@ -6,9 +6,9 @@
 //! Search is a **joint embedding space**: images and text are both encoded
 //! into vectors of the same dimension, so "how well does this text describe
 //! this photo?" becomes cosine similarity between two vectors, and finding
-//! matches becomes a nearest-neighbour lookup. That structure — [`Embedder`]
-//! + [`EmbeddingIndex`] — is identical whichever encoder is behind it, which
-//! is the whole point of putting a trait here.
+//! matches becomes a nearest-neighbour lookup. That structure — an
+//! [`Embedder`] paired with an [`EmbeddingIndex`] — is identical whichever
+//! encoder is behind it, which is the whole point of putting a trait here.
 //!
 //! # Two encoders, and the honest difference between them
 //!

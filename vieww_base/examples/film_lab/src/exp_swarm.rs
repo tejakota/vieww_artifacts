@@ -18,12 +18,12 @@ use std::sync::Mutex;
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Painting, PaintWith, Text};
+use vieww_widget::{Filtered, PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, Rng, BG_DEEP, INK, MUTED, VIOLET_SOFT};
+use crate::film_lib::{alpha, mix, Rng, INK, MUTED, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The flock's size — the axis.
 const N: usize = 2400;
@@ -74,7 +74,15 @@ fn init_swarm() -> Swarm {
         vel.push([d.cos() * sp, d.sin() * sp]);
         seedz.push(rng.f01());
     }
-    Swarm { pos, vel, seedz, sim_t: 0.0, steps: 0, queries: 0, last_t: -1.0 }
+    Swarm {
+        pos,
+        vel,
+        seedz,
+        sim_t: 0.0,
+        steps: 0,
+        queries: 0,
+        last_t: -1.0,
+    }
 }
 
 /// The roost attractor — a slow lissajous the cloud follows.
@@ -95,7 +103,10 @@ fn predator_at(sim_t: f32) -> Option<[f32; 2]> {
         return None;
     }
     let u = (sim_t - start) / dur;
-    Some([120.0 + u * 1040.0, 220.0 + (u * 6.2832 * 1.5).sin() * 60.0])
+    Some([
+        120.0 + u * 1040.0,
+        220.0 + (u * std::f32::consts::TAU * 1.5).sin() * 60.0,
+    ])
 }
 
 /// Advance the sim to `target_t` (film seconds), stepping `DT`.
@@ -115,7 +126,10 @@ fn advance(target_t: f32) -> (u64, u64) {
         let sim_t = sw.sim_t;
 
         // The spatial hash, rebuilt each step.
-        let (gw, gh) = ((1280.0 / CELL).ceil() as usize, (560.0 / CELL).ceil() as usize);
+        let (gw, gh) = (
+            (1280.0 / CELL).ceil() as usize,
+            (560.0 / CELL).ceil() as usize,
+        );
         let mut grid: Vec<Vec<u32>> = vec![Vec::new(); gw * gh];
         for (i, p) in sw.pos.iter().enumerate() {
             let gx = ((p[0] / CELL).floor() as usize).min(gw - 1);
@@ -229,7 +243,7 @@ fn advance(target_t: f32) -> (u64, u64) {
 
 /// The snapshot the renderer draws from (pos + vel, cloned under the lock).
 fn snapshot(target_t: f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>, Vec<f32>, u64, u64) {
-    let (steps, queries) = advance(target_t);
+    let (steps, _queries) = advance(target_t);
     let guard = SWARM.lock().expect("swarm");
     let sw = guard.as_ref().expect("swarm live");
     (
@@ -243,7 +257,7 @@ fn snapshot(target_t: f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>, Vec<f32>, u64, u64)
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let film = t * SECONDS;
     let (pos, vel, seedz, steps, queries) = snapshot(film);
 
@@ -292,8 +306,14 @@ pub fn frame(t: f32) -> WidgetNode {
                 let (ox, oy) = (9.0, 9.0);
                 let mut path = Path::new();
                 path.move_to(Offset::new(ox + (tipx - p[0]), oy + (tipy - p[1])));
-                path.line_to(Offset::new(ox + (bx - p[0]) + px * wing, oy + (by - p[1]) + py * wing));
-                path.line_to(Offset::new(ox + (bx - p[0]) - px * wing * 0.55, oy + (by - p[1]) - py * wing * 0.55));
+                path.line_to(Offset::new(
+                    ox + (bx - p[0]) + px * wing,
+                    oy + (by - p[1]) + py * wing,
+                ));
+                path.line_to(Offset::new(
+                    ox + (bx - p[0]) - px * wing * 0.55,
+                    oy + (by - p[1]) - py * wing * 0.55,
+                ));
                 // Closed — the U-22 lesson on its second working day: an
                 // open triangle fills chord-closed (pixel-correct) but the
                 // census counts it, and 2,411 of them per frame is the
@@ -332,10 +352,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // A low sun's last warmth on the horizon.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.24, 0.86), 0.42).with_dither().with_stops(&[
-                    (0.0, alpha(Color::rgb(224, 120, 70), 0.16)),
-                    (1.0, alpha(Color::rgb(224, 120, 70), 0.0)),
-                ]),
+                Gradient::radial(Offset::new(0.24, 0.86), 0.42)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, alpha(Color::rgb(224, 120, 70), 0.16)),
+                        (1.0, alpha(Color::rgb(224, 120, 70), 0.0)),
+                    ]),
             );
 
             // The far hills.
@@ -355,30 +377,38 @@ pub fn frame(t: f32) -> WidgetNode {
             // The dead tree on its rise — a fixed silhouette, the roost.
             let tree_root = Offset::new(1084.0, 596.0);
             let mut tree_rng = Rng::new(0x7EE);
-            let mut branch = |book: &mut Sketchbook, from: Offset, dir: f32, len: f32, wdt: f32,
-                 depth: u32| {
-                let mut stack = Vec::new();
-                stack.push((from, dir, len, wdt, depth));
-                while let Some((f0, dr, ln, wd, dp)) = stack.pop() {
-                    let to = Offset::new(f0.dx + dr.cos() * ln, f0.dy + dr.sin() * ln);
-                    let mut p = Path::new();
-                    p.move_to(f0);
-                    p.line_to(to);
-                    book.stroke(p, alpha(Color::rgb(8, 6, 10), 0.96), wd);
-                    if dp > 0 {
-                        let nch = if dp == 4 { 3 } else { 2 };
-                        for _ in 0..nch {
-                            let nd = dr + tree_rng.sym() * 0.65;
-                            stack.push((to, nd, ln * (0.62 + tree_rng.f01() * 0.16), wd * 0.62,
-                                dp - 1));
+            let mut branch =
+                |book: &mut Sketchbook, from: Offset, dir: f32, len: f32, wdt: f32, depth: u32| {
+                    let mut stack = Vec::new();
+                    stack.push((from, dir, len, wdt, depth));
+                    while let Some((f0, dr, ln, wd, dp)) = stack.pop() {
+                        let to = Offset::new(f0.dx + dr.cos() * ln, f0.dy + dr.sin() * ln);
+                        let mut p = Path::new();
+                        p.move_to(f0);
+                        p.line_to(to);
+                        book.stroke(p, alpha(Color::rgb(8, 6, 10), 0.96), wd);
+                        if dp > 0 {
+                            let nch = if dp == 4 { 3 } else { 2 };
+                            for _ in 0..nch {
+                                let nd = dr + tree_rng.sym() * 0.65;
+                                stack.push((
+                                    to,
+                                    nd,
+                                    ln * (0.62 + tree_rng.f01() * 0.16),
+                                    wd * 0.62,
+                                    dp - 1,
+                                ));
+                            }
                         }
                     }
-                }
-            };
+                };
             branch(book, tree_root, -std::f32::consts::FRAC_PI_2, 84.0, 7.0, 5);
 
             // The ground.
-            book.rect(Rect::new(0.0, 596.0, w, h), alpha(Color::rgb(10, 8, 12), 1.0));
+            book.rect(
+                Rect::new(0.0, 596.0, w, h),
+                alpha(Color::rgb(10, 8, 12), 1.0),
+            );
 
             // The predator — a dark kite with a pale belly when it passes.
             if let Some(pr) = pred {
@@ -399,10 +429,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // A vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.85).with_dither().with_stops(&[
-                    (0.0, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.32)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.85)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.32)),
+                    ]),
             );
         }),
     );
@@ -425,8 +457,7 @@ pub fn frame(t: f32) -> WidgetNode {
         for &i in list {
             inner = inner.push(bird_node(i));
         }
-        let bucket_angle = (b as f32 + 0.5) / 3.0 * std::f32::consts::TAU
-            - std::f32::consts::PI;
+        let bucket_angle = (b as f32 + 0.5) / 3.0 * std::f32::consts::TAU - std::f32::consts::PI;
         stack = stack.push(
             Positioned::fill().child(
                 Filtered::new()
@@ -437,18 +468,23 @@ pub fn frame(t: f32) -> WidgetNode {
         );
     }
 
-    stack.push(receipt_panel(t, steps, queries, mean_speed, pred.is_some())).into()
+    stack
+        .push(receipt_panel(t, steps, queries, mean_speed, pred.is_some()))
+        .into()
 }
 
 // ── The receipt ─────────────────────────────────────────────────────────────
 
-fn receipt_panel(t: f32, steps: u64, queries: u64, mean_speed: f32, pred_on: bool) -> WidgetNode {
+fn receipt_panel(_t: f32, steps: u64, queries: u64, mean_speed: f32, pred_on: bool) -> WidgetNode {
     let lines = [
         "SWARM · THE SIMULATION AXIS · 2,400 BOIDS".to_string(),
         format!("steps this frame {steps} · dt {DT:.3} s · neighbour queries {queries}"),
         format!("mean speed {mean_speed:.0} px/s (clamp {V_MIN:.0}-{V_MAX:.0})"),
         format!("hash cell {CELL:.0} px · perception {PERCEPTION:.0} px · sep {SEP_R:.0} px"),
-        format!("predator {} · build vs raster in metrics", if pred_on { "IN THE FLOCK" } else { "away" }),
+        format!(
+            "predator {} · build vs raster in metrics",
+            if pred_on { "IN THE FLOCK" } else { "away" }
+        ),
     ];
 
     const P_X: f32 = 42.0;
@@ -468,7 +504,10 @@ fn receipt_panel(t: f32, steps: u64, queries: u64, mean_speed: f32, pred_on: boo
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -495,7 +534,9 @@ fn receipt_panel(t: f32, steps: u64, queries: u64, mean_speed: f32, pred_on: boo
             let mut bins = [0u32; 10];
             for v in &sw.vel {
                 let sp = (v[0].powi(2) + v[1].powi(2)).sqrt();
-                let b = (((sp - V_MIN) / (V_MAX - V_MIN)) * 10.0).floor().clamp(0.0, 9.0) as usize;
+                let b = (((sp - V_MIN) / (V_MAX - V_MIN)) * 10.0)
+                    .floor()
+                    .clamp(0.0, 9.0) as usize;
                 bins[b] += 1;
             }
             let peak = bins.iter().copied().max().unwrap_or(1).max(1) as f32;
@@ -509,7 +550,12 @@ fn receipt_panel(t: f32, steps: u64, queries: u64, mean_speed: f32, pred_on: boo
             }
             // The blur threshold tick.
             let tx = 12.0 + ((88.0 - V_MIN) / (V_MAX - V_MIN)).clamp(0.0, 1.0) * (P_W - 24.0);
-            book.line(Offset::new(tx, 8.0), Offset::new(tx, 33.0), alpha(INK, 0.6), 1.0);
+            book.line(
+                Offset::new(tx, 8.0),
+                Offset::new(tx, 33.0),
+                alpha(INK, 0.6),
+                1.0,
+            );
         }),
     );
     stack = stack.push(

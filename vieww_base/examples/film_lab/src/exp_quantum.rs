@@ -25,13 +25,15 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, smoothstep, tint, AMBER, CYAN,
-    INK, MUTED, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_cubic, mix, smoothstep, tint, AMBER, CYAN, INK, MUTED, VIOLET,
+    VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The apparatus ───────────────────────────────────────────────────────────
 
@@ -136,11 +138,15 @@ fn fringe_spacing(h: &[usize], half: f32) -> Option<f32> {
         if c > p && c >= n && c > thresh {
             // Parabolic refine on the three bins.
             let denom = p - 2.0 * c + n;
-            let off = if denom.abs() > 1e-6 { 0.5 * (p - n) / denom } else { 0.0 };
+            let off = if denom.abs() > 1e-6 {
+                0.5 * (p - n) / denom
+            } else {
+                0.0
+            };
             let pos = (i as f32 + off) / bins as f32 * 2.0 * half - half;
             // Resolution: merge peaks closer than 20 px — sampling noise
             // doubles peaks ~10 px apart; true fringes are far wider.
-            if peaks.last().map_or(true, |&prev| pos - prev > 20.0) {
+            if peaks.last().is_none_or(|&prev| pos - prev > 20.0) {
                 peaks.push(pos);
             }
             i += 2;
@@ -157,7 +163,7 @@ fn fringe_spacing(h: &[usize], half: f32) -> Option<f32> {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The two runs share one source stream: every particle index has a
     // watched and an unwatched landing, so the A/B is the SAME particles.
     let l_top = RUN_TOP.1 * 0.86;
@@ -186,7 +192,7 @@ pub fn frame(t: f32) -> WidgetNode {
         let valleys: Vec<usize> = u_hist
             .windows(3)
             .map(|w| w[1])
-            .filter(|&v| v < hi as usize / 2)
+            .filter(|&v| v < hi / 2)
             .collect();
         valleys.iter().copied().max().unwrap_or(0) as f32
     };
@@ -213,35 +219,16 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — a lab at night.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 16))]),
             );
 
             // ── The unwatched run (top) ────────────────────────────────────
-            draw_run(
-                book,
-                t,
-                RUN_TOP,
-                &unwatched,
-                landed,
-                &u_hist,
-                l_top,
-                true,
-            );
+            draw_run(book, t, RUN_TOP, &unwatched, landed, &u_hist, l_top, true);
 
             // ── The watched run (bottom) ───────────────────────────────────
-            draw_run(
-                book,
-                t,
-                RUN_BOT,
-                &watched,
-                landed,
-                &w_hist,
-                l_bot,
-                false,
-            );
+            draw_run(book, t, RUN_BOT, &watched, landed, &w_hist, l_bot, false);
 
             // The divider between runs — the apparatus label rail.
             // (Edges, not x+y+w+h: the first cut passed (0, 362, w, 26)
@@ -270,11 +257,7 @@ pub fn frame(t: f32) -> WidgetNode {
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     stack = stack.push(receipt_panel(
-        landed,
-        measured,
-        theory,
-        contrast_u,
-        contrast_w,
+        landed, measured, theory, contrast_u, contrast_w,
     ));
     stack.into()
 }
@@ -311,7 +294,7 @@ fn draw_run(
     );
 
     // The source: a coherent emitter, pulsing.
-    let pulse = 0.5 + 0.5 * (t * 6.2832 * 3.0).sin();
+    let pulse = 0.5 + 0.5 * (t * std::f32::consts::TAU * 3.0).sin();
     book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
         g.circle(
             Offset::new(SRC_X, cy),
@@ -326,9 +309,9 @@ fn draw_run(
     });
     // Coherent wavefronts leaving the source — rings, marching.
     if t < 0.9 || interference {
-        let phase = t * 6.2832 * 1.4;
+        let phase = t * std::f32::consts::TAU * 1.4;
         for k in 0..4 {
-            let r = 36.0 + k as f32 * 46.0 + (phase / 6.2832 * 46.0) % 46.0;
+            let r = 36.0 + k as f32 * 46.0 + (phase / std::f32::consts::TAU * 46.0) % 46.0;
             let fade = (1.0 - r / 220.0).clamp(0.0, 1.0);
             if fade > 0.02 {
                 book.arc(
@@ -348,9 +331,18 @@ fn draw_run(
     let bar_bot = cy + hh - 18.0;
     let s1 = cy - SLIT_D / 2.0;
     let s2 = cy + SLIT_D / 2.0;
-    book.rect(Rect::new(BAR_X - 5.0, bar_top, BAR_X + 5.0, s1 - SLIT_H), alpha(Color::rgb(44, 46, 56), 0.98));
-    book.rect(Rect::new(BAR_X - 5.0, s1 + SLIT_H, BAR_X + 5.0, s2 - SLIT_H), alpha(Color::rgb(44, 46, 56), 0.98));
-    book.rect(Rect::new(BAR_X - 5.0, s2 + SLIT_H, BAR_X + 5.0, bar_bot), alpha(Color::rgb(44, 46, 56), 0.98));
+    book.rect(
+        Rect::new(BAR_X - 5.0, bar_top, BAR_X + 5.0, s1 - SLIT_H),
+        alpha(Color::rgb(44, 46, 56), 0.98),
+    );
+    book.rect(
+        Rect::new(BAR_X - 5.0, s1 + SLIT_H, BAR_X + 5.0, s2 - SLIT_H),
+        alpha(Color::rgb(44, 46, 56), 0.98),
+    );
+    book.rect(
+        Rect::new(BAR_X - 5.0, s2 + SLIT_H, BAR_X + 5.0, bar_bot),
+        alpha(Color::rgb(44, 46, 56), 0.98),
+    );
     // Slit edges glow faintly.
     for &sy in &[s1, s2] {
         book.line(
@@ -367,10 +359,10 @@ fn draw_run(
         // drawn as two arc families. Where they cross, bright — that is
         // where the fringes will land.
         book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
-            let phase = t * 6.2832 * 1.4;
+            let phase = t * std::f32::consts::TAU * 1.4;
             for &sy in &[s1, s2] {
                 for k in 0..7 {
-                    let r = 20.0 + k as f32 * 52.0 + (phase / 6.2832 * 52.0) % 52.0;
+                    let r = 20.0 + k as f32 * 52.0 + (phase / std::f32::consts::TAU * 52.0) % 52.0;
                     if r < SCR_X - BAR_X - 16.0 {
                         let fade = (1.0 - r / 560.0).clamp(0.0, 1.0);
                         g.arc(
@@ -387,7 +379,7 @@ fn draw_run(
         });
     } else {
         // The detector: an eye at each slit, flashing on its watch.
-        let blink = 0.55 + 0.45 * (t * 6.2832 * 5.0).sin();
+        let blink = 0.55 + 0.45 * (t * std::f32::consts::TAU * 5.0).sin();
         book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
             for &sy in &[s1, s2] {
                 g.circle(
@@ -398,7 +390,12 @@ fn draw_run(
                         (1.0, alpha(AMBER, 0.0)),
                     ]),
                 );
-                g.ring(Offset::new(BAR_X + 26.0, sy), 7.0, 1.4, alpha(tint(AMBER, 0.4), 0.8));
+                g.ring(
+                    Offset::new(BAR_X + 26.0, sy),
+                    7.0,
+                    1.4,
+                    alpha(tint(AMBER, 0.4), 0.8),
+                );
                 g.circle(Offset::new(BAR_X + 26.0, sy), 2.2, alpha(INK, 0.9));
             }
         });
@@ -419,7 +416,10 @@ fn draw_run(
     }
 
     // The screen: a dark plate with a bright readout strip.
-    book.rect(Rect::new(SCR_X - 6.0, cy - hh + 18.0, SCR_X + 6.0, cy + hh - 18.0), alpha(Color::rgb(26, 28, 36), 0.95));
+    book.rect(
+        Rect::new(SCR_X - 6.0, cy - hh + 18.0, SCR_X + 6.0, cy + hh - 18.0),
+        alpha(Color::rgb(26, 28, 36), 0.95),
+    );
     book.line(
         Offset::new(SCR_X - 6.0, cy - hh + 18.0),
         Offset::new(SCR_X - 6.0, cy + hh - 18.0),
@@ -443,7 +443,12 @@ fn draw_run(
             mix(MUTED, tint(AMBER, 0.5), heat * 0.7)
         };
         book.rect(
-            Rect::new(SCR_X - 3.0, yc - col_h * 0.42, SCR_X + 3.0, yc + col_h * 0.42),
+            Rect::new(
+                SCR_X - 3.0,
+                yc - col_h * 0.42,
+                SCR_X + 3.0,
+                yc + col_h * 0.42,
+            ),
             alpha(col, 0.30 + 0.65 * heat),
         );
     }
@@ -462,7 +467,10 @@ fn draw_run(
                 let which_slit = if y < 0.0 { s1 } else { s2 };
                 let (x, yy) = if p < 0.45 {
                     let q = p / 0.45;
-                    (SRC_X + (BAR_X - SRC_X) * q, cy + (which_slit - cy) * smoothstep(q))
+                    (
+                        SRC_X + (BAR_X - SRC_X) * q,
+                        cy + (which_slit - cy) * smoothstep(q),
+                    )
                 } else {
                     let q = (p - 0.45) / 0.55;
                     (
@@ -481,7 +489,10 @@ fn draw_run(
     }
 
     // The run's label, left of the window.
-    book.rect(Rect::new(SRC_X - 70.0, cy - hh + 18.0, SCR_X - 40.0, cy - hh + 34.0), alpha(Color::rgb(8, 8, 12), 0.0));
+    book.rect(
+        Rect::new(SRC_X - 70.0, cy - hh + 18.0, SCR_X - 40.0, cy - hh + 34.0),
+        alpha(Color::rgb(8, 8, 12), 0.0),
+    );
     // (label drawn via Text in the widget layer — the painting layer here
     //  is shapes only; the receipt panel carries the words.)
     let _ = label;
@@ -493,13 +504,13 @@ fn draw_run(
 /// buffer, finds the bright bands, and measures their spacing — the Born
 /// rule's fingerprint, read from pixels that were written by the histogram
 /// above. It does not consult λ, L, or d.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     // The screen strip of the top run at t=1: x in [SCR_X-3, SCR_X+3],
     // y across RUN_TOP's half window.
     let (cy, hh) = RUN_TOP;
     let half = hh * 0.86;
     let x = SCR_X as u32;
-    let y0 = ((cy - half) as u32).max(0);
+    let y0 = (cy - half) as u32;
     let y1 = ((cy + half) as u32).min(719);
     let mut col: Vec<f32> = Vec::with_capacity((y1 - y0) as usize);
     for y in y0..y1 {
@@ -585,7 +596,10 @@ fn receipt_panel(
         "QUANTUM · THE PROBABILITY AXIS · THE DOUBLE SLIT".to_string(),
         format!(
             "particles landed {landed}/{} per run · λ {} px · d {} px · L {} px",
-            N_LAND, LAMBDA, SLIT_D, SCR_X - BAR_X
+            N_LAND,
+            LAMBDA,
+            SLIT_D,
+            SCR_X - BAR_X
         ),
         match measured {
             Some(m) => format!(
@@ -600,7 +614,8 @@ fn receipt_panel(
             "contrast (Imax−Imin)/(Imax+Imin): unwatched {:.2} → watched {:.2}",
             contrast_u, contrast_w
         ),
-        "watched run lands per ½|ψ₁|²+½|ψ₂|² — the cross term is the detector's only theft".to_string(),
+        "watched run lands per ½|ψ₁|²+½|ψ₂|² — the cross term is the detector's only theft"
+            .to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -619,7 +634,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -627,8 +645,16 @@ fn receipt_panel(
 
     // The run labels, painted as text at the run windows' top-left.
     for (y, txt, col) in [
-        (RUN_TOP.0 - RUN_TOP.1 + 28.0, "RUN A · BOTH SLITS OPEN · NO DETECTOR — |ψ₁+ψ₂|²", VIOLET_SOFT),
-        (RUN_BOT.0 - RUN_BOT.1 + 28.0, "RUN B · WHICH-SLIT DETECTOR ON — ½|ψ₁|²+½|ψ₂|²", AMBER),
+        (
+            RUN_TOP.0 - RUN_TOP.1 + 28.0,
+            "RUN A · BOTH SLITS OPEN · NO DETECTOR — |ψ₁+ψ₂|²",
+            VIOLET_SOFT,
+        ),
+        (
+            RUN_BOT.0 - RUN_BOT.1 + 28.0,
+            "RUN B · WHICH-SLIT DETECTOR ON — ½|ψ₁|²+½|ψ₂|²",
+            AMBER,
+        ),
     ] {
         stack = stack.push(
             Positioned::new()

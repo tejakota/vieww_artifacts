@@ -22,13 +22,14 @@
 
 use std::sync::Mutex;
 
-use vieww_foundation::{
-    Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextAlign, TextStyle,
-};
+use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_back, ease_out_cubic, mix, tint, xywh, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, AMBER, CYAN_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, ease_out_back, tint, xywh, Rng, AMBER, CYAN_SOFT, INK, MUTED,
+    VIOLET, VIOLET_SOFT,
+};
 
 use super::studio;
 use super::{group_commas, Ctx};
@@ -78,13 +79,23 @@ fn init_swarm() -> Swarm {
     for _ in 0..N {
         let a = rng.f01() * std::f32::consts::TAU;
         let r = rng.f01().sqrt();
-        pos.push([WORLD_W * 0.5 + (a.cos() * r) * 220.0, WORLD_H * 0.34 + (a.sin() * r) * 120.0]);
+        pos.push([
+            WORLD_W * 0.5 + (a.cos() * r) * 220.0,
+            WORLD_H * 0.34 + (a.sin() * r) * 120.0,
+        ]);
         let sp = 70.0 + rng.f01() * 50.0;
         let d = rng.f01() * std::f32::consts::TAU;
         vel.push([d.cos() * sp, d.sin() * sp]);
         seedz.push(rng.f01());
     }
-    Swarm { pos, vel, seedz, sim_t: 0.0, steps: 0, queries: 0 }
+    Swarm {
+        pos,
+        vel,
+        seedz,
+        sim_t: 0.0,
+        steps: 0,
+        queries: 0,
+    }
 }
 
 /// The roost attractor — a slow lissajous the cloud follows.
@@ -103,7 +114,10 @@ fn predator_at(sim_t: f32) -> Option<[f32; 2]> {
         return None;
     }
     let u = (sim_t - start) / dur;
-    Some([60.0 + u * 780.0, WORLD_H * 0.30 + (u * 6.2832 * 1.5).sin() * 60.0])
+    Some([
+        60.0 + u * 780.0,
+        WORLD_H * 0.30 + (u * std::f32::consts::TAU * 1.5).sin() * 60.0,
+    ])
 }
 
 /// Advance the sim to `target_t` (film seconds), stepping DT.
@@ -122,7 +136,10 @@ fn advance(target_t: f32) -> (u64, u64) {
         let sim_t = sw.sim_t;
 
         // The spatial hash, rebuilt each step.
-        let (gw, gh) = ((WORLD_W / CELL).ceil() as usize, (WORLD_H / CELL).ceil() as usize);
+        let (gw, gh) = (
+            (WORLD_W / CELL).ceil() as usize,
+            (WORLD_H / CELL).ceil() as usize,
+        );
         let mut grid: Vec<Vec<u32>> = vec![Vec::new(); gw * gh];
         for (i, p) in sw.pos.iter().enumerate() {
             let gx = ((p[0] / CELL).floor() as usize).min(gw - 1);
@@ -258,10 +275,19 @@ fn swarm_lines() -> Vec<Vec<studio::Seg>> {
     let tx = studio::CODE_PLAIN;
     let pu = MUTED;
     vec![
-        vec![("keep ", kw), ("a flock of ", tx), ("2,400", nu), (" boids", tx)],
+        vec![
+            ("keep ", kw),
+            ("a flock of ", tx),
+            ("2,400", nu),
+            (" boids", tx),
+        ],
         vec![],
         vec![("screen ", kw), ("\"Swarm\"", st), (":", pu)],
-        vec![("    a sheet, dusk behind, spaced ", pu), ("24", nu), (", holding:", pu)],
+        vec![
+            ("    a sheet, dusk behind, spaced ", pu),
+            ("24", nu),
+            (", holding:", pu),
+        ],
         vec![("        the flock, steering:", pu)],
         vec![("            separation, alignment, cohesion", tx)],
         vec![("        one roost, wandering", tx)],
@@ -269,7 +295,7 @@ fn swarm_lines() -> Vec<Vec<studio::Seg>> {
     ]
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
     let ladder = ctx.ladder;
@@ -306,9 +332,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             hill.move_to(Offset::new(0.0, WORLD_H));
             for i in 0..=24 {
                 let x = i as f32 / 24.0 * WORLD_W;
-                let y = WORLD_H * 0.86
-                    + (x * 0.006).sin() * 26.0
-                    + (x * 0.017 + 2.0).sin() * 14.0;
+                let y = WORLD_H * 0.86 + (x * 0.006).sin() * 26.0 + (x * 0.017 + 2.0).sin() * 14.0;
                 hill.line_to(Offset::new(x, y));
             }
             hill.line_to(Offset::new(WORLD_W, WORLD_H));
@@ -338,7 +362,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 wing.move_to(Offset::new(pr[0] - 26.0, pr[1] - 6.0));
                 wing.line_to(Offset::new(pr[0], pr[1]));
                 wing.line_to(Offset::new(pr[0] + 26.0, pr[1] - 8.0));
-                book.stroke_styled(wing, alpha(AMBER, 0.8), 2.2, vieww_foundation::StrokeStyle::rounded());
+                book.stroke_styled(
+                    wing,
+                    alpha(AMBER, 0.8),
+                    2.2,
+                    vieww_foundation::StrokeStyle::rounded(),
+                );
             }
 
             // The flock — 2,400 oriented chevrons, one paint pass. Fast
@@ -376,7 +405,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let plate_receipt = "plate receipt · 2,511 shapes/frame · build 66.4 ms · raster 214.1 ms";
 
     let mut spec = studio::Spec {
-        code: studio::Code::Lines { lines: swarm_lines(), blink: ctx.sec },
+        code: studio::Code::Lines {
+            lines: swarm_lines(),
+            blink: ctx.sec,
+        },
         app: studio::App::new(1, super::tap_pulse(abs), abs),
         preview_custom: Some(sheet),
         session_line: 1.0,
@@ -385,8 +417,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     };
     spec.damage = None;
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
+    let mut stack = Stack::new().push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
 
     // The build/raster gauges — the engine splitting the frame budget, on
     // the fly. Two arcs, filling from their own receipts.
@@ -403,8 +434,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(Opacity::new(gauge_a).child(Painting::sized(
                     Size::new(360.0, 170.0),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.rrect(xywh(0.0, 0.0, 360.0, 170.0), 14.0, alpha(Color::rgb(12, 12, 17), 0.92));
-                        book.stroke_rrect(xywh(0.0, 0.0, 360.0, 170.0), 14.0, alpha(Color::WHITE, 0.09), 1.1);
+                        book.rrect(
+                            xywh(0.0, 0.0, 360.0, 170.0),
+                            14.0,
+                            alpha(Color::rgb(12, 12, 17), 0.92),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, 360.0, 170.0),
+                            14.0,
+                            alpha(Color::WHITE, 0.09),
+                            1.1,
+                        );
                         // Two horizontal gauges — build and raster.
                         let gauges = [
                             ("build", build_fill, CYAN_SOFT),
@@ -434,10 +474,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(y - 4.0)
                     .width(120.0)
                     .height(24.0)
-                    .child(Opacity::new(gauge_a).child(
-                        Text::new(*label)
-                            .style(TextStyle::new(15.0).monospace().color(alpha(INK, 0.9))),
-                    )),
+                    .child(
+                        Opacity::new(gauge_a).child(
+                            Text::new(*label)
+                                .style(TextStyle::new(15.0).monospace().color(alpha(INK, 0.9))),
+                        ),
+                    ),
             );
             stack = stack.push(
                 Positioned::new()
@@ -445,10 +487,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(y + 16.0)
                     .width(320.0)
                     .height(20.0)
-                    .child(Opacity::new(gauge_a).child(
-                        Text::new(*txt)
-                            .style(TextStyle::new(11.5).monospace().color(alpha(MUTED, 0.8))),
-                    )),
+                    .child(
+                        Opacity::new(gauge_a).child(
+                            Text::new(*txt)
+                                .style(TextStyle::new(11.5).monospace().color(alpha(MUTED, 0.8))),
+                        ),
+                    ),
             );
         }
     }
@@ -462,7 +506,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(studio::TITLE_H + 60.0 + studio::PV_H - 620.0)
                 .width(700.0)
                 .height(40.0)
-                .child(Opacity::new(econ_a).child(super::chip(receipts, 15.0, tint(VIOLET_SOFT, 0.1)))),
+                .child(Opacity::new(econ_a).child(super::chip(
+                    receipts,
+                    15.0,
+                    tint(VIOLET_SOFT, 0.1),
+                ))),
         );
     }
 

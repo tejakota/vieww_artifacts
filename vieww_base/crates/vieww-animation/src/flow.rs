@@ -256,10 +256,15 @@ impl Flow {
                 .map(|f| f.lay(seq, at, scale, events))
                 .fold(at, f32::max),
             Self::Any(items) => {
-                let ends: Vec<f32> = items.iter().map(|f| f.lay(seq, at, scale, events)).collect();
+                let ends: Vec<f32> = items
+                    .iter()
+                    .map(|f| f.lay(seq, at, scale, events))
+                    .collect();
                 ends.into_iter().reduce(f32::min).unwrap_or(at)
             }
-            Self::Chain(items) => items.iter().fold(at, |cursor, f| f.lay(seq, cursor, scale, events)),
+            Self::Chain(items) => items
+                .iter()
+                .fold(at, |cursor, f| f.lay(seq, cursor, scale, events)),
             Self::Stagger(interval, items) => {
                 let mut end = at;
                 for (i, f) in items.iter().enumerate() {
@@ -270,7 +275,9 @@ impl Flow {
                 end
             }
             Self::Delay(s, body) => body.lay(seq, at + s * scale, scale, events),
-            Self::Loop(n, body) => (0..*n).fold(at, |cursor, _| body.lay(seq, cursor, scale, events)),
+            Self::Loop(n, body) => {
+                (0..*n).fold(at, |cursor, _| body.lay(seq, cursor, scale, events))
+            }
             Self::Spawn(body) => {
                 body.lay(seq, at, scale, events);
                 at
@@ -306,11 +313,15 @@ mod tests {
         let ev = TimeEvents::new();
         let a = Flow::tween("a", 1.0, 1.0, Curve::Linear);
         let b = Flow::tween("b", 1.0, 2.0, Curve::Linear);
-        assert!(close(Flow::chain([a.clone(), b.clone()]).duration(&ev), 3.0));
+        assert!(close(
+            Flow::chain([a.clone(), b.clone()]).duration(&ev),
+            3.0
+        ));
         assert!(close(Flow::all([a.clone(), b.clone()]).duration(&ev), 2.0));
         assert!(close(Flow::any([a.clone(), b.clone()]).duration(&ev), 1.0));
         // After `any`, the longer one is still running in the background.
-        let seq = Flow::chain([Flow::any([a, b]), Flow::tween("c", 1.0, 1.0, Curve::Linear)]).compile(&ev);
+        let seq = Flow::chain([Flow::any([a, b]), Flow::tween("c", 1.0, 1.0, Curve::Linear)])
+            .compile(&ev);
         let mut s = seq;
         s.seek(1.5);
         assert!(close(s.scalar("b"), 0.75));
@@ -353,7 +364,10 @@ mod tests {
     fn stagger_loop_spawn_delay() {
         let ev = TimeEvents::new();
         let item = |c: &str| Flow::from_to(c, 0.0, 1.0, 1.0, Curve::Linear);
-        assert!(close(Flow::stagger(0.25, [item("a"), item("b"), item("c")]).duration(&ev), 1.5));
+        assert!(close(
+            Flow::stagger(0.25, [item("a"), item("b"), item("c")]).duration(&ev),
+            1.5
+        ));
         assert!(close(Flow::repeat(3, item("a")).duration(&ev), 3.0));
         assert!(close(Flow::spawn(item("a")).duration(&ev), 0.0));
         assert!(close(Flow::delay(0.5, item("a")).duration(&ev), 1.5));
@@ -371,7 +385,10 @@ mod tests {
         .compile(&ev);
         assert_eq!(seq.label_time("hit"), Some(0.75));
         let mut s = seq;
-        let names: Vec<String> = (0..20).flat_map(|_| s.advance(0.1)).map(|e| e.name).collect();
+        let names: Vec<String> = (0..20)
+            .flat_map(|_| s.advance(0.1))
+            .map(|e| e.name)
+            .collect();
         assert!(names.contains(&"bang".to_owned()));
         assert!(close(s.duration(), 1.75));
     }

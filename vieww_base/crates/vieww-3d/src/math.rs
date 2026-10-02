@@ -183,7 +183,9 @@ impl Quat {
     /// `Object3D.rotation`: the matrix is `Rx · Ry · Rz`.
     #[must_use]
     pub fn from_euler(x: f32, y: f32, z: f32) -> Self {
-        Self::from_axis_angle(Vec3::X, x) * Self::from_axis_angle(Vec3::Y, y) * Self::from_axis_angle(Vec3::Z, z)
+        Self::from_axis_angle(Vec3::X, x)
+            * Self::from_axis_angle(Vec3::Y, y)
+            * Self::from_axis_angle(Vec3::Z, z)
     }
 
     #[must_use]
@@ -306,9 +308,24 @@ impl Mat4 {
         let (x, y, z, w) = (q.x, q.y, q.z, q.w);
         Self {
             m: [
-                [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 2.0 * (x * z - y * w), 0.0],
-                [2.0 * (x * y - z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z + x * w), 0.0],
-                [2.0 * (x * z + y * w), 2.0 * (y * z - x * w), 1.0 - 2.0 * (x * x + y * y), 0.0],
+                [
+                    1.0 - 2.0 * (y * y + z * z),
+                    2.0 * (x * y + z * w),
+                    2.0 * (x * z - y * w),
+                    0.0,
+                ],
+                [
+                    2.0 * (x * y - z * w),
+                    1.0 - 2.0 * (x * x + z * z),
+                    2.0 * (y * z + x * w),
+                    0.0,
+                ],
+                [
+                    2.0 * (x * z + y * w),
+                    2.0 * (y * z - x * w),
+                    1.0 - 2.0 * (x * x + y * y),
+                    0.0,
+                ],
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }
@@ -358,7 +375,9 @@ impl Mat4 {
         let mut s = f.cross(up).normalize();
         if s.length() < 1e-6 {
             // Looking straight along `up`: pick any perpendicular.
-            s = f.cross(if f.x.abs() < 0.9 { Vec3::X } else { Vec3::Z }).normalize();
+            s = f
+                .cross(if f.x.abs() < 0.9 { Vec3::X } else { Vec3::Z })
+                .normalize();
         }
         let u = s.cross(f);
         Self {
@@ -393,7 +412,10 @@ impl Mat4 {
     pub fn mul_vec4(&self, v: [f32; 4]) -> [f32; 4] {
         let mut out = [0.0; 4];
         for (row, o) in out.iter_mut().enumerate() {
-            *o = self.m[0][row] * v[0] + self.m[1][row] * v[1] + self.m[2][row] * v[2] + self.m[3][row] * v[3];
+            *o = self.m[0][row] * v[0]
+                + self.m[1][row] * v[1]
+                + self.m[2][row] * v[2]
+                + self.m[3][row] * v[3];
         }
         out
     }
@@ -435,22 +457,70 @@ impl Mat4 {
             a
         };
         let mut inv = [0.0f32; 16];
-        inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15] + a[9] * a[7] * a[14] + a[13] * a[6] * a[11] - a[13] * a[7] * a[10];
-        inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15] - a[8] * a[7] * a[14] - a[12] * a[6] * a[11] + a[12] * a[7] * a[10];
-        inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15] + a[8] * a[7] * a[13] + a[12] * a[5] * a[11] - a[12] * a[7] * a[9];
-        inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14] - a[8] * a[6] * a[13] - a[12] * a[5] * a[10] + a[12] * a[6] * a[9];
-        inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15] - a[9] * a[3] * a[14] - a[13] * a[2] * a[11] + a[13] * a[3] * a[10];
-        inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15] + a[8] * a[3] * a[14] + a[12] * a[2] * a[11] - a[12] * a[3] * a[10];
-        inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15] - a[8] * a[3] * a[13] - a[12] * a[1] * a[11] + a[12] * a[3] * a[9];
-        inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14] + a[8] * a[2] * a[13] + a[12] * a[1] * a[10] - a[12] * a[2] * a[9];
-        inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15] + a[5] * a[3] * a[14] + a[13] * a[2] * a[7] - a[13] * a[3] * a[6];
-        inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15] - a[4] * a[3] * a[14] - a[12] * a[2] * a[7] + a[12] * a[3] * a[6];
-        inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15] + a[4] * a[3] * a[13] + a[12] * a[1] * a[7] - a[12] * a[3] * a[5];
-        inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14] - a[4] * a[2] * a[13] - a[12] * a[1] * a[6] + a[12] * a[2] * a[5];
-        inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11] - a[5] * a[3] * a[10] - a[9] * a[2] * a[7] + a[9] * a[3] * a[6];
-        inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11] + a[4] * a[3] * a[10] + a[8] * a[2] * a[7] - a[8] * a[3] * a[6];
-        inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11] - a[4] * a[3] * a[9] - a[8] * a[1] * a[7] + a[8] * a[3] * a[5];
-        inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10] + a[4] * a[2] * a[9] + a[8] * a[1] * a[6] - a[8] * a[2] * a[5];
+        inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15]
+            + a[9] * a[7] * a[14]
+            + a[13] * a[6] * a[11]
+            - a[13] * a[7] * a[10];
+        inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15]
+            - a[8] * a[7] * a[14]
+            - a[12] * a[6] * a[11]
+            + a[12] * a[7] * a[10];
+        inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15]
+            + a[8] * a[7] * a[13]
+            + a[12] * a[5] * a[11]
+            - a[12] * a[7] * a[9];
+        inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14]
+            - a[8] * a[6] * a[13]
+            - a[12] * a[5] * a[10]
+            + a[12] * a[6] * a[9];
+        inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15]
+            - a[9] * a[3] * a[14]
+            - a[13] * a[2] * a[11]
+            + a[13] * a[3] * a[10];
+        inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15]
+            + a[8] * a[3] * a[14]
+            + a[12] * a[2] * a[11]
+            - a[12] * a[3] * a[10];
+        inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15]
+            - a[8] * a[3] * a[13]
+            - a[12] * a[1] * a[11]
+            + a[12] * a[3] * a[9];
+        inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14]
+            + a[8] * a[2] * a[13]
+            + a[12] * a[1] * a[10]
+            - a[12] * a[2] * a[9];
+        inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15]
+            + a[5] * a[3] * a[14]
+            + a[13] * a[2] * a[7]
+            - a[13] * a[3] * a[6];
+        inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15]
+            - a[4] * a[3] * a[14]
+            - a[12] * a[2] * a[7]
+            + a[12] * a[3] * a[6];
+        inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15]
+            + a[4] * a[3] * a[13]
+            + a[12] * a[1] * a[7]
+            - a[12] * a[3] * a[5];
+        inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14]
+            - a[4] * a[2] * a[13]
+            - a[12] * a[1] * a[6]
+            + a[12] * a[2] * a[5];
+        inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11]
+            - a[5] * a[3] * a[10]
+            - a[9] * a[2] * a[7]
+            + a[9] * a[3] * a[6];
+        inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11]
+            + a[4] * a[3] * a[10]
+            + a[8] * a[2] * a[7]
+            - a[8] * a[3] * a[6];
+        inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11]
+            - a[4] * a[3] * a[9]
+            - a[8] * a[1] * a[7]
+            + a[8] * a[3] * a[5];
+        inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10]
+            + a[4] * a[2] * a[9]
+            + a[8] * a[1] * a[6]
+            - a[8] * a[2] * a[5];
         let det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
         if det.abs() < 1e-20 {
             return None;
@@ -492,12 +562,19 @@ mod tests {
     fn quaternion_rotation_matches_the_matrix() {
         let q = Quat::from_axis_angle(Vec3::Y, FRAC_PI_2);
         assert!(close(q.rotate(Vec3::X), Vec3::new(0.0, 0.0, -1.0)));
-        assert!(close(Mat4::rotation(q).transform_vector(Vec3::X), Vec3::new(0.0, 0.0, -1.0)));
+        assert!(close(
+            Mat4::rotation(q).transform_vector(Vec3::X),
+            Vec3::new(0.0, 0.0, -1.0)
+        ));
     }
 
     #[test]
     fn compose_then_inverse_is_identity() {
-        let m = Mat4::compose(Vec3::new(1.0, 2.0, 3.0), Quat::from_euler(0.3, 0.7, -0.2), Vec3::new(2.0, 1.0, 0.5));
+        let m = Mat4::compose(
+            Vec3::new(1.0, 2.0, 3.0),
+            Quat::from_euler(0.3, 0.7, -0.2),
+            Vec3::new(2.0, 1.0, 0.5),
+        );
         let id = m * m.inverse().unwrap();
         for c in 0..4 {
             for r in 0..4 {
@@ -510,7 +587,10 @@ mod tests {
     #[test]
     fn look_at_puts_the_target_on_negative_z() {
         let v = Mat4::look_at(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO, Vec3::Y);
-        assert!(close(v.transform_point(Vec3::ZERO), Vec3::new(0.0, 0.0, -5.0)));
+        assert!(close(
+            v.transform_point(Vec3::ZERO),
+            Vec3::new(0.0, 0.0, -5.0)
+        ));
     }
 
     #[test]

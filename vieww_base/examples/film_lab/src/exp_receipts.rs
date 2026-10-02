@@ -23,20 +23,21 @@
 //! widgets.
 
 use vieww_foundation::{
-    Color, Dash, FontWeight, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle,
-    TextStyle,
+    Color, Dash, FontWeight, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
 };
 use vieww_widget::prelude::*;
-use vieww_widget::{Icon, LinearProgress, LineChart, Opacity, Painting, PaintWith, Theme, ThemeData};
+use vieww_widget::{
+    Icon, LineChart, LinearProgress, Opacity, PaintWith, Painting, Theme, ThemeData,
+};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_out_expo, mix, spring_out, BG_DEEP, CANVAS, CANVAS_W, FAINT, INK, MUTED,
-    Rng, VIOLET, VIOLET_SOFT,
+    alpha, clamp01, ease_out_expo, mix, spring_out, Rng, BG_DEEP, CANVAS, CANVAS_W, FAINT, INK,
+    MUTED, VIOLET, VIOLET_SOFT,
 };
 use crate::three_d::{Camera, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // The receipts, sourced: 59.3/4.09 from ci/mobile/device-suite artifacts
 // (the lab pins their targets; the master reads files). The progress value
@@ -72,7 +73,12 @@ fn pieces() -> Vec<Piece> {
             delay: 0.0,
         },
         Piece {
-            rect: Rect::new(CARD.left, CARD.top + TITLE_H, CARD.right, CARD.bottom - PROGRESS_H),
+            rect: Rect::new(
+                CARD.left,
+                CARD.top + TITLE_H,
+                CARD.right,
+                CARD.bottom - PROGRESS_H,
+            ),
             fan: (Vec3::new(0.0, 3.0, 1.6), 0.0, 0.0),
             delay: 0.07,
         },
@@ -120,7 +126,12 @@ fn piece_corners(piece: &Piece, p: f32) -> [Offset; 4] {
         Offset::new(piece.rect.right, piece.rect.bottom),
         Offset::new(piece.rect.left, piece.rect.bottom),
     ];
-    let start = [proj(-0.5, -0.5), proj(0.5, -0.5), proj(0.5, 0.5), proj(-0.5, 0.5)];
+    let start = [
+        proj(-0.5, -0.5),
+        proj(0.5, -0.5),
+        proj(0.5, 0.5),
+        proj(-0.5, 0.5),
+    ];
     let mut out = [Offset::ZERO; 4];
     for i in 0..4 {
         out[i] = Offset::new(
@@ -162,10 +173,8 @@ fn scene(book: &mut Sketchbook, t: f32) {
         inner.circle(
             Offset::new(w * 0.5, h * 0.40),
             w * 0.30,
-            Gradient::radial_fill().with_stops(&[
-                (0.0, alpha(VIOLET, 0.10)),
-                (1.0, alpha(VIOLET, 0.0)),
-            ]),
+            Gradient::radial_fill()
+                .with_stops(&[(0.0, alpha(VIOLET, 0.10)), (1.0, alpha(VIOLET, 0.0))]),
         );
     });
 
@@ -194,7 +203,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
             tq.close();
             book.fill(tq, alpha(VIOLET, 0.05 * (1.0 - p)));
             book.stroke_rrect(
-                Rect::new(trail[0].dx - 2.0, trail[0].dy - 2.0, trail[1].dx + 2.0, trail[2].dy + 2.0),
+                Rect::new(
+                    trail[0].dx - 2.0,
+                    trail[0].dy - 2.0,
+                    trail[1].dx + 2.0,
+                    trail[2].dy + 2.0,
+                ),
                 10.0,
                 alpha(VIOLET_SOFT, 0.10 * (1.0 - p)),
                 1.6,
@@ -258,7 +272,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
         book.stroke_rrect(CARD, 16.0, alpha(VIOLET_SOFT, 0.5 * settle), 1.2);
         // A hairline top edge — the card's catch-light.
         book.rrect(
-            Rect::new(CARD.left + 1.0, CARD.top + 1.0, CARD.right - 1.0, CARD.top + 3.0),
+            Rect::new(
+                CARD.left + 1.0,
+                CARD.top + 1.0,
+                CARD.right - 1.0,
+                CARD.top + 3.0,
+            ),
             1.0,
             alpha(Color::WHITE, 0.10 * settle),
         );
@@ -281,7 +300,10 @@ fn scene(book: &mut Sketchbook, t: f32) {
             let y = y0 - dip * dip * 20.0;
             pts.push(Offset::new(x, y));
         }
-        let total: f32 = pts.windows(2).map(|q| (q[1].dx - q[0].dx).hypot(q[1].dy - q[0].dy)).sum();
+        let total: f32 = pts
+            .windows(2)
+            .map(|q| (q[1].dx - q[0].dx).hypot(q[1].dy - q[0].dy))
+            .sum();
         let mut path = Path::new();
         path.move_to(pts[0]);
         for q in &pts[1..] {
@@ -307,7 +329,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
                 crate::film_lib::MINT
             };
             let spring = spring_out(node_t, 12.0, 0.55);
-            book.ring(node, 5.0 + 12.0 * (1.0 - node_t), 1.3, alpha(color, (1.0 - node_t) * 0.5));
+            book.ring(
+                node,
+                5.0 + 12.0 * (1.0 - node_t),
+                1.3,
+                alpha(color, (1.0 - node_t) * 0.5),
+            );
             book.circle(node, 3.8 + 0.8 * (spring - 1.0), color);
         }
     }
@@ -315,10 +342,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
     // The vignette.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::radial(Offset::new(0.5, 0.5), 0.8).with_dither().with_stops(&[
-            (0.6, alpha(Color::BLACK, 0.0)),
-            (1.0, alpha(Color::BLACK, 0.42)),
-        ]),
+        Gradient::radial(Offset::new(0.5, 0.5), 0.8)
+            .with_dither()
+            .with_stops(&[
+                (0.6, alpha(Color::BLACK, 0.0)),
+                (1.0, alpha(Color::BLACK, 0.42)),
+            ]),
     );
 }
 
@@ -327,12 +356,10 @@ fn scene(book: &mut Sketchbook, t: f32) {
 /// Deterministic fps samples for the chart — synthetic, seeded, honest.
 fn fps_samples() -> Vec<f32> {
     let mut rng = Rng::new(0xF935);
-    (0..26)
-        .map(|_| 57.8 + rng.f01() * 3.4)
-        .collect()
+    (0..26).map(|_| 57.8 + rng.f01() * 3.4).collect()
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let asm_t = clamp01(t / 0.42);
 
     // Each piece's content blooms as its plane lands.
@@ -395,7 +422,11 @@ pub fn frame(t: f32) -> WidgetNode {
                             Text::new(format!("{:.1}", fps_v)).style(
                                 TextStyle::new(44.0)
                                     .monospace()
-                                    .weight(if fps_settled { FontWeight::Bold } else { FontWeight::Medium })
+                                    .weight(if fps_settled {
+                                        FontWeight::Bold
+                                    } else {
+                                        FontWeight::Medium
+                                    })
                                     .color(if fps_settled { INK } else { alpha(MUTED, 0.9) }),
                             ),
                         ),
@@ -416,7 +447,7 @@ pub fn frame(t: f32) -> WidgetNode {
                                     .color(alpha(FAINT, 0.9)),
                             ),
                         ),
-                    )
+                    ),
             )
             // The ms median — second stat.
             .push(
@@ -427,9 +458,8 @@ pub fn frame(t: f32) -> WidgetNode {
                     .height(40.0)
                     .child(
                         Opacity::new(body_bloom).child(
-                            Text::new(format!("{:.2}", ms_v)).style(
-                                TextStyle::new(30.0).monospace().color(alpha(INK, 0.85)),
-                            ),
+                            Text::new(format!("{:.2}", ms_v))
+                                .style(TextStyle::new(30.0).monospace().color(alpha(INK, 0.85))),
                         ),
                     ),
             )
@@ -458,9 +488,8 @@ pub fn frame(t: f32) -> WidgetNode {
                     .width(340.0)
                     .height(160.0)
                     .child(
-                        Opacity::new(body_bloom).child(
-                            LineChart::new(fps_samples()).label("fps · window"),
-                        ),
+                        Opacity::new(body_bloom)
+                            .child(LineChart::new(fps_samples()).label("fps · window")),
                     ),
             );
         let _ = stats_start;
@@ -489,12 +518,13 @@ pub fn frame(t: f32) -> WidgetNode {
                     .height(14.0)
                     .child(
                         Opacity::new(foot_bloom).child(
-                            Text::new(format!("fps median / cap = {:.3}", FPS_MEDIAN / FPS_CAP)).style(
-                                TextStyle::new(10.5)
-                                    .monospace()
-                                    .letter_spacing(1.5)
-                                    .color(alpha(FAINT, 0.8)),
-                            ),
+                            Text::new(format!("fps median / cap = {:.3}", FPS_MEDIAN / FPS_CAP))
+                                .style(
+                                    TextStyle::new(10.5)
+                                        .monospace()
+                                        .letter_spacing(1.5)
+                                        .color(alpha(FAINT, 0.8)),
+                                ),
                         ),
                     ),
             )
@@ -506,8 +536,10 @@ pub fn frame(t: f32) -> WidgetNode {
                     .height(30.0)
                     .child(
                         Opacity::new(foot_bloom).child(
-                            Badge::new(Icon::new(icons::check()).size(15.0).color(alpha(INK, 0.85)))
-                                .count(CI_RUNS as u32),
+                            Badge::new(
+                                Icon::new(icons::check()).size(15.0).color(alpha(INK, 0.85)),
+                            )
+                            .count(CI_RUNS as u32),
                         ),
                     ),
             );
@@ -524,7 +556,12 @@ pub fn frame(t: f32) -> WidgetNode {
             .child(
                 Opacity::new(cap_t).child(
                     Text::new("59.3 · 4.09 · Redmi Note 7 Pro — from CI artifacts")
-                        .style(TextStyle::new(12.5).monospace().letter_spacing(1.5).color(alpha(MUTED, 0.95)))
+                        .style(
+                            TextStyle::new(12.5)
+                                .monospace()
+                                .letter_spacing(1.5)
+                                .color(alpha(MUTED, 0.95)),
+                        )
                         .align(vieww_foundation::TextAlign::Center),
                 ),
             )

@@ -12,9 +12,9 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    BREAK_RED, Ctx, GROUND, MUTED, SYN_COMMENT, SYN_FUNCTION, SYN_KEYWORD, SYN_NUMBER, SYN_PUNCT,
-    SYN_TYPE, W, alpha, caption, clamp01, distance_chip, gap_line, grain, ground, pole_caret,
-    pole_screen, progress_rail, spring_out, tint, vignette, xywh,
+    alpha, caption, clamp01, distance_chip, gap_line, grain, ground, pole_caret, pole_screen,
+    progress_rail, spring_out, tint, vignette, xywh, Ctx, BREAK_RED, GROUND, MUTED, SYN_COMMENT,
+    SYN_FUNCTION, SYN_KEYWORD, SYN_NUMBER, SYN_PUNCT, SYN_TYPE, W,
 };
 use crate::film_lib::ease_out_cubic;
 
@@ -41,7 +41,7 @@ const TOWER_Y: f32 = 560.0;
 const SLAB_W: f32 = 320.0;
 const SLAB_H: f32 = 52.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -90,7 +90,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let slab_a = ease_out_cubic(clamp01(land_t * 1.4));
         let color = *color;
         let label = *label;
-        let judd_y = if land_t < 1.0 { 0.0 } else { (sec * 2.0 + i as f32).sin() * 0.6 };
+        let judd_y = if land_t < 1.0 {
+            0.0
+        } else {
+            (sec * 2.0 + i as f32).sin() * 0.6
+        };
 
         stack = stack.push(
             Positioned::new()
@@ -98,24 +102,27 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y + judd_y)
                 .width(SLAB_W)
                 .height(SLAB_H)
-                .child(
-                    super::Opacity::new(slab_a).child(Painting::sized(
-                        Size::new(SLAB_W, SLAB_H),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // The slab — a language bar: heavy body, top rim.
-                            book.rrect(xywh(0.0, 0.0, SLAB_W, SLAB_H), 8.0, alpha(GROUND, 0.92));
-                            book.stroke_rrect(xywh(0.0, 0.0, SLAB_W, SLAB_H), 8.0, alpha(color, 0.55), 1.6);
-                            book.rrect(xywh(1.0, 1.0, SLAB_W - 2.0, 3.0), 2.0, alpha(color, 0.30));
-                            // The tick — a toll paid.
-                            book.line(
-                                Offset::new(18.0, SLAB_H * 0.5),
-                                Offset::new(34.0, SLAB_H * 0.5),
-                                alpha(color, 0.85),
-                                2.6,
-                            );
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(slab_a).child(Painting::sized(
+                    Size::new(SLAB_W, SLAB_H),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The slab — a language bar: heavy body, top rim.
+                        book.rrect(xywh(0.0, 0.0, SLAB_W, SLAB_H), 8.0, alpha(GROUND, 0.92));
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, SLAB_W, SLAB_H),
+                            8.0,
+                            alpha(color, 0.55),
+                            1.6,
+                        );
+                        book.rrect(xywh(1.0, 1.0, SLAB_W - 2.0, 3.0), 2.0, alpha(color, 0.30));
+                        // The tick — a toll paid.
+                        book.line(
+                            Offset::new(18.0, SLAB_H * 0.5),
+                            Offset::new(34.0, SLAB_H * 0.5),
+                            alpha(color, 0.85),
+                            2.6,
+                        );
+                    }),
+                ))),
         );
         // The label.
         stack = stack.push(
@@ -148,15 +155,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(140.0)
                 .width(300.0)
                 .height(56.0)
-                .child(
-                    super::Opacity::new(toll_a).child(Painting::sized(
-                        Size::new(300.0, 56.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(0.0, 0.0, 300.0, 50.0), 9.0, alpha(super::SURFACE_2, 0.9));
-                            book.stroke_rrect(xywh(0.0, 0.0, 300.0, 50.0), 9.0, alpha(BREAK_RED, 0.30), 1.1);
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(toll_a).child(Painting::sized(
+                    Size::new(300.0, 56.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        book.rrect(
+                            xywh(0.0, 0.0, 300.0, 50.0),
+                            9.0,
+                            alpha(super::SURFACE_2, 0.9),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, 300.0, 50.0),
+                            9.0,
+                            alpha(BREAK_RED, 0.30),
+                            1.1,
+                        );
+                    }),
+                ))),
         );
         stack = stack.push(super::chrome(
             Positioned::new()
@@ -189,11 +203,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     ));
     let late = clamp01((t - 0.78) / 0.14);
     if late > 0.01 {
-        stack = stack.push(caption(
-            "nobody chose the tower. it accreted",
-            966.0,
-            late,
-        ));
+        stack = stack.push(caption("nobody chose the tower. it accreted", 966.0, late));
     }
 
     stack = stack.push(distance_chip(ctx.abs, clamp01(t / 0.1)));

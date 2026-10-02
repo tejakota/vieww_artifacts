@@ -13,8 +13,8 @@
 use vieww_foundation::{Color, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
-use super::{CANVAS, Ctx, MUTED, VIOLET, VIOLET_SOFT, W, alpha, caption, clamp01, dust, glow, grain, ground, mono_w, spark, tint, vignette, xywh};
-use crate::film_lib::{ease_out_cubic};
+use super::{alpha, caption, clamp01, mono_w, tint, xywh, Ctx, MUTED, VIOLET, VIOLET_SOFT, W};
+use crate::film_lib::ease_out_cubic;
 
 /// The question — typed, never pasted.
 const QUESTION: &str = "how far is a thought from a screen?";
@@ -22,7 +22,7 @@ const QUESTION: &str = "how far is a thought from a screen?";
 /// The caret's blink period, seconds (≈2.2 Hz — a terminal at rest).
 const BLINK_HZ: f32 = 2.2;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -56,22 +56,24 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             let swell = 0.05 + 0.045 * t + 0.02 * (sec * 0.8).sin();
             super::glow(book, 12.0, 32.0, 110.0 + 30.0 * t, VIOLET, swell);
             if on {
-                book.rrect(xywh(10.0, 6.0, 4.0, 52.0), 2.0, alpha(tint(VIOLET_SOFT, 0.4), 0.98));
+                book.rrect(
+                    xywh(10.0, 6.0, 4.0, 52.0),
+                    2.0,
+                    alpha(tint(VIOLET_SOFT, 0.4), 0.98),
+                );
                 book.rrect(xywh(10.5, 8.0, 3.0, 48.0), 1.5, alpha(Color::WHITE, 0.85));
             }
         }),
     );
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(room))
-        .push(
-            Positioned::new()
-                .left(W * 0.5 - 12.0)
-                .top(440.0)
-                .width(24.0)
-                .height(64.0)
-                .child(caret),
-        );
+    let mut stack = Stack::new().push(Positioned::fill().child(room)).push(
+        Positioned::new()
+            .left(W * 0.5 - 12.0)
+            .top(440.0)
+            .width(24.0)
+            .height(64.0)
+            .child(caret),
+    );
 
     // The question — types itself under the caret, mid-scene, in the
     // instrument voice; its own caret rides the type-on.

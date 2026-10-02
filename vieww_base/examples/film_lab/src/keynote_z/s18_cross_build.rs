@@ -11,17 +11,16 @@
 //! Witness taps 7 (the build view, 161.3 s) and 8 (the devices land,
 //! 166.8 s) fire here.
 
-use vieww_widget::prelude::*;
+use super::{caption, clamp01, studio_chrome, tap_ring_at, Ctx, MINT, SYN_TYPE};
 use vieww_widget::WidgetNode;
-use super::{caption, clamp01, studio_chrome, tap_ring_at, Ctx, SYN_TYPE, ACCENT, MINT};
 
 /// The script's moments, absolute film seconds.
 const TOOLCHAIN_T: f32 = 159.0;
 const EXPORT_T: f32 = 161.3;
 const DEVICES_T: f32 = 166.8;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
-    let t = ctx.t;
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
+    let _t = ctx.t;
     let abs = ctx.abs;
 
     let mut stack = studio_chrome(ctx);
@@ -42,7 +41,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 
     // The build's annotation — a tap ring at the Export view's moment
     // (the film's witness grammar, marking the build firing).
-    if abs >= EXPORT_T && abs < EXPORT_T + 1.0 {
+    if (EXPORT_T..EXPORT_T + 1.0).contains(&abs) {
         stack = stack.push(tap_ring_at(
             vieww_foundation::Offset::new(300.0, 300.0),
             (abs - EXPORT_T) * 0.9,

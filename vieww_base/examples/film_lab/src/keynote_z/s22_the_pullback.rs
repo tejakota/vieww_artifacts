@@ -13,18 +13,17 @@
 //! built on vieww** — an editor and a device-framed preview, riding one
 //! renderer, thirty-six crates down.
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{ease_in_out, ease_out_cubic};
 use super::{
-    ACCENT, CANVAS, CRATES, Ctx, FAINT, INK, MINT, MUTED, SYN_TYPE, VIOLET_SOFT, W, alpha,
-    caption, clamp01, glow, ground, mix, session_rail, spark, stars_parallax, tint,
-    vignette, xywh,
+    alpha, caption, clamp01, glow, ground, mix, session_rail, spark, stars_parallax, tint,
+    vignette, xywh, Ctx, ACCENT, CANVAS, CRATES, FAINT, INK, MINT, MUTED, SYN_TYPE, VIOLET_SOFT, W,
 };
+use crate::film_lib::ease_in_out;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let abs = ctx.abs;
@@ -87,13 +86,21 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         7.0,
                         alpha(mix(Color::rgb(0x16, 0x13, 0x11), ACCENT, 0.10), a * 0.9),
                     );
-                    book.stroke_rrect(xywh(x, y, cw - 10.0, hgt), 7.0, alpha(ACCENT, 0.14 + 0.06 * (i % 3) as f32 / 3.0 * a), 1.0);
+                    book.stroke_rrect(
+                        xywh(x, y, cw - 10.0, hgt),
+                        7.0,
+                        alpha(ACCENT, 0.14 + 0.06 * (i % 3) as f32 / 3.0 * a),
+                        1.0,
+                    );
                     // The crate's lit windows — tiny ticks.
                     for k in 0..3 {
                         book.rrect(
                             xywh(x + 8.0 + k as f32 * 14.0, y + 10.0, 6.0, 4.0),
                             1.5,
-                            alpha(tint(SYN_TYPE, 0.1), a * (0.4 + 0.3 * ((i + k) % 3) as f32 / 3.0)),
+                            alpha(
+                                tint(SYN_TYPE, 0.1),
+                                a * (0.4 + 0.3 * ((i + k) % 3) as f32 / 3.0),
+                            ),
                         );
                     }
                     let _ = name;
@@ -113,25 +120,44 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let w = studio_w.max(60.0);
                 let h = studio_h.max(40.0);
                 // The glass body.
-                book.rrect(xywh(0.0, 0.0, w, h), 14.0, alpha(Color::rgb(0x14, 0x12, 0x10), 0.97));
+                book.rrect(
+                    xywh(0.0, 0.0, w, h),
+                    14.0,
+                    alpha(Color::rgb(0x14, 0x12, 0x10), 0.97),
+                );
                 book.stroke_rrect(xywh(0.0, 0.0, w, h), 14.0, alpha(ACCENT, 0.4), 1.6);
                 // The title bar dots.
                 for (i, c) in [
                     Color::rgb(255, 95, 86),
                     Color::rgb(255, 189, 46),
                     Color::rgb(39, 201, 63),
-                ].iter().enumerate() {
-                    book.circle(Offset::new(18.0 + i as f32 * 16.0, 16.0), 4.0, alpha(*c, 0.8));
+                ]
+                .iter()
+                .enumerate()
+                {
+                    book.circle(
+                        Offset::new(18.0 + i as f32 * 16.0, 16.0),
+                        4.0,
+                        alpha(*c, 0.8),
+                    );
                 }
                 // The mark — the studio's own glyph.
                 let ms = (w * 0.03).max(10.0);
                 super::draw_mark(book, w * 0.5, h * 0.5 - h * 0.18, ms, VIOLET_SOFT, 0.9);
                 // The sidebar block.
-                book.rect(xywh(0.0, 30.0, w * 0.18, h - 30.0), alpha(Color::rgb(0x10, 0x0E, 0x0C), 0.9));
+                book.rect(
+                    xywh(0.0, 30.0, w * 0.18, h - 30.0),
+                    alpha(Color::rgb(0x10, 0x0E, 0x0C), 0.9),
+                );
                 // The editor's lines.
                 for l in 0..6 {
                     book.rrect(
-                        xywh(w * 0.22, 44.0 + l as f32 * (h * 0.075), w * 0.5 * (1.0 - l as f32 * 0.09), h * 0.03),
+                        xywh(
+                            w * 0.22,
+                            44.0 + l as f32 * (h * 0.075),
+                            w * 0.5 * (1.0 - l as f32 * 0.09),
+                            h * 0.03,
+                        ),
                         3.0,
                         alpha(Color::WHITE, 0.14),
                     );
@@ -141,13 +167,27 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let ph_h = ph_w * 1.9;
                 let ph_x = w - ph_w - w * 0.06;
                 let ph_y = h * 0.22;
-                book.rrect(xywh(ph_x, ph_y, ph_w, ph_h), 8.0, alpha(Color::rgb(0x0D, 0x0C, 0x0A), 1.0));
+                book.rrect(
+                    xywh(ph_x, ph_y, ph_w, ph_h),
+                    8.0,
+                    alpha(Color::rgb(0x0D, 0x0C, 0x0A), 1.0),
+                );
                 book.stroke_rrect(xywh(ph_x, ph_y, ph_w, ph_h), 8.0, alpha(ACCENT, 0.5), 1.4);
                 // The screen's light — the live demo, still alive in
                 // miniature.
-                glow(book, ph_x + ph_w * 0.5, ph_y + ph_h * 0.5, ph_w * 0.9, ACCENT, 0.5);
+                glow(
+                    book,
+                    ph_x + ph_w * 0.5,
+                    ph_y + ph_h * 0.5,
+                    ph_w * 0.9,
+                    ACCENT,
+                    0.5,
+                );
                 // The status bar.
-                book.rect(xywh(0.0, h - 8.0, w, 8.0), alpha(Color::rgb(0x18, 0x16, 0x14), 1.0));
+                book.rect(
+                    xywh(0.0, h - 8.0, w, 8.0),
+                    alpha(Color::rgb(0x18, 0x16, 0x14), 1.0),
+                );
             }),
         );
         stack = stack.push(
@@ -162,7 +202,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                glow(book, studio_x + studio_w * 0.5, studio_y + studio_h * 0.5, studio_w.max(60.0) * 0.9, ACCENT, 0.22);
+                glow(
+                    book,
+                    studio_x + studio_w * 0.5,
+                    studio_y + studio_h * 0.5,
+                    studio_w.max(60.0) * 0.9,
+                    ACCENT,
+                    0.22,
+                );
             }),
         )));
     }
@@ -226,7 +273,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         ));
     }
 
-    let _ = (FAINT, INK, MINT, MUTED, SYN_TYPE, Rect::new(0.0, 0.0, 1.0, 1.0), sec);
+    let _ = (
+        FAINT,
+        INK,
+        MINT,
+        MUTED,
+        SYN_TYPE,
+        Rect::new(0.0, 0.0, 1.0, 1.0),
+        sec,
+    );
 
     stack.into()
 }

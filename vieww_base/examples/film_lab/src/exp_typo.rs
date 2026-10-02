@@ -25,15 +25,15 @@ use std::sync::OnceLock;
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle, Transform};
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Opacity, Painting, PaintWith, Transformed};
+use vieww_widget::{Filtered, Opacity, PaintWith, Painting, Transformed};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, ease_out_cubic, mix, tint, FAINT, MUTED, VIOLET, VIOLET_SOFT,
-    CYAN, CYAN_SOFT, BG_DEEP,
+    alpha, clamp01, ease_in_out, ease_out_cubic, mix, tint, BG_DEEP, CYAN, CYAN_SOFT, FAINT, MUTED,
+    VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 8.0;
+pub(crate) const SECONDS: f32 = 8.0;
 
 /// The sentence — the film's own question.
 const LINE: &str = "how long should it take to see what you built?";
@@ -106,12 +106,14 @@ fn storm() -> &'static Storm {
 
         let n = LINE.len();
         let rates = (0..n).map(|i| 0.75 + hash01(i * 7 + 1) * 0.6).collect();
-        let phases = (0..n).map(|i| hash01(i * 13 + 5) * 6.28).collect();
+        let phases = (0..n)
+            .map(|i| hash01(i * 13 + 5) * std::f32::consts::TAU)
+            .collect();
 
         // Integrate each character (spaces too — they keep the rhythm).
         let base = Offset::new(640.0, 318.0);
         let mut tables = Vec::with_capacity(n);
-        for (i, s0) in starts.iter().enumerate() {
+        for s0 in starts.iter() {
             let p0 = Offset::new(base.dx + s0.dx, base.dy + s0.dy);
             let mut path = Vec::with_capacity(STEPS + 1);
             let mut p = p0;
@@ -166,14 +168,8 @@ fn letter_pos(idx: usize, t: f32) -> Offset {
     let centre = Offset::new(640.0, 300.0);
     let ang = idx as f32 * 2.39996 + t * 0.8;
     let r = (18.0 + (idx % 7) as f32 * 5.0) * (1.0 - c);
-    let target = Offset::new(
-        centre.dx + r * ang.cos(),
-        centre.dy + r * ang.sin() * 0.72,
-    );
-    Offset::new(
-        p.dx + (target.dx - p.dx) * c,
-        p.dy + (target.dy - p.dy) * c,
-    )
+    let target = Offset::new(centre.dx + r * ang.cos(), centre.dy + r * ang.sin() * 0.72);
+    Offset::new(p.dx + (target.dx - p.dx) * c, p.dy + (target.dy - p.dy) * c)
 }
 
 /// A letter's velocity (px per 0.02 t), from the same pure position.
@@ -188,18 +184,16 @@ fn letter_vel(idx: usize, t: f32) -> Offset {
 fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     let w = canvas.width;
     let h = canvas.height;
-    let s = storm();
+    let _s = storm();
 
     // The ground.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(9, 9, 14)),
-                (0.6, BG_DEEP),
-                (1.0, Color::rgb(5, 5, 9)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(9, 9, 14)),
+            (0.6, BG_DEEP),
+            (1.0, Color::rgb(5, 5, 9)),
+        ]),
     );
 
     // The wind, made faintly visible: streamlines of the same field the
@@ -208,7 +202,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
         let mut rng = crate::film_lib::Rng::new(0x799);
         let gust = clamp01((t - 0.12) * 1.8);
         let mut path = vieww_foundation::Path::new();
-        for i in 0..22 {
+        for _i in 0..22 {
             let mut p = Offset::new(rng.f01() * w, rng.f01() * h);
             path.move_to(p);
             for _ in 0..26 {
@@ -289,7 +283,7 @@ fn bucket_angle(bucket: usize) -> f32 {
 }
 
 /// The frame: the painting, then the letters — grouped by blur bucket.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let s = storm();
     let loose = clamp01((t - 0.12) / 0.18);
     let storm_g = clamp01((t - 0.28) / 0.42);
@@ -340,7 +334,11 @@ pub fn frame(t: f32) -> WidgetNode {
             alpha: a,
         });
     }
-    let mean_speed = if states.is_empty() { 0.0 } else { speeds / states.len() as f32 };
+    let mean_speed = if states.is_empty() {
+        0.0
+    } else {
+        speeds / states.len() as f32
+    };
     let blur_k = (mean_speed / 260.0).clamp(0.0, 1.0) * storm_g * (1.0 - c);
     let sigma = 1.0 + blur_k * 3.6;
 

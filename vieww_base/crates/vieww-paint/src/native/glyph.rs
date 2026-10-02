@@ -322,23 +322,6 @@ pub fn units_per_em(face_bytes: &[u8], face_index: u32) -> Option<f32> {
         .map(|face| f32::from(face.units_per_em()))
 }
 
-#[cfg(test)]
-mod door_tests {
-    use super::*;
-
-    /// todo-upgrades U-09's shadow, from the outline side: bytes that are not
-    /// a font must say so as `None`, never as a silent default. A placeholder
-    /// note where a `.ttf` should be is exactly the 241-byte file U-09
-    /// describes, and this is the failure it produced before anything
-    /// asserted on it.
-    #[test]
-    fn a_non_font_reports_none_rather_than_a_default() {
-        let not_a_font = b"this is a note standing where a ttf should be";
-        assert!(units_per_em(not_a_font, 0).is_none());
-        assert!(outline_glyph(not_a_font, 0, 1, &[]).is_none());
-    }
-}
-
 /// A glyph's outline, positioned and scaled into device space, ready for
 /// [`super::geometry::fill::rasterize`].
 #[must_use]
@@ -361,4 +344,21 @@ pub(crate) fn place_glyph(
     };
     let combined = base.then(transform);
     super::geometry::flatten::flatten_path(outline, combined)
+}
+
+#[cfg(test)]
+mod door_tests {
+    use super::*;
+
+    /// todo-upgrades U-09's shadow, from the outline side: bytes that are not
+    /// a font must say so as `None`, never as a silent default. A placeholder
+    /// note where a `.ttf` should be is exactly the 241-byte file U-09
+    /// describes, and this is the failure it produced before anything
+    /// asserted on it.
+    #[test]
+    fn a_non_font_reports_none_rather_than_a_default() {
+        let not_a_font = b"this is a note standing where a ttf should be";
+        assert!(units_per_em(not_a_font, 0).is_none());
+        assert!(outline_glyph(not_a_font, 0, 1, &[]).is_none());
+    }
 }

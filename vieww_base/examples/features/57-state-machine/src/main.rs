@@ -28,25 +28,25 @@ const SCHEDULE: &[(f32, &str)] = &[(0.5, "alert"), (1.7, "settle"), (2.7, "alert
 /// onto the resting scale). Transitions cross-fade, so the machine's own
 /// blending is part of the picture.
 fn machine() -> StateMachine<f32> {
-    let mut machine = StateMachine::new(
-        "rest",
-        Keyframes::new(0.0).with(Keyframe::to(0.4, 0.0)),
-    );
+    let mut machine = StateMachine::new("rest", Keyframes::new(0.0).with(Keyframe::to(0.4, 0.0)));
     machine.state(
         "pop",
         Keyframes::new(0.0)
             .with(Keyframe::to(0.18, 1.6))
             .with(Keyframe::to(0.55, 0.9)),
     );
-    machine.state_once(
-        "hold",
-        Keyframes::new(0.0).with(Keyframe::to(0.6, 0.55)),
-    );
+    machine.state_once("hold", Keyframes::new(0.0).with(Keyframe::to(0.6, 0.55)));
     // The guard is the event's name: "alert" pops, "settle" calms. The
     // `Duration` is the cross-fade, where both states keep playing.
-    machine.transition("rest", "pop", Duration::from_millis(120), |event| event == "alert");
-    machine.transition("pop", "hold", Duration::from_millis(250), |event| event == "settle");
-    machine.transition("hold", "pop", Duration::from_millis(250), |event| event == "alert");
+    machine.transition("rest", "pop", Duration::from_millis(120), |event| {
+        event == "alert"
+    });
+    machine.transition("pop", "hold", Duration::from_millis(250), |event| {
+        event == "settle"
+    });
+    machine.transition("hold", "pop", Duration::from_millis(250), |event| {
+        event == "alert"
+    });
     machine
 }
 
@@ -168,7 +168,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(Chip { pose, state, _clock: clock }),
+                .child(Chip {
+                    pose,
+                    state,
+                    _clock: clock,
+                }),
         );
     })
 }

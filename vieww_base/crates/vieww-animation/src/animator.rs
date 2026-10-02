@@ -80,7 +80,11 @@ impl Clip {
     #[must_use]
     pub fn sample(&self, t: f32) -> Channels {
         let len = self.length();
-        let t = if self.looping && len > 0.0 { t.rem_euclid(len) } else { t.min(len) };
+        let t = if self.looping && len > 0.0 {
+            t.rem_euclid(len)
+        } else {
+            t.min(len)
+        };
         self.tracks
             .iter()
             .map(|(k, v)| (k.clone(), v.at(Duration::from_secs_f32(t.max(0.0)))))
@@ -94,21 +98,29 @@ pub enum Motion {
     Clip(Clip),
     /// Children at thresholds of a float parameter, blended linearly between
     /// the two that bracket it — Unity's 1D blend tree.
-    Blend1D { parameter: String, children: Vec<(f32, Clip)> },
+    Blend1D {
+        parameter: String,
+        children: Vec<(f32, Clip)>,
+    },
 }
 
 impl Motion {
     fn length(&self) -> f32 {
         match self {
             Self::Clip(c) => c.length(),
-            Self::Blend1D { children, .. } => children.iter().map(|(_, c)| c.length()).fold(0.0, f32::max),
+            Self::Blend1D { children, .. } => {
+                children.iter().map(|(_, c)| c.length()).fold(0.0, f32::max)
+            }
         }
     }
 
     fn sample(&self, t: f32, params: &BTreeMap<String, Param>) -> Channels {
         match self {
             Self::Clip(c) => c.sample(t),
-            Self::Blend1D { parameter, children } => {
+            Self::Blend1D {
+                parameter,
+                children,
+            } => {
                 let x = params.get(parameter).map_or(0.0, Param::as_f32);
                 let mut sorted: Vec<&(f32, Clip)> = children.iter().collect();
                 sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -116,9 +128,15 @@ impl Motion {
                     0 => Channels::new(),
                     1 => sorted[0].1.sample(t),
                     _ => {
-                        let i = sorted.partition_point(|c| c.0 <= x).clamp(1, sorted.len() - 1);
+                        let i = sorted
+                            .partition_point(|c| c.0 <= x)
+                            .clamp(1, sorted.len() - 1);
                         let (lo, hi) = (sorted[i - 1], sorted[i]);
-                        let w = if hi.0 > lo.0 { ((x - lo.0) / (hi.0 - lo.0)).clamp(0.0, 1.0) } else { 0.0 };
+                        let w = if hi.0 > lo.0 {
+                            ((x - lo.0) / (hi.0 - lo.0)).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
                         mix(&lo.1.sample(t), &hi.1.sample(t), w)
                     }
                 }
@@ -362,7 +380,9 @@ impl Layer {
     }
 
     fn sample_state(&self, name: &str, t: f32, params: &BTreeMap<String, Param>) -> Channels {
-        self.states.get(name).map_or_else(Channels::new, |m| m.sample(t, params))
+        self.states
+            .get(name)
+            .map_or_else(Channels::new, |m| m.sample(t, params))
     }
 
     fn output(&self, params: &BTreeMap<String, Param>) -> Channels {
@@ -374,7 +394,11 @@ impl Layer {
                     FadeSource::State { name, time } => self.sample_state(name, *time, params),
                     FadeSource::Frozen(c) => c.clone(),
                 };
-                let w = if f.duration > 0.0 { (f.elapsed / f.duration).clamp(0.0, 1.0) } else { 1.0 };
+                let w = if f.duration > 0.0 {
+                    (f.elapsed / f.duration).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
                 mix(&from, &target, w)
             }
         }
@@ -389,7 +413,13 @@ impl Layer {
         }
     }
 
-    fn advance(&mut self, dt: f32, index: usize, params: &mut BTreeMap<String, Param>, events: &mut Vec<AnimatorEvent>) {
+    fn advance(
+        &mut self,
+        dt: f32,
+        index: usize,
+        params: &mut BTreeMap<String, Param>,
+        events: &mut Vec<AnimatorEvent>,
+    ) {
         self.time += dt;
         if let Some(f) = &mut self.fade {
             f.elapsed += dt;
@@ -407,7 +437,11 @@ impl Layer {
             .transitions
             .iter()
             .filter(|t| t.from.is_none())
-            .chain(self.transitions.iter().filter(|t| t.from.as_deref() == Some(self.current.as_str())))
+            .chain(
+                self.transitions
+                    .iter()
+                    .filter(|t| t.from.as_deref() == Some(self.current.as_str())),
+            )
             .find(|t| {
                 (t.from.is_some() || t.to_self || t.to != self.current)
                     && t.exit_time.is_none_or(|e| normalized >= e)
@@ -540,7 +574,9 @@ impl Animator {
                 let base = out.get(&k).copied().unwrap_or(0.0);
                 let next = match layer.mode {
                     LayerMode::Override => base + (v - base) * layer.weight,
-                    LayerMode::Additive => base + (v - reference.get(&k).copied().unwrap_or(0.0)) * layer.weight,
+                    LayerMode::Additive => {
+                        base + (v - reference.get(&k).copied().unwrap_or(0.0)) * layer.weight
+                    }
                 };
                 out.insert(k, next);
             }
@@ -568,7 +604,10 @@ impl Animator {
             })
             .collect::<Vec<_>>();
         let layers = self.layers.iter().map(layer_to_json).collect::<Vec<_>>();
-        Json::object([("params", Json::Object(params)), ("layers", Json::Array(layers))])
+        Json::object([
+            ("params", Json::Object(params)),
+            ("layers", Json::Array(layers)),
+        ])
     }
 
     /// Rebuild from [`to_json`](Self::to_json)'s format.
@@ -595,7 +634,11 @@ impl Animator {
                 animator.params.insert(name.clone(), p);
             }
         }
-        for l in doc.get("layers").and_then(Json::as_array).ok_or("missing layers")? {
+        for l in doc
+            .get("layers")
+            .and_then(Json::as_array)
+            .ok_or("missing layers")?
+        {
             animator.layers.push(layer_from_json(l)?);
         }
         Ok(animator)
@@ -619,13 +662,19 @@ const CURVES: &[(&str, Curve)] = &[
 /// The name a curve is saved under, if it is one of the named ones.
 #[must_use]
 pub fn curve_name(c: Curve) -> &'static str {
-    CURVES.iter().find(|(_, k)| *k == c).map_or("linear", |(n, _)| n)
+    CURVES
+        .iter()
+        .find(|(_, k)| *k == c)
+        .map_or("linear", |(n, _)| n)
 }
 
 /// A named curve; `linear` for unknown names.
 #[must_use]
 pub fn curve_named(name: &str) -> Curve {
-    CURVES.iter().find(|(n, _)| *n == name).map_or(Curve::Linear, |(_, c)| *c)
+    CURVES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map_or(Curve::Linear, |(_, c)| *c)
 }
 
 fn clip_to_json(c: &Clip) -> Json {
@@ -648,13 +697,20 @@ fn clip_to_json(c: &Clip) -> Json {
             (k.clone(), Json::Array(list))
         })
         .collect::<Vec<_>>();
-    Json::object([("loop", Json::Bool(c.looping)), ("tracks", Json::Object(tracks))])
+    Json::object([
+        ("loop", Json::Bool(c.looping)),
+        ("tracks", Json::Object(tracks)),
+    ])
 }
 
 fn clip_from_json(j: &Json) -> Result<Clip, String> {
     let mut clip = Clip::new();
     clip.looping = j.get("loop").and_then(Json::as_bool).unwrap_or(false);
-    for (name, list) in j.get("tracks").and_then(Json::as_object).ok_or("clip without tracks")? {
+    for (name, list) in j
+        .get("tracks")
+        .and_then(Json::as_object)
+        .ok_or("clip without tracks")?
+    {
         let frames = list.as_array().ok_or("track is not an array")?;
         let mut track: Option<Keyframes<f32>> = None;
         for f in frames {
@@ -662,14 +718,19 @@ fn clip_from_json(j: &Json) -> Result<Clip, String> {
             let value = f.index(1).and_then(Json::as_f32).ok_or("keyframe value")?;
             let curve = curve_named(f.index(2).and_then(Json::as_str).unwrap_or("linear"));
             let hold = f.index(3).and_then(Json::as_bool).unwrap_or(false);
-            let key = if hold { Keyframe::hold(time, value) } else { Keyframe::to(time, value).curve(curve) };
+            let key = if hold {
+                Keyframe::hold(time, value)
+            } else {
+                Keyframe::to(time, value).curve(curve)
+            };
             track = Some(match track {
                 None if time == 0.0 => Keyframes::new(value),
                 None => Keyframes::new(value).with(key),
                 Some(t) => t.with(key),
             });
         }
-        clip.tracks.insert(name.clone(), track.ok_or("empty track")?);
+        clip.tracks
+            .insert(name.clone(), track.ok_or("empty track")?);
     }
     Ok(clip)
 }
@@ -677,14 +738,19 @@ fn clip_from_json(j: &Json) -> Result<Clip, String> {
 fn motion_to_json(m: &Motion) -> Json {
     match m {
         Motion::Clip(c) => Json::object([("clip", clip_to_json(c))]),
-        Motion::Blend1D { parameter, children } => Json::object([
+        Motion::Blend1D {
+            parameter,
+            children,
+        } => Json::object([
             ("blend1d", Json::from(parameter.as_str())),
             (
                 "children",
                 Json::Array(
                     children
                         .iter()
-                        .map(|(t, c)| Json::object([("threshold", Json::from(*t)), ("clip", clip_to_json(c))]))
+                        .map(|(t, c)| {
+                            Json::object([("threshold", Json::from(*t)), ("clip", clip_to_json(c))])
+                        })
                         .collect(),
                 ),
             ),
@@ -696,15 +762,28 @@ fn motion_from_json(j: &Json) -> Result<Motion, String> {
     if let Some(c) = j.get("clip") {
         return Ok(Motion::Clip(clip_from_json(c)?));
     }
-    let parameter = j.get("blend1d").and_then(Json::as_str).ok_or("unknown motion")?.to_owned();
+    let parameter = j
+        .get("blend1d")
+        .and_then(Json::as_str)
+        .ok_or("unknown motion")?
+        .to_owned();
     let mut children = Vec::new();
-    for c in j.get("children").and_then(Json::as_array).ok_or("blend without children")? {
+    for c in j
+        .get("children")
+        .and_then(Json::as_array)
+        .ok_or("blend without children")?
+    {
         children.push((
-            c.get("threshold").and_then(Json::as_f32).ok_or("threshold")?,
+            c.get("threshold")
+                .and_then(Json::as_f32)
+                .ok_or("threshold")?,
             clip_from_json(c.get("clip").ok_or("child clip")?)?,
         ));
     }
-    Ok(Motion::Blend1D { parameter, children })
+    Ok(Motion::Blend1D {
+        parameter,
+        children,
+    })
 }
 
 fn condition_to_json(c: &Condition) -> Json {
@@ -723,8 +802,16 @@ fn condition_to_json(c: &Condition) -> Json {
 #[allow(clippy::cast_possible_truncation)]
 fn condition_from_json(j: &Json) -> Result<Condition, String> {
     let op = j.index(0).and_then(Json::as_str).ok_or("condition op")?;
-    let n = j.index(1).and_then(Json::as_str).ok_or("condition param")?.to_owned();
-    let f = || j.index(2).and_then(Json::as_f64).ok_or_else(|| format!("{op} needs a value"));
+    let n = j
+        .index(1)
+        .and_then(Json::as_str)
+        .ok_or("condition param")?
+        .to_owned();
+    let f = || {
+        j.index(2)
+            .and_then(Json::as_f64)
+            .ok_or_else(|| format!("{op} needs a value"))
+    };
     Ok(match op {
         "greater" => Condition::Greater(n, f()? as f32),
         "less" => Condition::Less(n, f()? as f32),
@@ -751,7 +838,10 @@ fn layer_to_json(l: &Layer) -> Json {
                 ("from", t.from.as_deref().map_or(Json::Null, Json::from)),
                 ("to", Json::from(t.to.as_str())),
                 ("duration", Json::from(t.duration)),
-                ("conditions", Json::Array(t.conditions.iter().map(condition_to_json).collect())),
+                (
+                    "conditions",
+                    Json::Array(t.conditions.iter().map(condition_to_json).collect()),
+                ),
             ];
             if let Some(e) = t.exit_time {
                 fields.push(("exit_time", Json::from(e)));
@@ -777,15 +867,24 @@ fn layer_to_json(l: &Layer) -> Json {
         ("transitions", Json::Array(transitions)),
     ];
     if let Some(m) = &l.mask {
-        fields.push(("mask", Json::Array(m.iter().map(|s| Json::from(s.as_str())).collect())));
+        fields.push((
+            "mask",
+            Json::Array(m.iter().map(|s| Json::from(s.as_str())).collect()),
+        ));
     }
     Json::object(fields)
 }
 
 fn layer_from_json(j: &Json) -> Result<Layer, String> {
     let name = j.get("name").and_then(Json::as_str).unwrap_or("layer");
-    let default = j.get("default").and_then(Json::as_str).ok_or("layer default")?;
-    let states = j.get("states").and_then(Json::as_object).ok_or("layer states")?;
+    let default = j
+        .get("default")
+        .and_then(Json::as_str)
+        .ok_or("layer default")?;
+    let states = j
+        .get("states")
+        .and_then(Json::as_object)
+        .ok_or("layer states")?;
     let (_, first) = states
         .iter()
         .find(|(k, _)| k == default)
@@ -799,10 +898,11 @@ fn layer_from_json(j: &Json) -> Result<Layer, String> {
         Some("additive") => LayerMode::Additive,
         _ => LayerMode::Override,
     };
-    layer.mask = j
-        .get("mask")
-        .and_then(Json::as_array)
-        .map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_owned)).collect());
+    layer.mask = j.get("mask").and_then(Json::as_array).map(|a| {
+        a.iter()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect()
+    });
     for t in j.get("transitions").and_then(Json::as_array).unwrap_or(&[]) {
         let to = t.get("to").and_then(Json::as_str).ok_or("transition to")?;
         let duration = t.get("duration").and_then(Json::as_f32).unwrap_or(0.0);
@@ -859,9 +959,16 @@ mod tests {
                     },
                 )
                 .state("jump", Motion::Clip(ramp("body.y", 0.0, 50.0, 0.5)))
-                .transition(Transition::new("idle", "move", 0.0).when(Condition::Greater("speed".into(), 0.1)))
-                .transition(Transition::new("move", "idle", 0.0).when(Condition::Less("speed".into(), 0.1)))
-                .transition(Transition::from_any("jump", 0.0).when(Condition::Trigger("jump".into())))
+                .transition(
+                    Transition::new("idle", "move", 0.0)
+                        .when(Condition::Greater("speed".into(), 0.1)),
+                )
+                .transition(
+                    Transition::new("move", "idle", 0.0).when(Condition::Less("speed".into(), 0.1)),
+                )
+                .transition(
+                    Transition::from_any("jump", 0.0).when(Condition::Trigger("jump".into())),
+                )
                 .transition(Transition::new("jump", "idle", 0.0).exit_time(1.0)),
             )
     }
@@ -876,11 +983,20 @@ mod tests {
         assert_eq!(
             ev,
             vec![
-                AnimatorEvent::Exit { layer: 0, state: "idle".into() },
-                AnimatorEvent::Enter { layer: 0, state: "move".into() }
+                AnimatorEvent::Exit {
+                    layer: 0,
+                    state: "idle".into()
+                },
+                AnimatorEvent::Enter {
+                    layer: 0,
+                    state: "move".into()
+                }
             ]
         );
-        assert!(close(a.output()["legs.swing"], 20.0), "halfway between 10 and 30");
+        assert!(
+            close(a.output()["legs.swing"], 20.0),
+            "halfway between 10 and 30"
+        );
     }
 
     #[test]
@@ -926,7 +1042,10 @@ mod tests {
         a.set_int("s", 2);
         a.advance(0.0001);
         let after = a.output()["x"];
-        assert!((after - mid).abs() < 1.0, "interruption starts from the frozen blend: {mid} → {after}");
+        assert!(
+            (after - mid).abs() < 1.0,
+            "interruption starts from the frozen blend: {mid} → {after}"
+        );
         a.advance(1.0);
         assert!(close(a.output()["x"], -100.0));
     }
@@ -938,9 +1057,13 @@ mod tests {
             "walk",
             Motion::Clip(constant("arm.r", 10.0).track("leg.r", Keyframes::new(5.0))),
         );
-        let upper = Layer::new("upper", "wave", Motion::Clip(constant("arm.r", 90.0).track("leg.r", Keyframes::new(99.0))))
-            .mask(&["arm."])
-            .weight(0.5);
+        let upper = Layer::new(
+            "upper",
+            "wave",
+            Motion::Clip(constant("arm.r", 90.0).track("leg.r", Keyframes::new(99.0))),
+        )
+        .mask(&["arm."])
+        .weight(0.5);
         let breathe = Layer::new("add", "b", Motion::Clip(ramp("arm.r", 0.0, 4.0, 1.0)))
             .mode(LayerMode::Additive);
         let mut a = Animator::new().layer(base).layer(upper).layer(breathe);

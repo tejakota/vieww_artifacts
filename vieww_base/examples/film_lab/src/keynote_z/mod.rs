@@ -50,56 +50,56 @@
 //! cargo run --release -p film_lab -- kz:spark    # one scene, 16 frames
 //! ```
 
-pub mod master;
-pub mod script;
-pub mod s01_the_blank;
-pub mod s02_the_wait;
-pub mod s03_the_break;
-pub mod s04_the_spark;
-pub mod s05_the_descent;
-pub mod s06_the_crates;
-pub mod s07_the_signal;
-pub mod s08_the_rasterizer;
-pub mod s09_the_damage;
-pub mod s10_the_cadence;
-pub mod s11_studio_opens;
-pub mod s12_first_paint;
-pub mod s13_live_compose;
-pub mod s14_the_tap;
-pub mod s15_say_to_rust;
-pub mod s16_the_screens;
-pub mod s17_the_tokens;
-pub mod s18_cross_build;
-pub mod s19_devtools_mirror;
-pub mod s20_the_apps;
-pub mod s21_the_ledger;
-pub mod s22_the_pullback;
-pub mod s23_the_endcard;
-pub mod s24_the_loop;
+pub(crate) mod master;
+pub(crate) mod s01_the_blank;
+pub(crate) mod s02_the_wait;
+pub(crate) mod s03_the_break;
+pub(crate) mod s04_the_spark;
+pub(crate) mod s05_the_descent;
+pub(crate) mod s06_the_crates;
+pub(crate) mod s07_the_signal;
+pub(crate) mod s08_the_rasterizer;
+pub(crate) mod s09_the_damage;
+pub(crate) mod s10_the_cadence;
+pub(crate) mod s11_studio_opens;
+pub(crate) mod s12_first_paint;
+pub(crate) mod s13_live_compose;
+pub(crate) mod s14_the_tap;
+pub(crate) mod s15_say_to_rust;
+pub(crate) mod s16_the_screens;
+pub(crate) mod s17_the_tokens;
+pub(crate) mod s18_cross_build;
+pub(crate) mod s19_devtools_mirror;
+pub(crate) mod s20_the_apps;
+pub(crate) mod s21_the_ledger;
+pub(crate) mod s22_the_pullback;
+pub(crate) mod s23_the_endcard;
+pub(crate) mod s24_the_loop;
+pub(crate) mod script;
 
-pub use vieww_foundation::{
-    Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,
+pub(crate) use vieww_foundation::{
+    Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,
 };
-pub use vieww_widget::prelude::*;
-pub use vieww_widget::{Opacity, Painting, PaintWith};
+pub(crate) use vieww_widget::prelude::*;
+pub(crate) use vieww_widget::{Opacity, PaintWith, Painting};
 
-pub use crate::film_lib::{ease_out_cubic, Rng};
+pub(crate) use crate::film_lib::{ease_out_cubic, Rng};
 
 /// The studio's Teal accent ramp (the token editor's other face) —
 /// quoted from `apps/viewwstudio/src/theme.rs`'s TEAL.
-pub const TEAL_SWATCH: Color = Color::rgb(0x0E, 0x81, 0x74);
-pub const TEAL_SWATCH_2: Color = Color::rgb(0x2F, 0xBF, 0xAE);
+pub(crate) const TEAL_SWATCH: Color = Color::rgb(0x0E, 0x81, 0x74);
+pub(crate) const TEAL_SWATCH_2: Color = Color::rgb(0x2F, 0xBF, 0xAE);
 
 // ── The master format ───────────────────────────────────────────────────────
 
 /// Master width, px — 1080p.
-pub const W: f32 = 1920.0;
+pub(crate) const W: f32 = 1920.0;
 /// Master height, px.
-pub const H: f32 = 1080.0;
+pub(crate) const H: f32 = 1080.0;
 /// The master canvas.
-pub const CANVAS: Size = Size::new(W, H);
+pub(crate) const CANVAS: Size = Size::new(W, H);
 /// Master cadence — the product's own.
-pub const FPS: f32 = 60.0;
+pub(crate) const FPS: f32 = 60.0;
 
 // ── The palette — the viewwsite's own, verbatim ─────────────────────────────
 //
@@ -110,69 +110,69 @@ pub const FPS: f32 = 60.0;
 // scenes read the same; the values are the brand's.
 
 /// The page's ground — warm near-black. The film's BG.
-pub const GROUND: Color = Color::rgb(0x0F, 0x0D, 0x0B);
+pub(crate) const GROUND: Color = Color::rgb(0x0F, 0x0D, 0x0B);
 /// Deeper than the ground — the floor of the frame.
-pub const BG_DEEP: Color = Color::rgb(0x0A, 0x09, 0x08);
+pub(crate) const BG_DEEP: Color = Color::rgb(0x0A, 0x09, 0x08);
 /// The site's raised panel.
-pub const SURFACE: Color = Color::rgb(0x1B, 0x17, 0x15);
+pub(crate) const SURFACE: Color = Color::rgb(0x1B, 0x17, 0x15);
 /// The site's second raise.
-pub const SURFACE_2: Color = Color::rgb(0x2B, 0x25, 0x21);
+pub(crate) const SURFACE_2: Color = Color::rgb(0x2B, 0x25, 0x21);
 /// The site's hairline.
-pub const LINE: Color = Color::rgb(0x2A, 0x28, 0x26);
+pub(crate) const LINE: Color = Color::rgb(0x2A, 0x28, 0x26);
 /// The site's ink — warm off-white.
-pub const INK: Color = Color::rgb(0xF8, 0xF4, 0xF2);
+pub(crate) const INK: Color = Color::rgb(0xF8, 0xF4, 0xF2);
 /// The site's second ink.
-pub const MUTED: Color = Color::rgb(0xA6, 0x9C, 0x95);
+pub(crate) const MUTED: Color = Color::rgb(0xA6, 0x9C, 0x95);
 /// The site's third ink.
-pub const FAINT: Color = Color::rgb(0x78, 0x71, 0x6C);
+pub(crate) const FAINT: Color = Color::rgb(0x78, 0x71, 0x6C);
 
 /// The brand accent (the site's ACCENT, the studio's dark_far).
-pub const ACCENT: Color = Color::rgb(0xB4, 0x91, 0xFF);
+pub(crate) const ACCENT: Color = Color::rgb(0xB4, 0x91, 0xFF);
 /// The brand accent's deep end (the site's ACCENT_DEEP, the studio's
 /// dark_near).
-pub const ACCENT_DEEP: Color = Color::rgb(0x7E, 0x5C, 0xE8);
+pub(crate) const ACCENT_DEEP: Color = Color::rgb(0x7E, 0x5C, 0xE8);
 /// The site's violet wash.
-pub const WASH: Color = Color::rgb(0x22, 0x1C, 0x33);
+pub(crate) const WASH: Color = Color::rgb(0x22, 0x1C, 0x33);
 
 /// The site's syntax ramp — the film's engine/technical register.
-pub const SYN_KEYWORD: Color = Color::rgb(0xEF, 0xA3, 0xFF);
-pub const SYN_TYPE: Color = Color::rgb(0x48, 0xD7, 0xFE);
-pub const SYN_STRING: Color = Color::rgb(0x59, 0xD3, 0x8C);
-pub const SYN_NUMBER: Color = Color::rgb(0xFF, 0x8F, 0x9A);
-pub const SYN_COMMENT: Color = Color::rgb(0x85, 0x7F, 0x7A);
-pub const SYN_MACRO: Color = Color::rgb(0xFE, 0xB2, 0x63);
-pub const SYN_FUNCTION: Color = Color::rgb(0xFF, 0xBB, 0x6D);
-pub const SYN_PUNCT: Color = Color::rgb(0xA3, 0x9D, 0x98);
+pub(crate) const SYN_KEYWORD: Color = Color::rgb(0xEF, 0xA3, 0xFF);
+pub(crate) const SYN_TYPE: Color = Color::rgb(0x48, 0xD7, 0xFE);
+pub(crate) const SYN_STRING: Color = Color::rgb(0x59, 0xD3, 0x8C);
+pub(crate) const SYN_NUMBER: Color = Color::rgb(0xFF, 0x8F, 0x9A);
+pub(crate) const SYN_COMMENT: Color = Color::rgb(0x85, 0x7F, 0x7A);
+pub(crate) const SYN_MACRO: Color = Color::rgb(0xFE, 0xB2, 0x63);
+pub(crate) const SYN_FUNCTION: Color = Color::rgb(0xFF, 0xBB, 0x6D);
+pub(crate) const SYN_PUNCT: Color = Color::rgb(0xA3, 0x9D, 0x98);
 
 // The house grammar's aliases — same names the helpers grew up with,
 // the brand's values.
-pub const VIOLET: Color = ACCENT;
-pub const VIOLET_SOFT: Color = Color::rgb(0xC7, 0xAF, 0xFF);
-pub const VIOLET_DEEP: Color = ACCENT_DEEP;
-pub const CYAN: Color = SYN_TYPE;
-pub const CYAN_SOFT: Color = Color::rgb(0x8F, 0xE7, 0xFE);
-pub const MINT: Color = SYN_STRING;
-pub const AMBER: Color = SYN_FUNCTION;
-pub const RED: Color = SYN_NUMBER;
-pub const MAGENTA: Color = SYN_KEYWORD;
+pub(crate) const VIOLET: Color = ACCENT;
+pub(crate) const VIOLET_SOFT: Color = Color::rgb(0xC7, 0xAF, 0xFF);
+pub(crate) const VIOLET_DEEP: Color = ACCENT_DEEP;
+pub(crate) const CYAN: Color = SYN_TYPE;
+pub(crate) const CYAN_SOFT: Color = Color::rgb(0x8F, 0xE7, 0xFE);
+pub(crate) const MINT: Color = SYN_STRING;
+pub(crate) const AMBER: Color = SYN_FUNCTION;
+pub(crate) const RED: Color = SYN_NUMBER;
+pub(crate) const MAGENTA: Color = SYN_KEYWORD;
 
 /// The damage/danger accent (act I's register).
-pub const C_DAMAGE: Color = RED;
+pub(crate) const C_DAMAGE: Color = RED;
 /// Act I's terminal green — the *old world's* promise color (not the
 /// brand's: the old world gets its own palette, and it is not ours).
-pub const TERM_GREEN: Color = Color::rgb(63, 185, 80);
+pub(crate) const TERM_GREEN: Color = Color::rgb(63, 185, 80);
 /// Act II's engine register.
-pub const ENGINE: Color = CYAN;
+pub(crate) const ENGINE: Color = CYAN;
 /// The receipts' green (act IV's ledger).
-pub const LEDGER: Color = MINT;
+pub(crate) const LEDGER: Color = MINT;
 /// The spark's own color — the light that never leaves.
-pub const SPARK_C: Color = ACCENT;
+pub(crate) const SPARK_C: Color = ACCENT;
 
 // ── The scene registry ──────────────────────────────────────────────────────
 
 /// How a scene renders.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
+pub(crate) enum Kind {
     /// A pure widget tree — a function of the frame's ctx (the film's
     /// own graphics).
     Pure,
@@ -186,7 +186,7 @@ pub enum Kind {
 /// What a scene may read: its own clock, the film clock, the ladder, and
 /// the census pass's measured numbers (zeros in pass 1 — a scene must
 /// render sanely without them; only the numbers' *display* differs).
-pub struct Ctx<'a> {
+pub(crate) struct Ctx<'a> {
     /// `t` in `[0, 1)` within the scene.
     pub t: f32,
     /// Seconds into the scene (`t * seconds`).
@@ -200,7 +200,7 @@ pub struct Ctx<'a> {
 }
 
 /// One scene in the film.
-pub struct SceneDef {
+pub(crate) struct SceneDef {
     /// "S01" — the scene id.
     pub id: &'static str,
     /// "the_blank" — the scene name.
@@ -218,57 +218,201 @@ pub struct SceneDef {
 
 impl SceneDef {
     /// Frames this scene emits at master cadence — derived, never typed.
-    pub fn frames(&self) -> usize {
+    pub(crate) fn frames(&self) -> usize {
         (self.seconds * FPS).round() as usize
     }
 }
 
 /// The twenty-four scenes, in cut order.
-pub fn scenes() -> Vec<SceneDef> {
+pub(crate) fn scenes() -> Vec<SceneDef> {
     vec![
         // ── Act I · THE SPARK ────────────────────────────────────────────
-        SceneDef { id: "S01", name: "the_blank", seconds: 9.0, kind: Kind::Pure, build: s01_the_blank::build },
-        SceneDef { id: "S02", name: "the_wait", seconds: 10.0, kind: Kind::Pure, build: s02_the_wait::build },
-        SceneDef { id: "S03", name: "the_break", seconds: 7.0, kind: Kind::Pure, build: s03_the_break::build },
-        SceneDef { id: "S04", name: "the_spark", seconds: 11.0, kind: Kind::Pure, build: s04_the_spark::build },
+        SceneDef {
+            id: "S01",
+            name: "the_blank",
+            seconds: 9.0,
+            kind: Kind::Pure,
+            build: s01_the_blank::build,
+        },
+        SceneDef {
+            id: "S02",
+            name: "the_wait",
+            seconds: 10.0,
+            kind: Kind::Pure,
+            build: s02_the_wait::build,
+        },
+        SceneDef {
+            id: "S03",
+            name: "the_break",
+            seconds: 7.0,
+            kind: Kind::Pure,
+            build: s03_the_break::build,
+        },
+        SceneDef {
+            id: "S04",
+            name: "the_spark",
+            seconds: 11.0,
+            kind: Kind::Pure,
+            build: s04_the_spark::build,
+        },
         // ── Act II · THE MACHINE ─────────────────────────────────────────
-        SceneDef { id: "S05", name: "the_descent", seconds: 8.0, kind: Kind::Pure, build: s05_the_descent::build },
-        SceneDef { id: "S06", name: "the_crates", seconds: 10.0, kind: Kind::Pure, build: s06_the_crates::build },
-        SceneDef { id: "S07", name: "the_signal", seconds: 9.0, kind: Kind::Pure, build: s07_the_signal::build },
-        SceneDef { id: "S08", name: "the_rasterizer", seconds: 11.0, kind: Kind::Pure, build: s08_the_rasterizer::build },
-        SceneDef { id: "S09", name: "the_damage", seconds: 8.0, kind: Kind::Pure, build: s09_the_damage::build },
-        SceneDef { id: "S10", name: "the_cadence", seconds: 6.0, kind: Kind::Pure, build: s10_the_cadence::build },
+        SceneDef {
+            id: "S05",
+            name: "the_descent",
+            seconds: 8.0,
+            kind: Kind::Pure,
+            build: s05_the_descent::build,
+        },
+        SceneDef {
+            id: "S06",
+            name: "the_crates",
+            seconds: 10.0,
+            kind: Kind::Pure,
+            build: s06_the_crates::build,
+        },
+        SceneDef {
+            id: "S07",
+            name: "the_signal",
+            seconds: 9.0,
+            kind: Kind::Pure,
+            build: s07_the_signal::build,
+        },
+        SceneDef {
+            id: "S08",
+            name: "the_rasterizer",
+            seconds: 11.0,
+            kind: Kind::Pure,
+            build: s08_the_rasterizer::build,
+        },
+        SceneDef {
+            id: "S09",
+            name: "the_damage",
+            seconds: 8.0,
+            kind: Kind::Pure,
+            build: s09_the_damage::build,
+        },
+        SceneDef {
+            id: "S10",
+            name: "the_cadence",
+            seconds: 6.0,
+            kind: Kind::Pure,
+            build: s10_the_cadence::build,
+        },
         // ── Act III · THE STUDIO — the real app, driven by the script ────
-        SceneDef { id: "S11", name: "studio_opens", seconds: 8.0, kind: Kind::Studio, build: s11_studio_opens::build },
-        SceneDef { id: "S12", name: "first_paint", seconds: 12.0, kind: Kind::Studio, build: s12_first_paint::build },
-        SceneDef { id: "S13", name: "live_compose", seconds: 11.0, kind: Kind::Studio, build: s13_live_compose::build },
-        SceneDef { id: "S14", name: "the_tap", seconds: 8.0, kind: Kind::Studio, build: s14_the_tap::build },
-        SceneDef { id: "S15", name: "say_to_rust", seconds: 12.0, kind: Kind::Studio, build: s15_say_to_rust::build },
-        SceneDef { id: "S16", name: "the_screens", seconds: 10.0, kind: Kind::Studio, build: s16_the_screens::build },
-        SceneDef { id: "S17", name: "the_tokens", seconds: 8.0, kind: Kind::Studio, build: s17_the_tokens::build },
-        SceneDef { id: "S18", name: "cross_build", seconds: 11.0, kind: Kind::Studio, build: s18_cross_build::build },
-        SceneDef { id: "S19", name: "devtools_mirror", seconds: 8.0, kind: Kind::Studio, build: s19_devtools_mirror::build },
+        SceneDef {
+            id: "S11",
+            name: "studio_opens",
+            seconds: 8.0,
+            kind: Kind::Studio,
+            build: s11_studio_opens::build,
+        },
+        SceneDef {
+            id: "S12",
+            name: "first_paint",
+            seconds: 12.0,
+            kind: Kind::Studio,
+            build: s12_first_paint::build,
+        },
+        SceneDef {
+            id: "S13",
+            name: "live_compose",
+            seconds: 11.0,
+            kind: Kind::Studio,
+            build: s13_live_compose::build,
+        },
+        SceneDef {
+            id: "S14",
+            name: "the_tap",
+            seconds: 8.0,
+            kind: Kind::Studio,
+            build: s14_the_tap::build,
+        },
+        SceneDef {
+            id: "S15",
+            name: "say_to_rust",
+            seconds: 12.0,
+            kind: Kind::Studio,
+            build: s15_say_to_rust::build,
+        },
+        SceneDef {
+            id: "S16",
+            name: "the_screens",
+            seconds: 10.0,
+            kind: Kind::Studio,
+            build: s16_the_screens::build,
+        },
+        SceneDef {
+            id: "S17",
+            name: "the_tokens",
+            seconds: 8.0,
+            kind: Kind::Studio,
+            build: s17_the_tokens::build,
+        },
+        SceneDef {
+            id: "S18",
+            name: "cross_build",
+            seconds: 11.0,
+            kind: Kind::Studio,
+            build: s18_cross_build::build,
+        },
+        SceneDef {
+            id: "S19",
+            name: "devtools_mirror",
+            seconds: 8.0,
+            kind: Kind::Studio,
+            build: s19_devtools_mirror::build,
+        },
         // ── Act IV · THE SHIP ────────────────────────────────────────────
-        SceneDef { id: "S20", name: "the_apps", seconds: 10.0, kind: Kind::Pure, build: s20_the_apps::build },
-        SceneDef { id: "S21", name: "the_ledger", seconds: 9.0, kind: Kind::Pure, build: s21_the_ledger::build },
-        SceneDef { id: "S22", name: "the_pullback", seconds: 8.0, kind: Kind::Pure, build: s22_the_pullback::build },
-        SceneDef { id: "S23", name: "the_endcard", seconds: 11.0, kind: Kind::Pure, build: s23_the_endcard::build },
-        SceneDef { id: "S24", name: "the_loop", seconds: 6.0, kind: Kind::Pure, build: s24_the_loop::build },
+        SceneDef {
+            id: "S20",
+            name: "the_apps",
+            seconds: 10.0,
+            kind: Kind::Pure,
+            build: s20_the_apps::build,
+        },
+        SceneDef {
+            id: "S21",
+            name: "the_ledger",
+            seconds: 9.0,
+            kind: Kind::Pure,
+            build: s21_the_ledger::build,
+        },
+        SceneDef {
+            id: "S22",
+            name: "the_pullback",
+            seconds: 8.0,
+            kind: Kind::Pure,
+            build: s22_the_pullback::build,
+        },
+        SceneDef {
+            id: "S23",
+            name: "the_endcard",
+            seconds: 11.0,
+            kind: Kind::Pure,
+            build: s23_the_endcard::build,
+        },
+        SceneDef {
+            id: "S24",
+            name: "the_loop",
+            seconds: 6.0,
+            kind: Kind::Pure,
+            build: s24_the_loop::build,
+        },
     ]
 }
 
 /// Absolute film seconds where scene `index` starts.
-pub fn scene_start(index: usize) -> f32 {
+pub(crate) fn scene_start(index: usize) -> f32 {
     scenes().iter().take(index).map(|s| s.seconds).sum()
 }
 
 /// The film's total frame count — the sum of the scene table, emitted.
-pub fn total_frames() -> usize {
+pub(crate) fn total_frames() -> usize {
     scenes().iter().map(|s| s.frames()).sum()
 }
 
 /// The film's total seconds — derived, never typed.
-pub fn total_seconds() -> f32 {
+pub(crate) fn total_seconds() -> f32 {
     scenes().iter().map(|s| s.seconds).sum()
 }
 
@@ -282,7 +426,7 @@ pub fn total_seconds() -> f32 {
 /// (S14, `PointerUp`) · Render fires (S15) · *Add one* is tapped (S15) ·
 /// the build view opens (S18) · the devices land (S18). The counter is
 /// the witness; the camera changes, it doesn't.
-pub fn taps() -> Vec<f32> {
+pub(crate) fn taps() -> Vec<f32> {
     let at = |i: usize, frac: f32| scene_start(i) + scenes()[i].seconds * frac;
     vec![
         at(11, 6.20 / 12.0), // 1 · AcceptLive at 103.2
@@ -297,13 +441,13 @@ pub fn taps() -> Vec<f32> {
 }
 
 /// The witness counter at absolute time `abs`.
-pub fn ladder_at(abs: f32) -> u32 {
+pub(crate) fn ladder_at(abs: f32) -> u32 {
     taps().iter().filter(|&&tap| abs >= tap).count() as u32
 }
 
 /// A short pulse envelope right after the most recent tap — the bloom the
 /// counter wears on every touch.
-pub fn tap_pulse(abs: f32) -> f32 {
+pub(crate) fn tap_pulse(abs: f32) -> f32 {
     let mut best = 0.0f32;
     for &tap in taps().iter() {
         if abs >= tap {
@@ -316,7 +460,7 @@ pub fn tap_pulse(abs: f32) -> f32 {
 }
 
 /// The session chip's clock — mm:ss of the session, which is the film.
-pub fn session_clock(abs: f32) -> String {
+pub(crate) fn session_clock(abs: f32) -> String {
     let shown = abs.min(total_seconds());
     format!("{:02}:{:02}", (shown / 60.0) as u32, (shown % 60.0) as u32)
 }
@@ -326,7 +470,7 @@ pub fn session_clock(abs: f32) -> String {
 /// The film's own audit, plus the live probes. Every field is measured or
 /// derived; none is typed by a human.
 #[derive(Default, Clone)]
-pub struct Probe {
+pub(crate) struct Probe {
     /// Total frames — derived (Σ seconds × 60).
     pub frames: u64,
     /// Fill + stroke commands across the whole film.
@@ -355,11 +499,13 @@ pub struct Probe {
 
 impl Probe {
     /// Parse the house-format `key=value` receipt the census wrote.
-    pub fn load(path: &std::path::Path) -> Option<Probe> {
+    pub(crate) fn load(path: &std::path::Path) -> Option<Probe> {
         let body = std::fs::read_to_string(path).ok()?;
         let mut p = Probe::default();
         for line in body.lines() {
-            let Some((k, v)) = line.split_once('=') else { continue };
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
             let v = v.trim();
             match k.trim() {
                 "frames" => p.frames = v.parse().ok()?,
@@ -383,7 +529,7 @@ impl Probe {
     /// No system font scan runs (the film's store is embedded + Geist,
     /// both in-tree), so glyph determinism is a property of the checkout
     /// — said out loud rather than implied.
-    pub fn bench_identity(fonts: u32) -> String {
+    pub(crate) fn bench_identity(fonts: u32) -> String {
         format!(
             "{} · {} · rust {} · {} embedded faces",
             std::env::consts::OS,
@@ -400,7 +546,7 @@ impl Probe {
 /// (the examples and apps excluded — they are guests, not the engine).
 /// S06 counts this list at runtime; the count on screen is the list's
 /// own length.
-pub const CRATES: [&str; 36] = [
+pub(crate) const CRATES: [&str; 36] = [
     "vieww-foundation",
     "vieww-widget",
     "vieww-element",
@@ -446,10 +592,15 @@ pub const CRATES: [&str; 36] = [
 /// crossing it: *view* + *light*, the product in one glyph. Drawn as
 /// strokes so it inherits every color the film puts it in. (Verbatim
 /// from `apps/viewwstudio/src/theme.rs`'s chrome — the shipped mark.)
-pub fn draw_mark(book: &mut Sketchbook, cx: f32, cy: f32, s: f32, color: Color, a: f32) {
+pub(crate) fn draw_mark(book: &mut Sketchbook, cx: f32, cy: f32, s: f32, color: Color, a: f32) {
     let c = alpha(color, a);
     // The window.
-    book.stroke_rrect(xywh(cx - s * 0.5, cy - s * 0.5, s, s), s * 0.22, c, s * 0.14);
+    book.stroke_rrect(
+        xywh(cx - s * 0.5, cy - s * 0.5, s, s),
+        s * 0.22,
+        c,
+        s * 0.14,
+    );
     // The viewport — the view.
     book.stroke_rrect(
         xywh(cx - s * 0.26, cy - s * 0.26, s * 0.52, s * 0.52),
@@ -467,34 +618,38 @@ pub fn draw_mark(book: &mut Sketchbook, cx: f32, cy: f32, s: f32, color: Color, 
         s * 0.13,
         vieww_foundation::StrokeStyle::rounded(),
     );
-    book.circle(Offset::new(cx + s * 0.62, cy - s * 0.62), s * 0.11, alpha(color, a));
+    book.circle(
+        Offset::new(cx + s * 0.62, cy - s * 0.62),
+        s * 0.11,
+        alpha(color, a),
+    );
 }
 
 // ── Color arithmetic (the film_lib spelling, local so the palette is ours) ─
 
-pub fn alpha(c: Color, a: f32) -> Color {
+pub(crate) fn alpha(c: Color, a: f32) -> Color {
     Color::rgba(c.r, c.g, c.b, (a * 255.0).clamp(0.0, 255.0) as u8)
 }
 
-pub fn mix(a: Color, b: Color, t: f32) -> Color {
+pub(crate) fn mix(a: Color, b: Color, t: f32) -> Color {
     a.lerp(b, t.clamp(0.0, 1.0))
 }
 
 /// A rect from origin + size — the (x, y, w, h) habit.
-pub fn xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
+pub(crate) fn xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
     Rect::new(x, y, x + w.max(0.0), y + h.max(0.0))
 }
 
 /// Lighten toward white (a "tint").
-pub fn tint(c: Color, t: f32) -> Color {
+pub(crate) fn tint(c: Color, t: f32) -> Color {
     mix(c, Color::WHITE, t)
 }
 
-pub fn clamp01(t: f32) -> f32 {
+pub(crate) fn clamp01(t: f32) -> f32 {
     t.clamp(0.0, 1.0)
 }
 
-pub fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
+pub(crate) fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
     let t = clamp01(t);
     let decay = (-zeta * omega * t).exp();
     1.0 - decay * ((1.0 - zeta * zeta).sqrt() * omega * t).cos()
@@ -505,10 +660,14 @@ pub fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
 /// The site's Geist faces, included from the site's own assets — the
 /// brand's typography, byte-for-byte what the product page ships.
 const GEIST: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Regular.ttf");
-const GEIST_MEDIUM: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Medium.ttf");
-const GEIST_BOLD: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Bold.ttf");
-const GEIST_MONO: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Regular.ttf");
-const GEIST_MONO_MEDIUM: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Medium.ttf");
+const GEIST_MEDIUM: &[u8] =
+    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Medium.ttf");
+const GEIST_BOLD: &[u8] =
+    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Bold.ttf");
+const GEIST_MONO: &[u8] =
+    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Regular.ttf");
+const GEIST_MONO_MEDIUM: &[u8] =
+    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Medium.ttf");
 
 /// The film's font store: the **embedded faces only** for the generic
 /// families — which is exactly the store the real studio binary runs —
@@ -517,7 +676,7 @@ const GEIST_MONO_MEDIUM: &[u8] = include_bytes!("../../../../apps/viewwsite/asse
 /// and previews therefore render precisely as the shipped product does;
 /// the film's graphics render in the brand's type. No system scan: the
 /// store is a property of the checkout, and glyph determinism with it.
-pub fn fonts() -> vieww_text::FontStore {
+pub(crate) fn fonts() -> vieww_text::FontStore {
     let mut store = vieww_text::FontStore::embedded_only();
     store.load_font_data(GEIST.to_vec());
     store.load_font_data(GEIST_MEDIUM.to_vec());
@@ -528,19 +687,19 @@ pub fn fonts() -> vieww_text::FontStore {
 }
 
 /// A text style in the brand's Geist (the film's display voice).
-pub fn geist(size: f32) -> TextStyle {
+pub(crate) fn geist(size: f32) -> TextStyle {
     TextStyle::new(size).family(vieww_foundation::FontFamily::Named("Geist"))
 }
 
 /// A text style in the brand's Geist Mono (the film's instrument voice).
-pub fn geist_mono(size: f32) -> TextStyle {
+pub(crate) fn geist_mono(size: f32) -> TextStyle {
     TextStyle::new(size).family(vieww_foundation::FontFamily::Named("Geist Mono"))
 }
 
 // ── Shared composition helpers — the film's house look ─────────────────────
 
 /// A soft radial glow blob, drawn as its own blurred layer.
-pub fn glow(book: &mut Sketchbook, x: f32, y: f32, r: f32, color: Color, a: f32) {
+pub(crate) fn glow(book: &mut Sketchbook, x: f32, y: f32, r: f32, color: Color, a: f32) {
     book.layer(1.0, r * 0.16, None, |g| {
         g.circle(
             Offset::new(x, y),
@@ -555,20 +714,24 @@ pub fn glow(book: &mut Sketchbook, x: f32, y: f32, r: f32, color: Color, a: f32)
 }
 
 /// The standard star field — sparse, calm, deterministic.
-pub fn stars(book: &mut Sketchbook, w: f32, h: f32, seed: u64, n: usize, t: f32, base: f32) {
+pub(crate) fn stars(book: &mut Sketchbook, w: f32, h: f32, seed: u64, n: usize, t: f32, base: f32) {
     let mut rng = Rng::new(seed);
     for _ in 0..n {
         let x = rng.f01() * w;
         let y = rng.f01() * h;
         let r = 0.4 + rng.f01() * 0.9;
         let tw = 0.5 + 0.5 * (t * 3.2 + rng.f01() * 9.0).sin();
-        book.circle(Offset::new(x, y), r, alpha(Color::WHITE, base * (0.4 + 0.6 * tw)));
+        book.circle(
+            Offset::new(x, y),
+            r,
+            alpha(Color::WHITE, base * (0.4 + 0.6 * tw)),
+        );
     }
 }
 
 /// A parallax star field — three depth bands that shear against a
 /// virtual camera (the descent's and the pull-back's sky).
-pub fn stars_parallax(
+pub(crate) fn stars_parallax(
     book: &mut Sketchbook,
     w: f32,
     h: f32,
@@ -594,7 +757,7 @@ pub fn stars_parallax(
 }
 
 /// The corner vignette.
-pub fn vignette(book: &mut Sketchbook, w: f32, h: f32, strength: f32) {
+pub(crate) fn vignette(book: &mut Sketchbook, w: f32, h: f32, strength: f32) {
     book.rect(
         Rect::new(0.0, 0.0, w, h),
         Gradient::radial(Offset::new(0.5, 0.5), 0.80)
@@ -608,7 +771,7 @@ pub fn vignette(book: &mut Sketchbook, w: f32, h: f32, strength: f32) {
 
 /// The standard ground gradient — the site's warm ground, deepening at
 /// the floor.
-pub fn ground(book: &mut Sketchbook, w: f32, h: f32) {
+pub(crate) fn ground(book: &mut Sketchbook, w: f32, h: f32) {
     book.rect(
         Rect::new(0.0, 0.0, w, h),
         Gradient::vertical().with_dither().with_stops(&[
@@ -620,7 +783,7 @@ pub fn ground(book: &mut Sketchbook, w: f32, h: f32) {
 }
 
 /// A generic "deep space" backdrop painting: ground + stars + vignette.
-pub fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
+pub(crate) fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
     Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -635,14 +798,19 @@ pub fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
 }
 
 /// A mono text node — the film's instrument voice.
-pub fn mono(text: impl Into<String>, size: f32, color: Color) -> WidgetNode {
+pub(crate) fn mono(text: impl Into<String>, size: f32, color: Color) -> WidgetNode {
     Text::new(text)
         .style(TextStyle::new(size).monospace().color(color))
         .into()
 }
 
 /// A mono text node with letter tracking.
-pub fn mono_tracked(text: impl Into<String>, size: f32, color: Color, tracking: f32) -> WidgetNode {
+pub(crate) fn mono_tracked(
+    text: impl Into<String>,
+    size: f32,
+    color: Color,
+    tracking: f32,
+) -> WidgetNode {
     Text::new(text)
         .style(
             TextStyle::new(size)
@@ -656,7 +824,7 @@ pub fn mono_tracked(text: impl Into<String>, size: f32, color: Color, tracking: 
 /// The film's caption — bottom-left, mono, tracked, with an accent tick.
 /// `appear` in `[0, 1]` fades it in with a slight rise; every beat is
 /// captioned by construction (the cut works muted).
-pub fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
+pub(crate) fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
     let a = ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
@@ -682,21 +850,19 @@ pub fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
                 .top(y + rise)
                 .width(1560.0)
                 .height(32.0)
-                .child(Opacity::new(a).child(
-                    Text::new(text)
-                        .style(
-                            geist_mono(22.0)
-                                .letter_spacing(1.8)
-                                .color(alpha(INK, 0.92)),
-                        )
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(text)
+                            .style(geist_mono(22.0).letter_spacing(1.8).color(alpha(INK, 0.92)))
+                            .align(TextAlign::Left),
+                    ),
+                ),
         )
         .into()
 }
 
 /// A centered caption — key info stays center-frame.
-pub fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
+pub(crate) fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
     let a = ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
@@ -709,40 +875,35 @@ pub fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
                 .top(y + rise)
                 .width(W)
                 .height(32.0)
-                .child(Opacity::new(a).child(
-                    Text::new(text)
-                        .style(
-                            geist_mono(22.0)
-                                .letter_spacing(1.8)
-                                .color(alpha(INK, 0.92)),
-                        )
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(text)
+                            .style(geist_mono(22.0).letter_spacing(1.8).color(alpha(INK, 0.92)))
+                            .align(TextAlign::Center),
+                    ),
+                ),
         )
         .into()
 }
 
 /// A small chip — rounded label with a soft border, the receipts' container.
-pub fn chip(text: impl Into<String>, size: f32, fg: Color) -> WidgetNode {
+pub(crate) fn chip(text: impl Into<String>, size: f32, fg: Color) -> WidgetNode {
     Container::new()
         .color(alpha(SURFACE, 0.88))
         .radius(7.0)
         .border(vieww_foundation::Border::new(alpha(fg, 0.22), 1.0))
         .padding(vieww_foundation::EdgeInsets::symmetric(7.0, 11.0))
-        .child(
-            Text::new(text)
-                .style(geist_mono(size).letter_spacing(1.1).color(fg)),
-        )
+        .child(Text::new(text).style(geist_mono(size).letter_spacing(1.1).color(fg)))
         .into()
 }
 
 /// Comma-grouped integer — the receipts' spelling (10,800, not 10800).
-pub fn group_commas(n: u64) -> String {
+pub(crate) fn group_commas(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();
     let bytes = s.as_bytes();
     for (i, c) in bytes.iter().enumerate() {
-        if i > 0 && (bytes.len() - i) % 3 == 0 {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(*c as char);
@@ -753,30 +914,30 @@ pub fn group_commas(n: u64) -> String {
 /// DejaVu Sans Mono's advance in ems — layout arithmetic for the mono
 /// grid (the film's mono voice and the studio's editor metrics agree,
 /// which the studio-adjacent scenes rely on).
-pub const MONO_ADV: f32 = 0.60205;
+pub(crate) const MONO_ADV: f32 = 0.60205;
 
 /// A monospace run's pixel width.
-pub fn mono_w(size: f32, chars: usize) -> f32 {
+pub(crate) fn mono_w(size: f32, chars: usize) -> f32 {
     size * MONO_ADV * chars as f32
 }
 
 /// Geist Mono's advance in ems — measured from the face itself at load
 /// (the receipt is printed by the harness; this constant is the fallback
 /// before the first measure).
-pub const GEIST_MONO_ADV: f32 = 0.6035;
+pub(crate) const GEIST_MONO_ADV: f32 = 0.6035;
 
 /// A Geist Mono run's pixel width.
-pub fn gmono_w(size: f32, chars: usize) -> f32 {
+pub(crate) fn gmono_w(size: f32, chars: usize) -> f32 {
     size * GEIST_MONO_ADV * chars as f32
 }
 
 /// Held 24-in-60 progress for a sub-window — the old world's cadence.
-pub fn held_t(sec: f32, seconds: f32) -> f32 {
+pub(crate) fn held_t(sec: f32, seconds: f32) -> f32 {
     crate::film_lib::held_24_in_60(sec) / seconds
 }
 
 /// The typing cadence — bursts and pauses, a keystroke rhythm.
-pub fn ease_out_type(t: f32) -> f32 {
+pub(crate) fn ease_out_type(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     let burst = |u: f32| 1.0 - (1.0 - u).powi(2);
     if t < 0.35 {
@@ -793,7 +954,7 @@ pub fn ease_out_type(t: f32) -> f32 {
 }
 
 /// A circle as a closed polyline path.
-pub fn circle_path(cx: f32, cy: f32, r: f32, segs: usize) -> vieww_foundation::Path {
+pub(crate) fn circle_path(cx: f32, cy: f32, r: f32, segs: usize) -> vieww_foundation::Path {
     let mut p = vieww_foundation::Path::new();
     for i in 0..=segs {
         let a = i as f32 / segs as f32 * std::f32::consts::TAU;
@@ -809,7 +970,7 @@ pub fn circle_path(cx: f32, cy: f32, r: f32, segs: usize) -> vieww_foundation::P
 }
 
 /// Film grain — round specks, per-frame seed (round reads as film).
-pub fn grain(book: &mut Sketchbook, w: f32, h: f32, frame_i: u64, strength: f32) {
+pub(crate) fn grain(book: &mut Sketchbook, w: f32, h: f32, frame_i: u64, strength: f32) {
     let mut rng = Rng::new(0x6A1D ^ frame_i.wrapping_mul(0x9E37));
     let n = (240.0 * strength) as usize;
     for _ in 0..n {
@@ -820,13 +981,17 @@ pub fn grain(book: &mut Sketchbook, w: f32, h: f32, frame_i: u64, strength: f32)
         book.circle(
             Offset::new(x, y),
             0.5 + rng.f01() * 0.7,
-            if bright { alpha(Color::WHITE, a) } else { alpha(Color::BLACK, a * 1.6) },
+            if bright {
+                alpha(Color::WHITE, a)
+            } else {
+                alpha(Color::BLACK, a * 1.6)
+            },
         );
     }
 }
 
 /// Slow dust motes — the wait's air.
-pub fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, strength: f32) {
+pub(crate) fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, strength: f32) {
     let mut rng = Rng::new(seed);
     for _ in 0..64 {
         let bx = rng.f01() * w;
@@ -844,7 +1009,7 @@ pub fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, strength: 
 
 // ── The act chip — the movement's name (I–IV · 起承転結) ────────────────────
 
-pub fn act_chip(act: &str, name: &str, appear: f32) -> WidgetNode {
+pub(crate) fn act_chip(act: &str, name: &str, appear: f32) -> WidgetNode {
     let a = ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
@@ -856,51 +1021,66 @@ pub fn act_chip(act: &str, name: &str, appear: f32) -> WidgetNode {
                 .top(92.0)
                 .width(700.0)
                 .height(26.0)
-                .child(Opacity::new(a).child(
-                    Text::new(format!("ACT {act} — {name}"))
-                        .style(
-                            geist_mono(15.0)
-                                .letter_spacing(4.5)
-                                .color(alpha(MUTED, 0.85)),
-                        )
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(format!("ACT {act} — {name}"))
+                            .style(
+                                geist_mono(15.0)
+                                    .letter_spacing(4.5)
+                                    .color(alpha(MUTED, 0.85)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         )
         .into()
 }
 
 /// The film's progress rail — a hairline at the very bottom, one tick per
 /// scene, the playhead sliding: the session clock made visible.
-pub fn progress_rail(abs: f32) -> WidgetNode {
+pub(crate) fn progress_rail(abs: f32) -> WidgetNode {
     let total = total_seconds();
     let frac = (abs / total).clamp(0.0, 1.0);
     let starts: Vec<f32> = (0..scenes().len()).map(scene_start).collect();
-    Painting::sized(Size::new(W, 26.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-        let x0 = 180.0;
-        let x1 = W - 180.0;
-        let y = 18.0;
-        book.line(Offset::new(x0, y), Offset::new(x1, y), alpha(Color::WHITE, 0.07), 1.0);
-        // One tick per scene boundary — derived, never typed.
-        for (i, st) in starts.iter().enumerate() {
-            let x = x0 + (x1 - x0) * (st / total);
-            let major = i == 0 || i == 4 || i == 10 || i == 19; // the four movements
+    Painting::sized(
+        Size::new(W, 26.0),
+        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+            let x0 = 180.0;
+            let x1 = W - 180.0;
+            let y = 18.0;
             book.line(
-                Offset::new(x, y - if major { 6.0 } else { 4.0 }),
-                Offset::new(x, y + if major { 6.0 } else { 4.0 }),
-                alpha(Color::WHITE, if major { 0.22 } else { 0.13 }),
+                Offset::new(x0, y),
+                Offset::new(x1, y),
+                alpha(Color::WHITE, 0.07),
                 1.0,
             );
-        }
-        // The playhead.
-        let px = x0 + (x1 - x0) * frac;
-        book.circle(Offset::new(px, y), 3.0, alpha(VIOLET_SOFT, 0.9));
-        book.line(Offset::new(px, y), Offset::new(px, y + 10.0), alpha(VIOLET_SOFT, 0.55), 1.2);
-    }))
+            // One tick per scene boundary — derived, never typed.
+            for (i, st) in starts.iter().enumerate() {
+                let x = x0 + (x1 - x0) * (st / total);
+                let major = i == 0 || i == 4 || i == 10 || i == 19; // the four movements
+                book.line(
+                    Offset::new(x, y - if major { 6.0 } else { 4.0 }),
+                    Offset::new(x, y + if major { 6.0 } else { 4.0 }),
+                    alpha(Color::WHITE, if major { 0.22 } else { 0.13 }),
+                    1.0,
+                );
+            }
+            // The playhead.
+            let px = x0 + (x1 - x0) * frac;
+            book.circle(Offset::new(px, y), 3.0, alpha(VIOLET_SOFT, 0.9));
+            book.line(
+                Offset::new(px, y),
+                Offset::new(px, y + 10.0),
+                alpha(VIOLET_SOFT, 0.55),
+                1.2,
+            );
+        }),
+    )
     .into()
 }
 
 /// A count-up value — integer part eased, so digits roll to their rest.
-pub fn count_up(target: u64, progress: f32) -> u64 {
+pub(crate) fn count_up(target: u64, progress: f32) -> u64 {
     let e = ease_out_cubic(progress.clamp(0.0, 1.0));
     ((target as f32 * e).round()) as u64
 }
@@ -910,7 +1090,7 @@ pub fn count_up(target: u64, progress: f32) -> u64 {
 /// The witness chip — top-right: the counter of human touches, blooming
 /// on every tap. This is the film's own instrument (the session spine),
 /// riding over the studio like a screencast's annotation layer.
-pub fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
+pub(crate) fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
     let bloom = 1.0 + pulse * 0.5;
     Stack::new()
         .push(
@@ -919,8 +1099,9 @@ pub fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
                 .top(976.0)
                 .width(240.0)
                 .height(38.0)
-                .child(Painting::sized(Size::new(240.0, 38.0), PaintWith::new(
-                    move |book: &mut Sketchbook, _s: Size| {
+                .child(Painting::sized(
+                    Size::new(240.0, 38.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                         // The halo — the touch's bloom.
                         if pulse > 0.02 {
                             glow(book, 120.0, 19.0, 90.0, ACCENT, pulse * 0.30);
@@ -928,12 +1109,26 @@ pub fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
                         let _ = bloom;
                         // The body.
                         book.rrect(xywh(0.0, 2.0, 240.0, 34.0), 9.0, alpha(SURFACE_2, 0.92));
-                        book.stroke_rrect(xywh(0.0, 2.0, 240.0, 34.0), 9.0, alpha(ACCENT, 0.30), 1.1);
+                        book.stroke_rrect(
+                            xywh(0.0, 2.0, 240.0, 34.0),
+                            9.0,
+                            alpha(ACCENT, 0.30),
+                            1.1,
+                        );
                         // The witness dot.
-                        book.circle(Offset::new(22.0, 19.0), 5.0, alpha(ACCENT, 0.55 + pulse * 0.45));
-                        book.ring(Offset::new(22.0, 19.0), 9.0 + pulse * 5.0, 1.2, alpha(ACCENT, 0.5 * pulse));
-                    },
-                ))),
+                        book.circle(
+                            Offset::new(22.0, 19.0),
+                            5.0,
+                            alpha(ACCENT, 0.55 + pulse * 0.45),
+                        );
+                        book.ring(
+                            Offset::new(22.0, 19.0),
+                            9.0 + pulse * 5.0,
+                            1.2,
+                            alpha(ACCENT, 0.5 * pulse),
+                        );
+                    }),
+                )),
         )
         .push(
             Positioned::new()
@@ -952,7 +1147,7 @@ pub fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
 
 /// The session chip — the film's clock, under the witness: mm:ss of the
 /// session, which is the film.
-pub fn session_chip(abs: f32, a: f32) -> WidgetNode {
+pub(crate) fn session_chip(abs: f32, a: f32) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
@@ -963,11 +1158,17 @@ pub fn session_chip(abs: f32, a: f32) -> WidgetNode {
                 .top(1016.0)
                 .width(240.0)
                 .height(28.0)
-                .child(Opacity::new(a).child(
-                    Text::new(format!("session · {}", session_clock(abs)))
-                        .style(geist_mono(13.0).letter_spacing(1.6).color(alpha(MUTED, 0.9)))
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(format!("session · {}", session_clock(abs)))
+                            .style(
+                                geist_mono(13.0)
+                                    .letter_spacing(1.6)
+                                    .color(alpha(MUTED, 0.9)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         )
         .into()
 }
@@ -983,7 +1184,15 @@ pub fn session_chip(abs: f32, a: f32) -> WidgetNode {
 /// **The spark** — the film's through-line of light. A hot core, a soft
 /// halo, a breathing ring, and seven orbiting motes; `phase` is the light's
 /// life (feed it film seconds and it never repeats a pose).
-pub fn spark(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, phase: f32, a: f32, color: Color) {
+pub(crate) fn spark(
+    book: &mut Sketchbook,
+    cx: f32,
+    cy: f32,
+    r: f32,
+    phase: f32,
+    a: f32,
+    color: Color,
+) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.004 {
         return;
@@ -1004,7 +1213,12 @@ pub fn spark(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, phase: f32, a: f32
     // The ring — a thin circle at the halo's waist, opacity breathing
     // counter to the halo so the light feels alive rather than pulsed.
     let ring_a = a * (0.30 + 0.22 * (phase * 1.7 + std::f32::consts::PI).sin());
-    book.ring(Offset::new(cx, cy), r * 0.72, 1.3, alpha(tint(color, 0.45), ring_a.max(0.0)));
+    book.ring(
+        Offset::new(cx, cy),
+        r * 0.72,
+        1.3,
+        alpha(tint(color, 0.45), ring_a.max(0.0)),
+    );
     // The core — white-hot, slightly larger than a point.
     let core_r = (r * 0.11).max(1.6);
     book.circle(Offset::new(cx, cy), core_r, alpha(tint(color, 0.82), a));
@@ -1030,7 +1244,7 @@ pub fn spark(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, phase: f32, a: f32
 /// **God rays** — soft triangular shafts rotating slowly around a center,
 /// the spark's arrival lighting the room. `n` rays, base angle drifting
 /// with `t`, each breathing on its own harmonic.
-pub fn light_rays(
+pub(crate) fn light_rays(
     book: &mut Sketchbook,
     cx: f32,
     cy: f32,
@@ -1044,10 +1258,16 @@ pub fn light_rays(
     let n = 9;
     book.layer(1.0, 7.0, None, |g| {
         for i in 0..n {
-            let ang = base + i as f32 / n as f32 * std::f32::consts::TAU
+            let ang = base
+                + i as f32 / n as f32 * std::f32::consts::TAU
                 + (t * 0.30 + i as f32 * 1.7).sin() * 0.11;
             let half = 0.10 + 0.05 * (t * 0.4 + i as f32).sin().abs();
-            let fade = a * (0.35 + 0.65 * (i as f32 / n as f32 * std::f32::consts::TAU + t * 0.5).cos().abs());
+            let fade = a
+                * (0.35
+                    + 0.65
+                        * (i as f32 / n as f32 * std::f32::consts::TAU + t * 0.5)
+                            .cos()
+                            .abs());
             let tip0 = Offset::new(cx + (ang - half).cos() * r1, cy + (ang - half).sin() * r1);
             let tip1 = Offset::new(cx + (ang + half).cos() * r1, cy + (ang + half).sin() * r1);
             let root = Offset::new(cx + ang.cos() * r0, cy + ang.sin() * r0);
@@ -1071,7 +1291,7 @@ pub fn light_rays(
 /// **Aurora curtains** — two or three slow luminous ribbons across the
 /// frame, heavily blurred, the calm register behind the film's big
 /// moments. The ribbons drift and never repeat.
-pub fn aurora(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, a: f32) {
+pub(crate) fn aurora(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, a: f32) {
     let bands: [(Color, f32, f32, f32, f32); 3] = [
         // (color, y0, amplitude, speed, thickness)
         (ACCENT, 0.30, 54.0, 0.16, 130.0),
@@ -1102,16 +1322,17 @@ pub fn aurora(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, a: f32) 
                 p.line_to(*pt);
             }
             for pt in pts.iter().rev() {
-                p.line_to(Offset::new(pt.dx, pt.dy + thick * (0.7 + 0.3 * (pt.dx / w).sin())));
+                p.line_to(Offset::new(
+                    pt.dx,
+                    pt.dy + thick * (0.7 + 0.3 * (pt.dx / w).sin()),
+                ));
             }
             p.close();
-            let grad = Gradient::vertical()
-                .with_dither()
-                .with_stops(&[
-                    (0.0, alpha(*color, 0.0)),
-                    (0.45, alpha(*color, a * 0.30)),
-                    (1.0, alpha(*color, 0.0)),
-                ]);
+            let grad = Gradient::vertical().with_dither().with_stops(&[
+                (0.0, alpha(*color, 0.0)),
+                (0.45, alpha(*color, a * 0.30)),
+                (1.0, alpha(*color, 0.0)),
+            ]);
             g.fill(p, grad);
         }
     });
@@ -1120,7 +1341,16 @@ pub fn aurora(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, a: f32) 
 /// **Bokeh** — defocused discs drifting through the depth field, the
 /// dark's warm air. Drawn inside one blurred layer so each disc is a
 /// soft circle of light, not a circle with a soft edge.
-pub fn bokeh(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, n: usize, a: f32, color: Color) {
+pub(crate) fn bokeh(
+    book: &mut Sketchbook,
+    w: f32,
+    h: f32,
+    t: f32,
+    seed: u64,
+    n: usize,
+    a: f32,
+    color: Color,
+) {
     let mut rng = Rng::new(seed);
     let mut disc = Vec::with_capacity(n);
     for _ in 0..n {
@@ -1137,18 +1367,14 @@ pub fn bokeh(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, n: usize,
             let dx = (t * 12.0 * sp + x).rem_euclid(w);
             let dy = y - (t * 6.0 * sp).sin() * 24.0;
             let pulse = 0.6 + 0.4 * (t * 0.5 + sp * 9.0).sin();
-            g.circle(
-                Offset::new(dx, dy),
-                r,
-                alpha(color, a * ascale * pulse),
-            );
+            g.circle(Offset::new(dx, dy), r, alpha(color, a * ascale * pulse));
         }
     });
 }
 
 /// **A full-frame flash** — the match-cut breath between scenes; `a` is
 /// its envelope. Never pure white: a hair of the accent rides in.
-pub fn flash(book: &mut Sketchbook, w: f32, h: f32, a: f32, color: Color) {
+pub(crate) fn flash(book: &mut Sketchbook, w: f32, h: f32, a: f32, color: Color) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.004 {
         return;
@@ -1158,7 +1384,7 @@ pub fn flash(book: &mut Sketchbook, w: f32, h: f32, a: f32, color: Color) {
 
 /// **Scanline bands** — the old world's CRT register: horizontal bands
 /// crawling down the frame, alternating darkness and a faint tint.
-pub fn scanbands(book: &mut Sketchbook, w: f32, h: f32, t: f32, a: f32, color: Color) {
+pub(crate) fn scanbands(book: &mut Sketchbook, w: f32, h: f32, t: f32, a: f32, color: Color) {
     let band_h = 90.0;
     let drift = (t * 130.0) % (band_h * 2.0);
     let mut y = -band_h * 2.0 + drift;
@@ -1166,9 +1392,15 @@ pub fn scanbands(book: &mut Sketchbook, w: f32, h: f32, t: f32, a: f32, color: C
     while y < h {
         let fade = (1.0 - (y / h - 0.5).abs() * 1.4).clamp(0.0, 1.0);
         if i % 2 == 0 {
-            book.rect(xywh(0.0, y, w, band_h * 0.55), alpha(Color::BLACK, a * 0.30 * fade));
+            book.rect(
+                xywh(0.0, y, w, band_h * 0.55),
+                alpha(Color::BLACK, a * 0.30 * fade),
+            );
         } else {
-            book.rect(xywh(0.0, y, w, band_h * 0.35), alpha(color, a * 0.05 * fade));
+            book.rect(
+                xywh(0.0, y, w, band_h * 0.35),
+                alpha(color, a * 0.05 * fade),
+            );
         }
         y += band_h;
         i += 1;
@@ -1179,7 +1411,7 @@ pub fn scanbands(book: &mut Sketchbook, w: f32, h: f32, t: f32, a: f32, color: C
 /// machine's architecture: `z` in `[0, 1]` is its depth (0 = at the
 /// camera, 1 = at the vanishing point), and the camera's `dive` shifts
 /// the plane toward the eye. The descent's geography.
-pub fn grid_plane(
+pub(crate) fn grid_plane(
     book: &mut Sketchbook,
     w: f32,
     h: f32,
@@ -1226,7 +1458,7 @@ pub fn grid_plane(
 /// **A receipt chip row** — the scene-level provenance line: chips laid
 /// out left-to-right at a baseline, fading in staggered (the `Sequence`
 /// discipline: annotations bloom in order, never simultaneously).
-pub fn chip_row(chips: &[(&str, Color)], x: f32, y: f32, appear: f32) -> WidgetNode {
+pub(crate) fn chip_row(chips: &[(&str, Color)], x: f32, y: f32, appear: f32) -> WidgetNode {
     let a = ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
@@ -1256,14 +1488,19 @@ pub fn chip_row(chips: &[(&str, Color)], x: f32, y: f32, appear: f32) -> WidgetN
 
 /// **A damage rect** — the inspector's grammar: an outlined rect with
 /// corner ticks, the film's most reused receipt.
-pub fn damage_rect(book: &mut Sketchbook, r: Rect, a: f32, color: Color) {
+pub(crate) fn damage_rect(book: &mut Sketchbook, r: Rect, a: f32, color: Color) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 {
         return;
     }
     let tick = 10.0f32.min(r.width() * 0.4).min(r.height() * 0.4).max(3.0);
     // The body — hairline outline.
-    book.stroke_rrect(xywh(r.left, r.top, r.width(), r.height()), 4.0, alpha(color, a * 0.85), 1.6);
+    book.stroke_rrect(
+        xywh(r.left, r.top, r.width(), r.height()),
+        4.0,
+        alpha(color, a * 0.85),
+        1.6,
+    );
     // Corner ticks — heavier than the body, the inspector's brackets.
     let corners = [
         (r.left, r.top, 1.0, 1.0),
@@ -1298,7 +1535,7 @@ pub fn damage_rect(book: &mut Sketchbook, r: Rect, a: f32, color: Color) {
 /// The studio scenes' shared chrome: the act chip (top-left), the
 /// witness chip and the session clock (bottom-right), and the caption
 /// scrim. The captions themselves are each scene's own.
-pub fn studio_chrome(ctx: &Ctx) -> Stack {
+pub(crate) fn studio_chrome(ctx: &Ctx) -> Stack {
     let ladder = ctx.ladder;
     let pulse = tap_pulse(ctx.abs);
     let abs = ctx.abs;
@@ -1318,7 +1555,11 @@ pub fn studio_chrome(ctx: &Ctx) -> Stack {
                 );
             }),
         )))
-        .push(act_chip("III", "THE STUDIO", clamp01((ctx.sec - 0.3) / 0.5)))
+        .push(act_chip(
+            "III",
+            "THE STUDIO",
+            clamp01((ctx.sec - 0.3) / 0.5),
+        ))
         // The witness — bottom-right.
         .push(witness_chip(ladder, pulse))
         .push(session_chip(abs, clamp01((ctx.sec - 1.2) / 0.6)))
@@ -1327,7 +1568,7 @@ pub fn studio_chrome(ctx: &Ctx) -> Stack {
 /// The tap ring — the film's annotation of a real interaction: a bloom
 /// ring expanding from the tap point, plus a small spark there. The
 /// product's own ripple (if any) is beneath it.
-pub fn tap_ring(at: Offset, since: f32) -> WidgetNode {
+pub(crate) fn tap_ring(_at: Offset, since: f32) -> WidgetNode {
     if since < 0.0 || since > 1.0 {
         return Stack::new().into();
     }
@@ -1339,7 +1580,12 @@ pub fn tap_ring(at: Offset, since: f32) -> WidgetNode {
             let cx = 180.0;
             let cy = 180.0;
             book.ring(Offset::new(cx, cy), r, 2.6, alpha(ACCENT, a * 0.85));
-            book.ring(Offset::new(cx, cy), r * 0.6, 1.4, alpha(tint(ACCENT, 0.4), a * 0.6));
+            book.ring(
+                Offset::new(cx, cy),
+                r * 0.6,
+                1.4,
+                alpha(tint(ACCENT, 0.4), a * 0.6),
+            );
             if a > 0.5 {
                 glow(book, cx, cy, 90.0, ACCENT, (a - 0.5) * 0.5);
                 spark(book, cx, cy, 8.0, since * 6.0, a, ACCENT);
@@ -1350,7 +1596,7 @@ pub fn tap_ring(at: Offset, since: f32) -> WidgetNode {
 }
 
 /// A positioned tap ring at window coordinates.
-pub fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
+pub(crate) fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
     let size = 360.0;
     let node = tap_ring(at, since);
     Stack::new()
@@ -1367,19 +1613,24 @@ pub fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
 
 /// A receipt chip row pinned bottom-right (the studio scenes' provenance
 /// line, mirroring the captions on the left).
-pub fn receipt_row(chips: &[(&str, Color)], appear: f32) -> WidgetNode {
+pub(crate) fn receipt_row(chips: &[(&str, Color)], appear: f32) -> WidgetNode {
     chip_row(chips, W - 900.0, 936.0, appear)
 }
 
 /// **The session rail** — the film's own spine, drawn when a scene wants
 /// the continuity visible without the studio: a horizontal line with
 /// the ladder's ticks and a traveling pulse.
-pub fn session_rail(book: &mut Sketchbook, x0: f32, x1: f32, y: f32, abs: f32, a: f32) {
+pub(crate) fn session_rail(book: &mut Sketchbook, x0: f32, x1: f32, y: f32, abs: f32, a: f32) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 {
         return;
     }
-    book.line(Offset::new(x0, y), Offset::new(x1, y), alpha(Color::WHITE, 0.10 * a), 1.0);
+    book.line(
+        Offset::new(x0, y),
+        Offset::new(x1, y),
+        alpha(Color::WHITE, 0.10 * a),
+        1.0,
+    );
     let total = total_seconds();
     let frac = (abs / total).clamp(0.0, 1.0);
     // The ladder's ticks — one per tap already landed.
@@ -1390,11 +1641,18 @@ pub fn session_rail(book: &mut Sketchbook, x0: f32, x1: f32, y: f32, abs: f32, a
         book.line(
             Offset::new(tx, y - 7.0),
             Offset::new(tx, y + 7.0),
-            alpha(if lit { ACCENT } else { FAINT }, if lit { a } else { a * 0.5 }),
+            alpha(
+                if lit { ACCENT } else { FAINT },
+                if lit { a } else { a * 0.5 },
+            ),
             if lit { 2.0 } else { 1.0 },
         );
         if lit {
-            book.circle(Offset::new(tx, y), 2.4 + bloom * 2.2, alpha(ACCENT, a * (0.5 + bloom * 0.5)));
+            book.circle(
+                Offset::new(tx, y),
+                2.4 + bloom * 2.2,
+                alpha(ACCENT, a * (0.5 + bloom * 0.5)),
+            );
         }
     }
     // The playhead — the session's own position.

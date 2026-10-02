@@ -13,16 +13,17 @@
 //!
 //! Tap 8 (the package lands, t≈0.80) fires here.
 
-use vieww_foundation::{
-    Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle, FontWeight,
-};
+use vieww_foundation::{Color, Gradient, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_back, ease_out_cubic, mix, spring_out, tint, xywh, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT, MINT, AMBER};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, ease_out_back, tint, xywh, Rng, CYAN_SOFT, INK, MINT, MUTED,
+    VIOLET, VIOLET_SOFT,
+};
 
 use super::studio;
-use super::{Ctx};
+use super::Ctx;
 
 /// When the build fires and when the packages land (scene fractions).
 const BUILD_T: f32 = 0.30;
@@ -31,7 +32,7 @@ const LAND_T: f32 = 0.80;
 /// The build's staged duration — the plan's "under 15 s on stage" rule.
 const BUILD_SECONDS: f32 = 14.8;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
     let ladder = ctx.ladder;
@@ -47,7 +48,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 
     // The studio, dimmed slightly under the build overlay.
     let spec = studio::Spec {
-        code: studio::Code::Say { typed: 1.0, blink: ctx.sec },
+        code: studio::Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app: {
             let mut app = studio::App::new(1, super::tap_pulse(abs), abs);
             app.dial = 1.0;
@@ -58,8 +62,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         ..Default::default()
     };
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
+    let mut stack = Stack::new().push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
 
     // ── The build rail — the pipeline rolling, over the editor.
     let rail_a = clamp01((t - BUILD_T + 0.04) / 0.08);
@@ -73,10 +76,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(Opacity::new(rail_a).child(Painting::sized(
                     Size::new(studio::ED_X1 - studio::ED_X0 - 60.0, 330.0),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.rrect(xywh(0.0, 0.0, _s.width, 330.0), 16.0, alpha(Color::rgb(13, 14, 20), 0.96));
-                        book.stroke_rrect(xywh(0.0, 0.0, _s.width, 330.0), 16.0, alpha(VIOLET_SOFT, 0.4), 1.3);
+                        book.rrect(
+                            xywh(0.0, 0.0, _s.width, 330.0),
+                            16.0,
+                            alpha(Color::rgb(13, 14, 20), 0.96),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, _s.width, 330.0),
+                            16.0,
+                            alpha(VIOLET_SOFT, 0.4),
+                            1.3,
+                        );
                         // The header.
-                        book.rect(xywh(1.0, 1.0, _s.width - 2.0, 48.0), alpha(Color::rgb(16, 17, 24), 0.9));
+                        book.rect(
+                            xywh(1.0, 1.0, _s.width - 2.0, 48.0),
+                            alpha(Color::rgb(16, 17, 24), 0.9),
+                        );
                         book.rect(xywh(0.0, 48.0, _s.width, 1.0), alpha(Color::WHITE, 0.06));
                         // The rolling log — the crates rolling up.
                         let log = [
@@ -103,7 +118,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         }
                         // The progress bar.
                         let y = 292.0;
-                        book.rrect(xywh(24.0, y, _s.width - 48.0, 10.0), 5.0, alpha(Color::WHITE, 0.07));
+                        book.rrect(
+                            xywh(24.0, y, _s.width - 48.0, 10.0),
+                            5.0,
+                            alpha(Color::WHITE, 0.07),
+                        );
                         book.rrect(
                             xywh(24.0, y, (_s.width - 48.0) * build_p, 10.0),
                             5.0,
@@ -135,10 +154,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(150.0 + 74.0 + i as f32 * 34.0 - 9.0)
                     .width(560.0)
                     .height(24.0)
-                    .child(Opacity::new(rail_a).child(
-                        Text::new(*line)
-                            .style(TextStyle::new(16.0).monospace().color(alpha(INK, 0.88))),
-                    )),
+                    .child(
+                        Opacity::new(rail_a).child(
+                            Text::new(*line)
+                                .style(TextStyle::new(16.0).monospace().color(alpha(INK, 0.88))),
+                        ),
+                    ),
             );
         }
         // The timer.
@@ -148,10 +169,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(150.0 + 236.0)
                 .width(300.0)
                 .height(30.0)
-                .child(Opacity::new(rail_a).child(
-                    Text::new(format!("{:02}.{} s", build_secs as u32, ((build_secs % 1.0) * 10.0) as u32))
+                .child(
+                    Opacity::new(rail_a).child(
+                        Text::new(format!(
+                            "{:02}.{} s",
+                            build_secs as u32,
+                            ((build_secs % 1.0) * 10.0) as u32
+                        ))
                         .style(TextStyle::new(24.0).monospace().color(alpha(INK, 0.92))),
-                )),
+                    ),
+                ),
         );
         stack = stack.push(
             Positioned::new()
@@ -159,10 +186,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(150.0 + 240.0)
                 .width(400.0)
                 .height(26.0)
-                .child(Opacity::new(rail_a).child(
-                    Text::new("the staged build — under 15 s")
-                        .style(TextStyle::new(14.5).monospace().color(alpha(MUTED, 0.85))),
-                )),
+                .child(
+                    Opacity::new(rail_a).child(
+                        Text::new("the staged build — under 15 s")
+                            .style(TextStyle::new(14.5).monospace().color(alpha(MUTED, 0.85))),
+                    ),
+                ),
         );
     }
 
@@ -194,7 +223,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // the devices at LAND_T.
     if t >= LAND_T - 0.04 && landed < 1.0 {
         let fly = ease_in_out(landed);
-        for (i, (ext, tx, ty)) in [(".apk", 1280.0, 620.0), (".ipa", 1670.0, 580.0)].iter().enumerate() {
+        for (i, (ext, tx, ty)) in [(".apk", 1280.0, 620.0), (".ipa", 1670.0, 580.0)]
+            .iter()
+            .enumerate()
+        {
             let sx = studio::ED_X0 + 300.0;
             let sy = 400.0;
             let x = sx + (tx - sx) * fly;
@@ -208,7 +240,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(Opacity::new(1.0 - landed * 0.6).child(super::chip(
                         *ext,
                         16.0,
-                        if i == 0 { tint(MINT, 0.1) } else { tint(CYAN_SOFT, 0.1) },
+                        if i == 0 {
+                            tint(MINT, 0.1)
+                        } else {
+                            tint(CYAN_SOFT, 0.1)
+                        },
                     ))),
             );
         }
@@ -264,10 +300,18 @@ fn device(
             book.shadow(
                 xywh(8.0, 14.0, w + 8.0, h + 8.0),
                 26.0,
-                vieww_foundation::Shadow::new(alpha(Color::BLACK, 0.5), Offset::new(0.0, 22.0), 52.0),
+                vieww_foundation::Shadow::new(
+                    alpha(Color::BLACK, 0.5),
+                    Offset::new(0.0, 22.0),
+                    52.0,
+                ),
             );
             // The body.
-            book.rrect(xywh(0.0, 0.0, w, h), 30.0, alpha(Color::rgb(18, 19, 25), 0.98));
+            book.rrect(
+                xywh(0.0, 0.0, w, h),
+                30.0,
+                alpha(Color::rgb(18, 19, 25), 0.98),
+            );
             book.stroke_rrect(xywh(0.0, 0.0, w, h), 30.0, alpha(Color::WHITE, 0.16), 1.6);
             // The screen.
             let scr = xywh(10.0, 10.0, w - 20.0, h - 20.0);
@@ -279,10 +323,18 @@ fn device(
                 let cy = scr.top + scr.height() * 0.30;
                 // The counter — the same witness number.
                 let rr = 74.0 * if is_phone { 1.0 } else { 1.3 };
-                book.circle(Offset::new(cx, cy), rr, alpha(Color::rgb(18, 18, 24), 0.95 * a));
+                book.circle(
+                    Offset::new(cx, cy),
+                    rr,
+                    alpha(Color::rgb(18, 18, 24), 0.95 * a),
+                );
                 book.stroke(super::circle_path(cx, cy, rr, 40), alpha(col, 0.6 * a), 2.4);
                 // The button hint.
-                book.rrect(xywh(cx - 70.0, cy + rr + 60.0, 140.0, 40.0), 10.0, alpha(VIOLET, 0.22 * a));
+                book.rrect(
+                    xywh(cx - 70.0, cy + rr + 60.0, 140.0, 40.0),
+                    10.0,
+                    alpha(VIOLET, 0.22 * a),
+                );
                 // The phone plays the swarm — a whisper of birds.
                 if is_phone {
                     let mut rng = Rng::new(0x600D);
@@ -290,7 +342,10 @@ fn device(
                         let by = scr.top + scr.height() * 0.62 + rng.f01() * 70.0;
                         let drift = (sec * 40.0 + rng.f01() * 200.0).rem_euclid(scr.width() - 40.0);
                         book.circle(
-                            Offset::new(scr.left + 20.0 + drift, by + (sec * 12.0 * rng.f01()).sin() * 4.0),
+                            Offset::new(
+                                scr.left + 20.0 + drift,
+                                by + (sec * 12.0 * rng.f01()).sin() * 4.0,
+                            ),
                             1.4,
                             alpha(INK, 0.5 * a),
                         );
@@ -300,7 +355,14 @@ fn device(
         }),
     );
     Stack::new()
-        .push(Positioned::new().left(0.0).top(0.0).width(w + 24.0).height(h + 24.0).child(body))
+        .push(
+            Positioned::new()
+                .left(0.0)
+                .top(0.0)
+                .width(w + 24.0)
+                .height(h + 24.0)
+                .child(body),
+        )
         .push(
             Positioned::new()
                 .left(0.0)
@@ -309,7 +371,12 @@ fn device(
                 .height(26.0)
                 .child(
                     Text::new(format!("{} — installed", ext_owned))
-                        .style(TextStyle::new(15.0).monospace().letter_spacing(1.4).color(alpha(col, 0.95)))
+                        .style(
+                            TextStyle::new(15.0)
+                                .monospace()
+                                .letter_spacing(1.4)
+                                .color(alpha(col, 0.95)),
+                        )
                         .align(TextAlign::Center),
                 ),
         )

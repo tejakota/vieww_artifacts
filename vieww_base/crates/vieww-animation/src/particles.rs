@@ -54,7 +54,6 @@
 
 use vieww_foundation::{Color, Offset};
 
-
 /// The deterministic hash behind every per-particle decision.
 ///
 /// splitmix64 again, deliberately the same primitive the noise module uses:
@@ -77,7 +76,9 @@ fn birth_rng(seed: u64, index: u64) -> u64 {
 /// A unit interval from the stream, in `0..1`.
 #[allow(clippy::cast_precision_loss)] // 24-bit mantissa: exact in f32
 fn unit(stream: &mut u64) -> f32 {
-    *stream = (*stream).wrapping_mul(0x2545_F491_4F6C_DD1D).wrapping_add(1);
+    *stream = (*stream)
+        .wrapping_mul(0x2545_F491_4F6C_DD1D)
+        .wrapping_add(1);
     // 24 bits of mantissa: enough resolution for a spread, and immune to the
     // low-bit pathologies of `% f32`.
     (((*stream >> 40) & 0xFF_FFFF) as f32) / 16_777_215.0
@@ -411,14 +412,16 @@ mod tests {
     #[test]
     fn particles_age_then_die() {
         let field = ParticleField::new(4.0, 0.5); // ±10% → 0.45..0.55 s lives
-        // The first particle (k=0, spawn ≤ 0.25 s) is alive mid-life and
-        // dead well after every possible lifetime.
+                                                  // The first particle (k=0, spawn ≤ 0.25 s) is alive mid-life and
+                                                  // dead well after every possible lifetime.
         let mid = field.sample(Duration::from_secs_f32(0.3));
         let late = field.sample(Duration::from_secs_f32(3.0));
         assert!(!mid.is_empty());
         // At t = 3 s the alive set is particles born after 2.45 s — k=0 is
         // long dead, which is the point: nothing survives its lifetime.
-        let any_ancient = late.iter().any(|p| p.age01 > 0.999 && p.position.dy.abs() > 1000.0);
+        let any_ancient = late
+            .iter()
+            .any(|p| p.age01 > 0.999 && p.position.dy.abs() > 1000.0);
         assert!(!any_ancient);
         assert!(!late.is_empty(), "the field keeps emitting");
     }
@@ -451,7 +454,11 @@ mod tests {
         assert!(oldest.size < newest.size, "birth is big, death is small");
         // And never outside the authored pair.
         for p in &alive {
-            assert!((1.0..=8.0).contains(&p.size), "size {} out of range", p.size);
+            assert!(
+                (1.0..=8.0).contains(&p.size),
+                "size {} out of range",
+                p.size
+            );
         }
     }
 

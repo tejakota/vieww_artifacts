@@ -112,7 +112,9 @@ fn pixels(driver: &FrameDriver) -> Vec<(u8, u8, u8, u8)> {
 /// Tightly packed straight-alpha RGBA8 bytes as `(r, g, b, a)` tuples, the
 /// shape `diff` and the pixel assertions below compare by.
 fn to_tuples(data: &[u8]) -> Vec<(u8, u8, u8, u8)> {
-    data.chunks_exact(4)
+    data.as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| (c[0], c[1], c[2], c[3]))
         .collect()
 }

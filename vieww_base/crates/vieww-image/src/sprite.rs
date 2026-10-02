@@ -89,7 +89,12 @@ impl SpriteSheet {
         let frames = (0..rows)
             .flat_map(|r| (0..cols).map(move |c| (c, r)))
             .map(|(c, r)| SpriteFrame {
-                rect: AtlasRect { x: c * w, y: r * h, width: w, height: h },
+                rect: AtlasRect {
+                    x: c * w,
+                    y: r * h,
+                    width: w,
+                    height: h,
+                },
                 pivot: (0.5, 0.5),
                 duration: None,
             })
@@ -112,7 +117,18 @@ impl SpriteSheet {
         let frames_j = j.get("frames").ok_or("no frames")?;
         let entries: Vec<(String, &Json)> = match frames_j {
             Json::Object(o) => o.iter().map(|(k, v)| (k.clone(), v)).collect(),
-            Json::Array(a) => a.iter().enumerate().map(|(i, v)| (v.get("filename").and_then(Json::as_str).map_or_else(|| i.to_string(), str::to_owned), v)).collect(),
+            Json::Array(a) => a
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    (
+                        v.get("filename")
+                            .and_then(Json::as_str)
+                            .map_or_else(|| i.to_string(), str::to_owned),
+                        v,
+                    )
+                })
+                .collect(),
             _ => return Err("frames must be an object or array".into()),
         };
         let mut sheet = Self {
@@ -124,16 +140,46 @@ impl SpriteSheet {
         for (name, f) in entries {
             let r = f.get("frame").ok_or("frame without rect")?;
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let n = |k: &str| r.get(k).and_then(Json::as_f64).map(|v| v as u32).ok_or(format!("frame rect missing {k}"));
-            let rect = AtlasRect { x: n("x")?, y: n("y")?, width: n("w")?, height: n("h")? };
-            let pivot = f.get("pivot").map_or((0.5, 0.5), |p| (p.get("x").and_then(Json::as_f32).unwrap_or(0.5), p.get("y").and_then(Json::as_f32).unwrap_or(0.5)));
-            let duration = f.get("duration").and_then(Json::as_f32).map(|ms| ms / 1000.0);
+            let n = |k: &str| {
+                r.get(k)
+                    .and_then(Json::as_f64)
+                    .map(|v| v as u32)
+                    .ok_or(format!("frame rect missing {k}"))
+            };
+            let rect = AtlasRect {
+                x: n("x")?,
+                y: n("y")?,
+                width: n("w")?,
+                height: n("h")?,
+            };
+            let pivot = f.get("pivot").map_or((0.5, 0.5), |p| {
+                (
+                    p.get("x").and_then(Json::as_f32).unwrap_or(0.5),
+                    p.get("y").and_then(Json::as_f32).unwrap_or(0.5),
+                )
+            });
+            let duration = f
+                .get("duration")
+                .and_then(Json::as_f32)
+                .map(|ms| ms / 1000.0);
             sheet.names.insert(name, sheet.frames.len());
-            sheet.frames.push(SpriteFrame { rect, pivot, duration });
+            sheet.frames.push(SpriteFrame {
+                rect,
+                pivot,
+                duration,
+            });
         }
-        if let Some(tags) = j.get("meta").and_then(|m| m.get("frameTags")).and_then(Json::as_array) {
+        if let Some(tags) = j
+            .get("meta")
+            .and_then(|m| m.get("frameTags"))
+            .and_then(Json::as_array)
+        {
             for t in tags {
-                let (Some(name), Some(from), Some(to)) = (t.get("name").and_then(Json::as_str), t.get("from").and_then(Json::as_usize), t.get("to").and_then(Json::as_usize)) else {
+                let (Some(name), Some(from), Some(to)) = (
+                    t.get("name").and_then(Json::as_str),
+                    t.get("from").and_then(Json::as_usize),
+                    t.get("to").and_then(Json::as_usize),
+                ) else {
                     continue;
                 };
                 let mode = match t.get("direction").and_then(Json::as_str) {
@@ -141,8 +187,14 @@ impl SpriteSheet {
                     Some("pingpong") => PlayMode::PingPong,
                     _ => PlayMode::Loop,
                 };
-                let d = sheet.frames.get(from).and_then(|f| f.duration).unwrap_or(0.1);
-                sheet.clips.insert(name.to_owned(), Clip::new(from..=to, 1.0 / d).mode(mode));
+                let d = sheet
+                    .frames
+                    .get(from)
+                    .and_then(|f| f.duration)
+                    .unwrap_or(0.1);
+                sheet
+                    .clips
+                    .insert(name.to_owned(), Clip::new(from..=to, 1.0 / d).mode(mode));
             }
         }
         Ok(sheet)
@@ -152,7 +204,10 @@ impl SpriteSheet {
     /// Returns `None` if they do not fit.
     #[must_use]
     pub fn pack(frames: &[(&str, &Image)], width: u32, height: u32) -> Option<Self> {
-        let req: Vec<(u32, u32)> = frames.iter().map(|(_, i)| (i.width() + 1, i.height() + 1)).collect();
+        let req: Vec<(u32, u32)> = frames
+            .iter()
+            .map(|(_, i)| (i.width() + 1, i.height() + 1))
+            .collect();
         let res = AtlasPacker::new(width, height).pack(&req);
         if !res.all_fit() {
             return None;
@@ -163,15 +218,35 @@ impl SpriteSheet {
             .zip(frames)
             .map(|(p, (_, i))| {
                 let p = p.expect("all fit");
-                AtlasRect { x: p.x, y: p.y, width: i.width(), height: i.height() }
+                AtlasRect {
+                    x: p.x,
+                    y: p.y,
+                    width: i.width(),
+                    height: i.height(),
+                }
             })
             .collect();
-        let placements: Vec<(&Image, AtlasRect)> = frames.iter().zip(&rects).map(|((_, i), r)| (*i, *r)).collect();
+        let placements: Vec<(&Image, AtlasRect)> = frames
+            .iter()
+            .zip(&rects)
+            .map(|((_, i), r)| (*i, *r))
+            .collect();
         let image = composite(width, height, &placements);
         Some(Self {
             image,
-            frames: rects.iter().map(|&rect| SpriteFrame { rect, pivot: (0.5, 0.5), duration: None }).collect(),
-            names: frames.iter().enumerate().map(|(i, (n, _))| ((*n).to_owned(), i)).collect(),
+            frames: rects
+                .iter()
+                .map(|&rect| SpriteFrame {
+                    rect,
+                    pivot: (0.5, 0.5),
+                    duration: None,
+                })
+                .collect(),
+            names: frames
+                .iter()
+                .enumerate()
+                .map(|(i, (n, _))| ((*n).to_owned(), i))
+                .collect(),
             clips: BTreeMap::new(),
         })
     }
@@ -192,7 +267,12 @@ impl SpriteSheet {
     #[must_use]
     pub fn frame_image(&self, i: usize) -> Option<Image> {
         let f = self.frames.get(i)?;
-        let AtlasRect { x, y, width, height } = f.rect;
+        let AtlasRect {
+            x,
+            y,
+            width,
+            height,
+        } = f.rect;
         let (iw, src) = (self.image.width(), self.image.pixels());
         let mut out = Vec::with_capacity((width * height * 4) as usize);
         for row in y..y + height {
@@ -259,7 +339,9 @@ impl AnimatedSprite {
 
     /// Advance by `dt` seconds; returns the events crossed.
     pub fn advance(&mut self, sheet: &SpriteSheet, dt: f32) -> Vec<String> {
-        let Some(clip) = sheet.clips.get(&self.clip) else { return Vec::new() };
+        let Some(clip) = sheet.clips.get(&self.clip) else {
+            return Vec::new();
+        };
         if !self.playing {
             return Vec::new();
         }
@@ -267,7 +349,12 @@ impl AnimatedSprite {
         let (step, done) = Self::step_at(clip, self.time);
         let mut events = Vec::new();
         if self.last_step != Some(step) {
-            events.extend(clip.events.iter().filter(|(at, _)| *at == step).map(|(_, e)| e.clone()));
+            events.extend(
+                clip.events
+                    .iter()
+                    .filter(|(at, _)| *at == step)
+                    .map(|(_, e)| e.clone()),
+            );
             self.last_step = Some(step);
         }
         if done {
@@ -306,7 +393,15 @@ mod tests {
     fn grid_frames_crop_correctly() {
         let s = SpriteSheet::grid(sheet_image(4, 2, 8), 4, 2);
         assert_eq!(s.frames.len(), 8);
-        assert_eq!(s.frames[5].rect, AtlasRect { x: 8, y: 8, width: 8, height: 8 });
+        assert_eq!(
+            s.frames[5].rect,
+            AtlasRect {
+                x: 8,
+                y: 8,
+                width: 8,
+                height: 8
+            }
+        );
         let f = s.frame_image(5).unwrap();
         assert_eq!((f.width(), f.pixels()[0]), (8, 100));
     }
@@ -314,7 +409,11 @@ mod tests {
     #[test]
     fn play_modes() {
         let c = |m| Clip::new(0..4, 10.0).mode(m);
-        let steps = |m| (0..8).map(|i| AnimatedSprite::step_at(&c(m), i as f32 / 10.0 + 0.01).0).collect::<Vec<_>>();
+        let steps = |m| {
+            (0..8)
+                .map(|i| AnimatedSprite::step_at(&c(m), i as f32 / 10.0 + 0.01).0)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(steps(PlayMode::Loop), [0, 1, 2, 3, 0, 1, 2, 3]);
         assert_eq!(steps(PlayMode::Reverse), [3, 2, 1, 0, 3, 2, 1, 0]);
         assert_eq!(steps(PlayMode::PingPong), [0, 1, 2, 3, 2, 1, 0, 1]);
@@ -355,7 +454,10 @@ mod tests {
                       "meta": {"frameTags": [{"name": "blink", "from": 0, "to": 1, "direction": "pingpong"}]}}"#;
         let s = SpriteSheet::from_json(img, ase).unwrap();
         let clip = &s.clips["blink"];
-        assert_eq!((clip.frames.clone(), clip.mode), (vec![0, 1], PlayMode::PingPong));
+        assert_eq!(
+            (clip.frames.clone(), clip.mode),
+            (vec![0, 1], PlayMode::PingPong)
+        );
         assert!((clip.fps - 10.0).abs() < 1e-4);
     }
 

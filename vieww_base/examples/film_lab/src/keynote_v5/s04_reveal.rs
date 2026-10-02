@@ -9,13 +9,18 @@
 //!
 //! K1: the wait is obsolete.
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle, FontWeight};
+use vieww_foundation::{
+    Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_cubic, mix, spring_out, tint, xywh, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN_SOFT, MAGENTA};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, ease_out_cubic, mix, spring_out, tint, xywh, Rng, CYAN_SOFT, INK,
+    MUTED, VIOLET, VIOLET_SOFT,
+};
 
-use super::{Ctx};
+use super::Ctx;
 
 /// The bloom's origin (S03's hub).
 const CX: f32 = 960.0;
@@ -26,7 +31,7 @@ const BLOOM_T: f32 = 0.16;
 const MARK_TOP: f32 = 400.0;
 const MARK_SIZE: f32 = 176.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -46,15 +51,31 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
                 Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, mix(Color::rgb(7, 7, 9), Color::rgb(9, 9, 13), palette_in)),
-                    (0.6, mix(Color::rgb(6, 6, 9), crate::film_lib::BG_DEEP, palette_in)),
-                    (1.0, mix(Color::rgb(8, 7, 10), Color::rgb(12, 11, 18), palette_in)),
+                    (
+                        0.0,
+                        mix(Color::rgb(7, 7, 9), Color::rgb(9, 9, 13), palette_in),
+                    ),
+                    (
+                        0.6,
+                        mix(Color::rgb(6, 6, 9), crate::film_lib::BG_DEEP, palette_in),
+                    ),
+                    (
+                        1.0,
+                        mix(Color::rgb(8, 7, 10), Color::rgb(12, 11, 18), palette_in),
+                    ),
                 ]),
             );
             let star_a = palette_in;
             super::stars(book, w, h, 0x4B10, 110, t, 0.11 * star_a + 0.02);
             // The horizon glow — violet, then warm as the mark lands.
-            super::glow(book, CX, h * 0.80, w * 0.34, VIOLET, 0.10 + 0.10 * palette_in);
+            super::glow(
+                book,
+                CX,
+                h * 0.80,
+                w * 0.34,
+                VIOLET,
+                0.10 + 0.10 * palette_in,
+            );
             super::vignette(book, w, h, 0.50 - 0.08 * palette_in);
         }),
     )));
@@ -67,7 +88,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             super::CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 let r = 4.0 + grow * 26.0 + pulse * 5.0;
-                super::glow(book, CX, CY, 140.0 + grow * 420.0, VIOLET, 0.30 + 0.4 * grow * pulse);
+                super::glow(
+                    book,
+                    CX,
+                    CY,
+                    140.0 + grow * 420.0,
+                    VIOLET,
+                    0.30 + 0.4 * grow * pulse,
+                );
                 book.circle(Offset::new(CX, CY), r, alpha(tint(VIOLET_SOFT, 0.55), 1.0));
                 book.circle(Offset::new(CX, CY), r * 0.45, alpha(Color::WHITE, 0.9));
             }),
@@ -84,8 +112,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 // Two rings — the hard edge and its echo.
                 let r1 = 60.0 + wave * 1250.0;
                 let r2 = r1 * 0.72;
-                book.ring(Offset::new(CX, CY), r1, 3.4 * (1.0 - wave) + 0.8, alpha(tint(VIOLET_SOFT, 0.3), 0.85 * (1.0 - wave)));
-                book.ring(Offset::new(CX, CY), r2, 1.8, alpha(CYAN_SOFT, 0.5 * (1.0 - wave)));
+                book.ring(
+                    Offset::new(CX, CY),
+                    r1,
+                    3.4 * (1.0 - wave) + 0.8,
+                    alpha(tint(VIOLET_SOFT, 0.3), 0.85 * (1.0 - wave)),
+                );
+                book.ring(
+                    Offset::new(CX, CY),
+                    r2,
+                    1.8,
+                    alpha(CYAN_SOFT, 0.5 * (1.0 - wave)),
+                );
                 // The bars' dust — 220 motes blown outward on the wave.
                 let mut rng = Rng::new(0xB100);
                 for _ in 0..220 {
@@ -95,7 +133,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     let dist = r0 + wave * 700.0 * speed;
                     let fall = wave * wave * 160.0 * rng.f01();
                     let size = 0.8 + rng.f01() * 2.4;
-                    let c = if rng.f01() > 0.7 { CYAN_SOFT } else { VIOLET_SOFT };
+                    let c = if rng.f01() > 0.7 {
+                        CYAN_SOFT
+                    } else {
+                        VIOLET_SOFT
+                    };
                     book.circle(
                         Offset::new(CX + ang.cos() * dist, CY + ang.sin() * dist * 0.7 + fall),
                         size,
@@ -114,10 +156,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         beam.line_to(tip);
                         beam.line_to(Offset::new(CX - perp.dx * 26.0, CY - perp.dy * 26.0));
                         beam.close();
-                        g.fill(beam, Gradient::linear(Offset::new(CX, CY), tip).with_dither().with_stops(&[
-                            (0.0, alpha(VIOLET, 0.20 * (1.0 - wave * 0.8))),
-                            (1.0, alpha(VIOLET, 0.0)),
-                        ]));
+                        g.fill(
+                            beam,
+                            Gradient::linear(Offset::new(CX, CY), tip)
+                                .with_dither()
+                                .with_stops(&[
+                                    (0.0, alpha(VIOLET, 0.20 * (1.0 - wave * 0.8))),
+                                    (1.0, alpha(VIOLET, 0.0)),
+                                ]),
+                        );
                     }
                 });
             }),
@@ -145,8 +192,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(726.0)
                 .width(box_w)
                 .height(80.0)
-                .child(Painting::sized(Size::new(box_w, 80.0), PaintWith::new(
-                    move |book: &mut Sketchbook, _sz: Size| {
+                .child(Painting::sized(
+                    Size::new(box_w, 80.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
                         book.circle(
                             Offset::new(box_w * 0.5, 30.0),
                             120.0 + 240.0 * near,
@@ -155,8 +203,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 (1.0, alpha(Color::BLACK, 0.0)),
                             ]),
                         );
-                    },
-                ))),
+                    }),
+                )),
         );
 
         // The mark — revealed by brightness, not clipping: a soft alpha ramp
@@ -180,16 +228,23 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         );
         // The sweep bar — a bright hairline with bloom, riding the reveal.
         if reveal > 0.01 && reveal < 0.995 {
-            stack = stack.push(Positioned::new()
-                .left(sweep_x - 2.0)
-                .top(y - 30.0)
-                .width(4.0)
-                .height(box_h + 60.0)
-                .child(Painting::sized(Size::new(4.0, box_h + 60.0), PaintWith::new(
-                    move |book: &mut Sketchbook, s: Size| {
-                        book.rrect(xywh(0.0, 0.0, 3.2, s.height), 1.6, alpha(tint(VIOLET_SOFT, 0.5), 0.95));
-                    },
-                ))));
+            stack = stack.push(
+                Positioned::new()
+                    .left(sweep_x - 2.0)
+                    .top(y - 30.0)
+                    .width(4.0)
+                    .height(box_h + 60.0)
+                    .child(Painting::sized(
+                        Size::new(4.0, box_h + 60.0),
+                        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+                            book.rrect(
+                                xywh(0.0, 0.0, 3.2, s.height),
+                                1.6,
+                                alpha(tint(VIOLET_SOFT, 0.5), 0.95),
+                            );
+                        }),
+                    )),
+            );
         }
     }
 
@@ -204,8 +259,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(738.0)
                 .width(w.max(2.0) + 4.0)
                 .height(12.0)
-                .child(Painting::sized(Size::new(w.max(2.0) + 4.0, 12.0), PaintWith::new(
-                    move |book: &mut Sketchbook, _sz: Size| {
+                .child(Painting::sized(
+                    Size::new(w.max(2.0) + 4.0, 12.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
                         book.rrect(
                             xywh(0.0, 0.0, w, 5.0),
                             2.5,
@@ -215,8 +271,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 (1.0, alpha(VIOLET_SOFT, 0.12)),
                             ]),
                         );
-                    },
-                ))),
+                    }),
+                )),
         );
     }
 
@@ -229,11 +285,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(812.0)
                 .width(1920.0)
                 .height(60.0)
-                .child(Opacity::new(say_a).child(
-                    Text::new("this is vieww")
-                        .style(TextStyle::new(40.0).monospace().letter_spacing(7.0).color(alpha(INK, 0.96)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(say_a).child(
+                        Text::new("this is vieww")
+                            .style(
+                                TextStyle::new(40.0)
+                                    .monospace()
+                                    .letter_spacing(7.0)
+                                    .color(alpha(INK, 0.96)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
     // The quiet subtitle — what it is.
@@ -245,11 +308,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(872.0)
                 .width(1920.0)
                 .height(36.0)
-                .child(Opacity::new(sub_a).child(
-                    Text::new("the ui runtime, written in rust")
-                        .style(TextStyle::new(21.0).monospace().letter_spacing(4.0).color(alpha(MUTED, 0.9)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(sub_a).child(
+                        Text::new("the ui runtime, written in rust")
+                            .style(
+                                TextStyle::new(21.0)
+                                    .monospace()
+                                    .letter_spacing(4.0)
+                                    .color(alpha(MUTED, 0.9)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
 

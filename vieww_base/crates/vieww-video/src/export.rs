@@ -81,7 +81,14 @@ impl<W: Write> Y4mWriter<W> {
     /// A stream of `width × height` (both even) at `fps` = num/den.
     #[must_use]
     pub const fn new(out: W, width: u32, height: u32, fps: (u32, u32)) -> Self {
-        Self { out, width, height, fps, started: false, frames: 0 }
+        Self {
+            out,
+            width,
+            height,
+            fps,
+            started: false,
+            frames: 0,
+        }
     }
 
     /// Give back the underlying writer.
@@ -96,7 +103,11 @@ impl<W: Write> FrameSink for Y4mWriter<W> {
             return Err(mismatch(self.width, self.height, f));
         }
         if !self.started {
-            writeln!(self.out, "YUV4MPEG2 W{} H{} F{}:{} Ip A1:1 C420jpeg", self.width, self.height, self.fps.0, self.fps.1)?;
+            writeln!(
+                self.out,
+                "YUV4MPEG2 W{} H{} F{}:{} Ip A1:1 C420jpeg",
+                self.width, self.height, self.fps.0, self.fps.1
+            )?;
             self.started = true;
         }
         self.out.write_all(b"FRAME\n")?;
@@ -160,7 +171,10 @@ pub fn read_y4m(bytes: &[u8]) -> Result<FrameSequence, String> {
             b'H' => h = p[1..].parse().map_err(|_| "bad H")?,
             b'F' => {
                 let (a, b) = p[1..].split_once(':').ok_or("bad F")?;
-                let (a, b): (f64, f64) = (a.parse().map_err(|_| "bad F")?, b.parse().map_err(|_| "bad F")?);
+                let (a, b): (f64, f64) = (
+                    a.parse().map_err(|_| "bad F")?,
+                    b.parse().map_err(|_| "bad F")?,
+                );
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 {
                     fps = (a / b).round().max(1.0) as u32;
@@ -173,12 +187,19 @@ pub fn read_y4m(bytes: &[u8]) -> Result<FrameSequence, String> {
     if w == 0 || h == 0 {
         return Err("missing size".into());
     }
-    let (cw, ch) = if c444 { (w, h) } else { (w.div_ceil(2), h.div_ceil(2)) };
+    let (cw, ch) = if c444 {
+        (w, h)
+    } else {
+        (w.div_ceil(2), h.div_ceil(2))
+    };
     let frame_len = w * h + 2 * cw * ch;
     let mut at = nl + 1;
     let mut frames: Vec<Frame> = Vec::new();
     while at < bytes.len() {
-        let fnl = bytes[at..].iter().position(|&b| b == b'\n').ok_or("truncated frame header")?;
+        let fnl = bytes[at..]
+            .iter()
+            .position(|&b| b == b'\n')
+            .ok_or("truncated frame header")?;
         if !bytes[at..].starts_with(b"FRAME") {
             return Err("expected FRAME".into());
         }
@@ -189,9 +210,22 @@ pub fn read_y4m(bytes: &[u8]) -> Result<FrameSequence, String> {
         let mut rgba = Vec::with_capacity(w * h * 4);
         for yy in 0..h {
             for x in 0..w {
-                let ci = if c444 { yy * w + x } else { (yy / 2) * cw + x / 2 };
-                let (y, u, v) = (f32::from(yp[yy * w + x]), f32::from(up[ci]) - 128.0, f32::from(vp[ci]) - 128.0);
-                rgba.extend_from_slice(&[byte(y + 1.402 * v), byte(y - 0.344_136 * u - 0.714_136 * v), byte(y + 1.772 * u), 255]);
+                let ci = if c444 {
+                    yy * w + x
+                } else {
+                    (yy / 2) * cw + x / 2
+                };
+                let (y, u, v) = (
+                    f32::from(yp[yy * w + x]),
+                    f32::from(up[ci]) - 128.0,
+                    f32::from(vp[ci]) - 128.0,
+                );
+                rgba.extend_from_slice(&[
+                    byte(y + 1.402 * v),
+                    byte(y - 0.344_136 * u - 0.714_136 * v),
+                    byte(y + 1.772 * u),
+                    255,
+                ]);
             }
         }
         #[allow(clippy::cast_possible_truncation)]
@@ -215,7 +249,10 @@ pub struct GifWriter<W: Write> {
 
 impl<W: Write> std::fmt::Debug for GifWriter<W> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GifWriter").field("frames", &self.frames).field("delay_ms", &self.delay_ms).finish_non_exhaustive()
+        f.debug_struct("GifWriter")
+            .field("frames", &self.frames)
+            .field("delay_ms", &self.delay_ms)
+            .finish_non_exhaustive()
     }
 }
 
@@ -228,7 +265,8 @@ impl<W: Write> GifWriter<W> {
     /// The encoder refusing its settings.
     pub fn new(out: W, width: u32, height: u32, fps: u32) -> io::Result<Self> {
         let mut enc = image::codecs::gif::GifEncoder::new_with_speed(out, 10);
-        enc.set_repeat(image::codecs::gif::Repeat::Infinite).map_err(io::Error::other)?;
+        enc.set_repeat(image::codecs::gif::Repeat::Infinite)
+            .map_err(io::Error::other)?;
         Ok(Self {
             encoder: Some(enc),
             delay_ms: 1000 / fps.max(1),
@@ -246,7 +284,12 @@ impl<W: Write> FrameSink for GifWriter<W> {
         }
         let buf = image::RgbaImage::from_raw(f.width(), f.height(), f.pixels().to_vec())
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "pixel buffer size"))?;
-        let frame = image::Frame::from_parts(buf, 0, 0, image::Delay::from_numer_denom_ms(self.delay_ms, 1));
+        let frame = image::Frame::from_parts(
+            buf,
+            0,
+            0,
+            image::Delay::from_numer_denom_ms(self.delay_ms, 1),
+        );
         self.encoder
             .as_mut()
             .ok_or_else(|| io::Error::other("finished"))?
@@ -277,7 +320,11 @@ impl PngSequence {
     /// The directory cannot be created.
     pub fn new(dir: &Path, prefix: &str) -> io::Result<Self> {
         std::fs::create_dir_all(dir)?;
-        Ok(Self { dir: dir.to_owned(), prefix: prefix.to_owned(), frames: 0 })
+        Ok(Self {
+            dir: dir.to_owned(),
+            prefix: prefix.to_owned(),
+            frames: 0,
+        })
     }
 
     /// Path of frame `i`.
@@ -317,19 +364,48 @@ impl FfmpegSink {
     /// # Errors
     ///
     /// No `ffmpeg` on the `PATH`, or it failed to start.
-    pub fn new(out: &Path, width: u32, height: u32, fps: u32, audio: Option<&Path>) -> io::Result<Self> {
+    pub fn new(
+        out: &Path,
+        width: u32,
+        height: u32,
+        fps: u32,
+        audio: Option<&Path>,
+    ) -> io::Result<Self> {
         let mut cmd = std::process::Command::new("ffmpeg");
-        cmd.args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s"])
-            .arg(format!("{width}x{height}"))
-            .args(["-r", &fps.to_string(), "-i", "-"]);
+        cmd.args([
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-s",
+        ])
+        .arg(format!("{width}x{height}"))
+        .args(["-r", &fps.to_string(), "-i", "-"]);
         if let Some(a) = audio {
             cmd.arg("-i").arg(a).args(["-c:a", "aac", "-shortest"]);
         }
-        cmd.args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart"])
-            .arg(out)
-            .stdin(std::process::Stdio::piped());
-        let child = cmd.spawn().map_err(|e| io::Error::new(e.kind(), format!("ffmpeg is not available: {e}")))?;
-        Ok(Self { child: Some(child), width, height, frames: 0 })
+        cmd.args([
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+        ])
+        .arg(out)
+        .stdin(std::process::Stdio::piped());
+        let child = cmd
+            .spawn()
+            .map_err(|e| io::Error::new(e.kind(), format!("ffmpeg is not available: {e}")))?;
+        Ok(Self {
+            child: Some(child),
+            width,
+            height,
+            frames: 0,
+        })
     }
 }
 
@@ -338,8 +414,15 @@ impl FrameSink for FfmpegSink {
         if f.width() != self.width || f.height() != self.height {
             return Err(mismatch(self.width, self.height, f));
         }
-        let child = self.child.as_mut().ok_or_else(|| io::Error::other("finished"))?;
-        child.stdin.as_mut().ok_or_else(|| io::Error::other("no stdin"))?.write_all(f.pixels())?;
+        let child = self
+            .child
+            .as_mut()
+            .ok_or_else(|| io::Error::other("finished"))?;
+        child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| io::Error::other("no stdin"))?
+            .write_all(f.pixels())?;
         self.frames += 1;
         Ok(())
     }
@@ -380,7 +463,12 @@ impl Timecode {
             let per_min = (fps as u64) * 60 - drop;
             let d = f / per_10min;
             let m = f % per_10min;
-            f += drop * 9 * d + if m > drop { drop * ((m - drop) / per_min) } else { 0 };
+            f += drop * 9 * d
+                + if m > drop {
+                    drop * ((m - drop) / per_min)
+                } else {
+                    0
+                };
         }
         let fps64 = fps as u64;
         #[allow(clippy::cast_possible_truncation)]
@@ -398,7 +486,9 @@ impl Timecode {
     pub const fn to_frame(&self, fps: u32) -> u64 {
         let fps64 = fps as u64;
         let total_minutes = (self.hours as u64) * 60 + self.minutes as u64;
-        let mut f = ((self.hours as u64 * 3600) + (self.minutes as u64 * 60) + self.seconds as u64) * fps64 + self.frames as u64;
+        let mut f = ((self.hours as u64 * 3600) + (self.minutes as u64 * 60) + self.seconds as u64)
+            * fps64
+            + self.frames as u64;
         if self.drop_frame {
             let drop = (fps / 15) as u64;
             f -= drop * (total_minutes - total_minutes / 10);
@@ -410,7 +500,11 @@ impl Timecode {
 impl std::fmt::Display for Timecode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let sep = if self.drop_frame { ';' } else { ':' };
-        write!(f, "{:02}:{:02}:{:02}{sep}{:02}", self.hours, self.minutes, self.seconds, self.frames)
+        write!(
+            f,
+            "{:02}:{:02}:{:02}{sep}{:02}",
+            self.hours, self.minutes, self.seconds, self.frames
+        )
     }
 }
 
@@ -443,7 +537,9 @@ mod tests {
         let p = &f0.pixels()[..3];
         assert!(p[0] > 245 && p[1] < 10 && p[2] < 10, "{p:?}");
         let f3 = seq.frame_at(3).unwrap();
-        assert!(f3.pixels()[..3].iter().all(|&c| (i32::from(c) - 128).abs() <= 1));
+        assert!(f3.pixels()[..3]
+            .iter()
+            .all(|&c| (i32::from(c) - 128).abs() <= 1));
     }
 
     #[test]
@@ -485,16 +581,29 @@ mod tests {
 
     #[test]
     fn timecode_counts_and_drops_frames() {
-        assert_eq!(Timecode::from_frame(0, 24, false).to_string(), "00:00:00:00");
-        assert_eq!(Timecode::from_frame(24 * 3661 + 5, 24, false).to_string(), "01:01:01:05");
+        assert_eq!(
+            Timecode::from_frame(0, 24, false).to_string(),
+            "00:00:00:00"
+        );
+        assert_eq!(
+            Timecode::from_frame(24 * 3661 + 5, 24, false).to_string(),
+            "01:01:01:05"
+        );
         // 29.97 DF: frame 1800 is 00:01:00;02 (frames ;00 and ;01 skipped).
         let tc = Timecode::from_frame(1800, 30, true);
         assert_eq!(tc.to_string(), "00:01:00;02");
         assert_eq!(tc.to_frame(30), 1800);
         // Every tenth minute keeps its frames.
-        assert_eq!(Timecode::from_frame(17982, 30, true).to_string(), "00:10:00;00");
+        assert_eq!(
+            Timecode::from_frame(17982, 30, true).to_string(),
+            "00:10:00;00"
+        );
         for f in [0u64, 1799, 1800, 17981, 17982, 100_000] {
-            assert_eq!(Timecode::from_frame(f, 30, true).to_frame(30), f, "frame {f}");
+            assert_eq!(
+                Timecode::from_frame(f, 30, true).to_frame(30),
+                f,
+                "frame {f}"
+            );
         }
     }
 }

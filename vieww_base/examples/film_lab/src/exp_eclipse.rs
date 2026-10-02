@@ -19,20 +19,21 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, shade, smoothstep, Rng, AMBER, BG_DEEP, FAINT, INK,
-    MUTED, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, shade, smoothstep, Rng, AMBER, FAINT, INK, MUTED, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 14.0;
+pub(crate) const SECONDS: f32 = 14.0;
 
 // ── The clock of the eclipse ────────────────────────────────────────────────
 
-const T_FIRST: f32 = 0.07;   // first contact
-const T_TOTAL: f32 = 0.52;   // totality begins
-const T_ENGEND: f32 = 0.76;  // totality ends (third contact)
-const T_LAST: f32 = 0.97;    // last contact
+const T_FIRST: f32 = 0.07; // first contact
+const T_TOTAL: f32 = 0.52; // totality begins
+const T_ENGEND: f32 = 0.76; // totality ends (third contact)
+const T_LAST: f32 = 0.97; // last contact
 
 /// The overlap-area obscuration of two equal discs at centre distance `d`.
 /// This is the number the receipt prints — measured from the geometry the
@@ -73,9 +74,11 @@ fn totality(t: f32) -> f32 {
 /// Scene light, 1 = day, 0 = deepest eclipse.
 #[must_use]
 fn daylight(t: f32) -> f32 {
-    1.0 - 0.94 * totality(t) - 0.42 * (smoothstep((t - T_FIRST) / (T_TOTAL - T_FIRST))
-        * (1.0 - smoothstep((t - T_ENGEND) / (T_LAST - T_ENGEND))))
-        * (1.0 - totality(t))
+    1.0 - 0.94 * totality(t)
+        - 0.42
+            * (smoothstep((t - T_FIRST) / (T_TOTAL - T_FIRST))
+                * (1.0 - smoothstep((t - T_ENGEND) / (T_LAST - T_ENGEND))))
+            * (1.0 - totality(t))
 }
 
 // ── The scene ───────────────────────────────────────────────────────────────
@@ -119,12 +122,17 @@ fn stars() -> Vec<Star> {
             continue;
         }
         let r = rng.f01();
-        v.push(Star { x, y, mag: 0.25 + 0.75 * r * r, bright: r > 0.90 });
+        v.push(Star {
+            x,
+            y,
+            mag: 0.25 + 0.75 * r * r,
+            bright: r > 0.90,
+        });
     }
     v
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let stars = stars();
     let obs = obscuration_from(moon_d(t), R_SUN);
     let light = daylight(t);
@@ -137,7 +145,10 @@ pub fn frame(t: f32) -> WidgetNode {
         * smoothstep((t - 0.34) / 0.15)
         * (1.0 - smoothstep((t - 0.87) / 0.09));
     // How many stars are visible enough to draw this frame (the census).
-    let star_vis = stars.iter().filter(|s| (1.0 - light) * s.mag > 0.06).count();
+    let star_vis = stars
+        .iter()
+        .filter(|s| (1.0 - light) * s.mag > 0.06)
+        .count();
 
     let board = Painting::sized(
         Size::new(1280.0, 720.0),
@@ -160,13 +171,16 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // The 360° sunset — the horizon ring only totality makes: the
             // whole horizon glows at once because every distant azimuth is
-                // catching twilight. Its alpha is `totality` itself.
+            // catching twilight. Its alpha is `totality` itself.
             if tot > 0.001 {
                 book.rect(
                     Rect::new(0.0, 528.0, w, 620.0),
                     Gradient::vertical().with_dither().with_stops(&[
                         (0.0, alpha(shade(AMBER, 0.25), 0.0)),
-                        (0.55, alpha(mix(AMBER, Color::rgb(255, 120, 60), 0.5), 0.42 * tot)),
+                        (
+                            0.55,
+                            alpha(mix(AMBER, Color::rgb(255, 120, 60), 0.5), 0.42 * tot),
+                        ),
                         (1.0, alpha(Color::rgb(210, 90, 50), 0.0)),
                     ]),
                 );
@@ -236,9 +250,10 @@ pub fn frame(t: f32) -> WidgetNode {
                     // drawn as three stacked quads of falling alpha —
                     // gradient geometry is local-box space (the U-23-era
                     // lesson), so the falloff is built as geometry.
-                    for k in 0..26 {
+                    for _k in 0..26 {
                         let a = rng.f01() * std::f32::consts::TAU;
-                        let breathe = 0.75 + 0.25 * (t * 6.2832 * 0.7 + a * 3.0).sin();
+                        let breathe =
+                            0.75 + 0.25 * (t * std::f32::consts::TAU * 0.7 + a * 3.0).sin();
                         let len = (110.0 + rng.f01() * 190.0) * breathe;
                         let half = 0.028 + rng.f01() * 0.05;
                         let warm = rng.f01() > 0.55;
@@ -249,9 +264,11 @@ pub fn frame(t: f32) -> WidgetNode {
                         };
                         let r0 = R_SUN - 2.0;
                         // Three depth bands: 0..0.4, 0.4..0.75, 0.75..1 of len.
-                        for (f0, f1, dim) in
-                            [(0.0_f32, 0.40_f32, 0.32), (0.40, 0.75, 0.13), (0.75, 1.0, 0.045)]
-                        {
+                        for (f0, f1, dim) in [
+                            (0.0_f32, 0.40_f32, 0.32),
+                            (0.40, 0.75, 0.13),
+                            (0.75, 1.0, 0.045),
+                        ] {
                             let taper = |fr: f32| 1.0 - fr * 0.66; // narrower outward
                             let w0 = half * taper(f0);
                             let w1 = half * taper(f1);
@@ -303,27 +320,22 @@ pub fn frame(t: f32) -> WidgetNode {
                 for k in 0..6 {
                     let a = base_a + (k as f32 - 2.5) * 0.14;
                     let sz = 3.0 + rng.f01() * 3.4;
-                    book.blended_layer(
-                        1.0,
-                        0.0,
-                        vieww_foundation::BlendMode::Plus,
-                        None,
-                        |g| {
-                            g.circle(
-                                Offset::new(
-                                    SUN.0 + a.cos() * R_SUN,
-                                    SUN.1 + a.sin() * R_SUN,
-                                ),
-                                sz,
-                                alpha(Color::rgb(255, 250, 235), 0.95 * bead),
-                            );
-                        },
-                    );
+                    book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
+                        g.circle(
+                            Offset::new(SUN.0 + a.cos() * R_SUN, SUN.1 + a.sin() * R_SUN),
+                            sz,
+                            alpha(Color::rgb(255, 250, 235), 0.95 * bead),
+                        );
+                    });
                 }
             }
             if diamond > 0.003 {
                 // The diamond: one bead outliving the others, flaring.
-                let da = if t < 0.5 { 0.55 } else { 0.55 + std::f32::consts::PI };
+                let da = if t < 0.5 {
+                    0.55
+                } else {
+                    0.55 + std::f32::consts::PI
+                };
                 let dc = Offset::new(SUN.0 + da.cos() * R_SUN, SUN.1 + da.sin() * R_SUN);
                 book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
                     g.circle(
@@ -380,7 +392,10 @@ pub fn frame(t: f32) -> WidgetNode {
             // The tree — the crescent-shadow projector. Its gaps cast the
             // little crescents on the ground during the partial phase.
             let tree_x = 238.0;
-            book.rect(Rect::new(tree_x - 4.0, 528.0, tree_x + 4.0, 636.0), shade(g_deep, 0.4));
+            book.rect(
+                Rect::new(tree_x - 4.0, 528.0, tree_x + 4.0, 636.0),
+                shade(g_deep, 0.4),
+            );
             let mut crown = Path::new();
             crown.move_to(Offset::new(tree_x, 470.0));
             crown.line_to(Offset::new(tree_x + 62.0, 522.0));
@@ -396,7 +411,7 @@ pub fn frame(t: f32) -> WidgetNode {
             let partial = (obs > 0.18 && obs < 0.985) as u8 as f32;
             if partial > 0.5 {
                 let mut rng = Rng::new(0xC5E5_u64);
-                for k in 0..16 {
+                for _k in 0..16 {
                     let x = 340.0 + rng.f01() * 760.0;
                     let y = 656.0 + rng.f01() * 44.0;
                     let s = 4.5 + rng.f01() * 5.5;
@@ -409,14 +424,20 @@ pub fn frame(t: f32) -> WidgetNode {
                         light,
                     );
                     book.circle(Offset::new(x, y), s, light_col);
-                    book.circle(Offset::new(x + d * 0.86, y - d * 0.51), s, shade(g_deep, 0.2));
+                    book.circle(
+                        Offset::new(x + d * 0.86, y - d * 0.51),
+                        s,
+                        shade(g_deep, 0.2),
+                    );
                 }
             }
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack.push(receipt_panel(t, obs, light, star_vis, bead, diamond)).into()
+    let stack = Stack::new().push(Positioned::fill().child(board));
+    stack
+        .push(receipt_panel(t, obs, light, star_vis, bead, diamond))
+        .into()
 }
 
 // ── The receipt ─────────────────────────────────────────────────────────────
@@ -449,12 +470,8 @@ fn receipt_panel(
             "obscuration {obs:.1}% (lens area, computed) · moon offset {:.1} px",
             moon_d(t)
         ),
-        format!(
-            "scene light {light:.2} · stars visible {star_vis}/210 · planets 2"
-        ),
-        format!(
-            "corona: 26 streamers · 1 Plus layer · beads α {bead:.2} · diamond α {diamond:.2}"
-        ),
+        format!("scene light {light:.2} · stars visible {star_vis}/210 · planets 2"),
+        format!("corona: 26 streamers · 1 Plus layer · beads α {bead:.2} · diamond α {diamond:.2}"),
     ];
 
     const P_X: f32 = 42.0;
@@ -473,7 +490,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

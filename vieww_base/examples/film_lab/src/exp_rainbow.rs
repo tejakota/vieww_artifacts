@@ -20,28 +20,28 @@
 //! angular luminance profile of the final frame, binned, its two peaks
 //! read off in degrees.**
 
-use std::f64::consts::PI;
 use std::sync::OnceLock;
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, Rng};
+use crate::film_lib::{alpha, mix, Rng, AMBER, INK, MUTED};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The optics ──────────────────────────────────────────────────────────────
 
 /// Five sample wavelengths (nm) and their screen colours.
 const BANDS: [(f64, Color); 5] = [
-    (700.0, Color::rgb(255, 64, 54)),   // red
-    (610.0, Color::rgb(255, 150, 40)),  // orange
-    (550.0, Color::rgb(246, 232, 60)),  // yellow-green
-    (470.0, Color::rgb(64, 178, 255)),  // blue
-    (405.0, Color::rgb(142, 82, 255)),  // violet
+    (700.0, Color::rgb(255, 64, 54)),  // red
+    (610.0, Color::rgb(255, 150, 40)), // orange
+    (550.0, Color::rgb(246, 232, 60)), // yellow-green
+    (470.0, Color::rgb(64, 178, 255)), // blue
+    (405.0, Color::rgb(142, 82, 255)), // violet
 ];
 
 /// Cauchy's law for water (λ in nm).
@@ -105,7 +105,7 @@ fn kernel() -> &'static Vec<Vec<f32>> {
             for i in 0..nb {
                 let mut acc = 0.0;
                 let mut wsum = 0.0;
-                for d in -(sigma as isize * 3) as isize..=(sigma as isize * 3) as isize {
+                for d in (-(sigma as isize * 3))..=(sigma as isize * 3) {
                     let j = i as isize + d;
                     if j >= 0 && (j as usize) < nb {
                         let wgt = (-(d * d) as f64 / (2.0 * sigma * sigma)).exp();
@@ -126,7 +126,7 @@ fn kernel() -> &'static Vec<Vec<f32>> {
 /// Kernel value at β (degrees) for a band, linearly interpolated.
 fn k_at(bi: usize, beta: f64) -> f32 {
     let k = kernel();
-    let x = (beta / 0.25) as f64;
+    let x = beta / 0.25;
     let i = x.floor() as usize;
     if i + 1 >= k[bi].len() {
         return 0.0;
@@ -146,7 +146,11 @@ fn descartes_peaks(lambda: f64, secondary: bool) -> f64 {
     // of β2 = D2 − 180. (The first cut minimised both and printed the
     // primary at 0.0° — the i = 0 endpoint, where there is no bow at all;
     // the probe's 41.0° caught it.)
-    let mut best = if secondary { f64::INFINITY } else { f64::NEG_INFINITY };
+    let mut best = if secondary {
+        f64::INFINITY
+    } else {
+        f64::NEG_INFINITY
+    };
     for x in 0..=9000 {
         let i = x as f64 * 0.01;
         let r = (i.to_radians().sin() / n).asin().to_degrees();
@@ -200,7 +204,7 @@ fn beta_of(px: f32, py: f32) -> f64 {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // reveal: drops accumulate over the first 40%, then the rain matures
     let n_shown = (((t / 0.4).clamp(0.0, 1.0)) * drops().len() as f32).round() as usize;
 
@@ -241,7 +245,11 @@ pub fn frame(t: f32) -> WidgetNode {
                 g.ring(Offset::new(SUN.0, SUN.1), 54.0, 44.0, alpha(AMBER, 0.10));
                 g.ring(Offset::new(SUN.0, SUN.1), 30.0, 26.0, alpha(AMBER, 0.16));
             });
-            book.circle(Offset::new(SUN.0, SUN.1), 15.0, alpha(Color::rgb(255, 214, 150), 0.95));
+            book.circle(
+                Offset::new(SUN.0, SUN.1),
+                15.0,
+                alpha(Color::rgb(255, 214, 150), 0.95),
+            );
             // god-rays: a few faint parallel beams from the sun into the rain
             book.blended_layer(0.5, 0.0, BlendMode::Plus, None, |g| {
                 let dir = ((OBS.0 - SUN.0) as f64, (OBS.1 - SUN.1) as f64);
@@ -298,18 +306,20 @@ pub fn frame(t: f32) -> WidgetNode {
                 if bright > 0.35 {
                     let c = if beta < 46.0 {
                         // primary: red outside, violet inside — the slope of β
-                        mix(Color::rgb(255, 200, 150), Color::rgb(190, 150, 255),
-                            (((beta - 39.0) / 3.4).clamp(0.0, 1.0)) as f32)
+                        mix(
+                            Color::rgb(255, 200, 150),
+                            Color::rgb(190, 150, 255),
+                            (((beta - 39.0) / 3.4).clamp(0.0, 1.0)) as f32,
+                        )
                     } else {
                         // secondary: reversed
-                        mix(Color::rgb(190, 150, 255), Color::rgb(255, 200, 150),
-                            (((beta - 50.0) / 3.4).clamp(0.0, 1.0)) as f32)
+                        mix(
+                            Color::rgb(190, 150, 255),
+                            Color::rgb(255, 200, 150),
+                            (((beta - 50.0) / 3.4).clamp(0.0, 1.0)) as f32,
+                        )
                     };
-                    book.circle(
-                        Offset::new(x, y),
-                        s * 0.9,
-                        alpha(c, (bright - 0.35) * 1.2),
-                    );
+                    book.circle(Offset::new(x, y), s * 0.9, alpha(c, (bright - 0.35) * 1.2));
                 }
             }
 
@@ -332,8 +342,16 @@ pub fn frame(t: f32) -> WidgetNode {
             // the observer, small, at their spot
             let ob = Offset::new(OBS.0, OBS.1 - 26.0);
             book.circle(Offset::new(ob.dx, ob.dy + 16.0), 4.2, Color::rgb(8, 8, 12)); // shadow
-            book.rrect(Rect::new(ob.dx - 5.0, ob.dy - 4.0, ob.dx + 5.0, ob.dy + 14.0), 3.0, Color::rgb(30, 30, 40));
-            book.circle(Offset::new(ob.dx, ob.dy - 8.0), 4.4, Color::rgb(232, 228, 236));
+            book.rrect(
+                Rect::new(ob.dx - 5.0, ob.dy - 4.0, ob.dx + 5.0, ob.dy + 14.0),
+                3.0,
+                Color::rgb(30, 30, 40),
+            );
+            book.circle(
+                Offset::new(ob.dx, ob.dy - 8.0),
+                4.4,
+                Color::rgb(232, 228, 236),
+            );
             book.ring(Offset::new(ob.dx, ob.dy - 8.0), 4.4, 1.0, alpha(INK, 0.8));
 
             // ── The kernel panel, bottom-right: the machine's own physics ──
@@ -384,8 +402,8 @@ pub fn frame(t: f32) -> WidgetNode {
 /// Build the angular luminance profile of the final frame (sky pixels,
 /// binned by β from the observer), then report the two peak angles beside
 /// Descartes' stationary values. Measured from pixels, not from the model.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
-    let (iw, ih) = img.dimensions();
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
+    let (iw, _ih) = img.dimensions();
     let step = 0.25_f64;
     let nb = (64.0 / step) as usize;
     let mut sums = vec![0u64; nb];
@@ -429,7 +447,7 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
     }
     peaks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     let mut out = Vec::new();
-    if peaks.len() >= 1 {
+    if !peaks.is_empty() {
         out.push(format!(
             "RASTER PEAK 1: β = {:.1}° (luminance profile of the final frame)",
             peaks[0].0
@@ -463,9 +481,7 @@ fn receipt_panel(n_shown: usize) -> WidgetNode {
     let lines = [
         "RAINBOW · THE DEVIATION AXIS · DESCARTES, 1637".to_string(),
         "Snell's law at n(λ) = 1.3243 + 3587/λ² nm · incidence swept 0–90° · density ∝ sin i / |dD/di|".to_string(),
-        format!(
-            "2,600 seeded drops, each painted by the kernel at its own β — the bow is the statistics",
-        ),
+        "2,600 seeded drops, each painted by the kernel at its own β — the bow is the statistics".to_string(),
         format!(
             "drops shown {n_shown} · primary: D_min stationary · secondary: 2 reflections, spectrum reversed"
         ),
@@ -489,7 +505,10 @@ fn receipt_panel(n_shown: usize) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

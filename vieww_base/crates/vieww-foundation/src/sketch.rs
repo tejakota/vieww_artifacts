@@ -630,7 +630,11 @@ mod tests {
             panic!("the shadow is a layer")
         };
         assert!((blur - 8.0).abs() < f32::EPSILON);
-        let Sketch::Transformed { transform, children } = &children[0] else {
+        let Sketch::Transformed {
+            transform,
+            children,
+        } = &children[0]
+        else {
             panic!("inside the layer, the fill flies")
         };
         assert!((transform.ty - 4.0).abs() < f32::EPSILON);
@@ -654,7 +658,13 @@ mod tests {
         let Sketch::Transformed { children, .. } = &book.items()[0] else {
             panic!("the transform is outside")
         };
-        let Sketch::Layer { alpha, clip, children, .. } = &children[0] else {
+        let Sketch::Layer {
+            alpha,
+            clip,
+            children,
+            ..
+        } = &children[0]
+        else {
             panic!("the clip is inside")
         };
         assert!((alpha - 0.5).abs() < f32::EPSILON);

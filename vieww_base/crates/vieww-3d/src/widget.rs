@@ -64,7 +64,9 @@ impl Widget for Viewport3D {
     }
 
     fn build(&self, _ctx: &BuildContext) -> WidgetNode {
-        let (image, stats) = self.renderer.render(&mut self.scene.borrow_mut(), &self.camera);
+        let (image, stats) = self
+            .renderer
+            .render(&mut self.scene.borrow_mut(), &self.camera);
         if let Some(s) = &self.stats {
             *s.borrow_mut() = stats;
         }

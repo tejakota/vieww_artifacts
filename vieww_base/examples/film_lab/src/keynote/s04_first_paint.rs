@@ -13,16 +13,16 @@
 //! Tap → the counter reads **1**. The session chip and the session line
 //! are born here and never leave.
 
-use vieww_foundation::{Color, Offset, Size, Sketchbook};
+use vieww_foundation::{Offset, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, smoothstep, xywh, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, smoothstep, xywh, VIOLET};
 
 use super::studio::{studio, App, Code, Spec};
 use super::{caption, Ctx};
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -34,7 +34,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // The buffer types: say, three lines and then the rest, at a human
     // rhythm (E-02's bursts-and-pauses).
     let typed = clamp01((t - 0.04) / 0.50);
-    let code = Code::Say { typed, blink: ctx.sec };
+    let code = Code::Say {
+        typed,
+        blink: ctx.sec,
+    };
 
     // The preview blooms alive at 0.30 — the film's first product shot.
     let alive = smoothstep(clamp01((t - 0.30) / 0.11));
@@ -49,27 +52,20 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         ..Spec::default()
     };
 
-    let mut stack = Stack::new().push(
-        Opacity::new(enter).child(studio(abs, ctx.ladder, spec)),
-    );
+    let mut stack = Stack::new().push(Opacity::new(enter).child(studio(abs, ctx.ladder, spec)));
 
     // The light spill — the door, as light: a wide violet wash behind the
     // studio that recedes as the IDE becomes the world.
     if enter < 1.0 {
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    let a = (1.0 - enter) * 0.5;
-                    book.layer(1.0, 60.0, None, |g| {
-                        g.rect(
-                            xywh(0.0, 0.0, 1920.0, 1080.0),
-                            alpha(VIOLET, a * 0.30),
-                        );
-                    });
-                }),
-            )),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                let a = (1.0 - enter) * 0.5;
+                book.layer(1.0, 60.0, None, |g| {
+                    g.rect(xywh(0.0, 0.0, 1920.0, 1080.0), alpha(VIOLET, a * 0.30));
+                });
+            }),
+        )));
     }
 
     // The caption — N measured, never typed (ledger 11).
@@ -86,15 +82,20 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     if ctx.ladder >= 1 {
         let pulse = super::tap_pulse(abs);
         if pulse > 0.01 {
-            stack = stack.push(
-                Positioned::fill().child(Painting::sized(
-                    super::CANVAS,
-                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        let c = Offset::new(1405.0, 660.0);
-                        super::glow(book, c.dx, c.dy, 160.0 + 200.0 * (1.0 - pulse), VIOLET, 0.35 * pulse);
-                    }),
-                )),
-            );
+            stack = stack.push(Positioned::fill().child(Painting::sized(
+                super::CANVAS,
+                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                    let c = Offset::new(1405.0, 660.0);
+                    super::glow(
+                        book,
+                        c.dx,
+                        c.dy,
+                        160.0 + 200.0 * (1.0 - pulse),
+                        VIOLET,
+                        0.35 * pulse,
+                    );
+                }),
+            )));
         }
     }
 

@@ -61,16 +61,21 @@ pub fn panel(title: &str, detail: &str, body: impl Into<WidgetNode>) -> WidgetNo
         .color(PANEL)
         .radius(8.0)
         .padding(EdgeInsets::all(8.0))
-        .child(
-            Flex::column()
-                .spacing(4.0)
-                .children(children![body.into(), Text::new(title).size(12.0).bold().color(INK), Text::new(detail).size(10.0).color(DIM),]),
-        )
+        .child(Flex::column().spacing(4.0).children(children![
+            body.into(),
+            Text::new(title).size(12.0).bold().color(INK),
+            Text::new(detail).size(10.0).color(DIM),
+        ]))
         .into()
 }
 
 /// A panel around a painting.
-pub fn painted(title: &str, detail: &str, size: Size, f: impl Fn(&mut Sketchbook, Size) + 'static) -> WidgetNode {
+pub fn painted(
+    title: &str,
+    detail: &str,
+    size: Size,
+    f: impl Fn(&mut Sketchbook, Size) + 'static,
+) -> WidgetNode {
     panel(title, detail, paint(size, f))
 }
 
@@ -90,7 +95,11 @@ pub fn page(title: &str, subtitle: &str, body: WidgetNode) -> WidgetNode {
     Container::new()
         .color(PAGE)
         .padding(EdgeInsets::all(16.0))
-        .child(Flex::column().spacing(10.0).children(children![crate::caption(title, subtitle, true), body]))
+        .child(
+            Flex::column()
+                .spacing(10.0)
+                .children(children![crate::caption(title, subtitle, true), body]),
+        )
         .into()
 }
 

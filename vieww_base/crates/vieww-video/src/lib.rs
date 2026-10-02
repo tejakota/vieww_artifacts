@@ -164,7 +164,10 @@ impl FrameSequence {
     pub fn new(frames: Vec<Frame>, frame_rate: u32) -> Self {
         assert!(!frames.is_empty(), "a video has at least one frame");
         assert!(frame_rate > 0, "a video has a frame rate above zero");
-        Self { frames, rate: frame_rate }
+        Self {
+            frames,
+            rate: frame_rate,
+        }
     }
 }
 
@@ -312,7 +315,10 @@ impl VideoSource for GeneratedVideo {
                 let phase = (index % 4) as f32 / 4.0;
                 for _y in 0..self.height {
                     for x in 0..self.width {
-                        #[expect(clippy::cast_precision_loss, reason = "a gradient coordinate is exact enough in f32")]
+                        #[expect(
+                            clippy::cast_precision_loss,
+                            reason = "a gradient coordinate is exact enough in f32"
+                        )]
                         let t = (x as f32 / self.width.max(1) as f32 + phase).fract();
                         let r = (t * 255.0) as u8;
                         let g = ((1.0 - t) * 255.0) as u8;
@@ -329,8 +335,11 @@ impl VideoSource for GeneratedVideo {
                 };
                 let grey = (step * 255.0).round() as u8;
                 data.extend(
-                    std::iter::repeat_n([grey, grey, grey, 255], (self.width * self.height) as usize)
-                        .flatten(),
+                    std::iter::repeat_n(
+                        [grey, grey, grey, 255],
+                        (self.width * self.height) as usize,
+                    )
+                    .flatten(),
                 );
             }
         }
@@ -640,7 +649,11 @@ mod tests {
         assert_eq!(player.frame_index(), Some(2), "pause held position");
 
         player.play();
-        assert_eq!(player.frame_index(), Some(2), "and resume continued from it");
+        assert_eq!(
+            player.frame_index(),
+            Some(2),
+            "and resume continued from it"
+        );
         player.advance(ms(100));
         assert_eq!(player.frame_index(), Some(3));
     }

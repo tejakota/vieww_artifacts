@@ -20,13 +20,14 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Painting, PaintWith, Text};
+use vieww_widget::{Filtered, PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, Rng, AMBER, BG_DEEP, FAINT, INK, MUTED, RED,
-    VIOLET_SOFT, CYAN_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, Rng, AMBER, BG_DEEP, CYAN_SOFT, FAINT, INK, MUTED, RED, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// The lantern count — 27 glows + 2 reflections + 1 mist = 30 of 32.
 const LANTERNS: usize = 27;
@@ -40,8 +41,8 @@ const WATER: f32 = 520.0;
 /// One lantern's whole life, a pure function of its index.
 struct Lantern {
     x0: f32,
-    rise: f32,    // screen heights per plate
-    speed: f32,   // 0..1 of the plate spent rising
+    rise: f32,  // screen heights per plate
+    speed: f32, // 0..1 of the plate spent rising
     sway: f32,
     sway_hz: f32,
     size: f32,
@@ -84,7 +85,7 @@ fn lan_pos(l: &Lantern, t: f32) -> (f32, f32) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let lans = lanterns();
 
     let board = Painting::sized(
@@ -112,10 +113,26 @@ pub fn frame(t: f32) -> WidgetNode {
                 book.circle(Offset::new(sx, sy), r, alpha(INK, 0.14 + rng.f01() * 0.22));
             }
             // The moon.
-            book.circle(Offset::new(214.0, 122.0), 46.0, alpha(Color::rgb(228, 226, 214), 0.14));
-            book.circle(Offset::new(214.0, 122.0), 26.0, alpha(Color::rgb(233, 231, 220), 0.9));
-            book.circle(Offset::new(206.0, 116.0), 5.0, alpha(Color::rgb(210, 206, 195), 0.5));
-            book.circle(Offset::new(222.0, 130.0), 3.6, alpha(Color::rgb(210, 206, 195), 0.4));
+            book.circle(
+                Offset::new(214.0, 122.0),
+                46.0,
+                alpha(Color::rgb(228, 226, 214), 0.14),
+            );
+            book.circle(
+                Offset::new(214.0, 122.0),
+                26.0,
+                alpha(Color::rgb(233, 231, 220), 0.9),
+            );
+            book.circle(
+                Offset::new(206.0, 116.0),
+                5.0,
+                alpha(Color::rgb(210, 206, 195), 0.5),
+            );
+            book.circle(
+                Offset::new(222.0, 130.0),
+                3.6,
+                alpha(Color::rgb(210, 206, 195), 0.4),
+            );
 
             // The far bank — a low dark treeline.
             let mut bank = Path::new();
@@ -137,16 +154,23 @@ pub fn frame(t: f32) -> WidgetNode {
             // The river — dark, with the moon's lane.
             book.rect(
                 Rect::new(0.0, WATER, w, h - WATER),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(10, 13, 20)),
-                    (1.0, Color::rgb(4, 5, 9)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(10, 13, 20)), (1.0, Color::rgb(4, 5, 9))]),
             );
             for row in 0..8 {
                 let yy = WATER + 8.0 + row as f32 * 24.0;
                 book.rect(
-                    Rect::new(150.0 - row as f32 * 8.0, yy, 270.0 + row as f32 * 10.0, yy + 1.3),
-                    alpha(Color::rgb(226, 224, 212), (0.16 - row as f32 * 0.016).max(0.03)),
+                    Rect::new(
+                        150.0 - row as f32 * 8.0,
+                        yy,
+                        270.0 + row as f32 * 10.0,
+                        yy + 1.3,
+                    ),
+                    alpha(
+                        Color::rgb(226, 224, 212),
+                        (0.16 - row as f32 * 0.016).max(0.03),
+                    ),
                 );
             }
 
@@ -195,7 +219,11 @@ pub fn frame(t: f32) -> WidgetNode {
                         (1.0, alpha(warm, 0.0)),
                     ]),
                 );
-                g.circle(Offset::new(c, c), lsize * 0.5, alpha(mix(Color::WHITE, warm, 0.2), 0.5));
+                g.circle(
+                    Offset::new(c, c),
+                    lsize * 0.5,
+                    alpha(mix(Color::WHITE, warm, 0.2), 0.5),
+                );
             }),
         );
         stack = stack.push(
@@ -337,7 +365,7 @@ fn receipt_panel(t: f32) -> WidgetNode {
     let risen = lanterns().iter().filter(|l| t > (1.0 - l.speed)).count();
     let lines = [
         "SHADOWPLAY · THE BLUR ECONOMY AT THE GUARD".to_string(),
-        format!("filtered groups built 30 (27 glows + 2 refl + 1 mist)"),
+        "filtered groups built 30 (27 glows + 2 refl + 1 mist)".to_string(),
         format!("guard {} · measured count + ms → metrics", GUARD),
         format!("lanterns risen {risen}/{LANTERNS} · σ 1.6-5.0 by depth"),
         "the only plate whose instrument is a fuel gauge".to_string(),
@@ -359,7 +387,10 @@ fn receipt_panel(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -389,13 +420,21 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 } else {
                     book.rect(
                         Rect::new(x - 1.5, 14.0, x + 1.5, 26.0),
-                        alpha(if spent { AMBER } else { FAINT }, if spent { 0.72 } else { 0.20 }),
+                        alpha(
+                            if spent { AMBER } else { FAINT },
+                            if spent { 0.72 } else { 0.20 },
+                        ),
                     );
                 }
             }
             // The live needle at 30.
             let nx = 12.0 + 29.0 * ((400.0 - 24.0) / (GUARD - 1) as f32);
-            book.line(Offset::new(nx, 6.0), Offset::new(nx, 34.0), alpha(INK, 0.9), 1.4);
+            book.line(
+                Offset::new(nx, 6.0),
+                Offset::new(nx, 34.0),
+                alpha(INK, 0.9),
+                1.4,
+            );
         }),
     );
     stack = stack.push(

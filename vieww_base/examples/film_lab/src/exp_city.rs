@@ -18,18 +18,17 @@
 //!
 //! Receipts: towers, windows, windows lit (counted this frame), traffic.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
-use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
-
-use crate::film_lib::{
-    alpha, clamp01, ease_in_out, ease_out_cubic, mix, tint, FAINT, MUTED, Rng, VIOLET,
-    CYAN, CYAN_SOFT, AMBER, BG_DEEP,
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
 };
+use vieww_widget::prelude::*;
+use vieww_widget::{PaintWith, Painting};
+
+use crate::film_lib::{alpha, clamp01, mix, tint, Rng, AMBER, CYAN_SOFT, FAINT, MUTED, VIOLET};
 use crate::three_d::{Camera, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 9.0;
+pub(crate) const SECONDS: f32 = 9.0;
 
 /// City grid: GRID × GRID blocks.
 const GRID: usize = 13;
@@ -39,11 +38,9 @@ const PITCH: f32 = 5.0;
 
 /// Hash a grid coordinate to a deterministic noise value.
 fn vnoise(x: i32, y: i32, seed: u32) -> f32 {
-    let h = (x as u32)
-        .wrapping_mul(0x27D4EB2D)
-         ^ ((y as u32).wrapping_mul(0x165667B1))
-         ^ (seed.wrapping_mul(0x9E3779B1))
-        .rotate_left(13);
+    let h = (x as u32).wrapping_mul(0x27D4EB2D)
+        ^ ((y as u32).wrapping_mul(0x165667B1))
+        ^ (seed.wrapping_mul(0x9E3779B1)).rotate_left(13);
     (h >> 8) as f32 / ((1u32 << 24) as f32)
 }
 
@@ -89,15 +86,13 @@ fn window_lit(bx: i32, bz: i32, face: u8, floor: i32, col: i32, t: f32, wave: f3
     if dist > wave {
         return (false, 0.0);
     }
-    let h = (bx as u32)
-        .wrapping_mul(0x27D4EB2D)
-         ^ ((bz as u32).wrapping_mul(0x165667B1))
-         ^ ((face as u32).wrapping_mul(0x9E3779B1))
-         ^ ((floor as u32).wrapping_mul(0x85EBCA6B))
-         ^ ((col as u32).wrapping_mul(0xC2B2AE35))
-        .rotate_left(11);
+    let h = (bx as u32).wrapping_mul(0x27D4EB2D)
+        ^ ((bz as u32).wrapping_mul(0x165667B1))
+        ^ ((face as u32).wrapping_mul(0x9E3779B1))
+        ^ ((floor as u32).wrapping_mul(0x85EBCA6B))
+        ^ ((col as u32).wrapping_mul(0xC2B2AE35)).rotate_left(11);
     let on_bias = (h >> 9) as f32 / ((1u32 << 23) as f32); // 0..1
-    // Flicker: a slow square-ish wobble per window.
+                                                           // Flicker: a slow square-ish wobble per window.
     let phase = ((h >> 3) as f32) * 0.001;
     let wobble = (t * 0.55 + phase).sin();
     let lit = on_bias > 0.42 && wobble > -0.35;
@@ -119,13 +114,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The night sky.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(5, 6, 11)),
-                (0.5, Color::rgb(10, 10, 18)),
-                (1.0, Color::rgb(16, 13, 22)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(5, 6, 11)),
+            (0.5, Color::rgb(10, 10, 18)),
+            (1.0, Color::rgb(16, 13, 22)),
+        ]),
     );
 
     // Stars.
@@ -135,7 +128,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let x = rng.f01() * w;
             let y = rng.f01() * h * 0.5;
             let tw = 0.5 + 0.5 * (t * 1.9 + rng.f01() * 7.0).sin();
-            book.circle(Offset::new(x, y), 0.4 + rng.f01() * 0.7, alpha(Color::WHITE, 0.02 + 0.08 * tw));
+            book.circle(
+                Offset::new(x, y),
+                0.4 + rng.f01() * 0.7,
+                alpha(Color::WHITE, 0.02 + 0.08 * tw),
+            );
         }
     }
 
@@ -218,17 +215,15 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 Vec3::new(x + half_w, 0.0, z + half_w),
                 Vec3::new(x - half_w, 0.0, z + half_w),
             ];
-            let top: Vec<Vec3> = corners.iter().map(|c| Vec3::new(c.x, height, c.z)).collect();
+            let top: Vec<Vec3> = corners
+                .iter()
+                .map(|c| Vec3::new(c.x, height, c.z))
+                .collect();
 
             // Face orientations with their shade tints.
-            for (fi, (a, b)) in [
-                (0usize, 1usize),
-                (1, 2),
-                (2, 3),
-                (3, 0),
-            ]
-            .iter()
-            .enumerate()
+            for (fi, (a, b)) in [(0usize, 1usize), (1, 2), (2, 3), (3, 0)]
+                .iter()
+                .enumerate()
             {
                 let _ = fi;
                 let (ca, cb) = (corners[*a], corners[*b]);
@@ -260,7 +255,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                     _ => 0.38,
                 };
                 let col = mix(Color::rgb(4, 4, 7), base, shade);
-                faces.push(Face { pts, depth, color: col });
+                faces.push(Face {
+                    pts,
+                    depth,
+                    color: col,
+                });
 
                 // Windows on this wall.
                 if park {
@@ -323,7 +322,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     }
 
     // Painter's sort, far first.
-    faces.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
+    faces.sort_by(|a, b| {
+        b.depth
+            .partial_cmp(&a.depth)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     for f in &faces {
         let mut path = Path::new();
         path.move_to(f.pts[0]);
@@ -354,7 +357,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
         // Traffic: dots riding the streets, closed form.
         if traffic_t > 0.0 {
             let mut rng = Rng::new(0x7A1);
-            for i in 0..72 {
+            for _i in 0..72 {
                 let axis_x = rng.f01() < 0.5;
                 let line = ((rng.f01() * GRID as f32).round() - half as f32) * PITCH;
                 let speed = (0.55 + rng.f01() * 0.9) * if rng.f01() < 0.5 { 1.0 } else { -1.0 };
@@ -368,7 +371,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 if let Some((pp, _, sc)) = cam.project(p, canvas) {
                     let r = (0.9 * sc * 900.0).max(0.7);
                     let head = speed > 0.0;
-                    let col = if head { tint(AMBER, 0.5) } else { mix(REDISH, Color::WHITE, 0.3) };
+                    let col = if head {
+                        tint(AMBER, 0.5)
+                    } else {
+                        mix(REDISH, Color::WHITE, 0.3)
+                    };
                     g.circle(pp, r, alpha(col, 0.85 * traffic_t));
                 }
             }
@@ -385,7 +392,6 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 (1.0, alpha(Color::BLACK, 0.55)),
             ]),
     );
-
 }
 
 /// Tail-light red.
@@ -397,11 +403,7 @@ fn lerp3(a: Vec3, b: Vec3, k: f32) -> Vec3 {
 }
 
 /// Project a 4-point quad; `None` if any corner falls behind the camera.
-fn project4(
-    quad: &[Vec3; 4],
-    cam: &Camera,
-    canvas: Size,
-) -> Option<([Offset; 4], f32, f32)> {
+fn project4(quad: &[Vec3; 4], cam: &Camera, canvas: Size) -> Option<([Offset; 4], f32, f32)> {
     let mut pts = [Offset::new(0.0, 0.0); 4];
     let mut depth = 0.0;
     let mut scale = 0.0;
@@ -424,7 +426,7 @@ fn cross_area(pts: &[Offset; 4]) -> f32 {
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

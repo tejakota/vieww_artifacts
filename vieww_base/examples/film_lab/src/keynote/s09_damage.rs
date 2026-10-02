@@ -16,7 +16,7 @@ use crate::film_lib::clamp01;
 use super::studio::{button_rect, studio, App, Code, Spec};
 use super::{caption, group_commas, Ctx};
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -34,15 +34,25 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     app.spring = 1.0;
 
     let spec = Spec {
-        code: Code::Say { typed: 1.0, blink: ctx.sec },
+        code: Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app,
         damage: if lit > 0.0 {
-            Some((r, format!("{} px · one write", group_commas(area_px as u64))))
+            Some((
+                r,
+                format!("{} px · one write", group_commas(area_px as u64)),
+            ))
         } else {
             None
         },
         perf_strip: true,
-        ms: if ctx.probe.frame_ms > 0.0 { Some(ctx.probe.frame_ms) } else { None },
+        ms: if ctx.probe.frame_ms > 0.0 {
+            Some(ctx.probe.frame_ms)
+        } else {
+            None
+        },
         px: Some(area_px),
         session_line: clamp01((abs - 26.0) / 99.0),
         ..Spec::default()
@@ -53,22 +63,20 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // The damage rect's own pulse — a soft ring when the write lands.
     if (write_t..write_t + 0.4).contains(&t) {
         let k = clamp01((t - write_t) / 0.4);
-        stack = stack.push(
-            Positioned::fill().child(
-                vieww_widget::Painting::sized(
-                    super::CANVAS,
-                    vieww_widget::PaintWith::new(move |book: &mut vieww_foundation::Sketchbook, _s: vieww_foundation::Size| {
-                        let c = vieww_foundation::Offset::new(1209.0, 640.0);
-                        book.ring(
-                            c,
-                            30.0 + 150.0 * k,
-                            2.2,
-                            crate::film_lib::alpha(super::C_DAMAGE, (1.0 - k) * 0.8),
-                        );
-                    }),
-                ),
+        stack = stack.push(Positioned::fill().child(vieww_widget::Painting::sized(
+            super::CANVAS,
+            vieww_widget::PaintWith::new(
+                move |book: &mut vieww_foundation::Sketchbook, _s: vieww_foundation::Size| {
+                    let c = vieww_foundation::Offset::new(1209.0, 640.0);
+                    book.ring(
+                        c,
+                        30.0 + 150.0 * k,
+                        2.2,
+                        crate::film_lib::alpha(super::C_DAMAGE, (1.0 - k) * 0.8),
+                    );
+                },
             ),
-        );
+        )));
     }
 
     stack = stack.push(caption(

@@ -8,13 +8,16 @@
 //! scene ends almost dark — except one violet spark that refuses to go out
 //! (S04's first frame).
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, spring_out, tint, xywh, FAINT, INK, MUTED, RED, AMBER, Rng, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_cubic, mix, spring_out, tint, xywh, INK, MUTED, RED, VIOLET,
+    VIOLET_SOFT,
+};
 
-use super::{Ctx};
+use super::Ctx;
 
 /// The gear's center.
 const CX: f32 = 960.0;
@@ -50,7 +53,7 @@ const BARS: [(&str, f32); 4] = [
     ("the toolchain maze", 0.60),
 ];
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -77,10 +80,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         sec * 1.4
     } else {
         let over = (t - decay_start) / (1.0 - decay_start);
-        1.4 * (sec.min(decay_start * 8.0)) + (1.0 - ease_out_cubic(over)) * (t - decay_start) * 8.0 * 1.4
+        1.4 * (sec.min(decay_start * 8.0))
+            + (1.0 - ease_out_cubic(over)) * (t - decay_start) * 8.0 * 1.4
     };
     let dim = 1.0 - 0.72 * ease_out_cubic(clamp01((t - 0.34) / 0.30));
-    let gear_col = mix(alpha(VIOLET_SOFT, 0.95), alpha(mix(VIOLET, Color::BLACK, 0.5), 0.9), 1.0 - dim);
+    let gear_col = mix(
+        alpha(VIOLET_SOFT, 0.95),
+        alpha(mix(VIOLET, Color::BLACK, 0.5), 0.9),
+        1.0 - dim,
+    );
 
     stack = stack.push(Positioned::fill().child(Painting::sized(
         super::CANVAS,
@@ -95,10 +103,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     gear.clone(),
                     gear_col,
                     5.0,
-                    vieww_foundation::StrokeStyle::rounded().dash(vieww_foundation::Dash::new(vec![
-                        2600.0 * draw_p,
-                        2600.0,
-                    ])),
+                    vieww_foundation::StrokeStyle::rounded()
+                        .dash(vieww_foundation::Dash::new(vec![2600.0 * draw_p, 2600.0])),
                 );
                 // The hub — a smaller cog inside, counter-rotating.
                 let hub = gear_path(0.0, 0.0, R_OUT * 0.45, 8);
@@ -108,7 +114,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     3.0,
                     vieww_foundation::StrokeStyle::rounded(),
                 );
-                g.circle(Offset::new(0.0, 0.0), 16.0, alpha(gear_col_color(), 0.9 * draw_p));
+                g.circle(
+                    Offset::new(0.0, 0.0),
+                    16.0,
+                    alpha(gear_col_color(), 0.9 * draw_p),
+                );
             });
             // The glow the gear casts while it still turns.
             let glow_a = dim * (0.16 + 0.05 * (sec * 3.0).sin());
@@ -129,9 +139,19 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         // Four bars around the gear: left, right, top, bottom — a cage.
         let (x, y, w, h) = match i {
             0 => (CX - 460.0, CY - 300.0, 120.0 * slam.max(0.05), 600.0),
-            1 => (CX + 340.0 + 120.0 * (1.0 - slam), CY - 300.0, 120.0 * slam.max(0.05), 600.0),
+            1 => (
+                CX + 340.0 + 120.0 * (1.0 - slam),
+                CY - 300.0,
+                120.0 * slam.max(0.05),
+                600.0,
+            ),
             2 => (CX - 460.0, CY - 420.0, 940.0, 110.0 * slam.max(0.05)),
-            _ => (CX - 460.0, CY + 310.0 + 110.0 * (1.0 - slam), 940.0, 110.0 * slam.max(0.05)),
+            _ => (
+                CX - 460.0,
+                CY + 310.0 + 110.0 * (1.0 - slam),
+                940.0,
+                110.0 * slam.max(0.05),
+            ),
         };
         let label = *label;
         let i = i as f32;
@@ -144,7 +164,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(Painting::sized(
                     Size::new(w.max(1.0), h.max(1.0)),
                     PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-                        book.rrect(xywh(0.0, 0.0, s.width, s.height), 10.0, alpha(Color::rgb(24, 24, 28), 0.97));
+                        book.rrect(
+                            xywh(0.0, 0.0, s.width, s.height),
+                            10.0,
+                            alpha(Color::rgb(24, 24, 28), 0.97),
+                        );
                         book.stroke_rrect(
                             xywh(0.0, 0.0, s.width, s.height),
                             10.0,
@@ -152,12 +176,27 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                             1.4,
                         );
                         // Rivets — two rows, the industrial grammar.
-                        let (rx, ry, rw, rh) = (14.0, 14.0, (s.width - 28.0).max(1.0), (s.height - 28.0).max(1.0));
+                        let (rx, ry, rw, rh) = (
+                            14.0,
+                            14.0,
+                            (s.width - 28.0).max(1.0),
+                            (s.height - 28.0).max(1.0),
+                        );
                         for k in 0..5 {
                             let fx = k as f32 / 4.0;
                             let fy = if k % 2 == 0 { 0.0 } else { 1.0 };
-                            let px = rx + rw * (if s.width > s.height { fx } else { fy * 0.5 + 0.25 });
-                            let py = ry + rh * (if s.width > s.height { fy * 0.5 + 0.25 } else { fx });
+                            let px = rx
+                                + rw * (if s.width > s.height {
+                                    fx
+                                } else {
+                                    fy * 0.5 + 0.25
+                                });
+                            let py = ry
+                                + rh * (if s.width > s.height {
+                                    fy * 0.5 + 0.25
+                                } else {
+                                    fx
+                                });
                             book.circle(Offset::new(px, py), 3.2, alpha(Color::WHITE, 0.10));
                         }
                         let _ = i;
@@ -178,8 +217,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .width(420.0)
                 .height(28.0)
                 .child(
-                    Text::new(label)
-                        .style(TextStyle::new(21.0).monospace().letter_spacing(2.4).color(alpha(tint(RED, 0.05), 0.9))),
+                    Text::new(label).style(
+                        TextStyle::new(21.0)
+                            .monospace()
+                            .letter_spacing(2.4)
+                            .color(alpha(tint(RED, 0.05), 0.9)),
+                    ),
                 ),
         );
     }
@@ -193,7 +236,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .height(50.0)
             .child(
                 Text::new("rust has the power to fix this")
-                    .style(TextStyle::new(34.0).letter_spacing(2.0).color(alpha(INK, 0.95)))
+                    .style(
+                        TextStyle::new(34.0)
+                            .letter_spacing(2.0)
+                            .color(alpha(INK, 0.95)),
+                    )
                     .align(TextAlign::Center),
             ),
     );
@@ -205,11 +252,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(200.0)
                 .width(1920.0)
                 .height(40.0)
-                .child(Opacity::new(pivot_a).child(
-                    Text::new("…but the old world locked the door")
-                        .style(TextStyle::new(22.0).monospace().letter_spacing(2.6).color(alpha(MUTED, 0.9)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(pivot_a).child(
+                        Text::new("…but the old world locked the door")
+                            .style(
+                                TextStyle::new(22.0)
+                                    .monospace()
+                                    .letter_spacing(2.6)
+                                    .color(alpha(MUTED, 0.9)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
 
@@ -221,7 +275,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         stack = stack.push(Positioned::fill().child(Painting::sized(
             super::CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                super::glow(book, CX, CY, 120.0 + spark_t * 160.0, VIOLET, 0.30 + 0.22 * breathe);
+                super::glow(
+                    book,
+                    CX,
+                    CY,
+                    120.0 + spark_t * 160.0,
+                    VIOLET,
+                    0.30 + 0.22 * breathe,
+                );
                 book.circle(Offset::new(CX, CY), r, alpha(tint(VIOLET_SOFT, 0.5), 1.0));
             }),
         )));

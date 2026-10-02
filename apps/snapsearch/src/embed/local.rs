@@ -203,10 +203,10 @@ impl Embedder for LocalEmbedder {
         // image would sit in the positive orthant and every pair would
         // score a high cosine whatever their content — the index would rank
         // by brightness and nothing else.
-        for cell in 0..GRID * GRID {
-            let n = cell_counts[cell].max(1.0);
-            for channel in 0..3 {
-                features.push(cell_sums[cell][channel] / n - 0.5);
+        for (counts, sums) in cell_counts.iter().zip(&cell_sums) {
+            let n = counts.max(1.0);
+            for channel in sums {
+                features.push(channel / n - 0.5);
             }
         }
 

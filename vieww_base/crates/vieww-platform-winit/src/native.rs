@@ -367,10 +367,9 @@ impl NativeRenderer {
                     logical_height,
                     base,
                 )?,
-                None => {
-                    self.cpu
-                        .render_in_place(scene, logical_width, logical_height, base)?
-                }
+                None => self
+                    .cpu
+                    .render_in_place(scene, logical_width, logical_height, base)?,
             }
         } else {
             let factor = scale.factor();

@@ -244,9 +244,7 @@ pub fn collide(a: &Body, b: &Body) -> Option<Contact> {
         // a-to-b convention holds for every pair, and every formula that
         // depends on it can be written once.
         (Shape::Circle { .. }, Shape::Box { .. }) => circle_box(a, b),
-        (Shape::Box { .. }, Shape::Circle { .. }) => {
-            circle_box(b, a).map(negated)
-        }
+        (Shape::Box { .. }, Shape::Circle { .. }) => circle_box(b, a).map(negated),
         (Shape::Box { .. }, Shape::Box { .. }) => box_box(a, b),
     }
 }
@@ -660,10 +658,7 @@ impl World {
                 continue;
             }
 
-            let delta = Offset::new(
-                b.position.dx - a.position.dx,
-                b.position.dy - a.position.dy,
-            );
+            let delta = Offset::new(b.position.dx - a.position.dx, b.position.dy - a.position.dy);
             let distance = (delta.dx * delta.dx + delta.dy * delta.dy).sqrt();
             if distance < f32::EPSILON {
                 // Coincident bodies have no axis to pull along; a position
@@ -695,10 +690,8 @@ impl World {
             // one solve, and the joint stops oscillating.
             let a = self.bodies[joint.a];
             let b = self.bodies[joint.b];
-            let relative = Offset::new(
-                b.velocity.dx - a.velocity.dx,
-                b.velocity.dy - a.velocity.dy,
-            );
+            let relative =
+                Offset::new(b.velocity.dx - a.velocity.dx, b.velocity.dy - a.velocity.dy);
             let along = relative.dx * axis.dx + relative.dy * axis.dy;
             let magnitude = -along / inv_total * joint.stiffness;
             self.bodies[joint.a].velocity = Offset::new(
@@ -727,10 +720,7 @@ impl World {
         // contacts are skipped: an impulse that accelerates an
         // already-separating pair is the jitter a resting stack shows when
         // the solver cannot tell "leaving" from "arriving".
-        let relative = Offset::new(
-            b.velocity.dx - a.velocity.dx,
-            b.velocity.dy - a.velocity.dy,
-        );
+        let relative = Offset::new(b.velocity.dx - a.velocity.dx, b.velocity.dy - a.velocity.dy);
         let closing = relative.dx * contact.normal.dx + relative.dy * contact.normal.dy;
         if closing > 0.0 {
             return;
@@ -743,10 +733,7 @@ impl World {
         let restitution = a.restitution.min(b.restitution).min(1.0);
         let magnitude = -(1.0 + restitution) * closing / inv_total;
 
-        let impulse = Offset::new(
-            contact.normal.dx * magnitude,
-            contact.normal.dy * magnitude,
-        );
+        let impulse = Offset::new(contact.normal.dx * magnitude, contact.normal.dy * magnitude);
         self.bodies[contact.a].velocity = Offset::new(
             a.velocity.dx - impulse.dx * inv_a,
             a.velocity.dy - impulse.dy * inv_a,
@@ -774,10 +761,7 @@ impl World {
             return;
         }
         let move_by = contact.depth * CORRECTION / inv_total;
-        let shift = Offset::new(
-            contact.normal.dx * move_by,
-            contact.normal.dy * move_by,
-        );
+        let shift = Offset::new(contact.normal.dx * move_by, contact.normal.dy * move_by);
         self.bodies[contact.a].position = Offset::new(
             a.position.dx - shift.dx * inv_a,
             a.position.dy - shift.dy * inv_a,
@@ -802,11 +786,19 @@ mod tests {
     #[test]
     fn gravity_accelerates_a_dynamic_body() {
         let mut world = World::with_gravity(Offset::new(0.0, 10.0));
-        let ball = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(1.0), 1.0));
+        let ball = world.add_body(Body::dynamic(
+            Offset::new(0.0, 0.0),
+            Shape::circle(1.0),
+            1.0,
+        ));
 
         world.step(1.0);
         assert_eq!(world.body(ball).velocity.dy, 10.0, "one second of g");
-        assert_eq!(world.body(ball).position.dy, 10.0, "semi-implicit: new velocity, then position");
+        assert_eq!(
+            world.body(ball).position.dy,
+            10.0,
+            "semi-implicit: new velocity, then position"
+        );
 
         world.step(1.0);
         assert_eq!(world.body(ball).velocity.dy, 20.0);
@@ -816,8 +808,15 @@ mod tests {
     #[test]
     fn a_fixed_body_never_moves() {
         let mut world = World::with_gravity(Offset::new(0.0, 100.0));
-        let floor = world.add_body(Body::fixed(Offset::new(0.0, 50.0), Shape::box_shape(100.0, 4.0)));
-        let ball = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(2.0), 1.0));
+        let floor = world.add_body(Body::fixed(
+            Offset::new(0.0, 50.0),
+            Shape::box_shape(100.0, 4.0),
+        ));
+        let ball = world.add_body(Body::dynamic(
+            Offset::new(0.0, 0.0),
+            Shape::circle(2.0),
+            1.0,
+        ));
 
         steps(&mut world, 1.0 / 60.0, 60);
         assert_eq!(world.body(floor).position, Offset::new(0.0, 50.0));
@@ -828,17 +827,32 @@ mod tests {
     #[test]
     fn gravity_is_opt_in() {
         let mut world = World::new();
-        let puck = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(1.0), 1.0));
+        let puck = world.add_body(Body::dynamic(
+            Offset::new(0.0, 0.0),
+            Shape::circle(1.0),
+            1.0,
+        ));
 
         world.step(1.0);
-        assert_eq!(world.body(puck).position, Offset::new(0.0, 0.0), "top-down: nothing falls");
+        assert_eq!(
+            world.body(puck).position,
+            Offset::new(0.0, 0.0),
+            "top-down: nothing falls"
+        );
     }
 
     #[test]
     fn a_ball_comes_to_rest_above_a_floor() {
         let mut world = World::with_gravity(Offset::new(0.0, 600.0));
-        let ball = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(8.0), 1.0));
-        world.add_body(Body::fixed(Offset::new(0.0, 100.0), Shape::box_shape(200.0, 4.0)));
+        let ball = world.add_body(Body::dynamic(
+            Offset::new(0.0, 0.0),
+            Shape::circle(8.0),
+            1.0,
+        ));
+        world.add_body(Body::fixed(
+            Offset::new(0.0, 100.0),
+            Shape::box_shape(200.0, 4.0),
+        ));
 
         // A second of settling.
         steps(&mut world, 1.0 / 60.0, 60);
@@ -903,12 +917,10 @@ mod tests {
         // zero, and the correction separates them.
         let mut world = World::new();
         let left = world.add_body(
-            Body::dynamic(Offset::new(-5.0, 0.0), Shape::circle(2.0), 1.0)
-                .restitution(0.0),
+            Body::dynamic(Offset::new(-5.0, 0.0), Shape::circle(2.0), 1.0).restitution(0.0),
         );
         let right = world.add_body(
-            Body::dynamic(Offset::new(5.0, 0.0), Shape::circle(2.0), 1.0)
-                .restitution(0.0),
+            Body::dynamic(Offset::new(5.0, 0.0), Shape::circle(2.0), 1.0).restitution(0.0),
         );
         world.body_mut(left).velocity = Offset::new(10.0, 0.0);
         world.body_mut(right).velocity = Offset::new(-10.0, 0.0);
@@ -959,7 +971,10 @@ mod tests {
             (barge_after - 2.0).abs() < 0.5,
             "the barge sailed on: {barge_after}"
         );
-        assert!(pebble_after > 10.0, "the pebble was sent flying: {pebble_after}");
+        assert!(
+            pebble_after > 10.0,
+            "the pebble was sent flying: {pebble_after}"
+        );
     }
 
     #[test]
@@ -974,12 +989,19 @@ mod tests {
         let a = Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(1.0), 1.0);
         let b = Body::dynamic(Offset::new(2.5, 0.0), Shape::circle(2.0), 1.0);
         let contact = collide(&a, &b).expect("they overlap");
-        assert!(contact.normal.dx > 0.9, "from a toward b: {:?}", contact.normal);
+        assert!(
+            contact.normal.dx > 0.9,
+            "from a toward b: {:?}",
+            contact.normal
+        );
         assert!((contact.depth - 0.5).abs() < 0.01, "3 of radii, 2.5 apart");
 
         // And exactly touching — depth zero — is *not* a contact.
         let touching = Body::dynamic(Offset::new(3.0, 0.0), Shape::circle(2.0), 1.0);
-        assert!(collide(&a, &touching).is_none(), "touching, not overlapping");
+        assert!(
+            collide(&a, &touching).is_none(),
+            "touching, not overlapping"
+        );
     }
 
     #[test]
@@ -990,12 +1012,20 @@ mod tests {
         let outside = Body::dynamic(Offset::new(7.0, 0.0), Shape::circle(3.0), 1.0);
         let contact = collide(&outside, &a_box).expect("overlapping the edge");
         // Convention: from a (the circle) to b (the box) — toward the box.
-        assert!(contact.normal.dx < -0.9, "toward the box: {:?}", contact.normal);
+        assert!(
+            contact.normal.dx < -0.9,
+            "toward the box: {:?}",
+            contact.normal
+        );
 
         // From the other argument order, the normal flips with it: a-to-b
         // now points from the box at the circle.
         let contact = collide(&a_box, &outside).expect("overlapping the edge");
-        assert!(contact.normal.dx > 0.9, "at the circle: {:?}", contact.normal);
+        assert!(
+            contact.normal.dx > 0.9,
+            "at the circle: {:?}",
+            contact.normal
+        );
 
         // Deep inside: pushed out along the shallower axis, and the depth
         // is the whole push — out past the face plus the radius.
@@ -1005,8 +1035,16 @@ mod tests {
         // y: the circle exits the +y face, so the box-first normal (a to
         // b) points +y — at the face the exit happens through — and the
         // depth is 3 + 1 (radius) = 4.
-        assert!(contact.normal.dy > 0.9, "at the exit face: {:?}", contact.normal);
-        assert!((contact.depth - 4.0).abs() < 0.01, "out past the face: {}", contact.depth);
+        assert!(
+            contact.normal.dy > 0.9,
+            "at the exit face: {:?}",
+            contact.normal
+        );
+        assert!(
+            (contact.depth - 4.0).abs() < 0.01,
+            "out past the face: {}",
+            contact.depth
+        );
     }
 
     #[test]
@@ -1016,14 +1054,26 @@ mod tests {
         let contact = collide(&a, &b).expect("overlapping");
         // x overlap: 10 - 8 = 2; y overlap: 4 - 0.5 = 3.5. The shallow one
         // is x, so the normal is ±x.
-        assert!(contact.normal.dx.abs() > 0.9, "the shallow axis: {:?}", contact.normal);
-        assert!((contact.depth - 2.0).abs() < 0.01, "by its overlap: {}", contact.depth);
+        assert!(
+            contact.normal.dx.abs() > 0.9,
+            "the shallow axis: {:?}",
+            contact.normal
+        );
+        assert!(
+            (contact.depth - 2.0).abs() < 0.01,
+            "by its overlap: {}",
+            contact.depth
+        );
     }
 
     #[test]
     fn a_step_of_zero_is_a_no_op() {
         let mut world = World::with_gravity(Offset::new(0.0, 100.0));
-        let ball = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(1.0), 1.0));
+        let ball = world.add_body(Body::dynamic(
+            Offset::new(0.0, 0.0),
+            Shape::circle(1.0),
+            1.0,
+        ));
         world.step(0.0);
         assert_eq!(world.body(ball).position, Offset::new(0.0, 0.0));
         assert_eq!(world.body(ball).velocity, Offset::new(0.0, 0.0));
@@ -1064,7 +1114,11 @@ mod joint_tests {
         // at every step, not just at rest.
         let mut world = World::with_gravity(Offset::new(0.0, 600.0));
         let anchor = world.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
-        let bob = world.add_body(Body::dynamic(Offset::new(30.0, 0.0), Shape::circle(4.0), 1.0));
+        let bob = world.add_body(Body::dynamic(
+            Offset::new(30.0, 0.0),
+            Shape::circle(4.0),
+            1.0,
+        ));
         world.add_joint(Joint::rod(anchor, bob, 50.0));
 
         for step in 0..600 {
@@ -1092,13 +1146,20 @@ mod joint_tests {
         // waiting for damping that is not this crate's to add.
         let mut world = World::with_gravity(Offset::new(0.0, 600.0));
         let anchor = world.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
-        let bob = world.add_body(Body::dynamic(Offset::new(0.0, 50.0), Shape::circle(4.0), 1.0));
+        let bob = world.add_body(Body::dynamic(
+            Offset::new(0.0, 50.0),
+            Shape::circle(4.0),
+            1.0,
+        ));
         world.add_joint(Joint::rod(anchor, bob, 50.0));
 
         step_n(&mut world, 240);
         let position = world.body(bob).position;
         assert!(position.dx.abs() < 0.5, "no sideways drift: {position:?}");
-        assert!((position.dy - 50.0).abs() < 0.5, "hangs at rest length: {position:?}");
+        assert!(
+            (position.dy - 50.0).abs() < 0.5,
+            "hangs at rest length: {position:?}"
+        );
         assert!(magnitude(world.body(bob).velocity) < 5.0, "motionless");
     }
 
@@ -1109,8 +1170,16 @@ mod joint_tests {
         // the centre of mass stays put — the conservation an impulse
         // split by inverse mass is *for*.
         let mut world = World::new();
-        let a = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(2.0), 1.0));
-        let b = world.add_body(Body::dynamic(Offset::new(100.0, 0.0), Shape::circle(2.0), 1.0));
+        let a = world.add_body(Body::dynamic(
+            Offset::new(0.0, 0.0),
+            Shape::circle(2.0),
+            1.0,
+        ));
+        let b = world.add_body(Body::dynamic(
+            Offset::new(100.0, 0.0),
+            Shape::circle(2.0),
+            1.0,
+        ));
         world.add_joint(Joint::rod(a, b, 40.0));
 
         step_n(&mut world, 30);
@@ -1134,12 +1203,20 @@ mod joint_tests {
         // by a magic number of steps.
         let mut rigid = World::new();
         let ra = rigid.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
-        let rb = rigid.add_body(Body::dynamic(Offset::new(80.0, 0.0), Shape::circle(3.0), 1.0));
+        let rb = rigid.add_body(Body::dynamic(
+            Offset::new(80.0, 0.0),
+            Shape::circle(3.0),
+            1.0,
+        ));
         rigid.add_joint(Joint::rod(ra, rb, 50.0));
 
         let mut soft = World::new();
         let sa = soft.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
-        let sb = soft.add_body(Body::dynamic(Offset::new(80.0, 0.0), Shape::circle(3.0), 1.0));
+        let sb = soft.add_body(Body::dynamic(
+            Offset::new(80.0, 0.0),
+            Shape::circle(3.0),
+            1.0,
+        ));
         soft.add_joint(Joint::tether(sa, sb, 50.0, 0.2));
 
         step_n(&mut rigid, 10);
@@ -1152,21 +1229,38 @@ mod joint_tests {
         );
         // And the soft one gets there eventually.
         step_n(&mut soft, 600);
-        assert!((world_length(&soft, sb) - 50.0).abs() < 1.0, "tether converged");
+        assert!(
+            (world_length(&soft, sb) - 50.0).abs() < 1.0,
+            "tether converged"
+        );
     }
 
     #[test]
     fn a_joint_at_rest_changes_nothing() {
         let mut world = World::new();
-        let a = world.add_body(Body::dynamic(Offset::new(0.0, 0.0), Shape::circle(2.0), 1.0));
-        let b = world.add_body(Body::dynamic(Offset::new(40.0, 0.0), Shape::circle(2.0), 1.0));
+        let a = world.add_body(Body::dynamic(
+            Offset::new(0.0, 0.0),
+            Shape::circle(2.0),
+            1.0,
+        ));
+        let b = world.add_body(Body::dynamic(
+            Offset::new(40.0, 0.0),
+            Shape::circle(2.0),
+            1.0,
+        ));
         world.add_joint(Joint::rod(a, b, 40.0));
 
         step_n(&mut world, 10);
         let pa = world.body(a).position;
         let pb = world.body(b).position;
-        assert!((pa.dx - 0.0).abs() < 1e-3 && (pb.dx - 40.0).abs() < 1e-3, "nothing moved");
-        assert!(world.body(a).velocity.dx.abs() < 1e-3, "nothing accelerated");
+        assert!(
+            (pa.dx - 0.0).abs() < 1e-3 && (pb.dx - 40.0).abs() < 1e-3,
+            "nothing moved"
+        );
+        assert!(
+            world.body(a).velocity.dx.abs() < 1e-3,
+            "nothing accelerated"
+        );
     }
 
     #[test]
@@ -1190,7 +1284,11 @@ mod joint_tests {
         // catches a sign error in it.
         let mut world = World::with_gravity(Offset::new(0.0, 600.0));
         let anchor = world.add_body(Body::fixed(Offset::new(0.0, 0.0), Shape::circle(1.0)));
-        let bob = world.add_body(Body::dynamic(Offset::new(0.0, 50.0), Shape::circle(4.0), 1.0));
+        let bob = world.add_body(Body::dynamic(
+            Offset::new(0.0, 50.0),
+            Shape::circle(4.0),
+            1.0,
+        ));
         world.body_mut(bob).velocity = Offset::new(300.0, 0.0);
         world.add_joint(Joint::rod(anchor, bob, 50.0));
 

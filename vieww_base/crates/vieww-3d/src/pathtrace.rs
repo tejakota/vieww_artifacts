@@ -86,9 +86,14 @@ impl TraceScene {
         let mut tris = Vec::new();
         let mut materials: Vec<PtMaterial> = Vec::new();
         let mut lights = Vec::new();
-        let mut add_mesh = |model: crate::math::Mat4, mesh: &vieww_mesh::Mesh, m: &Arc<Material>| {
+        let mut add_mesh = |model: crate::math::Mat4,
+                            mesh: &vieww_mesh::Mesh,
+                            m: &Arc<Material>| {
             let (metallic, roughness) = match m.shading {
-                Shading::Standard { metallic, roughness } => (metallic, roughness),
+                Shading::Standard {
+                    metallic,
+                    roughness,
+                } => (metallic, roughness),
                 Shading::Phong { shininess, .. } => (0.0, (2.0 / (shininess + 2.0)).sqrt()),
                 _ => (0.0, 1.0),
             };
@@ -100,13 +105,15 @@ impl TraceScene {
             });
             let mi = materials.len() - 1;
             let nm = model.inverse().map_or(model, |x| x.transpose());
-            for t in mesh.indices.chunks_exact(3) {
-                let p = |i: u32| model.transform_point(Vec3::from_array(mesh.positions[i as usize]));
+            for t in mesh.indices.as_chunks::<3>().0 {
+                let p =
+                    |i: u32| model.transform_point(Vec3::from_array(mesh.positions[i as usize]));
                 let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
                 let face = (b - a).cross(c - a).normalize();
                 let n = |i: u32| {
                     if mesh.has_normals() {
-                        nm.transform_vector(Vec3::from_array(mesh.normals[i as usize])).normalize()
+                        nm.transform_vector(Vec3::from_array(mesh.normals[i as usize]))
+                            .normalize()
                     } else {
                         face
                     }
@@ -128,12 +135,19 @@ impl TraceScene {
             let world = node.world();
             match &node.content {
                 Content::Mesh { mesh, material, .. } => add_mesh(world, mesh, material),
-                Content::Instanced { mesh, material, instances, .. } => {
+                Content::Instanced {
+                    mesh,
+                    material,
+                    instances,
+                    ..
+                } => {
                     for i in instances {
                         add_mesh(world * *i, mesh, material);
                     }
                 }
-                Content::Lod { levels, material, .. } => {
+                Content::Lod {
+                    levels, material, ..
+                } => {
                     if let Some((_, m)) = levels.first() {
                         add_mesh(world, m, material);
                     }
@@ -209,7 +223,8 @@ impl TraceScene {
                 [c.x, c.y, c.z][axis]
             };
             let mid = count / 2;
-            self.tris[start..start + count].select_nth_unstable_by(mid, |x, y| key(x).total_cmp(&key(y)));
+            self.tris[start..start + count]
+                .select_nth_unstable_by(mid, |x, y| key(x).total_cmp(&key(y)));
             self.nodes[index].count = 0;
             self.nodes[index].start = start;
             // Right first so left is processed next (and lands at index+1).
@@ -223,7 +238,11 @@ impl TraceScene {
         if self.nodes.is_empty() {
             return None;
         }
-        let inv = Vec3::new(1.0 / ray.direction.x, 1.0 / ray.direction.y, 1.0 / ray.direction.z);
+        let inv = Vec3::new(
+            1.0 / ray.direction.x,
+            1.0 / ray.direction.y,
+            1.0 / ray.direction.z,
+        );
         let mut best: Option<(f32, usize, f32, f32)> = None;
         let mut limit = max_t;
         let mut stack = vec![0usize];
@@ -235,7 +254,9 @@ impl TraceScene {
             if n.count > 0 {
                 for ti in n.start..n.start + n.count {
                     let t = &self.tris[ti];
-                    if let Some((d, u, v)) = crate::raycast::ray_triangle(ray, t.a, t.a + t.e1, t.a + t.e2) {
+                    if let Some((d, u, v)) =
+                        crate::raycast::ray_triangle(ray, t.a, t.a + t.e1, t.a + t.e2)
+                    {
                         if d < limit {
                             limit = d;
                             best = Some((d, ti, u, v));
@@ -258,7 +279,11 @@ impl TraceScene {
 
 fn slab(o: Vec3, inv: Vec3, lo: Vec3, hi: Vec3, max_t: f32) -> bool {
     let (mut t0, mut t1) = (0.0f32, max_t);
-    for (oa, ia, la, ha) in [(o.x, inv.x, lo.x, hi.x), (o.y, inv.y, lo.y, hi.y), (o.z, inv.z, lo.z, hi.z)] {
+    for (oa, ia, la, ha) in [
+        (o.x, inv.x, lo.x, hi.x),
+        (o.y, inv.y, lo.y, hi.y),
+        (o.z, inv.z, lo.z, hi.z),
+    ] {
         let (mut a, mut b) = ((la - oa) * ia, (ha - oa) * ia);
         if a > b {
             std::mem::swap(&mut a, &mut b);
@@ -281,7 +306,10 @@ impl Rng {
         r
     }
     fn next(&mut self) -> f32 {
-        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         let x = ((self.0 >> 18) ^ self.0) >> 27;
         #[allow(clippy::cast_possible_truncation)]
         let rot = (self.0 >> 59) as u32;
@@ -343,7 +371,11 @@ impl Accumulator {
             ((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)).clamp(0.0, 1.0)
         };
         let enc = |v: f32| {
-            let s = if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 };
+            let s = if v <= 0.003_130_8 {
+                v * 12.92
+            } else {
+                1.055 * v.powf(1.0 / 2.4) - 0.055
+            };
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let b = (s * 255.0 + 0.5) as u8;
             b
@@ -378,7 +410,13 @@ impl Default for PathTracer {
 impl PathTracer {
     /// Add `spp` samples per pixel to `acc`, viewing `scene` from `camera`.
     /// Returns rays cast.
-    pub fn accumulate(&self, scene: &TraceScene, camera: &Camera, acc: &mut Accumulator, spp: u32) -> u64 {
+    pub fn accumulate(
+        &self,
+        scene: &TraceScene,
+        camera: &Camera,
+        acc: &mut Accumulator,
+        spp: u32,
+    ) -> u64 {
         let (w, h) = (acc.width, acc.height);
         let first = acc.samples;
         #[allow(clippy::cast_precision_loss)]
@@ -445,15 +483,30 @@ impl PathTracer {
                 // Next-event estimation.
                 for (light, pos, dir) in &scene.lights {
                     let (li, ldir, dist) = match *light {
-                        Light::Directional { color, intensity, .. } => (color.scale(intensity), -*dir, f32::INFINITY),
-                        Light::Point { color, intensity, range } => {
+                        Light::Directional {
+                            color, intensity, ..
+                        } => (color.scale(intensity), -*dir, f32::INFINITY),
+                        Light::Point {
+                            color,
+                            intensity,
+                            range,
+                        } => {
                             let d = *pos - p;
                             let dist = d.length();
-                            let fall = if range > 0.0 { (1.0 - (dist / range).powi(4)).clamp(0.0, 1.0).powi(2) } else { 1.0 };
-                            (color.scale(intensity * fall / (1.0 + dist * dist * 0.02)), d / dist.max(1e-6), dist)
+                            let fall = if range > 0.0 {
+                                (1.0 - (dist / range).powi(4)).clamp(0.0, 1.0).powi(2)
+                            } else {
+                                1.0
+                            };
+                            (
+                                color.scale(intensity * fall / (1.0 + dist * dist * 0.02)),
+                                d / dist.max(1e-6),
+                                dist,
+                            )
                         }
                         Light::Ambient { color, intensity } => {
-                            radiance = radiance.add(throughput.mul(m.albedo).mul(color).scale(intensity));
+                            radiance =
+                                radiance.add(throughput.mul(m.albedo).mul(color).scale(intensity));
                             continue;
                         }
                         _ => continue,
@@ -463,7 +516,10 @@ impl PathTracer {
                         continue;
                     }
                     rays += 1;
-                    if scene.intersect(&Ray::new(origin, ldir), dist - 1e-3).is_none() {
+                    if scene
+                        .intersect(&Ray::new(origin, ldir), dist - 1e-3)
+                        .is_none()
+                    {
                         radiance = radiance.add(throughput.mul(m.albedo).mul(li).scale(ndl));
                     }
                 }
@@ -503,7 +559,13 @@ mod tests {
     fn furnace() -> Scene {
         let mut s = Scene::new();
         s.background = Rgb::new(0.5, 0.5, 0.5);
-        s.add(Node::new("ball", Content::mesh(sphere(1.0, 24, 12), Material::lambert(Color::WHITE))), None);
+        s.add(
+            Node::new(
+                "ball",
+                Content::mesh(sphere(1.0, 24, 12), Material::lambert(Color::WHITE)),
+            ),
+            None,
+        );
         s
     }
 
@@ -513,18 +575,30 @@ mod tests {
         for i in 0..10 {
             #[allow(clippy::cast_precision_loss)]
             let x = i as f32 * 1.5 - 7.0;
-            s.add(Node::new("b", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE))).at(Vec3::new(x, 0.0, 0.0)), None);
+            s.add(
+                Node::new(
+                    "b",
+                    Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE)),
+                )
+                .at(Vec3::new(x, 0.0, 0.0)),
+                None,
+            );
         }
         let ts = TraceScene::build(&mut s);
         assert_eq!(ts.triangles(), 120);
         for i in 0..40 {
             #[allow(clippy::cast_precision_loss)]
-            let ray = Ray::new(Vec3::new(i as f32 * 0.4 - 8.0, 0.2, 5.0), Vec3::new(0.0, 0.0, -1.0));
+            let ray = Ray::new(
+                Vec3::new(i as f32 * 0.4 - 8.0, 0.2, 5.0),
+                Vec3::new(0.0, 0.0, -1.0),
+            );
             let bvh = ts.intersect(&ray, f32::INFINITY).map(|h| h.0);
             let brute = ts
                 .tris
                 .iter()
-                .filter_map(|t| crate::raycast::ray_triangle(&ray, t.a, t.a + t.e1, t.a + t.e2).map(|h| h.0))
+                .filter_map(|t| {
+                    crate::raycast::ray_triangle(&ray, t.a, t.a + t.e1, t.a + t.e2).map(|h| h.0)
+                })
                 .reduce(f32::min);
             assert_eq!(bvh, brute, "ray {i}");
         }
@@ -538,7 +612,10 @@ mod tests {
         let ts = TraceScene::build(&mut s);
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 4.0), Vec3::ZERO, 0.8);
         let mut acc = Accumulator::new(16, 16);
-        let pt = PathTracer { max_bounces: 64, ..PathTracer::default() };
+        let pt = PathTracer {
+            max_bounces: 64,
+            ..PathTracer::default()
+        };
         pt.accumulate(&ts, &cam, &mut acc, 64);
         let centre: Rgb = acc.sum[8 * 16 + 8].scale(1.0 / 64.0);
         assert!((centre.r - 0.5).abs() < 0.03, "{centre:?}");
@@ -549,16 +626,33 @@ mod tests {
         let mut s = Scene::new();
         s.background = Rgb::new(0.1, 0.1, 0.12);
         s.add(
-            Node::new("floor", Content::mesh(plane(10.0, 10.0, 1, 1), Material::lambert(Color::WHITE)))
-                .rotated(Quat::from_axis_angle(Vec3::X, -std::f32::consts::FRAC_PI_2))
-                .at(Vec3::new(0.0, -1.0, 0.0)),
+            Node::new(
+                "floor",
+                Content::mesh(plane(10.0, 10.0, 1, 1), Material::lambert(Color::WHITE)),
+            )
+            .rotated(Quat::from_axis_angle(Vec3::X, -std::f32::consts::FRAC_PI_2))
+            .at(Vec3::new(0.0, -1.0, 0.0)),
             None,
         );
-        s.add(Node::new("ball", Content::mesh(sphere(1.0, 24, 12), Material::standard(Color::rgb(200, 60, 60), 0.0, 0.8))), None);
+        s.add(
+            Node::new(
+                "ball",
+                Content::mesh(
+                    sphere(1.0, 24, 12),
+                    Material::standard(Color::rgb(200, 60, 60), 0.0, 0.8),
+                ),
+            ),
+            None,
+        );
         s.add(
             Node::new(
                 "sun",
-                Content::Light(Light::Directional { color: Rgb::WHITE, intensity: 2.0, direction: Vec3::new(-0.4, -1.0, -0.3), shadow: true }),
+                Content::Light(Light::Directional {
+                    color: Rgb::WHITE,
+                    intensity: 2.0,
+                    direction: Vec3::new(-0.4, -1.0, -0.3),
+                    shadow: true,
+                }),
             ),
             None,
         );

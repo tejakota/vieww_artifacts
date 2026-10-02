@@ -9,20 +9,19 @@
 //!
 //! Tap 5 (the descent, t≈0.45) fires here.
 
-use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::Opacity;
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_cubic, mix, tint, xywh, INK, MUTED, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{clamp01, ease_in_out, tint, VIOLET_SOFT};
 
 use super::studio;
-use super::{Ctx};
+use super::Ctx;
 
 /// The sweep's window (scene fraction).
 const SWEEP_T0: f32 = 0.14;
 const SWEEP_T1: f32 = 0.72;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
     let ladder = ctx.ladder;
@@ -43,8 +42,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         ..Default::default()
     };
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
+    let mut stack = Stack::new().push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
 
     // The state-held receipt — a chip pinned to the preview: the counter
     // and the spring's phase, both carried across the descent (their

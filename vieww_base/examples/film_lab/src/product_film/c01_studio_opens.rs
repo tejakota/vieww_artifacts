@@ -14,12 +14,11 @@
 //! for one beat before dissolving into the chrome.
 
 use vieww_foundation::TextAlign;
-use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
-use super::{ACCENT, Ctx, INK, SYN_TYPE, W, caption, chip_row, clamp01, studio_chrome, tint};
+use super::{caption, chip_row, clamp01, studio_chrome, tint, Ctx, ACCENT, INK, SYN_TYPE, W};
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -54,7 +53,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(title_a * 0.8).child(
                         vieww_widget::Text::new("the actual app — not a mock")
-                            .style(super::geist_mono(16.0).letter_spacing(2.2).color(tint(SYN_TYPE, 0.15)))
+                            .style(
+                                super::geist_mono(16.0)
+                                    .letter_spacing(2.2)
+                                    .color(tint(SYN_TYPE, 0.15)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),

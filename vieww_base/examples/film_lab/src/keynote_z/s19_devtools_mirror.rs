@@ -9,9 +9,8 @@
 //! film's whole honesty discipline, running inside the thing it
 //! films.
 
-use vieww_widget::prelude::*;
-use vieww_widget::WidgetNode;
 use super::{caption, clamp01, studio_chrome, Ctx, ACCENT, SYN_TYPE};
+use vieww_widget::WidgetNode;
 
 /// The script's moments, absolute film seconds.
 const MIRROR_T: f32 = 170.0;
@@ -19,21 +18,30 @@ const DAMAGE_T: f32 = 171.5;
 const SEMANTICS_T: f32 = 173.0;
 const EDIT_T: f32 = 174.2;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
-    let t = ctx.t;
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
+    let _t = ctx.t;
     let abs = ctx.abs;
 
     let mut stack = studio_chrome(ctx);
 
     // The inspector chips — which overlays are on, live.
-    let damage_on = abs >= DAMAGE_T && abs < 175.5;
-    let semantics_on = abs >= SEMANTICS_T && abs < 176.2;
+    let damage_on = (DAMAGE_T..175.5).contains(&abs);
+    let semantics_on = (SEMANTICS_T..176.2).contains(&abs);
     let damage_label = format!("show_damage: {}", if damage_on { "on" } else { "off" });
-    let semantics_label = format!("show_semantics: {}", if semantics_on { "on" } else { "off" });
+    let semantics_label = format!(
+        "show_semantics: {}",
+        if semantics_on { "on" } else { "off" }
+    );
     stack = stack.push(super::receipt_row(
         &[
-            (damage_label.as_str(), if damage_on { ACCENT } else { super::MUTED }),
-            (semantics_label.as_str(), if semantics_on { SYN_TYPE } else { super::MUTED }),
+            (
+                damage_label.as_str(),
+                if damage_on { ACCENT } else { super::MUTED },
+            ),
+            (
+                semantics_label.as_str(),
+                if semantics_on { SYN_TYPE } else { super::MUTED },
+            ),
         ],
         clamp01((abs - DAMAGE_T) / 0.3),
     ));

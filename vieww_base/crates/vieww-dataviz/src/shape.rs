@@ -28,7 +28,9 @@ pub enum Curve {
 #[must_use]
 pub fn line(points: &[Offset], curve: Curve) -> Path {
     let mut p = Path::new();
-    let Some(&first) = points.first() else { return p };
+    let Some(&first) = points.first() else {
+        return p;
+    };
     p.move_to(first);
     append(&mut p, points, curve);
     p
@@ -82,7 +84,11 @@ fn append(p: &mut Path, points: &[Offset], curve: Curve) {
             m[0] = d[0];
             m[n - 1] = d[n - 2];
             for i in 1..n - 1 {
-                m[i] = if d[i - 1] * d[i] <= 0.0 { 0.0 } else { (d[i - 1] + d[i]) / 2.0 };
+                m[i] = if d[i - 1] * d[i] <= 0.0 {
+                    0.0
+                } else {
+                    (d[i - 1] + d[i]) / 2.0
+                };
             }
             for i in 0..n - 1 {
                 if d[i] == 0.0 {
@@ -102,7 +108,11 @@ fn append(p: &mut Path, points: &[Offset], curve: Curve) {
             for i in 0..n - 1 {
                 let (a, b) = (points[i], points[i + 1]);
                 let h = (b.dx - a.dx) / 3.0;
-                p.cubic_to(Offset::new(a.dx + h, a.dy + m[i] * h), Offset::new(b.dx - h, b.dy - m[i + 1] * h), b);
+                p.cubic_to(
+                    Offset::new(a.dx + h, a.dy + m[i] * h),
+                    Offset::new(b.dx - h, b.dy - m[i + 1] * h),
+                    b,
+                );
             }
         }
         Curve::Basis => {
@@ -117,7 +127,10 @@ fn append(p: &mut Path, points: &[Offset], curve: Curve) {
                 let (p0, p1, p2, p3) = (w[0], w[1], w[2], w[3]);
                 let c1 = Offset::new((2.0 * p1.dx + p2.dx) / 3.0, (2.0 * p1.dy + p2.dy) / 3.0);
                 let c2 = Offset::new((p1.dx + 2.0 * p2.dx) / 3.0, (p1.dy + 2.0 * p2.dy) / 3.0);
-                let end = Offset::new((p1.dx + 4.0 * p2.dx + p3.dx) / 6.0, (p1.dy + 4.0 * p2.dy + p3.dy) / 6.0);
+                let end = Offset::new(
+                    (p1.dx + 4.0 * p2.dx + p3.dx) / 6.0,
+                    (p1.dy + 4.0 * p2.dy + p3.dy) / 6.0,
+                );
                 let _ = p0;
                 p.cubic_to(c1, c2, end);
             }
@@ -178,11 +191,24 @@ pub fn pie(values: &[f32], sort: bool, start: f32, end: f32, pad: f32) -> Vec<Sl
     let pads = pad * values.len() as f32;
     let span = (end - start - pads).max(0.0);
     let mut angle = start;
-    let mut out = vec![Slice { index: 0, value: 0.0, start: 0.0, end: 0.0 }; values.len()];
+    let mut out = vec![
+        Slice {
+            index: 0,
+            value: 0.0,
+            start: 0.0,
+            end: 0.0
+        };
+        values.len()
+    ];
     for i in order {
         let v = values[i].max(0.0);
         let a = if total > 0.0 { span * v / total } else { 0.0 } + pad;
-        out[i] = Slice { index: i, value: v, start: angle, end: angle + a };
+        out[i] = Slice {
+            index: i,
+            value: v,
+            start: angle,
+            end: angle + a,
+        };
         angle += a;
     }
     out
@@ -207,12 +233,19 @@ pub fn stack(series: &[Vec<f32>], offset: StackOffset) -> Vec<Vec<(f32, f32)>> {
     let mut out = vec![vec![(0.0, 0.0); cols]; series.len()];
     #[allow(clippy::needless_range_loop)]
     for x in 0..cols {
-        let total: f32 = series.iter().map(|s| s.get(x).copied().unwrap_or(0.0)).sum();
+        let total: f32 = series
+            .iter()
+            .map(|s| s.get(x).copied().unwrap_or(0.0))
+            .sum();
         let base = match offset {
             StackOffset::Silhouette => -total / 2.0,
             _ => 0.0,
         };
-        let scale = if offset == StackOffset::Expand && total > 0.0 { 1.0 / total } else { 1.0 };
+        let scale = if offset == StackOffset::Expand && total > 0.0 {
+            1.0 / total
+        } else {
+            1.0
+        };
         let mut acc = base;
         for (s, row) in series.iter().enumerate() {
             let v = row.get(x).copied().unwrap_or(0.0) * scale;
@@ -246,17 +279,32 @@ mod tests {
     #[test]
     fn every_curve_passes_through_its_ends() {
         let p = pts(&[(0.0, 0.0), (10.0, 5.0), (20.0, -3.0), (30.0, 8.0)]);
-        for c in [Curve::Linear, Curve::Step, Curve::MonotoneX, Curve::Cardinal(0.0), Curve::Basis] {
+        for c in [
+            Curve::Linear,
+            Curve::Step,
+            Curve::MonotoneX,
+            Curve::Cardinal(0.0),
+            Curve::Basis,
+        ] {
             let path = line(&p, c);
             let m = path.measure();
             let end = m.point_at_fraction(1.0).unwrap().position;
-            assert!((end - Offset::new(30.0, 8.0)).distance() < 1e-3, "{c:?} ends at {end:?}");
+            assert!(
+                (end - Offset::new(30.0, 8.0)).distance() < 1e-3,
+                "{c:?} ends at {end:?}"
+            );
         }
     }
 
     #[test]
     fn monotone_never_overshoots() {
-        let p = pts(&[(0.0, 0.0), (1.0, 10.0), (2.0, 10.0), (3.0, 11.0), (4.0, 0.0)]);
+        let p = pts(&[
+            (0.0, 0.0),
+            (1.0, 10.0),
+            (2.0, 10.0),
+            (3.0, 11.0),
+            (4.0, 0.0),
+        ]);
         let path = line(&p, Curve::MonotoneX);
         for c in path.flatten(0.01) {
             for q in c.points {
@@ -265,7 +313,12 @@ mod tests {
         }
         // Cardinal does overshoot here (the contrast D3's docs draw).
         let card = line(&p, Curve::Cardinal(0.0));
-        let max = card.flatten(0.01).iter().flat_map(|c| c.points.clone()).map(|q| q.dy).fold(f32::MIN, f32::max);
+        let max = card
+            .flatten(0.01)
+            .iter()
+            .flat_map(|c| c.points.clone())
+            .map(|q| q.dy)
+            .fold(f32::MIN, f32::max);
         assert!(max > 11.0);
     }
 
@@ -295,7 +348,10 @@ mod tests {
         let a = arc(c, 20.0, 50.0, 0.0, FRAC_PI_2, 0.0);
         assert!(a.contains(Offset::new(25.0, -25.0), FillRule::NonZero));
         assert!(!a.contains(Offset::new(-25.0, -25.0), FillRule::NonZero));
-        assert!(!a.contains(Offset::new(5.0, -5.0), FillRule::NonZero), "the hole");
+        assert!(
+            !a.contains(Offset::new(5.0, -5.0), FillRule::NonZero),
+            "the hole"
+        );
         let wedge = arc(c, 0.0, 50.0, 0.0, FRAC_PI_2, 0.0);
         assert!(wedge.contains(Offset::new(5.0, -5.0), FillRule::NonZero));
         let cen = arc_centroid(c, 20.0, 50.0, 0.0, FRAC_PI_2);

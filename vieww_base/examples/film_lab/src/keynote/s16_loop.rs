@@ -10,23 +10,24 @@
 //! The tool that escaped the wait is the tool that rendered the film
 //! about escaping it.
 
-use vieww_foundation::{Color, Offset, Size, Sketchbook, TextAlign, TextStyle, Transform, FontWeight};
+use vieww_foundation::{
+    Color, FontWeight, Offset, Size, Sketchbook, TextAlign, TextStyle, Transform,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
 use vieww_widget::Transformed;
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, mix, smoothstep, tint, xywh, INK, MUTED, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, ease_in_out, smoothstep, tint, INK, VIOLET_SOFT};
 
 use super::studio::{studio, App, Code, Spec};
 use super::{caption, Ctx};
 
 /// Scale about a point.
 fn scale_about(cx: f32, cy: f32, s: f32) -> Transform {
-    Transform::translate(Offset::new(cx * (1.0 - s), cy * (1.0 - s)))
-        .then(Transform::scale(s, s))
+    Transform::translate(Offset::new(cx * (1.0 - s), cy * (1.0 - s))).then(Transform::scale(s, s))
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -37,7 +38,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     app.dial = 1.0;
     app.spring = 1.0;
     let spec = Spec {
-        code: Code::Say { typed: 1.0, blink: ctx.sec },
+        code: Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app,
         session_line: 1.0,
         tab: Some("endcard".to_string()),
@@ -55,23 +59,38 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     if card_a > 0.01 {
         let card = Stack::new()
             .push(
-                Positioned::new().left(0.0).top(360.0).width(1920.0).height(170.0).child(
-                    Text::new("vieww")
-                        .style(
-                            TextStyle::new(128.0)
-                                .weight(FontWeight::Regular)
-                                .letter_spacing(18.0)
-                                .color(alpha(INK, 0.95)),
-                        )
-                        .align(TextAlign::Center),
-                ),
+                Positioned::new()
+                    .left(0.0)
+                    .top(360.0)
+                    .width(1920.0)
+                    .height(170.0)
+                    .child(
+                        Text::new("vieww")
+                            .style(
+                                TextStyle::new(128.0)
+                                    .weight(FontWeight::Regular)
+                                    .letter_spacing(18.0)
+                                    .color(alpha(INK, 0.95)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
             )
             .push(
-                Positioned::new().left(0.0).top(540.0).width(1920.0).height(30.0).child(
-                    Text::new("this film was rendered with vieww")
-                        .style(TextStyle::new(28.0).monospace().letter_spacing(4.0).color(alpha(tint(VIOLET_SOFT, 0.2), 0.9)))
-                        .align(TextAlign::Center),
-                ),
+                Positioned::new()
+                    .left(0.0)
+                    .top(540.0)
+                    .width(1920.0)
+                    .height(30.0)
+                    .child(
+                        Text::new("this film was rendered with vieww")
+                            .style(
+                                TextStyle::new(28.0)
+                                    .monospace()
+                                    .letter_spacing(4.0)
+                                    .color(alpha(tint(VIOLET_SOFT, 0.2), 0.9)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
             );
         stack = stack.push(Positioned::fill().child(
             Opacity::new(card_a).child(Transformed::new(scale_about(960.0, 470.0, k)).child(card)),
@@ -90,22 +109,27 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let refl_a = clamp01((t - 0.55) / 0.15) * (1.0 - clamp01((t - 0.90) / 0.10));
     if refl_a > 0.01 {
         let floor_y = 968.0;
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    // The floor line.
-                    book.line(
-                        Offset::new(560.0, floor_y),
-                        Offset::new(1360.0, floor_y),
-                        alpha(Color::WHITE, 0.10),
-                        1.0,
-                    );
-                    // The reflection's glow — soft, sinking.
-                    super::glow(book, 960.0, floor_y + 40.0, 300.0, VIOLET_SOFT, 0.12 * refl_a);
-                }),
-            )),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                // The floor line.
+                book.line(
+                    Offset::new(560.0, floor_y),
+                    Offset::new(1360.0, floor_y),
+                    alpha(Color::WHITE, 0.10),
+                    1.0,
+                );
+                // The reflection's glow — soft, sinking.
+                super::glow(
+                    book,
+                    960.0,
+                    floor_y + 40.0,
+                    300.0,
+                    VIOLET_SOFT,
+                    0.12 * refl_a,
+                );
+            }),
+        )));
         // The mirrored mark — a text node flipped about the floor line.
         let mark_h = 120.0;
         let flip = Transform::translate(Offset::new(0.0, 2.0 * (floor_y + 14.0)))
@@ -114,16 +138,21 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             Positioned::fill().child(
                 Opacity::new(refl_a * 0.30).child(
                     Transformed::new(flip).child(
-                        Positioned::new().left(0.0).top(floor_y + 14.0).width(1920.0).height(mark_h).child(
-                            Text::new("vieww")
-                                .style(
-                                    TextStyle::new(96.0)
-                                        .weight(FontWeight::Regular)
-                                        .letter_spacing(14.0)
-                                        .color(INK),
-                                )
-                                .align(TextAlign::Center),
-                        ),
+                        Positioned::new()
+                            .left(0.0)
+                            .top(floor_y + 14.0)
+                            .width(1920.0)
+                            .height(mark_h)
+                            .child(
+                                Text::new("vieww")
+                                    .style(
+                                        TextStyle::new(96.0)
+                                            .weight(FontWeight::Regular)
+                                            .letter_spacing(14.0)
+                                            .color(INK),
+                                    )
+                                    .align(TextAlign::Center),
+                            ),
                     ),
                 ),
             ),
@@ -136,7 +165,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         stack = stack.push(
             Positioned::fill().child(
                 Opacity::new(1.0 - fade).child(
-                    Container::new().size(1920.0, 1080.0).color(Color::rgb(4, 4, 6)),
+                    Container::new()
+                        .size(1920.0, 1080.0)
+                        .color(Color::rgb(4, 4, 6)),
                 ),
             ),
         );

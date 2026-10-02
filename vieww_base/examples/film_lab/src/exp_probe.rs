@@ -22,13 +22,14 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, mix, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET,
-    VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 8.0;
+pub(crate) const SECONDS: f32 = 8.0;
 
 /// The wash's blur sigma — the U-15 probe's subject.
 const WASH_SIGMA: f32 = 24.0;
@@ -100,7 +101,7 @@ fn petal_centroid(t: f32, k: usize) -> Offset {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let fade_in = clamp01(t / 0.06);
     let petals = petal_path(t);
 
@@ -113,10 +114,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(8, 8, 11)),
-                    (1.0, BG_DEEP),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(8, 8, 11)), (1.0, BG_DEEP)]),
             );
 
             // ── U-15's subject: the full-bleed wash, blurred σ24 ─────────
@@ -238,10 +238,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.9).with_dither().with_stops(&[
-                    (0.6, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.38)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.9)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.6, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.38)),
+                    ]),
             );
         }),
     );
@@ -258,9 +260,8 @@ pub fn frame(t: f32) -> WidgetNode {
                 .width(58.0)
                 .height(16.0)
                 .child(
-                    Text::new(format!("{rung:.2} px")).style(
-                        TextStyle::new(11.0).monospace().color(alpha(MUTED, 1.0)),
-                    ),
+                    Text::new(format!("{rung:.2} px"))
+                        .style(TextStyle::new(11.0).monospace().color(alpha(MUTED, 1.0))),
                 ),
         );
     }
@@ -280,10 +281,20 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
     let lines = [
         "PROBE · THE INSTRUMENT PANEL · MEASURED IN PIXELS".to_string(),
-        format!("wash σ{:.0} full-bleed — corners read by the probe", WASH_SIGMA),
-        format!("petals {} · open #{} · open_subpath_fills → 1", PETALS, OPEN_PETAL),
-        format!("ladder {} rungs {:.2}→{:.2} px (U-18 CLOSED r11: floor off here)", RUNGS.len(),
-            RUNGS[0], RUNGS[RUNGS.len() - 1]),
+        format!(
+            "wash σ{:.0} full-bleed — corners read by the probe",
+            WASH_SIGMA
+        ),
+        format!(
+            "petals {} · open #{} · open_subpath_fills → 1",
+            PETALS, OPEN_PETAL
+        ),
+        format!(
+            "ladder {} rungs {:.2}→{:.2} px (U-18 CLOSED r11: floor off here)",
+            RUNGS.len(),
+            RUNGS[0],
+            RUNGS[RUNGS.len() - 1]
+        ),
         "probe lines below: from the RGBA buffer, last frame".to_string(),
     ];
 
@@ -311,7 +322,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 .height(15.0)
                 .child(
                     Text::new(line.clone()).style(
-                        TextStyle::new(11.0).monospace().color(alpha(mix(MUTED, INK, 0.55), 0.95)),
+                        TextStyle::new(11.0)
+                            .monospace()
+                            .color(alpha(mix(MUTED, INK, 0.55), 0.95)),
                     ),
                 ),
         );
@@ -324,7 +337,7 @@ fn receipt_panel(t: f32) -> WidgetNode {
 /// Reads the evidence out of the output buffer. Every number below is a
 /// pixel value the rasterizer produced; the probe's own positions are the
 /// plate's closed-form geometry at `t = 1`.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let mut out = Vec::new();
 
     // ── U-15: the wash's four corners, and the max channel delta.

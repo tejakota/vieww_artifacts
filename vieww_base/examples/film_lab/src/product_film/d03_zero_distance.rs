@@ -17,8 +17,8 @@ use vieww_foundation::{Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    Ctx, INK, MUTED, W, alpha, brand_mark, caption, clamp01, distance_chip, gap_line, glow,
-    grain, ground, pole_caret, pole_screen, progress_rail, spring_out, vignette, xywh,
+    alpha, brand_mark, caption, clamp01, distance_chip, gap_line, glow, grain, ground, pole_caret,
+    pole_screen, progress_rail, spring_out, vignette, xywh, Ctx, INK, MUTED, W,
 };
 use crate::film_lib::ease_out_cubic;
 
@@ -26,7 +26,7 @@ use crate::film_lib::ease_out_cubic;
 const MEET_X: f32 = 960.0;
 const MEET_Y: f32 = 430.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -62,14 +62,32 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             if merge < 0.99 {
-                gap_line(book, MEET_Y, 560.0, 1360.0, approach * 0.85, sec, 0.0, 0.0, MUTED, 1.0 - merge * 0.8);
+                gap_line(
+                    book,
+                    MEET_Y,
+                    560.0,
+                    1360.0,
+                    approach * 0.85,
+                    sec,
+                    0.0,
+                    0.0,
+                    MUTED,
+                    1.0 - merge * 0.8,
+                );
                 pole_caret(book, caret_x, MEET_Y, sec, 1.0 - merge * 0.6);
                 pole_screen(book, screen_x, MEET_Y, approach, 1.0 - merge * 0.6, MUTED);
             }
             // The contact's bloom — the moment itself.
             if merge > 0.0 {
                 let bloom = spring_out(merge, 11.0, 0.5);
-                glow(book, MEET_X, MEET_Y, 320.0 * bloom, super::ACCENT, 0.5 * (1.0 - merge * 0.4));
+                glow(
+                    book,
+                    MEET_X,
+                    MEET_Y,
+                    320.0 * bloom,
+                    super::ACCENT,
+                    0.5 * (1.0 - merge * 0.4),
+                );
                 // The shockwave ring.
                 book.ring(
                     Offset::new(MEET_X, MEET_Y),
@@ -101,12 +119,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(MEET_Y - side * 0.5 + rise - 6.0)
                 .width(side)
                 .height(side)
-                .child(
-                    super::Opacity::new(mark_a).child(
-                        // The real mark — the studio's own drawing of it.
-                        brand_mark(side, editor, preview),
-                    ),
-                ),
+                .child(super::Opacity::new(mark_a).child(
+                    // The real mark — the studio's own drawing of it.
+                    brand_mark(side, editor, preview),
+                )),
         );
     }
 
@@ -158,7 +174,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     }
 
     // The captions — the closing narration.
-    stack = stack.push(super::act_chip("MOVEMENT V", "ZERO", clamp01((t - 0.04) / 0.10)));
+    stack = stack.push(super::act_chip(
+        "MOVEMENT V",
+        "ZERO",
+        clamp01((t - 0.04) / 0.10),
+    ));
     stack = stack.push(caption(
         "the question the film opened with — answered",
         1002.0,

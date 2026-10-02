@@ -40,7 +40,11 @@ impl Lag {
     /// Seconds to cover ~63% of a step up and down respectively.
     #[must_use]
     pub const fn new(rise: f32, fall: f32) -> Self {
-        Self { rise, fall, state: None }
+        Self {
+            rise,
+            fall,
+            state: None,
+        }
     }
 }
 
@@ -48,7 +52,11 @@ impl Chop for Lag {
     fn process(&mut self, input: f32, dt: f32) -> f32 {
         let prev = self.state.unwrap_or(input);
         let tau = if input > prev { self.rise } else { self.fall };
-        let a = if tau <= 0.0 { 1.0 } else { 1.0 - (-dt / tau).exp() };
+        let a = if tau <= 0.0 {
+            1.0
+        } else {
+            1.0 - (-dt / tau).exp()
+        };
         let out = prev + (input - prev) * a;
         self.state = Some(out);
         out
@@ -117,7 +125,10 @@ pub struct Speed {
 impl Speed {
     #[must_use]
     pub const fn new(start: f32) -> Self {
-        Self { value: start, limits: None }
+        Self {
+            value: start,
+            limits: None,
+        }
     }
     #[must_use]
     pub const fn limits(mut self, lo: f32, hi: f32) -> Self {
@@ -206,7 +217,13 @@ impl Chop for Envelope {
         } else if !gate && self.is_open() {
             self.stage = Stage::Release;
         }
-        let rate = |secs: f32, span: f32| if secs <= 0.0 { f32::INFINITY } else { span / secs };
+        let rate = |secs: f32, span: f32| {
+            if secs <= 0.0 {
+                f32::INFINITY
+            } else {
+                span / secs
+            }
+        };
         match self.stage {
             Stage::Idle => self.level = 0.0,
             Stage::Attack => {
@@ -252,7 +269,11 @@ pub struct Remap {
 impl Chop for Remap {
     fn process(&mut self, input: f32, _dt: f32) -> f32 {
         let span = self.from.1 - self.from.0;
-        let mut u = if span.abs() < 1e-12 { 0.0 } else { (input - self.from.0) / span };
+        let mut u = if span.abs() < 1e-12 {
+            0.0
+        } else {
+            (input - self.from.0) / span
+        };
         if self.clamp {
             u = u.clamp(0.0, 1.0);
         }
@@ -352,7 +373,9 @@ impl Chop for Delay {
         }
         let (t0, v0) = self.history[0];
         match self.history.get(1) {
-            Some(&(t1, v1)) if target >= t0 && t1 > t0 => v0 + (v1 - v0) * ((target - t0) / (t1 - t0)).clamp(0.0, 1.0),
+            Some(&(t1, v1)) if target >= t0 && t1 > t0 => {
+                v0 + (v1 - v0) * ((target - t0) / (t1 - t0)).clamp(0.0, 1.0)
+            }
             _ => v0,
         }
     }
@@ -409,21 +432,28 @@ mod tests {
         let va = *run(&mut a, |_| 1.0, 60, 1.0 / 60.0).last().unwrap();
         let vb = *run(&mut b, |_| 1.0, 30, 1.0 / 30.0).last().unwrap();
         assert!((va - vb).abs() < 1e-4, "{va} vs {vb}");
-        assert!((va - (1.0 - (-2.0f32).exp())).abs() < 1e-3, "one second is two time constants");
+        assert!(
+            (va - (1.0 - (-2.0f32).exp())).abs() < 1e-3,
+            "one second is two time constants"
+        );
         let down = *run(&mut a, |_| 0.0, 6, 1.0 / 60.0).last().unwrap();
         assert!(down < va * 0.5, "falls faster than it rose");
     }
 
     #[test]
     fn one_euro_smooths_jitter_but_tracks_fast_motion() {
-        let jitter = |i: usize| if i % 2 == 0 { 0.05 } else { -0.05 };
+        let jitter = |i: usize| if i.is_multiple_of(2) { 0.05 } else { -0.05 };
         let mut f = OneEuro::new(1.0, 0.5);
         let still = run(&mut f, jitter, 120, 1.0 / 60.0);
         assert!(still[60..].iter().all(|v| v.abs() < 0.02));
         let mut g = OneEuro::new(1.0, 0.5);
         #[allow(clippy::cast_precision_loss)]
         let ramp = run(&mut g, |i| i as f32 * 5.0, 60, 1.0 / 60.0);
-        assert!((ramp[59] - 295.0).abs() < 30.0, "little lag on a fast ramp: {}", ramp[59]);
+        assert!(
+            (ramp[59] - 295.0).abs() < 30.0,
+            "little lag on a fast ramp: {}",
+            ramp[59]
+        );
     }
 
     #[test]
@@ -451,12 +481,24 @@ mod tests {
 
     #[test]
     fn remap_limit_hold_delay() {
-        let mut r = Remap { from: (0.0, 10.0), to: (100.0, 200.0), clamp: true };
+        let mut r = Remap {
+            from: (0.0, 10.0),
+            to: (100.0, 200.0),
+            clamp: true,
+        };
         assert_eq!(r.process(5.0, 0.0), 150.0);
         assert_eq!(r.process(20.0, 0.0), 200.0);
-        let mut l = Limit { min: 0.0, max: 1.0, mode: LimitMode::Loop };
+        let mut l = Limit {
+            min: 0.0,
+            max: 1.0,
+            mode: LimitMode::Loop,
+        };
         assert!((l.process(2.25, 0.0) - 0.25).abs() < 1e-6);
-        let mut z = Limit { min: 0.0, max: 1.0, mode: LimitMode::ZigZag };
+        let mut z = Limit {
+            min: 0.0,
+            max: 1.0,
+            mode: LimitMode::ZigZag,
+        };
         assert!((z.process(1.25, 0.0) - 0.75).abs() < 1e-6);
         let mut h = SampleHold::default();
         h.process(3.0, 0.0);
@@ -465,14 +507,26 @@ mod tests {
         let mut d = Delay::new(0.5);
         #[allow(clippy::cast_precision_loss)]
         let out = run(&mut d, |i| i as f32, 20, 0.1);
-        assert!((out[19] - 14.0).abs() < 1e-3, "half a second late: {}", out[19]);
+        assert!(
+            (out[19] - 14.0).abs() < 1e-3,
+            "half a second late: {}",
+            out[19]
+        );
     }
 
     #[test]
     fn chains_compose() {
         let mut c = Chain::new()
-            .then(Remap { from: (0.0, 1.0), to: (0.0, 10.0), clamp: false })
-            .then(Limit { min: 0.0, max: 5.0, mode: LimitMode::Clamp });
+            .then(Remap {
+                from: (0.0, 1.0),
+                to: (0.0, 10.0),
+                clamp: false,
+            })
+            .then(Limit {
+                min: 0.0,
+                max: 5.0,
+                mode: LimitMode::Clamp,
+            });
         assert_eq!(c.process(0.3, 0.0), 3.0);
         assert_eq!(c.process(0.9, 0.0), 5.0);
     }

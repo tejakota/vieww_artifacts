@@ -190,11 +190,9 @@ impl AudioPlayer for RecordingPlayer {
             *next += 1;
             *next
         });
-        self.commands
-            .borrow_mut()
-            .push(RecordedCommand::Play {
-                duration: sound.duration(),
-            });
+        self.commands.borrow_mut().push(RecordedCommand::Play {
+            duration: sound.duration(),
+        });
         Ok(handle)
     }
 
@@ -223,7 +221,11 @@ mod tests {
     fn a_recording_player_records_the_wiring() {
         let player = RecordingPlayer::new();
         let handle = player
-            .play(&Sound::tone(Tone::held(440.0, crate::Waveform::Sine, Duration::from_millis(100))))
+            .play(&Sound::tone(Tone::held(
+                440.0,
+                crate::Waveform::Sine,
+                Duration::from_millis(100),
+            )))
             .expect("the recorder always accepts");
 
         player.stop(handle).expect("the recorder always accepts");

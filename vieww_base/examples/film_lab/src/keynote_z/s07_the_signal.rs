@@ -15,11 +15,13 @@
 
 use vieww_foundation::{Color, Offset, Path, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{ease_out_cubic};
-use super::{CANVAS, CYAN, CYAN_SOFT, Ctx, FAINT, H, INK, MINT, MUTED, VIOLET, VIOLET_SOFT, W, alpha, caption, clamp01, glow, grain, ground, mono, spring_out, stars, tint, vignette, xywh};
-
+use super::{
+    alpha, caption, clamp01, spring_out, tint, xywh, Ctx, CYAN, CYAN_SOFT, FAINT, INK, MINT, MUTED,
+    VIOLET, VIOLET_SOFT,
+};
+use crate::film_lib::ease_out_cubic;
 
 /// The signal line's y.
 const SY: f32 = 540.0;
@@ -40,12 +42,36 @@ struct Node {
 /// root is farthest from the line; the leaves reach for it.
 fn tree_nodes() -> Vec<Node> {
     vec![
-        Node { x: 0.0, d: 152.0, gen: 0 },
-        Node { x: -116.0, d: 64.0, gen: 1 },
-        Node { x: 116.0, d: 64.0, gen: 1 },
-        Node { x: -176.0, d: 6.0, gen: 2 },
-        Node { x: -64.0, d: 6.0, gen: 2 },
-        Node { x: 76.0, d: 6.0, gen: 2 },
+        Node {
+            x: 0.0,
+            d: 152.0,
+            gen: 0,
+        },
+        Node {
+            x: -116.0,
+            d: 64.0,
+            gen: 1,
+        },
+        Node {
+            x: 116.0,
+            d: 64.0,
+            gen: 1,
+        },
+        Node {
+            x: -176.0,
+            d: 6.0,
+            gen: 2,
+        },
+        Node {
+            x: -64.0,
+            d: 6.0,
+            gen: 2,
+        },
+        Node {
+            x: 76.0,
+            d: 6.0,
+            gen: 2,
+        },
     ]
 }
 
@@ -58,7 +84,7 @@ const TREES: [(f32, bool, f32, f32); 3] = [
     (1300.0, true, 0.60, 0.97),
 ];
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -91,7 +117,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             // The base — a hairline the whole width.
-            book.line(Offset::new(X0, SY), Offset::new(X1, SY), alpha(Color::WHITE, 0.09), 1.0);
+            book.line(
+                Offset::new(X0, SY),
+                Offset::new(X1, SY),
+                alpha(Color::WHITE, 0.09),
+                1.0,
+            );
             // The signal body — brighter near the pulse, breathing.
             let near = |x: f32| 1.0 - ((x - pulse_x).abs() / 400.0).min(1.0);
             for (x, step) in [(X0, 24.0), (X0 + 264.0, 264.0), (X1 - 264.0, 264.0)] {
@@ -157,7 +188,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 for m in [1usize, 2usize] {
                     let mid = world(&ns[m]);
                     book.line(root, mid, alpha(MUTED, 0.5 * tree_a), 1.2);
-                    let (leaf_start, leaf_n) = if m == 1 { (3usize, 2usize) } else { (5usize, 1usize) };
+                    let (leaf_start, leaf_n) = if m == 1 {
+                        (3usize, 2usize)
+                    } else {
+                        (5usize, 1usize)
+                    };
                     for l in leaf_start..leaf_start + leaf_n {
                         let leaf = world(&ns[l]);
                         book.line(mid, leaf, alpha(MUTED, 0.38 * tree_a), 1.0);
@@ -194,12 +229,24 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     book.rrect(
                         xywh(0.0, 0.0, nw, nh),
                         6.0,
-                        alpha(super::mix(Color::rgb(18, 18, 24), node_col, 0.12 + lit * 0.20), a * 0.95),
+                        alpha(
+                            super::mix(Color::rgb(18, 18, 24), node_col, 0.12 + lit * 0.20),
+                            a * 0.95,
+                        ),
                     );
-                    book.stroke_rrect(xywh(0.0, 0.0, nw, nh), 6.0, alpha(node_col, a * (0.35 + lit * 0.55)), 1.2);
+                    book.stroke_rrect(
+                        xywh(0.0, 0.0, nw, nh),
+                        6.0,
+                        alpha(node_col, a * (0.35 + lit * 0.55)),
+                        1.2,
+                    );
                     // The gen ticks — root/mid/leaf markers.
                     for g in 0..=gen {
-                        book.rrect(xywh(6.0 + g as f32 * 6.0, nh - 9.0, 3.0, 4.0), 1.0, alpha(node_col, a * 0.6));
+                        book.rrect(
+                            xywh(6.0 + g as f32 * 6.0, nh - 9.0, 3.0, 4.0),
+                            1.0,
+                            alpha(node_col, a * 0.6),
+                        );
                     }
                     if lit > 0.25 {
                         super::glow(book, nw * 0.5, nh * 0.5, 60.0, CYAN, lit * 0.35 * a);
@@ -225,11 +272,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(196.0)
             .width(800.0)
             .height(40.0)
-            .child(Opacity::new(label_a).child(
-                Text::new("the session — one signal, outside every tree")
-                    .style(TextStyle::new(28.0).weight(vieww_foundation::FontWeight::Medium).letter_spacing(1.6).color(alpha(INK, 0.96)))
-                    .align(TextAlign::Left),
-            )),
+            .child(
+                Opacity::new(label_a).child(
+                    Text::new("the session — one signal, outside every tree")
+                        .style(
+                            TextStyle::new(28.0)
+                                .weight(vieww_foundation::FontWeight::Medium)
+                                .letter_spacing(1.6)
+                                .color(alpha(INK, 0.96)),
+                        )
+                        .align(TextAlign::Left),
+                ),
+            ),
     );
 
     // The endpoint annotations — mono, the signal's type signature.
@@ -239,11 +293,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(SY + 16.0)
             .width(360.0)
             .height(26.0)
-            .child(Opacity::new(label_a).child(
-                Text::new("Signal<u32> · the witness")
-                    .style(TextStyle::new(15.0).monospace().letter_spacing(1.6).color(alpha(MUTED, 0.9)))
-                    .align(TextAlign::Left),
-            )),
+            .child(
+                Opacity::new(label_a).child(
+                    Text::new("Signal<u32> · the witness")
+                        .style(
+                            TextStyle::new(15.0)
+                                .monospace()
+                                .letter_spacing(1.6)
+                                .color(alpha(MUTED, 0.9)),
+                        )
+                        .align(TextAlign::Left),
+                ),
+            ),
     );
     stack = stack.push(
         Positioned::new()
@@ -251,11 +312,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(SY - 40.0)
             .width(360.0)
             .height(26.0)
-            .child(Opacity::new(label_a).child(
-                Text::new("Signal<Seconds> · the clock")
-                    .style(TextStyle::new(15.0).monospace().letter_spacing(1.6).color(alpha(MUTED, 0.9)))
-                    .align(TextAlign::Right),
-            )),
+            .child(
+                Opacity::new(label_a).child(
+                    Text::new("Signal<Seconds> · the clock")
+                        .style(
+                            TextStyle::new(15.0)
+                                .monospace()
+                                .letter_spacing(1.6)
+                                .color(alpha(MUTED, 0.9)),
+                        )
+                        .align(TextAlign::Right),
+                ),
+            ),
     );
 
     // The captions — the law's statement, in two beats.

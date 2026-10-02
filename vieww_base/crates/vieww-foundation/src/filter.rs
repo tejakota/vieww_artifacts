@@ -388,7 +388,7 @@ pub fn compose_matrices(first: &ColorMatrix, second: &ColorMatrix) -> ColorMatri
 /// Fully transparent pixels are skipped: their colour carries no information
 /// and dividing by zero would invent some.
 pub fn apply_color_matrix_premultiplied(pixels: &mut [u8], matrix: &ColorMatrix) {
-    for pixel in pixels.chunks_exact_mut(4) {
+    for pixel in pixels.as_chunks_mut::<4>().0 {
         let a = f32::from(pixel[3]) / 255.0;
         if a <= 0.0 {
             continue;
@@ -790,7 +790,10 @@ mod tests {
         const W: usize = 64;
         let mut pixels = vec![255u8; W * W * 4];
         directional_blur_rgba(&mut pixels, W, W, 8.0, 0.6);
-        assert!(pixels.iter().all(|&v| v == 255), "a corner or edge darkened");
+        assert!(
+            pixels.iter().all(|&v| v == 255),
+            "a corner or edge darkened"
+        );
     }
 
     /// A motion blur smears **along** its ray and only along it: a single

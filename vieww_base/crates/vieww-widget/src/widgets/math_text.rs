@@ -48,8 +48,8 @@
 use vieww_foundation::{Color, TextStyle};
 
 use crate::prelude::*;
-use vieww_foundation::BoxDecoration;
 use crate::widgets::decorated_box::DecoratedBox;
+use vieww_foundation::BoxDecoration;
 
 /// One parsed piece of a formula.
 #[derive(Debug, Clone, PartialEq)]
@@ -356,10 +356,7 @@ fn plain_text(atom: &Atom) -> String {
         Atom::Frac(num, den) => {
             format!("({})/({})", plain_text(num), plain_text(den))
         }
-        Atom::Sqrt {
-            index,
-            radicand,
-        } => match index {
+        Atom::Sqrt { index, radicand } => match index {
             Some(index) => format!("root_{}({})", plain_text(index), plain_text(radicand)),
             None => format!("sqrt({})", plain_text(radicand)),
         },
@@ -404,21 +401,15 @@ fn render(atom: &Atom, style: &TextStyle, rule_color: Color) -> WidgetNode {
             let script = script_style(*style, SCRIPT_SCALE);
             // Raised: translated up by the rise, so the row's height is set
             // by the *base* glyphs and the script rides above them.
-            Transformed::translate(vieww_foundation::Offset::new(
-                0.0,
-                -style.size * SUPER_RISE,
-            ))
-            .child(render(inner, &script, rule_color))
-            .into()
+            Transformed::translate(vieww_foundation::Offset::new(0.0, -style.size * SUPER_RISE))
+                .child(render(inner, &script, rule_color))
+                .into()
         }
         Atom::Sub(inner) => {
             let script = script_style(*style, SCRIPT_SCALE);
-            Transformed::translate(vieww_foundation::Offset::new(
-                0.0,
-                style.size * SUB_DROP,
-            ))
-            .child(render(inner, &script, rule_color))
-            .into()
+            Transformed::translate(vieww_foundation::Offset::new(0.0, style.size * SUB_DROP))
+                .child(render(inner, &script, rule_color))
+                .into()
         }
         Atom::Frac(num, den) => {
             let part = script_style(*style, FRAC_SCALE);
@@ -437,10 +428,7 @@ fn render(atom: &Atom, style: &TextStyle, rule_color: Color) -> WidgetNode {
                 ])
                 .into()
         }
-        Atom::Sqrt {
-            index,
-            radicand,
-        } => {
+        Atom::Sqrt { index, radicand } => {
             // The radical sign at full size (a hair larger, so its height
             // covers the rule), the index in script size dropped to its
             // baseline corner, and the radicand in a column whose first
@@ -484,10 +472,7 @@ fn render(atom: &Atom, style: &TextStyle, rule_color: Color) -> WidgetNode {
 
             Flex::row()
                 .cross_axis_alignment(CrossAxisAlignment::End)
-                .children(children![
-                    sign_column,
-                    overlined,
-                ])
+                .children(children![sign_column, overlined,])
                 .into()
         }
     }
@@ -568,10 +553,7 @@ mod tests {
     fn the_gauss_sum_parses_end_to_end() {
         // The classic — every feature at once.
         let atom = parse("\\sum_{i=0}^{n} i = \\frac{n(n+1)}{2}");
-        assert_eq!(
-            plain_text(&atom),
-            "∑_(i=0)^(n) i = (n(n+1))/(2)"
-        );
+        assert_eq!(plain_text(&atom), "∑_(i=0)^(n) i = (n(n+1))/(2)");
     }
 
     #[test]

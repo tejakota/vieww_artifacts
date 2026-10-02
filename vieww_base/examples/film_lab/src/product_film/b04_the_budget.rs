@@ -16,10 +16,10 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    Ctx, LEDGER, MUTED, TERM_GREEN, W, alpha, caption, clamp01, distance_chip, gap_line, glow,
-    grain, ground, pole_caret, pole_screen, progress_rail, tint, vignette, xywh,
+    alpha, caption, clamp01, distance_chip, gap_line, glow, grain, ground, pole_caret, pole_screen,
+    progress_rail, tint, vignette, xywh, Ctx, LEDGER, MUTED, TERM_GREEN, W,
 };
-use crate::film_lib::{Rng, ease_out_cubic};
+use crate::film_lib::{ease_out_cubic, Rng};
 
 /// The budget, in ms.
 const BUDGET_MS: f32 = 16.6;
@@ -43,7 +43,7 @@ const DMG_Y: f32 = 380.0;
 const DMG_W: f32 = 500.0;
 const DMG_H: f32 = 340.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -70,40 +70,61 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(DMG_Y)
                 .width(DMG_W)
                 .height(DMG_H)
-                .child(
-                    super::Opacity::new(dmg_a).child(Painting::sized(
-                        Size::new(DMG_W, DMG_H),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // The window — a mock surface with content rows.
-                            book.rrect(xywh(0.0, 0.0, DMG_W, DMG_H), 12.0, alpha(super::SURFACE, 0.95));
-                            book.stroke_rrect(xywh(0.0, 0.0, DMG_W, DMG_H), 12.0, alpha(MUTED, 0.3), 1.4);
-                            for r in 0..7 {
-                                let ry = 24.0 + r as f32 * 44.0;
-                                book.rrect(xywh(24.0, ry, DMG_W - 48.0, 26.0), 5.0, alpha(Color::WHITE, 0.05));
-                            }
-                            // The damaged rect — one row lights, the rest
-                            // stay dark: only that region repaints. The
-                            // rect breathes slightly (it is *live* damage).
-                            let row = 3;
-                            let dy = 24.0 + row as f32 * 44.0 + (sec * 2.0).sin() * 1.5;
-                            let dr = xywh(20.0, dy - 4.0, DMG_W - 40.0, 34.0);
-                            // The inspector's brackets — the film's own
-                            // damage-rect grammar.
-                            book.stroke_rrect(dr, 4.0, alpha(LEDGER, 0.85), 1.6);
-                            for (x, y, sx, sy) in [
-                                (dr.left, dr.top, 1.0, 1.0),
-                                (dr.right, dr.top, -1.0, 1.0),
-                                (dr.right, dr.bottom, -1.0, -1.0),
-                                (dr.left, dr.bottom, 1.0, -1.0),
-                            ] {
-                                book.line(Offset::new(x, y), Offset::new(x + sx * 10.0, y), alpha(LEDGER, 0.95), 3.0);
-                                book.line(Offset::new(x, y), Offset::new(x, y + sy * 10.0), alpha(LEDGER, 0.95), 3.0);
-                            }
-                            // The fill — the region being repainted.
-                            book.rrect(dr, 4.0, alpha(LEDGER, 0.12));
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(dmg_a).child(Painting::sized(
+                    Size::new(DMG_W, DMG_H),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The window — a mock surface with content rows.
+                        book.rrect(
+                            xywh(0.0, 0.0, DMG_W, DMG_H),
+                            12.0,
+                            alpha(super::SURFACE, 0.95),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, DMG_W, DMG_H),
+                            12.0,
+                            alpha(MUTED, 0.3),
+                            1.4,
+                        );
+                        for r in 0..7 {
+                            let ry = 24.0 + r as f32 * 44.0;
+                            book.rrect(
+                                xywh(24.0, ry, DMG_W - 48.0, 26.0),
+                                5.0,
+                                alpha(Color::WHITE, 0.05),
+                            );
+                        }
+                        // The damaged rect — one row lights, the rest
+                        // stay dark: only that region repaints. The
+                        // rect breathes slightly (it is *live* damage).
+                        let row = 3;
+                        let dy = 24.0 + row as f32 * 44.0 + (sec * 2.0).sin() * 1.5;
+                        let dr = xywh(20.0, dy - 4.0, DMG_W - 40.0, 34.0);
+                        // The inspector's brackets — the film's own
+                        // damage-rect grammar.
+                        book.stroke_rrect(dr, 4.0, alpha(LEDGER, 0.85), 1.6);
+                        for (x, y, sx, sy) in [
+                            (dr.left, dr.top, 1.0, 1.0),
+                            (dr.right, dr.top, -1.0, 1.0),
+                            (dr.right, dr.bottom, -1.0, -1.0),
+                            (dr.left, dr.bottom, 1.0, -1.0),
+                        ] {
+                            book.line(
+                                Offset::new(x, y),
+                                Offset::new(x + sx * 10.0, y),
+                                alpha(LEDGER, 0.95),
+                                3.0,
+                            );
+                            book.line(
+                                Offset::new(x, y),
+                                Offset::new(x, y + sy * 10.0),
+                                alpha(LEDGER, 0.95),
+                                3.0,
+                            );
+                        }
+                        // The fill — the region being repainted.
+                        book.rrect(dr, 4.0, alpha(LEDGER, 0.12));
+                    }),
+                ))),
         );
         // The damage label.
         stack = stack.push(
@@ -134,42 +155,46 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(DMG_Y + DMG_H + 52.0)
                 .width(DMG_W)
                 .height(120.0)
-                .child(
-                    super::Opacity::new(sig_a).child(Painting::sized(
-                        Size::new(DMG_W, 120.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // The signal graph — a small tree where one
-                            // leaf pulses and only its ancestors brighten.
-                            let root = Offset::new(DMG_W * 0.5, 18.0);
-                            let leaves: [Offset; 6] = [
-                                Offset::new(70.0, 96.0),
-                                Offset::new(150.0, 96.0),
-                                Offset::new(230.0, 96.0),
-                                Offset::new(DMG_W - 230.0, 96.0),
-                                Offset::new(DMG_W - 150.0, 96.0),
-                                Offset::new(DMG_W - 70.0, 96.0),
-                            ];
-                            // The wiring.
-                            for (i, leaf) in leaves.iter().enumerate() {
-                                let lit = i == 2 && (sec * 1.4).sin() > -0.2;
-                                book.line(
-                                    root,
-                                    *leaf,
-                                    alpha(if lit { LEDGER } else { MUTED }, if lit { 0.8 } else { 0.25 }),
-                                    if lit { 2.2 } else { 1.2 },
-                                );
-                                book.circle(
-                                    *leaf,
-                                    5.0,
-                                    alpha(if lit { LEDGER } else { MUTED }, if lit { 0.95 } else { 0.4 }),
-                                );
-                            }
-                            // The root — always lit when any leaf is.
-                            book.circle(root, 6.0, alpha(LEDGER, 0.9));
-                            glow(book, root.dx, root.dy, 20.0, LEDGER, 0.3);
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(sig_a).child(Painting::sized(
+                    Size::new(DMG_W, 120.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The signal graph — a small tree where one
+                        // leaf pulses and only its ancestors brighten.
+                        let root = Offset::new(DMG_W * 0.5, 18.0);
+                        let leaves: [Offset; 6] = [
+                            Offset::new(70.0, 96.0),
+                            Offset::new(150.0, 96.0),
+                            Offset::new(230.0, 96.0),
+                            Offset::new(DMG_W - 230.0, 96.0),
+                            Offset::new(DMG_W - 150.0, 96.0),
+                            Offset::new(DMG_W - 70.0, 96.0),
+                        ];
+                        // The wiring.
+                        for (i, leaf) in leaves.iter().enumerate() {
+                            let lit = i == 2 && (sec * 1.4).sin() > -0.2;
+                            book.line(
+                                root,
+                                *leaf,
+                                alpha(
+                                    if lit { LEDGER } else { MUTED },
+                                    if lit { 0.8 } else { 0.25 },
+                                ),
+                                if lit { 2.2 } else { 1.2 },
+                            );
+                            book.circle(
+                                *leaf,
+                                5.0,
+                                alpha(
+                                    if lit { LEDGER } else { MUTED },
+                                    if lit { 0.95 } else { 0.4 },
+                                ),
+                            );
+                        }
+                        // The root — always lit when any leaf is.
+                        book.circle(root, 6.0, alpha(LEDGER, 0.9));
+                        glow(book, root.dx, root.dy, 20.0, LEDGER, 0.3);
+                    }),
+                ))),
         );
         stack = stack.push(
             Positioned::new()
@@ -193,7 +218,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // ── Right: the budget, kept ──
     let bars_a = ease_out_cubic(clamp01((t - 0.15) / 0.2));
     if bars_a > 0.01 {
-        let arrived = ((t - 0.15) / 0.75 * N_BARS as f32).ceil().clamp(0.0, N_BARS as f32) as usize;
+        let arrived = ((t - 0.15) / 0.75 * N_BARS as f32)
+            .ceil()
+            .clamp(0.0, N_BARS as f32) as usize;
         let full_h = 200.0;
         let scale_ms = 24.0;
         stack = stack.push(
@@ -202,30 +229,38 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(BARS_Y - full_h - 30.0)
                 .width(N_BARS as f32 * (BAR_W + BAR_GAP) + 40.0)
                 .height(full_h + 60.0)
-                .child(
-                    super::Opacity::new(bars_a).child(Painting::sized(
-                        Size::new(N_BARS as f32 * (BAR_W + BAR_GAP) + 40.0, full_h + 60.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // The budget line.
-                            let by = full_h + 10.0 - (BUDGET_MS / scale_ms) * full_h;
-                            let field_w = N_BARS as f32 * (BAR_W + BAR_GAP);
-                            book.line(Offset::new(0.0, by), Offset::new(field_w, by), alpha(TERM_GREEN, 0.6), 1.6);
-                            // The bars — every one inside.
-                            for i in 0..arrived.min(N_BARS) {
-                                let cost = frame_cost(i);
-                                let h = (cost / scale_ms * full_h).min(full_h);
-                                let x = i as f32 * (BAR_W + BAR_GAP);
-                                book.rrect(
-                                    xywh(x, full_h + 10.0 - h, BAR_W, h.max(3.0)),
-                                    3.0,
-                                    alpha(tint(LEDGER, 0.15), 0.7),
-                                );
-                            }
-                            // The baseline.
-                            book.line(Offset::new(0.0, full_h + 10.0), Offset::new(N_BARS as f32 * (BAR_W + BAR_GAP), full_h + 10.0), alpha(Color::WHITE, 0.14), 1.0);
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(bars_a).child(Painting::sized(
+                    Size::new(N_BARS as f32 * (BAR_W + BAR_GAP) + 40.0, full_h + 60.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The budget line.
+                        let by = full_h + 10.0 - (BUDGET_MS / scale_ms) * full_h;
+                        let field_w = N_BARS as f32 * (BAR_W + BAR_GAP);
+                        book.line(
+                            Offset::new(0.0, by),
+                            Offset::new(field_w, by),
+                            alpha(TERM_GREEN, 0.6),
+                            1.6,
+                        );
+                        // The bars — every one inside.
+                        for i in 0..arrived.min(N_BARS) {
+                            let cost = frame_cost(i);
+                            let h = (cost / scale_ms * full_h).min(full_h);
+                            let x = i as f32 * (BAR_W + BAR_GAP);
+                            book.rrect(
+                                xywh(x, full_h + 10.0 - h, BAR_W, h.max(3.0)),
+                                3.0,
+                                alpha(tint(LEDGER, 0.15), 0.7),
+                            );
+                        }
+                        // The baseline.
+                        book.line(
+                            Offset::new(0.0, full_h + 10.0),
+                            Offset::new(N_BARS as f32 * (BAR_W + BAR_GAP), full_h + 10.0),
+                            alpha(Color::WHITE, 0.14),
+                            1.0,
+                        );
+                    }),
+                ))),
         );
         // The budget's label.
         stack = stack.push(
@@ -256,9 +291,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             let close = lean * 0.30;
-            gap_line(book, 946.0, caret_x, screen_x, close, sec, 0.0, 0.0, LEDGER, 0.8);
+            gap_line(
+                book, 946.0, caret_x, screen_x, close, sec, 0.0, 0.0, LEDGER, 0.8,
+            );
             pole_caret(book, caret_x, 946.0, sec, 0.95);
-            pole_screen(book, screen_x, 946.0, 0.5 + 0.3 * (sec * 1.1).sin().abs(), 0.95, LEDGER);
+            pole_screen(
+                book,
+                screen_x,
+                946.0,
+                0.5 + 0.3 * (sec * 1.1).sin().abs(),
+                0.95,
+                LEDGER,
+            );
         }),
     )));
 

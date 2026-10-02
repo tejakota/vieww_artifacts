@@ -38,15 +38,16 @@
 //! f64 that number is the honest statement of how much arithmetic the
 //! demonstration survived.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, RED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 13.0;
+pub(crate) const SECONDS: f32 = 13.0;
 
 /// The digits of π, for the comparison column. Not used in any
 /// calculation — the plate computes π from the collisions instead.
@@ -163,7 +164,7 @@ fn run(n: u32, record: bool, stop_after: Option<u64>) -> Run {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // ── the table: every ratio, run to completion ──
     let table: Vec<(u32, u64, u64, f64)> = (0..=5)
         .map(|n| {
@@ -204,10 +205,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(12, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(12, 11, 16))]),
             );
 
             // ── the apparatus ──
@@ -333,7 +333,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 alpha(Color::rgb(13, 13, 19), 0.95),
             );
             // a bar per row, length ∝ log(collisions)
-            let maxlog = (table_c.last().map(|r| r.1).unwrap_or(1) as f32).ln().max(1.0);
+            let maxlog = (table_c.last().map(|r| r.1).unwrap_or(1) as f32)
+                .ln()
+                .max(1.0);
             for (i, &(_, c, pred, _)) in table_c.iter().enumerate() {
                 let y = ty + 8.0 + i as f32 * (th / table_c.len() as f32);
                 let h = th / table_c.len() as f32 - 12.0;
@@ -346,8 +348,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let lines = vec![
-        "PIDIGITS · THE COUNTING AXIS · π, BANGED OUT OF TWO BLOCKS (GALPERIN, 2003)".to_string(),
+    let lines = ["PIDIGITS · THE COUNTING AXIS · π, BANGED OUT OF TWO BLOCKS (GALPERIN, 2003)".to_string(),
         format!(
             "elastic collisions only, event-driven with exact collision times · small block m = {M_SMALL}, big block M = 100ⁿ·m · no circle appears anywhere in the mechanics"
         ),
@@ -379,8 +380,7 @@ pub fn frame(t: f32) -> WidgetNode {
             "THE BOOKS: |ΔE/E| = {de:.2e} over the n = {SHOW_N} run, and {de_big:.2e} over the n = 5 run's {} collisions in f64 — no energy was invented anywhere in {} digits of π",
             biggest.collisions,
             PI_DIGITS.len().min(6)
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -395,7 +395,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -404,34 +407,55 @@ pub fn frame(t: f32) -> WidgetNode {
     for (i, &(n, c, pred, _)) in table.iter().enumerate() {
         let y = 470.0 + 8.0 + i as f32 * (196.0 / table.len() as f32);
         stack = stack.push(
-            Positioned::new().left(66.0).top(y).width(440.0).height(14.0).child(
-                Text::new(format!(
-                    "M/m = 100^{n} = 10^{:<2}  counted {c:>7}  ⌈π/θ⌉−1 {pred:>7}  π: {}",
-                    2 * n,
-                    &PI_DIGITS[..(n as usize + 1).min(PI_DIGITS.len())]
-                ))
-                .style(
-                    TextStyle::new(10.0)
-                        .monospace()
-                        .color(alpha(if c == pred { mix(MINT, INK, 0.4) } else { RED }, 0.95)),
+            Positioned::new()
+                .left(66.0)
+                .top(y)
+                .width(440.0)
+                .height(14.0)
+                .child(
+                    Text::new(format!(
+                        "M/m = 100^{n} = 10^{:<2}  counted {c:>7}  ⌈π/θ⌉−1 {pred:>7}  π: {}",
+                        2 * n,
+                        &PI_DIGITS[..(n as usize + 1).min(PI_DIGITS.len())]
+                    ))
+                    .style(TextStyle::new(10.0).monospace().color(alpha(
+                        if c == pred { mix(MINT, INK, 0.4) } else { RED },
+                        0.95,
+                    ))),
                 ),
-            ),
         );
     }
     for (x, y, s) in [
-        (60.0_f32, 186.0_f32, "THE APPARATUS — wall, small block, big block · nothing else".to_string()),
-        (748.0, 186.0, "THE PHASE CIRCLE — energy is the circle, each collision a reflection".to_string()),
-        (60.0, 442.0, "EVERY RATIO, RUN TO COMPLETION — counted vs ⌈π/θ⌉−1 vs the digits".to_string()),
+        (
+            60.0_f32,
+            186.0_f32,
+            "THE APPARATUS — wall, small block, big block · nothing else".to_string(),
+        ),
+        (
+            748.0,
+            186.0,
+            "THE PHASE CIRCLE — energy is the circle, each collision a reflection".to_string(),
+        ),
+        (
+            60.0,
+            442.0,
+            "EVERY RATIO, RUN TO COMPLETION — counted vs ⌈π/θ⌉−1 vs the digits".to_string(),
+        ),
     ] {
         stack = stack.push(
-            Positioned::new().left(x).top(y).width(560.0).height(14.0).child(
-                Text::new(s).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .letter_spacing(0.9)
-                        .color(alpha(MUTED, 0.85)),
+            Positioned::new()
+                .left(x)
+                .top(y)
+                .width(560.0)
+                .height(14.0)
+                .child(
+                    Text::new(s).style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()

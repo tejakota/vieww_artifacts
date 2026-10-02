@@ -61,8 +61,8 @@ winit = "0.30"
 # this names an existing dependency rather than adding one.
 sys-locale = "0.3"
 
-accesskit = "0.24"
-accesskit_winit = "0.33"
+accesskit = "0.25"
+accesskit_winit = "0.34"
 
 # A facade, and on every platform but one it is a no-op that an application can
 # switch on if it wants to. On Android it is the only way out: stderr is
@@ -97,8 +97,8 @@ log = "0.4"
 # handshake rather than a function to call.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 arboard = "3"
-tray-icon = { version = "0.19", optional = true }
-global-hotkey = { version = "0.6", optional = true }
+tray-icon = { version = "0.26", optional = true }
+global-hotkey = { version = "0.8", optional = true }
 # `muda` is deliberately **not** named here. `tray-icon` re-exports it as
 # `tray_icon::menu`, and `TrayIcon::set_menu` takes a `dyn ContextMenu` from
 # *its* copy — so a second requirement of our own is a chance for cargo to
@@ -139,7 +139,7 @@ jni = "0.22"
 # The screen reader bridge, driven directly rather than through
 # `accesskit_winit`'s Android arm.
 #
-# That arm exists in 0.33.2 and is unusable here: it finds the view by reading a
+# That arm exists in 0.34.1 and is unusable here: it finds the view by reading a
 # `mSurfaceView` field off `com.google.androidgamesdk.GameActivity`, which a
 # `NativeActivity` does not have, and unwraps the result. Enabling the
 # `accesskit_winit/accesskit_android` feature would therefore not bridge
@@ -154,7 +154,7 @@ jni = "0.22"
 # for exactly the reason that comment warns about. It is safe only because the
 # two never exchange a value: `a11y_android.rs` imports its JNI types from
 # `accesskit_android::jni` and nothing else does.
-accesskit_android = { version = "0.7.5", features = ["embedded-dex"] }
+accesskit_android = { version = "0.9.0", features = ["embedded-dex"] }
 
 # The safe area and the keyboard are `UIView` properties, and `winit` has no
 # accessor for either — so the only way to them is a message send. `objc2`

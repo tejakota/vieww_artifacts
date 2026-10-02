@@ -796,7 +796,7 @@ impl Target {
         // 1,203,539,565**, a difference of 117 across a whole fixture render.
         // LLVM already turns this into the same four-byte store. Left as the
         // more familiar spelling.
-        for (pixel, slot) in self.pixels.iter().zip(out.chunks_exact_mut(4)) {
+        for (pixel, slot) in self.pixels.iter().zip(out.as_chunks_mut::<4>().0) {
             slot.copy_from_slice(&pixel.to_straight_u8());
         }
     }
@@ -879,7 +879,7 @@ impl Target {
             let row = y as usize * width;
             let pixels = &self.pixels[row + x0 as usize..row + x1 as usize];
             let bytes = &mut out[(row + x0 as usize) * 4..(row + x1 as usize) * 4];
-            for (pixel, slot) in pixels.iter().zip(bytes.chunks_exact_mut(4)) {
+            for (pixel, slot) in pixels.iter().zip(bytes.as_chunks_mut::<4>().0) {
                 slot.copy_from_slice(&pixel.to_straight_u8());
             }
         }

@@ -32,14 +32,23 @@ impl Hierarchy {
     ///
     /// No root, several roots, a missing parent, or a cycle.
     pub fn stratify(rows: &[(&str, Option<&str>, f64)]) -> Result<Self, String> {
-        let roots: Vec<usize> = rows.iter().enumerate().filter(|(_, r)| r.1.is_none()).map(|(i, _)| i).collect();
+        let roots: Vec<usize> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.1.is_none())
+            .map(|(i, _)| i)
+            .collect();
         if roots.len() != 1 {
             return Err(format!("expected one root, found {}", roots.len()));
         }
         // Root first, then rows in order.
         let mut order = vec![roots[0]];
         order.extend((0..rows.len()).filter(|i| *i != roots[0]));
-        let index: std::collections::HashMap<&str, usize> = order.iter().enumerate().map(|(n, &i)| (rows[i].0, n)).collect();
+        let index: std::collections::HashMap<&str, usize> = order
+            .iter()
+            .enumerate()
+            .map(|(n, &i)| (rows[i].0, n))
+            .collect();
         let mut nodes: Vec<HNode> = order
             .iter()
             .map(|&i| HNode {
@@ -77,7 +86,12 @@ impl Hierarchy {
             return Err("a cycle detached some nodes from the root".into());
         }
         for i in h.post_order() {
-            h.nodes[i].height = h.nodes[i].children.iter().map(|&c| h.nodes[c].height + 1).max().unwrap_or(0);
+            h.nodes[i].height = h.nodes[i]
+                .children
+                .iter()
+                .map(|&c| h.nodes[c].height + 1)
+                .max()
+                .unwrap_or(0);
         }
         Ok(h)
     }
@@ -103,7 +117,11 @@ impl Hierarchy {
     /// Replace each value with its subtree's total — `node.sum()`.
     pub fn sum(&mut self) {
         for i in self.post_order() {
-            let kids: f64 = self.nodes[i].children.iter().map(|&c| self.nodes[c].value).sum();
+            let kids: f64 = self.nodes[i]
+                .children
+                .iter()
+                .map(|&c| self.nodes[c].value)
+                .sum();
             self.nodes[i].value += kids;
         }
     }
@@ -119,7 +137,9 @@ impl Hierarchy {
 
     #[must_use]
     pub fn leaves(&self) -> Vec<usize> {
-        (0..self.nodes.len()).filter(|&i| self.nodes[i].children.is_empty()).collect()
+        (0..self.nodes.len())
+            .filter(|&i| self.nodes[i].children.is_empty())
+            .collect()
     }
 }
 
@@ -134,7 +154,12 @@ pub fn treemap(h: &Hierarchy, area: Rect, padding: f32) -> Vec<Rect> {
     out[0] = area;
     let mut stack = vec![0usize];
     while let Some(i) = stack.pop() {
-        let kids: Vec<usize> = h.nodes[i].children.iter().copied().filter(|&c| h.nodes[c].value > 0.0).collect();
+        let kids: Vec<usize> = h.nodes[i]
+            .children
+            .iter()
+            .copied()
+            .filter(|&c| h.nodes[c].value > 0.0)
+            .collect();
         if kids.is_empty() {
             continue;
         }
@@ -164,31 +189,59 @@ fn squarify(h: &Hierarchy, items: &[usize], rect: Rect, out: &mut [Rect]) {
         // Grow a row while the worst aspect ratio improves.
         let mut row_end = i + 1;
         let worst = |a: usize, b: usize| {
-            let areas: Vec<f64> = items[a..b].iter().map(|&k| h.nodes[k].value * scale).collect();
+            let areas: Vec<f64> = items[a..b]
+                .iter()
+                .map(|&k| h.nodes[k].value * scale)
+                .collect();
             let s: f64 = areas.iter().sum();
-            let (mx, mn) = areas.iter().fold((0.0f64, f64::MAX), |(x, n), &v| (x.max(v), n.min(v)));
+            let (mx, mn) = areas
+                .iter()
+                .fold((0.0f64, f64::MAX), |(x, n), &v| (x.max(v), n.min(v)));
             (short * short * mx / (s * s)).max(s * s / (short * short * mn))
         };
         while row_end < items.len() && worst(i, row_end + 1) <= worst(i, row_end) {
             row_end += 1;
         }
-        let row_sum: f64 = items[i..row_end].iter().map(|&k| h.nodes[k].value * scale).sum();
+        let row_sum: f64 = items[i..row_end]
+            .iter()
+            .map(|&k| h.nodes[k].value * scale)
+            .sum();
         let horizontal = remaining.width() >= remaining.height();
         let thick = (row_sum / short) as f32;
         let mut cursor = 0.0f32;
         for &k in &items[i..row_end] {
             let len = ((h.nodes[k].value * scale) / (row_sum / short)) as f32;
             out[k] = if horizontal {
-                Rect::new(remaining.left, remaining.top + cursor, remaining.left + thick, remaining.top + cursor + len)
+                Rect::new(
+                    remaining.left,
+                    remaining.top + cursor,
+                    remaining.left + thick,
+                    remaining.top + cursor + len,
+                )
             } else {
-                Rect::new(remaining.left + cursor, remaining.top, remaining.left + cursor + len, remaining.top + thick)
+                Rect::new(
+                    remaining.left + cursor,
+                    remaining.top,
+                    remaining.left + cursor + len,
+                    remaining.top + thick,
+                )
             };
             cursor += len;
         }
         remaining = if horizontal {
-            Rect::new(remaining.left + thick, remaining.top, remaining.right, remaining.bottom)
+            Rect::new(
+                remaining.left + thick,
+                remaining.top,
+                remaining.right,
+                remaining.bottom,
+            )
         } else {
-            Rect::new(remaining.left, remaining.top + thick, remaining.right, remaining.bottom)
+            Rect::new(
+                remaining.left,
+                remaining.top + thick,
+                remaining.right,
+                remaining.bottom,
+            )
         };
         i = row_end;
     }
@@ -211,7 +264,11 @@ pub fn partition(h: &Hierarchy, area: Rect) -> Vec<Rect> {
         let mut x = r.left;
         for &c in &h.nodes[i].children {
             #[allow(clippy::cast_possible_truncation)]
-            let w = if total > 0.0 { (h.nodes[c].value / total) as f32 * r.width() } else { 0.0 };
+            let w = if total > 0.0 {
+                (h.nodes[c].value / total) as f32 * r.width()
+            } else {
+                0.0
+            };
             out[c] = Rect::new(x, r.bottom, x + w, r.bottom + band);
             x += w;
         }
@@ -293,7 +350,11 @@ pub fn tree(h: &Hierarchy, size: (f32, f32)) -> Vec<Offset> {
                 ancestor[vop] = v;
                 let sh = prelim[vim] + sim - prelim[vip] - sip + separation(vim, vip);
                 if sh > 0.0 {
-                    let anc = if parent(ancestor[vim]) == parent(v) { ancestor[vim] } else { default };
+                    let anc = if parent(ancestor[vim]) == parent(v) {
+                        ancestor[vim]
+                    } else {
+                        default
+                    };
                     // Move subtree.
                     #[allow(clippy::cast_precision_loss)]
                     let subtrees = (sibling_index[v] - sibling_index[anc]) as f64;
@@ -331,12 +392,18 @@ pub fn tree(h: &Hierarchy, size: (f32, f32)) -> Vec<Offset> {
             stack.push((c, acc + modv[v]));
         }
     }
-    let (lo, hi) = x.iter().fold((f64::MAX, f64::MIN), |(a, b), &v| (a.min(v), b.max(v)));
+    let (lo, hi) = x
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(a, b), &v| (a.min(v), b.max(v)));
     let depth = h.nodes[0].height.max(1);
     (0..n)
         .map(|v| {
             #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-            let px = if hi > lo { ((x[v] - lo) / (hi - lo)) as f32 * size.0 } else { size.0 / 2.0 };
+            let px = if hi > lo {
+                ((x[v] - lo) / (hi - lo)) as f32 * size.0
+            } else {
+                size.0 / 2.0
+            };
             #[allow(clippy::cast_precision_loss)]
             let py = h.nodes[v].depth as f32 / depth as f32 * size.1;
             Offset::new(px, py)
@@ -381,7 +448,12 @@ mod tests {
         for &leaf in &h.leaves() {
             #[allow(clippy::cast_possible_truncation)]
             let expect = (h.nodes[leaf].value / 20.0) as f32 * total;
-            assert!((rects[leaf].area() - expect).abs() < 1.0, "{} {} vs {expect}", h.nodes[leaf].id, rects[leaf].area());
+            assert!(
+                (rects[leaf].area() - expect).abs() < 1.0,
+                "{} {} vs {expect}",
+                h.nodes[leaf].id,
+                rects[leaf].area()
+            );
         }
         // Leaves do not overlap.
         let leaves = h.leaves();
@@ -410,7 +482,11 @@ mod tests {
             if !n.children.is_empty() {
                 let first = pts[n.children[0]].dx;
                 let last = pts[*n.children.last().unwrap()].dx;
-                assert!((pts[i].dx - (first + last) / 2.0).abs() < 1e-3, "{} centred", n.id);
+                assert!(
+                    (pts[i].dx - (first + last) / 2.0).abs() < 1e-3,
+                    "{} centred",
+                    n.id
+                );
             }
         }
         // Nodes at the same depth keep order and spacing.
@@ -443,7 +519,10 @@ mod tests {
         // Same-depth nodes are strictly ordered left to right by their
         // in-order position: no overlaps anywhere.
         for d in 0..=3 {
-            let mut row: Vec<f32> = (0..h.nodes.len()).filter(|&i| h.nodes[i].depth == d).map(|i| pts[i].dx).collect();
+            let mut row: Vec<f32> = (0..h.nodes.len())
+                .filter(|&i| h.nodes[i].depth == d)
+                .map(|i| pts[i].dx)
+                .collect();
             let sorted = {
                 let mut s = row.clone();
                 s.sort_by(f32::total_cmp);
@@ -451,7 +530,11 @@ mod tests {
             };
             assert_eq!(row, sorted, "depth {d} keeps order");
             row.dedup_by(|a, b| (*a - *b).abs() < 1e-3);
-            assert_eq!(row.len(), sorted.len(), "depth {d}: no two nodes share a column");
+            assert_eq!(
+                row.len(),
+                sorted.len(),
+                "depth {d}: no two nodes share a column"
+            );
         }
     }
 }

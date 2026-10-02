@@ -25,7 +25,9 @@ use vieww_collab::{anchor_at, Doc, Op, Presence};
 use vieww_foundation::json::Json;
 use vieww_foundation::{Offset, Size};
 use vieww_game::{Behaviour, Coroutine, Ctx, Game, GlobalTransform, InputMap, Name, Transform2};
-use vieww_graph::{Constant, ExecGraph, ExecNode, Expression, Graph, Lfo, Math, Noise, Remap, Time, Trail, Value};
+use vieww_graph::{
+    Constant, ExecGraph, ExecNode, Expression, Graph, Lfo, Math, Noise, Remap, Time, Trail, Value,
+};
 use vieww_lottie::Composition;
 use vieww_widget::prelude::*;
 
@@ -71,18 +73,42 @@ fn net() -> Net {
     g.connect(mul, "out", trail, "in").ok();
     let mut exec = ExecGraph::new();
     let ev = exec.add(ExecNode::Event("Tick".into()));
-    let lp = exec.add(ExecNode::ForLoop { count: (k, "out".into()), index_var: "i".into() });
-    let br = exec.add(ExecNode::Branch { condition: (remap, "out".into()) });
+    let lp = exec.add(ExecNode::ForLoop {
+        count: (k, "out".into()),
+        index_var: "i".into(),
+    });
+    let br = exec.add(ExecNode::Branch {
+        condition: (remap, "out".into()),
+    });
     let hi = exec.add(ExecNode::Call("Flash".into()));
     let lo = exec.add(ExecNode::Call("Dim".into()));
-    let set = exec.add(ExecNode::SetVariable { name: "level".into(), value: (mul, "out".into()) });
+    let set = exec.add(ExecNode::SetVariable {
+        name: "level".into(),
+        value: (mul, "out".into()),
+    });
     exec.then(ev, 0, lp);
     exec.then(lp, 0, set);
     exec.then(lp, 1, br);
     exec.then(br, 0, hi);
     exec.then(br, 1, lo);
-    let boxes = vec![(time, o(10.0, 20.0)), (lfo, o(70.0, 10.0)), (remap, o(130.0, 10.0)), (noise, o(70.0, 60.0)), (expr, o(70.0, 100.0)), (k, o(130.0, 130.0)), (add, o(130.0, 70.0)), (mul, o(190.0, 100.0)), (trail, o(190.0, 40.0))];
-    Net { g, exec, out: mul, trail, boxes }
+    let boxes = vec![
+        (time, o(10.0, 20.0)),
+        (lfo, o(70.0, 10.0)),
+        (remap, o(130.0, 10.0)),
+        (noise, o(70.0, 60.0)),
+        (expr, o(70.0, 100.0)),
+        (k, o(130.0, 130.0)),
+        (add, o(130.0, 70.0)),
+        (mul, o(190.0, 100.0)),
+        (trail, o(190.0, 40.0)),
+    ];
+    Net {
+        g,
+        exec,
+        out: mul,
+        trail,
+        boxes,
+    }
 }
 
 // ---------------------------------------------------------------- game
@@ -142,11 +168,16 @@ fn game() -> Game {
         let e = w.spawn();
         w.insert(e, Transform2::at(at));
         w.insert(e, Name("comet".into()));
-        (e, Some(Box::new(Drift(o(90.0, 18.0))) as Box<dyn Behaviour>))
+        (
+            e,
+            Some(Box::new(Drift(o(90.0, 18.0))) as Box<dyn Behaviour>),
+        )
     });
     let mut c = Coroutine::new();
     for k in 0..8 {
-        c = c.wait(0.6).then(move |_, cmd| cmd.instantiate("comet", o(0.0, 20.0 + (k % 4) as f32 * 40.0)));
+        c = c
+            .wait(0.6)
+            .then(move |_, cmd| cmd.instantiate("comet", o(0.0, 20.0 + (k % 4) as f32 * 40.0)));
     }
     g.start_coroutine(c);
     g
@@ -156,12 +187,20 @@ fn game() -> Game {
 
 fn exchange(a: &mut Doc, b: &mut Doc) -> usize {
     // Ops travel as JSON, as they would over a socket.
-    let wire: Vec<String> = a.ops_since(b.clock()).iter().map(|op| op.to_json().to_string()).collect();
+    let wire: Vec<String> = a
+        .ops_since(b.clock())
+        .iter()
+        .map(|op| op.to_json().to_string())
+        .collect();
     for s in &wire {
         let op = Op::from_json(&Json::parse(s).expect("json")).expect("op");
         b.apply(&op);
     }
-    let back: Vec<String> = b.ops_since(a.clock()).iter().map(|op| op.to_json().to_string()).collect();
+    let back: Vec<String> = b
+        .ops_since(a.clock())
+        .iter()
+        .map(|op| op.to_json().to_string())
+        .collect();
     for s in &back {
         a.apply(&Op::from_json(&Json::parse(s).expect("json")).expect("op"));
     }
@@ -201,7 +240,12 @@ fn collab(t: f32) -> (String, String, usize, String, Cursors) {
     let pos = b.text.value().find('w').unwrap_or(0);
     presence.update(2, 1, "Bo", anchor_at(&b.text, pos));
     let cursors = presence.positions(&a.text);
-    let meta = format!("title {} · set {:?} · counter {}", a.map.get("title").map_or("-".to_owned(), |j| j.to_string()), a.set.elements(), a.counter.value());
+    let meta = format!(
+        "title {} · set {:?} · counter {}",
+        a.map.get("title").map_or("-".to_owned(), |j| j.to_string()),
+        a.set.elements(),
+        a.counter.value()
+    );
     (a.text.value(), b.text.value(), sent, meta, cursors)
 }
 
@@ -234,117 +278,200 @@ type Run = (f32, Net, Game, Vec<String>);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let comp = Rc::new(Composition::parse(LOTTIE).map_err(|e| e.0)?);
-    feature_harness::launch("88 — graph, game, collab, lottie", Size::new(1160.0, 330.0), move |d| {
-        let comp = comp.clone();
-        let state: Rc<RefCell<Run>> = Rc::new(RefCell::new((0.0, net(), game(), Vec::new())));
-        let view = feature_harness::clocked(d, SPAN, move |t| {
-            let mut st = state.borrow_mut();
-            if t < st.0 {
-                *st = (0.0, net(), game(), Vec::new());
-            }
-            while st.0 + 1.0 / 60.0 <= t {
-                st.0 += 1.0 / 60.0;
-                let now = st.0;
+    feature_harness::launch(
+        "88 — graph, game, collab, lottie",
+        Size::new(1160.0, 330.0),
+        move |d| {
+            let comp = comp.clone();
+            let state: Rc<RefCell<Run>> = Rc::new(RefCell::new((0.0, net(), game(), Vec::new())));
+            let view = feature_harness::clocked(d, SPAN, move |t| {
+                let mut st = state.borrow_mut();
+                if t < st.0 {
+                    *st = (0.0, net(), game(), Vec::new());
+                }
+                while st.0 + 1.0 / 60.0 <= t {
+                    st.0 += 1.0 / 60.0;
+                    let now = st.0;
+                    let (_, n, g, trace) = &mut *st;
+                    n.g.set_time(now);
+                    let _ = n.g.pull(n.trail, "channel");
+                    if (now * 60.0) as i32 % 60 == 0 {
+                        if let Ok(tr) = n.exec.fire("Tick", &mut n.g) {
+                            *trace = tr;
+                        }
+                    }
+                    g.frame(1.0 / 60.0);
+                }
                 let (_, n, g, trace) = &mut *st;
-                n.g.set_time(now);
-                let _ = n.g.pull(n.trail, "channel");
-                if (now * 60.0) as i32 % 60 == 0 {
-                    if let Ok(tr) = n.exec.fire("Tick", &mut n.g) {
-                        *trace = tr;
+                let channel = match n.g.pull(n.trail, "channel") {
+                    Ok(Value::Channel(c)) => c,
+                    _ => Vec::new(),
+                };
+                let level = n.g.pull(n.out, "out").map(|v| v.as_f32()).unwrap_or(0.0);
+                let boxes: Vec<(String, Offset, u64)> = n
+                    .boxes
+                    .iter()
+                    .map(|(id, p)| (n.g.name(*id).to_owned(), *p, n.g.cooks(*id)))
+                    .collect();
+                let wires: Vec<(Offset, Offset)> =
+                    n.g.wires()
+                        .iter()
+                        .filter_map(|w| {
+                            let a = n.boxes.iter().find(|b| b.0 == w.from)?.1;
+                            let b = n.boxes.iter().find(|b| b.0 == w.to)?.1;
+                            Some((a + o(44.0, 9.0), b + o(0.0, 9.0)))
+                        })
+                        .collect();
+                let mut trace_s = trace.join(" → ");
+                if trace_s.chars().count() > 34 {
+                    trace_s = trace_s.chars().take(33).collect::<String>() + "…";
+                }
+                let labels: Vec<WidgetNode> = boxes
+                    .iter()
+                    .map(|(n, p, _)| {
+                        Positioned::new()
+                            .left(p.dx + 4.0)
+                            .top(p.dy + 2.0)
+                            .child(Text::new(n.clone()).size(9.0).color(INK))
+                            .into()
+                    })
+                    .collect();
+                let graph_paint =
+                    feature_harness::draw::paint(Size::new(240.0, 190.0), move |gk, _| {
+                        for (a, b) in &wires {
+                            let mut p = vieww_foundation::Path::new();
+                            p.move_to(*a)
+                                .cubic_to(*a + o(20.0, 0.0), *b - o(20.0, 0.0), *b);
+                            gk.stroke(p, DIM, 1.2);
+                        }
+                        for (i, (_, p, cooks)) in boxes.iter().enumerate() {
+                            gk.rrect(
+                                xywh(p.dx, p.dy, 44.0, 18.0),
+                                4.0,
+                                HUES[i % 6].with_alpha(200),
+                            );
+                            gk.rect(
+                                xywh(
+                                    p.dx + 2.0,
+                                    p.dy + 14.0,
+                                    (*cooks as f32 / 8.0).min(40.0),
+                                    2.0,
+                                ),
+                                INK,
+                            );
+                        }
+                        gk.stroke(
+                            plot(&channel, o(10.0, 150.0), Size::new(220.0, 36.0), -1.5, 1.5),
+                            HUES[1],
+                            1.5,
+                        );
+                    });
+                let mut layers: Vec<WidgetNode> = vec![graph_paint];
+                layers.extend(labels);
+                let p1 = feature_harness::draw::panel(
+                    "node graph + event graph",
+                    &format!(
+                        "out {level:.2} · Tick: {}",
+                        if trace_s.is_empty() {
+                            "…".into()
+                        } else {
+                            trace_s
+                        }
+                    ),
+                    Stack::new().children(layers),
+                );
+
+                let w = &g.world;
+                let mut bodies: Vec<(String, Offset)> = Vec::new();
+                for e in w.query::<GlobalTransform>() {
+                    if let Some(Name(nm)) = w.get::<Name>(e) {
+                        let gt = w.get::<GlobalTransform>(e).expect("queried").0;
+                        bodies.push((nm.clone(), gt.apply(Offset::ZERO)));
                     }
                 }
-                g.frame(1.0 / 60.0);
-            }
-            let (_, n, g, trace) = &mut *st;
-            let channel = match n.g.pull(n.trail, "channel") {
-                Ok(Value::Channel(c)) => c,
-                _ => Vec::new(),
-            };
-            let level = n.g.pull(n.out, "out").map(|v| v.as_f32()).unwrap_or(0.0);
-            let boxes: Vec<(String, Offset, u64)> = n.boxes.iter().map(|(id, p)| (n.g.name(*id).to_owned(), *p, n.g.cooks(*id))).collect();
-            let wires: Vec<(Offset, Offset)> = n
-                .g
-                .wires()
-                .iter()
-                .filter_map(|w| {
-                    let a = n.boxes.iter().find(|b| b.0 == w.from)?.1;
-                    let b = n.boxes.iter().find(|b| b.0 == w.to)?.1;
-                    Some((a + o(44.0, 9.0), b + o(0.0, 9.0)))
-                })
-                .collect();
-            let mut trace_s = trace.join(" → ");
-            if trace_s.chars().count() > 34 {
-                trace_s = trace_s.chars().take(33).collect::<String>() + "…";
-            }
-            let labels: Vec<WidgetNode> = boxes.iter().map(|(n, p, _)| Positioned::new().left(p.dx + 4.0).top(p.dy + 2.0).child(Text::new(n.clone()).size(9.0).color(INK)).into()).collect();
-            let graph_paint = feature_harness::draw::paint(Size::new(240.0, 190.0), move |gk, _| {
-                for (a, b) in &wires {
-                    let mut p = vieww_foundation::Path::new();
-                    p.move_to(*a).cubic_to(*a + o(20.0, 0.0), *b - o(20.0, 0.0), *b);
-                    gk.stroke(p, DIM, 1.2);
-                }
-                for (i, (_, p, cooks)) in boxes.iter().enumerate() {
-                    gk.rrect(xywh(p.dx, p.dy, 44.0, 18.0), 4.0, HUES[i % 6].with_alpha(200));
-                    gk.rect(xywh(p.dx + 2.0, p.dy + 14.0, (*cooks as f32 / 8.0).min(40.0), 2.0), INK);
-                }
-                gk.stroke(plot(&channel, o(10.0, 150.0), Size::new(220.0, 36.0), -1.5, 1.5), HUES[1], 1.5);
-            });
-            let mut layers: Vec<WidgetNode> = vec![graph_paint];
-            layers.extend(labels);
-            let p1 = feature_harness::draw::panel("node graph + event graph", &format!("out {level:.2} · Tick: {}", if trace_s.is_empty() { "…".into() } else { trace_s }), Stack::new().children(layers));
+                let count = w.len();
+                let p2 = painted(
+                    "ECS + behaviours + coroutine",
+                    &format!(
+                        "{count} entities · frame {} · hierarchy propagated",
+                        g.frame
+                    ),
+                    Size::new(240.0, 190.0),
+                    move |gk, _| {
+                        gk.stroke(
+                            feature_harness::draw::circle(o(120.0, 95.0), 40.0),
+                            DIM.with_alpha(60),
+                            1.0,
+                        );
+                        gk.stroke(
+                            feature_harness::draw::circle(o(120.0, 95.0), 70.0),
+                            DIM.with_alpha(60),
+                            1.0,
+                        );
+                        for (nm, p) in &bodies {
+                            let (r, c) = match nm.as_str() {
+                                "sun" => (14.0, HUES[3]),
+                                "comet" => (3.0, INK),
+                                n if n.starts_with("planet") => (7.0, HUES[0]),
+                                _ => (3.0, HUES[5]),
+                            };
+                            gk.circle(*p, r, c);
+                        }
+                    },
+                );
+                drop(st);
 
-            let w = &g.world;
-            let mut bodies: Vec<(String, Offset)> = Vec::new();
-            for e in w.query::<GlobalTransform>() {
-                if let Some(Name(nm)) = w.get::<Name>(e) {
-                    let gt = w.get::<GlobalTransform>(e).expect("queried").0;
-                    bodies.push((nm.clone(), gt.apply(Offset::ZERO)));
-                }
-            }
-            let count = w.len();
-            let p2 = painted("ECS + behaviours + coroutine", &format!("{count} entities · frame {} · hierarchy propagated", g.frame), Size::new(240.0, 190.0), move |gk, _| {
-                gk.stroke(feature_harness::draw::circle(o(120.0, 95.0), 40.0), DIM.with_alpha(60), 1.0);
-                gk.stroke(feature_harness::draw::circle(o(120.0, 95.0), 70.0), DIM.with_alpha(60), 1.0);
-                for (nm, p) in &bodies {
-                    let (r, c) = match nm.as_str() {
-                        "sun" => (14.0, HUES[3]),
-                        "comet" => (3.0, INK),
-                        n if n.starts_with("planet") => (7.0, HUES[0]),
-                        _ => (3.0, HUES[5]),
-                    };
-                    gk.circle(*p, r, c);
-                }
-            });
-            drop(st);
+                let (ta, tb, sent, meta, cursors) = collab(t);
+                let same = ta == tb;
+                let cursor = cursors
+                    .first()
+                    .map_or(String::new(), |(r, n, p)| format!("{n}#{r}@{p}"));
+                let p3 = feature_harness::draw::panel(
+                    "CRDT collaboration",
+                    &format!(
+                        "{sent} ops over JSON · {} · {cursor}",
+                        if same {
+                            "converged"
+                        } else {
+                            "diverged (pending sync)"
+                        }
+                    ),
+                    Container::new().width(240.0).height(190.0).child(
+                        Flex::column().spacing(6.0).children(children![
+                            Text::new("replica A").size(10.0).color(DIM),
+                            Text::new(ta.clone()).size(13.0).color(HUES[0]),
+                            Text::new("replica B").size(10.0).color(DIM),
+                            Text::new(tb.clone()).size(13.0).color(HUES[1]),
+                            Text::new(meta).size(10.0).color(INK),
+                        ]),
+                    ),
+                );
 
-            let (ta, tb, sent, meta, cursors) = collab(t);
-            let same = ta == tb;
-            let cursor = cursors.first().map_or(String::new(), |(r, n, p)| format!("{n}#{r}@{p}"));
-            let p3 = feature_harness::draw::panel(
-                "CRDT collaboration",
-                &format!("{sent} ops over JSON · {} · {cursor}", if same { "converged" } else { "diverged (pending sync)" }),
-                Container::new().width(240.0).height(190.0).child(
-                    Flex::column().spacing(6.0).children(children![
-                        Text::new("replica A").size(10.0).color(DIM),
-                        Text::new(ta.clone()).size(13.0).color(HUES[0]),
-                        Text::new("replica B").size(10.0).color(DIM),
-                        Text::new(tb.clone()).size(13.0).color(HUES[1]),
-                        Text::new(meta).size(10.0).color(INK),
-                    ]),
-                ),
-            );
-
-            let frame = comp.frame_at(t / SPAN * comp.duration());
-            let comp2 = comp.clone();
-            let p4 = painted("Lottie playback", &format!("frame {frame:.0}/{:.0} · {} layers", comp.duration() * 30.0, comp.layer_names().len()), Size::new(240.0, 190.0), move |gk, _| {
-                gk.rect(xywh(0.0, 0.0, 240.0, 170.0), DIM.with_alpha(25));
-                for it in comp2.render(frame, xywh(0.0, 0.0, 240.0, 170.0)).items() {
-                    gk.push(it.clone());
-                }
+                let frame = comp.frame_at(t / SPAN * comp.duration());
+                let comp2 = comp.clone();
+                let p4 = painted(
+                    "Lottie playback",
+                    &format!(
+                        "frame {frame:.0}/{:.0} · {} layers",
+                        comp.duration() * 30.0,
+                        comp.layer_names().len()
+                    ),
+                    Size::new(240.0, 190.0),
+                    move |gk, _| {
+                        gk.rect(xywh(0.0, 0.0, 240.0, 170.0), DIM.with_alpha(25));
+                        for it in comp2.render(frame, xywh(0.0, 0.0, 240.0, 170.0)).items() {
+                            gk.push(it.clone());
+                        }
+                    },
+                );
+                page(
+                    "88 · node graph, ECS, CRDT, Lottie",
+                    "vieww-graph · vieww-game · vieww-collab · vieww-lottie",
+                    grid(4, vec![p1, p2, p3, p4]),
+                )
             });
-            page("88 · node graph, ECS, CRDT, Lottie", "vieww-graph · vieww-game · vieww-collab · vieww-lottie", grid(4, vec![p1, p2, p3, p4]))
-        });
-        feature_harness::set_page(d, view);
-        let _ = TAU;
-    })
+            feature_harness::set_page(d, view);
+            let _ = TAU;
+        },
+    )
 }

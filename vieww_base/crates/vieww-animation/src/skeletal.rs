@@ -147,7 +147,10 @@ impl Lerp for BoneTransform {
         Self {
             translation: self.translation.lerp(other.translation, t),
             rotation: self.rotation.lerp(other.rotation, t),
-            scale: (self.scale.0.lerp(other.scale.0, t), self.scale.1.lerp(other.scale.1, t)),
+            scale: (
+                self.scale.0.lerp(other.scale.0, t),
+                self.scale.1.lerp(other.scale.1, t),
+            ),
         }
     }
 }
@@ -603,9 +606,7 @@ impl SkeletalClip {
     /// A clip with no tracks yet: sampling it yields the base pose.
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            tracks: Vec::new(),
-        }
+        Self { tracks: Vec::new() }
     }
 
     /// Add (or replace) a bone's track. Returns `self` for chains.
@@ -632,12 +633,7 @@ impl SkeletalClip {
     /// [`pose`](Self::pose), over an explicit base pose — the entry point for
     /// blending a clip onto another clip's output, or onto a live-edited pose.
     #[must_use]
-    pub fn pose_over(
-        &self,
-        skeleton: &Skeleton,
-        base: Pose,
-        elapsed: std::time::Duration,
-    ) -> Pose {
+    pub fn pose_over(&self, skeleton: &Skeleton, base: Pose, elapsed: std::time::Duration) -> Pose {
         let mut pose = base;
         for (name, frames) in &self.tracks {
             // See `bone`: unknown names skip silently, and the pose's `set`
@@ -672,20 +668,31 @@ mod tests {
     fn world_chains_parents() {
         // Root at (10, 0), child at (0, 20) relative to root.
         let skeleton = Skeleton::new()
-            .bone("root", None, BoneTransform::from_translation(Offset::new(10.0, 0.0)))
-            .bone("child", Some("root"), BoneTransform::from_translation(Offset::new(0.0, 20.0)));
+            .bone(
+                "root",
+                None,
+                BoneTransform::from_translation(Offset::new(10.0, 0.0)),
+            )
+            .bone(
+                "child",
+                Some("root"),
+                BoneTransform::from_translation(Offset::new(0.0, 20.0)),
+            );
 
         let world = skeleton.world(&skeleton.bind_pose());
         let origin = world[1].apply(Offset::new(0.0, 0.0));
-        assert_eq!(origin, Offset::new(10.0, 20.0), "parent then child composes");
+        assert_eq!(
+            origin,
+            Offset::new(10.0, 20.0),
+            "parent then child composes"
+        );
     }
 
     #[test]
     fn a_child_may_be_declared_before_its_parent() {
         // Wait: it may not, and the error is loud — this test pins that.
         let result = std::panic::catch_unwind(|| {
-            let _ = Skeleton::new()
-                .bone("child", Some("not-yet"), BoneTransform::default());
+            let _ = Skeleton::new().bone("child", Some("not-yet"), BoneTransform::default());
         });
         assert!(result.is_err(), "a parent must exist before its child");
     }
@@ -695,7 +702,11 @@ mod tests {
         // Root at origin, rotated 90°; child 40 units down the y axis.
         let skeleton = Skeleton::new()
             .bone("root", None, BoneTransform::default())
-            .bone("child", Some("root"), BoneTransform::from_translation(Offset::new(0.0, 40.0)));
+            .bone(
+                "child",
+                Some("root"),
+                BoneTransform::from_translation(Offset::new(0.0, 40.0)),
+            );
 
         let mut pose = skeleton.bind_pose();
         pose.set(&skeleton, "root", BoneTransform::from_rotation(FRAC_PI_2));
@@ -708,8 +719,11 @@ mod tests {
 
     #[test]
     fn bind_pose_world_is_the_identity_the_skin_freezes() {
-        let skeleton = Skeleton::new()
-            .bone("a", None, BoneTransform::from_translation(Offset::new(5.0, 5.0)));
+        let skeleton = Skeleton::new().bone(
+            "a",
+            None,
+            BoneTransform::from_translation(Offset::new(5.0, 5.0)),
+        );
         let world = skeleton.world(&skeleton.bind_pose());
         let origin = world[0].apply(Offset::new(0.0, 0.0));
         assert_eq!(origin, Offset::new(5.0, 5.0));
@@ -717,8 +731,11 @@ mod tests {
 
     #[test]
     fn skinning_an_unmoved_rig_returns_bind_positions() {
-        let skeleton = Skeleton::new()
-            .bone("b", None, BoneTransform::from_translation(Offset::new(3.0, 4.0)));
+        let skeleton = Skeleton::new().bone(
+            "b",
+            None,
+            BoneTransform::from_translation(Offset::new(3.0, 4.0)),
+        );
         let bind = skeleton.bind_pose();
         let skin = Skin::bind(&skeleton, &bind)
             .vertex(Vertex::new(Offset::new(10.0, 10.0)).binding(0, 1.0));
@@ -734,14 +751,21 @@ mod tests {
 
     #[test]
     fn skinning_follows_a_translated_bone() {
-        let skeleton = Skeleton::new()
-            .bone("b", None, BoneTransform::from_translation(Offset::new(0.0, 0.0)));
+        let skeleton = Skeleton::new().bone(
+            "b",
+            None,
+            BoneTransform::from_translation(Offset::new(0.0, 0.0)),
+        );
         let bind = skeleton.bind_pose();
         let mut skin = Skin::bind(&skeleton, &bind);
         skin = skin.vertex(Vertex::new(Offset::new(6.0, 0.0)).binding(0, 1.0));
 
         let mut pose = bind.clone();
-        pose.set(&skeleton, "b", BoneTransform::from_translation(Offset::new(2.0, 0.0)));
+        pose.set(
+            &skeleton,
+            "b",
+            BoneTransform::from_translation(Offset::new(2.0, 0.0)),
+        );
         let world = skeleton.world(&pose);
         let deformed = skin.apply(&world);
         assert_eq!(
@@ -756,16 +780,31 @@ mod tests {
         // Two bones 10 apart in x; a vertex half-bound to each lands between
         // wherever each would have put it.
         let skeleton = Skeleton::new()
-            .bone("left", None, BoneTransform::from_translation(Offset::new(0.0, 0.0)))
-            .bone("right", None, BoneTransform::from_translation(Offset::new(10.0, 0.0)));
+            .bone(
+                "left",
+                None,
+                BoneTransform::from_translation(Offset::new(0.0, 0.0)),
+            )
+            .bone(
+                "right",
+                None,
+                BoneTransform::from_translation(Offset::new(10.0, 0.0)),
+            );
         let bind = skeleton.bind_pose();
         let mut skin = Skin::bind(&skeleton, &bind);
-        skin = skin
-            .vertex(Vertex::new(Offset::new(0.0, 0.0)).binding(0, 0.5).binding(1, 0.5));
+        skin = skin.vertex(
+            Vertex::new(Offset::new(0.0, 0.0))
+                .binding(0, 0.5)
+                .binding(1, 0.5),
+        );
 
         // Move only the right bone +20 in x: half-weight pulls 10.
         let mut pose = bind.clone();
-        pose.set(&skeleton, "right", BoneTransform::from_translation(Offset::new(30.0, 0.0)));
+        pose.set(
+            &skeleton,
+            "right",
+            BoneTransform::from_translation(Offset::new(30.0, 0.0)),
+        );
         let world = skeleton.world(&pose);
         let deformed = skin.apply(&world);
         let dx = deformed[0].dx;
@@ -806,7 +845,11 @@ mod tests {
         skin = skin.vertex(Vertex::new(Offset::new(7.0, 8.0)));
 
         let mut pose = bind.clone();
-        pose.set(&skeleton, "b", BoneTransform::from_translation(Offset::new(100.0, 100.0)));
+        pose.set(
+            &skeleton,
+            "b",
+            BoneTransform::from_translation(Offset::new(100.0, 100.0)),
+        );
         let world = skeleton.world(&pose);
         let deformed = skin.apply(&world);
         assert_eq!(deformed[0], Offset::new(7.0, 8.0));
@@ -832,10 +875,18 @@ mod tests {
     fn a_clip_samples_over_the_bind_pose() {
         let skeleton = Skeleton::new()
             .bone("hand", None, BoneTransform::default())
-            .bone("arm", None, BoneTransform::from_translation(Offset::new(2.0, 2.0)));
-        let clip = SkeletalClip::new()
-            .bone("hand", Keyframes::new(BoneTransform::default())
-                .with(Keyframe::to(0.5, BoneTransform::from_translation(Offset::new(0.0, -12.0)))));
+            .bone(
+                "arm",
+                None,
+                BoneTransform::from_translation(Offset::new(2.0, 2.0)),
+            );
+        let clip = SkeletalClip::new().bone(
+            "hand",
+            Keyframes::new(BoneTransform::default()).with(Keyframe::to(
+                0.5,
+                BoneTransform::from_translation(Offset::new(0.0, -12.0)),
+            )),
+        );
 
         let pose = clip.pose(&skeleton, ms(250));
         let hand = pose.get(skeleton.index_of("hand").unwrap()).unwrap();
@@ -849,12 +900,20 @@ mod tests {
     #[test]
     fn a_clip_over_a_base_pose_blend_onto_live_state() {
         let skeleton = Skeleton::new().bone("hand", None, BoneTransform::default());
-        let clip = SkeletalClip::new()
-            .bone("hand", Keyframes::new(BoneTransform::default())
-                .with(Keyframe::to(0.5, BoneTransform::from_translation(Offset::new(0.0, -12.0)))));
+        let clip = SkeletalClip::new().bone(
+            "hand",
+            Keyframes::new(BoneTransform::default()).with(Keyframe::to(
+                0.5,
+                BoneTransform::from_translation(Offset::new(0.0, -12.0)),
+            )),
+        );
 
         let mut base = skeleton.bind_pose();
-        base.set(&skeleton, "hand", BoneTransform::from_translation(Offset::new(100.0, 100.0)));
+        base.set(
+            &skeleton,
+            "hand",
+            BoneTransform::from_translation(Offset::new(100.0, 100.0)),
+        );
         // The clip's track *replaces* the base for animated bones.
         let pose = clip.pose_over(&skeleton, base, ms(250));
         let hand = pose.get(0).unwrap();
@@ -864,9 +923,13 @@ mod tests {
     #[test]
     fn a_track_for_an_unknown_bone_is_skipped() {
         let skeleton = Skeleton::new().bone("hand", None, BoneTransform::default());
-        let clip = SkeletalClip::new()
-            .bone("ghost", Keyframes::new(BoneTransform::default())
-                .with(Keyframe::to(0.5, BoneTransform::from_translation(Offset::new(9.0, 9.0)))));
+        let clip = SkeletalClip::new().bone(
+            "ghost",
+            Keyframes::new(BoneTransform::default()).with(Keyframe::to(
+                0.5,
+                BoneTransform::from_translation(Offset::new(9.0, 9.0)),
+            )),
+        );
 
         let pose = clip.pose(&skeleton, ms(250));
         assert_eq!(pose.get(0).unwrap().translation, Offset::new(0.0, 0.0));
@@ -876,10 +939,16 @@ mod tests {
     fn clip_duration_is_the_longest_track() {
         let _skeleton = Skeleton::new().bone("a", None, BoneTransform::default());
         let clip = SkeletalClip::new()
-            .bone("a", Keyframes::new(BoneTransform::default())
-                .with(Keyframe::to(0.5, BoneTransform::default())))
-            .bone("b", Keyframes::new(BoneTransform::default())
-                .with(Keyframe::to(2.0, BoneTransform::default())));
+            .bone(
+                "a",
+                Keyframes::new(BoneTransform::default())
+                    .with(Keyframe::to(0.5, BoneTransform::default())),
+            )
+            .bone(
+                "b",
+                Keyframes::new(BoneTransform::default())
+                    .with(Keyframe::to(2.0, BoneTransform::default())),
+            );
         assert_eq!(clip.duration(), ms(2000));
     }
 
@@ -899,13 +968,21 @@ mod tests {
         // feature: shoulder + forearm, a skinned tip, one rotation.
         let skeleton = Skeleton::new()
             .bone("shoulder", None, BoneTransform::default())
-            .bone("forearm", Some("shoulder"), BoneTransform::from_translation(Offset::new(0.0, 40.0)));
+            .bone(
+                "forearm",
+                Some("shoulder"),
+                BoneTransform::from_translation(Offset::new(0.0, 40.0)),
+            );
         let bind = skeleton.bind_pose();
         let mut skin = Skin::bind(&skeleton, &bind);
         skin = skin.vertex(Vertex::new(Offset::new(0.0, 80.0)).binding(1, 1.0));
 
         let mut pose = bind.clone();
-        pose.set(&skeleton, "shoulder", BoneTransform::from_rotation(FRAC_PI_2));
+        pose.set(
+            &skeleton,
+            "shoulder",
+            BoneTransform::from_rotation(FRAC_PI_2),
+        );
         let world = skeleton.world(&pose);
         let tip = skin.apply(&world)[0];
         assert!(tip.dx < -70.0, "tip at {tip:?}");
@@ -1027,12 +1104,7 @@ pub struct TwoBoneIk {
 /// assert!(!far.reachable);
 /// assert!((far.effector.dx - 120.0).abs() < 1e-3, "fully extended");
 /// ```
-pub fn solve_two_bone(
-    root: Offset,
-    lengths: (f32, f32),
-    target: Offset,
-    bend: Bend,
-) -> TwoBoneIk {
+pub fn solve_two_bone(root: Offset, lengths: (f32, f32), target: Offset, bend: Bend) -> TwoBoneIk {
     let (l1, l2) = lengths;
     assert!(
         l1.is_finite() && l1 > 0.0 && l2.is_finite() && l2 > 0.0,
@@ -1158,7 +1230,10 @@ mod ik_tests {
         );
         assert!(!solution.reachable);
         assert!((solution.effector.dx - 60.0).abs() < EPS);
-        assert!((solution.effector.dy - 80.0).abs() < EPS, "toward the target");
+        assert!(
+            (solution.effector.dy - 80.0).abs() < EPS,
+            "toward the target"
+        );
         // The FK round trip still lands on the (clamped) effector.
         let joint = solution.joint(Offset::new(0.0, 0.0), (50.0, 50.0));
         let end = Offset::new(
@@ -1211,7 +1286,10 @@ mod ik_tests {
             Bend::CounterClockwise,
         );
         assert!(!solution.reachable);
-        assert!((solution.effector.dx - 20.0).abs() < EPS, "folded to the minimum");
+        assert!(
+            (solution.effector.dx - 20.0).abs() < EPS,
+            "folded to the minimum"
+        );
     }
 
     #[test]

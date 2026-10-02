@@ -32,13 +32,17 @@ impl Ray {
     /// Through normalised device coordinates (−1..1, y up).
     #[must_use]
     pub fn from_camera(camera: &Camera, aspect: f32, ndc_x: f32, ndc_y: f32) -> Self {
-        let inv = (camera.projection(aspect) * camera.view()).inverse().unwrap_or(Mat4::IDENTITY);
+        let inv = (camera.projection(aspect) * camera.view())
+            .inverse()
+            .unwrap_or(Mat4::IDENTITY);
         let near = inv.transform_point(Vec3::new(ndc_x, ndc_y, -1.0));
         let far = inv.transform_point(Vec3::new(ndc_x, ndc_y, 1.0));
         match camera.projection {
             // Perspective rays start at the eye, as Three.js' do, so hit
             // distances are distances from the camera.
-            crate::scene::Projection::Perspective { .. } => Self::new(camera.position, far - camera.position),
+            crate::scene::Projection::Perspective { .. } => {
+                Self::new(camera.position, far - camera.position)
+            }
             crate::scene::Projection::Orthographic { .. } => Self::new(near, far - near),
         }
     }
@@ -46,7 +50,12 @@ impl Ray {
     /// Through pixel `(x, y)` of a `width × height` view.
     #[must_use]
     pub fn from_screen(camera: &Camera, width: f32, height: f32, x: f32, y: f32) -> Self {
-        Self::from_camera(camera, width / height, x / width * 2.0 - 1.0, 1.0 - y / height * 2.0)
+        Self::from_camera(
+            camera,
+            width / height,
+            x / width * 2.0 - 1.0,
+            1.0 - y / height * 2.0,
+        )
     }
 
     #[must_use]
@@ -104,49 +113,62 @@ pub fn raycast(scene: &mut Scene, ray: &Ray) -> Vec<Hit> {
         }
         let node = scene.node(id);
         let world = node.world();
-        let mut test = |model: Mat4, mesh: &vieww_mesh::Mesh, bounds: (Vec3, f32), instance: Option<usize>| {
-            let c = model.transform_point(bounds.0);
-            let r = bounds.1 * model.max_scale();
-            // Sphere rejection.
-            let oc = ray.origin - c;
-            let b = oc.dot(ray.direction);
-            if b * b - (oc.dot(oc) - r * r) < 0.0 {
-                return;
-            }
-            let normal_m = model.inverse().map_or(model, |m| m.transpose());
-            for (ti, t) in mesh.indices.chunks_exact(3).enumerate() {
-                let p = |i: u32| model.transform_point(Vec3::from_array(mesh.positions[i as usize]));
-                let (a, bb, cc) = (p(t[0]), p(t[1]), p(t[2]));
-                if let Some((dist, u, v)) = ray_triangle(ray, a, bb, cc) {
-                    let w = 1.0 - u - v;
-                    let normal = if mesh.has_normals() {
-                        let n = |i: u32| Vec3::from_array(mesh.normals[i as usize]);
-                        normal_m.transform_vector(n(t[0]) * w + n(t[1]) * u + n(t[2]) * v).normalize()
-                    } else {
-                        (bb - a).cross(cc - a).normalize()
-                    };
-                    let uv = if mesh.has_uvs() {
-                        let q = |i: u32| mesh.uvs[i as usize];
-                        let (q0, q1, q2) = (q(t[0]), q(t[1]), q(t[2]));
-                        [q0[0] * w + q1[0] * u + q2[0] * v, q0[1] * w + q1[1] * u + q2[1] * v]
-                    } else {
-                        [0.0, 0.0]
-                    };
-                    hits.push(Hit {
-                        node: id,
-                        instance,
-                        distance: dist,
-                        point: ray.at(dist),
-                        normal,
-                        uv,
-                        triangle: ti,
-                    });
+        let mut test =
+            |model: Mat4, mesh: &vieww_mesh::Mesh, bounds: (Vec3, f32), instance: Option<usize>| {
+                let c = model.transform_point(bounds.0);
+                let r = bounds.1 * model.max_scale();
+                // Sphere rejection.
+                let oc = ray.origin - c;
+                let b = oc.dot(ray.direction);
+                if b * b - (oc.dot(oc) - r * r) < 0.0 {
+                    return;
                 }
-            }
-        };
+                let normal_m = model.inverse().map_or(model, |m| m.transpose());
+                for (ti, t) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
+                    let p = |i: u32| {
+                        model.transform_point(Vec3::from_array(mesh.positions[i as usize]))
+                    };
+                    let (a, bb, cc) = (p(t[0]), p(t[1]), p(t[2]));
+                    if let Some((dist, u, v)) = ray_triangle(ray, a, bb, cc) {
+                        let w = 1.0 - u - v;
+                        let normal = if mesh.has_normals() {
+                            let n = |i: u32| Vec3::from_array(mesh.normals[i as usize]);
+                            normal_m
+                                .transform_vector(n(t[0]) * w + n(t[1]) * u + n(t[2]) * v)
+                                .normalize()
+                        } else {
+                            (bb - a).cross(cc - a).normalize()
+                        };
+                        let uv = if mesh.has_uvs() {
+                            let q = |i: u32| mesh.uvs[i as usize];
+                            let (q0, q1, q2) = (q(t[0]), q(t[1]), q(t[2]));
+                            [
+                                q0[0] * w + q1[0] * u + q2[0] * v,
+                                q0[1] * w + q1[1] * u + q2[1] * v,
+                            ]
+                        } else {
+                            [0.0, 0.0]
+                        };
+                        hits.push(Hit {
+                            node: id,
+                            instance,
+                            distance: dist,
+                            point: ray.at(dist),
+                            normal,
+                            uv,
+                            triangle: ti,
+                        });
+                    }
+                }
+            };
         match &node.content {
             Content::Mesh { mesh, bounds, .. } => test(world, mesh, *bounds, None),
-            Content::Instanced { mesh, bounds, instances, .. } => {
+            Content::Instanced {
+                mesh,
+                bounds,
+                instances,
+                ..
+            } => {
                 for (i, inst) in instances.iter().enumerate() {
                     test(world * *inst, mesh, *bounds, Some(i));
                 }
@@ -162,7 +184,9 @@ pub fn raycast(scene: &mut Scene, ray: &Ray) -> Vec<Hit> {
     hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
     // A ray through a shared edge hits both triangles at the same point;
     // that is one surface crossing, not two.
-    hits.dedup_by(|b, a| a.node == b.node && a.instance == b.instance && (a.distance - b.distance).abs() < 1e-5);
+    hits.dedup_by(|b, a| {
+        a.node == b.node && a.instance == b.instance && (a.distance - b.distance).abs() < 1e-5
+    });
     hits
 }
 
@@ -189,7 +213,13 @@ mod tests {
     #[test]
     fn the_centre_ray_hits_the_front_face_first() {
         let mut s = Scene::new();
-        let id = s.add(Node::new("box", Content::mesh(box_mesh(2.0, 2.0, 2.0), Material::lambert(Color::WHITE))), None);
+        let id = s.add(
+            Node::new(
+                "box",
+                Content::mesh(box_mesh(2.0, 2.0, 2.0), Material::lambert(Color::WHITE)),
+            ),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO, 0.8);
         let ray = Ray::from_screen(&cam, 100.0, 100.0, 50.0, 50.0);
         let hits = raycast(&mut s, &ray);
@@ -202,8 +232,17 @@ mod tests {
     #[test]
     fn picking_distinguishes_objects_and_instances() {
         let mut s = Scene::new();
-        let inst = vec![Mat4::translation(Vec3::new(-2.0, 0.0, 0.0)), Mat4::translation(Vec3::new(2.0, 0.0, 0.0))];
-        s.add(Node::new("pair", Content::instanced(sphere(0.5, 16, 8), Material::lambert(Color::WHITE), inst)), None);
+        let inst = vec![
+            Mat4::translation(Vec3::new(-2.0, 0.0, 0.0)),
+            Mat4::translation(Vec3::new(2.0, 0.0, 0.0)),
+        ];
+        s.add(
+            Node::new(
+                "pair",
+                Content::instanced(sphere(0.5, 16, 8), Material::lambert(Color::WHITE), inst),
+            ),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 8.0), Vec3::ZERO, 0.8);
         let (x, y, _) = project(&cam, 200.0, 200.0, Vec3::new(2.0, 0.0, 0.0)).unwrap();
         let hits = raycast(&mut s, &Ray::from_screen(&cam, 200.0, 200.0, x, y));

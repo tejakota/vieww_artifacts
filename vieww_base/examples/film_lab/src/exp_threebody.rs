@@ -19,33 +19,35 @@
 //! series between two marks, and the separation itself at t, printed in
 //! the same units as the δ that started it.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
-    StrokeStyle, Dash};
+use vieww_foundation::{
+    Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, smoothstep, tint, CYAN, FAINT, INK, MUTED,
-    MAGENTA, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, smoothstep, tint, CYAN, FAINT, INK, MAGENTA, MUTED, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 14.0;
+pub(crate) const SECONDS: f32 = 14.0;
 
 // ── The choreography ────────────────────────────────────────────────────────
 
 /// The figure-eight initial conditions (equal masses, G = 1) — Simó's values.
 const X0: [[f32; 2]; 3] = [
-    [0.97000436, -0.24308753],
-    [-0.97000436, 0.24308753],
+    [0.970_004_4, -0.24308753],
+    [-0.970_004_4, 0.24308753],
     [0.0, 0.0],
 ];
 const V0: [[f32; 2]; 3] = [
-    [0.46620368, 0.43236573],
-    [0.46620368, 0.43236573],
-    [-0.93240737, -0.86473146],
+    [0.466_203_7, 0.43236573],
+    [0.466_203_7, 0.43236573],
+    [-0.932_407_4, -0.86473146],
 ];
 
 /// The orbit's period (in the same units).
-const PERIOD: f32 = 6.32591398;
+const PERIOD: f32 = 6.325_914;
 
 /// How many periods the plate spans.
 const N_PERIODS: f32 = 2.0;
@@ -93,18 +95,30 @@ fn rk4(pos: &mut [[f32; 2]; 3], vel: &mut [[f32; 2]; 3], h: f32) {
         k1p[i] = vel[i];
     }
     for i in 0..n {
-        mid[i] = [pos[i][0] + k1p[i][0] * h * 0.5, pos[i][1] + k1p[i][1] * h * 0.5];
+        mid[i] = [
+            pos[i][0] + k1p[i][0] * h * 0.5,
+            pos[i][1] + k1p[i][1] * h * 0.5,
+        ];
     }
     for i in 0..n {
         k2v[i] = accel(&mid, i);
-        k2p[i] = [vel[i][0] + k1v[i][0] * h * 0.5, vel[i][1] + k1v[i][1] * h * 0.5];
+        k2p[i] = [
+            vel[i][0] + k1v[i][0] * h * 0.5,
+            vel[i][1] + k1v[i][1] * h * 0.5,
+        ];
     }
     for i in 0..n {
-        mid[i] = [pos[i][0] + k2p[i][0] * h * 0.5, pos[i][1] + k2p[i][1] * h * 0.5];
+        mid[i] = [
+            pos[i][0] + k2p[i][0] * h * 0.5,
+            pos[i][1] + k2p[i][1] * h * 0.5,
+        ];
     }
     for i in 0..n {
         k3v[i] = accel(&mid, i);
-        k3p[i] = [vel[i][0] + k2v[i][0] * h * 0.5, vel[i][1] + k2v[i][1] * h * 0.5];
+        k3p[i] = [
+            vel[i][0] + k2v[i][0] * h * 0.5,
+            vel[i][1] + k2v[i][1] * h * 0.5,
+        ];
     }
     for i in 0..n {
         mid[i] = [pos[i][0] + k3p[i][0] * h, pos[i][1] + k3p[i][1] * h];
@@ -124,7 +138,15 @@ fn rk4(pos: &mut [[f32; 2]; 3], vel: &mut [[f32; 2]; 3], h: f32) {
 /// A full replay to film-fraction `t`: returns (nominal trail, twin trail,
 /// nominal positions, twin positions, separation series [(t, d)]).
 #[must_use]
-fn replay(t: f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>, [[f32; 2]; 3], [[f32; 2]; 3], Vec<(f32, f32)>) {
+fn replay(
+    t: f32,
+) -> (
+    Vec<[f32; 2]>,
+    Vec<[f32; 2]>,
+    [[f32; 2]; 3],
+    [[f32; 2]; 3],
+    Vec<(f32, f32)>,
+) {
     let mut pos = X0;
     let mut vel = V0;
     let mut twin_pos = X0;
@@ -200,12 +222,9 @@ fn project(p: [f32; 2]) -> Offset {
     Offset::new(CENTRE.0 + p[0] * SCALE, CENTRE.1 + p[1] * SCALE)
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let (trail, twin_trail, pos, twin_pos, sep_series) = replay(clamp01(t));
-    let sep_now = sep_series
-        .last()
-        .map(|&(_, d)| d)
-        .unwrap_or(DELTA);
+    let sep_now = sep_series.last().map(|&(_, d)| d).unwrap_or(DELTA);
     let lambda = growth_rate(&sep_series, 3.0, 11.0);
 
     // The reveal: the twin rides hidden (rings exactly on the bodies) for
@@ -222,10 +241,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — a void with a star of drift.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.48), 0.9).with_dither().with_stops(&[
-                    (0.0, Color::rgb(10, 9, 14)),
-                    (1.0, Color::rgb(5, 5, 8)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.48), 0.9)
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(10, 9, 14)), (1.0, Color::rgb(5, 5, 8))]),
             );
 
             // ── The figure-eight, drawn by its own dancers ──────────────
@@ -253,11 +271,7 @@ pub fn frame(t: f32) -> WidgetNode {
                             p2.line_to(o);
                         }
                     }
-                    book.stroke(
-                        p2,
-                        alpha(MAGENTA, 0.30 * twin_visible),
-                        1.6,
-                    );
+                    book.stroke(p2, alpha(MAGENTA, 0.30 * twin_visible), 1.6);
                 }
             }
 
@@ -284,12 +298,17 @@ pub fn frame(t: f32) -> WidgetNode {
             if twin_visible > 0.01 {
                 for &q in twin_pos.iter() {
                     let o = project(q);
-                    book.ring(o, 11.0 + 3.0 * twin_visible, 1.8, alpha(MAGENTA, 0.9 * twin_visible));
+                    book.ring(
+                        o,
+                        11.0 + 3.0 * twin_visible,
+                        1.8,
+                        alpha(MAGENTA, 0.9 * twin_visible),
+                    );
                 }
             } else {
                 // Locked phase: a single ring ticks around the lead body
                 // as the tell that the second machine is running.
-                let pulse = 0.5 + 0.5 * (t * 6.2832 * 2.0).sin();
+                let pulse = 0.5 + 0.5 * (t * std::f32::consts::TAU * 2.0).sin();
                 let o = project(pos[0]);
                 book.ring(o, 12.0, 1.2, alpha(MAGENTA, 0.35 + 0.3 * pulse));
             }
@@ -329,7 +348,11 @@ pub fn frame(t: f32) -> WidgetNode {
             }
             // The curve.
             if sep_series.len() > 1 {
-                let t_end = sep_series.last().map(|&(ts, _)| ts).unwrap_or(1.0).max(1e-6);
+                let t_end = sep_series
+                    .last()
+                    .map(|&(ts, _)| ts)
+                    .unwrap_or(1.0)
+                    .max(1e-6);
                 let mut p = Path::new();
                 for (i, &(ts, d)) in sep_series.iter().enumerate() {
                     let o = map(d, ts / t_end);
@@ -410,7 +433,10 @@ fn receipt_panel(sep: f32, lambda: Option<f32>) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

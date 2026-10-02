@@ -60,12 +60,33 @@ impl VectorClock {
 /// One replicated change.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
-    Set { stamp: Stamp, key: String, value: Option<Json> },
-    SetAdd { stamp: Stamp, element: String },
-    SetRemove { stamp: Stamp, element: String, observed: Vec<Stamp> },
-    Count { stamp: Stamp, delta: i64 },
-    Insert { stamp: Stamp, after: Option<Stamp>, ch: char },
-    Delete { stamp: Stamp, target: Stamp },
+    Set {
+        stamp: Stamp,
+        key: String,
+        value: Option<Json>,
+    },
+    SetAdd {
+        stamp: Stamp,
+        element: String,
+    },
+    SetRemove {
+        stamp: Stamp,
+        element: String,
+        observed: Vec<Stamp>,
+    },
+    Count {
+        stamp: Stamp,
+        delta: i64,
+    },
+    Insert {
+        stamp: Stamp,
+        after: Option<Stamp>,
+        ch: char,
+    },
+    Delete {
+        stamp: Stamp,
+        target: Stamp,
+    },
 }
 
 impl Op {
@@ -93,22 +114,38 @@ impl Op {
                 ("v", value.clone().unwrap_or(Json::Null)),
                 ("del", Json::Bool(value.is_none())),
             ]),
-            Self::SetAdd { stamp, element } => Json::object([("op", Json::from("add")), ("s", st(stamp)), ("e", Json::from(element.as_str()))]),
-            Self::SetRemove { stamp, element, observed } => Json::object([
+            Self::SetAdd { stamp, element } => Json::object([
+                ("op", Json::from("add")),
+                ("s", st(stamp)),
+                ("e", Json::from(element.as_str())),
+            ]),
+            Self::SetRemove {
+                stamp,
+                element,
+                observed,
+            } => Json::object([
                 ("op", Json::from("rm")),
                 ("s", st(stamp)),
                 ("e", Json::from(element.as_str())),
                 ("obs", Json::Array(observed.iter().map(st).collect())),
             ]),
             #[allow(clippy::cast_precision_loss)]
-            Self::Count { stamp, delta } => Json::object([("op", Json::from("count")), ("s", st(stamp)), ("d", Json::from(*delta as f64))]),
+            Self::Count { stamp, delta } => Json::object([
+                ("op", Json::from("count")),
+                ("s", st(stamp)),
+                ("d", Json::from(*delta as f64)),
+            ]),
             Self::Insert { stamp, after, ch } => Json::object([
                 ("op", Json::from("ins")),
                 ("s", st(stamp)),
                 ("a", after.as_ref().map_or(Json::Null, st)),
                 ("c", Json::from(ch.to_string())),
             ]),
-            Self::Delete { stamp, target } => Json::object([("op", Json::from("del")), ("s", st(stamp)), ("t", st(target))]),
+            Self::Delete { stamp, target } => Json::object([
+                ("op", Json::from("del")),
+                ("s", st(stamp)),
+                ("t", st(target)),
+            ]),
         }
     }
 
@@ -127,21 +164,42 @@ impl Op {
             })
         };
         let s = stamp_of(j.get("s"))?;
-        let text = |k: &str| j.get(k).and_then(Json::as_str).map(str::to_owned).ok_or_else(|| format!("missing {k}"));
+        let text = |k: &str| {
+            j.get(k)
+                .and_then(Json::as_str)
+                .map(str::to_owned)
+                .ok_or_else(|| format!("missing {k}"))
+        };
         Ok(match j.get("op").and_then(Json::as_str).ok_or("op")? {
             "set" => Self::Set {
                 stamp: s,
                 key: text("k")?,
-                value: if j.get("del").and_then(Json::as_bool).unwrap_or(false) { None } else { j.get("v").cloned() },
+                value: if j.get("del").and_then(Json::as_bool).unwrap_or(false) {
+                    None
+                } else {
+                    j.get("v").cloned()
+                },
             },
-            "add" => Self::SetAdd { stamp: s, element: text("e")? },
+            "add" => Self::SetAdd {
+                stamp: s,
+                element: text("e")?,
+            },
             "rm" => Self::SetRemove {
                 stamp: s,
                 element: text("e")?,
-                observed: j.get("obs").and_then(Json::as_array).unwrap_or(&[]).iter().map(|x| stamp_of(Some(x))).collect::<Result<_, _>>()?,
+                observed: j
+                    .get("obs")
+                    .and_then(Json::as_array)
+                    .unwrap_or(&[])
+                    .iter()
+                    .map(|x| stamp_of(Some(x)))
+                    .collect::<Result<_, _>>()?,
             },
             #[allow(clippy::cast_possible_truncation)]
-            "count" => Self::Count { stamp: s, delta: j.get("d").and_then(Json::as_f64).ok_or("d")? as i64 },
+            "count" => Self::Count {
+                stamp: s,
+                delta: j.get("d").and_then(Json::as_f64).ok_or("d")? as i64,
+            },
             "ins" => Self::Insert {
                 stamp: s,
                 after: match j.get("a") {
@@ -150,7 +208,10 @@ impl Op {
                 },
                 ch: text("c")?.chars().next().ok_or("empty char")?,
             },
-            "del" => Self::Delete { stamp: s, target: stamp_of(j.get("t"))? },
+            "del" => Self::Delete {
+                stamp: s,
+                target: stamp_of(j.get("t"))?,
+            },
             other => return Err(format!("unknown op {other}")),
         })
     }
@@ -180,7 +241,10 @@ impl LwwMap {
     /// Live keys and values.
     #[must_use]
     pub fn entries(&self) -> Vec<(&str, &Json)> {
-        self.entries.iter().filter_map(|(k, (_, v))| v.as_ref().map(|v| (k.as_str(), v))).collect()
+        self.entries
+            .iter()
+            .filter_map(|(k, (_, v))| v.as_ref().map(|v| (k.as_str(), v)))
+            .collect()
     }
 }
 
@@ -213,10 +277,17 @@ impl OrSet {
     }
     #[must_use]
     pub fn elements(&self) -> Vec<&str> {
-        self.adds.iter().filter(|(_, t)| !t.is_empty()).map(|(k, _)| k.as_str()).collect()
+        self.adds
+            .iter()
+            .filter(|(_, t)| !t.is_empty())
+            .map(|(k, _)| k.as_str())
+            .collect()
     }
     fn tags(&self, e: &str) -> Vec<Stamp> {
-        self.adds.get(e).map(|t| t.iter().copied().collect()).unwrap_or_default()
+        self.adds
+            .get(e)
+            .map(|t| t.iter().copied().collect())
+            .unwrap_or_default()
     }
 }
 
@@ -310,12 +381,20 @@ impl Text {
     /// The visible string.
     #[must_use]
     pub fn value(&self) -> String {
-        self.elems.iter().filter(|e| !e.deleted).map(|e| e.ch).collect()
+        self.elems
+            .iter()
+            .filter(|e| !e.deleted)
+            .map(|e| e.ch)
+            .collect()
     }
 
     /// Id of the `n`th visible character.
     fn visible_id(&self, n: usize) -> Option<Stamp> {
-        self.elems.iter().filter(|e| !e.deleted).nth(n).map(|e| e.id)
+        self.elems
+            .iter()
+            .filter(|e| !e.deleted)
+            .nth(n)
+            .map(|e| e.id)
     }
 
     /// Visible index of an element id (for mapping a cursor anchored to an
@@ -357,7 +436,10 @@ impl Doc {
 
     fn tick(&mut self) -> Stamp {
         self.clock += 1;
-        Stamp { counter: self.clock, replica: self.replica }
+        Stamp {
+            counter: self.clock,
+            replica: self.replica,
+        }
     }
 
     /// Everything this replica has applied.
@@ -374,18 +456,29 @@ impl Doc {
     /// Set a key (`None` deletes).
     pub fn set(&mut self, key: &str, value: Option<Json>) -> Op {
         let stamp = self.tick();
-        self.local(Op::Set { stamp, key: key.to_owned(), value })
+        self.local(Op::Set {
+            stamp,
+            key: key.to_owned(),
+            value,
+        })
     }
 
     pub fn add(&mut self, element: &str) -> Op {
         let stamp = self.tick();
-        self.local(Op::SetAdd { stamp, element: element.to_owned() })
+        self.local(Op::SetAdd {
+            stamp,
+            element: element.to_owned(),
+        })
     }
 
     pub fn remove(&mut self, element: &str) -> Op {
         let stamp = self.tick();
         let observed = self.set.tags(element);
-        self.local(Op::SetRemove { stamp, element: element.to_owned(), observed })
+        self.local(Op::SetRemove {
+            stamp,
+            element: element.to_owned(),
+            observed,
+        })
     }
 
     pub fn count(&mut self, delta: i64) -> Op {
@@ -395,7 +488,11 @@ impl Doc {
 
     /// Insert text at a visible position.
     pub fn insert(&mut self, pos: usize, s: &str) -> Vec<Op> {
-        let mut after = if pos == 0 { None } else { self.text.visible_id(pos - 1) };
+        let mut after = if pos == 0 {
+            None
+        } else {
+            self.text.visible_id(pos - 1)
+        };
         let mut ops = Vec::new();
         for ch in s.chars() {
             let stamp = self.tick();
@@ -407,7 +504,9 @@ impl Doc {
 
     /// Delete `len` visible characters from `pos`.
     pub fn delete(&mut self, pos: usize, len: usize) -> Vec<Op> {
-        let targets: Vec<Stamp> = (pos..pos + len).filter_map(|i| self.text.visible_id(i)).collect();
+        let targets: Vec<Stamp> = (pos..pos + len)
+            .filter_map(|i| self.text.visible_id(i))
+            .collect();
         targets
             .into_iter()
             .map(|target| {
@@ -428,7 +527,9 @@ impl Doc {
         match op {
             Op::Set { key, value, .. } => self.map.apply(s, key, value.clone()),
             Op::SetAdd { element, .. } => self.set.add(s, element),
-            Op::SetRemove { element, observed, .. } => self.set.remove(element, observed),
+            Op::SetRemove {
+                element, observed, ..
+            } => self.set.remove(element, observed),
             Op::Count { delta, .. } => {
                 if self.counter.seen.insert(s) {
                     self.counter.value += delta;
@@ -443,7 +544,11 @@ impl Doc {
     /// Operations the holder of `clock` has not seen — the sync delta.
     #[must_use]
     pub fn ops_since(&self, clock: &VectorClock) -> Vec<Op> {
-        self.log.iter().filter(|o| o.stamp().counter > clock.get(o.stamp().replica)).cloned().collect()
+        self.log
+            .iter()
+            .filter(|o| o.stamp().counter > clock.get(o.stamp().replica))
+            .cloned()
+            .collect()
     }
 
     /// Pull everything new from `other` (a sync round).
@@ -461,9 +566,18 @@ impl Doc {
         Json::object([
             (
                 "map",
-                Json::Object(self.map.entries().into_iter().map(|(k, v)| (k.to_owned(), v.clone())).collect()),
+                Json::Object(
+                    self.map
+                        .entries()
+                        .into_iter()
+                        .map(|(k, v)| (k.to_owned(), v.clone()))
+                        .collect(),
+                ),
             ),
-            ("set", Json::Array(self.set.elements().into_iter().map(Json::from).collect())),
+            (
+                "set",
+                Json::Array(self.set.elements().into_iter().map(Json::from).collect()),
+            ),
             #[allow(clippy::cast_precision_loss)]
             ("counter", Json::from(self.counter.value() as f64)),
             ("text", Json::from(self.text.value())),
@@ -492,7 +606,14 @@ impl Presence {
     pub fn positions(&self, text: &Text) -> Vec<(ReplicaId, String, usize)> {
         self.cursors
             .iter()
-            .map(|(r, (_, n, a))| (*r, n.clone(), a.and_then(|id| text.position_of(id).map(|p| p + 1)).unwrap_or(0)))
+            .map(|(r, (_, n, a))| {
+                (
+                    *r,
+                    n.clone(),
+                    a.and_then(|id| text.position_of(id).map(|p| p + 1))
+                        .unwrap_or(0),
+                )
+            })
             .collect()
     }
 }

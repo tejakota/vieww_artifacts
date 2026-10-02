@@ -114,7 +114,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(24.0))
-                .child(Reveals { progress, _clock: clock }),
+                .child(Reveals {
+                    progress,
+                    _clock: clock,
+                }),
         );
     })
 }

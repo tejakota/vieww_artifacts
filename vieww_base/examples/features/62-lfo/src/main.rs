@@ -155,7 +155,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(Waves { time, _clock: clock }),
+                .child(Waves {
+                    time,
+                    _clock: clock,
+                }),
         );
     })
 }

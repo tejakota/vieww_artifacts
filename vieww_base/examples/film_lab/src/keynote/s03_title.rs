@@ -9,13 +9,18 @@
 //! bounces — and the receipt constants ride the motion (ω/ζ printed by
 //! the curve itself in the spring plate; here the curve *is* the film).
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle, FontWeight};
+use vieww_foundation::{
+    Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, spring_out, tint, xywh, BG_DEEP, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, spring_out, tint, xywh, Rng, BG_DEEP, FAINT, INK, MUTED, VIOLET,
+    VIOLET_SOFT,
+};
 
-use super::{Ctx};
+use super::Ctx;
 
 // ── The two springs — the same constants the spring plate proved ───────────
 
@@ -47,7 +52,7 @@ fn line_s(t: f32) -> f32 {
     spring_out(clamp01((t - LINE_T0) / 0.40), LINE_OMEGA, LINE_ZETA)
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
 
     // The falling drop — gravity from S02's last position. The fall
@@ -66,77 +71,75 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let speed = fall_u;
         let stretch = 1.0 + speed * 0.8;
         let dr = 13.0 * (1.0 - 0.3 * speed);
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                    book.layer(1.0, 7.0, None, |g| {
-                        g.circle(
-                            Offset::new(DROP_X, fall_y),
-                            dr * 3.2,
-                            Gradient::radial_fill().with_dither().with_stops(&[
-                                (0.0, alpha(VIOLET, 0.28)),
-                                (1.0, alpha(VIOLET, 0.0)),
-                            ]),
-                        );
-                    });
-                    // The stretched body.
-                    let mut p = vieww_foundation::Path::new();
-                    let r = dr;
-                    let sy = stretch;
-                    p.move_to(Offset::new(DROP_X, fall_y - r * 2.1 * sy));
-                    p.line_to(Offset::new(DROP_X + r * 0.95, fall_y - r * 0.15));
-                    p.line_to(Offset::new(DROP_X, fall_y + r * 1.05));
-                    p.line_to(Offset::new(DROP_X - r * 0.95, fall_y - r * 0.15));
-                    p.close();
-                    g_fill_drop(book, p);
-                    book.circle(
-                        Offset::new(DROP_X - r * 0.3, fall_y - r * 0.5),
-                        r * 0.2,
-                        alpha(Color::WHITE, 0.7),
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                book.layer(1.0, 7.0, None, |g| {
+                    g.circle(
+                        Offset::new(DROP_X, fall_y),
+                        dr * 3.2,
+                        Gradient::radial_fill()
+                            .with_dither()
+                            .with_stops(&[(0.0, alpha(VIOLET, 0.28)), (1.0, alpha(VIOLET, 0.0))]),
                     );
-                }),
-            )),
-        );
+                });
+                // The stretched body.
+                let mut p = vieww_foundation::Path::new();
+                let r = dr;
+                let sy = stretch;
+                p.move_to(Offset::new(DROP_X, fall_y - r * 2.1 * sy));
+                p.line_to(Offset::new(DROP_X + r * 0.95, fall_y - r * 0.15));
+                p.line_to(Offset::new(DROP_X, fall_y + r * 1.05));
+                p.line_to(Offset::new(DROP_X - r * 0.95, fall_y - r * 0.15));
+                p.close();
+                g_fill_drop(book, p);
+                book.circle(
+                    Offset::new(DROP_X - r * 0.3, fall_y - r * 0.5),
+                    r * 0.2,
+                    alpha(Color::WHITE, 0.7),
+                );
+            }),
+        )));
     }
 
     // The impact — flash, rings, and a burst of dust flying outward.
     if impact > 0.0 && t >= LAND_T {
         let ring_r = 26.0 + 300.0 * (1.0 - impact);
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                    let c = Offset::new(DROP_X, FLOOR_Y);
-                    // The rings — two, expanding and fading.
-                    book.ring(c, ring_r, 2.4, alpha(VIOLET_SOFT, impact * 0.55));
-                    book.ring(c, ring_r * 0.66, 1.2, alpha(MUTED, impact * 0.35));
-                    // The floor flash.
-                    book.layer(1.0, 14.0, None, |g| {
-                        g.circle(
-                            c,
-                            90.0 + 140.0 * (1.0 - impact),
-                            Gradient::radial_fill().with_dither().with_stops(&[
-                                (0.0, alpha(tint(VIOLET_SOFT, 0.3), 0.4 * impact)),
-                                (1.0, alpha(VIOLET, 0.0)),
-                            ]),
-                        );
-                    });
-                    // Dust burst — deterministic motes, flying outward.
-                    let mut rng = Rng::new(0x300D);
-                    for _ in 0..26 {
-                        let ang = rng.f01() * std::f32::consts::TAU;
-                        let dist = (30.0 + rng.f01() * 220.0) * (1.0 - impact * 0.3);
-                        let r = 1.0 + rng.f01() * 2.2;
-                        book.circle(
-                            Offset::new(c.dx + ang.cos() * dist, c.dy + ang.sin() * dist * 0.42 - dist * 0.16),
-                            r,
-                            alpha(VIOLET_SOFT, impact * (0.25 + rng.f01() * 0.4)),
-                        );
-                    }
-                }),
-            )),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                let c = Offset::new(DROP_X, FLOOR_Y);
+                // The rings — two, expanding and fading.
+                book.ring(c, ring_r, 2.4, alpha(VIOLET_SOFT, impact * 0.55));
+                book.ring(c, ring_r * 0.66, 1.2, alpha(MUTED, impact * 0.35));
+                // The floor flash.
+                book.layer(1.0, 14.0, None, |g| {
+                    g.circle(
+                        c,
+                        90.0 + 140.0 * (1.0 - impact),
+                        Gradient::radial_fill().with_dither().with_stops(&[
+                            (0.0, alpha(tint(VIOLET_SOFT, 0.3), 0.4 * impact)),
+                            (1.0, alpha(VIOLET, 0.0)),
+                        ]),
+                    );
+                });
+                // Dust burst — deterministic motes, flying outward.
+                let mut rng = Rng::new(0x300D);
+                for _ in 0..26 {
+                    let ang = rng.f01() * std::f32::consts::TAU;
+                    let dist = (30.0 + rng.f01() * 220.0) * (1.0 - impact * 0.3);
+                    let r = 1.0 + rng.f01() * 2.2;
+                    book.circle(
+                        Offset::new(
+                            c.dx + ang.cos() * dist,
+                            c.dy + ang.sin() * dist * 0.42 - dist * 0.16,
+                        ),
+                        r,
+                        alpha(VIOLET_SOFT, impact * (0.25 + rng.f01() * 0.4)),
+                    );
+                }
+            }),
+        )));
     }
 
     // The wordmark — springs up from the impact. Squash and stretch with
@@ -156,8 +159,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(FLOOR_Y + 24.0)
                 .width(box_w)
                 .height(80.0)
-                .child(Painting::sized(Size::new(box_w, 80.0), PaintWith::new(
-                    move |book: &mut Sketchbook, _sz: Size| {
+                .child(Painting::sized(
+                    Size::new(box_w, 80.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
                         book.circle(
                             Offset::new(box_w * 0.5, 30.0),
                             120.0 + 220.0 * near,
@@ -166,8 +170,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 (1.0, alpha(Color::BLACK, 0.0)),
                             ]),
                         );
-                    },
-                ))),
+                    }),
+                )),
         );
 
         stack = stack.push(
@@ -200,8 +204,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(FLOOR_Y + 8.0)
                 .width((w.max(2.0)) + 4.0)
                 .height(12.0)
-                .child(Painting::sized(Size::new(w.max(2.0) + 4.0, 12.0), PaintWith::new(
-                    move |book: &mut Sketchbook, _sz: Size| {
+                .child(Painting::sized(
+                    Size::new(w.max(2.0) + 4.0, 12.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
                         book.rrect(
                             xywh(0.0, 0.0, w, 5.0),
                             2.5,
@@ -211,8 +216,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 (1.0, alpha(VIOLET_SOFT, 0.12)),
                             ]),
                         );
-                    },
-                ))),
+                    }),
+                )),
         );
     }
 
@@ -228,7 +233,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     Opacity::new(tag_a).child(
                         Text::new("the ui runtime that renders its own film")
-                            .style(TextStyle::new(22.0).monospace().letter_spacing(5.0).color(alpha(MUTED, 0.85)))
+                            .style(
+                                TextStyle::new(22.0)
+                                    .monospace()
+                                    .letter_spacing(5.0)
+                                    .color(alpha(MUTED, 0.85)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),
@@ -263,10 +273,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 g.circle(
                     Offset::new(w * 0.5, h * 0.78),
                     w * 0.30,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.12)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.12)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
             // The floor line — where the mass landed.
@@ -290,10 +299,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 fn g_fill_drop(book: &mut Sketchbook, p: vieww_foundation::Path) {
     book.fill(
         p,
-        Gradient::linear(Offset::new(DROP_X, DROP_Y0), Offset::new(DROP_X, FLOOR_Y)).with_dither().with_stops(&[
-            (0.0, alpha(tint(VIOLET_SOFT, 0.55), 0.98)),
-            (0.5, alpha(VIOLET, 0.92)),
-            (1.0, alpha(mix(VIOLET, Color::BLACK, 0.35), 0.92)),
-        ]),
+        Gradient::linear(Offset::new(DROP_X, DROP_Y0), Offset::new(DROP_X, FLOOR_Y))
+            .with_dither()
+            .with_stops(&[
+                (0.0, alpha(tint(VIOLET_SOFT, 0.55), 0.98)),
+                (0.5, alpha(VIOLET, 0.92)),
+                (1.0, alpha(mix(VIOLET, Color::BLACK, 0.35), 0.92)),
+            ]),
     );
 }

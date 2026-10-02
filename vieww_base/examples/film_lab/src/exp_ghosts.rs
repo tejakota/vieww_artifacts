@@ -18,16 +18,18 @@
 //! stays lit to its own rim instead of darkening — visible where the
 //! lissajous swings wide.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle,
-    Transform};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle, Transform,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Painting, PaintWith};
+use vieww_widget::{Filtered, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, mix, tint, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET,
-    VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, tint, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// Ghosts in the trail.
 const GHOSTS: usize = 56;
@@ -50,7 +52,7 @@ const CENTER: Offset = Offset::new(640.0, 350.0);
 /// phase skew — a figure that crosses itself twice per loop, so the trail
 /// regularly meets its own future and past.
 #[must_use]
-pub fn path_at(s: f32) -> Offset {
+pub(crate) fn path_at(s: f32) -> Offset {
     let a = s * 0.72;
     let x = CENTER.dx + 480.0 * a.sin();
     let y = CENTER.dy + 210.0 * (2.0 * a + std::f32::consts::FRAC_PI_3).sin();
@@ -81,7 +83,7 @@ fn bucket_angle(bucket: usize) -> f32 {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let fade_in = clamp01(t / 0.06);
     let s = t * SECONDS;
 
@@ -105,7 +107,11 @@ pub fn frame(t: f32) -> WidgetNode {
             for _ in 0..70 {
                 let x = rng.f01() * w;
                 let y = rng.f01() * h;
-                book.circle(Offset::new(x, y), 0.4 + rng.f01() * 0.7, alpha(Color::WHITE, 0.05));
+                book.circle(
+                    Offset::new(x, y),
+                    0.4 + rng.f01() * 0.7,
+                    alpha(Color::WHITE, 0.05),
+                );
             }
 
             // The full figure, faint — where the next ten seconds go.
@@ -195,7 +201,11 @@ pub fn frame(t: f32) -> WidgetNode {
                 let core = Rect::new(here.dx - 16.0, here.dy - 7.0, here.dx + 16.0, here.dy + 7.0);
                 g.rrect(core, 6.5, alpha(Color::WHITE, 0.96 * fade_in));
                 g.stroke_rrect(core, 6.5, alpha(VIOLET_SOFT, 0.8 * fade_in), 1.4);
-                g.circle(Offset::new(here.dx + 14.0, here.dy), 3.0, alpha(Color::WHITE, fade_in));
+                g.circle(
+                    Offset::new(here.dx + 14.0, here.dy),
+                    3.0,
+                    alpha(Color::WHITE, fade_in),
+                );
             });
 
             // The bloom riding the courier — the trail's one extra filtered
@@ -215,10 +225,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, CANVAS.width, CANVAS.height),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.95).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.42)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.95)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.42)),
+                    ]),
             );
         }),
     );
@@ -262,7 +274,11 @@ fn receipt_panel(t: f32) -> WidgetNode {
             filtered,
             GHOSTS + 1
         ),
-        format!("heading {:+.2} rad · fade-in {:.0}%", heading_at(s), fade_in * 100.0),
+        format!(
+            "heading {:+.2} rad · fade-in {:.0}%",
+            heading_at(s),
+            fade_in * 100.0
+        ),
     ];
 
     let mut stack = Stack::new().push(
@@ -289,7 +305,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 .height(15.0)
                 .child(
                     Text::new(line.clone()).style(
-                        TextStyle::new(11.0).monospace().color(alpha(mix(MUTED, INK, 0.4), 0.95)),
+                        TextStyle::new(11.0)
+                            .monospace()
+                            .color(alpha(mix(MUTED, INK, 0.4), 0.95)),
                     ),
                 ),
         );
@@ -335,8 +353,7 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
             // The four bucket wedges, filled by their census share.
             for (b, pop) in pops.iter().enumerate() {
-                let a0 =
-                    bucket_angle(b) - std::f32::consts::TAU / BUCKETS as f32 / 2.0;
+                let a0 = bucket_angle(b) - std::f32::consts::TAU / BUCKETS as f32 / 2.0;
                 let a1 = a0 + std::f32::consts::TAU / BUCKETS as f32;
                 let c = Offset::new(P_W - 40.0, 44.0);
                 let r = 10.0 + 12.0 * *pop as f32 / GHOSTS as f32;
@@ -348,7 +365,10 @@ fn receipt_panel(t: f32) -> WidgetNode {
                     wedge.line_to(Offset::new(c.dx + r * a.cos(), c.dy + r * a.sin()));
                 }
                 wedge.close();
-                book.fill(wedge.clone(), alpha(VIOLET_SOFT, 0.10 + 0.30 * *pop as f32 / 22.0));
+                book.fill(
+                    wedge.clone(),
+                    alpha(VIOLET_SOFT, 0.10 + 0.30 * *pop as f32 / 22.0),
+                );
                 book.stroke(wedge, alpha(VIOLET_SOFT, 0.35), 1.0);
             }
 

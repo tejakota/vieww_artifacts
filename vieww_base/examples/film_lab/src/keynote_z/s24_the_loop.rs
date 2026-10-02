@@ -7,15 +7,14 @@
 //! quietest scene in the film, and the cut back to S01 (for those who
 //! loop the film) lands on the exact same darkness.
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{ease_in_out, ease_out_cubic};
-use super::{CANVAS, Ctx, INK, MUTED, VIOLET, VIOLET_SOFT, alpha, clamp01, glow, ground, mix, spark, stars, tint, vignette, xywh};
+use super::{alpha, clamp01, tint, Ctx, VIOLET, VIOLET_SOFT};
+use crate::film_lib::ease_in_out;
 
-
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -53,9 +52,13 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(520.0)
                     .width(14.0)
                     .height(28.0)
-                    .child(Opacity::new(a).child(
-                        Container::new().color(alpha(super::TERM_GREEN, 0.85)).radius(2.0),
-                    )),
+                    .child(
+                        Opacity::new(a).child(
+                            Container::new()
+                                .color(alpha(super::TERM_GREEN, 0.85))
+                                .radius(2.0),
+                        ),
+                    ),
             );
         }
     }
@@ -68,8 +71,19 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             super::CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 let r = 3.0 + spark_t * 6.0 + breathe * 2.0;
-                super::glow(book, 960.0, 534.0, 90.0 + spark_t * 120.0, VIOLET, (0.28 + 0.2 * breathe) * spark_t);
-                book.circle(Offset::new(960.0, 534.0), r, alpha(tint(VIOLET_SOFT, 0.5), spark_t));
+                super::glow(
+                    book,
+                    960.0,
+                    534.0,
+                    90.0 + spark_t * 120.0,
+                    VIOLET,
+                    (0.28 + 0.2 * breathe) * spark_t,
+                );
+                book.circle(
+                    Offset::new(960.0, 534.0),
+                    r,
+                    alpha(tint(VIOLET_SOFT, 0.5), spark_t),
+                );
             }),
         )));
     }

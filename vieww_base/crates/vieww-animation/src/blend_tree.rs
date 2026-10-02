@@ -315,7 +315,9 @@ mod tests {
 
     #[test]
     fn a_single_child_is_its_pure_pose_everywhere() {
-        let tree = BlendTree1::new(0.0, flat(7.0)).child(1.0, flat(9.0)).child(9.0, flat(11.0));
+        let tree = BlendTree1::new(0.0, flat(7.0))
+            .child(1.0, flat(9.0))
+            .child(9.0, flat(11.0));
         // ^ three children, but the parameter is what picks; here one child:
         let one = BlendTree1::new(0.3, flat(7.0));
         for p in [-1.0, 0.0, 0.3, 5.0] {
@@ -422,8 +424,7 @@ mod tests {
         let with_far = BlendTree2::new((0.0, 0.0), near_a.clone())
             .child((1.0, 0.0), near_b.clone())
             .child((50.0, 50.0), far);
-        let without_far = BlendTree2::new((0.0, 0.0), near_a)
-            .child((1.0, 0.0), near_b);
+        let without_far = BlendTree2::new((0.0, 0.0), near_a).child((1.0, 0.0), near_b);
         for i in 1..10 {
             let x = i as f32 / 10.0;
             let a = with_far.at(x, 0.0, ms(0));

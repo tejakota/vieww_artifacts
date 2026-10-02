@@ -27,17 +27,19 @@
 //! rasterizer. The typographic grid is left-aligned at x = 120, matching the
 //! sheets' stat typography.
 
-use vieww_foundation::{Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextStyle, TextAlign};
+use vieww_foundation::{
+    Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, spring_out, tint, xywh, BG_DEEP, CANVAS, FAINT, INK, MUTED, Rng, VIOLET,
+    alpha, clamp01, mix, spring_out, tint, xywh, Rng, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET,
     VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 14.0;
+pub(crate) const SECONDS: f32 = 14.0;
 
 // The film's own derived quantities — the receipt culture, in constants.
 /// 59.3 fps median, measured by ci/mobile/device-suite.sh on the Redmi.
@@ -68,7 +70,7 @@ fn group_commas(n: u32) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -131,15 +133,17 @@ fn band_typeon(t: f32) -> WidgetNode {
                 .top(110.0)
                 .width(1100.0)
                 .height(44.0)
-                .child(Opacity::new(1.0 - settle_t).child(
-                    Text::new(visible.clone()).style(
-                        TextStyle::new(size)
-                            .monospace()
-                            .letter_spacing(spacing)
-                            .weight(FontWeight::Regular)
-                            .color(alpha(INK, 0.92)),
+                .child(
+                    Opacity::new(1.0 - settle_t).child(
+                        Text::new(visible.clone()).style(
+                            TextStyle::new(size)
+                                .monospace()
+                                .letter_spacing(spacing)
+                                .weight(FontWeight::Regular)
+                                .color(alpha(INK, 0.92)),
+                        ),
                     ),
-                )),
+                ),
         )
         .push(
             Positioned::new()
@@ -147,15 +151,17 @@ fn band_typeon(t: f32) -> WidgetNode {
                 .top(110.0)
                 .width(1100.0)
                 .height(44.0)
-                .child(Opacity::new(settle_t).child(
-                    Text::new(visible.clone()).style(
-                        TextStyle::new(size)
-                            .monospace()
-                            .letter_spacing(spacing)
-                            .weight(FontWeight::Medium)
-                            .color(INK),
+                .child(
+                    Opacity::new(settle_t).child(
+                        Text::new(visible.clone()).style(
+                            TextStyle::new(size)
+                                .monospace()
+                                .letter_spacing(spacing)
+                                .weight(FontWeight::Medium)
+                                .color(INK),
+                        ),
                     ),
-                )),
+                ),
         );
 
     // The caret — a plain rect, blinking on the 24-in-60 cadence while typing.
@@ -278,7 +284,12 @@ fn band_counter(t: f32) -> WidgetNode {
                             let x = i as f32 / 23.0 * 964.0;
                             let tall = i % 6 == 0;
                             book.rect(
-                                xywh(x, if tall { 0.0 } else { 2.5 }, 2.0, if tall { 10.0 } else { 5.0 }),
+                                xywh(
+                                    x,
+                                    if tall { 0.0 } else { 2.5 },
+                                    2.0,
+                                    if tall { 10.0 } else { 5.0 },
+                                ),
                                 alpha(FAINT, 0.4),
                             );
                         }
@@ -303,7 +314,10 @@ fn band_counter(t: f32) -> WidgetNode {
     );
 
     Stack::new()
-        .push(band_label("E-01 · THE HOUR-COUNTER · TICK HELD AT 24-IN-60", 228.0))
+        .push(band_label(
+            "E-01 · THE HOUR-COUNTER · TICK HELD AT 24-IN-60",
+            228.0,
+        ))
         .push(Positioned::fill().child(motes))
         .push(counter)
         .into()
@@ -367,7 +381,11 @@ fn band_ladder(t: f32) -> WidgetNode {
                         Text::new(d.to_string()).style(
                             TextStyle::new(digit_size)
                                 .monospace()
-                                .weight(if settle { FontWeight::Bold } else { FontWeight::Medium })
+                                .weight(if settle {
+                                    FontWeight::Bold
+                                } else {
+                                    FontWeight::Medium
+                                })
                                 .color(if settle { VIOLET_SOFT } else { INK }),
                         ),
                     ),
@@ -394,7 +412,11 @@ fn band_ladder(t: f32) -> WidgetNode {
                 book.circle(
                     Offset::new(cx, cy),
                     if done { 5.0 } else { 3.0 + arriving * 2.0 },
-                    if done { alpha(VIOLET_SOFT, 0.95) } else { alpha(MUTED, 0.25 + arriving * 0.4) },
+                    if done {
+                        alpha(VIOLET_SOFT, 0.95)
+                    } else {
+                        alpha(MUTED, 0.25 + arriving * 0.4)
+                    },
                 );
                 // The pulse ring on the currently-arriving touch.
                 if !done && arriving > 0.0 {
@@ -430,29 +452,35 @@ fn band_ladder(t: f32) -> WidgetNode {
         }),
     );
     // Tiny ladder labels under the dots — the graph's own words.
-    let labels = (0..7)
-        .fold(Stack::new(), |acc, i| {
-            let (label, _t0) = LADDER[i];
-            let lit = p >= i as f32 + 0.98;
-            acc.push(
-                Positioned::new()
-                    .left(120.0 + 84.0 * i as f32 - 34.0)
-                    .top(458.0)
-                    .width(100.0)
-                    .height(17.0)
-                    .child(
-                        Text::new(label).style(
-                            TextStyle::new(12.5)
-                                .monospace()
-                                .letter_spacing(0.5)
-                                .color(if lit { alpha(INK, 0.8) } else { alpha(MUTED, 0.55) }),
-                        ),
+    let labels = (0..7).fold(Stack::new(), |acc, i| {
+        let (label, _t0) = LADDER[i];
+        let lit = p >= i as f32 + 0.98;
+        acc.push(
+            Positioned::new()
+                .left(120.0 + 84.0 * i as f32 - 34.0)
+                .top(458.0)
+                .width(100.0)
+                .height(17.0)
+                .child(
+                    Text::new(label).style(
+                        TextStyle::new(12.5)
+                            .monospace()
+                            .letter_spacing(0.5)
+                            .color(if lit {
+                                alpha(INK, 0.8)
+                            } else {
+                                alpha(MUTED, 0.55)
+                            }),
                     ),
-            )
-        });
+                ),
+        )
+    });
 
     Stack::new()
-        .push(band_label("THE WITNESS · ONE NUMBER PER TOUCH · NEVER RESET", 366.0))
+        .push(band_label(
+            "THE WITNESS · ONE NUMBER PER TOUCH · NEVER RESET",
+            366.0,
+        ))
         .push(
             Positioned::new()
                 .left(X)
@@ -467,11 +495,16 @@ fn band_ladder(t: f32) -> WidgetNode {
                 .top(396.0)
                 .width(12.0)
                 .height(digit_h)
-                .child(
-                    Text::new("→").style(TextStyle::new(digit_size).color(alpha(FAINT, 0.7))),
-                ),
+                .child(Text::new("→").style(TextStyle::new(digit_size).color(alpha(FAINT, 0.7)))),
         )
-        .push(Positioned::new().left(X - 44.0).top(404.0).width(760.0).height(60.0).child(rail))
+        .push(
+            Positioned::new()
+                .left(X - 44.0)
+                .top(404.0)
+                .width(760.0)
+                .height(60.0)
+                .child(rail),
+        )
         .push(labels)
         .into()
 }
@@ -510,7 +543,11 @@ fn band_stats(t: f32) -> WidgetNode {
                         Text::new(text).style(
                             TextStyle::new(38.0)
                                 .monospace()
-                                .weight(if settled { FontWeight::Bold } else { FontWeight::Medium })
+                                .weight(if settled {
+                                    FontWeight::Bold
+                                } else {
+                                    FontWeight::Medium
+                                })
                                 .color(if settled { INK } else { alpha(MUTED, 0.9) }),
                         ),
                     ),
@@ -533,14 +570,17 @@ fn band_stats(t: f32) -> WidgetNode {
     }
 
     Stack::new()
-        .push(band_label("S11 · THE RECEIPTS · EVERY NUMBER MEASURED", 516.0))
+        .push(band_label(
+            "S11 · THE RECEIPTS · EVERY NUMBER MEASURED",
+            516.0,
+        ))
         .push(band)
         .into()
 }
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -572,10 +612,8 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.28, h * 0.94),
                     w * 0.30,
-                    Gradient::radial_fill().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.10)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.10)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
 
@@ -587,10 +625,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.78).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.78)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );

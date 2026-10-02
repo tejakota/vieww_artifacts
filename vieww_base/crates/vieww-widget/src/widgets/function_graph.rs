@@ -267,7 +267,10 @@ impl CustomPainter for FunctionGraphPainter {
             // them: a mathematician's frame and a chart's ticks, both
             // visible, neither pretending to be the other.
             for step in 0..=4 {
-                #[expect(clippy::cast_precision_loss, reason = "four gridlines, small constants")]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "four gridlines, small constants"
+                )]
                 let y = size.height * (step as f32 / 4.0);
                 instructions.push(DrawInstruction::DrawLine {
                     from: Offset::new(0.0, y),
@@ -362,7 +365,10 @@ mod tests {
     fn the_range_covers_the_function() {
         let samples = sample_function(&|x| x * x, (-3.0, 3.0), 33);
         let (min, max) = range_of_samples(&samples).expect("finite samples");
-        assert!((0.0 - 1e-3..=0.0 + 1e-3).contains(&min), "f(0) = 0 is the min: {min}");
+        assert!(
+            (0.0 - 1e-3..=0.0 + 1e-3).contains(&min),
+            "f(0) = 0 is the min: {min}"
+        );
         assert!((max - 9.0).abs() < 1e-3, "f(±3) = 9 is the max: {max}");
     }
 
@@ -372,11 +378,17 @@ mod tests {
         // *emit* the NaN rather than quietly substituting a value, and this
         // test is the contract between the two halves.
         let samples = sample_function(&|x| 1.0 / x, (-1.0, 1.0), 41);
-        assert!(samples.iter().any(|&(_, y)| !y.is_finite()), "1/x has a pole");
+        assert!(
+            samples.iter().any(|&(_, y)| !y.is_finite()),
+            "1/x has a pole"
+        );
         // And the range survives it.
         assert!(range_of_samples(&samples).is_some());
         let (min, max) = range_of_samples(&samples).expect("range");
-        assert!(min < -10.0 && max > 10.0, "the pole dominates the range: {min}..{max}");
+        assert!(
+            min < -10.0 && max > 10.0,
+            "the pole dominates the range: {min}..{max}"
+        );
     }
 
     #[test]

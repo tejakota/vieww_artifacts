@@ -61,7 +61,10 @@ impl Cloth {
         for r in 0..rows {
             for c in 0..cols {
                 #[allow(clippy::cast_precision_loss)]
-                let p = Offset::new(origin.dx + c as f32 * spacing, origin.dy + r as f32 * spacing);
+                let p = Offset::new(
+                    origin.dx + c as f32 * spacing,
+                    origin.dy + r as f32 * spacing,
+                );
                 particles.push(ClothParticle {
                     position: p,
                     previous: p,
@@ -75,14 +78,34 @@ impl Cloth {
         for r in 0..rows {
             for c in 0..cols {
                 if c + 1 < cols {
-                    links.push(Link { a: idx(c, r), b: idx(c + 1, r), rest: spacing, broken: false });
+                    links.push(Link {
+                        a: idx(c, r),
+                        b: idx(c + 1, r),
+                        rest: spacing,
+                        broken: false,
+                    });
                 }
                 if r + 1 < rows {
-                    links.push(Link { a: idx(c, r), b: idx(c, r + 1), rest: spacing, broken: false });
+                    links.push(Link {
+                        a: idx(c, r),
+                        b: idx(c, r + 1),
+                        rest: spacing,
+                        broken: false,
+                    });
                 }
                 if c + 1 < cols && r + 1 < rows {
-                    links.push(Link { a: idx(c, r), b: idx(c + 1, r + 1), rest: diag, broken: false });
-                    links.push(Link { a: idx(c + 1, r), b: idx(c, r + 1), rest: diag, broken: false });
+                    links.push(Link {
+                        a: idx(c, r),
+                        b: idx(c + 1, r + 1),
+                        rest: diag,
+                        broken: false,
+                    });
+                    links.push(Link {
+                        a: idx(c + 1, r),
+                        b: idx(c, r + 1),
+                        rest: diag,
+                        broken: false,
+                    });
                 }
             }
         }
@@ -210,7 +233,12 @@ mod tests {
             c.grab(corner, Offset::new(45.0, 70.0 + k as f32 * 8.0));
             c.step(1.0 / 60.0);
         }
-        assert!(c.intact() < before, "{} of {} links left", c.intact(), before);
+        assert!(
+            c.intact() < before,
+            "{} of {} links left",
+            c.intact(),
+            before
+        );
     }
 
     #[test]
@@ -233,6 +261,9 @@ mod tests {
             w.particles.last().unwrap().position
         };
         let (calm, last) = (flag(0.0), flag(1500.0));
-        assert!(last.dx > calm.dx + 25.0, "blown sideways: {calm:?} → {last:?}");
+        assert!(
+            last.dx > calm.dx + 25.0,
+            "blown sideways: {calm:?} → {last:?}"
+        );
     }
 }

@@ -20,13 +20,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, ease_in_out, mix, tint, AMBER, CYAN, INK,
-    MUTED, RED, VIOLET};
+use crate::film_lib::{alpha, ease_in_out, mix, tint, AMBER, CYAN, INK, MUTED, RED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The structure ───────────────────────────────────────────────────────────
 
@@ -67,26 +66,54 @@ fn members() -> Vec<Member> {
     let mut v = Vec::new();
     let bot = |i: usize| i; // bottom joint i
     let top = |i: usize| PANELS + 1 + (i - 1); // top joint above panel point i (1..=7)
-    // Bottom chord: bot(i)-bot(i+1).
+                                               // Bottom chord: bot(i)-bot(i+1).
     for i in 0..PANELS {
-        v.push(Member { a: bot(i), b: bot(i + 1), kind: "bottom" });
+        v.push(Member {
+            a: bot(i),
+            b: bot(i + 1),
+            kind: "bottom",
+        });
     }
     // Top chord: top(i)-top(i+1).
     for i in 1..PANELS - 1 {
-        v.push(Member { a: top(i), b: top(i + 1), kind: "top" });
+        v.push(Member {
+            a: top(i),
+            b: top(i + 1),
+            kind: "top",
+        });
     }
     // Verticals: bot(i)-top(i).
     for i in 1..PANELS {
-        v.push(Member { a: bot(i), b: top(i), kind: "vertical" });
+        v.push(Member {
+            a: bot(i),
+            b: top(i),
+            kind: "vertical",
+        });
     }
     // End posts: bot(0)-top(1), bot(N)-top(N−1).
-    v.push(Member { a: bot(0), b: top(1), kind: "diagonal" });
-    v.push(Member { a: bot(PANELS), b: top(PANELS - 1), kind: "diagonal" });
+    v.push(Member {
+        a: bot(0),
+        b: top(1),
+        kind: "diagonal",
+    });
+    v.push(Member {
+        a: bot(PANELS),
+        b: top(PANELS - 1),
+        kind: "diagonal",
+    });
     // Pratt diagonals: one per interior panel, sloping down toward
     // mid-span from each end (the Pratt signature: diagonals in tension).
     for i in 1..PANELS / 2 {
-        v.push(Member { a: top(i), b: bot(i + 1), kind: "diagonal" }); // left half, down-right
-        v.push(Member { a: top(PANELS - i), b: bot(PANELS - i - 1), kind: "diagonal" }); // right
+        v.push(Member {
+            a: top(i),
+            b: bot(i + 1),
+            kind: "diagonal",
+        }); // left half, down-right
+        v.push(Member {
+            a: top(PANELS - i),
+            b: bot(PANELS - i - 1),
+            kind: "diagonal",
+        }); // right
     }
     v
 }
@@ -277,7 +304,7 @@ fn unit(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let js = joints();
     let ms = members();
     let (forces, reactions, resid) = solve(t);
@@ -308,10 +335,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — an engineer's blue hour.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(8, 9, 13)),
-                    (1.0, Color::rgb(12, 13, 18)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(8, 9, 13)), (1.0, Color::rgb(12, 13, 18))]),
             );
 
             // The river below — the reason there's a bridge.
@@ -341,7 +367,10 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // The piers.
             for &(px0, _) in &[js[0], js[PANELS]] {
-                book.rect(Rect::new(px0 - 16.0, Y_BOT, px0 + 16.0, Y_BOT + 58.0), Color::rgb(30, 32, 40));
+                book.rect(
+                    Rect::new(px0 - 16.0, Y_BOT, px0 + 16.0, Y_BOT + 58.0),
+                    Color::rgb(30, 32, 40),
+                );
                 book.stroke_rrect(
                     Rect::new(px0 - 16.0, Y_BOT, px0 + 16.0, Y_BOT + 58.0),
                     2.0,
@@ -402,8 +431,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 // Windows.
                 for k in 0..4 {
                     g.rect(
-                        Rect::new(tx - 82.0 + k as f32 * 22.0, Y_BOT - 32.0,
-                                  tx - 70.0 + k as f32 * 22.0, Y_BOT - 20.0),
+                        Rect::new(
+                            tx - 82.0 + k as f32 * 22.0,
+                            Y_BOT - 32.0,
+                            tx - 70.0 + k as f32 * 22.0,
+                            Y_BOT - 20.0,
+                        ),
                         alpha(tint(CYAN, 0.5), 0.8),
                     );
                 }
@@ -457,7 +490,9 @@ pub fn frame(t: f32) -> WidgetNode {
     );
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack = stack.push(receipt_panel(&ms, &forces, reactions, resid, &name_t, max_t, &name_c, max_c));
+    stack = stack.push(receipt_panel(
+        &ms, &forces, reactions, resid, &name_t, max_t, &name_c, max_c,
+    ));
     stack.into()
 }
 
@@ -492,7 +527,8 @@ fn receipt_panel(
             "max tension {} {max_t:+.2} · max compression {} {max_c:+.2} (from the solve)",
             name_t, name_c
         ),
-        "colour IS force: amber-red pulls, cyan-blue pushes — the bridge's own thinking".to_string(),
+        "colour IS force: amber-red pulls, cyan-blue pushes — the bridge's own thinking"
+            .to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -511,7 +547,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

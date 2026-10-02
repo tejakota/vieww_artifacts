@@ -69,7 +69,11 @@ pub fn with_timing(value: &SharedValue, target: f32, duration: Duration, curve: 
     let mut from: Option<f32> = None;
     Box::new(move |elapsed| {
         let start = *from.get_or_insert_with(|| v.get());
-        let t = if duration.is_zero() { 1.0 } else { (elapsed.as_secs_f32() / duration.as_secs_f32()).min(1.0) };
+        let t = if duration.is_zero() {
+            1.0
+        } else {
+            (elapsed.as_secs_f32() / duration.as_secs_f32()).min(1.0)
+        };
         v.set(start + (target - start) * curve.transform(t));
         t < 1.0
     })
@@ -131,7 +135,12 @@ impl UiThread {
         let active = Arc::new(AtomicU64::new(0));
         let (to_js, from_ui) = channel();
         let handle = {
-            let (pending, running, frames, active) = (pending.clone(), running.clone(), frames.clone(), active.clone());
+            let (pending, running, frames, active) = (
+                pending.clone(),
+                running.clone(),
+                frames.clone(),
+                active.clone(),
+            );
             std::thread::Builder::new()
                 .name("vieww-ui-worklets".into())
                 .spawn(move || {
@@ -139,7 +148,10 @@ impl UiThread {
                     let mut next = Instant::now();
                     while running.load(Ordering::Acquire) {
                         if let Ok(mut p) = pending.lock() {
-                            live.extend(p.drain(..).map(|w| Registered { worklet: w, started: None }));
+                            live.extend(p.drain(..).map(|w| Registered {
+                                worklet: w,
+                                started: None,
+                            }));
                         }
                         let now = Instant::now();
                         live.retain_mut(|r| {
@@ -233,7 +245,12 @@ mod tests {
     fn animation_advances_while_the_calling_thread_is_blocked() {
         let mut ui = UiThread::start(Duration::from_millis(5));
         let x = SharedValue::new(0.0);
-        ui.run(with_timing(&x, 100.0, Duration::from_millis(150), Curve::Linear));
+        ui.run(with_timing(
+            &x,
+            100.0,
+            Duration::from_millis(150),
+            Curve::Linear,
+        ));
         // Block this thread outright — the stand-in for a stuck rebuild.
         std::thread::sleep(Duration::from_millis(80));
         let mid = x.get();

@@ -107,7 +107,7 @@ pub(crate) fn dashed_segments(
         idx = (idx + 1) % pattern.len();
         remaining = pattern[idx];
     }
-    let mut on = idx % 2 == 0;
+    let mut on = idx.is_multiple_of(2);
 
     let all_points: Vec<(f32, f32)> = if closed && !points.is_empty() {
         let mut p = points.to_vec();
@@ -348,11 +348,18 @@ mod orientation_tests {
     #[test]
     fn round_joins_do_not_punch_holes() {
         let mut p = Path::new();
-        p.move_to(Offset::new(10.0, 40.0)).line_to(Offset::new(40.0, 10.0)).line_to(Offset::new(70.0, 40.0)).line_to(Offset::new(100.0, 10.0));
+        p.move_to(Offset::new(10.0, 40.0))
+            .line_to(Offset::new(40.0, 10.0))
+            .line_to(Offset::new(70.0, 40.0))
+            .line_to(Offset::new(100.0, 10.0));
         let polys = stroke_to_polygons(&p, 12.0, &StrokeStyle::rounded(), Transform::IDENTITY);
         for poly in &polys {
             let pts = &poly.points;
-            let area: f32 = (0..pts.len()).map(|i| pts[i].0 * pts[(i + 1) % pts.len()].1 - pts[(i + 1) % pts.len()].0 * pts[i].1).sum();
+            let area: f32 = (0..pts.len())
+                .map(|i| {
+                    pts[i].0 * pts[(i + 1) % pts.len()].1 - pts[(i + 1) % pts.len()].0 * pts[i].1
+                })
+                .sum();
             assert!(area <= 0.0, "every piece winds the same way");
         }
         let mask = super::super::fill::rasterize(&polys, Rect::new(0.0, 0.0, 120.0, 60.0));

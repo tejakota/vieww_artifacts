@@ -350,13 +350,16 @@ fn decode_png(bytes: &[u8]) -> Option<Vec<u8>> {
     // cache holds one pixel layout regardless of what the font shipped.
     decoder.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = decoder.read_info().ok()?;
-    let mut buffer = vec![0_u8; reader.output_buffer_size()];
+    // png 0.18's `output_buffer_size` is `Option` — it can only size the
+    // buffer once the transformations have pinned the output colour type down,
+    // and a font that somehow defeats that is not one worth an unwrap for.
+    let mut buffer = vec![0_u8; reader.output_buffer_size()?];
     let info = reader.next_frame(&mut buffer).ok()?;
     match info.color_type {
         png::ColorType::Rgba => Some(buffer),
         png::ColorType::Rgb => {
             let mut rgba = Vec::with_capacity(buffer.len() / 3 * 4);
-            for pixel in buffer.chunks_exact(3) {
+            for pixel in buffer.as_chunks::<3>().0 {
                 rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
             }
             Some(rgba)
@@ -383,7 +386,7 @@ fn decode_png(bytes: &[u8]) -> Option<Vec<u8>> {
 fn bgra_to_rgba(bytes: &[u8], width: u32, height: u32) -> Vec<u8> {
     let count = (width * height) as usize;
     let mut out = Vec::with_capacity(count * 4);
-    for pixel in bytes.chunks_exact(4) {
+    for pixel in bytes.as_chunks::<4>().0 {
         let (b, g, r, a) = (pixel[0], pixel[1], pixel[2], pixel[3]);
         if a == 0 {
             out.extend_from_slice(&[0, 0, 0, 0]);

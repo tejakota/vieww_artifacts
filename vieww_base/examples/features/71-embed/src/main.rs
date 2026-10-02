@@ -19,26 +19,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(
-                    Flex::column()
-                        .spacing(16.0)
-                        .children(children![
-                            Text::new("WebView by URL").style(TextStyle {
-                                size: 13.0,
-                                color: Color::rgb(90, 100, 120),
-                                ..TextStyle::default()
-                            }),
-                            WebView::new(WebContent::url("https://vieww.dev")),
-                            Text::new("WebView by inline HTML (srcdoc)").style(TextStyle {
-                                size: 13.0,
-                                color: Color::rgb(90, 100, 120),
-                                ..TextStyle::default()
-                            }),
-                            WebView::new(WebContent::html(
-                                "<h1>Hello from the host page</h1>",
-                            )),
-                        ]),
-                ),
+                .child(Flex::column().spacing(16.0).children(children![
+                    Text::new("WebView by URL").style(TextStyle {
+                        size: 13.0,
+                        color: Color::rgb(90, 100, 120),
+                        ..TextStyle::default()
+                    }),
+                    WebView::new(WebContent::url("https://vieww.dev")),
+                    Text::new("WebView by inline HTML (srcdoc)").style(TextStyle {
+                        size: 13.0,
+                        color: Color::rgb(90, 100, 120),
+                        ..TextStyle::default()
+                    }),
+                    WebView::new(WebContent::html("<h1>Hello from the host page</h1>",)),
+                ])),
         );
     })
 }

@@ -19,12 +19,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, Rng};
+use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, INK, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The machine ─────────────────────────────────────────────────────────────
 
@@ -221,7 +221,7 @@ const Y0: f32 = 140.0;
 const CW: f32 = 5.6;
 const CH: f32 = 5.6;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let p = P0 + (P1 - P0) * t as f64;
     let (parent, spanning, best) = label(p);
     let span_frac = best.1 as f64 / (GX * GY) as f64;
@@ -229,7 +229,7 @@ pub fn frame(t: f32) -> WidgetNode {
 
     // The bracket and the curve history — one analysis, cached, the film
     // reading it forward frame by frame.
-    let ((blo, bhi, _, _), curve) = &*sweep_data();
+    let ((blo, bhi, _, _), curve) = sweep_data();
     let (blo, bhi) = (*blo, *bhi);
 
     let board = Painting::sized(
@@ -241,10 +241,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — cold slate at the moment before connection.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 7, 10)),
-                    (1.0, Color::rgb(11, 12, 17)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 7, 10)), (1.0, Color::rgb(11, 12, 17))]),
             );
 
             // ── The lattice: one rect per site ──
@@ -374,7 +373,11 @@ pub fn frame(t: f32) -> WidgetNode {
             );
             // the threshold notch on the spine
             let nx = X0 + GX as f32 * CW * ((0.5927 - P0) / (P1 - P0)) as f32;
-            book.rrect(Rect::new(nx - 1.0, spine_y - 3.0, nx + 1.0, spine_y + 6.0), 1.0, AMBER);
+            book.rrect(
+                Rect::new(nx - 1.0, spine_y - 3.0, nx + 1.0, spine_y + 6.0),
+                1.0,
+                AMBER,
+            );
         }),
     );
 
@@ -426,7 +429,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

@@ -16,7 +16,7 @@ use crate::film_lib::clamp01;
 use super::studio::{studio, App, Code, Spec};
 use super::{caption, Ctx};
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -24,7 +24,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // Rust after, line by line as the scan passes.
     let sweep = clamp01((t - 0.14) / 0.34);
     let code = if t < 0.14 {
-        Code::Say { typed: 1.0, blink: ctx.sec }
+        Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        }
     } else {
         Code::Rust { sweep }
     };
@@ -40,8 +43,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         ..Spec::default()
     };
 
-    let mut stack = Stack::new()
-        .push(studio(abs, ctx.ladder, spec));
+    let mut stack = Stack::new().push(studio(abs, ctx.ladder, spec));
 
     stack = stack.push(caption(
         "start in say · go as deep as you want",

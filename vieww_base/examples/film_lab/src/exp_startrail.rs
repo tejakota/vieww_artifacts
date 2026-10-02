@@ -17,13 +17,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, smoothstep, Rng, AMBER, BG_DEEP, INK,
-    MUTED};
+use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, smoothstep, Rng, AMBER, INK, MUTED};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// The celestial pole (Polaris), on canvas.
 const POLE: (f32, f32) = (938.0, 186.0);
@@ -61,8 +60,19 @@ fn field() -> Vec<Star> {
         }
         let a = (y - POLE.1).atan2(x - POLE.0);
         let bucket = rng.f01();
-        let b = if bucket > 0.96 { 0 } else if bucket > 0.72 { 1 } else { 2 };
-        v.push(Star { a, r, b, m: 0.4 + 0.6 * rng.f01() });
+        let b = if bucket > 0.96 {
+            0
+        } else if bucket > 0.72 {
+            1
+        } else {
+            2
+        };
+        v.push(Star {
+            a,
+            r,
+            b,
+            m: 0.4 + 0.6 * rng.f01(),
+        });
     }
     v
 }
@@ -87,7 +97,12 @@ fn milky_way() -> Vec<Star> {
             continue;
         }
         let a = (y - POLE.1).atan2(x - POLE.0);
-        v.push(Star { a, r, b: 2, m: 0.25 + 0.5 * rng.f01() });
+        v.push(Star {
+            a,
+            r,
+            b: 2,
+            m: 0.25 + 0.5 * rng.f01(),
+        });
     }
     v
 }
@@ -102,12 +117,30 @@ struct Meteor {
 }
 
 const METEORS: [Meteor; 3] = [
-    Meteor { t0: 0.26, x0: 220.0, y0: 120.0, dx: 360.0, dy: 210.0 },
-    Meteor { t0: 0.54, x0: 1080.0, y0: 80.0, dx: -300.0, dy: 260.0 },
-    Meteor { t0: 0.81, x0: 520.0, y0: 60.0, dx: 260.0, dy: 300.0 },
+    Meteor {
+        t0: 0.26,
+        x0: 220.0,
+        y0: 120.0,
+        dx: 360.0,
+        dy: 210.0,
+    },
+    Meteor {
+        t0: 0.54,
+        x0: 1080.0,
+        y0: 80.0,
+        dx: -300.0,
+        dy: 260.0,
+    },
+    Meteor {
+        t0: 0.81,
+        x0: 520.0,
+        y0: 60.0,
+        dx: 260.0,
+        dy: 300.0,
+    },
 ];
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let stars = field();
     let mw = milky_way();
     // The exposure so far: eased so the shutter feels mechanical. The
@@ -117,7 +150,7 @@ pub fn frame(t: f32) -> WidgetNode {
     let rot = SWEEP * exposure;
     // Trails visible this frame (census).
     let arc_count = stars.len() + mw.len();
-    let beacon = 0.5 + 0.5 * (t * 6.2832 * 2.4).sin();
+    let beacon = 0.5 + 0.5 * (t * std::f32::consts::TAU * 2.4).sin();
 
     let board = Painting::sized(
         Size::new(1280.0, 720.0),
@@ -145,10 +178,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 haze.line_to(Offset::new(1400.0, 200.0));
                 haze.line_to(Offset::new(420.0, 780.0));
                 haze.close();
-                g.fill(
-                    haze,
-                    alpha(Color::rgb(38, 40, 66), 0.16),
-                );
+                g.fill(haze, alpha(Color::rgb(38, 40, 66), 0.16));
             });
 
             // ── THE TRAILS — all arcs in ONE Plus group: crossings
@@ -253,22 +283,15 @@ pub fn frame(t: f32) -> WidgetNode {
                 p.close();
                 book.fill(p, color);
             };
-            ridge(
-                0x2D6E,
-                596.0,
-                90.0,
-                Color::rgb(14, 15, 24),
-            );
-            ridge(
-                0x9C4A,
-                648.0,
-                60.0,
-                Color::rgb(7, 8, 13),
-            );
+            ridge(0x2D6E, 596.0, 90.0, Color::rgb(14, 15, 24));
+            ridge(0x9C4A, 648.0, 60.0, Color::rgb(7, 8, 13));
 
             // The observatory: dome, slit, and the red beacon.
             let (ox, oy) = (1012.0, 596.0);
-            book.rect(Rect::new(ox - 34.0, oy - 26.0, ox + 34.0, oy + 2.0), Color::rgb(10, 11, 17));
+            book.rect(
+                Rect::new(ox - 34.0, oy - 26.0, ox + 34.0, oy + 2.0),
+                Color::rgb(10, 11, 17),
+            );
             let mut dome = Path::new();
             dome.move_to(Offset::new(ox - 30.0, oy - 24.0));
             dome.line_to(Offset::new(ox - 26.0, oy - 44.0));
@@ -308,7 +331,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
+    let stack = Stack::new().push(Positioned::fill().child(board));
     stack.push(receipt_panel(t, exposure, arc_count)).into()
 }
 
@@ -336,7 +359,7 @@ fn patch_mean(img: &image::RgbaImage, cx: u32, cy: u32) -> (f32, f32, f32) {
 /// excess over one trail is many faint arcs stacked through ONE additive
 /// layer; the ground's near-zero ink is the same sky with the shutter
 /// blocked by the mountain.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let mut lines = Vec::new();
     let ground = patch_mean(img, 640, 704);
     lines.push(format!(
@@ -370,7 +393,7 @@ fn receipt_panel(t: f32, exposure: f32, arc_count: usize) -> WidgetNode {
         "STARTRAIL · THE EXPOSURE AXIS · TIME, FOLDED INTO ARCS".to_string(),
         format!("exposure {exposure:.0}% · sky rotation {deg:.0}° held open"),
         format!("arcs {arc_count}/3,300 · crossings accumulate (1 Plus layer)"),
-        format!("meteors 3 · streaks beat the shutter (straight, not curved)"),
+        "meteors 3 · streaks beat the shutter (straight, not curved)".to_string(),
         format!("beacon {:.0}% · polaris fixed at (938, 186)", beacon(t)),
     ];
 
@@ -390,7 +413,10 @@ fn receipt_panel(t: f32, exposure: f32, arc_count: usize) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -411,7 +437,10 @@ fn receipt_panel(t: f32, exposure: f32, arc_count: usize) -> WidgetNode {
                 let on = (k as f32 / 12.0) < exposure;
                 book.rect(
                     Rect::new(x, 8.0, x + 14.0, 18.0),
-                    alpha(if on { AMBER } else { Color::rgb(40, 42, 52) }, if on { 0.8 } else { 0.9 }),
+                    alpha(
+                        if on { AMBER } else { Color::rgb(40, 42, 52) },
+                        if on { 0.8 } else { 0.9 },
+                    ),
                 );
             }
             book.stroke_rrect(
@@ -436,5 +465,5 @@ fn receipt_panel(t: f32, exposure: f32, arc_count: usize) -> WidgetNode {
 
 /// The beacon's pulse, shared with the board (one law, two callers).
 fn beacon(t: f32) -> f32 {
-    0.5 + 0.5 * (t * 6.2832 * 2.4).sin()
+    0.5 + 0.5 * (t * std::f32::consts::TAU * 2.4).sin()
 }

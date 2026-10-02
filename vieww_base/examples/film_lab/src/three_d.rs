@@ -20,36 +20,40 @@ use crate::film_lib::{alpha, clamp01, mix, scaled};
 // ── Vector math ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Vec3 {
+pub(crate) struct Vec3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
 impl Vec3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
+    pub(crate) const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
-    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+    pub(crate) const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
 
-    pub fn sub(self, o: Self) -> Self {
+    pub(crate) fn sub(self, o: Self) -> Self {
         Self::new(self.x - o.x, self.y - o.y, self.z - o.z)
     }
 
-    pub fn add(self, o: Self) -> Self {
+    pub(crate) fn add(self, o: Self) -> Self {
         Self::new(self.x + o.x, self.y + o.y, self.z + o.z)
     }
 
-    pub fn scale(self, k: f32) -> Self {
+    pub(crate) fn scale(self, k: f32) -> Self {
         Self::new(self.x * k, self.y * k, self.z * k)
     }
 
-    pub fn dot(self, o: Self) -> f32 {
+    pub(crate) fn dot(self, o: Self) -> f32 {
         self.x * o.x + self.y * o.y + self.z * o.z
     }
 
-    pub fn cross(self, o: Self) -> Self {
+    pub(crate) fn cross(self, o: Self) -> Self {
         Self::new(
             self.y * o.z - self.z * o.y,
             self.z * o.x - self.x * o.z,
@@ -57,16 +61,20 @@ impl Vec3 {
         )
     }
 
-    pub fn len(self) -> f32 {
+    pub(crate) fn len(self) -> f32 {
         self.dot(self).sqrt()
     }
 
-    pub fn norm(self) -> Self {
+    pub(crate) fn norm(self) -> Self {
         let l = self.len();
-        if l < 1e-9 { Self::ZERO } else { self.scale(1.0 / l) }
+        if l < 1e-9 {
+            Self::ZERO
+        } else {
+            self.scale(1.0 / l)
+        }
     }
 
-    pub fn lerp(self, o: Self, t: f32) -> Self {
+    pub(crate) fn lerp(self, o: Self, t: f32) -> Self {
         Self::new(
             self.x + (o.x - self.x) * t,
             self.y + (o.y - self.y) * t,
@@ -75,13 +83,13 @@ impl Vec3 {
     }
 
     /// Rotate around the Y (vertical) axis by `a` radians.
-    pub fn rot_y(self, a: f32) -> Self {
+    pub(crate) fn rot_y(self, a: f32) -> Self {
         let (s, c) = a.sin_cos();
         Self::new(self.x * c + self.z * s, self.y, -self.x * s + self.z * c)
     }
 
     /// Rotate around the X axis by `a` radians.
-    pub fn rot_x(self, a: f32) -> Self {
+    pub(crate) fn rot_x(self, a: f32) -> Self {
         let (s, c) = a.sin_cos();
         Self::new(self.x, self.y * c - self.z * s, self.y * s + self.z * c)
     }
@@ -90,7 +98,7 @@ impl Vec3 {
 // ── Camera ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy)]
-pub struct Camera {
+pub(crate) struct Camera {
     pub eye: Vec3,
     pub target: Vec3,
     /// Vertical field of view, radians.
@@ -101,7 +109,7 @@ impl Camera {
     /// Project a world point to canvas space. `None` if behind the near plane.
     /// Returns the point, the forward depth (for painter sorting + fog), and
     /// the perspective scale factor (for size cues).
-    pub fn project(&self, p: Vec3, canvas: Size) -> Option<(Offset, f32, f32)> {
+    pub(crate) fn project(&self, p: Vec3, canvas: Size) -> Option<(Offset, f32, f32)> {
         let forward = self.target.sub(self.eye).norm();
         let world_up = Vec3::new(0.0, 1.0, 0.0);
         let right = forward.cross(world_up).norm();
@@ -128,7 +136,7 @@ impl Camera {
 /// A quad-indexed mesh. Quads project more cheaply than triangles and the
 /// rasterizer's path fill doesn't care either way.
 #[derive(Debug, Clone)]
-pub struct Mesh {
+pub(crate) struct Mesh {
     pub verts: Vec<Vec3>,
     /// Quad vertex indices, counter-clockwise seen from the front.
     pub quads: Vec<[usize; 4]>,
@@ -137,7 +145,7 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             verts: Vec::new(),
             quads: Vec::new(),
@@ -145,13 +153,13 @@ impl Mesh {
         }
     }
 
-    pub fn push_quad(&mut self, a: usize, b: usize, c: usize, d: usize, color: Color) {
+    pub(crate) fn push_quad(&mut self, a: usize, b: usize, c: usize, d: usize, color: Color) {
         self.quads.push([a, b, c, d]);
         self.colors.push(color);
     }
 
     /// Face normal (Newell's method — robust for near-degenerate quads).
-    pub fn quad_normal(&self, q: &[usize; 4]) -> Vec3 {
+    pub(crate) fn quad_normal(&self, q: &[usize; 4]) -> Vec3 {
         let vs: [Vec3; 4] = q.map(|i| self.verts[i]);
         let mut n = Vec3::ZERO;
         for i in 0..4 {
@@ -164,7 +172,7 @@ impl Mesh {
         n.norm()
     }
 
-    pub fn quad_center(&self, q: &[usize; 4]) -> Vec3 {
+    pub(crate) fn quad_center(&self, q: &[usize; 4]) -> Vec3 {
         let c: Vec3 = q.iter().map(|&i| self.verts[i]).fold(Vec3::ZERO, Vec3::add);
         c.scale(0.25)
     }
@@ -173,11 +181,12 @@ impl Mesh {
 // ── Mesh builders ───────────────────────────────────────────────────────────
 
 /// A flat grid on the XZ plane, `nx × nz` cells, cell size `step`.
-pub fn grid_mesh(nx: usize, nz: usize, step: f32, color: Color) -> Mesh {
+pub(crate) fn grid_mesh(nx: usize, nz: usize, step: f32, color: Color) -> Mesh {
     let mut m = Mesh::new();
     for z in 0..=nz {
         for x in 0..=nx {
-            m.verts.push(Vec3::new(x as f32 * step, 0.0, z as f32 * step));
+            m.verts
+                .push(Vec3::new(x as f32 * step, 0.0, z as f32 * step));
         }
     }
     let row = nx + 1;
@@ -196,14 +205,14 @@ pub fn grid_mesh(nx: usize, nz: usize, step: f32, color: Color) -> Mesh {
 }
 
 /// Displace verts' y by a height function.
-pub fn displace_y(m: &mut Mesh, f: impl Fn(Vec3) -> f32) {
+pub(crate) fn displace_y(m: &mut Mesh, f: impl Fn(Vec3) -> f32) {
     for v in &mut m.verts {
         v.y = f(*v);
     }
 }
 
 /// A torus in the XZ plane, `nseg` around the tube, `nring` around the ring.
-pub fn torus_mesh(big: f32, small: f32, nseg: usize, nring: usize, color: Color) -> Mesh {
+pub(crate) fn torus_mesh(big: f32, small: f32, nseg: usize, nring: usize, color: Color) -> Mesh {
     let mut m = Mesh::new();
     for ring in 0..nring {
         let theta = ring as f32 / nring as f32 * std::f32::consts::TAU;
@@ -228,13 +237,19 @@ pub fn torus_mesh(big: f32, small: f32, nseg: usize, nring: usize, color: Color)
 }
 
 /// A box centered at `center`, half-extents `h`.
-pub fn box_mesh(center: Vec3, h: Vec3, color: Color) -> Mesh {
+pub(crate) fn box_mesh(center: Vec3, h: Vec3, color: Color) -> Mesh {
     let mut m = Mesh::new();
     let c = |dx: f32, dy: f32, dz: f32| center.add(Vec3::new(dx * h.x, dy * h.y, dz * h.z));
     // 8 corners, CCW seen from outside.
     let v: [Vec3; 8] = [
-        c(-1.0, -1.0, 1.0), c(1.0, -1.0, 1.0), c(1.0, 1.0, 1.0), c(-1.0, 1.0, 1.0), // front z+
-        c(1.0, -1.0, -1.0), c(-1.0, -1.0, -1.0), c(-1.0, 1.0, -1.0), c(1.0, 1.0, -1.0), // back z-
+        c(-1.0, -1.0, 1.0),
+        c(1.0, -1.0, 1.0),
+        c(1.0, 1.0, 1.0),
+        c(-1.0, 1.0, 1.0), // front z+
+        c(1.0, -1.0, -1.0),
+        c(-1.0, -1.0, -1.0),
+        c(-1.0, 1.0, -1.0),
+        c(1.0, 1.0, -1.0), // back z-
     ];
     m.verts = v.to_vec();
     let c7 = color;
@@ -259,7 +274,7 @@ fn tint(c: Color, t: f32) -> Color {
 
 /// How a mesh renders.
 #[derive(Debug, Clone, Copy)]
-pub struct MeshStyle {
+pub(crate) struct MeshStyle {
     /// Direction *toward* the light, normalized.
     pub light_dir: Vec3,
     /// Ambient floor added to the Lambert term.
@@ -303,7 +318,13 @@ impl Default for MeshStyle {
 }
 
 /// Draw a mesh: project, back-face cull, painter-sort far→near, shade.
-pub fn draw_mesh(book: &mut Sketchbook, mesh: &Mesh, cam: &Camera, canvas: Size, style: &MeshStyle) {
+pub(crate) fn draw_mesh(
+    book: &mut Sketchbook,
+    mesh: &Mesh,
+    cam: &Camera,
+    canvas: Size,
+    style: &MeshStyle,
+) {
     // Project all verts once.
     let projected: Vec<Option<(Offset, f32, f32)>> =
         mesh.verts.iter().map(|v| cam.project(*v, canvas)).collect();
@@ -353,7 +374,11 @@ pub fn draw_mesh(book: &mut Sketchbook, mesh: &Mesh, cam: &Camera, canvas: Size,
         let base = mesh.colors[qi];
         let normal = mesh.quad_normal(&mesh.quads[qi]);
         // Double-sided lighting: flip the normal if it faces away from the camera.
-        let n = if normal.dot(forward) < 0.0 { normal.scale(-1.0) } else { normal };
+        let n = if normal.dot(forward) < 0.0 {
+            normal.scale(-1.0)
+        } else {
+            normal
+        };
         let lambert = (n.dot(style.light_dir)).max(0.0);
         let mut lit = scaled(base, style.ambient + (1.0 - style.ambient) * lambert);
 
@@ -393,13 +418,17 @@ pub fn draw_mesh(book: &mut Sketchbook, mesh: &Mesh, cam: &Camera, canvas: Size,
         }
 
         if style.edge_alpha > 0.0 {
-            book.stroke(path, alpha(Color::WHITE, style.edge_alpha), style.edge_width);
+            book.stroke(
+                path,
+                alpha(Color::WHITE, style.edge_alpha),
+                style.edge_width,
+            );
         }
     }
 }
 
 /// Draw a 3D polyline (already a world-space path) projected to screen.
-pub fn draw_polyline3(
+pub(crate) fn draw_polyline3(
     book: &mut Sketchbook,
     points: &[Vec3],
     cam: &Camera,
@@ -425,7 +454,7 @@ pub fn draw_polyline3(
 }
 
 /// A projected, filled disc in 3D (the drop, the sparkles).
-pub fn draw_dot3(
+pub(crate) fn draw_dot3(
     book: &mut Sketchbook,
     p: Vec3,
     radius_world: f32,
@@ -441,12 +470,9 @@ pub fn draw_dot3(
 }
 
 /// The horizon glow band behind a 3D scene — one wide gradient rect.
-pub fn horizon(book: &mut Sketchbook, canvas: Size, color: Color) {
+pub(crate) fn horizon(book: &mut Sketchbook, canvas: Size, color: Color) {
     let rect = Rect::new(0.0, 0.0, canvas.width, canvas.height);
-    let g = vieww_foundation::Gradient::radial(
-        Offset::new(0.5, 0.62),
-        0.9,
-    )
-    .with_stops(&[(0.0, alpha(color, 0.30)), (1.0, alpha(color, 0.0))]);
+    let g = vieww_foundation::Gradient::radial(Offset::new(0.5, 0.62), 0.9)
+        .with_stops(&[(0.0, alpha(color, 0.30)), (1.0, alpha(color, 0.0))]);
     book.rect(rect, g);
 }

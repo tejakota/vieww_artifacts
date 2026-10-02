@@ -30,13 +30,15 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, shade, tint, Rng, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED,
-    RED, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, mix, shade, tint, Rng, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, RED, VIOLET,
+    VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The field ───────────────────────────────────────────────────────────────
 
@@ -208,12 +210,7 @@ fn convergence_fit(a: f64, roots: &[C]) -> (f64, f64, usize, Vec<(f64, f64)>) {
             if let Some((_, r)) = roots
                 .iter()
                 .enumerate()
-                .min_by(|p, q| {
-                    z.sub(*p.1)
-                        .abs()
-                        .partial_cmp(&z.sub(*q.1).abs())
-                        .unwrap()
-                })
+                .min_by(|p, q| z.sub(*p.1).abs().partial_cmp(&z.sub(*q.1).abs()).unwrap())
             {
                 errs.push(z.sub(*r).abs());
                 hit = Some(*r);
@@ -265,7 +262,7 @@ const FY: f32 = 166.0;
 const FW: f32 = 880.0;
 const FH: f32 = 495.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // the perturbation runs 0 → 0.9 → 0
     let a = 0.9 * (1.0 - (t as f64 * std::f64::consts::TAU).cos()) * 0.5;
     let field = compute(a);
@@ -311,7 +308,11 @@ pub fn frame(t: f32) -> WidgetNode {
     // The theoretical constant at a root: |f''(r) / 2f'(r)|. For z⁵−1 at a
     // fifth root of unity that is |20r³ / 10r⁴| = 2/|r| = 2.
     let c_theory = {
-        let r = field.roots.first().copied().unwrap_or(C { re: 1.0, im: 0.0 });
+        let r = field
+            .roots
+            .first()
+            .copied()
+            .unwrap_or(C { re: 1.0, im: 0.0 });
         let r2 = r.mul(r);
         let r3 = r2.mul(r);
         let r4 = r3.mul(r);
@@ -337,10 +338,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(5, 5, 9)),
-                    (1.0, Color::rgb(10, 10, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(5, 5, 9)), (1.0, Color::rgb(10, 10, 15))]),
             );
             book.rrect(
                 Rect::new(FX - 12.0, FY - 12.0, FX + FW + 12.0, FY + FH + 12.0),
@@ -376,17 +376,10 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // the roots themselves, marked on the picture they generated
             let aspect = GW as f64 / GH as f64;
-            let sx = |re: f64| {
-                FX + ((re - VIEW.0) / (VIEW.2 * aspect) * 0.5 + 0.5) as f32 * FW
-            };
+            let sx = |re: f64| FX + ((re - VIEW.0) / (VIEW.2 * aspect) * 0.5 + 0.5) as f32 * FW;
             let sy = |im: f64| FY + ((im - VIEW.1) / VIEW.2 * 0.5 + 0.5) as f32 * FH;
             for (k, r) in roots.iter().enumerate() {
-                book.ring(
-                    Offset::new(sx(r.re), sy(r.im)),
-                    6.0,
-                    1.8,
-                    alpha(INK, 0.9),
-                );
+                book.ring(Offset::new(sx(r.re), sy(r.im)), 6.0, 1.8, alpha(INK, 0.9));
                 let _ = k;
             }
 
@@ -457,8 +450,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let lines = vec![
-        "NEWTON · THE ROOT AXIS · WHERE A GUESS GOES (CAYLEY'S QUESTION, 1879)".to_string(),
+    let lines = ["NEWTON · THE ROOT AXIS · WHERE A GUESS GOES (CAYLEY'S QUESTION, 1879)".to_string(),
         format!(
             "f(z) = z⁵ − 1 + a·z², a = {a:.3} (animated) · {} × {} = {} starting guesses per frame, Newton to |f| < 1e−10 or {MAX_ITER} steps · mean {mean_iters:.2} iterations",
             GW, GH, GW * GH
@@ -486,8 +478,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 .collect::<Vec<_>>()
                 .join(" "),
             1.0 / n_roots.max(1) as f32
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -502,24 +493,40 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
     }
     for (x, y, s) in [
-        (952.0_f32, 178.0_f32, "BASIN SHARES — the line is 1/n".to_string()),
-        (952.0, 440.0, "ln|eₙ₊₁| vs ln|eₙ| · grey: order 1 · amber: fit".to_string()),
+        (
+            952.0_f32,
+            178.0_f32,
+            "BASIN SHARES — the line is 1/n".to_string(),
+        ),
+        (
+            952.0,
+            440.0,
+            "ln|eₙ₊₁| vs ln|eₙ| · grey: order 1 · amber: fit".to_string(),
+        ),
     ] {
         stack = stack.push(
-            Positioned::new().left(x).top(y).width(320.0).height(14.0).child(
-                Text::new(s).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .letter_spacing(0.9)
-                        .color(alpha(MUTED, 0.85)),
+            Positioned::new()
+                .left(x)
+                .top(y)
+                .width(320.0)
+                .height(14.0)
+                .child(
+                    Text::new(s).style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()

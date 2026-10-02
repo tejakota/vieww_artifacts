@@ -31,15 +31,15 @@ use vieww_foundation::{
 use vieww_paint::native::{outline_glyph, units_per_em};
 use vieww_text::{FontStore, Paragraph, TextSpan};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, ease_out_cubic, mix, spring_out, tint, FAINT, MUTED, VIOLET,
-    VIOLET_SOFT, BG_DEEP,
+    alpha, clamp01, ease_in_out, ease_out_cubic, mix, spring_out, tint, BG_DEEP, FAINT, MUTED,
+    VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 7.0;
+pub(crate) const SECONDS: f32 = 7.0;
 
 /// The sentence — the film's own S02 question.
 const LINE: &str = "how long should it take to see what you built?";
@@ -53,7 +53,7 @@ const SHARD_ROWS: usize = 4;
 
 // ── Shaping: the sentence as real glyph outlines (the U-03 door) ────────────
 
-pub struct Letter {
+pub(crate) struct Letter {
     /// Placed outline (baseline at 0, run origin at x=0).
     pub outline: Path,
     /// Bounding box in line space: (left, top, right, bottom).
@@ -89,9 +89,12 @@ fn shape_line() -> Shaped {
     for run in paragraph.runs() {
         for glyph in run.glyphs.iter() {
             glyph_count += 1;
-            let Some(outline) =
-                outline_glyph(run.font.bytes(), face_index, glyph.id, run.font.variations())
-            else {
+            let Some(outline) = outline_glyph(
+                run.font.bytes(),
+                face_index,
+                glyph.id,
+                run.font.variations(),
+            ) else {
                 continue;
             };
             let place = Transform::scale(scale, scale)
@@ -128,7 +131,10 @@ fn shaped() -> &'static Shaped {
 
 /// The ink color of the line — violet-tinted white.
 fn ink(a: f32) -> Color {
-    alpha(mix(tint(VIOLET_SOFT, 0.5), Color::WHITE, 0.55), a.clamp(0.0, 1.0))
+    alpha(
+        mix(tint(VIOLET_SOFT, 0.5), Color::WHITE, 0.55),
+        a.clamp(0.0, 1.0),
+    )
 }
 
 // ── The scene ───────────────────────────────────────────────────────────────
@@ -141,13 +147,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The ground.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(9, 9, 14)),
-                (0.6, BG_DEEP),
-                (1.0, Color::rgb(5, 5, 9)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(9, 9, 14)),
+            (0.6, BG_DEEP),
+            (1.0, Color::rgb(5, 5, 9)),
+        ]),
     );
 
     // Stage gates.
@@ -316,7 +320,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                         let centre_l = l + cw * 0.5;
                         let centre_t = tp + ch * 0.5;
                         let fp = about.apply(Offset::new(centre_l, centre_t));
-                        g.circle(fp, 1.6 + 1.2 * (1.0 - rise), alpha(tint(VIOLET, 0.45), alpha_k * 0.5));
+                        g.circle(
+                            fp,
+                            1.6 + 1.2 * (1.0 - rise),
+                            alpha(tint(VIOLET, 0.45), alpha_k * 0.5),
+                        );
                     });
                 }
             }
@@ -412,7 +420,7 @@ fn release_state(t: f32) -> (usize, usize) {
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

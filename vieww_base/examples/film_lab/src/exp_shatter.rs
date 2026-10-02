@@ -36,15 +36,15 @@ use vieww_foundation::{
     Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle, Transform,
 };
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Painting, PaintWith};
+use vieww_widget::{Filtered, PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_out_cubic, mix, spring_out, tint, BG_DEEP, CANVAS, FAINT, INK, MUTED, Rng,
+    alpha, clamp01, ease_out_cubic, mix, spring_out, tint, Rng, BG_DEEP, CANVAS, FAINT, INK, MUTED,
     VIOLET, VIOLET_DEEP, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The card ────────────────────────────────────────────────────────────────
 
@@ -91,7 +91,10 @@ impl Field {
         let mut rng = Rng::new(0x5111);
 
         // The crack origin — near center, slightly low-left, jittered.
-        let crack = Offset::new(CARD_W * (0.42 + rng.sym() * 0.04), CARD_H * (0.55 + rng.sym() * 0.04));
+        let crack = Offset::new(
+            CARD_W * (0.42 + rng.sym() * 0.04),
+            CARD_H * (0.55 + rng.sym() * 0.04),
+        );
 
         // Seeds: 64, jittered grid so cells vary in size but stay coherent.
         let n = 64;
@@ -106,12 +109,8 @@ impl Field {
         // rectangle — each result stays convex, U-13's workaround).
         let mut shards = Vec::with_capacity(n);
         for (i, &s) in seeds.iter().enumerate() {
-            let mut poly: Vec<(f32, f32)> = vec![
-                (0.0, 0.0),
-                (rect.0, 0.0),
-                (rect.0, rect.1),
-                (0.0, rect.1),
-            ];
+            let mut poly: Vec<(f32, f32)> =
+                vec![(0.0, 0.0), (rect.0, 0.0), (rect.0, rect.1), (0.0, rect.1)];
             // Clip against a subsample of the other seeds: full 63-way is
             // O(n²) fine here, but the nearest 24 dominate a cell's shape.
             let mut others: Vec<&Offset> = seeds
@@ -258,14 +257,30 @@ fn source(book: &mut Sketchbook) {
 
     // A stat row.
     book.circle(Offset::new(52.0, 52.0), 12.0, alpha(VIOLET_SOFT, 0.8));
-    book.rrect(Rect::new(76.0, 44.0, 226.0, 60.0), 8.0, alpha(Color::WHITE, 0.10));
-    book.rrect(Rect::new(300.0, 44.0, 470.0, 60.0), 8.0, alpha(Color::WHITE, 0.06));
+    book.rrect(
+        Rect::new(76.0, 44.0, 226.0, 60.0),
+        8.0,
+        alpha(Color::WHITE, 0.10),
+    );
+    book.rrect(
+        Rect::new(300.0, 44.0, 470.0, 60.0),
+        8.0,
+        alpha(Color::WHITE, 0.06),
+    );
 
     // A sparkline.
     let mut spark = Path::new();
     let pts: [(f32, f32); 11] = [
-        (40.0, 292.0), (88.0, 268.0), (136.0, 286.0), (184.0, 232.0), (232.0, 250.0),
-        (280.0, 208.0), (328.0, 226.0), (376.0, 186.0), (424.0, 204.0), (472.0, 164.0),
+        (40.0, 292.0),
+        (88.0, 268.0),
+        (136.0, 286.0),
+        (184.0, 232.0),
+        (232.0, 250.0),
+        (280.0, 208.0),
+        (328.0, 226.0),
+        (376.0, 186.0),
+        (424.0, 204.0),
+        (472.0, 164.0),
         (520.0, 178.0),
     ];
     spark.move_to(Offset::new(pts[0].0, pts[0].1));
@@ -275,8 +290,16 @@ fn source(book: &mut Sketchbook) {
     book.stroke(spark, alpha(VIOLET_SOFT, 0.85), 3.0);
 
     // A progress bar.
-    book.rrect(Rect::new(40.0, 214.0, 320.0, 222.0), 4.0, alpha(Color::WHITE, 0.10));
-    book.rrect(Rect::new(40.0, 214.0, 232.0, 222.0), 4.0, alpha(VIOLET, 0.9));
+    book.rrect(
+        Rect::new(40.0, 214.0, 320.0, 222.0),
+        4.0,
+        alpha(Color::WHITE, 0.10),
+    );
+    book.rrect(
+        Rect::new(40.0, 214.0, 232.0, 222.0),
+        4.0,
+        alpha(VIOLET, 0.9),
+    );
 
     // Rising blocks — the chart.
     for (i, h) in [34.0, 58.0, 44.0, 78.0, 66.0, 96.0].iter().enumerate() {
@@ -317,7 +340,8 @@ fn speed_now(s: &Shard, t: f32) -> f32 {
     let e0 = ease_out_cubic((tau - 0.02).max(0.0));
     let e1 = ease_out_cubic((tau + 0.02).min(1.0));
     let vx = (s.vel.0 * (e1 - e0)) / 0.04;
-    let vy = (s.vel.1 * (e1 - e0) + 150.0 * ((tau + 0.02).powi(2) - (tau - 0.02).powi(2)) / 0.04) / 1.0;
+    let vy =
+        (s.vel.1 * (e1 - e0) + 150.0 * ((tau + 0.02).powi(2) - (tau - 0.02).powi(2)) / 0.04) / 1.0;
     ((vx * vx + vy * vy).sqrt() / 15.0).min(60.0)
 }
 
@@ -329,7 +353,7 @@ fn sigma_for(speed: f32) -> f32 {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let struck = t >= STRIKE;
 
     // The background + the intact card + the slow shards: one painter.
@@ -355,7 +379,11 @@ pub fn frame(t: f32) -> WidgetNode {
                 let x = rng.f01() * w;
                 let y = rng.f01() * h;
                 let r = 0.4 + rng.f01() * 0.8;
-                book.circle(Offset::new(x, y), r, alpha(Color::WHITE, 0.03 + 0.05 * rng.f01()));
+                book.circle(
+                    Offset::new(x, y),
+                    r,
+                    alpha(Color::WHITE, 0.03 + 0.05 * rng.f01()),
+                );
             }
 
             let field = Field::get();
@@ -365,8 +393,8 @@ pub fn frame(t: f32) -> WidgetNode {
                 let bob = (t * 7.0).sin() * 5.0;
                 let tension = clamp01((t - 0.14) / 0.08);
                 let wobble = (t * 46.0).sin() * 0.012 * tension;
-                let flight = Transform::translate(Offset::new(0.0, bob))
-                    .then(Transform::rotate_around(
+                let flight =
+                    Transform::translate(Offset::new(0.0, bob)).then(Transform::rotate_around(
                         Offset::new(CARD_X + CARD_W * 0.5, CARD_Y + CARD_H * 0.5),
                         wobble,
                     ));
@@ -385,10 +413,9 @@ pub fn frame(t: f32) -> WidgetNode {
 
                 book.transformed(flight, |g| {
                     g.layer(1.0, 0.0, None, |h| {
-                        h.transformed(
-                            Transform::translate(Offset::new(CARD_X, CARD_Y)),
-                            |k| source(k),
-                        );
+                        h.transformed(Transform::translate(Offset::new(CARD_X, CARD_Y)), |k| {
+                            source(k)
+                        });
                     });
                 });
 
@@ -446,10 +473,9 @@ pub fn frame(t: f32) -> WidgetNode {
                     let flight_t = Transform::rotate_around(center, rot);
                     book.transformed(flight_t, |g| {
                         g.layer(fade, 0.0, Some(s.cell.clone()), |h| {
-                            h.transformed(
-                                Transform::translate(Offset::new(CARD_X, CARD_Y)),
-                                |k| source(k),
-                            );
+                            h.transformed(Transform::translate(Offset::new(CARD_X, CARD_Y)), |k| {
+                                source(k)
+                            });
                         });
                     });
                     // The shard's rim — the fracture surface catching light.
@@ -484,10 +510,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.85).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.42)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.85)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.42)),
+                    ]),
             );
         }),
     );
@@ -518,10 +546,9 @@ pub fn frame(t: f32) -> WidgetNode {
                     // `Fn` (not `FnOnce`): the window is cloned per call.
                     book.transformed(flight_t, |g| {
                         g.layer(fade, 0.0, Some(cell.clone()), |h| {
-                            h.transformed(
-                                Transform::translate(Offset::new(CARD_X, CARD_Y)),
-                                |k| source(k),
-                            );
+                            h.transformed(Transform::translate(Offset::new(CARD_X, CARD_Y)), |k| {
+                                source(k)
+                            });
                         });
                     });
                 }),
@@ -547,11 +574,7 @@ pub fn frame(t: f32) -> WidgetNode {
 fn receipt_panel(t: f32) -> WidgetNode {
     let field = Field::get();
     let struck = t >= STRIKE;
-    let fast = field
-        .shards
-        .iter()
-        .filter(|s| s.speed_rank >= 0.9)
-        .count();
+    let fast = field.shards.iter().filter(|s| s.speed_rank >= 0.9).count();
     let mean_speed = if struck {
         let mut acc = 0.0;
         let mut n = 0;
@@ -562,7 +585,11 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 n += 1;
             }
         }
-        if n > 0 { acc / n as f32 } else { 0.0 }
+        if n > 0 {
+            acc / n as f32
+        } else {
+            0.0
+        }
     } else {
         0.0
     };
@@ -588,13 +615,22 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
     let lines = [
         "X-08 · SHATTER · THE WINDOW PATTERN (U-11)".to_string(),
-        format!("shards {} · cells ≥3-gon {} · crack ({:.0}, {:.0})",
+        format!(
+            "shards {} · cells ≥3-gon {} · crack ({:.0}, {:.0})",
             field.shards.len(),
             field.shards.len(),
-            field.crack.dx, field.crack.dy),
-        format!("fast {} through U-14 blur · mean {:.1} px/frame", fast, mean_speed),
+            field.crack.dx,
+            field.crack.dy
+        ),
+        format!(
+            "fast {} through U-14 blur · mean {:.1} px/frame",
+            fast, mean_speed
+        ),
         if struck {
-            format!("sigma {:.1}..{:.1} along atan2(v) · edge-clamped (U-15)", sigma_min, sigma_max)
+            format!(
+                "sigma {:.1}..{:.1} along atan2(v) · edge-clamped (U-15)",
+                sigma_min, sigma_max
+            )
         } else {
             format!("intact · strike at t={:.2}", STRIKE)
         },
@@ -624,11 +660,8 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 .width(P_W)
                 .height(15.0)
                 .child(
-                    Text::new(line.clone()).style(
-                        TextStyle::new(11.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.9)),
-                    ),
+                    Text::new(line.clone())
+                        .style(TextStyle::new(11.0).monospace().color(alpha(MUTED, 0.9))),
                 ),
         );
     }
@@ -652,7 +685,11 @@ fn receipt_panel(t: f32) -> WidgetNode {
             let n = field.shards.len().max(1);
             let bw = (P_W - 24.0) / n as f32;
             for (i, s) in field.shards.iter().enumerate() {
-                let v = if struck { speed_now(s, t).min(60.0) } else { 0.0 };
+                let v = if struck {
+                    speed_now(s, t).min(60.0)
+                } else {
+                    0.0
+                };
                 let bh = 2.0 + (v / 60.0) * 38.0;
                 let color = if s.speed_rank >= 0.9 {
                     alpha(VIOLET_SOFT, 0.9)
@@ -660,7 +697,12 @@ fn receipt_panel(t: f32) -> WidgetNode {
                     alpha(INK, 0.55)
                 };
                 book.rect(
-                    Rect::new(12.0 + i as f32 * bw, 46.0 - bh, 12.0 + i as f32 * bw + bw.max(1.2), 46.0),
+                    Rect::new(
+                        12.0 + i as f32 * bw,
+                        46.0 - bh,
+                        12.0 + i as f32 * bw + bw.max(1.2),
+                        46.0,
+                    ),
                     color,
                 );
             }

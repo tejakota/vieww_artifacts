@@ -182,10 +182,10 @@ pub fn read_wav(bytes: &[u8]) -> Result<PcmSamples, PcmError> {
 
 /// 16-bit signed PCM, little-endian, to `f32` in `-1..=1`.
 fn decode_16(data: &[u8]) -> Vec<f32> {
-    data.chunks_exact(2)
-        .map(|pair| {
-            i16::from_le_bytes([pair[0], pair[1]]) as f32 / i16::MAX as f32
-        })
+    data.as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| i16::from_le_bytes([pair[0], pair[1]]) as f32 / i16::MAX as f32)
         .collect()
 }
 
@@ -251,7 +251,10 @@ mod tests {
     use crate::{Envelope, Tone, Waveform};
 
     fn tone(rate: u32, frames: usize) -> Samples {
-        #[expect(clippy::cast_precision_loss, reason = "a test tone is exact enough in f32")]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a test tone is exact enough in f32"
+        )]
         let rate = rate as f32;
         let data: Vec<f32> = (0..frames)
             .map(|frame| (std::f32::consts::TAU * 1_000.0 * frame as f32 / rate).sin() * 0.25)
@@ -284,10 +287,7 @@ mod tests {
     fn stereo_round_trips() {
         // Left full-scale, right silent: a stereo identity the decode must
         // preserve channel by channel.
-        let original = Samples::stereo(
-            (0..50).flat_map(|_| [0.5_f32, 0.0]).collect(),
-            48_000,
-        );
+        let original = Samples::stereo((0..50).flat_map(|_| [0.5_f32, 0.0]).collect(), 48_000);
         let bytes = write_wav(&original).unwrap();
         let decoded = read_wav(&bytes).unwrap();
 
@@ -404,7 +404,10 @@ mod tests {
         let decoded = read_wav(&file).unwrap();
         assert_eq!(decoded.bits, 8);
         // 8-bit unsigned tops out one step below +1: 127/128.
-        assert_eq!(decoded.samples.data, vec![0.0, 127.0 / 128.0, -1.0, 1.0 / 128.0]);
+        assert_eq!(
+            decoded.samples.data,
+            vec![0.0, 127.0 / 128.0, -1.0, 1.0 / 128.0]
+        );
     }
 
     #[test]

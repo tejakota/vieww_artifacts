@@ -96,9 +96,17 @@ pub enum CycleMode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Modifier {
     /// Repeat the keyed range outside itself.
-    Cycles { before: Option<CycleMode>, after: Option<CycleMode> },
+    Cycles {
+        before: Option<CycleMode>,
+        after: Option<CycleMode>,
+    },
     /// Add smooth noise.
-    Noise { scale: f32, strength: f32, phase: f32, seed: u64 },
+    Noise {
+        scale: f32,
+        strength: f32,
+        phase: f32,
+        seed: u64,
+    },
     /// Quantise time to steps of `step` seconds (the "on twos" look).
     Stepped { step: f32, offset: f32 },
     /// Clamp the value.
@@ -125,7 +133,13 @@ impl FCurve {
     }
 
     /// Insert with explicit handle type and interpolation.
-    pub fn insert_key(&mut self, time: f32, value: f32, handles: Handles, interpolation: Interpolation) -> &mut Self {
+    pub fn insert_key(
+        &mut self,
+        time: f32,
+        value: f32,
+        handles: Handles,
+        interpolation: Interpolation,
+    ) -> &mut Self {
         let key = Key {
             time,
             value,
@@ -180,10 +194,16 @@ impl FCurve {
                 Handles::Vector => {
                     let (l, r) = (prev, next);
                     self.keys[i].left = l.map_or((k.time, k.value), |p| {
-                        (k.time + (p.time - k.time) / 3.0, k.value + (p.value - k.value) / 3.0)
+                        (
+                            k.time + (p.time - k.time) / 3.0,
+                            k.value + (p.value - k.value) / 3.0,
+                        )
                     });
                     self.keys[i].right = r.map_or((k.time, k.value), |q| {
-                        (k.time + (q.time - k.time) / 3.0, k.value + (q.value - k.value) / 3.0)
+                        (
+                            k.time + (q.time - k.time) / 3.0,
+                            k.value + (q.value - k.value) / 3.0,
+                        )
                     });
                 }
                 Handles::Auto | Handles::AutoClamped => {
@@ -217,8 +237,16 @@ impl FCurve {
         // Clamp handle times into their segments so x(u) stays monotone.
         for i in 0..n {
             let t = self.keys[i].time;
-            let lo = if i > 0 { self.keys[i - 1].time } else { f32::NEG_INFINITY };
-            let hi = if i + 1 < n { self.keys[i + 1].time } else { f32::INFINITY };
+            let lo = if i > 0 {
+                self.keys[i - 1].time
+            } else {
+                f32::NEG_INFINITY
+            };
+            let hi = if i + 1 < n {
+                self.keys[i + 1].time
+            } else {
+                f32::INFINITY
+            };
             let k = &mut self.keys[i];
             k.left.0 = k.left.0.clamp(lo, t);
             k.right.0 = k.right.0.clamp(t, hi);
@@ -233,9 +261,15 @@ impl FCurve {
             if reach > span && reach > 0.0 {
                 let f = span / reach;
                 let k = &mut self.keys[i];
-                k.right = (k.time + (k.right.0 - k.time) * f, k.value + (k.right.1 - k.value) * f);
+                k.right = (
+                    k.time + (k.right.0 - k.time) * f,
+                    k.value + (k.right.1 - k.value) * f,
+                );
                 let k = &mut self.keys[i + 1];
-                k.left = (k.time - (k.time - k.left.0) * f, k.value - (k.value - k.left.1) * f);
+                k.left = (
+                    k.time - (k.time - k.left.0) * f,
+                    k.value - (k.value - k.left.1) * f,
+                );
             }
         }
     }
@@ -270,7 +304,9 @@ impl FCurve {
         let (a, b) = (self.keys[i], self.keys[i + 1]);
         match a.interpolation {
             Interpolation::Constant => a.value,
-            Interpolation::Linear => a.value + (b.value - a.value) * (t - a.time) / (b.time - a.time),
+            Interpolation::Linear => {
+                a.value + (b.value - a.value) * (t - a.time) / (b.time - a.time)
+            }
             Interpolation::Bezier => {
                 let xs = [a.time, a.right.0, b.left.0, b.time];
                 let ys = [a.value, a.right.1, b.left.1, b.value];
@@ -352,7 +388,11 @@ fn bez_d(p: [f32; 4], u: f32) -> f32 {
 /// The Bézier parameter at which x reaches `t`.
 fn solve_u(xs: [f32; 4], t: f32) -> f32 {
     let span = xs[3] - xs[0];
-    let mut u = if span > 0.0 { ((t - xs[0]) / span).clamp(0.0, 1.0) } else { 0.0 };
+    let mut u = if span > 0.0 {
+        ((t - xs[0]) / span).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     for _ in 0..8 {
         let x = bez(xs, u) - t;
         if x.abs() < 1e-6 {
@@ -389,7 +429,10 @@ mod tests {
     fn keys_are_hit_exactly_and_sorted() {
         let mut c = FCurve::new();
         c.insert(2.0, 5.0).insert(0.0, 1.0).insert(1.0, 3.0);
-        assert_eq!(c.keys().iter().map(|k| k.time).collect::<Vec<_>>(), [0.0, 1.0, 2.0]);
+        assert_eq!(
+            c.keys().iter().map(|k| k.time).collect::<Vec<_>>(),
+            [0.0, 1.0, 2.0]
+        );
         for (t, v) in [(0.0, 1.0), (1.0, 3.0), (2.0, 5.0)] {
             assert!(close(c.evaluate(t), v, 1e-4));
         }
@@ -414,14 +457,18 @@ mod tests {
     fn auto_clamped_never_overshoots_but_auto_can() {
         let mut clamped = FCurve::new();
         clamped.insert(0.0, 0.0).insert(1.0, 10.0).insert(1.2, 0.0);
-        let max_c = (0..=120).map(|i| clamped.evaluate(i as f32 / 100.0)).fold(f32::MIN, f32::max);
+        let max_c = (0..=120)
+            .map(|i| clamped.evaluate(i as f32 / 100.0))
+            .fold(f32::MIN, f32::max);
         assert!(max_c <= 10.0 + 1e-4, "{max_c}");
         let mut auto = FCurve::new();
         auto.insert_key(0.0, 0.0, Handles::Auto, Interpolation::Bezier)
             .insert_key(1.0, 5.0, Handles::Auto, Interpolation::Bezier)
             .insert_key(1.1, 10.0, Handles::Auto, Interpolation::Bezier)
             .insert_key(3.0, 10.5, Handles::Auto, Interpolation::Bezier);
-        let max_a = (0..=300).map(|i| auto.evaluate(i as f32 / 100.0)).fold(f32::MIN, f32::max);
+        let max_a = (0..=300)
+            .map(|i| auto.evaluate(i as f32 / 100.0))
+            .fold(f32::MIN, f32::max);
         assert!(max_a > 10.5, "auto overshoots on a sharp rise: {max_a}");
     }
 
@@ -431,7 +478,9 @@ mod tests {
         c.insert(0.0, 0.0).insert(1.0, 1.0);
         c.set_handles(0, (0.0, 0.0), (0.5, 2.0));
         c.set_handles(1, (0.8, 1.5), (1.0, 1.0));
-        let peak = (0..=100).map(|i| c.evaluate(i as f32 / 100.0)).fold(f32::MIN, f32::max);
+        let peak = (0..=100)
+            .map(|i| c.evaluate(i as f32 / 100.0))
+            .fold(f32::MIN, f32::max);
         assert!(peak > 1.1, "{peak}");
     }
 
@@ -457,13 +506,22 @@ mod tests {
             c
         };
         let mut r = base();
-        r.modifier(Modifier::Cycles { before: None, after: Some(CycleMode::Repeat) });
+        r.modifier(Modifier::Cycles {
+            before: None,
+            after: Some(CycleMode::Repeat),
+        });
         assert!(close(r.evaluate(2.25), 0.25, 1e-4));
         let mut o = base();
-        o.modifier(Modifier::Cycles { before: None, after: Some(CycleMode::RepeatWithOffset) });
+        o.modifier(Modifier::Cycles {
+            before: None,
+            after: Some(CycleMode::RepeatWithOffset),
+        });
         assert!(close(o.evaluate(2.25), 2.25, 1e-4));
         let mut m = base();
-        m.modifier(Modifier::Cycles { before: Some(CycleMode::Mirror), after: Some(CycleMode::Mirror) });
+        m.modifier(Modifier::Cycles {
+            before: Some(CycleMode::Mirror),
+            after: Some(CycleMode::Mirror),
+        });
         assert!(close(m.evaluate(1.25), 0.75, 1e-4));
         assert!(close(m.evaluate(-0.25), 0.25, 1e-4));
     }
@@ -473,12 +531,20 @@ mod tests {
         let mut c = FCurve::new();
         c.insert_key(0.0, 0.0, Handles::Vector, Interpolation::Linear)
             .insert_key(1.0, 1.0, Handles::Vector, Interpolation::Linear);
-        c.modifier(Modifier::Stepped { step: 0.25, offset: 0.0 });
+        c.modifier(Modifier::Stepped {
+            step: 0.25,
+            offset: 0.0,
+        });
         assert!(close(c.evaluate(0.6), 0.5, 1e-4));
         c.modifier(Modifier::Limits { min: 0.0, max: 0.3 });
         assert!(close(c.evaluate(0.9), 0.3, 1e-4));
         let mut n = FCurve::new();
-        n.insert(0.0, 0.0).modifier(Modifier::Noise { scale: 0.5, strength: 2.0, phase: 0.3, seed: 7 });
+        n.insert(0.0, 0.0).modifier(Modifier::Noise {
+            scale: 0.5,
+            strength: 2.0,
+            phase: 0.3,
+            seed: 7,
+        });
         let vals: Vec<f32> = (0..50).map(|i| n.evaluate(i as f32 * 0.1)).collect();
         assert!(vals.iter().any(|v| v.abs() > 0.1) && vals.iter().all(|v| v.abs() <= 2.0));
     }

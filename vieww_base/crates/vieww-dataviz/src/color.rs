@@ -35,7 +35,9 @@ pub fn viridis(t: f32) -> Color {
     let c4 = [6.228_27, 14.179_934, 56.690_55];
     let c5 = [4.776_385, -13.745_146, -65.353_03];
     let c6 = [-5.435_456, 4.645_852_6, 26.312_435];
-    let ch = |k: usize| c0[k] + t * (c1[k] + t * (c2[k] + t * (c3[k] + t * (c4[k] + t * (c5[k] + t * c6[k])))));
+    let ch = |k: usize| {
+        c0[k] + t * (c1[k] + t * (c2[k] + t * (c3[k] + t * (c4[k] + t * (c5[k] + t * c6[k])))))
+    };
     rgb(ch(0), ch(1), ch(2))
 }
 
@@ -43,9 +45,14 @@ pub fn viridis(t: f32) -> Color {
 #[must_use]
 pub fn turbo(t: f32) -> Color {
     let t = t.clamp(0.0, 1.0);
-    let r = 0.135_721_38 + t * (4.615_392_6 + t * (-42.660_32 + t * (132.131_08 + t * (-152.942_4 + t * 59.286_38))));
-    let g = 0.091_402_61 + t * (2.194_188_4 + t * (4.842_966_6 + t * (-14.185_033 + t * (4.277_298_6 + t * 2.829_566))));
-    let b = 0.106_673_3 + t * (12.641_946 + t * (-60.582_05 + t * (110.362_77 + t * (-89.903_11 + t * 27.348_25))));
+    let r = 0.135_721_38
+        + t * (4.615_392_6
+            + t * (-42.660_32 + t * (132.131_08 + t * (-152.942_4 + t * 59.286_38))));
+    let g = 0.091_402_61
+        + t * (2.194_188_4
+            + t * (4.842_966_6 + t * (-14.185_033 + t * (4.277_298_6 + t * 2.829_566))));
+    let b = 0.106_673_3
+        + t * (12.641_946 + t * (-60.582_05 + t * (110.362_77 + t * (-89.903_11 + t * 27.348_25))));
     rgb(r, g, b)
 }
 
@@ -53,7 +60,11 @@ pub fn turbo(t: f32) -> Color {
 #[must_use]
 pub fn diverging(t: f32) -> Color {
     let t = t.clamp(0.0, 1.0);
-    let (a, m, b) = (Color::rgb(33, 102, 172), Color::rgb(247, 247, 247), Color::rgb(178, 24, 43));
+    let (a, m, b) = (
+        Color::rgb(33, 102, 172),
+        Color::rgb(247, 247, 247),
+        Color::rgb(178, 24, 43),
+    );
     if t < 0.5 {
         a.lerp_oklab(m, t * 2.0)
     } else {
@@ -87,13 +98,25 @@ mod tests {
     fn viridis_endpoints_match_the_table() {
         let a = viridis(0.0);
         let b = viridis(1.0);
-        assert!((i32::from(a.r) - 68).abs() <= 4 && (i32::from(a.g) - 1).abs() <= 3 && (i32::from(a.b) - 84).abs() <= 3, "{a:?}");
-        assert!((i32::from(b.r) - 253).abs() <= 3 && (i32::from(b.g) - 231).abs() <= 3 && (i32::from(b.b) - 37).abs() <= 4, "{b:?}");
+        assert!(
+            (i32::from(a.r) - 68).abs() <= 4
+                && (i32::from(a.g) - 1).abs() <= 3
+                && (i32::from(a.b) - 84).abs() <= 3,
+            "{a:?}"
+        );
+        assert!(
+            (i32::from(b.r) - 253).abs() <= 3
+                && (i32::from(b.g) - 231).abs() <= 3
+                && (i32::from(b.b) - 37).abs() <= 4,
+            "{b:?}"
+        );
     }
 
     #[test]
     fn viridis_lightness_increases() {
-        let l: Vec<f32> = (0..=10).map(|i| viridis(i as f32 / 10.0).lightness()).collect();
+        let l: Vec<f32> = (0..=10)
+            .map(|i| viridis(i as f32 / 10.0).lightness())
+            .collect();
         assert!(l.windows(2).all(|w| w[1] > w[0]), "{l:?}");
     }
 

@@ -83,7 +83,7 @@ pub mod midi;
 pub mod player;
 pub mod wav;
 
-pub use player::{AudioPlayer, NoAudio, PlaybackHandle, RecordingPlayer, RecordedCommand, Sound};
+pub use player::{AudioPlayer, NoAudio, PlaybackHandle, RecordedCommand, RecordingPlayer, Sound};
 pub use wav::{read_wav, write_wav, PcmError, PcmSamples};
 
 pub use vieww_foundation as foundation;
@@ -143,7 +143,7 @@ impl Samples {
     #[must_use]
     pub fn stereo(data: Vec<f32>, rate: u32) -> Self {
         assert!(
-            data.len() % 2 == 0,
+            data.len().is_multiple_of(2),
             "a stereo buffer is whole [L, R] frames; {} samples is {} and a half",
             data.len(),
             data.len() / 2
@@ -549,8 +549,7 @@ impl Mixer {
         let mut data = vec![0.0_f32; frames];
 
         for source in &self.sources {
-            let start =
-                (source.at.as_secs_f32() * as_f32(self.rate)).round() as usize;
+            let start = (source.at.as_secs_f32() * as_f32(self.rate)).round() as usize;
             match &source.kind {
                 SourceKind::Buffer(buffer) => {
                     for (index, sample) in buffer.data.iter().enumerate() {
@@ -619,7 +618,11 @@ mod tests {
         assert_eq!(Waveform::Square.at(0.25), 1.0);
         assert_eq!(Waveform::Square.at(0.75), -1.0);
         assert_eq!(Waveform::Saw.at(0.75), -0.5);
-        assert_eq!(Waveform::Triangle.at(0.5), 1.0, "the triangle peaks mid-cycle");
+        assert_eq!(
+            Waveform::Triangle.at(0.5),
+            1.0,
+            "the triangle peaks mid-cycle"
+        );
         assert_eq!(Waveform::Triangle.at(0.0), -1.0, "and starts at its trough");
     }
 
@@ -631,7 +634,10 @@ mod tests {
         assert_eq!(envelope.at(ms(5), ms(100)), 0.5);
         assert_eq!(envelope.at(ms(10), ms(100)), 1.0);
         assert_eq!(envelope.at(ms(80), ms(100)), 1.0, "the hold");
-        assert!((envelope.at(ms(120), ms(100)) - 0.5).abs() < 0.001, "the release, half way");
+        assert!(
+            (envelope.at(ms(120), ms(100)) - 0.5).abs() < 0.001,
+            "the release, half way"
+        );
         assert_eq!(envelope.at(ms(140), ms(100)), 0.0, "the release, done");
     }
 
@@ -643,7 +649,10 @@ mod tests {
 
         let just_before = envelope.at(ms(60), ms(20));
         let just_after = envelope.at(ms(61), ms(20));
-        assert!((just_after - just_before).abs() < 0.05, "no step: {just_before} then {just_after}");
+        assert!(
+            (just_after - just_before).abs() < 0.05,
+            "no step: {just_before} then {just_after}"
+        );
         // Both are on the release now, which began at the attack's end.
         assert!(just_before > 0.5 && just_before < 1.0);
     }
@@ -666,7 +675,11 @@ mod tests {
         assert_eq!(stereo.frames(), 10);
         assert_eq!(stereo.peak(), 0.5);
         assert_eq!(stereo.amplitude_at(ms(0)), 0.5);
-        assert_eq!(stereo.amplitude_at(Duration::from_secs(10)), 0.0, "past the end");
+        assert_eq!(
+            stereo.amplitude_at(Duration::from_secs(10)),
+            0.0,
+            "past the end"
+        );
     }
 
     #[test]
@@ -694,7 +707,10 @@ mod tests {
     fn overdubbing_refuses_mismatched_buffers() {
         let mut base = Samples::mono(vec![0.0; 10], 8_000);
         let fast = Samples::mono(vec![0.0; 10], 16_000);
-        assert_eq!(base.overdub(&fast, Duration::ZERO), Err(MixError::RateMismatch));
+        assert_eq!(
+            base.overdub(&fast, Duration::ZERO),
+            Err(MixError::RateMismatch)
+        );
 
         let stereo = Samples::stereo(vec![0.0; 10], 8_000);
         assert_eq!(
@@ -705,7 +721,10 @@ mod tests {
 
     #[test]
     fn mix_errors_say_what_to_do() {
-        assert_eq!(MixError::RateMismatch.to_string(), "sample rates differ; resample first");
+        assert_eq!(
+            MixError::RateMismatch.to_string(),
+            "sample rates differ; resample first"
+        );
         assert_eq!(
             MixError::ChannelMismatch.to_string(),
             "channel counts differ; downmix first"
@@ -716,13 +735,14 @@ mod tests {
     fn a_mixer_sums_two_tones() {
         // Two 440 Hz tones at gain 0.5: the sum is one tone at 1.0.
         let tone = Tone::held(440.0, Waveform::Sine, ms(100));
-        let mixed = Mixer::new(44_100)
-            .add(tone, 0.5)
-            .add(tone, 0.5)
-            .render();
+        let mixed = Mixer::new(44_100).add(tone, 0.5).add(tone, 0.5).render();
 
         // A pure sine's peak is the sum of the gains.
-        assert!((mixed.peak() - 1.0).abs() < 0.05, "summed to one tone, peak {}", mixed.peak());
+        assert!(
+            (mixed.peak() - 1.0).abs() < 0.05,
+            "summed to one tone, peak {}",
+            mixed.peak()
+        );
     }
 
     #[test]
@@ -793,9 +813,8 @@ mod tests {
     fn a_tone_knows_its_amplitude_at_any_instant() {
         // 4 Hz square: +1 through the first half of every cycle, so the wave
         // contributes a constant and the envelope is the number under test.
-        let tone = Tone::held(4.0, Waveform::Square, ms(100)).envelope(
-            Envelope::attack_release(ms(50), ms(50)),
-        );
+        let tone = Tone::held(4.0, Waveform::Square, ms(100))
+            .envelope(Envelope::attack_release(ms(50), ms(50)));
 
         // Rising: half way through the 50 ms attack, wave full.
         assert_eq!(tone.at(ms(25)), 0.5);

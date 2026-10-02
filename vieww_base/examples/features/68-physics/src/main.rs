@@ -203,7 +203,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(Scene { snapshot, _clock: clock }),
+                .child(Scene {
+                    snapshot,
+                    _clock: clock,
+                }),
         );
     })
 }

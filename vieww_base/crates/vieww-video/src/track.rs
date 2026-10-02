@@ -83,7 +83,10 @@ impl PointTracker {
     /// position.
     pub fn track(&mut self, frame: &Image) -> Offset {
         #[allow(clippy::cast_possible_truncation)]
-        let (px, py) = (self.position.dx.round() as i64, self.position.dy.round() as i64);
+        let (px, py) = (
+            self.position.dx.round() as i64,
+            self.position.dy.round() as i64,
+        );
         let s = self.search;
         let size = (2 * s + 1) as usize;
         let mut scores = vec![f32::MIN; size * size];
@@ -181,7 +184,12 @@ pub fn apply_transform(frame: &Image, t: Transform) -> Image {
             #[allow(clippy::cast_possible_truncation)]
             let (x0, y0) = (x0 as i64, y0 as i64);
             let mut acc = [0.0f32; 4];
-            for (dx, dy, wgt) in [(0, 0, (1.0 - tx) * (1.0 - ty)), (1, 0, tx * (1.0 - ty)), (0, 1, (1.0 - tx) * ty), (1, 1, tx * ty)] {
+            for (dx, dy, wgt) in [
+                (0, 0, (1.0 - tx) * (1.0 - ty)),
+                (1, 0, tx * (1.0 - ty)),
+                (0, 1, (1.0 - tx) * ty),
+                (1, 1, tx * ty),
+            ] {
                 let (sx, sy) = (x0 + dx, y0 + dy);
                 if sx < 0 || sy < 0 || sx >= wi || sy >= hi {
                     continue;
@@ -217,7 +225,9 @@ mod tests {
                 #[allow(clippy::cast_precision_loss)]
                 let (dx, dy) = (x as f32 - c.dx, y as f32 - c.dy);
                 let d2 = dx * dx + dy * dy;
-                let v = (255.0 * (-d2 / 18.0).exp() + 40.0 * ((dx * 0.9).sin() * (dy * 0.7).cos()).max(0.0) * (-d2 / 60.0).exp()).min(255.0);
+                let v = (255.0 * (-d2 / 18.0).exp()
+                    + 40.0 * ((dx * 0.9).sin() * (dy * 0.7).cos()).max(0.0) * (-d2 / 60.0).exp())
+                .min(255.0);
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let b = v as u8;
                 px.extend_from_slice(&[b, b, b, 255]);
@@ -228,7 +238,9 @@ mod tests {
 
     #[test]
     fn tracks_a_moving_feature_with_subpixel_accuracy() {
-        let path: Vec<Offset> = (0..10).map(|i| Offset::new(20.0 + i as f32 * 3.3, 25.0 + i as f32 * 1.7)).collect();
+        let path: Vec<Offset> = (0..10)
+            .map(|i| Offset::new(20.0 + i as f32 * 3.3, 25.0 + i as f32 * 1.7))
+            .collect();
         let mut t = PointTracker::new(&blob(path[0]), path[0], 6, 6);
         for p in &path[1..] {
             let got = t.track(&blob(*p));
@@ -251,7 +263,10 @@ mod tests {
         let t = stabilize(&[a.clone(), b.clone()]);
         let pa = t[1].apply(a[1]);
         let pb = t[1].apply(b[1]);
-        assert!((pa - a[0]).distance() < 1e-3 && (pb - b[0]).distance() < 1e-3, "{pa:?} {pb:?}");
+        assert!(
+            (pa - a[0]).distance() < 1e-3 && (pb - b[0]).distance() < 1e-3,
+            "{pa:?} {pb:?}"
+        );
     }
 
     #[test]

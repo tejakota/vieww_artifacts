@@ -160,9 +160,11 @@ impl Fluid {
                 }
                 let q = r / h;
                 let u = d.scale(1.0 / r);
-                let inward = (self.velocities[i].dx - self.velocities[j].dx) * u.dx + (self.velocities[i].dy - self.velocities[j].dy) * u.dy;
+                let inward = (self.velocities[i].dx - self.velocities[j].dx) * u.dx
+                    + (self.velocities[i].dy - self.velocities[j].dy) * u.dy;
                 if inward > 0.0 {
-                    let imp = dt * (1.0 - q) * (p.viscosity.0 * inward + p.viscosity.1 * inward * inward);
+                    let imp =
+                        dt * (1.0 - q) * (p.viscosity.0 * inward + p.viscosity.1 * inward * inward);
                     let iv = u.scale(imp / 2.0);
                     self.velocities[i] = self.velocities[i] - iv;
                     self.velocities[j] = self.velocities[j] + iv;
@@ -204,7 +206,8 @@ impl Fluid {
                 if q > 0.0 {
                     let pj = p.stiffness * (density[j] - p.rest_density);
                     let nj = p.near_stiffness * near[j];
-                    let mag = dt2 * ((pressure + pj) * 0.5 * q + (near_pressure + nj) * 0.5 * q * q);
+                    let mag =
+                        dt2 * ((pressure + pj) * 0.5 * q + (near_pressure + nj) * 0.5 * q * q);
                     let disp = d.scale(mag / r * 0.5);
                     self.positions[j] = self.positions[j] + disp;
                     dx = dx - disp;
@@ -243,12 +246,20 @@ mod tests {
             f.step(1.0 / 60.0);
         }
         let b = f.params.bounds;
-        assert!(f.positions.iter().all(|p| b.contains(*p) || (p.dx - b.right).abs() < 1e-3 || (p.dy - b.bottom).abs() < 1e-3));
+        assert!(f.positions.iter().all(|p| b.contains(*p)
+            || (p.dx - b.right).abs() < 1e-3
+            || (p.dy - b.bottom).abs() < 1e-3));
         let right = f.positions.iter().map(|p| p.dx).fold(0.0f32, f32::max);
-        assert!(right > start_right + 100.0, "the water ran across the floor: {start_right} → {right}");
+        assert!(
+            right > start_right + 100.0,
+            "the water ran across the floor: {start_right} → {right}"
+        );
         let top = f.positions.iter().map(|p| p.dy).fold(f32::MAX, f32::min);
         assert!(top > 150.0, "and the column fell: top {top}");
-        assert!(f.velocities.iter().all(|v| v.dx.is_finite() && v.dy.is_finite()));
+        assert!(f
+            .velocities
+            .iter()
+            .all(|v| v.dx.is_finite() && v.dy.is_finite()));
     }
 
     #[test]
@@ -268,7 +279,11 @@ mod tests {
             })
             .collect();
         let crowded = nearest.iter().filter(|&&d| d < 2.0).count();
-        assert!(crowded * 50 < f.len(), "near pressure keeps particles apart: {crowded} of {} crowded", f.len());
+        assert!(
+            crowded * 50 < f.len(),
+            "near pressure keeps particles apart: {crowded} of {} crowded",
+            f.len()
+        );
     }
 
     #[test]

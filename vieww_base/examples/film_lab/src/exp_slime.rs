@@ -53,12 +53,12 @@
 
 use vieww_foundation::{BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 13.0;
+pub(crate) const SECONDS: f32 = 13.0;
 
 // ── The lattice ─────────────────────────────────────────────────────────────
 
@@ -330,7 +330,7 @@ const DYO: f32 = 168.0;
 const DW: f32 = 1000.0;
 const DH: f32 = 448.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let net = grow_to(t as f64);
     let edges = net.edges;
     let steps = net.steps;
@@ -376,10 +376,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(5, 5, 9)),
-                    (1.0, Color::rgb(11, 10, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(5, 5, 9)), (1.0, Color::rgb(11, 10, 16))]),
             );
             book.rrect(
                 Rect::new(DXO - 16.0, DYO - 16.0, DXO + DW + 16.0, DYO + DH + 16.0),
@@ -465,8 +464,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let lines = vec![
-        "SLIME · THE TRANSPORT AXIS · PHYSARUM BUILDS THE NETWORK (TERO ET AL., 2010)".to_string(),
+    let lines = ["SLIME · THE TRANSPORT AXIS · PHYSARUM BUILDS THE NETWORK (TERO ET AL., 2010)".to_string(),
         format!(
             "dD/dt = f(|Q|) − D, f(Q) = Q^{GAMMA}/(1+Q^{GAMMA}) · Q = D·Δp/L (Poiseuille) · p from Kirchhoff's law at all {NODES} nodes · {total_tubes} tubes, 8-neighbour lattice"
         ),
@@ -488,8 +486,7 @@ pub fn frame(t: f32) -> WidgetNode {
         format!(
             "FAULT TOLERANCE by cutting: each of the {n_live} living tubes severed in turn, the towns re-flooded · {:.1}% of cuts change nothing. A minimum spanning tree survives none of them.",
             tolerance * 100.0
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -504,7 +501,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

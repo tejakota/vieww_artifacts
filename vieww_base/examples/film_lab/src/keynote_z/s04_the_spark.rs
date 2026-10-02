@@ -13,18 +13,20 @@
 //! frame to the end. The spark settles above the wordmark — its post
 //! until S05 dives into it.
 
-use vieww_foundation::{Color, Offset, Size, Sketchbook, TextAlign, TextStyle, FontWeight};
+use vieww_foundation::{FontWeight, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{ease_out_cubic};
-use super::{CANVAS, CYAN, CYAN_SOFT, Ctx, H, INK, MINT, MUTED, VIOLET, VIOLET_SOFT, W, alpha, aurora, bokeh, caption, chip_row, clamp01, draw_mark, glow, grain, ground, light_rays, mono, mono_w, spark, spring_out, stars, stars_parallax, tint, vignette, xywh};
-
+use super::{
+    alpha, caption, clamp01, mono_w, spring_out, tint, xywh, Ctx, CYAN, CYAN_SOFT, H, INK, MINT,
+    MUTED, VIOLET, VIOLET_SOFT, W,
+};
+use crate::film_lib::ease_out_cubic;
 
 /// The wordmark's letters — positions derived from the mono advance.
 const WORD: &str = "vieww";
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -77,10 +79,28 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             let _ = s;
             // The rays — the room, lit by one point.
             if ray_a > 0.02 {
-                super::light_rays(book, W * 0.5, spark_y, spark_r, 1000.0, sec * 0.10, sec, ray_a * 0.8, VIOLET_SOFT);
+                super::light_rays(
+                    book,
+                    W * 0.5,
+                    spark_y,
+                    spark_r,
+                    1000.0,
+                    sec * 0.10,
+                    sec,
+                    ray_a * 0.8,
+                    VIOLET_SOFT,
+                );
             }
             // The spark itself — the film's protagonist, in full costume.
-            super::spark(book, W * 0.5, spark_y, spark_r, sec, point.max(0.2), VIOLET_SOFT);
+            super::spark(
+                book,
+                W * 0.5,
+                spark_y,
+                spark_r,
+                sec,
+                point.max(0.2),
+                VIOLET_SOFT,
+            );
             // Its ground-glow — the floor catching the light.
             super::glow(book, W * 0.5, H - 140.0, 600.0, VIOLET, 0.10 * bloom);
         }),
@@ -131,17 +151,19 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y)
                 .width(mono_w(size, 1) + 8.0)
                 .height(160.0)
-                .child(Opacity::new(a).child(
-                    Text::new(ch.to_string())
-                        .style(
-                            TextStyle::new(size)
-                                .monospace()
-                                .weight(FontWeight::Medium)
-                                .letter_spacing(0.0)
-                                .color(alpha(INK, 0.97)),
-                        )
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(ch.to_string())
+                            .style(
+                                TextStyle::new(size)
+                                    .monospace()
+                                    .weight(FontWeight::Medium)
+                                    .letter_spacing(0.0)
+                                    .color(alpha(INK, 0.97)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         );
     }
 
@@ -158,7 +180,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(Painting::sized(
                     Size::new(w.max(2.0), 6.0),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.rrect(xywh(0.0, 0.0, w.max(2.0), 3.0), 1.5, alpha(tint(VIOLET_SOFT, 0.2), 0.95));
+                        book.rrect(
+                            xywh(0.0, 0.0, w.max(2.0), 3.0),
+                            1.5,
+                            alpha(tint(VIOLET_SOFT, 0.2), 0.95),
+                        );
                     }),
                 )),
         );
@@ -174,11 +200,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(750.0 + rise)
                 .width(W)
                 .height(36.0)
-                .child(Opacity::new(sub_a).child(
-                    Text::new("the runtime that renders what you imagine")
-                        .style(TextStyle::new(24.0).monospace().letter_spacing(3.2).color(alpha(MUTED, 0.95)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(sub_a).child(
+                        Text::new("the runtime that renders what you imagine")
+                            .style(
+                                TextStyle::new(24.0)
+                                    .monospace()
+                                    .letter_spacing(3.2)
+                                    .color(alpha(MUTED, 0.95)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
 
@@ -193,7 +226,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             }),
         );
         stack = stack.push(
-            Positioned::new().left(W * 0.5 - 150.0).top(spark_y - 150.0).width(300.0).height(300.0).child(mark),
+            Positioned::new()
+                .left(W * 0.5 - 150.0)
+                .top(spark_y - 150.0)
+                .width(300.0)
+                .height(300.0)
+                .child(mark),
         );
     }
 
@@ -211,11 +249,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     ));
 
     // The captions — the reveal's beats.
-    stack = stack.push(caption(
-        "this is vieww",
-        1002.0,
-        clamp01((t - 0.34) / 0.12),
-    ));
+    stack = stack.push(caption("this is vieww", 1002.0, clamp01((t - 0.34) / 0.12)));
     stack = stack.push(caption(
         "the spark stays — scenes cut, the light doesn't",
         966.0,
@@ -233,10 +267,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 // beneath, glowing up through the floor.
                 book.rect(
                     xywh(0.0, s.height - 180.0, s.width, 180.0),
-                    vieww_foundation::Gradient::vertical().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.0)),
-                        (1.0, alpha(VIOLET, dive_a)),
-                    ]),
+                    vieww_foundation::Gradient::vertical()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.0)), (1.0, alpha(VIOLET, dive_a))]),
                 );
             }),
         )));

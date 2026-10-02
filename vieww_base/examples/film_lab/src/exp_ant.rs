@@ -18,15 +18,14 @@
 //! exploration timeline collapses to zero in the corner: the signature
 //! of order nobody designed.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The machine ─────────────────────────────────────────────────────────────
 
@@ -142,7 +141,7 @@ const X0: f32 = 128.0;
 const Y0: f32 = 140.0;
 const CELL: f32 = 1.16;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let k = (t * STEPS as f32).round() as usize;
     let (cells, last_visit, (ax, ay, ad), fresh) = replay(k);
     let (last_fresh, period, drift, fresh_series, coverage) = biography();
@@ -156,14 +155,17 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — graph paper in the dark.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 16))]),
             );
             book.rrect(
-                Rect::new(X0 - 20.0, Y0 - 20.0, X0 + N as f32 * CELL + 20.0,
-                          Y0 + N as f32 * CELL + 20.0),
+                Rect::new(
+                    X0 - 20.0,
+                    Y0 - 20.0,
+                    X0 + N as f32 * CELL + 20.0,
+                    Y0 + N as f32 * CELL + 20.0,
+                ),
                 12.0,
                 alpha(Color::rgb(12, 12, 18), 0.96),
             );
@@ -200,7 +202,10 @@ pub fn frame(t: f32) -> WidgetNode {
             }
 
             // ── The ant: a hot dot with its heading tick ──
-            let (axf, ayf) = (X0 + ax as f32 * CELL + CELL / 2.0, Y0 + ay as f32 * CELL + CELL / 2.0);
+            let (axf, ayf) = (
+                X0 + ax as f32 * CELL + CELL / 2.0,
+                Y0 + ay as f32 * CELL + CELL / 2.0,
+            );
             book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
                 g.ring(Offset::new(axf, ayf), 9.0, 7.0, alpha(AMBER, 0.30));
             });
@@ -258,7 +263,10 @@ pub fn frame(t: f32) -> WidgetNode {
             if period > 0 {
                 book.ring(Offset::new(rx, ry), 34.0, 1.2, alpha(MUTED, 0.6));
                 let ang = (drift.1 as f32).atan2(drift.0 as f32);
-                let len = ((drift.0 as f32).hypot(drift.1 as f32) / (period as f32 / 104.0).max(1.0) * 26.0).min(40.0);
+                let len = ((drift.0 as f32).hypot(drift.1 as f32)
+                    / (period as f32 / 104.0).max(1.0)
+                    * 26.0)
+                    .min(40.0);
                 book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
                     g.line(
                         Offset::new(rx, ry),
@@ -322,7 +330,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

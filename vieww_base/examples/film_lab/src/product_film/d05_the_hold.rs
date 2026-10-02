@@ -10,9 +10,7 @@
 use vieww_foundation::{Color, Gradient, Rect, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
-use super::{
-    ACCENT, Ctx, INK, MUTED, W, alpha, brand_mark, clamp01, glow, tint, xywh,
-};
+use super::{alpha, brand_mark, clamp01, glow, tint, xywh, Ctx, ACCENT, INK, MUTED, W};
 use crate::film_lib::ease_out_cubic;
 
 /// The fade — everything leaves except the caret.
@@ -20,7 +18,7 @@ fn fade(t: f32) -> f32 {
     1.0 - ease_out_cubic(clamp01((t - 0.55) / 0.35))
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let f = fade(t);
@@ -54,9 +52,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(360.0)
                 .width(side)
                 .height(side)
-                .child(
-                    super::Opacity::new(f).child(brand_mark(side, 1.0, 1.0)),
-                ),
+                .child(super::Opacity::new(f).child(brand_mark(side, 1.0, 1.0))),
         );
     }
 
@@ -120,8 +116,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let on = (sec * 2.2).fract() < 0.55;
                 glow(book, cx, cy, 100.0, ACCENT, 0.14);
                 if on {
-                    book.rrect(xywh(cx - 2.5, cy - 22.0, 5.0, 44.0), 2.0, alpha(tint(ACCENT, 0.4), 1.0));
-                    book.rrect(xywh(cx - 1.5, cy - 18.0, 3.0, 36.0), 1.5, alpha(Color::WHITE, 0.85));
+                    book.rrect(
+                        xywh(cx - 2.5, cy - 22.0, 5.0, 44.0),
+                        2.0,
+                        alpha(tint(ACCENT, 0.4), 1.0),
+                    );
+                    book.rrect(
+                        xywh(cx - 1.5, cy - 18.0, 3.0, 36.0),
+                        1.5,
+                        alpha(Color::WHITE, 0.85),
+                    );
                 }
             }),
         )));

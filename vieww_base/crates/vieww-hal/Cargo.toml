@@ -39,7 +39,7 @@ ash = { version = "0.38", optional = true }
 # the Vulkan backend at build/first-use time. MSL and DXIL targets are wired
 # the same way behind their own platform's feature — see `src/metal.rs` and
 # `src/d3d12.rs`.
-naga = { version = "29", optional = true, features = ["wgsl-in", "spv-out"] }
+naga = { version = "30", optional = true, features = ["wgsl-in", "spv-out"] }
 
 # The swapchain half of `vulkan`: `VK_KHR_surface` creation from a window
 # handle. `ash-window` does not link against X11/Wayland/Win32 itself — it

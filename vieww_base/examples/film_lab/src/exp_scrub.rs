@@ -23,19 +23,17 @@
 //! the receipt strip are counted by this code as it composes the frame —
 //! nothing typed.
 
-use vieww_foundation::{
-    Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,
-};
+use vieww_foundation::{Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_out_cubic, mix, spring_out, tint, xywh, BG_DEEP, CANVAS, CANVAS_W, FAINT,
-    INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT,
+    alpha, clamp01, ease_out_cubic, mix, spring_out, tint, xywh, Rng, BG_DEEP, CANVAS, CYAN,
+    CYAN_SOFT, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 14.0;
+pub(crate) const SECONDS: f32 = 14.0;
 
 /// Left margin — the typographic grid.
 const X: f32 = 120.0;
@@ -55,7 +53,9 @@ const GESTURES: [(f32, f32, f32, f32, u32); 3] = [
 
 /// Which gesture is active at `t` (its index), if any.
 fn active_gesture(t: f32) -> Option<usize> {
-    GESTURES.iter().position(|&(a, b, _, _, _)| t >= a && t <= b)
+    GESTURES
+        .iter()
+        .position(|&(a, b, _, _, _)| t >= a && t <= b)
 }
 
 /// Writes emitted by gesture `g` by time `t` (its own rail position).
@@ -84,7 +84,7 @@ fn thumb_value(g: usize, t: f32) -> f32 {
 /// The preview's committed value at `t` — changes ONLY at rebuild moments.
 fn committed_value(t: f32) -> f32 {
     let mut v = 0.14;
-    for &(a, b, from, to, _) in GESTURES.iter() {
+    for &(_a, b, from, to, _) in GESTURES.iter() {
         let _ = from;
         if t > b {
             v = to;
@@ -163,10 +163,9 @@ fn preview_card(t: f32) -> WidgetNode {
                     7.0,
                     150.0_f32.to_radians(),
                     sweep.to_radians(),
-                    Gradient::horizontal().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.95)),
-                        (1.0, alpha(VIOLET_SOFT, 0.9)),
-                    ]),
+                    Gradient::horizontal()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.95)), (1.0, alpha(VIOLET_SOFT, 0.9))]),
                 );
             }
             // The needle tip — a dot at the arc's head.
@@ -185,8 +184,9 @@ fn preview_card(t: f32) -> WidgetNode {
     // The flash layer — the card's border lights on the single rebuild.
     let flash_border = if flash > 0.01 {
         let f = flash;
-        Some(
-            Painting::sized(Size::new(C_W, C_H), PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+        Some(Painting::sized(
+            Size::new(C_W, C_H),
+            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
                 book.stroke_rrect(
                     Rect::new(0.5, 0.5, C_W - 1.0, C_H - 1.0),
                     12.0,
@@ -197,13 +197,12 @@ fn preview_card(t: f32) -> WidgetNode {
                 book.rrect(
                     Rect::new(-8.0, -8.0, C_W + 16.0, C_H + 16.0),
                     18.0,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.16 * f)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.16 * f)), (1.0, alpha(VIOLET, 0.0))]),
                 );
-            })),
-        )
+            }),
+        ))
     } else {
         None
     };
@@ -265,27 +264,25 @@ fn preview_card(t: f32) -> WidgetNode {
 
     // The card body — surface + border, under everything.
     let body = Stack::new()
-        .push(Positioned::fill().child(
-            Painting::sized(
-                Size::new(C_W, C_H),
-                PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                    book.rrect(
-                        Rect::new(0.0, 0.0, C_W, C_H),
-                        12.0,
-                        Gradient::vertical().with_dither().with_stops(&[
-                            (0.0, alpha(Color::rgb(20, 20, 26), 0.92)),
-                            (1.0, alpha(Color::rgb(14, 14, 19), 0.94)),
-                        ]),
-                    );
-                    book.stroke_rrect(
-                        Rect::new(0.5, 0.5, C_W - 1.0, C_H - 1.0),
-                        12.0,
-                        alpha(Color::WHITE, 0.10),
-                        1.0,
-                    );
-                }),
-            ),
-        ))
+        .push(Positioned::fill().child(Painting::sized(
+            Size::new(C_W, C_H),
+            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                book.rrect(
+                    Rect::new(0.0, 0.0, C_W, C_H),
+                    12.0,
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, alpha(Color::rgb(20, 20, 26), 0.92)),
+                        (1.0, alpha(Color::rgb(14, 14, 19), 0.94)),
+                    ]),
+                );
+                book.stroke_rrect(
+                    Rect::new(0.5, 0.5, C_W - 1.0, C_H - 1.0),
+                    12.0,
+                    alpha(Color::WHITE, 0.10),
+                    1.0,
+                );
+            }),
+        )))
         .push(card);
 
     Stack::new()
@@ -320,18 +317,14 @@ fn build_badge(builds: u32, flash: f32) -> WidgetNode {
     let bump = spring_out(clamp01(flash * 2.0), 14.0, 0.55);
     let scale = 1.0 + 0.10 * bump;
 
-            let badge = Painting::sized(
+    let badge = Painting::sized(
         Size::new(120.0, 58.0),
         PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
             let w = 118.0 * scale;
             let h = 56.0 * scale;
             let x = (120.0 - w) / 2.0;
             let y = (58.0 - h) / 2.0;
-            book.rrect(
-                xywh(x, y, w, h),
-                9.0,
-                alpha(Color::rgb(26, 24, 36), 0.95),
-            );
+            book.rrect(xywh(x, y, w, h), 9.0, alpha(Color::rgb(26, 24, 36), 0.95));
             book.stroke_rrect(
                 xywh(x, y, w, h),
                 9.0,
@@ -365,11 +358,8 @@ fn build_badge(builds: u32, flash: f32) -> WidgetNode {
                 .width(110.0)
                 .height(14.0)
                 .child(
-                    Text::new("build_count()").style(
-                        TextStyle::new(10.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.9)),
-                    ),
+                    Text::new("build_count()")
+                        .style(TextStyle::new(10.0).monospace().color(alpha(MUTED, 0.9))),
                 ),
         )
         .into()
@@ -405,10 +395,9 @@ fn scrub_track(t: f32) -> WidgetNode {
             book.rrect(
                 xywh(0.0, y - 3.0, tx.max(2.0), 6.0),
                 3.0,
-                Gradient::horizontal().with_dither().with_stops(&[
-                    (0.0, alpha(VIOLET, 0.55)),
-                    (1.0, alpha(VIOLET_SOFT, 0.75)),
-                ]),
+                Gradient::horizontal()
+                    .with_dither()
+                    .with_stops(&[(0.0, alpha(VIOLET, 0.55)), (1.0, alpha(VIOLET_SOFT, 0.75))]),
             );
 
             // The write rail — below the track: ticks spill as the gesture
@@ -424,9 +413,9 @@ fn scrub_track(t: f32) -> WidgetNode {
             // The coalescing bracket over the active gesture's writes.
             if let Some(g) = gesture {
                 let (a, b, _, _, total) = GESTURES[g];
-                let written = writes_by(g, t);
+                let _written = writes_by(g, t);
                 // Bracket spans [a, t] in gesture-timeline space.
-                let bx0 = x_of(thumb_start_hint(g)) ;
+                let bx0 = x_of(thumb_start_hint(g));
                 let _ = bx0;
                 // Simpler, honest: bracket spans the write ticks drawn.
                 let bw = ((T_W - 40.0) * 0.9) * clamp01((t - a) / (b - a));
@@ -459,7 +448,13 @@ fn scrub_track(t: f32) -> WidgetNode {
             let mut drawn = 0;
             for g in 0..GESTURES.len() {
                 let (a, b, from, to, total) = GESTURES[g];
-                let n = if t > b { total } else if t >= a { writes_by(g, t) } else { 0 };
+                let n = if t > b {
+                    total
+                } else if t >= a {
+                    writes_by(g, t)
+                } else {
+                    0
+                };
                 for i in 0..n {
                     let frac = (i + 1) as f32 / total as f32;
                     let wv = from + (to - from) * ease_out_cubic(frac);
@@ -489,12 +484,7 @@ fn scrub_track(t: f32) -> WidgetNode {
                         alpha(VIOLET_SOFT, 0.95),
                         3.0,
                     );
-                    book.ring(
-                        Offset::new(nx, wy),
-                        10.0,
-                        1.0,
-                        alpha(VIOLET, 0.35),
-                    );
+                    book.ring(Offset::new(nx, wy), 10.0, 1.0, alpha(VIOLET, 0.35));
                     let _ = gi;
                 }
             }
@@ -566,11 +556,7 @@ fn scrub_track(t: f32) -> WidgetNode {
                             "—".to_string()
                         }
                     ))
-                    .style(
-                        TextStyle::new(13.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.95)),
-                    ),
+                    .style(TextStyle::new(13.0).monospace().color(alpha(MUTED, 0.95))),
                 ),
         )
         .into()
@@ -582,7 +568,7 @@ fn thumb_start_hint(_g: usize) -> f32 {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -613,10 +599,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.68, h * 0.30),
                     w * 0.26,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(CYAN, 0.06)),
-                        (1.0, alpha(CYAN, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(CYAN, 0.06)), (1.0, alpha(CYAN, 0.0))]),
                 );
             });
             // A violet answering glow, low.
@@ -624,10 +609,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.25, h * 0.92),
                     w * 0.28,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.08)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.08)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
 
@@ -637,10 +621,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.80).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.80)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );

@@ -16,16 +16,16 @@
 //! the width of the landed pile against σ = √(np(1−p)) = √6 — every number
 //! counted from the arrays that drew the frame.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
-    StrokeStyle, Dash};
+use vieww_foundation::{
+    Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, tint, AMBER, CYAN,
-    INK, MUTED};
+use crate::film_lib::{alpha, mix, tint, AMBER, CYAN, INK, MUTED};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The machine ─────────────────────────────────────────────────────────────
 
@@ -52,12 +52,13 @@ struct Ball {
     depart: f32,
 }
 
-
 fn balls() -> Vec<Ball> {
     let mut rng = crate::film_lib::Rng::new(0xBEA4);
     (0..BALLS)
         .map(|i| {
-            let dirs = (0..ROWS).map(|_| if rng.f01() < 0.5 { 0 } else { 1 }).collect();
+            let dirs = (0..ROWS)
+                .map(|_| if rng.f01() < 0.5 { 0 } else { 1 })
+                .collect();
             Ball {
                 dirs,
                 depart: i as f32 / BALLS as f32 * RELEASE_SPAN,
@@ -115,11 +116,11 @@ const ROW_H: f32 = 15.5;
 /// Bin count (0..=24 rights → 25 bins).
 const BINS: usize = ROWS + 1;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let all = balls();
 
     // The census: landed balls per bin at this t (measured, not assumed).
-    let mut counts = vec![0usize; BINS];
+    let mut counts = [0usize; BINS];
     let mut in_flight = 0usize;
     for b in &all {
         let (done, _prog, landed) = ball_state(b, t);
@@ -151,10 +152,7 @@ pub fn frame(t: f32) -> WidgetNode {
             .map(|(k, &c)| (k as f64 - mean).powi(2) * c as f64)
             .sum::<f64>()
             / n;
-        (
-            var.sqrt(),
-            (ROWS as f64 * 0.25f64).sqrt(),
-        )
+        (var.sqrt(), (ROWS as f64 * 0.25f64).sqrt())
     };
     // The bins' worst disagreement with theory, in balls.
     let max_dev = counts
@@ -173,10 +171,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — a Victorian instrument parlour, in lab colours.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 7, 10)),
-                    (1.0, Color::rgb(12, 12, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(7, 7, 10)), (1.0, Color::rgb(12, 12, 16))]),
             );
 
             // The frame: a glass case, wood-dark rails.
@@ -227,7 +224,11 @@ pub fn frame(t: f32) -> WidgetNode {
             for r in 0..ROWS {
                 for i in 0..=r {
                     let x = cx + (i as f32 - r as f32 / 2.0) * bin_w;
-                    book.circle(Offset::new(x, peg_y(r)), 2.1, alpha(tint(AMBER, 0.28), 0.75));
+                    book.circle(
+                        Offset::new(x, peg_y(r)),
+                        2.1,
+                        alpha(tint(AMBER, 0.28), 0.75),
+                    );
                 }
             }
 
@@ -248,8 +249,8 @@ pub fn frame(t: f32) -> WidgetNode {
                     // At peg #rights of row r, lurching through the
                     // current deflection — the path IS the position.
                     let dir = b.dirs[r] as f32 * 2.0 - 1.0;
-                    let x = cx + (rights as f32 - r as f32 / 2.0) * bin_w
-                        + dir * prog * bin_w * 0.5;
+                    let x =
+                        cx + (rights as f32 - r as f32 / 2.0) * bin_w + dir * prog * bin_w * 0.5;
                     let y = peg_y(r) + prog * ROW_H;
                     let a = 0.30 + 0.5 * (1.0 - prog);
                     g.rect(
@@ -259,7 +260,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 }
 
                 // Landed: sand columns, normalised to the tallest bin.
-                let mut stack = vec![0usize; BINS];
+                let mut stack = [0usize; BINS];
                 for b in all.iter() {
                     if !ball_state(b, t).2 {
                         continue;
@@ -270,8 +271,7 @@ pub fn frame(t: f32) -> WidgetNode {
                     // 14 sub-columns of jitter width per bin, set by
                     // landing order — deterministic sand.
                     let (sub, lev) = (layer % 14, layer / 14);
-                    let x = wx + (k as f32 + 0.12) * bin_w
-                        + sub as f32 * bin_w * 0.76 / 13.0;
+                    let x = wx + (k as f32 + 0.12) * bin_w + sub as f32 * bin_w * 0.76 / 13.0;
                     let y = floor_y - (lev as f32 + 1.0) * level_h;
                     let heat = (lev as f32 * level_h / 128.0).min(1.0);
                     g.rect(
@@ -344,11 +344,7 @@ pub fn frame(t: f32) -> WidgetNode {
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     stack = stack.push(receipt_panel(
-        landed_n,
-        in_flight,
-        m_sigma,
-        t_sigma,
-        max_dev,
+        landed_n, in_flight, m_sigma, t_sigma, max_dev,
     ));
     stack.into()
 }
@@ -394,7 +390,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

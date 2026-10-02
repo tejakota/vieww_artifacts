@@ -35,7 +35,12 @@ use crate::widgets::BlendMode;
 /// Both buffers are straight-alpha (the common case for image data);
 /// the premultiplication happens internally.
 pub fn blend_pixels(src: &[u8], dst: &mut [u8], mode: BlendMode) {
-    for (s, d) in src.chunks_exact(4).zip(dst.chunks_exact_mut(4)) {
+    for (s, d) in src
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(dst.as_chunks_mut::<4>().0)
+    {
         // Convert to premultiplied [0,1] space.
         let sa = s[3] as f32 / 255.0;
         let sr = (s[0] as f32 / 255.0) * sa;

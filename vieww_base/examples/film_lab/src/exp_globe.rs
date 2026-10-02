@@ -23,19 +23,19 @@
 //! vertices projected here, quads and lines are ordinary paths.
 
 use vieww_foundation::{
-    Color, FontWeight, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle, TextAlign,
+    Color, FontWeight, Gradient, Offset, Path, Rect, Size, Sketchbook, TextAlign, TextStyle,
 };
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Opacity, Painting, PaintWith, Transformed};
+use vieww_widget::{Filtered, Opacity, PaintWith, Painting, Transformed};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_out_expo, mix, spring_out, BG_DEEP, CANVAS, CANVAS_W, INK, MUTED, Rng,
+    alpha, clamp01, ease_out_expo, mix, spring_out, Rng, BG_DEEP, CANVAS, CANVAS_W, INK, MUTED,
     VIOLET, VIOLET_SOFT,
 };
 use crate::three_d::{Camera, Vec3};
 
 /// Film-time this experiment spans — the reveal's first four frames.
-pub const SECONDS: f32 = 20.0;
+pub(crate) const SECONDS: f32 = 20.0;
 
 // The storyboard's layer colors, verbatim from e20_storyboard_v1.svg.
 const C_DESCRIPTION: Color = Color::rgb(88, 166, 255);
@@ -165,7 +165,9 @@ fn plane_world(center: Vec3, rot_y: f32, tilt: f32, u: f32, v: f32) -> Vec3 {
         up_raw.y,
         up_raw.x * rot_y.sin() + up_raw.z * rot_y.cos(),
     );
-    center.add(right.scale(u * PLANE_W)).add(up.scale(v * PLANE_H))
+    center
+        .add(right.scale(u * PLANE_W))
+        .add(up.scale(v * PLANE_H))
 }
 
 /// A tree glyph: nodes in plane-local uv, edges as (parent, child) indices.
@@ -257,10 +259,8 @@ fn scene(book: &mut Sketchbook, t: f32) {
             inner.circle(
                 Offset::new(w * 0.5, h * 0.62),
                 w * 0.36,
-                Gradient::radial_fill().with_stops(&[
-                    (0.0, alpha(VIOLET, 0.10 * f3)),
-                    (1.0, alpha(VIOLET, 0.0)),
-                ]),
+                Gradient::radial_fill()
+                    .with_stops(&[(0.0, alpha(VIOLET, 0.10 * f3)), (1.0, alpha(VIOLET, 0.0))]),
             );
         });
         // The grid: rows and cols of projected 3D lines, fog-faded by depth.
@@ -273,14 +273,24 @@ fn scene(book: &mut Sketchbook, t: f32) {
             let a = cam.project(Vec3::new(x, 0.0, -extent), CANVAS);
             let b = cam.project(Vec3::new(x, 0.0, extent * 0.55), CANVAS);
             if let (Some(a), Some(b)) = (a, b) {
-                book.line(a.0, b.0, alpha(mix(VIOLET, Color::BLACK, 0.45), floor_alpha * 0.4), 1.0);
+                book.line(
+                    a.0,
+                    b.0,
+                    alpha(mix(VIOLET, Color::BLACK, 0.45), floor_alpha * 0.4),
+                    1.0,
+                );
             }
             // Column along x.
             let z = -extent + i as f32 * step;
             let a = cam.project(Vec3::new(-extent, 0.0, z), CANVAS);
             let b = cam.project(Vec3::new(extent, 0.0, z), CANVAS);
             if let (Some(a), Some(b)) = (a, b) {
-                book.line(a.0, b.0, alpha(mix(VIOLET, Color::BLACK, 0.45), floor_alpha * 0.25), 1.0);
+                book.line(
+                    a.0,
+                    b.0,
+                    alpha(mix(VIOLET, Color::BLACK, 0.45), floor_alpha * 0.25),
+                    1.0,
+                );
             }
         }
     }
@@ -318,8 +328,17 @@ fn scene(book: &mut Sketchbook, t: f32) {
             let x = LINE_X0 + x_span * nf;
             let y = LINE_Y + (nf * std::f32::consts::TAU * 1.5).sin() * 3.0;
             let node = Offset::new(x, y);
-            book.ring(node, 5.0 + 13.0 * (1.0 - node_t), 1.4, alpha(VIOLET, (1.0 - node_t) * 0.5 * line_fade));
-            book.circle(node, 3.6 + 0.8 * (spring - 1.0), alpha(VIOLET_SOFT, 0.95 * line_fade));
+            book.ring(
+                node,
+                5.0 + 13.0 * (1.0 - node_t),
+                1.4,
+                alpha(VIOLET, (1.0 - node_t) * 0.5 * line_fade),
+            );
+            book.circle(
+                node,
+                3.6 + 0.8 * (spring - 1.0),
+                alpha(VIOLET_SOFT, 0.95 * line_fade),
+            );
         }
     }
 
@@ -336,17 +355,24 @@ fn scene(book: &mut Sketchbook, t: f32) {
         book.stroke_styled(axis.clone(), alpha(INK, 0.9), 2.4, style);
         // The analytic glow along it.
         let outline = axis.stroke_outline(14.0);
-        book.fill(outline, Gradient::vertical().with_stops(&[
-            (0.0, alpha(VIOLET_SOFT, 0.0)),
-            (0.5, alpha(VIOLET_SOFT, 0.14)),
-            (1.0, alpha(VIOLET_SOFT, 0.0)),
-        ]));
+        book.fill(
+            outline,
+            Gradient::vertical().with_stops(&[
+                (0.0, alpha(VIOLET_SOFT, 0.0)),
+                (0.5, alpha(VIOLET_SOFT, 0.14)),
+                (1.0, alpha(VIOLET_SOFT, 0.0)),
+            ]),
+        );
         // The head: bright, deliberate.
         book.layer(1.0, 9.0, None, |inner| {
-            inner.circle(tip, 15.0, Gradient::radial_fill().with_stops(&[
-                (0.0, alpha(Color::WHITE, 0.5)),
-                (1.0, alpha(VIOLET_SOFT, 0.0)),
-            ]));
+            inner.circle(
+                tip,
+                15.0,
+                Gradient::radial_fill().with_stops(&[
+                    (0.0, alpha(Color::WHITE, 0.5)),
+                    (1.0, alpha(VIOLET_SOFT, 0.0)),
+                ]),
+            );
         });
         book.circle(tip, 2.8, Color::WHITE);
     }
@@ -367,7 +393,10 @@ fn scene(book: &mut Sketchbook, t: f32) {
                 plane_world(center, rot_y, tilt, 0.5, 0.5),
                 plane_world(center, rot_y, tilt, -0.5, 0.5),
             ];
-            let proj: Vec<Option<Offset>> = corners.iter().map(|c| cam.project(*c, CANVAS).map(|x| x.0)).collect();
+            let proj: Vec<Option<Offset>> = corners
+                .iter()
+                .map(|c| cam.project(*c, CANVAS).map(|x| x.0))
+                .collect();
             if proj.iter().any(|p| p.is_none()) {
                 continue;
             }
@@ -417,8 +446,10 @@ fn scene(book: &mut Sketchbook, t: f32) {
                 .iter()
                 .map(|&(u, v)| plane_world(center, rot_y, tilt, u, v))
                 .collect();
-            let proj_nodes: Vec<Option<Offset>> =
-                world_nodes.iter().map(|n| cam.project(*n, CANVAS).map(|x| x.0)).collect();
+            let proj_nodes: Vec<Option<Offset>> = world_nodes
+                .iter()
+                .map(|n| cam.project(*n, CANVAS).map(|x| x.0))
+                .collect();
             // Edges first — the structure arrives before the nodes.
             for &(a, b) in &tree.edges {
                 if let (Some(pa), Some(pb)) = (proj_nodes[a], proj_nodes[b]) {
@@ -441,7 +472,11 @@ fn scene(book: &mut Sketchbook, t: f32) {
                     let r = 5.4 * (0.7 + 0.3 * spring);
                     if ni == 0 {
                         // Roots are brighter — the root of each tree.
-                        book.circle(*p, r + 1.2, alpha(mix(spec.color, Color::WHITE, 0.35), 0.95 * fan));
+                        book.circle(
+                            *p,
+                            r + 1.2,
+                            alpha(mix(spec.color, Color::WHITE, 0.35), 0.95 * fan),
+                        );
                     } else {
                         book.circle(*p, r, alpha(spec.color, 0.85 * fan));
                     }
@@ -453,10 +488,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
     // The vignette — tighter than usual: the reveal is an interior.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::radial(Offset::new(0.5, 0.48), 0.72).with_dither().with_stops(&[
-            (0.55, alpha(Color::BLACK, 0.0)),
-            (1.0, alpha(Color::BLACK, 0.5)),
-        ]),
+        Gradient::radial(Offset::new(0.5, 0.48), 0.72)
+            .with_dither()
+            .with_stops(&[
+                (0.55, alpha(Color::BLACK, 0.0)),
+                (1.0, alpha(Color::BLACK, 0.5)),
+            ]),
     );
 }
 
@@ -468,7 +505,7 @@ fn scale_about(cx: f32, cy: f32, s: f32) -> vieww_foundation::Transform {
         .then(vieww_foundation::Transform::scale(s, s))
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let f1 = f1_t(t);
     let f2 = f2_t(t);
     let f3 = f3_t(t);
@@ -539,7 +576,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 .child(
                     Opacity::new(small_alpha).child(
                         Text::new("7").style(
-                            TextStyle::new(SMALL_SIZE).weight(FontWeight::Medium).color(INK),
+                            TextStyle::new(SMALL_SIZE)
+                                .weight(FontWeight::Medium)
+                                .color(INK),
                         ),
                     ),
                 ),
@@ -586,9 +625,8 @@ pub fn frame(t: f32) -> WidgetNode {
                     .height(26.0)
                     .child(
                         Opacity::new(cap_alpha).child(
-                            Text::new("what you watched, from outside.").style(
-                                TextStyle::new(15.0).weight(FontWeight::Medium).color(INK),
-                            ),
+                            Text::new("what you watched, from outside.")
+                                .style(TextStyle::new(15.0).weight(FontWeight::Medium).color(INK)),
                         ),
                     ),
             );

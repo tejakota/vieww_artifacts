@@ -42,14 +42,14 @@ use vieww_foundation::Size;
 use vieww_paint::native::NativeRenderer;
 use vieww_paint::Command;
 use vieww_render::FrameDriver;
-use viewwstudio::state::Studio;
 use vieww_widget::WidgetNode;
+use viewwstudio::state::Studio;
 
 use super::script;
 use super::{scenes, total_frames, Ctx, Kind, Probe, SceneDef, FPS, H, W};
 
 /// Where the keynote's artifacts live while being built.
-pub fn work_root() -> PathBuf {
+pub(crate) fn work_root() -> PathBuf {
     PathBuf::from("/home/z/my-project/download/keynote_z")
 }
 
@@ -58,7 +58,7 @@ fn manifest_path() -> PathBuf {
 }
 
 /// Entry point — dispatch on the CLI word.
-pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         "censusz" => census(),
         "masterz" => master(),
@@ -105,8 +105,14 @@ impl Rig {
 
     /// Build one frame of scene `s` at in-scene frame `i`: apply the
     /// script, mount (or keep) the studio, set the root, draw.
-    fn build_frame<'a>(&mut self, s: &SceneDef, start_abs: f32, i: usize, probe: &'a Probe) -> Ctx<'a> {
-        let n = s.frames();
+    fn build_frame<'a>(
+        &mut self,
+        s: &SceneDef,
+        start_abs: f32,
+        i: usize,
+        probe: &'a Probe,
+    ) -> Ctx<'a> {
+        let _n = s.frames();
         let sec = i as f32 / FPS;
         let t = (sec / s.seconds).min(1.0);
         let abs = start_abs + sec;
@@ -125,7 +131,12 @@ impl Rig {
         match s.kind {
             Kind::Studio => {
                 let _ = self.studio();
-                script::apply_up_to(&mut self.driver, self.studio.as_ref().unwrap(), abs, &mut self.cursor);
+                script::apply_up_to(
+                    &mut self.driver,
+                    self.studio.as_ref().unwrap(),
+                    abs,
+                    &mut self.cursor,
+                );
                 let overlay: WidgetNode = (s.build)(&ctx);
                 let root = script::shell_root(self.studio.as_ref().unwrap(), overlay);
                 self.background = viewwstudio::StudioTheme::dark().window;
@@ -137,7 +148,8 @@ impl Rig {
                 self.driver.set_root(tree);
             }
         }
-        self.driver.draw_frame_at(Duration::from_secs_f64(abs as f64));
+        self.driver
+            .draw_frame_at(Duration::from_secs_f64(abs as f64));
         ctx
     }
 }
@@ -174,13 +186,17 @@ fn count_scene_commands(scene_cmds: &[Command], p: &mut Probe) {
 
 // ── Pass 1 — the census ─────────────────────────────────────────────────────
 
-pub fn census() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
     std::fs::create_dir_all(&root)?;
 
     let all = scenes();
     let total = total_frames();
-    println!("keynote_z census — {} scenes · {} frames (derived, never typed)", all.len(), total);
+    println!(
+        "keynote_z census — {} scenes · {} frames (derived, never typed)",
+        all.len(),
+        total
+    );
 
     let mut probe = Probe::default();
     probe.frames = total as u64;
@@ -213,8 +229,12 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
             if sample {
                 let t_start = std::time::Instant::now();
                 let _ctx = rig.build_frame(s, start_abs, i, &empty_probe);
-                let (pixels, _report) =
-                    renderer.render_to_pixels(rig.driver.scene(), W as u32, H as u32, rig.background)?;
+                let (pixels, _report) = renderer.render_to_pixels(
+                    rig.driver.scene(),
+                    W as u32,
+                    H as u32,
+                    rig.background,
+                )?;
                 let took = t_start.elapsed().as_secs_f64() * 1000.0;
                 frame_ms_samples.push(took);
                 if alive_window {
@@ -246,7 +266,10 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut alive_sorted = alive_samples.clone();
     alive_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let alive_median = alive_sorted.get(alive_sorted.len() / 2).copied().unwrap_or(0.0);
+    let alive_median = alive_sorted
+        .get(alive_sorted.len() / 2)
+        .copied()
+        .unwrap_or(0.0);
     probe.alive_seconds = (alive_median / 1000.0) as f32;
 
     probe.bench = Probe::bench_identity(renderer.cached_fonts() as u32);
@@ -273,16 +296,21 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
         frame_ms_samples.len(),
         median_ms
     );
-    println!("  shapes {} · glyph runs {} · layers {} (filtered {}) · strokes {}",
-        probe.shapes, probe.glyph_runs, probe.layers, probe.filtered, probe.strokes);
-    println!("  alive N = {:.3} s · bench: {}", probe.alive_seconds, probe.bench);
+    println!(
+        "  shapes {} · glyph runs {} · layers {} (filtered {}) · strokes {}",
+        probe.shapes, probe.glyph_runs, probe.layers, probe.filtered, probe.strokes
+    );
+    println!(
+        "  alive N = {:.3} s · bench: {}",
+        probe.alive_seconds, probe.bench
+    );
     println!("  manifest → {}", manifest_path().display());
     Ok(())
 }
 
 // ── Pass 2 — the master ─────────────────────────────────────────────────────
 
-pub fn master() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
     std::fs::create_dir_all(root.join("sheets"))?;
     std::fs::create_dir_all(root.join("segments"))?;
@@ -345,7 +373,10 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
 
         // Resume: a scene is done when its segment and its sheet both exist.
         if seg.exists() && sheet.exists() {
-            println!("  {} {} · segment + sheet already rendered, skipping", s.id, s.name);
+            println!(
+                "  {} {} · segment + sheet already rendered, skipping",
+                s.id, s.name
+            );
             done_sheets += 1;
             continue;
         }
@@ -355,15 +386,26 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         // actions are cheap, the compiles are cached) so the session is
         // exactly where a continuous run would have it.
         if first_unrendered.is_some() && s.kind == Kind::Studio && rig.studio.is_none() {
-            println!("  resuming into the studio act at {} — replaying the session", s.id);
+            println!(
+                "  resuming into the studio act at {} — replaying the session",
+                s.id
+            );
             let _ = rig.studio();
-            script::apply_up_to(&mut rig.driver, rig.studio.as_ref().unwrap(), start_abs, &mut rig.cursor);
+            script::apply_up_to(
+                &mut rig.driver,
+                rig.studio.as_ref().unwrap(),
+                start_abs,
+                &mut rig.cursor,
+            );
             // Draw once so the replayed state composes.
-            rig.driver.draw_frame_at(Duration::from_secs_f64(start_abs as f64));
+            rig.driver
+                .draw_frame_at(Duration::from_secs_f64(start_abs as f64));
         }
         let _ = resume_abs;
 
-        let scene_dir = root.join("frames").join(format!("{:02}_{}", si + 1, s.name));
+        let scene_dir = root
+            .join("frames")
+            .join(format!("{:02}_{}", si + 1, s.name));
         std::fs::remove_dir_all(&scene_dir).ok();
         std::fs::create_dir_all(&scene_dir)?;
         let sheet_stride = (n / 16).max(1);
@@ -371,12 +413,27 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut ffmpeg = ProcCommand::new("ffmpeg")
             .args([
-                "-y", "-loglevel", "error",
-                "-f", "rawvideo", "-pix_fmt", "rgba",
-                "-s", "1920x1080", "-framerate", "60",
-                "-i", "-",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-                "-pix_fmt", "yuv420p",
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgba",
+                "-s",
+                "1920x1080",
+                "-framerate",
+                "60",
+                "-i",
+                "-",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "18",
+                "-pix_fmt",
+                "yuv420p",
             ])
             .arg(&seg)
             .stdin(Stdio::piped())
@@ -387,15 +444,21 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
 
         for i in 0..n {
             let _ctx = rig.build_frame(s, start_abs, i, &probe);
-            let (pixels, _report) = renderer.render_to_pixels(rig.driver.scene(), W as u32, H as u32, rig.background)?;
+            let (pixels, _report) = renderer.render_to_pixels(
+                rig.driver.scene(),
+                W as u32,
+                H as u32,
+                rig.background,
+            )?;
             stdin.write_all(pixels.data())?;
 
             // The sheet frames — sixteen strided, parked only for the tile.
             if i % sheet_stride == 0 {
                 let k = i / sheet_stride;
                 if k < 16 {
-                    let img = image::RgbaImage::from_raw(W as u32, H as u32, pixels.data().to_vec())
-                        .ok_or("invalid frame")?;
+                    let img =
+                        image::RgbaImage::from_raw(W as u32, H as u32, pixels.data().to_vec())
+                            .ok_or("invalid frame")?;
                     img.save(scene_dir.join(format!("frame_{k:03}.png")))?;
                 }
             }
@@ -403,7 +466,10 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
                 let el = t0.elapsed().as_secs_f32();
                 println!(
                     "  {} {} · {:>3}% · {:.1} min in",
-                    s.id, s.name, (i * 100 / n), el / 60.0
+                    s.id,
+                    s.name,
+                    (i * 100 / n),
+                    el / 60.0
                 );
             }
         }
@@ -416,15 +482,21 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         // The house contact sheet — fps=10, scale=480:-1, tile=4x4.
         let status = ProcCommand::new("ffmpeg")
             .args(["-y", "-loglevel", "error", "-framerate", "10"])
-            .arg("-i").arg(scene_dir.join("frame_%03d.png"))
-            .arg("-vf").arg("scale=480:-1,tile=4x4")
-            .arg("-frames:v").arg("1")
+            .arg("-i")
+            .arg(scene_dir.join("frame_%03d.png"))
+            .arg("-vf")
+            .arg("scale=480:-1,tile=4x4")
+            .arg("-frames:v")
+            .arg("1")
             .arg(&sheet)
             .status();
         match status {
             Ok(st) if st.success() => println!(
                 "  {} {} · done in {:.1}s · sheet {}",
-                s.id, s.name, scene_start.elapsed().as_secs_f32(), sheet.display()
+                s.id,
+                s.name,
+                scene_start.elapsed().as_secs_f32(),
+                sheet.display()
             ),
             _ => println!("  {} {} · sheet FAILED", s.id, s.name),
         }
@@ -448,9 +520,12 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
     let mp4 = root.join("keynote_z.mp4");
     let status = ProcCommand::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-f", "concat", "-safe", "0"])
-        .arg("-i").arg(&list)
-        .arg("-c").arg("copy")
-        .arg("-movflags").arg("+faststart")
+        .arg("-i")
+        .arg(&list)
+        .arg("-c")
+        .arg("copy")
+        .arg("-movflags")
+        .arg("+faststart")
         .arg(&mp4)
         .status()?;
     if !status.success() {
@@ -479,7 +554,9 @@ fn preview_scene(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         .find(|s| s.id.to_ascii_lowercase().contains(name) || s.name.contains(name))
         .ok_or_else(|| format!("no scene matches {name:?}"))?;
 
-    let root = work_root().join("preview").join(found.id.to_ascii_lowercase());
+    let root = work_root()
+        .join("preview")
+        .join(found.id.to_ascii_lowercase());
     std::fs::remove_dir_all(&root).ok();
     std::fs::create_dir_all(&root)?;
 
@@ -489,31 +566,34 @@ fn preview_scene(name: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut rig = Rig::new();
     let mut renderer = NativeRenderer::new();
     let n = 16;
-    println!("preview {} {} · {} frames at 1920×1080", found.id, found.name, n);
+    println!(
+        "preview {} {} · {} frames at 1920×1080",
+        found.id, found.name, n
+    );
     for k in 0..n {
         // Sixteen evenly spaced beats, including the hold at the end.
         let i = (k as f32 / (n - 1) as f32 * (found.frames() - 1) as f32).round() as usize;
         let t_render = std::time::Instant::now();
         let _ctx = rig.build_frame(found, start_abs, i, &probe);
-        let (pixels, report) = renderer.render_to_pixels(rig.driver.scene(), W as u32, H as u32, rig.background)?;
+        let (pixels, report) =
+            renderer.render_to_pixels(rig.driver.scene(), W as u32, H as u32, rig.background)?;
         let ms = t_render.elapsed().as_secs_f64() * 1000.0;
         let img = image::RgbaImage::from_raw(W as u32, H as u32, pixels.data().to_vec())
             .ok_or("invalid frame")?;
         img.save(root.join(format!("frame_{k:03}.png")))?;
         println!(
             "  frame {:>2} · t {:.3} · shapes {} · layers {} · {:.1} ms",
-            k,
-            _ctx.t,
-            report.shapes,
-            report.layers,
-            ms
+            k, _ctx.t, report.shapes, report.layers, ms
         );
     }
     let status = ProcCommand::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-framerate", "10"])
-        .arg("-i").arg(root.join("frame_%03d.png"))
-        .arg("-vf").arg("scale=480:-1,tile=4x4")
-        .arg("-frames:v").arg("1")
+        .arg("-i")
+        .arg(root.join("frame_%03d.png"))
+        .arg("-vf")
+        .arg("scale=480:-1,tile=4x4")
+        .arg("-frames:v")
+        .arg("1")
         .arg(root.join("sheet.png"))
         .status();
     if matches!(status, Ok(s) if s.success()) {
@@ -537,10 +617,21 @@ fn calibrate() -> Result<(), Box<dyn std::error::Error>> {
     // Drive to the live demo, exactly as S12 does.
     let studio = rig.studio().clone();
     // The tab list — the receipt for the script's TAB_* indices.
-    let names: Vec<String> = studio.buffers.get().iter().map(|b| b.name.clone()).collect();
+    let names: Vec<String> = studio
+        .buffers
+        .get()
+        .iter()
+        .map(|b| b.name.clone())
+        .collect();
     println!("BUFFERS = {:?}", names);
     script::apply_up_to(&mut rig.driver, &studio, 103.3, &mut rig.cursor);
-    let ctx = Ctx { t: 0.5, sec: 6.0, abs: 103.3, ladder: 1, probe: &Probe::default() };
+    let ctx = Ctx {
+        t: 0.5,
+        sec: 6.0,
+        abs: 103.3,
+        ladder: 1,
+        probe: &Probe::default(),
+    };
     let overlay: WidgetNode = (scenes()[11].build)(&ctx);
     let root = script::shell_root(&studio, overlay);
     rig.background = viewwstudio::StudioTheme::dark().window;
@@ -557,18 +648,21 @@ fn calibrate() -> Result<(), Box<dyn std::error::Error>> {
         for x in (980..1700).step_by(10) {
             clock += 0.05;
             let at = vieww_foundation::Offset::new(x as f32, y as f32);
-            rig.driver.handle_pointer(&vieww_foundation::PointerEvent::down(
-                vieww_foundation::PointerId(1),
-                at,
-                Duration::from_secs_f64(clock),
-            ));
+            rig.driver
+                .handle_pointer(&vieww_foundation::PointerEvent::down(
+                    vieww_foundation::PointerId(1),
+                    at,
+                    Duration::from_secs_f64(clock),
+                ));
             rig.driver.draw_frame_at(Duration::from_secs_f64(clock));
-            rig.driver.handle_pointer(&vieww_foundation::PointerEvent::up(
-                vieww_foundation::PointerId(1),
-                at,
-                Duration::from_secs_f64(clock + 0.02),
-            ));
-            rig.driver.draw_frame_at(Duration::from_secs_f64(clock + 0.03));
+            rig.driver
+                .handle_pointer(&vieww_foundation::PointerEvent::up(
+                    vieww_foundation::PointerId(1),
+                    at,
+                    Duration::from_secs_f64(clock + 0.02),
+                ));
+            rig.driver
+                .draw_frame_at(Duration::from_secs_f64(clock + 0.03));
             if studio.live_state.route.get() != before {
                 found = Some((x as f32, y as f32));
                 studio.live_state.route.set(before);
@@ -594,17 +688,19 @@ fn calibrate() -> Result<(), Box<dyn std::error::Error>> {
     // (or the snapshot) carry the receipt.
     {
         let at = script::TAP_ADD_ONE;
-        rig.driver.handle_pointer(&vieww_foundation::PointerEvent::down(
-            vieww_foundation::PointerId(1),
-            at,
-            Duration::from_secs_f64(136.5),
-        ));
+        rig.driver
+            .handle_pointer(&vieww_foundation::PointerEvent::down(
+                vieww_foundation::PointerId(1),
+                at,
+                Duration::from_secs_f64(136.5),
+            ));
         rig.driver.draw_frame_at(Duration::from_secs_f64(136.5));
-        rig.driver.handle_pointer(&vieww_foundation::PointerEvent::up(
-            vieww_foundation::PointerId(1),
-            at,
-            Duration::from_secs_f64(136.52),
-        ));
+        rig.driver
+            .handle_pointer(&vieww_foundation::PointerEvent::up(
+                vieww_foundation::PointerId(1),
+                at,
+                Duration::from_secs_f64(136.52),
+            ));
         rig.driver.draw_frame_at(Duration::from_secs_f64(136.6));
         println!("tapped Add one at {:?}", at);
     }
@@ -621,9 +717,11 @@ fn snap(
     abs: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for k in 0..3 {
-        rig.driver.draw_frame_at(Duration::from_secs_f64(abs + k as f64 * 0.05));
+        rig.driver
+            .draw_frame_at(Duration::from_secs_f64(abs + k as f64 * 0.05));
     }
-    let (png, _report) = renderer.render_to_png(rig.driver.scene(), W as u32, H as u32, rig.background)?;
+    let (png, _report) =
+        renderer.render_to_png(rig.driver.scene(), W as u32, H as u32, rig.background)?;
     let path = out.join(format!("{name}.png"));
     std::fs::write(&path, png)?;
     println!("  snap → {}", path.display());

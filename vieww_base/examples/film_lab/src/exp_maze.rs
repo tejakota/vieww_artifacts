@@ -25,15 +25,16 @@
 //! ratio. And, for greedy, the price of dropping g: its path length as a
 //! percentage over optimal.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The maze ────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ fn carve() -> Vec<bool> {
     let mut visited = vec![false; W * H];
     let mut stack = vec![(0usize, 0usize)];
     visited[0] = true;
-    open[1 * GW + 1] = true;
+    open[GW + 1] = true;
     while let Some(&(cx, cy)) = stack.last() {
         let mut dirs: Vec<(i32, i32)> = vec![(1, 0), (-1, 0), (0, 1), (0, -1)];
         // a seeded Fisher–Yates: the shuffle IS the maze
@@ -244,7 +245,7 @@ fn true_distances(open: &[bool]) -> Vec<u32> {
 const PANEL_W: f32 = 392.0;
 const PANEL_H: f32 = 228.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let open = carve();
     let dist = true_distances(&open);
 
@@ -292,10 +293,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(12, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(12, 11, 16))]),
             );
 
             let tints = [CYAN, AMBER, VIOLET];
@@ -303,7 +303,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 let ox = 44.0 + k as f32 * (PANEL_W + 20.0);
                 let oy = 196.0;
                 book.rrect(
-                    Rect::new(ox - 12.0, oy - 26.0, ox + PANEL_W + 12.0, oy + PANEL_H + 14.0),
+                    Rect::new(
+                        ox - 12.0,
+                        oy - 26.0,
+                        ox + PANEL_W + 12.0,
+                        oy + PANEL_H + 14.0,
+                    ),
                     10.0,
                     alpha(Color::rgb(13, 13, 19), 0.95),
                 );
@@ -344,10 +349,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 if !path.is_empty() {
                     let mut p = Path::new();
                     for (i, &(x, y)) in path.iter().enumerate() {
-                        let o = Offset::new(
-                            ox + (x as f32 + 0.5) * cw,
-                            oy + (y as f32 + 0.5) * ch,
-                        );
+                        let o = Offset::new(ox + (x as f32 + 0.5) * cw, oy + (y as f32 + 0.5) * ch);
                         if i == 0 {
                             p.move_to(o);
                         } else {
@@ -365,7 +367,10 @@ pub fn frame(t: f32) -> WidgetNode {
                     alpha(MINT, 0.95),
                 );
                 book.ring(
-                    Offset::new(ox + (GOAL.0 as f32 + 0.5) * cw, oy + (GOAL.1 as f32 + 0.5) * ch),
+                    Offset::new(
+                        ox + (GOAL.0 as f32 + 0.5) * cw,
+                        oy + (GOAL.1 as f32 + 0.5) * ch,
+                    ),
                     4.0,
                     1.6,
                     alpha(MINT, 0.95),
@@ -388,7 +393,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 let y = by + k as f32 * (bh / 3.0) + 8.0;
                 let h = bh / 3.0 - 18.0;
                 book.rect(
-                    Rect::new(bx + 140.0, y, bx + 140.0 + e as f32 / m * (bw - 300.0), y + h),
+                    Rect::new(
+                        bx + 140.0,
+                        y,
+                        bx + 140.0 + e as f32 / m * (bw - 300.0),
+                        y + h,
+                    ),
                     alpha(tints[k], 0.55),
                 );
                 // the live bar, as the film plays
@@ -407,8 +417,7 @@ pub fn frame(t: f32) -> WidgetNode {
         0.0
     };
 
-    let lines = vec![
-        "MAZE · THE SEARCH AXIS · THE SAME MAZE, THREE WAYS OF LOOKING".to_string(),
+    let lines = ["MAZE · THE SEARCH AXIS · THE SAME MAZE, THREE WAYS OF LOOKING".to_string(),
         format!(
             "{W}×{H} cells carved by randomized DFS from a seed ({GW}×{GH} grid, {checked} reachable cells) · one shared expansion loop; only the priority key differs"
         ),
@@ -427,8 +436,7 @@ pub fn frame(t: f32) -> WidgetNode {
             "playing back {} of {} expansions · colour is expansion order (late = bright), so each panel shows the SHAPE of its search: a flood, an aimed cone, and a thread that gambles",
             live_exp.iter().cloned().max().unwrap_or(0),
             max_exp
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -443,14 +451,21 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
     }
-    for (k, name) in ["BREADTH-FIRST — no information", "A* — f = g + h, admissible", "GREEDY BEST-FIRST — h only"]
-        .iter()
-        .enumerate()
+    for (k, name) in [
+        "BREADTH-FIRST — no information",
+        "A* — f = g + h, admissible",
+        "GREEDY BEST-FIRST — h only",
+    ]
+    .iter()
+    .enumerate()
     {
         stack = stack.push(
             Positioned::new()
@@ -485,14 +500,20 @@ pub fn frame(t: f32) -> WidgetNode {
         );
     }
     stack = stack.push(
-        Positioned::new().left(44.0).top(482.0).width(700.0).height(14.0).child(
-            Text::new("NODES EXPANDED — the whole difference between the three".to_string()).style(
-                TextStyle::new(9.5)
-                    .monospace()
-                    .letter_spacing(0.9)
-                    .color(alpha(MUTED, 0.85)),
+        Positioned::new()
+            .left(44.0)
+            .top(482.0)
+            .width(700.0)
+            .height(14.0)
+            .child(
+                Text::new("NODES EXPANDED — the whole difference between the three".to_string())
+                    .style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
             ),
-        ),
     );
     stack.into()
 }

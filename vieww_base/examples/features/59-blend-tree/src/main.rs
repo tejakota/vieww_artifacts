@@ -136,7 +136,12 @@ impl CustomPainter for GaitPainter {
             color: Color::rgb(24, 28, 40),
         });
         // The blended pose — the answer, over the ghosts it came from.
-        out.push(bar(blended.clamp(0.0, 100.0), size.width - 60.0, Color::rgb(58, 122, 246), 0xFF));
+        out.push(bar(
+            blended.clamp(0.0, 100.0),
+            size.width - 60.0,
+            Color::rgb(58, 122, 246),
+            0xFF,
+        ));
         out
     }
 
@@ -166,7 +171,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(Gaits { time, _clock: clock }),
+                .child(Gaits {
+                    time,
+                    _clock: clock,
+                }),
         );
     })
 }

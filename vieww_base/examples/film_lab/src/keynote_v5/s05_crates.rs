@@ -8,37 +8,66 @@
 //! gentle 3D stack (the unfold's grammar, held vertical here): foundation
 //! at the base, the meta-crate `vieww` at the crown.
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Gradient, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_back, ease_out_cubic, mix, tint, xywh, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT, MINT, AMBER, MAGENTA};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_back, xywh, CYAN, CYAN_SOFT, INK, MAGENTA, MINT, VIOLET, VIOLET_SOFT,
+};
 
-use super::{Ctx};
+use super::Ctx;
 
 /// The 36 crates — verbatim from `vieww_base/Cargo.toml`'s workspace
 /// members (the crates/ directory, counted by the code that draws them).
 const CRATES: [&str; 36] = [
-    "vieww-foundation", "vieww-widget", "vieww-element", "vieww-paint",
-    "vieww-hal", "vieww-text", "vieww-animation", "vieww-asset",
-    "vieww-gestures", "vieww-render", "vieww-scene", "vieww-render-graph",
-    "vieww-render-planner", "vieww-runtime", "vieww-gpu", "vieww-shaders",
-    "vieww-reload", "vieww-platform", "vieww-platform-winit", "vieww-platform-web",
-    "vieww-platform-web-dom", "vieww-hardware", "vieww-effects", "vieww-devtools",
-    "vieww", "vieww-say-codegen", "vieww-test-harness", "vieww-image",
-    "vieww-interaction", "vieww-scroll", "vieww-accessibility", "vieww-plugin",
-    "vieww-plugin-macros", "vieww-widget-macros", "vieww-build", "vieww-cli",
+    "vieww-foundation",
+    "vieww-widget",
+    "vieww-element",
+    "vieww-paint",
+    "vieww-hal",
+    "vieww-text",
+    "vieww-animation",
+    "vieww-asset",
+    "vieww-gestures",
+    "vieww-render",
+    "vieww-scene",
+    "vieww-render-graph",
+    "vieww-render-planner",
+    "vieww-runtime",
+    "vieww-gpu",
+    "vieww-shaders",
+    "vieww-reload",
+    "vieww-platform",
+    "vieww-platform-winit",
+    "vieww-platform-web",
+    "vieww-platform-web-dom",
+    "vieww-hardware",
+    "vieww-effects",
+    "vieww-devtools",
+    "vieww",
+    "vieww-say-codegen",
+    "vieww-test-harness",
+    "vieww-image",
+    "vieww-interaction",
+    "vieww-scroll",
+    "vieww-accessibility",
+    "vieww-plugin",
+    "vieww-plugin-macros",
+    "vieww-widget-macros",
+    "vieww-build",
+    "vieww-cli",
 ];
 
 /// The tier of a crate index — six tiers, bottom to top.
 fn tier_of(i: usize) -> usize {
     match i {
-        0 => 0,                        // foundation — alone at the base
-        1..=5 => 1,                    // widget, element, paint, hal, text
-        6..=12 => 2,                   // animation .. render-planner
-        13..=22 => 3,                  // runtime .. hardware
-        23..=24 => 4,                  // effects, devtools
-        _ => 5,                        // the ecosystem crown
+        0 => 0,       // foundation — alone at the base
+        1..=5 => 1,   // widget, element, paint, hal, text
+        6..=12 => 2,  // animation .. render-planner
+        13..=22 => 3, // runtime .. hardware
+        23..=24 => 4, // effects, devtools
+        _ => 5,       // the ecosystem crown
     }
 }
 
@@ -63,13 +92,21 @@ fn block_rect(i: usize) -> (f32, f32, f32, f32) {
     let n = members.len().max(1);
     // Tier rows, bottom (0) at the diagram's base.
     let tier_y = 720.0 - tier as f32 * 118.0;
-    let row_w = match n { 1 => 300.0, 2..=4 => 1240.0, _ => 1460.0 };
-    let bw = match n { 1 => 300.0, 2..=4 => (row_w - (n as f32 - 1.0) * 20.0) / n as f32, _ => (row_w - (n as f32 - 1.0) * 12.0) / n as f32 };
+    let row_w = match n {
+        1 => 300.0,
+        2..=4 => 1240.0,
+        _ => 1460.0,
+    };
+    let bw = match n {
+        1 => 300.0,
+        2..=4 => (row_w - (n as f32 - 1.0) * 20.0) / n as f32,
+        _ => (row_w - (n as f32 - 1.0) * 12.0) / n as f32,
+    };
     let x = 960.0 - row_w * 0.5 + slot as f32 * (bw + if n > 4 { 12.0 } else { 20.0 });
     (x, tier_y, bw, if tier == 5 { 74.0 } else { 62.0 })
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -160,10 +197,23 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     Size::new(w, h),
                     PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
                         // The slab — dark glass with the tier's edge light.
-                        book.rrect(xywh(0.0, 0.0, w, h), 9.0, alpha(Color::rgb(15, 16, 22), 0.94));
-                        book.stroke_rrect(xywh(0.0, 0.0, w, h), 9.0, alpha(col, if settled { 0.42 } else { 0.75 }), 1.3);
+                        book.rrect(
+                            xywh(0.0, 0.0, w, h),
+                            9.0,
+                            alpha(Color::rgb(15, 16, 22), 0.94),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, w, h),
+                            9.0,
+                            alpha(col, if settled { 0.42 } else { 0.75 }),
+                            1.3,
+                        );
                         // The top edge light — the tier's accent.
-                        book.rrect(xywh(6.0, 3.0, (w - 12.0).max(2.0), 2.4), 1.2, alpha(col, 0.65));
+                        book.rrect(
+                            xywh(6.0, 3.0, (w - 12.0).max(2.0), 2.4),
+                            1.2,
+                            alpha(col, 0.65),
+                        );
                         // The crown tier gets the mark's glow.
                         if tier == 5 {
                             book.layer(1.0, 12.0, None, |g| {
@@ -188,11 +238,13 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y + rise + h * 0.5 - 11.0)
                 .width(w)
                 .height(22.0)
-                .child(Opacity::new(a).child(
-                    Text::new(name)
-                        .style(TextStyle::new(font).monospace().color(alpha(INK, 0.92)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(name)
+                            .style(TextStyle::new(font).monospace().color(alpha(INK, 0.92)))
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
 
@@ -207,11 +259,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(140.0)
                 .width(1920.0)
                 .height(70.0)
-                .child(Opacity::new(count_a).child(
-                    Text::new(format!("{} crates · one dependency graph", landed))
-                        .style(TextStyle::new(44.0).monospace().letter_spacing(3.0).color(alpha(INK, 0.96)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(count_a).child(
+                        Text::new(format!("{} crates · one dependency graph", landed))
+                            .style(
+                                TextStyle::new(44.0)
+                                    .monospace()
+                                    .letter_spacing(3.0)
+                                    .color(alpha(INK, 0.96)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
     // The tier legend, right side.
@@ -220,7 +279,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         ("the engine — paint · text · render · gpu", CYAN),
         ("the product — the vieww crate & friends", VIOLET_SOFT),
     ];
-    for (i, (label, c)) in legend.iter().enumerate() {
+    for (i, (label, _c)) in legend.iter().enumerate() {
         let la = clamp01((t - 0.42 - i as f32 * 0.08) / 0.2);
         if la <= 0.0 {
             continue;
@@ -231,15 +290,26 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(190.0 + i as f32 * 34.0)
                 .width(280.0)
                 .height(26.0)
-                .child(Opacity::new(la).child(
-                    Text::new(*label)
-                        .style(TextStyle::new(14.5).monospace().letter_spacing(1.2).color(alpha(INK, 0.85)))
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(la).child(
+                        Text::new(*label)
+                            .style(
+                                TextStyle::new(14.5)
+                                    .monospace()
+                                    .letter_spacing(1.2)
+                                    .color(alpha(INK, 0.85)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         );
     }
 
-    stack = stack.push(super::act_chip("II", "THE FOUNDATION", clamp01((sec - 0.3) / 0.5)));
+    stack = stack.push(super::act_chip(
+        "II",
+        "THE FOUNDATION",
+        clamp01((sec - 0.3) / 0.5),
+    ));
     stack = stack.push(super::caption(
         "thirty-six crates. one graph. zero orphan layers.",
         1000.0,

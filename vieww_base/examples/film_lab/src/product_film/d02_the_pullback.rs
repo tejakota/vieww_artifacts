@@ -15,10 +15,10 @@ use vieww_foundation::{Color, Offset, Sketchbook};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, Ctx, INK, LEDGER, MUTED, W, alpha, caption, clamp01, distance_chip, glow, grain,
-    ground, progress_rail, stars_deep, vignette, xywh,
+    alpha, caption, clamp01, distance_chip, glow, grain, ground, progress_rail, stars_deep,
+    vignette, xywh, Ctx, ACCENT, INK, LEDGER, MUTED, W,
 };
-use crate::film_lib::{Rng, ease_out_cubic};
+use crate::film_lib::{ease_out_cubic, Rng};
 
 /// The pullback — 0 = the studio fills the frame, 1 = the constellation.
 fn pullback(t: f32) -> f32 {
@@ -62,7 +62,7 @@ fn card(
     glow(book, x + w * 0.5, y + h * 0.5, w * 0.9, color, 0.05 * a);
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -95,34 +95,69 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             // activity rail, the editor, the preview, all as geometry.
             let pad = sw * 0.03;
             // Title bar.
-            book.rrect(xywh(sx + pad, sy + pad, sw - pad * 2.0, sh * 0.05), 6.0, alpha(Color::rgb(0x1E, 0x21, 0x26), 1.0));
-            for (i, c) in [Color::rgb(0xE0, 0x6C, 0x60), Color::rgb(0xE0, 0xA8, 0x4E), Color::rgb(0x5C, 0xB8, 0x60)].iter().enumerate() {
+            book.rrect(
+                xywh(sx + pad, sy + pad, sw - pad * 2.0, sh * 0.05),
+                6.0,
+                alpha(Color::rgb(0x1E, 0x21, 0x26), 1.0),
+            );
+            for (i, c) in [
+                Color::rgb(0xE0, 0x6C, 0x60),
+                Color::rgb(0xE0, 0xA8, 0x4E),
+                Color::rgb(0x5C, 0xB8, 0x60),
+            ]
+            .iter()
+            .enumerate()
+            {
                 let d = sh * 0.02;
-                book.circle(Offset::new(sx + pad * 2.0 + i as f32 * d * 2.2, sy + pad + sh * 0.025), d * 0.5, alpha(*c, 0.85));
+                book.circle(
+                    Offset::new(sx + pad * 2.0 + i as f32 * d * 2.2, sy + pad + sh * 0.025),
+                    d * 0.5,
+                    alpha(*c, 0.85),
+                );
             }
             // The activity rail.
-            book.rrect(xywh(sx + pad, sy + pad * 3.0 + sh * 0.05, sw * 0.035, sh * 0.78), 6.0, alpha(Color::rgb(0x18, 0x1B, 0x20), 1.0));
+            book.rrect(
+                xywh(sx + pad, sy + pad * 3.0 + sh * 0.05, sw * 0.035, sh * 0.78),
+                6.0,
+                alpha(Color::rgb(0x18, 0x1B, 0x20), 1.0),
+            );
             // The editor + the preview.
             let body_y = sy + pad * 3.0 + sh * 0.05;
             let body_h = sh * 0.78;
-            book.rrect(xywh(sx + pad * 3.0 + sw * 0.035, body_y, sw * 0.5, body_h), 8.0, alpha(Color::rgb(0x14, 0x16, 0x1A), 1.0));
+            book.rrect(
+                xywh(sx + pad * 3.0 + sw * 0.035, body_y, sw * 0.5, body_h),
+                8.0,
+                alpha(Color::rgb(0x14, 0x16, 0x1A), 1.0),
+            );
             // The preview — the accent panel, with a screen inside.
             let pv_x = sx + pad * 3.0 + sw * 0.035 + sw * 0.5 + pad;
             let pv_w = sw - (pv_x - sx) - pad;
-            book.rrect(xywh(pv_x, body_y, pv_w, body_h), 8.0, alpha(Color::rgb(0x14, 0x16, 0x1A), 1.0));
+            book.rrect(
+                xywh(pv_x, body_y, pv_w, body_h),
+                8.0,
+                alpha(Color::rgb(0x14, 0x16, 0x1A), 1.0),
+            );
             // The preview's device — the phone, purple-lit.
             let pw = pv_w * 0.34;
             let ph = body_h * 0.72;
             let px = pv_x + (pv_w - pw) * 0.5;
             let py = body_y + (body_h - ph) * 0.5;
-            book.rrect(xywh(px, py, pw, ph), pw * 0.18, alpha(Color::rgb(0x0A, 0x0A, 0x0C), 1.0));
+            book.rrect(
+                xywh(px, py, pw, ph),
+                pw * 0.18,
+                alpha(Color::rgb(0x0A, 0x0A, 0x0C), 1.0),
+            );
             book.stroke_rrect(xywh(px, py, pw, ph), pw * 0.18, alpha(ACCENT, 0.7), 1.4);
             glow(book, px + pw * 0.5, py + ph * 0.5, pw * 1.1, ACCENT, 0.16);
             // The phone's content rows.
             for r in 0..4 {
                 let ry = py + ph * 0.12 + r as f32 * ph * 0.18;
                 let rw = pw * 0.6 * (0.5 + (r % 3) as f32 * 0.25);
-                book.rrect(xywh(px + pw * 0.12, ry, rw, ph * 0.07), 3.0, alpha(MUTED, 0.35));
+                book.rrect(
+                    xywh(px + pw * 0.12, ry, rw, ph * 0.07),
+                    3.0,
+                    alpha(MUTED, 0.35),
+                );
             }
             // The editor's lines — mono-ish rows with syntax colours.
             for r in 0..7 {
@@ -135,7 +170,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 ];
                 let c = cols[r % cols.len()];
                 let rw = sw * 0.4 * (0.4 + ((r * 31) % 7) as f32 / 10.0);
-                book.rrect(xywh(sx + pad * 3.0 + sw * 0.035 + sw * 0.02, ry, rw, body_h * 0.05), 2.0, alpha(c, 0.5));
+                book.rrect(
+                    xywh(
+                        sx + pad * 3.0 + sw * 0.035 + sw * 0.02,
+                        ry,
+                        rw,
+                        body_h * 0.05,
+                    ),
+                    2.0,
+                    alpha(c, 0.5),
+                );
             }
 
             // The constellation — the other cards, arriving with the pull.

@@ -16,7 +16,10 @@ use std::fmt;
 
 use vieww_foundation::{Color, EdgeInsets, FontWeight, Key, TextStyle};
 
-use crate::{widget_node_from, BuildContext, Container, Opacity, Positioned, RichText, Span, Stack, Widget, WidgetKind, WidgetNode};
+use crate::{
+    widget_node_from, BuildContext, Container, Opacity, Positioned, RichText, Span, Stack, Widget,
+    WidgetKind, WidgetNode,
+};
 
 /// Source language for [`highlight`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -33,17 +36,61 @@ impl Language {
     fn keywords(self) -> &'static [&'static str] {
         match self {
             Self::Rust => &[
-                "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut",
-                "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use", "where", "while",
+                "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else",
+                "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match",
+                "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct",
+                "super", "trait", "true", "type", "unsafe", "use", "where", "while",
             ],
             Self::JavaScript => &[
-                "async", "await", "break", "case", "catch", "class", "const", "continue", "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "from", "function", "if",
-                "import", "in", "instanceof", "interface", "let", "new", "null", "of", "return", "static", "super", "switch", "this", "throw", "true", "try", "type", "typeof", "undefined", "var",
-                "void", "while", "yield",
+                "async",
+                "await",
+                "break",
+                "case",
+                "catch",
+                "class",
+                "const",
+                "continue",
+                "default",
+                "delete",
+                "do",
+                "else",
+                "export",
+                "extends",
+                "false",
+                "finally",
+                "for",
+                "from",
+                "function",
+                "if",
+                "import",
+                "in",
+                "instanceof",
+                "interface",
+                "let",
+                "new",
+                "null",
+                "of",
+                "return",
+                "static",
+                "super",
+                "switch",
+                "this",
+                "throw",
+                "true",
+                "try",
+                "type",
+                "typeof",
+                "undefined",
+                "var",
+                "void",
+                "while",
+                "yield",
             ],
             Self::Python => &[
-                "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if",
-                "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "self", "try", "while", "with", "yield",
+                "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class",
+                "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
+                "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass",
+                "raise", "return", "self", "try", "while", "with", "yield",
             ],
             Self::Json => &["true", "false", "null"],
             Self::Plain => &[],
@@ -98,13 +145,20 @@ pub fn highlight(src: &str, lang: Language) -> Vec<Vec<Token>> {
             let line = lines.last_mut().expect("never empty");
             match line.last_mut() {
                 Some(t) if t.kind == kind => t.text.push_str(part),
-                _ => line.push(Token { kind, text: part.to_owned() }),
+                _ => line.push(Token {
+                    kind,
+                    text: part.to_owned(),
+                }),
             }
         }
     };
     let kw = lang.keywords();
-    let lc: Vec<char> = lang.line_comment().map(|s| s.chars().collect()).unwrap_or_default();
-    let starts = |i: usize, pat: &[char]| !pat.is_empty() && chars.get(i..i + pat.len()) == Some(pat);
+    let lc: Vec<char> = lang
+        .line_comment()
+        .map(|s| s.chars().collect())
+        .unwrap_or_default();
+    let starts =
+        |i: usize, pat: &[char]| !pat.is_empty() && chars.get(i..i + pat.len()) == Some(pat);
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
@@ -114,18 +168,33 @@ pub fn highlight(src: &str, lang: Language) -> Vec<Vec<Token>> {
             continue;
         }
         if starts(i, &lc) {
-            let end = chars[i..].iter().position(|&c| c == '\n').map_or(chars.len(), |p| i + p);
-            push(&mut lines, TokenKind::Comment, &chars[i..end].iter().collect::<String>());
+            let end = chars[i..]
+                .iter()
+                .position(|&c| c == '\n')
+                .map_or(chars.len(), |p| i + p);
+            push(
+                &mut lines,
+                TokenKind::Comment,
+                &chars[i..end].iter().collect::<String>(),
+            );
             i = end;
             continue;
         }
         if matches!(lang, Language::Rust | Language::JavaScript) && starts(i, &['/', '*']) {
-            let end = (i + 2..chars.len().saturating_sub(1)).find(|&j| chars[j] == '*' && chars[j + 1] == '/').map_or(chars.len(), |j| j + 2);
-            push(&mut lines, TokenKind::Comment, &chars[i..end].iter().collect::<String>());
+            let end = (i + 2..chars.len().saturating_sub(1))
+                .find(|&j| chars[j] == '*' && chars[j + 1] == '/')
+                .map_or(chars.len(), |j| j + 2);
+            push(
+                &mut lines,
+                TokenKind::Comment,
+                &chars[i..end].iter().collect::<String>(),
+            );
             i = end;
             continue;
         }
-        let is_quote = c == '"' || (c == '\'' && lang != Language::Rust) || (c == '`' && lang == Language::JavaScript);
+        let is_quote = c == '"'
+            || (c == '\'' && lang != Language::Rust)
+            || (c == '`' && lang == Language::JavaScript);
         if is_quote {
             let mut j = i + 1;
             while j < chars.len() && chars[j] != c {
@@ -138,17 +207,31 @@ pub fn highlight(src: &str, lang: Language) -> Vec<Vec<Token>> {
             let text: String = chars[i..end].iter().collect();
             // A JSON string followed by ':' is a key.
             let next = chars[end..].iter().find(|c| !c.is_whitespace());
-            let kind = if lang == Language::Json && next == Some(&':') { TokenKind::Property } else { TokenKind::String };
+            let kind = if lang == Language::Json && next == Some(&':') {
+                TokenKind::Property
+            } else {
+                TokenKind::String
+            };
             push(&mut lines, kind, &text);
             i = end;
             continue;
         }
-        if c.is_ascii_digit() || (c == '-' && lang == Language::Json && chars.get(i + 1).is_some_and(char::is_ascii_digit)) {
+        if c.is_ascii_digit()
+            || (c == '-'
+                && lang == Language::Json
+                && chars.get(i + 1).is_some_and(char::is_ascii_digit))
+        {
             let mut j = i + 1;
-            while j < chars.len() && (chars[j].is_ascii_alphanumeric() || chars[j] == '.' || chars[j] == '_') {
+            while j < chars.len()
+                && (chars[j].is_ascii_alphanumeric() || chars[j] == '.' || chars[j] == '_')
+            {
                 j += 1;
             }
-            push(&mut lines, TokenKind::Number, &chars[i..j].iter().collect::<String>());
+            push(
+                &mut lines,
+                TokenKind::Number,
+                &chars[i..j].iter().collect::<String>(),
+            );
             i = j;
             continue;
         }
@@ -158,7 +241,10 @@ pub fn highlight(src: &str, lang: Language) -> Vec<Vec<Token>> {
                 j += 1;
             }
             // Rust macros: `println!`.
-            if lang == Language::Rust && chars.get(j) == Some(&'!') && chars.get(j + 1) != Some(&'=') {
+            if lang == Language::Rust
+                && chars.get(j) == Some(&'!')
+                && chars.get(j + 1) != Some(&'=')
+            {
                 j += 1;
             }
             let word: String = chars[i..j].iter().collect();
@@ -176,7 +262,11 @@ pub fn highlight(src: &str, lang: Language) -> Vec<Vec<Token>> {
             i = j;
             continue;
         }
-        let kind = if c.is_whitespace() { TokenKind::Plain } else { TokenKind::Punctuation };
+        let kind = if c.is_whitespace() {
+            TokenKind::Plain
+        } else {
+            TokenKind::Punctuation
+        };
         push(&mut lines, kind, &c.to_string());
         i += 1;
     }
@@ -253,9 +343,16 @@ impl CodeTheme {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineOp {
     /// Line `old` becomes line `new`, unchanged.
-    Keep { old: usize, new: usize },
-    Delete { old: usize },
-    Insert { new: usize },
+    Keep {
+        old: usize,
+        new: usize,
+    },
+    Delete {
+        old: usize,
+    },
+    Insert {
+        new: usize,
+    },
 }
 
 /// LCS diff of two line lists (in old/new order).
@@ -265,7 +362,11 @@ pub fn diff_lines(a: &[&str], b: &[&str]) -> Vec<LineOp> {
     let mut l = vec![vec![0u32; m + 1]; n + 1];
     for i in (0..n).rev() {
         for j in (0..m).rev() {
-            l[i][j] = if a[i] == b[j] { l[i + 1][j + 1] + 1 } else { l[i + 1][j].max(l[i][j + 1]) };
+            l[i][j] = if a[i] == b[j] {
+                l[i + 1][j + 1] + 1
+            } else {
+                l[i + 1][j].max(l[i][j + 1])
+            };
         }
     }
     let (mut i, mut j) = (0, 0);
@@ -344,7 +445,8 @@ impl Look {
     fn width_for(&self, lines: &[&str]) -> f32 {
         #[allow(clippy::cast_precision_loss)]
         let chars = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0) as f32;
-        self.width.unwrap_or(self.gutter_width(lines.len()) + chars * self.size * 0.62 + 32.0)
+        self.width
+            .unwrap_or(self.gutter_width(lines.len()) + chars * self.size * 0.62 + 32.0)
     }
 }
 
@@ -360,7 +462,10 @@ pub struct CodeBlock {
 
 impl fmt::Debug for CodeBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CodeBlock").field("language", &self.language).field("lines", &self.source.lines().count()).finish_non_exhaustive()
+        f.debug_struct("CodeBlock")
+            .field("language", &self.language)
+            .field("lines", &self.source.lines().count())
+            .finish_non_exhaustive()
     }
 }
 
@@ -445,7 +550,16 @@ impl Widget for CodeBlock {
         let tokens = highlight(&self.source, self.language);
         let look = self.look;
         #[allow(clippy::cast_precision_loss)]
-        let rows: Vec<Row> = tokens.into_iter().enumerate().map(|(i, t)| Row { tokens: t, y: i as f32, number: Some(i + 1), alpha: 1.0 }).collect();
+        let rows: Vec<Row> = tokens
+            .into_iter()
+            .enumerate()
+            .map(|(i, t)| Row {
+                tokens: t,
+                y: i as f32,
+                number: Some(i + 1),
+                alpha: 1.0,
+            })
+            .collect();
         #[allow(clippy::cast_precision_loss)]
         let band = self.highlighted.map(|(a, b)| (a as f32, b as f32));
         render(&rows, &look, raw.len(), look.width_for(&raw), band)
@@ -460,11 +574,23 @@ struct Row {
     alpha: f32,
 }
 
-fn render(rows: &[Row], look: &Look, count: usize, width: f32, band: Option<(f32, f32)>) -> WidgetNode {
+fn render(
+    rows: &[Row],
+    look: &Look,
+    count: usize,
+    width: f32,
+    band: Option<(f32, f32)>,
+) -> WidgetNode {
     let row = look.row();
     let pad = 12.0;
     let gutter = look.gutter_width(count);
-    let height = rows.iter().map(|r| r.y + 1.0).fold(0.0f32, f32::max).max(1.0) * row + pad * 2.0;
+    let height = rows
+        .iter()
+        .map(|r| r.y + 1.0)
+        .fold(0.0f32, f32::max)
+        .max(1.0)
+        * row
+        + pad * 2.0;
     let mut kids: Vec<WidgetNode> = Vec::new();
     if let Some((a, b)) = band {
         kids.push(
@@ -490,7 +616,10 @@ fn render(rows: &[Row], look: &Look, count: usize, width: f32, band: Option<(f32
                 Positioned::new()
                     .left(8.0)
                     .top(top)
-                    .child(Opacity::new(r.alpha).child(RichText::new([Span::new(format!("{n:>2}"))]).style(gs)))
+                    .child(
+                        Opacity::new(r.alpha)
+                            .child(RichText::new([Span::new(format!("{n:>2}"))]).style(gs)),
+                    )
                     .into(),
             );
         }
@@ -526,7 +655,9 @@ pub struct CodeMorph {
 
 impl fmt::Debug for CodeMorph {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CodeMorph").field("t", &self.t).finish_non_exhaustive()
+        f.debug_struct("CodeMorph")
+            .field("t", &self.t)
+            .finish_non_exhaustive()
     }
 }
 
@@ -554,13 +685,25 @@ impl CodeMorph {
     /// The per-line layout at the current `t`: (text, y in rows, alpha).
     #[must_use]
     pub fn layout(&self) -> Vec<(String, f32, f32)> {
-        self.rows().into_iter().map(|r| (r.tokens.iter().map(|t| t.text.as_str()).collect(), r.y, r.alpha)).collect()
+        self.rows()
+            .into_iter()
+            .map(|r| {
+                (
+                    r.tokens.iter().map(|t| t.text.as_str()).collect(),
+                    r.y,
+                    r.alpha,
+                )
+            })
+            .collect()
     }
 
     fn rows(&self) -> Vec<Row> {
         let a: Vec<&str> = self.from.lines().collect();
         let b: Vec<&str> = self.to.lines().collect();
-        let (ha, hb) = (highlight(&self.from, self.language), highlight(&self.to, self.language));
+        let (ha, hb) = (
+            highlight(&self.from, self.language),
+            highlight(&self.to, self.language),
+        );
         let ease = |x: f32| x * x * (3.0 - 2.0 * x);
         // Phases: deletions fade 0..0.4, moves 0.2..0.8, insertions 0.6..1.
         let ph = |lo: f32, hi: f32| ease(((self.t - lo) / (hi - lo)).clamp(0.0, 1.0));
@@ -575,7 +718,12 @@ impl CodeMorph {
                 LineOp::Keep { old, new } => {
                     #[allow(clippy::cast_precision_loss)]
                     let y = old as f32 + (new as f32 - old as f32) * mv;
-                    rows.push(Row { tokens: hb.get(new).cloned().unwrap_or_default(), y, number: Some(new + 1), alpha: 1.0 });
+                    rows.push(Row {
+                        tokens: hb.get(new).cloned().unwrap_or_default(),
+                        y,
+                        number: Some(new + 1),
+                        alpha: 1.0,
+                    });
                     #[allow(clippy::cast_precision_loss)]
                     {
                         last_new = new as f32;
@@ -584,12 +732,22 @@ impl CodeMorph {
                 LineOp::Delete { old } => {
                     #[allow(clippy::cast_precision_loss)]
                     let y = old as f32 + (last_new + 0.5 - old as f32) * mv;
-                    rows.push(Row { tokens: ha.get(old).cloned().unwrap_or_default(), y, number: None, alpha: 1.0 - fade_out });
+                    rows.push(Row {
+                        tokens: ha.get(old).cloned().unwrap_or_default(),
+                        y,
+                        number: None,
+                        alpha: 1.0 - fade_out,
+                    });
                 }
                 LineOp::Insert { new } => {
                     #[allow(clippy::cast_precision_loss)]
                     let y = new as f32;
-                    rows.push(Row { tokens: hb.get(new).cloned().unwrap_or_default(), y, number: Some(new + 1), alpha: fade_in });
+                    rows.push(Row {
+                        tokens: hb.get(new).cloned().unwrap_or_default(),
+                        y,
+                        number: Some(new + 1),
+                        alpha: fade_in,
+                    });
                     #[allow(clippy::cast_precision_loss)]
                     {
                         last_new = new as f32;
@@ -632,12 +790,20 @@ mod tests {
     use super::*;
 
     fn kinds(src: &str, lang: Language) -> Vec<(TokenKind, String)> {
-        highlight(src, lang).into_iter().flatten().filter(|t| !t.text.trim().is_empty()).map(|t| (t.kind, t.text)).collect()
+        highlight(src, lang)
+            .into_iter()
+            .flatten()
+            .filter(|t| !t.text.trim().is_empty())
+            .map(|t| (t.kind, t.text))
+            .collect()
     }
 
     #[test]
     fn rust_tokens() {
-        let k = kinds("pub fn main() { let x: Vec<u8> = vec![1, 2]; // hi\n}", Language::Rust);
+        let k = kinds(
+            "pub fn main() { let x: Vec<u8> = vec![1, 2]; // hi\n}",
+            Language::Rust,
+        );
         assert!(k.contains(&(TokenKind::Keyword, "pub".into())));
         assert!(k.contains(&(TokenKind::Function, "main".into())));
         assert!(k.contains(&(TokenKind::Type, "Vec".into())));
@@ -649,11 +815,20 @@ mod tests {
 
     #[test]
     fn strings_escape_and_block_comments_span_lines() {
-        let k = kinds(r#"const s = "a \" b"; /* x
-y */ f()"#, Language::JavaScript);
+        let k = kinds(
+            r#"const s = "a \" b"; /* x
+y */ f()"#,
+            Language::JavaScript,
+        );
         assert!(k.contains(&(TokenKind::String, r#""a \" b""#.into())));
         let lines = highlight("/* x\ny */ f()", Language::JavaScript);
-        assert_eq!(lines[1][0], Token { kind: TokenKind::Comment, text: "y */".into() });
+        assert_eq!(
+            lines[1][0],
+            Token {
+                kind: TokenKind::Comment,
+                text: "y */".into()
+            }
+        );
     }
 
     #[test]
@@ -685,11 +860,28 @@ y */ f()"#, Language::JavaScript);
     #[test]
     fn morph_endpoints_match_the_sources() {
         let m0 = CodeMorph::new("a\nb\nc", "a\nc\nd", 0.0).layout();
-        let visible0: Vec<_> = m0.iter().filter(|r| r.2 > 0.99).map(|r| (r.0.clone(), r.1)).collect();
-        assert_eq!(visible0, vec![("a".into(), 0.0), ("b".into(), 1.0), ("c".into(), 2.0)]);
+        let visible0: Vec<_> = m0
+            .iter()
+            .filter(|r| r.2 > 0.99)
+            .map(|r| (r.0.clone(), r.1))
+            .collect();
+        assert_eq!(
+            visible0,
+            vec![("a".into(), 0.0), ("b".into(), 1.0), ("c".into(), 2.0)]
+        );
         let m1 = CodeMorph::new("a\nb\nc", "a\nc\nd", 1.0).layout();
-        let visible1: Vec<_> = m1.iter().filter(|r| r.2 > 0.99).map(|r| (r.0.clone(), r.1)).collect();
-        assert_eq!(visible1, vec![("a".into(), 0.0), ("c".into(), 1.0), ("d".into(), 2.0)]);
-        assert!(m1.iter().any(|r| r.0 == "b" && r.2 < 0.01), "deleted line faded out");
+        let visible1: Vec<_> = m1
+            .iter()
+            .filter(|r| r.2 > 0.99)
+            .map(|r| (r.0.clone(), r.1))
+            .collect();
+        assert_eq!(
+            visible1,
+            vec![("a".into(), 0.0), ("c".into(), 1.0), ("d".into(), 2.0)]
+        );
+        assert!(
+            m1.iter().any(|r| r.0 == "b" && r.2 < 0.01),
+            "deleted line faded out"
+        );
     }
 }

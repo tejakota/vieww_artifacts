@@ -18,17 +18,16 @@
 //! z-maxima — the return map that IS the attractor's fingerprint —
 //! plotted live in the corner. Every number counted, none remembered.
 
-use std::f64::consts::PI;
-
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The law ─────────────────────────────────────────────────────────────────
 
@@ -76,7 +75,14 @@ const STEPS: usize = 60 * 240;
 
 /// The full flight + twin, replayed to a film-fraction. Returns
 /// (main trajectory, twin trajectory, separation series, z-maxima pairs).
-fn flight_to(t: f64) -> (Vec<[f64; 3]>, Vec<[f64; 3]>, Vec<(f64, f64)>, Vec<(f64, f64)>) {
+fn flight_to(
+    t: f64,
+) -> (
+    Vec<[f64; 3]>,
+    Vec<[f64; 3]>,
+    Vec<(f64, f64)>,
+    Vec<(f64, f64)>,
+) {
     let n = ((t * STEPS as f64) as usize).max(2);
     let dt = T_END / STEPS as f64;
     let mut a = [0.1, 0.0, 0.0];
@@ -145,7 +151,7 @@ fn lyapunov_fit() -> (f64, f64, usize) {
         b = step(&b, dt);
         t += dt;
         i += 1;
-        if i % renorm_steps == 0 {
+        if i.is_multiple_of(renorm_steps) {
             let d = ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt();
             acc += (d / d0).ln();
             let scale = d0 / d;
@@ -172,7 +178,7 @@ const PY: f32 = 140.0;
 const PW: f32 = 660.0;
 const PH: f32 = 520.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let (traj, twin, sep, zmax) = flight_to(t as f64);
     let (lam, r2, npts) = lyapunov_fit();
 
@@ -194,10 +200,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the depth of the ambience.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 16))]),
             );
 
             // The portrait panel.
@@ -225,10 +230,10 @@ pub fn frame(t: f32) -> WidgetNode {
             // ── The attractor's ink — one Plus layer, accumulated glow ──
             book.blended_layer(0.9, 0.0, BlendMode::Plus, None, |g| {
                 // the main trajectory: thin cyan ink, brighter at the tips
-                let stride = 2usize.max(1);
+                let stride = 2usize;
                 let mut path = Path::new();
                 let mut started = false;
-                for (i, s) in traj.iter().enumerate().step_by(stride) {
+                for (_i, s) in traj.iter().enumerate().step_by(stride) {
                     let (x, y) = (mx(s[0]), my(s[2]));
                     if !started {
                         path.move_to(Offset::new(x, y));
@@ -257,7 +262,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 }
                 g.stroke(tpath, alpha(AMBER, 0.5), 1.6);
                 if let Some(s) = twin.last() {
-                    g.ring(Offset::new(mx(s[0]), my(s[2])), 4.4, 1.6, alpha(AMBER, 0.95));
+                    g.ring(
+                        Offset::new(mx(s[0]), my(s[2])),
+                        4.4,
+                        1.6,
+                        alpha(AMBER, 0.95),
+                    );
                 }
             });
 
@@ -273,7 +283,9 @@ pub fn frame(t: f32) -> WidgetNode {
             );
             // log|Δ| from 1e-7 to 3, drawn as the meter's own curve
             let lx = |tt: f64| sx0 + (tt / T_END * sw as f64) as f32;
-            let lyy = |d: f64| sy0 + sh - ((d.ln() - (-16.0)) / (1.2 - (-16.0))).clamp(0.0, 1.0) as f32 * sh;
+            let lyy = |d: f64| {
+                sy0 + sh - ((d.ln() - (-16.0)) / (1.2 - (-16.0))).clamp(0.0, 1.0) as f32 * sh
+            };
             let mut spath = Path::new();
             let mut sstarted = false;
             for &(tt, d) in sep.iter() {
@@ -288,9 +300,10 @@ pub fn frame(t: f32) -> WidgetNode {
             book.stroke(spath, alpha(AMBER, 0.9), 1.6);
             // the fitted growth line, drawn from the fit's own numbers
             if lam.is_finite() {
-                let y_a = ((lam * 0.5 + ln_intercept(lam)) as f32);
-                let y_b = ((lam * 3.5 + ln_intercept(lam)) as f32);
-                let map = |v: f32| sy0 + sh - ((v - (-16.0)) / (1.2 - (-16.0))).clamp(0.0, 1.0) * sh;
+                let y_a = (lam * 0.5 + ln_intercept(lam)) as f32;
+                let y_b = (lam * 3.5 + ln_intercept(lam)) as f32;
+                let map =
+                    |v: f32| sy0 + sh - ((v - (-16.0)) / (1.2 - (-16.0))).clamp(0.0, 1.0) * sh;
                 book.line(
                     Offset::new(lx(0.5), map(y_a)),
                     Offset::new(lx(3.5), map(y_b)),
@@ -337,9 +350,7 @@ pub fn frame(t: f32) -> WidgetNode {
 fn ln_intercept(lam: f64) -> f64 {
     // anchor the line through the first point of the window
     let (_, _, sep, _) = flight_to(1.0);
-    let first = sep
-        .iter()
-        .find(|&&(t, d)| d > 1e-6 && d < 1.0 && t > 0.5);
+    let first = sep.iter().find(|&&(t, d)| d > 1e-6 && d < 1.0 && t > 0.5);
     match first {
         Some(&(t, d)) => d.ln() - lam * t,
         None => -13.8,
@@ -350,7 +361,7 @@ fn ln_intercept(lam: f64) -> f64 {
 
 fn receipt_panel(
     lam: f64,
-    r2: f64,
+    _r2: f64,
     npts: usize,
     sep_now: f64,
     z_min: f64,
@@ -359,12 +370,8 @@ fn receipt_panel(
 ) -> WidgetNode {
     let lines = [
         "LORENZ · THE ATTRACTOR AXIS · THE BUTTERFLY (1963)".to_string(),
-        format!(
-            "dx/dt = σ(y−x), dy/dt = x(ρ−z)−y, dz/dt = xy−βz · σ=10, ρ=28, β=8/3 · RK4 @ 240/unit"
-        ),
-        format!(
-            "flight replayed from the seed every frame · twin released at δ = 1e−6 · x–z portrait"
-        ),
+        "dx/dt = σ(y−x), dy/dt = x(ρ−z)−y, dz/dt = xy−βz · σ=10, ρ=28, β=8/3 · RK4 @ 240/unit".to_string(),
+        "flight replayed from the seed every frame · twin released at δ = 1e−6 · x–z portrait".to_string(),
         format!(
             "LYAPUNOV (Benettin, 200 units): λ = {lam:.3} vs theory 0.906 · {npts} renormalisations"
         ),
@@ -392,7 +399,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

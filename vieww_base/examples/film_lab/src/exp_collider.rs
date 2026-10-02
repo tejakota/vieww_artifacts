@@ -17,16 +17,18 @@
 //! the arcs were drawn with, and the species census — hadrons, electrons,
 //! photons, muons — counted, not asserted.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
-    StrokeStyle, Dash};
+use vieww_foundation::{
+    Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, smoothstep, tint, AMBER, CYAN,
-    INK, MUTED, MAGENTA, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, smoothstep, tint, AMBER, CYAN, INK, MAGENTA, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The detector ────────────────────────────────────────────────────────────
 
@@ -82,7 +84,13 @@ fn event() -> (Vec<Track>, (f32, f32)) {
                 x if x < 0.92 => Species::Photon,
                 _ => Species::Muon,
             };
-            let charge = if species == Species::Photon { 0.0 } else if rng.f01() < 0.5 { 1.0 } else { -1.0 };
+            let charge = if species == Species::Photon {
+                0.0
+            } else if rng.f01() < 0.5 {
+                1.0
+            } else {
+                -1.0
+            };
             tracks.push(Track {
                 charge,
                 pt,
@@ -135,10 +143,7 @@ fn arc_points(t: &Track, stop_r: f32) -> (Vec<Offset>, f32) {
         for k in 0..=24 {
             let u = k as f32 / 24.0;
             let d = u * stop_r;
-            pts.push(Offset::new(
-                C.0 + t.phi.cos() * d,
-                C.1 + t.phi.sin() * d,
-            ));
+            pts.push(Offset::new(C.0 + t.phi.cos() * d, C.1 + t.phi.sin() * d));
         }
         return (pts, f32::INFINITY);
     }
@@ -149,9 +154,9 @@ fn arc_points(t: &Track, stop_r: f32) -> (Vec<Offset>, f32) {
         C.1 + t.phi.cos() * r * t.charge,
     );
     let a0 = (C.1 - cy).atan2(C.0 - cx); // angle of the vertex from centre
-    // Half-angle where the arc crosses radius stop_r from C:
-    // chord geometry: cos(half) = (r² + d² − stop_r²)/(2·r·d)? Simpler:
-    // find sweep where |P(θ) − C| = stop_r by scanning.
+                                         // Half-angle where the arc crosses radius stop_r from C:
+                                         // chord geometry: cos(half) = (r² + d² − stop_r²)/(2·r·d)? Simpler:
+                                         // find sweep where |P(θ) − C| = stop_r by scanning.
     let mut pts = Vec::new();
     let mut end = a0;
     let dir = -t.charge; // bend direction
@@ -188,7 +193,7 @@ fn arc_points(t: &Track, stop_r: f32) -> (Vec<Offset>, f32) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let (tracks, met) = event();
 
     // The replay: after the flash, tracks stream outward — progress eased.
@@ -210,16 +215,15 @@ pub fn frame(t: f32) -> WidgetNode {
                 // Find the first point at radius ≥ layer.
                 if let Some(&p) = pts
                     .iter()
-                    .find(|&&p| {
-                        ((p.dx - C.0).powi(2) + (p.dy - C.1).powi(2)).sqrt() >= layer
-                    })
+                    .find(|&&p| ((p.dx - C.0).powi(2) + (p.dy - C.1).powi(2)).sqrt() >= layer)
                 {
-                    let crossed = upto >= pts
-                        .iter()
-                        .position(|&q| {
-                            ((q.dx - C.0).powi(2) + (q.dy - C.1).powi(2)).sqrt() >= layer
-                        })
-                        .unwrap_or(usize::MAX);
+                    let crossed = upto
+                        >= pts
+                            .iter()
+                            .position(|&q| {
+                                ((q.dx - C.0).powi(2) + (q.dy - C.1).powi(2)).sqrt() >= layer
+                            })
+                            .unwrap_or(usize::MAX);
                     if crossed {
                         hits.push((p, layer));
                     }
@@ -231,7 +235,12 @@ pub fn frame(t: f32) -> WidgetNode {
 
     // The species census, from the record.
     let count = |s: Species| tracks.iter().filter(|tr| tr.species == s).count();
-    let (n_h, n_e, n_g, n_m) = (count(Species::Hadron), count(Species::Electron), count(Species::Photon), count(Species::Muon));
+    let (n_h, n_e, n_g, n_m) = (
+        count(Species::Hadron),
+        count(Species::Electron),
+        count(Species::Photon),
+        count(Species::Muon),
+    );
     let met_mag = (met.0 * met.0 + met.1 * met.1).sqrt();
 
     let board = Painting::sized(
@@ -243,41 +252,81 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the control room's view.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.85).with_dither().with_stops(&[
-                    (0.0, Color::rgb(10, 10, 15)),
-                    (1.0, Color::rgb(5, 5, 8)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.85)
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(10, 10, 15)), (1.0, Color::rgb(5, 5, 8))]),
             );
 
             // ── The detector, concentric instrumented rings ─────────────
             // Beam pipe.
-            book.ring(Offset::new(C.0, C.1), R_PIPE, 3.0, alpha(mix(MUTED, CYAN, 0.2), 0.5));
+            book.ring(
+                Offset::new(C.0, C.1),
+                R_PIPE,
+                3.0,
+                alpha(mix(MUTED, CYAN, 0.2), 0.5),
+            );
             // Tracker: three thin shells + straws.
             for k in 0..3 {
                 let r = R_PIPE + 24.0 + k as f32 * 52.0;
                 book.ring(Offset::new(C.0, C.1), r, 1.2, alpha(tint(CYAN, 0.25), 0.30));
             }
-            book.ring(Offset::new(C.0, C.1), R_TRACKER, 2.6, alpha(mix(CYAN, VIOLET, 0.35), 0.55));
+            book.ring(
+                Offset::new(C.0, C.1),
+                R_TRACKER,
+                2.6,
+                alpha(mix(CYAN, VIOLET, 0.35), 0.55),
+            );
             // ECAL: a denser band.
-            book.ring(Offset::new(C.0, C.1), R_ECAL - 8.0, 5.0, alpha(tint(AMBER, 0.15), 0.35));
-            book.ring(Offset::new(C.0, C.1), R_ECAL, 2.4, alpha(tint(AMBER, 0.4), 0.55));
+            book.ring(
+                Offset::new(C.0, C.1),
+                R_ECAL - 8.0,
+                5.0,
+                alpha(tint(AMBER, 0.15), 0.35),
+            );
+            book.ring(
+                Offset::new(C.0, C.1),
+                R_ECAL,
+                2.4,
+                alpha(tint(AMBER, 0.4), 0.55),
+            );
             // HCAL: the thick block.
-            book.ring(Offset::new(C.0, C.1), (R_ECAL + R_HCAL) / 2.0, (R_HCAL - R_ECAL) * 0.5, alpha(Color::rgb(60, 46, 30), 0.55));
-            book.ring(Offset::new(C.0, C.1), R_HCAL, 2.4, alpha(tint(AMBER, 0.1), 0.5));
+            book.ring(
+                Offset::new(C.0, C.1),
+                (R_ECAL + R_HCAL) / 2.0,
+                (R_HCAL - R_ECAL) * 0.5,
+                alpha(Color::rgb(60, 46, 30), 0.55),
+            );
+            book.ring(
+                Offset::new(C.0, C.1),
+                R_HCAL,
+                2.4,
+                alpha(tint(AMBER, 0.1), 0.5),
+            );
             // The coil: violet, bright.
             book.ring(Offset::new(C.0, C.1), R_COIL, 3.2, alpha(VIOLET, 0.75));
             // Muon chambers: three thin outer shells with tick segmentation.
             for k in 0..3 {
                 let r = R_COIL + 12.0 + k as f32 * 12.0;
-                book.ring(Offset::new(C.0, C.1), r, 1.6, alpha(mix(VIOLET, CYAN, 0.4), 0.4));
+                book.ring(
+                    Offset::new(C.0, C.1),
+                    r,
+                    1.6,
+                    alpha(mix(VIOLET, CYAN, 0.4), 0.4),
+                );
             }
             // Segmentation ticks on the outermost shell (the chambers).
             let segs = 48;
             for i in 0..segs {
                 let a = i as f32 / segs as f32 * std::f32::consts::TAU;
                 book.line(
-                    Offset::new(C.0 + a.cos() * (R_MUON - 3.0), C.1 + a.sin() * (R_MUON - 3.0)),
-                    Offset::new(C.0 + a.cos() * (R_MUON + 3.0), C.1 + a.sin() * (R_MUON + 3.0)),
+                    Offset::new(
+                        C.0 + a.cos() * (R_MUON - 3.0),
+                        C.1 + a.sin() * (R_MUON - 3.0),
+                    ),
+                    Offset::new(
+                        C.0 + a.cos() * (R_MUON + 3.0),
+                        C.1 + a.sin() * (R_MUON + 3.0),
+                    ),
                     alpha(mix(VIOLET, CYAN, 0.4), 0.4),
                     1.0,
                 );
@@ -408,7 +457,12 @@ fn receipt_panel(
             if tr.charge == 0.0 {
                 format!("γ pT {:>5.1} GeV (straight)", tr.pt)
             } else {
-                format!("q{:+.0} pT {:>5.1} → r = {:.0} px", tr.charge, tr.pt, SCALE_PT * tr.pt)
+                format!(
+                    "q{:+.0} pT {:>5.1} → r = {:.0} px",
+                    tr.charge,
+                    tr.pt,
+                    SCALE_PT * tr.pt
+                )
             }
         })
         .collect();
@@ -423,7 +477,8 @@ fn receipt_panel(
             "visible ΣpT → MET = ({:+.1}, {:+.1}), |MET| = {met_mag:.1} GeV — the ledger, closed",
             met.0, met.1
         ),
-        "μ sail through everything · hadrons stop in the HCAL · MET points where nothing shows".to_string(),
+        "μ sail through everything · hadrons stop in the HCAL · MET points where nothing shows"
+            .to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -442,7 +497,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

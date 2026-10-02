@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn frequency_scales_the_period() {
         let slow = Lfo::new(Wave::Sine, 0.5); // 2 s period
-        // 0.5 s is a quarter of the slow period — its crest.
+                                              // 0.5 s is a quarter of the slow period — its crest.
         assert!((slow.at(ms(500)) - 1.0).abs() < EPS);
     }
 

@@ -108,7 +108,11 @@ impl Prop {
 /// What a layer shows.
 #[derive(Clone)]
 pub enum Source {
-    Solid { color: Color, width: u32, height: u32 },
+    Solid {
+        color: Color,
+        width: u32,
+        height: u32,
+    },
     Still(Image),
     /// Footage; sampled at the layer's (remapped) local time.
     Footage(Arc<dyn VideoSource + Send + Sync>),
@@ -123,7 +127,11 @@ pub enum Source {
 impl fmt::Debug for Source {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Solid { color, width, height } => write!(f, "Solid({color:?}, {width}x{height})"),
+            Self::Solid {
+                color,
+                width,
+                height,
+            } => write!(f, "Solid({color:?}, {width}x{height})"),
             Self::Still(i) => write!(f, "Still({}x{})", i.width(), i.height()),
             Self::Footage(_) => f.write_str("Footage(..)"),
             Self::Generator(_) => f.write_str("Generator(..)"),
@@ -208,7 +216,10 @@ impl LayerTransform {
         Transform::translate(Offset::new(-self.anchor_x.at(t), -self.anchor_y.at(t)))
             .then(Transform::scale(self.scale_x.at(t), self.scale_y.at(t)))
             .then(Transform::rotate(self.rotation.at(t).to_radians()))
-            .then(Transform::translate(Offset::new(self.x.at(t), self.y.at(t))))
+            .then(Transform::translate(Offset::new(
+                self.x.at(t),
+                self.y.at(t),
+            )))
     }
 }
 
@@ -434,9 +445,17 @@ impl Composition {
     fn source_image(&self, layer: &Layer, t: f32) -> Option<Image> {
         let lt = layer.local_time(t);
         match &layer.source {
-            Source::Solid { color, width, height } => {
+            Source::Solid {
+                color,
+                width,
+                height,
+            } => {
                 let px = [color.r, color.g, color.b, color.a];
-                Some(Image::from_rgba8(px.repeat((width * height) as usize), *width, *height))
+                Some(Image::from_rgba8(
+                    px.repeat((width * height) as usize),
+                    *width,
+                    *height,
+                ))
             }
             Source::Still(i) => Some(i.clone()),
             Source::Footage(v) => {
@@ -479,7 +498,12 @@ impl Composition {
                 }
                 // Premultiplied bilinear.
                 let mut acc = [0.0f32; 4];
-                for (dx, dy, wt) in [(0, 0, (1.0 - tx) * (1.0 - ty)), (1, 0, tx * (1.0 - ty)), (0, 1, (1.0 - tx) * ty), (1, 1, tx * ty)] {
+                for (dx, dy, wt) in [
+                    (0, 0, (1.0 - tx) * (1.0 - ty)),
+                    (1, 0, tx * (1.0 - ty)),
+                    (0, 1, (1.0 - tx) * ty),
+                    (1, 1, tx * ty),
+                ] {
                     let (sx, sy) = (x0 + dx, y0 + dy);
                     if sx < 0 || sy < 0 || sx >= sw || sy >= sh {
                         continue;
@@ -507,7 +531,13 @@ impl Composition {
         let (w, h) = (self.width as usize, self.height as usize);
         let bg = self.background;
         let ba = f32::from(bg.a) / 255.0;
-        let mut acc: Vec<f32> = [f32::from(bg.r) / 255.0 * ba, f32::from(bg.g) / 255.0 * ba, f32::from(bg.b) / 255.0 * ba, ba].repeat(w * h);
+        let mut acc: Vec<f32> = [
+            f32::from(bg.r) / 255.0 * ba,
+            f32::from(bg.g) / 255.0 * ba,
+            f32::from(bg.b) / 255.0 * ba,
+            ba,
+        ]
+        .repeat(w * h);
         // Layers used as a matte by the layer below them are not drawn.
         let is_matte = |i: usize| i > 0 && self.layers[i - 1].track_matte.is_some();
         for (i, layer) in self.layers.iter().enumerate() {
@@ -527,11 +557,19 @@ impl Composition {
                 }
                 continue;
             }
-            let Some(mut px) = self.layer_pixels(i, t) else { continue };
+            let Some(mut px) = self.layer_pixels(i, t) else {
+                continue;
+            };
             if let Some(mode) = layer.track_matte {
-                let matte = self.layers.get(i + 1).filter(|m| m.active(t)).and_then(|_| self.layer_pixels(i + 1, t));
-                for (k, p) in px.chunks_exact_mut(4).enumerate() {
-                    let m = matte.as_ref().map_or([0.0; 4], |m| [m[k * 4], m[k * 4 + 1], m[k * 4 + 2], m[k * 4 + 3]]);
+                let matte = self
+                    .layers
+                    .get(i + 1)
+                    .filter(|m| m.active(t))
+                    .and_then(|_| self.layer_pixels(i + 1, t));
+                for (k, p) in px.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                    let m = matte.as_ref().map_or([0.0; 4], |m| {
+                        [m[k * 4], m[k * 4 + 1], m[k * 4 + 2], m[k * 4 + 3]]
+                    });
                     let luma = 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
                     let f = match mode {
                         MatteMode::Alpha => m[3],
@@ -544,7 +582,12 @@ impl Composition {
                     }
                 }
             }
-            for (d, s) in acc.chunks_exact_mut(4).zip(px.chunks_exact(4)) {
+            for (d, s) in acc
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(px.as_chunks::<4>().0)
+            {
                 let sa = s[3];
                 if sa <= 0.0 {
                     continue;
@@ -575,7 +618,7 @@ impl Composition {
 
 fn to_image(acc: &[f32], w: u32, h: u32) -> Image {
     let mut out = Vec::with_capacity(acc.len());
-    for p in acc.chunks_exact(4) {
+    for p in acc.as_chunks::<4>().0 {
         let a = p[3].clamp(0.0, 1.0);
         for &c in &p[..3] {
             let v = if a > 0.0 { c / a } else { 0.0 };
@@ -590,10 +633,17 @@ fn to_image(acc: &[f32], w: u32, h: u32) -> Image {
 
 fn from_image(img: &Image) -> Vec<f32> {
     img.pixels()
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .flat_map(|p| {
             let a = f32::from(p[3]) / 255.0;
-            [f32::from(p[0]) / 255.0 * a, f32::from(p[1]) / 255.0 * a, f32::from(p[2]) / 255.0 * a, a]
+            [
+                f32::from(p[0]) / 255.0 * a,
+                f32::from(p[1]) / 255.0 * a,
+                f32::from(p[2]) / 255.0 * a,
+                a,
+            ]
         })
         .collect()
 }
@@ -628,7 +678,11 @@ mod tests {
     }
 
     fn solid(c: Color, w: u32, h: u32) -> Source {
-        Source::Solid { color: c, width: w, height: h }
+        Source::Solid {
+            color: c,
+            width: w,
+            height: h,
+        }
     }
 
     #[test]
@@ -644,7 +698,11 @@ mod tests {
     #[test]
     fn in_out_points_and_position() {
         let mut c = Composition::new("c", 20, 10, 10, 2.0).background(Color::rgb(0, 0, 0));
-        c.push(Layer::new("red", solid(Color::rgb(255, 0, 0), 4, 4)).at(10.0, 2.0).span(0.5, 1.5));
+        c.push(
+            Layer::new("red", solid(Color::rgb(255, 0, 0), 4, 4))
+                .at(10.0, 2.0)
+                .span(0.5, 1.5),
+        );
         assert_eq!(px(&c.render(0.0), 11, 3), [0, 0, 0, 255]);
         assert_eq!(px(&c.render(1.0), 11, 3), [255, 0, 0, 255]);
         assert_eq!(px(&c.render(1.0), 9, 3), [0, 0, 0, 255]);
@@ -655,7 +713,11 @@ mod tests {
     fn parenting_inherits_transform() {
         let mut c = Composition::new("c", 40, 40, 10, 1.0);
         let null = c.push(Layer::new("null", Source::Null).at(20.0, 20.0).scale(2.0));
-        c.push(Layer::new("child", solid(Color::rgb(0, 255, 0), 2, 2)).at(5.0, 0.0).parent(null));
+        c.push(
+            Layer::new("child", solid(Color::rgb(0, 255, 0), 2, 2))
+                .at(5.0, 0.0)
+                .parent(null),
+        );
         // child's (0..2) → ×2 → +(10,0)… then +(20,20): covers x 30..34, y 20..24.
         let img = c.render(0.0);
         assert_eq!(px(&img, 31, 21)[1], 255);
@@ -681,14 +743,22 @@ mod tests {
         c.push(Layer::new("fill", solid(Color::rgb(255, 0, 0), 10, 10)).matte(MatteMode::Alpha));
         c.push(Layer::new("shape", solid(Color::rgb(0, 0, 255), 4, 4)).at(3.0, 3.0));
         let img = c.render(0.0);
-        assert_eq!(px(&img, 4, 4), [255, 0, 0, 255], "red inside the matte, matte itself invisible");
+        assert_eq!(
+            px(&img, 4, 4),
+            [255, 0, 0, 255],
+            "red inside the matte, matte itself invisible"
+        );
         assert_eq!(px(&img, 0, 0), [0, 0, 0, 255]);
     }
 
     #[test]
     fn adjustment_layer_affects_only_beneath() {
         let invert = |img: &Image, _t: f32| {
-            let p: Vec<u8> = img.pixels().chunks(4).flat_map(|p| [255 - p[0], 255 - p[1], 255 - p[2], p[3]]).collect();
+            let p: Vec<u8> = img
+                .pixels()
+                .chunks(4)
+                .flat_map(|p| [255 - p[0], 255 - p[1], 255 - p[2], p[3]])
+                .collect();
             Image::from_rgba8(p, img.width(), img.height())
         };
         let mut c = Composition::new("c", 4, 1, 10, 1.0).background(Color::rgb(0, 0, 0));
@@ -710,8 +780,16 @@ mod tests {
         inner.push(Layer::new("g", gen.clone()));
         let mut c = Composition::new("c", 3, 1, 10, 3.0);
         c.push(Layer::new("frozen", gen.clone()).remap(1.0.into()));
-        c.push(Layer::new("reversed", gen).at(1.0, 0.0).remap(Prop::Linear(vec![(0.0, 2.0), (2.0, 0.0)])));
-        c.push(Layer::new("pre", Source::Precomp(Arc::new(inner))).at(2.0, 0.0).starting(0.5));
+        c.push(
+            Layer::new("reversed", gen)
+                .at(1.0, 0.0)
+                .remap(Prop::Linear(vec![(0.0, 2.0), (2.0, 0.0)])),
+        );
+        c.push(
+            Layer::new("pre", Source::Precomp(Arc::new(inner)))
+                .at(2.0, 0.0)
+                .starting(0.5),
+        );
         let img = c.render(1.5);
         assert_eq!(px(&img, 0, 0)[0], 100, "freeze frame at source 1s");
         assert_eq!(px(&img, 1, 0)[0], 50, "reversed: comp 1.5 → source 0.5");

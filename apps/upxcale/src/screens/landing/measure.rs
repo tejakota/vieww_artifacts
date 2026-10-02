@@ -392,7 +392,7 @@ mod tests {
         let mut pixels = Vec::with_capacity((width * height * 4) as usize);
         for y in 0..height {
             for x in 0..width {
-                let on = (x / period.max(1)) % 2 == 0;
+                let on = (x / period.max(1)).is_multiple_of(2);
                 let level = if on { 128 + contrast / 2 } else { 128 - contrast / 2 };
                 pixels.extend([
                     level,

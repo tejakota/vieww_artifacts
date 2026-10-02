@@ -17,16 +17,18 @@
 //! computed by the same functions that drew the frame: the churn census, the
 //! settle times, the wave position, the underline's drawn fraction.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, Dash,
-    TextStyle};
+use vieww_foundation::{
+    Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, mix, spring_out, BG_DEEP, CANVAS, FAINT, INK, MUTED,
-    VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, spring_out, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The sentence the noise resolves into.
 const LINE1: &str = "every frame is a receipt";
@@ -105,11 +107,12 @@ fn wave_front(t: f32) -> usize {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let n1 = LINE1.chars().count();
     let all_settled = (0..n1).all(|i| t >= settle_at(i));
     let line2_t = clamp01((t - LINE2_T0) / LINE2_SPAN);
-    let typed = ((line2_t * LINE2.chars().count() as f32).floor() as usize).min(LINE2.chars().count());
+    let typed =
+        ((line2_t * LINE2.chars().count() as f32).floor() as usize).min(LINE2.chars().count());
 
     let board = Painting::sized(
         CANVAS,
@@ -120,17 +123,18 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — quiet; the type is the plate.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(8, 8, 11)),
-                    (1.0, BG_DEEP),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(8, 8, 11)), (1.0, BG_DEEP)]),
             );
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.34, 0.44), 0.75).with_dither().with_stops(&[
-                    (0.0, alpha(VIOLET_SOFT, 0.07)),
-                    (1.0, alpha(VIOLET_SOFT, 0.0)),
-                ]),
+                Gradient::radial(Offset::new(0.34, 0.44), 0.75)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, alpha(VIOLET_SOFT, 0.07)),
+                        (1.0, alpha(VIOLET_SOFT, 0.0)),
+                    ]),
             );
 
             // The ghost target — the sentence, always faintly present: the
@@ -191,7 +195,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // overshoot reads as growth from the baseline.
             let scale = 0.82 + 0.18 * pop;
             let c = mix(MUTED, INK, clamp01(u * 1.6));
-            (ch.to_string(), alpha(c, 0.75 + 0.25 * clamp01(u * 2.0)), 0.0, EM1 * scale)
+            (
+                ch.to_string(),
+                alpha(c, 0.75 + 0.25 * clamp01(u * 2.0)),
+                0.0,
+                EM1 * scale,
+            )
         } else if ch == ' ' {
             (String::new(), MUTED, 0.0, EM1)
         } else {
@@ -232,7 +241,11 @@ pub fn frame(t: f32) -> WidgetNode {
         let c = if on {
             let u = clamp01((line2_t * n2 as f32 - i as f32).max(0.0) / 0.8);
             let rise = (1.0 - u) * 4.0;
-            (ch.to_string(), alpha(mix(MUTED, INK, u), 0.45 + 0.55 * u), rise)
+            (
+                ch.to_string(),
+                alpha(mix(MUTED, INK, u), 0.45 + 0.55 * u),
+                rise,
+            )
         } else {
             (String::new(), MUTED, 4.0)
         };
@@ -245,11 +258,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 .top(LINE2_Y + c.2)
                 .width(ADV2 + 4.0)
                 .height(EM2 + 6.0)
-                .child(
-                    Text::new(c.0).style(
-                        TextStyle::new(EM2).monospace().color(c.1),
-                    ),
-                ),
+                .child(Text::new(c.0).style(TextStyle::new(EM2).monospace().color(c.1))),
         );
     }
     // The caret — blinking at the typing frontier.
@@ -285,8 +294,8 @@ fn receipt_panel(t: f32) -> WidgetNode {
     let front = wave_front(t);
     let burned: u64 = (0..n1).map(cycles_burned).sum();
     let line2_t = clamp01((t - LINE2_T0) / LINE2_SPAN);
-    let typed = ((line2_t * LINE2.chars().count() as f32).floor() as usize)
-        .min(LINE2.chars().count());
+    let typed =
+        ((line2_t * LINE2.chars().count() as f32).floor() as usize).min(LINE2.chars().count());
     let underline = if (0..n1).all(|i| t >= settle_at(i)) {
         clamp01((t - (settle_at(n1 - 1) + 0.10)) / 0.18)
     } else {
@@ -299,11 +308,21 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
     let lines = [
         "SETTLE · TEXT KINETICS II · SCRAMBLE → SETTLE".to_string(),
-        format!("line {} glyphs · settled {} · wave front {}", n1, settled, front),
+        format!(
+            "line {} glyphs · settled {} · wave front {}",
+            n1, settled, front
+        ),
         format!("churn {:.0} Hz · cycles burned {}", CHURN_HZ, burned),
-        format!("underline {:.0}% · motto typed {}/{}", underline * 100.0, typed,
-            LINE2.chars().count()),
-        format!("spring ω {:.0} ζ {:.2} (analytic)", SPRING_OMEGA, SPRING_ZETA),
+        format!(
+            "underline {:.0}% · motto typed {}/{}",
+            underline * 100.0,
+            typed,
+            LINE2.chars().count()
+        ),
+        format!(
+            "spring ω {:.0} ζ {:.2} (analytic)",
+            SPRING_OMEGA, SPRING_ZETA
+        ),
     ];
 
     let mut stack = Stack::new().push(
@@ -330,7 +349,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 .height(15.0)
                 .child(
                     Text::new(line.clone()).style(
-                        TextStyle::new(11.0).monospace().color(alpha(mix(MUTED, INK, 0.4), 0.95)),
+                        TextStyle::new(11.0)
+                            .monospace()
+                            .color(alpha(mix(MUTED, INK, 0.4), 0.95)),
                     ),
                 ),
         );

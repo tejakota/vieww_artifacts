@@ -179,8 +179,8 @@ fn an_empty_scene_is_the_clear_colour_exactly() {
 
     // Exactly, not approximately: nothing was drawn, so no rasterization
     // happened and there is no coverage to disagree about.
-    for pixel in pixels.chunks_exact(4) {
-        assert_eq!(pixel, [20, 30, 40, 255], "every pixel is the clear colour");
+    for pixel in pixels.as_chunks::<4>().0 {
+        assert_eq!(pixel, &[20, 30, 40, 255], "every pixel is the clear colour");
     }
 }
 

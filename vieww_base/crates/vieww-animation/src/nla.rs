@@ -250,11 +250,21 @@ impl Nla {
                 .iter()
                 .filter_map(|s| s.local(t).map(|l| (s, l)))
                 .min_by(|a, b| {
-                    let da = if t >= a.0.start && t <= a.0.end() { 0.0 } else { (t - a.0.end()).abs() };
-                    let db = if t >= b.0.start && t <= b.0.end() { 0.0 } else { (t - b.0.end()).abs() };
+                    let da = if t >= a.0.start && t <= a.0.end() {
+                        0.0
+                    } else {
+                        (t - a.0.end()).abs()
+                    };
+                    let db = if t >= b.0.start && t <= b.0.end() {
+                        0.0
+                    } else {
+                        (t - b.0.end()).abs()
+                    };
                     da.total_cmp(&db)
                 });
-            let Some((strip, (clip_t, w))) = active else { continue };
+            let Some((strip, (clip_t, w))) = active else {
+                continue;
+            };
             for (k, v) in strip.clip.sample(clip_t) {
                 let below = out.get(&k).copied();
                 let next = match strip.blend {
@@ -429,11 +439,20 @@ impl Montage {
             let s = self.sections[i].clone();
             let room = s.end - self.time;
             let step = dt.min(room);
-            out.extend(self.events.crossed(self.time, self.time + step, None).into_iter().map(str::to_owned));
+            out.extend(
+                self.events
+                    .crossed(self.time, self.time + step, None)
+                    .into_iter()
+                    .map(str::to_owned),
+            );
             self.time += step;
             dt -= step;
             if self.time >= s.end - 1e-6 {
-                match s.next.as_deref().and_then(|n| self.sections.iter().position(|x| x.name == n)) {
+                match s
+                    .next
+                    .as_deref()
+                    .and_then(|n| self.sections.iter().position(|x| x.name == n))
+                {
                     Some(n) => {
                         self.current = Some(n);
                         self.time = self.sections[n].start;
@@ -463,7 +482,10 @@ mod tests {
     use crate::Curve;
 
     fn ramp(ch: &str, a: f32, b: f32, len: f32) -> Clip {
-        Clip::new().track(ch, Keyframes::new(a).with(Keyframe::to(len, b).curve(Curve::Linear)))
+        Clip::new().track(
+            ch,
+            Keyframes::new(a).with(Keyframe::to(len, b).curve(Curve::Linear)),
+        )
     }
 
     fn close(a: f32, b: f32) -> bool {
@@ -472,21 +494,36 @@ mod tests {
 
     #[test]
     fn strips_repeat_scale_and_reverse() {
-        let s = Strip::new("walk", ramp("x", 0.0, 10.0, 1.0), 2.0).repeat(2.0).speed(2.0);
+        let s = Strip::new("walk", ramp("x", 0.0, 10.0, 1.0), 2.0)
+            .repeat(2.0)
+            .speed(2.0);
         assert!(close(s.length(), 1.0));
         let nla = Nla::new().track(Track::new("t").strip(s));
         assert!(close(nla.evaluate(2.25, &Channels::new())["x"], 5.0));
-        assert!(close(nla.evaluate(2.75, &Channels::new())["x"], 5.0), "second repeat");
-        assert!(nla.evaluate(1.0, &Channels::new()).is_empty(), "silent before");
-        let r = Nla::new().track(Track::new("t").strip(Strip::new("r", ramp("x", 0.0, 10.0, 1.0), 0.0).reversed()));
+        assert!(
+            close(nla.evaluate(2.75, &Channels::new())["x"], 5.0),
+            "second repeat"
+        );
+        assert!(
+            nla.evaluate(1.0, &Channels::new()).is_empty(),
+            "silent before"
+        );
+        let r = Nla::new().track(
+            Track::new("t").strip(Strip::new("r", ramp("x", 0.0, 10.0, 1.0), 0.0).reversed()),
+        );
         assert!(close(r.evaluate(0.25, &Channels::new())["x"], 7.5));
     }
 
     #[test]
     fn replace_add_and_multiply_layer_up() {
         let base = Track::new("base").strip(Strip::new("b", ramp("x", 10.0, 10.0, 1.0), 0.0));
-        let add = Track::new("add").strip(Strip::new("a", ramp("x", 5.0, 5.0, 1.0), 0.0).blend(StripBlend::Add));
-        let mul = Track::new("mul").strip(Strip::new("m", ramp("x", 2.0, 2.0, 1.0), 0.0).blend(StripBlend::Multiply).influence(0.5));
+        let add = Track::new("add")
+            .strip(Strip::new("a", ramp("x", 5.0, 5.0, 1.0), 0.0).blend(StripBlend::Add));
+        let mul = Track::new("mul").strip(
+            Strip::new("m", ramp("x", 2.0, 2.0, 1.0), 0.0)
+                .blend(StripBlend::Multiply)
+                .influence(0.5),
+        );
         let nla = Nla::new().track(base).track(add).track(mul);
         // (10 + 5) * (1 + (2-1)*0.5) = 22.5
         assert!(close(nla.evaluate(0.5, &Channels::new())["x"], 22.5));
@@ -494,7 +531,9 @@ mod tests {
 
     #[test]
     fn fades_and_hold_extension() {
-        let s = Strip::new("s", ramp("x", 10.0, 10.0, 2.0), 0.0).fades(1.0, 0.0).extend(StripExtend::HoldForward);
+        let s = Strip::new("s", ramp("x", 10.0, 10.0, 2.0), 0.0)
+            .fades(1.0, 0.0)
+            .extend(StripExtend::HoldForward);
         let mut base = Channels::new();
         base.insert("x".into(), 0.0);
         let nla = Nla::new().track(Track::new("t").strip(s));
@@ -513,7 +552,10 @@ mod tests {
         a2.solo = true;
         b.muted = false;
         let nla = Nla::new().track(a2).track(b);
-        assert!(close(nla.evaluate(0.5, &Channels::new())["x"], 1.0), "solo silences others");
+        assert!(
+            close(nla.evaluate(0.5, &Channels::new())["x"], 1.0),
+            "solo silences others"
+        );
     }
 
     #[test]
@@ -539,7 +581,11 @@ mod tests {
         assert_eq!(m.current(), Some("hold"), "loops while held");
         m.set_next("hold", Some("release"));
         let e = m.advance(3.0);
-        assert!(e.contains(&"section:release".to_owned()) && e.contains(&"hit".to_owned()) && e.last().unwrap() == "end");
+        assert!(
+            e.contains(&"section:release".to_owned())
+                && e.contains(&"hit".to_owned())
+                && e.last().unwrap() == "end"
+        );
         assert!(!m.is_playing());
     }
 }

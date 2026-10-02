@@ -93,7 +93,12 @@ pub fn plane(w: f32, h: f32, sx: u32, sy: u32) -> Mesh {
         for i in 0..=sx {
             #[allow(clippy::cast_precision_loss)]
             let (u, v) = (i as f32 / sx as f32, j as f32 / sy as f32);
-            push(&mut m, Vec3::new((u - 0.5) * w, (0.5 - v) * h, 0.0), Vec3::Z, [u, v]);
+            push(
+                &mut m,
+                Vec3::new((u - 0.5) * w, (0.5 - v) * h, 0.0),
+                Vec3::Z,
+                [u, v],
+            );
         }
     }
     let row = sx + 1;
@@ -121,11 +126,17 @@ pub fn cylinder(top: f32, bottom: f32, height: f32, segments: u32) -> Mesh {
         let (sin, cos) = t.sin_cos();
         let n = Vec3::new(sin, slope, cos).normalize();
         push(&mut m, Vec3::new(top * sin, half, top * cos), n, [u, 0.0]);
-        push(&mut m, Vec3::new(bottom * sin, -half, bottom * cos), n, [u, 1.0]);
+        push(
+            &mut m,
+            Vec3::new(bottom * sin, -half, bottom * cos),
+            n,
+            [u, 1.0],
+        );
     }
     for s in 0..segments {
         let a = s * 2;
-        m.indices.extend_from_slice(&[a, a + 1, a + 2, a + 2, a + 1, a + 3]);
+        m.indices
+            .extend_from_slice(&[a, a + 1, a + 2, a + 2, a + 1, a + 3]);
     }
     for (y, r, n) in [(half, top, Vec3::Y), (-half, bottom, -Vec3::Y)] {
         if r <= 0.0 {
@@ -137,7 +148,12 @@ pub fn cylinder(top: f32, bottom: f32, height: f32, segments: u32) -> Mesh {
             #[allow(clippy::cast_precision_loss)]
             let t = s as f32 / segments as f32 * TAU;
             let (sin, cos) = t.sin_cos();
-            push(&mut m, Vec3::new(r * sin, y, r * cos), n, [0.5 + sin * 0.5, 0.5 + cos * 0.5]);
+            push(
+                &mut m,
+                Vec3::new(r * sin, y, r * cos),
+                n,
+                [0.5 + sin * 0.5, 0.5 + cos * 0.5],
+            );
         }
         for s in 0..segments {
             if n.y > 0.0 {
@@ -192,7 +208,9 @@ pub fn torus(radius: f32, tube: f32, radial: u32, tubular: u32) -> Mesh {
 /// Bounding sphere (centre, radius) of a mesh's positions.
 #[must_use]
 pub fn bounding_sphere(mesh: &Mesh) -> (Vec3, f32) {
-    let Some((lo, hi)) = mesh.bounds() else { return (Vec3::ZERO, 0.0) };
+    let Some((lo, hi)) = mesh.bounds() else {
+        return (Vec3::ZERO, 0.0);
+    };
     let c = (Vec3::from_array(lo) + Vec3::from_array(hi)) * 0.5;
     let r = mesh
         .positions
@@ -229,7 +247,10 @@ mod tests {
         ] {
             assert!(m.has_normals() && m.has_uvs(), "{name}");
             assert_eq!(m.indices.len() % 3, 0, "{name}");
-            assert!(m.indices.iter().all(|&i| (i as usize) < m.positions.len()), "{name}");
+            assert!(
+                m.indices.iter().all(|&i| (i as usize) < m.positions.len()),
+                "{name}"
+            );
             assert!(outward(&m), "{name} winds inward somewhere");
         }
     }
@@ -237,7 +258,10 @@ mod tests {
     #[test]
     fn sizes_are_what_was_asked() {
         let (lo, hi) = box_mesh(1.0, 2.0, 3.0).bounds().unwrap();
-        assert_eq!((hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]), (1.0, 2.0, 3.0));
+        assert_eq!(
+            (hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]),
+            (1.0, 2.0, 3.0)
+        );
         let (c, r) = bounding_sphere(&sphere(2.0, 24, 12));
         assert!(c.length() < 1e-4 && (r - 2.0).abs() < 1e-4);
         assert_eq!(box_mesh(1.0, 1.0, 1.0).triangles(), 12);

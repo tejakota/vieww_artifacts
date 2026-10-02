@@ -16,10 +16,10 @@ use vieww_foundation::{Color, Offset, Rect, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    Ctx, ENGINE, INK, MUTED, W, alpha, caption, clamp01, distance_chip, grain, ground,
-    progress_rail, tint, vignette, xywh,
+    alpha, caption, clamp01, distance_chip, grain, ground, progress_rail, tint, vignette, xywh,
+    Ctx, ENGINE, INK, MUTED, W,
 };
-use crate::film_lib::{Rng, ease_out_cubic};
+use crate::film_lib::{ease_out_cubic, Rng};
 
 /// The glyph study's geometry — center frame, large.
 const GX: f32 = 960.0;
@@ -29,9 +29,9 @@ const GS: f32 = 300.0;
 /// The pixel grid's pitch at full zoom.
 const PITCH: f32 = 30.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
-    let sec = ctx.sec;
+    let _sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
 
     // The zoom — 0 = the glyph at reading size, 1 = the pixel grid.
@@ -88,18 +88,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             let glyph_cells = |ci: usize, cj: usize| -> f32 {
                 // The "R" in a 9×12 cell grid, as run-length rows.
                 const ROWS: [&str; 12] = [
-                    "  ####  ",
-                    " #    # ",
-                    " #    # ",
-                    " #    # ",
-                    " ###### ",
-                    " #  #   ",
-                    " #   #  ",
-                    " #    # ",
-                    " #    # ",
-                    " #    # ",
-                    "        ",
-                    "        ",
+                    "  ####  ", " #    # ", " #    # ", " #    # ", " ###### ", " #  #   ",
+                    " #   #  ", " #    # ", " #    # ", " #    # ", "        ", "        ",
                 ];
                 let row = ROWS.get(cj).copied().unwrap_or("");
                 let ch = row.chars().nth(ci).unwrap_or(' ');
@@ -136,9 +126,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     // Boundary cells that are the AA rim glow slightly
                     // cyan — the ramp made visible.
                     let is_rim = own < 1.0 && cov > 0.0;
-                    let c = if is_rim { alpha(ENGINE, 0.75) } else { alpha(tint(INK, 0.0), 0.85) };
+                    let c = if is_rim {
+                        alpha(ENGINE, 0.75)
+                    } else {
+                        alpha(tint(INK, 0.0), 0.85)
+                    };
                     book.rrect(
-                        xywh(ox + ci as f32 * cell + 1.0, oy + cj as f32 * cell + 1.0, cell - 2.0, cell - 2.0),
+                        xywh(
+                            ox + ci as f32 * cell + 1.0,
+                            oy + cj as f32 * cell + 1.0,
+                            cell - 2.0,
+                            cell - 2.0,
+                        ),
                         2.0,
                         alpha(c, cov * show_a),
                     );
@@ -166,7 +165,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 book.ring(Offset::new(rx, ry), 46.0, 1.6, alpha(ENGINE, 0.7 * rim_a));
                 book.ring(Offset::new(rx, ry), 62.0, 1.0, alpha(ENGINE, 0.3 * rim_a));
                 // The fraction — one boundary cell's coverage.
-                book.rrect(xywh(rx - 14.0, ry - 14.0, 28.0, 28.0), 4.0, alpha(ENGINE, 0.5 * rim_a));
+                book.rrect(
+                    xywh(rx - 14.0, ry - 14.0, 28.0, 28.0),
+                    4.0,
+                    alpha(ENGINE, 0.5 * rim_a),
+                );
             }
         }),
     )));
@@ -216,9 +219,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             super::CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 book.layer(1.0, 14.0, None, |g| {
-                    g.rect(xywh(sx - 60.0, GY - 250.0, 120.0, 500.0), alpha(ENGINE, 0.06));
+                    g.rect(
+                        xywh(sx - 60.0, GY - 250.0, 120.0, 500.0),
+                        alpha(ENGINE, 0.06),
+                    );
                 });
-                book.rrect(xywh(sx - 1.0, GY - 250.0, 2.0, 500.0), 1.0, alpha(tint(ENGINE, 0.3), 0.8));
+                book.rrect(
+                    xywh(sx - 1.0, GY - 250.0, 2.0, 500.0),
+                    1.0,
+                    alpha(tint(ENGINE, 0.3), 0.8),
+                );
             }),
         )));
     }

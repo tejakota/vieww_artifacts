@@ -164,7 +164,7 @@ impl Mesh {
     /// the mesh is never made worse than it was.
     pub fn compute_normals(&mut self) {
         let mut sums = vec![[0.0_f32; 3]; self.positions.len()];
-        for triangle in self.indices.chunks_exact(3) {
+        for triangle in self.indices.as_chunks::<3>().0 {
             let a = self.positions[triangle[0] as usize];
             let b = self.positions[triangle[1] as usize];
             let c = self.positions[triangle[2] as usize];
@@ -274,10 +274,12 @@ fn resolve_index(index: isize, len: usize, line: usize) -> Result<usize, MeshErr
     } else {
         usize::try_from(index - 1).ok()
     };
-    resolved.filter(|resolved| *resolved < len).ok_or(MeshError::IndexOutOfRange {
-        line,
-        index: index.unsigned_abs(),
-    })
+    resolved
+        .filter(|resolved| *resolved < len)
+        .ok_or(MeshError::IndexOutOfRange {
+            line,
+            index: index.unsigned_abs(),
+        })
 }
 
 /// Parse OBJ text into a [`Mesh`].
@@ -311,7 +313,9 @@ pub fn parse_obj(text: &str) -> Result<Mesh, MeshError> {
         // parsed here in the sense of "recognised and skipped", with the
         // reasons in the module docs.
         let mut words = trimmed.split_whitespace();
-        let Some(keyword) = words.next() else { continue };
+        let Some(keyword) = words.next() else {
+            continue;
+        };
         match keyword {
             "v" => {
                 let mut point = [0.0_f32; 3];
@@ -379,7 +383,10 @@ pub fn parse_obj(text: &str) -> Result<Mesh, MeshError> {
                 if corners.len() < 3 {
                     return Err(MeshError::Malformed {
                         line,
-                        what: format!("a face needs at least three corners, found {}", corners.len()),
+                        what: format!(
+                            "a face needs at least three corners, found {}",
+                            corners.len()
+                        ),
                     });
                 }
                 faces.push((line, corners));
@@ -595,7 +602,8 @@ fn parse_binary_stl(bytes: &[u8]) -> Result<Mesh, MeshError> {
             mesh.normals.push(normal);
         }
         let first = mesh.positions.len() as u32 - 3;
-        mesh.indices.extend_from_slice(&[first, first + 1, first + 2]);
+        mesh.indices
+            .extend_from_slice(&[first, first + 1, first + 2]);
     }
     if mesh.positions.is_empty() {
         return Err(MeshError::Empty);
@@ -613,7 +621,9 @@ fn parse_ascii_stl(text: &str) -> Result<Mesh, MeshError> {
         let line = number + 1;
         let trimmed = raw.trim();
         let mut words = trimmed.split_whitespace();
-        let Some(keyword) = words.next() else { continue };
+        let Some(keyword) = words.next() else {
+            continue;
+        };
         match keyword {
             "solid" | "endsolid" | "facet" | "endfacet" | "outer" | "endloop" | "loop" => {
                 // Structure words; `facet normal ni nj nk` is the one with
@@ -671,7 +681,8 @@ fn parse_ascii_stl(text: &str) -> Result<Mesh, MeshError> {
                 mesh.positions.push(corner);
                 mesh.normals.push(normal);
             }
-            mesh.indices.extend_from_slice(&[first, first + 1, first + 2]);
+            mesh.indices
+                .extend_from_slice(&[first, first + 1, first + 2]);
         }
     }
 
@@ -942,10 +953,13 @@ mod tests {
         let mut bytes = vec![0_u8; 80];
         bytes.extend_from_slice(&5_u32.to_le_bytes()); // promises 5
         bytes.extend_from_slice(&[0; 50]); // delivers 1
-        // Not the exact binary size, so it falls to ASCII, which fails to
-        // parse (NULs are not UTF-8 words) — the honest refusal.
+                                           // Not the exact binary size, so it falls to ASCII, which fails to
+                                           // parse (NULs are not UTF-8 words) — the honest refusal.
         let error = parse_stl(&bytes).unwrap_err();
-        assert!(matches!(error, MeshError::Malformed { .. }) || matches!(error, MeshError::StlTruncated { .. }));
+        assert!(
+            matches!(error, MeshError::Malformed { .. })
+                || matches!(error, MeshError::StlTruncated { .. })
+        );
     }
 
     #[test]
@@ -1008,7 +1022,11 @@ mod tests {
     #[test]
     fn errors_read_as_sentences() {
         assert_eq!(
-            MeshError::Malformed { line: 12, what: "unknown keyword `vv`".into() }.to_string(),
+            MeshError::Malformed {
+                line: 12,
+                what: "unknown keyword `vv`".into()
+            }
+            .to_string(),
             "line 12: unknown keyword `vv`"
         );
         assert_eq!(MeshError::Empty.to_string(), "no vertices in the file");

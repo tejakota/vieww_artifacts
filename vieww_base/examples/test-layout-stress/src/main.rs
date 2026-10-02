@@ -295,7 +295,7 @@ fn depth_screen() -> WidgetNode {
             let padded = Container::new()
                 .padding(EdgeInsets::symmetric(6.0, 5.0))
                 .child(child);
-            let axis = if level % 2 == 0 {
+            let axis = if level.is_multiple_of(2) {
                 Flex::column()
                     .cross_axis_alignment(CrossAxisAlignment::Start)
                     .children([padded.into()])
@@ -305,7 +305,7 @@ fn depth_screen() -> WidgetNode {
             Container::new()
                 .decoration(
                     BoxDecoration::new()
-                        .color(if level % 3 == 0 {
+                        .color(if level.is_multiple_of(3) {
                             Color::WHITE
                         } else {
                             Color::rgba(58, 122, 246, (8 + level) as u8)

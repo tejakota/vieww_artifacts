@@ -15,11 +15,10 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{ease_out_cubic};
-use super::{AMBER, CANVAS, Ctx, MUTED, RED, W, act_chip, alpha, caption, chip, chip_row, clamp01, glow, grain, ground, mix, mono_w, scanbands, stars, tint, vignette, xywh};
-
+use super::{alpha, caption, clamp01, mix, mono_w, tint, xywh, Ctx, AMBER, MUTED, RED, W};
+use crate::film_lib::ease_out_cubic;
 
 /// The terminal's inner origin.
 const TX: f32 = 300.0;
@@ -31,7 +30,7 @@ const MAX_LINES: usize = 9;
 
 /// One dependency line: text, tone, and the film-second it lands.
 fn dep_lines() -> Vec<(&'static str, Color, f32)> {
-    let green = alpha(Color::rgb(63, 185, 80), 0.9);
+    let _green = alpha(Color::rgb(63, 185, 80), 0.9);
     vec![
         ("$ create-app everything", Color::rgb(230, 232, 234), 0.5),
         ("resolving dependencies…", alpha(MUTED, 0.85), 1.15),
@@ -53,7 +52,7 @@ fn held24(sec: f32) -> f32 {
     (sec * 24.0).floor() / 24.0
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -67,28 +66,34 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let panel_w = 1400.0;
     let panel_h = 660.0;
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(Painting::sized(
-            super::CANVAS,
-            PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-                let w = s.width;
-                let h = s.height;
-                // The old world's air: a colder, flatter ground, no stars.
-                book.rect(
-                    Rect::new(0.0, 0.0, w, h),
-                    Gradient::vertical().with_dither().with_stops(&[
-                        (0.0, Color::rgb(11, 11, 12)),
-                        (0.7, Color::rgb(9, 10, 10)),
-                        (1.0, Color::rgb(13, 11, 11)),
-                    ]),
-                );
-                // The panel's shadow pool.
-                super::glow(book, panel_x + panel_w * 0.5, panel_y + panel_h + 30.0, 500.0, RED, 0.05);
-                super::vignette(book, w, h, 0.55);
-                super::scanbands(book, w, h, t, 0.35, Color::rgb(63, 185, 80));
-                super::grain(book, w, h, frame_i, 0.5);
-            }),
-        )));
+    let mut stack = Stack::new().push(Positioned::fill().child(Painting::sized(
+        super::CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+            let w = s.width;
+            let h = s.height;
+            // The old world's air: a colder, flatter ground, no stars.
+            book.rect(
+                Rect::new(0.0, 0.0, w, h),
+                Gradient::vertical().with_dither().with_stops(&[
+                    (0.0, Color::rgb(11, 11, 12)),
+                    (0.7, Color::rgb(9, 10, 10)),
+                    (1.0, Color::rgb(13, 11, 11)),
+                ]),
+            );
+            // The panel's shadow pool.
+            super::glow(
+                book,
+                panel_x + panel_w * 0.5,
+                panel_y + panel_h + 30.0,
+                500.0,
+                RED,
+                0.05,
+            );
+            super::vignette(book, w, h, 0.55);
+            super::scanbands(book, w, h, t, 0.35, Color::rgb(63, 185, 80));
+            super::grain(book, w, h, frame_i, 0.5);
+        }),
+    )));
 
     // The panel body.
     stack = stack.push(
@@ -112,7 +117,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             // The dots — the old world's macaroni.
             let dots = [RED, AMBER, Color::rgb(63, 185, 80)];
             for (i, c) in dots.iter().enumerate() {
-                book.circle(Offset::new(26.0 + i as f32 * 26.0, 23.0), 7.0, alpha(*c, 0.85));
+                book.circle(
+                    Offset::new(26.0 + i as f32 * 26.0, 23.0),
+                    7.0,
+                    alpha(*c, 0.85),
+                );
             }
             // The bar's underline.
             book.line(
@@ -123,7 +132,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             );
         }),
     );
-    stack = stack.push(Positioned::new().left(panel_x).top(panel_y).width(panel_w).height(46.0).child(titlebar));
+    stack = stack.push(
+        Positioned::new()
+            .left(panel_x)
+            .top(panel_y)
+            .width(panel_w)
+            .height(46.0)
+            .child(titlebar),
+    );
     stack = stack.push(
         Positioned::new()
             .left(panel_x + 96.0)
@@ -131,8 +147,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .width(600.0)
             .height(24.0)
             .child(
-                Text::new("terminal — the old world")
-                    .style(TextStyle::new(15.0).monospace().letter_spacing(2.2).color(alpha(MUTED, 0.8))),
+                Text::new("terminal — the old world").style(
+                    TextStyle::new(15.0)
+                        .monospace()
+                        .letter_spacing(2.2)
+                        .color(alpha(MUTED, 0.8)),
+                ),
             ),
     );
 
@@ -158,11 +178,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y)
                 .width(1300.0)
                 .height(26.0)
-                .child(Opacity::new(a.max(0.05)).child(
-                    Text::new(*text)
-                        .style(TextStyle::new(20.0).monospace().letter_spacing(0.6).color(alpha(*color, 0.95)))
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(a.max(0.05)).child(
+                        Text::new(*text)
+                            .style(
+                                TextStyle::new(20.0)
+                                    .monospace()
+                                    .letter_spacing(0.6)
+                                    .color(alpha(*color, 0.95)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         );
     }
 
@@ -179,7 +206,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(y + 4.0)
                     .width(11.0)
                     .height(22.0)
-                    .child(Container::new().color(alpha(Color::rgb(63, 185, 80), 0.9)).radius(1.5)),
+                    .child(
+                        Container::new()
+                            .color(alpha(Color::rgb(63, 185, 80), 0.9))
+                            .radius(1.5),
+                    ),
             );
         }
     }
@@ -201,7 +232,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let bar = Painting::sized(
         Size::new(bar_w, 26.0),
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            book.stroke_rrect(xywh(0.0, 0.0, bar_w, 12.0), 6.0, alpha(Color::WHITE, 0.14), 1.2);
+            book.stroke_rrect(
+                xywh(0.0, 0.0, bar_w, 12.0),
+                6.0,
+                alpha(Color::WHITE, 0.14),
+                1.2,
+            );
             let fill_w = (bar_w * bar_p).max(4.0);
             book.rrect(
                 xywh(0.0, 0.0, fill_w, 12.0),
@@ -214,10 +250,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             );
             // The 99 marker — the stall's headstone.
             let mx = bar_w * 0.99;
-            book.line(Offset::new(mx, -3.0), Offset::new(mx, 15.0), alpha(RED, 0.7), 1.4);
+            book.line(
+                Offset::new(mx, -3.0),
+                Offset::new(mx, 15.0),
+                alpha(RED, 0.7),
+                1.4,
+            );
         }),
     );
-    stack = stack.push(Positioned::new().left(bar_x).top(bar_y).width(bar_w).height(26.0).child(bar));
+    stack = stack.push(
+        Positioned::new()
+            .left(bar_x)
+            .top(bar_y)
+            .width(bar_w)
+            .height(26.0)
+            .child(bar),
+    );
     stack = stack.push(
         Positioned::new()
             .left(bar_x)
@@ -225,8 +273,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .width(900.0)
             .height(24.0)
             .child(
-                Text::new(format!("{:5.1} MB · compiling the world · {}%", mb, (bar_p * 100.0) as u32))
-                    .style(TextStyle::new(18.0).monospace().letter_spacing(1.0).color(alpha(tint(RED, 0.25), 0.9))),
+                Text::new(format!(
+                    "{:5.1} MB · compiling the world · {}%",
+                    mb,
+                    (bar_p * 100.0) as u32
+                ))
+                .style(
+                    TextStyle::new(18.0)
+                        .monospace()
+                        .letter_spacing(1.0)
+                        .color(alpha(tint(RED, 0.25), 0.9)),
+                ),
             ),
     );
 
@@ -241,8 +298,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         Size::new(64.0, 64.0),
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             let ang = spin * std::f32::consts::TAU;
-            book.arc(Offset::new(32.0, 32.0), 15.0, 3.0, ang, sweep, alpha(AMBER, 0.85));
-            book.arc(Offset::new(32.0, 32.0), 15.0, 1.2, ang + std::f32::consts::PI, sweep * 0.4, alpha(MUTED, 0.5));
+            book.arc(
+                Offset::new(32.0, 32.0),
+                15.0,
+                3.0,
+                ang,
+                sweep,
+                alpha(AMBER, 0.85),
+            );
+            book.arc(
+                Offset::new(32.0, 32.0),
+                15.0,
+                1.2,
+                ang + std::f32::consts::PI,
+                sweep * 0.4,
+                alpha(MUTED, 0.5),
+            );
         }),
     );
     let tremble = stall * (sec * 40.0).sin() * 2.5;
@@ -256,7 +327,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     );
 
     // The captions — the old world's receipts, in order.
-    stack = stack.push(super::act_chip("I", "THE SPARK", clamp01((sec - 0.4) / 0.5)));
+    stack = stack.push(super::act_chip(
+        "I",
+        "THE SPARK",
+        clamp01((sec - 0.4) / 0.5),
+    ));
     stack = stack.push(caption(
         "the old world's price — 41.7 MB before your first pixel",
         1000.0,

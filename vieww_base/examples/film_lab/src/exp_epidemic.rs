@@ -26,15 +26,16 @@
 //!   whose long tail is the superspreading everybody argued about, counted
 //!   here rather than asserted.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, INK, MINT, MUTED, RED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 13.0;
+pub(crate) const SECONDS: f32 = 13.0;
 
 // ── The population ──────────────────────────────────────────────────────────
 
@@ -226,7 +227,7 @@ const CX: f32 = 340.0;
 const CY: f32 = 424.0;
 const CR: f32 = 246.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let world = build_world();
     let ep = run_to(&world, t as f64);
 
@@ -254,12 +255,7 @@ pub fn frame(t: f32) -> WidgetNode {
     // infective tries each of ⟨k⟩ contacts on each of τ steps.
     let r0_structural = (1.0 - (1.0 - BETA).powi(TAU as i32)) * world.mean_k;
 
-    let attack = ep
-        .state
-        .iter()
-        .filter(|s| **s != State::S)
-        .count() as f32
-        / N as f32;
+    let attack = ep.state.iter().filter(|s| **s != State::S).count() as f32 / N as f32;
     let predicted = final_size(r0_measured);
     let predicted_struct = final_size(r0_structural);
     // Inverting the final-size law on the attack rate the run produced:
@@ -295,7 +291,10 @@ pub fn frame(t: f32) -> WidgetNode {
         let total: usize = off.iter().map(|&o| o as usize).sum();
         let take = (off.len() as f32 * 0.1).ceil() as usize;
         if total > 0 {
-            off[..take.min(off.len())].iter().map(|&o| o as usize).sum::<usize>() as f32
+            off[..take.min(off.len())]
+                .iter()
+                .map(|&o| o as usize)
+                .sum::<usize>() as f32
                 / total as f32
         } else {
             0.0
@@ -321,16 +320,19 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(12, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(12, 11, 16))]),
             );
 
             let px = |i: usize| CX + pos[i].0 * CR;
             let py = |i: usize| CY + pos[i].1 * CR;
 
-            book.circle(Offset::new(CX, CY), CR + 26.0, alpha(Color::rgb(12, 12, 18), 0.92));
+            book.circle(
+                Offset::new(CX, CY),
+                CR + 26.0,
+                alpha(Color::rgb(12, 12, 18), 0.92),
+            );
 
             // ── the contact graph, faint ──
             for &(a, b) in edges.iter().step_by(3) {
@@ -454,8 +456,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let lines = vec![
-        "EPIDEMIC · THE CONTAGION AXIS · SIR, PERSON BY PERSON — AND THEN THE EQUATION".to_string(),
+    let lines = ["EPIDEMIC · THE CONTAGION AXIS · SIR, PERSON BY PERSON — AND THEN THE EQUATION".to_string(),
         format!(
             "{N} people, seeded Erdős–Rényi contact graph (⟨k⟩ measured = {mean_k:.2}) · β = {BETA}/contact/step · τ = {TAU} steps · {SEEDS} index cases · step {steps}/{STEPS}"
         ),
@@ -480,8 +481,7 @@ pub fn frame(t: f32) -> WidgetNode {
         format!(
             "SUPERSPREADING, counted: the busiest 10% of {counted} completed cases caused {:.1}% of all transmissions — the long tail, from this epidemic's own ledger",
             top_decile_share * 100.0
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -496,24 +496,40 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
     }
     for (x, y, s) in [
-        (700.0_f32, 186.0_f32, "S (cyan) · I (red) · R (violet) — green: 1/R₀, amber: the final-size root".to_string()),
-        (700.0, 508.0, "OFFSPRING DISTRIBUTION — secondary cases per completed case, 0 … 11+".to_string()),
+        (
+            700.0_f32,
+            186.0_f32,
+            "S (cyan) · I (red) · R (violet) — green: 1/R₀, amber: the final-size root".to_string(),
+        ),
+        (
+            700.0,
+            508.0,
+            "OFFSPRING DISTRIBUTION — secondary cases per completed case, 0 … 11+".to_string(),
+        ),
     ] {
         stack = stack.push(
-            Positioned::new().left(x).top(y).width(560.0).height(14.0).child(
-                Text::new(s).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .letter_spacing(0.9)
-                        .color(alpha(MUTED, 0.85)),
+            Positioned::new()
+                .left(x)
+                .top(y)
+                .width(560.0)
+                .height(14.0)
+                .child(
+                    Text::new(s).style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()

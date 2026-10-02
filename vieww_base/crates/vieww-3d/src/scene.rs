@@ -110,7 +110,9 @@ impl Texture {
     #[must_use]
     pub fn from_rgba8(width: u32, height: u32, pixels: &[u8]) -> Self {
         let texels = pixels
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|p| {
                 let c = Color::rgba(p[0], p[1], p[2], p[3]).to_linear();
                 [c[0], c[1], c[2], f32::from(p[3]) / 255.0]
@@ -137,7 +139,11 @@ impl Texture {
         let cell = (size / cells.max(1)).max(1);
         for y in 0..size {
             for x in 0..size {
-                let c = if ((x / cell) + (y / cell)) % 2 == 0 { a } else { b };
+                let c = if ((x / cell) + (y / cell)).is_multiple_of(2) {
+                    a
+                } else {
+                    b
+                };
                 px.extend_from_slice(&[c.r, c.g, c.b, c.a]);
             }
         }
@@ -243,11 +249,23 @@ impl Material {
     }
     #[must_use]
     pub fn phong(color: Color, shininess: f32) -> Self {
-        Self::with(Shading::Phong { shininess, specular: 0.5 }, color)
+        Self::with(
+            Shading::Phong {
+                shininess,
+                specular: 0.5,
+            },
+            color,
+        )
     }
     #[must_use]
     pub fn standard(color: Color, metallic: f32, roughness: f32) -> Self {
-        Self::with(Shading::Standard { metallic, roughness }, color)
+        Self::with(
+            Shading::Standard {
+                metallic,
+                roughness,
+            },
+            color,
+        )
     }
     #[must_use]
     pub fn toon(color: Color, bands: u32) -> Self {
@@ -293,27 +311,63 @@ impl Material {
 /// A light source.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Light {
-    Ambient { color: Rgb, intensity: f32 },
+    Ambient {
+        color: Rgb,
+        intensity: f32,
+    },
     /// Sky colour from above, ground colour from below.
-    Hemisphere { sky: Rgb, ground: Rgb, intensity: f32 },
+    Hemisphere {
+        sky: Rgb,
+        ground: Rgb,
+        intensity: f32,
+    },
     /// Parallel rays travelling along `direction` (the node's rotation
     /// applies). Casts a shadow map when `shadow` is set.
-    Directional { color: Rgb, intensity: f32, direction: Vec3, shadow: bool },
+    Directional {
+        color: Rgb,
+        intensity: f32,
+        direction: Vec3,
+        shadow: bool,
+    },
     /// From the node's world position, falling off to zero at `range`.
-    Point { color: Rgb, intensity: f32, range: f32 },
+    Point {
+        color: Rgb,
+        intensity: f32,
+        range: f32,
+    },
     /// A cone from the node's position along `direction`.
-    Spot { color: Rgb, intensity: f32, range: f32, direction: Vec3, angle: f32, penumbra: f32 },
+    Spot {
+        color: Rgb,
+        intensity: f32,
+        range: f32,
+        direction: Vec3,
+        angle: f32,
+        penumbra: f32,
+    },
 }
 
 /// What a node carries.
 #[derive(Debug, Clone)]
 pub enum Content {
     Empty,
-    Mesh { mesh: Arc<Mesh>, material: Arc<Material>, bounds: (Vec3, f32) },
+    Mesh {
+        mesh: Arc<Mesh>,
+        material: Arc<Material>,
+        bounds: (Vec3, f32),
+    },
     /// One mesh drawn at many local transforms — `InstancedMesh`.
-    Instanced { mesh: Arc<Mesh>, material: Arc<Material>, bounds: (Vec3, f32), instances: Vec<Mat4> },
+    Instanced {
+        mesh: Arc<Mesh>,
+        material: Arc<Material>,
+        bounds: (Vec3, f32),
+        instances: Vec<Mat4>,
+    },
     /// Meshes chosen by camera distance — `LOD` / Unity's `LODGroup`.
-    Lod { levels: Vec<(f32, Arc<Mesh>)>, material: Arc<Material>, bounds: (Vec3, f32) },
+    Lod {
+        levels: Vec<(f32, Arc<Mesh>)>,
+        material: Arc<Material>,
+        bounds: (Vec3, f32),
+    },
     Light(Light),
 }
 
@@ -344,7 +398,9 @@ impl Content {
     /// serves every distance beyond.
     #[must_use]
     pub fn lod(levels: Vec<(f32, Mesh)>, material: Material) -> Self {
-        let bounds = levels.first().map_or((Vec3::ZERO, 0.0), |(_, m)| bounding_sphere(m));
+        let bounds = levels
+            .first()
+            .map_or((Vec3::ZERO, 0.0), |(_, m)| bounding_sphere(m));
         Self::Lod {
             levels: levels.into_iter().map(|(d, m)| (d, Arc::new(m))).collect(),
             material: Arc::new(material),
@@ -440,7 +496,11 @@ pub enum Projection {
     /// Vertical field of view in radians.
     Perspective { fov_y: f32, near: f32, far: f32 },
     /// Half the visible height in world units.
-    Orthographic { half_height: f32, near: f32, far: f32 },
+    Orthographic {
+        half_height: f32,
+        near: f32,
+        far: f32,
+    },
 }
 
 /// A viewpoint.
@@ -459,7 +519,11 @@ impl Camera {
             position,
             target,
             up: Vec3::Y,
-            projection: Projection::Perspective { fov_y, near: 0.1, far: 1000.0 },
+            projection: Projection::Perspective {
+                fov_y,
+                near: 0.1,
+                far: 1000.0,
+            },
         }
     }
 
@@ -469,7 +533,11 @@ impl Camera {
             position,
             target,
             up: Vec3::Y,
-            projection: Projection::Orthographic { half_height, near: 0.1, far: 1000.0 },
+            projection: Projection::Orthographic {
+                half_height,
+                near: 0.1,
+                far: 1000.0,
+            },
         }
     }
 
@@ -481,8 +549,14 @@ impl Camera {
     #[must_use]
     pub fn projection(&self, aspect: f32) -> Mat4 {
         match self.projection {
-            Projection::Perspective { fov_y, near, far } => Mat4::perspective(fov_y, aspect, near, far),
-            Projection::Orthographic { half_height, near, far } => {
+            Projection::Perspective { fov_y, near, far } => {
+                Mat4::perspective(fov_y, aspect, near, far)
+            }
+            Projection::Orthographic {
+                half_height,
+                near,
+                far,
+            } => {
                 let hw = half_height * aspect;
                 Mat4::orthographic(-hw, hw, -half_height, half_height, near, far)
             }
@@ -526,7 +600,8 @@ impl OrbitControls {
 
     /// A wheel step: positive zooms out, as a scale factor per notch.
     pub fn zoom(&mut self, notches: f32) {
-        self.distance = (self.distance * 1.1f32.powf(notches)).clamp(self.min_distance, self.max_distance);
+        self.distance =
+            (self.distance * 1.1f32.powf(notches)).clamp(self.min_distance, self.max_distance);
     }
 
     /// Where the camera sits.
@@ -672,7 +747,10 @@ impl Scene {
     /// The first live node named `name` — `getObjectByName`.
     #[must_use]
     pub fn find(&self, name: &str) -> Option<NodeId> {
-        self.nodes.iter().position(|n| n.alive && n.name == name).map(NodeId)
+        self.nodes
+            .iter()
+            .position(|n| n.alive && n.name == name)
+            .map(NodeId)
     }
 
     /// Live node ids, parents before children.
@@ -701,7 +779,11 @@ impl Scene {
     /// Recompute world matrices of dirty subtrees.
     pub fn update_world(&mut self) {
         let mut count = 0;
-        let mut stack: Vec<(NodeId, Mat4, bool)> = self.roots.iter().map(|r| (*r, Mat4::IDENTITY, false)).collect();
+        let mut stack: Vec<(NodeId, Mat4, bool)> = self
+            .roots
+            .iter()
+            .map(|r| (*r, Mat4::IDENTITY, false))
+            .collect();
         while let Some((id, parent_world, parent_changed)) = stack.pop() {
             let node = &mut self.nodes[id.0];
             let changed = parent_changed || node.dirty;
@@ -755,7 +837,13 @@ impl Scene {
         stats
     }
 
-    fn reconcile_one(&mut self, d: &NodeDesc, parent: Option<NodeId>, stats: &mut ReconcileStats, seen: &mut Vec<NodeId>) {
+    fn reconcile_one(
+        &mut self,
+        d: &NodeDesc,
+        parent: Option<NodeId>,
+        stats: &mut ReconcileStats,
+        seen: &mut Vec<NodeId>,
+    ) {
         let existing = self
             .nodes
             .iter()
@@ -812,18 +900,33 @@ mod tests {
     #[test]
     fn world_matrices_chain_and_only_dirty_subtrees_recompute() {
         let mut s = Scene::new();
-        let a = s.add(Node::new("a", Content::Empty).at(Vec3::new(1.0, 0.0, 0.0)), None);
-        let b = s.add(Node::new("b", Content::Empty).at(Vec3::new(0.0, 2.0, 0.0)), Some(a));
+        let a = s.add(
+            Node::new("a", Content::Empty).at(Vec3::new(1.0, 0.0, 0.0)),
+            None,
+        );
+        let b = s.add(
+            Node::new("b", Content::Empty).at(Vec3::new(0.0, 2.0, 0.0)),
+            Some(a),
+        );
         let c = s.add(Node::new("c", Content::Empty), None);
         s.update_world();
         assert_eq!(s.last_world_updates, 3);
-        assert_eq!(s.node(b).world().get_translation(), Vec3::new(1.0, 2.0, 0.0));
+        assert_eq!(
+            s.node(b).world().get_translation(),
+            Vec3::new(1.0, 2.0, 0.0)
+        );
         s.update_world();
-        assert_eq!(s.last_world_updates, 0, "nothing changed, nothing recomputed");
+        assert_eq!(
+            s.last_world_updates, 0,
+            "nothing changed, nothing recomputed"
+        );
         s.node_mut(a).position = Vec3::new(5.0, 0.0, 0.0);
         s.update_world();
         assert_eq!(s.last_world_updates, 2, "a and its child, not c");
-        assert_eq!(s.node(b).world().get_translation(), Vec3::new(5.0, 2.0, 0.0));
+        assert_eq!(
+            s.node(b).world().get_translation(),
+            Vec3::new(5.0, 2.0, 0.0)
+        );
         let _ = c;
         assert_eq!(s.find("b"), Some(b));
     }
@@ -843,16 +946,43 @@ mod tests {
         let mut s = Scene::new();
         let mesh = || Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE));
         let desc = |x: f32, with_b: bool| {
-            let mut root = NodeDesc::new("root", Content::Empty).child(NodeDesc::new("a", mesh()).at(Vec3::new(x, 0.0, 0.0)));
+            let mut root = NodeDesc::new("root", Content::Empty)
+                .child(NodeDesc::new("a", mesh()).at(Vec3::new(x, 0.0, 0.0)));
             if with_b {
                 root = root.child(NodeDesc::new("b", mesh()));
             }
             vec![root]
         };
-        assert_eq!(s.reconcile(&desc(0.0, true)), ReconcileStats { created: 3, ..Default::default() });
-        assert_eq!(s.reconcile(&desc(0.0, true)), ReconcileStats { unchanged: 3, ..Default::default() });
-        assert_eq!(s.reconcile(&desc(2.0, true)), ReconcileStats { updated: 1, unchanged: 2, ..Default::default() });
-        assert_eq!(s.reconcile(&desc(2.0, false)), ReconcileStats { unchanged: 2, removed: 1, ..Default::default() });
+        assert_eq!(
+            s.reconcile(&desc(0.0, true)),
+            ReconcileStats {
+                created: 3,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            s.reconcile(&desc(0.0, true)),
+            ReconcileStats {
+                unchanged: 3,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            s.reconcile(&desc(2.0, true)),
+            ReconcileStats {
+                updated: 1,
+                unchanged: 2,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            s.reconcile(&desc(2.0, false)),
+            ReconcileStats {
+                unchanged: 2,
+                removed: 1,
+                ..Default::default()
+            }
+        );
         assert_eq!(s.len(), 2);
     }
 

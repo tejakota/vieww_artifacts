@@ -10,13 +10,14 @@
 //! The crack is the spark's birth canal: S04 opens at the moment this
 //! line of light becomes a point of it.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{
+    Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextAlign, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{Rng, ease_out_cubic};
-use super::{AMBER, CANVAS, Ctx, H, INK, MUTED, RED, W, alpha, caption, clamp01, flash, glow, grain, ground, light_rays, mix, mono_w, scanbands, tint, vignette, xywh};
-
+use super::{alpha, caption, clamp01, mix, mono_w, tint, xywh, Ctx, AMBER, H, INK, MUTED, RED, W};
+use crate::film_lib::{ease_out_cubic, Rng};
 
 /// The question, again — this time the film asks it.
 const QUESTION: &str = "what if the wait was the work?";
@@ -30,7 +31,7 @@ const PH: f32 = 660.0;
 const COLS: usize = 9;
 const ROWS: usize = 5;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -57,9 +58,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
                 Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, mix(Color::rgb(11, 11, 12), Color::rgb(12, 12, 13), desat)),
-                    (0.7, mix(Color::rgb(9, 10, 10), Color::rgb(11, 11, 12), desat)),
-                    (1.0, mix(Color::rgb(13, 11, 11), Color::rgb(12, 12, 13), desat)),
+                    (
+                        0.0,
+                        mix(Color::rgb(11, 11, 12), Color::rgb(12, 12, 13), desat),
+                    ),
+                    (
+                        0.7,
+                        mix(Color::rgb(9, 10, 10), Color::rgb(11, 11, 12), desat),
+                    ),
+                    (
+                        1.0,
+                        mix(Color::rgb(13, 11, 11), Color::rgb(12, 12, 13), desat),
+                    ),
                 ]),
             );
             // The scanlines — crawling harder as the break comes.
@@ -87,8 +97,13 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         let cx = PX + (col as f32 + 0.5) * tw;
                         let cy = PY + (row as f32 + 0.5) * th;
                         // The shear: tiles flee the crack line (center col).
-                        let side = if col as f32 + 0.5 < COLS as f32 * 0.5 { -1.0 } else { 1.0 };
-                        let dist = ((col as f32 + 0.5) - COLS as f32 * 0.5).abs() / (COLS as f32 * 0.5);
+                        let side = if col as f32 + 0.5 < COLS as f32 * 0.5 {
+                            -1.0
+                        } else {
+                            1.0
+                        };
+                        let dist =
+                            ((col as f32 + 0.5) - COLS as f32 * 0.5).abs() / (COLS as f32 * 0.5);
                         let jx = rng.sym() * 30.0;
                         let jy = rng.sym() * 22.0 + shear * 40.0;
                         let dx = side * dist * shear * (140.0 + 160.0 * rng.f01()) + jx * shear;
@@ -123,17 +138,43 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let bar = Painting::sized(
             Size::new(1300.0, 14.0),
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                book.stroke_rrect(xywh(0.0, 0.0, 1300.0, 12.0), 6.0, alpha(Color::WHITE, 0.10 * ghost), 1.0);
-                book.rrect(xywh(0.0, 0.0, 1287.0, 12.0), 6.0, alpha(mix(RED, Color::rgb(150, 90, 90), desat * 0.6), ghost));
+                book.stroke_rrect(
+                    xywh(0.0, 0.0, 1300.0, 12.0),
+                    6.0,
+                    alpha(Color::WHITE, 0.10 * ghost),
+                    1.0,
+                );
+                book.rrect(
+                    xywh(0.0, 0.0, 1287.0, 12.0),
+                    6.0,
+                    alpha(mix(RED, Color::rgb(150, 90, 90), desat * 0.6), ghost),
+                );
             }),
         );
-        stack = stack.push(Positioned::new().left(300.0).top(760.0).width(1300.0).height(14.0).child(bar));
         stack = stack.push(
-            Positioned::new().left(300.0).top(790.0).width(900.0).height(24.0)
-                .child(Opacity::new(ghost).child(
-                    Text::new("41.3 MB · 99% · compiling the world")
-                        .style(TextStyle::new(18.0).monospace().letter_spacing(1.0).color(alpha(tint(RED, 0.25), 0.9))),
-                )),
+            Positioned::new()
+                .left(300.0)
+                .top(760.0)
+                .width(1300.0)
+                .height(14.0)
+                .child(bar),
+        );
+        stack = stack.push(
+            Positioned::new()
+                .left(300.0)
+                .top(790.0)
+                .width(900.0)
+                .height(24.0)
+                .child(
+                    Opacity::new(ghost).child(
+                        Text::new("41.3 MB · 99% · compiling the world").style(
+                            TextStyle::new(18.0)
+                                .monospace()
+                                .letter_spacing(1.0)
+                                .color(alpha(tint(RED, 0.25), 0.9)),
+                        ),
+                    ),
+                ),
         );
     }
 
@@ -163,7 +204,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     path.line_to(*pt);
                 }
                 // The glow — the light pouring through.
-                super::glow(book, W * 0.5, h * 0.5, 300.0 + flood * 500.0, super::SPARK_C, 0.10 * crack + 0.20 * flood);
+                super::glow(
+                    book,
+                    W * 0.5,
+                    h * 0.5,
+                    300.0 + flood * 500.0,
+                    super::SPARK_C,
+                    0.10 * crack + 0.20 * flood,
+                );
                 // The body — hot core over warm edge.
                 book.stroke_styled(
                     path.clone(),
@@ -179,7 +227,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 );
                 // God rays through the widening seam.
                 if flood > 0.05 {
-                    super::light_rays(book, W * 0.5, h * 0.5, 20.0, 1100.0, 0.0, t * 0.2, flood * 0.5, super::SPARK_C);
+                    super::light_rays(
+                        book,
+                        W * 0.5,
+                        h * 0.5,
+                        20.0,
+                        1100.0,
+                        0.0,
+                        t * 0.2,
+                        flood * 0.5,
+                        super::SPARK_C,
+                    );
                 }
             }),
         );
@@ -201,7 +259,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(40.0)
                 .child(
                     Text::new(shown)
-                        .style(TextStyle::new(size).monospace().letter_spacing(2.0).color(alpha(INK, 0.95)))
+                        .style(
+                            TextStyle::new(size)
+                                .monospace()
+                                .letter_spacing(2.0)
+                                .color(alpha(INK, 0.95)),
+                        )
                         .align(TextAlign::Left),
                 ),
         );
@@ -213,7 +276,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(602.0)
                     .width(13.0)
                     .height(30.0)
-                    .child(Container::new().color(alpha(super::SPARK_C, 0.9)).radius(1.5)),
+                    .child(
+                        Container::new()
+                            .color(alpha(super::SPARK_C, 0.9))
+                            .radius(1.5),
+                    ),
             );
         }
     }

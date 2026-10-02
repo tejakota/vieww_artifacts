@@ -18,17 +18,18 @@
 //! of glow is the rasterizer compositing `Plus` groups — `replay` carrying
 //! the mode `Canvas::push_layer` always accepted (U-01's one field).
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, tint, BG_DEEP, CANVAS, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT,
+    alpha, clamp01, mix, tint, Rng, BG_DEEP, CANVAS, FAINT, MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The shaft count — the receipt's first line.
 const SHAFTS: usize = 11;
@@ -98,7 +99,7 @@ fn beam_light(x: f32, y: f32, sway: f32, fan: &[Shaft]) -> f32 {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let fan = shafts();
 
     let board = Painting::sized(
@@ -106,139 +107,148 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new({
             let fan = fan.clone();
             move |book: &mut Sketchbook, size: Size| {
-            let w = size.width;
-            let h = size.height;
+                let w = size.width;
+                let h = size.height;
 
-            // The ground — a stage, darker than the shafts will make it.
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 7, 10)),
-                    (0.5, BG_DEEP),
-                    (1.0, Color::rgb(9, 9, 13)),
-                ]),
-            );
+                // The ground — a stage, darker than the shafts will make it.
+                book.rect(
+                    Rect::new(0.0, 0.0, w, h),
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, Color::rgb(7, 7, 10)),
+                        (0.5, BG_DEEP),
+                        (1.0, Color::rgb(9, 9, 13)),
+                    ]),
+                );
 
-            // Stars, sparse — the light will own this frame.
-            let mut rng = Rng::new(0x616);
-            for _ in 0..50 {
-                let x = rng.f01() * w;
-                let y = rng.f01() * h * 0.7;
-                book.circle(Offset::new(x, y), 0.4 + rng.f01() * 0.7, alpha(Color::WHITE, 0.04));
-            }
-
-            // The beam sway and breath, this frame.
-            let sway = (t * 0.9).sin();
-            let breath = 0.82 + 0.18 * (t * 1.7).sin();
-            let fade_in = clamp01(t / 0.12);
-
-            // ── THE GROUP — one Plus-blended, blurred layer for all eleven
-            //    shafts and their floor pools (U-01 economy, U-06 pricing).
-            book.blended_layer(fade_in, 10.0, BlendMode::Plus, None, |g| {
-                for s in &fan {
-                    let a = s.angle + sway * 0.10;
-                    let (sin, cos) = a.sin_cos();
-                    // The shaft: pivot apex to floor footprint.
-                    let len = (FLOOR - PIVOT.dy) / cos.max(0.2);
-                    let foot_x = PIVOT.dx + sin * len;
-                    // Apex width: 2-3 px — a shaft is a cone from a point.
-                    let apex = 2.0;
-                    let mut quad = Path::new();
-                    quad.move_to(Offset::new(PIVOT.dx - apex, PIVOT.dy));
-                    quad.line_to(Offset::new(PIVOT.dx + apex, PIVOT.dy));
-                    quad.line_to(Offset::new(foot_x + s.spread, FLOOR));
-                    quad.line_to(Offset::new(foot_x - s.spread, FLOOR));
-                    quad.close();
-
-                    let bright = 0.10 * s.gain * breath;
-                    g.fill(
-                        quad,
-                        Gradient::vertical().with_dither().with_stops(&[
-                            (0.0, alpha(mix(Color::WHITE, VIOLET_SOFT, 0.25), bright * 1.5)),
-                            (0.35, alpha(VIOLET_SOFT, bright)),
-                            (1.0, alpha(VIOLET, bright * 0.12)),
-                        ]),
+                // Stars, sparse — the light will own this frame.
+                let mut rng = Rng::new(0x616);
+                for _ in 0..50 {
+                    let x = rng.f01() * w;
+                    let y = rng.f01() * h * 0.7;
+                    book.circle(
+                        Offset::new(x, y),
+                        0.4 + rng.f01() * 0.7,
+                        alpha(Color::WHITE, 0.04),
                     );
+                }
 
-                    // The pool where the beam lands — a wide soft ellipse.
+                // The beam sway and breath, this frame.
+                let sway = (t * 0.9).sin();
+                let breath = 0.82 + 0.18 * (t * 1.7).sin();
+                let fade_in = clamp01(t / 0.12);
+
+                // ── THE GROUP — one Plus-blended, blurred layer for all eleven
+                //    shafts and their floor pools (U-01 economy, U-06 pricing).
+                book.blended_layer(fade_in, 10.0, BlendMode::Plus, None, |g| {
+                    for s in &fan {
+                        let a = s.angle + sway * 0.10;
+                        let (sin, cos) = a.sin_cos();
+                        // The shaft: pivot apex to floor footprint.
+                        let len = (FLOOR - PIVOT.dy) / cos.max(0.2);
+                        let foot_x = PIVOT.dx + sin * len;
+                        // Apex width: 2-3 px — a shaft is a cone from a point.
+                        let apex = 2.0;
+                        let mut quad = Path::new();
+                        quad.move_to(Offset::new(PIVOT.dx - apex, PIVOT.dy));
+                        quad.line_to(Offset::new(PIVOT.dx + apex, PIVOT.dy));
+                        quad.line_to(Offset::new(foot_x + s.spread, FLOOR));
+                        quad.line_to(Offset::new(foot_x - s.spread, FLOOR));
+                        quad.close();
+
+                        let bright = 0.10 * s.gain * breath;
+                        g.fill(
+                            quad,
+                            Gradient::vertical().with_dither().with_stops(&[
+                                (
+                                    0.0,
+                                    alpha(mix(Color::WHITE, VIOLET_SOFT, 0.25), bright * 1.5),
+                                ),
+                                (0.35, alpha(VIOLET_SOFT, bright)),
+                                (1.0, alpha(VIOLET, bright * 0.12)),
+                            ]),
+                        );
+
+                        // The pool where the beam lands — a wide soft ellipse.
+                        g.circle(
+                            Offset::new(foot_x, FLOOR + 6.0),
+                            s.spread * 1.8,
+                            Gradient::radial_fill().with_dither().with_stops(&[
+                                (
+                                    0.0,
+                                    alpha(mix(VIOLET_SOFT, Color::WHITE, 0.2), bright * 1.1),
+                                ),
+                                (1.0, alpha(VIOLET, 0.0)),
+                            ]),
+                        );
+                    }
+                });
+
+                // ── The dust — a second Plus group, crisp: the field made
+                //    visible. Each mote reads its own cone depth.
+                book.blended_layer(fade_in, 0.0, BlendMode::Plus, None, |g| {
+                    let mut rng = Rng::new(0x617);
+                    for _ in 0..MOTES {
+                        let x0 = rng.f01() * w;
+                        let depth = 0.25 + rng.f01() * 0.75;
+                        let y0 = rng.f01() * h;
+                        // Parallax drift: slow, down-right, depth-scaled.
+                        let x = x0 + t * 34.0 * depth;
+                        let y = y0 + t * 12.0 * depth;
+                        // Wrap.
+                        let x = x % w;
+                        let lit = beam_light(x, y, sway, &fan);
+                        if lit <= 0.015 {
+                            continue;
+                        }
+                        let r = 0.5 + depth * 0.9;
+                        let a = (lit * 0.85).min(1.0) * breath;
+                        g.circle(Offset::new(x, y), r, alpha(tint(VIOLET_SOFT, lit * 0.6), a));
+                    }
+                });
+
+                // ── The source — a bright core, its bloom, a breathing ring.
+                book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
+                    g.circle(PIVOT, 5.0 * breath, alpha(Color::WHITE, 0.95 * fade_in));
+                    g.circle(PIVOT, 12.0, alpha(tint(VIOLET_SOFT, 0.5), 0.6 * fade_in));
+                });
+                book.layer(1.0, 14.0, None, |g| {
                     g.circle(
-                        Offset::new(foot_x, FLOOR + 6.0),
-                        s.spread * 1.8,
+                        PIVOT,
+                        46.0 + 8.0 * (t * 1.7).sin(),
                         Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.2), bright * 1.1)),
+                            (0.0, alpha(tint(Color::WHITE, 0.2), 0.30 * fade_in * breath)),
+                            (0.45, alpha(VIOLET_SOFT, 0.12 * fade_in)),
                             (1.0, alpha(VIOLET, 0.0)),
                         ]),
                     );
-                }
-            });
-
-            // ── The dust — a second Plus group, crisp: the field made
-            //    visible. Each mote reads its own cone depth.
-            book.blended_layer(fade_in, 0.0, BlendMode::Plus, None, |g| {
-                let mut rng = Rng::new(0x617);
-                for _ in 0..MOTES {
-                    let x0 = rng.f01() * w;
-                    let depth = 0.25 + rng.f01() * 0.75;
-                    let y0 = rng.f01() * h;
-                    // Parallax drift: slow, down-right, depth-scaled.
-                    let x = x0 + t * 34.0 * depth;
-                    let y = y0 + t * 12.0 * depth;
-                    // Wrap.
-                    let x = x % w;
-                    let lit = beam_light(x, y, sway, &fan);
-                    if lit <= 0.015 {
-                        continue;
-                    }
-                    let r = 0.5 + depth * 0.9;
-                    let a = (lit * 0.85).min(1.0) * breath;
-                    g.circle(
-                        Offset::new(x, y),
-                        r,
-                        alpha(tint(VIOLET_SOFT, lit * 0.6), a),
-                    );
-                }
-            });
-
-            // ── The source — a bright core, its bloom, a breathing ring.
-            book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
-                g.circle(PIVOT, 5.0 * breath, alpha(Color::WHITE, 0.95 * fade_in));
-                g.circle(PIVOT, 12.0, alpha(tint(VIOLET_SOFT, 0.5), 0.6 * fade_in));
-            });
-            book.layer(1.0, 14.0, None, |g| {
-                g.circle(
+                });
+                book.ring(
                     PIVOT,
-                    46.0 + 8.0 * (t * 1.7).sin(),
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(tint(Color::WHITE, 0.2), 0.30 * fade_in * breath)),
-                        (0.45, alpha(VIOLET_SOFT, 0.12 * fade_in)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    30.0 + 6.0 * (t * 1.1).sin(),
+                    1.0,
+                    alpha(VIOLET_SOFT, 0.25 * fade_in),
                 );
-            });
-            book.ring(
-                PIVOT,
-                30.0 + 6.0 * (t * 1.1).sin(),
-                1.0,
-                alpha(VIOLET_SOFT, 0.25 * fade_in),
-            );
 
-            // The floor line — where the pools land.
-            book.line(
-                Offset::new(0.0, FLOOR),
-                Offset::new(w, FLOOR),
-                alpha(FAINT, 0.16 * fade_in),
-                1.0,
-            );
+                // The floor line — where the pools land.
+                book.line(
+                    Offset::new(0.0, FLOOR),
+                    Offset::new(w, FLOOR),
+                    alpha(FAINT, 0.16 * fade_in),
+                    1.0,
+                );
 
-            // The vignette.
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.42), 0.9).with_dither().with_stops(&[
-                    (0.5, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.40)),
-                ]),
-            );
-        }}),
+                // The vignette.
+                book.rect(
+                    Rect::new(0.0, 0.0, w, h),
+                    Gradient::radial(Offset::new(0.5, 0.42), 0.9)
+                        .with_dither()
+                        .with_stops(&[
+                            (0.5, alpha(Color::BLACK, 0.0)),
+                            (1.0, alpha(Color::BLACK, 0.40)),
+                        ]),
+                );
+            }
+        }),
     );
 
     Stack::new()
@@ -278,8 +288,16 @@ fn receipt_panel(t: f32, fan: &[Shaft]) -> WidgetNode {
     let lines = [
         "X-05 · BEAMS · ONE GROUP, ONE PRICE (U-01/U-06)".to_string(),
         format!("shafts {} in ONE Plus-blended blurred group", SHAFTS),
-        format!("dust {} · lit {} · mean light {:.2}", MOTES, lit_count,
-            if lit_count > 0 { total_light / lit_count as f32 } else { 0.0 }),
+        format!(
+            "dust {} · lit {} · mean light {:.2}",
+            MOTES,
+            lit_count,
+            if lit_count > 0 {
+                total_light / lit_count as f32
+            } else {
+                0.0
+            }
+        ),
         format!("breath {:.2} · sway {:+.2} rad", breath, sway * 0.10),
         format!("fade-in {:.0}%", fade_in * 100.0),
     ];
@@ -307,11 +325,8 @@ fn receipt_panel(t: f32, fan: &[Shaft]) -> WidgetNode {
                 .width(P_W)
                 .height(15.0)
                 .child(
-                    Text::new(line.clone()).style(
-                        TextStyle::new(11.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.9)),
-                    ),
+                    Text::new(line.clone())
+                        .style(TextStyle::new(11.0).monospace().color(alpha(MUTED, 0.9))),
                 ),
         );
     }
@@ -323,38 +338,42 @@ fn receipt_panel(t: f32, fan: &[Shaft]) -> WidgetNode {
         PaintWith::new({
             let fan: Vec<Shaft> = fan.to_vec();
             move |book: &mut Sketchbook, _sz: Size| {
-            book.rrect(
-                Rect::new(0.0, 0.0, P_W, 88.0),
-                10.0,
-                alpha(Color::rgb(16, 16, 21), 0.88),
-            );
-            book.stroke_rrect(
-                Rect::new(0.0, 0.0, P_W, 88.0),
-                10.0,
-                alpha(Color::WHITE, 0.08),
-                1.0,
-            );
-            // Mini pivot, upper center; each shaft a ray to the panel floor.
-            let pv = Offset::new(P_W * 0.5, 16.0);
-            let fl = 62.0f32;
-            for s in fan.iter() {
-                let a = s.angle + sway * 0.10;
-                let (sin, cos) = a.sin_cos();
-                let tip = Offset::new(pv.dx + sin * fl, pv.dy + cos * fl);
-                book.stroke(
-                    {
-                        let mut p = Path::new();
-                        p.move_to(pv);
-                        p.line_to(tip);
-                        p
-                    },
-                    alpha(tint(VIOLET_SOFT, s.gain * 0.5), 0.35 + 0.55 * s.gain * breath),
-                    1.0 + 1.6 * s.gain,
+                book.rrect(
+                    Rect::new(0.0, 0.0, P_W, 88.0),
+                    10.0,
+                    alpha(Color::rgb(16, 16, 21), 0.88),
                 );
+                book.stroke_rrect(
+                    Rect::new(0.0, 0.0, P_W, 88.0),
+                    10.0,
+                    alpha(Color::WHITE, 0.08),
+                    1.0,
+                );
+                // Mini pivot, upper center; each shaft a ray to the panel floor.
+                let pv = Offset::new(P_W * 0.5, 16.0);
+                let fl = 62.0f32;
+                for s in fan.iter() {
+                    let a = s.angle + sway * 0.10;
+                    let (sin, cos) = a.sin_cos();
+                    let tip = Offset::new(pv.dx + sin * fl, pv.dy + cos * fl);
+                    book.stroke(
+                        {
+                            let mut p = Path::new();
+                            p.move_to(pv);
+                            p.line_to(tip);
+                            p
+                        },
+                        alpha(
+                            tint(VIOLET_SOFT, s.gain * 0.5),
+                            0.35 + 0.55 * s.gain * breath,
+                        ),
+                        1.0 + 1.6 * s.gain,
+                    );
+                }
+                // The current sway indicator — where the fan points now.
+                book.circle(pv, 3.0, alpha(Color::WHITE, 0.9));
             }
-            // The current sway indicator — where the fan points now.
-            book.circle(pv, 3.0, alpha(Color::WHITE, 0.9));
-        }}),
+        }),
     );
     stack = stack.push(
         Positioned::new()

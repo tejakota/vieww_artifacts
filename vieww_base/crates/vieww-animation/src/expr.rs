@@ -80,7 +80,12 @@ impl Val {
                 let n = a.len().max(b.len());
                 Self::Vec(
                     (0..n)
-                        .map(|i| f(a.get(i).copied().unwrap_or(0.0), b.get(i).copied().unwrap_or(0.0)))
+                        .map(|i| {
+                            f(
+                                a.get(i).copied().unwrap_or(0.0),
+                                b.get(i).copied().unwrap_or(0.0),
+                            )
+                        })
                         .collect(),
                 )
             }
@@ -225,7 +230,8 @@ fn lex(src: &str) -> Result<Vec<Tok>, ExprError> {
     let mut i = 0;
     let mut out = Vec::new();
     const OPS: [&str; 22] = [
-        "&&", "||", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "^", "<", ">", "!", "?", ":", "(", ")", "[", "]", ",",
+        "&&", "||", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "^", "<", ">", "!", "?", ":",
+        "(", ")", "[", "]", ",",
     ];
     while i < b.len() {
         let c = b[i] as char;
@@ -245,7 +251,11 @@ fn lex(src: &str) -> Result<Vec<Tok>, ExprError> {
                     i += 1;
                 }
             }
-            out.push(Tok::Num(src[s..i].parse().map_err(|_| ExprError(format!("bad number at {s}")))?));
+            out.push(Tok::Num(
+                src[s..i]
+                    .parse()
+                    .map_err(|_| ExprError(format!("bad number at {s}")))?,
+            ));
         } else if c.is_ascii_alphabetic() || c == '_' {
             let s = i;
             while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_' || b[i] == b'.') {
@@ -371,7 +381,10 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Node, ExprError> {
-        let tok = self.peek().cloned().ok_or_else(|| ExprError("unexpected end".into()))?;
+        let tok = self
+            .peek()
+            .cloned()
+            .ok_or_else(|| ExprError("unexpected end".into()))?;
         self.at += 1;
         match tok {
             Tok::Num(n) => Ok(Node::Num(n)),
@@ -407,8 +420,19 @@ fn hash01(mut x: u64) -> f32 {
     r
 }
 
-fn remap(t: f32, t0: f32, t1: f32, v0: &Val, v1: &Val, ease: impl Fn(f32) -> f32) -> Result<Val, ExprError> {
-    let u = if (t1 - t0).abs() < 1e-9 { 1.0 } else { ((t - t0) / (t1 - t0)).clamp(0.0, 1.0) };
+fn remap(
+    t: f32,
+    t0: f32,
+    t1: f32,
+    v0: &Val,
+    v1: &Val,
+    ease: impl Fn(f32) -> f32,
+) -> Result<Val, ExprError> {
+    let u = if (t1 - t0).abs() < 1e-9 {
+        1.0
+    } else {
+        ((t - t0) / (t1 - t0)).clamp(0.0, 1.0)
+    };
     let e = ease(u);
     v0.zip(v1, |a, b| a + (b - a) * e)
 }
@@ -424,7 +448,10 @@ impl Expr {
         let mut p = Parser { toks, at: 0 };
         let root = p.ternary()?;
         if p.at != p.toks.len() {
-            return Err(ExprError(format!("unexpected trailing input at token {}", p.at)));
+            return Err(ExprError(format!(
+                "unexpected trailing input at token {}",
+                p.at
+            )));
         }
         Ok(Self {
             root,
@@ -477,7 +504,12 @@ fn eval(node: &Node, s: &Scope<'_>) -> Result<Val, ExprError> {
                 .cloned()
                 .ok_or_else(|| ExprError(format!("unknown variable '{other}'")))?,
         },
-        Node::Vec(items) => Val::Vec(items.iter().map(|n| eval(n, s).map(|v| v.num())).collect::<Result<_, _>>()?),
+        Node::Vec(items) => Val::Vec(
+            items
+                .iter()
+                .map(|n| eval(n, s).map(|v| v.num()))
+                .collect::<Result<_, _>>()?,
+        ),
         Node::Unary('-', e) => eval(e, s)?.map(|x| -x),
         Node::Unary(_, e) => Val::Num(f32::from(u8::from(!eval(e, s)?.truthy()))),
         Node::Index(v, i) => {
@@ -499,10 +531,14 @@ fn eval(node: &Node, s: &Scope<'_>) -> Result<Val, ExprError> {
         }
         Node::Binary(op, a, b) => {
             if *op == "&&" {
-                return Ok(Val::Num(f32::from(u8::from(eval(a, s)?.truthy() && eval(b, s)?.truthy()))));
+                return Ok(Val::Num(f32::from(u8::from(
+                    eval(a, s)?.truthy() && eval(b, s)?.truthy(),
+                ))));
             }
             if *op == "||" {
-                return Ok(Val::Num(f32::from(u8::from(eval(a, s)?.truthy() || eval(b, s)?.truthy()))));
+                return Ok(Val::Num(f32::from(u8::from(
+                    eval(a, s)?.truthy() || eval(b, s)?.truthy(),
+                ))));
             }
             let (x, y) = (eval(a, s)?, eval(b, s)?);
             if let (Val::Str(p), Val::Str(q)) = (&x, &y) {
@@ -535,7 +571,10 @@ fn eval(node: &Node, s: &Scope<'_>) -> Result<Val, ExprError> {
 
 #[allow(clippy::too_many_lines)]
 fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
-    let vals = args.iter().map(|a| eval(a, s)).collect::<Result<Vec<_>, _>>()?;
+    let vals = args
+        .iter()
+        .map(|a| eval(a, s))
+        .collect::<Result<Vec<_>, _>>()?;
     let need = |n: usize| {
         if vals.len() < n {
             Err(ExprError(format!("{name} needs {n} argument(s)")))
@@ -574,8 +613,18 @@ fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
             need(2)?;
             vals[0].zip(&vals[1], f32::powf)?
         }
-        "min" => vals.iter().map(Val::num).reduce(f32::min).map(Val::Num).ok_or_else(|| ExprError("min()".into()))?,
-        "max" => vals.iter().map(Val::num).reduce(f32::max).map(Val::Num).ok_or_else(|| ExprError("max()".into()))?,
+        "min" => vals
+            .iter()
+            .map(Val::num)
+            .reduce(f32::min)
+            .map(Val::Num)
+            .ok_or_else(|| ExprError("min()".into()))?,
+        "max" => vals
+            .iter()
+            .map(Val::num)
+            .reduce(f32::max)
+            .map(Val::Num)
+            .ok_or_else(|| ExprError("max()".into()))?,
         "clamp" => {
             need(3)?;
             let (lo, hi) = (n(1), n(2));
@@ -608,7 +657,11 @@ fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
         "normalize" => match vals.first() {
             Some(Val::Vec(v)) => {
                 let l = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-                Val::Vec(v.iter().map(|x| if l > 0.0 { x / l } else { 0.0 }).collect())
+                Val::Vec(
+                    v.iter()
+                        .map(|x| if l > 0.0 { x / l } else { 0.0 })
+                        .collect(),
+                )
             }
             Some(v) => Val::Num(v.num().signum()),
             None => return Err(ExprError("normalize()".into())),
@@ -629,7 +682,8 @@ fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
         }
         "random" => {
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let key = s.seed ^ ((s.index as u64) << 20) ^ ((s.time * 1000.0) as u64).wrapping_mul(0x9E37);
+            let key =
+                s.seed ^ ((s.index as u64) << 20) ^ ((s.time * 1000.0) as u64).wrapping_mul(0x9E37);
             let r = hash01(key);
             match vals.len() {
                 0 => Val::Num(r),
@@ -639,7 +693,11 @@ fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
         }
         "noise" => {
             let p = Perlin::from_seed(s.seed);
-            Val::Num(if vals.len() >= 2 { p.noise2(n(0), n(1)) } else { p.noise1(n(0)) })
+            Val::Num(if vals.len() >= 2 {
+                p.noise2(n(0), n(1))
+            } else {
+                p.noise1(n(0))
+            })
         }
         // wiggle(freq, amp, octaves = 1, amp_mult = 0.5, t = time)
         "wiggle" => {
@@ -647,7 +705,11 @@ fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
             let freq = n(0);
             let amp = n(1);
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let octaves = if vals.len() > 2 { n(2).max(1.0) as u32 } else { 1 };
+            let octaves = if vals.len() > 2 {
+                n(2).max(1.0) as u32
+            } else {
+                1
+            };
             let mult = if vals.len() > 3 { n(3) } else { 0.5 };
             let t = if vals.len() > 4 { n(4) } else { s.time };
             let base = s.value_at(t);
@@ -685,13 +747,19 @@ fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
                 Some(Val::Str(k)) => k.as_str(),
                 _ => "cycle",
             };
-            let Some((first, last)) = s.key_range else { return Ok(s.value.clone()) };
+            let Some((first, last)) = s.key_range else {
+                return Ok(s.value.clone());
+            };
             let span = last - first;
             if span <= 0.0 {
                 return Ok(s.value.clone());
             }
             let t = s.time;
-            let outside = if name == "loopOut" { t > last } else { t < first };
+            let outside = if name == "loopOut" {
+                t > last
+            } else {
+                t < first
+            };
             if !outside {
                 return Ok(s.value_at(t));
             }
@@ -711,9 +779,16 @@ fn call(name: &str, args: &[Node], s: &Scope<'_>) -> Result<Val, ExprError> {
                 }
                 "continue" => {
                     let e = 1e-3;
-                    let (edge, dir) = if name == "loopOut" { (last, 1.0) } else { (first, -1.0) };
-                    let slope = s.value_at(edge).zip(&s.value_at(edge - dir * e), |a, b| (a - b) / e)?;
-                    s.value_at(edge).zip(&slope, |a, m| a + m * (t - edge) * dir * dir)?
+                    let (edge, dir) = if name == "loopOut" {
+                        (last, 1.0)
+                    } else {
+                        (first, -1.0)
+                    };
+                    let slope = s
+                        .value_at(edge)
+                        .zip(&s.value_at(edge - dir * e), |a, b| (a - b) / e)?;
+                    s.value_at(edge)
+                        .zip(&slope, |a, m| a + m * (t - edge) * dir * dir)?
                 }
                 _ => s.value_at(first + local),
             }
@@ -754,10 +829,15 @@ impl Driver {
     /// # Errors
     ///
     /// An input channel is missing, or evaluation fails.
-    pub fn evaluate(&self, time: f32, lookup: impl Fn(&str) -> Option<f32>) -> Result<f32, ExprError> {
+    pub fn evaluate(
+        &self,
+        time: f32,
+        lookup: impl Fn(&str) -> Option<f32>,
+    ) -> Result<f32, ExprError> {
         let mut scope = Scope::at(time);
         for (var, source) in &self.inputs {
-            let v = lookup(source).ok_or_else(|| ExprError(format!("driver input '{source}' missing")))?;
+            let v = lookup(source)
+                .ok_or_else(|| ExprError(format!("driver input '{source}' missing")))?;
             scope.vars.insert(var.clone(), Val::Num(v));
         }
         self.expr.eval_num(&scope)
@@ -789,11 +869,17 @@ mod tests {
 
     #[test]
     fn vectors_broadcast_and_index() {
-        assert_eq!(ev("[1, 2] * 3 + [0, 1]", &Scope::at(0.0)), Val::Vec(vec![3.0, 7.0]));
+        assert_eq!(
+            ev("[1, 2] * 3 + [0, 1]", &Scope::at(0.0)),
+            Val::Vec(vec![3.0, 7.0])
+        );
         assert_eq!(num("[4, 5, 6][2]"), 6.0);
         assert_eq!(num("length([3, 4])"), 5.0);
         assert_eq!(num("length([0,0], [3,4])"), 5.0);
-        assert_eq!(ev("normalize([0, 2])", &Scope::at(0.0)), Val::Vec(vec![0.0, 1.0]));
+        assert_eq!(
+            ev("normalize([0, 2])", &Scope::at(0.0)),
+            Val::Vec(vec![0.0, 1.0])
+        );
     }
 
     #[test]
@@ -809,21 +895,38 @@ mod tests {
     fn linear_and_ease_remap_like_after_effects() {
         let s = Scope::at(1.0);
         assert_eq!(ev("linear(time, 0, 2, 0, 100)", &s).num(), 50.0);
-        assert_eq!(ev("linear(time, 0, 0.5, 0, 100)", &s).num(), 100.0, "clamped");
-        assert_eq!(ev("ease(0.5, [0,0], [10,20])", &s), Val::Vec(vec![5.0, 10.0]));
-        assert!(ev("easeIn(0.5, 0, 1)", &s).num() < 0.5 && ev("easeOut(0.5, 0, 1)", &s).num() > 0.5);
+        assert_eq!(
+            ev("linear(time, 0, 0.5, 0, 100)", &s).num(),
+            100.0,
+            "clamped"
+        );
+        assert_eq!(
+            ev("ease(0.5, [0,0], [10,20])", &s),
+            Val::Vec(vec![5.0, 10.0])
+        );
+        assert!(
+            ev("easeIn(0.5, 0, 1)", &s).num() < 0.5 && ev("easeOut(0.5, 0, 1)", &s).num() > 0.5
+        );
     }
 
     #[test]
     fn wiggle_is_seeded_bounded_and_per_axis() {
-        let s = Scope::at(1.3).with_value(Val::Vec(vec![100.0, 100.0])).with_seed(9);
+        let s = Scope::at(1.3)
+            .with_value(Val::Vec(vec![100.0, 100.0]))
+            .with_seed(9);
         let a = ev("wiggle(2, 10)", &s);
         let b = ev("wiggle(2, 10)", &s);
         assert_eq!(a, b, "same seed, same answer");
         let Val::Vec(v) = a else { panic!() };
         assert!(v.iter().all(|x| (x - 100.0).abs() <= 10.0));
         assert_ne!(v[0], v[1], "each axis wiggles on its own");
-        let other = ev("wiggle(2, 10)", &Scope::at(1.3).with_value(Val::Vec(vec![100.0, 100.0])).with_seed(9).with_index(2.0));
+        let other = ev(
+            "wiggle(2, 10)",
+            &Scope::at(1.3)
+                .with_value(Val::Vec(vec![100.0, 100.0]))
+                .with_seed(9)
+                .with_index(2.0),
+        );
         assert_ne!(other, Val::Vec(v), "layers with different indices differ");
     }
 
@@ -838,7 +941,10 @@ mod tests {
         assert!((at(1.25, "loopOut('pingpong')") - 7.5).abs() < 1e-4);
         assert!((at(2.25, "loopOut(\"offset\")") - 22.5).abs() < 1e-3);
         assert!((at(1.5, "loopOut('continue')") - 15.0).abs() < 1e-2);
-        assert!((at(0.5, "loopOut()") - 5.0).abs() < 1e-4, "inside the keys: the curve");
+        assert!(
+            (at(0.5, "loopOut()") - 5.0).abs() < 1e-4,
+            "inside the keys: the curve"
+        );
         assert!((at(-0.25, "loopIn()") - 7.5).abs() < 1e-4);
     }
 
@@ -852,7 +958,10 @@ mod tests {
 
     #[test]
     fn drivers_read_bound_channels() {
-        let d = Driver::new("rot * 0.5 + offset").unwrap().input("rot", "arm.rotation").input("offset", "bias");
+        let d = Driver::new("rot * 0.5 + offset")
+            .unwrap()
+            .input("rot", "arm.rotation")
+            .input("offset", "bias");
         let v = d.evaluate(0.0, |c| match c {
             "arm.rotation" => Some(2.0),
             "bias" => Some(0.25),
@@ -868,7 +977,10 @@ mod tests {
         assert!(Expr::parse("(1").is_err());
         assert!(Expr::parse("1 2").is_err());
         assert!(Expr::parse("$").is_err());
-        assert!(Expr::parse("nope(1)").unwrap().eval(&Scope::at(0.0)).is_err());
+        assert!(Expr::parse("nope(1)")
+            .unwrap()
+            .eval(&Scope::at(0.0))
+            .is_err());
         assert!(Expr::parse("x").unwrap().eval(&Scope::at(0.0)).is_err());
         assert!(num("sqrt(-1)").is_nan());
     }

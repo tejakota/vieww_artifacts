@@ -19,16 +19,19 @@
 //! probe reads each title cell's ink fraction out of the output buffer and
 //! prints the spread: variance is the receipt that glyphs, not boxes, drew.
 
-use vieww_foundation::{Color, Dash, FontFamily, FontWeight, Gradient, Offset, Path, Rect, Size,
-    Sketchbook, StrokeStyle, TextStyle, Transform};
+use vieww_foundation::{
+    Color, FontFamily, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle, Transform,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith, Text, Transformed};
+use vieww_widget::{Opacity, PaintWith, Painting, Text, Transformed};
 
-use crate::film_lib::{alpha, clamp01, ease_out_back, mix, spring_out, BG_DEEP, CANVAS, FAINT, INK,
-    MUTED, Rng, RED, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_back, mix, spring_out, Rng, BG_DEEP, CANVAS, FAINT, INK, MUTED, RED,
+    VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// The title — the creation idiom itself.
 const TITLE: [char; 4] = ['一', '画', '开', '天'];
@@ -113,7 +116,7 @@ fn land_at(i: usize) -> f32 {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let rain = rain_field();
     let stroke_u = clamp01(t / 0.13); // the opening stroke's draw-on
     let seal_t = clamp01((t - 0.60) / 0.12);
@@ -141,10 +144,12 @@ pub fn frame(t: f32) -> WidgetNode {
             if open > 0.0 {
                 book.rect(
                     Rect::new(0.0, 0.0, w, h),
-                    Gradient::radial(Offset::new(0.5, 0.36), 0.62).with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET_SOFT, 0.085 * open)),
-                        (1.0, alpha(VIOLET_SOFT, 0.0)),
-                    ]),
+                    Gradient::radial(Offset::new(0.5, 0.36), 0.62)
+                        .with_dither()
+                        .with_stops(&[
+                            (0.0, alpha(VIOLET_SOFT, 0.085 * open)),
+                            (1.0, alpha(VIOLET_SOFT, 0.0)),
+                        ]),
                 );
             }
 
@@ -154,11 +159,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 132.0,
                 alpha(Color::rgb(28, 30, 40), 0.9),
             );
-            book.circle(
-                Offset::new(w * 0.80, h * 0.30),
-                132.0,
-                alpha(FAINT, 0.22),
-            );
+            book.circle(Offset::new(w * 0.80, h * 0.30), 132.0, alpha(FAINT, 0.22));
 
             // ── The opening stroke — one brush line as a FILLED shape:
             //    a cubic spine with a calligraphic width profile (swell in
@@ -221,13 +222,21 @@ pub fn frame(t: f32) -> WidgetNode {
                         for (k, pt) in top.iter().enumerate() {
                             let u = k as f32 / steps as f32;
                             let y = pt.dy + sgn * (width(u) * 0.5 + 2.2);
-                            if k == 0 { p.move_to(Offset::new(pt.dx, y)); } else { p.line_to(Offset::new(pt.dx, y)); }
+                            if k == 0 {
+                                p.move_to(Offset::new(pt.dx, y));
+                            } else {
+                                p.line_to(Offset::new(pt.dx, y));
+                            }
                         }
                         book.stroke(p, alpha(mix(MUTED, INK, 0.5), 0.30), 1.6);
                     }
                     // The entry blot — where the nib first touched.
                     let (bx, by) = spine(0.0);
-                    book.circle(Offset::new(bx + 2.0, by), 7.0, alpha(mix(MUTED, INK, 0.62), 0.9));
+                    book.circle(
+                        Offset::new(bx + 2.0, by),
+                        7.0,
+                        alpha(mix(MUTED, INK, 0.62), 0.9),
+                    );
                 }
                 // The wet head — a small round bead at the frontier.
                 if stroke_u < 1.0 {
@@ -241,10 +250,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // night air the ink sits in.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.44), 0.85).with_dither().with_stops(&[
-                    (0.0, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.42)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.44), 0.85)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.42)),
+                    ]),
             );
             book.rect(
                 Rect::new(0.0, h * 0.72, w, h),
@@ -260,13 +271,22 @@ pub fn frame(t: f32) -> WidgetNode {
                 let a = clamp01(seal_t * 2.2);
                 let half = SEAL * s * 0.5;
                 book.rrect(
-                    Rect::new(SEAL_X + SEAL * 0.5 - half, SEAL_Y + SEAL * 0.5 - half,
-                        SEAL_X + SEAL * 0.5 + half, SEAL_Y + SEAL * 0.5 + half),
+                    Rect::new(
+                        SEAL_X + SEAL * 0.5 - half,
+                        SEAL_Y + SEAL * 0.5 - half,
+                        SEAL_X + SEAL * 0.5 + half,
+                        SEAL_Y + SEAL * 0.5 + half,
+                    ),
                     10.0 * s,
                     alpha(RED, a * 0.96),
                 );
                 book.stroke_rrect(
-                    Rect::new(SEAL_X + 4.0, SEAL_Y + 4.0, SEAL_X + SEAL - 4.0, SEAL_Y + SEAL - 4.0),
+                    Rect::new(
+                        SEAL_X + 4.0,
+                        SEAL_Y + 4.0,
+                        SEAL_X + SEAL - 4.0,
+                        SEAL_Y + SEAL - 4.0,
+                    ),
                     9.0,
                     alpha(Color::rgb(255, 226, 220), a * 0.9),
                     3.4,
@@ -401,7 +421,11 @@ fn ease_out_cubic_x(u: f32) -> f32 {
 // ── The receipt ─────────────────────────────────────────────────────────────
 
 fn receipt_panel(t: f32) -> WidgetNode {
-    let landed = TITLE.iter().enumerate().filter(|(i, _)| t >= land_at(*i)).count();
+    let landed = TITLE
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| t >= land_at(*i))
+        .count();
     let rain_n = 96;
     let seal_on = t >= 0.60;
     let motto_n = ((clamp01((t - 0.74) / 0.16) * 6.0).floor() as usize).min(5);
@@ -412,11 +436,18 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
     let lines = [
         "HAN · THE SCRIPT AXIS · 一画开天".to_string(),
-        format!("title {}/4 landed · rain glyphs {} · seal {}", landed, rain_n,
-            if seal_on { "stamped" } else { "—" }),
-        format!("families: LXGW WenKai · Noto Serif SC · DejaVu (mono)"),
-        format!("scripts: Han + Latin in one frame (the shaper's first mix)"),
-        format!("motto column {}/5 · vertical layout, native direction", motto_n),
+        format!(
+            "title {}/4 landed · rain glyphs {} · seal {}",
+            landed,
+            rain_n,
+            if seal_on { "stamped" } else { "—" }
+        ),
+        "families: LXGW WenKai · Noto Serif SC · DejaVu (mono)".to_string(),
+        "scripts: Han + Latin in one frame (the shaper's first mix)".to_string(),
+        format!(
+            "motto column {}/5 · vertical layout, native direction",
+            motto_n
+        ),
     ];
 
     let mut stack = Stack::new();
@@ -460,7 +491,10 @@ fn receipt_panel(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -489,17 +523,22 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 book.stroke_rrect(
                     Rect::new(x0, 8.0, x0 + cell, 38.0),
                     4.0,
-                    alpha(if lit { VIOLET_SOFT } else { FAINT }, if lit { 0.8 } else { 0.35 }),
+                    alpha(
+                        if lit { VIOLET_SOFT } else { FAINT },
+                        if lit { 0.8 } else { 0.35 },
+                    ),
                     1.2,
                 );
                 // The ink fill so far — a live echo of the probe's number.
                 let u = clamp01((t - land_at(i)) / 0.26);
-                let fillw = cell * clamp01(u * 1.4) * match i {
-                    0 => 0.16, // 一 — one bar
-                    1 => 0.30, // 画
-                    2 => 0.34, // 开
-                    _ => 0.27, // 天
-                };
+                let fillw = cell
+                    * clamp01(u * 1.4)
+                    * match i {
+                        0 => 0.16, // 一 — one bar
+                        1 => 0.30, // 画
+                        2 => 0.34, // 开
+                        _ => 0.27, // 天
+                    };
                 book.rect(
                     Rect::new(x0 + 3.0, 11.0, x0 + 3.0 + fillw.max(0.0), 35.0),
                     alpha(VIOLET_SOFT, 0.30),
@@ -522,9 +561,8 @@ fn receipt_panel(t: f32) -> WidgetNode {
             .width(80.0)
             .height(14.0)
             .child(
-                Text::new("ink/cell →".to_string()).style(
-                    TextStyle::new(10.0).monospace().color(alpha(FAINT, 0.9)),
-                ),
+                Text::new("ink/cell →".to_string())
+                    .style(TextStyle::new(10.0).monospace().color(alpha(FAINT, 0.9))),
             ),
     );
 
@@ -536,7 +574,7 @@ fn receipt_panel(t: f32) -> WidgetNode {
 /// Read the four title cells' ink out of the real output buffer. Real
 /// calligraphy varies per character; `.notdef` boxes are near-identical
 /// hollow rectangles — the spread between cells is the verdict.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let mut out = Vec::new();
     let mut cells: Vec<(char, f32)> = Vec::new();
     for (i, ch) in TITLE.iter().enumerate() {
@@ -555,15 +593,17 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
         }
         cells.push((*ch, ink as f32 / total.max(1) as f32));
     }
-    let desc: Vec<String> = cells
-        .iter()
-        .map(|(c, f)| format!("{c} {f:.3}"))
-        .collect();
+    let desc: Vec<String> = cells.iter().map(|(c, f)| format!("{c} {f:.3}")).collect();
     out.push(format!("title ink/cell: {}", desc.join(" · ")));
     let mean = cells.iter().map(|(_, f)| f).sum::<f32>() / 4.0;
     let var = cells.iter().map(|(_, f)| (f - mean).powi(2)).sum::<f32>() / 4.0;
-    out.push(format!("ink variance σ2 {var:.5} (tofu ≈ uniform, calligraphy ≠)"));
-    out.push(format!("verdict: {}", if var > 0.0004 { "glyphs" } else { "boxes?" }));
+    out.push(format!(
+        "ink variance σ2 {var:.5} (tofu ≈ uniform, calligraphy ≠)"
+    ));
+    out.push(format!(
+        "verdict: {}",
+        if var > 0.0004 { "glyphs" } else { "boxes?" }
+    ));
 
     // The seal — red where red should be.
     let mut red = 0u64;
@@ -575,6 +615,6 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
             }
         }
     }
-    out.push(format!("seal red pixels {red} (stamp present)" ));
+    out.push(format!("seal red pixels {red} (stamp present)"));
     out
 }

@@ -78,16 +78,26 @@ fn norm(a: V) -> V {
 /// A collision shape in body-local coordinates.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Collider {
-    Circle { radius: f32, center: V },
+    Circle {
+        radius: f32,
+        center: V,
+    },
     /// Convex, any winding (normalised to counter-clockwise on build), with
     /// a rounding `radius` (0 for sharp corners).
-    Polygon { vertices: Vec<V>, normals: Vec<V>, radius: f32 },
+    Polygon {
+        vertices: Vec<V>,
+        normals: Vec<V>,
+        radius: f32,
+    },
 }
 
 impl Collider {
     #[must_use]
     pub const fn circle(radius: f32) -> Self {
-        Self::Circle { radius, center: V::ZERO }
+        Self::Circle {
+            radius,
+            center: V::ZERO,
+        }
     }
 
     /// A `w × h` box centred on the body.
@@ -119,7 +129,9 @@ impl Collider {
             };
         }
         // Ensure counter-clockwise in the math sense (cross > 0).
-        let area: f32 = (0..pts.len()).map(|i| cross(pts[i], pts[(i + 1) % pts.len()])).sum();
+        let area: f32 = (0..pts.len())
+            .map(|i| cross(pts[i], pts[(i + 1) % pts.len()]))
+            .sum();
         if area < 0.0 {
             pts.reverse();
         }
@@ -130,7 +142,11 @@ impl Collider {
                 norm(v(e.dy, -e.dx))
             })
             .collect();
-        Self::Polygon { vertices: pts, normals, radius }
+        Self::Polygon {
+            vertices: pts,
+            normals,
+            radius,
+        }
     }
 
     /// Mass and rotational inertia at unit density, and the centroid.
@@ -140,7 +156,9 @@ impl Collider {
                 let m = std::f32::consts::PI * radius * radius;
                 (m, m * (0.5 * radius * radius + dot(*center, *center)))
             }
-            Self::Polygon { vertices, radius, .. } if vertices.len() == 2 => {
+            Self::Polygon {
+                vertices, radius, ..
+            } if vertices.len() == 2 => {
                 // Capsule: rectangle plus two half discs.
                 let len = (vertices[1] - vertices[0]).distance();
                 let r = *radius;
@@ -151,7 +169,9 @@ impl Collider {
                 let i_disc = disc_m * (0.5 * r * r + len * len / 4.0);
                 (m, i_rect + i_disc)
             }
-            Self::Polygon { vertices, radius, .. } => {
+            Self::Polygon {
+                vertices, radius, ..
+            } => {
                 let n = vertices.len();
                 let (mut area, mut inertia) = (0.0, 0.0);
                 for i in 0..n {
@@ -161,9 +181,14 @@ impl Collider {
                     inertia += c * (dot(a, a) + dot(a, b) + dot(b, b)) / 12.0;
                 }
                 // Rounding adds a thin shell; approximate by perimeter × r.
-                let perim: f32 = (0..n).map(|i| (vertices[(i + 1) % n] - vertices[i]).distance()).sum();
+                let perim: f32 = (0..n)
+                    .map(|i| (vertices[(i + 1) % n] - vertices[i]).distance())
+                    .sum();
                 let extra = perim * radius;
-                (area.abs() + extra, inertia.abs() * (1.0 + extra / area.abs().max(1e-6)))
+                (
+                    area.abs() + extra,
+                    inertia.abs() * (1.0 + extra / area.abs().max(1e-6)),
+                )
             }
         }
     }
@@ -173,9 +198,14 @@ impl Collider {
         match self {
             Self::Circle { radius, center } => {
                 let q = p + rot(*center, c, s);
-                (v(q.dx - radius, q.dy - radius), v(q.dx + radius, q.dy + radius))
+                (
+                    v(q.dx - radius, q.dy - radius),
+                    v(q.dx + radius, q.dy + radius),
+                )
             }
-            Self::Polygon { vertices, radius, .. } => {
+            Self::Polygon {
+                vertices, radius, ..
+            } => {
                 let mut lo = v(f32::INFINITY, f32::INFINITY);
                 let mut hi = v(f32::NEG_INFINITY, f32::NEG_INFINITY);
                 for &q in vertices {
@@ -183,7 +213,10 @@ impl Collider {
                     lo = v(lo.dx.min(w.dx), lo.dy.min(w.dy));
                     hi = v(hi.dx.max(w.dx), hi.dy.max(w.dy));
                 }
-                (v(lo.dx - radius, lo.dy - radius), v(hi.dx + radius, hi.dy + radius))
+                (
+                    v(lo.dx - radius, lo.dy - radius),
+                    v(hi.dx + radius, hi.dy + radius),
+                )
             }
         }
     }
@@ -192,7 +225,9 @@ impl Collider {
     fn min_extent(&self) -> f32 {
         match self {
             Self::Circle { radius, .. } => *radius,
-            Self::Polygon { vertices, radius, .. } => {
+            Self::Polygon {
+                vertices, radius, ..
+            } => {
                 if vertices.len() == 2 {
                     return *radius;
                 }
@@ -213,14 +248,24 @@ fn hull(points: &[V]) -> Vec<V> {
     }
     let mut lower: Vec<V> = Vec::new();
     for &q in &p {
-        while lower.len() >= 2 && cross(lower[lower.len() - 1] - lower[lower.len() - 2], q - lower[lower.len() - 2]) <= 0.0 {
+        while lower.len() >= 2
+            && cross(
+                lower[lower.len() - 1] - lower[lower.len() - 2],
+                q - lower[lower.len() - 2],
+            ) <= 0.0
+        {
             lower.pop();
         }
         lower.push(q);
     }
     let mut upper: Vec<V> = Vec::new();
     for &q in p.iter().rev() {
-        while upper.len() >= 2 && cross(upper[upper.len() - 1] - upper[upper.len() - 2], q - upper[upper.len() - 2]) <= 0.0 {
+        while upper.len() >= 2
+            && cross(
+                upper[upper.len() - 1] - upper[upper.len() - 2],
+                q - upper[upper.len() - 2],
+            ) <= 0.0
+        {
             upper.pop();
         }
         upper.push(q);
@@ -292,8 +337,16 @@ impl RigidBody {
             tag: 0,
             force: V::ZERO,
             torque: 0.0,
-            inv_mass: if dynamic && m * density > 0.0 { 1.0 / (m * density) } else { 0.0 },
-            inv_inertia: if dynamic && i * density > 0.0 { 1.0 / (i * density) } else { 0.0 },
+            inv_mass: if dynamic && m * density > 0.0 {
+                1.0 / (m * density)
+            } else {
+                0.0
+            },
+            inv_inertia: if dynamic && i * density > 0.0 {
+                1.0 / (i * density)
+            } else {
+                0.0
+            },
             sleep_time: 0.0,
             sleeping: false,
         }
@@ -385,7 +438,9 @@ impl RigidBody {
     #[must_use]
     pub fn world_vertices(&self) -> Vec<V> {
         match &self.collider {
-            Collider::Polygon { vertices, .. } => vertices.iter().map(|p| self.world_point(*p)).collect(),
+            Collider::Polygon { vertices, .. } => {
+                vertices.iter().map(|p| self.world_point(*p)).collect()
+            }
             Collider::Circle { center, .. } => vec![self.world_point(*center)],
         }
     }
@@ -408,7 +463,11 @@ impl RigidBody {
         let q = self.local_point(p);
         match &self.collider {
             Collider::Circle { radius, center } => (q - *center).distance() <= *radius,
-            Collider::Polygon { vertices, normals, radius } => {
+            Collider::Polygon {
+                vertices,
+                normals,
+                radius,
+            } => {
                 if vertices.len() == 2 {
                     return segment_distance(q, vertices[0], vertices[1]) <= *radius;
                 }
@@ -430,7 +489,11 @@ impl RigidBody {
 fn closest_on_segment(p: V, a: V, b: V) -> V {
     let ab = b - a;
     let l2 = dot(ab, ab);
-    let t = if l2 > 0.0 { (dot(p - a, ab) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l2 > 0.0 {
+        (dot(p - a, ab) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     a + ab.scale(t)
 }
 
@@ -484,9 +547,19 @@ struct Posed<'a> {
 impl Posed<'_> {
     fn verts(&self) -> (Vec<V>, Vec<V>, f32) {
         match self.c {
-            Collider::Polygon { vertices, normals, radius } => (
-                vertices.iter().map(|q| self.p + rot(*q, self.cos, self.sin)).collect(),
-                normals.iter().map(|n| rot(*n, self.cos, self.sin)).collect(),
+            Collider::Polygon {
+                vertices,
+                normals,
+                radius,
+            } => (
+                vertices
+                    .iter()
+                    .map(|q| self.p + rot(*q, self.cos, self.sin))
+                    .collect(),
+                normals
+                    .iter()
+                    .map(|n| rot(*n, self.cos, self.sin))
+                    .collect(),
                 *radius,
             ),
             Collider::Circle { .. } => (Vec::new(), Vec::new(), 0.0),
@@ -500,13 +573,23 @@ fn collide_circles(pa: V, ra: f32, pb: V, rb: f32) -> Option<(V, Vec<ContactPoin
     if dist > ra + rb {
         return None;
     }
-    let n = if dist > 1e-9 { d.scale(1.0 / dist) } else { v(0.0, -1.0) };
+    let n = if dist > 1e-9 {
+        d.scale(1.0 / dist)
+    } else {
+        v(0.0, -1.0)
+    };
     let mid = pa + n.scale(ra - (ra + rb - dist) / 2.0);
     Some((n, vec![point(mid, ra + rb - dist, 0)]))
 }
 
 /// Polygon (with radius) against a circle; normal from polygon to circle.
-fn collide_polygon_circle(verts: &[V], normals: &[V], pr: f32, c: V, cr: f32) -> Option<(V, Vec<ContactPoint>)> {
+fn collide_polygon_circle(
+    verts: &[V],
+    normals: &[V],
+    pr: f32,
+    c: V,
+    cr: f32,
+) -> Option<(V, Vec<ContactPoint>)> {
     let n = verts.len();
     let total = pr + cr;
     if n == 2 {
@@ -538,7 +621,11 @@ fn collide_polygon_circle(verts: &[V], normals: &[V], pr: f32, c: V, cr: f32) ->
     if dist > total {
         return None;
     }
-    let nn = if dist > 1e-9 { d.scale(1.0 / dist) } else { normals[best] };
+    let nn = if dist > 1e-9 {
+        d.scale(1.0 / dist)
+    } else {
+        normals[best]
+    };
     let pen = total - dist;
     Some((nn, vec![point(q + nn.scale(pr - pen / 2.0), pen, 0)]))
 }
@@ -547,7 +634,10 @@ fn collide_polygon_circle(verts: &[V], normals: &[V], pr: f32, c: V, cr: f32) ->
 fn max_separation(va: &[V], na: &[V], vb: &[V]) -> (usize, f32) {
     let mut best = (0, f32::NEG_INFINITY);
     for i in 0..va.len() {
-        let s = vb.iter().map(|q| dot(na[i], *q - va[i])).fold(f32::INFINITY, f32::min);
+        let s = vb
+            .iter()
+            .map(|q| dot(na[i], *q - va[i]))
+            .fold(f32::INFINITY, f32::min);
         if s > best.1 {
             best = (i, s);
         }
@@ -578,7 +668,11 @@ fn collide_polygons(a: &Posed<'_>, b: &Posed<'_>) -> Option<(V, Vec<ContactPoint
             if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
                 let x = va[0] + d1.scale(t);
                 let n = norm(perp(d1));
-                let n = if dot(n, (vb[0] + vb[1]).scale(0.5) - (va[0] + va[1]).scale(0.5)) < 0.0 { v(-n.dx, -n.dy) } else { n };
+                let n = if dot(n, (vb[0] + vb[1]).scale(0.5) - (va[0] + va[1]).scale(0.5)) < 0.0 {
+                    v(-n.dx, -n.dy)
+                } else {
+                    n
+                };
                 return Some((n, vec![point(x, radius, 0)]));
             }
         }
@@ -589,13 +683,28 @@ fn collide_polygons(a: &Posed<'_>, b: &Posed<'_>) -> Option<(V, Vec<ContactPoint
         if dist > radius {
             return None;
         }
-        let n = if dist > 1e-9 { (q - p).scale(1.0 / dist) } else { norm(perp(d1)) };
-        let mut pts = vec![point(p + n.scale(ra - (radius - dist) / 2.0), radius - dist, 0)];
+        let n = if dist > 1e-9 {
+            (q - p).scale(1.0 / dist)
+        } else {
+            norm(perp(d1))
+        };
+        let mut pts = vec![point(
+            p + n.scale(ra - (radius - dist) / 2.0),
+            radius - dist,
+            0,
+        )];
         // Parallel overlap: add the second-closest pair if nearly as close.
         let (p2, q2) = sorted[1];
         let dist2 = (q2 - p2).distance();
-        if dist2 <= radius && (dist2 - dist).abs() < 0.05 * radius.max(1.0) && (p2 - p).distance() > 1e-3 {
-            pts.push(point(p2 + n.scale(ra - (radius - dist2) / 2.0), radius - dist2, 1));
+        if dist2 <= radius
+            && (dist2 - dist).abs() < 0.05 * radius.max(1.0)
+            && (p2 - p).distance() > 1e-3
+        {
+            pts.push(point(
+                p2 + n.scale(ra - (radius - dist2) / 2.0),
+                radius - dist2,
+                1,
+            ));
         }
         return Some((n, pts));
     }
@@ -610,7 +719,11 @@ fn collide_polygons(a: &Posed<'_>, b: &Posed<'_>) -> Option<(V, Vec<ContactPoint
     }
     // Reference face on the polygon with the greater separation.
     let flip = sb > sa + 1e-4;
-    let (rv, rn, iv, inn, face) = if flip { (&vb, &nb, &va, &na, fb) } else { (&va, &na, &vb, &nb, fa) };
+    let (rv, rn, iv, inn, face) = if flip {
+        (&vb, &nb, &va, &na, fb)
+    } else {
+        (&va, &na, &vb, &nb, fa)
+    };
     let rnorm = rn[face];
     // Incident face: most anti-parallel to the reference normal.
     let mut inc = 0;
@@ -622,7 +735,10 @@ fn collide_polygons(a: &Posed<'_>, b: &Posed<'_>) -> Option<(V, Vec<ContactPoint
             inc = i;
         }
     }
-    let mut incident = [(iv[inc], inc), (iv[(inc + 1) % iv.len()], (inc + 1) % iv.len())];
+    let mut incident = [
+        (iv[inc], inc),
+        (iv[(inc + 1) % iv.len()], (inc + 1) % iv.len()),
+    ];
     let (r1, r2) = (rv[face], rv[(face + 1) % rv.len()]);
     let tangent = norm(r2 - r1);
     // Clip incident segment to the reference face's side planes.
@@ -641,7 +757,11 @@ fn collide_polygons(a: &Posed<'_>, b: &Posed<'_>) -> Option<(V, Vec<ContactPoint
         }
         true
     };
-    if !clip(&mut incident, v(-tangent.dx, -tangent.dy), -dot(tangent, r1)) {
+    if !clip(
+        &mut incident,
+        v(-tangent.dx, -tangent.dy),
+        -dot(tangent, r1),
+    ) {
         return None;
     }
     if !clip(&mut incident, tangent, dot(tangent, r2)) {
@@ -657,7 +777,10 @@ fn collide_polygons(a: &Posed<'_>, b: &Posed<'_>) -> Option<(V, Vec<ContactPoint
             let (pr, pi) = if flip { (rb, ra) } else { (ra, rb) };
             let mid = (on_ref + rnorm.scale(pr) + (*p - rnorm.scale(pi))).scale(0.5);
             #[allow(clippy::cast_possible_truncation)]
-            let id = ((face as u32) << 16) | ((*idx as u32) << 1) | k as u32 | if flip { 1 << 31 } else { 0 };
+            let id = ((face as u32) << 16)
+                | ((*idx as u32) << 1)
+                | k as u32
+                | if flip { 1 << 31 } else { 0 };
             pts.push(point(mid, radius - sep, id));
         }
     }
@@ -670,19 +793,42 @@ fn collide_polygons(a: &Posed<'_>, b: &Posed<'_>) -> Option<(V, Vec<ContactPoint
 fn collide(a: &RigidBody, b: &RigidBody) -> Option<(V, Vec<ContactPoint>)> {
     let (sa, ca) = a.angle.sin_cos();
     let (sb, cb) = b.angle.sin_cos();
-    let pa = Posed { c: &a.collider, p: a.position, cos: ca, sin: sa };
-    let pb = Posed { c: &b.collider, p: b.position, cos: cb, sin: sb };
+    let pa = Posed {
+        c: &a.collider,
+        p: a.position,
+        cos: ca,
+        sin: sa,
+    };
+    let pb = Posed {
+        c: &b.collider,
+        p: b.position,
+        cos: cb,
+        sin: sb,
+    };
     match (&a.collider, &b.collider) {
-        (Collider::Circle { radius: r1, center: c1 }, Collider::Circle { radius: r2, center: c2 }) => {
-            collide_circles(a.position + rot(*c1, ca, sa), *r1, b.position + rot(*c2, cb, sb), *r2)
-        }
+        (
+            Collider::Circle {
+                radius: r1,
+                center: c1,
+            },
+            Collider::Circle {
+                radius: r2,
+                center: c2,
+            },
+        ) => collide_circles(
+            a.position + rot(*c1, ca, sa),
+            *r1,
+            b.position + rot(*c2, cb, sb),
+            *r2,
+        ),
         (Collider::Polygon { .. }, Collider::Circle { radius, center }) => {
             let (vs, ns, r) = pa.verts();
             collide_polygon_circle(&vs, &ns, r, b.position + rot(*center, cb, sb), *radius)
         }
         (Collider::Circle { radius, center }, Collider::Polygon { .. }) => {
             let (vs, ns, r) = pb.verts();
-            collide_polygon_circle(&vs, &ns, r, a.position + rot(*center, ca, sa), *radius).map(|(n, p)| (v(-n.dx, -n.dy), p))
+            collide_polygon_circle(&vs, &ns, r, a.position + rot(*center, ca, sa), *radius)
+                .map(|(n, p)| (v(-n.dx, -n.dy), p))
         }
         (Collider::Polygon { .. }, Collider::Polygon { .. }) => collide_polygons(&pa, &pb),
     }
@@ -693,10 +839,17 @@ fn collide(a: &RigidBody, b: &RigidBody) -> Option<(V, Vec<ContactPoint>)> {
 pub enum JointKind {
     /// A pin: the anchors coincide; free rotation, optional limits on the
     /// relative angle and an optional motor (target speed, max torque).
-    Revolute { limits: Option<(f32, f32)>, motor: Option<(f32, f32)> },
+    Revolute {
+        limits: Option<(f32, f32)>,
+        motor: Option<(f32, f32)>,
+    },
     /// Anchors kept `length` apart; `frequency` > 0 makes it a spring with
     /// damping ratio `damping`.
-    Distance { length: f32, frequency: f32, damping: f32 },
+    Distance {
+        length: f32,
+        frequency: f32,
+        damping: f32,
+    },
     /// Anchors coincide and the relative angle is frozen.
     Weld,
     /// Pull body `b`'s anchor toward `target` with a soft spring (`a` is
@@ -740,7 +893,15 @@ impl RigidJoint {
     /// A distance joint between two world anchors; the length is their
     /// current separation unless `kind` says otherwise.
     #[must_use]
-    pub fn between(world: &RigidWorld, a: usize, anchor_a: V, b: usize, anchor_b: V, frequency: f32, damping: f32) -> Self {
+    pub fn between(
+        world: &RigidWorld,
+        a: usize,
+        anchor_a: V,
+        b: usize,
+        anchor_b: V,
+        frequency: f32,
+        damping: f32,
+    ) -> Self {
         let (ba, bb) = (&world.bodies[a], &world.bodies[b]);
         Self {
             a,
@@ -761,7 +922,11 @@ impl RigidJoint {
 
     /// Change a revolute joint's motor speed.
     pub fn set_motor_speed(&mut self, speed: f32) {
-        if let JointKind::Revolute { motor: Some((s, _)), .. } = &mut self.kind {
+        if let JointKind::Revolute {
+            motor: Some((s, _)),
+            ..
+        } = &mut self.kind
+        {
             *s = speed;
         }
     }
@@ -876,7 +1041,8 @@ impl RigidWorld {
             if b.kind != BodyKind::Dynamic || b.sleeping {
                 continue;
             }
-            b.velocity = b.velocity + (self.gravity.scale(b.gravity_scale) + b.force.scale(b.inv_mass)).scale(dt);
+            b.velocity = b.velocity
+                + (self.gravity.scale(b.gravity_scale) + b.force.scale(b.inv_mass)).scale(dt);
             b.angular_velocity += b.torque * b.inv_inertia * dt;
             b.velocity = b.velocity.scale(1.0 / (1.0 + dt * b.linear_damping));
             b.angular_velocity /= 1.0 + dt * b.angular_damping;
@@ -909,11 +1075,17 @@ impl RigidWorld {
                 if ba.kind != BodyKind::Dynamic && bb.kind != BodyKind::Dynamic {
                     continue;
                 }
-                if (ba.sleeping || ba.kind != BodyKind::Dynamic) && (bb.sleeping || bb.kind != BodyKind::Dynamic) {
+                if (ba.sleeping || ba.kind != BodyKind::Dynamic)
+                    && (bb.sleeping || bb.kind != BodyKind::Dynamic)
+                {
                     continue;
                 }
                 // Jointed bodies do not collide with each other.
-                if self.joints.iter().any(|jn| (jn.a == a && jn.b == b) || (jn.a == b && jn.b == a)) {
+                if self
+                    .joints
+                    .iter()
+                    .any(|jn| (jn.a == a && jn.b == b) || (jn.a == b && jn.b == a))
+                {
                     continue;
                 }
                 pairs.push((a, b));
@@ -925,7 +1097,8 @@ impl RigidWorld {
         };
 
         // Narrowphase, warm-started from last step's impulses.
-        let old: HashMap<(usize, usize), Manifold> = self.manifolds.drain(..).map(|m| ((m.a, m.b), m)).collect();
+        let old: HashMap<(usize, usize), Manifold> =
+            self.manifolds.drain(..).map(|m| ((m.a, m.b), m)).collect();
         let mut manifolds = Vec::new();
         for (a, b) in pairs {
             if let Some((normal, mut points)) = collide(&self.bodies[a], &self.bodies[b]) {
@@ -937,7 +1110,12 @@ impl RigidWorld {
                         }
                     }
                 }
-                manifolds.push(Manifold { a, b, normal, points });
+                manifolds.push(Manifold {
+                    a,
+                    b,
+                    normal,
+                    points,
+                });
             }
         }
         // Events.
@@ -975,13 +1153,21 @@ impl RigidWorld {
                 let rb = p.point - bb.position;
                 let rna = cross(ra, m.normal);
                 let rnb = cross(rb, m.normal);
-                let kn = ba.inv_mass + bb.inv_mass + ba.inv_inertia * rna * rna + bb.inv_inertia * rnb * rnb;
+                let kn = ba.inv_mass
+                    + bb.inv_mass
+                    + ba.inv_inertia * rna * rna
+                    + bb.inv_inertia * rnb * rnb;
                 p.normal_mass = if kn > 0.0 { 1.0 / kn } else { 0.0 };
                 let rta = cross(ra, tangent);
                 let rtb = cross(rb, tangent);
-                let kt = ba.inv_mass + bb.inv_mass + ba.inv_inertia * rta * rta + bb.inv_inertia * rtb * rtb;
+                let kt = ba.inv_mass
+                    + bb.inv_mass
+                    + ba.inv_inertia * rta * rta
+                    + bb.inv_inertia * rtb * rtb;
                 p.tangent_mass = if kt > 0.0 { 1.0 / kt } else { 0.0 };
-                let dv = bb.velocity + cross_sv(bb.angular_velocity, rb) - ba.velocity - cross_sv(ba.angular_velocity, ra);
+                let dv = bb.velocity + cross_sv(bb.angular_velocity, rb)
+                    - ba.velocity
+                    - cross_sv(ba.angular_velocity, ra);
                 let vn = dot(dv, m.normal);
                 p.bias = self.baumgarte * inv_dt * (p.penetration - self.position_slop).max(0.0);
                 if vn < -self.restitution_threshold {
@@ -1014,17 +1200,27 @@ impl RigidWorld {
                     let (ba, bb) = (&self.bodies[m.a], &self.bodies[m.b]);
                     let ra = p.point - ba.position;
                     let rb = p.point - bb.position;
-                    let dv = bb.velocity + cross_sv(bb.angular_velocity, rb) - ba.velocity - cross_sv(ba.angular_velocity, ra);
+                    let dv = bb.velocity + cross_sv(bb.angular_velocity, rb)
+                        - ba.velocity
+                        - cross_sv(ba.angular_velocity, ra);
                     // Tangent.
                     let vt = dot(dv, tangent);
                     let max_f = friction * p.normal_impulse;
                     let new_t = (p.tangent_impulse - p.tangent_mass * vt).clamp(-max_f, max_f);
                     let dt_imp = new_t - p.tangent_impulse;
                     p.tangent_impulse = new_t;
-                    Self::apply_pair_raw(&mut self.bodies, m.a, m.b, p.point, tangent.scale(dt_imp));
+                    Self::apply_pair_raw(
+                        &mut self.bodies,
+                        m.a,
+                        m.b,
+                        p.point,
+                        tangent.scale(dt_imp),
+                    );
                     // Normal, against the velocity friction just changed.
                     let (ba, bb) = (&self.bodies[m.a], &self.bodies[m.b]);
-                    let dv2 = bb.velocity + cross_sv(bb.angular_velocity, rb) - ba.velocity - cross_sv(ba.angular_velocity, ra);
+                    let dv2 = bb.velocity + cross_sv(bb.angular_velocity, rb)
+                        - ba.velocity
+                        - cross_sv(ba.angular_velocity, ra);
                     let vn = dot(dv2, m.normal);
                     let new_n = (p.normal_impulse - p.normal_mass * (vn - p.bias)).max(0.0);
                     let dn = new_n - p.normal_impulse;
@@ -1036,7 +1232,9 @@ impl RigidWorld {
         }
 
         // Continuous collision for bullets, then integrate positions.
-        let statics: Vec<usize> = (0..self.bodies.len()).filter(|&i| self.bodies[i].kind == BodyKind::Static).collect();
+        let statics: Vec<usize> = (0..self.bodies.len())
+            .filter(|&i| self.bodies[i].kind == BodyKind::Static)
+            .collect();
         for i in 0..self.bodies.len() {
             let b = &self.bodies[i];
             if b.kind == BodyKind::Static || b.sleeping {
@@ -1096,7 +1294,10 @@ impl RigidWorld {
         let touching = |t: f32| {
             let mut probe = body.clone();
             probe.position = body.position + body.velocity.scale(t);
-            statics.iter().any(|&s| collide(&probe, &self.bodies[s]).is_some_and(|(_, p)| p.iter().any(|q| q.penetration > 0.0)))
+            statics.iter().any(|&s| {
+                collide(&probe, &self.bodies[s])
+                    .is_some_and(|(_, p)| p.iter().any(|q| q.penetration > 0.0))
+            })
         };
         if touching(0.0) {
             return None;
@@ -1154,7 +1355,9 @@ impl RigidWorld {
         // The 2×2 point-to-point effective mass.
         let point_constraint = |bodies: &mut [RigidBody], stiffness_bias: V, soft: f32| {
             let (ba, bb) = (&bodies[ia], &bodies[ib]);
-            let dv = bb.velocity + cross_sv(bb.angular_velocity, rb) - ba.velocity - cross_sv(ba.angular_velocity, ra);
+            let dv = bb.velocity + cross_sv(bb.angular_velocity, rb)
+                - ba.velocity
+                - cross_sv(ba.angular_velocity, ra);
             let k11 = ma + mb + iia * ra.dy * ra.dy + iib * rb.dy * rb.dy + soft;
             let k12 = -iia * ra.dx * ra.dy - iib * rb.dx * rb.dy;
             let k22 = ma + mb + iia * ra.dx * ra.dx + iib * rb.dx * rb.dx + soft;
@@ -1163,7 +1366,10 @@ impl RigidWorld {
                 return V::ZERO;
             }
             let rhs = v(-(dv.dx + stiffness_bias.dx), -(dv.dy + stiffness_bias.dy));
-            let imp = v((k22 * rhs.dx - k12 * rhs.dy) / det, (k11 * rhs.dy - k12 * rhs.dx) / det);
+            let imp = v(
+                (k22 * rhs.dx - k12 * rhs.dy) / det,
+                (k11 * rhs.dy - k12 * rhs.dx) / det,
+            );
             Self::apply_pair_raw(bodies, ia, ib, pb, imp);
             let _ = pa;
             imp
@@ -1195,12 +1401,16 @@ impl RigidWorld {
                         let mut d = 0.0;
                         if angle <= lo {
                             let c = angle - lo;
-                            let new = (self.joints[ji].angular_impulse - (rel + 0.2 * inv_dt * c) / k).max(0.0);
+                            let new = (self.joints[ji].angular_impulse
+                                - (rel + 0.2 * inv_dt * c) / k)
+                                .max(0.0);
                             d = new - self.joints[ji].angular_impulse;
                             self.joints[ji].angular_impulse = new;
                         } else if angle >= hi {
                             let c = angle - hi;
-                            let new = (self.joints[ji].angular_impulse - (rel + 0.2 * inv_dt * c) / k).min(0.0);
+                            let new = (self.joints[ji].angular_impulse
+                                - (rel + 0.2 * inv_dt * c) / k)
+                                .min(0.0);
                             d = new - self.joints[ji].angular_impulse;
                             self.joints[ji].angular_impulse = new;
                         }
@@ -1226,7 +1436,11 @@ impl RigidWorld {
                 let bias = (pb - pa).scale(0.2 * inv_dt);
                 point_constraint(&mut self.bodies, bias, 0.0);
             }
-            JointKind::Distance { length, frequency, damping } => {
+            JointKind::Distance {
+                length,
+                frequency,
+                damping,
+            } => {
                 let d = pb - pa;
                 let len = d.distance();
                 if len < 1e-6 {
@@ -1241,7 +1455,9 @@ impl RigidWorld {
                     return;
                 }
                 let c = len - length;
-                let dv = bb.velocity + cross_sv(bb.angular_velocity, rb) - ba.velocity - cross_sv(ba.angular_velocity, ra);
+                let dv = bb.velocity + cross_sv(bb.angular_velocity, rb)
+                    - ba.velocity
+                    - cross_sv(ba.angular_velocity, ra);
                 let cdot = dot(u, dv);
                 let (bias, gamma) = if frequency > 0.0 {
                     let mass = 1.0 / k;
@@ -1277,8 +1493,14 @@ impl RigidWorld {
                 }
                 let vel = body.velocity + cross_sv(body.angular_velocity, r);
                 let old = self.joints[ji].impulse;
-                let rhs = v(-(vel.dx + c.dx * beta + gamma * old.dx), -(vel.dy + c.dy * beta + gamma * old.dy));
-                let mut imp = v((k22 * rhs.dx - k12 * rhs.dy) / det, (k11 * rhs.dy - k12 * rhs.dx) / det);
+                let rhs = v(
+                    -(vel.dx + c.dx * beta + gamma * old.dx),
+                    -(vel.dy + c.dy * beta + gamma * old.dy),
+                );
+                let mut imp = v(
+                    (k22 * rhs.dx - k12 * rhs.dy) / det,
+                    (k11 * rhs.dy - k12 * rhs.dx) / det,
+                );
                 let mut total = old + imp;
                 let max = max_force * dt;
                 if total.distance() > max {
@@ -1318,7 +1540,9 @@ impl RigidWorld {
     /// Every body whose collider covers `p`.
     #[must_use]
     pub fn query_point(&self, p: V) -> Vec<usize> {
-        (0..self.bodies.len()).filter(|&i| self.bodies[i].contains(p)).collect()
+        (0..self.bodies.len())
+            .filter(|&i| self.bodies[i].contains(p))
+            .collect()
     }
 
     /// Total kinetic energy (translational + rotational).
@@ -1329,8 +1553,13 @@ impl RigidWorld {
             .filter(|b| b.inv_mass > 0.0)
             .map(|b| {
                 let m = 1.0 / b.inv_mass;
-                let i = if b.inv_inertia > 0.0 { 1.0 / b.inv_inertia } else { 0.0 };
-                0.5 * m * dot(b.velocity, b.velocity) + 0.5 * i * b.angular_velocity * b.angular_velocity
+                let i = if b.inv_inertia > 0.0 {
+                    1.0 / b.inv_inertia
+                } else {
+                    0.0
+                };
+                0.5 * m * dot(b.velocity, b.velocity)
+                    + 0.5 * i * b.angular_velocity * b.angular_velocity
             })
             .sum()
     }
@@ -1372,8 +1601,14 @@ fn ray_segment(o: V, d: V, a: V, b: V, max: f32) -> Option<(f32, V)> {
 
 fn ray_body(b: &RigidBody, o: V, d: V, max: f32) -> Option<(f32, V)> {
     match &b.collider {
-        Collider::Circle { radius, center } => ray_circle(o, d, b.world_point(*center), *radius, max),
-        Collider::Polygon { vertices, normals, radius } => {
+        Collider::Circle { radius, center } => {
+            ray_circle(o, d, b.world_point(*center), *radius, max)
+        }
+        Collider::Polygon {
+            vertices,
+            normals,
+            radius,
+        } => {
             let w: Vec<V> = vertices.iter().map(|p| b.world_point(*p)).collect();
             let (s, c) = b.angle.sin_cos();
             let mut best: Option<(f32, V)> = None;
@@ -1389,9 +1624,19 @@ fn ray_body(b: &RigidBody, o: V, d: V, max: f32) -> Option<(f32, V)> {
             for i in 0..edges {
                 let (a, bb) = (w[i], w[(i + 1) % n]);
                 if *radius > 0.0 {
-                    let nn = if n == 2 { rot(normals[1], c, s) } else { rot(normals[i], c, s) };
+                    let nn = if n == 2 {
+                        rot(normals[1], c, s)
+                    } else {
+                        rot(normals[i], c, s)
+                    };
                     for side in [nn, v(-nn.dx, -nn.dy)] {
-                        consider(ray_segment(o, d, a + side.scale(*radius), bb + side.scale(*radius), max));
+                        consider(ray_segment(
+                            o,
+                            d,
+                            a + side.scale(*radius),
+                            bb + side.scale(*radius),
+                            max,
+                        ));
                     }
                     consider(ray_circle(o, d, a, *radius, max));
                     consider(ray_circle(o, d, bb, *radius, max));
@@ -1434,8 +1679,11 @@ impl CharacterController {
     }
 
     fn body(&self) -> RigidBody {
-        RigidBody::kinematic(Collider::capsule(self.half_height * 2.0, self.radius), self.position)
-            .angle(std::f32::consts::FRAC_PI_2)
+        RigidBody::kinematic(
+            Collider::capsule(self.half_height * 2.0, self.radius),
+            self.position,
+        )
+        .angle(std::f32::consts::FRAC_PI_2)
     }
 
     /// Move by `velocity * dt`, sliding along whatever static geometry is
@@ -1487,7 +1735,11 @@ impl CharacterController {
         // A floor probe just below the feet, so standing still still
         // reports the floor.
         let feet = self.position + v(0.0, self.half_height + self.radius + 0.5);
-        if world.bodies.iter().any(|b| b.kind != BodyKind::Dynamic && b.contains(feet)) {
+        if world
+            .bodies
+            .iter()
+            .any(|b| b.kind != BodyKind::Dynamic && b.contains(feet))
+        {
             self.on_floor = true;
         }
     }
@@ -1500,7 +1752,10 @@ mod tests {
     const DT: f32 = 1.0 / 60.0;
 
     fn floor(w: &mut RigidWorld) -> usize {
-        w.add(RigidBody::fixed(Collider::rect(2000.0, 40.0), v(0.0, 520.0)))
+        w.add(RigidBody::fixed(
+            Collider::rect(2000.0, 40.0),
+            v(0.0, 520.0),
+        ))
     }
 
     fn run(w: &mut RigidWorld, seconds: f32) {
@@ -1512,8 +1767,22 @@ mod tests {
 
     #[test]
     fn polygons_hull_and_face_outward() {
-        let c = Collider::polygon(&[v(0.0, 0.0), v(1.0, 1.0), v(1.0, 0.0), v(0.0, 1.0), v(0.5, 0.5)], 0.0);
-        let Collider::Polygon { vertices, normals, .. } = c else { panic!() };
+        let c = Collider::polygon(
+            &[
+                v(0.0, 0.0),
+                v(1.0, 1.0),
+                v(1.0, 0.0),
+                v(0.0, 1.0),
+                v(0.5, 0.5),
+            ],
+            0.0,
+        );
+        let Collider::Polygon {
+            vertices, normals, ..
+        } = c
+        else {
+            panic!()
+        };
         assert_eq!(vertices.len(), 4, "interior point dropped");
         for (i, n) in normals.iter().enumerate() {
             let centre = v(0.5, 0.5);
@@ -1525,12 +1794,21 @@ mod tests {
     fn a_box_lands_flat_and_rests_on_the_floor() {
         let mut w = RigidWorld::default();
         floor(&mut w);
-        let b = w.add(RigidBody::dynamic(Collider::rect(40.0, 40.0), v(0.0, 300.0), 1.0).angle(0.3));
+        let b =
+            w.add(RigidBody::dynamic(Collider::rect(40.0, 40.0), v(0.0, 300.0), 1.0).angle(0.3));
         run(&mut w, 4.0);
         let body = &w.bodies[b];
-        assert!((body.position.dy - 480.0).abs() < 2.0, "resting on top: {:?}", body.position);
+        assert!(
+            (body.position.dy - 480.0).abs() < 2.0,
+            "resting on top: {:?}",
+            body.position
+        );
         let a = body.angle.rem_euclid(std::f32::consts::FRAC_PI_2);
-        assert!(!(0.05..=std::f32::consts::FRAC_PI_2 - 0.05).contains(&a), "toppled flat: {}", body.angle);
+        assert!(
+            !(0.05..=std::f32::consts::FRAC_PI_2 - 0.05).contains(&a),
+            "toppled flat: {}",
+            body.angle
+        );
         assert!(body.sleeping, "and went to sleep");
     }
 
@@ -1542,24 +1820,47 @@ mod tests {
             .map(|i| {
                 #[allow(clippy::cast_precision_loss)]
                 let y = 480.0 - 40.5 * i as f32;
-                w.add(RigidBody::dynamic(Collider::rect(40.0, 40.0), v(0.0, y), 1.0))
+                w.add(RigidBody::dynamic(
+                    Collider::rect(40.0, 40.0),
+                    v(0.0, y),
+                    1.0,
+                ))
             })
             .collect();
         run(&mut w, 5.0);
         let top = &w.bodies[*ids.last().unwrap()];
-        assert!(top.position.dx.abs() < 2.0, "the stack did not fall over: {:?}", top.position);
-        assert!(top.position.dy > 270.0 && top.position.dy < 285.0, "{:?}", top.position);
+        assert!(
+            top.position.dx.abs() < 2.0,
+            "the stack did not fall over: {:?}",
+            top.position
+        );
+        assert!(
+            top.position.dy > 270.0 && top.position.dy < 285.0,
+            "{:?}",
+            top.position
+        );
     }
 
     #[test]
     fn friction_holds_a_box_on_a_slope_that_a_slippery_box_slides_down() {
         let make = |mu: f32| {
-            let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
+            let mut w = RigidWorld {
+                sleep_enabled: false,
+                ..RigidWorld::default()
+            };
             let slope = 0.35;
-            w.add(RigidBody::fixed(Collider::rect(1000.0, 20.0), v(0.0, 400.0)).angle(slope).friction(1.0));
+            w.add(
+                RigidBody::fixed(Collider::rect(1000.0, 20.0), v(0.0, 400.0))
+                    .angle(slope)
+                    .friction(1.0),
+            );
             let n = v(slope.sin(), -slope.cos());
             let start = v(0.0, 400.0) + n.scale(10.0 + 15.0 + 0.5);
-            let b = w.add(RigidBody::dynamic(Collider::rect(30.0, 30.0), start, 1.0).angle(slope).friction(mu));
+            let b = w.add(
+                RigidBody::dynamic(Collider::rect(30.0, 30.0), start, 1.0)
+                    .angle(slope)
+                    .friction(mu),
+            );
             run(&mut w, 1.5);
             (w.bodies[b].position - start).distance()
         };
@@ -1571,9 +1872,13 @@ mod tests {
 
     #[test]
     fn restitution_bounces_and_energy_does_not_grow() {
-        let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
+        let mut w = RigidWorld {
+            sleep_enabled: false,
+            ..RigidWorld::default()
+        };
         floor(&mut w);
-        let b = w.add(RigidBody::dynamic(Collider::circle(20.0), v(0.0, 200.0), 1.0).restitution(0.8));
+        let b =
+            w.add(RigidBody::dynamic(Collider::circle(20.0), v(0.0, 200.0), 1.0).restitution(0.8));
         let mut max_after = 0.0f32;
         let mut hit = false;
         for i in 0..300 {
@@ -1586,34 +1891,68 @@ mod tests {
             }
         }
         assert!(hit, "it bounced");
-        assert!(max_after < 300.0 && max_after > 60.0, "lower than dropped, but up again: {max_after}");
+        assert!(
+            max_after < 300.0 && max_after > 60.0,
+            "lower than dropped, but up again: {max_after}"
+        );
     }
 
     #[test]
     fn circles_roll_on_a_slope_because_rotation_exists() {
-        let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
-        w.add(RigidBody::fixed(Collider::rect(2000.0, 20.0), v(0.0, 400.0)).angle(0.2).friction(1.0));
+        let mut w = RigidWorld {
+            sleep_enabled: false,
+            ..RigidWorld::default()
+        };
+        w.add(
+            RigidBody::fixed(Collider::rect(2000.0, 20.0), v(0.0, 400.0))
+                .angle(0.2)
+                .friction(1.0),
+        );
         let b = w.add(RigidBody::dynamic(Collider::circle(20.0), v(0.0, 360.0), 1.0).friction(1.0));
         run(&mut w, 2.0);
-        assert!(w.bodies[b].angular_velocity > 0.5, "rolling: {}", w.bodies[b].angular_velocity);
+        assert!(
+            w.bodies[b].angular_velocity > 0.5,
+            "rolling: {}",
+            w.bodies[b].angular_velocity
+        );
     }
 
     #[test]
     fn capsules_collide_with_boxes_and_each_other() {
         let mut w = RigidWorld::default();
         floor(&mut w);
-        let c1 = w.add(RigidBody::dynamic(Collider::capsule(60.0, 10.0), v(0.0, 400.0), 1.0));
-        let c2 = w.add(RigidBody::dynamic(Collider::capsule(60.0, 10.0), v(5.0, 300.0), 1.0).angle(0.4));
+        let c1 = w.add(RigidBody::dynamic(
+            Collider::capsule(60.0, 10.0),
+            v(0.0, 400.0),
+            1.0,
+        ));
+        let c2 =
+            w.add(RigidBody::dynamic(Collider::capsule(60.0, 10.0), v(5.0, 300.0), 1.0).angle(0.4));
         run(&mut w, 4.0);
-        assert!((w.bodies[c1].position.dy - 490.0).abs() < 3.0, "{:?}", w.bodies[c1].position);
-        assert!(w.bodies[c2].position.dy < 485.0, "resting on the other: {:?}", w.bodies[c2].position);
+        assert!(
+            (w.bodies[c1].position.dy - 490.0).abs() < 3.0,
+            "{:?}",
+            w.bodies[c1].position
+        );
+        assert!(
+            w.bodies[c2].position.dy < 485.0,
+            "resting on the other: {:?}",
+            w.bodies[c2].position
+        );
     }
 
     #[test]
     fn revolute_pendulum_keeps_its_length_and_swings() {
-        let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
+        let mut w = RigidWorld {
+            sleep_enabled: false,
+            ..RigidWorld::default()
+        };
         let anchor = w.add(RigidBody::fixed(Collider::circle(2.0), v(0.0, 0.0)));
-        let bob = w.add(RigidBody::dynamic(Collider::circle(10.0), v(100.0, 0.0), 1.0));
+        let bob = w.add(RigidBody::dynamic(
+            Collider::circle(10.0),
+            v(100.0, 0.0),
+            1.0,
+        ));
         let j = RigidJoint::between(&w, anchor, v(0.0, 0.0), bob, v(100.0, 0.0), 0.0, 0.0);
         w.add_joint(j);
         let mut max_x = 0.0f32;
@@ -1633,53 +1972,140 @@ mod tests {
         let mut w = RigidWorld::new(V::ZERO);
         w.sleep_enabled = false;
         let hub = w.add(RigidBody::fixed(Collider::circle(2.0), v(0.0, 0.0)));
-        let wheel = w.add(RigidBody::dynamic(Collider::rect(80.0, 10.0), v(0.0, 0.0), 1.0));
-        let mut j = RigidJoint::at_anchor(&w, hub, wheel, v(0.0, 0.0), JointKind::Revolute { limits: None, motor: Some((3.0, 1e9)) });
+        let wheel = w.add(RigidBody::dynamic(
+            Collider::rect(80.0, 10.0),
+            v(0.0, 0.0),
+            1.0,
+        ));
+        let mut j = RigidJoint::at_anchor(
+            &w,
+            hub,
+            wheel,
+            v(0.0, 0.0),
+            JointKind::Revolute {
+                limits: None,
+                motor: Some((3.0, 1e9)),
+            },
+        );
         j.set_motor_speed(3.0);
         w.add_joint(j);
         run(&mut w, 1.0);
         assert!((w.bodies[wheel].angular_velocity - 3.0).abs() < 0.05);
         assert!(w.bodies[wheel].position.distance() < 0.5, "stays pinned");
 
-        let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
+        let mut w = RigidWorld {
+            sleep_enabled: false,
+            ..RigidWorld::default()
+        };
         let hub = w.add(RigidBody::fixed(Collider::circle(2.0), v(0.0, 0.0)));
-        let arm = w.add(RigidBody::dynamic(Collider::rect(80.0, 10.0), v(40.0, 0.0), 1.0));
-        w.add_joint(RigidJoint::at_anchor(&w, hub, arm, v(0.0, 0.0), JointKind::Revolute { limits: Some((-0.3, 0.3)), motor: None }));
+        let arm = w.add(RigidBody::dynamic(
+            Collider::rect(80.0, 10.0),
+            v(40.0, 0.0),
+            1.0,
+        ));
+        w.add_joint(RigidJoint::at_anchor(
+            &w,
+            hub,
+            arm,
+            v(0.0, 0.0),
+            JointKind::Revolute {
+                limits: Some((-0.3, 0.3)),
+                motor: None,
+            },
+        ));
         run(&mut w, 2.0);
-        assert!(w.bodies[arm].angle <= 0.36, "limited: {}", w.bodies[arm].angle);
+        assert!(
+            w.bodies[arm].angle <= 0.36,
+            "limited: {}",
+            w.bodies[arm].angle
+        );
     }
 
     #[test]
     fn weld_and_spring_joints() {
-        let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
+        let mut w = RigidWorld {
+            sleep_enabled: false,
+            ..RigidWorld::default()
+        };
         let wall = w.add(RigidBody::fixed(Collider::rect(10.0, 10.0), v(0.0, 0.0)));
-        let beam = w.add(RigidBody::dynamic(Collider::rect(100.0, 10.0), v(55.0, 0.0), 1.0));
-        w.add_joint(RigidJoint::at_anchor(&w, wall, beam, v(5.0, 0.0), JointKind::Weld));
+        let beam = w.add(RigidBody::dynamic(
+            Collider::rect(100.0, 10.0),
+            v(55.0, 0.0),
+            1.0,
+        ));
+        w.add_joint(RigidJoint::at_anchor(
+            &w,
+            wall,
+            beam,
+            v(5.0, 0.0),
+            JointKind::Weld,
+        ));
         run(&mut w, 1.0);
-        assert!(w.bodies[beam].angle.abs() < 0.2, "a welded cantilever barely droops: {}", w.bodies[beam].angle);
+        assert!(
+            w.bodies[beam].angle.abs() < 0.2,
+            "a welded cantilever barely droops: {}",
+            w.bodies[beam].angle
+        );
 
-        let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
+        let mut w = RigidWorld {
+            sleep_enabled: false,
+            ..RigidWorld::default()
+        };
         let top = w.add(RigidBody::fixed(Collider::circle(2.0), v(0.0, 0.0)));
-        let bob = w.add(RigidBody::dynamic(Collider::circle(10.0), v(0.0, 100.0), 1.0));
-        w.add_joint(RigidJoint::between(&w, top, v(0.0, 0.0), bob, v(0.0, 100.0), 0.5, 0.05));
+        let bob = w.add(RigidBody::dynamic(
+            Collider::circle(10.0),
+            v(0.0, 100.0),
+            1.0,
+        ));
+        w.add_joint(RigidJoint::between(
+            &w,
+            top,
+            v(0.0, 0.0),
+            bob,
+            v(0.0, 100.0),
+            0.5,
+            0.05,
+        ));
         let ys: Vec<f32> = (0..120)
             .map(|_| {
                 w.step(DT);
                 w.bodies[bob].position.dy
             })
             .collect();
-        let (lo, hi) = ys.iter().fold((f32::MAX, f32::MIN), |(a, b), &y| (a.min(y), b.max(y)));
-        assert!(hi - lo > 20.0, "the spring stretches and oscillates: {lo}..{hi}");
+        let (lo, hi) = ys
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(a, b), &y| (a.min(y), b.max(y)));
+        assert!(
+            hi - lo > 20.0,
+            "the spring stretches and oscillates: {lo}..{hi}"
+        );
     }
 
     #[test]
     fn mouse_joint_drags_toward_the_target() {
         let mut w = RigidWorld::new(V::ZERO);
         let ground = w.add(RigidBody::fixed(Collider::circle(1.0), v(-1000.0, -1000.0)));
-        let b = w.add(RigidBody::dynamic(Collider::rect(20.0, 20.0), v(0.0, 0.0), 1.0));
-        w.add_joint(RigidJoint::at_anchor(&w, ground, b, v(0.0, 0.0), JointKind::Mouse { target: v(100.0, 50.0), max_force: 1e7 }));
+        let b = w.add(RigidBody::dynamic(
+            Collider::rect(20.0, 20.0),
+            v(0.0, 0.0),
+            1.0,
+        ));
+        w.add_joint(RigidJoint::at_anchor(
+            &w,
+            ground,
+            b,
+            v(0.0, 0.0),
+            JointKind::Mouse {
+                target: v(100.0, 50.0),
+                max_force: 1e7,
+            },
+        ));
         run(&mut w, 2.0);
-        assert!((w.bodies[b].position - v(100.0, 50.0)).distance() < 5.0, "{:?}", w.bodies[b].position);
+        assert!(
+            (w.bodies[b].position - v(100.0, 50.0)).distance() < 5.0,
+            "{:?}",
+            w.bodies[b].position
+        );
     }
 
     #[test]
@@ -1687,7 +2113,8 @@ mod tests {
         let make = |bullet: bool| {
             let mut w = RigidWorld::new(V::ZERO);
             w.add(RigidBody::fixed(Collider::rect(4.0, 400.0), v(300.0, 0.0)));
-            let mut ball = RigidBody::dynamic(Collider::circle(5.0), v(0.0, 0.0), 1.0).velocity(v(12000.0, 0.0));
+            let mut ball = RigidBody::dynamic(Collider::circle(5.0), v(0.0, 0.0), 1.0)
+                .velocity(v(12000.0, 0.0));
             if bullet {
                 ball = ball.bullet();
             }
@@ -1719,13 +2146,20 @@ mod tests {
 
     #[test]
     fn contact_events_begin_and_end() {
-        let mut w = RigidWorld { sleep_enabled: false, ..RigidWorld::default() };
+        let mut w = RigidWorld {
+            sleep_enabled: false,
+            ..RigidWorld::default()
+        };
         floor(&mut w);
         w.add(RigidBody::dynamic(Collider::circle(10.0), v(0.0, 400.0), 1.0).restitution(0.0));
         let mut begins = 0;
         for _ in 0..120 {
             w.step(DT);
-            begins += w.events().iter().filter(|e| matches!(e, ContactEvent::Begin(..))).count();
+            begins += w
+                .events()
+                .iter()
+                .filter(|e| matches!(e, ContactEvent::Begin(..)))
+                .count();
         }
         assert_eq!(begins, 1);
     }
@@ -1734,15 +2168,26 @@ mod tests {
     fn character_walks_stands_and_is_blocked_by_walls() {
         let mut w = RigidWorld::default();
         floor(&mut w);
-        w.add(RigidBody::fixed(Collider::rect(20.0, 200.0), v(200.0, 400.0)));
+        w.add(RigidBody::fixed(
+            Collider::rect(20.0, 200.0),
+            v(200.0, 400.0),
+        ));
         let mut ch = CharacterController::new(v(0.0, 420.0), 20.0, 12.0);
         for _ in 0..120 {
             ch.velocity = v(200.0, ch.velocity.dy + 980.0 * DT);
             ch.move_and_slide(&w, DT);
         }
         assert!(ch.on_floor, "standing");
-        assert!((ch.position.dy - (500.0 - 32.0)).abs() < 2.0, "{:?}", ch.position);
-        assert!(ch.position.dx < 190.0 - 12.0 + 1.0, "stopped by the wall: {:?}", ch.position);
+        assert!(
+            (ch.position.dy - (500.0 - 32.0)).abs() < 2.0,
+            "{:?}",
+            ch.position
+        );
+        assert!(
+            ch.position.dx < 190.0 - 12.0 + 1.0,
+            "stopped by the wall: {:?}",
+            ch.position
+        );
         assert!(ch.on_wall);
     }
 }

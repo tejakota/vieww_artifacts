@@ -16,11 +16,13 @@
 
 use vieww_foundation::{Color, Offset, Path, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{Rng, ease_out_cubic};
-use super::{AMBER, CANVAS, CYAN, CYAN_SOFT, Ctx, FAINT, H, INK, MAGENTA, MINT, MUTED, VIOLET, VIOLET_SOFT, W, alpha, aurora, caption, clamp01, count_up, glow, grain, ground, mix, stars_parallax, tint, vignette, xywh};
-
+use super::{
+    alpha, caption, clamp01, count_up, mix, tint, xywh, Ctx, AMBER, CYAN, FAINT, H, INK, MAGENTA,
+    MINT, MUTED, VIOLET, VIOLET_SOFT, W,
+};
+use crate::film_lib::{ease_out_cubic, Rng};
 
 /// The grid: 9 × 4 = 36 — exactly the crate count, no padding, no gaps.
 const COLS: usize = 9;
@@ -30,14 +32,19 @@ const ROWS: usize = 4;
 /// Row order follows the stack: foundation at the bottom, the product
 /// facade at the top.
 const ROW_COLORS: [Color; 4] = [CYAN, VIOLET, MAGENTA, MINT];
-const ROW_LABELS: [&str; 4] = ["foundation · paint · render", "platform · graphics · text", "ui · motion · access", "product · tools · codegen"];
+const ROW_LABELS: [&str; 4] = [
+    "foundation · paint · render",
+    "platform · graphics · text",
+    "ui · motion · access",
+    "product · tools · codegen",
+];
 
 /// Which grid cell each crate occupies (row-major, matching `CRATES`).
 fn cell(i: usize) -> (usize, usize) {
     (i % COLS, i / COLS)
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -59,7 +66,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     // The grid's geometry.
     let gx0 = 260.0;
     let gy0 = 320.0;
-    let gw = (W - 520.0);
+    let gw = W - 520.0;
     let gh = 480.0;
     let cw = gw / COLS as f32;
     let ch = gh / ROWS as f32;
@@ -89,16 +96,24 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             let edges: [(usize, usize); 14] = [
-                (0, 3), (0, 2), (1, 6), (3, 10), (9, 10), (2, 10),
-                (10, 13), (12, 13), (14, 24), (15, 24), (24, 25),
-                (25, 22), (25, 27), (13, 27),
+                (0, 3),
+                (0, 2),
+                (1, 6),
+                (3, 10),
+                (9, 10),
+                (2, 10),
+                (10, 13),
+                (12, 13),
+                (14, 24),
+                (15, 24),
+                (24, 25),
+                (25, 22),
+                (25, 27),
+                (13, 27),
             ];
             let center = |i: usize| {
                 let (col, row) = cell(i);
-                Offset::new(
-                    gx0 + (col as f32 + 0.5) * cw,
-                    gy0 + (row as f32 + 0.5) * ch,
-                )
+                Offset::new(gx0 + (col as f32 + 0.5) * cw, gy0 + (row as f32 + 0.5) * ch)
             };
             for (a, b) in edges {
                 let pa = center(a);
@@ -107,11 +122,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let mid = Offset::new((pa.dx + pb.dx) * 0.5, (pa.dy + pb.dy) * 0.5 + 26.0);
                 let mut path = Path::new();
                 path.move_to(pa);
-                path.cubic_to(
-                    Offset::new(pa.dx, mid.dy),
-                    Offset::new(pb.dx, mid.dy),
-                    pb,
-                );
+                path.cubic_to(Offset::new(pa.dx, mid.dy), Offset::new(pb.dx, mid.dy), pb);
                 book.stroke(path, alpha(CYAN, 0.10), 1.0);
                 // The pulse — a bright dot riding the wire.
                 for k in 0..2 {
@@ -153,16 +164,34 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 book.rrect(
                     xywh(0.0, 0.0, bw, bh),
                     8.0,
-                    vieww_foundation::Gradient::vertical().with_dither().with_stops(&[
-                        (0.0, alpha(Color::rgb(16, 16, 21), 0.96)),
-                        (0.7, alpha(mix(Color::rgb(16, 16, 21), color, 0.10), 0.96)),
-                        (1.0, alpha(mix(Color::rgb(16, 16, 21), color, 0.30 + hover * 0.30), 0.98)),
-                    ]),
+                    vieww_foundation::Gradient::vertical()
+                        .with_dither()
+                        .with_stops(&[
+                            (0.0, alpha(Color::rgb(16, 16, 21), 0.96)),
+                            (0.7, alpha(mix(Color::rgb(16, 16, 21), color, 0.10), 0.96)),
+                            (
+                                1.0,
+                                alpha(
+                                    mix(Color::rgb(16, 16, 21), color, 0.30 + hover * 0.30),
+                                    0.98,
+                                ),
+                            ),
+                        ]),
                 );
                 // The top bevel — a hairline of light on the leading edge.
-                book.line(Offset::new(8.0, 1.5), Offset::new(bw - 8.0, 1.5), alpha(tint(color, 0.3), 0.35 + hover * 0.4), 1.0);
+                book.line(
+                    Offset::new(8.0, 1.5),
+                    Offset::new(bw - 8.0, 1.5),
+                    alpha(tint(color, 0.3), 0.35 + hover * 0.4),
+                    1.0,
+                );
                 // The border.
-                book.stroke_rrect(xywh(0.0, 0.0, bw, bh), 8.0, alpha(color, 0.22 + hover * 0.45), 1.0);
+                book.stroke_rrect(
+                    xywh(0.0, 0.0, bw, bh),
+                    8.0,
+                    alpha(color, 0.22 + hover * 0.45),
+                    1.0,
+                );
                 // The crate's index tick — top-left, tiny, the census's
                 // fingerprint.
                 book.rrect(xywh(7.0, 7.0, 3.0, 10.0), 1.5, alpha(color, 0.5));
@@ -190,16 +219,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y + 14.0 + rise)
                 .width(cw - 20.0)
                 .height(ch - 24.0)
-                .child(Opacity::new(arrive).child(
-                    Text::new(short)
-                        .style(
-                            TextStyle::new(13.5)
-                                .monospace()
-                                .letter_spacing(0.4)
-                                .color(alpha(tint(INK, 0.0), 0.80 + hover * 0.18)),
-                        )
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(arrive).child(
+                        Text::new(short)
+                            .style(
+                                TextStyle::new(13.5)
+                                    .monospace()
+                                    .letter_spacing(0.4)
+                                    .color(alpha(tint(INK, 0.0), 0.80 + hover * 0.18)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         );
     }
 
@@ -216,11 +247,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y)
                 .width(228.0)
                 .height(22.0)
-                .child(Opacity::new(la).child(
-                    Text::new(*label)
-                        .style(TextStyle::new(13.0).monospace().letter_spacing(1.4).color(alpha(ROW_COLORS[row], 0.75)))
-                        .align(TextAlign::Right),
-                )),
+                .child(
+                    Opacity::new(la).child(
+                        Text::new(*label)
+                            .style(
+                                TextStyle::new(13.0)
+                                    .monospace()
+                                    .letter_spacing(1.4)
+                                    .color(alpha(ROW_COLORS[row], 0.75)),
+                            )
+                            .align(TextAlign::Right),
+                    ),
+                ),
         );
     }
 
@@ -235,8 +273,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .child(Opacity::new(count_a).child(Painting::sized(
                 Size::new(300.0, 84.0),
                 PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    book.rrect(xywh(0.0, 8.0, 300.0, 60.0), 10.0, alpha(Color::rgb(16, 16, 21), 0.85));
-                    book.stroke_rrect(xywh(0.0, 8.0, 300.0, 60.0), 10.0, alpha(VIOLET_SOFT, 0.30), 1.2);
+                    book.rrect(
+                        xywh(0.0, 8.0, 300.0, 60.0),
+                        10.0,
+                        alpha(Color::rgb(16, 16, 21), 0.85),
+                    );
+                    book.stroke_rrect(
+                        xywh(0.0, 8.0, 300.0, 60.0),
+                        10.0,
+                        alpha(VIOLET_SOFT, 0.30),
+                        1.2,
+                    );
                 }),
             ))),
     );
@@ -246,11 +293,19 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(18.0 + 150.0)
             .width(290.0)
             .height(50.0)
-            .child(Opacity::new(count_a).child(
-                Text::new(format!("{} crates", count))
-                    .style(TextStyle::new(34.0).monospace().weight(vieww_foundation::FontWeight::Medium).letter_spacing(1.5).color(alpha(INK, 0.97)))
-                    .align(TextAlign::Left),
-            )),
+            .child(
+                Opacity::new(count_a).child(
+                    Text::new(format!("{} crates", count))
+                        .style(
+                            TextStyle::new(34.0)
+                                .monospace()
+                                .weight(vieww_foundation::FontWeight::Medium)
+                                .letter_spacing(1.5)
+                                .color(alpha(INK, 0.97)),
+                        )
+                        .align(TextAlign::Left),
+                ),
+            ),
     );
     stack = stack.push(
         Positioned::new()
@@ -258,11 +313,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(56.0 + 150.0)
             .width(290.0)
             .height(24.0)
-            .child(Opacity::new(count_a).child(
-                Text::new("counted from the workspace manifest")
-                    .style(TextStyle::new(13.0).monospace().letter_spacing(1.0).color(alpha(MUTED, 0.85)))
-                    .align(TextAlign::Left),
-            )),
+            .child(
+                Opacity::new(count_a).child(
+                    Text::new("counted from the workspace manifest")
+                        .style(
+                            TextStyle::new(13.0)
+                                .monospace()
+                                .letter_spacing(1.0)
+                                .color(alpha(MUTED, 0.85)),
+                        )
+                        .align(TextAlign::Left),
+                ),
+            ),
     );
 
     // The title — the architecture's name.
@@ -273,11 +335,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(150.0)
             .width(900.0)
             .height(60.0)
-            .child(Opacity::new(title_a).child(
-                Text::new("the architecture")
-                    .style(TextStyle::new(40.0).weight(vieww_foundation::FontWeight::Medium).letter_spacing(2.0).color(alpha(INK, 0.97)))
-                    .align(TextAlign::Left),
-            )),
+            .child(
+                Opacity::new(title_a).child(
+                    Text::new("the architecture")
+                        .style(
+                            TextStyle::new(40.0)
+                                .weight(vieww_foundation::FontWeight::Medium)
+                                .letter_spacing(2.0)
+                                .color(alpha(INK, 0.97)),
+                        )
+                        .align(TextAlign::Left),
+                ),
+            ),
     );
 
     // The captions — the architecture's beats.
@@ -292,7 +361,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         clamp01((t - 0.58) / 0.12),
     ));
 
-    let _ = (H, FAINT, AMBER, Rng::new(0), Rect::new(0.0, 0.0, 1.0, 1.0), MINT);
+    let _ = (
+        H,
+        FAINT,
+        AMBER,
+        Rng::new(0),
+        Rect::new(0.0, 0.0, 1.0, 1.0),
+        MINT,
+    );
 
     stack.into()
 }

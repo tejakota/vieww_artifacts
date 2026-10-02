@@ -21,13 +21,15 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, mix, smoothstep, Rng, Receipt, BG, BG_DEEP,
-    FAINT, INK, MUTED, VIOLET_SOFT, CYAN_SOFT, AMBER};
+use crate::film_lib::{
+    alpha, clamp01, mix, smoothstep, Receipt, Rng, AMBER, BG_DEEP, CYAN_SOFT, FAINT, INK, MUTED,
+    VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans — the endurance axis: 256 frames of it.
-pub const SECONDS: f32 = 256.0 / 12.0;
+pub(crate) const SECONDS: f32 = 256.0 / 12.0;
 
 // ── The scene's fixed geography ─────────────────────────────────────────────
 
@@ -66,7 +68,7 @@ fn stars() -> Vec<Star> {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let film = t * SECONDS;
     let st = stars();
 
@@ -91,7 +93,7 @@ pub fn frame(t: f32) -> WidgetNode {
             let drift = t * 18.0;
             for s in &st {
                 let x = ((s.x + drift) % 1280.0 + 1280.0) % 1280.0;
-                let tw = (film * s.tw + s.phase * 6.283).sin() * 0.5 + 0.5;
+                let tw = (film * s.tw + s.phase * std::f32::consts::TAU).sin() * 0.5 + 0.5;
                 book.circle(
                     Offset::new(x, s.y),
                     s.r,
@@ -104,10 +106,26 @@ pub fn frame(t: f32) -> WidgetNode {
             let my = 96.0 + smoothstep(clamp01(t / 0.9)) * 300.0;
             let moon_a = 1.0 - clamp01((t - 0.86) / 0.12);
             if moon_a > 0.0 {
-                book.circle(Offset::new(mx, my), 30.0, alpha(Color::rgb(233, 230, 222), 0.16 * moon_a));
-                book.circle(Offset::new(mx, my), 19.0, alpha(Color::rgb(238, 235, 226), 0.92 * moon_a));
-                book.circle(Offset::new(mx - 6.0, my - 4.0), 4.5, alpha(Color::rgb(214, 210, 200), 0.5 * moon_a));
-                book.circle(Offset::new(mx + 5.0, my + 6.0), 3.0, alpha(Color::rgb(214, 210, 200), 0.4 * moon_a));
+                book.circle(
+                    Offset::new(mx, my),
+                    30.0,
+                    alpha(Color::rgb(233, 230, 222), 0.16 * moon_a),
+                );
+                book.circle(
+                    Offset::new(mx, my),
+                    19.0,
+                    alpha(Color::rgb(238, 235, 226), 0.92 * moon_a),
+                );
+                book.circle(
+                    Offset::new(mx - 6.0, my - 4.0),
+                    4.5,
+                    alpha(Color::rgb(214, 210, 200), 0.5 * moon_a),
+                );
+                book.circle(
+                    Offset::new(mx + 5.0, my + 6.0),
+                    3.0,
+                    alpha(Color::rgb(214, 210, 200), 0.4 * moon_a),
+                );
             }
 
             // The sea — a gradient with the moon's lane, darkening as it sets.
@@ -130,8 +148,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         let glint = rng.f01();
                         book.rect(
                             Rect::new(gx, yy, gx + 2.0 + glint * 5.0, yy + 1.4),
-                            alpha(Color::rgb(232, 228, 216),
-                                (0.35 - row as f32 * 0.011).max(0.05) * moon_a),
+                            alpha(
+                                Color::rgb(232, 228, 216),
+                                (0.35 - row as f32 * 0.011).max(0.05) * moon_a,
+                            ),
                         );
                     }
                 }
@@ -146,7 +166,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 alpha(Color::rgb(16, 18, 24), 1.0),
             );
             book.rect(
-                Rect::new(ship_x + 9.0, ship_y - 9.0 + bob, ship_x + 20.0, ship_y + bob),
+                Rect::new(
+                    ship_x + 9.0,
+                    ship_y - 9.0 + bob,
+                    ship_x + 20.0,
+                    ship_y + bob,
+                ),
                 alpha(Color::rgb(14, 16, 22), 1.0),
             );
             book.circle(
@@ -164,7 +189,7 @@ pub fn frame(t: f32) -> WidgetNode {
             book.fill(land, alpha(Color::rgb(10, 11, 16), 1.0));
 
             // The near shore — left side, the tide creeping UP it.
-            let tide = 46.0 + 26.0 * (t * 6.2832).sin() * 0.5 + 26.0 * smoothstep(t);
+            let tide = 46.0 + 26.0 * (t * std::f32::consts::TAU).sin() * 0.5 + 26.0 * smoothstep(t);
             let mut shore = Path::new();
             shore.move_to(Offset::new(0.0, h));
             shore.line_to(Offset::new(0.0, 512.0));
@@ -194,22 +219,32 @@ pub fn frame(t: f32) -> WidgetNode {
             // ── The lighthouse: the tower, the lamp, the beam ──
             let (lx, ly) = LH;
             // Tower.
-            book.rrect(Rect::new(lx - 11.0, ly - 54.0, lx + 11.0, HORIZON + 8.0), 3.0,
-                alpha(Color::rgb(22, 24, 32), 1.0));
+            book.rrect(
+                Rect::new(lx - 11.0, ly - 54.0, lx + 11.0, HORIZON + 8.0),
+                3.0,
+                alpha(Color::rgb(22, 24, 32), 1.0),
+            );
             for band in 0..3 {
                 book.rect(
-                    Rect::new(lx - 11.0, ly - 44.0 + band as f32 * 16.0, lx + 11.0,
-                        ly - 38.0 + band as f32 * 16.0),
+                    Rect::new(
+                        lx - 11.0,
+                        ly - 44.0 + band as f32 * 16.0,
+                        lx + 11.0,
+                        ly - 38.0 + band as f32 * 16.0,
+                    ),
                     alpha(Color::rgb(180, 86, 82), 0.85),
                 );
             }
             // The lamp room.
-            book.rrect(Rect::new(lx - 8.0, ly - 66.0, lx + 8.0, ly - 52.0), 2.0,
-                alpha(Color::rgb(28, 30, 40), 1.0));
+            book.rrect(
+                Rect::new(lx - 8.0, ly - 66.0, lx + 8.0, ly - 52.0),
+                2.0,
+                alpha(Color::rgb(28, 30, 40), 1.0),
+            );
 
             // The beam — a sweep, cone, once per ~4.3 s. Two blades so the
             // sweep reads from both sides.
-            let sweep = (film * 1.46).fract() * 6.2832;
+            let sweep = (film * 1.46).fract() * std::f32::consts::TAU;
             for blade in [0.0, std::f32::consts::PI] {
                 let a = sweep + blade;
                 // Only draw while the beam points out to sea / across sky.
@@ -223,22 +258,31 @@ pub fn frame(t: f32) -> WidgetNode {
                 beam.line_to(Offset::new(tipx - diry * 34.0, tipy + 0.0));
                 beam.line_to(Offset::new(tipx + diry * 34.0, tipy + 0.0));
                 beam.line_to(Offset::new(lx + 4.0, ly - 58.0));
-                let fade = (a.cos() * -1.0).max(0.0).min(1.0);
+                let fade = (-a.cos()).max(0.0).min(1.0);
                 book.fill(beam, alpha(Color::rgb(250, 246, 230), 0.05 + 0.05 * fade));
             }
             // The lamp itself — flares as the beam sweeps past the camera.
             let lamp_flare = ((sweep - std::f32::consts::PI).cos()).max(0.0).powi(6);
-            book.circle(Offset::new(lx, ly - 58.0), 5.0, alpha(Color::rgb(255, 252, 240), 0.95));
-            book.circle(Offset::new(lx, ly - 58.0), 12.0 + 26.0 * lamp_flare,
-                alpha(Color::rgb(255, 248, 224), 0.10 + 0.22 * lamp_flare));
+            book.circle(
+                Offset::new(lx, ly - 58.0),
+                5.0,
+                alpha(Color::rgb(255, 252, 240), 0.95),
+            );
+            book.circle(
+                Offset::new(lx, ly - 58.0),
+                12.0 + 26.0 * lamp_flare,
+                alpha(Color::rgb(255, 248, 224), 0.10 + 0.22 * lamp_flare),
+            );
 
             // Foreground vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.8).with_dither().with_stops(&[
-                    (0.0, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.38)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.8)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.38)),
+                    ]),
             );
         }),
     );
@@ -256,9 +300,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
     let lines = [
         "LONGPLAY · THE ENDURANCE AXIS · 256 FRAMES".to_string(),
         format!("frame {frame_i}/255 · film {film:.0} s · no reset, no state"),
-        format!("closed-form scene: the ONLY drift possible is the renderer"),
-        format!("rss + build/raster sampled every 16 frames → metrics"),
-        format!("beam period 4.3 s · tide 1 cycle · moon 1 set · 1 crossing"),
+        "closed-form scene: the ONLY drift possible is the renderer".to_string(),
+        "rss + build/raster sampled every 16 frames → metrics".to_string(),
+        "beam period 4.3 s · tide 1 cycle · moon 1 set · 1 crossing".to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -278,7 +322,10 @@ fn receipt_panel(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -305,7 +352,10 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 let lit = (k as f32 / 31.0) <= t;
                 book.rect(
                     Rect::new(x, 14.0, x + 5.0, 26.0),
-                    alpha(if lit { VIOLET_SOFT } else { FAINT }, if lit { 0.5 } else { 0.22 }),
+                    alpha(
+                        if lit { VIOLET_SOFT } else { FAINT },
+                        if lit { 0.5 } else { 0.22 },
+                    ),
                 );
             }
         }),
@@ -327,8 +377,8 @@ fn receipt_panel(t: f32) -> WidgetNode {
 /// The per-frame series hook: RSS from the kernel, plus the measured
 /// build/raster split, recorded every 16 frames (16 lines, one per
 /// 16-frame block — a curve, not a log).
-pub fn frame_hook(receipt: &mut Receipt, i: usize, build_ms: f64, render_ms: f64) {
-    if i % 16 == 0 {
+pub(crate) fn frame_hook(receipt: &mut Receipt, i: usize, build_ms: f64, render_ms: f64) {
+    if i.is_multiple_of(16) {
         let rss = crate::film_lib::rss_kib();
         receipt.series.push(format!(
             "f{i:03} rss={rss}KiB build={build_ms:.1}ms raster={render_ms:.1}ms"
@@ -338,7 +388,7 @@ pub fn frame_hook(receipt: &mut Receipt, i: usize, build_ms: f64, render_ms: f64
 
 /// The probe — the last frame's facts, read out of the buffer: the lighthouse
 /// lamp is lit, the sea is not flat black, the vignette holds.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let mut out = Vec::new();
     // The lamp.
     let (lx, ly) = LH;
@@ -349,7 +399,9 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
             lamp_peak = lamp_peak.max(p[0]);
         }
     }
-    out.push(format!("lamp peak channel {lamp_peak}/255 (the light never sleeps)"));
+    out.push(format!(
+        "lamp peak channel {lamp_peak}/255 (the light never sleeps)"
+    ));
     // The sea's mean — not flat black.
     let mut sum = 0u64;
     let mut n = 0u64;
@@ -366,7 +418,9 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
     let k = img.get_pixel(8, 8);
     out.push(format!(
         "vignette centre G {} vs corner G {} (Δ{})",
-        c[1], k[1], c[1].saturating_sub(k[1])
+        c[1],
+        k[1],
+        c[1].saturating_sub(k[1])
     ));
     out
 }

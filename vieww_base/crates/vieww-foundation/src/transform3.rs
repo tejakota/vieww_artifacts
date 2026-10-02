@@ -228,12 +228,7 @@ mod tests {
         let rect = Rect::new(10.0, 20.0, 110.0, 70.0);
         let quad = Transform3::IDENTITY.project_rect(rect).unwrap();
         // The same four corners, in the same order — an exact round trip.
-        let expected = [
-            (10.0, 20.0),
-            (110.0, 20.0),
-            (110.0, 70.0),
-            (10.0, 70.0),
-        ];
+        let expected = [(10.0, 20.0), (110.0, 20.0), (110.0, 70.0), (10.0, 70.0)];
         for (verb, want) in quad.verbs().iter().zip(expected) {
             let p = match verb {
                 crate::PathVerb::MoveTo(p) | crate::PathVerb::LineTo(p) => *p,

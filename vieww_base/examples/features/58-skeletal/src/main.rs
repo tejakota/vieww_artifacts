@@ -21,7 +21,11 @@ const SPAN: f32 = 2.0;
 /// The rig: `arm` from the shoulder, `forearm` from the elbow.
 fn skeleton() -> Skeleton {
     Skeleton::new()
-        .bone("arm", None, BoneTransform::from_translation(Offset::new(0.0, 0.0)))
+        .bone(
+            "arm",
+            None,
+            BoneTransform::from_translation(Offset::new(0.0, 0.0)),
+        )
         .bone(
             "forearm",
             Some("arm"),
@@ -232,7 +236,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(Arm { time, _clock: clock }),
+                .child(Arm {
+                    time,
+                    _clock: clock,
+                }),
         );
     })
 }

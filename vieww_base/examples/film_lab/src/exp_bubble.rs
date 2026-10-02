@@ -16,15 +16,14 @@
 //! stops, the spectrum width it integrates, and the black-spot radius, all
 //! read from the same arrays that painted the frame.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
+use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, mix, smoothstep, Rng, BG_DEEP, FAINT, INK,
-    MUTED, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, mix, smoothstep, Rng, INK, MUTED, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The physics ─────────────────────────────────────────────────────────────
 
@@ -99,11 +98,12 @@ fn thickness(h: f32, t: f32) -> f32 {
 /// The hero bubble: centre + radius.
 const HERO: (f32, f32, f32) = (642.0, 392.0, 148.0);
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The hero drifts on a slow current.
-    let hx = HERO.0 + 14.0 * (t * 6.2832 * 0.21).sin() - 8.0 * (t * 6.2832 * 0.13).cos();
-    let hy = HERO.1 - 18.0 * t + 10.0 * (t * 6.2832 * 0.17).sin();
-    let hr = HERO.2 * (0.97 + 0.03 * (t * 6.2832 * 0.4).sin());
+    let hx = HERO.0 + 14.0 * (t * std::f32::consts::TAU * 0.21).sin()
+        - 8.0 * (t * std::f32::consts::TAU * 0.13).cos();
+    let hy = HERO.1 - 18.0 * t + 10.0 * (t * std::f32::consts::TAU * 0.17).sin();
+    let hr = HERO.2 * (0.97 + 0.03 * (t * std::f32::consts::TAU * 0.4).sin());
 
     // The black spot: after t0.82 the film's top is below the last order.
     let bs_gate = smoothstep((t - 0.82) / 0.18);
@@ -198,8 +198,18 @@ pub fn frame(t: f32) -> WidgetNode {
             );
             // The rim: the meniscus is thicker — it reads as a pale bright
             // edge with a hint of the same physics.
-            book.ring(Offset::new(hx, hy), hr, 2.6, alpha(Color::rgb(235, 240, 250), 0.55));
-            book.ring(Offset::new(hx, hy), hr - 3.4, 1.2, alpha(Color::rgb(220, 230, 244), 0.28));
+            book.ring(
+                Offset::new(hx, hy),
+                hr,
+                2.6,
+                alpha(Color::rgb(235, 240, 250), 0.55),
+            );
+            book.ring(
+                Offset::new(hx, hy),
+                hr - 3.4,
+                1.2,
+                alpha(Color::rgb(220, 230, 244), 0.28),
+            );
             // Speculars: one window and one bounce.
             book.circle(
                 Offset::new(hx - hr * 0.42, hy - hr * 0.46),
@@ -248,13 +258,13 @@ pub fn frame(t: f32) -> WidgetNode {
                 let (mx, my, mr) = if si == 1 {
                     (
                         sx + drift * t + (hx - (sx + drift * t)) * merge,
-                        sy + 8.0 * (t * 6.2832 * ph).sin() + (hy - sy) * merge,
+                        sy + 8.0 * (t * std::f32::consts::TAU * ph).sin() + (hy - sy) * merge,
                         sr * (1.0 - 0.85 * merge),
                     )
                 } else {
                     (
                         sx + drift * t,
-                        sy + 8.0 * (t * 6.2832 * ph).sin(),
+                        sy + 8.0 * (t * std::f32::consts::TAU * ph).sin(),
                         sr,
                     )
                 };
@@ -280,7 +290,12 @@ pub fn frame(t: f32) -> WidgetNode {
                     mr,
                     Gradient::vertical().with_dither().with_stops(&cstops),
                 );
-                book.ring(Offset::new(mx, my), mr, 1.6, alpha(Color::rgb(235, 240, 250), 0.4));
+                book.ring(
+                    Offset::new(mx, my),
+                    mr,
+                    1.6,
+                    alpha(Color::rgb(235, 240, 250), 0.4),
+                );
                 book.circle(
                     Offset::new(mx - mr * 0.4, my - mr * 0.44),
                     (mr * 0.16).max(3.0),
@@ -301,7 +316,12 @@ pub fn frame(t: f32) -> WidgetNode {
                     *mr,
                     alpha(film_color(thickness(0.0, t) * 1.4 + *mr * 8.0), 0.85),
                 );
-                book.ring(Offset::new(*mx, *my), *mr, 1.0, alpha(Color::rgb(235, 240, 250), 0.5));
+                book.ring(
+                    Offset::new(*mx, *my),
+                    *mr,
+                    1.0,
+                    alpha(Color::rgb(235, 240, 250), 0.5),
+                );
             }
 
             // Dust motes in the window light — a handful, for depth.
@@ -310,7 +330,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 for k in 0..40 {
                     let x = rng.f01() * 1280.0;
                     let y = rng.f01() * 720.0;
-                    let drift = 8.0 * (t * 6.2832 * 0.3 + k as f32).sin();
+                    let drift = 8.0 * (t * std::f32::consts::TAU * 0.3 + k as f32).sin();
                     g.circle(
                         Offset::new(x + drift, y),
                         1.0 + rng.f01() * 1.2,
@@ -321,7 +341,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
+    let stack = Stack::new().push(Positioned::fill().child(board));
     stack.push(receipt_panel(t, bs_r, micro_count)).into()
 }
 
@@ -332,13 +352,9 @@ fn receipt_panel(t: f32, bs_r: f32, micro_live: usize) -> WidgetNode {
     let d_bot = thickness(1.0, t);
     let lines = [
         "BUBBLE · THE OPTICS AXIS · SOAP-FILM LIGHT".to_string(),
-        format!(
-            "thickness span {d_top:.0}→{d_bot:.0} nm (gravity drain, swirl live)"
-        ),
-        format!("colour: Σ cos²(2πd/λ) · 48 λ, 380..680 nm · spectral locus"),
-        format!(
-            "black spot r {bs_r:.0} px @ t={t:.2} · merge event 0.55–0.78"
-        ),
+        format!("thickness span {d_top:.0}→{d_bot:.0} nm (gravity drain, swirl live)"),
+        "colour: Σ cos²(2πd/λ) · 48 λ, 380..680 nm · spectral locus".to_string(),
+        format!("black spot r {bs_r:.0} px @ t={t:.2} · merge event 0.55–0.78"),
         format!("bubbles live: hero + 5 sats + {micro_live} micro · census from arrays"),
     ];
 
@@ -358,7 +374,10 @@ fn receipt_panel(t: f32, bs_r: f32, micro_live: usize) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -377,10 +396,7 @@ fn receipt_panel(t: f32, bs_r: f32, micro_live: usize) -> WidgetNode {
             for k in 0..30 {
                 let d = 100.0 + k as f32 * 22.6;
                 let x = 6.0 + k as f32 * 7.7;
-                book.rect(
-                    Rect::new(x, 6.0, x + 7.0, 20.0),
-                    alpha(film_color(d), 0.95),
-                );
+                book.rect(Rect::new(x, 6.0, x + 7.0, 20.0), alpha(film_color(d), 0.95));
             }
             book.stroke_rrect(
                 Rect::new(0.0, 0.0, 240.0, 26.0),

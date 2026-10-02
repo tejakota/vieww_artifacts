@@ -107,7 +107,10 @@ pub struct World {
 
 impl fmt::Debug for World {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("World").field("entities", &self.len()).field("component_types", &self.storages.len()).finish()
+        f.debug_struct("World")
+            .field("entities", &self.len())
+            .field("component_types", &self.storages.len())
+            .finish()
     }
 }
 
@@ -130,7 +133,10 @@ impl World {
         let index = self.generations.len() as u32;
         self.generations.push(0);
         self.alive.push(true);
-        Entity { index, generation: 0 }
+        Entity {
+            index,
+            generation: 0,
+        }
     }
 
     #[must_use]
@@ -151,7 +157,9 @@ impl World {
     }
 
     fn storage<T: 'static>(&self) -> Option<&BTreeMap<Entity, T>> {
-        self.storages.get(&TypeId::of::<T>()).and_then(|s| s.as_any().downcast_ref())
+        self.storages
+            .get(&TypeId::of::<T>())
+            .and_then(|s| s.as_any().downcast_ref())
     }
 
     fn storage_mut<T: 'static>(&mut self) -> &mut BTreeMap<Entity, T> {
@@ -191,19 +199,26 @@ impl World {
     /// Every entity with a `T`, in id order.
     #[must_use]
     pub fn query<T: 'static>(&self) -> Vec<Entity> {
-        self.storage::<T>().map(|s| s.keys().copied().collect()).unwrap_or_default()
+        self.storage::<T>()
+            .map(|s| s.keys().copied().collect())
+            .unwrap_or_default()
     }
 
     /// Every entity with both an `A` and a `B`.
     #[must_use]
     pub fn query2<A: 'static, B: 'static>(&self) -> Vec<Entity> {
-        self.query::<A>().into_iter().filter(|e| self.has::<B>(*e)).collect()
+        self.query::<A>()
+            .into_iter()
+            .filter(|e| self.has::<B>(*e))
+            .collect()
     }
 
     /// The first entity named `name`.
     #[must_use]
     pub fn find(&self, name: &str) -> Option<Entity> {
-        self.query::<Name>().into_iter().find(|e| self.get::<Name>(*e).is_some_and(|n| n.0 == name))
+        self.query::<Name>()
+            .into_iter()
+            .find(|e| self.get::<Name>(*e).is_some_and(|n| n.0 == name))
     }
 
     /// Parent `child` under `parent` (or detach with `None`).
@@ -257,10 +272,19 @@ impl World {
 
     /// Compute every [`GlobalTransform`] from the [`Transform2`] hierarchy.
     pub fn propagate(&mut self) {
-        let roots: Vec<Entity> = self.query::<Transform2>().into_iter().filter(|e| !self.parent.contains_key(e)).collect();
-        let mut stack: Vec<(Entity, Transform)> = roots.into_iter().map(|r| (r, Transform::IDENTITY)).collect();
+        let roots: Vec<Entity> = self
+            .query::<Transform2>()
+            .into_iter()
+            .filter(|e| !self.parent.contains_key(e))
+            .collect();
+        let mut stack: Vec<(Entity, Transform)> = roots
+            .into_iter()
+            .map(|r| (r, Transform::IDENTITY))
+            .collect();
         while let Some((e, parent)) = stack.pop() {
-            let local = self.get::<Transform2>(e).map_or(Transform::IDENTITY, Transform2::matrix);
+            let local = self
+                .get::<Transform2>(e)
+                .map_or(Transform::IDENTITY, Transform2::matrix);
             let world = local.then(parent);
             self.insert(e, GlobalTransform(world));
             for c in self.children_of(e) {
@@ -441,7 +465,10 @@ impl InputMap {
 
     #[must_use]
     pub fn bind(mut self, action: &str, keys: &[&str]) -> Self {
-        self.bindings.insert(action.to_owned(), keys.iter().map(|k| (*k).to_owned()).collect());
+        self.bindings.insert(
+            action.to_owned(),
+            keys.iter().map(|k| (*k).to_owned()).collect(),
+        );
         self
     }
 }
@@ -469,7 +496,10 @@ impl Input {
         self.held.remove(key);
     }
     fn any(&self, action: &str, set: &BTreeSet<String>) -> bool {
-        self.map.bindings.get(action).is_some_and(|keys| keys.iter().any(|k| set.contains(k)))
+        self.map
+            .bindings
+            .get(action)
+            .is_some_and(|keys| keys.iter().any(|k| set.contains(k)))
     }
     #[must_use]
     pub fn is_action_pressed(&self, action: &str) -> bool {
@@ -487,7 +517,8 @@ impl Input {
     /// `get_axis`).
     #[must_use]
     pub fn axis(&self, negative: &str, positive: &str) -> f32 {
-        f32::from(u8::from(self.is_action_pressed(positive))) - f32::from(u8::from(self.is_action_pressed(negative)))
+        f32::from(u8::from(self.is_action_pressed(positive)))
+            - f32::from(u8::from(self.is_action_pressed(negative)))
     }
     fn end_frame(&mut self) {
         self.previous = self.held.clone();
@@ -503,7 +534,9 @@ pub struct Codec {
 
 impl fmt::Debug for Codec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Codec").field("name", &self.name).finish_non_exhaustive()
+        f.debug_struct("Codec")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
     }
 }
 
@@ -524,13 +557,25 @@ pub fn builtin_codecs() -> Vec<Codec> {
             name: "transform",
             save: |w, e| {
                 w.get::<Transform2>(e).map(|t| {
-                    Json::numbers([f64::from(t.position.dx), f64::from(t.position.dy), f64::from(t.rotation), f64::from(t.scale)])
+                    Json::numbers([
+                        f64::from(t.position.dx),
+                        f64::from(t.position.dy),
+                        f64::from(t.rotation),
+                        f64::from(t.scale),
+                    ])
                 })
             },
             load: |w, e, j| {
                 if let Some(v) = j.as_f32_vec() {
                     if v.len() == 4 {
-                        w.insert(e, Transform2 { position: Offset::new(v[0], v[1]), rotation: v[2], scale: v[3] });
+                        w.insert(
+                            e,
+                            Transform2 {
+                                position: Offset::new(v[0], v[1]),
+                                rotation: v[2],
+                                scale: v[3],
+                            },
+                        );
                     }
                 }
             },
@@ -547,14 +592,23 @@ impl SceneDesc {
     #[must_use]
     pub fn save(world: &World, roots: &[Entity], codecs: &[Codec]) -> Self {
         fn one(world: &World, e: Entity, codecs: &[Codec]) -> Json {
-            let mut fields: Vec<(String, Json)> = codecs.iter().filter_map(|c| (c.save)(world, e).map(|j| (c.name.to_owned(), j))).collect();
-            let kids: Vec<Json> = world.children_of(e).into_iter().map(|c| one(world, c, codecs)).collect();
+            let mut fields: Vec<(String, Json)> = codecs
+                .iter()
+                .filter_map(|c| (c.save)(world, e).map(|j| (c.name.to_owned(), j)))
+                .collect();
+            let kids: Vec<Json> = world
+                .children_of(e)
+                .into_iter()
+                .map(|c| one(world, c, codecs))
+                .collect();
             if !kids.is_empty() {
                 fields.push(("children".into(), Json::Array(kids)));
             }
             Json::Object(fields)
         }
-        Self(Json::Array(roots.iter().map(|r| one(world, *r, codecs)).collect()))
+        Self(Json::Array(
+            roots.iter().map(|r| one(world, *r, codecs)).collect(),
+        ))
     }
 
     /// Instantiate into `world`; returns the new roots.
@@ -572,7 +626,12 @@ impl SceneDesc {
             }
             e
         }
-        self.0.as_array().unwrap_or(&[]).iter().map(|j| one(world, j, None, codecs)).collect()
+        self.0
+            .as_array()
+            .unwrap_or(&[])
+            .iter()
+            .map(|j| one(world, j, None, codecs))
+            .collect()
     }
 }
 
@@ -649,7 +708,14 @@ impl Game {
     pub fn attach(&mut self, e: Entity, mut b: impl Behaviour + 'static) {
         let mut commands = Commands::default();
         {
-            let mut ctx = Ctx { world: &mut self.world, entity: e, input: &self.input, commands: &mut commands, time: self.time, frame: self.frame };
+            let mut ctx = Ctx {
+                world: &mut self.world,
+                entity: e,
+                input: &self.input,
+                commands: &mut commands,
+                time: self.time,
+                frame: self.frame,
+            };
             b.awake(&mut ctx);
         }
         self.behaviours.insert(e, Box::new(b));
@@ -659,7 +725,14 @@ impl Game {
     fn attach_boxed(&mut self, e: Entity, mut b: Box<dyn Behaviour>) {
         let mut commands = Commands::default();
         {
-            let mut ctx = Ctx { world: &mut self.world, entity: e, input: &self.input, commands: &mut commands, time: self.time, frame: self.frame };
+            let mut ctx = Ctx {
+                world: &mut self.world,
+                entity: e,
+                input: &self.input,
+                commands: &mut commands,
+                time: self.time,
+                frame: self.frame,
+            };
             b.awake(&mut ctx);
         }
         self.behaviours.insert(e, b);
@@ -678,7 +751,8 @@ impl Game {
 
     /// Deliver `signal` emitted by any entity to `listener`'s behaviour.
     pub fn connect(&mut self, signal: &str, listener: Entity) {
-        self.connections.push((signal.to_owned(), (listener, signal.to_owned())));
+        self.connections
+            .push((signal.to_owned(), (listener, signal.to_owned())));
     }
 
     /// Emit a signal now.
@@ -695,7 +769,11 @@ impl Game {
 
     /// Register a prefab: a function that builds an entity (and optionally
     /// its behaviour) at a position.
-    pub fn register_prefab(&mut self, name: &str, f: impl Fn(&mut World, Offset) -> (Entity, Option<Box<dyn Behaviour>>) + 'static) {
+    pub fn register_prefab(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut World, Offset) -> (Entity, Option<Box<dyn Behaviour>>) + 'static,
+    ) {
         self.prefabs.insert(name.to_owned(), Box::new(f));
     }
 
@@ -716,12 +794,17 @@ impl Game {
 
     /// Unload everything not persistent and instantiate scene `name`.
     pub fn load_scene(&mut self, name: &str) -> Vec<Entity> {
-        let Some(desc) = self.scenes.get(name).cloned() else { return Vec::new() };
+        let Some(desc) = self.scenes.get(name).cloned() else {
+            return Vec::new();
+        };
         let doomed: Vec<Entity> = (0..self.world.generations.len())
             .filter(|&i| self.world.alive[i])
             .map(|i| {
                 #[allow(clippy::cast_possible_truncation)]
-                Entity { index: i as u32, generation: self.world.generations[i] }
+                Entity {
+                    index: i as u32,
+                    generation: self.world.generations[i],
+                }
             })
             .filter(|e| self.world.parent_of(*e).is_none() && !self.persistent.contains(e))
             .collect();
@@ -737,7 +820,14 @@ impl Game {
         let mut commands = Commands::default();
         for x in &gone {
             if let Some(mut b) = self.behaviours.remove(x) {
-                let mut ctx = Ctx { world: &mut self.world, entity: *x, input: &self.input, commands: &mut commands, time: self.time, frame: self.frame };
+                let mut ctx = Ctx {
+                    world: &mut self.world,
+                    entity: *x,
+                    input: &self.input,
+                    commands: &mut commands,
+                    time: self.time,
+                    frame: self.frame,
+                };
                 b.on_destroy(&mut ctx);
             }
             self.started.remove(x);
@@ -755,10 +845,22 @@ impl Game {
             rounds += 1;
             let emits = std::mem::take(&mut c.emits);
             for (sig, from) in emits {
-                let targets: Vec<Entity> = self.connections.iter().filter(|(s, _)| *s == sig).map(|(_, (e, _))| *e).collect();
+                let targets: Vec<Entity> = self
+                    .connections
+                    .iter()
+                    .filter(|(s, _)| *s == sig)
+                    .map(|(_, (e, _))| *e)
+                    .collect();
                 for t in targets {
                     if let Some(mut b) = self.behaviours.remove(&t) {
-                        let mut ctx = Ctx { world: &mut self.world, entity: t, input: &self.input, commands: &mut c, time: self.time, frame: self.frame };
+                        let mut ctx = Ctx {
+                            world: &mut self.world,
+                            entity: t,
+                            input: &self.input,
+                            commands: &mut c,
+                            time: self.time,
+                            frame: self.frame,
+                        };
                         b.on_signal(&mut ctx, &sig, from);
                         self.behaviours.insert(t, b);
                         self.signal_log.push((sig.clone(), from, t));
@@ -781,7 +883,11 @@ impl Game {
         (despawned, signals)
     }
 
-    fn each(&mut self, phase: impl Fn(&mut dyn Behaviour, &mut Ctx<'_>), commands: &mut Commands) -> usize {
+    fn each(
+        &mut self,
+        phase: impl Fn(&mut dyn Behaviour, &mut Ctx<'_>),
+        commands: &mut Commands,
+    ) -> usize {
         let ids: Vec<Entity> = self.behaviours.keys().copied().collect();
         let mut n = 0;
         for e in ids {
@@ -789,7 +895,14 @@ impl Game {
                 continue;
             }
             if let Some(mut b) = self.behaviours.remove(&e) {
-                let mut ctx = Ctx { world: &mut self.world, entity: e, input: &self.input, commands, time: self.time, frame: self.frame };
+                let mut ctx = Ctx {
+                    world: &mut self.world,
+                    entity: e,
+                    input: &self.input,
+                    commands,
+                    time: self.time,
+                    frame: self.frame,
+                };
                 phase(b.as_mut(), &mut ctx);
                 self.behaviours.insert(e, b);
                 n += 1;
@@ -804,11 +917,23 @@ impl Game {
     pub fn frame(&mut self, dt: f32) -> FrameStats {
         let mut stats = FrameStats::default();
         let mut commands = Commands::default();
-        let fresh: Vec<Entity> = self.behaviours.keys().copied().filter(|e| !self.started.contains(e)).collect();
+        let fresh: Vec<Entity> = self
+            .behaviours
+            .keys()
+            .copied()
+            .filter(|e| !self.started.contains(e))
+            .collect();
         for e in fresh {
             self.started.insert(e);
             if let Some(mut b) = self.behaviours.remove(&e) {
-                let mut ctx = Ctx { world: &mut self.world, entity: e, input: &self.input, commands: &mut commands, time: self.time, frame: self.frame };
+                let mut ctx = Ctx {
+                    world: &mut self.world,
+                    entity: e,
+                    input: &self.input,
+                    commands: &mut commands,
+                    time: self.time,
+                    frame: self.frame,
+                };
                 b.start(&mut ctx);
                 self.behaviours.insert(e, b);
             }
@@ -880,7 +1005,10 @@ mod tests {
         assert_eq!(c.index, a.index);
         assert_ne!(c, a, "a reused slot has a new generation");
         assert!(!w.is_alive(a));
-        assert!(w.get::<Name>(c).is_none(), "components did not leak into the reused slot");
+        assert!(
+            w.get::<Name>(c).is_none(),
+            "components did not leak into the reused slot"
+        );
     }
 
     #[test]
@@ -888,12 +1016,26 @@ mod tests {
         let mut w = World::new();
         let parent = w.spawn();
         let child = w.spawn();
-        w.insert(parent, Transform2 { position: Offset::new(100.0, 0.0), rotation: std::f32::consts::FRAC_PI_2, scale: 2.0 });
+        w.insert(
+            parent,
+            Transform2 {
+                position: Offset::new(100.0, 0.0),
+                rotation: std::f32::consts::FRAC_PI_2,
+                scale: 2.0,
+            },
+        );
         w.insert(child, Transform2::at(Offset::new(10.0, 0.0)));
         w.set_parent(child, Some(parent));
         w.propagate();
-        let p = w.get::<GlobalTransform>(child).unwrap().0.apply(Offset::ZERO);
-        assert!((p.dx - 100.0).abs() < 1e-3 && (p.dy - 20.0).abs() < 1e-3, "{p:?}");
+        let p = w
+            .get::<GlobalTransform>(child)
+            .unwrap()
+            .0
+            .apply(Offset::ZERO);
+        assert!(
+            (p.dx - 100.0).abs() < 1e-3 && (p.dy - 20.0).abs() < 1e-3,
+            "{p:?}"
+        );
         assert_eq!(w.despawn(parent).len(), 2, "children go with the parent");
     }
 
@@ -936,7 +1078,10 @@ mod tests {
         g.attach(e, Recorder { log: log.clone() });
         let s = g.frame(1.0 / 30.0);
         assert_eq!(s.fixed_steps, 2, "two 60 Hz steps in a 30 Hz frame");
-        assert_eq!(*log.borrow(), ["awake", "start", "fixed", "fixed", "update", "late"]);
+        assert_eq!(
+            *log.borrow(),
+            ["awake", "start", "fixed", "fixed", "update", "late"]
+        );
         log.borrow_mut().clear();
         g.connect("hit", e);
         let other = g.world.spawn();
@@ -977,7 +1122,12 @@ mod tests {
 
     #[test]
     fn input_actions_track_edges() {
-        let mut g = Game::new(InputMap::new().bind("jump", &["Space", "W"]).bind("left", &["A"]).bind("right", &["D"]));
+        let mut g = Game::new(
+            InputMap::new()
+                .bind("jump", &["Space", "W"])
+                .bind("left", &["A"])
+                .bind("right", &["D"]),
+        );
         g.input.press("W");
         assert!(g.input.is_action_just_pressed("jump"));
         g.frame(0.016);
@@ -1008,9 +1158,16 @@ mod tests {
         assert_eq!(roots.len(), 1);
         assert!(g.world.find("player").is_some(), "persistent survived");
         let level = g.world.find("level").unwrap();
-        assert_eq!(g.world.get::<Transform2>(level).unwrap().position, Offset::new(5.0, 6.0));
+        assert_eq!(
+            g.world.get::<Transform2>(level).unwrap().position,
+            Offset::new(5.0, 6.0)
+        );
         assert_eq!(g.world.children_of(level).len(), 1);
-        assert_eq!(g.world.len(), 3, "old level gone, new level + door + player");
+        assert_eq!(
+            g.world.len(),
+            3,
+            "old level gone, new level + door + player"
+        );
     }
 
     #[test]

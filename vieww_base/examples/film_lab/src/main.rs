@@ -136,98 +136,98 @@
 //! - `pidigits` — the counting axis: π banged out of two blocks
 //! - `pathtrace` — the light-transport axis: 1/√N, fitted; the furnace test
 
+mod exp_ant;
 mod exp_aurora;
+mod exp_avatar;
 mod exp_beams;
+mod exp_blackhole;
+mod exp_blendmatrix;
+mod exp_bubble;
 mod exp_circuit;
+mod exp_city;
+mod exp_currents;
+mod exp_cymatics;
 mod exp_damage;
+mod exp_dla;
+mod exp_dolly;
+mod exp_doublepend;
+mod exp_dragon;
+mod exp_eclipse;
 mod exp_endcard;
+mod exp_fadeaway;
+mod exp_filterstack;
+mod exp_forest;
+mod exp_foucault;
+mod exp_fourier;
+mod exp_galaxy;
+mod exp_ghosts;
 mod exp_globe;
+mod exp_gw;
+mod exp_han;
+mod exp_harmony;
 mod exp_hero;
+mod exp_hero4k;
+mod exp_ink;
+mod exp_kaleido;
 mod exp_kinetic;
-mod exp_liquid;
 mod exp_light;
+mod exp_liquid;
+mod exp_longplay;
+mod exp_lorenz;
+mod exp_mandel;
+mod exp_megapath;
 mod exp_mesh;
 mod exp_morph;
 mod exp_ocean;
-mod exp_rackfocus;
-mod exp_unfold;
-mod exp_receipts;
-mod exp_scrub;
-mod exp_shatter;
-mod exp_spring;
-mod exp_wordmark;
-mod exp_ant;
-mod exp_doublepend;
-mod exp_dla;
-mod exp_dragon;
-mod exp_foucault;
-mod exp_gw;
-mod exp_lorenz;
+mod exp_orrery;
 mod exp_penrose;
 mod exp_percolation;
-mod exp_rainbow;
-mod exp_sandpile;
-mod exp_sorting;
-mod exp_ghosts;
-mod exp_settle;
-mod exp_dolly;
-mod exp_currents;
-mod exp_probe;
-mod exp_avatar;
-mod exp_fadeaway;
-mod exp_sea;
-mod exp_tesseract;
-mod exp_blackhole;
-mod exp_galaxy;
-mod exp_forest;
-mod exp_city;
-mod exp_typo;
-mod exp_mandel;
-mod exp_hero4k;
-mod exp_han;
-mod exp_megapath;
-mod exp_longplay;
-mod exp_swarm;
-mod exp_blendmatrix;
-mod exp_filterstack;
-mod exp_shadowplay;
 mod exp_prism;
-mod exp_eclipse;
-mod exp_cymatics;
-mod exp_harmony;
-mod exp_fourier;
+mod exp_probe;
+mod exp_rackfocus;
+mod exp_rainbow;
+mod exp_receipts;
+mod exp_sandpile;
+mod exp_scrub;
+mod exp_sea;
+mod exp_settle;
+mod exp_shadowplay;
+mod exp_shatter;
+mod exp_sorting;
+mod exp_spring;
 mod exp_startrail;
-mod exp_bubble;
-mod exp_orrery;
 mod exp_storm;
-mod exp_kaleido;
-mod exp_ink;
+mod exp_swarm;
+mod exp_tesseract;
+mod exp_typo;
+mod exp_unfold;
+mod exp_wordmark;
 // ── Round 9: the law machines ──
+mod exp_caustics;
+mod exp_cellauto;
+mod exp_collider;
+mod exp_crystal;
+mod exp_galton;
+mod exp_ising;
+mod exp_neural;
 mod exp_quantum;
 mod exp_smoke;
 mod exp_threebody;
-mod exp_turing;
-mod exp_galton;
-mod exp_caustics;
-mod exp_ising;
-mod exp_crystal;
-mod exp_neural;
 mod exp_truss;
-mod exp_cellauto;
-mod exp_collider;
+mod exp_turing;
 // ── Round 11: the machines of life, information & mind ──
-mod exp_evolve;
 mod exp_epidemic;
+mod exp_evolve;
 mod exp_excite;
 mod exp_gas;
+mod exp_huffman;
 mod exp_maze;
 mod exp_newton;
 mod exp_pathtrace;
 mod exp_pidigits;
 mod exp_planck;
-mod exp_huffman;
-mod exp_traffic;
 mod exp_slime;
+mod exp_traffic;
 mod film_lib;
 mod keynote;
 mod keynote_v5;
@@ -250,7 +250,12 @@ fn registry() -> Vec<Experiment> {
         Experiment::plain("spring", exp_spring::SECONDS, 16, exp_spring::frame),
         Experiment::plain("scrub", exp_scrub::SECONDS, 16, exp_scrub::frame),
         Experiment::plain("damage", exp_damage::SECONDS, 16, exp_damage::frame),
-        Experiment::plain("rackfocus", exp_rackfocus::SECONDS, 16, exp_rackfocus::frame),
+        Experiment::plain(
+            "rackfocus",
+            exp_rackfocus::SECONDS,
+            16,
+            exp_rackfocus::frame,
+        ),
         Experiment::plain("morph", exp_morph::SECONDS, 16, exp_morph::frame),
         Experiment::plain("endcard", exp_endcard::SECONDS, 16, exp_endcard::frame),
         Experiment::plain("beams", exp_beams::SECONDS, 16, exp_beams::frame),
@@ -275,8 +280,18 @@ fn registry() -> Vec<Experiment> {
         Experiment::plain("avatar", exp_avatar::SECONDS, 16, exp_avatar::frame),
         Experiment::plain("fadeaway", exp_fadeaway::SECONDS, 32, exp_fadeaway::frame),
         Experiment::plain("sea", exp_sea::SECONDS, 16, exp_sea::frame),
-        Experiment::plain("tesseract", exp_tesseract::SECONDS, 16, exp_tesseract::frame),
-        Experiment::plain("blackhole", exp_blackhole::SECONDS, 16, exp_blackhole::frame),
+        Experiment::plain(
+            "tesseract",
+            exp_tesseract::SECONDS,
+            16,
+            exp_tesseract::frame,
+        ),
+        Experiment::plain(
+            "blackhole",
+            exp_blackhole::SECONDS,
+            16,
+            exp_blackhole::frame,
+        ),
         Experiment::plain("galaxy", exp_galaxy::SECONDS, 16, exp_galaxy::frame),
         Experiment::plain("forest", exp_forest::SECONDS, 16, exp_forest::frame),
         Experiment::plain("city", exp_city::SECONDS, 16, exp_city::frame),
@@ -302,9 +317,24 @@ fn registry() -> Vec<Experiment> {
             frame_hook: Some(exp_longplay::frame_hook),
         },
         Experiment::plain("swarm", exp_swarm::SECONDS, 16, exp_swarm::frame),
-        Experiment::plain("blendmatrix", exp_blendmatrix::SECONDS, 16, exp_blendmatrix::frame),
-        Experiment::plain("filterstack", exp_filterstack::SECONDS, 16, exp_filterstack::frame),
-        Experiment::plain("shadowplay", exp_shadowplay::SECONDS, 16, exp_shadowplay::frame),
+        Experiment::plain(
+            "blendmatrix",
+            exp_blendmatrix::SECONDS,
+            16,
+            exp_blendmatrix::frame,
+        ),
+        Experiment::plain(
+            "filterstack",
+            exp_filterstack::SECONDS,
+            16,
+            exp_filterstack::frame,
+        ),
+        Experiment::plain(
+            "shadowplay",
+            exp_shadowplay::SECONDS,
+            16,
+            exp_shadowplay::frame,
+        ),
         Experiment::plain("prism", exp_prism::SECONDS, 16, exp_prism::frame),
         // ── Round 8: the wonder engines — ten new plates, one per axis ──
         Experiment::plain("eclipse", exp_eclipse::SECONDS, 24, exp_eclipse::frame),
@@ -341,7 +371,12 @@ fn registry() -> Vec<Experiment> {
             frame_hook: None,
         },
         Experiment::plain("smoke", exp_smoke::SECONDS, 20, exp_smoke::frame),
-        Experiment::plain("threebody", exp_threebody::SECONDS, 24, exp_threebody::frame),
+        Experiment::plain(
+            "threebody",
+            exp_threebody::SECONDS,
+            24,
+            exp_threebody::frame,
+        ),
         Experiment::plain("turing", exp_turing::SECONDS, 20, exp_turing::frame),
         Experiment::plain("galton", exp_galton::SECONDS, 20, exp_galton::frame),
         Experiment::plain("caustics", exp_caustics::SECONDS, 20, exp_caustics::frame),
@@ -361,11 +396,21 @@ fn registry() -> Vec<Experiment> {
         // ── Round 10: the closing round — machines of emergence & signature ──
         Experiment::plain("gw", exp_gw::SECONDS, 20, exp_gw::frame),
         Experiment::plain("sandpile", exp_sandpile::SECONDS, 20, exp_sandpile::frame),
-        Experiment::plain("percolation", exp_percolation::SECONDS, 24, exp_percolation::frame),
+        Experiment::plain(
+            "percolation",
+            exp_percolation::SECONDS,
+            24,
+            exp_percolation::frame,
+        ),
         Experiment::plain("ant", exp_ant::SECONDS, 24, exp_ant::frame),
         Experiment::plain("dla", exp_dla::SECONDS, 24, exp_dla::frame),
         Experiment::plain("lorenz", exp_lorenz::SECONDS, 24, exp_lorenz::frame),
-        Experiment::plain("doublepend", exp_doublepend::SECONDS, 24, exp_doublepend::frame),
+        Experiment::plain(
+            "doublepend",
+            exp_doublepend::SECONDS,
+            24,
+            exp_doublepend::frame,
+        ),
         Experiment {
             name: "penrose",
             seconds: exp_penrose::SECONDS,
@@ -404,7 +449,12 @@ fn registry() -> Vec<Experiment> {
         Experiment::plain("planck", exp_planck::SECONDS, 16, exp_planck::frame),
         Experiment::plain("excite", exp_excite::SECONDS, 20, exp_excite::frame),
         Experiment::plain("pidigits", exp_pidigits::SECONDS, 20, exp_pidigits::frame),
-        Experiment::plain("pathtrace", exp_pathtrace::SECONDS, 14, exp_pathtrace::frame),
+        Experiment::plain(
+            "pathtrace",
+            exp_pathtrace::SECONDS,
+            14,
+            exp_pathtrace::frame,
+        ),
     ]
 }
 
@@ -446,7 +496,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let root = out_root();
-    println!("film_lab — {} experiment(s) → {}", experiments.len(), root.display());
+    println!(
+        "film_lab — {} experiment(s) → {}",
+        experiments.len(),
+        root.display()
+    );
 
     let mut failures = 0;
     for experiment in &experiments {
@@ -464,7 +518,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match render_with(experiment, &dir, canvas) {
             Ok(receipt) => {
                 receipt.print(experiment.name);
-                let tile = match experiment.name.as_ref() {
+                let tile = match experiment.name {
                     "hero" | "hero4k" => "4x2",
                     "fadeaway" => "4x8",
                     "typo" | "han" => "4x6",
@@ -481,7 +535,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // The third artifact: the motion receipt. Cadence is
                 // per-plate (a 2-frame 4K receipt is a slow A/B flip,
                 // not a blink) — the recipe itself is one house line.
-                let (gif_fps, gif_stride) = match experiment.name.as_ref() {
+                let (gif_fps, gif_stride) = match experiment.name {
                     "hero" => (6, 1),
                     "hero4k" => (2, 1),
                     "longplay" => (12, 4),

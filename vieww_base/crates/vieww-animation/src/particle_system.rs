@@ -34,7 +34,11 @@ use crate::particles::Particle;
 pub enum EmitterShape {
     Point(Offset),
     /// On the circle's circumference (`edge`) or anywhere inside it.
-    Circle { center: Offset, radius: f32, edge: bool },
+    Circle {
+        center: Offset,
+        radius: f32,
+        edge: bool,
+    },
     Line(Offset, Offset),
     Rect(Rect),
 }
@@ -48,10 +52,18 @@ pub enum Force {
     Drag(f32),
     /// Curl-free noise push: `strength` at spatial `scale`, drifting over
     /// time at `speed`.
-    Turbulence { strength: f32, scale: f32, speed: f32 },
+    Turbulence {
+        strength: f32,
+        scale: f32,
+        speed: f32,
+    },
     /// Pull toward (positive) or push from (negative) a point, falling off
     /// with distance beyond `radius`.
-    Attractor { at: Offset, strength: f32, radius: f32 },
+    Attractor {
+        at: Offset,
+        strength: f32,
+        radius: f32,
+    },
     /// Swirl around a point.
     Vortex { at: Offset, strength: f32 },
 }
@@ -61,7 +73,11 @@ pub enum Force {
 pub enum Collision {
     /// Bounce off `y = floor` (Y-down) keeping `restitution` of the normal
     /// speed and `1 - friction` of the tangential.
-    Bounce { floor: f32, restitution: f32, friction: f32 },
+    Bounce {
+        floor: f32,
+        restitution: f32,
+        friction: f32,
+    },
     /// Die on touching the floor.
     Kill { floor: f32 },
 }
@@ -176,9 +192,17 @@ impl ParticleSystem {
     fn spawn_point(&mut self) -> Offset {
         match self.shape {
             EmitterShape::Point(p) => p,
-            EmitterShape::Circle { center, radius, edge } => {
+            EmitterShape::Circle {
+                center,
+                radius,
+                edge,
+            } => {
                 let a = self.random() * TAU;
-                let r = if edge { radius } else { radius * self.random().sqrt() };
+                let r = if edge {
+                    radius
+                } else {
+                    radius * self.random().sqrt()
+                };
                 Offset::new(center.dx + a.cos() * r, center.dy + a.sin() * r)
             }
             EmitterShape::Line(a, b) => {
@@ -241,7 +265,11 @@ impl ParticleSystem {
                     + match *f {
                         Force::Gravity(g) => g,
                         Force::Drag(k) => p.velocity.scale(-k),
-                        Force::Turbulence { strength, scale, speed } => {
+                        Force::Turbulence {
+                            strength,
+                            scale,
+                            speed,
+                        } => {
                             let (x, y) = (p.position.dx / scale, p.position.dy / scale);
                             let z = time * speed;
                             // Curl of a scalar potential: divergence-free swirl.
@@ -251,7 +279,11 @@ impl ParticleSystem {
                             let dndy = (n(x, y + e) - n(x, y - e)) / (2.0 * e);
                             Offset::new(dndy, -dndx).scale(strength)
                         }
-                        Force::Attractor { at, strength, radius } => {
+                        Force::Attractor {
+                            at,
+                            strength,
+                            radius,
+                        } => {
                             let d = at - p.position;
                             let dist = d.distance().max(1e-3);
                             let fall = (radius / dist.max(radius)).powi(2);
@@ -267,7 +299,11 @@ impl ParticleSystem {
             p.velocity = p.velocity + acc.scale(dt);
             p.position = p.position + p.velocity.scale(dt);
             match collision {
-                Some(Collision::Bounce { floor, restitution, friction }) if p.position.dy > floor => {
+                Some(Collision::Bounce {
+                    floor,
+                    restitution,
+                    friction,
+                }) if p.position.dy > floor => {
                     p.position.dy = floor - (p.position.dy - floor) * restitution;
                     p.velocity.dy = -p.velocity.dy.abs() * restitution;
                     p.velocity.dx *= 1.0 - friction;
@@ -341,7 +377,8 @@ mod tests {
 
     #[test]
     fn rate_times_time_births_and_lifetimes_cap_the_population() {
-        let mut s = ParticleSystem::new(EmitterShape::Point(Offset::ZERO), 100.0, 1).lifetime(1.0, 1.0);
+        let mut s =
+            ParticleSystem::new(EmitterShape::Point(Offset::ZERO), 100.0, 1).lifetime(1.0, 1.0);
         s.run(3.0, 0.01);
         assert!((299..=301).contains(&s.births()), "{}", s.births());
         assert!((99..=101).contains(&s.len()), "{}", s.len());
@@ -350,8 +387,20 @@ mod tests {
     #[test]
     fn same_seed_same_particles() {
         let run = || {
-            let mut s = ParticleSystem::new(EmitterShape::Circle { center: Offset::ZERO, radius: 10.0, edge: true }, 50.0, 42)
-                .force(Force::Turbulence { strength: 50.0, scale: 30.0, speed: 1.0 });
+            let mut s = ParticleSystem::new(
+                EmitterShape::Circle {
+                    center: Offset::ZERO,
+                    radius: 10.0,
+                    edge: true,
+                },
+                50.0,
+                42,
+            )
+            .force(Force::Turbulence {
+                strength: 50.0,
+                scale: 30.0,
+                speed: 1.0,
+            });
             s.run(1.0, 1.0 / 60.0);
             s.particles()
         };
@@ -360,17 +409,29 @@ mod tests {
 
     #[test]
     fn emitter_shapes_place_births() {
-        let mut s = ParticleSystem::new(EmitterShape::Circle { center: Offset::new(5.0, 5.0), radius: 10.0, edge: true }, 0.0, 3)
-            .forces(vec![]);
+        let mut s = ParticleSystem::new(
+            EmitterShape::Circle {
+                center: Offset::new(5.0, 5.0),
+                radius: 10.0,
+                edge: true,
+            },
+            0.0,
+            3,
+        )
+        .forces(vec![]);
         s.speed = (0.0, 0.0);
         s.burst(50);
         for p in s.particles() {
             assert!(((p.position - Offset::new(5.0, 5.0)).distance() - 10.0).abs() < 1e-3);
         }
-        let mut r = ParticleSystem::new(EmitterShape::Rect(Rect::new(0.0, 0.0, 4.0, 2.0)), 0.0, 3).forces(vec![]);
+        let mut r = ParticleSystem::new(EmitterShape::Rect(Rect::new(0.0, 0.0, 4.0, 2.0)), 0.0, 3)
+            .forces(vec![]);
         r.speed = (0.0, 0.0);
         r.burst(50);
-        assert!(r.particles().iter().all(|p| Rect::new(0.0, 0.0, 4.0, 2.0).contains(p.position)));
+        assert!(r
+            .particles()
+            .iter()
+            .all(|p| Rect::new(0.0, 0.0, 4.0, 2.0).contains(p.position)));
     }
 
     #[test]
@@ -379,7 +440,11 @@ mod tests {
             .launch(std::f32::consts::FRAC_PI_2, 0.0, (100.0, 100.0))
             .lifetime(10.0, 10.0)
             .forces(vec![Force::Gravity(Offset::new(0.0, 400.0))])
-            .collision(Collision::Bounce { floor: 50.0, restitution: 0.5, friction: 0.1 });
+            .collision(Collision::Bounce {
+                floor: 50.0,
+                restitution: 0.5,
+                friction: 0.1,
+            });
         s.burst(1);
         let mut max_after_bounce = 0.0f32;
         for i in 0..300 {
@@ -407,19 +472,29 @@ mod tests {
     #[test]
     fn attractors_pull_vortices_swirl_drag_slows() {
         let mut a = ParticleSystem::new(EmitterShape::Point(Offset::new(100.0, 0.0)), 0.0, 1)
-            .forces(vec![Force::Attractor { at: Offset::ZERO, strength: 500.0, radius: 10.0 }])
+            .forces(vec![Force::Attractor {
+                at: Offset::ZERO,
+                strength: 500.0,
+                radius: 10.0,
+            }])
             .lifetime(5.0, 5.0);
         a.speed = (0.0, 0.0);
         a.burst(1);
         a.run(0.5, 0.01);
         assert!(a.particles()[0].position.dx < 100.0);
         let mut v = ParticleSystem::new(EmitterShape::Point(Offset::new(50.0, 0.0)), 0.0, 1)
-            .forces(vec![Force::Vortex { at: Offset::ZERO, strength: 1000.0 }])
+            .forces(vec![Force::Vortex {
+                at: Offset::ZERO,
+                strength: 1000.0,
+            }])
             .lifetime(5.0, 5.0);
         v.speed = (0.0, 0.0);
         v.burst(1);
         v.run(0.1, 0.01);
-        assert!(v.particles()[0].position.dy > 0.0, "swirls clockwise in Y-down");
+        assert!(
+            v.particles()[0].position.dy > 0.0,
+            "swirls clockwise in Y-down"
+        );
         let mut d = ParticleSystem::new(EmitterShape::Point(Offset::ZERO), 0.0, 1)
             .forces(vec![Force::Drag(2.0)])
             .launch(0.0, 0.0, (100.0, 100.0))

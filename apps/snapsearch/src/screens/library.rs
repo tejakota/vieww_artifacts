@@ -222,7 +222,6 @@ impl Widget for LibraryScreen {
                 // subscribe nothing. The screen itself rebuilds every
                 // `CLOCK_INTERVAL` because `tick` is read in `build` above,
                 // and each rebuild hands the halo a fresh phase.
-                let tick = tick;
                 move |t| {
                     if t <= 0.001 {
                         return SizedBox::shrink().into();

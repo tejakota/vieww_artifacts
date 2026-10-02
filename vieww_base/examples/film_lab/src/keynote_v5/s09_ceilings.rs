@@ -13,13 +13,16 @@
 //! The point is the reference's own: "nothing in the film is limited by
 //! the renderer — the constraint is taste."
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_back, ease_out_cubic, mix, tint, xywh, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT, MINT, AMBER, MAGENTA};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_back, mix, tint, xywh, Rng, AMBER, CYAN, CYAN_SOFT, INK, MAGENTA,
+    MINT, MUTED, VIOLET, VIOLET_SOFT,
+};
 
-use super::{Ctx};
+use super::Ctx;
 
 /// The four vignette cards: (title, receipt, accent).
 const CARDS: [(&str, &str, Color); 4] = [
@@ -36,7 +39,7 @@ fn card_rect(i: usize) -> (f32, f32) {
     (x, y)
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -77,7 +80,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(Opacity::new(a).child(Painting::sized(
                     Size::new(cw, ch),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                        book.rrect(xywh(0.0, 0.0, cw, ch), 16.0, alpha(Color::rgb(13, 14, 20), 0.95));
+                        book.rrect(
+                            xywh(0.0, 0.0, cw, ch),
+                            16.0,
+                            alpha(Color::rgb(13, 14, 20), 0.95),
+                        );
                         book.stroke_rrect(xywh(0.0, 0.0, cw, ch), 16.0, alpha(accent, 0.35), 1.3);
                         // The vignette plate — each card's own mini-engine.
                         let px0 = 24.0;
@@ -101,10 +108,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y + rise + 16.0)
                 .width(300.0)
                 .height(28.0)
-                .child(Opacity::new(a).child(
-                    Text::new(title)
-                        .style(TextStyle::new(22.0).monospace().letter_spacing(2.4).color(alpha(INK, 0.95))),
-                )),
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(title).style(
+                            TextStyle::new(22.0)
+                                .monospace()
+                                .letter_spacing(2.4)
+                                .color(alpha(INK, 0.95)),
+                        ),
+                    ),
+                ),
         );
         stack = stack.push(
             Positioned::new()
@@ -112,10 +125,16 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y + rise + ch - 56.0)
                 .width(cw - 48.0)
                 .height(26.0)
-                .child(Opacity::new(clamp01((arrive - 0.4) * 2.0)).child(
-                    Text::new(receipt)
-                        .style(TextStyle::new(16.5).monospace().letter_spacing(1.0).color(alpha(tint(accent, 0.05), 0.95))),
-                )),
+                .child(
+                    Opacity::new(clamp01((arrive - 0.4) * 2.0)).child(
+                        Text::new(receipt).style(
+                            TextStyle::new(16.5)
+                                .monospace()
+                                .letter_spacing(1.0)
+                                .color(alpha(tint(accent, 0.05), 0.95)),
+                        ),
+                    ),
+                ),
         );
     }
 
@@ -127,11 +146,17 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(130.0)
             .width(1920.0)
             .height(44.0)
-            .child(Opacity::new(head_a).child(
-                Text::new("the renderer's ceilings")
-                    .style(TextStyle::new(34.0).letter_spacing(1.5).color(alpha(INK, 0.96)))
-                    .align(TextAlign::Center),
-            )),
+            .child(
+                Opacity::new(head_a).child(
+                    Text::new("the renderer's ceilings")
+                        .style(
+                            TextStyle::new(34.0)
+                                .letter_spacing(1.5)
+                                .color(alpha(INK, 0.96)),
+                        )
+                        .align(TextAlign::Center),
+                ),
+            ),
     );
     stack = stack.push(
         Positioned::new()
@@ -139,11 +164,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(182.0)
             .width(1920.0)
             .height(30.0)
-            .child(Opacity::new(head_a).child(
-                Text::new("nothing here is limited by the renderer — the constraint is taste")
-                    .style(TextStyle::new(19.0).monospace().letter_spacing(1.8).color(alpha(MUTED, 0.9)))
-                    .align(TextAlign::Center),
-            )),
+            .child(
+                Opacity::new(head_a).child(
+                    Text::new("nothing here is limited by the renderer — the constraint is taste")
+                        .style(
+                            TextStyle::new(19.0)
+                                .monospace()
+                                .letter_spacing(1.8)
+                                .color(alpha(MUTED, 0.9)),
+                        )
+                        .align(TextAlign::Center),
+                ),
+            ),
     );
 
     stack = stack.push(super::caption(
@@ -172,8 +204,18 @@ fn plate_galaxy(book: &mut Sketchbook, x: f32, y: f32, w: f32, h: f32, sec: f32)
         let px = cx + a.cos() * r * 1.25;
         let py = cy + a.sin() * r * 0.62;
         let warm = rng.f01();
-        let c = if warm > 0.8 { AMBER } else if warm > 0.5 { Color::WHITE } else { VIOLET_SOFT };
-        book.circle(Offset::new(px, py), 0.5 + rng.f01() * 1.1, alpha(c, 0.25 + rng.f01() * 0.6));
+        let c = if warm > 0.8 {
+            AMBER
+        } else if warm > 0.5 {
+            Color::WHITE
+        } else {
+            VIOLET_SOFT
+        };
+        book.circle(
+            Offset::new(px, py),
+            0.5 + rng.f01() * 1.1,
+            alpha(c, 0.25 + rng.f01() * 0.6),
+        );
     }
     super::glow(book, cx, cy, w * 0.4, VIOLET, 0.14);
 }
@@ -210,7 +252,10 @@ fn plate_mandel(book: &mut Sketchbook, x: f32, y: f32, w: f32, h: f32, sec: f32)
             } else {
                 mix(MAGENTA, CYAN, k)
             };
-            book.rect(xywh(x + gx as f32 * cw, y + gy as f32 * chh, cw + 0.6, chh + 0.6), alpha(c, 0.85));
+            book.rect(
+                xywh(x + gx as f32 * cw, y + gy as f32 * chh, cw + 0.6, chh + 0.6),
+                alpha(c, 0.85),
+            );
         }
     }
 }
@@ -226,9 +271,20 @@ fn plate_hero4k(book: &mut Sketchbook, x: f32, y: f32, w: f32, h: f32, sec: f32)
         for gx in 0..cols {
             let d = (gx + gy) as f32;
             let past = d < sweep;
-            let c = if past { MINT } else { alpha(Color::WHITE, 0.16) };
-            let a = if past { 0.14 + 0.10 * ((gx * 7 + gy * 13) % 5) as f32 / 5.0 } else { 0.14 };
-            book.rect(xywh(x + gx as f32 * cw, y + gy as f32 * chh, cw - 1.0, chh - 1.0), alpha(c, a));
+            let c = if past {
+                MINT
+            } else {
+                alpha(Color::WHITE, 0.16)
+            };
+            let a = if past {
+                0.14 + 0.10 * ((gx * 7 + gy * 13) % 5) as f32 / 5.0
+            } else {
+                0.14
+            };
+            book.rect(
+                xywh(x + gx as f32 * cw, y + gy as f32 * chh, cw - 1.0, chh - 1.0),
+                alpha(c, a),
+            );
         }
     }
     // The sweep line.
@@ -260,6 +316,16 @@ fn plate_longplay(book: &mut Sketchbook, x: f32, y: f32, w: f32, h: f32, sec: f3
     }
     book.stroke(p, alpha(tint(AMBER, 0.1), 0.95), 2.0);
     // The band edges.
-    book.line(Offset::new(x, y + h - 0.15 * h), Offset::new(x + w, y + h - 0.15 * h), alpha(MUTED, 0.25), 1.0);
-    book.line(Offset::new(x, y + h - 0.5 * h), Offset::new(x + w, y + h - 0.5 * h), alpha(MUTED, 0.25), 1.0);
+    book.line(
+        Offset::new(x, y + h - 0.15 * h),
+        Offset::new(x + w, y + h - 0.15 * h),
+        alpha(MUTED, 0.25),
+        1.0,
+    );
+    book.line(
+        Offset::new(x, y + h - 0.5 * h),
+        Offset::new(x + w, y + h - 0.5 * h),
+        alpha(MUTED, 0.25),
+        1.0,
+    );
 }

@@ -29,13 +29,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, BG_DEEP, FAINT, INK, MUTED, VIOLET_SOFT, CYAN_SOFT,
-    AMBER};
+use crate::film_lib::{alpha, mix, AMBER, BG_DEEP, CYAN_SOFT, FAINT, INK, MUTED, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The stop census — the axis.
 const STOPS: usize = 256;
@@ -74,11 +73,7 @@ fn hsv(h: f32, s: f32, v: f32) -> Color {
         4 => (t, p, v),
         _ => (v, p, q),
     };
-    Color::rgb(
-        (r * 255.0) as u8,
-        (g * 255.0) as u8,
-        (b * 255.0) as u8,
-    )
+    Color::rgb((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
 }
 
 // ── The animated spectrum — the axis itself ────────────────────────────────
@@ -94,11 +89,13 @@ fn spectrum_stops(t: f32) -> Vec<(f32, Color)> {
         let base = i as f32 / (STOPS - 1) as f32;
         // The phase advance — different harmonics per stop, so the ramp
         // flows rather than slides.
-        let w1 = (t * 6.2832 * 2.0 + base * 6.2832 * 3.0).sin() * 0.012;
-        let w2 = (t * 6.2832 * 5.0 + base * 6.2832 * 7.0).sin() * 0.005;
+        let w1 =
+            (t * std::f32::consts::TAU * 2.0 + base * std::f32::consts::TAU * 3.0).sin() * 0.012;
+        let w2 =
+            (t * std::f32::consts::TAU * 5.0 + base * std::f32::consts::TAU * 7.0).sin() * 0.005;
         let off = (base + w1 + w2).clamp(0.0, 1.0);
         // Saturation breathes along the band.
-        let s = 0.72 + 0.24 * (t * 6.2832 + base * 9.0).sin();
+        let s = 0.72 + 0.24 * (t * std::f32::consts::TAU + base * 9.0).sin();
         let v = 0.86 + 0.13 * (t * 4.0 + base * 13.0).sin();
         let hue = base + 0.04 * (t + base * 2.0).sin();
         stops.push((off, hsv(hue, s.clamp(0.0, 1.0), v.clamp(0.0, 1.0))));
@@ -112,7 +109,7 @@ fn spectrum_stops(t: f32) -> Vec<(f32, Color)> {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let stops = spectrum_stops(t);
     let stop_count = stops.len();
 
@@ -133,7 +130,7 @@ pub fn frame(t: f32) -> WidgetNode {
             );
 
             // The incident beam — white, from the left, breathing.
-            let breath = 0.75 + 0.25 * (t * 6.2832 * 1.1).sin();
+            let breath = 0.75 + 0.25 * (t * std::f32::consts::TAU * 1.1).sin();
             let beam_h = 7.0 * breath;
             book.fill(
                 {
@@ -209,7 +206,8 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // ── THE FAN — forty-eight rays, each its own gradient. ──
             // The sweep of the fan breathes with the incident angle.
-            let sweep = (0.42 + 0.10 * (t * 6.2832 * 0.8).sin()) * std::f32::consts::PI;
+            let sweep =
+                (0.42 + 0.10 * (t * std::f32::consts::TAU * 0.8).sin()) * std::f32::consts::PI;
             for k in 0..RAYS {
                 let f = k as f32 / (RAYS - 1) as f32;
                 let a = -sweep * 0.5 + f * sweep;
@@ -304,7 +302,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
+    let stack = Stack::new().push(Positioned::fill().child(board));
     stack.push(receipt_panel(t, stop_count)).into()
 }
 
@@ -338,7 +336,10 @@ fn receipt_panel(t: f32, live_stops: usize) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -346,10 +347,7 @@ fn receipt_panel(t: f32, live_stops: usize) -> WidgetNode {
 
     // The instrument: the stop field itself — 64 sampled stops drawn as a
     // comb, advancing phase visible as the comb's breathing.
-    let sample: Vec<(f32, Color)> = spectrum_stops(t)
-        .into_iter()
-        .step_by(4)
-        .collect();
+    let sample: Vec<(f32, Color)> = spectrum_stops(t).into_iter().step_by(4).collect();
     let comb = Painting::sized(
         Size::new(400.0, 40.0),
         PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
@@ -369,9 +367,11 @@ fn receipt_panel(t: f32, live_stops: usize) -> WidgetNode {
                 book.rect(Rect::new(x - 1.4, 24.0, x + 1.4, 33.0), alpha(*c, 0.9));
             }
             // The phase playhead — the ramp's flow, marked.
-            let px = 12.0 + (t * 6.2832 * 2.0).sin() * 0.5 + 0.5;
-            book.rect(Rect::new(12.0 + px * 376.0 - 0.8, 12.0, 12.0 + px * 376.0 + 0.8, 20.0),
-                alpha(AMBER, 0.7));
+            let px = 12.0 + (t * std::f32::consts::TAU * 2.0).sin() * 0.5 + 0.5;
+            book.rect(
+                Rect::new(12.0 + px * 376.0 - 0.8, 12.0, 12.0 + px * 376.0 + 0.8, 20.0),
+                alpha(AMBER, 0.7),
+            );
         }),
     );
     stack = stack.push(

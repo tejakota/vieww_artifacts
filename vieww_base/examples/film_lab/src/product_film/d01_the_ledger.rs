@@ -15,10 +15,9 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    CERT_ALLOCS_STEADY, CERT_CRATES, CERT_FRAMES_STEADY, CERT_P95_MS, CERT_STARTUP_MS,
-    CERT_TESTS, CERT_VULKAN_TESTS, CERT_WORST_MS, Ctx, INK, LEDGER, MUTED, W, alpha, caption,
-    clamp01, count_up, distance_chip, grain, ground, group_commas, progress_rail, tint,
-    vignette, xywh,
+    alpha, caption, clamp01, count_up, distance_chip, grain, ground, group_commas, progress_rail,
+    tint, vignette, xywh, Ctx, CERT_ALLOCS_STEADY, CERT_CRATES, CERT_FRAMES_STEADY, CERT_P95_MS,
+    CERT_STARTUP_MS, CERT_TESTS, CERT_VULKAN_TESTS, CERT_WORST_MS, INK, LEDGER, MUTED, W,
 };
 use crate::film_lib::ease_out_cubic;
 
@@ -28,7 +27,7 @@ const R_X: f32 = 1040.0;
 const Y0: f32 = 220.0;
 const ROW_H: f32 = 74.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let probe = ctx.probe;
@@ -56,27 +55,31 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(Y0 - 90.0)
                 .width(1060.0)
                 .height(660.0)
-                .child(
-                    super::Opacity::new(card_a).child(Painting::sized(
-                        Size::new(1060.0, 660.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(0.0, 0.0, 1060.0, 660.0), 16.0, alpha(super::SURFACE, 0.92));
-                            book.stroke_rrect(xywh(0.0, 0.0, 1060.0, 660.0), 16.0, alpha(LEDGER, 0.25), 1.4);
-                            // The card's top rule — the ledger's binding.
-                            book.rrect(xywh(24.0, 70.0, 1012.0, 2.0), 1.0, alpha(LEDGER, 0.30));
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(card_a).child(Painting::sized(
+                    Size::new(1060.0, 660.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        book.rrect(
+                            xywh(0.0, 0.0, 1060.0, 660.0),
+                            16.0,
+                            alpha(super::SURFACE, 0.92),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, 1060.0, 660.0),
+                            16.0,
+                            alpha(LEDGER, 0.25),
+                            1.4,
+                        );
+                        // The card's top rule — the ledger's binding.
+                        book.rrect(xywh(24.0, 70.0, 1012.0, 2.0), 1.0, alpha(LEDGER, 0.30));
+                    }),
+                ))),
         );
     }
 
     // The column headers.
     let head_a = clamp01((t - 0.12) / 0.12);
     if head_a > 0.01 {
-        for (text, x) in [
-            ("the engine, certified", L_X),
-            ("this film, measured", R_X),
-        ] {
+        for (text, x) in [("the engine, certified", L_X), ("this film, measured", R_X)] {
             stack = stack.push(
                 Positioned::new()
                     .left(x)
@@ -327,7 +330,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     }
 
     // The captions.
-    stack = stack.push(super::act_chip("MOVEMENT IV", "THE PROOF", clamp01((t - 0.04) / 0.10)));
+    stack = stack.push(super::act_chip(
+        "MOVEMENT IV",
+        "THE PROOF",
+        clamp01((t - 0.04) / 0.10),
+    ));
     stack = stack.push(caption(
         "every number on screen is a receipt — counted, not claimed",
         1002.0,

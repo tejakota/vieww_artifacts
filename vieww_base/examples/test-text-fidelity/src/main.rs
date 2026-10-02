@@ -206,8 +206,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut bx0, mut by0, mut bx1, mut by1) = (u32::MAX, u32::MAX, 0u32, 0u32);
     for (i, (g, l)) in gray_pixels
         .data()
-        .chunks_exact(4)
-        .zip(lcd_pixels.data().chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(lcd_pixels.data().as_chunks::<4>().0)
         .enumerate()
     {
         let dr = i16::from(l[0]) - i16::from(g[0]);

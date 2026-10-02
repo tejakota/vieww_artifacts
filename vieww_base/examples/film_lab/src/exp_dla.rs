@@ -18,15 +18,16 @@
 
 use std::sync::OnceLock;
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, VIOLET_SOFT, Rng};
+use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, INK, MUTED, VIOLET, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The machine ─────────────────────────────────────────────────────────────
 
@@ -54,14 +55,13 @@ fn aggregate() -> &'static Vec<Stuck> {
         let mut out: Vec<Stuck> = Vec::with_capacity(N + 1);
         // the seed
         let (cx, cy) = (GRID as f32 / 2.0, GRID as f32 / 2.0);
-        let seed = Stuck { x: cx, y: cy, steps: 0 };
-        out.push(seed);
-        let gi = |x: f32, y: f32| {
-            (
-                (x / cell).floor() as i32,
-                (y / cell).floor() as i32,
-            )
+        let seed = Stuck {
+            x: cx,
+            y: cy,
+            steps: 0,
         };
+        out.push(seed);
+        let gi = |x: f32, y: f32| ((x / cell).floor() as i32, (y / cell).floor() as i32);
         let (sx, sy) = gi(cx, cy);
         occupied[sy as usize * GRID + sx as usize] = true;
 
@@ -133,13 +133,16 @@ fn mass_radius() -> (f64, f64, usize, f32) {
     let r_outer = structure_radius(agg);
     // fit r in [12, 0.75 r_outer]: the core is compact (D=2 locally)
     // and biases a whole-range fit low (the first cut included it).
-    let rs: Vec<f32> = (12..((r_outer as f32 * 0.75) as usize))
+    let rs: Vec<f32> = (12..((r_outer * 0.75) as usize))
         .step_by(3)
         .map(|r| r as f32)
         .collect();
     let mut pts: Vec<(f64, f64)> = Vec::new();
     for &r in &rs {
-        let m = agg.iter().filter(|p| (p.x - cx).hypot(p.y - cy) <= r).count();
+        let m = agg
+            .iter()
+            .filter(|p| (p.x - cx).hypot(p.y - cy) <= r)
+            .count();
         if m > 2 {
             pts.push((r.ln() as f64, (m as f64).ln()));
         }
@@ -158,7 +161,10 @@ fn mass_radius() -> (f64, f64, usize, f32) {
     }
     let slope = (n * sxy - sx * sy) / denom;
     let intercept = (sy - slope * sx) / n;
-    let sse: f64 = pts.iter().map(|p| (p.1 - (intercept + slope * p.0)).powi(2)).sum();
+    let sse: f64 = pts
+        .iter()
+        .map(|p| (p.1 - (intercept + slope * p.0)).powi(2))
+        .sum();
     let sst: f64 = pts.iter().map(|p| (p.1 - sy / n).powi(2)).sum();
     let r2 = if sst > 0.0 { 1.0 - sse / sst } else { 0.0 };
     (slope, r2, pts.len(), r_outer)
@@ -171,12 +177,11 @@ const BX: f32 = 240.0;
 const BY: f32 = 150.0;
 const BS: f32 = 440.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let agg = aggregate();
     let reveal = (t * (N + 1) as f32).round() as usize;
     let (d_dim, r2, npts, r_outer) = mass_radius();
-    let mean_walk: f64 = agg.iter().map(|p| p.steps as f64).sum::<f64>()
-        / agg.len().max(1) as f64;
+    let mean_walk: f64 = agg.iter().map(|p| p.steps as f64).sum::<f64>() / agg.len().max(1) as f64;
 
     let board = Painting::sized(
         Size::new(1280.0, 720.0),
@@ -187,10 +192,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the deep-field plate.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 16))]),
             );
             book.rrect(
                 Rect::new(BX - 22.0, BY - 22.0, BX + BS + 22.0, BY + BS + 22.0),
@@ -199,12 +203,8 @@ pub fn frame(t: f32) -> WidgetNode {
             );
 
             let (cx, cy) = (GRID as f32 / 2.0, GRID as f32 / 2.0);
-            let to_canvas = |x: f32, y: f32| {
-                (
-                    BX + (x - cx) / STAGE * BS,
-                    BY + (y - cy) / STAGE * BS,
-                )
-            };
+            let to_canvas =
+                |x: f32, y: f32| (BX + (x - cx) / STAGE * BS, BY + (y - cy) / STAGE * BS);
 
             // ── The aggregate: every stuck particle, coloured by radius ──
             // one Plus group for the glow, one ink pass for the particles
@@ -244,12 +244,7 @@ pub fn frame(t: f32) -> WidgetNode {
             };
             let (ccx, ccy) = to_canvas(cx, cy);
             let ring_r = (r_now + 14.0) / STAGE * BS;
-            book.ring(
-                Offset::new(ccx, ccy),
-                ring_r,
-                1.0,
-                alpha(MUTED, 0.35),
-            );
+            book.ring(Offset::new(ccx, ccy), ring_r, 1.0, alpha(MUTED, 0.35));
             // 14 deterministic motes riding the ring — the walkers, en route
             book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
                 for i in 0..14 {
@@ -287,7 +282,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 1.0,
             );
             // M(r) dots, counted live from the revealed prefix
-            let lx = |r: f64| px0 + ((r.ln() / (r_outer.max(2.0) as f64).ln())) as f32 * pw;
+            let lx = |r: f64| px0 + (r.ln() / (r_outer.max(2.0) as f64).ln()) as f32 * pw;
             let m_max = reveal.max(2) as f64;
             let ly = |m: f64| py0 + ph - ((m / m_max) as f32) * (ph - 18.0);
             let mut started = false;
@@ -333,14 +328,20 @@ fn fit_intercept(d: f64) -> f64 {
     let pts: Vec<(f64, f64)> = (8..(structure_radius(agg) as usize).max(10))
         .step_by(3)
         .map(|r| {
-            let m = agg.iter().filter(|p| (p.x - cx).hypot(p.y - cy) <= r as f32).count();
+            let _m = agg
+                .iter()
+                .filter(|p| (p.x - cx).hypot(p.y - cy) <= r as f32)
+                .count();
             (r as f64).ln()
         })
         .zip(
             (8..(structure_radius(agg) as usize).max(10))
                 .step_by(3)
                 .map(|r| {
-                    let m = agg.iter().filter(|p| (p.x - cx).hypot(p.y - cy) <= r as f32).count();
+                    let m = agg
+                        .iter()
+                        .filter(|p| (p.x - cx).hypot(p.y - cy) <= r as f32)
+                        .count();
                     (m.max(2) as f64).ln()
                 }),
         )
@@ -401,7 +402,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

@@ -177,7 +177,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(Arm { time, _clock: clock }),
+                .child(Arm {
+                    time,
+                    _clock: clock,
+                }),
         );
     })
 }

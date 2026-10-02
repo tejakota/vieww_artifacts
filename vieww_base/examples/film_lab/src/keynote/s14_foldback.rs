@@ -6,19 +6,19 @@
 //! one thing. Kishōtenketsu's reconciliation begins by taking the world
 //! apart again, quickly, and handing it back as a workbench.
 
-use vieww_foundation::{Color, Offset, Rect, Sketchbook, Size, Transform3};
+use vieww_foundation::{Color, Rect, Size, Sketchbook, Transform3};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, mix, spring_out, tint, xywh, BG_DEEP, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, ease_in_out, mix, spring_out, tint, BG_DEEP};
 
 use super::studio::{studio, App, Code, Spec};
-use super::{C_DESC, C_GEOM, C_IDENT, Ctx};
+use super::{Ctx, C_DESC, C_GEOM, C_IDENT};
 
 const FOCAL: f32 = 1500.0;
 const SPINE_Y: f32 = 660.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -35,7 +35,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     app.dial = 1.0;
     app.spring = 1.0;
     let spec = Spec {
-        code: Code::Say { typed: 1.0, blink: ctx.sec },
+        code: Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app,
         session_line: 1.0,
         ..Spec::default()
@@ -45,53 +48,75 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 
     if studio_a < 1.0 {
         stack = stack.push(
-            Positioned::fill().child(Opacity::new(1.0 - studio_a).child(
-                Container::new().size(1920.0, 1080.0).color(Color::rgb(6, 6, 9)),
-            )),
+            Positioned::fill().child(
+                Opacity::new(1.0 - studio_a).child(
+                    Container::new()
+                        .size(1920.0, 1080.0)
+                        .color(Color::rgb(6, 6, 9)),
+                ),
+            ),
         );
     }
     if studio_a > 0.0 {
-        stack = stack.push(Positioned::fill().child(Opacity::new(studio_a).child(studio(abs, ctx.ladder, spec))));
+        stack = stack.push(
+            Positioned::fill().child(Opacity::new(studio_a).child(studio(abs, ctx.ladder, spec))),
+        );
     }
 
     // The folding planes — three quads rising back to edge-on.
     if unfold > 0.01 {
         let planes = [
-            (Rect::new(468.0, 452.0, 828.0, SPINE_Y), C_DESC, 0.0f32, -0.46f32),
-            (Rect::new(852.0, 452.0, 1212.0, SPINE_Y), C_IDENT, 0.06, -0.58),
-            (Rect::new(1236.0, 452.0, 1596.0, SPINE_Y), C_GEOM, 0.12, -0.70),
+            (
+                Rect::new(468.0, 452.0, 828.0, SPINE_Y),
+                C_DESC,
+                0.0f32,
+                -0.46f32,
+            ),
+            (
+                Rect::new(852.0, 452.0, 1212.0, SPINE_Y),
+                C_IDENT,
+                0.06,
+                -0.58,
+            ),
+            (
+                Rect::new(1236.0, 452.0, 1596.0, SPINE_Y),
+                C_GEOM,
+                0.12,
+                -0.70,
+            ),
         ];
         let k = 0.82 + 0.18 * fold; // the world group returns too
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    for (rest, color, stagger, tilt_rest) in planes {
-                        // The unfold's timeline reversed: where S13 ended
-                        // (settled), S14 begins, and it folds to edge-on.
-                        let tau = clamp01((unfold - stagger) / 0.5);
-                        let s = spring_out(tau, 6.4, 0.8);
-                        let tilt = tilt_rest + (1.0 - s) * (-std::f32::consts::FRAC_PI_2 + 0.06 - tilt_rest);
-                        let xf = Transform3::translation(0.0, -SPINE_Y, 0.0)
-                            .then(Transform3::rotation_x(tilt))
-                            .then(Transform3::translation(0.0, SPINE_Y, 0.0))
-                            .then(Transform3::perspective(FOCAL));
-                        let Some(quad) = xf.project_rect(rest) else { continue };
-                        book.layer(clamp01(tau * 1.2), 0.0, None, |g| {
-                            g.fill(
-                                quad.clone(),
-                                Gradient::vertical().with_dither().with_stops(&[
-                                    (0.0, alpha(mix(color, BG_DEEP, 0.72), 0.30)),
-                                    (1.0, alpha(mix(color, BG_DEEP, 0.82), 0.22)),
-                                ]),
-                            );
-                        });
-                        book.stroke(quad, alpha(tint(color, 0.25), 0.7 * clamp01(tau)), 1.4);
-                    }
-                    let _ = k;
-                }),
-            )),
-        );
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                for (rest, color, stagger, tilt_rest) in planes {
+                    // The unfold's timeline reversed: where S13 ended
+                    // (settled), S14 begins, and it folds to edge-on.
+                    let tau = clamp01((unfold - stagger) / 0.5);
+                    let s = spring_out(tau, 6.4, 0.8);
+                    let tilt =
+                        tilt_rest + (1.0 - s) * (-std::f32::consts::FRAC_PI_2 + 0.06 - tilt_rest);
+                    let xf = Transform3::translation(0.0, -SPINE_Y, 0.0)
+                        .then(Transform3::rotation_x(tilt))
+                        .then(Transform3::translation(0.0, SPINE_Y, 0.0))
+                        .then(Transform3::perspective(FOCAL));
+                    let Some(quad) = xf.project_rect(rest) else {
+                        continue;
+                    };
+                    book.layer(clamp01(tau * 1.2), 0.0, None, |g| {
+                        g.fill(
+                            quad.clone(),
+                            Gradient::vertical().with_dither().with_stops(&[
+                                (0.0, alpha(mix(color, BG_DEEP, 0.72), 0.30)),
+                                (1.0, alpha(mix(color, BG_DEEP, 0.82), 0.22)),
+                            ]),
+                        );
+                    });
+                    book.stroke(quad, alpha(tint(color, 0.25), 0.7 * clamp01(tau)), 1.4);
+                }
+                let _ = k;
+            }),
+        )));
     }
 
     stack.into()

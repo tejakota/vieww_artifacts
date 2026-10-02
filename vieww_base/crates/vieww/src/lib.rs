@@ -75,17 +75,17 @@
 pub use vieww_animation as animation;
 pub use vieww_audio as audio;
 pub use vieww_effects as effects;
-pub use vieww_embed as embed;
-pub use vieww_mesh as mesh;
-pub use vieww_network as network;
-pub use vieww_physics as physics;
-pub use vieww_video as video;
 pub use vieww_element as element;
+pub use vieww_embed as embed;
 pub use vieww_foundation as foundation;
 pub use vieww_gestures as gestures;
+pub use vieww_mesh as mesh;
+pub use vieww_network as network;
 pub use vieww_paint as paint;
+pub use vieww_physics as physics;
 pub use vieww_render as render;
 pub use vieww_text as text;
+pub use vieww_video as video;
 pub use vieww_widget as widget;
 
 pub use vieww_animation::{
@@ -93,23 +93,17 @@ pub use vieww_animation::{
     Keyframes, Lerp, LoopMode, Motion, Particle, ParticleField, Simulation, Spring, StateMachine,
     Ticker, Tickers, Timeline, TimelineFrame, Tween, Wave as LfoWave,
 };
-pub use vieww_audio::{
-    AudioPlayer, Envelope, MixError, Mixer, NoAudio, PlaybackHandle, RecordingPlayer,
-    RecordedCommand, Samples, Sound, Tone, Waveform,
-};
-pub use vieww_audio::analysis::{Spectrum, Window as AnalysisWindow};
-pub use vieww_embed::{WebContent, WebView, WEB_VIEW_KIND};
-pub use vieww_mesh::{parse_obj, parse_stl, Mesh, MeshError, Point3, TexCoord};
-pub use vieww_network::{
-    HttpClient, HttpRequest, HttpResponse, MemoryClient, Method, NetError, NoNetwork, Scheme, Url,
-};
-pub use vieww_physics::{collide, Body, Contact, Joint, Shape as PhysicsShape, World};
-pub use vieww_video::{FrameSequence, GeneratedVideo, Pattern, VideoPlayer, VideoSource};
 pub use vieww_asset::{AssetBundle, AssetError, DirectoryBundle, EmbeddedBundle, ImageCache};
+pub use vieww_audio::analysis::{Spectrum, Window as AnalysisWindow};
+pub use vieww_audio::{
+    AudioPlayer, Envelope, MixError, Mixer, NoAudio, PlaybackHandle, RecordedCommand,
+    RecordingPlayer, Samples, Sound, Tone, Waveform,
+};
 pub use vieww_element::{
     Animation, BuildError, DragController, DragTargetId, Dropped, Element, ElementId, ElementTree,
     ErrorPolicy, Hotspot, Memo, NavigatorController, Runtime, ScrollController, Signal,
 };
+pub use vieww_embed::{WebContent, WebView, WEB_VIEW_KIND};
 /// The decoded-pixel type [`vieww_foundation::Image`], under a name that does
 /// not collide with the [`Image`] *widget* the prelude
 /// re-exports.
@@ -136,16 +130,22 @@ pub use vieww_foundation::{
     TextSelection, Time, ViewMetrics, Weekday,
 };
 pub use vieww_gestures::{Overscroll, Recognized, ScrollPhysics, ScrollPosition};
+pub use vieww_mesh::{parse_obj, parse_stl, Mesh, MeshError, Point3, TexCoord};
+pub use vieww_network::{
+    HttpClient, HttpRequest, HttpResponse, MemoryClient, Method, NetError, NoNetwork, Scheme, Url,
+};
 pub use vieww_paint::{
     Canvas, Damage, FramePhase, FrameScheduler, FrameSink, Layer, LayerId, LayerTree, Paint, Path,
     Scene,
 };
+pub use vieww_physics::{collide, Body, Contact, Joint, Shape as PhysicsShape, World};
 pub use vieww_render::{
     set_render_panic_sink, set_unregistered_render_object_sink, Announcement, Dispatched,
     FocusManager, FrameDriver, HitTestResult, Liveness, PointerRouter, RenderId, RenderObject,
     RenderOwner, RenderTree, Role, ScrollDirection, SemanticsNode, SemanticsTree,
     SliverConstraints, SliverGeometry, OVERLAY_HEIGHT,
 };
+pub use vieww_video::{FrameSequence, GeneratedVideo, Pattern, VideoPlayer, VideoSource};
 // Everything `vieww_widget::prelude` exports, re-exported at the facade's root
 // by *glob* rather than by name.
 //

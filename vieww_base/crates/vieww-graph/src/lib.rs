@@ -80,7 +80,12 @@ pub trait Operator: fmt::Debug {
     fn outputs(&self) -> Vec<&'static str>;
     /// Compute outputs from inputs (missing inputs arrive as `Float(0.0)`)
     /// and parameters.
-    fn cook(&mut self, inputs: &[Value], params: &BTreeMap<String, Value>, ctx: &CookContext) -> Vec<Value>;
+    fn cook(
+        &mut self,
+        inputs: &[Value],
+        params: &BTreeMap<String, Value>,
+        ctx: &CookContext,
+    ) -> Vec<Value>;
     /// Re-cook whenever the clock moves (a Timer CHOP, an LFO).
     fn time_dependent(&self) -> bool {
         false
@@ -207,7 +212,10 @@ impl Graph {
     }
 
     fn port(names: &[&str], port: &str) -> Result<usize, GraphError> {
-        names.iter().position(|n| *n == port).ok_or_else(|| GraphError::NoSuchPort(port.to_owned()))
+        names
+            .iter()
+            .position(|n| *n == port)
+            .ok_or_else(|| GraphError::NoSuchPort(port.to_owned()))
     }
 
     /// Wire `from.output` into `to.input` (replacing any wire already on
@@ -216,14 +224,25 @@ impl Graph {
     /// # Errors
     ///
     /// Unknown port names or a wire that would close a cycle.
-    pub fn connect(&mut self, from: NodeId, output: &str, to: NodeId, input: &str) -> Result<(), GraphError> {
+    pub fn connect(
+        &mut self,
+        from: NodeId,
+        output: &str,
+        to: NodeId,
+        input: &str,
+    ) -> Result<(), GraphError> {
         let o = Self::port(&self.slots[from.0].op.outputs(), output)?;
         let i = Self::port(&self.slots[to.0].op.inputs(), input)?;
         if from == to || self.reaches(to, from) {
             return Err(GraphError::Cycle);
         }
         self.wires.retain(|w| !(w.to == to && w.input == i));
-        self.wires.push(Wire { from, output: o, to, input: i });
+        self.wires.push(Wire {
+            from,
+            output: o,
+            to,
+            input: i,
+        });
         self.mark_dirty(to);
         Ok(())
     }
@@ -290,7 +309,10 @@ impl Graph {
             return;
         }
         self.time = t;
-        let timed: Vec<NodeId> = (0..self.slots.len()).filter(|&i| self.slots[i].op.time_dependent()).map(NodeId).collect();
+        let timed: Vec<NodeId> = (0..self.slots.len())
+            .filter(|&i| self.slots[i].op.time_dependent())
+            .map(NodeId)
+            .collect();
         for id in timed {
             self.mark_dirty(id);
         }
@@ -352,7 +374,11 @@ impl Graph {
                 self.cook(n);
             }
         }
-        Ok(self.slots[id.0].cache.get(o).cloned().unwrap_or(Value::Float(0.0)))
+        Ok(self.slots[id.0]
+            .cache
+            .get(o)
+            .cloned()
+            .unwrap_or(Value::Float(0.0)))
     }
 
     /// Cook every dirty node (a frame of a TouchDesigner project).
@@ -391,7 +417,12 @@ impl Operator for Constant {
     fn outputs(&self) -> Vec<&'static str> {
         vec!["out"]
     }
-    fn cook(&mut self, _: &[Value], params: &BTreeMap<String, Value>, _: &CookContext) -> Vec<Value> {
+    fn cook(
+        &mut self,
+        _: &[Value],
+        params: &BTreeMap<String, Value>,
+        _: &CookContext,
+    ) -> Vec<Value> {
         vec![params.get("value").cloned().unwrap_or(Value::Float(0.0))]
     }
 }
@@ -409,7 +440,12 @@ impl Operator for Time {
     fn outputs(&self) -> Vec<&'static str> {
         vec!["seconds"]
     }
-    fn cook(&mut self, _: &[Value], params: &BTreeMap<String, Value>, ctx: &CookContext) -> Vec<Value> {
+    fn cook(
+        &mut self,
+        _: &[Value],
+        params: &BTreeMap<String, Value>,
+        ctx: &CookContext,
+    ) -> Vec<Value> {
         vec![Value::Float(ctx.time * p(params, "speed", 1.0))]
     }
     fn time_dependent(&self) -> bool {
@@ -465,10 +501,17 @@ impl Operator for Lfo {
     fn outputs(&self) -> Vec<&'static str> {
         vec!["out"]
     }
-    fn cook(&mut self, i: &[Value], params: &BTreeMap<String, Value>, _: &CookContext) -> Vec<Value> {
+    fn cook(
+        &mut self,
+        i: &[Value],
+        params: &BTreeMap<String, Value>,
+        _: &CookContext,
+    ) -> Vec<Value> {
         let f = p(params, "frequency", 1.0);
         let a = p(params, "amplitude", 1.0);
-        vec![Value::Float(a * (std::f32::consts::TAU * f * i[0].as_f32()).sin() + p(params, "offset", 0.0))]
+        vec![Value::Float(
+            a * (std::f32::consts::TAU * f * i[0].as_f32()).sin() + p(params, "offset", 0.0),
+        )]
     }
 }
 
@@ -485,7 +528,12 @@ impl Operator for Noise {
     fn outputs(&self) -> Vec<&'static str> {
         vec!["out"]
     }
-    fn cook(&mut self, i: &[Value], params: &BTreeMap<String, Value>, _: &CookContext) -> Vec<Value> {
+    fn cook(
+        &mut self,
+        i: &[Value],
+        params: &BTreeMap<String, Value>,
+        _: &CookContext,
+    ) -> Vec<Value> {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let seed = p(params, "seed", 1.0) as u64;
         let n = Perlin::from_seed(seed).noise1(i[0].as_f32() * p(params, "frequency", 1.0));
@@ -506,10 +554,19 @@ impl Operator for Remap {
     fn outputs(&self) -> Vec<&'static str> {
         vec!["out"]
     }
-    fn cook(&mut self, i: &[Value], params: &BTreeMap<String, Value>, _: &CookContext) -> Vec<Value> {
+    fn cook(
+        &mut self,
+        i: &[Value],
+        params: &BTreeMap<String, Value>,
+        _: &CookContext,
+    ) -> Vec<Value> {
         let (a, b) = (p(params, "from_lo", 0.0), p(params, "from_hi", 1.0));
         let (c, d) = (p(params, "to_lo", 0.0), p(params, "to_hi", 1.0));
-        let u = if (b - a).abs() < 1e-12 { 0.0 } else { (i[0].as_f32() - a) / (b - a) };
+        let u = if (b - a).abs() < 1e-12 {
+            0.0
+        } else {
+            (i[0].as_f32() - a) / (b - a)
+        };
         vec![Value::Float(c + (d - c) * u)]
     }
 }
@@ -528,7 +585,11 @@ impl Operator for Switch {
         vec!["out"]
     }
     fn cook(&mut self, i: &[Value], _: &BTreeMap<String, Value>, _: &CookContext) -> Vec<Value> {
-        vec![if i[0].truthy() { i[2].clone() } else { i[1].clone() }]
+        vec![if i[0].truthy() {
+            i[2].clone()
+        } else {
+            i[1].clone()
+        }]
     }
 }
 
@@ -548,7 +609,12 @@ impl Operator for Trail {
     fn outputs(&self) -> Vec<&'static str> {
         vec!["channel"]
     }
-    fn cook(&mut self, i: &[Value], params: &BTreeMap<String, Value>, _: &CookContext) -> Vec<Value> {
+    fn cook(
+        &mut self,
+        i: &[Value],
+        params: &BTreeMap<String, Value>,
+        _: &CookContext,
+    ) -> Vec<Value> {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let len = p(params, "length", 64.0).max(1.0) as usize;
         self.samples.push(i[0].as_f32());
@@ -576,7 +642,12 @@ impl Operator for Expression {
     fn outputs(&self) -> Vec<&'static str> {
         vec!["out"]
     }
-    fn cook(&mut self, i: &[Value], params: &BTreeMap<String, Value>, ctx: &CookContext) -> Vec<Value> {
+    fn cook(
+        &mut self,
+        i: &[Value],
+        params: &BTreeMap<String, Value>,
+        ctx: &CookContext,
+    ) -> Vec<Value> {
         let src = match params.get("expr") {
             Some(Value::Text(t)) => t.clone(),
             _ => "0".to_owned(),
@@ -588,7 +659,11 @@ impl Operator for Expression {
             .with_var("a", Val::Num(i[0].as_f32()))
             .with_var("b", Val::Num(i[1].as_f32()))
             .with_var("c", Val::Num(i[2].as_f32()));
-        let v = self.compiled.as_ref().and_then(|(_, e)| e.eval_num(&scope).ok()).unwrap_or(f32::NAN);
+        let v = self
+            .compiled
+            .as_ref()
+            .and_then(|(_, e)| e.eval_num(&scope).ok())
+            .unwrap_or(f32::NAN);
         vec![Value::Float(v)]
     }
     fn time_dependent(&self) -> bool {
@@ -608,9 +683,15 @@ pub enum ExecNode {
     /// Run each output in order.
     Sequence(usize),
     /// Run `body` `count` times (the index is in variable `index_var`).
-    ForLoop { count: (NodeId, String), index_var: String },
+    ForLoop {
+        count: (NodeId, String),
+        index_var: String,
+    },
     /// Store a data pin in a variable.
-    SetVariable { name: String, value: (NodeId, String) },
+    SetVariable {
+        name: String,
+        value: (NodeId, String),
+    },
     /// Call out to the host (`Print String`, a game function).
     Call(String),
 }
@@ -662,7 +743,14 @@ impl ExecGraph {
         Ok(trace)
     }
 
-    fn run(&mut self, at: ExecId, data: &mut Graph, trace: &mut Vec<String>, depth: usize, index: Option<usize>) -> Result<(), GraphError> {
+    fn run(
+        &mut self,
+        at: ExecId,
+        data: &mut Graph,
+        trace: &mut Vec<String>,
+        depth: usize,
+        index: Option<usize>,
+    ) -> Result<(), GraphError> {
         if depth > 10_000 {
             return Ok(()); // runaway guard
         }
@@ -692,7 +780,8 @@ impl ExecGraph {
                 let n = data.pull(count.0, &count.1)?.as_f32().max(0.0) as usize;
                 for i in 0..n {
                     #[allow(clippy::cast_precision_loss)]
-                    self.variables.insert(index_var.clone(), Value::Float(i as f32));
+                    self.variables
+                        .insert(index_var.clone(), Value::Float(i as f32));
                     if let Some(b) = next(self, 0) {
                         self.run(b, data, trace, depth + 1, Some(i))?;
                     }
@@ -769,7 +858,10 @@ mod tests {
         let (mut g, a, _, sum, dbl) = chain();
         assert_eq!(g.connect(dbl, "out", sum, "a"), Err(GraphError::Cycle));
         assert_eq!(g.connect(sum, "out", sum, "b"), Err(GraphError::Cycle));
-        assert!(matches!(g.connect(a, "nope", sum, "a"), Err(GraphError::NoSuchPort(_))));
+        assert!(matches!(
+            g.connect(a, "nope", sum, "a"),
+            Err(GraphError::NoSuchPort(_))
+        ));
     }
 
     #[test]
@@ -787,7 +879,10 @@ mod tests {
         assert!((g.pull(mix, "out").unwrap().as_f32() - 1.0).abs() < 1e-5);
         g.set_time(2.0);
         g.pull(mix, "out").unwrap();
-        assert_eq!(g.last_cooks, 3, "time, lfo, mix — the constant stays cached");
+        assert_eq!(
+            g.last_cooks, 3,
+            "time, lfo, mix — the constant stays cached"
+        );
         assert_eq!(g.cooks(k), 1);
     }
 
@@ -806,7 +901,10 @@ mod tests {
             g.set_time(s as f32);
             g.cook_all();
         }
-        assert_eq!(g.pull(trail, "channel").unwrap(), Value::Channel(vec![30.0, 40.0, 50.0]));
+        assert_eq!(
+            g.pull(trail, "channel").unwrap(),
+            Value::Channel(vec![30.0, 40.0, 50.0])
+        );
         let r = g.add("r", Remap);
         g.set_param(r, "from_hi", Value::Float(100.0));
         g.set_param(r, "to_hi", Value::Float(1.0));
@@ -824,12 +922,20 @@ mod tests {
         let mut ex = ExecGraph::new();
         let begin = ex.add(ExecNode::Event("BeginPlay".into()));
         let seq = ex.add(ExecNode::Sequence(2));
-        let branch = ex.add(ExecNode::Branch { condition: (cond, "out".into()) });
+        let branch = ex.add(ExecNode::Branch {
+            condition: (cond, "out".into()),
+        });
         let yes = ex.add(ExecNode::Call("Open Door".into()));
         let no = ex.add(ExecNode::Call("Lock Door".into()));
-        let lp = ex.add(ExecNode::ForLoop { count: (three, "out".into()), index_var: "index".into() });
+        let lp = ex.add(ExecNode::ForLoop {
+            count: (three, "out".into()),
+            index_var: "index".into(),
+        });
         let body = ex.add(ExecNode::Call("Spawn".into()));
-        let set = ex.add(ExecNode::SetVariable { name: "spawned".into(), value: (three, "out".into()) });
+        let set = ex.add(ExecNode::SetVariable {
+            name: "spawned".into(),
+            value: (three, "out".into()),
+        });
         ex.then(begin, 0, seq);
         ex.then(seq, 0, branch);
         ex.then(branch, 0, yes);
@@ -838,7 +944,16 @@ mod tests {
         ex.then(lp, 0, body);
         ex.then(lp, 1, set);
         let trace = ex.fire("BeginPlay", &mut data).unwrap();
-        assert_eq!(trace, ["call Open Door", "call Spawn #0", "call Spawn #1", "call Spawn #2", "set spawned = 3.000"]);
+        assert_eq!(
+            trace,
+            [
+                "call Open Door",
+                "call Spawn #0",
+                "call Spawn #1",
+                "call Spawn #2",
+                "set spawned = 3.000"
+            ]
+        );
         data.set_param(cond, "value", Value::Bool(false));
         let trace = ex.fire("BeginPlay", &mut data).unwrap();
         assert_eq!(trace[0], "call Lock Door");

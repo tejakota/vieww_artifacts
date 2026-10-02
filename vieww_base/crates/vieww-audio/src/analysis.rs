@@ -481,12 +481,17 @@ mod tests {
         // and always wins it), but by band energy: the band holding each
         // note must dominate a band holding neither.
         let hold = Duration::from_millis(300);
-        let shape = || {
-            Envelope::attack_release(Duration::from_millis(5), Duration::from_millis(50))
-        };
+        let shape =
+            || Envelope::attack_release(Duration::from_millis(5), Duration::from_millis(50));
         let chord = Mixer::new(44_100)
-            .add(Tone::held(440.0, Waveform::Sine, hold).envelope(shape()), 0.5)
-            .add(Tone::held(1318.0, Waveform::Sine, hold).envelope(shape()), 0.5);
+            .add(
+                Tone::held(440.0, Waveform::Sine, hold).envelope(shape()),
+                0.5,
+            )
+            .add(
+                Tone::held(1318.0, Waveform::Sine, hold).envelope(shape()),
+                0.5,
+            );
         let rendered = chord.render();
         let spectrum = Spectrum::analyze(&rendered, Window::Hann);
 

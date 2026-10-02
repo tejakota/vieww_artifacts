@@ -9,14 +9,14 @@
 //! One twist, eight seconds: everything the film has shown you was the
 //! product drawing itself.
 
-use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_back, ease_out_cubic, mix, spring_out, tint, xywh, BG_DEEP, FAINT, INK, MUTED, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, ease_out_back, tint, xywh, INK, VIOLET_SOFT};
 
 use super::studio::{studio, App, Code, Spec};
-use super::{caption, C_DAMAGE, C_DESC, C_GEOM, C_IDENT, C_SIGNAL, Ctx};
+use super::{caption, Ctx, C_DAMAGE, C_DESC, C_GEOM, C_IDENT, C_SIGNAL};
 
 /// The inspector panel's rect — full-frame coordinates. Its own opening
 /// is the write whose damage lights (E-12).
@@ -33,22 +33,70 @@ struct Row {
 
 fn tree_rows() -> Vec<Row> {
     vec![
-        Row { depth: 0, label: "viewwstudio", color: C_DESC },
-        Row { depth: 1, label: "TitleBar", color: C_DESC },
-        Row { depth: 1, label: "ActivityBar", color: C_DESC },
-        Row { depth: 1, label: "EditorPane", color: C_GEOM },
-        Row { depth: 2, label: "buffer counter.say", color: C_IDENT },
-        Row { depth: 2, label: "Text · say code", color: C_IDENT },
-        Row { depth: 1, label: "PreviewPane", color: C_GEOM },
-        Row { depth: 2, label: "column", color: C_GEOM },
-        Row { depth: 3, label: "heading \"Counter\"", color: C_DESC },
-        Row { depth: 3, label: "label \"Tapped …\"", color: C_DESC },
-        Row { depth: 3, label: "button \"Add one\"", color: C_GEOM },
-        Row { depth: 2, label: "Signal COUNT", color: C_SIGNAL },
+        Row {
+            depth: 0,
+            label: "viewwstudio",
+            color: C_DESC,
+        },
+        Row {
+            depth: 1,
+            label: "TitleBar",
+            color: C_DESC,
+        },
+        Row {
+            depth: 1,
+            label: "ActivityBar",
+            color: C_DESC,
+        },
+        Row {
+            depth: 1,
+            label: "EditorPane",
+            color: C_GEOM,
+        },
+        Row {
+            depth: 2,
+            label: "buffer counter.say",
+            color: C_IDENT,
+        },
+        Row {
+            depth: 2,
+            label: "Text · say code",
+            color: C_IDENT,
+        },
+        Row {
+            depth: 1,
+            label: "PreviewPane",
+            color: C_GEOM,
+        },
+        Row {
+            depth: 2,
+            label: "column",
+            color: C_GEOM,
+        },
+        Row {
+            depth: 3,
+            label: "heading \"Counter\"",
+            color: C_DESC,
+        },
+        Row {
+            depth: 3,
+            label: "label \"Tapped …\"",
+            color: C_DESC,
+        },
+        Row {
+            depth: 3,
+            label: "button \"Add one\"",
+            color: C_GEOM,
+        },
+        Row {
+            depth: 2,
+            label: "Signal COUNT",
+            color: C_SIGNAL,
+        },
     ]
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
 
@@ -59,7 +107,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     app.spring = 1.0;
 
     let spec = Spec {
-        code: Code::Say { typed: 1.0, blink: ctx.sec },
+        code: Code::Say {
+            typed: 1.0,
+            blink: ctx.sec,
+        },
         app,
         session_line: 1.0,
         ..Spec::default()
@@ -79,18 +130,30 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let damage_a = clamp01((t - 0.10) / 0.06) * (1.0 - clamp01((t - 0.45) / 0.20));
 
         stack = stack.push(
-            Positioned::new().left(x).top(r.top).width(r.width()).height(r.height()).child(
-                Painting::sized(
+            Positioned::new()
+                .left(x)
+                .top(r.top)
+                .width(r.width())
+                .height(r.height())
+                .child(Painting::sized(
                     Size::new(r.width(), r.height()),
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                         // The panel body — frosted, over the studio.
-                        book.rrect(xywh(0.0, 0.0, 672.0, 880.0), 14.0, alpha(Color::rgb(14, 14, 19), 0.965));
-                        book.stroke_rrect(xywh(0.0, 0.0, 672.0, 880.0), 14.0, alpha(Color::WHITE, 0.10), 1.0);
+                        book.rrect(
+                            xywh(0.0, 0.0, 672.0, 880.0),
+                            14.0,
+                            alpha(Color::rgb(14, 14, 19), 0.965),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, 672.0, 880.0),
+                            14.0,
+                            alpha(Color::WHITE, 0.10),
+                            1.0,
+                        );
                         // The header rule.
                         book.rect(xywh(0.0, 52.0, 672.0, 1.0), alpha(Color::WHITE, 0.07));
                     }),
-                ),
-            ),
+                )),
         );
 
         // The tree rows — the studio's own widget tree, the reveal's palette.
@@ -124,33 +187,53 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(ry + 7.0)
                     .width(14.0)
                     .height(14.0)
-                    .child(Painting::sized(Size::new(14.0, 14.0), PaintWith::new(
-                        move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(0.0, 0.0, 14.0, 14.0), 4.0, alpha(glyph_color, 0.9 * g_a));
-                        },
-                    ))),
+                    .child(Painting::sized(
+                        Size::new(14.0, 14.0),
+                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                            book.rrect(
+                                xywh(0.0, 0.0, 14.0, 14.0),
+                                4.0,
+                                alpha(glyph_color, 0.9 * g_a),
+                            );
+                        }),
+                    )),
             );
         }
 
         // The panel header + LIVE chip.
         stack = stack
             .push(
-                Positioned::new().left(x + 22.0).top(96.0).width(420.0).height(28.0).child(
-                    Text::new("inspector · viewwstudio (self)")
-                        .style(TextStyle::new(20.0).monospace().letter_spacing(1.4).color(alpha(INK, 0.92))),
-                ),
+                Positioned::new()
+                    .left(x + 22.0)
+                    .top(96.0)
+                    .width(420.0)
+                    .height(28.0)
+                    .child(
+                        Text::new("inspector · viewwstudio (self)").style(
+                            TextStyle::new(20.0)
+                                .monospace()
+                                .letter_spacing(1.4)
+                                .color(alpha(INK, 0.92)),
+                        ),
+                    ),
             )
             .push(
-                Positioned::new().left(x + 560.0).top(94.0).width(90.0).height(30.0).child(
-                    super::chip("live", 14.0, tint(VIOLET_SOFT, 0.25)),
-                ),
+                Positioned::new()
+                    .left(x + 560.0)
+                    .top(94.0)
+                    .width(90.0)
+                    .height(30.0)
+                    .child(super::chip("live", 14.0, tint(VIOLET_SOFT, 0.25))),
             );
 
         // The damage outline — the studio inspecting itself.
         if damage_a > 0.0 {
             stack = stack.push(
-                Positioned::new().left(r.left - 3.0).top(r.top - 3.0)
-                    .width(r.width() + 6.0).height(r.height() + 6.0)
+                Positioned::new()
+                    .left(r.left - 3.0)
+                    .top(r.top - 3.0)
+                    .width(r.width() + 6.0)
+                    .height(r.height() + 6.0)
                     .child(Painting::sized(
                         Size::new(r.width() + 6.0, r.height() + 6.0),
                         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {

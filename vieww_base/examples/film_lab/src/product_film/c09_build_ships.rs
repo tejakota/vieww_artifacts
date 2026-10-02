@@ -17,8 +17,8 @@ use vieww_widget::prelude::*;
 use vieww_widget::WidgetNode;
 
 use super::{
-    ACCENT, Ctx, INK, LEDGER, MUTED, SYN_FUNCTION, SYN_TYPE, W, alpha, caption, chip_row,
-    clamp01, studio_chrome, xywh,
+    alpha, caption, chip_row, clamp01, studio_chrome, xywh, Ctx, ACCENT, INK, LEDGER, MUTED,
+    SYN_FUNCTION, SYN_TYPE, W,
 };
 
 /// The export view's arrival (the script's own).
@@ -34,7 +34,7 @@ const TARGETS: [(&str, &str); 4] = [
     ("iOS", "requires a Mac — Apple's rule, said plainly"),
 ];
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -52,7 +52,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(head_a).child(
                         vieww_widget::Text::new("from the studio, onto the devices")
-                            .style(super::geist(26.0).letter_spacing(1.6).color(alpha(INK, 0.95)))
+                            .style(
+                                super::geist(26.0)
+                                    .letter_spacing(1.6)
+                                    .color(alpha(INK, 0.95)),
+                            )
                             .align(TextAlign::Center),
                     ),
                 ),
@@ -96,17 +100,24 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(300.0 + i as f32 * 52.0 + rise)
                     .width(640.0)
                     .height(44.0)
-                    .child(
-                        vieww_widget::Opacity::new(row_a).child(Painting::sized(
-                            Size::new(640.0, 44.0),
-                            PaintWith::new(move |book: &mut vieww_foundation::Sketchbook, _s: Size| {
-                                book.rrect(xywh(0.0, 0.0, 640.0, 40.0), 8.0, alpha(super::SURFACE_2, 0.92));
-                                book.stroke_rrect(xywh(0.0, 0.0, 640.0, 40.0), 8.0, alpha(LEDGER, 0.25), 1.1);
-                                // The row's status dot.
-                                book.circle(Offset::new(24.0, 20.0), 5.0, alpha(LEDGER, 0.85));
-                            }),
-                        )),
-                    ),
+                    .child(vieww_widget::Opacity::new(row_a).child(Painting::sized(
+                        Size::new(640.0, 44.0),
+                        PaintWith::new(move |book: &mut vieww_foundation::Sketchbook, _s: Size| {
+                            book.rrect(
+                                xywh(0.0, 0.0, 640.0, 40.0),
+                                8.0,
+                                alpha(super::SURFACE_2, 0.92),
+                            );
+                            book.stroke_rrect(
+                                xywh(0.0, 0.0, 640.0, 40.0),
+                                8.0,
+                                alpha(LEDGER, 0.25),
+                                1.1,
+                            );
+                            // The row's status dot.
+                            book.circle(Offset::new(24.0, 20.0), 5.0, alpha(LEDGER, 0.85));
+                        }),
+                    ))),
             );
             stack = stack.push(
                 vieww_widget::Positioned::new()
@@ -117,7 +128,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         vieww_widget::Opacity::new(row_a).child(
                             vieww_widget::Text::new(name.to_string())
-                                .style(super::geist_mono(15.0).letter_spacing(1.4).color(alpha(INK, 0.95)))
+                                .style(
+                                    super::geist_mono(15.0)
+                                        .letter_spacing(1.4)
+                                        .color(alpha(INK, 0.95)),
+                                )
                                 .align(TextAlign::Left),
                         ),
                     ),
@@ -131,7 +146,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         vieww_widget::Opacity::new(row_a * 0.9).child(
                             vieww_widget::Text::new(note.to_string())
-                                .style(super::geist_mono(12.5).letter_spacing(1.0).color(alpha(MUTED, 0.9)))
+                                .style(
+                                    super::geist_mono(12.5)
+                                        .letter_spacing(1.0)
+                                        .color(alpha(MUTED, 0.9)),
+                                )
                                 .align(TextAlign::Left),
                         ),
                     ),
@@ -150,9 +169,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(30.0)
                 .child(
                     vieww_widget::Opacity::new(a).child(
-                        vieww_widget::Text::new("the package lands — four targets, honest labels, no secrets held")
-                            .style(super::geist_mono(16.0).letter_spacing(1.5).color(alpha(LEDGER, 0.95)))
-                            .align(TextAlign::Center),
+                        vieww_widget::Text::new(
+                            "the package lands — four targets, honest labels, no secrets held",
+                        )
+                        .style(
+                            super::geist_mono(16.0)
+                                .letter_spacing(1.5)
+                                .color(alpha(LEDGER, 0.95)),
+                        )
+                        .align(TextAlign::Center),
                     ),
                 ),
         );

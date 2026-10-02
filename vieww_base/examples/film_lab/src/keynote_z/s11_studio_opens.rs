@@ -14,11 +14,12 @@
 //! where the film's own session is, and the captions. The spark takes
 //! its post above the studio's mark — the light found its workshop.
 
-use vieww_widget::prelude::*;
+use super::{
+    caption, chip_row, clamp01, studio_chrome, tint, Ctx, ACCENT, INK, SYN_TYPE, VIOLET_SOFT, W,
+};
 use vieww_widget::WidgetNode;
-use super::{ACCENT, Ctx, INK, MUTED, SYN_TYPE, VIOLET_SOFT, W, act_chip, caption, chip_row, clamp01, studio_chrome, tint};
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -53,7 +54,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .child(
                     vieww_widget::Opacity::new(title_a * 0.8).child(
                         vieww_widget::Text::new("the actual app — not a mock")
-                            .style(super::geist_mono(16.0).letter_spacing(2.2).color(tint(SYN_TYPE, 0.15)))
+                            .style(
+                                super::geist_mono(16.0)
+                                    .letter_spacing(2.2)
+                                    .color(tint(SYN_TYPE, 0.15)),
+                            )
                             .align(vieww_foundation::TextAlign::Center),
                     ),
                 ),

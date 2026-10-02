@@ -373,10 +373,8 @@ impl VulkanDevice {
                     // `R G B A` read back as `R | G<<8 | B<<16 | A<<24`, and
                     // the swap the format wants is byte 0 with byte 2.
                     let count = pixels.len() / 4;
-                    let src =
-                        std::slice::from_raw_parts(pixels.as_ptr().cast::<u32>(), count);
-                    let dst =
-                        std::slice::from_raw_parts_mut(ptr.cast::<u32>(), count);
+                    let src = std::slice::from_raw_parts(pixels.as_ptr().cast::<u32>(), count);
+                    let dst = std::slice::from_raw_parts_mut(ptr.cast::<u32>(), count);
                     for (&s, d) in src.iter().zip(dst.iter_mut()) {
                         *d = ((s & 0x00FF_0000) >> 16)
                             | ((s & 0x0000_00FF) << 16)
@@ -738,9 +736,11 @@ impl VulkanSwapchain {
             }
         };
         self.staging_capacity = bytes;
-        if let Err(e) =
-            unsafe { device.device.bind_buffer_memory(self.staging, self.staging_memory, 0) }
-        {
+        if let Err(e) = unsafe {
+            device
+                .device
+                .bind_buffer_memory(self.staging, self.staging_memory, 0)
+        } {
             self.destroy_upload_resources(device);
             return Err(VulkanError::Vulkan(e.to_string()));
         }
@@ -759,14 +759,13 @@ impl VulkanSwapchain {
             .command_pool(self.command_pool)
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(1);
-        self.command_buffer =
-            match unsafe { device.device.allocate_command_buffers(&cmd_alloc) } {
-                Ok(buffers) => buffers[0],
-                Err(e) => {
-                    self.destroy_upload_resources(device);
-                    return Err(VulkanError::Vulkan(e.to_string()));
-                }
-            };
+        self.command_buffer = match unsafe { device.device.allocate_command_buffers(&cmd_alloc) } {
+            Ok(buffers) => buffers[0],
+            Err(e) => {
+                self.destroy_upload_resources(device);
+                return Err(VulkanError::Vulkan(e.to_string()));
+            }
+        };
         Ok(())
     }
 

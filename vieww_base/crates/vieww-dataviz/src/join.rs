@@ -60,7 +60,10 @@ impl Mix for f32 {
 }
 impl Mix for Offset {
     fn mix(&self, o: &Self, t: f32) -> Self {
-        Offset::new(self.dx + (o.dx - self.dx) * t, self.dy + (o.dy - self.dy) * t)
+        Offset::new(
+            self.dx + (o.dx - self.dx) * t,
+            self.dy + (o.dy - self.dy) * t,
+        )
     }
 }
 impl Mix for Color {
@@ -113,7 +116,10 @@ pub struct Marks<K, T> {
 
 impl<K: std::fmt::Debug, T: std::fmt::Debug> std::fmt::Debug for Marks<K, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Marks").field("len", &self.marks.len()).field("duration", &self.duration).finish_non_exhaustive()
+        f.debug_struct("Marks")
+            .field("len", &self.marks.len())
+            .field("duration", &self.duration)
+            .finish_non_exhaustive()
     }
 }
 
@@ -160,7 +166,16 @@ impl<K: Eq + Hash + Clone + Ord, T: Mix> Marks<K, T> {
                 Some(m) => self.value(m),
                 None => enter(&v),
             };
-            self.marks.insert(k, Mark { from, to: v, age: 0.0, phase: Phase::Entering, order });
+            self.marks.insert(
+                k,
+                Mark {
+                    from,
+                    to: v,
+                    age: 0.0,
+                    phase: Phase::Entering,
+                    order,
+                },
+            );
         }
         for (k, _, new) in j.update {
             let now = self.marks.get(&k).map(|m| self.value(m));
@@ -206,7 +221,11 @@ impl<K: Eq + Hash + Clone + Ord, T: Mix> Marks<K, T> {
             .map(|(k, _)| k.clone())
             .collect();
         for k in done {
-            if self.marks.get(&k).is_some_and(|m| m.phase == Phase::Exiting) {
+            if self
+                .marks
+                .get(&k)
+                .is_some_and(|m| m.phase == Phase::Exiting)
+            {
                 self.marks.remove(&k);
             } else if let Some(m) = self.marks.get_mut(&k) {
                 m.phase = Phase::Settled;
@@ -217,7 +236,11 @@ impl<K: Eq + Hash + Clone + Ord, T: Mix> Marks<K, T> {
     /// Every live mark `(key, value now, phase)`, sorted by key.
     #[must_use]
     pub fn current(&self) -> Vec<(K, T, Phase)> {
-        let mut v: Vec<(K, T, Phase)> = self.marks.iter().map(|(k, m)| (k.clone(), self.value(m), m.phase)).collect();
+        let mut v: Vec<(K, T, Phase)> = self
+            .marks
+            .iter()
+            .map(|(k, m)| (k.clone(), self.value(m), m.phase))
+            .collect();
         v.sort_by(|a, b| a.0.cmp(&b.0));
         v
     }
@@ -254,7 +277,10 @@ mod tests {
         m.advance(0.5);
         let mid = m.current();
         assert_eq!(mid[0].2, Phase::Entering);
-        assert!((mid[0].1 - 5.0).abs() < 1e-4, "halfway in (eased 0.5 = 0.5)");
+        assert!(
+            (mid[0].1 - 5.0).abs() < 1e-4,
+            "halfway in (eased 0.5 = 0.5)"
+        );
         m.advance(0.6);
         assert!(m.current().iter().all(|x| x.2 == Phase::Settled));
         m.data(&[("b", 40.0), ("c", 7.0)], |_| 0.0, |_| 0.0);
@@ -276,7 +302,10 @@ mod tests {
         m.advance(0.5);
         let mid = m.current()[0].1;
         m.data(&[(1, 0.0)], |v| *v, |v| *v);
-        assert!((m.current()[0].1 - mid).abs() < 1e-4, "no jump on interruption");
+        assert!(
+            (m.current()[0].1 - mid).abs() < 1e-4,
+            "no jump on interruption"
+        );
     }
 
     #[test]

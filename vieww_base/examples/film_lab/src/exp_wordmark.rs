@@ -39,13 +39,14 @@ use vieww_foundation::{
 use vieww_paint::native::{outline_glyph, units_per_em};
 use vieww_text::{FontStore, Paragraph, TextSpan};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, mix, BG_DEEP, CANVAS, FAINT, INK, MUTED, Rng, VIOLET,
-    VIOLET_SOFT, VIOLET_DEEP};
+use crate::film_lib::{
+    alpha, clamp01, mix, Rng, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET, VIOLET_DEEP, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The wordmark, verbatim — lowercase, the mark's own voice.
 const MARK: &str = "vieww";
@@ -116,11 +117,7 @@ impl Mark {
         // shaping layer hands over ids and offsets, the door hands back
         // outlines, and the caller does the same scale-and-place arithmetic
         // `place_glyph` performs before flattening.
-        let mut store = FontStore::with_application_faces(
-            [bytes.clone()],
-            Some("Carlito"),
-            None,
-        );
+        let mut store = FontStore::with_application_faces([bytes.clone()], Some("Carlito"), None);
         let paragraph = Paragraph::layout(
             &mut store,
             &[TextSpan::new(MARK, TextStyle::new(EM))],
@@ -140,9 +137,12 @@ impl Mark {
         for run in paragraph.runs() {
             for (i, glyph) in run.glyphs.iter().enumerate() {
                 glyph_count += 1;
-                let Some(outline) =
-                    outline_glyph(run.font.bytes(), face_index, glyph.id, run.font.variations())
-                else {
+                let Some(outline) = outline_glyph(
+                    run.font.bytes(),
+                    face_index,
+                    glyph.id,
+                    run.font.variations(),
+                ) else {
                     continue;
                 };
                 // Place: font units → px, then to (shaped offset +
@@ -194,8 +194,16 @@ impl Mark {
 
         // Ascent/descent from the actual outline extremes, relative to the
         // baseline (letters are placed AT the baseline).
-        let ascent = if top.is_finite() { BASELINE - top } else { EM * 0.75 };
-        let descent = if bottom.is_finite() { bottom - BASELINE } else { EM * 0.25 };
+        let ascent = if top.is_finite() {
+            BASELINE - top
+        } else {
+            EM * 0.75
+        };
+        let descent = if bottom.is_finite() {
+            bottom - BASELINE
+        } else {
+            EM * 0.25
+        };
 
         Mark {
             letters,
@@ -279,10 +287,18 @@ fn wordmark(book: &mut Sketchbook, t: f32) {
         .transformed(Transform::translate(Offset::new(left, 0.0)));
     if reveal > 0.0 {
         let cut = left + (mark.advance + 10.0) * reveal;
-        let clip = Path::rect(Rect::new(left - 4.0, BASELINE - mark.ascent - 30.0, cut,
-            BASELINE + mark.descent + 30.0));
+        let clip = Path::rect(Rect::new(
+            left - 4.0,
+            BASELINE - mark.ascent - 30.0,
+            cut,
+            BASELINE + mark.descent + 30.0,
+        ));
         book.layer(1.0, 0.0, Some(clip), |g| {
-            g.stroke(placed.clone(), alpha(mix(INK, VIOLET_SOFT, 0.25), 0.92), SKELETON_W);
+            g.stroke(
+                placed.clone(),
+                alpha(mix(INK, VIOLET_SOFT, 0.25), 0.92),
+                SKELETON_W,
+            );
         });
     }
 
@@ -305,8 +321,12 @@ fn wordmark(book: &mut Sketchbook, t: f32) {
         let fade = (glint * (1.0 - glint) * 4.0).sqrt();
         book.blended_layer(1.0, 6.0, BlendMode::Plus, None, |g| {
             g.rect(
-                Rect::new(x - 26.0, BASELINE - mark.ascent - 8.0, x + 26.0,
-                    BASELINE + mark.descent + 8.0),
+                Rect::new(
+                    x - 26.0,
+                    BASELINE - mark.ascent - 8.0,
+                    x + 26.0,
+                    BASELINE + mark.descent + 8.0,
+                ),
                 Gradient::horizontal().with_stops(&[
                     (0.0, alpha(Color::WHITE, 0.0)),
                     (0.5, alpha(mix(Color::WHITE, VIOLET_SOFT, 0.3), 0.30 * fade)),
@@ -320,8 +340,10 @@ fn wordmark(book: &mut Sketchbook, t: f32) {
     //    in a blurred group, faded out by the ground gradient painted over it.
     let reflect = clamp01((t - REFLECT_T0) / REFLECT_SPAN);
     if reflect > 0.0 {
-        let mirror = Transform::scale(1.0, -1.0)
-            .then(Transform::translate(Offset::new(left, 2.0 * (BASELINE + 9.0))));
+        let mirror = Transform::scale(1.0, -1.0).then(Transform::translate(Offset::new(
+            left,
+            2.0 * (BASELINE + 9.0),
+        )));
         let flipped = mark.all.transformed(mirror);
         book.layer(reflect, 2.5, None, |g| {
             g.fill(flipped, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.2), 0.14));
@@ -340,10 +362,9 @@ fn wordmark(book: &mut Sketchbook, t: f32) {
         g.circle(
             Offset::new(left + mark.advance * 0.5, BASELINE + 10.0),
             mark.advance * 0.42,
-            Gradient::radial_fill().with_dither().with_stops(&[
-                (0.0, alpha(VIOLET, 0.10)),
-                (1.0, alpha(VIOLET, 0.0)),
-            ]),
+            Gradient::radial_fill()
+                .with_dither()
+                .with_stops(&[(0.0, alpha(VIOLET, 0.10)), (1.0, alpha(VIOLET, 0.0))]),
         );
     });
 }
@@ -380,16 +401,8 @@ fn receipt(book: &mut Sketchbook, t: f32) {
     book.circle(
         dial_c,
         dial_r,
-        Gradient::sweep(
-            Offset::new(0.5, 0.5),
-            theta - std::f32::consts::TAU,
-            theta,
-        )
-        .with_stops_mirrored(&[
-            (0.0, VIOLET_DEEP),
-            (0.30, VIOLET),
-            (0.5, Color::WHITE),
-        ]),
+        Gradient::sweep(Offset::new(0.5, 0.5), theta - std::f32::consts::TAU, theta)
+            .with_stops_mirrored(&[(0.0, VIOLET_DEEP), (0.30, VIOLET), (0.5, Color::WHITE)]),
     );
     book.ring(dial_c, dial_r, 1.0, alpha(Color::WHITE, 0.14));
     // The needle — a hairline at the sweep's end, through the phase.
@@ -451,31 +464,44 @@ fn receipt_labels(t: f32) -> WidgetNode {
 
     let lines = [
         "X-03 · WORDMARK · OUTLINE DOOR (U-03)".to_string(),
-        format!("glyphs {} · outlines {} · upem {:.0}", mark.glyph_count, mark.letters.len(), mark.upem),
-        format!("advance {:.0}px @ {:.0}em · track {:.0}px", mark.advance, EM, TRACKING),
-        format!("chrome stops {} · wrapped {} → re-sorted", stops.len(), wrapped),
-        format!("reveal {:.0}% · fill {:.0}% · phase {:.2}",
+        format!(
+            "glyphs {} · outlines {} · upem {:.0}",
+            mark.glyph_count,
+            mark.letters.len(),
+            mark.upem
+        ),
+        format!(
+            "advance {:.0}px @ {:.0}em · track {:.0}px",
+            mark.advance, EM, TRACKING
+        ),
+        format!(
+            "chrome stops {} · wrapped {} → re-sorted",
+            stops.len(),
+            wrapped
+        ),
+        format!(
+            "reveal {:.0}% · fill {:.0}% · phase {:.2}",
             clamp01((t - REVEAL_T0) / REVEAL_SPAN) * 100.0,
             clamp01((t - FILL_T0) / FILL_SPAN) * 100.0,
-            phase),
+            phase
+        ),
     ];
 
-    let mut stack = Stack::new()
-        .push(
-            Positioned::new()
-                .left(P_X + 16.0)
-                .top(P_Y - 22.0)
-                .width(P_W)
-                .height(18.0)
-                .child(
-                    Text::new(lines[0].clone()).style(
-                        TextStyle::new(12.0)
-                            .monospace()
-                            .letter_spacing(2.2)
-                            .color(alpha(FAINT, 0.95)),
-                    ),
+    let mut stack = Stack::new().push(
+        Positioned::new()
+            .left(P_X + 16.0)
+            .top(P_Y - 22.0)
+            .width(P_W)
+            .height(18.0)
+            .child(
+                Text::new(lines[0].clone()).style(
+                    TextStyle::new(12.0)
+                        .monospace()
+                        .letter_spacing(2.2)
+                        .color(alpha(FAINT, 0.95)),
                 ),
-        );
+            ),
+    );
     for (i, line) in lines.iter().enumerate().skip(1) {
         stack = stack.push(
             Positioned::new()
@@ -484,11 +510,8 @@ fn receipt_labels(t: f32) -> WidgetNode {
                 .width(P_W - 12.0)
                 .height(16.0)
                 .child(
-                    Text::new(line.clone()).style(
-                        TextStyle::new(11.5)
-                            .monospace()
-                            .color(alpha(MUTED, 0.92)),
-                    ),
+                    Text::new(line.clone())
+                        .style(TextStyle::new(11.5).monospace().color(alpha(MUTED, 0.92))),
                 ),
         );
     }
@@ -497,7 +520,7 @@ fn receipt_labels(t: f32) -> WidgetNode {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -545,10 +568,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.45), 0.85).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.45), 0.85)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );

@@ -14,11 +14,13 @@
 
 use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{ease_out_cubic};
-use super::{CANVAS, Ctx, FAINT, H, INK, MINT, MUTED, VIOLET, VIOLET_SOFT, W, alpha, caption, chip, chip_row, clamp01, damage_rect, flash, grain, ground, mix, mono, mono_w, stars, tint, vignette, xywh};
-
+use super::{
+    alpha, caption, clamp01, mix, mono_w, tint, xywh, Ctx, FAINT, INK, MINT, MUTED, VIOLET,
+    VIOLET_SOFT, W,
+};
+use crate::film_lib::ease_out_cubic;
 
 /// The mock window's geometry.
 const WX: f32 = 430.0;
@@ -32,10 +34,15 @@ const CELL: f32 = 59.0;
 /// The odometer: which digit flips, and when (scene fraction, digit).
 /// The flips are the writes; each one damages only its own cells.
 const FLIPS: [(f32, usize); 6] = [
-    (0.20, 5), (0.30, 4), (0.42, 3), (0.56, 5), (0.68, 4), (0.82, 3),
+    (0.20, 5),
+    (0.30, 4),
+    (0.42, 3),
+    (0.56, 5),
+    (0.68, 4),
+    (0.82, 3),
 ];
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -90,34 +97,97 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         Size::new(WW, WH),
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             // The body — dark glass.
-            book.rrect(xywh(0.0, 0.0, WW, WH), 16.0, alpha(Color::rgb(17, 17, 22), 0.97));
+            book.rrect(
+                xywh(0.0, 0.0, WW, WH),
+                16.0,
+                alpha(Color::rgb(17, 17, 22), 0.97),
+            );
             book.stroke_rrect(xywh(0.0, 0.0, WW, WH), 16.0, alpha(Color::WHITE, 0.08), 1.0);
             // The header band.
-            book.rrect(xywh(0.0, 0.0, WW, 64.0), 16.0, alpha(Color::rgb(22, 22, 29), 0.9));
-            book.rect(xywh(0.0, 48.0, WW, 16.0), alpha(Color::rgb(22, 22, 29), 0.9));
+            book.rrect(
+                xywh(0.0, 0.0, WW, 64.0),
+                16.0,
+                alpha(Color::rgb(22, 22, 29), 0.9),
+            );
+            book.rect(
+                xywh(0.0, 48.0, WW, 16.0),
+                alpha(Color::rgb(22, 22, 29), 0.9),
+            );
             // Traffic dots.
-            for (i, c) in [Color::rgb(255, 95, 86), Color::rgb(255, 189, 46), Color::rgb(39, 201, 63)].iter().enumerate() {
-                book.circle(Offset::new(28.0 + i as f32 * 24.0, 32.0), 6.0, alpha(*c, 0.8));
+            for (i, c) in [
+                Color::rgb(255, 95, 86),
+                Color::rgb(255, 189, 46),
+                Color::rgb(39, 201, 63),
+            ]
+            .iter()
+            .enumerate()
+            {
+                book.circle(
+                    Offset::new(28.0 + i as f32 * 24.0, 32.0),
+                    6.0,
+                    alpha(*c, 0.8),
+                );
             }
             // The sidebar.
-            book.rect(xywh(0.0, 64.0, 190.0, WH - 64.0), alpha(Color::rgb(14, 14, 19), 0.9));
-            book.line(Offset::new(190.0, 64.0), Offset::new(190.0, WH), alpha(Color::WHITE, 0.05), 1.0);
+            book.rect(
+                xywh(0.0, 64.0, 190.0, WH - 64.0),
+                alpha(Color::rgb(14, 14, 19), 0.9),
+            );
+            book.line(
+                Offset::new(190.0, 64.0),
+                Offset::new(190.0, WH),
+                alpha(Color::WHITE, 0.05),
+                1.0,
+            );
             // Sidebar rows — nav items.
             for r in 0..7 {
                 let ry = 100.0 + r as f32 * 44.0;
-                book.rrect(xywh(18.0, ry, 154.0, 20.0), 5.0, alpha(if r == 0 { VIOLET_SOFT } else { MUTED }, if r == 0 { 0.16 } else { 0.09 }));
-                book.rrect(xywh(18.0, ry + 26.0, 90.0 + r as f32 * 6.0, 8.0), 3.0, alpha(MUTED, 0.07));
+                book.rrect(
+                    xywh(18.0, ry, 154.0, 20.0),
+                    5.0,
+                    alpha(
+                        if r == 0 { VIOLET_SOFT } else { MUTED },
+                        if r == 0 { 0.16 } else { 0.09 },
+                    ),
+                );
+                book.rrect(
+                    xywh(18.0, ry + 26.0, 90.0 + r as f32 * 6.0, 8.0),
+                    3.0,
+                    alpha(MUTED, 0.07),
+                );
             }
             // Content rows — text lines as bars, an image block.
             for r in 0..5 {
                 let ry = 360.0 + r as f32 * 34.0;
-                book.rrect(xywh(240.0, ry, 420.0 - r as f32 * 40.0, 12.0), 4.0, alpha(MUTED, 0.12));
+                book.rrect(
+                    xywh(240.0, ry, 420.0 - r as f32 * 40.0, 12.0),
+                    4.0,
+                    alpha(MUTED, 0.12),
+                );
             }
-            book.rrect(xywh(760.0, 356.0, 240.0, 160.0), 10.0, alpha(mix(VIOLET, Color::rgb(16, 16, 21), 0.75), 0.5));
-            book.stroke_rrect(xywh(760.0, 356.0, 240.0, 160.0), 10.0, alpha(VIOLET_SOFT, 0.25), 1.0);
+            book.rrect(
+                xywh(760.0, 356.0, 240.0, 160.0),
+                10.0,
+                alpha(mix(VIOLET, Color::rgb(16, 16, 21), 0.75), 0.5),
+            );
+            book.stroke_rrect(
+                xywh(760.0, 356.0, 240.0, 160.0),
+                10.0,
+                alpha(VIOLET_SOFT, 0.25),
+                1.0,
+            );
             // The odometer's frame — a chip in the content area.
-            book.rrect(xywh(230.0, 216.0, 620.0, 124.0), 12.0, alpha(Color::rgb(20, 20, 26), 0.9));
-            book.stroke_rrect(xywh(230.0, 216.0, 620.0, 124.0), 12.0, alpha(VIOLET_SOFT, 0.18), 1.0);
+            book.rrect(
+                xywh(230.0, 216.0, 620.0, 124.0),
+                12.0,
+                alpha(Color::rgb(20, 20, 26), 0.9),
+            );
+            book.stroke_rrect(
+                xywh(230.0, 216.0, 620.0, 124.0),
+                12.0,
+                alpha(VIOLET_SOFT, 0.18),
+                1.0,
+            );
         }),
     );
     stack = stack.push(
@@ -143,11 +213,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(WY + 244.0)
                 .width(mono_w(58.0, 1) + 8.0)
                 .height(70.0)
-                .child(Opacity::new(frame_in).child(
-                    Text::new(ch.to_string())
-                        .style(TextStyle::new(58.0).monospace().weight(vieww_foundation::FontWeight::Medium).color(alpha(tint(MINT, 0.1), lit)))
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(frame_in).child(
+                        Text::new(ch.to_string())
+                            .style(
+                                TextStyle::new(58.0)
+                                    .monospace()
+                                    .weight(vieww_foundation::FontWeight::Medium)
+                                    .color(alpha(tint(MINT, 0.1), lit)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         );
     }
     // The odometer's label.
@@ -157,11 +234,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(WY + 186.0)
             .width(400.0)
             .height(24.0)
-            .child(Opacity::new(frame_in).child(
-                Text::new("the odometer — six writes, one frame")
-                    .style(TextStyle::new(15.0).monospace().letter_spacing(1.8).color(alpha(MUTED, 0.9)))
-                    .align(TextAlign::Left),
-            )),
+            .child(
+                Opacity::new(frame_in).child(
+                    Text::new("the odometer — six writes, one frame")
+                        .style(
+                            TextStyle::new(15.0)
+                                .monospace()
+                                .letter_spacing(1.8)
+                                .color(alpha(MUTED, 0.9)),
+                        )
+                        .align(TextAlign::Left),
+                ),
+            ),
     );
 
     // THE DAMAGE GRID — the inspector's overlay: cell boundaries, faint,
@@ -174,17 +258,34 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 let mut x = CELL;
                 while x < WW {
-                    book.line(Offset::new(x, 64.0), Offset::new(x, WH), alpha(Color::WHITE, 0.035 * grid_a), 0.7);
+                    book.line(
+                        Offset::new(x, 64.0),
+                        Offset::new(x, WH),
+                        alpha(Color::WHITE, 0.035 * grid_a),
+                        0.7,
+                    );
                     x += CELL;
                 }
                 let mut y = 64.0 + CELL;
                 while y < WH {
-                    book.line(Offset::new(0.0, y), Offset::new(WW, y), alpha(Color::WHITE, 0.035 * grid_a), 0.7);
+                    book.line(
+                        Offset::new(0.0, y),
+                        Offset::new(WW, y),
+                        alpha(Color::WHITE, 0.035 * grid_a),
+                        0.7,
+                    );
                     y += CELL;
                 }
             }),
         );
-        stack = stack.push(Positioned::new().left(WX).top(WY).width(WW).height(WH).child(grid));
+        stack = stack.push(
+            Positioned::new()
+                .left(WX)
+                .top(WY)
+                .width(WW)
+                .height(WH)
+                .child(grid),
+        );
     }
 
     // THE DAMAGE RECT — the active flip's cell, blooming and fading over
@@ -199,7 +300,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let local = xywh(20.0, 20.0, rect.width(), rect.height());
                 // The re-raster flash — the cell's pixels, briefly hot.
                 if bloom < 1.0 {
-                    book.rrect(local, 6.0, alpha(tint(VIOLET_SOFT, 0.5), (1.0 - bloom) * 0.35));
+                    book.rrect(
+                        local,
+                        6.0,
+                        alpha(tint(VIOLET_SOFT, 0.5), (1.0 - bloom) * 0.35),
+                    );
                 }
                 super::damage_rect(book, local, a, VIOLET_SOFT);
                 // The cell count — the rect's own arithmetic, printed
@@ -223,11 +328,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(rect.top - 30.0)
                 .width(300.0)
                 .height(24.0)
-                .child(Opacity::new(label_a).child(
-                    Text::new(format!("damage · {}×{} px · 2 cells", rect.width() as u32, rect.height() as u32))
-                        .style(TextStyle::new(14.0).monospace().letter_spacing(1.2).color(alpha(tint(VIOLET_SOFT, 0.3), 0.95)))
+                .child(
+                    Opacity::new(label_a).child(
+                        Text::new(format!(
+                            "damage · {}×{} px · 2 cells",
+                            rect.width() as u32,
+                            rect.height() as u32
+                        ))
+                        .style(
+                            TextStyle::new(14.0)
+                                .monospace()
+                                .letter_spacing(1.2)
+                                .color(alpha(tint(VIOLET_SOFT, 0.3), 0.95)),
+                        )
                         .align(TextAlign::Left),
-                )),
+                    ),
+                ),
         );
     }
 
@@ -237,7 +353,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     let untouched = 100.0 - (touched_cells as f32 / cells_total as f32 * 100.0);
     stack = stack.push(super::chip_row(
         &[
-            (&format!("writes {}", FLIPS.iter().filter(|(ft, _)| t >= *ft).count()), VIOLET_SOFT),
+            (
+                &format!("writes {}", FLIPS.iter().filter(|(ft, _)| t >= *ft).count()),
+                VIOLET_SOFT,
+            ),
             (&format!("cells touched {}", touched_cells), VIOLET_SOFT),
             (&format!("{:.0}% of the frame untouched", untouched), MINT),
         ],
@@ -258,7 +377,13 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         clamp01((t - 0.52) / 0.12),
     ));
 
-    let _ = (FAINT, Rect::new(0.0, 0.0, 1.0, 1.0), super::H, INK, last_flip_age);
+    let _ = (
+        FAINT,
+        Rect::new(0.0, 0.0, 1.0, 1.0),
+        super::H,
+        INK,
+        last_flip_age,
+    );
 
     stack.into()
 }

@@ -11,15 +11,14 @@
 //!
 //! Witness tap 4 (the route changes, 124.5 s) fires here.
 
-use vieww_widget::prelude::*;
+use super::{caption, clamp01, script, studio_chrome, tap_ring_at, Ctx};
 use vieww_widget::WidgetNode;
-use super::{clamp01, script, studio_chrome, tap_ring_at, caption, Ctx};
 
 /// The tap: down at 124.38 s, up at 124.50 s (scene fractions 0.548/0.563).
 const DOWN_T: f32 = 124.38;
 const UP_T: f32 = 124.50;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
     let scene_start = abs - ctx.sec;

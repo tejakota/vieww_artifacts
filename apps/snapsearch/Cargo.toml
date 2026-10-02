@@ -2,7 +2,9 @@
 name = "snapsearch"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+# Honest figure: the framework this app builds on requires 1.89, and the
+# app itself uses `as_chunks` (1.88).
+rust-version = "1.89"
 
 [lib]
 name = "snapsearch"

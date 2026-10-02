@@ -17,16 +17,18 @@
 //! reads the grid. If two cells render identically the axis has found a
 //! bug, and that receipt goes to todo-upgrades.
 
-use vieww_foundation::{BlendMode, Color, FontFamily, Gradient, Offset, Path, Rect, Size,
-    Sketchbook, TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, FontFamily, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, AMBER, BG_DEEP, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
-    CYAN, CYAN_SOFT, MINT};
+use crate::film_lib::{
+    alpha, mix, AMBER, BG_DEEP, CYAN, FAINT, INK, MINT, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The tour: Normal as reference, then every cinematic mode.
 const MODES: [(BlendMode, &str); 16] = [
@@ -81,10 +83,14 @@ fn draw_ground(book: &mut Sketchbook, x0: f32, y0: f32, w: f32, h: f32, t: f32) 
     let bands = 7;
     let band_h = h / bands as f32;
     for k in 0..bands {
-        let lum = 0.5 + 0.5 * ((k as f32 / bands as f32) * std::f32::consts::PI
-            + t * 0.8).sin();
+        let lum = 0.5 + 0.5 * ((k as f32 / bands as f32) * std::f32::consts::PI + t * 0.8).sin();
         book.rect(
-            Rect::new(x0, y0 + k as f32 * band_h, x0 + w, y0 + (k + 1) as f32 * band_h - 1.0),
+            Rect::new(
+                x0,
+                y0 + k as f32 * band_h,
+                x0 + w,
+                y0 + (k + 1) as f32 * band_h - 1.0,
+            ),
             alpha(Color::rgb(210, 205, 225), 0.05 + 0.22 * lum),
         );
     }
@@ -109,7 +115,11 @@ fn draw_ground(book: &mut Sketchbook, x0: f32, y0: f32, w: f32, h: f32, t: f32) 
         let sx = x0 + rng.f01() * w;
         let sy = y0 + rng.f01() * h;
         let r = 1.2 + rng.f01() * 2.0;
-        book.circle(Offset::new(sx, sy), r, alpha(Color::rgb(235, 230, 240), 0.5));
+        book.circle(
+            Offset::new(sx, sy),
+            r,
+            alpha(Color::rgb(235, 230, 240), 0.5),
+        );
     }
 }
 
@@ -121,9 +131,15 @@ fn draw_subject(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, t: f32) {
         let a = spin + k as f32 * std::f32::consts::TAU / 12.0;
         let len = r * (1.18 + 0.24 * ((k as f32 * 1.7 + t * 6.0).sin()));
         let mut ray = Path::new();
-        ray.move_to(Offset::new(cx + (a - 0.10).cos() * r * 0.72, cy + (a - 0.10).sin() * r * 0.72));
+        ray.move_to(Offset::new(
+            cx + (a - 0.10).cos() * r * 0.72,
+            cy + (a - 0.10).sin() * r * 0.72,
+        ));
         ray.line_to(Offset::new(cx + a.cos() * len, cy + a.sin() * len));
-        ray.line_to(Offset::new(cx + (a + 0.10).cos() * r * 0.72, cy + (a + 0.10).sin() * r * 0.72));
+        ray.line_to(Offset::new(
+            cx + (a + 0.10).cos() * r * 0.72,
+            cy + (a + 0.10).sin() * r * 0.72,
+        ));
         ray.close();
         book.fill(ray, alpha(AMBER, 0.30));
     }
@@ -144,7 +160,7 @@ fn draw_subject(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, t: f32) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The tour: one mode per 1/16 of the plate.
     let slot = ((t * 16.0).floor() as usize).min(15);
     let (featured, featured_name) = MODES[slot];
@@ -206,8 +222,10 @@ pub fn frame(t: f32) -> WidgetNode {
                 book.stroke_rrect(
                     Rect::new(x0, y0, x0 + CW, y0 + CH),
                     3.0,
-                    alpha(if active { VIOLET_SOFT } else { FAINT },
-                        if active { 0.95 } else { 0.30 }),
+                    alpha(
+                        if active { VIOLET_SOFT } else { FAINT },
+                        if active { 0.95 } else { 0.30 },
+                    ),
                     if active { 1.8 } else { 0.8 },
                 );
             }
@@ -218,7 +236,10 @@ pub fn frame(t: f32) -> WidgetNode {
                 let lit = k == slot;
                 book.rect(
                     Rect::new(kx - 2.5, SY + SH + 16.0, kx + 2.5, SY + SH + 30.0),
-                    alpha(if lit { VIOLET_SOFT } else { FAINT }, if lit { 0.8 } else { 0.28 }),
+                    alpha(
+                        if lit { VIOLET_SOFT } else { FAINT },
+                        if lit { 0.8 } else { 0.28 },
+                    ),
                 );
             }
         }),
@@ -271,14 +292,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 .top(y0 + CH - 17.0)
                 .width(CW - 10.0)
                 .height(14.0)
-                .child(
-                    Text::new((*name).to_string()).style(
-                        TextStyle::new(10.5)
-                            .monospace()
-                            .color(alpha(if active { INK } else { MUTED },
-                                if active { 0.95 } else { 0.75 })),
-                    ),
-                ),
+                .child(Text::new((*name).to_string()).style(
+                    TextStyle::new(10.5).monospace().color(alpha(
+                        if active { INK } else { MUTED },
+                        if active { 0.95 } else { 0.75 },
+                    )),
+                )),
         );
     }
 
@@ -287,12 +306,12 @@ pub fn frame(t: f32) -> WidgetNode {
 
 // ── The receipt ─────────────────────────────────────────────────────────────
 
-fn receipt_panel(t: f32, slot: usize) -> WidgetNode {
+fn receipt_panel(_t: f32, slot: usize) -> WidgetNode {
     let lines = [
         "BLENDMATRIX · THE BLEND-MODE AXIS".to_string(),
         format!("tour {}/16 · {} this frame", slot + 1, MODES[slot].1),
         "15 cinematic + Normal · 4 non-separable (H,S,C,L)".to_string(),
-        format!("17 blended groups/frame · 1 stage + 16 cells"),
+        "17 blended groups/frame · 1 stage + 16 cells".to_string(),
         "subject over shared ground · only the verb changes".to_string(),
     ];
 
@@ -319,7 +338,12 @@ fn receipt_panel(t: f32, slot: usize) -> WidgetNode {
                 book.circle(Offset::new(x, 20.0), 3.0, alpha(MINT, 0.8));
             }
             let px = 12.0 + slot as f32 * ((400.0 - 24.0) / 15.0);
-            book.line(Offset::new(px, 8.0), Offset::new(px, 32.0), alpha(INK, 0.85), 1.2);
+            book.line(
+                Offset::new(px, 8.0),
+                Offset::new(px, 32.0),
+                alpha(INK, 0.85),
+                1.2,
+            );
         }),
     );
 
@@ -336,7 +360,10 @@ fn receipt_panel(t: f32, slot: usize) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

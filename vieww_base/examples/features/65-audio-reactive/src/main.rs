@@ -108,9 +108,7 @@ impl CustomPainter for SpectrumPainter {
 
     fn should_repaint(&self, previous: &dyn CustomPainter) -> bool {
         match previous.as_any().downcast_ref::<Self>() {
-            Some(prev) => {
-                self.bars != prev.bars || self.peak_bin_hz != prev.peak_bin_hz
-            }
+            Some(prev) => self.bars != prev.bars || self.peak_bin_hz != prev.peak_bin_hz,
             None => true,
         }
     }
@@ -123,10 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::WHITE)
                 .padding(EdgeInsets::all(20.0))
-                .child(
-                    Flex::column()
-                        .spacing(16.0)
-                        .children(children![
+                .child(Flex::column().spacing(16.0).children(children![
                             Text::new("A3 + A4 + E5 + A5, as a spectrum").style(TextStyle {
                                 size: 14.0,
                                 color: Color::rgb(90, 100, 120),
@@ -141,8 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 color: Color::rgb(130, 140, 160),
                                 ..TextStyle::default()
                             }),
-                        ]),
-                ),
+                        ])),
         );
     })
 }

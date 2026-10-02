@@ -154,8 +154,7 @@ impl Path {
             "cubic_to({c1:?}, {c2:?}, {end:?}): non-finite control points \
              corrupt the geometry silently (todo-upgrades U-16)"
         );
-        std::sync::Arc::make_mut(&mut self.verbs)
-            .push(PathVerb::CubicTo(c1, c2, end));
+        std::sync::Arc::make_mut(&mut self.verbs).push(PathVerb::CubicTo(c1, c2, end));
         self
     }
 
@@ -1073,7 +1072,12 @@ mod tests {
         // closing edge the caller never asked for. The census counts them,
         // which is also correct — a *filled* partial arc is exactly the
         // chord-bitten pie slice the census exists to flag.
-        let arc = Path::arc(Offset::new(20.0, 20.0), 8.0, 0.0, std::f32::consts::FRAC_PI_2);
+        let arc = Path::arc(
+            Offset::new(20.0, 20.0),
+            8.0,
+            0.0,
+            std::f32::consts::FRAC_PI_2,
+        );
         assert_eq!(arc.open_subpaths(), 1);
     }
 

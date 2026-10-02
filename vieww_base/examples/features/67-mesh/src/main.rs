@@ -202,7 +202,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::rgb(16, 18, 28))
                 .padding(EdgeInsets::all(20.0))
-                .child(Cube { time, _clock: clock }),
+                .child(Cube {
+                    time,
+                    _clock: clock,
+                }),
         );
     })
 }

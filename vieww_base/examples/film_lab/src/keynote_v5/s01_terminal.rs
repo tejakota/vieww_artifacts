@@ -17,9 +17,11 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, shade, tint, xywh, FAINT, INK, MUTED, RED, AMBER, Rng, BG_DEEP};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_cubic, mix, tint, xywh, AMBER, BG_DEEP, INK, MUTED, RED,
+};
 
 use super::{grain, mono_tracked, Ctx, TERM_GREEN};
 
@@ -47,7 +49,7 @@ fn dep_lines() -> Vec<(&'static str, Color, f32)> {
     v
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let abs = ctx.abs;
@@ -87,7 +89,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     book.shadow(
                         xywh(0.0, 10.0, TERM.width(), TERM.height()),
                         14.0,
-                        vieww_foundation::Shadow::new(alpha(Color::BLACK, 0.55), Offset::new(0.0, 22.0), 46.0),
+                        vieww_foundation::Shadow::new(
+                            alpha(Color::BLACK, 0.55),
+                            Offset::new(0.0, 22.0),
+                            46.0,
+                        ),
                     );
                     // The body — near-black, faintly green-washed: the old world.
                     book.rrect(
@@ -102,16 +108,29 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         1.2,
                     );
                     // The title bar.
-                    book.rect(xywh(1.0, 1.0, TERM.width() - 2.0, 44.0), alpha(Color::rgb(17, 20, 18), 0.95));
-                    let dots = [Color::rgb(255, 95, 86), Color::rgb(255, 189, 46), Color::rgb(39, 201, 63)];
+                    book.rect(
+                        xywh(1.0, 1.0, TERM.width() - 2.0, 44.0),
+                        alpha(Color::rgb(17, 20, 18), 0.95),
+                    );
+                    let dots = [
+                        Color::rgb(255, 95, 86),
+                        Color::rgb(255, 189, 46),
+                        Color::rgb(39, 201, 63),
+                    ];
                     for (i, c) in dots.iter().enumerate() {
                         book.circle(Offset::new(28.0 + i as f32 * 24.0, 22.0), 6.0, *c);
                     }
-                    book.rect(xywh(1.0, 44.0, TERM.width() - 2.0, 1.0), alpha(Color::WHITE, 0.05));
+                    book.rect(
+                        xywh(1.0, 44.0, TERM.width() - 2.0, 1.0),
+                        alpha(Color::WHITE, 0.05),
+                    );
                     // Scanlines — the CRT's memory, 3px apart, barely there.
                     let mut y = 46.0;
                     while y < TERM.height() {
-                        book.rect(xywh(1.0, y, TERM.width() - 2.0, 1.0), alpha(Color::BLACK, 0.10));
+                        book.rect(
+                            xywh(1.0, y, TERM.width() - 2.0, 1.0),
+                            alpha(Color::BLACK, 0.10),
+                        );
                         y += 3.0;
                     }
                 }),
@@ -125,7 +144,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .height(24.0)
             .child(
                 Text::new("the old way — sh")
-                    .style(TextStyle::new(14.0).monospace().letter_spacing(2.0).color(alpha(MUTED, 0.8)))
+                    .style(
+                        TextStyle::new(14.0)
+                            .monospace()
+                            .letter_spacing(2.0)
+                            .color(alpha(MUTED, 0.8)),
+                    )
                     .align(TextAlign::Center),
             ),
     );
@@ -201,7 +225,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(TERM.top + TERM.height() - 84.0)
                 .width(190.0)
                 .height(28.0)
-                .child(mono_tracked(format!("{:5.1} MB", mb), 20.0, tint(RED, 0.2), 1.0)),
+                .child(mono_tracked(
+                    format!("{:5.1} MB", mb),
+                    20.0,
+                    tint(RED, 0.2),
+                    1.0,
+                )),
         );
     }
 
@@ -213,22 +242,27 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(TERM.top + 64.0)
             .width(150.0)
             .height(60.0)
-            .child(Painting::sized(Size::new(150.0, 60.0), PaintWith::new(
-                move |book: &mut Sketchbook, _s: Size| {
+            .child(Painting::sized(
+                Size::new(150.0, 60.0),
+                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                     let bw = 92.0;
                     let bh = 34.0;
                     let bx = 0.0;
                     let by = 12.0;
                     book.stroke_rrect(xywh(bx, by, bw, bh), 5.0, alpha(MUTED, 0.7), 2.0);
-                    book.rrect(xywh(bx + bw + 3.0, by + bh * 0.5 - 6.0, 7.0, 12.0), 2.0, alpha(MUTED, 0.7));
+                    book.rrect(
+                        xywh(bx + bw + 3.0, by + bh * 0.5 - 6.0, 7.0, 12.0),
+                        2.0,
+                        alpha(MUTED, 0.7),
+                    );
                     let level = 1.0 - drain * 0.86;
                     let col = mix(TERM_GREEN, RED, clamp01(drain * 1.6));
                     let fw = (bw - 6.0) * level;
                     if fw > 2.0 {
                         book.rrect(xywh(bx + 3.0, by + 3.0, fw, bh - 6.0), 3.0, alpha(col, 0.9));
                     }
-                },
-            ))),
+                }),
+            )),
     );
 
     // Grain + dust — the degradation is rendered, on purpose.

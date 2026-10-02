@@ -15,20 +15,45 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{ease_out_cubic};
-use super::{CANVAS, CYAN, CYAN_SOFT, Ctx, FAINT, H, INK, MINT, MUTED, VIOLET, VIOLET_SOFT, W, alpha, caption, chip, circle_path, clamp01, glow, grain, ground, mix, stars, tint, vignette, xywh};
-
+use super::{
+    alpha, caption, clamp01, mix, tint, xywh, Ctx, CYAN, FAINT, INK, MINT, MUTED, VIOLET,
+    VIOLET_SOFT, W,
+};
+use crate::film_lib::ease_out_cubic;
 
 /// The 28 blend modes — verbatim from `vieww-paint/src/native/color.rs`
 /// ("Premultiplied compositing and all 28 blend modes"). The ring shows
 /// all 28; the readout names them as it turns.
 const BLENDS: [&str; 28] = [
-    "Normal", "Clear", "Src", "Dst", "DstOver", "SrcIn", "DstIn", "SrcOut",
-    "DstOut", "SrcAtop", "DstAtop", "Xor", "Plus", "Multiply", "Screen",
-    "Overlay", "Darken", "Lighten", "ColorDodge", "ColorBurn", "HardLight",
-    "SoftLight", "Difference", "Exclusion", "Hue", "Saturation", "Color",
+    "Normal",
+    "Clear",
+    "Src",
+    "Dst",
+    "DstOver",
+    "SrcIn",
+    "DstIn",
+    "SrcOut",
+    "DstOut",
+    "SrcAtop",
+    "DstAtop",
+    "Xor",
+    "Plus",
+    "Multiply",
+    "Screen",
+    "Overlay",
+    "Darken",
+    "Lighten",
+    "ColorDodge",
+    "ColorBurn",
+    "HardLight",
+    "SoftLight",
+    "Difference",
+    "Exclusion",
+    "Hue",
+    "Saturation",
+    "Color",
     "Luminosity",
 ];
 
@@ -43,7 +68,7 @@ const RY: f32 = 210.0;
 const RW: f32 = 420.0;
 const RH: f32 = 300.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -69,12 +94,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             let step = 120.0;
             let mut x = (t * 12.0) % step;
             while x < w {
-                book.line(Offset::new(x, 0.0), Offset::new(x, h), alpha(CYAN, 0.035), 1.0);
+                book.line(
+                    Offset::new(x, 0.0),
+                    Offset::new(x, h),
+                    alpha(CYAN, 0.035),
+                    1.0,
+                );
                 x += step;
             }
             let mut y = (t * 8.0) % step;
             while y < h {
-                book.line(Offset::new(0.0, y), Offset::new(w, y), alpha(CYAN, 0.035), 1.0);
+                book.line(
+                    Offset::new(0.0, y),
+                    Offset::new(w, y),
+                    alpha(CYAN, 0.035),
+                    1.0,
+                );
                 y += step;
             }
             super::vignette(book, w, h, 0.5);
@@ -91,16 +126,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             .top(300.0)
             .width(600.0)
             .height(500.0)
-            .child(Opacity::new(1.0).child(
-                Text::new("V")
-                    .style(
-                        TextStyle::new(430.0)
-                            .monospace()
-                            .weight(vieww_foundation::FontWeight::Medium)
-                            .color(alpha(INK, glyph_a.max(0.03))),
-                    )
-                    .align(TextAlign::Center),
-            )),
+            .child(
+                Opacity::new(1.0).child(
+                    Text::new("V")
+                        .style(
+                            TextStyle::new(430.0)
+                                .monospace()
+                                .weight(vieww_foundation::FontWeight::Medium)
+                                .color(alpha(INK, glyph_a.max(0.03))),
+                        )
+                        .align(TextAlign::Center),
+                ),
+            ),
     );
 
     // THE LENS — a great circle over the glyph's edge. Inside it, the
@@ -161,14 +198,24 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         // Only the boundary cells carry the arithmetic —
                         // the AA band, the whole point of the scene.
                         book.rrect(
-                            xywh(cx - cell * 0.5 + 0.6, cy - cell * 0.5 + 0.6, cell - 1.2, cell - 1.2),
+                            xywh(
+                                cx - cell * 0.5 + 0.6,
+                                cy - cell * 0.5 + 0.6,
+                                cell - 1.2,
+                                cell - 1.2,
+                            ),
                             2.0,
                             alpha(tint(VIOLET_SOFT, 0.2), cov * 0.85),
                         );
                     } else if cov >= 0.98 {
                         // Inside — the glyph's body, dim.
                         book.rrect(
-                            xywh(cx - cell * 0.5 + 0.6, cy - cell * 0.5 + 0.6, cell - 1.2, cell - 1.2),
+                            xywh(
+                                cx - cell * 0.5 + 0.6,
+                                cy - cell * 0.5 + 0.6,
+                                cell - 1.2,
+                                cell - 1.2,
+                            ),
                             2.0,
                             alpha(INK, 0.10),
                         );
@@ -178,11 +225,21 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             // The grid's hairlines.
             for ix in 0..=res {
                 let x = gx0 + ix as f32 * cell;
-                book.line(Offset::new(x, gy0), Offset::new(x, gy0 + cell * res as f32), alpha(Color::WHITE, 0.05), 0.8);
+                book.line(
+                    Offset::new(x, gy0),
+                    Offset::new(x, gy0 + cell * res as f32),
+                    alpha(Color::WHITE, 0.05),
+                    0.8,
+                );
             }
             for iy in 0..=res {
                 let y = gy0 + iy as f32 * cell;
-                book.line(Offset::new(gx0, y), Offset::new(gx0 + cell * res as f32, y), alpha(Color::WHITE, 0.05), 0.8);
+                book.line(
+                    Offset::new(gx0, y),
+                    Offset::new(gx0 + cell * res as f32, y),
+                    alpha(Color::WHITE, 0.05),
+                    0.8,
+                );
             }
         }),
     );
@@ -200,7 +257,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let py = LY + a.sin() * rr * 0.86; // a slight ellipse — perspective
                 let active = i == readout_i;
                 let size = if active { 7.0 } else { 4.0 };
-                book.circle(Offset::new(px, py), size, alpha(if active { tint(CYAN, 0.5) } else { CYAN }, if active { 1.0 } else { 0.55 }));
+                book.circle(
+                    Offset::new(px, py),
+                    size,
+                    alpha(
+                        if active { tint(CYAN, 0.5) } else { CYAN },
+                        if active { 1.0 } else { 0.55 },
+                    ),
+                );
                 if active {
                     super::glow(book, px, py, 70.0, CYAN, 0.35);
                 }
@@ -220,19 +284,21 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(RY)
                 .width(RW)
                 .height(RH)
-                .child(Opacity::new(panel_a).child(
-                    Container::new()
-                        .color(alpha(Color::rgb(16, 16, 21), 0.92))
-                        .radius(14.0)
-                        .border(vieww_foundation::Border::new(alpha(CYAN, 0.28), 1.2)),
-                )),
+                .child(
+                    Opacity::new(panel_a).child(
+                        Container::new()
+                            .color(alpha(Color::rgb(16, 16, 21), 0.92))
+                            .radius(14.0)
+                            .border(vieww_foundation::Border::new(alpha(CYAN, 0.28), 1.2)),
+                    ),
+                ),
         );
         // The two edges — drawn in a painting: left, the 4× coverage
         // ramp; right, the 1× hard stair. Same edge, two worlds.
         let edges = Painting::sized(
             Size::new(RW - 40.0, 180.0),
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                let w = RW - 40.0;
+                let _w = RW - 40.0;
                 let h = 180.0;
                 let edge = clamp01((t - 0.35) / 0.20);
                 // LEFT — the 4× supersampled edge: a column of cells
@@ -248,9 +314,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         let edge_x = 30.0 + (cy / h) * 18.0;
                         let cov = ((edge_x - (cx + cw * 0.5)) / cw + 0.5).clamp(0.0, 1.0) * edge;
                         if cov > 0.02 {
-                            book.rrect(xywh(cx, cy, cw - 2.0, ch - 2.0), 2.0, alpha(VIOLET_SOFT, cov * 0.9));
+                            book.rrect(
+                                xywh(cx, cy, cw - 2.0, ch - 2.0),
+                                2.0,
+                                alpha(VIOLET_SOFT, cov * 0.9),
+                            );
                         }
-                        book.stroke_rrect(xywh(cx, cy, cw - 2.0, ch - 2.0), 2.0, alpha(Color::WHITE, 0.05), 0.6);
+                        book.stroke_rrect(
+                            xywh(cx, cy, cw - 2.0, ch - 2.0),
+                            2.0,
+                            alpha(Color::WHITE, 0.05),
+                            0.6,
+                        );
                     }
                 }
                 // RIGHT — the 1× aliased edge: the same slant, hard
@@ -263,9 +338,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                         let cx = base + ix as f32 * cw;
                         let filled = (cx + cw * 0.5) < edge_x_row;
                         if filled {
-                            book.rrect(xywh(cx, cy, cw - 2.0, ch - 2.0), 2.0, alpha(MUTED, 0.55 * edge));
+                            book.rrect(
+                                xywh(cx, cy, cw - 2.0, ch - 2.0),
+                                2.0,
+                                alpha(MUTED, 0.55 * edge),
+                            );
                         }
-                        book.stroke_rrect(xywh(cx, cy, cw - 2.0, ch - 2.0), 2.0, alpha(Color::WHITE, 0.05), 0.6);
+                        book.stroke_rrect(
+                            xywh(cx, cy, cw - 2.0, ch - 2.0),
+                            2.0,
+                            alpha(Color::WHITE, 0.05),
+                            0.6,
+                        );
                     }
                 }
                 // The labels — beneath each column, in the panel body.
@@ -290,11 +374,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(RY + 244.0)
                     .width(190.0)
                     .height(22.0)
-                    .child(Opacity::new(panel_a).child(
-                        Text::new(label)
-                            .style(TextStyle::new(14.0).monospace().letter_spacing(1.2).color(alpha(color, 0.9)))
-                            .align(TextAlign::Left),
-                    )),
+                    .child(
+                        Opacity::new(panel_a).child(
+                            Text::new(label)
+                                .style(
+                                    TextStyle::new(14.0)
+                                        .monospace()
+                                        .letter_spacing(1.2)
+                                        .color(alpha(color, 0.9)),
+                                )
+                                .align(TextAlign::Left),
+                        ),
+                    ),
             );
         }
         // The blend readout — the active mode's name, cycling.
@@ -304,11 +395,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(RY + 16.0)
                 .width(RW - 40.0)
                 .height(28.0)
-                .child(Opacity::new(panel_a).child(
-                    Text::new(format!("blend · {} · {}/28", BLENDS[readout_i], readout_i + 1))
-                        .style(TextStyle::new(17.0).monospace().letter_spacing(1.6).color(alpha(tint(CYAN, 0.3), 1.0)))
+                .child(
+                    Opacity::new(panel_a).child(
+                        Text::new(format!(
+                            "blend · {} · {}/28",
+                            BLENDS[readout_i],
+                            readout_i + 1
+                        ))
+                        .style(
+                            TextStyle::new(17.0)
+                                .monospace()
+                                .letter_spacing(1.6)
+                                .color(alpha(tint(CYAN, 0.3), 1.0)),
+                        )
                         .align(TextAlign::Left),
-                )),
+                    ),
+                ),
         );
     }
 
@@ -329,26 +431,49 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     let color = mix(mix(VIOLET, CYAN, u * 1.4), MINT, (u - 0.6).max(0.0) * 1.8);
                     stops.push(((u + wobble).clamp(0.0, 1.0), color));
                 }
-                book.rrect(xywh(0.0, 0.0, 620.0, 16.0), 8.0, Gradient::horizontal().with_dither().with_stops(&stops));
+                book.rrect(
+                    xywh(0.0, 0.0, 620.0, 16.0),
+                    8.0,
+                    Gradient::horizontal().with_dither().with_stops(&stops),
+                );
                 // The stop ticks — the 16 pins, riding the ramp.
                 for (u, _c) in stops.iter() {
-                    book.line(Offset::new(u * 620.0, -5.0), Offset::new(u * 620.0, 22.0), alpha(Color::WHITE, 0.35), 1.0);
+                    book.line(
+                        Offset::new(u * 620.0, -5.0),
+                        Offset::new(u * 620.0, 22.0),
+                        alpha(Color::WHITE, 0.35),
+                        1.0,
+                    );
                     book.circle(Offset::new(u * 620.0, -7.0), 2.2, alpha(Color::WHITE, 0.6));
                 }
             }),
         );
-        stack = stack.push(Positioned::new().left(400.0).top(860.0).width(620.0).height(40.0).child(Opacity::new(bar_a).child(bar)));
+        stack = stack.push(
+            Positioned::new()
+                .left(400.0)
+                .top(860.0)
+                .width(620.0)
+                .height(40.0)
+                .child(Opacity::new(bar_a).child(bar)),
+        );
         stack = stack.push(
             Positioned::new()
                 .left(400.0)
                 .top(906.0)
                 .width(620.0)
                 .height(22.0)
-                .child(Opacity::new(bar_a).child(
-                    Text::new("16 gradient stops · animated ramps · dithered")
-                        .style(TextStyle::new(14.0).monospace().letter_spacing(1.4).color(alpha(MUTED, 0.9)))
-                        .align(TextAlign::Left),
-                )),
+                .child(
+                    Opacity::new(bar_a).child(
+                        Text::new("16 gradient stops · animated ramps · dithered")
+                            .style(
+                                TextStyle::new(14.0)
+                                    .monospace()
+                                    .letter_spacing(1.4)
+                                    .color(alpha(MUTED, 0.9)),
+                            )
+                            .align(TextAlign::Left),
+                    ),
+                ),
         );
     }
 
@@ -364,7 +489,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         clamp01((t - 0.52) / 0.12),
     ));
 
-    let _ = (FAINT, Rect::new(0.0, 0.0, 1.0, 1.0), W, super::H, INK, lens_in);
+    let _ = (
+        FAINT,
+        Rect::new(0.0, 0.0, 1.0, 1.0),
+        W,
+        super::H,
+        INK,
+        lens_in,
+    );
 
     stack.into()
 }

@@ -5,7 +5,7 @@
 //! from the strings a caller actually writes. Each line is also the
 //! parser's test corpus in miniature, which is why the Gauss sum is here.
 
-use vieww_foundation::{Color};
+use vieww_foundation::Color;
 use vieww_widget::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,10 +22,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .children(children![
                             MathText::new("x^2 + y^2 = z^2").size(18.0),
                             MathText::new("\\sum_{i=0}^{n} i = \\frac{n(n+1)}{2}").size(18.0),
-                            MathText::new("E = mc^2 \\quad \\to \\quad \\sqrt[3]{\\frac{E}{c^2}} = m").size(18.0),
-                            MathText::new("\\frac{\\partial u}{\\partial t} = \\alpha \\nabla^2 u").size(18.0),
-                            MathText::new("\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}").size(18.0),
-                            MathText::new("\\alpha \\cdot \\beta \\le \\gamma \\ne \\omega \\pm \\epsilon").size(18.0),
+                            MathText::new(
+                                "E = mc^2 \\quad \\to \\quad \\sqrt[3]{\\frac{E}{c^2}} = m"
+                            )
+                            .size(18.0),
+                            MathText::new("\\frac{\\partial u}{\\partial t} = \\alpha \\nabla^2 u")
+                                .size(18.0),
+                            MathText::new("\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}")
+                                .size(18.0),
+                            MathText::new(
+                                "\\alpha \\cdot \\beta \\le \\gamma \\ne \\omega \\pm \\epsilon"
+                            )
+                            .size(18.0),
                         ]),
                 ),
         );

@@ -17,9 +17,9 @@ use vieww_foundation::{Color, Offset, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, Ctx, ENGINE, INK, LEDGER, MUTED, SYN_FUNCTION, SYN_KEYWORD, SYN_STRING, SYN_TYPE, W,
     alpha, caption, clamp01, count_up, distance_chip, gap_line, glow, grain, ground, pole_caret,
-    pole_screen, progress_rail, vignette, xywh,
+    pole_screen, progress_rail, vignette, xywh, Ctx, ACCENT, ENGINE, INK, LEDGER, MUTED,
+    SYN_FUNCTION, SYN_KEYWORD, SYN_STRING, SYN_TYPE, W,
 };
 use crate::film_lib::ease_out_cubic;
 
@@ -33,9 +33,14 @@ fn ring_of(name: &str) -> usize {
         0
     } else if name.contains("widget") || name.contains("element") || name.contains("animation") {
         1
-    } else if name.contains("render") || name.contains("paint") || name.contains("scene")
-        || name.contains("gpu") || name.contains("hal") || name.contains("shaders")
-        || name.contains("effects") || name.contains("image")
+    } else if name.contains("render")
+        || name.contains("paint")
+        || name.contains("scene")
+        || name.contains("gpu")
+        || name.contains("hal")
+        || name.contains("shaders")
+        || name.contains("effects")
+        || name.contains("image")
     {
         2
     } else {
@@ -54,7 +59,7 @@ fn ring_color(ring: usize) -> Color {
     }
 }
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -91,7 +96,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             }
             // The crates.
             let spin = sec * 0.06;
-            let n = super::CRATES.len() as f32;
+            let _n = super::CRATES.len() as f32;
             for (i, name) in super::CRATES.iter().enumerate() {
                 let ring = ring_of(name);
                 // Ring radius, with a per-index jitter so the lattice
@@ -138,15 +143,22 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(130.0)
                 .width(320.0)
                 .height(120.0)
-                .child(
-                    super::Opacity::new(count_a).child(Painting::sized(
-                        Size::new(320.0, 120.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(0.0, 0.0, 320.0, 112.0), 10.0, alpha(super::SURFACE_2, 0.9));
-                            book.stroke_rrect(xywh(0.0, 0.0, 320.0, 112.0), 10.0, alpha(ENGINE, 0.30), 1.2);
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(count_a).child(Painting::sized(
+                    Size::new(320.0, 120.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        book.rrect(
+                            xywh(0.0, 0.0, 320.0, 112.0),
+                            10.0,
+                            alpha(super::SURFACE_2, 0.9),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, 320.0, 112.0),
+                            10.0,
+                            alpha(ENGINE, 0.30),
+                            1.2,
+                        );
+                    }),
+                ))),
         );
         stack = stack.push(
             Positioned::new()
@@ -197,15 +209,18 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(268.0)
                 .width(320.0)
                 .height(70.0)
-                .child(
-                    super::Opacity::new(choice_a).child(Painting::sized(
-                        Size::new(320.0, 70.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(0.0, 0.0, 320.0, 62.0), 10.0, alpha(super::WASH, 0.75));
-                            book.stroke_rrect(xywh(0.0, 0.0, 320.0, 62.0), 10.0, alpha(ACCENT, 0.35), 1.2);
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(choice_a).child(Painting::sized(
+                    Size::new(320.0, 70.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        book.rrect(xywh(0.0, 0.0, 320.0, 62.0), 10.0, alpha(super::WASH, 0.75));
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, 320.0, 62.0),
+                            10.0,
+                            alpha(ACCENT, 0.35),
+                            1.2,
+                        );
+                    }),
+                ))),
         );
         stack = stack.push(
             Positioned::new()

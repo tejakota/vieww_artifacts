@@ -25,13 +25,14 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, tint, AMBER, CYAN, FAINT, INK, MUTED,
-    VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_cubic, mix, tint, AMBER, CYAN, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The three panes ─────────────────────────────────────────────────────────
 
@@ -117,16 +118,54 @@ fn life_seed() -> Vec<Vec<bool>> {
     {
         let (ox, oy) = (10usize, 6usize);
         let cells = [
-            (2, 0), (3, 0), (4, 0), (8, 0), (9, 0), (10, 0),
-            (0, 2), (5, 2), (7, 2), (12, 2),
-            (0, 3), (5, 3), (7, 3), (12, 3),
-            (0, 4), (5, 4), (7, 4), (12, 4),
-            (2, 5), (3, 5), (4, 5), (8, 5), (9, 5), (10, 5),
-            (2, 7), (3, 7), (4, 7), (8, 7), (9, 7), (10, 7),
-            (0, 8), (5, 8), (7, 8), (12, 8),
-            (0, 9), (5, 9), (7, 9), (12, 9),
-            (0, 10), (5, 10), (7, 10), (12, 10),
-            (2, 12), (3, 12), (4, 12), (8, 12), (9, 12), (10, 12),
+            (2, 0),
+            (3, 0),
+            (4, 0),
+            (8, 0),
+            (9, 0),
+            (10, 0),
+            (0, 2),
+            (5, 2),
+            (7, 2),
+            (12, 2),
+            (0, 3),
+            (5, 3),
+            (7, 3),
+            (12, 3),
+            (0, 4),
+            (5, 4),
+            (7, 4),
+            (12, 4),
+            (2, 5),
+            (3, 5),
+            (4, 5),
+            (8, 5),
+            (9, 5),
+            (10, 5),
+            (2, 7),
+            (3, 7),
+            (4, 7),
+            (8, 7),
+            (9, 7),
+            (10, 7),
+            (0, 8),
+            (5, 8),
+            (7, 8),
+            (12, 8),
+            (0, 9),
+            (5, 9),
+            (7, 9),
+            (12, 9),
+            (0, 10),
+            (5, 10),
+            (7, 10),
+            (12, 10),
+            (2, 12),
+            (3, 12),
+            (4, 12),
+            (8, 12),
+            (9, 12),
+            (10, 12),
         ];
         for &(dx, dy) in cells.iter() {
             put(&mut g, ox + dx, oy + dy);
@@ -143,7 +182,19 @@ fn life_seed() -> Vec<Vec<bool>> {
         put(&mut g, 68 + dx, 30 + dy);
     }
     // A lightweight ship at (8, 34) — the canonical LWSS, heading right.
-    for &(dx, dy) in [(0, 0), (3, 0), (4, 1), (0, 2), (4, 2), (0, 3), (1, 3), (2, 3), (3, 3)].iter() {
+    for &(dx, dy) in [
+        (0, 0),
+        (3, 0),
+        (4, 1),
+        (0, 2),
+        (4, 2),
+        (0, 3),
+        (1, 3),
+        (2, 3),
+        (3, 3),
+    ]
+    .iter()
+    {
         put(&mut g, 8 + dx, 34 + dy);
     }
     // A pentadecathlon at (64, 8): a 10-cell line, period 15.
@@ -196,7 +247,7 @@ fn run_life(gens: usize) -> (Vec<Vec<bool>>, Vec<usize>) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // Reveal depth: how many generations each machine has run.
     let frac = clamp01(t);
     let gens = ((ease_out_cubic(frac) * CA_GENS as f32).round() as usize).clamp(1, CA_GENS);
@@ -230,10 +281,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — three specimen chambers.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 15))]),
             );
             for &(px, py) in [P1, P2, P3].iter() {
                 book.rrect(
@@ -302,10 +352,7 @@ pub fn frame(t: f32) -> WidgetNode {
                     let y0 = py + 8.0;
                     let x1 = x0 + slope * (PANE_H - 16.0) / 2.0;
                     path.move_to(Offset::new(x0, y0));
-                    path.line_to(Offset::new(
-                        x1.clamp(px, px + PANE_W),
-                        py + PANE_H - 8.0,
-                    ));
+                    path.line_to(Offset::new(x1.clamp(px, px + PANE_W), py + PANE_H - 8.0));
                     g.stroke(path, alpha(tint(CYAN, 0.4), 0.14), 1.0);
                 }
             });
@@ -363,7 +410,9 @@ pub fn frame(t: f32) -> WidgetNode {
     );
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack = stack.push(receipt_panel(gens, centre, d110_first, d110_now, pop_now, pop_peak, life_gens));
+    stack = stack.push(receipt_panel(
+        gens, centre, d110_first, d110_now, pop_now, pop_peak, life_gens,
+    ));
     stack = stack.push(pane_labels());
     stack.into()
 }
@@ -372,9 +421,21 @@ pub fn frame(t: f32) -> WidgetNode {
 
 fn pane_labels() -> WidgetNode {
     let labels = [
-        (P1, "RULE 30 — chaos from one cell", "the RNG Mathematica shipped"),
-        (P2, "RULE 110 — the traffic", "Turing-complete, one cell wide"),
-        (P3, "LIFE B3/S23 — emergence", "gliders · pulsar · pentadecathlon"),
+        (
+            P1,
+            "RULE 30 — chaos from one cell",
+            "the RNG Mathematica shipped",
+        ),
+        (
+            P2,
+            "RULE 110 — the traffic",
+            "Turing-complete, one cell wide",
+        ),
+        (
+            P3,
+            "LIFE B3/S23 — emergence",
+            "gliders · pulsar · pentadecathlon",
+        ),
     ];
     let mut stack = Stack::new();
     for ((px, py), title, sub) in labels.iter() {
@@ -391,7 +452,11 @@ fn pane_labels() -> WidgetNode {
                                 .monospace()
                                 .letter_spacing(if k == 0 { 1.6 } else { 0.8 })
                                 .color(alpha(
-                                    if k == 0 { tint(VIOLET_SOFT, 0.3) } else { MUTED },
+                                    if k == 0 {
+                                        tint(VIOLET_SOFT, 0.3)
+                                    } else {
+                                        MUTED
+                                    },
                                     0.95,
                                 )),
                         ),
@@ -445,7 +510,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

@@ -23,16 +23,16 @@
 use vieww_effects::{Blend, BlendMode, Filter, FilterChain};
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::Painting;
 use vieww_widget::PaintWith;
+use vieww_widget::Painting;
 
 use crate::film_lib::{
-    alpha, clamp01, mix, smoothstep, spring_out, BG_DEEP, CANVAS, CANVAS_H, CANVAS_W, MAGENTA,
-    MUTED, Rng, VIOLET, VIOLET_DEEP, VIOLET_SOFT, CYAN, CYAN_SOFT,
+    alpha, clamp01, mix, smoothstep, spring_out, Rng, BG_DEEP, CANVAS, CANVAS_H, CANVAS_W, CYAN,
+    CYAN_SOFT, MAGENTA, MUTED, VIOLET, VIOLET_DEEP, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The degradation state machine: E-21's ramp and release ─────────────────
 
@@ -66,10 +66,9 @@ fn void_paint(t: f32) -> WidgetNode {
             book.circle(
                 Offset::new(w * 0.5, h * 0.72),
                 w * 0.42,
-                Gradient::radial_fill().with_dither().with_stops(&[
-                    (0.0, alpha(VIOLET, 0.05)),
-                    (1.0, alpha(VIOLET, 0.0)),
-                ]),
+                Gradient::radial_fill()
+                    .with_dither()
+                    .with_stops(&[(0.0, alpha(VIOLET, 0.05)), (1.0, alpha(VIOLET, 0.0))]),
             );
             let mut rng = Rng::new(0xA10A);
             for _ in 0..110 {
@@ -101,19 +100,15 @@ fn cone_paint(t: f32) -> WidgetNode {
             book.circle(
                 center,
                 640.0,
-                Gradient::sweep(
-                    Offset::new(0.5, 0.5),
-                    theta - std::f32::consts::TAU,
-                    theta,
-                )
-                .with_stops(&[
-                    (0.0, alpha(VIOLET, 0.0)),
-                    (0.70, alpha(VIOLET, 0.0)),
-                    (0.84, alpha(mix(VIOLET, CYAN_SOFT, 0.3), 0.13 * fade)),
-                    (0.93, alpha(CYAN_SOFT, 0.20 * fade)),
-                    (0.97, alpha(VIOLET, 0.0)),
-                    (1.0, alpha(VIOLET, 0.0)),
-                ]),
+                Gradient::sweep(Offset::new(0.5, 0.5), theta - std::f32::consts::TAU, theta)
+                    .with_stops(&[
+                        (0.0, alpha(VIOLET, 0.0)),
+                        (0.70, alpha(VIOLET, 0.0)),
+                        (0.84, alpha(mix(VIOLET, CYAN_SOFT, 0.3), 0.13 * fade)),
+                        (0.93, alpha(CYAN_SOFT, 0.20 * fade)),
+                        (0.97, alpha(VIOLET, 0.0)),
+                        (1.0, alpha(VIOLET, 0.0)),
+                    ]),
             );
             // The pivot: a small bright point + its breathing ring.
             book.circle(center, 3.0, alpha(Color::WHITE, 0.9 * fade));
@@ -130,7 +125,14 @@ fn cone_paint(t: f32) -> WidgetNode {
 }
 
 /// One aurora ribbon — a wide gradient stroke on a waving cubic, softened.
-fn ribbon_paint(t: f32, idx: usize, color: Color, base_y: f32, phase: f32, width: f32) -> WidgetNode {
+fn ribbon_paint(
+    t: f32,
+    idx: usize,
+    color: Color,
+    base_y: f32,
+    phase: f32,
+    width: f32,
+) -> WidgetNode {
     let arrive = clamp01(t / 0.30);
     Painting::sized(
         CANVAS,
@@ -241,10 +243,14 @@ fn star_paint(t: f32) -> WidgetNode {
             });
             // The spark.
             book.layer(1.0, 7.0, None, |inner| {
-                inner.circle(head, 12.0, Gradient::radial_fill().with_stops(&[
-                    (0.0, alpha(Color::WHITE, 0.8 * (1.0 - s))),
-                    (1.0, alpha(CYAN, 0.0)),
-                ]));
+                inner.circle(
+                    head,
+                    12.0,
+                    Gradient::radial_fill().with_stops(&[
+                        (0.0, alpha(Color::WHITE, 0.8 * (1.0 - s))),
+                        (1.0, alpha(CYAN, 0.0)),
+                    ]),
+                );
             });
         }),
     )
@@ -293,7 +299,11 @@ fn dust_paint(t: f32) -> WidgetNode {
                 book.circle(
                     Offset::new(x, y),
                     0.5 + rng.f01() * 0.7,
-                    if bright { alpha(Color::WHITE, a) } else { alpha(Color::BLACK, a * 1.6) },
+                    if bright {
+                        alpha(Color::WHITE, a)
+                    } else {
+                        alpha(Color::BLACK, a * 1.6)
+                    },
                 );
             }
         }),
@@ -310,10 +320,12 @@ fn vignette_paint() -> WidgetNode {
             let h = size.height;
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.82).with_dither().with_stops(&[
-                    (0.62, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.5)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.82)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.62, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.5)),
+                    ]),
             );
         }),
     )
@@ -322,7 +334,7 @@ fn vignette_paint() -> WidgetNode {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The lights: cone + three ribbons + the star, Screen-nested so light
     // adds — over the void, over the stars, over each other.
     let lights = Blend::new(BlendMode::Screen)
@@ -332,7 +344,14 @@ pub fn frame(t: f32) -> WidgetNode {
                 .foreground(ribbon_paint(t, 2, CYAN, 470.0, 2.1, 120.0))
                 .background(
                     Blend::new(BlendMode::Screen)
-                        .foreground(ribbon_paint(t, 1, mix(MAGENTA, VIOLET, 0.4), 310.0, 1.3, 150.0))
+                        .foreground(ribbon_paint(
+                            t,
+                            1,
+                            mix(MAGENTA, VIOLET, 0.4),
+                            310.0,
+                            1.3,
+                            150.0,
+                        ))
                         .background(
                             Blend::new(BlendMode::Screen)
                                 .foreground(ribbon_paint(t, 0, VIOLET_DEEP, 190.0, 0.6, 170.0))

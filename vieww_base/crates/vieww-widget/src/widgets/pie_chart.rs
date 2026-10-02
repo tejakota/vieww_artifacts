@@ -313,11 +313,7 @@ impl Painter for PieChartPainter {
         for (index, &(name, value)) in self.slices.iter().enumerate() {
             let share = value / total;
             let sweep = share * std::f32::consts::TAU;
-            let color = self
-                .colors
-                .get(index)
-                .copied()
-                .unwrap_or(self.colors[0]);
+            let color = self.colors.get(index).copied().unwrap_or(self.colors[0]);
 
             if value < 0.0 {
                 // A negative proportion has no angle: skipped, silently and
@@ -412,7 +408,11 @@ mod tests {
         assert_eq!(pie.share_text(0), None);
 
         let zero = PieChart::new(vec![("a", 0.0), ("b", 0.0)]);
-        assert_eq!(zero.share_text(0), None, "a total of zero divides by nothing");
+        assert_eq!(
+            zero.share_text(0),
+            None,
+            "a total of zero divides by nothing"
+        );
     }
 
     #[test]
@@ -423,7 +423,10 @@ mod tests {
         // The painter's per-index lookup wraps: five slices, one colour.
         let painter_colors = [Color::RED];
         assert_eq!(
-            painter_colors.get(4).copied().or_else(|| painter_colors.first().copied()),
+            painter_colors
+                .get(4)
+                .copied()
+                .or_else(|| painter_colors.first().copied()),
             Some(Color::RED)
         );
     }
@@ -448,7 +451,10 @@ mod tests {
     fn a_donut_puts_its_label_in_the_hole() {
         let node = inflate(DonutChart::new(vec![("a", 1.0), ("b", 1.0)]).center_label("2 total"));
         let rendered = format!("{node:?}");
-        assert!(rendered.contains("Stack"), "the label overlays the ring: {rendered}");
+        assert!(
+            rendered.contains("Stack"),
+            "the label overlays the ring: {rendered}"
+        );
         assert!(rendered.contains("2 total"), "in the hole: {rendered}");
     }
 
@@ -456,7 +462,10 @@ mod tests {
     fn a_donut_without_a_centre_label_is_just_a_holed_pie() {
         let node = inflate(DonutChart::new(vec![("a", 1.0)]));
         let rendered = format!("{node:?}");
-        assert!(!rendered.contains("Stack"), "no overlay scaffold: {rendered}");
+        assert!(
+            !rendered.contains("Stack"),
+            "no overlay scaffold: {rendered}"
+        );
     }
 
     #[test]
@@ -484,7 +493,10 @@ mod tests {
         };
         let mut book = Sketchbook::new();
         painter.paint(&mut book, Size::new(100.0, 100.0));
-        assert!(book.is_empty(), "no data is no drawing, not an empty outline");
+        assert!(
+            book.is_empty(),
+            "no data is no drawing, not an empty outline"
+        );
     }
 
     #[test]

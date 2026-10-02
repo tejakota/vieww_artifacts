@@ -19,14 +19,16 @@
 //! field is SILENT — the census prints how many found the quiet, and the
 //! mean |v| they ended on, measured, not asserted.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
+use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, smoothstep, tint, AMBER, FAINT, INK, MUTED, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, mix, smoothstep, tint, AMBER, FAINT, INK, MUTED, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The plate ────────────────────────────────────────────────────────────────
 
@@ -74,7 +76,11 @@ fn schedule(t: f32) -> ((u32, u32), (u32, u32), f32, f32) {
     let j = (i + 1) % MODES.len();
     let f = x - i as f32;
     // Each slot: hold 78% on its mode, morph over the last 22%.
-    let s = if f > 0.78 { smoothstep((f - 0.78) / 0.22) } else { 0.0 };
+    let s = if f > 0.78 {
+        smoothstep((f - 0.78) / 0.22)
+    } else {
+        0.0
+    };
     (MODES[i], MODES[j], s, f)
 }
 
@@ -129,14 +135,21 @@ fn settle(t: f32) -> Vec<Grain> {
             }
             last = f0.abs();
         }
-        grains.push(Grain { su, sv, u, v, quiet: last, walked });
+        grains.push(Grain {
+            su,
+            sv,
+            u,
+            v,
+            quiet: last,
+            walked,
+        });
     }
     grains
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let grains = settle(t);
-    let (a, b, s, slot_f) = schedule(t);
+    let (a, b, s, _slot_f) = schedule(t);
     // The census, measured at the end of the descent.
     let settled = grains.iter().filter(|g| g.quiet < 0.02).count();
     let mean_quiet = grains.iter().map(|g| g.quiet).sum::<f32>() / grains.len() as f32;
@@ -152,10 +165,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — a dark instrument room.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 7, 10)),
-                    (1.0, Color::rgb(12, 12, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(7, 7, 10)), (1.0, Color::rgb(12, 12, 16))]),
             );
 
             let (px, py, pw, ph) = PLATE;
@@ -203,8 +215,12 @@ pub fn frame(t: f32) -> WidgetNode {
                         let cw = pw / 23.0;
                         let ch = ph / 27.0;
                         book.rect(
-                            Rect::new(px + u * pw - cw * 0.5, py + v * ph - ch * 0.5,
-                                      px + u * pw + cw * 0.5, py + v * ph + ch * 0.5),
+                            Rect::new(
+                                px + u * pw - cw * 0.5,
+                                py + v * ph - ch * 0.5,
+                                px + u * pw + cw * 0.5,
+                                py + v * ph + ch * 0.5,
+                            ),
                             alpha(tint(AMBER, 0.1), 0.05 + 0.045 * (loud - 0.55)),
                         );
                     }
@@ -275,7 +291,7 @@ pub fn frame(t: f32) -> WidgetNode {
             // The driver's cove: a small exciter under the plate centre —
             // where the bow touches the glass. A pulsing ring, phase-locked
             // to the (computed) frequency: the visual metronome.
-            let beat = 0.5 + 0.5 * (t * 6.2832 * 6.0).sin();
+            let beat = 0.5 + 0.5 * (t * std::f32::consts::TAU * 6.0).sin();
             book.circle(
                 Offset::new(px + pw * 0.5, py + ph * 0.5),
                 10.0 + 5.0 * beat,
@@ -287,8 +303,10 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack.push(receipt_panel(a, b, s, settled, mean_quiet, hz)).into()
+    let stack = Stack::new().push(Positioned::fill().child(board));
+    stack
+        .push(receipt_panel(a, b, s, settled, mean_quiet, hz))
+        .into()
 }
 
 // ── The receipt ─────────────────────────────────────────────────────────────
@@ -304,7 +322,11 @@ fn receipt_panel(
     let mode_line = if s > 0.02 {
         format!(
             "mode ({},{}) → ({},{}) · blend {:.0}%",
-            a.0, a.1, b.0, b.1, s * 100.0
+            a.0,
+            a.1,
+            b.0,
+            b.1,
+            s * 100.0
         )
     } else {
         format!("mode ({},{}) · steady", a.0, a.1)
@@ -335,7 +357,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -356,7 +381,11 @@ fn receipt_panel(
                 Rect::new(3.0, 3.0, 3.0 + 234.0 * frac, 23.0),
                 4.0,
                 alpha(
-                    if frac > 0.8 { VIOLET_SOFT } else { mix(AMBER, VIOLET_SOFT, 0.4) },
+                    if frac > 0.8 {
+                        VIOLET_SOFT
+                    } else {
+                        mix(AMBER, VIOLET_SOFT, 0.4)
+                    },
                     0.75,
                 ),
             );

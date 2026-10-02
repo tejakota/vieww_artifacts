@@ -17,9 +17,8 @@
 //!
 //! Witness taps 5 (Render, 134.2 s) and 6 (Add one, 136.62 s) fire here.
 
-use vieww_widget::prelude::*;
+use super::{caption, clamp01, spark, studio_chrome, tap_ring_at, tint, Ctx, ACCENT};
 use vieww_widget::WidgetNode;
-use super::{caption, clamp01, spark, studio_chrome, tap_ring_at, tint, ACCENT, Ctx};
 
 /// The script's moments, in absolute film seconds.
 const OPEN_T: f32 = 129.0;
@@ -29,15 +28,15 @@ const TAP_T: f32 = 136.62;
 const CARRY_RENDER_T: f32 = 138.1;
 const CARRY_SETTLE_T: f32 = 139.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
-    let t = ctx.t;
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
+    let _t = ctx.t;
     let abs = ctx.abs;
 
     let mut stack = studio_chrome(ctx);
 
     // The spark — rides the Render button's corner while the compile
     // runs (the light working), then settles into the preview.
-    let compiling = abs >= RENDER_T && abs < SETTLE_T;
+    let compiling = (RENDER_T..SETTLE_T).contains(&abs);
     let done = abs >= SETTLE_T;
     if compiling || done {
         let (sx, sy, r) = if compiling {
@@ -132,17 +131,23 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 /// The carry badge — the state's receipt: "Tapped 1 times", still.
 fn chip_carry(pop: f32) -> vieww_widget::WidgetNode {
     use vieww_widget::prelude::*;
-    vieww_widget::Opacity::new(pop.max(0.01)).child(
-        Container::new()
-            .color(super::alpha(super::SURFACE_2, 0.92))
-            .radius(8.0)
-            .border(vieww_foundation::Border::new(super::alpha(super::MINT, 0.4), 1.2))
-            .padding(vieww_foundation::EdgeInsets::symmetric(8.0, 13.0))
-            .child(
-                Text::new("count = 1 · across the recompile")
-                    .style(super::geist_mono(15.0).letter_spacing(1.2).color(tint(super::MINT, 0.12))),
-            ),
-    )
-    .into()
+    vieww_widget::Opacity::new(pop.max(0.01))
+        .child(
+            Container::new()
+                .color(super::alpha(super::SURFACE_2, 0.92))
+                .radius(8.0)
+                .border(vieww_foundation::Border::new(
+                    super::alpha(super::MINT, 0.4),
+                    1.2,
+                ))
+                .padding(vieww_foundation::EdgeInsets::symmetric(8.0, 13.0))
+                .child(
+                    Text::new("count = 1 · across the recompile").style(
+                        super::geist_mono(15.0)
+                            .letter_spacing(1.2)
+                            .color(tint(super::MINT, 0.12)),
+                    ),
+                ),
+        )
+        .into()
 }
-

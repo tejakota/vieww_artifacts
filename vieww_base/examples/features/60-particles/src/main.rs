@@ -78,10 +78,7 @@ impl CustomPainter for FountainPainter {
             .speed(140.0, 330.0)
             .gravity(Offset::new(0.0, 260.0))
             .size(5.0, 0.8)
-            .color(
-                Color::rgba(255, 214, 64, 255),
-                Color::rgba(255, 61, 61, 0),
-            );
+            .color(Color::rgba(255, 214, 64, 255), Color::rgba(255, 61, 61, 0));
 
         let origin = Offset::new(size.width / 2.0, size.height - 36.0);
         let particles = field.sample(Duration::from_secs_f32(self.t));
@@ -137,7 +134,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Container::new()
                 .color(Color::rgb(16, 18, 28))
                 .padding(EdgeInsets::all(20.0))
-                .child(Fountain { time, _clock: clock }),
+                .child(Fountain {
+                    time,
+                    _clock: clock,
+                }),
         );
     })
 }

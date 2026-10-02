@@ -62,7 +62,7 @@ pub fn by_class(items: &[Item]) -> Vec<ClassShare> {
             });
         }
     }
-    shares.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    shares.sort_by_key(|s| std::cmp::Reverse(s.bytes));
     shares
 }
 
@@ -226,8 +226,7 @@ pub fn vault_map(theme: &VavltTheme, items: &[Item]) -> Option<WidgetNode> {
                     )
                     .style(theme.caption()),
                 ),
-        )
-        .into(),
+        ),
     )
 }
 

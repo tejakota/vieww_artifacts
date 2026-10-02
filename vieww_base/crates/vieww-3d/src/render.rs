@@ -106,7 +106,10 @@ fn lerp_v(a: &VertexOut, b: &VertexOut, t: f32) -> VertexOut {
         clip,
         world: a.world.lerp(b.world, t),
         normal: a.normal.lerp(b.normal, t),
-        uv: [a.uv[0] + (b.uv[0] - a.uv[0]) * t, a.uv[1] + (b.uv[1] - a.uv[1]) * t],
+        uv: [
+            a.uv[0] + (b.uv[0] - a.uv[0]) * t,
+            a.uv[1] + (b.uv[1] - a.uv[1]) * t,
+        ],
     }
 }
 
@@ -189,7 +192,14 @@ fn frustum(vp: &Mat4) -> [[f32; 4]; 6] {
     let (r0, r1, r2, r3) = (row(0), row(1), row(2), row(3));
     let add = |a: [f32; 4], b: [f32; 4]| [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]];
     let sub = |a: [f32; 4], b: [f32; 4]| [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]];
-    let mut planes = [add(r3, r0), sub(r3, r0), add(r3, r1), sub(r3, r1), add(r3, r2), sub(r3, r2)];
+    let mut planes = [
+        add(r3, r0),
+        sub(r3, r0),
+        add(r3, r1),
+        sub(r3, r1),
+        add(r3, r2),
+        sub(r3, r2),
+    ];
     for p in &mut planes {
         let l = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt().max(1e-12);
         for v in p.iter_mut() {
@@ -200,12 +210,18 @@ fn frustum(vp: &Mat4) -> [[f32; 4]; 6] {
 }
 
 fn sphere_visible(planes: &[[f32; 4]; 6], c: Vec3, r: f32) -> bool {
-    planes.iter().all(|p| p[0] * c.x + p[1] * c.y + p[2] * c.z + p[3] >= -r)
+    planes
+        .iter()
+        .all(|p| p[0] * c.x + p[1] * c.y + p[2] * c.z + p[3] >= -r)
 }
 
 fn srgb(v: f32) -> u8 {
     let v = v.clamp(0.0, 1.0);
-    let s = if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 };
+    let s = if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    };
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let b = (s * 255.0 + 0.5) as u8;
     b
@@ -257,7 +273,11 @@ impl Renderer {
             }
             let n = scene.node(id);
             let world = n.world();
-            let mut push = |model: Mat4, mesh: &Arc<Mesh>, material: &Arc<Material>, bounds: (Vec3, f32), stats: &mut RenderStats| {
+            let mut push = |model: Mat4,
+                            mesh: &Arc<Mesh>,
+                            material: &Arc<Material>,
+                            bounds: (Vec3, f32),
+                            stats: &mut RenderStats| {
                 stats.objects += 1;
                 let c = model.transform_point(bounds.0);
                 let r = bounds.1 * model.max_scale();
@@ -274,15 +294,32 @@ impl Renderer {
                 });
             };
             match &n.content {
-                Content::Mesh { mesh, material, bounds } => push(world, mesh, material, *bounds, &mut stats),
-                Content::Instanced { mesh, material, bounds, instances } => {
+                Content::Mesh {
+                    mesh,
+                    material,
+                    bounds,
+                } => push(world, mesh, material, *bounds, &mut stats),
+                Content::Instanced {
+                    mesh,
+                    material,
+                    bounds,
+                    instances,
+                } => {
                     for inst in instances {
                         push(world * *inst, mesh, material, *bounds, &mut stats);
                     }
                 }
-                Content::Lod { levels, material, bounds } => {
+                Content::Lod {
+                    levels,
+                    material,
+                    bounds,
+                } => {
                     let d = (world.transform_point(bounds.0) - camera.position).length();
-                    if let Some((_, mesh)) = levels.iter().find(|(max, _)| d <= *max).or_else(|| levels.last()) {
+                    if let Some((_, mesh)) = levels
+                        .iter()
+                        .find(|(max, _)| d <= *max)
+                        .or_else(|| levels.last())
+                    {
                         push(world, mesh, material, *bounds, &mut stats);
                     }
                 }
@@ -299,7 +336,8 @@ impl Renderer {
             color: vec![scene.background; w * h],
             depth: vec![f32::INFINITY; w * h],
         };
-        let (opaque, mut transparent): (Vec<&Item>, Vec<&Item>) = items.iter().partition(|i| i.material.opacity >= 1.0);
+        let (opaque, mut transparent): (Vec<&Item>, Vec<&Item>) =
+            items.iter().partition(|i| i.material.opacity >= 1.0);
         transparent.sort_by(|a, b| b.view_depth.total_cmp(&a.view_depth));
         stats.transparent = transparent.len();
         let ctx = ShadeCtx {
@@ -333,7 +371,12 @@ impl Renderer {
         (Image::from_rgba8(px, self.width, self.height), stats)
     }
 
-    fn shadow_pass(&self, lights: &[LightW], items: &[Item], stats: &mut RenderStats) -> Option<ShadowMap> {
+    fn shadow_pass(
+        &self,
+        lights: &[LightW],
+        items: &[Item],
+        stats: &mut RenderStats,
+    ) -> Option<ShadowMap> {
         if self.shadow_size == 0 {
             return None;
         }
@@ -374,11 +417,21 @@ impl Renderer {
                     vp.mul_vec4([wpos.x, wpos.y, wpos.z, 1.0])
                 })
                 .collect();
-            for t in m.indices.chunks_exact(3) {
-                let v = [clip[t[0] as usize], clip[t[1] as usize], clip[t[2] as usize]];
+            for t in m.indices.as_chunks::<3>().0 {
+                let v = [
+                    clip[t[0] as usize],
+                    clip[t[1] as usize],
+                    clip[t[2] as usize],
+                ];
                 stats.shadow_triangles += 1;
                 #[allow(clippy::cast_precision_loss)]
-                let sp = v.map(|c| [(c[0] * 0.5 + 0.5) * size as f32, (0.5 - c[1] * 0.5) * size as f32, c[2]]);
+                let sp = v.map(|c| {
+                    [
+                        (c[0] * 0.5 + 0.5) * size as f32,
+                        (0.5 - c[1] * 0.5) * size as f32,
+                        c[2],
+                    ]
+                });
                 raster_depth(&sp, size, &mut depth);
             }
         }
@@ -387,24 +440,55 @@ impl Renderer {
 }
 
 /// Depth-only rasterization for the shadow map (both faces).
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn raster_depth(v: &[[f32; 3]; 3], size: usize, depth: &mut [f32]) {
-    let area = (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) - (v[2][0] - v[0][0]) * (v[1][1] - v[0][1]);
+    let area =
+        (v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) - (v[2][0] - v[0][0]) * (v[1][1] - v[0][1]);
     if area.abs() < 1e-12 {
         return;
     }
-    let minx = v.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-    let maxx = (v.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max).ceil() as i64).min(size as i64 - 1);
-    let miny = v.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-    let maxy = (v.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max).ceil() as i64).min(size as i64 - 1);
+    let minx = v
+        .iter()
+        .map(|p| p[0])
+        .fold(f32::INFINITY, f32::min)
+        .floor()
+        .max(0.0) as usize;
+    let maxx = (v
+        .iter()
+        .map(|p| p[0])
+        .fold(f32::NEG_INFINITY, f32::max)
+        .ceil() as i64)
+        .min(size as i64 - 1);
+    let miny = v
+        .iter()
+        .map(|p| p[1])
+        .fold(f32::INFINITY, f32::min)
+        .floor()
+        .max(0.0) as usize;
+    let maxy = (v
+        .iter()
+        .map(|p| p[1])
+        .fold(f32::NEG_INFINITY, f32::max)
+        .ceil() as i64)
+        .min(size as i64 - 1);
     if maxx < 0 || maxy < 0 {
         return;
     }
     for y in miny..=maxy as usize {
         for x in minx..=maxx as usize {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let e = |a: [f32; 3], b: [f32; 3]| (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0]);
-            let (w0, w1, w2) = (e(v[1], v[2]) / area, e(v[2], v[0]) / area, e(v[0], v[1]) / area);
+            let e = |a: [f32; 3], b: [f32; 3]| {
+                (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0])
+            };
+            let (w0, w1, w2) = (
+                e(v[1], v[2]) / area,
+                e(v[2], v[0]) / area,
+                e(v[0], v[1]) / area,
+            );
             if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
                 continue;
             }
@@ -426,8 +510,19 @@ struct ShadeCtx<'a> {
     exposure: f32,
 }
 
-#[allow(clippy::too_many_lines, clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn draw_item(item: &Item, vp: &Mat4, target: &mut Target, ctx: &ShadeCtx<'_>, stats: &mut RenderStats) {
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn draw_item(
+    item: &Item,
+    vp: &Mat4,
+    target: &mut Target,
+    ctx: &ShadeCtx<'_>,
+    stats: &mut RenderStats,
+) {
     let mesh = &item.mesh;
     let mat = &item.material;
     let normal_m = item.model.inverse().map_or(item.model, |m| m.transpose());
@@ -435,9 +530,13 @@ fn draw_item(item: &Item, vp: &Mat4, target: &mut Target, ctx: &ShadeCtx<'_>, st
     let has_uv = mesh.has_uvs();
     let verts: Vec<VertexOut> = (0..mesh.positions.len())
         .map(|i| {
-            let world = item.model.transform_point(Vec3::from_array(mesh.positions[i]));
+            let world = item
+                .model
+                .transform_point(Vec3::from_array(mesh.positions[i]));
             let normal = if has_n {
-                normal_m.transform_vector(Vec3::from_array(mesh.normals[i])).normalize()
+                normal_m
+                    .transform_vector(Vec3::from_array(mesh.normals[i]))
+                    .normalize()
             } else {
                 Vec3::ZERO
             };
@@ -450,10 +549,16 @@ fn draw_item(item: &Item, vp: &Mat4, target: &mut Target, ctx: &ShadeCtx<'_>, st
         })
         .collect();
     let (w, h) = (target.w as f32, target.h as f32);
-    for t in mesh.indices.chunks_exact(3) {
+    for t in mesh.indices.as_chunks::<3>().0 {
         stats.triangles += 1;
-        let tri = [verts[t[0] as usize], verts[t[1] as usize], verts[t[2] as usize]];
-        let face_n = (tri[1].world - tri[0].world).cross(tri[2].world - tri[0].world).normalize();
+        let tri = [
+            verts[t[0] as usize],
+            verts[t[1] as usize],
+            verts[t[2] as usize],
+        ];
+        let face_n = (tri[1].world - tri[0].world)
+            .cross(tri[2].world - tri[0].world)
+            .normalize();
         let poly = clip_near(tri);
         if poly.len() < 3 {
             continue;
@@ -472,7 +577,8 @@ fn draw_item(item: &Item, vp: &Mat4, target: &mut Target, ctx: &ShadeCtx<'_>, st
                     p.clip[2] * iw,
                 ]
             });
-            let area = (sp[1][0] - sp[0][0]) * (sp[2][1] - sp[0][1]) - (sp[2][0] - sp[0][0]) * (sp[1][1] - sp[0][1]);
+            let area = (sp[1][0] - sp[0][0]) * (sp[2][1] - sp[0][1])
+                - (sp[2][0] - sp[0][0]) * (sp[1][1] - sp[0][1]);
             // Screen Y is down, so a counter-clockwise front face has
             // negative area here.
             let back = area > 0.0;
@@ -485,15 +591,41 @@ fn draw_item(item: &Item, vp: &Mat4, target: &mut Target, ctx: &ShadeCtx<'_>, st
             }
             if mat.wireframe {
                 for e in 0..3 {
-                    draw_line(sp[e], sp[(e + 1) % 3], target, mat.color.add(mat.emissive), stats);
+                    draw_line(
+                        sp[e],
+                        sp[(e + 1) % 3],
+                        target,
+                        mat.color.add(mat.emissive),
+                        stats,
+                    );
                 }
                 continue;
             }
             let inv_w = [1.0 / v[0].clip[3], 1.0 / v[1].clip[3], 1.0 / v[2].clip[3]];
-            let minx = sp.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-            let maxx = (sp.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max).ceil()).min(w - 1.0);
-            let miny = sp.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-            let maxy = (sp.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max).ceil()).min(h - 1.0);
+            let minx = sp
+                .iter()
+                .map(|p| p[0])
+                .fold(f32::INFINITY, f32::min)
+                .floor()
+                .max(0.0) as usize;
+            let maxx = (sp
+                .iter()
+                .map(|p| p[0])
+                .fold(f32::NEG_INFINITY, f32::max)
+                .ceil())
+            .min(w - 1.0);
+            let miny = sp
+                .iter()
+                .map(|p| p[1])
+                .fold(f32::INFINITY, f32::min)
+                .floor()
+                .max(0.0) as usize;
+            let maxy = (sp
+                .iter()
+                .map(|p| p[1])
+                .fold(f32::NEG_INFINITY, f32::max)
+                .ceil())
+            .min(h - 1.0);
             if maxx < 0.0 || maxy < 0.0 {
                 continue;
             }
@@ -501,8 +633,14 @@ fn draw_item(item: &Item, vp: &Mat4, target: &mut Target, ctx: &ShadeCtx<'_>, st
                 let py = y as f32 + 0.5;
                 for x in minx..=maxx as usize {
                     let px = x as f32 + 0.5;
-                    let e = |a: [f32; 3], b: [f32; 3]| (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0]);
-                    let (b0, b1, b2) = (e(sp[1], sp[2]) / area, e(sp[2], sp[0]) / area, e(sp[0], sp[1]) / area);
+                    let e = |a: [f32; 3], b: [f32; 3]| {
+                        (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0])
+                    };
+                    let (b0, b1, b2) = (
+                        e(sp[1], sp[2]) / area,
+                        e(sp[2], sp[0]) / area,
+                        e(sp[0], sp[1]) / area,
+                    );
                     if b0 < 0.0 || b1 < 0.0 || b2 < 0.0 {
                         continue;
                     }
@@ -547,13 +685,26 @@ fn draw_item(item: &Item, vp: &Mat4, target: &mut Target, ctx: &ShadeCtx<'_>, st
     }
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn draw_line(a: [f32; 3], b: [f32; 3], target: &mut Target, color: Rgb, stats: &mut RenderStats) {
     let steps = (b[0] - a[0]).abs().max((b[1] - a[1]).abs()).ceil().max(1.0) as usize;
     for i in 0..=steps {
         let t = i as f32 / steps as f32;
-        let (x, y, z) = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t);
-        if x < 0.0 || y < 0.0 || x >= target.w as f32 || y >= target.h as f32 || !(-1.0..=1.0).contains(&z) {
+        let (x, y, z) = (
+            a[0] + (b[0] - a[0]) * t,
+            a[1] + (b[1] - a[1]) * t,
+            a[2] + (b[2] - a[2]) * t,
+        );
+        if x < 0.0
+            || y < 0.0
+            || x >= target.w as f32
+            || y >= target.h as f32
+            || !(-1.0..=1.0).contains(&z)
+        {
             continue;
         }
         let idx = y as usize * target.w + x as usize;
@@ -592,12 +743,25 @@ fn shade(mat: &Material, p: Vec3, n: Vec3, uv: [f32; 2], ctx: &ShadeCtx<'_>) -> 
                         total = total.add(albedo.mul(color).scale(intensity * ctx.exposure));
                         continue;
                     }
-                    Light::Hemisphere { sky, ground, intensity } => {
+                    Light::Hemisphere {
+                        sky,
+                        ground,
+                        intensity,
+                    } => {
                         let k = 0.5 * (n.y + 1.0);
-                        total = total.add(albedo.mul(ground.lerp(sky, k)).scale(intensity * ctx.exposure));
+                        total = total.add(
+                            albedo
+                                .mul(ground.lerp(sky, k))
+                                .scale(intensity * ctx.exposure),
+                        );
                         continue;
                     }
-                    Light::Directional { color, intensity, shadow, .. } => {
+                    Light::Directional {
+                        color,
+                        intensity,
+                        shadow,
+                        ..
+                    } => {
                         let vis = match (shadow, ctx.shadow) {
                             (true, Some(sm)) if mat.receive_shadow => {
                                 let ndl = n.dot(-l.direction).max(0.0);
@@ -607,13 +771,32 @@ fn shade(mat: &Material, p: Vec3, n: Vec3, uv: [f32; 2], ctx: &ShadeCtx<'_>) -> 
                         };
                         (color.scale(intensity), -l.direction, vis)
                     }
-                    Light::Point { color, intensity, range } => {
+                    Light::Point {
+                        color,
+                        intensity,
+                        range,
+                    } => {
                         let d = l.position - p;
                         let dist = d.length();
-                        let fall = if range > 0.0 { saturate(1.0 - (dist / range).powi(4)).powi(2) } else { 1.0 };
-                        (color.scale(intensity * fall / (1.0 + dist * dist * 0.02)), d.normalize(), 1.0)
+                        let fall = if range > 0.0 {
+                            saturate(1.0 - (dist / range).powi(4)).powi(2)
+                        } else {
+                            1.0
+                        };
+                        (
+                            color.scale(intensity * fall / (1.0 + dist * dist * 0.02)),
+                            d.normalize(),
+                            1.0,
+                        )
                     }
-                    Light::Spot { color, intensity, range, direction: _, angle, penumbra } => {
+                    Light::Spot {
+                        color,
+                        intensity,
+                        range,
+                        direction: _,
+                        angle,
+                        penumbra,
+                    } => {
                         let d = l.position - p;
                         let dist = d.length();
                         let ld = d.normalize();
@@ -621,7 +804,11 @@ fn shade(mat: &Material, p: Vec3, n: Vec3, uv: [f32; 2], ctx: &ShadeCtx<'_>) -> 
                         let outer = angle.cos();
                         let inner = (angle * (1.0 - penumbra)).cos();
                         let cone = saturate((cos - outer) / (inner - outer).max(1e-4));
-                        let fall = if range > 0.0 { saturate(1.0 - (dist / range).powi(4)).powi(2) } else { 1.0 };
+                        let fall = if range > 0.0 {
+                            saturate(1.0 - (dist / range).powi(4)).powi(2)
+                        } else {
+                            1.0
+                        };
                         (color.scale(intensity * fall * cone * cone), ld, 1.0)
                     }
                 };
@@ -636,12 +823,18 @@ fn shade(mat: &Material, p: Vec3, n: Vec3, uv: [f32; 2], ctx: &ShadeCtx<'_>) -> 
                         let b = bands.max(1) as f32;
                         albedo.scale(((ndl * b).ceil() / b).min(1.0))
                     }
-                    Shading::Phong { shininess, specular } => {
+                    Shading::Phong {
+                        shininess,
+                        specular,
+                    } => {
                         let hv = (dir + v).normalize();
                         let spec = n.dot(hv).max(0.0).powf(shininess.max(1.0)) * specular;
                         albedo.scale(ndl).add(Rgb::WHITE.scale(spec))
                     }
-                    Shading::Standard { metallic, roughness } => {
+                    Shading::Standard {
+                        metallic,
+                        roughness,
+                    } => {
                         let hv = (dir + v).normalize();
                         let ndh = n.dot(hv).max(0.0);
                         let ndv = n.dot(v).max(1e-4);
@@ -654,7 +847,8 @@ fn shade(mat: &Material, p: Vec3, n: Vec3, uv: [f32; 2], ctx: &ShadeCtx<'_>) -> 
                         let f0 = Rgb::new(0.04, 0.04, 0.04).lerp(albedo, metallic);
                         let fr = (1.0 - v.dot(hv).max(0.0)).powi(5);
                         let f = f0.add(Rgb::WHITE.add(f0.scale(-1.0)).scale(fr));
-                        let spec = f.scale(dist * g / (4.0 * ndl * ndv) * std::f32::consts::PI * ndl);
+                        let spec =
+                            f.scale(dist * g / (4.0 * ndl * ndv) * std::f32::consts::PI * ndl);
                         let kd = (1.0 - metallic) * (1.0 - f.luminance());
                         albedo.scale(kd * ndl).add(spec)
                     }
@@ -685,7 +879,16 @@ mod tests {
     fn lit_scene() -> Scene {
         let mut s = Scene::new();
         s.background = Rgb::BLACK;
-        s.add(Node::new("amb", Content::Light(Light::Ambient { color: Rgb::WHITE, intensity: 0.1 })), None);
+        s.add(
+            Node::new(
+                "amb",
+                Content::Light(Light::Ambient {
+                    color: Rgb::WHITE,
+                    intensity: 0.1,
+                }),
+            ),
+            None,
+        );
         s.add(
             Node::new(
                 "sun",
@@ -710,20 +913,42 @@ mod tests {
     #[test]
     fn a_red_box_in_front_of_the_camera_is_red_in_the_middle() {
         let mut s = lit_scene();
-        s.add(Node::new("box", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::basic(Color::RED))), None);
+        s.add(
+            Node::new(
+                "box",
+                Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::basic(Color::RED)),
+            ),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 4.0), Vec3::ZERO, 0.8);
         let (img, stats) = Renderer::new(64, 64).samples(1).render(&mut s, &cam);
         assert_eq!(pixel(&img, 32, 32), [255, 0, 0, 255]);
         assert_eq!(pixel(&img, 1, 1), [0, 0, 0, 255], "background");
         assert_eq!(stats.triangles, 12);
-        assert_eq!(stats.backfaces, 10, "all but the front face point away or are edge-on");
+        assert_eq!(
+            stats.backfaces, 10,
+            "all but the front face point away or are edge-on"
+        );
     }
 
     #[test]
     fn depth_testing_keeps_the_nearer_surface() {
         let mut s = lit_scene();
-        s.add(Node::new("far", Content::mesh(plane(4.0, 4.0, 1, 1), Material::basic(Color::BLUE))).at(Vec3::new(0.0, 0.0, -1.0)), None);
-        s.add(Node::new("near", Content::mesh(plane(1.0, 1.0, 1, 1), Material::basic(Color::GREEN))), None);
+        s.add(
+            Node::new(
+                "far",
+                Content::mesh(plane(4.0, 4.0, 1, 1), Material::basic(Color::BLUE)),
+            )
+            .at(Vec3::new(0.0, 0.0, -1.0)),
+            None,
+        );
+        s.add(
+            Node::new(
+                "near",
+                Content::mesh(plane(1.0, 1.0, 1, 1), Material::basic(Color::GREEN)),
+            ),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 3.0), Vec3::ZERO, 0.8);
         let (img, _) = Renderer::new(40, 40).samples(1).render(&mut s, &cam);
         assert_eq!(pixel(&img, 20, 20), [0, 255, 0, 255]);
@@ -733,9 +958,29 @@ mod tests {
     #[test]
     fn objects_outside_the_frustum_are_culled() {
         let mut s = lit_scene();
-        s.add(Node::new("in", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE))), None);
-        s.add(Node::new("behind", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE))).at(Vec3::new(0.0, 0.0, 20.0)), None);
-        s.add(Node::new("left", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE))).at(Vec3::new(-50.0, 0.0, 0.0)), None);
+        s.add(
+            Node::new(
+                "in",
+                Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE)),
+            ),
+            None,
+        );
+        s.add(
+            Node::new(
+                "behind",
+                Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE)),
+            )
+            .at(Vec3::new(0.0, 0.0, 20.0)),
+            None,
+        );
+        s.add(
+            Node::new(
+                "left",
+                Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE)),
+            )
+            .at(Vec3::new(-50.0, 0.0, 0.0)),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO, 0.8);
         let (_, stats) = Renderer::new(32, 32).samples(1).render(&mut s, &cam);
         assert_eq!((stats.objects, stats.culled_objects), (3, 2));
@@ -744,22 +989,41 @@ mod tests {
     #[test]
     fn lambert_is_brighter_facing_the_light() {
         let mut s = lit_scene();
-        s.add(Node::new("ball", Content::mesh(sphere(1.0, 32, 16), Material::lambert(Color::WHITE))), None);
+        s.add(
+            Node::new(
+                "ball",
+                Content::mesh(sphere(1.0, 32, 16), Material::lambert(Color::WHITE)),
+            ),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 4.0), Vec3::ZERO, 0.8);
         let (img, _) = Renderer::new(64, 64).samples(1).render(&mut s, &cam);
         let top = pixel(&img, 32, 18)[0];
         let bottom = pixel(&img, 32, 46)[0];
-        assert!(top > bottom + 40, "lit from above: top {top} bottom {bottom}");
+        assert!(
+            top > bottom + 40,
+            "lit from above: top {top} bottom {bottom}"
+        );
     }
 
     #[test]
     fn shadows_darken_the_ground_under_a_caster() {
         let mut s = lit_scene();
-        let ground = Node::new("ground", Content::mesh(plane(8.0, 8.0, 1, 1), Material::lambert(Color::WHITE)))
-            .rotated(Quat::from_axis_angle(Vec3::X, -std::f32::consts::FRAC_PI_2))
-            .at(Vec3::new(0.0, -1.0, 0.0));
+        let ground = Node::new(
+            "ground",
+            Content::mesh(plane(8.0, 8.0, 1, 1), Material::lambert(Color::WHITE)),
+        )
+        .rotated(Quat::from_axis_angle(Vec3::X, -std::f32::consts::FRAC_PI_2))
+        .at(Vec3::new(0.0, -1.0, 0.0));
         s.add(ground, None);
-        s.add(Node::new("box", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::RED))).at(Vec3::new(0.0, 0.5, 0.0)), None);
+        s.add(
+            Node::new(
+                "box",
+                Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::RED)),
+            )
+            .at(Vec3::new(0.0, 0.5, 0.0)),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 6.0, 0.01), Vec3::ZERO, 1.2);
         let r = Renderer::new(64, 64).samples(1);
         let (with, stats) = r.render(&mut s, &cam);
@@ -768,19 +1032,33 @@ mod tests {
         off.shadow_size = 0;
         let (without, _) = off.render(&mut s, &cam);
         // Somewhere on the ground the shadow makes it darker than unshadowed.
-        let darker = (0..64u32).flat_map(|y| (0..64u32).map(move |x| (x, y))).any(|(x, y)| {
-            let a = pixel(&with, x, y);
-            let b = pixel(&without, x, y);
-            u16::from(a[1]) + 30 < u16::from(b[1])
-        });
+        let darker = (0..64u32)
+            .flat_map(|y| (0..64u32).map(move |x| (x, y)))
+            .any(|(x, y)| {
+                let a = pixel(&with, x, y);
+                let b = pixel(&without, x, y);
+                u16::from(a[1]) + 30 < u16::from(b[1])
+            });
         assert!(darker);
     }
 
     #[test]
     fn the_near_plane_clips_rather_than_inverting() {
         let mut s = lit_scene();
-        s.add(Node::new("wall", Content::mesh(plane(20.0, 20.0, 1, 1), Material::basic(Color::WHITE).double_sided()))
-            .rotated(Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2 * 0.9)), None);
+        s.add(
+            Node::new(
+                "wall",
+                Content::mesh(
+                    plane(20.0, 20.0, 1, 1),
+                    Material::basic(Color::WHITE).double_sided(),
+                ),
+            )
+            .rotated(Quat::from_axis_angle(
+                Vec3::Y,
+                std::f32::consts::FRAC_PI_2 * 0.9,
+            )),
+            None,
+        );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.0, -1.0), 1.2);
         let (_, stats) = Renderer::new(32, 32).samples(1).render(&mut s, &cam);
         assert!(stats.near_clipped > 0);
@@ -790,9 +1068,24 @@ mod tests {
     #[test]
     fn instances_and_lods_count_and_choose() {
         let mut s = lit_scene();
-        let inst: Vec<Mat4> = (0..5).map(|i| Mat4::translation(Vec3::new(i as f32 * 2.0 - 4.0, 0.0, 0.0))).collect();
-        s.add(Node::new("many", Content::instanced(box_mesh(0.5, 0.5, 0.5), Material::lambert(Color::WHITE), inst)), None);
-        let lod = Content::lod(vec![(5.0, sphere(1.0, 32, 16)), (1e9, box_mesh(1.0, 1.0, 1.0))], Material::lambert(Color::WHITE));
+        let inst: Vec<Mat4> = (0..5)
+            .map(|i| Mat4::translation(Vec3::new(i as f32 * 2.0 - 4.0, 0.0, 0.0)))
+            .collect();
+        s.add(
+            Node::new(
+                "many",
+                Content::instanced(
+                    box_mesh(0.5, 0.5, 0.5),
+                    Material::lambert(Color::WHITE),
+                    inst,
+                ),
+            ),
+            None,
+        );
+        let lod = Content::lod(
+            vec![(5.0, sphere(1.0, 32, 16)), (1e9, box_mesh(1.0, 1.0, 1.0))],
+            Material::lambert(Color::WHITE),
+        );
         s.add(Node::new("lod", lod).at(Vec3::new(0.0, 0.0, -20.0)), None);
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 8.0), Vec3::ZERO, 1.0);
         let (_, stats) = Renderer::new(32, 32).samples(1).render(&mut s, &cam);

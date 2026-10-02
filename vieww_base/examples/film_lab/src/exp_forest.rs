@@ -22,20 +22,17 @@
 //!
 //! Receipts: segments built, leaves drawn, max depth reached — live.
 
-use vieww_foundation::{
-    Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
-};
+use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, ease_out_cubic, ease_out_expo, mix, tint, FAINT, MUTED, Rng,
-    VIOLET, VIOLET_SOFT, CYAN_SOFT, MINT, AMBER, BG_DEEP,
+    alpha, clamp01, ease_out_cubic, mix, tint, Rng, AMBER, FAINT, MINT, MUTED, VIOLET,
 };
 use crate::three_d::{Camera, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 8.0;
+pub(crate) const SECONDS: f32 = 8.0;
 
 /// Recursion depth — the tree's fractal dimension.
 const DEPTH: u8 = 8;
@@ -114,7 +111,13 @@ fn grow(
     let r1 = hash01(depth as u32, idx as u32);
     let r2 = hash01(idx as u32, depth as u32 * 7 + 3);
     let r3 = hash01(depth as u32 * 31 + 11, idx as u32 + 17);
-    let kids = if depth == 0 { 2 } else if r1 < 0.30 { 2 } else { 3 };
+    let kids = if depth == 0 {
+        2
+    } else if r1 < 0.30 {
+        2
+    } else {
+        3
+    };
     for k in 0..kids {
         let kr = hash01(idx as u32 * 13 + k, depth as u32 * 17 + 5);
         let (pitch, yaw) = if k == 0 {
@@ -174,14 +177,12 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The dusk sky.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(8, 9, 16)),
-                (0.5, Color::rgb(14, 12, 22)),
-                (0.8, Color::rgb(28, 16, 28)),
-                (1.0, Color::rgb(36, 20, 26)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(8, 9, 16)),
+            (0.5, Color::rgb(14, 12, 22)),
+            (0.8, Color::rgb(28, 16, 28)),
+            (1.0, Color::rgb(36, 20, 26)),
+        ]),
     );
 
     // The horizon glow — low, warm, behind the hill.
@@ -203,7 +204,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let x = rng.f01() * w;
             let y = rng.f01() * h * 0.55;
             let tw = 0.5 + 0.5 * (t * 1.6 + i as f32 * 1.37).sin();
-            book.circle(Offset::new(x, y), 0.4 + rng.f01() * 0.8, alpha(Color::WHITE, 0.02 + 0.08 * tw));
+            book.circle(
+                Offset::new(x, y),
+                0.4 + rng.f01() * 0.8,
+                alpha(Color::WHITE, 0.02 + 0.08 * tw),
+            );
         }
     }
 
@@ -230,10 +235,18 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
         for i in 0..bands {
             let z0 = -far + i as f32 / bands as f32 * far * 1.9;
             let z1 = -far + (i + 1) as f32 / bands as f32 * far * 1.9;
-            let Some((a, da, _)) = cam.project(Vec3::new(-wide, 0.0, z0), canvas) else { continue };
-            let Some((b, _, _)) = cam.project(Vec3::new(wide, 0.0, z0), canvas) else { continue };
-            let Some((c, _, _)) = cam.project(Vec3::new(wide, 0.02, z1), canvas) else { continue };
-            let Some((d, _, _)) = cam.project(Vec3::new(-wide, 0.02, z1), canvas) else { continue };
+            let Some((a, da, _)) = cam.project(Vec3::new(-wide, 0.0, z0), canvas) else {
+                continue;
+            };
+            let Some((b, _, _)) = cam.project(Vec3::new(wide, 0.0, z0), canvas) else {
+                continue;
+            };
+            let Some((c, _, _)) = cam.project(Vec3::new(wide, 0.02, z1), canvas) else {
+                continue;
+            };
+            let Some((d, _, _)) = cam.project(Vec3::new(-wide, 0.02, z1), canvas) else {
+                continue;
+            };
             let fade = 1.0 - clamp01((da - 6.0) / 22.0) * 0.6;
             let mut g = Path::new();
             g.move_to(a);
@@ -320,13 +333,13 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let leaves = if seg.depth + 3 > DEPTH + 1 { 4 } else { 3 };
             for k in 0..leaves {
                 let kr = hash01(seg.order as u32 * 7 + k, seg.depth as u32 + 101);
-                let kr2 = hash01(seg.order as u32 + 31, k as u32 * 13 + 7);
+                let kr2 = hash01(seg.order as u32 + 31, k * 13 + 7);
                 let appear = clamp01(leaf_wave * 2.0 - kr * 1.0);
                 if appear <= 0.0 {
                     continue;
                 }
                 // The leaf rides the branch tip with its own sway.
-                let sway = (t * 2.6 + kr * 6.28).sin() * 0.06 * wind;
+                let sway = (t * 2.6 + kr * std::f32::consts::TAU).sin() * 0.06 * wind;
                 let base = seg.b.add(Vec3::new(
                     (kr - 0.5) * 0.9,
                     (kr2 - 0.5) * 0.7 + 0.3,
@@ -340,7 +353,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                         mix(AMBER, Color::WHITE, 0.15) // rare autumn holdouts, catching the dusk
                     } else {
                         // A green family with warm variance — leaves, not lights.
-                        mix(mix(MINT, Color::rgb(64, 122, 82), 0.55), Color::rgb(132, 186, 130), warm)
+                        mix(
+                            mix(MINT, Color::rgb(64, 122, 82), 0.55),
+                            Color::rgb(132, 186, 130),
+                            warm,
+                        )
                     };
                     let dim_by_depth = 1.0 / (1.0 + dl * 0.06);
                     faces.push(Face {
@@ -360,16 +377,36 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     }
 
     // Painter's sort, far first.
-    faces.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
+    faces.sort_by(|a, b| {
+        b.depth
+            .partial_cmp(&a.depth)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let mut leaves_drawn = 0usize;
     for f in &faces {
         let mut path = Path::new();
         if f.rrect > 0.0 {
             leaves_drawn += 1;
-            let l = f.pts[0].dx.min(f.pts[1].dx).min(f.pts[2].dx).min(f.pts[3].dx);
-            let tp = f.pts[0].dy.min(f.pts[1].dy).min(f.pts[2].dy).min(f.pts[3].dy);
-            let r = f.pts[0].dx.max(f.pts[1].dx).max(f.pts[2].dx).max(f.pts[3].dx);
-            let btm = f.pts[0].dy.max(f.pts[1].dy).max(f.pts[2].dy).max(f.pts[3].dy);
+            let l = f.pts[0]
+                .dx
+                .min(f.pts[1].dx)
+                .min(f.pts[2].dx)
+                .min(f.pts[3].dx);
+            let tp = f.pts[0]
+                .dy
+                .min(f.pts[1].dy)
+                .min(f.pts[2].dy)
+                .min(f.pts[3].dy);
+            let r = f.pts[0]
+                .dx
+                .max(f.pts[1].dx)
+                .max(f.pts[2].dx)
+                .max(f.pts[3].dx);
+            let btm = f.pts[0]
+                .dy
+                .max(f.pts[1].dy)
+                .max(f.pts[2].dy)
+                .max(f.pts[3].dy);
             let leaf = Path::rounded_rect(Rect::new(l, tp, r, btm), f.rrect);
             book.fill(leaf, f.brush.clone());
             continue;
@@ -430,7 +467,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

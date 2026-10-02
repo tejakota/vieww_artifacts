@@ -30,7 +30,11 @@ pub fn tick_step(start: f64, stop: f64, count: usize) -> f64 {
 /// Round tick values covering `[start, stop]` — `d3.ticks`.
 #[must_use]
 pub fn ticks(start: f64, stop: f64, count: usize) -> Vec<f64> {
-    let (lo, hi, rev) = if start <= stop { (start, stop, false) } else { (stop, start, true) };
+    let (lo, hi, rev) = if start <= stop {
+        (start, stop, false)
+    } else {
+        (stop, start, true)
+    };
     let step = tick_step(lo, hi, count);
     if step == 0.0 || !step.is_finite() {
         return vec![lo];
@@ -38,7 +42,11 @@ pub fn ticks(start: f64, stop: f64, count: usize) -> Vec<f64> {
     // D3's trick against float dust: for fractional steps, divide by the
     // (integral) inverse step instead of multiplying by the step, so 0.3 is
     // 3 / 10 rather than 3 × 0.1 = 0.30000000000000004.
-    let inverse = if step < 1.0 { Some((1.0 / step).round()) } else { None };
+    let inverse = if step < 1.0 {
+        Some((1.0 / step).round())
+    } else {
+        None
+    };
     let (i0, i1) = match inverse {
         Some(inc) => ((lo * inc).ceil(), (hi * inc).floor()),
         None => ((lo / step).ceil(), (hi / step).floor()),
@@ -144,7 +152,11 @@ impl Continuous {
     pub fn map(&self, x: f64) -> f64 {
         let t = self.transform;
         let (d0, d1) = (t.forward(self.domain.0), t.forward(self.domain.1));
-        let mut u = if (d1 - d0).abs() < f64::EPSILON { 0.5 } else { (t.forward(x) - d0) / (d1 - d0) };
+        let mut u = if (d1 - d0).abs() < f64::EPSILON {
+            0.5
+        } else {
+            (t.forward(x) - d0) / (d1 - d0)
+        };
         if self.clamp {
             u = u.clamp(0.0, 1.0);
         }
@@ -156,7 +168,11 @@ impl Continuous {
     pub fn invert(&self, y: f64) -> f64 {
         let t = self.transform;
         let (d0, d1) = (t.forward(self.domain.0), t.forward(self.domain.1));
-        let u = if (self.range.1 - self.range.0).abs() < f64::EPSILON { 0.0 } else { (y - self.range.0) / (self.range.1 - self.range.0) };
+        let u = if (self.range.1 - self.range.0).abs() < f64::EPSILON {
+            0.0
+        } else {
+            (y - self.range.0) / (self.range.1 - self.range.0)
+        };
         t.inverse(d0 + (d1 - d0) * u)
     }
 
@@ -194,7 +210,10 @@ impl Continuous {
     #[must_use]
     pub fn ticks(&self, count: usize) -> Vec<f64> {
         if let Transform::Log(base) = self.transform {
-            let (lo, hi) = (self.domain.0.min(self.domain.1), self.domain.0.max(self.domain.1));
+            let (lo, hi) = (
+                self.domain.0.min(self.domain.1),
+                self.domain.0.max(self.domain.1),
+            );
             let mut out = Vec::new();
             #[allow(clippy::cast_possible_truncation)]
             let (e0, e1) = (lo.log(base).floor() as i32, hi.log(base).ceil() as i32);
@@ -202,7 +221,10 @@ impl Continuous {
                 let p = base.powi(e);
                 for k in 1..10 {
                     let v = p * f64::from(k);
-                    if v >= lo * (1.0 - 1e-12) && v <= hi * (1.0 + 1e-12) && (e1 - e0 <= 2 || k == 1) {
+                    if v >= lo * (1.0 - 1e-12)
+                        && v <= hi * (1.0 + 1e-12)
+                        && (e1 - e0 <= 2 || k == 1)
+                    {
                         out.push(v);
                     }
                 }
@@ -276,7 +298,11 @@ impl Band {
 
 /// `scalePoint` — a band scale with zero-width bands.
 #[must_use]
-pub fn point_scale(domain: impl IntoIterator<Item = impl Into<String>>, range: (f64, f64), padding: f64) -> Band {
+pub fn point_scale(
+    domain: impl IntoIterator<Item = impl Into<String>>,
+    range: (f64, f64),
+    padding: f64,
+) -> Band {
     let mut b = Band::new(domain, range);
     b.padding_inner = 1.0;
     b.padding_outer = padding;
@@ -293,7 +319,10 @@ pub struct Ordinal<T: Clone> {
 impl<T: Clone> Ordinal<T> {
     #[must_use]
     pub const fn new(range: Vec<T>) -> Self {
-        Self { domain: Vec::new(), range }
+        Self {
+            domain: Vec::new(),
+            range,
+        }
     }
 
     /// The output for `key`; unseen keys are appended to the domain, as in
@@ -328,7 +357,11 @@ pub fn format_tick(value: f64, step: f64) -> String {
         return format!("{}k", trim(value / 1e3));
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let decimals = if step > 0.0 && step < 1.0 { (-step.log10()).ceil() as usize } else { 0 };
+    let decimals = if step > 0.0 && step < 1.0 {
+        (-step.log10()).ceil() as usize
+    } else {
+        0
+    };
     format!("{value:.decimals$}")
 }
 
@@ -343,7 +376,10 @@ mod tests {
 
     #[test]
     fn ticks_match_d3() {
-        assert_eq!(ticks(0.0, 1.0, 10), vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]);
+        assert_eq!(
+            ticks(0.0, 1.0, 10),
+            vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        );
         assert_eq!(ticks(0.0, 10.0, 5), vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
         assert_eq!(ticks(-3.3, 7.7, 5), vec![-2.0, 0.0, 2.0, 4.0, 6.0]);
         assert_eq!(ticks(1.0, 0.0, 2), vec![1.0, 0.5, 0.0]);

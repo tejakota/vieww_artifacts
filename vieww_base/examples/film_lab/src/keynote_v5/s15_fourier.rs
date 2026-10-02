@@ -12,13 +12,14 @@
 //! geometry runs streaming past, dash-marching, the run counter climbing
 //! with the film's own clock.
 
-use vieww_foundation::{
-    Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextAlign, TextStyle,
-};
+use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, ease_out_back, ease_out_cubic, mix, tint, xywh, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT, AMBER};
+use crate::film_lib::{
+    alpha, clamp01, ease_in_out, ease_out_back, tint, AMBER, CYAN, CYAN_SOFT, MUTED, VIOLET,
+    VIOLET_SOFT,
+};
 
 use super::studio;
 use super::{group_commas, Ctx};
@@ -28,10 +29,26 @@ use super::{group_commas, Ctx};
 /// The source: a stylised 'w' as a closed polygon — three valleys, the
 /// wordmark's initial, closed by the sky. Local 320×220 box.
 const SIG: [(f32, f32); 20] = [
-    (10.0, 40.0), (46.0, 180.0), (66.0, 208.0), (86.0, 180.0), (110.0, 70.0),
-    (128.0, 40.0), (146.0, 70.0), (168.0, 176.0), (188.0, 206.0), (206.0, 176.0),
-    (232.0, 66.0), (248.0, 40.0), (264.0, 72.0), (282.0, 160.0), (300.0, 148.0),
-    (292.0, 96.0), (262.0, 34.0), (180.0, 10.0), (92.0, 22.0), (34.0, 52.0),
+    (10.0, 40.0),
+    (46.0, 180.0),
+    (66.0, 208.0),
+    (86.0, 180.0),
+    (110.0, 70.0),
+    (128.0, 40.0),
+    (146.0, 70.0),
+    (168.0, 176.0),
+    (188.0, 206.0),
+    (206.0, 176.0),
+    (232.0, 66.0),
+    (248.0, 40.0),
+    (264.0, 72.0),
+    (282.0, 160.0),
+    (300.0, 148.0),
+    (292.0, 96.0),
+    (262.0, 34.0),
+    (180.0, 10.0),
+    (92.0, 22.0),
+    (34.0, 52.0),
 ];
 
 /// One Fourier coefficient: amplitude, phase, frequency index.
@@ -64,8 +81,16 @@ fn coefs() -> Vec<Coef> {
         re /= n;
         im /= n;
         let kk = k as i32;
-        let k = if kk * 2 > SIG.len() as i32 { kk - SIG.len() as i32 } else { kk };
-        out.push(Coef { r: (re * re + im * im).sqrt(), a0: im.atan2(re), k });
+        let k = if kk * 2 > SIG.len() as i32 {
+            kk - SIG.len() as i32
+        } else {
+            kk
+        };
+        out.push(Coef {
+            r: (re * re + im * im).sqrt(),
+            a0: im.atan2(re),
+            k,
+        });
     }
     out.sort_by(|x, y| y.r.partial_cmp(&x.r).unwrap_or(std::cmp::Ordering::Equal));
     out
@@ -82,10 +107,22 @@ fn fourier_lines() -> Vec<Vec<studio::Seg>> {
         vec![("keep ", kw), ("a line called ", tx), ("signature", tx)],
         vec![],
         vec![("screen ", kw), ("\"Fourier\"", st), (":", pu)],
-        vec![("    a scroll view, spaced ", pu), ("18", nu), (", children aligned to the start:", pu)],
+        vec![
+            ("    a scroll view, spaced ", pu),
+            ("18", nu),
+            (", children aligned to the start:", pu),
+        ],
         vec![("        the canvas, drawing the signature", tx)],
-        vec![("        a choir of ", pu), ("20", nu), (" circles, chained", tx)],
-        vec![("        a scroll of ", pu), ("geometry runs", tx), (", active", pu)],
+        vec![
+            ("        a choir of ", pu),
+            ("20", nu),
+            (" circles, chained", tx),
+        ],
+        vec![
+            ("        a scroll of ", pu),
+            ("geometry runs", tx),
+            (", active", pu),
+        ],
     ]
 }
 
@@ -93,7 +130,7 @@ fn fourier_lines() -> Vec<Vec<studio::Seg>> {
 const CW: f32 = 900.0;
 const CH: f32 = 880.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let abs = ctx.abs;
     let ladder = ctx.ladder;
@@ -119,20 +156,29 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             // The canvas ground.
             book.rect(
                 Rect::new(0.0, 0.0, CW, CH),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(10, 10, 14)),
-                    (1.0, Color::rgb(13, 12, 19)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(10, 10, 14)), (1.0, Color::rgb(13, 12, 19))]),
             );
             // Fine grid.
             let mut x = 0.0;
             while x < CW {
-                book.line(Offset::new(x, 0.0), Offset::new(x, CH * 0.62), alpha(CYAN, 0.03), 1.0);
+                book.line(
+                    Offset::new(x, 0.0),
+                    Offset::new(x, CH * 0.62),
+                    alpha(CYAN, 0.03),
+                    1.0,
+                );
                 x += 64.0;
             }
             let mut y = 0.0;
             while y < CH * 0.62 {
-                book.line(Offset::new(0.0, y), Offset::new(CW, y), alpha(CYAN, 0.03), 1.0);
+                book.line(
+                    Offset::new(0.0, y),
+                    Offset::new(CW, y),
+                    alpha(CYAN, 0.03),
+                    1.0,
+                );
                 y += 64.0;
             }
 
@@ -145,10 +191,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     break;
                 }
                 let a = c.a0 + c.k as f32 * phase;
-                let next = Offset::new(
-                    tip.dx + a.cos() * c.r * 1.55,
-                    tip.dy + a.sin() * c.r * 1.55,
-                );
+                let next =
+                    Offset::new(tip.dx + a.cos() * c.r * 1.55, tip.dy + a.sin() * c.r * 1.55);
                 // The circle — faint, the machine's bones.
                 book.stroke(
                     super::circle_path(tip.dx, tip.dy, c.r * 1.55, 40),
@@ -194,7 +238,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             for r in 0..rows {
                 let y = strip_y0 + 10.0 + r as f32 * row_h;
                 // The row's hairline rail.
-                book.line(Offset::new(24.0, y), Offset::new(CW - 24.0, y), alpha(Color::WHITE, 0.05), 1.0);
+                book.line(
+                    Offset::new(24.0, y),
+                    Offset::new(CW - 24.0, y),
+                    alpha(Color::WHITE, 0.05),
+                    1.0,
+                );
                 // The run — a waveform polyline, dash-marching.
                 let mut p = Path::new();
                 let scroll = sec * (60.0 + r as f32 * 9.0);
@@ -202,7 +251,8 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     let x = 24.0 + i as f32 / 63.0 * (CW - 48.0);
                     let wave = (x * 0.030 + r as f32 * 1.7).sin()
                         * (x * 0.011 - r as f32 * 0.9).cos()
-                        * row_h * 0.32;
+                        * row_h
+                        * 0.32;
                     let xx = x - scroll.rem_euclid(CW - 48.0);
                     let xx = if xx < 24.0 { xx + (CW - 48.0) } else { xx };
                     let pt = Offset::new(xx, y + wave);
@@ -215,7 +265,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 let warm = r % 3 == 0;
                 book.stroke_styled(
                     p,
-                    alpha(if warm { AMBER } else { CYAN_SOFT }, 0.42 + 0.2 * ((sec * 2.0 + r as f32).sin())),
+                    alpha(
+                        if warm { AMBER } else { CYAN_SOFT },
+                        0.42 + 0.2 * ((sec * 2.0 + r as f32).sin()),
+                    ),
                     1.5,
                     vieww_foundation::StrokeStyle::rounded()
                         .dash(vieww_foundation::Dash::even(7.0).offset(-sec * 26.0)),
@@ -226,7 +279,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     .into();
 
     let spec = studio::Spec {
-        code: studio::Code::Lines { lines: fourier_lines(), blink: ctx.sec },
+        code: studio::Code::Lines {
+            lines: fourier_lines(),
+            blink: ctx.sec,
+        },
         app: studio::App::new(1, super::tap_pulse(abs), abs),
         preview_custom: Some(sheet),
         session_line: 1.0,
@@ -234,8 +290,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         ..Default::default()
     };
 
-    let mut stack = Stack::new()
-        .push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
+    let mut stack = Stack::new().push(Positioned::fill().child(studio::studio(abs, ladder, spec)));
 
     // The run counter — live, climbing with the clock.
     let counter_a = clamp01((t - 0.30) / 0.14);

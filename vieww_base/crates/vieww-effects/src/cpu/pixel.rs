@@ -28,7 +28,12 @@ pub fn sample(px: &[u8], w: usize, h: usize, x: f32, y: f32) -> [f32; 4] {
     let (x1, y1) = ((x0 + 1).min(w - 1), (y0 + 1).min(h - 1));
     let (tx, ty) = (fx - x0 as f32, fy - y0 as f32);
     let mut out = [0.0; 4];
-    for (xx, yy, wt) in [(x0, y0, (1.0 - tx) * (1.0 - ty)), (x1, y0, tx * (1.0 - ty)), (x0, y1, (1.0 - tx) * ty), (x1, y1, tx * ty)] {
+    for (xx, yy, wt) in [
+        (x0, y0, (1.0 - tx) * (1.0 - ty)),
+        (x1, y0, tx * (1.0 - ty)),
+        (x0, y1, (1.0 - tx) * ty),
+        (x1, y1, tx * ty),
+    ] {
         let i = (yy * w + xx) * 4;
         for (c, o) in out.iter_mut().enumerate() {
             *o += f32::from(px[i + c]) * wt;
@@ -45,7 +50,7 @@ fn q(v: f32) -> u8 {
 /// Reduce each channel to `levels` steps.
 pub fn posterize(px: &mut [u8], levels: u8) {
     let l = f32::from(levels.max(2) - 1);
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         for c in &mut p[..3] {
             *c = q((f32::from(*c) / 255.0 * l).round() / l * 255.0);
         }
@@ -54,7 +59,7 @@ pub fn posterize(px: &mut [u8], levels: u8) {
 
 /// Black or white by luminance.
 pub fn threshold(px: &mut [u8], level: u8) {
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         let l = 0.2126 * f32::from(p[0]) + 0.7152 * f32::from(p[1]) + 0.0722 * f32::from(p[2]);
         let v = if l >= f32::from(level) { 255 } else { 0 };
         p[..3].fill(v);
@@ -63,7 +68,7 @@ pub fn threshold(px: &mut [u8], level: u8) {
 
 /// Invert colour.
 pub fn invert(px: &mut [u8]) {
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         for c in &mut p[..3] {
             *c = 255 - *c;
         }
@@ -73,7 +78,7 @@ pub fn invert(px: &mut [u8]) {
 /// Film grain: deterministic per `seed`, `amount` 0..1.
 pub fn grain(px: &mut [u8], amount: f32, seed: u32) {
     let mut s = seed.wrapping_mul(2_654_435_761).max(1);
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         s ^= s << 13;
         s ^= s >> 17;
         s ^= s << 5;
@@ -111,7 +116,11 @@ pub const EDGE: [f32; 9] = [-1.0, -1.0, -1.0, -1.0, 8.0, -1.0, -1.0, -1.0, -1.0]
 /// Convolve RGB with a square `kernel` (odd side), plus `bias`; alpha kept.
 #[must_use]
 pub fn convolve(px: &[u8], w: usize, h: usize, kernel: &[f32], bias: f32) -> Vec<u8> {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     let side = (kernel.len() as f32).sqrt() as usize;
     let r = (side / 2) as isize;
     let mut out = px.to_vec();
@@ -142,15 +151,24 @@ pub fn convolve(px: &[u8], w: usize, h: usize, kernel: &[f32], bias: f32) -> Vec
 #[must_use]
 pub fn sobel(px: &[u8], w: usize, h: usize) -> Vec<u8> {
     let lum = |x: isize, y: isize| {
-        let (x, y) = (x.clamp(0, w as isize - 1) as usize, y.clamp(0, h as isize - 1) as usize);
+        let (x, y) = (
+            x.clamp(0, w as isize - 1) as usize,
+            y.clamp(0, h as isize - 1) as usize,
+        );
         let i = (y * w + x) * 4;
         0.2126 * f32::from(px[i]) + 0.7152 * f32::from(px[i + 1]) + 0.0722 * f32::from(px[i + 2])
     };
     let mut out = px.to_vec();
     for y in 0..h as isize {
         for x in 0..w as isize {
-            let gx = lum(x + 1, y - 1) + 2.0 * lum(x + 1, y) + lum(x + 1, y + 1) - lum(x - 1, y - 1) - 2.0 * lum(x - 1, y) - lum(x - 1, y + 1);
-            let gy = lum(x - 1, y + 1) + 2.0 * lum(x, y + 1) + lum(x + 1, y + 1) - lum(x - 1, y - 1) - 2.0 * lum(x, y - 1) - lum(x + 1, y - 1);
+            let gx = lum(x + 1, y - 1) + 2.0 * lum(x + 1, y) + lum(x + 1, y + 1)
+                - lum(x - 1, y - 1)
+                - 2.0 * lum(x - 1, y)
+                - lum(x - 1, y + 1);
+            let gy = lum(x - 1, y + 1) + 2.0 * lum(x, y + 1) + lum(x + 1, y + 1)
+                - lum(x - 1, y - 1)
+                - 2.0 * lum(x, y - 1)
+                - lum(x + 1, y - 1);
             let m = q((gx * gx + gy * gy).sqrt() / 4.0);
             let o = (y as usize * w + x as usize) * 4;
             out[o..o + 3].fill(m);
@@ -243,7 +261,10 @@ pub fn halftone(px: &[u8], w: usize, h: usize, cell: f32, angle: f32, ink: [u8; 
     shader(px, w, h, |x, y, _uv, src| {
         let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
         let (u, v) = (fx * c + fy * s, -fx * s + fy * c);
-        let (cu, cv) = (((u / cell).floor() + 0.5) * cell, ((v / cell).floor() + 0.5) * cell);
+        let (cu, cv) = (
+            ((u / cell).floor() + 0.5) * cell,
+            ((v / cell).floor() + 0.5) * cell,
+        );
         let centre = (cu * c - cv * s, cu * s + cv * c);
         let p = src(centre.0, centre.1);
         let dark = 1.0 - (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) / 255.0;
@@ -327,12 +348,21 @@ impl Feedback {
             let p = src(sx, sy);
             [p[0], p[1], p[2], p[3] * decay]
         });
-        for (d, s) in trail.chunks_exact_mut(4).zip(input.chunks_exact(4)) {
+        for (d, s) in trail
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(input.as_chunks::<4>().0)
+        {
             let sa = f32::from(s[3]) / 255.0;
             let da = f32::from(d[3]) / 255.0;
             let oa = sa + da * (1.0 - sa);
             for k in 0..3 {
-                let v = if oa > 0.0 { (f32::from(s[k]) * sa + f32::from(d[k]) * da * (1.0 - sa)) / oa } else { 0.0 };
+                let v = if oa > 0.0 {
+                    (f32::from(s[k]) * sa + f32::from(d[k]) * da * (1.0 - sa)) / oa
+                } else {
+                    0.0
+                };
                 d[k] = q(v);
             }
             d[3] = q(oa * 255.0);
@@ -356,7 +386,12 @@ mod tests {
         for y in 0..h {
             for x in 0..w {
                 #[allow(clippy::cast_possible_truncation)]
-                v.extend([(x * 255 / (w - 1)) as u8, (y * 255 / (h - 1)) as u8, 100, 255]);
+                v.extend([
+                    (x * 255 / (w - 1)) as u8,
+                    (y * 255 / (h - 1)) as u8,
+                    100,
+                    255,
+                ]);
             }
         }
         v
@@ -406,7 +441,10 @@ mod tests {
     #[test]
     fn shader_identity_and_displace() {
         let p = grad(16, 8);
-        assert_eq!(shader(&p, 16, 8, |x, y, _, s| s(x as f32 + 0.5, y as f32 + 0.5)), p);
+        assert_eq!(
+            shader(&p, 16, 8, |x, y, _, s| s(x as f32 + 0.5, y as f32 + 0.5)),
+            p
+        );
         let neutral = vec![128u8; 16 * 8 * 4];
         assert_eq!(displace(&p, &neutral, 16, 8, 10.0), p);
         let mut right = neutral.clone();
@@ -444,7 +482,10 @@ mod tests {
         let empty = vec![0u8; 8 * 8 * 4];
         let a1 = fb.step(&empty)[(4 * 8 + 4) * 4 + 3];
         let a2 = fb.step(&empty)[(4 * 8 + 4) * 4 + 3];
-        assert!((i32::from(a1) - 128).abs() <= 1 && (i32::from(a2) - 64).abs() <= 1, "{a1} {a2}");
+        assert!(
+            (i32::from(a1) - 128).abs() <= 1 && (i32::from(a2) - 64).abs() <= 1,
+            "{a1} {a2}"
+        );
     }
 
     #[test]

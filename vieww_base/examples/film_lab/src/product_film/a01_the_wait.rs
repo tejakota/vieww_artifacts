@@ -14,11 +14,10 @@ use vieww_foundation::{Color, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    Ctx, MUTED, TERM_GREEN, W, alpha, caption, clamp01, distance_chip, dust,
-    gap_line, grain, ground, pole_caret, pole_screen, progress_rail, tint, vignette,
-    xywh,
+    alpha, caption, clamp01, distance_chip, dust, gap_line, grain, ground, pole_caret, pole_screen,
+    progress_rail, tint, vignette, xywh, Ctx, MUTED, TERM_GREEN, W,
 };
-use crate::film_lib::{Rng, ease_out_cubic, held_24_in_60};
+use crate::film_lib::{ease_out_cubic, held_24_in_60, Rng};
 
 /// The terminal's build line, typed once, then the wait.
 const BUILD_LINE: &str = "cargo build --release";
@@ -29,7 +28,7 @@ const TERM_Y: f32 = 640.0;
 const TERM_W: f32 = 600.0;
 const TERM_H: f32 = 240.0;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -51,9 +50,15 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
             while y < h {
                 let fade = (1.0 - (y / h - 0.5).abs() * 1.4).clamp(0.0, 1.0);
                 if i % 2 == 0 {
-                    book.rect(xywh(0.0, y, w, band_h * 0.55), alpha(Color::BLACK, 0.30 * fade));
+                    book.rect(
+                        xywh(0.0, y, w, band_h * 0.55),
+                        alpha(Color::BLACK, 0.30 * fade),
+                    );
                 } else {
-                    book.rect(xywh(0.0, y, w, band_h * 0.35), alpha(TERM_GREEN, 0.04 * fade));
+                    book.rect(
+                        xywh(0.0, y, w, band_h * 0.35),
+                        alpha(TERM_GREEN, 0.04 * fade),
+                    );
                 }
                 y += band_h;
                 i += 1;
@@ -84,27 +89,38 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(TERM_Y)
                 .width(TERM_W)
                 .height(TERM_H)
-                .child(
-                    super::Opacity::new(term_a).child(Painting::sized(
-                        Size::new(TERM_W, TERM_H),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // The terminal card: a dark surface, a green rim.
-                            book.rrect(xywh(0.0, 0.0, TERM_W, TERM_H), 12.0, alpha(Color::rgb(0x14, 0x18, 0x12), 0.96));
-                            book.stroke_rrect(xywh(0.0, 0.0, TERM_W, TERM_H), 12.0, alpha(TERM_GREEN, 0.25), 1.4);
-                            // The traffic lights — the old world is a GUI too.
-                            for (i, c) in [
-                                Color::rgb(0xE0, 0x6C, 0x60),
-                                Color::rgb(0xE0, 0xA8, 0x4E),
-                                Color::rgb(0x5C, 0xB8, 0x60),
-                            ]
-                            .iter()
-                            .enumerate()
-                            {
-                                book.circle(Offset::new(26.0 + i as f32 * 26.0, 24.0), 6.5, alpha(*c, 0.8));
-                            }
-                        }),
-                    )),
-                ),
+                .child(super::Opacity::new(term_a).child(Painting::sized(
+                    Size::new(TERM_W, TERM_H),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The terminal card: a dark surface, a green rim.
+                        book.rrect(
+                            xywh(0.0, 0.0, TERM_W, TERM_H),
+                            12.0,
+                            alpha(Color::rgb(0x14, 0x18, 0x12), 0.96),
+                        );
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, TERM_W, TERM_H),
+                            12.0,
+                            alpha(TERM_GREEN, 0.25),
+                            1.4,
+                        );
+                        // The traffic lights — the old world is a GUI too.
+                        for (i, c) in [
+                            Color::rgb(0xE0, 0x6C, 0x60),
+                            Color::rgb(0xE0, 0xA8, 0x4E),
+                            Color::rgb(0x5C, 0xB8, 0x60),
+                        ]
+                        .iter()
+                        .enumerate()
+                        {
+                            book.circle(
+                                Offset::new(26.0 + i as f32 * 26.0, 24.0),
+                                6.5,
+                                alpha(*c, 0.8),
+                            );
+                        }
+                    }),
+                ))),
         );
 
         // The typed command + the compiling line + the progress bar.
@@ -143,11 +159,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .child(
                         super::Opacity::new(comp_a).child(
                             Text::new("   Compiling the app v0.3.0 (1,247 crates)")
-                                .style(
-                                    TextStyle::new(14.0)
-                                        .monospace()
-                                        .color(alpha(MUTED, 0.8)),
-                                )
+                                .style(TextStyle::new(14.0).monospace().color(alpha(MUTED, 0.8)))
                                 .align(TextAlign::Left),
                         ),
                     ),
@@ -164,20 +176,27 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                     .top(TERM_Y + 140.0)
                     .width(TERM_W - 48.0)
                     .height(16.0)
-                    .child(
-                        super::Opacity::new(bar_a).child(Painting::sized(
-                            Size::new(TERM_W - 48.0, 16.0),
-                            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                                let bw = TERM_W - 48.0;
-                                // 24-in-60 hold judder — the wait's cadence.
-                                let judd = held_24_in_60(sec);
-                                let creep = 0.5 + 0.5 * (judd * 0.4).sin();
-                                let frac = 0.02 + creep * 0.004;
-                                book.stroke_rrect(xywh(0.0, 2.0, bw, 10.0), 5.0, alpha(Color::WHITE, 0.12), 1.0);
-                                book.rrect(xywh(2.0, 4.0, (bw - 4.0) * frac, 6.0), 3.0, alpha(TERM_GREEN, 0.75));
-                            }),
-                        )),
-                    ),
+                    .child(super::Opacity::new(bar_a).child(Painting::sized(
+                        Size::new(TERM_W - 48.0, 16.0),
+                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                            let bw = TERM_W - 48.0;
+                            // 24-in-60 hold judder — the wait's cadence.
+                            let judd = held_24_in_60(sec);
+                            let creep = 0.5 + 0.5 * (judd * 0.4).sin();
+                            let frac = 0.02 + creep * 0.004;
+                            book.stroke_rrect(
+                                xywh(0.0, 2.0, bw, 10.0),
+                                5.0,
+                                alpha(Color::WHITE, 0.12),
+                                1.0,
+                            );
+                            book.rrect(
+                                xywh(2.0, 4.0, (bw - 4.0) * frac, 6.0),
+                                3.0,
+                                alpha(TERM_GREEN, 0.75),
+                            );
+                        }),
+                    ))),
             );
         }
 
@@ -197,8 +216,14 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 let ang = spin + i as f32 / 10.0 * std::f32::consts::TAU;
                                 let a = (i as f32 / 10.0).powi(2);
                                 book.line(
-                                    Offset::new(20.0 + (ang - 0.22).cos() * 11.0, 20.0 + (ang - 0.22).sin() * 11.0),
-                                    Offset::new(20.0 + (ang + 0.22).cos() * 11.0, 20.0 + (ang + 0.22).sin() * 11.0),
+                                    Offset::new(
+                                        20.0 + (ang - 0.22).cos() * 11.0,
+                                        20.0 + (ang - 0.22).sin() * 11.0,
+                                    ),
+                                    Offset::new(
+                                        20.0 + (ang + 0.22).cos() * 11.0,
+                                        20.0 + (ang + 0.22).sin() * 11.0,
+                                    ),
                                     alpha(TERM_GREEN, a * 0.7),
                                     2.4,
                                 );
@@ -234,40 +259,47 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(120.0)
                 .width(300.0)
                 .height(90.0)
-                .child(
-                    super::Opacity::new(user_a).child(Painting::sized(
-                        Size::new(300.0, 90.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // The clock face.
-                            let cx = 150.0;
-                            let cy = 45.0;
-                            book.circle(Offset::new(cx, cy), 26.0, alpha(Color::BLACK, 0.35));
-                            book.ring(Offset::new(cx, cy), 26.0, 1.6, alpha(MUTED, 0.5));
-                            // The second hand, sweeping with a terminal tick.
-                            let tick = (sec.floor() / 60.0) * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
-                            book.line(
-                                Offset::new(cx, cy),
-                                Offset::new(cx + tick.cos() * 20.0, cy + tick.sin() * 20.0),
-                                alpha(TERM_GREEN, 0.8),
-                                2.0,
+                .child(super::Opacity::new(user_a).child(Painting::sized(
+                    Size::new(300.0, 90.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // The clock face.
+                        let cx = 150.0;
+                        let cy = 45.0;
+                        book.circle(Offset::new(cx, cy), 26.0, alpha(Color::BLACK, 0.35));
+                        book.ring(Offset::new(cx, cy), 26.0, 1.6, alpha(MUTED, 0.5));
+                        // The second hand, sweeping with a terminal tick.
+                        let tick = (sec.floor() / 60.0) * std::f32::consts::TAU
+                            - std::f32::consts::FRAC_PI_2;
+                        book.line(
+                            Offset::new(cx, cy),
+                            Offset::new(cx + tick.cos() * 20.0, cy + tick.sin() * 20.0),
+                            alpha(TERM_GREEN, 0.8),
+                            2.0,
+                        );
+                        // The dots — one per wasted second, accumulating.
+                        let dots = (sec as usize).min(14);
+                        let mut rng = Rng::new(0xBEA7);
+                        for _ in 0..dots {
+                            let dx = cx + rng.sym() * 60.0;
+                            let dy = cy + rng.sym() * 26.0;
+                            book.circle(
+                                Offset::new(dx, dy),
+                                1.6,
+                                alpha(tint(TERM_GREEN, 0.2), 0.5),
                             );
-                            // The dots — one per wasted second, accumulating.
-                            let dots = (sec as usize).min(14);
-                            let mut rng = Rng::new(0xBEA7);
-                            for _ in 0..dots {
-                                let dx = cx + rng.sym() * 60.0;
-                                let dy = cy + rng.sym() * 26.0;
-                                book.circle(Offset::new(dx, dy), 1.6, alpha(tint(TERM_GREEN, 0.2), 0.5));
-                            }
-                            let _ = total_wait;
-                        }),
-                    )),
-                ),
+                        }
+                        let _ = total_wait;
+                    }),
+                ))),
         );
     }
 
     // The captions — the pain, named plainly.
-    stack = stack.push(super::act_chip("MOVEMENT I", "THE FAR", clamp01((t - 0.04) / 0.10)));
+    stack = stack.push(super::act_chip(
+        "MOVEMENT I",
+        "THE FAR",
+        clamp01((t - 0.04) / 0.10),
+    ));
     stack = stack.push(caption(
         "edit. wait. rebuild. wait. — the loop the old world gave you",
         1002.0,

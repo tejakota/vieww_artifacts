@@ -23,7 +23,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use vieww_foundation::json::Json;
-use vieww_foundation::{Brush, Color, FillRule, Offset, Path, Rect, Sketch, Sketchbook, StrokeStyle, Transform};
+use vieww_foundation::{
+    Brush, Color, FillRule, Offset, Path, Rect, Sketch, Sketchbook, StrokeStyle, Transform,
+};
 
 mod view;
 pub use view::CanvasView;
@@ -35,18 +37,43 @@ pub struct NodeId(pub usize);
 /// What a shape draws, in its own local frame.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shape {
-    Rect { width: f32, height: f32, corner: f32 },
-    Circle { radius: f32 },
-    Ellipse { rx: f32, ry: f32 },
+    Rect {
+        width: f32,
+        height: f32,
+        corner: f32,
+    },
+    Circle {
+        radius: f32,
+    },
+    Ellipse {
+        rx: f32,
+        ry: f32,
+    },
     /// A polyline; `closed` joins the ends and makes it fillable.
-    Line { points: Vec<Offset>, closed: bool },
+    Line {
+        points: Vec<Offset>,
+        closed: bool,
+    },
     Path(Path),
-    Star { points: u32, inner: f32, outer: f32 },
-    RegularPolygon { sides: u32, radius: f32 },
+    Star {
+        points: u32,
+        inner: f32,
+        outer: f32,
+    },
+    RegularPolygon {
+        sides: u32,
+        radius: f32,
+    },
     /// A line with an arrowhead at the end.
-    Arrow { points: Vec<Offset>, head: f32 },
+    Arrow {
+        points: Vec<Offset>,
+        head: f32,
+    },
     /// Text drawn by the widget layer at the node's transform.
-    Text { text: String, size: f32 },
+    Text {
+        text: String,
+        size: f32,
+    },
 }
 
 impl Shape {
@@ -54,7 +81,11 @@ impl Shape {
     #[must_use]
     pub fn path(&self) -> Path {
         match self {
-            Self::Rect { width, height, corner } => {
+            Self::Rect {
+                width,
+                height,
+                corner,
+            } => {
                 let r = Rect::new(0.0, 0.0, *width, *height);
                 if *corner > 0.0 {
                     Path::rounded_rect(r, *corner)
@@ -63,9 +94,8 @@ impl Shape {
                 }
             }
             Self::Circle { radius } => Path::arc(Offset::ZERO, *radius, 0.0, std::f32::consts::TAU),
-            Self::Ellipse { rx, ry } => {
-                Path::arc(Offset::ZERO, 1.0, 0.0, std::f32::consts::TAU).transformed(Transform::scale(*rx, *ry))
-            }
+            Self::Ellipse { rx, ry } => Path::arc(Offset::ZERO, 1.0, 0.0, std::f32::consts::TAU)
+                .transformed(Transform::scale(*rx, *ry)),
             Self::Line { points, closed } => {
                 let mut p = Path::new();
                 if let Some(first) = points.first() {
@@ -80,10 +110,18 @@ impl Shape {
                 p
             }
             Self::Path(p) => p.clone(),
-            Self::Star { points, inner, outer } => star(*points, *inner, *outer),
+            Self::Star {
+                points,
+                inner,
+                outer,
+            } => star(*points, *inner, *outer),
             Self::RegularPolygon { sides, radius } => star(*sides, *radius, *radius),
             Self::Arrow { points, head } => {
-                let mut p = Self::Line { points: points.clone(), closed: false }.path();
+                let mut p = Self::Line {
+                    points: points.clone(),
+                    closed: false,
+                }
+                .path();
                 if points.len() >= 2 {
                     let (a, b) = (points[points.len() - 2], points[points.len() - 1]);
                     let d = b - a;
@@ -128,11 +166,20 @@ impl Shape {
 
 fn star(n: u32, inner: f32, outer: f32) -> Path {
     let mut p = Path::new();
-    let count = if (inner - outer).abs() < 1e-6 { n } else { n * 2 };
+    let count = if (inner - outer).abs() < 1e-6 {
+        n
+    } else {
+        n * 2
+    };
     for i in 0..count.max(3) {
         #[allow(clippy::cast_precision_loss)]
-        let a = -std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::TAU / count.max(3) as f32;
-        let r = if count == n || i % 2 == 0 { outer } else { inner };
+        let a =
+            -std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::TAU / count.max(3) as f32;
+        let r = if count == n || i % 2 == 0 {
+            outer
+        } else {
+            inner
+        };
         let q = Offset::new(a.cos() * r, a.sin() * r);
         if i == 0 {
             p.move_to(q);
@@ -167,7 +214,11 @@ fn filter_color(c: Color, filters: &[Filter]) -> Color {
             Filter::Invert => rgb = rgb.map(|v| 255.0 - v),
             Filter::Sepia => {
                 let [r, g, b] = rgb;
-                rgb = [0.393 * r + 0.769 * g + 0.189 * b, 0.349 * r + 0.686 * g + 0.168 * b, 0.272 * r + 0.534 * g + 0.131 * b];
+                rgb = [
+                    0.393 * r + 0.769 * g + 0.189 * b,
+                    0.349 * r + 0.686 * g + 0.168 * b,
+                    0.272 * r + 0.534 * g + 0.131 * b,
+                ];
             }
             Filter::Blur(_) => {}
         }
@@ -403,7 +454,10 @@ impl Stage {
     /// Live nodes, excluding layers.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.nodes.iter().filter(|n| n.alive && n.parent.is_some()).count()
+        self.nodes
+            .iter()
+            .filter(|n| n.alive && n.parent.is_some())
+            .count()
     }
 
     #[must_use]
@@ -477,9 +531,9 @@ impl Stage {
             chain.push(c);
             cur = self.nodes[c.0].parent;
         }
-        chain
-            .iter()
-            .fold(Transform::IDENTITY, |acc, n| acc.then(self.nodes[n.0].attrs.transform()))
+        chain.iter().fold(Transform::IDENTITY, |acc, n| {
+            acc.then(self.nodes[n.0].attrs.transform())
+        })
     }
 
     fn effectively(&self, id: NodeId, f: impl Fn(&Attrs) -> bool) -> bool {
@@ -517,12 +571,19 @@ impl Stage {
         let n = &self.nodes[id.0];
         if let Some(s) = &n.shape {
             let b = s.path().bounds();
-            let pad = if n.attrs.stroke.is_some() { n.attrs.stroke_width / 2.0 } else { 0.0 };
+            let pad = if n.attrs.stroke.is_some() {
+                n.attrs.stroke_width / 2.0
+            } else {
+                0.0
+            };
             return b.inflate(pad);
         }
         let mut acc: Option<Rect> = None;
         for c in &n.children {
-            let r = self.nodes[c.0].attrs.transform().apply_rect(self.local_rect(*c));
+            let r = self.nodes[c.0]
+                .attrs
+                .transform()
+                .apply_rect(self.local_rect(*c));
             acc = Some(acc.map_or(r, |a| a.union(r)));
         }
         acc.unwrap_or(Rect::ZERO)
@@ -537,12 +598,20 @@ impl Stage {
             if !self.effectively(id, |a| a.visible && a.listening) {
                 return false;
             }
-            let Some(inv) = self.absolute_transform(id).invert() else { return false };
+            let Some(inv) = self.absolute_transform(id).invert() else {
+                return false;
+            };
             let local = inv.apply(point);
             let path = shape.path();
-            let stroke_w = n.attrs.stroke.map_or(0.0, |_| n.attrs.stroke_width).max(n.attrs.hit_stroke_width);
-            let filled = !shape.is_open() && (n.attrs.fill.is_some() || matches!(shape, Shape::Text { .. }));
-            (filled && path.contains(local, FillRule::NonZero)) || (stroke_w > 0.0 && path.stroke_contains(local, stroke_w.max(1.0)))
+            let stroke_w = n
+                .attrs
+                .stroke
+                .map_or(0.0, |_| n.attrs.stroke_width)
+                .max(n.attrs.hit_stroke_width);
+            let filled =
+                !shape.is_open() && (n.attrs.fill.is_some() || matches!(shape, Shape::Text { .. }));
+            (filled && path.contains(local, FillRule::NonZero))
+                || (stroke_w > 0.0 && path.stroke_contains(local, stroke_w.max(1.0)))
         })
     }
 
@@ -554,7 +623,10 @@ impl Stage {
             .filter(|&id| {
                 self.nodes[id.0].shape.is_some() && {
                     let r = self.client_rect(id);
-                    r.left >= rect.left && r.top >= rect.top && r.right <= rect.right && r.bottom <= rect.bottom
+                    r.left >= rect.left
+                        && r.top >= rect.top
+                        && r.right <= rect.right
+                        && r.bottom <= rect.bottom
                 }
             })
             .collect()
@@ -562,7 +634,10 @@ impl Stage {
 
     /// Listen for `kind` on `id` (Konva's `node.on('click', …)`).
     pub fn on(&mut self, id: NodeId, kind: EventKind, handler: impl FnMut(&mut Event) + 'static) {
-        self.handlers.entry((id, kind)).or_default().push(Box::new(handler));
+        self.handlers
+            .entry((id, kind))
+            .or_default()
+            .push(Box::new(handler));
     }
 
     /// Fire `kind` at `target` and bubble it to the root.
@@ -676,7 +751,16 @@ impl Stage {
             let t = self.absolute_transform(id);
             let opacity = self.opacity(id);
             let filters = &n.attrs.filters;
-            let blur = filters.iter().find_map(|f| if let Filter::Blur(s) = f { Some(*s) } else { None }).unwrap_or(0.0);
+            let blur = filters
+                .iter()
+                .find_map(|f| {
+                    if let Filter::Blur(s) = f {
+                        Some(*s)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0.0);
             if let Shape::Text { text, size } = shape {
                 texts.push(TextItem {
                     text: text.clone(),
@@ -703,7 +787,10 @@ impl Stage {
                     style: StrokeStyle::rounded(),
                 });
             }
-            let group = Sketch::Transformed { transform: t, children: items };
+            let group = Sketch::Transformed {
+                transform: t,
+                children: items,
+            };
             if opacity < 1.0 || blur > 0.0 {
                 book.push(Sketch::Layer {
                     alpha: opacity,
@@ -726,7 +813,13 @@ impl Stage {
     pub fn to_json(&self) -> Json {
         let layers = self.layers.iter().map(|l| self.node_json(*l)).collect();
         Json::object([
-            ("attrs", Json::object([("width", Json::from(self.width)), ("height", Json::from(self.height))])),
+            (
+                "attrs",
+                Json::object([
+                    ("width", Json::from(self.width)),
+                    ("height", Json::from(self.height)),
+                ]),
+            ),
             ("className", Json::from("Stage")),
             ("children", Json::Array(layers)),
         ])
@@ -793,9 +886,15 @@ impl Stage {
             None if n.parent.is_none() => "Layer",
             None => "Group",
             Some(s) => {
-                let pts = |v: &[Offset]| Json::numbers(v.iter().flat_map(|p| [f64::from(p.dx), f64::from(p.dy)]));
+                let pts = |v: &[Offset]| {
+                    Json::numbers(v.iter().flat_map(|p| [f64::from(p.dx), f64::from(p.dy)]))
+                };
                 match s {
-                    Shape::Rect { width, height, corner } => {
+                    Shape::Rect {
+                        width,
+                        height,
+                        corner,
+                    } => {
                         attrs.push(("width", Json::from(*width)));
                         attrs.push(("height", Json::from(*height)));
                         attrs.push(("cornerRadius", Json::from(*corner)));
@@ -810,7 +909,11 @@ impl Stage {
                         attrs.push(("closed", Json::Bool(*closed)));
                     }
                     Shape::Path(p) => attrs.push(("data", Json::from(p.to_svg_data()))),
-                    Shape::Star { points, inner, outer } => {
+                    Shape::Star {
+                        points,
+                        inner,
+                        outer,
+                    } => {
                         attrs.push(("numPoints", Json::from(*points as usize)));
                         attrs.push(("innerRadius", Json::from(*inner)));
                         attrs.push(("outerRadius", Json::from(*outer)));
@@ -831,9 +934,15 @@ impl Stage {
                 s.kind_name()
             }
         };
-        let mut fields = vec![("attrs", Json::object(attrs)), ("className", Json::from(class))];
+        let mut fields = vec![
+            ("attrs", Json::object(attrs)),
+            ("className", Json::from(class)),
+        ];
         if !n.children.is_empty() {
-            fields.push(("children", Json::Array(n.children.iter().map(|c| self.node_json(*c)).collect())));
+            fields.push((
+                "children",
+                Json::Array(n.children.iter().map(|c| self.node_json(*c)).collect()),
+            ));
         }
         Json::object(fields)
     }
@@ -853,7 +962,11 @@ impl Stage {
         for layer in doc.get("children").and_then(Json::as_array).unwrap_or(&[]) {
             let id = s.add_layer();
             s.nodes[id.0].attrs = parse_attrs(layer.get("attrs").unwrap_or(&Json::Null))?;
-            for c in layer.get("children").and_then(Json::as_array).unwrap_or(&[]) {
+            for c in layer
+                .get("children")
+                .and_then(Json::as_array)
+                .unwrap_or(&[])
+            {
                 s.load_node(id, c)?;
             }
         }
@@ -867,28 +980,59 @@ impl Stage {
         let points = |k: &str| {
             a.get(k)
                 .and_then(Json::as_f32_vec)
-                .map(|v| v.chunks_exact(2).map(|c| Offset::new(c[0], c[1])).collect::<Vec<_>>())
+                .map(|v| {
+                    v.as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|c| Offset::new(c[0], c[1]))
+                        .collect::<Vec<_>>()
+                })
                 .unwrap_or_default()
         };
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let shape = match j.get("className").and_then(Json::as_str).unwrap_or("Group") {
             "Group" => None,
-            "Rect" => Some(Shape::Rect { width: f("width"), height: f("height"), corner: f("cornerRadius") }),
-            "Circle" => Some(Shape::Circle { radius: f("radius") }),
-            "Ellipse" => Some(Shape::Ellipse { rx: f("radiusX"), ry: f("radiusY") }),
+            "Rect" => Some(Shape::Rect {
+                width: f("width"),
+                height: f("height"),
+                corner: f("cornerRadius"),
+            }),
+            "Circle" => Some(Shape::Circle {
+                radius: f("radius"),
+            }),
+            "Ellipse" => Some(Shape::Ellipse {
+                rx: f("radiusX"),
+                ry: f("radiusY"),
+            }),
             "Line" => Some(Shape::Line {
                 points: points("points"),
                 closed: a.get("closed").and_then(Json::as_bool).unwrap_or(false),
             }),
             "Path" => Some(Shape::Path(
-                vieww_foundation::parse_path_data(a.get("data").and_then(Json::as_str).unwrap_or(""))
-                    .map_err(|e| format!("{e:?}"))?,
+                vieww_foundation::parse_path_data(
+                    a.get("data").and_then(Json::as_str).unwrap_or(""),
+                )
+                .map_err(|e| format!("{e:?}"))?,
             )),
-            "Star" => Some(Shape::Star { points: f("numPoints") as u32, inner: f("innerRadius"), outer: f("outerRadius") }),
-            "RegularPolygon" => Some(Shape::RegularPolygon { sides: f("sides") as u32, radius: f("radius") }),
-            "Arrow" => Some(Shape::Arrow { points: points("points"), head: f("pointerLength") }),
+            "Star" => Some(Shape::Star {
+                points: f("numPoints") as u32,
+                inner: f("innerRadius"),
+                outer: f("outerRadius"),
+            }),
+            "RegularPolygon" => Some(Shape::RegularPolygon {
+                sides: f("sides") as u32,
+                radius: f("radius"),
+            }),
+            "Arrow" => Some(Shape::Arrow {
+                points: points("points"),
+                head: f("pointerLength"),
+            }),
             "Text" => Some(Shape::Text {
-                text: a.get("text").and_then(Json::as_str).unwrap_or("").to_owned(),
+                text: a
+                    .get("text")
+                    .and_then(Json::as_str)
+                    .unwrap_or("")
+                    .to_owned(),
                 size: f("fontSize"),
             }),
             other => return Err(format!("unknown className {other}")),
@@ -928,7 +1072,11 @@ fn parse_attrs(a: &Json) -> Result<Attrs, String> {
     }
     Ok(Attrs {
         id: a.get("id").and_then(Json::as_str).unwrap_or("").to_owned(),
-        name: a.get("name").and_then(Json::as_str).unwrap_or("").to_owned(),
+        name: a
+            .get("name")
+            .and_then(Json::as_str)
+            .unwrap_or("")
+            .to_owned(),
         x: f("x", d.x),
         y: f("y", d.y),
         rotation: f("rotation", d.rotation),
@@ -1026,7 +1174,10 @@ impl Transformer {
             .iter()
             .map(|&a| {
                 let (fx, fy) = a.fraction();
-                let mut p = Offset::new(local.left + local.width() * fx, local.top + local.height() * fy);
+                let mut p = Offset::new(
+                    local.left + local.width() * fx,
+                    local.top + local.height() * fy,
+                );
                 if a == Anchor::Rotater {
                     p.dy -= self.rotate_offset / sy;
                 }
@@ -1070,13 +1221,21 @@ impl Transformer {
 
     /// Continue the drag to `point`, updating the node's attributes.
     pub fn drag(&mut self, stage: &mut Stage, point: Offset) {
-        let Some((anchor, _)) = self.active else { return };
+        let Some((anchor, _)) = self.active else {
+            return;
+        };
         let id = self.node;
         if anchor == Anchor::Rotater {
             let local = stage.local_rect(id);
             let t = stage.absolute_transform(id);
-            let center = t.apply(Offset::new(local.left + local.width() / 2.0, local.top + local.height() / 2.0));
-            let mut deg = (point.dy - center.dy).atan2(point.dx - center.dx).to_degrees() + 90.0;
+            let center = t.apply(Offset::new(
+                local.left + local.width() / 2.0,
+                local.top + local.height() / 2.0,
+            ));
+            let mut deg = (point.dy - center.dy)
+                .atan2(point.dx - center.dx)
+                .to_degrees()
+                + 90.0;
             for s in &self.rotation_snaps {
                 let diff = (deg - s + 180.0).rem_euclid(360.0) - 180.0;
                 if diff.abs() <= self.snap_tolerance {
@@ -1087,7 +1246,10 @@ impl Transformer {
             let old_t = t;
             stage.attrs_mut(id).rotation = deg;
             let new_t = stage.absolute_transform(id);
-            let c_local = Offset::new(local.left + local.width() / 2.0, local.top + local.height() / 2.0);
+            let c_local = Offset::new(
+                local.left + local.width() / 2.0,
+                local.top + local.height() / 2.0,
+            );
             let drift = new_t.apply(c_local) - old_t.apply(c_local);
             let at = stage.attrs_mut(id);
             at.x -= drift.dx;
@@ -1101,10 +1263,21 @@ impl Transformer {
         let Some(inv) = t.invert() else { return };
         let p = inv.apply(point);
         let (fx, fy) = anchor.fraction();
-        let fixed = Offset::new(local.left + local.width() * (1.0 - fx), local.top + local.height() * (1.0 - fy));
+        let fixed = Offset::new(
+            local.left + local.width() * (1.0 - fx),
+            local.top + local.height() * (1.0 - fy),
+        );
         let fixed_stage = t.apply(fixed);
-        let mut sx = if fx == 0.5 { 1.0 } else { (p.dx - fixed.dx) / (local.width() * (fx * 2.0 - 1.0)).max(1e-6) };
-        let mut sy = if fy == 0.5 { 1.0 } else { (p.dy - fixed.dy) / (local.height() * (fy * 2.0 - 1.0)).max(1e-6) };
+        let mut sx = if fx == 0.5 {
+            1.0
+        } else {
+            (p.dx - fixed.dx) / (local.width() * (fx * 2.0 - 1.0)).max(1e-6)
+        };
+        let mut sy = if fy == 0.5 {
+            1.0
+        } else {
+            (p.dy - fixed.dy) / (local.height() * (fy * 2.0 - 1.0)).max(1e-6)
+        };
         if self.keep_ratio && fx != 0.5 && fy != 0.5 {
             let s = sx.max(sy);
             sx = s;
@@ -1130,11 +1303,21 @@ impl Transformer {
         let blue = Color::rgb(0, 161, 255);
         let o = self.outline(stage);
         let mut p = Path::new();
-        p.move_to(o[0]).line_to(o[1]).line_to(o[2]).line_to(o[3]).close();
+        p.move_to(o[0])
+            .line_to(o[1])
+            .line_to(o[2])
+            .line_to(o[3])
+            .close();
         book.stroke(p, blue, 1.5);
         let anchors = self.anchors(stage);
-        let top = anchors.iter().find(|(a, _)| *a == Anchor::TopCenter).map(|(_, p)| *p);
-        let rot = anchors.iter().find(|(a, _)| *a == Anchor::Rotater).map(|(_, p)| *p);
+        let top = anchors
+            .iter()
+            .find(|(a, _)| *a == Anchor::TopCenter)
+            .map(|(_, p)| *p);
+        let rot = anchors
+            .iter()
+            .find(|(a, _)| *a == Anchor::Rotater)
+            .map(|(_, p)| *p);
         if let (Some(a), Some(b)) = (top, rot) {
             book.line(a, b, blue, 1.5);
         }
@@ -1172,8 +1355,20 @@ mod tests {
     fn hit_testing_is_exact_and_front_to_back() {
         let mut s = Stage::new(400.0, 300.0);
         let l = s.add_layer();
-        let back = s.add_shape(l, filled(0.0, 0.0, Color::RED), Shape::Rect { width: 200.0, height: 200.0, corner: 0.0 });
-        let circle = s.add_shape(l, filled(100.0, 100.0, Color::BLUE), Shape::Circle { radius: 50.0 });
+        let back = s.add_shape(
+            l,
+            filled(0.0, 0.0, Color::RED),
+            Shape::Rect {
+                width: 200.0,
+                height: 200.0,
+                corner: 0.0,
+            },
+        );
+        let circle = s.add_shape(
+            l,
+            filled(100.0, 100.0, Color::BLUE),
+            Shape::Circle { radius: 50.0 },
+        );
         assert_eq!(s.hit(Offset::new(100.0, 100.0)), Some(circle));
         // Inside the circle's bounding box but outside the curve: the rect.
         assert_eq!(s.hit(Offset::new(145.0, 145.0)), Some(back));
@@ -1186,11 +1381,26 @@ mod tests {
     fn transforms_nest_through_groups_with_rotation_and_offset() {
         let mut s = Stage::new(400.0, 400.0);
         let l = s.add_layer();
-        let g = s.add_group(l, Attrs { x: 200.0, y: 200.0, rotation: 90.0, ..Attrs::default() });
+        let g = s.add_group(
+            l,
+            Attrs {
+                x: 200.0,
+                y: 200.0,
+                rotation: 90.0,
+                ..Attrs::default()
+            },
+        );
         let r = s.add_shape(
             g,
-            Attrs { offset: Offset::new(50.0, 10.0), ..filled(0.0, 0.0, Color::RED) },
-            Shape::Rect { width: 100.0, height: 20.0, corner: 0.0 },
+            Attrs {
+                offset: Offset::new(50.0, 10.0),
+                ..filled(0.0, 0.0, Color::RED)
+            },
+            Shape::Rect {
+                width: 100.0,
+                height: 20.0,
+                corner: 0.0,
+            },
         );
         // Rotated 90°: the bar is now vertical through (200, 200).
         assert_eq!(s.hit(Offset::new(200.0, 240.0)), Some(r));
@@ -1205,10 +1415,22 @@ mod tests {
         let l = s.add_layer();
         let line = s.add_shape(
             l,
-            Attrs { stroke: Some(Color::BLACK), stroke_width: 2.0, hit_stroke_width: 12.0, ..Attrs::default() },
-            Shape::Line { points: vec![Offset::new(10.0, 10.0), Offset::new(190.0, 10.0)], closed: false },
+            Attrs {
+                stroke: Some(Color::BLACK),
+                stroke_width: 2.0,
+                hit_stroke_width: 12.0,
+                ..Attrs::default()
+            },
+            Shape::Line {
+                points: vec![Offset::new(10.0, 10.0), Offset::new(190.0, 10.0)],
+                closed: false,
+            },
         );
-        assert_eq!(s.hit(Offset::new(100.0, 15.0)), Some(line), "within the hit stroke");
+        assert_eq!(
+            s.hit(Offset::new(100.0, 15.0)),
+            Some(line),
+            "within the hit stroke"
+        );
         assert_eq!(s.hit(Offset::new(100.0, 30.0)), None);
     }
 
@@ -1217,29 +1439,63 @@ mod tests {
         let mut s = Stage::new(200.0, 200.0);
         let l = s.add_layer();
         let g = s.add_group(l, Attrs::default());
-        let a = s.add_shape(g, filled(0.0, 0.0, Color::RED), Shape::Rect { width: 50.0, height: 50.0, corner: 0.0 });
+        let a = s.add_shape(
+            g,
+            filled(0.0, 0.0, Color::RED),
+            Shape::Rect {
+                width: 50.0,
+                height: 50.0,
+                corner: 0.0,
+            },
+        );
         let seen = Rc::new(RefCell::new(Vec::new()));
         for (id, tag) in [(a, "shape"), (g, "group"), (l, "layer")] {
             let seen = seen.clone();
-            s.on(id, EventKind::Click, move |e| seen.borrow_mut().push((tag, e.target, e.current)));
+            s.on(id, EventKind::Click, move |e| {
+                seen.borrow_mut().push((tag, e.target, e.current))
+            });
         }
         s.pointer_down(Offset::new(10.0, 10.0));
         s.pointer_up(Offset::new(11.0, 10.0));
-        assert_eq!(seen.borrow().iter().map(|x| x.0).collect::<Vec<_>>(), ["shape", "group", "layer"]);
+        assert_eq!(
+            seen.borrow().iter().map(|x| x.0).collect::<Vec<_>>(),
+            ["shape", "group", "layer"]
+        );
         assert!(seen.borrow().iter().all(|x| x.1 == a));
         seen.borrow_mut().clear();
         s.on(g, EventKind::Click, Event::cancel_bubble);
         s.pointer_down(Offset::new(10.0, 10.0));
         s.pointer_up(Offset::new(10.0, 10.0));
-        assert_eq!(seen.borrow().iter().map(|x| x.0).collect::<Vec<_>>(), ["shape", "group"]);
+        assert_eq!(
+            seen.borrow().iter().map(|x| x.0).collect::<Vec<_>>(),
+            ["shape", "group"]
+        );
     }
 
     #[test]
     fn draggable_nodes_follow_the_pointer_in_their_parents_frame() {
         let mut s = Stage::new(400.0, 400.0);
         let l = s.add_layer();
-        let g = s.add_group(l, Attrs { scale_x: 2.0, scale_y: 2.0, ..Attrs::default() });
-        let r = s.add_shape(g, Attrs { draggable: true, ..filled(10.0, 10.0, Color::RED) }, Shape::Rect { width: 20.0, height: 20.0, corner: 0.0 });
+        let g = s.add_group(
+            l,
+            Attrs {
+                scale_x: 2.0,
+                scale_y: 2.0,
+                ..Attrs::default()
+            },
+        );
+        let r = s.add_shape(
+            g,
+            Attrs {
+                draggable: true,
+                ..filled(10.0, 10.0, Color::RED)
+            },
+            Shape::Rect {
+                width: 20.0,
+                height: 20.0,
+                corner: 0.0,
+            },
+        );
         let moves = Rc::new(RefCell::new(0));
         let m = moves.clone();
         s.on(r, EventKind::DragMove, move |_| *m.borrow_mut() += 1);
@@ -1255,7 +1511,15 @@ mod tests {
     fn hover_enter_and_leave() {
         let mut s = Stage::new(200.0, 200.0);
         let l = s.add_layer();
-        let a = s.add_shape(l, filled(0.0, 0.0, Color::RED), Shape::Rect { width: 50.0, height: 50.0, corner: 0.0 });
+        let a = s.add_shape(
+            l,
+            filled(0.0, 0.0, Color::RED),
+            Shape::Rect {
+                width: 50.0,
+                height: 50.0,
+                corner: 0.0,
+            },
+        );
         s.on(a, EventKind::PointerEnter, |_| {});
         s.on(a, EventKind::PointerLeave, |_| {});
         s.pointer_move(Offset::new(10.0, 10.0));
@@ -1268,23 +1532,49 @@ mod tests {
     fn transformer_resizes_from_the_opposite_corner_and_rotates_with_snaps() {
         let mut s = Stage::new(400.0, 400.0);
         let l = s.add_layer();
-        let r = s.add_shape(l, filled(100.0, 100.0, Color::RED), Shape::Rect { width: 100.0, height: 50.0, corner: 0.0 });
+        let r = s.add_shape(
+            l,
+            filled(100.0, 100.0, Color::RED),
+            Shape::Rect {
+                width: 100.0,
+                height: 50.0,
+                corner: 0.0,
+            },
+        );
         let mut tr = Transformer::new(r);
-        assert_eq!(tr.begin(&s, Offset::new(200.0, 150.0)), Some(Anchor::BottomRight));
+        assert_eq!(
+            tr.begin(&s, Offset::new(200.0, 150.0)),
+            Some(Anchor::BottomRight)
+        );
         tr.drag(&mut s, Offset::new(300.0, 250.0));
         tr.end();
         let cr = s.client_rect(r);
-        assert!((cr.left - 100.0).abs() < 1e-3 && (cr.top - 100.0).abs() < 1e-3, "top-left fixed: {cr:?}");
+        assert!(
+            (cr.left - 100.0).abs() < 1e-3 && (cr.top - 100.0).abs() < 1e-3,
+            "top-left fixed: {cr:?}"
+        );
         assert!((cr.width() - 200.0).abs() < 1e-3 && (cr.height() - 150.0).abs() < 1e-3);
         // Rotate by dragging the rotater to the right of the centre: 90°.
         tr.rotation_snaps = vec![0.0, 90.0, 180.0, 270.0];
-        let rot_at = tr.anchors(&s).into_iter().find(|(a, _)| *a == Anchor::Rotater).unwrap().1;
+        let rot_at = tr
+            .anchors(&s)
+            .into_iter()
+            .find(|(a, _)| *a == Anchor::Rotater)
+            .unwrap()
+            .1;
         assert_eq!(tr.begin(&s, rot_at), Some(Anchor::Rotater));
         let centre = Offset::new(cr.left + cr.width() / 2.0, cr.top + cr.height() / 2.0);
         tr.drag(&mut s, Offset::new(centre.dx + 100.0, centre.dy + 3.0));
-        assert!((s.node(r).attrs.rotation - 90.0).abs() < 1e-3, "snapped: {}", s.node(r).attrs.rotation);
+        assert!(
+            (s.node(r).attrs.rotation - 90.0).abs() < 1e-3,
+            "snapped: {}",
+            s.node(r).attrs.rotation
+        );
         let after = s.client_rect(r);
-        let c2 = Offset::new(after.left + after.width() / 2.0, after.top + after.height() / 2.0);
+        let c2 = Offset::new(
+            after.left + after.width() / 2.0,
+            after.top + after.height() / 2.0,
+        );
         assert!((c2 - centre).distance() < 1e-2, "rotated about its centre");
     }
 
@@ -1292,7 +1582,15 @@ mod tests {
     fn keep_ratio_scales_uniformly() {
         let mut s = Stage::new(400.0, 400.0);
         let l = s.add_layer();
-        let r = s.add_shape(l, filled(0.0, 0.0, Color::RED), Shape::Rect { width: 100.0, height: 50.0, corner: 0.0 });
+        let r = s.add_shape(
+            l,
+            filled(0.0, 0.0, Color::RED),
+            Shape::Rect {
+                width: 100.0,
+                height: 50.0,
+                corner: 0.0,
+            },
+        );
         let mut tr = Transformer::new(r);
         tr.keep_ratio = true;
         tr.begin(&s, Offset::new(100.0, 50.0));
@@ -1305,10 +1603,47 @@ mod tests {
     fn json_round_trips_the_stage() {
         let mut s = Stage::new(300.0, 200.0);
         let l = s.add_layer();
-        let g = s.add_group(l, Attrs { id: "grp".into(), x: 5.0, rotation: 15.0, ..Attrs::default() });
-        s.add_shape(g, Attrs { name: "a b".into(), filters: vec![Filter::Blur(2.0), Filter::Grayscale], ..filled(1.0, 2.0, Color::rgb(10, 20, 30)) }, Shape::Star { points: 5, inner: 10.0, outer: 20.0 });
-        s.add_shape(l, Attrs { stroke: Some(Color::BLACK), ..Attrs::default() }, Shape::Arrow { points: vec![Offset::ZERO, Offset::new(40.0, 5.0)], head: 8.0 });
-        s.add_shape(l, filled(0.0, 0.0, Color::BLUE), Shape::Text { text: "hi \"there\"".into(), size: 14.0 });
+        let g = s.add_group(
+            l,
+            Attrs {
+                id: "grp".into(),
+                x: 5.0,
+                rotation: 15.0,
+                ..Attrs::default()
+            },
+        );
+        s.add_shape(
+            g,
+            Attrs {
+                name: "a b".into(),
+                filters: vec![Filter::Blur(2.0), Filter::Grayscale],
+                ..filled(1.0, 2.0, Color::rgb(10, 20, 30))
+            },
+            Shape::Star {
+                points: 5,
+                inner: 10.0,
+                outer: 20.0,
+            },
+        );
+        s.add_shape(
+            l,
+            Attrs {
+                stroke: Some(Color::BLACK),
+                ..Attrs::default()
+            },
+            Shape::Arrow {
+                points: vec![Offset::ZERO, Offset::new(40.0, 5.0)],
+                head: 8.0,
+            },
+        );
+        s.add_shape(
+            l,
+            filled(0.0, 0.0, Color::BLUE),
+            Shape::Text {
+                text: "hi \"there\"".into(),
+                size: 14.0,
+            },
+        );
         let text = s.to_json().pretty();
         let back = Stage::from_json(&Json::parse(&text).unwrap()).unwrap();
         assert_eq!(back.to_json(), s.to_json());
@@ -1321,8 +1656,24 @@ mod tests {
     fn z_order_and_marquee_and_destroy() {
         let mut s = Stage::new(300.0, 300.0);
         let l = s.add_layer();
-        let a = s.add_shape(l, filled(0.0, 0.0, Color::RED), Shape::Rect { width: 50.0, height: 50.0, corner: 0.0 });
-        let b = s.add_shape(l, filled(10.0, 10.0, Color::BLUE), Shape::Rect { width: 50.0, height: 50.0, corner: 0.0 });
+        let a = s.add_shape(
+            l,
+            filled(0.0, 0.0, Color::RED),
+            Shape::Rect {
+                width: 50.0,
+                height: 50.0,
+                corner: 0.0,
+            },
+        );
+        let b = s.add_shape(
+            l,
+            filled(10.0, 10.0, Color::BLUE),
+            Shape::Rect {
+                width: 50.0,
+                height: 50.0,
+                corner: 0.0,
+            },
+        );
         assert_eq!(s.hit(Offset::new(20.0, 20.0)), Some(b));
         s.move_to_top(a);
         assert_eq!(s.hit(Offset::new(20.0, 20.0)), Some(a));
@@ -1335,11 +1686,24 @@ mod tests {
 
     #[test]
     fn filters_change_colours_and_blur_becomes_a_layer() {
-        assert_eq!(filter_color(Color::rgb(255, 0, 0), &[Filter::Grayscale]), Color::rgb(54, 54, 54));
-        assert_eq!(filter_color(Color::rgb(10, 20, 30), &[Filter::Invert]), Color::rgb(245, 235, 225));
+        assert_eq!(
+            filter_color(Color::rgb(255, 0, 0), &[Filter::Grayscale]),
+            Color::rgb(54, 54, 54)
+        );
+        assert_eq!(
+            filter_color(Color::rgb(10, 20, 30), &[Filter::Invert]),
+            Color::rgb(245, 235, 225)
+        );
         let mut s = Stage::new(100.0, 100.0);
         let l = s.add_layer();
-        s.add_shape(l, Attrs { filters: vec![Filter::Blur(3.0)], ..filled(0.0, 0.0, Color::RED) }, Shape::Circle { radius: 10.0 });
+        s.add_shape(
+            l,
+            Attrs {
+                filters: vec![Filter::Blur(3.0)],
+                ..filled(0.0, 0.0, Color::RED)
+            },
+            Shape::Circle { radius: 10.0 },
+        );
         let (book, _) = s.render();
         assert!(matches!(book.items()[0], Sketch::Layer { blur, .. } if blur == 3.0));
     }

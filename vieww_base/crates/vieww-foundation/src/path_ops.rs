@@ -167,10 +167,7 @@ fn cubic_derivative(p0: Offset, c1: Offset, c2: Offset, p3: Offset, t: f32) -> O
 }
 
 /// Split a cubic at `t`, returning both halves' control points.
-fn split_cubic(
-    p: [Offset; 4],
-    t: f32,
-) -> ([Offset; 4], [Offset; 4]) {
+fn split_cubic(p: [Offset; 4], t: f32) -> ([Offset; 4], [Offset; 4]) {
     let p01 = lerp(p[0], p[1], t);
     let p12 = lerp(p[1], p[2], t);
     let p23 = lerp(p[2], p[3], t);
@@ -205,7 +202,11 @@ fn cubic_steps(p: [Offset; 4], tolerance: f32) -> usize {
 enum SegKind {
     Line,
     /// Cumulative arc length at `t = i / LUT`, `i = 0..=LUT`.
-    Cubic { c1: Offset, c2: Offset, lut: Box<[f32; LUT + 1]> },
+    Cubic {
+        c1: Offset,
+        c2: Offset,
+        lut: Box<[f32; LUT + 1]>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -234,7 +235,11 @@ impl Segment {
                 let local = local.clamp(0.0, self.length);
                 let i = lut.partition_point(|&d| d < local).clamp(1, LUT);
                 let (d0, d1) = (lut[i - 1], lut[i]);
-                let frac = if d1 > d0 { (local - d0) / (d1 - d0) } else { 0.0 };
+                let frac = if d1 > d0 {
+                    (local - d0) / (d1 - d0)
+                } else {
+                    0.0
+                };
                 #[allow(clippy::cast_precision_loss)]
                 let t = ((i - 1) as f32 + frac) / LUT as f32;
                 t.clamp(0.0, 1.0)
@@ -571,7 +576,7 @@ impl Path {
         let mut index = 0usize;
         while d < m.length() {
             let len = pattern[index % pattern.len()].max(0.0);
-            if index % 2 == 0 {
+            if index.is_multiple_of(2) {
                 out.extend(&m.segment(d.max(0.0), (d + len).min(m.length())));
             }
             d += len;
@@ -682,7 +687,13 @@ impl Path {
 
     /// [`boolean`](Self::boolean) with each operand read under its own rule.
     #[must_use]
-    pub fn boolean_with(&self, other: &Self, op: PathOp, rule_a: FillRule, rule_b: FillRule) -> Self {
+    pub fn boolean_with(
+        &self,
+        other: &Self,
+        op: PathOp,
+        rule_a: FillRule,
+        rule_b: FillRule,
+    ) -> Self {
         let a = closed_rings(self.flatten(DEFAULT_TOLERANCE));
         let b = closed_rings(other.flatten(DEFAULT_TOLERANCE));
         boolean_rings(&a, &b, op, rule_a, rule_b)
@@ -754,7 +765,10 @@ fn edge_winding(a: Offset, b: Offset, p: Offset) -> i32 {
 /// A point key for linking edges: coordinates snapped to 1/1024 of a unit.
 fn key(p: Offset) -> (i64, i64) {
     #[allow(clippy::cast_possible_truncation)]
-    ((f64::from(p.dx) * 1024.0).round() as i64, (f64::from(p.dy) * 1024.0).round() as i64)
+    (
+        (f64::from(p.dx) * 1024.0).round() as i64,
+        (f64::from(p.dy) * 1024.0).round() as i64,
+    )
 }
 
 fn boolean_rings(
@@ -782,10 +796,21 @@ fn boolean_rings(
     #[allow(clippy::needless_range_loop)]
     for i in 0..edges.len() {
         let (p, q) = edges[i];
-        let bb_i = Rect::new(p.dx.min(q.dx), p.dy.min(q.dy), p.dx.max(q.dx), p.dy.max(q.dy)).inflate(1e-3);
+        let bb_i = Rect::new(
+            p.dx.min(q.dx),
+            p.dy.min(q.dy),
+            p.dx.max(q.dx),
+            p.dy.max(q.dy),
+        )
+        .inflate(1e-3);
         for j in (i + 1)..edges.len() {
             let (r, s) = edges[j];
-            let bb_j = Rect::new(r.dx.min(s.dx), r.dy.min(s.dy), r.dx.max(s.dx), r.dy.max(s.dy));
+            let bb_j = Rect::new(
+                r.dx.min(s.dx),
+                r.dy.min(s.dy),
+                r.dx.max(s.dx),
+                r.dy.max(s.dy),
+            );
             if !bb_i.overlaps(bb_j.inflate(1e-3)) {
                 continue;
             }
@@ -798,7 +823,12 @@ fn boolean_rings(
         let mut bounds = Rect::ZERO;
         let mut first = true;
         for (p, q) in &edges {
-            let r = Rect::new(p.dx.min(q.dx), p.dy.min(q.dy), p.dx.max(q.dx), p.dy.max(q.dy));
+            let r = Rect::new(
+                p.dx.min(q.dx),
+                p.dy.min(q.dy),
+                p.dx.max(q.dx),
+                p.dy.max(q.dy),
+            );
             bounds = if first { r } else { bounds.union(r) };
             first = false;
         }
@@ -1017,16 +1047,25 @@ mod tests {
         let m = square(0.0, 0.0, 10.0).measure();
         let p = m.point_at(15.0).unwrap();
         assert!((p.position.dx - 10.0).abs() < 1e-4 && (p.position.dy - 5.0).abs() < 1e-4);
-        assert!((p.angle - PI / 2.0).abs() < 1e-4, "heading down the right side");
+        assert!(
+            (p.angle - PI / 2.0).abs() < 1e-4,
+            "heading down the right side"
+        );
         let end = m.point_at(1e9).unwrap();
-        assert!(sub(end.position, Offset::ZERO).distance() < 1e-4, "clamped to the end");
+        assert!(
+            sub(end.position, Offset::ZERO).distance() < 1e-4,
+            "clamped to the end"
+        );
     }
 
     #[test]
     fn trim_keeps_curves_cubic_and_the_right_length() {
         let c = circle(Offset::new(0.0, 0.0), 40.0);
         let half = c.trim(0.0, 0.5);
-        assert!(half.verbs().iter().any(|v| matches!(v, PathVerb::CubicTo(..))));
+        assert!(half
+            .verbs()
+            .iter()
+            .any(|v| matches!(v, PathVerb::CubicTo(..))));
         assert!((half.length() - PI * 40.0).abs() < 0.3, "{}", half.length());
         assert!(c.trim(0.6, 0.4).is_empty());
         assert!((c.trim(0.0, 1.0).length() - c.length()).abs() < 0.2);
@@ -1037,18 +1076,30 @@ mod tests {
         let s = square(0.0, 0.0, 10.0);
         let t = s.trim_offset(0.0, 0.25, 0.875);
         assert!((t.length() - 10.0).abs() < 1e-3, "{}", t.length());
-        let starts = t.verbs().iter().filter(|v| matches!(v, PathVerb::MoveTo(_))).count();
+        let starts = t
+            .verbs()
+            .iter()
+            .filter(|v| matches!(v, PathVerb::MoveTo(_)))
+            .count();
         assert_eq!(starts, 2, "the wrapped window is two pieces");
     }
 
     #[test]
     fn trimming_across_subpaths_does_not_bridge_them() {
         let mut p = Path::new();
-        p.move_to(Offset::new(0.0, 0.0)).line_to(Offset::new(10.0, 0.0));
-        p.move_to(Offset::new(0.0, 20.0)).line_to(Offset::new(10.0, 20.0));
+        p.move_to(Offset::new(0.0, 0.0))
+            .line_to(Offset::new(10.0, 0.0));
+        p.move_to(Offset::new(0.0, 20.0))
+            .line_to(Offset::new(10.0, 20.0));
         let t = p.trim(0.25, 0.75);
         assert!((t.length() - 10.0).abs() < 1e-4);
-        assert_eq!(t.verbs().iter().filter(|v| matches!(v, PathVerb::MoveTo(_))).count(), 2);
+        assert_eq!(
+            t.verbs()
+                .iter()
+                .filter(|v| matches!(v, PathVerb::MoveTo(_)))
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -1061,14 +1112,21 @@ mod tests {
         let d = line.dashed(&[10.0, 10.0], 0.0);
         assert!((d.length() - 50.0).abs() < 1e-3);
         let shifted = line.dashed(&[10.0, 10.0], 5.0);
-        assert!((shifted.length() - 50.0).abs() < 1e-3, "{}", shifted.length());
+        assert!(
+            (shifted.length() - 50.0).abs() < 1e-3,
+            "{}",
+            shifted.length()
+        );
     }
 
     #[test]
     fn contains_is_exact_for_curves_and_honours_fill_rules() {
         let c = circle(Offset::new(0.0, 0.0), 10.0);
         assert!(c.contains(Offset::new(9.9, 0.0), FillRule::NonZero));
-        assert!(!c.contains(Offset::new(7.2, 7.2), FillRule::NonZero), "outside the curve, inside the box");
+        assert!(
+            !c.contains(Offset::new(7.2, 7.2), FillRule::NonZero),
+            "outside the curve, inside the box"
+        );
         // A ring drawn as two same-direction circles: nonzero fills the hole,
         // even-odd does not.
         let mut ring = circle(Offset::ZERO, 10.0);
@@ -1090,7 +1148,11 @@ mod tests {
         let mut p = Path::new();
         p.move_to(Offset::new(1.5, 2.0))
             .line_to(Offset::new(10.0, 2.0))
-            .cubic_to(Offset::new(12.0, 4.0), Offset::new(12.0, 8.0), Offset::new(10.0, 10.0))
+            .cubic_to(
+                Offset::new(12.0, 4.0),
+                Offset::new(12.0, 8.0),
+                Offset::new(10.0, 10.0),
+            )
             .close();
         let d = p.to_svg_data();
         assert_eq!(d, "M1.5 2 L10 2 C12 4 12 8 10 10 Z");
@@ -1101,9 +1163,13 @@ mod tests {
     #[test]
     fn quad_to_is_the_equivalent_cubic() {
         let mut p = Path::new();
-        p.move_to(Offset::ZERO).quad_to(Offset::new(10.0, 10.0), Offset::new(20.0, 0.0));
+        p.move_to(Offset::ZERO)
+            .quad_to(Offset::new(10.0, 10.0), Offset::new(20.0, 0.0));
         let mid = p.measure().point_at_fraction(0.5).unwrap().position;
-        assert!((mid.dx - 10.0).abs() < 0.05 && (mid.dy - 5.0).abs() < 0.05, "{mid:?}");
+        assert!(
+            (mid.dx - 10.0).abs() < 0.05 && (mid.dy - 5.0).abs() < 0.05,
+            "{mid:?}"
+        );
     }
 
     fn area(p: &Path) -> f32 {
@@ -1140,7 +1206,10 @@ mod tests {
         let b = square(10.0, 0.0, 10.0);
         let u = a.boolean(&b, PathOp::Union);
         assert!((area(&u) - 200.0).abs() < 0.01);
-        assert!(u.contains(Offset::new(10.0, 5.0), FillRule::NonZero), "the seam is filled");
+        assert!(
+            u.contains(Offset::new(10.0, 5.0), FillRule::NonZero),
+            "the seam is filled"
+        );
         let far = square(50.0, 50.0, 5.0);
         assert!(a.boolean(&far, PathOp::Intersect).is_empty());
         assert!((area(&a.boolean(&far, PathOp::Union)) - 125.0).abs() < 0.01);
@@ -1154,7 +1223,10 @@ mod tests {
         let lens = area(&a.boolean(&b, PathOp::Intersect));
         // Lens of two radius-r circles at distance r: r²(2π/3 − √3/2).
         let expected = r * r * (2.0 * PI / 3.0 - 3f32.sqrt() / 2.0);
-        assert!((lens - expected).abs() / expected < 0.01, "{lens} vs {expected}");
+        assert!(
+            (lens - expected).abs() / expected < 0.01,
+            "{lens} vs {expected}"
+        );
     }
 
     #[test]
@@ -1184,7 +1256,11 @@ mod tests {
         assert!(!wedge.contains(Offset::new(-20.0, 20.0), FillRule::NonZero));
         // The inner arc of the band starts on the inner circle, not at the
         // outer arc's end: the band's end is a straight edge.
-        let lines = band.verbs().iter().filter(|v| matches!(v, crate::PathVerb::LineTo(_))).count();
+        let lines = band
+            .verbs()
+            .iter()
+            .filter(|v| matches!(v, crate::PathVerb::LineTo(_)))
+            .count();
         assert!(lines >= 1, "{:?}", band.verbs());
         let first_inner = band.verbs().iter().find_map(|v| match v {
             crate::PathVerb::LineTo(p) => Some(*p),

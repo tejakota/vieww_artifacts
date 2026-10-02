@@ -32,7 +32,6 @@ mod picker;
 
 #[cfg(target_os = "android")]
 use std::path::PathBuf;
-use std::time::Duration;
 #[cfg(target_os = "android")]
 use std::rc::Rc;
 #[cfg(target_os = "android")]

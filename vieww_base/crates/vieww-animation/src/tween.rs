@@ -57,10 +57,7 @@ impl Lerp for f32 {
 /// to hand-rolled per-component trees.
 impl Lerp for (f32, f32) {
     fn lerp(self, other: Self, t: f32) -> Self {
-        (
-            self.0.lerp(other.0, t),
-            self.1.lerp(other.1, t),
-        )
+        (self.0.lerp(other.0, t), self.1.lerp(other.1, t))
     }
 }
 

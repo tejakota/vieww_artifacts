@@ -22,16 +22,16 @@ use std::time::Duration;
 use vieww_animation::{SpringAnimation, SpringPreset, Ticker};
 use vieww_foundation::{Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, ease_out_expo, mix, CANVAS, CYAN, CYAN_SOFT, VIOLET,
-    VIOLET_DEEP, VIOLET_SOFT,
+    alpha, clamp01, ease_in_out, ease_out_expo, mix, CANVAS, CYAN, CYAN_SOFT, VIOLET, VIOLET_DEEP,
+    VIOLET_SOFT,
 };
 use crate::three_d::{draw_mesh, grid_mesh, torus_mesh, Camera, MeshStyle, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 6.0;
+pub(crate) const SECONDS: f32 = 6.0;
 
 // ── The deterministic spring replay ─────────────────────────────────────────
 //
@@ -67,13 +67,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // the object.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(12, 10, 20)),
-                (0.5, Color::rgb(7, 7, 12)),
-                (1.0, Color::rgb(4, 4, 8)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(12, 10, 20)),
+            (0.5, Color::rgb(7, 7, 12)),
+            (1.0, Color::rgb(4, 4, 8)),
+        ]),
     );
 
     // Sparse stars — the void is not empty, it is dark.
@@ -235,10 +233,13 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             );
             p.close();
             book.layer(1.0, 10.0, None, |inner| {
-                inner.fill(p, Gradient::radial_fill().with_stops(&[
-                    (0.0, alpha(Color::BLACK, 0.55)),
-                    (1.0, alpha(Color::BLACK, 0.0)),
-                ]));
+                inner.fill(
+                    p,
+                    Gradient::radial_fill().with_stops(&[
+                        (0.0, alpha(Color::BLACK, 0.55)),
+                        (1.0, alpha(Color::BLACK, 0.0)),
+                    ]),
+                );
             });
         }
         let spin = t * 2.2;
@@ -265,10 +266,8 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 inner.circle(
                     pt,
                     r,
-                    Gradient::radial_fill().with_stops(&[
-                        (0.0, alpha(CYAN_SOFT, 0.22)),
-                        (1.0, alpha(CYAN, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_stops(&[(0.0, alpha(CYAN_SOFT, 0.22)), (1.0, alpha(CYAN, 0.0))]),
                 );
             }
         });
@@ -390,15 +389,13 @@ fn draw_mesh_sweep(
 }
 
 /// The frame: just the painter — this experiment is all paint.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     Stack::new()
-        .push(Positioned::fill().child(
-            Painting::sized(
-                CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, size: Size| {
-                    scene(book, size, t);
-                }),
-            ),
-        ))
+        .push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, size: Size| {
+                scene(book, size, t);
+            }),
+        )))
         .into()
 }

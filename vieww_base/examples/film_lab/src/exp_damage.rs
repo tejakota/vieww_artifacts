@@ -22,15 +22,15 @@
 
 use vieww_foundation::{Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, smoothstep, spring_out, tint, xywh, BG_DEEP, CANVAS, FAINT, INK, MUTED,
-    Rng, VIOLET, VIOLET_SOFT, MINT, AMBER,
+    alpha, clamp01, mix, spring_out, tint, xywh, Rng, AMBER, BG_DEEP, CANVAS, FAINT, INK, MINT,
+    MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// Left margin.
 const X: f32 = 120.0;
@@ -73,10 +73,26 @@ fn regions() -> Vec<Region> {
     );
     let _header = xywh(W_X, W_Y, W_W, HEADER_H);
     vec![
-        Region { name: "sidebar/tree", rect: sidebar, accent: VIOLET_SOFT },
-        Region { name: "preview/canvas", rect: preview, accent: VIOLET },
-        Region { name: "inspector/props", rect: inspector, accent: VIOLET },
-        Region { name: "preview/canvas", rect: preview, accent: VIOLET },
+        Region {
+            name: "sidebar/tree",
+            rect: sidebar,
+            accent: VIOLET_SOFT,
+        },
+        Region {
+            name: "preview/canvas",
+            rect: preview,
+            accent: VIOLET,
+        },
+        Region {
+            name: "inspector/props",
+            rect: inspector,
+            accent: VIOLET,
+        },
+        Region {
+            name: "preview/canvas",
+            rect: preview,
+            accent: VIOLET,
+        },
     ]
 }
 
@@ -100,12 +116,18 @@ fn damage_env(e: usize, t: f32) -> f32 {
 
 /// Total lit regions at `t` (an edit stays "lit" while its envelope > 0.03).
 fn lit_count(t: f32) -> u32 {
-    EDITS.iter().filter(|&&(e, _)| damage_env(e, t) > 0.03).count() as u32
+    EDITS
+        .iter()
+        .filter(|&&(e, _)| damage_env(e, t) > 0.03)
+        .count() as u32
 }
 
 /// The strongest active envelope — drives the strip's headline numbers.
 fn active_damage(t: f32) -> f32 {
-    EDITS.iter().map(|&(e, _)| damage_env(e, t)).fold(0.0, f32::max)
+    EDITS
+        .iter()
+        .map(|&(e, _)| damage_env(e, t))
+        .fold(0.0, f32::max)
 }
 
 /// The most-recently-lit region at `t` (for the strip's name line).
@@ -147,7 +169,7 @@ fn app_surface(t: f32) -> WidgetNode {
 
             // The content ghosts — each region's furniture, drawn cold and
             // low-contrast: this is what "not repainting" looks like.
-            let header = xywh(ox, oy, W_W, HEADER_H);
+            let _header = xywh(ox, oy, W_W, HEADER_H);
             // Header: three dots + a title bar ghost.
             for i in 0..3 {
                 book.circle(
@@ -172,11 +194,20 @@ fn app_surface(t: f32) -> WidgetNode {
             let sb = xywh(ox, oy + HEADER_H, SIDEBAR_W, W_H - HEADER_H);
             let mut rng = Rng::new(0x7EE);
             for row in 0..9 {
-                let indent = if row % 3 == 0 { 0.0 } else { 16.0 + (row % 3) as f32 * 8.0 };
+                let indent = if row % 3 == 0 {
+                    0.0
+                } else {
+                    16.0 + (row % 3) as f32 * 8.0
+                };
                 let row_y = oy + HEADER_H + 22.0 + row as f32 * 34.0;
                 let _ = rng.f01();
                 book.rrect(
-                    xywh(ox + 18.0 + indent, row_y, 90.0 + (row % 4) as f32 * 28.0, 9.0),
+                    xywh(
+                        ox + 18.0 + indent,
+                        row_y,
+                        90.0 + (row % 4) as f32 * 28.0,
+                        9.0,
+                    ),
                     3.0,
                     alpha(Color::WHITE, 0.05 + if row % 4 == 0 { 0.02 } else { 0.0 }),
                 );
@@ -192,7 +223,11 @@ fn app_surface(t: f32) -> WidgetNode {
             let ins_x = ox + W_W - INSPECTOR_W;
             for row in 0..7 {
                 let row_y = oy + HEADER_H + 26.0 + row as f32 * 44.0;
-                book.rrect(xywh(ins_x + 20.0, row_y, 64.0, 9.0), 3.0, alpha(Color::WHITE, 0.05));
+                book.rrect(
+                    xywh(ins_x + 20.0, row_y, 64.0, 9.0),
+                    3.0,
+                    alpha(Color::WHITE, 0.05),
+                );
                 book.rrect(
                     xywh(ins_x + 96.0, row_y - 4.0, INSPECTOR_W - 120.0, 17.0),
                     5.0,
@@ -209,7 +244,12 @@ fn app_surface(t: f32) -> WidgetNode {
             // Preview canvas: the app's own art — a mini composition living
             // in the preview region (a card + a sparkline, the film's props
             // inside the prop).
-            let pv = xywh(ox + SIDEBAR_W, oy + HEADER_H, W_W - SIDEBAR_W - INSPECTOR_W, W_H - HEADER_H);
+            let pv = xywh(
+                ox + SIDEBAR_W,
+                oy + HEADER_H,
+                W_W - SIDEBAR_W - INSPECTOR_W,
+                W_H - HEADER_H,
+            );
             book.rrect(
                 xywh(pv.left + 34.0, pv.top + 30.0, 330.0, 150.0),
                 10.0,
@@ -222,14 +262,26 @@ fn app_surface(t: f32) -> WidgetNode {
                 1.0,
             );
             // A ghost headline + sparkline in the preview card.
-            book.rrect(xywh(pv.left + 58.0, pv.top + 56.0, 180.0, 16.0), 4.0, alpha(Color::WHITE, 0.10));
-            book.rrect(xywh(pv.left + 58.0, pv.top + 84.0, 120.0, 10.0), 3.0, alpha(Color::WHITE, 0.06));
+            book.rrect(
+                xywh(pv.left + 58.0, pv.top + 56.0, 180.0, 16.0),
+                4.0,
+                alpha(Color::WHITE, 0.10),
+            );
+            book.rrect(
+                xywh(pv.left + 58.0, pv.top + 84.0, 120.0, 10.0),
+                3.0,
+                alpha(Color::WHITE, 0.06),
+            );
             let mut spark = vieww_foundation::Path::new();
             let mut rng2 = Rng::new(0x5FA2);
             for i in 0..12 {
                 let px = pv.left + 58.0 + i as f32 * 20.0;
                 let py = pv.top + 148.0 - 34.0 * (i as f32 / 11.0).powi(2) - rng2.f01() * 6.0;
-                if i == 0 { spark.move_to(Offset::new(px, py)); } else { spark.line_to(Offset::new(px, py)); }
+                if i == 0 {
+                    spark.move_to(Offset::new(px, py));
+                } else {
+                    spark.line_to(Offset::new(px, py));
+                }
             }
             book.stroke(spark, alpha(VIOLET_SOFT, 0.4), 2.0);
 
@@ -250,11 +302,7 @@ fn app_surface(t: f32) -> WidgetNode {
 
                 // The fill: a violet wash strong enough to read as an
                 // event — the whole point is that this ONE region lights.
-                book.rrect(
-                    rect,
-                    8.0,
-                    alpha(accent, 0.22 * env),
-                );
+                book.rrect(rect, 8.0, alpha(accent, 0.22 * env));
                 // The border: bright on attack, the region's own outline.
                 book.stroke_rrect(rect, 8.0, alpha(accent, 0.95 * env), 2.2);
                 // Corner ticks — the selection grammar, keeping the rect
@@ -264,7 +312,12 @@ fn app_surface(t: f32) -> WidgetNode {
                     (rect.left, rect.top, 1.0, 1.0),
                     (rect.left + rect.width(), rect.top, -1.0, 1.0),
                     (rect.left, rect.top + rect.height(), 1.0, -1.0),
-                    (rect.left + rect.width(), rect.top + rect.height(), -1.0, -1.0),
+                    (
+                        rect.left + rect.width(),
+                        rect.top + rect.height(),
+                        -1.0,
+                        -1.0,
+                    ),
                 ];
                 for &(cx, cy, sx, sy) in corners.iter() {
                     book.line(
@@ -302,8 +355,8 @@ fn app_surface(t: f32) -> WidgetNode {
             // the region whose edit is freshest).
             if let Some(ri) = active_region(t) {
                 let r = regs[ri].rect;
-                let cxp = (r.left + 40.0 - ox) as f32;
-                let cyp = (r.top + 64.0 - oy) as f32;
+                let cxp = r.left + 40.0 - ox;
+                let cyp = r.top + 64.0 - oy;
                 let blink = 0.5 + 0.5 * (t * SECONDS * 2.4).sin();
                 book.rect(xywh(cxp, cyp, 2.4, 22.0), alpha(INK, 0.75 * blink));
             }
@@ -354,7 +407,7 @@ fn overlay_strip(t: f32) -> WidgetNode {
             let r = regs[ri].rect;
             let area = r.width() * r.height();
             let total = W_W * W_H;
-            (area / total * 100.0)
+            area / total * 100.0
         }
         None => 0.0,
     };
@@ -392,7 +445,11 @@ fn overlay_strip(t: f32) -> WidgetNode {
                 }
                 let px = 4.0 + u * 432.0;
                 let py = 60.0 - (v / 40.0).min(1.0) * 52.0;
-                if i == 0 { p.move_to(Offset::new(px, py)); } else { p.line_to(Offset::new(px, py)); }
+                if i == 0 {
+                    p.move_to(Offset::new(px, py));
+                } else {
+                    p.line_to(Offset::new(px, py));
+                }
             }
             book.stroke(p, alpha(VIOLET_SOFT, 0.75), 1.8);
             // The playhead.
@@ -411,11 +468,7 @@ fn overlay_strip(t: f32) -> WidgetNode {
     );
 
     let headline = match active {
-        Some(ri) => format!(
-            "damage · {} · {:.1}% of surface",
-            regs[ri].name,
-            pct_now
-        ),
+        Some(ri) => format!("damage · {} · {:.1}% of surface", regs[ri].name, pct_now),
         None => "idle · 0 regions · 0.0%".to_string(),
     };
 
@@ -471,11 +524,8 @@ fn overlay_strip(t: f32) -> WidgetNode {
                 .width(420.0)
                 .height(16.0)
                 .child(
-                    Text::new("one region lights · the rest never repaints").style(
-                        TextStyle::new(11.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.8)),
-                    ),
+                    Text::new("one region lights · the rest never repaints")
+                        .style(TextStyle::new(11.0).monospace().color(alpha(MUTED, 0.8))),
                 ),
         )
         .into()
@@ -483,7 +533,7 @@ fn overlay_strip(t: f32) -> WidgetNode {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -514,20 +564,18 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.70, h * 0.18),
                     w * 0.22,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(AMBER, 0.05)),
-                        (1.0, alpha(AMBER, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(AMBER, 0.05)), (1.0, alpha(AMBER, 0.0))]),
                 );
             });
             book.layer(1.0, 36.0, None, |inner| {
                 inner.circle(
                     Offset::new(w * 0.28, h * 0.85),
                     w * 0.26,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.07)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.07)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
 
@@ -537,10 +585,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.80).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.80)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );

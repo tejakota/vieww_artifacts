@@ -96,14 +96,22 @@ impl<T: 'static> Binding<T> {
 
     /// Convert both ways.
     #[must_use]
-    pub fn map<U: 'static>(&self, to: impl Fn(T) -> U + 'static, from: impl Fn(U) -> T + 'static) -> Binding<U> {
+    pub fn map<U: 'static>(
+        &self,
+        to: impl Fn(T) -> U + 'static,
+        from: impl Fn(U) -> T + 'static,
+    ) -> Binding<U> {
         let (g, s) = (self.get.clone(), self.set.clone());
         Binding::new(move || to(g()), move |u| s(from(u)))
     }
 
     /// Project a part of the value (`$user.name`).
     #[must_use]
-    pub fn lens<U: 'static>(&self, get: impl Fn(&T) -> U + 'static, set: impl Fn(&mut T, U) + 'static) -> Binding<U> {
+    pub fn lens<U: 'static>(
+        &self,
+        get: impl Fn(&T) -> U + 'static,
+        set: impl Fn(&mut T, U) + 'static,
+    ) -> Binding<U> {
         let (g, g2, s) = (self.get.clone(), self.get.clone(), self.set.clone());
         Binding::new(
             move || get(&g()),
@@ -130,7 +138,10 @@ pub struct TextBinding<T: 'static> {
 
 impl<T: 'static> fmt::Debug for TextBinding<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TextBinding").field("text", &self.text.peek()).field("error", &self.error.peek()).finish()
+        f.debug_struct("TextBinding")
+            .field("text", &self.text.peek())
+            .field("error", &self.error.peek())
+            .finish()
     }
 }
 
@@ -189,13 +200,18 @@ pub struct Command {
 
 impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Command").field("can_execute", &self.can_execute()).finish()
+        f.debug_struct("Command")
+            .field("can_execute", &self.can_execute())
+            .finish()
     }
 }
 
 impl Command {
     pub fn new(run: impl Fn() + 'static) -> Self {
-        Self { run: Rc::new(run), can: None }
+        Self {
+            run: Rc::new(run),
+            can: None,
+        }
     }
 
     /// Enable only while `pred` holds (re-evaluated reactively).
@@ -229,7 +245,10 @@ pub enum Value {
     Bool(bool),
     Color(Color),
     /// One of a fixed set of options.
-    Enum { options: Vec<String>, selected: usize },
+    Enum {
+        options: Vec<String>,
+        selected: usize,
+    },
     /// Fire-and-forget; the count of firings.
     Trigger(u32),
 }
@@ -240,8 +259,12 @@ impl Value {
             Self::Number(n) => Json::Number(f64::from(*n)),
             Self::Text(s) => Json::String(s.clone()),
             Self::Bool(b) => Json::Bool(*b),
-            Self::Color(c) => Json::String(format!("#{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a)),
-            Self::Enum { options, selected } => Json::String(options.get(*selected).cloned().unwrap_or_default()),
+            Self::Color(c) => {
+                Json::String(format!("#{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a))
+            }
+            Self::Enum { options, selected } => {
+                Json::String(options.get(*selected).cloned().unwrap_or_default())
+            }
             Self::Trigger(n) => Json::Number(f64::from(*n)),
         }
     }
@@ -260,14 +283,18 @@ impl Value {
                 let h = v.trim_start_matches('#');
                 let byte = |i: usize| h.get(i..i + 2).and_then(|s| u8::from_str_radix(s, 16).ok());
                 match (byte(0), byte(2), byte(4)) {
-                    (Some(r), Some(g), Some(b)) => *c = Color::rgba(r, g, b, byte(6).unwrap_or(255)),
+                    (Some(r), Some(g), Some(b)) => {
+                        *c = Color::rgba(r, g, b, byte(6).unwrap_or(255))
+                    }
                     _ => return false,
                 }
             }
-            (Self::Enum { options, selected }, Json::String(v)) => match options.iter().position(|o| o == v) {
-                Some(i) => *selected = i,
-                None => return false,
-            },
+            (Self::Enum { options, selected }, Json::String(v)) => {
+                match options.iter().position(|o| o == v) {
+                    Some(i) => *selected = i,
+                    None => return false,
+                }
+            }
             (Self::Trigger(_), _) => {}
             _ => return false,
         }
@@ -309,7 +336,9 @@ impl ViewModel {
     /// Declare a property.
     #[must_use]
     pub fn with(self, key: &str, v: Value) -> Self {
-        self.props.borrow_mut().insert(key.to_owned(), self.rt.signal(v));
+        self.props
+            .borrow_mut()
+            .insert(key.to_owned(), self.rt.signal(v));
         self
     }
 
@@ -335,7 +364,9 @@ impl ViewModel {
 
     /// Set a property; false if absent or of a different kind.
     pub fn set(&self, path: &str, v: Value) -> bool {
-        let Some(s) = self.resolve(path) else { return false };
+        let Some(s) = self.resolve(path) else {
+            return false;
+        };
         if std::mem::discriminant(&s.peek()) != std::mem::discriminant(&v) {
             return false;
         }
@@ -345,7 +376,9 @@ impl ViewModel {
 
     /// Fire a trigger.
     pub fn fire(&self, path: &str) -> bool {
-        let Some(s) = self.resolve(path) else { return false };
+        let Some(s) = self.resolve(path) else {
+            return false;
+        };
         let mut ok = false;
         s.update(|v| {
             if let Value::Trigger(n) = v {
@@ -410,8 +443,18 @@ impl ViewModel {
     /// Current state as JSON (nested objects for nested models).
     #[must_use]
     pub fn to_json(&self) -> Json {
-        let mut fields: Vec<(String, Json)> = self.props.borrow().iter().map(|(k, s)| (k.clone(), s.peek().to_json())).collect();
-        fields.extend(self.children.borrow().iter().map(|(k, c)| (k.clone(), c.to_json())));
+        let mut fields: Vec<(String, Json)> = self
+            .props
+            .borrow()
+            .iter()
+            .map(|(k, s)| (k.clone(), s.peek().to_json()))
+            .collect();
+        fields.extend(
+            self.children
+                .borrow()
+                .iter()
+                .map(|(k, c)| (k.clone(), c.to_json())),
+        );
         Json::Object(fields)
     }
 
@@ -451,7 +494,10 @@ mod tests {
         let rt = Runtime::new();
         let volume = rt.signal(0.5f32);
         let slider = Binding::signal(&volume);
-        let label = Binding::signal(&volume).map(|v| format!("{:.0}%", v * 100.0), |s: String| s.trim_end_matches('%').parse::<f32>().unwrap_or(0.0) / 100.0);
+        let label = Binding::signal(&volume).map(
+            |v| format!("{:.0}%", v * 100.0),
+            |s: String| s.trim_end_matches('%').parse::<f32>().unwrap_or(0.0) / 100.0,
+        );
         assert_eq!(label.get(), "50%");
         slider.set(0.8);
         assert_eq!(label.get(), "80%");
@@ -463,7 +509,10 @@ mod tests {
         });
         slider.set(0.4);
         rt.settle_memos();
-        assert!((doubled.get() - 0.8).abs() < 1e-6, "a memo downstream of the bound signal recomputes");
+        assert!(
+            (doubled.get() - 0.8).abs() < 1e-6,
+            "a memo downstream of the bound signal recomputes"
+        );
     }
 
     #[test]
@@ -474,10 +523,19 @@ mod tests {
             age: u32,
         }
         let rt = Runtime::new();
-        let user = rt.signal(User { name: "Ada".into(), age: 36 });
+        let user = rt.signal(User {
+            name: "Ada".into(),
+            age: 36,
+        });
         let name = Binding::signal(&user).lens(|u| u.name.clone(), |u, n| u.name = n);
         name.set("Grace".into());
-        assert_eq!(user.peek(), User { name: "Grace".into(), age: 36 });
+        assert_eq!(
+            user.peek(),
+            User {
+                name: "Grace".into(),
+                age: 36
+            }
+        );
     }
 
     #[test]
@@ -487,7 +545,17 @@ mod tests {
         let field = TextBinding::new(
             &rt,
             Binding::signal(&age),
-            |s| s.parse::<u32>().map_err(|_| "enter a whole number".to_owned()).and_then(|v| if v > 150 { Err("too old".into()) } else { Ok(v) }),
+            |s| {
+                s.parse::<u32>()
+                    .map_err(|_| "enter a whole number".to_owned())
+                    .and_then(|v| {
+                        if v > 150 {
+                            Err("too old".into())
+                        } else {
+                            Ok(v)
+                        }
+                    })
+            },
             u32::to_string,
         );
         assert_eq!(field.text(), "30");
@@ -510,7 +578,8 @@ mod tests {
         let sent = Rc::new(RefCell::new(0));
         let s2 = sent.clone();
         let t2 = text.clone();
-        let send = Command::new(move || *s2.borrow_mut() += 1).when(&rt, move || !t2.get().is_empty());
+        let send =
+            Command::new(move || *s2.borrow_mut() += 1).when(&rt, move || !t2.get().is_empty());
         assert!(!send.execute());
         text.set("hi".into());
         rt.settle_memos();
@@ -526,9 +595,18 @@ mod tests {
             .with("name", Value::Text("Ada".into()))
             .with("shielded", Value::Bool(false))
             .with("tint", Value::Color(Color::rgb(255, 0, 0)))
-            .with("mode", Value::Enum { options: vec!["idle".into(), "run".into()], selected: 0 })
+            .with(
+                "mode",
+                Value::Enum {
+                    options: vec!["idle".into(), "run".into()],
+                    selected: 0,
+                },
+            )
             .with("hit", Value::Trigger(0))
-            .nest("weapon", ViewModel::new(&rt, "Weapon").with("ammo", Value::Number(12.0)));
+            .nest(
+                "weapon",
+                ViewModel::new(&rt, "Weapon").with("ammo", Value::Number(12.0)),
+            );
         let health = vm.number("health");
         health.update(|h| *h -= 30.0);
         assert_eq!(vm.get("health"), Some(Value::Number(70.0)));
@@ -536,15 +614,29 @@ mod tests {
         assert_eq!(vm.get("weapon.ammo"), Some(Value::Number(11.0)));
         assert!(vm.fire("hit") && vm.fire("hit"));
         assert_eq!(vm.get("hit"), Some(Value::Trigger(2)));
-        assert!(!vm.set("health", Value::Text("x".into())), "kinds are enforced");
+        assert!(
+            !vm.set("health", Value::Text("x".into())),
+            "kinds are enforced"
+        );
         vm.flag("shielded").set(true);
         let j = vm.to_json();
-        assert_eq!(j.get("weapon").and_then(|w| w.get("ammo")).and_then(Json::as_f32), Some(11.0));
+        assert_eq!(
+            j.get("weapon")
+                .and_then(|w| w.get("ammo"))
+                .and_then(Json::as_f32),
+            Some(11.0)
+        );
         assert_eq!(j.get("tint").and_then(Json::as_str), Some("#ff0000ff"));
         let other = Json::parse(r##"{"health": 5, "mode": "run", "tint": "#00ff00", "weapon": {"ammo": 3, "bogus": 1}, "nope": true}"##).unwrap();
         let rejected = vm.apply_json(&other);
         assert_eq!(rejected, vec!["weapon.bogus".to_owned(), "nope".to_owned()]);
-        assert_eq!(vm.get("mode"), Some(Value::Enum { options: vec!["idle".into(), "run".into()], selected: 1 }));
+        assert_eq!(
+            vm.get("mode"),
+            Some(Value::Enum {
+                options: vec!["idle".into(), "run".into()],
+                selected: 1
+            })
+        );
         assert_eq!(vm.get("tint"), Some(Value::Color(Color::rgb(0, 255, 0))));
         assert_eq!(vm.text("name").get(), "Ada");
     }

@@ -188,8 +188,18 @@ impl CustomPainter for ScatterChartPainter {
         // Both axes normalise on their own ranges: the *shape* of the cloud
         // is the point of a scatter, and pinning either axis to a data range
         // the caller did not state would silently change that shape.
-        let x_min = self.points.iter().map(|&(x, _)| x).reduce(f32::min).unwrap_or(0.0);
-        let x_max = self.points.iter().map(|&(x, _)| x).reduce(f32::max).unwrap_or(1.0);
+        let x_min = self
+            .points
+            .iter()
+            .map(|&(x, _)| x)
+            .reduce(f32::min)
+            .unwrap_or(0.0);
+        let x_max = self
+            .points
+            .iter()
+            .map(|&(x, _)| x)
+            .reduce(f32::max)
+            .unwrap_or(1.0);
         let (y_min, y_max) = scatter_range(&self.points).unwrap_or((0.0, 1.0));
         let x_range = (x_max - x_min).max(f32::EPSILON);
         let y_range = (y_max - y_min).max(f32::EPSILON);
@@ -208,7 +218,10 @@ impl CustomPainter for ScatterChartPainter {
             // The same hairline grid the line chart draws, first, so the
             // dots sit on the reference rather than under it.
             for step in 0..=4 {
-                #[expect(clippy::cast_precision_loss, reason = "four gridlines, small constants")]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "four gridlines, small constants"
+                )]
                 let y = size.height * (step as f32 / 4.0);
                 let baseline = step == 4;
                 instructions.push(DrawInstruction::DrawLine {
@@ -276,7 +289,10 @@ mod tests {
     fn a_scatter_without_a_label_has_no_semantics_wrapper() {
         let node = inflate(scatter());
         let rendered = format!("{node:?}");
-        assert!(!rendered.contains("Semantics"), "no label, no wrapper: {rendered}");
+        assert!(
+            !rendered.contains("Semantics"),
+            "no label, no wrapper: {rendered}"
+        );
     }
 
     #[test]
@@ -297,8 +313,14 @@ mod tests {
         };
         assert_eq!(*radius, 3.0);
         // The first point (min x, min y) sits bottom-left, inside the inset.
-        assert!((center.dx - 3.0).abs() < 1.0, "x at the left inset: {center:?}");
-        assert!((center.dy - 111.0).abs() < 1.0, "y at the bottom: {center:?}");
+        assert!(
+            (center.dx - 3.0).abs() < 1.0,
+            "x at the left inset: {center:?}"
+        );
+        assert!(
+            (center.dy - 111.0).abs() < 1.0,
+            "y at the bottom: {center:?}"
+        );
     }
 
     #[test]
@@ -323,14 +345,21 @@ mod tests {
             axes: ChartAxes::None,
         };
         let instructions = painter.paint(Size::new(100.0, 100.0));
-        assert_eq!(instructions.len(), 1, "degenerate ranges are handled, not divided by");
+        assert_eq!(
+            instructions.len(),
+            1,
+            "degenerate ranges are handled, not divided by"
+        );
     }
 
     #[test]
     fn axes_add_the_value_labels_column() {
         let node = inflate(scatter().axes(ChartAxes::Value));
         let rendered = format!("{node:?}");
-        assert!(rendered.contains("Flex"), "the axis frame wraps the field: {rendered}");
+        assert!(
+            rendered.contains("Flex"),
+            "the axis frame wraps the field: {rendered}"
+        );
         assert!(rendered.contains("Text"), "with tick labels: {rendered}");
     }
 

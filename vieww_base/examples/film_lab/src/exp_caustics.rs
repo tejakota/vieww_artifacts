@@ -20,13 +20,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, tint, AMBER, CYAN, FAINT, INK, MUTED,
-    VIOLET};
+use crate::film_lib::{alpha, mix, tint, AMBER, CYAN, FAINT, INK, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The optics ──────────────────────────────────────────────────────────────
 
@@ -72,10 +71,10 @@ fn land_x(x_s: f32, t: f32) -> f32 {
     // (0, 1). Refraction: standard vector Snell.
     let nrm = (slope * slope + 1.0).sqrt();
     let n_in = [0.0_f32, 1.0]; // into the water
-    // The surface's up-normal (into the air): (f', −1)/|·| for the curve
-    // y = f(x) — the sign checked by hand: flat → (0,−1), and a surface
-    // descending to the right tips its normal right, refracting vertical
-    // light toward the shallow side (verified against scalar Snell).
+                               // The surface's up-normal (into the air): (f', −1)/|·| for the curve
+                               // y = f(x) — the sign checked by hand: flat → (0,−1), and a surface
+                               // descending to the right tips its normal right, refracting vertical
+                               // light toward the shallow side (verified against scalar Snell).
     let nrm_v = [slope / nrm, -1.0 / nrm];
     let cos_i = -(n_in[0] * nrm_v[0] + n_in[1] * nrm_v[1]); // > 0
     let sin_t2 = (N_AIR / N_WATER) * (N_AIR / N_WATER) * (1.0 - cos_i * cos_i);
@@ -111,7 +110,7 @@ fn stationary_points(t: f32) -> Vec<f32> {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // Trace every ray, bin the landings — the histogram IS the floor.
     let mut hist = vec![0u32; BINS];
     let mut ray_pts: Vec<(f32, f32, f32)> = Vec::new(); // (x_s, y_surface, x_floor) for the drawn subset
@@ -151,10 +150,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The room — above water.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(9, 10, 14)),
-                    (1.0, Color::rgb(6, 7, 10)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(9, 10, 14)), (1.0, Color::rgb(6, 7, 10))]),
             );
 
             // ── Underwater — the tinted depth ──────────────────────────
@@ -170,12 +168,10 @@ pub fn frame(t: f32) -> WidgetNode {
             water.close();
             book.fill(
                 water,
-                Gradient::vertical()
-                    .with_dither()
-                    .with_stops(&[
-                        (0.0, alpha(CYAN, 0.10)),
-                        (1.0, alpha(Color::rgb(3, 12, 24), 0.85)),
-                    ]),
+                Gradient::vertical().with_dither().with_stops(&[
+                    (0.0, alpha(CYAN, 0.10)),
+                    (1.0, alpha(Color::rgb(3, 12, 24), 0.85)),
+                ]),
             );
 
             // ── The surface line, bright where the sun rides it ────────
@@ -223,7 +219,14 @@ pub fn frame(t: f32) -> WidgetNode {
                     let a = ((density - 1.0) * 0.22).clamp(0.0, 0.75);
                     g.rect(
                         Rect::new(x, Y_FLOOR - hh, x + bin_w + 0.5, Y_FLOOR),
-                        alpha(mix(tint(AMBER, 0.4), Color::rgb(255, 250, 235), (density - 1.0).clamp(0.0, 1.0)), a),
+                        alpha(
+                            mix(
+                                tint(AMBER, 0.4),
+                                Color::rgb(255, 250, 235),
+                                (density - 1.0).clamp(0.0, 1.0),
+                            ),
+                            a,
+                        ),
                     );
                     // The glow above tall blades — the pool-floor shimmer.
                     if density > 1.6 {
@@ -259,7 +262,11 @@ pub fn frame(t: f32) -> WidgetNode {
             }
             for &p in peaks_draw.iter() {
                 let x = X0 + (p as f32 + 0.5) * bin_w;
-                book.circle(Offset::new(x, Y_FLOOR + 22.0), 2.6, alpha(tint(CYAN, 0.4), 0.9));
+                book.circle(
+                    Offset::new(x, Y_FLOOR + 22.0),
+                    2.6,
+                    alpha(tint(CYAN, 0.4), 0.9),
+                );
             }
 
             // The pool walls.
@@ -330,7 +337,10 @@ fn receipt_panel(max_bin: f32, mean_bin: f32, foci: &[f32], peaks: &[usize]) -> 
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

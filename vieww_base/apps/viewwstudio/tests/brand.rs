@@ -79,7 +79,9 @@ fn frame(
     Frame {
         data: pixels
             .data()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| (c[0], c[1], c[2]))
             .collect(),
         width,

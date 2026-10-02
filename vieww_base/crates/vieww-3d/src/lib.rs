@@ -67,7 +67,7 @@ pub use pathtrace::{Accumulator, PathTracer, TraceScene};
 pub use raycast::{project, raycast, Hit, Ray};
 pub use render::{RenderStats, Renderer};
 pub use scene::{
-    Camera, Content, Filter, Light, Material, Node, NodeDesc, NodeId, OrbitControls, Projection, ReconcileStats, Rgb,
-    Scene, Shading, Texture,
+    Camera, Content, Filter, Light, Material, Node, NodeDesc, NodeId, OrbitControls, Projection,
+    ReconcileStats, Rgb, Scene, Shading, Texture,
 };
 pub use widget::Viewport3D;

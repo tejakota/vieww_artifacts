@@ -25,16 +25,16 @@ use vieww_foundation::{
     Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
 };
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, ease_out_expo, mix, tint, FAINT, INK, MUTED, Rng, VIOLET,
-    VIOLET_DEEP, VIOLET_SOFT, CYAN, CYAN_SOFT, BG_DEEP,
+    alpha, clamp01, ease_in_out, ease_out_expo, mix, tint, Rng, BG_DEEP, CYAN, CYAN_SOFT, FAINT,
+    MUTED, VIOLET, VIOLET_DEEP, VIOLET_SOFT,
 };
 use crate::three_d::{draw_mesh, Camera, Mesh, MeshStyle, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 8.0;
+pub(crate) const SECONDS: f32 = 8.0;
 
 /// Radial copies of the profile — the lathe's resolution.
 const LATHE: usize = 64;
@@ -81,14 +81,16 @@ fn smooth_profile() -> Vec<(f32, f32)> {
             let s = k as f32 / 6.0;
             let s2 = s * s;
             let s3 = s2 * s;
-            let r = 0.5 * ((2.0 * p1.0)
-                + (-p0.0 + p2.0) * s
-                + (2.0 * p0.0 - 5.0 * p1.0 + 4.0 * p2.0 - p3.0) * s2
-                + (-p0.0 + 3.0 * p1.0 - 3.0 * p2.0 + p3.0) * s3);
-            let y = 0.5 * ((2.0 * p1.1)
-                + (-p0.1 + p2.1) * s
-                + (2.0 * p0.1 - 5.0 * p1.1 + 4.0 * p2.1 - p3.1) * s2
-                + (-p0.1 + 3.0 * p1.1 - 3.0 * p2.1 + p3.1) * s3);
+            let r = 0.5
+                * ((2.0 * p1.0)
+                    + (-p0.0 + p2.0) * s
+                    + (2.0 * p0.0 - 5.0 * p1.0 + 4.0 * p2.0 - p3.0) * s2
+                    + (-p0.0 + 3.0 * p1.0 - 3.0 * p2.0 + p3.0) * s3);
+            let y = 0.5
+                * ((2.0 * p1.1)
+                    + (-p0.1 + p2.1) * s
+                    + (2.0 * p0.1 - 5.0 * p1.1 + 4.0 * p2.1 - p3.1) * s2
+                    + (-p0.1 + 3.0 * p1.1 - 3.0 * p2.1 + p3.1) * s3);
             out.push((r.max(0.0), y));
         }
     }
@@ -146,7 +148,14 @@ fn lathe_mesh(reveal: f32) -> (Mesh, usize) {
 }
 
 /// The wireframe cage: profile copies at K angles + ring hoops.
-fn draw_cage(book: &mut Sketchbook, cam: &Camera, canvas: Size, fan: f32, hoops: f32, alpha_k: f32) {
+fn draw_cage(
+    book: &mut Sketchbook,
+    cam: &Camera,
+    canvas: Size,
+    fan: f32,
+    hoops: f32,
+    alpha_k: f32,
+) {
     let profile = smooth_profile();
     let copies = 28;
     // Radial copies, staggered around the turn.
@@ -161,7 +170,15 @@ fn draw_cage(book: &mut Sketchbook, cam: &Camera, canvas: Size, fan: f32, hoops:
             .iter()
             .map(|(r, y)| Vec3::new(r * th.cos(), *y, r * th.sin()))
             .collect();
-        stroke_frac3(book, &pts, cam, canvas, frac, alpha(VIOLET_SOFT, 0.34 * alpha_k), 1.0);
+        stroke_frac3(
+            book,
+            &pts,
+            cam,
+            canvas,
+            frac,
+            alpha(VIOLET_SOFT, 0.34 * alpha_k),
+            1.0,
+        );
     }
     // Ring hoops at a few heights — the lathe's own circles.
     let hoop_at = [2.28f32, 1.79, 1.20, 0.47];
@@ -263,13 +280,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The void.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(11, 10, 18)),
-                (0.55, BG_DEEP),
-                (1.0, Color::rgb(5, 5, 9)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(11, 10, 18)),
+            (0.55, BG_DEEP),
+            (1.0, Color::rgb(5, 5, 9)),
+        ]),
     );
 
     // Stage dust — sparse, slow, gives the void depth.
@@ -297,7 +312,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The camera: front for the line, off-axis for the revolve, orbiting
     // gently once the avatar has presence.
     let orbit = 0.55 + ease_in_out(present_t) * 0.85 + t * 0.10;
-    let eye = Vec3::new(orbit.sin() * 6.8, 2.35 + 0.35 * present_t, orbit.cos() * 6.8);
+    let eye = Vec3::new(
+        orbit.sin() * 6.8,
+        2.35 + 0.35 * present_t,
+        orbit.cos() * 6.8,
+    );
     let cam = Camera {
         eye,
         target: Vec3::new(0.0, 1.62, 0.0),
@@ -334,7 +353,15 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 Vec3::new(*r, *y, 0.0)
             })
             .collect();
-        stroke_frac3(book, &pts, &cam, canvas, line_draw, tint(VIOLET_SOFT, 0.35), 2.4);
+        stroke_frac3(
+            book,
+            &pts,
+            &cam,
+            canvas,
+            line_draw,
+            tint(VIOLET_SOFT, 0.35),
+            2.4,
+        );
         // The line's own bloom.
         book.layer(1.0, 6.0, None, |g| {
             stroke_frac3(g, &pts, &cam, canvas, line_draw, alpha(VIOLET, 0.35), 5.0);
@@ -344,7 +371,14 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // ── B · THE REVOLVE: the cage fans out around the line ────────────────
     if fan_t > 0.0 {
         let cage_fade = 1.0 - skin_t * 0.55;
-        draw_cage(book, &cam, canvas, fan_t, clamp01((fan_t - 0.35) / 0.5), cage_fade);
+        draw_cage(
+            book,
+            &cam,
+            canvas,
+            fan_t,
+            clamp01((fan_t - 0.35) / 0.5),
+            cage_fade,
+        );
     }
 
     // ── C · THE SKIN + D · PRESENCE ───────────────────────────────────────
@@ -418,7 +452,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
 }
 
 /// The frame: the painter, plus the textual instrument.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

@@ -214,7 +214,11 @@ impl SvgWriter {
         match item {
             Sketch::Fill { path, brush } => {
                 let (fill, a) = self.paint(brush, bounds_of(path));
-                let _ = write!(out, "{pad}<path d=\"{}\" fill=\"{fill}\"", path.to_svg_data());
+                let _ = write!(
+                    out,
+                    "{pad}<path d=\"{}\" fill=\"{fill}\"",
+                    path.to_svg_data()
+                );
                 if a < 1.0 {
                     let _ = write!(out, " fill-opacity=\"{}\"", n(a));
                 }
@@ -333,7 +337,11 @@ fn svg_stroke_style(out: &mut String, style: &StrokeStyle) {
     }
     match style.join {
         StrokeJoin::Miter => {
-            let _ = write!(out, " stroke-miterlimit=\"{}\"", n(style.effective_miter_limit()));
+            let _ = write!(
+                out,
+                " stroke-miterlimit=\"{}\"",
+                n(style.effective_miter_limit())
+            );
         }
         StrokeJoin::Round => out.push_str(" stroke-linejoin=\"round\""),
         StrokeJoin::Bevel => out.push_str(" stroke-linejoin=\"bevel\""),
@@ -435,7 +443,10 @@ impl PdfWriter {
         } else if funcs.len() == 1 {
             funcs.remove(0)
         } else {
-            let bounds_list: Vec<String> = stops[1..stops.len() - 1].iter().map(|s| n(s.offset)).collect();
+            let bounds_list: Vec<String> = stops[1..stops.len() - 1]
+                .iter()
+                .map(|s| n(s.offset))
+                .collect();
             let encode: Vec<&str> = funcs.iter().map(|_| "0 1").collect();
             format!(
                 "<< /FunctionType 3 /Domain [{} {}] /Functions [{}] /Bounds [{}] /Encode [{}] >>",
@@ -663,9 +674,14 @@ mod tests {
             3.0,
             StrokeStyle::rounded(),
         );
-        book.layer(0.5, 2.0, Some(Path::rect(Rect::new(0.0, 0.0, 50.0, 50.0))), |g| {
-            g.circle(Offset::new(25.0, 25.0), 10.0, Color::BLUE);
-        });
+        book.layer(
+            0.5,
+            2.0,
+            Some(Path::rect(Rect::new(0.0, 0.0, 50.0, 50.0))),
+            |g| {
+                g.circle(Offset::new(25.0, 25.0), 10.0, Color::BLUE);
+            },
+        );
         book.shadow(
             Rect::new(20.0, 20.0, 40.0, 40.0),
             4.0,
@@ -698,7 +714,10 @@ mod tests {
         let pdf = sample().to_pdf(Size::new(100.0, 50.0));
         // The binary comment on line two is the only non-ASCII; blank it so
         // byte offsets and string offsets agree.
-        let text: String = pdf.iter().map(|&b| if b < 128 { b as char } else { '?' }).collect();
+        let text: String = pdf
+            .iter()
+            .map(|&b| if b < 128 { b as char } else { '?' })
+            .collect();
         assert!(text.starts_with("%PDF-1.4"));
         assert!(text.trim_end().ends_with("%%EOF"));
         // The xref offsets point at the objects they claim to.
@@ -711,13 +730,28 @@ mod tests {
         assert!(text[xref_at..].starts_with("xref"));
         for (i, line) in text[xref_at..].lines().skip(3).take(4).enumerate() {
             let off: usize = line[..10].parse().unwrap();
-            assert!(text[off..].starts_with(&format!("{} 0 obj", i + 1)), "object {}", i + 1);
+            assert!(
+                text[off..].starts_with(&format!("{} 0 obj", i + 1)),
+                "object {}",
+                i + 1
+            );
         }
         assert!(text.contains("/ShadingType 2"));
-        assert!(text.contains("/FunctionType 3"), "three stops stitch two functions");
+        assert!(
+            text.contains("/FunctionType 3"),
+            "three stops stitch two functions"
+        );
         assert!(text.contains(" re") || text.contains(" m\n"));
         // Content stream length is exact.
-        let len: usize = text.split("/Length ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
+        let len: usize = text
+            .split("/Length ")
+            .nth(1)
+            .unwrap()
+            .split(' ')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
         let start = text.find("stream\n").unwrap() + 7;
         let end = text.find("endstream").unwrap();
         assert_eq!(end - start, len);

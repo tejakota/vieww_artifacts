@@ -12,11 +12,11 @@
 
 use std::sync::OnceLock;
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle};
+use vieww_foundation::{Color, Gradient, Offset, Size, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, spring_out, tint, xywh, INK, MUTED, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, mix, tint, INK, VIOLET, VIOLET_SOFT};
 
 use super::{ease_out_type, Ctx};
 
@@ -52,10 +52,20 @@ fn storm() -> &'static Storm {
         let starts: Vec<Offset> = (0..n)
             .map(|i| Offset::new(x0 + adv * i as f32 + adv * 0.5, LINE_Y))
             .collect();
-        let phases: Vec<(f32, f32)> =
-            (0..n).map(|i| (hash01(i * 7 + 1) * 6.28, hash01(i * 13 + 5) * 6.28)).collect();
+        let phases: Vec<(f32, f32)> = (0..n)
+            .map(|i| {
+                (
+                    hash01(i * 7 + 1) * std::f32::consts::TAU,
+                    hash01(i * 13 + 5) * std::f32::consts::TAU,
+                )
+            })
+            .collect();
         let rates: Vec<f32> = (0..n).map(|i| 0.8 + hash01(i * 11 + 3) * 0.5).collect();
-        Storm { starts, phases, rates }
+        Storm {
+            starts,
+            phases,
+            rates,
+        }
     })
 }
 
@@ -63,7 +73,7 @@ fn storm() -> &'static Storm {
 const TYPE_END: f32 = 0.40;
 const LIFT_END: f32 = 0.78;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let n = QUESTION.chars().count();
     let st = storm();
@@ -88,7 +98,12 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(64.0)
                 .child(
                     Text::new(visible)
-                        .style(TextStyle::new(TYPE_SIZE).monospace().letter_spacing(1.5).color(alpha(INK, 0.94)))
+                        .style(
+                            TextStyle::new(TYPE_SIZE)
+                                .monospace()
+                                .letter_spacing(1.5)
+                                .color(alpha(INK, 0.94)),
+                        )
                         .align(TextAlign::Center),
                 ),
         );
@@ -121,8 +136,7 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
 
             // The field: two crossing sines and a swirl — typo's flow,
             // closed-form (deterministic, no integration table needed).
-            let field_x = (start.dy * 0.011 + p1).sin() * 46.0
-                + (start.dx * 0.009).cos() * 18.0
+            let field_x = (start.dy * 0.011 + p1).sin() * 46.0 + (start.dx * 0.009).cos() * 18.0
                 - (start.dx - CENTER.dx) / 480.0 * 26.0 * u;
             let field_y = -(start.dx * 0.010 + p2).cos() * 40.0 * u
                 + (start.dy - CENTER.dy) / 420.0 * 30.0 * u
@@ -164,46 +178,48 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         let dy = CENTER.dy + fall * fall * 130.0;
         let dr = 7.0 + 9.0 * drop_birth;
         let dalpha = drop_birth;
-        stack = stack.push(
-            Positioned::fill().child(Painting::sized(
-                super::CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    // The drop — a teardrop body with a violet core.
-                    book.layer(1.0, 6.0, None, |g| {
-                        g.circle(
-                            Offset::new(CENTER.dx, dy),
-                            dr * 3.4,
-                            Gradient::radial_fill().with_dither().with_stops(&[
-                                (0.0, alpha(VIOLET, 0.30 * dalpha)),
-                                (1.0, alpha(VIOLET, 0.0)),
-                            ]),
-                        );
-                    });
-                    book.circle(
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            super::CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                // The drop — a teardrop body with a violet core.
+                book.layer(1.0, 6.0, None, |g| {
+                    g.circle(
                         Offset::new(CENTER.dx, dy),
-                        dr,
+                        dr * 3.4,
                         Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(tint(VIOLET_SOFT, 0.55), 0.98 * dalpha)),
-                            (0.7, alpha(VIOLET, 0.85 * dalpha)),
-                            (1.0, alpha(mix(VIOLET, Color::BLACK, 0.4), 0.9 * dalpha)),
+                            (0.0, alpha(VIOLET, 0.30 * dalpha)),
+                            (1.0, alpha(VIOLET, 0.0)),
                         ]),
                     );
-                    // The highlight — the drop reads as liquid.
-                    book.circle(
-                        Offset::new(CENTER.dx - dr * 0.32, dy - dr * 0.36),
-                        dr * 0.22,
-                        alpha(Color::WHITE, 0.75 * dalpha),
-                    );
-                }),
-            )),
-        );
+                });
+                book.circle(
+                    Offset::new(CENTER.dx, dy),
+                    dr,
+                    Gradient::radial_fill().with_dither().with_stops(&[
+                        (0.0, alpha(tint(VIOLET_SOFT, 0.55), 0.98 * dalpha)),
+                        (0.7, alpha(VIOLET, 0.85 * dalpha)),
+                        (1.0, alpha(mix(VIOLET, Color::BLACK, 0.4), 0.9 * dalpha)),
+                    ]),
+                );
+                // The highlight — the drop reads as liquid.
+                book.circle(
+                    Offset::new(CENTER.dx - dr * 0.32, dy - dr * 0.36),
+                    dr * 0.22,
+                    alpha(Color::WHITE, 0.75 * dalpha),
+                );
+            }),
+        )));
     }
 
     // The ground — black, the deepest the film goes between beats.
     Stack::new()
-        .push(Positioned::fill().child(
-            Container::new().size(1920.0, 1080.0).color(Color::rgb(5, 5, 7)),
-        ))
+        .push(
+            Positioned::fill().child(
+                Container::new()
+                    .size(1920.0, 1080.0)
+                    .color(Color::rgb(5, 5, 7)),
+            ),
+        )
         .push(stack)
         .into()
 }

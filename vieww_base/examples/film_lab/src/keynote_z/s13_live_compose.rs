@@ -10,9 +10,10 @@
 //!
 //! Witness tap 3 (the compose edit, 114.0 s) fires here.
 
-use vieww_widget::prelude::*;
+use super::{
+    caption, chip, clamp01, studio_chrome, tint, Ctx, ACCENT, MINT, SYN_TYPE, VIOLET_SOFT,
+};
 use vieww_widget::WidgetNode;
-use super::{caption, chip, clamp01, studio_chrome, tint, ACCENT, Ctx, MINT, SYN_TYPE, VIOLET_SOFT};
 
 /// The overlay's arrival (110.0 s → scene fraction 0.09).
 const OVERLAY_T: f32 = 0.09;
@@ -21,7 +22,7 @@ const EDIT_T: f32 = 0.45;
 /// The row edit (116.5 s → 0.68).
 const ROW_T: f32 = 0.68;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
 
     let mut stack = studio_chrome(ctx);
@@ -67,11 +68,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(852.0 - (1.0 - pop) * 12.0)
                 .width(420.0)
                 .height(40.0)
-                .child(
-                    super::Opacity::new(pop.max(0.01)).child(
-                        chip("2 edits · 0 rebuilds · live preview", 15.0, tint(MINT, 0.1)),
-                    ),
-                ),
+                .child(super::Opacity::new(pop.max(0.01)).child(chip(
+                    "2 edits · 0 rebuilds · live preview",
+                    15.0,
+                    tint(MINT, 0.1),
+                ))),
         );
     }
 

@@ -41,15 +41,16 @@
 //! - **The critical density**, where the fundamental diagram turns over:
 //!   located from the measured points, with the flow it achieves.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, RED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The road ────────────────────────────────────────────────────────────────
 
@@ -265,7 +266,7 @@ fn wave_speed(rows: &[Vec<i32>]) -> (f32, usize) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let (rows, step_no) = show_history(t as f64);
     // The fit uses the second half of the window only: the first rows are
     // the crystal breaking up, and a transient is not a shock.
@@ -303,7 +304,12 @@ pub fn frame(t: f32) -> WidgetNode {
     let stopped = current.iter().filter(|&&v| v == 0).count();
     let cars = current.iter().filter(|&&v| v >= 0).count();
     let mean_v = if cars > 0 {
-        current.iter().filter(|&&v| v >= 0).map(|&v| v as f32).sum::<f32>() / cars as f32
+        current
+            .iter()
+            .filter(|&&v| v >= 0)
+            .map(|&v| v as f32)
+            .sum::<f32>()
+            / cars as f32
     } else {
         0.0
     };
@@ -315,10 +321,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(12, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(12, 11, 16))]),
             );
 
             // ── the ring road ──
@@ -330,14 +335,19 @@ pub fn frame(t: f32) -> WidgetNode {
                 12.0,
                 alpha(Color::rgb(13, 13, 19), 0.95),
             );
-            book.ring(Offset::new(rcx, rcy), rr, 26.0, alpha(Color::rgb(22, 22, 30), 0.9));
+            book.ring(
+                Offset::new(rcx, rcy),
+                rr,
+                26.0,
+                alpha(Color::rgb(22, 22, 30), 0.9),
+            );
             book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
                 for (i, &v) in current.iter().enumerate() {
                     if v < 0 {
                         continue;
                     }
-                    let a = i as f32 / L as f32 * std::f32::consts::TAU
-                        - std::f32::consts::FRAC_PI_2;
+                    let a =
+                        i as f32 / L as f32 * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
                     let k = v as f32 / V_MAX as f32;
                     let c = if v == 0 {
                         RED
@@ -373,7 +383,12 @@ pub fn frame(t: f32) -> WidgetNode {
                     let k = v as f32 / V_MAX as f32;
                     let c = if v == 0 { RED } else { mix(AMBER, CYAN, k) };
                     book.rect(
-                        Rect::new(tx + i as f32 * cw, y, tx + (i as f32 + 1.0) * cw, y + rh + 0.4),
+                        Rect::new(
+                            tx + i as f32 * cw,
+                            y,
+                            tx + (i as f32 + 1.0) * cw,
+                            y + rh + 0.4,
+                        ),
                         alpha(c, 0.30 + 0.62 * (1.0 - k)),
                     );
                 }
@@ -393,10 +408,7 @@ pub fn frame(t: f32) -> WidgetNode {
             // the free-flow line, from the fitted slope
             book.line(
                 Offset::new(fx, fy + fh),
-                Offset::new(
-                    fx + (qmax / slope.max(1e-6)) * fw,
-                    fy,
-                ),
+                Offset::new(fx + (qmax / slope.max(1e-6)) * fw, fy),
                 alpha(MINT, 0.45),
                 1.2,
             );
@@ -450,8 +462,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let lines = vec![
-        "TRAFFIC · THE JAM AXIS · NAGEL–SCHRECKENBERG, AND THE JAM WITH NO CAUSE".to_string(),
+    let lines = ["TRAFFIC · THE JAM AXIS · NAGEL–SCHRECKENBERG, AND THE JAM WITH NO CAUSE".to_string(),
         format!(
             "accelerate → brake to the gap → dawdle with p = {P_DAWDLE} → move · v_max = {V_MAX} cells/step · ring of {L} cells · replayed from the seed every frame · step {step_no}"
         ),
@@ -470,8 +481,7 @@ pub fn frame(t: f32) -> WidgetNode {
         format!(
             "CRITICAL DENSITY located from those points: ρ_c = {:.3} at peak flow q = {:.3} cars/cell/step — past it, adding cars REMOVES throughput, which is the whole of rush hour",
             peak.0, peak.1
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -486,7 +496,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

@@ -18,13 +18,14 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, smoothstep, tint, Rng, INK, MUTED,
-    VIOLET, VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_cubic, mix, smoothstep, tint, Rng, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 11.0;
+pub(crate) const SECONDS: f32 = 11.0;
 
 // ── The timeline ────────────────────────────────────────────────────────────
 
@@ -79,19 +80,45 @@ fn build_tree() -> Vec<Filament> {
         let tip = *pts.last().unwrap();
         out.push(Filament { pts, gen, t_start });
         // Branch: 2 children, splayed; deeper generations branch less.
-        let n = if gen < 4 { 2 } else if rng.f01() < 0.6 { 2 } else { 1 };
+        let n = if gen < 4 {
+            2
+        } else if rng.f01() < 0.6 {
+            2
+        } else {
+            1
+        };
         let spread = 0.42 + gen as f32 * 0.06;
         for i in 0..n {
-            let dir = if n == 1 { rng.sym() * 0.3 } else { (i as f32 * 2.0 - 1.0) * spread + rng.sym() * 0.12 };
+            let dir = if n == 1 {
+                rng.sym() * 0.3
+            } else {
+                (i as f32 * 2.0 - 1.0) * spread + rng.sym() * 0.12
+            };
             let lchild = len * (0.78 + rng.f01() * 0.1);
-            grow(&mut *rng, out, tip, a + dir, lchild, gen + 1, t_start + 0.085);
+            grow(
+                &mut *rng,
+                out,
+                tip,
+                a + dir,
+                lchild,
+                gen + 1,
+                t_start + 0.085,
+            );
         }
     }
 
     // The root burst: 6 primary filaments from the strike point.
     for k in 0..6 {
         let a = -std::f32::consts::FRAC_PI_2 + (k as f32 - 2.5) * 0.5;
-        grow(&mut rng, &mut out, Offset::new(640.0, 372.0), a, 88.0, 0, 0.0);
+        grow(
+            &mut rng,
+            &mut out,
+            Offset::new(640.0, 372.0),
+            a,
+            88.0,
+            0,
+            0.0,
+        );
     }
     out
 }
@@ -169,7 +196,7 @@ fn motes(tree: &[Filament], t: f32) -> Vec<(Offset, f32)> {
     out
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let tree = build_tree();
     // The census, measured from the tree.
     let branches = tree.len();
@@ -224,7 +251,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 if f < 1.0 {
                     let y = 60.0 + f * f * 300.0;
                     // A slight wobble on the way down.
-                    let x = 640.0 + 6.0 * (t * 6.2832 * 3.0).sin() * (1.0 - f);
+                    let x = 640.0 + 6.0 * (t * std::f32::consts::TAU * 3.0).sin() * (1.0 - f);
                     book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
                         g.circle(
                             Offset::new(x, y),
@@ -337,13 +364,17 @@ pub fn frame(t: f32) -> WidgetNode {
                     }
                 }
                 // The root glow at the strike point, fading as the tree owns it.
-                let root_env = smoothstep((t - T_STRIKE) / 0.08) * (1.0 - smoothstep((t - 0.45) / 0.3));
+                let root_env =
+                    smoothstep((t - T_STRIKE) / 0.08) * (1.0 - smoothstep((t - 0.45) / 0.3));
                 if root_env > 0.01 {
                     g.circle(
                         Offset::new(640.0, 372.0),
                         46.0,
                         Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(Color::rgb(160, 140, 255), 0.5 * root_env * dilute)),
+                            (
+                                0.0,
+                                alpha(Color::rgb(160, 140, 255), 0.5 * root_env * dilute),
+                            ),
                             (1.0, alpha(Color::WHITE, 0.0)),
                         ]),
                     );
@@ -354,11 +385,7 @@ pub fn frame(t: f32) -> WidgetNode {
             if !mt.is_empty() {
                 book.blended_layer(1.0, 0.0, vieww_foundation::BlendMode::Plus, None, |g| {
                     for (p, a) in mt.iter() {
-                        g.circle(
-                            *p,
-                            1.6,
-                            alpha(Color::rgb(170, 180, 250), 0.5 * a * dilute),
-                        );
+                        g.circle(*p, 1.6, alpha(Color::rgb(170, 180, 250), 0.5 * a * dilute));
                     }
                 });
             }
@@ -379,8 +406,10 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack.push(receipt_panel(branches, segments, gens, live_count)).into()
+    let stack = Stack::new().push(Positioned::fill().child(board));
+    stack
+        .push(receipt_panel(branches, segments, gens, live_count))
+        .into()
 }
 
 // ── The receipt ─────────────────────────────────────────────────────────────
@@ -390,8 +419,8 @@ fn receipt_panel(branches: usize, segments: usize, gens: usize, live: usize) -> 
         "INK · THE DIFFUSION AXIS · ONE DROP, ONE NEBULA".to_string(),
         format!("tree: {branches} branches · {segments} segments · {gens} generations (measured)"),
         format!("reveal clock: gen g at T_BLOOM + 0.085·g · live now {live}"),
-        format!("motes: tips advected by the closed-form current · 34 substeps"),
-        format!("dilution: the wash that returns the ink to water"),
+        "motes: tips advected by the closed-form current · 34 substeps".to_string(),
+        "dilution: the wash that returns the ink to water".to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -410,7 +439,10 @@ fn receipt_panel(branches: usize, segments: usize, gens: usize, live: usize) -> 
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

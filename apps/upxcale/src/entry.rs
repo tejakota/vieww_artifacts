@@ -9,7 +9,6 @@
 //! entry symbol must be exported from that library. A binary's `main` fn is
 //! never visible to the Android runtime.
 
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

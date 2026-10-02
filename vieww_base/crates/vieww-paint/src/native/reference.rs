@@ -916,9 +916,7 @@ impl NativeRenderer {
                     _ => (stroke.width, *paint),
                 };
                 let polygons = stroke_to_polygons(path, width, &stroke.style, *transform);
-                let bounds = path
-                    .bounds()
-                    .inflate(stroke.reach().max(width * 0.5 + 1.0));
+                let bounds = path.bounds().inflate(stroke.reach().max(width * 0.5 + 1.0));
                 let (target, origin) = current!();
                 self.paint_shape(
                     target,

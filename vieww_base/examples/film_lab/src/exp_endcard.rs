@@ -27,15 +27,15 @@ use vieww_foundation::{
     Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,
 };
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_out_cubic, mix, smoothstep, spring_out, tint, xywh, BG_DEEP, CANVAS,
-    CANVAS_W, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT,
+    alpha, clamp01, ease_out_cubic, mix, smoothstep, spring_out, tint, xywh, Rng, BG_DEEP, CANVAS,
+    CANVAS_W, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 9.0;
+pub(crate) const SECONDS: f32 = 9.0;
 
 // ── The manifest facts — the workspace's own numbers ────────────────────────
 
@@ -90,21 +90,18 @@ fn wordmark(t: f32) -> WidgetNode {
 
     // The bloom behind the mark — breathes once on the sting.
     let bloom = if env > 0.01 {
-        Some(
-            Painting::sized(
-                Size::new(900.0, 320.0),
-                PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                    book.circle(
-                        Offset::new(450.0, 160.0),
-                        200.0 + 90.0 * env,
-                        Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(VIOLET, 0.14 * env)),
-                            (1.0, alpha(VIOLET, 0.0)),
-                        ]),
-                    );
-                }),
-            ),
-        )
+        Some(Painting::sized(
+            Size::new(900.0, 320.0),
+            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                book.circle(
+                    Offset::new(450.0, 160.0),
+                    200.0 + 90.0 * env,
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.14 * env)), (1.0, alpha(VIOLET, 0.0))]),
+                );
+            }),
+        ))
     } else {
         None
     };
@@ -123,13 +120,14 @@ fn wordmark(t: f32) -> WidgetNode {
             .height(130.0)
             .child(
                 Opacity::new(a).child(
-                    Text::new(MARK).style(
-                        TextStyle::new(MARK_SIZE)
-                            .weight(FontWeight::Regular)
-                            .letter_spacing(spacing)
-                            .color(mix(alpha(INK, 1.0), tint(VIOLET_SOFT, 0.25), env * 0.6)),
-                    )
-                    .align(TextAlign::Center),
+                    Text::new(MARK)
+                        .style(
+                            TextStyle::new(MARK_SIZE)
+                                .weight(FontWeight::Regular)
+                                .letter_spacing(spacing)
+                                .color(mix(alpha(INK, 1.0), tint(VIOLET_SOFT, 0.25), env * 0.6)),
+                        )
+                        .align(TextAlign::Center),
                 ),
             ),
     );
@@ -178,14 +176,16 @@ fn wordmark(t: f32) -> WidgetNode {
 // ── The install line — typed on with a caret, then settles ──────────────────
 
 fn install_line(t: f32) -> WidgetNode {
-    let typed = ((INSTALL.chars().count() as f32) * ease_out_cubic(clamp01((t - TYPE_T0) / TYPE_SPAN))).round() as usize;
+    let typed = ((INSTALL.chars().count() as f32)
+        * ease_out_cubic(clamp01((t - TYPE_T0) / TYPE_SPAN)))
+    .round() as usize;
     let typed = typed.min(INSTALL.chars().count());
     let visible: String = INSTALL.chars().take(typed).collect();
     let done = typed >= INSTALL.chars().count();
 
     let mono_adv = 15.5; // 26 px mono advance — layout arithmetic
-    let caret_x = (CANVAS_W - INSTALL.chars().count() as f32 * mono_adv) / 2.0
-        + typed as f32 * mono_adv;
+    let caret_x =
+        (CANVAS_W - INSTALL.chars().count() as f32 * mono_adv) / 2.0 + typed as f32 * mono_adv;
     let caret_a = if !done {
         0.9 * (0.55 + 0.45 * (t * SECONDS * 2.0).sin())
     } else {
@@ -200,24 +200,22 @@ fn install_line(t: f32) -> WidgetNode {
     let mut band = Stack::new();
 
     // A soft panel behind the install line — the "copy me" affordance.
-    band = band.push(Positioned::fill().child(
-        Painting::sized(
-            Size::new(430.0, 56.0),
-            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                book.rrect(
-                    Rect::new(0.0, 0.0, 430.0, 56.0),
-                    9.0,
-                    alpha(Color::rgb(20, 19, 28), 0.75),
-                );
-                book.stroke_rrect(
-                    Rect::new(0.5, 0.5, 429.0, 55.0),
-                    9.0,
-                    alpha(Color::WHITE, 0.08),
-                    1.0,
-                );
-            }),
-        ),
-    ));
+    band = band.push(Positioned::fill().child(Painting::sized(
+        Size::new(430.0, 56.0),
+        PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+            book.rrect(
+                Rect::new(0.0, 0.0, 430.0, 56.0),
+                9.0,
+                alpha(Color::rgb(20, 19, 28), 0.75),
+            );
+            book.stroke_rrect(
+                Rect::new(0.5, 0.5, 429.0, 55.0),
+                9.0,
+                alpha(Color::WHITE, 0.08),
+                1.0,
+            );
+        }),
+    )));
 
     band = band.push(
         Positioned::new()
@@ -226,13 +224,14 @@ fn install_line(t: f32) -> WidgetNode {
             .width(430.0)
             .height(30.0)
             .child(
-                Text::new(visible).style(
-                    TextStyle::new(24.0)
-                        .monospace()
-                        .weight(FontWeight::Medium)
-                        .color(alpha(INK, 0.95)),
-                )
-                .align(TextAlign::Center),
+                Text::new(visible)
+                    .style(
+                        TextStyle::new(24.0)
+                            .monospace()
+                            .weight(FontWeight::Medium)
+                            .color(alpha(INK, 0.95)),
+                    )
+                    .align(TextAlign::Center),
             ),
     );
 
@@ -243,17 +242,12 @@ fn install_line(t: f32) -> WidgetNode {
                 .top(16.0)
                 .width(2.6)
                 .height(26.0)
-                .child(
-                    Painting::sized(
-                        Size::new(2.6, 26.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                            book.rect(
-                                Rect::new(0.0, 0.0, 2.6, 26.0),
-                                alpha(VIOLET_SOFT, caret_a),
-                            );
-                        }),
-                    ),
-                ),
+                .child(Painting::sized(
+                    Size::new(2.6, 26.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                        book.rect(Rect::new(0.0, 0.0, 2.6, 26.0), alpha(VIOLET_SOFT, caret_a));
+                    }),
+                )),
         );
     }
 
@@ -276,10 +270,7 @@ fn manifest_line(t: f32) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
-    let text = format!(
-        "vieww {} · {} crates · {}",
-        VERSION, CRATES, TOOLCHAIN
-    );
+    let text = format!("vieww {} · {} crates · {}", VERSION, CRATES, TOOLCHAIN);
 
     Stack::new()
         .push(
@@ -290,13 +281,14 @@ fn manifest_line(t: f32) -> WidgetNode {
                 .height(20.0)
                 .child(
                     Opacity::new(a).child(
-                        Text::new(text).style(
-                            TextStyle::new(13.0)
-                                .monospace()
-                                .letter_spacing(2.0)
-                                .color(alpha(MUTED, 0.75)),
-                        )
-                        .align(TextAlign::Center),
+                        Text::new(text)
+                            .style(
+                                TextStyle::new(13.0)
+                                    .monospace()
+                                    .letter_spacing(2.0)
+                                    .color(alpha(MUTED, 0.75)),
+                            )
+                            .align(TextAlign::Center),
                     ),
                 ),
         )
@@ -319,13 +311,14 @@ fn closing_line(t: f32) -> WidgetNode {
                 .height(16.0)
                 .child(
                     Opacity::new(a).child(
-                        Text::new("rendered by the film's own rasterizer · no post").style(
-                            TextStyle::new(11.0)
-                                .monospace()
-                                .letter_spacing(1.8)
-                                .color(alpha(FAINT, 0.7)),
-                        )
-                        .align(TextAlign::Center),
+                        Text::new("rendered by the film's own rasterizer · no post")
+                            .style(
+                                TextStyle::new(11.0)
+                                    .monospace()
+                                    .letter_spacing(1.8)
+                                    .color(alpha(FAINT, 0.7)),
+                            )
+                            .align(TextAlign::Center),
                     ),
                 ),
         )
@@ -334,7 +327,7 @@ fn closing_line(t: f32) -> WidgetNode {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -367,10 +360,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.5, h * 1.02),
                     w * 0.42,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.10)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.10)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
 
@@ -387,10 +379,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // closes in.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.72).with_dither().with_stops(&[
-                    (0.45, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.55)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.72)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.45, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.55)),
+                    ]),
             );
         }),
     );

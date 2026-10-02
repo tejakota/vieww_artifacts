@@ -262,7 +262,6 @@ impl Widget for ShapeMorph {
 
 widget_node_from!(ShapeMorph);
 
-
 /// A regular n-gon: triangle, square (as a shape, not a rect), pentagon …
 ///
 /// MorphSVG's bread and butter — a morph between two polygon shapes is the
@@ -313,10 +312,7 @@ impl MorphShape for Polygon {
             let a = corner(c.floor());
             let b = corner(c.floor() + 1.0);
             let frac = c - c.floor();
-            *point = Point::new(
-                a.dx + (b.dx - a.dx) * frac,
-                a.dy + (b.dy - a.dy) * frac,
-            );
+            *point = Point::new(a.dx + (b.dx - a.dx) * frac, a.dy + (b.dy - a.dy) * frac);
         }
         points
     }
@@ -342,10 +338,7 @@ impl Star {
     /// A star of `points` spikes with the classic inner radius.
     #[must_use]
     pub const fn new(points: u32) -> Self {
-        Self {
-            points,
-            inner: 0.5,
-        }
+        Self { points, inner: 0.5 }
     }
 
     /// Set the inner radius fraction.
@@ -387,12 +380,13 @@ impl MorphShape for Star {
             // the *angle*, so the spikes have straight flanks exactly as a
             // drawn star does, rather than a cosine that rounds them.
             let phase = (t * spikes).fract();
-            let wave = if phase < 0.5 { 1.0 - 2.0 * phase } else { 2.0 * phase - 1.0 };
+            let wave = if phase < 0.5 {
+                1.0 - 2.0 * phase
+            } else {
+                2.0 * phase - 1.0
+            };
             let r = inner + (1.0 - inner) * wave;
-            *point = Point::new(
-                cx + rx * r * angle.cos(),
-                cy + ry * r * angle.sin(),
-            );
+            *point = Point::new(cx + rx * r * angle.cos(), cy + ry * r * angle.sin());
         }
         points
     }
@@ -522,7 +516,10 @@ mod more_shape_tests {
         // samples, 10 extrema), but the *envelope* must hold.
         let max_r = radii.iter().copied().fold(f32::MIN, f32::max);
         let min_r = radii.iter().copied().fold(f32::MAX, f32::min);
-        assert!(max_r <= 50.0 + EPS && max_r > 48.0, "spikes reach the edge: {max_r}");
+        assert!(
+            max_r <= 50.0 + EPS && max_r > 48.0,
+            "spikes reach the edge: {max_r}"
+        );
         assert!(min_r < 27.0 && min_r > 23.0, "valleys pull in: {min_r}");
     }
 

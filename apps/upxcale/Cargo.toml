@@ -3,7 +3,10 @@ name = "upxcale"
 description = "Upscale photos — a vieww application."
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+# Honest figure, same reasoning as `vieww_base`'s own note: the framework
+# this app builds on requires 1.89 (cosmic-text@0.19 et al), and the app
+# itself now uses `as_chunks` (1.88) and `is_multiple_of` (1.87).
+rust-version = "1.89"
 publish = false
 
 # `upxcale` is deliberately its own workspace rather than a member of vieww's.

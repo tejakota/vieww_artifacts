@@ -7,9 +7,8 @@
 //! desktop — one preview, three frames, the studio's own device
 //! dressing (safe areas, platform control shapes, appearance).
 
-use vieww_widget::prelude::*;
+use super::{caption, clamp01, studio_chrome, Ctx, ACCENT, SYN_TYPE};
 use vieww_widget::WidgetNode;
-use super::{caption, clamp01, studio_chrome, ACCENT, Ctx, SYN_TYPE};
 
 /// The script's moments, absolute film seconds.
 const TAB_T: f32 = 140.5;
@@ -18,8 +17,8 @@ const ANDROID_T: f32 = 144.5;
 const IOS_T: f32 = 146.5;
 const DESKTOP_T: f32 = 148.5;
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
-    let t = ctx.t;
+pub(crate) fn build(ctx: &Ctx) -> WidgetNode {
+    let _t = ctx.t;
     let abs = ctx.abs;
 
     let mut stack = studio_chrome(ctx);
@@ -35,14 +34,36 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
         None
     };
     if let Some((name, color)) = platform {
-        let pop = clamp01((abs - (if abs >= DESKTOP_T { DESKTOP_T } else if abs >= IOS_T { IOS_T } else { ANDROID_T }) - 0.0) / 0.18);
+        let pop = clamp01(
+            (abs - (if abs >= DESKTOP_T {
+                DESKTOP_T
+            } else if abs >= IOS_T {
+                IOS_T
+            } else {
+                ANDROID_T
+            }) - 0.0)
+                / 0.18,
+        );
         let badge = super::Painting::sized(
             super::Size::new(220.0, 46.0),
             super::PaintWith::new(move |book: &mut super::Sketchbook, _s: super::Size| {
-                book.rrect(super::xywh(0.0, 2.0, 220.0, 40.0), 9.0, super::alpha(super::SURFACE_2, 0.94));
-                book.stroke_rrect(super::xywh(0.0, 2.0, 220.0, 40.0), 9.0, super::alpha(color, 0.35), 1.2);
+                book.rrect(
+                    super::xywh(0.0, 2.0, 220.0, 40.0),
+                    9.0,
+                    super::alpha(super::SURFACE_2, 0.94),
+                );
+                book.stroke_rrect(
+                    super::xywh(0.0, 2.0, 220.0, 40.0),
+                    9.0,
+                    super::alpha(color, 0.35),
+                    1.2,
+                );
                 // The frame's notch — a small mark of the platform.
-                book.rrect(super::xywh(14.0, 16.0, 12.0, 12.0), 3.0, super::alpha(color, 0.8));
+                book.rrect(
+                    super::xywh(14.0, 16.0, 12.0, 12.0),
+                    3.0,
+                    super::alpha(color, 0.8),
+                );
             }),
         );
         stack = stack.push(
@@ -61,7 +82,11 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .height(30.0)
                 .child(
                     vieww_widget::Text::new(name)
-                        .style(super::geist_mono(16.0).letter_spacing(2.0).color(super::alpha(color, 1.0)))
+                        .style(
+                            super::geist_mono(16.0)
+                                .letter_spacing(2.0)
+                                .color(super::alpha(color, 1.0)),
+                        )
                         .align(vieww_foundation::TextAlign::Left),
                 ),
         );
