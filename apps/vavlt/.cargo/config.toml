@@ -24,3 +24,14 @@ linker = "ci/ndk-clang-aarch64.sh"
 
 [target.x86_64-linux-android]
 linker = "ci/ndk-clang-x86_64.sh"
+
+# iOS: rustc's aarch64-apple-ios default deployment target is 10.0, but the
+# C deps (zstd-sys, libdeflate-sys) build against whatever SDK Xcode defaults
+# to. Skewed that far apart the linker resolves an iOS 10.0 compiler-rt that
+# has no ___chkstk_darwin while the newer C objects call it — the
+# undefined-symbol wall documented in ci.yml's iOS build step. 13.0 is the
+# MinimumOSVersion the app bundle already declares, so both sides are pinned
+# to it here too. Ignored for non-Apple targets, so Android and desktop
+# builds never see it.
+[env]
+IPHONEOS_DEPLOYMENT_TARGET = "13.0"
