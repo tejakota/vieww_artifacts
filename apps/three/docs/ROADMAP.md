@@ -1,55 +1,46 @@
 # Roadmap
 
-## Milestone 1 — `.3` foundation
+## Milestone 1 — the depth-video foundation
 
-- [x] Temporal 3D core types and invariants.
-- [x] `.3` binary format, versioning, encode/decode and validation.
-- [x] Camera/depth/IMU and reconstruction interfaces.
-- [x] Runtime playback and deterministic moving demo capture.
-- [x] Vieww presentation layer and interactive reference viewer.
+- [x] Core types: `DepthVideo`, per-frame color+depth, intrinsics, source kinds.
+- [x] `.3` v1: JPEG + zstd, deterministic encoding, lazy per-frame decoding.
+- [x] Capture traits + the deterministic host source.
+- [x] The depth-warp renderer and the viewer camera (pan/pinch/hold).
+- [x] The reference Vieww viewer with the gesture set.
 
-## Milestone 2 — social product core
+## Milestone 2 — the social product core
 
-- [x] User/profile domain.
-- [x] `.3` asset upload/download contract.
-- [x] Publish/delete posts.
-- [x] Public / followers / private visibility.
-- [x] For You / Following / Profile feeds with pagination.
-- [x] Likes, comments and follow graph.
-- [x] Profile search.
-- [x] Activity notifications.
-- [x] Remix ancestry.
-- [x] Product navigation and composer state in `three-app`.
-- [x] Vieww social application shell with interactive `.3` feed content.
-- [x] Deterministic offline/reference social backend.
+- [x] User/profile domain, feeds, likes, comments, follows, search.
+- [x] `.3` upload/download contract; publish/delete; visibility.
+- [x] Remix ancestry, notifications, navigation.
+- [x] The Vieww social application shell with interactive `.3` feed content.
+- [x] The offline reference backend.
 
-## Milestone 3 — production service adapters
+## Milestone 3 — real devices
+
+- [x] Android `camera2` backend: YUV color + `DEPTH16` where present, the
+      Java shim compiled and dexed in-build, CAMERA permission, honest
+      `no-depth` degradation. (Shipped in this iteration; device testing is
+      the remaining gap.)
+- [x] iOS AVFoundation backend: LiDAR depth where present, compile-verified
+      in CI. (First device run pending — see below.)
+- [ ] On-device tuning: capture resolution vs warp cost, depth-confidence
+      threshold, the sticky-depth cadence on real LiDAR hardware.
+- [ ] Camera intrinsics validation against the warp's expectations.
+
+## Milestone 4 — production service adapters
 
 - [ ] Authenticated remote `SocialBackend` transport.
-- [ ] Durable database repository.
-- [ ] Object storage and CDN delivery.
-- [ ] Progressive/chunked `.3` streaming.
-- [ ] Server-side recommendation/ranking service.
-- [ ] Push notification delivery.
-- [ ] Moderation, reporting, blocking and abuse prevention.
-- [ ] Account/data export and deletion workflows.
+- [ ] Durable repository; object storage and CDN delivery.
+- [ ] Progressive/chunked `.3` streaming (the format's v2 offset table).
+- [ ] Server-side feed ranking; push notifications.
+- [ ] Moderation, reporting, blocking; export and deletion workflows.
 
-## Milestone 4 — real devices
+## Milestone 5 — depth-video craft
 
-- [ ] Android camera backend.
-- [ ] iOS camera backend.
-- [ ] Camera intrinsics/extrinsics ingestion.
-- [ ] AR tracking ingestion.
-- [ ] Optional depth/LiDAR ingestion.
-- [ ] GPU-accelerated reconstruction.
-
-## Milestone 5 — dynamic spatial media
-
-- [ ] Temporal correspondence.
-- [ ] Dynamic mesh reconstruction.
-- [ ] Occlusion handling.
-- [ ] Texture stabilization.
-- [ ] Quality tiers for low/mid/high-end devices.
-- [ ] AR placement.
-- [ ] Spatial reactions/comments.
-- [ ] Multi-object remix/composition.
+- [ ] Warp quality: temporal depth smoothing to kill per-frame flicker;
+      hole-filling improvements (inpainting vs the directional sweep).
+- [ ] Capture UX: framing guide, depth-confidence preview, retake flow.
+- [ ] Quality tiers for low/mid/high-end devices (warp resolution scale).
+- [ ] Spatial reactions; remix on depth (re-cut with a different camera
+      path through the same moment).

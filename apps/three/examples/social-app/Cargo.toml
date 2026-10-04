@@ -11,6 +11,8 @@ three-app.workspace = true
 three-social.workspace = true
 three-runtime.workspace = true
 three-core.workspace = true
+three-format.workspace = true
+three-capture.workspace = true
 vieww-integration = { path = "../vieww-integration" }
 vieww.workspace = true
 vieww-platform-winit.workspace = true
@@ -49,6 +51,14 @@ target_sdk_version = 34
 [package.metadata.android.application]
 label = "3"
 theme = "@android:style/Theme.DeviceDefault.NoActionBar"
+
+# The one permission the product needs: the camera that records the moment.
+# No INTERNET (the offline backend is the whole app so far), no storage (the
+# capture never leaves the process it was recorded in). The runtime request
+# is made by the camera shim's start(), through the activity's own
+# checkSelfPermission — the manifest declares, the code asks.
+[[package.metadata.android.uses_permission]]
+name = "android.permission.CAMERA"
 
 [package.metadata.android.application.activity]
 orientation = "portrait"

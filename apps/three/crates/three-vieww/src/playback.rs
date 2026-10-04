@@ -1,266 +1,233 @@
-//! Playback state for a temporal 3D asset.
+//! The viewer's media state: a lazy capture, a clock, a camera, one decoded
+//! frame.
 
 use std::rc::Rc;
-use three_core::{Capture3D, MeshFrame, PointFrame};
+use std::sync::Arc as Shared;
 
-/// A Vieww-friendly controller for a temporal 3D asset.
-///
-/// Owns the decoded capture behind an [`Rc`] so the widget that displays it,
-/// the painter that draws it, and this controller can all share one copy —
-/// a capture can carry megabytes of mesh data, and cloning it per rebuild
-/// would make playback stutter for no gain.
-///
-/// Time is an integer count of nanoseconds since the capture started, the
-/// same units `three-core` timestamps use, so no conversion sits between the
-/// media clock and the frame timestamps.
-pub struct ThreeView {
-    capture: Rc<Capture3D>,
-    time_ns: u64,
-    looping: bool,
+use three_core::DepthVideoFrame;
+use three_format::{CaptureMeta, LazyCapture};
+use three_runtime::DepthVideoPlayer;
+
+use crate::ViewCamera;
+
+/// One rendered frame, ready for a 2D UI to draw as an image.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderedFrame {
+    pub width: u32,
+    pub height: u32,
+    /// RGBA8, shared rather than copied: a snapshot hands this to a widget
+    /// description every rebuild, and the pixels must not duplicate per
+    /// rebuild. `Clone` is an `Arc` bump.
+    pub rgba: Shared<Vec<u8>>,
 }
 
-impl std::fmt::Debug for ThreeView {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Not the capture's own Debug: its geometry would drown any tree
-        // dump this appears in. Identity and position are what a dump wants.
-        f.debug_struct("ThreeView")
-            .field("title", &self.capture.title)
-            .field("time_ns", &self.time_ns)
-            .field("looping", &self.looping)
-            .finish()
+impl RenderedFrame {
+    /// The render for a paused, camera-neutral state machine — what a feed
+    /// card shows before anything has decoded, and what tests use as a
+    /// blank. Black, because the alternative (white) flashes on dark
+    /// themes.
+    pub fn blank(width: u32, height: u32) -> Self {
+        let mut rgba = vec![0u8; (width * height * 4) as usize];
+        for pixel in rgba.as_chunks_mut::<4>().0 {
+            pixel[3] = 255;
+        }
+        Self {
+            width,
+            height,
+            rgba: Shared::new(rgba),
+        }
     }
 }
 
-impl ThreeView {
-    pub fn new(capture: Capture3D) -> Self {
-        Self { capture: Rc::new(capture), time_ns: 0, looping: true }
-    }
+/// Everything a depth-video surface needs, in one owned place.
+///
+/// The view deliberately caches **exactly one decoded frame**: the one
+/// being shown. Decoding is the expensive act in this pipeline (a JPEG and
+/// a zstd inflate per frame), playback moves forward one frame at a time,
+/// and a re-render at the same position must not re-decode — scrubbing
+/// back and forth across two frames is the only pattern that pays double,
+/// and it pays once per crossing, which is the cache a scroll UI actually
+/// needs. (A full decode of a 3-second capture is ~130 MB — see
+/// `LazyCapture` for why that is not an option on a phone.)
+///
+/// The camera is a plain field, not a child object: gestures write it, the
+/// render reads it, and the recenter spring advances inside
+/// [`render`](Self::render) so a single call drives one whole frame of the
+/// state machine.
+pub struct DepthView {
+    capture: Rc<LazyCapture>,
+    player: DepthVideoPlayer,
+    camera: ViewCamera,
+    /// The index `decoded` belongs to, if any.
+    decoded_index: Option<usize>,
+    decoded: Option<DepthVideoFrame>,
+    /// The subject distance, measured once from the first frame's depth
+    /// median and then never re-measured: it anchors the orbit, and letting
+    /// it move per-frame would make the camera breathe with the footage.
+    subject_distance: f32,
+}
 
-    /// Build a view over a capture that is already shared — for an
-    /// application state that hands the same [`Rc`] to a painter, a feed list
-    /// and a player without any of them copying the geometry.
-    pub fn from_shared(capture: Rc<Capture3D>) -> Self {
-        Self { capture, time_ns: 0, looping: true }
-    }
-
-    /// The capture being played.
-    pub fn capture(&self) -> &Capture3D {
-        &self.capture
-    }
-
-    /// A shared handle to the capture, for a painter that draws at paint time
-    /// rather than holding a clone.
-    pub fn shared_capture(&self) -> Rc<Capture3D> {
-        Rc::clone(&self.capture)
-    }
-
-    pub fn set_looping(&mut self, looping: bool) {
-        self.looping = looping;
-    }
-
-    pub fn is_looping(&self) -> bool {
-        self.looping
-    }
-
-    pub fn set_time_ns(&mut self, time_ns: u64) {
-        self.time_ns = time_ns.min(self.capture.duration_ns);
-    }
-
-    pub fn time_ns(&self) -> u64 {
-        self.time_ns
-    }
-
-    /// How far through the capture, `0.0 ..= 1.0`.
-    pub fn progress(&self) -> f32 {
-        if self.capture.duration_ns == 0 {
-            return 0.0;
+impl DepthView {
+    /// Open a capture for viewing. Decodes the first frame (for the
+    /// subject distance and the first paint) and nothing else.
+    pub fn new(capture: Rc<LazyCapture>) -> Self {
+        let player = DepthVideoPlayer::new_from_meta(capture.meta());
+        let subject_distance = capture
+            .frame(0)
+            .ok()
+            .map(|frame| median_depth(&frame.depth))
+            .filter(|&meters| meters > 0.0)
+            .unwrap_or(2.0);
+        Self {
+            capture,
+            player,
+            camera: ViewCamera::default(),
+            decoded_index: None,
+            decoded: None,
+            subject_distance,
         }
-        self.time_ns as f32 / self.capture.duration_ns as f32
     }
 
-    /// Jump to a fraction of the duration, as reported by [`progress`](Self::progress).
-    pub fn set_progress(&mut self, progress: f32) {
-        self.set_time_ns((progress.clamp(0.0, 1.0) * self.capture.duration_ns as f32) as u64);
+    pub fn meta(&self) -> &CaptureMeta {
+        self.capture.meta()
     }
 
-    /// Advance playback by `delta_ns`.
+    pub fn player(&self) -> &DepthVideoPlayer {
+        &self.player
+    }
+
+    pub fn player_mut(&mut self) -> &mut DepthVideoPlayer {
+        &mut self.player
+    }
+
+    pub fn camera(&self) -> &ViewCamera {
+        &self.camera
+    }
+
+    pub fn camera_mut(&mut self) -> &mut ViewCamera {
+        &mut self.camera
+    }
+
+    /// Where the orbit centres, meters in front of the capture camera.
+    pub fn subject_distance(&self) -> f32 {
+        self.subject_distance
+    }
+
+    /// The frame the clock currently points at, decoded on demand.
     ///
-    /// While looping, time wraps at the duration. While not looping, it stops
-    /// at the end and [`is_finished`](Self::is_finished) reports true — a
-    /// paused-at-end frame the user can scrub back from, rather than a time
-    /// that keeps growing past every frame timestamp.
-    pub fn tick(&mut self, delta_ns: u64) {
-        if self.capture.duration_ns == 0 {
-            return;
+    /// Returns `None` when the capture's frame cannot be decoded (a corrupt
+    /// file mid-stream) — a viewer shows the last good render or a blank,
+    /// and carries on; one bad frame must not take the feed down with it.
+    pub fn current_frame(&mut self) -> Option<&DepthVideoFrame> {
+        let index = self.player.frame_index()?;
+        if self.decoded_index != Some(index) {
+            self.decoded = self.capture.frame(index).ok();
+            self.decoded_index = Some(index);
         }
-        if self.looping {
-            self.time_ns = self.time_ns.saturating_add(delta_ns) % self.capture.duration_ns;
-        } else {
-            self.time_ns = self.time_ns.saturating_add(delta_ns).min(self.capture.duration_ns);
-        }
+        self.decoded.as_ref()
     }
 
-    /// Whether playback has run to the end without looping.
-    pub fn is_finished(&self) -> bool {
-        !self.looping && self.capture.duration_ns > 0 && self.time_ns >= self.capture.duration_ns
-    }
-
-    /// How many mesh frames the capture carries.
-    pub fn mesh_frame_count(&self) -> usize {
-        self.capture.meshes.len()
-    }
-
-    /// The mesh frame at or after the current time, or the last frame when
-    /// the time is past every timestamp.
+    /// Render what the state machine says is on screen: advance the recenter
+    /// spring, then decode the current frame if the clock moved, then warp
+    /// it for the camera. One call, one frame of viewer state.
     ///
-    /// This matches `three_runtime::seek_mesh`: "at or after" is the frame a
-    /// player would **next show** at this time — the same rule seeking a
-    /// keyframe-coded stream uses, since the frame before the seek point
-    /// cannot be decoded without its keyframe. A time past every timestamp
-    /// falls back to the final frame so the end of a capture never shows
-    /// nothing.
-    pub fn current_mesh(&self) -> Option<&MeshFrame> {
-        self.mesh_at_ns(self.time_ns)
+    /// `delta` is the time since the last render — used *only* by the
+    /// spring, which is the only part of this view that integrates time
+    /// itself. Playback time is advanced separately by whoever owns the
+    /// app's frame loop, through [`player_mut`](Self::player_mut).
+    pub fn render(&mut self, delta: std::time::Duration) -> Option<RenderedFrame> {
+        self.camera.step_recentre(delta);
+        let intrinsics = self.capture.meta().intrinsics;
+        let subject = self.subject_distance;
+        let camera = self.camera;
+        let frame = self.current_frame()?;
+        let out = crate::warp_frame(&frame.color, &frame.depth, &intrinsics, &camera, subject);
+        Some(RenderedFrame {
+            width: out.width,
+            height: out.height,
+            rgba: Shared::new(out.rgba),
+        })
     }
 
-    /// [`current_mesh`](Self::current_mesh) at an arbitrary timestamp.
-    pub fn mesh_at_ns(&self, time_ns: u64) -> Option<&MeshFrame> {
-        self.capture
-            .meshes
-            .iter()
-            .find(|m| m.timestamp.0 >= time_ns)
-            .or_else(|| self.capture.meshes.last())
+    /// Whether the current state still needs frames drawn for it: the
+    /// spring is settling. Playback ticks are the caller's business.
+    pub fn animating(&self) -> bool {
+        !self.camera.is_neutral()
     }
+}
 
-    /// The index [`current_mesh`](Self::current_mesh) would return.
-    pub fn current_mesh_index(&self) -> Option<usize> {
-        self.capture
-            .meshes
-            .iter()
-            .position(|m| m.timestamp.0 >= self.time_ns)
-            .or(Some(self.capture.meshes.len().wrapping_sub(1)))
-            .filter(|_| !self.capture.meshes.is_empty())
+/// The median of a depth plane in meters, 0 when nothing is known.
+///
+/// The median, not the mean: a sky and a foreground hand are both outliers,
+/// and the subject is what is left.
+fn median_depth(depth_mm: &[u16]) -> f32 {
+    let mut known: Vec<u16> = depth_mm.iter().copied().filter(|&mm| mm > 0).collect();
+    if known.is_empty() {
+        return 0.0;
     }
-
-    /// The index [`current_points`](Self::current_points) would return.
-    pub fn current_points_index(&self) -> Option<usize> {
-        self.capture
-            .points
-            .iter()
-            .position(|p| p.timestamp.0 >= self.time_ns)
-            .or(Some(self.capture.points.len().wrapping_sub(1)))
-            .filter(|_| !self.capture.points.is_empty())
-    }
-
-    /// The nearest point frame at or after the current time, or the last.
-    pub fn current_points(&self) -> Option<&PointFrame> {
-        self.capture
-            .points
-            .iter()
-            .find(|p| p.timestamp.0 >= self.time_ns)
-            .or_else(|| self.capture.points.last())
-    }
+    known.sort_unstable();
+    known[known.len() / 2] as f32 / 1000.0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::wave_capture;
-    use three_core::TimestampNs;
+    use three_format::encode;
 
-    #[test]
-    fn ticking_loops_at_the_duration() {
-        let mut view = ThreeView::new(wave_capture());
-        view.tick(600_000_000);
-        assert_eq!(view.time_ns(), 600_000_000);
-        view.tick(600_000_000);
-        assert_eq!(view.time_ns(), 200_000_000, "1.2s wraps at 1s");
-        assert!((view.progress() - 0.2).abs() < 1e-6);
+    fn sample_view() -> DepthView {
+        let capture = three_runtime::sample_with_size(48, 32, 8, std::time::Duration::from_secs(1));
+        let bytes = encode(&capture).unwrap();
+        DepthView::new(Rc::new(LazyCapture::open(bytes).unwrap()))
     }
 
     #[test]
-    fn ticking_without_looping_stops_at_the_end() {
-        let mut view = ThreeView::new(wave_capture());
-        view.set_looping(false);
-        view.tick(5_000_000_000);
-        assert_eq!(view.time_ns(), 1_000_000_000);
-        assert!(view.is_finished());
+    fn the_first_frame_decodes_once_per_position() {
+        let mut view = sample_view();
+        view.player_mut().play();
+        view.player_mut()
+            .advance(std::time::Duration::from_millis(125));
+        // Same position twice: the decoded frame is the same *content*
+        // both times — identity, not address: the allocator is free to
+        // reuse the slot across a replacement, so pointer equality would
+        // test the allocator, not the cache.
+        let first_ts = view.current_frame().unwrap().timestamp;
+        assert_eq!(view.current_frame().unwrap().timestamp, first_ts);
+
+        // Moving to the next frame decodes a different one.
+        view.player_mut()
+            .advance(std::time::Duration::from_millis(125));
+        let third_ts = view.current_frame().unwrap().timestamp;
+        assert_ne!(first_ts, third_ts);
+        assert_eq!(view.player().frame_index(), Some(2));
     }
 
     #[test]
-    fn looping_is_never_finished() {
-        let mut view = ThreeView::new(wave_capture());
-        view.tick(5_000_000_000);
-        assert!(!view.is_finished());
+    fn render_tracks_the_camera_and_the_clock() {
+        let mut view = sample_view();
+        view.player_mut().play();
+
+        let neutral = view.render(std::time::Duration::ZERO).unwrap();
+        assert_eq!(neutral.width, 48);
+        assert_eq!(neutral.rgba.len(), 48 * 32 * 4);
+
+        // Neutral camera: the render equals the decoded frame's color —
+        // the fast path is a copy.
+        view.camera_mut().drag(40.0, 0.0);
+        let moved = view.render(std::time::Duration::ZERO).unwrap();
+        assert_ne!(moved.rgba, neutral.rgba, "an orbit changes the picture");
+
+        // Hold: the spring homes.
+        view.camera_mut().begin_recentre();
+        let _ = view.render(std::time::Duration::from_secs(5));
+        assert!(view.camera().is_neutral());
+        let homed = view.render(std::time::Duration::ZERO).unwrap();
+        assert_eq!(homed.rgba, neutral.rgba, "what returns is the frame itself");
     }
 
     #[test]
-    fn the_next_frame_at_or_after_the_time_wins() {
-        let view = ThreeView::new(wave_capture());
-        // Frames start at 0s and 1s (the duration). At t=0 the frame at 0s
-        // is the next one at or after the time...
-        assert_eq!(view.current_mesh_index(), Some(0));
-        // ...and at 999ms the at-or-after rule has already moved to the
-        // frame that starts at 1s, the same rule `seek_mesh` applies.
-        let mut late = ThreeView::new(wave_capture());
-        late.set_time_ns(999_999_999);
-        assert_eq!(late.current_mesh_index(), Some(1));
-        late.set_time_ns(1_000_000_000);
-        assert_eq!(late.current_mesh_index(), Some(1));
-    }
-
-    #[test]
-    fn a_time_past_every_frame_shows_the_last_frame() {
-        let mut view = ThreeView::new(wave_capture());
-        view.set_looping(false);
-        view.tick(5_000_000_000);
-        let mesh = view.current_mesh().expect("frames exist");
-        assert_eq!(mesh.timestamp, TimestampNs(1_000_000_000));
-        assert_eq!(view.current_mesh_index(), Some(1));
-    }
-
-    #[test]
-    fn set_time_is_clamped_and_progress_round_trips() {
-        let mut view = ThreeView::new(wave_capture());
-        view.set_time_ns(u64::MAX);
-        assert_eq!(view.time_ns(), 1_000_000_000);
-        view.set_progress(0.5);
-        assert_eq!(view.time_ns(), 500_000_000);
-        assert!((view.progress() - 0.5).abs() < 1e-6);
-        view.set_progress(7.0);
-        assert_eq!(view.time_ns(), 1_000_000_000, "out-of-range progress clamps");
-    }
-
-    #[test]
-    fn the_capture_is_shared_not_copied() {
-        let view = ThreeView::new(wave_capture());
-        let shared = view.shared_capture();
-        assert!(Rc::ptr_eq(&shared, &view.shared_capture()));
-        assert_eq!(shared.meshes.len(), 2);
-        // The handle is one more reference, not a copy of the data...
-        assert_eq!(Rc::strong_count(&shared), 2, "the view and this handle");
-        // ...and releasing it leaves the view playing from its own reference.
-        drop(shared);
-        assert_eq!(view.current_mesh_index(), Some(0));
-    }
-
-    #[test]
-    fn point_frames_follow_the_same_selection_rule() {
-        let view = ThreeView::new(wave_capture());
-        let points = view.current_points().expect("points exist");
-        assert_eq!(points.points.len(), 1);
-    }
-
-    #[test]
-    fn an_empty_capture_degrades_quietly() {
-        let mut capture = wave_capture();
-        capture.meshes.clear();
-        capture.points.clear();
-        let mut view = ThreeView::new(capture);
-        view.tick(1_000);
-        assert!(view.current_mesh().is_none());
-        assert!(view.current_mesh_index().is_none());
-        assert!(view.current_points().is_none());
-        assert!((0.0..=1.0).contains(&view.progress()), "progress stays finite");
+    fn blank_is_black_and_opaque() {
+        let blank = RenderedFrame::blank(4, 3);
+        assert_eq!(blank.rgba.len(), 4 * 3 * 4);
+        assert!(blank.rgba.chunks(4).all(|p| p == [0, 0, 0, 255]));
     }
 }

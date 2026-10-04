@@ -1,92 +1,59 @@
 # `3` social application
 
-`3` is the product. `.3` is its native moving-spatial media format.
+`3` is the product. `.3` is its native depth-video media format.
 
 The social application is deliberately split into three layers so capture,
 rendering, product state, and transport do not become one inseparable crate.
 
 ```text
-Vieww application (`examples/social-app`)
+Vieww application (examples/social-app)
         |
         v
-three-app                     product state + navigation + orchestration
+three-app          product state + navigation + orchestration
         |
         v
-three-social                  accounts, assets, posts, feed, graph, activity
+three-social       accounts, assets, posts, feed, graph, activity
         |
         +---- SocialBackend trait ---- remote service / persistent adapter
         |
-        `---- MemorySocialBackend ---- deterministic offline/demo implementation
-
-Media path:
-camera -> reconstruction -> Capture3D -> .3 -> upload -> post -> feed
-                                               |                 |
-                                               `--- download ----+-> ThreeView -> Vieww
+        `---- MemorySocialBackend ---- deterministic offline/demo impl
 ```
 
-## Product surfaces
+## The Create tab is the camera
 
-The reference Vieww application has five root destinations:
+On a phone build, `android_main` constructs the `Camera2Source` from the
+activity handle and hands it to the app (`set_capture_source`) before the
+tree mounts; `SocialState::new` takes it. **Record a moment** starts a
+`DynRecording` (three seconds, 24 fps, 4:3); the element's `tick` polls it
+one frame per frame tick — the poll contract, so the capture never blocks
+the UI thread; the progress line is the recording's own numbers. On
+completion the capture is encoded and attached to the composer (the bytes
+the composer holds are exactly the bytes a publish will upload), and the
+flow routes to the caption/publish screen.
 
-* **Home** — For You / Following feeds. A post's media is an interactive `.3`,
-  not a video thumbnail pretending to be the final medium.
-* **Explore** — profile discovery/search surface backed by profile search.
-* **Create** — the composer contract: capture, reconstruct, preview, caption,
-  privacy, publish. `ThreeApp::attach_capture` and `publish_composer` implement
-  the product transaction.
-* **Activity** — likes, comments, follows and remixes from the notification
-  domain.
-* **Profile** — identity, social counts and a profile-specific `.3` feed.
+On a desktop run there is no camera source, and the Create tab says so —
+with **Use the sample moment** as the dev path through the identical
+publish pipeline.
 
-Post-detail, comments, user-detail and composer routes are first-class `Route`
-variants rather than booleans sprinkled through widgets.
+## The feed card
 
-## Social semantics already implemented
+The home feed's first post opens through `three_app.open_post_media`:
+bytes downloaded, `LazyCapture::open` indexed, shared as an `Rc`. The
+`ViewerScreen` (the same one the reference viewer uses) plays it with the
+full gesture set: pan orbits, pinch dollies in depth, hold recentres. A
+feed of posts holds compressed bytes and one decoded frame per visible
+card — the lazy reader is what makes that a budget, not a fantasy.
 
-`three-social` implements:
+## Publishing
 
-* profiles and active identity;
-* validated `.3` asset upload/download;
-* public, followers-only and private posts;
-* For You, Following and Profile feeds with cursors;
-* likes/unlikes;
-* comments;
-* follow/unfollow with counts;
-* user search;
-* activity notifications;
-* post deletion with ownership checks;
-* remix ancestry and remix notifications;
-* deterministic offline behavior for tests and development.
+`publish_composer` validates the attached bytes by decoding them (the
+composer's proof it holds a real capture), uploads through the backend's
+asset contract, and publishes the post. The offline backend makes the
+whole loop real with no network: likes, comments, follows, notifications
+and remixes all happen through the same calls a server would answer.
 
-The For You ranking in the local implementation is intentionally simple and
-transparent: engagement score followed by creation time. Production ranking
-belongs behind the same service boundary; it does not leak into UI code.
+## The receipts
 
-## Why the backend is a trait
-
-The UI must never know whether social data came from an in-process development
-backend, a disk cache, or the production service. `SocialBackend` is that
-boundary. A production HTTP/WebSocket adapter can therefore replace
-`MemorySocialBackend` without rewriting Vieww widgets or `.3` playback.
-
-The bundled backend is not represented as a production Internet service. It is
-the executable reference/social semantics and offline development backend.
-Authentication, abuse prevention, database durability, CDN/object storage,
-server-side ranking and production transport are deployment concerns and must
-be implemented as service adapters rather than contaminating the media stack.
-
-## Run
-
-With the Vieww checkout next to this workspace at `../vieww-develop`:
-
-```bash
-cargo run -p three-social-app
-```
-
-The older standalone viewer remains useful as a media diagnostic:
-
-```bash
-cargo run -p vieww-integration
-```
-
-but it is no longer the product entry point.
+`cargo test -p three-social-app -- --ignored --nocapture` renders the app's
+five screens through the native rasterizer — the same tree `App::run`
+shows, no display, no window.

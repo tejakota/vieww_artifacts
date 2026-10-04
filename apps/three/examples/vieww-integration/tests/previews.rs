@@ -8,120 +8,94 @@
 //! touches the disk beyond `target/`. The same headless path the viewer
 //! tests use — real element tree, real frame loop, the native rasteriser —
 //! so what lands in the PNG is what the window shows.
-//!
-//! `render_the_moment_loop` additionally writes the GIF's source frames: the
-//! 3-second capture playing through the real frame loop at capture rate, the
-//! way the feed shows it — not a reproduction, the render itself.
 
 use std::rc::Rc;
 use std::time::Duration;
 
 use vieww::prelude::*;
-use vieww_test_harness::TestHarness;
 use vieww_test_harness::visual;
+use vieww_test_harness::TestHarness;
 
-use three_runtime::demo_capture;
+use three_format::LazyCapture;
 
 use vieww_integration::{PlaybackState, ViewerScreen};
 
-const WINDOW: Size = Size { width: 480.0, height: 820.0 };
+const WINDOW: Size = Size {
+    width: 480.0,
+    height: 820.0,
+};
 const OUT_DIR: &str = "target/previews";
 
 fn mounted_viewer() -> TestHarness {
+    let capture = three_runtime::sample_capture();
+    let bytes = three_runtime::save(&capture).unwrap();
     let mut harness = TestHarness::new(WINDOW);
     // The same dark theme `App::theme` publishes in the real application.
-    harness.mount(Theme::new(ThemeData::dark()).child(WidgetNode::new(ViewerScreen {
-        capture: Rc::new(demo_capture()),
-    })));
+    harness.mount(
+        Theme::new(ThemeData::dark()).child(WidgetNode::new(ViewerScreen {
+            capture: Rc::new(LazyCapture::open(bytes).unwrap()),
+        })),
+    );
     harness
 }
 
 fn save(harness: &mut TestHarness, name: &str) {
     let frame = visual::render(harness.driver(), WINDOW, Color::WHITE);
-    let dir = std::path::Path::new(OUT_DIR);
-    std::fs::create_dir_all(dir).expect("create the previews directory");
-    let path = dir.join(name);
-    frame.write_png(&path).expect("write the preview");
+    std::fs::create_dir_all(OUT_DIR).expect("create the previews directory");
+    let path = std::path::Path::new(OUT_DIR).join(name);
+    frame.write_png(&path).expect("write the frame");
     println!("wrote {}", path.display());
 }
 
+/// The root element's state cell — the same handle control handlers use.
+fn state_cell(
+    harness: &mut TestHarness,
+) -> Rc<std::cell::RefCell<dyn vieww::widget::ElementState>> {
+    let driver = harness.driver();
+    let tree = driver.elements();
+    let root = tree
+        .iter()
+        .into_iter()
+        .find(|element| element.debug_name() == "ViewerScreen")
+        .expect("the root screen is mounted");
+    root.state()
+        .expect("the screen owns a playback state")
+        .clone()
+}
+
 fn edit(harness: &mut TestHarness, edit: impl FnOnce(&mut PlaybackState)) {
-    let cell = {
-        let driver = harness.driver();
-        let tree = driver.elements();
-        let root = tree
-            .iter()
-            .into_iter()
-            .find(|element| element.debug_name() == "ViewerScreen")
-            .expect("the root screen is mounted");
-        root.state().expect("the screen owns a playback state").clone()
-    };
+    let cell = state_cell(harness);
     let mut state = cell.borrow_mut();
     let playback = state
         .as_any_mut()
         .downcast_mut::<PlaybackState>()
-        .expect("the screen's state is playback state");
+        .expect("the screen's state is the playback state");
     edit(playback);
-    drop(state);
-    harness.request_frame();
-}
-
-#[test]
-#[ignore = "writes PNG files; run with -- --ignored"]
-fn render_the_reference_previews() {
-    // 1. The viewer as it opens: playing the demo capture through the
-    //    engine — depth-buffered, lit, shadowed, motes occluded by the
-    //    surface — which is the default now that the framework owns a 3D
-    //    stack. The painter is one toggle away and shot 3.
-    let mut harness = mounted_viewer();
-    harness.tick(Duration::from_millis(100));
-    save(&mut harness, "viewer-initial.png");
-
-    // 2. Halfway through the timeline: the wave surface has rippled on.
-    edit(&mut harness, |state| {
-        state.set_playing(false);
-        state.scrub(0.5);
-    });
-    harness.tick(Duration::from_millis(50));
-    save(&mut harness, "viewer-halfway.png");
-
-    // 3. Wireframe from a fresh angle: a dragged camera, wire mode, motes
-    //    left on so the two layers read together. Asking for the wire
-    //    drops back to the painter — wireframe is the painter's view.
-    edit(&mut harness, |state| {
-        state.orbit(160.0, 60.0);
-        state.zoom(-40.0);
-        state.toggle_wireframe();
-    });
-    harness.tick(Duration::from_millis(50));
-    save(&mut harness, "viewer-wireframe.png");
-
-    // 4. The same dragged angle, back under the engine: the identical
-    //    viewpoint rendered depth-correct with the light rig, so the two
-    //    previews are a comparison rather than two unrelated pictures.
-    edit(&mut harness, |state| {
-        state.toggle_engine();
-    });
-    harness.tick(Duration::from_millis(50));
-    save(&mut harness, "viewer-engine.png");
 }
 
 #[test]
 #[ignore = "writes PNG files; run with -- --ignored --nocapture"]
-fn render_the_moment_loop() {
-    // The receipt GIF's frames: 30 at 100ms — the 3-second demo capture
-    // playing once through at capture rate, driven by the same `tick` clock
-    // the harness runs everything else on. Every frame is a real render of
-    // the real tree: the sine mesh rippling, the 32 motes drifting, the
-    // camera orbiting as `demo_capture`'s orbit track moves it.
+fn render_the_viewer_states() {
+    // 1. The moment as filmed: neutral camera, playing.
     let mut harness = mounted_viewer();
-    let dir = std::path::Path::new("target/moment");
-    std::fs::create_dir_all(dir).expect("create the moment directory");
-    for frame in 0..30 {
-        harness.tick(Duration::from_millis(100));
-        let image = visual::render(harness.driver(), WINDOW, Color::WHITE);
-        let path = dir.join(format!("moment-{:02}.png", frame));
-        image.write_png(&path).expect("write the moment frame");
+    harness.tick(Duration::from_millis(120));
+    save(&mut harness, "1-neutral.png");
+
+    // 2. Pan: the camera orbits the subject — parallax on a real
+    //    re-photograph.
+    edit(&mut harness, |state| state.orbit(150.0, -40.0));
+    harness.tick(Duration::from_millis(60));
+    save(&mut harness, "2-orbit.png");
+
+    // 3. Pinch: dolly into the depth of the scene.
+    edit(&mut harness, |state| state.pinch_step(1.8));
+    harness.tick(Duration::from_millis(60));
+    save(&mut harness, "3-dolly.png");
+
+    // 4. Hold: the spring brings the view home.
+    edit(&mut harness, |state| state.hold());
+    for _ in 0..120 {
+        harness.tick(Duration::from_millis(16));
     }
-    println!("wrote {} moment frames", 30);
+    save(&mut harness, "4-recentred.png");
 }

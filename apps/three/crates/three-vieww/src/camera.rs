@@ -1,185 +1,288 @@
-//! Orbit camera state suitable for wiring to Vieww gestures.
+//! The viewer's virtual camera: orbit, dolly, and the spring home.
 
-use three_core::{Bounds, Vec3};
+use three_core::Vec3;
 
-/// A tiny camera orbit state suitable for wiring to Vieww gestures.
+/// How far a drag of one pixel rotates the view, in radians.
+const DRAG_GAIN: f32 = 0.008;
+
+/// How far the orbit may swing horizontally, radians (~28 degrees).
 ///
-/// The camera sits at [`eye`](Self::eye), `distance` meters from
-/// [`target`](Self::target), at `pitch` radians above the horizon and `yaw`
-/// radians around the +Y axis (measured from +Z, so yaw 0 looks from +Z
-/// toward −Z, and yaw π/2 looks from +X).
+/// A monocular-with-depth capture is one viewpoint: past roughly this angle
+/// there is more hole than image, because the camera is asking to see
+/// around surfaces it never photographed. The clamp stops the gesture
+/// before it starts lying.
+const YAW_LIMIT: f32 = 0.5;
+
+/// Vertical orbit limit (~20 degrees) — see [`YAW_LIMIT`].
+const PITCH_LIMIT: f32 = 0.35;
+
+/// Dolly limits as multiples of the subject distance: half as close,
+/// twice as far.
+const DOLLY_MIN: f32 = 0.5;
+const DOLLY_MAX: f32 = 2.0;
+
+/// How fast the recenter spring settles: the fraction of remaining distance
+/// covered per millisecond. 0.012/ms ≈ 98% gone in 325 ms — quick enough to
+/// feel like a release, slow enough to read as a movement, not a cut.
+const RECENTRE_RATE_MS: f32 = 0.012;
+
+/// The viewer's camera state: where around the subject it sits.
 ///
-/// Drag and zoom take pixel deltas rather than angles because that is what a
-/// gesture recognizer hands over: [`drag`](Self::drag) receives the same
-/// `dx`/`dy` a `DragDetails::delta` carries, and [`zoom`](Self::zoom) the
-/// `dy` of a scroll wheel or the scale factor of a pinch.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct OrbitCamera {
+/// This is deliberately *not* a free 6-DOF camera. A depth video has one
+/// real viewpoint and geometry measured from it; the two axes and a dolly
+/// are the honest envelope of that data, and the clamps keep the warp inside
+/// what was actually filmed.
+///
+/// All values are relative to the capture's own camera, which sits at the
+/// neutral pose `(yaw 0, pitch 0, dolly 1)` — exactly where the footage was
+/// recorded from.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ViewCamera {
+    /// Orbit around the subject's vertical axis, radians. Positive orbits
+    /// toward the capture's left side (drag right, subject turns right).
     pub yaw: f32,
+    /// Orbit above the horizon, radians. Positive is above, looking down.
     pub pitch: f32,
-    pub distance: f32,
-    pub target: Vec3,
+    /// Distance to the subject as a multiple of its true distance: 1.0 is
+    /// where the camera stood, 0.5 half as close, 2.0 twice as far.
+    pub dolly: f32,
+    /// True while a recenter is settling; advanced by [`step_recentre`].
+    pub(crate) recentring: bool,
 }
 
-/// How far a drag of one pixel rotates the camera, in radians.
-const DRAG_GAIN: f32 = 0.01;
+impl Default for ViewCamera {
+    fn default() -> Self {
+        Self {
+            yaw: 0.0,
+            pitch: 0.0,
+            dolly: 1.0,
+            recentring: false,
+        }
+    }
+}
 
-/// The pitch beyond which the camera would flip over the pole.
-const PITCH_LIMIT: f32 = 1.5;
-
-/// The closest the camera may approach the target.
-///
-/// Not zero, because a viewer sitting inside its subject is degenerate: the
-/// projection divides by depth, triangles cross the near plane, and the
-/// picture dissolves. A hard floor keeps zoom gesturing safe.
-const MIN_DISTANCE: f32 = 0.05;
-
-impl OrbitCamera {
-    /// The world-space position of the eye.
-    pub fn eye(&self) -> Vec3 {
-        let horizontal = self.pitch.cos();
-        Vec3::new(
-            self.target.x + self.distance * horizontal * self.yaw.sin(),
-            self.target.y + self.distance * self.pitch.sin(),
-            self.target.z + self.distance * horizontal * self.yaw.cos(),
-        )
+impl ViewCamera {
+    /// Whether this pose is the neutral one, within the epsilon the warp
+    /// uses to skip re-projection entirely. Feeds autoplay on this answer:
+    /// the common case must cost nothing.
+    pub fn is_neutral(&self) -> bool {
+        self.yaw.abs() < 1e-4 && self.pitch.abs() < 1e-4 && (self.dolly - 1.0).abs() < 1e-4
     }
 
-    /// The point the camera orbits around.
-    pub fn target(&self) -> Vec3 {
-        self.target
-    }
-
-    /// Rotate from pointer movement, in pixels.
-    ///
-    /// Yaw follows `dx` (drag right, subject rotates right) and pitch follows
-    /// `dy` (drag down, look from higher up), each pixel worth
-    /// [`DRAG_GAIN`](constant.DRAG_GAIN) radians — about 57 pixels per 10
-    /// degrees, in the range a trackpad or a finger both feel natural at.
+    /// Pan/drag: orbit around the subject, in pixel deltas straight from a
+    /// gesture recognizer.
     pub fn drag(&mut self, dx: f32, dy: f32) {
-        self.yaw += dx * DRAG_GAIN;
+        self.recentring = false;
+        self.yaw = (self.yaw + dx * DRAG_GAIN).clamp(-YAW_LIMIT, YAW_LIMIT);
         self.pitch = (self.pitch + dy * DRAG_GAIN).clamp(-PITCH_LIMIT, PITCH_LIMIT);
     }
 
-    /// Move the camera `delta` meters toward the target (positive = zoom in).
-    pub fn zoom(&mut self, delta: f32) {
-        self.distance = (self.distance - delta).max(MIN_DISTANCE);
-    }
-
-    /// Zoom by a multiplicative pinch factor.
-    ///
-    /// `factor > 1.0` spreads the fingers and moves the camera **in**;
-    /// `factor < 1.0` pinches and moves it out. This is the inverse of how a
-    /// `scale` gesture reports spread, so a viewer wires it as
-    /// `camera.pinch(1.0 / details.scale)` per update, or
-    /// `camera.pinch(previous_scale / details.scale)` for the incremental
-    /// delta.
+    /// Pinch/scroll: `factor > 1` (fingers spread) moves closer; `factor <
+    /// 1` pulls back. `scroll` deltas arrive as pixels and can be handed
+    /// over as `pinch(1.0 - delta.dy * 0.001)`.
     pub fn pinch(&mut self, factor: f32) {
         if factor.is_finite() && factor > 0.0 {
-            self.distance = (self.distance / factor).max(MIN_DISTANCE);
+            self.recentring = false;
+            self.dolly = (self.dolly / factor).clamp(DOLLY_MIN, DOLLY_MAX);
         }
     }
 
-    /// Frame `bounds` entirely from any orbit direction.
+    /// Begin the recenter spring — the "hold" gesture.
     ///
-    /// Sets the target to the bounds center and the distance so a sphere
-    /// enclosing the capture fits the given vertical field of view with
-    /// `margin` room to spare. Leaves yaw and pitch alone — framing says
-    /// *where* to look from, not which side; the caller keeps the user's
-    /// viewing angle, which is what "reset camera" should preserve and
-    /// "fit to view" should not disturb.
-    pub fn fit(&mut self, bounds: Bounds, fov_y: f32, margin: f32) {
-        let radius = bounds.radius().max(1e-6);
-        let fov = fov_y.clamp(0.01, std::f32::consts::FRAC_PI_2);
-        self.target = bounds.center();
-        // The enclosing sphere touches the frustum walls, so distance is the
-        // sphere over sin(half-fov), with a margin so the silhouette never
-        // kisses the viewport edge.
-        self.distance = (radius / (0.5 * fov).sin()) * margin.max(1.0);
+    /// The animation itself is deterministic: [`step_recentre`] moves the
+    /// pose an exponential fraction of the remaining distance per tick, so
+    /// the same tick sequence always lands the same way, and a test can
+    /// drive it with `Duration`s instead of sleeping.
+    pub fn begin_recentre(&mut self) {
+        self.recentring = true;
     }
+
+    /// Advance the recenter spring by `delta`. Returns whether it is still
+    /// moving, so the caller can keep requesting frames until it lands.
+    pub fn step_recentre(&mut self, delta: std::time::Duration) -> bool {
+        if !self.recentring {
+            return false;
+        }
+        let ms = delta.as_secs_f32() * 1000.0;
+        let remaining = 1.0 - (-RECENTRE_RATE_MS * ms).exp();
+        let arrived = self.is_neutral();
+        self.yaw *= 1.0 - remaining;
+        self.pitch *= 1.0 - remaining;
+        self.dolly = 1.0 + (self.dolly - 1.0) * (1.0 - remaining);
+        if self.is_neutral() || arrived {
+            self.yaw = 0.0;
+            self.pitch = 0.0;
+            self.dolly = 1.0;
+            self.recentring = false;
+            return false;
+        }
+        true
+    }
+
+    // ── the pose, for the renderer ───────────────────────────────────────
+
+    /// The virtual camera's eye position in the capture's own coordinates.
+    ///
+    /// The subject sits on the optical axis at `subject_distance`; the eye
+    /// is `dolly * subject_distance` back from it along the view direction.
+    /// At the neutral pose this is the origin — the capture's own camera.
+    pub fn eye(&self, subject_distance: f32) -> Vec3 {
+        let forward = self.forward();
+        let distance = self.dolly * subject_distance;
+        Vec3::new(
+            -forward.x * distance,
+            -forward.y * distance,
+            subject_distance - forward.z * distance,
+        )
+    }
+
+    /// The unit vector from the eye toward the subject.
+    ///
+    /// Built so that `(yaw, pitch) = (0, 0)` gives `(0, 0, 1)` — the capture
+    /// camera's own forward — and positive pitch looks downward from above
+    /// (the Y-down convention's "up").
+    pub fn forward(&self) -> Vec3 {
+        let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
+        let (sin_pitch, cos_pitch) = self.pitch.sin_cos();
+        Vec3::new(sin_yaw * cos_pitch, sin_pitch, cos_yaw * cos_pitch)
+    }
+
+    /// The unit vector of the image's horizontal axis in capture space.
+    pub fn right(&self) -> Vec3 {
+        let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
+        Vec3::new(cos_yaw, 0.0, -sin_yaw)
+    }
+
+    /// The unit vector of the image's vertical axis (downward, matching
+    /// pixel rows).
+    pub fn down(&self) -> Vec3 {
+        cross(self.forward(), self.right())
+    }
+}
+
+/// Cross product — small, local, and used by exactly one caller.
+fn cross(a: Vec3, b: Vec3) -> Vec3 {
+    Vec3::new(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn eye_orbits_the_target() {
-        let camera = OrbitCamera {
-            yaw: 0.0,
-            pitch: 0.0,
-            distance: 2.0,
-            target: Vec3::new(1.0, 2.0, 3.0),
-        };
-        // Yaw 0, pitch 0: on +Z looking toward -Z.
-        assert_eq!(camera.eye(), Vec3::new(1.0, 2.0, 5.0));
-
-        let quarter = OrbitCamera {
-            yaw: std::f32::consts::FRAC_PI_2,
-            pitch: 0.0,
-            distance: 2.0,
-            target: Vec3::new(0.0, 0.0, 0.0),
-        };
-        let eye = quarter.eye();
-        assert!((eye.x - 2.0).abs() < 1e-6, "yaw pi/2 puts the eye on +X");
-        assert!(eye.z.abs() < 1e-6);
+    fn assert_close(a: Vec3, b: Vec3, what: &str) {
+        let close =
+            (a.x - b.x).abs() < 1e-5 && (a.y - b.y).abs() < 1e-5 && (a.z - b.z).abs() < 1e-5;
+        assert!(close, "{what}: {a:?} vs {b:?}");
     }
 
     #[test]
-    fn pitch_is_sine_up() {
-        let camera = OrbitCamera {
-            yaw: 0.0,
-            pitch: std::f32::consts::FRAC_PI_2,
-            distance: 3.0,
-            target: Vec3::new(0.0, 0.0, 0.0),
-        };
-        let eye = camera.eye();
-        assert!((eye.y - 3.0).abs() < 1e-6, "pitch pi/2 is directly overhead");
-        assert!(eye.x.abs() < 1e-6 && eye.z.abs() < 1e-6);
+    fn neutral_pose_is_the_capture_camera() {
+        let camera = ViewCamera::default();
+        assert!(camera.is_neutral());
+        assert_close(camera.forward(), Vec3::new(0.0, 0.0, 1.0), "forward");
+        assert_close(camera.right(), Vec3::new(1.0, 0.0, 0.0), "right");
+        assert_close(camera.down(), Vec3::new(0.0, 1.0, 0.0), "down");
+        assert_close(
+            camera.eye(3.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            "eye at the origin",
+        );
     }
 
     #[test]
-    fn drag_clamps_pitch_but_not_yaw() {
-        let mut camera = OrbitCamera { yaw: 0.0, pitch: 0.0, distance: 1.0, target: Vec3::new(0.0, 0.0, 0.0) };
-        camera.drag(0.0, 100_000.0);
-        assert_eq!(camera.pitch, 1.5, "pitch cannot exceed the pole");
-        camera.drag(0.0, -100_000.0);
-        assert_eq!(camera.pitch, -1.5, "pitch cannot go under the floor");
+    fn the_eye_stays_on_the_subject_sphere() {
+        // Whatever the angles, the eye is `dolly * distance` from the
+        // subject center at (0, 0, z_s) — the orbit that makes parallax
+        // behave like walking around the subject.
+        let subject = 2.0;
+        let camera = ViewCamera {
+            yaw: 0.7,
+            pitch: -0.3,
+            dolly: 1.4,
+            recentring: false,
+        };
+        let eye = camera.eye(subject);
+        let to_center = Vec3::new(0.0 - eye.x, 0.0 - eye.y, subject - eye.z);
+        let length =
+            (to_center.x * to_center.x + to_center.y * to_center.y + to_center.z * to_center.z)
+                .sqrt();
+        assert!(
+            (length - 1.4 * subject).abs() < 1e-5,
+            "orbit radius {length}"
+        );
+    }
+
+    #[test]
+    fn positive_pitch_is_above_looking_down() {
+        let camera = ViewCamera {
+            yaw: 0.0,
+            pitch: 0.5,
+            dolly: 1.0,
+            recentring: false,
+        };
+        let eye = camera.eye(2.0);
+        assert!(
+            eye.y < 0.0,
+            "in Y-down space, above the subject is negative y"
+        );
+        assert!(camera.forward().y > 0.0, "looking down is +y");
+    }
+
+    #[test]
+    fn drag_and_pinch_clamp_to_the_honest_envelope() {
+        let mut camera = ViewCamera::default();
         camera.drag(100_000.0, 0.0);
-        assert!(camera.yaw > 100.0, "yaw wraps freely");
-    }
-
-    #[test]
-    fn zoom_and_pinch_respect_the_floor() {
-        let mut camera = OrbitCamera { yaw: 0.0, pitch: 0.0, distance: 1.0, target: Vec3::new(0.0, 0.0, 0.0) };
-        camera.zoom(100.0);
-        assert_eq!(camera.distance, 0.05);
+        assert_eq!(camera.yaw, 0.5);
+        camera.drag(0.0, -100_000.0);
+        assert_eq!(camera.pitch, -0.35);
+        camera.pinch(1e9);
+        assert!((camera.dolly - 0.5).abs() < 1e-6);
         camera.pinch(0.0);
-        assert_eq!(camera.distance, 0.05, "a zero pinch factor is ignored, not NaN");
+        assert!(
+            (camera.dolly - 0.5).abs() < 1e-6,
+            "a zero factor is ignored, not NaN"
+        );
     }
 
     #[test]
-    fn pinch_moves_in_when_fingers_spread() {
-        let mut camera = OrbitCamera { yaw: 0.0, pitch: 0.0, distance: 4.0, target: Vec3::new(0.0, 0.0, 0.0) };
-        camera.pinch(2.0);
-        assert!((camera.distance - 2.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn fit_centers_and_distances_for_the_frustum() {
-        let bounds = Bounds {
-            min: Vec3::new(-1.0, -1.0, -1.0),
-            max: Vec3::new(1.0, 1.0, 1.0),
+    fn recentre_springs_home_and_lands_exactly() {
+        let mut camera = ViewCamera {
+            yaw: 0.4,
+            pitch: -0.2,
+            dolly: 1.7,
+            recentring: false,
         };
-        let mut camera = OrbitCamera { yaw: 0.4, pitch: 0.3, distance: 99.0, target: Vec3::new(0.0, 0.0, 0.0) };
-        camera.fit(bounds, std::f32::consts::FRAC_PI_4, 1.2);
+        camera.begin_recentre();
+        // A long idle tick lands it.
+        assert!(!camera.step_recentre(std::time::Duration::from_secs(5)));
+        assert!(
+            camera.is_neutral(),
+            "spring settles exactly, not asymptotically-on-screen"
+        );
+    }
 
-        assert_eq!(camera.target(), Vec3::new(0.0, 0.0, 0.0));
-        // radius = sqrt(3), sin(22.5 deg) ~ 0.38268, margin 1.2
-        let expected = 3.0_f32.sqrt() / (std::f32::consts::FRAC_PI_8).sin() * 1.2;
-        assert!((camera.distance - expected).abs() < 1e-4);
-        // The user's angle survives a fit.
-        assert_eq!(camera.yaw, 0.4);
-        assert_eq!(camera.pitch, 0.3);
+    #[test]
+    fn recentre_is_deterministic() {
+        let mut a = ViewCamera {
+            yaw: 0.3,
+            pitch: 0.1,
+            dolly: 1.5,
+            recentring: false,
+        };
+        let mut b = a;
+        a.begin_recentre();
+        b.begin_recentre();
+        for _ in 0..10 {
+            let moving = a.step_recentre(std::time::Duration::from_millis(16));
+            assert_eq!(
+                b.step_recentre(std::time::Duration::from_millis(16)),
+                moving
+            );
+            assert_eq!(a, b);
+        }
     }
 }

@@ -5,7 +5,47 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-description = "Device-independent camera, depth and IMU capture interfaces for 3"
+description = "Device-independent camera and depth capture for 3, with camera2 and AVFoundation backends"
 
 [dependencies]
 three-core.workspace = true
+
+# The camera2 shim's class loader and JNI. Pinned to the version the
+# workspace's platform crate resolves for this target — a second `jni` in
+# the binary would give us a `JavaVM` type that looks identical and is not.
+# `vieww-platform-winit` supplies the `AndroidApp` handle the backend
+# bootstraps from; on every other target this crate stays UI-framework-free.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+vieww-platform-winit.workspace = true
+
+# The AVFoundation backend: objc2 rather than a hand-written objc_msgSend,
+# for the reason vieww's own iOS code gives: how a struct comes back from
+# one is ABI-dependent, and getting it wrong compiles cleanly and reads
+# garbage. Pinned to the versions `vieww-platform-winit` resolves for this
+# target; a second version would be a second, incompatible `UIView` type.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = { version = "0.2", features = [
+    "NSString",
+    "NSArray",
+    "NSDictionary",
+    "NSError",
+    "NSProcessInfo",
+] }
+objc2-av-foundation = { version = "0.3", features = [
+    "AVCaptureDevice",
+    "AVCaptureSession",
+    "AVCaptureInput",
+    "AVCaptureVideoDataOutput",
+    "AVCaptureDepthDataOutput",
+    "AVCaptureOutputBase",
+    "AVCaptureSessionPreset",
+] }
+objc2-core-video = { version = "0.3", features = ["CVPixelBuffer"] }
+dispatch2 = "0.3"
+
+[build-dependencies]
+# Compiles and dexes the camera2 Java shim at build time — the vavlt
+# pattern: no Gradle, no AGP, no Kotlin.
+android-build = "0.1"

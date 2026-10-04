@@ -5,7 +5,21 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-description = "Reference encoder and decoder for the .3 temporal 3D container"
+description = "Reference encoder and decoder for the .3 depth-video container"
 
 [dependencies]
 three-core.workspace = true
+
+# Color: JPEG for the same reason every camera pipeline uses it — natural
+# images at a social quality setting are an order of magnitude smaller than
+# any lossless codec, and both halves are pure Rust so the same bytes come out
+# of every platform. `jpeg-encoder` writes, `zune-jpeg` reads (the same
+# decoder the `image` crate ships).
+jpeg-encoder = "0.6"
+zune-jpeg = "0.5"
+
+# Depth: zstd, lossless, on the raw u16 millimeter samples. Depth maps are
+# smooth in exactly the way zstd's match finder likes, and the same C crate
+# already builds for every target this workspace ships to (vavlt has carried
+# it through Android and iOS CI since the beginning).
+zstd = "0.13"

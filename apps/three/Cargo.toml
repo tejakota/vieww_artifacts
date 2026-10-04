@@ -4,13 +4,11 @@ members = [
     "crates/three-core",
     "crates/three-format",
     "crates/three-capture",
-    "crates/three-reconstruction",
     "crates/three-runtime",
     "crates/three-vieww",
     "crates/three-social",
     "crates/three-app",
     "crates/three-cli",
-    "examples/capture-demo",
     "examples/vieww-integration",
     "examples/social-app",
 ]
@@ -32,13 +30,11 @@ default-members = [
     "crates/three-core",
     "crates/three-format",
     "crates/three-capture",
-    "crates/three-reconstruction",
     "crates/three-runtime",
     "crates/three-vieww",
     "crates/three-social",
     "crates/three-app",
     "crates/three-cli",
-    "examples/capture-demo",
 ]
 
 [workspace.package]

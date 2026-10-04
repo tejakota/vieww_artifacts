@@ -14,15 +14,17 @@
 
 use std::{cell::RefCell, collections::HashSet, fmt, rc::Rc};
 use three_app::{HomeFeed, Route, Tab, ThreeApp};
-use three_runtime::demo_capture;
+use three_capture::{CaptureRequest, DepthVideoSource};
+use three_format::LazyCapture;
+use three_runtime::{sample_capture, DynRecording};
 use three_social::{
     demo_profile, MemorySocialBackend, Notification, NotificationKind, Post, PostId, Profile,
     SocialBackend, UserId,
 };
 use vieww::prelude::*;
 use vieww::widget::ElementState;
-use vieww_platform_winit::App;
 use vieww_integration::ViewerScreen;
+use vieww_platform_winit::App;
 
 // ── the glyphs this shell draws ─────────────────────────────────────────────
 //
@@ -149,24 +151,9 @@ mod icons {
         // The top face, the front face, and the right face — one silhouette
         // with two internal seams left as gaps, which is how an unfilled
         // wireframe has to spell itself when the painter only fills.
-        let top = [
-            (12.0, 3.0),
-            (20.4, 7.6),
-            (12.0, 12.2),
-            (3.6, 7.6),
-        ];
-        let front = [
-            (3.6, 7.6),
-            (12.0, 12.2),
-            (12.0, 21.0),
-            (3.6, 16.4),
-        ];
-        let right = [
-            (20.4, 7.6),
-            (12.0, 12.2),
-            (12.0, 21.0),
-            (20.4, 16.4),
-        ];
+        let top = [(12.0, 3.0), (20.4, 7.6), (12.0, 12.2), (3.6, 7.6)];
+        let front = [(3.6, 7.6), (12.0, 12.2), (12.0, 21.0), (3.6, 16.4)];
+        let right = [(20.4, 7.6), (12.0, 12.2), (12.0, 21.0), (20.4, 16.4)];
         for face in [top, front, right] {
             path.move_to(Offset::new(face[0].0, face[0].1));
             for &(x, y) in &face[1..] {
@@ -176,7 +163,25 @@ mod icons {
         }
         IconData::square24(path)
     }
+}
 
+// The platform's camera, when there is one — set once by the entry point
+// that has the handle (Android's `android_main`, via `set_capture_source`),
+// consumed by the first `SocialState::new()`.
+//
+// A thread-local rather than a parameter because the widget tree builds
+// `SocialState` from a `create_state` with no arguments, and the platform
+// handle exists before the tree does. One shot: the first state built
+// takes it, and a rebuilt tree keeps its own source for the process's
+// lifetime — which is also the camera's.
+thread_local! {
+    static CAPTURE_SOURCE: RefCell<Option<Box<dyn DepthVideoSource>>> =
+        const { RefCell::new(None) };
+}
+
+/// Hand the platform's camera to the app. Call before the tree mounts.
+pub fn set_capture_source(source: Box<dyn DepthVideoSource>) {
+    CAPTURE_SOURCE.with(|slot| *slot.borrow_mut() = Some(source));
 }
 
 /// The seeded world: three people, one published moment, and a real
@@ -201,8 +206,10 @@ fn seeded_app() -> ThreeApp<MemorySocialBackend> {
     backend.add_profile(noah);
     let mut app = ThreeApp::new(backend);
     app.begin_create();
-    app.composer.caption = "A living 3D moment — drag it, rotate it, make it yours.".into();
-    app.attach_capture(&demo_capture()).expect("demo capture encodes");
+    app.composer.caption =
+        "A real moment, in depth — pan it, pinch into it, hold to come home.".into();
+    app.attach_capture(&sample_capture())
+        .expect("the sample capture encodes");
     let post = app.publish_composer().expect("seed post publishes");
 
     // The trail, left by real actors through the real actions. `set_active_user`
@@ -235,9 +242,36 @@ struct ActivityRow {
     kind: NotificationKind,
 }
 
+/// The Create tab's camera flow: what a recording is doing right now.
+enum CapturePhase {
+    /// No camera on this build — the honest state of a desktop run.
+    NoSource,
+    Idle,
+    Recording(Box<DynRecording>),
+    Failed(String),
+}
+
+impl fmt::Debug for CapturePhase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Not the recording's Debug — it has none, and a dump wants the
+        // phase and its progress, not the source.
+        match self {
+            Self::NoSource => f.write_str("CapturePhase::NoSource"),
+            Self::Idle => f.write_str("CapturePhase::Idle"),
+            Self::Recording(recording) => f
+                .debug_struct("CapturePhase::Recording")
+                .field("frames", &recording.frame_count())
+                .field("progress", &recording.progress())
+                .finish(),
+            Self::Failed(error) => f.debug_tuple("CapturePhase::Failed").field(error).finish(),
+        }
+    }
+}
+
 struct SocialState {
     app: ThreeApp<MemorySocialBackend>,
     pending: bool,
+    capture: CapturePhase,
     /// The Explore search field's live text.
     search: String,
     /// Who the signed-in user follows, mirrored from the backend's boolean
@@ -246,38 +280,193 @@ struct SocialState {
     /// that writes the backend's.
     following: HashSet<UserId>,
 }
-impl fmt::Debug for SocialState { fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result{f.debug_struct("SocialState").field("route",&self.app.route).field("feed_items",&self.app.feed.posts.len()).finish()} }
+/// AppError has no Display; the failure line wants a string.
+fn self_capture_failed(phase: &mut CapturePhase, error: &three_app::AppError) {
+    *phase = CapturePhase::Failed(format!("{error:?}"));
+}
+
+impl fmt::Debug for SocialState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SocialState")
+            .field("route", &self.app.route)
+            .field("feed_items", &self.app.feed.posts.len())
+            .finish()
+    }
+}
 impl SocialState {
-    fn new()->Self{Self{app:seeded_app(),pending:false,search:String::new(),following:HashSet::new()}}
-    fn tab(&mut self,tab:Tab){self.app.select_tab(tab);self.pending=true;}
-    fn toggle_feed(&mut self){let next=if self.app.home_feed==HomeFeed::ForYou{HomeFeed::Following}else{HomeFeed::ForYou};let _=self.app.set_home_feed(next);self.pending=true;}
-    fn like(&mut self,id:&PostId){let _=self.app.like(id);self.pending=true;}
-    fn set_search(&mut self,text:String){self.search=text;self.pending=true;}
+    fn new() -> Self {
+        // The platform's camera (set by the entry point, see
+        // `set_capture_source`) is taken here, once: the first state built
+        // owns it for the process's lifetime.
+        let source = CAPTURE_SOURCE.with(|slot| slot.borrow_mut().take());
+        Self {
+            app: seeded_app(),
+            pending: false,
+            search: String::new(),
+            following: HashSet::new(),
+            capture: match source {
+                Some(_) => CapturePhase::Idle,
+                None => CapturePhase::NoSource,
+            },
+        }
+    }
+    fn tab(&mut self, tab: Tab) {
+        self.app.select_tab(tab);
+        self.pending = true;
+    }
+    fn toggle_feed(&mut self) {
+        let next = if self.app.home_feed == HomeFeed::ForYou {
+            HomeFeed::Following
+        } else {
+            HomeFeed::ForYou
+        };
+        let _ = self.app.set_home_feed(next);
+        self.pending = true;
+    }
+    fn like(&mut self, id: &PostId) {
+        let _ = self.app.like(id);
+        self.pending = true;
+    }
+    fn set_search(&mut self, text: String) {
+        self.search = text;
+        self.pending = true;
+    }
     /// Follow or unfollow through the product state, keeping the view's mirror
     /// in step with the boolean the backend returns.
-    fn follow(&mut self,id:&UserId){
+    fn follow(&mut self, id: &UserId) {
         match self.app.follow(id) {
-            Ok(true) => { self.following.insert(id.clone()); }
-            Ok(false) => { self.following.remove(id); }
+            Ok(true) => {
+                self.following.insert(id.clone());
+            }
+            Ok(false) => {
+                self.following.remove(id);
+            }
             Err(_) => {}
         }
-        self.pending=true;
+        self.pending = true;
     }
-    fn begin_create(&mut self){self.app.begin_create();self.pending=true;}
-    fn discard_composer(&mut self){self.app.select_tab(Tab::Create);self.pending=true;}
+    fn discard_composer(&mut self) {
+        self.app.select_tab(Tab::Create);
+        self.pending = true;
+    }
+
+    /// Route to the composer (the caption/publish half of the flow).
+    fn route_to_composer(&mut self) {
+        self.app.navigate(Route::Composer);
+        self.pending = true;
+    }
+
+    /// The one action the Create tab exists for: start recording.
+    fn start_recording(&mut self) {
+        if !matches!(self.capture, CapturePhase::Idle | CapturePhase::Failed(_)) {
+            return;
+        }
+        let source = CAPTURE_SOURCE.with(|slot| slot.borrow_mut().take());
+        let Some(source) = source else {
+            self.capture = CapturePhase::NoSource;
+            self.pending = true;
+            return;
+        };
+        // The social default: three seconds, 24 fps, 4:3 at a size the warp
+        // renderer is happy to run per frame on a phone.
+        match DynRecording::start_boxed(
+            source,
+            CaptureRequest::social_default(),
+            "A moment, in depth",
+        ) {
+            Ok(recording) => {
+                self.capture = CapturePhase::Recording(Box::new(recording));
+                self.pending = true;
+            }
+            Err(error) => {
+                self.capture = CapturePhase::Failed(error.to_string());
+                self.pending = true;
+            }
+        }
+    }
+
+    /// One frame tick of an in-flight recording. Finishing attaches the
+    /// capture to the composer and routes there.
+    fn poll_recording(&mut self) {
+        let still_going = match &mut self.capture {
+            CapturePhase::Recording(recording) => recording.poll(),
+            _ => return,
+        };
+        if !still_going {
+            let finished = std::mem::replace(&mut self.capture, CapturePhase::Idle);
+            let CapturePhase::Recording(recording) = finished else {
+                unreachable!("the borrow above guarantees the variant")
+            };
+            match recording.finish() {
+                Ok(capture) => match self.app.attach_capture(&capture) {
+                    Ok(()) => self.route_to_composer(),
+                    Err(error) => {
+                        self.capture = CapturePhase::Failed(format!("{error:?}"));
+                    }
+                },
+                Err(error) => self.capture = CapturePhase::Failed(error.to_string()),
+            }
+        }
+        self.pending = true;
+    }
 }
 impl ElementState for SocialState {
-    fn as_any(&self)->&dyn std::any::Any{self}
-    fn as_any_mut(&mut self)->&mut dyn std::any::Any{self}
-    fn take_pending(&mut self)->bool{std::mem::take(&mut self.pending)}
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+    fn tick(&mut self, _now: std::time::Duration) -> bool {
+        // One frame of an in-flight recording per frame tick: the poll
+        // contract the camera backends are built around, and the reason a
+        // capture never blocks the UI thread.
+        if matches!(self.capture, CapturePhase::Recording(_)) {
+            self.poll_recording();
+        }
+        self.take_pending()
+    }
+    fn is_animating(&self) -> bool {
+        matches!(self.capture, CapturePhase::Recording(_))
+    }
+    fn take_pending(&mut self) -> bool {
+        std::mem::take(&mut self.pending)
+    }
 }
-#[derive(Clone)] struct Handle(Rc<RefCell<dyn ElementState>>);
-impl Handle { fn write(&self,f:impl FnOnce(&mut SocialState)){let mut s=self.0.borrow_mut();if let Some(s)=s.as_any_mut().downcast_mut::<SocialState>(){f(s)}} }
-impl fmt::Debug for Handle { fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result{f.write_str("Handle(<SocialState>)")} }
+#[derive(Clone)]
+struct Handle(Rc<RefCell<dyn ElementState>>);
+impl Handle {
+    fn write(&self, f: impl FnOnce(&mut SocialState)) {
+        let mut s = self.0.borrow_mut();
+        if let Some(s) = s.as_any_mut().downcast_mut::<SocialState>() {
+            f(s)
+        }
+    }
+}
+impl fmt::Debug for Handle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Handle(<SocialState>)")
+    }
+}
+
+/// What a build needs to know about the capture flow — a `Clone` of the
+/// phase, because the live recording itself is not cloneable (and must not
+/// be: exactly one state owns it).
+#[derive(Clone, Debug)]
+enum CaptureRead {
+    NoSource,
+    Idle,
+    Recording { frames: usize, progress: f32 },
+    Failed(String),
+}
 
 #[derive(Clone)]
 struct Snapshot {
     route: Route,
+    capture: CaptureRead,
+    composer_attached: bool,
+    composer_title: String,
+    composer_caption: String,
     feed: HomeFeed,
     posts: Vec<Post>,
     /// Everyone the backend knows, self included — Explore filters the self
@@ -287,80 +476,145 @@ struct Snapshot {
     activity: Vec<ActivityRow>,
     following: Vec<UserId>,
     search: String,
+    /// The feed's first post, opened for lazy viewing.
+    media: Option<Rc<LazyCapture>>,
 }
 impl Snapshot {
-    fn read(s:&SocialState)->Self{
-        let people=s.app.backend().search_profiles("",30);
-        let me=people.iter().find(|p|p.id.0=="teja").cloned()
-            .unwrap_or_else(||demo_profile("teja","teja","Teja"));
-        let name_of=|id:&UserId|people.iter().find(|p|&p.id==id);
-        let activity=s.app.backend().notifications()
+    fn read(s: &SocialState) -> Self {
+        let people = s.app.backend().search_profiles("", 30);
+        let me = people
+            .iter()
+            .find(|p| p.id.0 == "teja")
+            .cloned()
+            .unwrap_or_else(|| demo_profile("teja", "teja", "Teja"));
+        let name_of = |id: &UserId| people.iter().find(|p| &p.id == id);
+        let activity = s
+            .app
+            .backend()
+            .notifications()
             .expect("the backend serves its notifications")
             .into_iter()
-            .map(|Notification{actor,kind,read,..}|{
-                let who=name_of(&actor);
-                let verb=match &kind{
-                    NotificationKind::Like{..}=>"liked your moment",
-                    NotificationKind::Comment{..}=>"commented on your moment",
-                    NotificationKind::Follow{..}=>"started following you",
-                    NotificationKind::Remix{..}=>"remixed your moment",
-                }.to_string();
-                ActivityRow{
-                    actor:who.map(|p|p.display_name.clone()).unwrap_or_else(||"Someone".into()),
-                    actor_handle:who.map(|p|format!("@{}",p.handle)).unwrap_or_default(),
-                    verb,
-                    unread:!read,
-                    kind,
-                }
-            })
+            .map(
+                |Notification {
+                     actor, kind, read, ..
+                 }| {
+                    let who = name_of(&actor);
+                    let verb = match &kind {
+                        NotificationKind::Like { .. } => "liked your moment",
+                        NotificationKind::Comment { .. } => "commented on your moment",
+                        NotificationKind::Follow { .. } => "started following you",
+                        NotificationKind::Remix { .. } => "remixed your moment",
+                    }
+                    .to_string();
+                    ActivityRow {
+                        actor: who
+                            .map(|p| p.display_name.clone())
+                            .unwrap_or_else(|| "Someone".into()),
+                        actor_handle: who.map(|p| format!("@{}", p.handle)).unwrap_or_default(),
+                        verb,
+                        unread: !read,
+                        kind,
+                    }
+                },
+            )
             .collect();
-        Self{
-            route:s.app.route.clone(),
-            feed:s.app.home_feed,
-            posts:s.app.feed.posts.clone(),
+        let capture = match &s.capture {
+            CapturePhase::NoSource => CaptureRead::NoSource,
+            CapturePhase::Idle => CaptureRead::Idle,
+            CapturePhase::Recording(recording) => CaptureRead::Recording {
+                frames: recording.frame_count(),
+                progress: recording.progress(),
+            },
+            CapturePhase::Failed(reason) => CaptureRead::Failed(reason.clone()),
+        };
+        Self {
+            route: s.app.route.clone(),
+            capture,
+            composer_attached: s.app.composer.asset_bytes.is_some(),
+            composer_title: s.app.composer.title.clone(),
+            composer_caption: s.app.composer.caption.clone(),
+            feed: s.app.home_feed,
+            posts: s.app.feed.posts.clone(),
             people,
             me,
             activity,
-            following:s.following.iter().cloned().collect(),
-            search:s.search.clone(),
+            following: s.following.iter().cloned().collect(),
+            search: s.search.clone(),
+            media: s
+                .app
+                .feed
+                .posts
+                .first()
+                .and_then(|post| s.app.open_post_media(post).ok()),
         }
     }
-    fn initial()->Self{Self{route:Route::Root(Tab::Home),feed:HomeFeed::ForYou,posts:vec![],people:vec![],me:demo_profile("teja","teja","Teja"),activity:vec![],following:vec![],search:String::new()}}
+    fn initial() -> Self {
+        Self {
+            route: Route::Root(Tab::Home),
+            capture: CaptureRead::NoSource,
+            composer_attached: false,
+            composer_title: String::new(),
+            composer_caption: String::new(),
+            feed: HomeFeed::ForYou,
+            posts: vec![],
+            people: vec![],
+            me: demo_profile("teja", "teja", "Teja"),
+            activity: vec![],
+            following: vec![],
+            search: String::new(),
+            media: None,
+        }
+    }
 }
 
-#[derive(Debug)] pub struct SocialScreen;
+#[derive(Debug)]
+pub struct SocialScreen;
 #[widget]
 impl SocialScreen {
-    fn create_state(&self)->Option<Box<dyn ElementState>>{Some(Box::new(SocialState::new()))}
-    fn build(&self,ctx:&BuildContext)->impl Into<WidgetNode>{
-        let theme=ThemeData::of(ctx);
-        let snap=ctx.state::<SocialState,Snapshot>(Snapshot::read).unwrap_or_else(Snapshot::initial);
-        let handle=ctx.state_handle().map(Handle);
-        let body=match &snap.route {
-            Route::Root(Tab::Home)=>home_screen(&theme,&snap,handle.clone()),
-            Route::Root(Tab::Explore)=>explore_screen(&theme,&snap,handle.clone()),
-            Route::Root(Tab::Create)=>create_screen(&theme,false,handle.clone()),
-            Route::Composer=>create_screen(&theme,true,handle.clone()),
-            Route::Root(Tab::Activity)=>activity_screen(&theme,&snap),
-            Route::Root(Tab::Profile)=>profile_screen(&theme,&snap),
-            _=>simple_screen(&theme,"3","Detail route"),
+    fn create_state(&self) -> Option<Box<dyn ElementState>> {
+        Some(Box::new(SocialState::new()))
+    }
+    fn build(&self, ctx: &BuildContext) -> impl Into<WidgetNode> {
+        let theme = ThemeData::of(ctx);
+        let snap = ctx
+            .state::<SocialState, Snapshot>(Snapshot::read)
+            .unwrap_or_else(Snapshot::initial);
+        let handle = ctx.state_handle().map(Handle);
+        let body = match &snap.route {
+            Route::Root(Tab::Home) => home_screen(&theme, &snap, handle.clone()),
+            Route::Root(Tab::Explore) => explore_screen(&theme, &snap, handle.clone()),
+            Route::Root(Tab::Create) => create_screen(&theme, &snap, handle.clone()),
+            Route::Composer => create_screen(&theme, &snap, handle.clone()),
+            Route::Root(Tab::Activity) => activity_screen(&theme, &snap),
+            Route::Root(Tab::Profile) => profile_screen(&theme, &snap),
+            _ => simple_screen(&theme, "3", "Detail route"),
         };
         Container::new().color(theme.colors.surface).child(
-            Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch)
+            Flex::column()
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .push(Flexible::expanded(1).child(body))
-                .push(navbar(&theme,&snap,handle))
+                .push(navbar(&theme, &snap, handle)),
         )
     }
 }
 
 // ── the screens ─────────────────────────────────────────────────────────────
 
-fn home_screen(theme:&ThemeData,snap:&Snapshot,handle:Option<Handle>)->WidgetNode{
-    let toggle=handle.clone();
-    let label=if snap.feed==HomeFeed::ForYou{"For You"}else{"Following"};
-    let header=Flex::row().main_axis_alignment(MainAxisAlignment::SpaceBetween)
+fn home_screen(theme: &ThemeData, snap: &Snapshot, handle: Option<Handle>) -> WidgetNode {
+    let toggle = handle.clone();
+    let label = if snap.feed == HomeFeed::ForYou {
+        "For You"
+    } else {
+        "Following"
+    };
+    let header = Flex::row()
+        .main_axis_alignment(MainAxisAlignment::SpaceBetween)
         .push(Text::new("3").style(theme.text.title).size(28.0).bold())
-        .push(Button::new(label).on_pressed(move||{if let Some(h)=&toggle{h.write(|s|s.toggle_feed())}}));
+        .push(Button::new(label).on_pressed(move || {
+            if let Some(h) = &toggle {
+                h.write(|s| s.toggle_feed())
+            }
+        }));
 
     // The moment card: author, caption, the capture itself and the action
     // row travel together on one raised surface. A feed post is *one thing*;
@@ -368,363 +622,845 @@ fn home_screen(theme:&ThemeData,snap:&Snapshot,handle:Option<Handle>)->WidgetNod
     // the viewer's dark chamber bled straight into the surrounding surface
     // with nothing marking whose content it was. Same layout, one surface:
     // radius, fill, and the cast shadow that separates it from the page.
-    let card=if let Some(post)=snap.posts.first(){
-        let like=handle.clone(); let id=post.id.clone();
-        Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0)
-            .push(Text::new(format!("@{}",post.author.0)).style(theme.text.label).color(theme.colors.primary).bold())
+    let card = if let Some(post) = snap.posts.first() {
+        let like = handle.clone();
+        let id = post.id.clone();
+        Flex::column()
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .spacing(10.0)
+            .push(
+                Text::new(format!("@{}", post.author.0))
+                    .style(theme.text.label)
+                    .color(theme.colors.primary)
+                    .bold(),
+            )
             .push(Text::new(post.caption.clone()).style(theme.text.body))
-            .push(Flexible::expanded(1).child(ViewerScreen{capture:Rc::new(demo_capture())}))
-            .push(Flex::row().spacing(8.0)
-                .push(Button::new(format!("♥ {}",post.likes)).on_pressed(move||{if let Some(h)=&like{h.write(|s|s.like(&id))}}))
-                .push(Button::new(format!("Comment {}",post.comments)))
-                .push(Button::new("Remix"))
-                .push(Button::new("Share")))
-    }else{
+            .push(Flexible::expanded(1).child(ViewerScreen {
+                capture: feed_media(snap),
+            }))
+            .push(
+                Flex::row()
+                    .spacing(8.0)
+                    .push(
+                        Button::new(format!("♥ {}", post.likes)).on_pressed(move || {
+                            if let Some(h) = &like {
+                                h.write(|s| s.like(&id))
+                            }
+                        }),
+                    )
+                    .push(Button::new(format!("Comment {}", post.comments)))
+                    .push(Button::new("Remix"))
+                    .push(Button::new("Share")),
+            )
+    } else {
         Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch)
     };
-    let card=Container::new()
+    let card = Container::new()
         .color(theme.colors.surface_variant)
         .radius(18.0)
-        .shadow(Shadow::new(Color::rgba(0,0,0,110),Offset::new(0.0,12.0),32.0))
+        .shadow(Shadow::new(
+            Color::rgba(0, 0, 0, 110),
+            Offset::new(0.0, 12.0),
+            32.0,
+        ))
         .padding(EdgeInsets::all(12.0))
         .child(card);
 
-    Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(12.0)
+    Flex::column()
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .spacing(12.0)
         .push(header)
         .push(Flexible::expanded(1).child(card))
         .into()
+}
+
+/// The feed card's media: the first post's asset, opened lazily the way
+/// a downloaded asset is. Falls back to the deterministic sample when the
+/// feed is somehow empty, so the card never mounts a blank chamber.
+fn feed_media(snap: &Snapshot) -> Rc<LazyCapture> {
+    match (&snap.media, snap.posts.first()) {
+        (Some(media), Some(_)) => Rc::clone(media),
+        _ => Rc::new(
+            LazyCapture::open(three_runtime::save(&sample_capture()).expect("sample encodes"))
+                .expect("sample opens"),
+        ),
+    }
 }
 
 /// Explore: a live search field over the backend's own people, each card
 /// carrying a Follow button wired through the product state. The list the
 /// field filters is `search_profiles`' actual answer — the same call the
 /// networked client makes.
-fn explore_screen(theme:&ThemeData,snap:&Snapshot,handle:Option<Handle>)->WidgetNode{
-    let on_search=handle.clone();
-    let field=Container::new()
+fn explore_screen(theme: &ThemeData, snap: &Snapshot, handle: Option<Handle>) -> WidgetNode {
+    let on_search = handle.clone();
+    let field = Container::new()
         .color(theme.colors.surface_variant)
         .radius(f32::MAX)
-        .padding(EdgeInsets::symmetric(6.0,4.0))
+        .padding(EdgeInsets::symmetric(6.0, 4.0))
         .child(
-            Flex::row().cross_axis_alignment(CrossAxisAlignment::Center).spacing(8.0)
-                .push(Icon::new(icons::search()).size(17.0).color(theme.colors.on_surface_variant))
-                .push(Flexible::expanded(1).child(
-                    TextField::text(snap.search.clone())
-                        .placeholder("Search people")
-                        .placeholder_color(theme.colors.on_surface_variant)
-                        .color(theme.colors.on_surface)
-                        .cursor(theme.colors.primary,2.0)
-                        .single_line()
-                        .on_changed(Rc::new(move|value:TextEditingValue|{
-                            if let Some(h)=&on_search{h.write(|s|s.set_search(value.text));}
-                        })),
-                )),
+            Flex::row()
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .spacing(8.0)
+                .push(
+                    Icon::new(icons::search())
+                        .size(17.0)
+                        .color(theme.colors.on_surface_variant),
+                )
+                .push(
+                    Flexible::expanded(1).child(
+                        TextField::text(snap.search.clone())
+                            .placeholder("Search people")
+                            .placeholder_color(theme.colors.on_surface_variant)
+                            .color(theme.colors.on_surface)
+                            .cursor(theme.colors.primary, 2.0)
+                            .single_line()
+                            .on_changed(Rc::new(move |value: TextEditingValue| {
+                                if let Some(h) = &on_search {
+                                    h.write(|s| s.set_search(value.text));
+                                }
+                            })),
+                    ),
+                ),
         );
 
-    let q=snap.search.trim().to_lowercase();
-    let people:Vec<&Profile>=snap.people.iter()
-        .filter(|p|p.id.0!="teja")
-        .filter(|p|q.is_empty()||p.handle.to_lowercase().contains(&q)||p.display_name.to_lowercase().contains(&q))
+    let q = snap.search.trim().to_lowercase();
+    let people: Vec<&Profile> = snap
+        .people
+        .iter()
+        .filter(|p| p.id.0 != "teja")
+        .filter(|p| {
+            q.is_empty()
+                || p.handle.to_lowercase().contains(&q)
+                || p.display_name.to_lowercase().contains(&q)
+        })
         .collect();
 
-    let mut body:Vec<WidgetNode>=vec![Text::new("People").style(theme.text.title).bold().into()];
-    if people.is_empty(){
-        body.push(Text::new("No one by that name yet.").style(theme.text.body).color(theme.colors.on_surface_variant).into());
+    let mut body: Vec<WidgetNode> = vec![Text::new("People").style(theme.text.title).bold().into()];
+    if people.is_empty() {
+        body.push(
+            Text::new("No one by that name yet.")
+                .style(theme.text.body)
+                .color(theme.colors.on_surface_variant)
+                .into(),
+        );
     }
-    for person in people{
-        let follow=handle.clone();
-        let id=person.id.clone();
-        let is_following=snap.following.iter().any(|f|f==&id);
-        let initials: String=person.display_name.split_whitespace().take(2)
-            .filter_map(|w|w.chars().next()).flat_map(char::to_uppercase).collect();
-        body.push(person_card(theme,person,&initials,is_following,move||{
-            if let Some(h)=&follow{h.write(|s|s.follow(&id));}
-        }));
+    for person in people {
+        let follow = handle.clone();
+        let id = person.id.clone();
+        let is_following = snap.following.iter().any(|f| f == &id);
+        let initials: String = person
+            .display_name
+            .split_whitespace()
+            .take(2)
+            .filter_map(|w| w.chars().next())
+            .flat_map(char::to_uppercase)
+            .collect();
+        body.push(person_card(
+            theme,
+            person,
+            &initials,
+            is_following,
+            move || {
+                if let Some(h) = &follow {
+                    h.write(|s| s.follow(&id));
+                }
+            },
+        ));
     }
 
-    Container::new().padding(EdgeInsets::all(20.0)).child(
-        Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(12.0)
-            .push(field)
-            .push(Flexible::expanded(1).child(
-                Scrollable::vertical(0.0).child(
-                    Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0)
-                        .children(body),
+    Container::new()
+        .padding(EdgeInsets::all(20.0))
+        .child(
+            Flex::column()
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .spacing(12.0)
+                .push(field)
+                .push(
+                    Flexible::expanded(1).child(
+                        Scrollable::vertical(0.0).child(
+                            Flex::column()
+                                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                                .spacing(10.0)
+                                .children(body),
+                        ),
+                    ),
                 ),
-            )),
-    ).into()
+        )
+        .into()
 }
 
 /// One person in Explore: an avatar disc carrying the person's own accent,
 /// their name and handle, and the follow control.
-fn person_card(theme:&ThemeData,person:&Profile,initials:&str,following:bool,on_follow:impl Fn()+'static)->WidgetNode{
-    let avatar=Container::new()
-        .size(46.0,46.0)
+fn person_card(
+    theme: &ThemeData,
+    person: &Profile,
+    initials: &str,
+    following: bool,
+    on_follow: impl Fn() + 'static,
+) -> WidgetNode {
+    let avatar = Container::new()
+        .size(46.0, 46.0)
         .radius(f32::MAX)
         .gradient(accent_for(&person.handle))
         .alignment(Alignment::CENTER)
-        .child(Text::new(initials.to_string()).color(Color::WHITE).size(15.0).bold());
+        .child(
+            Text::new(initials.to_string())
+                .color(Color::WHITE)
+                .size(15.0)
+                .bold(),
+        );
 
-    let names=Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(1.0)
-        .push(Text::new(person.display_name.clone()).style(theme.text.body).bold())
-        .push(Text::new(format!("{} · {} followers",person.handle,person.followers)).style(theme.text.label).color(theme.colors.on_surface_variant));
+    let names = Flex::column()
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .spacing(1.0)
+        .push(
+            Text::new(person.display_name.clone())
+                .style(theme.text.body)
+                .bold(),
+        )
+        .push(
+            Text::new(format!(
+                "{} · {} followers",
+                person.handle, person.followers
+            ))
+            .style(theme.text.label)
+            .color(theme.colors.on_surface_variant),
+        );
 
-    let button=if following{
+    let button = if following {
         Button::new("Following")
-    }else{
+    } else {
         Button::new("Follow").style(ButtonStyle::Filled)
     };
-    let button=button.on_pressed(on_follow);
+    let button = button.on_pressed(on_follow);
 
     Container::new()
         .color(theme.colors.surface_variant)
         .radius(16.0)
-        .padding(EdgeInsets::symmetric(12.0,10.0))
-        .child(Flex::row().cross_axis_alignment(CrossAxisAlignment::Center).spacing(12.0)
-            .push(avatar)
-            .push(Flexible::expanded(1).child(names))
-            .push(button))
+        .padding(EdgeInsets::symmetric(12.0, 10.0))
+        .child(
+            Flex::row()
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .spacing(12.0)
+                .push(avatar)
+                .push(Flexible::expanded(1).child(names))
+                .push(button),
+        )
         .into()
 }
 
 /// A stable per-person accent: the theme's primary hue rotated by a hash of
 /// the handle, so a feed of people is a feed of distinguishable people
 /// without inventing a colour system the theme does not carry.
-fn accent_for(handle:&str)->Gradient{
-    let hash=handle.bytes().fold(0x811c9dc5u32,|h,b|(h^b as u32).wrapping_mul(0x01000193));
-    let hue=(hash%360) as f32;
-    let top=hsl(hue,0.62,0.62);
-    let bottom=hsl(hue+34.0,0.66,0.42);
-    Gradient::linear(Offset::new(0.5,0.0),Offset::new(0.5,1.0))
-        .with_stops(&[(0.0,top),(1.0,bottom)])
+fn accent_for(handle: &str) -> Gradient {
+    let hash = handle.bytes().fold(0x811c9dc5u32, |h, b| {
+        (h ^ b as u32).wrapping_mul(0x01000193)
+    });
+    let hue = (hash % 360) as f32;
+    let top = hsl(hue, 0.62, 0.62);
+    let bottom = hsl(hue + 34.0, 0.66, 0.42);
+    Gradient::linear(Offset::new(0.5, 0.0), Offset::new(0.5, 1.0))
+        .with_stops(&[(0.0, top), (1.0, bottom)])
 }
 
 /// HSL → RGB, the one colour helper this shell needs. The framework's `Color`
 /// takes components; it does not take a wheel position.
-fn hsl(hue:f32,saturation:f32,lightness:f32)->Color{
-    let h=((hue%360.0)+360.0)%360.0/360.0;
-    let s=saturation.clamp(0.0,1.0);
-    let l=lightness.clamp(0.0,1.0);
-    let c=(1.0-(2.0*l-1.0).abs())*s;
-    let x=c*(1.0-((h*6.0)%2.0-1.0).abs());
-    let m=l-c*0.5;
-    let (r,g,b)=match (h*6.0) as u32{
-        0=>(c,x,0.0),1=>(x,c,0.0),2=>(0.0,c,x),
-        3=>(0.0,x,c),4=>(x,0.0,c),_=>(c,0.0,x),
+fn hsl(hue: f32, saturation: f32, lightness: f32) -> Color {
+    let h = ((hue % 360.0) + 360.0) % 360.0 / 360.0;
+    let s = saturation.clamp(0.0, 1.0);
+    let l = lightness.clamp(0.0, 1.0);
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
+    let m = l - c * 0.5;
+    let (r, g, b) = match (h * 6.0) as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
     };
-    Color::rgb(((r+m)*255.0) as u8,((g+m)*255.0) as u8,((b+m)*255.0) as u8)
+    Color::rgb(
+        ((r + m) * 255.0) as u8,
+        ((g + m) * 255.0) as u8,
+        ((b + m) * 255.0) as u8,
+    )
 }
 
 /// Create: the pipeline as a timeline — six numbered stages, joined by a
-/// spine, the first active when a capture is actually in flight.
-fn create_screen(theme:&ThemeData,capturing:bool,handle:Option<Handle>)->WidgetNode{
-    const STEPS:[(&str,&str);6]=[
-        ("Capture","A slow orbit around the subject — the phone is the scanner."),
-        ("Reconstruct","Frames become a mesh per instant, in the .3 container."),
-        ("Preview","Turn it, light it, decide it is worth keeping."),
-        ("Caption","Say what the moment was, not what the file is."),
-        ("Privacy","Public, followers, or private — per moment, forever."),
-        ("Publish","It lands in the feed as a moment, not as a photo."),
-    ];
-
-    let mut rows:Vec<WidgetNode>=vec![Text::new("Create").style(theme.text.title).bold().into()];
-    for (index,(name,blurb)) in STEPS.iter().enumerate(){
-        let active=capturing&&index==0;
-        let disc=Container::new()
-            .size(30.0,30.0)
-            .radius(f32::MAX)
-            .color(if active{theme.colors.primary}else{theme.colors.surface_variant})
-            .alignment(Alignment::CENTER)
-            .child(Text::new((index+1).to_string()).size(13.0).bold()
-                .color(if active{theme.colors.on_primary}else{theme.colors.on_surface_variant}));
-        let row=Flex::row().cross_axis_alignment(CrossAxisAlignment::Center).spacing(12.0)
-            .push(disc)
-            .push(Flexible::expanded(1).child(
-                Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(1.0)
-                    .push(Text::new(name.to_string()).style(theme.text.body).bold()
-                        .color(if active{theme.colors.on_surface}else{theme.colors.on_surface_variant}))
-                    .push(Text::new(blurb.to_string()).style(theme.text.label).color(theme.colors.on_surface_variant)),
-            ));
-        rows.push(Container::new().padding(EdgeInsets::only(0.0,6.0,0.0,6.0)).child(row).into());
-    }
-
-    let begin=handle.clone();
-    let action=if capturing{
-        Button::new("Discard this capture").on_pressed(move||{if let Some(h)=&begin{h.write(|s|s.discard_composer());}})
-    }else{
-        Button::new("Begin a capture").style(ButtonStyle::Filled).on_pressed(move||{if let Some(h)=&begin{h.write(|s|s.begin_create());}})
+/// Create: the camera, honestly. One button records a three-second moment
+/// through the platform's depth-video source; the progress line is the
+/// recording's own numbers; failure names its reason. On a build with no
+/// camera wired (a desktop run), the state says so and the sample moment
+/// is the dev path — the feed's content pipeline is identical either way,
+/// which is the point of the trait boundary.
+fn create_screen(theme: &ThemeData, snap: &Snapshot, handle: Option<Handle>) -> WidgetNode {
+    // The recording's own numbers, read from the live state.
+    let (recording, progress) = match &snap.capture {
+        CaptureRead::Recording { frames, progress } => (Some(*frames), *progress),
+        _ => (None, 0.0),
     };
 
-    Container::new().padding(EdgeInsets::all(20.0)).child(
-        Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0)
-            .push(Text::new(if capturing{"Capture in flight"}else{"A moment, start to finish"}).style(theme.text.label).color(theme.colors.primary).bold())
-            .push(Flexible::expanded(1).child(
-                Scrollable::vertical(0.0).child(
-                    Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(6.0)
-                        .children(rows),
+    let mut column: Vec<WidgetNode> = vec![
+        Text::new("Create").style(theme.text.title).bold().into(),
+        Text::new("A real moment, in depth — the camera records video and the depth the hardware measures with it.")
+            .style(theme.text.body)
+            .into(),
+    ];
+
+    match &snap.capture {
+        CaptureRead::NoSource => {
+            column.push(
+                Text::new("No camera on this build — run it on a phone to record. The dev path below publishes the same container.")
+                    .style(theme.text.label)
+                    .color(theme.colors.on_surface_variant)
+                    .into(),
+            );
+        }
+        CaptureRead::Idle => {
+            column.push(
+                Text::new(
+                    "Three seconds, 24 fps. The subject at arm's length; the depth does the rest.",
+                )
+                .style(theme.text.label)
+                .color(theme.colors.on_surface_variant)
+                .into(),
+            );
+        }
+        CaptureRead::Recording { .. } => {
+            column.push(
+                Text::new(format!(
+                    "Recording… {} frames ({:.0}%)",
+                    recording.unwrap_or(0),
+                    progress * 100.0
+                ))
+                .style(theme.text.label)
+                .color(theme.colors.primary)
+                .bold()
+                .into(),
+            );
+            // The progress as an honest bar: a track plus a fill.
+            column.push(
+                Container::new()
+                    .height(8.0)
+                    .radius(f32::MAX)
+                    .color(theme.colors.surface_variant)
+                    .alignment(Alignment::CENTER_LEFT)
+                    .child(
+                        Container::new()
+                            .height(8.0)
+                            .width((progress * 100.0).clamp(1.0, 100.0))
+                            .radius(f32::MAX)
+                            .color(theme.colors.primary),
+                    )
+                    .into(),
+            );
+        }
+        CaptureRead::Failed(reason) => {
+            column.push(
+                Text::new(format!("The camera declined: {reason}"))
+                    .style(theme.text.label)
+                    .color(theme.colors.error)
+                    .into(),
+            );
+        }
+    }
+
+    // The composer route shows the caption/publish flow once a capture is
+    // attached; the Create tab is the camera.
+    let body = if matches!(snap.route, Route::Composer) {
+        composer_screen(theme, snap, handle.clone())
+    } else {
+        let mut rows = column;
+        let actions = create_actions(theme, snap, handle.clone());
+        rows.push(Flexible::expanded(1).child(SizedBox::new()).into());
+        rows.push(actions);
+        Flex::column()
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .spacing(10.0)
+            .children(rows)
+            .into()
+    };
+    Container::new()
+        .padding(EdgeInsets::all(20.0))
+        .child(body)
+        .into()
+}
+
+/// The Create tab's buttons: what can be done right now.
+fn create_actions(theme: &ThemeData, snap: &Snapshot, handle: Option<Handle>) -> WidgetNode {
+    let record = handle.clone();
+    let sample = handle.clone();
+    let mut row = Flex::row().spacing(8.0);
+
+    match &snap.capture {
+        CaptureRead::Idle | CaptureRead::Failed(_) => {
+            row = row.push(
+                Flexible::expanded(1).child(
+                    Button::new("Record a moment")
+                        .style(ButtonStyle::Filled)
+                        .on_pressed(move || {
+                            if let Some(h) = &record {
+                                h.write(|s| s.start_recording());
+                            }
+                        }),
                 ),
-            ))
-            .push(action),
-    ).into()
+            );
+        }
+        CaptureRead::Recording { .. } => {
+            row = row.push(
+                Flexible::expanded(1).child(Button::new("Recording…").style(ButtonStyle::Text)),
+            );
+        }
+        CaptureRead::NoSource => {}
+    }
+
+    row = row.push(
+        Flexible::expanded(1).child(
+            Button::new("Use the sample moment")
+                .style(ButtonStyle::Text)
+                .on_pressed(move || {
+                    if let Some(h) = &sample {
+                        h.write(|s| {
+                            if let Err(error) = s.app.attach_capture(&sample_capture()) {
+                                s.capture = CapturePhase::Failed(format!("{error:?}"));
+                            } else {
+                                s.route_to_composer();
+                            }
+                            s.pending = true;
+                        });
+                    }
+                }),
+        ),
+    );
+
+    let _ = theme;
+    row.into()
+}
+
+/// The composer: caption and publish for an attached capture.
+fn composer_screen(theme: &ThemeData, snap: &Snapshot, handle: Option<Handle>) -> WidgetNode {
+    let publish = handle.clone();
+    let caption = handle.clone();
+    let discard = handle.clone();
+
+    let attached = snap.composer_attached;
+
+    let mut rows: Vec<WidgetNode> = vec![
+        Text::new("Your moment")
+            .style(theme.text.title)
+            .bold()
+            .into(),
+        Text::new(if attached {
+            format!(
+                "Attached: {} — the moment is ready to publish",
+                snap.composer_title
+            )
+        } else {
+            "Nothing attached — record or use the sample first.".into()
+        })
+        .style(theme.text.label)
+        .color(theme.colors.on_surface_variant)
+        .into(),
+    ];
+
+    let field = Container::new()
+        .color(theme.colors.surface_variant)
+        .radius(12.0)
+        .padding(EdgeInsets::all(12.0))
+        .child(
+            TextField::text(snap.composer_caption.clone())
+                .placeholder("Say what the moment was…")
+                .placeholder_color(theme.colors.on_surface_variant)
+                .color(theme.colors.on_surface)
+                .cursor(theme.colors.primary, 2.0)
+                .single_line()
+                .on_changed(Rc::new(move |value: TextEditingValue| {
+                    if let Some(h) = &caption {
+                        h.write(|s| {
+                            s.app.composer.caption = value.text;
+                            s.pending = true;
+                        });
+                    }
+                })),
+        );
+    rows.push(field.into());
+
+    let publish_button = Button::new("Publish")
+        .style(if attached {
+            ButtonStyle::Filled
+        } else {
+            ButtonStyle::Text
+        })
+        .on_pressed(move || {
+            if let Some(h) = &publish {
+                h.write(|s| {
+                    match s.app.publish_composer() {
+                        Ok(_) => {
+                            s.capture = CapturePhase::Idle;
+                        }
+                        Err(error) => {
+                            self_capture_failed(&mut s.capture, &error);
+                        }
+                    }
+                    s.pending = true;
+                });
+            }
+        });
+    let buttons = Flex::row()
+        .spacing(8.0)
+        .push(
+            Flexible::expanded(1).child(
+                Button::new("Discard")
+                    .style(ButtonStyle::Text)
+                    .on_pressed(move || {
+                        if let Some(h) = &discard {
+                            h.write(|s| s.discard_composer());
+                        }
+                    }),
+            ),
+        )
+        .push(Flexible::expanded(1).child(publish_button));
+    rows.push(buttons.into());
+
+    Container::new()
+        .padding(EdgeInsets::all(20.0))
+        .child(
+            Flex::column()
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .spacing(12.0)
+                .children(rows),
+        )
+        .into()
 }
 
 /// Activity: the backend's own notification feed, each act with its glyph and
 /// actor. Every row happened — see `seeded_app` for the acts that left them.
-fn activity_screen(theme:&ThemeData,snap:&Snapshot)->WidgetNode{
-    let mut rows:Vec<WidgetNode>=vec![Text::new("Activity").style(theme.text.title).bold().into()];
+fn activity_screen(theme: &ThemeData, snap: &Snapshot) -> WidgetNode {
+    let mut rows: Vec<WidgetNode> =
+        vec![Text::new("Activity").style(theme.text.title).bold().into()];
 
-    if snap.activity.is_empty(){
+    if snap.activity.is_empty() {
         rows.push(Text::new("Likes, comments, follows and remixes land here — the moment you publish, so does the first one.")
             .style(theme.text.body).color(theme.colors.on_surface_variant).into());
     }
-    for item in &snap.activity{
-        let (glyph,tint)=match item.kind{
-            NotificationKind::Like{..}=>(icons::heart(),theme.colors.primary),
-            NotificationKind::Comment{..}=>(icons::comment(),theme.colors.primary),
-            NotificationKind::Follow{..}=>(icons::person(),theme.colors.primary),
-            NotificationKind::Remix{..}=>(icons::cube(),theme.colors.primary),
+    for item in &snap.activity {
+        let (glyph, tint) = match item.kind {
+            NotificationKind::Like { .. } => (icons::heart(), theme.colors.primary),
+            NotificationKind::Comment { .. } => (icons::comment(), theme.colors.primary),
+            NotificationKind::Follow { .. } => (icons::person(), theme.colors.primary),
+            NotificationKind::Remix { .. } => (icons::cube(), theme.colors.primary),
         };
-        let disc=Container::new()
-            .size(36.0,36.0)
+        let disc = Container::new()
+            .size(36.0, 36.0)
             .radius(f32::MAX)
             .color(theme.colors.surface_variant)
             .alignment(Alignment::CENTER)
             .child(Icon::new(glyph).size(16.0).color(tint));
 
-        let mut line=Flex::row().cross_axis_alignment(CrossAxisAlignment::Center).spacing(10.0)
+        let mut line = Flex::row()
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .spacing(10.0)
             .push(disc)
-            .push(Flexible::expanded(1).child(
-                Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(1.0)
-                    .push(Flex::row().cross_axis_alignment(CrossAxisAlignment::Baseline).spacing(6.0)
-                        .push(Text::new(item.actor.clone()).style(theme.text.body).bold())
-                        .push(Text::new(item.actor_handle.clone()).style(theme.text.label).color(theme.colors.on_surface_variant)))
-                    .push(Text::new(item.verb.clone()).style(theme.text.label).color(theme.colors.on_surface_variant)),
-            ));
-        if item.unread{
-            line=line.push(Container::new().size(8.0,8.0).radius(f32::MAX).color(theme.colors.primary));
+            .push(
+                Flexible::expanded(1).child(
+                    Flex::column()
+                        .cross_axis_alignment(CrossAxisAlignment::Start)
+                        .spacing(1.0)
+                        .push(
+                            Flex::row()
+                                .cross_axis_alignment(CrossAxisAlignment::Baseline)
+                                .spacing(6.0)
+                                .push(Text::new(item.actor.clone()).style(theme.text.body).bold())
+                                .push(
+                                    Text::new(item.actor_handle.clone())
+                                        .style(theme.text.label)
+                                        .color(theme.colors.on_surface_variant),
+                                ),
+                        )
+                        .push(
+                            Text::new(item.verb.clone())
+                                .style(theme.text.label)
+                                .color(theme.colors.on_surface_variant),
+                        ),
+                ),
+            );
+        if item.unread {
+            line = line.push(
+                Container::new()
+                    .size(8.0, 8.0)
+                    .radius(f32::MAX)
+                    .color(theme.colors.primary),
+            );
         }
         rows.push(
-            Container::new().color(theme.colors.surface_variant).radius(16.0)
-                .padding(EdgeInsets::symmetric(12.0,10.0))
-                .child(line).into(),
+            Container::new()
+                .color(theme.colors.surface_variant)
+                .radius(16.0)
+                .padding(EdgeInsets::symmetric(12.0, 10.0))
+                .child(line)
+                .into(),
         );
     }
 
-    Container::new().padding(EdgeInsets::all(20.0)).child(
-        Scrollable::vertical(0.0).child(
-            Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0)
-                .children(rows),
-        ),
-    ).into()
+    Container::new()
+        .padding(EdgeInsets::all(20.0))
+        .child(
+            Scrollable::vertical(0.0).child(
+                Flex::column()
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .spacing(10.0)
+                    .children(rows),
+            ),
+        )
+        .into()
 }
 
 /// Profile: the signed-in person, their numbers, and their moments as cards.
-fn profile_screen(theme:&ThemeData,snap:&Snapshot)->WidgetNode{
-    let me=&snap.me;
+fn profile_screen(theme: &ThemeData, snap: &Snapshot) -> WidgetNode {
+    let me = &snap.me;
 
-    let ring=Container::new()
-        .size(84.0,84.0)
+    let ring = Container::new()
+        .size(84.0, 84.0)
         .radius(f32::MAX)
-        .gradient(Gradient::linear(Offset::new(0.0,0.0),Offset::new(1.0,1.0)).with_stops(&[
-            (0.0,theme.colors.primary),
-            (1.0,hsl(210.0,0.7,0.6)),
-        ]))
+        .gradient(
+            Gradient::linear(Offset::new(0.0, 0.0), Offset::new(1.0, 1.0))
+                .with_stops(&[(0.0, theme.colors.primary), (1.0, hsl(210.0, 0.7, 0.6))]),
+        )
         .padding(EdgeInsets::all(3.0))
-        .child(Container::new().color(theme.colors.surface).radius(f32::MAX).padding(EdgeInsets::all(3.0))
-            .child(Container::new().size(72.0,72.0).radius(f32::MAX)
-                .color(theme.colors.surface_variant)
-                .alignment(Alignment::CENTER)
-                .child(Text::new("T".to_string()).size(28.0).bold().color(theme.colors.on_surface))));
+        .child(
+            Container::new()
+                .color(theme.colors.surface)
+                .radius(f32::MAX)
+                .padding(EdgeInsets::all(3.0))
+                .child(
+                    Container::new()
+                        .size(72.0, 72.0)
+                        .radius(f32::MAX)
+                        .color(theme.colors.surface_variant)
+                        .alignment(Alignment::CENTER)
+                        .child(
+                            Text::new("T".to_string())
+                                .size(28.0)
+                                .bold()
+                                .color(theme.colors.on_surface),
+                        ),
+                ),
+        );
 
-    let stat=|label:&str,value:&str|{
-        Flex::column().cross_axis_alignment(CrossAxisAlignment::Center).spacing(2.0)
-            .push(Text::new(value.to_string()).size(19.0).bold().color(theme.colors.on_surface))
-            .push(Text::new(label.to_string()).style(theme.text.label).color(theme.colors.on_surface_variant))
+    let stat = |label: &str, value: &str| {
+        Flex::column()
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .spacing(2.0)
+            .push(
+                Text::new(value.to_string())
+                    .size(19.0)
+                    .bold()
+                    .color(theme.colors.on_surface),
+            )
+            .push(
+                Text::new(label.to_string())
+                    .style(theme.text.label)
+                    .color(theme.colors.on_surface_variant),
+            )
     };
 
-    let header=Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(12.0)
-        .push(Flex::row().cross_axis_alignment(CrossAxisAlignment::Center).spacing(14.0)
-            .push(ring)
-            .push(Flexible::expanded(1).child(
-                Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(3.0)
-                    .push(Text::new(me.display_name.clone()).style(theme.text.title).bold())
-                    .push(Text::new(format!("@{}",me.handle)).style(theme.text.label).color(theme.colors.primary))
-                    .push(Text::new(me.bio.clone()).style(theme.text.body).color(theme.colors.on_surface_variant)),
-            )))
-        .push(Container::new().color(theme.colors.surface_variant).radius(16.0)
-            .padding(EdgeInsets::symmetric(8.0,12.0))
-            .child(Flex::row().main_axis_alignment(MainAxisAlignment::SpaceAround)
-                .push(stat("moments",&me.posts.to_string()))
-                .push(stat("followers",&me.followers.to_string()))
-                .push(stat("following",&me.following.to_string()))));
+    let header = Flex::column()
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .spacing(12.0)
+        .push(
+            Flex::row()
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .spacing(14.0)
+                .push(ring)
+                .push(
+                    Flexible::expanded(1).child(
+                        Flex::column()
+                            .cross_axis_alignment(CrossAxisAlignment::Start)
+                            .spacing(3.0)
+                            .push(
+                                Text::new(me.display_name.clone())
+                                    .style(theme.text.title)
+                                    .bold(),
+                            )
+                            .push(
+                                Text::new(format!("@{}", me.handle))
+                                    .style(theme.text.label)
+                                    .color(theme.colors.primary),
+                            )
+                            .push(
+                                Text::new(me.bio.clone())
+                                    .style(theme.text.body)
+                                    .color(theme.colors.on_surface_variant),
+                            ),
+                    ),
+                ),
+        )
+        .push(
+            Container::new()
+                .color(theme.colors.surface_variant)
+                .radius(16.0)
+                .padding(EdgeInsets::symmetric(8.0, 12.0))
+                .child(
+                    Flex::row()
+                        .main_axis_alignment(MainAxisAlignment::SpaceAround)
+                        .push(stat("moments", &me.posts.to_string()))
+                        .push(stat("followers", &me.followers.to_string()))
+                        .push(stat("following", &me.following.to_string())),
+                ),
+        );
 
-    let mut moments:Vec<WidgetNode>=vec![Text::new("Moments").style(theme.text.title).bold().into()];
-    for post in &snap.posts{
+    let mut moments: Vec<WidgetNode> =
+        vec![Text::new("Moments").style(theme.text.title).bold().into()];
+    for post in &snap.posts {
         moments.push(
-            Container::new().color(theme.colors.surface_variant).radius(16.0)
+            Container::new()
+                .color(theme.colors.surface_variant)
+                .radius(16.0)
                 .padding(EdgeInsets::all(12.0))
                 .child(
-                    Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(8.0)
-                        .push(Flex::row().cross_axis_alignment(CrossAxisAlignment::Center).spacing(8.0)
-                            .push(Icon::new(icons::cube()).size(15.0).color(theme.colors.primary))
-                            .push(Text::new("3.0s · .3 moment".to_string()).style(theme.text.label).color(theme.colors.on_surface_variant))
-                            .push(Flexible::expanded(1).child(SizedBox::new()))
-                            .push(Icon::new(icons::heart()).size(13.0).color(theme.colors.on_surface_variant))
-                            .push(Text::new(post.likes.to_string()).style(theme.text.label).color(theme.colors.on_surface_variant))
-                            .push(Icon::new(icons::comment()).size(13.0).color(theme.colors.on_surface_variant))
-                            .push(Text::new(post.comments.to_string()).style(theme.text.label).color(theme.colors.on_surface_variant)))
-                        .push(Text::new(post.caption.clone()).style(theme.text.body))
-                ).into(),
+                    Flex::column()
+                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                        .spacing(8.0)
+                        .push(
+                            Flex::row()
+                                .cross_axis_alignment(CrossAxisAlignment::Center)
+                                .spacing(8.0)
+                                .push(
+                                    Icon::new(icons::cube())
+                                        .size(15.0)
+                                        .color(theme.colors.primary),
+                                )
+                                .push(
+                                    Text::new("3.0s · .3 moment".to_string())
+                                        .style(theme.text.label)
+                                        .color(theme.colors.on_surface_variant),
+                                )
+                                .push(Flexible::expanded(1).child(SizedBox::new()))
+                                .push(
+                                    Icon::new(icons::heart())
+                                        .size(13.0)
+                                        .color(theme.colors.on_surface_variant),
+                                )
+                                .push(
+                                    Text::new(post.likes.to_string())
+                                        .style(theme.text.label)
+                                        .color(theme.colors.on_surface_variant),
+                                )
+                                .push(
+                                    Icon::new(icons::comment())
+                                        .size(13.0)
+                                        .color(theme.colors.on_surface_variant),
+                                )
+                                .push(
+                                    Text::new(post.comments.to_string())
+                                        .style(theme.text.label)
+                                        .color(theme.colors.on_surface_variant),
+                                ),
+                        )
+                        .push(Text::new(post.caption.clone()).style(theme.text.body)),
+                )
+                .into(),
         );
     }
-    if snap.posts.is_empty(){
-        moments.push(Text::new("Nothing published yet. The first orbit is one tap away.")
-            .style(theme.text.body).color(theme.colors.on_surface_variant).into());
+    if snap.posts.is_empty() {
+        moments.push(
+            Text::new("Nothing published yet. The first orbit is one tap away.")
+                .style(theme.text.body)
+                .color(theme.colors.on_surface_variant)
+                .into(),
+        );
     }
 
-    Container::new().padding(EdgeInsets::all(20.0)).child(
-        Scrollable::vertical(0.0).child(
-            Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(12.0)
-                .push(header)
-                .children(moments),
-        ),
-    ).into()
+    Container::new()
+        .padding(EdgeInsets::all(20.0))
+        .child(
+            Scrollable::vertical(0.0).child(
+                Flex::column()
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .spacing(12.0)
+                    .push(header)
+                    .children(moments),
+            ),
+        )
+        .into()
 }
 
-fn simple_screen(theme:&ThemeData,title:&str,subtitle:&str)->WidgetNode{
+fn simple_screen(theme: &ThemeData, title: &str, subtitle: &str) -> WidgetNode {
     // Kept for the detail routes the shell does not draw yet — a title, a
     // rule, a line, rather than a blank surface.
-    Container::new().padding(EdgeInsets::all(20.0)).child(Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(10.0)
-        .push(Text::new(title).style(theme.text.title).bold())
-        .push(Container::new().height(2.0).width(44.0).radius(f32::MAX).color(theme.colors.primary))
-        .push(Text::new(subtitle).style(theme.text.body).color(theme.colors.on_surface_variant))).into()
+    Container::new()
+        .padding(EdgeInsets::all(20.0))
+        .child(
+            Flex::column()
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .spacing(10.0)
+                .push(Text::new(title).style(theme.text.title).bold())
+                .push(
+                    Container::new()
+                        .height(2.0)
+                        .width(44.0)
+                        .radius(f32::MAX)
+                        .color(theme.colors.primary),
+                )
+                .push(
+                    Text::new(subtitle)
+                        .style(theme.text.body)
+                        .color(theme.colors.on_surface_variant),
+                ),
+        )
+        .into()
 }
-fn navbar(theme:&ThemeData,snap:&Snapshot,handle:Option<Handle>)->WidgetNode{
+fn navbar(theme: &ThemeData, snap: &Snapshot, handle: Option<Handle>) -> WidgetNode {
     // The bar sits on its own raised surface with a hairline above it, so
     // the content scrolls *under* something rather than into nothing. The
     // active tab is the filled one and the rest are text — the framework's
     // own button hierarchy doing the work the "•" bullet used to do alone.
-    let active=match &snap.route{Route::Root(t)=>Some(*t),_=>None};
-    let mut row=Flex::row().spacing(6.0);
-    for (tab,name) in [(Tab::Home,"Home"),(Tab::Explore,"Explore"),(Tab::Create,"Create"),(Tab::Activity,"Activity"),(Tab::Profile,"Profile")]{
-        let h=handle.clone();
-        let is_active=active==Some(tab);
-        let mut b=Button::new(name).on_pressed(move||{if let Some(h)=&h{h.write(|s|s.tab(tab))}});
-        b=if is_active{b.style(ButtonStyle::Filled)}else{b.style(ButtonStyle::Text)};
-        row=row.push(Flexible::expanded(1).child(b));
+    let active = match &snap.route {
+        Route::Root(t) => Some(*t),
+        _ => None,
+    };
+    let mut row = Flex::row().spacing(6.0);
+    for (tab, name) in [
+        (Tab::Home, "Home"),
+        (Tab::Explore, "Explore"),
+        (Tab::Create, "Create"),
+        (Tab::Activity, "Activity"),
+        (Tab::Profile, "Profile"),
+    ] {
+        let h = handle.clone();
+        let is_active = active == Some(tab);
+        let mut b = Button::new(name).on_pressed(move || {
+            if let Some(h) = &h {
+                h.write(|s| s.tab(tab))
+            }
+        });
+        b = if is_active {
+            b.style(ButtonStyle::Filled)
+        } else {
+            b.style(ButtonStyle::Text)
+        };
+        row = row.push(Flexible::expanded(1).child(b));
     }
     Container::new()
         .color(theme.colors.surface_variant)
         .border(Border::thin(theme.colors.outline))
-        .padding(EdgeInsets::symmetric(10.0,6.0))
-        .child(row).into()
+        .padding(EdgeInsets::symmetric(10.0, 6.0))
+        .child(row)
+        .into()
 }
 /// Desktop entry — the phone-shaped window the harness opens.
 ///
 /// Called from `src/main.rs`; kept here so the Android entry point below can
 /// share the exact same tree without duplicating the setup.
-pub fn run_desktop()->Result<(),Box<dyn std::error::Error>>{
-    let report=App::new().title("3 — social 3D").size(Size::new(480.0,860.0)).theme(ThemeData::dark()).run(|driver|driver.set_root(WidgetNode::new(SocialScreen)))?;
-    println!("{report}"); Ok(())
+pub fn run_desktop() -> Result<(), Box<dyn std::error::Error>> {
+    let report = App::new()
+        .title("3 — social 3D")
+        .size(Size::new(480.0, 860.0))
+        .theme(ThemeData::dark())
+        .run(|driver| driver.set_root(WidgetNode::new(SocialScreen)))?;
+    println!("{report}");
+    Ok(())
 }
 
 // ── Android entry point ─────────────────────────────────────────────────────
@@ -737,9 +1473,7 @@ pub fn run_desktop()->Result<(),Box<dyn std::error::Error>>{
 #[cfg(target_os = "android")]
 #[no_mangle]
 fn android_main(android: vieww_platform_winit::AndroidApp) {
-    let app = App::new()
-        .title("3 — social 3D")
-        .theme(ThemeData::dark());
+    let app = App::new().title("3 — social 3D").theme(ThemeData::dark());
 
     if let Err(error) = app.run_android(android, |driver| {
         driver.set_root(WidgetNode::new(SocialScreen));
@@ -762,10 +1496,13 @@ fn android_main(android: vieww_platform_winit::AndroidApp) {
 mod receipts {
     use super::*;
     use std::time::Duration;
-    use vieww_test_harness::TestHarness;
     use vieww_test_harness::visual;
+    use vieww_test_harness::TestHarness;
 
-    const WINDOW: Size = Size { width: 480.0, height: 860.0 };
+    const WINDOW: Size = Size {
+        width: 480.0,
+        height: 860.0,
+    };
     const OUT_DIR: &str = "target/screens";
 
     fn mounted_app() -> TestHarness {
@@ -784,7 +1521,9 @@ mod receipts {
                 .into_iter()
                 .find(|element| element.debug_name() == "SocialScreen")
                 .expect("the root screen is mounted");
-            root.state().expect("the screen owns a social state").clone()
+            root.state()
+                .expect("the screen owns a social state")
+                .clone()
         };
         let mut state = cell.borrow_mut();
         let social = state

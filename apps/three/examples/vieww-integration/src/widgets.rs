@@ -4,16 +4,14 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use three_core::Capture3D;
-use three_vieww::OrbitCamera;
+use three_format::LazyCapture;
+use three_vieww::RenderedFrame;
 
+use vieww::foundation::{BoxFit, Image as ImageData, Offset, ScrollEvent, Shadow};
 use vieww::prelude::*;
-use vieww::{DragDetails, ScaleDetails};
-use vieww::foundation::{Offset, ScrollEvent, Shadow};
+use vieww::{DragDetails, LongPressDetails, ScaleDetails};
 
-use crate::engine::EngineViewport;
-use crate::painter::{MeshPainter, ViewPalette};
-use crate::state::{PlaybackState, Snapshot};
+use crate::state::PlaybackState;
 
 /// The corner the media chamber and its frame share.
 const MEDIA_CORNER: f32 = 14.0;
@@ -51,22 +49,31 @@ impl StateHandle {
 
 impl fmt::Debug for StateHandle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Not the state's Debug: printing a capture's geometry into a tree
-        // dump would drown it. The type is what a dump needs to say.
-        f.write_str("StateHandle(<PlaybackState>)")
+        f.debug_struct("StateHandle(<PlaybackState>)").finish()
     }
 }
 
-/// The root screen: title, the 3D media surface, and the playback controls.
+/// The root screen: title, the depth-video surface, and the playback
+/// controls.
 ///
 /// The durable playback state lives on this widget's element; both the media
-/// view and the controls are rebuilt from a [`Snapshot`] of it on every frame
-/// that changes something. That is the Vieww shape for shared view state: one
-/// element owns it, and the children are pure descriptions of it.
-#[derive(Debug)]
+/// view and the controls are rebuilt from a render of it on every frame
+/// that changes something. That is the Vieww shape for shared view state:
+/// one element owns it, and the children are pure descriptions of it.
 pub struct ViewerScreen {
-    /// The capture being viewed, shared with the state and the painter.
-    pub capture: Rc<Capture3D>,
+    /// The capture being viewed, shared with the state.
+    pub capture: Rc<LazyCapture>,
+}
+
+impl fmt::Debug for ViewerScreen {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Not the capture's own Debug — its bytes would drown the dump. The
+        // title and frame count are what a dump needs.
+        f.debug_struct("ViewerScreen")
+            .field("title", &self.capture.meta().title)
+            .field("frames", &self.capture.meta().frame_count)
+            .finish()
+    }
 }
 
 #[widget]
@@ -77,9 +84,23 @@ impl ViewerScreen {
 
     fn build(&self, ctx: &BuildContext) -> impl Into<WidgetNode> {
         let theme = ThemeData::of(ctx);
-        let snapshot = ctx
-            .state::<PlaybackState, Snapshot>(Snapshot::from_state)
-            .unwrap_or_else(|| Snapshot::initial(&self.capture));
+        let (rendered, meta, controls) = ctx
+            .state::<PlaybackState, (RenderedFrame, three_format::CaptureMeta, ControlsData)>(
+                |state| {
+                    (
+                        state.rendered().clone(),
+                        state.view().meta().clone(),
+                        ControlsData::from_state(state),
+                    )
+                },
+            )
+            .unwrap_or_else(|| {
+                (
+                    RenderedFrame::blank(16, 12),
+                    self.capture.meta().clone(),
+                    ControlsData::unmounted(),
+                )
+            });
         let handle = ctx.state_handle().map(StateHandle::new);
 
         Container::new()
@@ -89,69 +110,63 @@ impl ViewerScreen {
                 Flex::column()
                     .cross_axis_alignment(CrossAxisAlignment::Stretch)
                     .spacing(12.0)
-                    .push(viewer_header(&theme, &snapshot))
+                    .push(viewer_header(&theme, &meta))
                     .push(Flexible::expanded(1).child(ThreeMediaView {
-                        mesh_index: snapshot.mesh_index,
-                        points_index: snapshot.points_index,
-                        camera: snapshot.camera,
-                        wireframe: snapshot.wireframe,
-                        show_points: snapshot.show_points,
-                        engine: snapshot.engine,
-                        capture: Rc::clone(&snapshot.capture),
-                        frame_count: snapshot.frame_count,
+                        rendered,
+                        frame_count: meta.frame_count,
                         handle: handle.clone(),
                     }))
-                    .push(ControlsBar {
-                        snapshot: snapshot.clone(),
-                        handle,
-                    }),
+                    .push(ControlsBar { controls, handle }),
             )
     }
 }
 
 /// The title row: capture name and a one-line description.
-fn viewer_header(theme: &ThemeData, snapshot: &Snapshot) -> WidgetNode {
-    let capture = &snapshot.capture;
-    let meta = if snapshot.frame_count > 0 {
-        format!(
-            "{} frames · {} · {} s",
-            snapshot.frame_count,
-            capture.source,
-            format_seconds(snapshot.duration_seconds)
-        )
-    } else {
-        "no spatial data".to_string()
-    };
+fn viewer_header(theme: &ThemeData, meta: &three_format::CaptureMeta) -> WidgetNode {
+    let meta_line = format!(
+        "{} frames · {} · {} s · depth: {}",
+        meta.frame_count,
+        meta.source,
+        meta.duration_ns as f32 / 1_000_000_000.0,
+        if meta.source.is_measured() {
+            "measured"
+        } else if meta.source == three_core::DepthSourceKind::None {
+            "none"
+        } else {
+            "generated"
+        },
+    );
 
     Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .spacing(2.0)
         .push(
-            Text::new(capture.title.clone())
+            Text::new(meta.title.clone())
                 .style(theme.text.title)
                 .max_lines(1),
         )
-        .push(Text::new(meta).style(theme.text.label).max_lines(1))
+        .push(Text::new(meta_line).style(theme.text.label).max_lines(1))
         .into()
 }
 
-/// The gesture-driven 3D surface.
+/// The gesture-driven depth-video surface.
 ///
-/// Everything drawn is decided by the fields — the widget itself holds no
-/// state that survives a rebuild. Drag orbits, scroll and pinch zoom, and the
-/// [`MeshPainter`] records the frame under the current camera when the
-/// `Painting` render leaf lays out.
+/// The pixels come from the state — the warp ran on the element's tick, on
+/// the frame clock, not during build — and this widget is only their
+/// description: an [`Image`](vieww::Image) fitted to the chamber, inside
+/// the gesture recognizer that drives the camera.
+///
+/// The gestures, and what each one means:
+///
+/// * **Pan** — orbit the virtual camera around the subject; the depth
+///   makes this a real re-photograph, with near geometry sweeping past far.
+/// * **Pinch** — dolly in and out *in depth*: closer is genuinely closer,
+///   the foreground overtaking the background as it would if you walked.
+/// * **Hold** — the recenter spring, returning the view to the one angle
+///   the footage was actually filmed from.
 #[derive(Debug)]
 pub struct ThreeMediaView {
-    pub capture: Rc<Capture3D>,
-    pub mesh_index: Option<usize>,
-    pub points_index: Option<usize>,
-    pub camera: OrbitCamera,
-    pub wireframe: bool,
-    pub show_points: bool,
-    /// Render through `vieww-3d` (the engine: depth buffer, lights,
-    /// shadows) rather than the painter. See `src/engine.rs`.
-    pub engine: bool,
+    pub rendered: RenderedFrame,
     pub frame_count: usize,
     handle: Option<StateHandle>,
 }
@@ -160,51 +175,29 @@ pub struct ThreeMediaView {
 impl ThreeMediaView {
     fn build(&self, ctx: &BuildContext) -> impl Into<WidgetNode> {
         let theme = ThemeData::of(ctx);
-        let palette = ViewPalette::from_theme(&theme);
+        let _ = theme;
 
-        // The media surface itself: the framework's 3D engine when the
-        // snapshot says so, this workspace's painter otherwise. Same
-        // gestures over either — the engine does not change how the viewer
-        // is driven, only who rasterises it.
-        let media: WidgetNode = if self.engine {
-            EngineViewport {
-                capture: Rc::clone(&self.capture),
-                mesh_index: self.mesh_index,
-                points_index: self.points_index,
-                camera: self.camera,
-                show_points: self.show_points,
-                palette,
-                fov_y: three_vieww::Perspective::default().fov_y,
-            }
-            .into()
-        } else {
-            let painter = MeshPainter {
-                capture: Rc::clone(&self.capture),
-                mesh_index: self.mesh_index,
-                points_index: self.points_index,
-                camera: self.camera,
-                wireframe: self.wireframe,
-                show_points: self.show_points,
-                palette,
-                shading: three_vieww::MeshShading::default(),
-                lens: three_vieww::Perspective::default(),
-            };
-            Painting::new(painter).into()
-        };
+        // The pixels as the framework's image type: shared, not copied —
+        // the render already lives on the element, the widget description
+        // only borrows it for this build.
+        let pixels = ImageData::from_shared_rgba8(
+            self.rendered.rgba.clone(),
+            self.rendered.width,
+            self.rendered.height,
+        );
+        let media: WidgetNode = vieww::prelude::Image::new(pixels)
+            .fit(BoxFit::Contain)
+            .label(format!(
+                "Depth video, {} frames. Pan to orbit, pinch to move in depth, hold to recenter.",
+                self.frame_count
+            ))
+            .into();
 
         let drag = self.handle.clone();
         let scroll = self.handle.clone();
         let pinch = self.handle.clone();
         let pinch_end = self.handle.clone();
-
-        // What a screen reader is told: the media itself, not the gestures.
-        // An ink rectangle with no text announces as nothing, so this label
-        // is the only way a reader knows a capture is even here.
-        let label = format!(
-            "Temporal 3D capture, {} frames, {:.1} seconds",
-            self.frame_count,
-            self.capture.duration_ns as f32 / 1_000_000_000.0
-        );
+        let hold = self.handle.clone();
 
         GestureDetector::new()
             .on_drag_update(move |details: DragDetails| {
@@ -227,174 +220,167 @@ impl ThreeMediaView {
                     handle.write(|state| state.pinch_end());
                 }
             })
+            // Hold: press without moving, and the view comes home.
+            .on_long_press(move |_: LongPressDetails| {
+                if let Some(handle) = &hold {
+                    handle.write(|state| state.hold());
+                }
+            })
             .child(
                 // The chamber, lifted: a shadow-casting frame *outside* the
                 // clip (a shadow drawn inside its own `Clip` is clipped to
                 // the very corner it is meant to soften). The capture is
                 // this screen's one subject, and on a flat surface colour the
-                // difference between "a viewport into a 3D scene" and "a
+                // difference between "a viewport into a moment" and "a
                 // rectangle of dark pixels" is exactly this lift.
                 Container::new()
+                    .color(vieww::foundation::Color::rgb(12, 14, 20))
                     .radius(MEDIA_CORNER)
                     .shadow(Shadow::new(
                         vieww::foundation::Color::rgba(0, 0, 0, 96),
                         Offset::new(0.0, 14.0),
                         36.0,
                     ))
-                    .child(
-                        Clip::rounded(MEDIA_CORNER)
-                            .child(Semantics::container(label).child(media)),
-                    ),
+                    .child(Clip::rounded(MEDIA_CORNER).child(media)),
             )
     }
 }
 
+/// What the controls bar needs to draw itself: an immutable read of the
+/// player, taken during a build.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ControlsData {
+    playing: bool,
+    looping: bool,
+    progress: f32,
+    time_seconds: f32,
+    duration_seconds: f32,
+}
+
+impl ControlsData {
+    fn from_state(state: &PlaybackState) -> Self {
+        let player = state.view().player();
+        Self {
+            playing: state.playing(),
+            looping: player.is_looping(),
+            progress: player.progress(),
+            time_seconds: player.time_ns() as f32 / 1_000_000_000.0,
+            duration_seconds: state.view().meta().duration_ns as f32 / 1_000_000_000.0,
+        }
+    }
+
+    /// The controls an unmounted tree draws — the fallback of a
+    /// `debug_tree` dump: honest zeros, no media.
+    fn unmounted() -> Self {
+        Self {
+            playing: false,
+            looping: true,
+            progress: 0.0,
+            time_seconds: 0.0,
+            duration_seconds: 0.0,
+        }
+    }
+}
+
 /// The playback controls: transport row, scrub slider, and the status line.
-///
-/// The status line doubles as the viewer's instrumentation in tests — the
-/// frame counter and camera readout are asserted on through the element
-/// tree's debug dump, which is cheaper and more honest than a screenshot.
 #[derive(Debug)]
 pub struct ControlsBar {
-    pub snapshot: Snapshot,
-    pub handle: Option<StateHandle>,
+    controls: ControlsData,
+    handle: Option<StateHandle>,
 }
 
 #[widget]
 impl ControlsBar {
     fn build(&self, ctx: &BuildContext) -> impl Into<WidgetNode> {
         let theme = ThemeData::of(ctx);
-        let snapshot = &self.snapshot;
 
         let play_pause = self.handle.clone();
-        let wireframe = self.handle.clone();
-        let motes = self.handle.clone();
         let looping = self.handle.clone();
-        let engine = self.handle.clone();
-        let reset = self.handle.clone();
+        let recenter = self.handle.clone();
         let scrub = self.handle.clone();
 
-        // Five toggles, each filling an equal slot of the transport row.
-        // Tight `Flexible::expanded` rather than natural-size buttons: a
-        // natural row of buttons overflows a 480 px window (the harness
-        // tests caught it as a `RenderRow` overflow before any human saw
-        // it), and equal-width transport buttons are what a media player's
-        // row looks like anyway. Labels stay short enough that the squeeze
-        // on a narrow window never has to wrap them.
-        //
-        // Hierarchy, not just equal slots: Play/Pause is the one action the
-        // thumb goes to every time, so it alone is `Filled` — the view-mode
-        // toggles beside it are `Text`, which reads as the secondary
-        // settings they are.
+        // Play/Pause is the one action the thumb goes to every time, so it
+        // alone is `Filled`; Recenter is the button form of the hold
+        // gesture; Loop is a setting. Equal-width transport slots keep the
+        // row inside a narrow window instead of overflowing it.
         let transport = Flex::row()
             .spacing(8.0)
-            .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.playing { "Pause" } else { "Play" })
+            .push(
+                Flexible::expanded(1).child(
+                    Button::new(if self.controls.playing {
+                        "Pause"
+                    } else {
+                        "Play"
+                    })
                     .style(ButtonStyle::Filled)
                     .on_pressed(move || {
                         if let Some(handle) = &play_pause {
                             handle.write(|state| state.toggle_play());
                         }
                     }),
-            ))
-            .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.wireframe { "Shaded" } else { "Wire" })
-                    .style(ButtonStyle::Text)
-                    .on_pressed(
-                        move || {
-                            if let Some(handle) = &wireframe {
-                                handle.write(|state| state.toggle_wireframe());
-                            }
-                        },
-                    ),
-            ))
-            .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.show_points { "Motes on" } else { "Motes off" })
-                    .style(ButtonStyle::Text)
-                    .on_pressed(
-                        move || {
-                            if let Some(handle) = &motes {
-                                handle.write(|state| state.toggle_points());
-                            }
-                        },
-                    ),
-            ))
-            .push(Flexible::expanded(1).child(
-                Button::new(if snapshot.looping { "Loop on" } else { "Loop off" })
-                    .style(ButtonStyle::Text)
-                    .on_pressed(
-                        move || {
-                            if let Some(handle) = &looping {
-                                handle.write(|state| state.set_looping(!state.view().is_looping()));
-                            }
-                        },
-                    ),
-            ))
-            .push(Flexible::expanded(1).child(
-                // The renderer itself, as a setting: vieww-3d's engine (depth
-                // buffer, lights, shadows) or this workspace's painter. The
-                // label names where a press goes, not where it is.
-                Button::new(if snapshot.engine { "Painter" } else { "Engine" })
+                ),
+            )
+            .push(
+                Flexible::expanded(1).child(
+                    Button::new(if self.controls.looping {
+                        "Loop on"
+                    } else {
+                        "Loop off"
+                    })
                     .style(ButtonStyle::Text)
                     .on_pressed(move || {
-                        if let Some(handle) = &engine {
-                            handle.write(|state| state.toggle_engine());
+                        if let Some(handle) = &looping {
+                            handle.write(|state| {
+                                state.set_looping(!state.view().player().is_looping())
+                            });
                         }
                     }),
-            ));
+                ),
+            )
+            .push(
+                Flexible::expanded(1).child(
+                    Button::new("Hold recentres")
+                        .style(ButtonStyle::Text)
+                        .on_pressed(move || {
+                            if let Some(handle) = &recenter {
+                                handle.write(|state| state.hold());
+                            }
+                        }),
+                ),
+            );
 
-        // The timeline: a fixed clock readout, a flexible scrub track, and
-        // the camera reset tucked at the end where a thumb rests.
+        // The timeline: a fixed clock readout and a flexible scrub track.
         let timeline = Flex::row()
             .spacing(10.0)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .push(
                 Text::new(format!(
-                    "{} / {}",
-                    format_seconds(snapshot.time_seconds),
-                    format_seconds(snapshot.duration_seconds)
+                    "{:.1} / {:.1} s",
+                    self.controls.time_seconds, self.controls.duration_seconds
                 ))
                 .style(theme.text.label),
             )
             .push(Flexible::expanded(1).child(
-                Slider::new(snapshot.progress.clamp(0.0, 1.0))
-                    .on_changed(Rc::new(move |progress: f32| {
+                Slider::new(self.controls.progress.clamp(0.0, 1.0)).on_changed(Rc::new(
+                    move |progress: f32| {
                         if let Some(handle) = &scrub {
                             handle.write(|state| state.scrub(progress));
                         }
-                    })),
-            ))
-            .push(Button::new("Reset view").on_pressed(move || {
-                if let Some(handle) = &reset {
-                    handle.write(|state| state.reset_camera());
-                }
-            }));
+                    },
+                )),
+            ));
 
-        let shown_frame = snapshot
-            .mesh_index
-            .map(|index| (index + 1).to_string())
-            .unwrap_or_else(|| "-".into());
-        let yaw_degrees = snapshot.camera.yaw * 180.0 / std::f32::consts::PI;
-        let pitch_degrees = snapshot.camera.pitch * 180.0 / std::f32::consts::PI;
-        let status = format!(
-            "frame {} / {} · cam {:.0}° / {:.0}° · {:.2} m",
-            shown_frame,
-            snapshot.frame_count,
-            yaw_degrees,
-            pitch_degrees,
-            snapshot.camera.distance
-        );
+        // The caption: what the gestures do, because no gesture explains
+        // itself on first use.
+        let caption = Text::new("Pan orbits · Pinch moves in depth · Hold recentres")
+            .style(theme.text.label)
+            .max_lines(1);
 
         Flex::column()
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .spacing(10.0)
             .push(transport)
             .push(timeline)
-            .push(Text::new(status).style(theme.text.label).max_lines(1))
+            .push(caption)
     }
-}
-
-/// Seconds as a media clock prints them: `1.4 s`, never `1.400000000 s`.
-fn format_seconds(seconds: f32) -> String {
-    format!("{seconds:.1} s")
 }
