@@ -162,6 +162,9 @@ impl DepthVideoSource for Box<dyn DepthVideoSource> {
 
 // ── platform backends ─────────────────────────────────────────────────────
 
+/// Pure depth-unit math the backends share — host-testable by design.
+mod depth;
+
 #[cfg(target_os = "android")]
 pub mod android;
 #[cfg(target_os = "android")]

@@ -22,28 +22,47 @@ vieww-platform-winit.workspace = true
 # The AVFoundation backend: objc2 rather than a hand-written objc_msgSend,
 # for the reason vieww's own iOS code gives: how a struct comes back from
 # one is ABI-dependent, and getting it wrong compiles cleanly and reads
-# garbage. Pinned to the versions `vieww-platform-winit` resolves for this
-# target; a second version would be a second, incompatible `UIView` type.
+# garbage. The versions must be exactly the ones objc2-av-foundation 0.3
+# resolves for this target (objc2 0.6, objc2-foundation 0.3): a second copy
+# of either would be a second, incompatible `NSString`/`Retained` type and
+# every protocol signature in this file would stop matching.
 [target.'cfg(target_os = "ios")'.dependencies]
-objc2 = "0.5"
-objc2-foundation = { version = "0.2", features = [
+objc2 = "0.6"
+objc2-core-foundation = "0.3"
+objc2-foundation = { version = "0.3", features = [
     "NSString",
     "NSArray",
     "NSDictionary",
+    "NSValue",
+    "NSObject",
     "NSError",
-    "NSProcessInfo",
 ] }
 objc2-av-foundation = { version = "0.3", features = [
     "AVCaptureDevice",
     "AVCaptureSession",
     "AVCaptureInput",
+    "AVCaptureOutputBase",
     "AVCaptureVideoDataOutput",
     "AVCaptureDepthDataOutput",
-    "AVCaptureOutputBase",
     "AVCaptureSessionPreset",
+    "AVDepthData",
+    "AVMediaFormat",
+    "objc2-core-media",
+    "dispatch2",
 ] }
-objc2-core-video = { version = "0.3", features = ["CVPixelBuffer"] }
-dispatch2 = "0.3"
+objc2-core-video = { version = "0.3", features = [
+    "CVBase",
+    "CVBuffer",
+    "CVImageBuffer",
+    "CVReturn",
+    "CVPixelBuffer",
+] }
+objc2-core-media = { version = "0.3", features = [
+    "CMSampleBuffer",
+    "CMTime",
+    "objc2-core-video",
+] }
+dispatch2 = { version = "0.3", features = ["alloc"] }
 
 [build-dependencies]
 # Compiles and dexes the camera2 Java shim at build time — the vavlt
