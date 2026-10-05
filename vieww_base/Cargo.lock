@@ -2373,7 +2373,10 @@ version = "0.1.0"
 dependencies = [
  "image",
  "vieww",
+ "vieww-3d",
  "vieww-animation",
+ "vieww-audio",
+ "vieww-dataviz",
  "vieww-effects",
  "vieww-foundation",
  "vieww-mesh",

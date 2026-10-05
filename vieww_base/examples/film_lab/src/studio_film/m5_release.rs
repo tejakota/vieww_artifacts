@@ -112,43 +112,102 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     // dissolve, and the transform continues instead of restarting.
     let panel_p = ease_in_out(clamp01(t / 0.9));
     let anchor = mark_anchor();
+    let side = anchor.width();
     let app_world = super::layout::APP;
-    let shrink = ease_in_out(clamp01(t / 0.88));
     let lerp = |a: f32, b: f32, u: f32| a + (b - a) * u;
-    let dst = Rect::new(
-        lerp(app_world.left, anchor.left, shrink),
-        lerp(app_world.top, anchor.top, shrink),
-        lerp(app_world.right, anchor.right, shrink),
-        lerp(app_world.bottom, anchor.bottom, shrink),
-    );
-    // The studio's fade is the mark's gain — a cross-dissolve at the
-    // same rect, the total light held. The plate is registered at every
-    // opacity, **including zero**: a studio scene that registers no plate
-    // at all gets the master's whole-window auto-plate, and this scene's
-    // studio being gone at its end is a choice, not an omission — the
-    // mark has taken its place.
-    let studio_a = 1.0 - ease_in_out(clamp01((t - 0.40) / 0.42));
+    let lerp_r = |a: Rect, b: Rect, u: f32| Rect::new(lerp(a.left, b.left, u), lerp(a.top, b.top, u), lerp(a.right, b.right, u), lerp(a.bottom, b.bottom, u));
+    // The mark's own geometry — `viewwstudio::ui::brand`'s panel
+    // fractions (x, y, w, h of the side), restated here because the
+    // module keeps them private; the final hand-off to the real
+    // `brand::revealed` below is what proves they agree.
+    let frac = |f: (f32, f32, f32, f32)| Rect::new(anchor.left + side * f.0, anchor.top + side * f.1, anchor.left + side * (f.0 + f.2), anchor.top + side * (f.1 + f.3));
+    let mark_editor = frac((0.16, 0.20, 0.40, 0.60));
+    let mark_preview = frac((0.44, 0.32, 0.40, 0.48));
+
+    // **1 · the window recedes** — whole, keeping its own proportions —
+    // until it is a little wider than the mark, centred where the mark
+    // will be.
+    let shrink = ease_in_out(clamp01(t / 0.46));
+    let (acx, acy) = ((anchor.left + anchor.right) * 0.5, (anchor.top + anchor.bottom) * 0.5);
+    let ww = side * 1.55;
+    let wh = ww * app_world.height() / app_world.width();
+    let small = Rect::new(acx - ww * 0.5, acy - wh * 0.5, acx + ww * 0.5, acy + wh * 0.5);
+    let window = lerp_r(app_world, small, shrink);
+    // Where a region of the app sits inside the collapsing window — the
+    // plate maps the app by the window's width, so the panes ride with it.
+    let k = window.width() / app_world.width();
+    let inside = |r: Rect| Rect::new(window.left + r.left * k, window.top + r.top * k, window.left + r.right * k, window.top + r.bottom * k);
+
+    // **2 · the two panes lift out of it and become the two panels.** The
+    // studio *is* the mark's picture — an editor beside a preview — so
+    // the editor pane reshapes into the mark's grey panel and the
+    // preview pane (the phone, still live) into its violet one, each
+    // travelling from where it sits in the window to where it sits in
+    // the logo. The window behind them dims into the mark's ground.
+    let split = ease_in_out(clamp01((t - 0.36) / 0.36));
+    let ed_dst = lerp_r(inside(super::m3_studio::app::EDITOR), mark_editor, split);
+    let pv_dst = lerp_r(inside(super::m3_studio::app::PREVIEW), mark_preview, split);
+    // The panes take the panels' solid faces as they land.
+    let solid = ease_in_out(clamp01((t - 0.62) / 0.14));
+    let window_a = 1.0 - ease_in_out(clamp01((t - 0.38) / 0.20));
+    let ground_a = ease_in_out(clamp01((t - 0.36) / 0.14));
+    // The ground is the window's own rectangle squaring up into the
+    // mark's rounded square while the panes leave it.
+    let ground = lerp_r(window, anchor, split);
+
     super::frame::plate(super::frame::Plate {
         src: super::layout::APP,
-        dst,
-        alpha: studio_a.max(0.0),
-        // The window's corners round into the mark's own as it
-        // collapses — 0.22 of a side is `brand::revealed`'s ground.
-        radius: lerp(14.0, anchor.width() * 0.22, shrink),
+        dst: window,
+        alpha: window_a.max(0.0),
+        radius: 14.0 * (1.0 - shrink) + side * 0.06 * shrink,
         snap: None,
         card: true,
         bare: false,
+        morph: None, stretch: false,
     });
+    // The mark's ground, under the panes (drawn beneath the plates), so
+    // the panes travel *over* it the way the panels sit on it.
+    if ground_a > 0.01 {
+        let g = ground;
+        super::frame::under(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+            let r = lerp(side * 0.06, side * 0.22, split);
+            book.rrect(g, r, Gradient::vertical().between(
+                pf::alpha(Color::rgb(0x24, 0x27, 0x2E), ground_a),
+                pf::alpha(viewwstudio::ui::brand::GROUND, ground_a),
+            ));
+            book.fill(vieww_foundation::Path::rounded_ring(g, r, 1.0), pf::alpha(Color::WHITE, 0.10 * ground_a));
+        }))));
+    }
+    let pane_a = 1.0 - clamp01((solid - 0.85) / 0.15);
+    if t > 0.34 && pane_a > 0.0 {
+        for (src, dst) in [(super::m3_studio::app::EDITOR, ed_dst), (super::m3_studio::app::PREVIEW, pv_dst)] {
+            super::frame::plate(super::frame::Plate {
+                src,
+                dst,
+                alpha: pane_a,
+                radius: lerp(4.0, side * 0.08, split),
+                snap: None,
+                card: split < 0.6,
+                bare: false,
+                morph: None, stretch: true,
+            });
+        }
+    }
+    // The panels' solid faces, over the landing panes.
+    if solid > 0.01 {
+        stack = stack.push(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+            book.rrect(ed_dst, side * 0.08, pf::alpha(viewwstudio::ui::brand::PANEL, solid));
+            book.rrect(pv_dst, side * 0.08, Gradient::vertical().between(
+                pf::alpha(viewwstudio::ui::brand::ACCENT_FAR, solid),
+                pf::alpha(viewwstudio::ui::brand::ACCENT, solid),
+            ));
+        }))));
+    }
 
-    // The mark, taking the studio's place panel by panel — the studio's
-    // own `brand::revealed`, so the film's logo and the product's cannot
-    // drift. It lands whole before the cut, and the end card receives it
-    // whole.
-    let mark_a = ease_out_expo(clamp01((t - 0.48) / 0.24));
-    let editor = ease_out_expo(clamp01((t - 0.55) / 0.18));
-    let preview = spring_out(clamp01((t - 0.70) / 0.18), 9.0, 0.62).clamp(0.0, 1.0);
+    // **3 · the hand-off.** The real `brand::revealed` takes over at the
+    // very same rect, whole — what Z21 receives across the cut.
+    let mark_a = ease_out_cubic(clamp01((t - 0.78) / 0.10));
     if mark_a > 0.01 {
-        let side = anchor.width();
         let at = Offset::new(anchor.left, anchor.top);
         stack = stack.push(
             Positioned::new()
@@ -156,9 +215,7 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
                 .top(at.dy)
                 .width(side)
                 .height(side)
-                .child(Opacity::new(mark_a).child(
-                    pf::brand_mark(side, editor, preview),
-                )),
+                .child(Opacity::new(mark_a).child(pf::brand_mark(side, 1.0, 1.0))),
         );
     }
 
@@ -395,7 +452,7 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
             Positioned::new().left(0.0).top(900.0).width(W).height(32.0).child(
                 Opacity::new(contract_a).child(
                     Text::new(format!(
-                        "every frame rendered by vieww — {} frames · {:.0} ms median",
+                        "every frame rendered by vieww — {} frames · {:.0} ms median · score synthesised by vieww-audio",
                         pf::group_commas(probe.frames),
                         probe.frame_ms
                     ))
@@ -542,7 +599,7 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
                 .height(32.0)
                 .child(
                     Text::new(format!(
-                        "every frame rendered by vieww — {} frames · {:.0} ms median",
+                        "every frame rendered by vieww — {} frames · {:.0} ms median · score synthesised by vieww-audio",
                         pf::group_commas(probe.frames),
                         probe.frame_ms
                     ))

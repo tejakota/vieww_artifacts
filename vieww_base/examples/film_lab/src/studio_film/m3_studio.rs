@@ -92,7 +92,7 @@ fn a2s(r: Rect) -> Rect {
 
 /// A plate of the live studio.
 fn plate(src: Rect, dst: Rect, alpha: f32, radius: f32, card: bool) {
-    frame::plate(Plate { src, dst, alpha, radius, snap: None, card, bare: false });
+    frame::plate(Plate { src, dst, alpha, radius, snap: None, card, bare: false, morph: None, stretch: false });
 }
 
 /// A snapshot placed **directly** — no card, no backdrop, no rim. For
@@ -101,13 +101,13 @@ fn plate(src: Rect, dst: Rect, alpha: f32, radius: f32, card: bool) {
 /// device's own corner at destination scale, so the plate's silhouette
 /// is the device's.
 fn snap_bare(key: &'static str, src: Rect, dst: Rect, alpha: f32, radius: f32) {
-    frame::plate(Plate { src, dst, alpha, radius, snap: Some(key), card: false, bare: true });
+    frame::plate(Plate { src, dst, alpha, radius, snap: Some(key), card: false, bare: true, morph: None, stretch: false });
 }
 
 /// A live-region plate placed directly — same grammar as [`snap_bare`],
 /// for a device quoted from the live frame rather than a snapshot.
 fn bare_plate(src: Rect, dst: Rect, alpha: f32, radius: f32) {
-    frame::plate(Plate { src, dst, alpha, radius, snap: None, card: false, bare: true });
+    frame::plate(Plate { src, dst, alpha, radius, snap: None, card: false, bare: true, morph: None, stretch: false });
 }
 
 /// `src` scaled by `s` with its top-left at `at`.
@@ -458,7 +458,7 @@ pub fn say_to_rust(ctx: &pf::Ctx) -> WidgetNode {
     let in_p = ease_out_expo(clamp01((sec - 0.8) / 0.6));
     // The phone before anything was rendered into it — placed directly,
     // its bezel its own frame.
-    frame::plate(Plate { src: app::PHONE, dst: pd, alpha: in_p, radius: 40.0, snap: Some("blank"), card: false, bare: true });
+    frame::plate(Plate { src: app::PHONE, dst: pd, alpha: in_p, radius: 40.0, snap: Some("blank"), card: false, bare: true, morph: None, stretch: false });
     let screen = Rect::new(
         pd.left + (app::PHONE_SCREEN.left - app::PHONE.left) * ps,
         pd.top + (app::PHONE_SCREEN.top - app::PHONE.top) * ps,
@@ -673,12 +673,23 @@ pub fn the_devices(ctx: &pf::Ctx) -> WidgetNode {
     let since = sec - devs[cur].0;
     let ps = 1.22;
     let pd = centred(app::STAGE, Offset::new((ld.right + BODY.right) * 0.5 + 10.0, (BODY.top + BODY.bottom) * 0.5 + 20.0), ps);
-    let fade = ease_in_out(clamp01(since / 0.5));
+    // A change of device is a **reshape**, not a crossfade: the outgoing
+    // and incoming devices share one outline that travels from the old
+    // silhouette to the new (a phone stretching into a tablet, a tablet
+    // lying down into a laptop), the old screen held opaque underneath
+    // while the new one comes up over it — no moment where two
+    // half-transparent devices ghost through each other.
+    let fade = ease_in_out(clamp01(since / 0.65));
+    let now_key = super::script::device_key(devs[cur].1);
     if cur > 0 && fade < 0.999 {
-        snap_bare(super::script::device_key(devs[cur - 1].1), app::STAGE, pd, 1.0 - fade, 0.0);
+        let was_key = super::script::device_key(devs[cur - 1].1);
+        frame::plate(Plate { src: app::STAGE, dst: pd, alpha: 1.0, radius: 0.0, snap: Some(was_key), card: false, bare: true, morph: Some((now_key, fade)), stretch: false });
+        let a_now = clamp01(fade * 1.6 - 0.15);
+        frame::plate(Plate { src: app::STAGE, dst: pd, alpha: a_now, radius: 0.0, snap: Some(now_key), card: false, bare: true, morph: Some((was_key, 1.0 - fade)), stretch: false });
+    } else {
+        let a_now = if cur > 0 { 1.0 } else { ease_out_expo(clamp01(sec / 0.6)) };
+        snap_bare(now_key, app::STAGE, pd, a_now, 0.0);
     }
-    let a_now = if cur > 0 { fade } else { ease_out_expo(clamp01(sec / 0.6)) };
-    snap_bare(super::script::device_key(devs[cur].1), app::STAGE, pd, a_now, 0.0);
 
     let mut stack = Stack::new();
     stack = stack.push(tag(ld.left, ld.top - 50.0, "device sizes", 20.0, SYN_TYPE, in_l));
@@ -711,7 +722,7 @@ pub fn build_and_ship(ctx: &pf::Ctx) -> WidgetNode {
         (Ico::Export, "package", 8.0, 9.2),
     ];
     const LOG: [(u8, &str); 22] = [
-        (0, "resolving workspace · 49 crates"),
+        (0, "resolving workspace · {crates} crates"),
         (2, "lockfile up to date"),
         (0, "compiling vieww-foundation v0.1.0"),
         (1, "compiling vieww-paint v0.1.0"),
@@ -792,7 +803,9 @@ pub fn build_and_ship(ctx: &pf::Ctx) -> WidgetNode {
         let ic = match kind { 0 => MUTED, 1 => SYN_TYPE, _ => LEDGER };
         let (lx, ly) = (panel.left + 34.0, y + row_h * 0.5);
         stack = stack.push(paint(move |book| kit::icon_at(book, ico, Offset::new(lx, ly), 15.0, ic, 1.6, fresh)));
-        stack = stack.push(frame::label(panel.left + 58.0, y, pw - 80.0, row_h, line.to_string(),
+        // The crate count in the log is the manifest's own, not a typed one.
+        let line = line.replace("{crates}", &super::workspace_crates().len().to_string());
+        stack = stack.push(frame::label(panel.left + 58.0, y, pw - 80.0, row_h, line,
             pf::geist_mono(19.0).color(pf::alpha(c, 0.95)), TextAlign::Left, fresh));
     }
 

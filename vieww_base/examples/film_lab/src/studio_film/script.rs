@@ -32,6 +32,13 @@ pub enum Sf {
     /// A Devices-tab preset by index into `Device::ALL`, or the platform
     /// default.
     Device(Option<usize>),
+    /// What the command palette's input holds — the real filter runs on
+    /// it (`>` is the command registry).
+    PaletteQuery(&'static str),
+    /// Close the command palette.
+    PaletteClose,
+    /// The studio's semantics overlay — what a screen reader is told.
+    Semantics(bool),
 }
 
 /// The start of scene `id` on the film's clock.
@@ -49,7 +56,9 @@ pub fn session() -> Vec<(f32, Sf)> {
     let z15 = at("Z15");
     let z16 = at("Z16");
     let z17 = at("Z17");
-    vec![
+    let z12b = at("Z12B");
+    let z13b = at("Z13B");
+    let mut list = vec![
         // Z11 — the studio opens: a file, the live preview's own dialog,
         // and the sketch running on a simulated phone.
         (z11 + 1.6, Sf::Pf(Action::ActiveTab(TAB_LIVE))),
@@ -71,11 +80,42 @@ pub fn session() -> Vec<(f32, Sf)> {
         (z16 + 5.0, Sf::Device(Some(3))),
         (z16 + 7.6, Sf::Device(Some(6))),
         (z16 + 10.2, Sf::Device(Some(4))),
-        // Back to the preview, platform default — before Z17 is entered,
-        // so its snapshots quote the preview and not the Devices list.
-        (z17 - 0.4, Sf::Device(None)),
-        (z17 - 0.4, Sf::Pf(Action::RightTab(RightTab::Preview))),
-    ]
+        // Back to the preview, platform default — **after** Z16 has
+        // left the screen. Z16's list plate is live, so a switch made
+        // before the cut landed in its final frame: the Devices list
+        // turned into the preview pane (a phone in the left box) and
+        // that frame then ghosted through Z17's dissolve. Z17's
+        // snapshots do not need the switch early — each snapshot sets
+        // the Preview tab and the default device itself.
+        (z17 + 0.05, Sf::Device(None)),
+        (z17 + 0.05, Sf::Pf(Action::RightTab(RightTab::Preview))),
+        // Z12B — make it yours: the real command palette, the real filter
+        // typed a key at a time, then the accent walked round the wheel —
+        // the whole studio re-themed live — and home to the brand's.
+        (z12b + 0.6, Sf::Pf(Action::Run(Command::CommandPalette))),
+        (z12b + 1.0, Sf::PaletteQuery(">")),
+        (z12b + 2.6, Sf::PaletteQuery(">t")),
+        (z12b + 2.75, Sf::PaletteQuery(">th")),
+        (z12b + 2.9, Sf::PaletteQuery(">the")),
+        (z12b + 3.05, Sf::PaletteQuery(">them")),
+        (z12b + 3.2, Sf::PaletteQuery(">theme")),
+        (z12b + 4.4, Sf::PaletteClose),
+        (z12b + 4.6, Sf::Pf(Action::Accent("Teal".into()))),
+        (z12b + 5.9, Sf::Pf(Action::Accent("Amber".into()))),
+        (z12b + 7.2, Sf::Pf(Action::Accent("Rose".into()))),
+        (z12b + 8.5, Sf::Pf(Action::Accent("Green".into()))),
+        (z12b + 9.8, Sf::Pf(Action::Accent("Purple".into()))),
+        // Z13B — the inspector: the previewed screen's render tree, then
+        // the semantics overlay over the whole window; back to the
+        // preview before the say program opens.
+        (z13b + 0.4, Sf::Pf(Action::RightTab(RightTab::Inspector))),
+        (z13b + 5.6, Sf::Semantics(true)),
+        (z13b + 11.3, Sf::Semantics(false)),
+        (z13b + 11.3, Sf::Pf(Action::RightTab(RightTab::Preview))),
+    ];
+    // One clock: the scenes' own order decides the session's.
+    list.sort_by(|a, b| a.0.total_cmp(&b.0));
+    list
 }
 
 /// The Devices presets Z16 steps through, in order, with when.
@@ -114,6 +154,12 @@ pub fn apply_one(driver: &mut vieww_render::FrameDriver, studio: &Studio, action
         Sf::PreviewDark(on) => studio.preview_dark.set(*on),
         Sf::Device(Some(i)) => studio.choose_device(Device::ALL[*i]),
         Sf::Device(None) => studio.clear_device(),
+        Sf::PaletteQuery(q) => {
+            studio.palette_query.set((*q).to_string());
+            studio.palette_index.set(0);
+        }
+        Sf::PaletteClose => studio.palette_open.set(false),
+        Sf::Semantics(on) => studio.show_semantics.set(*on),
     }
 }
 
@@ -143,7 +189,7 @@ pub struct Snap {
 pub fn snapshots(id: &str) -> Vec<Snap> {
     let plat = |key: &'static str, p: Platform, dark: bool| Snap {
         key,
-        apply: vec![Sf::Pf(Action::Platform(p)), Sf::PreviewDark(dark)],
+        apply: vec![Sf::Device(None), Sf::Pf(Action::Platform(p)), Sf::PreviewDark(dark)],
         restore: vec![Sf::Pf(Action::Platform(Platform::Ios)), Sf::PreviewDark(false)],
     };
     match id {

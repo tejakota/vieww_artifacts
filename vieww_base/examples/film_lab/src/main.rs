@@ -438,7 +438,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // built on this branch's brief: need → engine → studio → proof →
         // release, at this film's own 30 fps, mounted on the same real
         // app and rendered by the same engine (`studio_film/master.rs`).
-        if arg == "censussf" || arg == "mastersf" || arg == "sfprobe" || arg.starts_with("sfmeasure") || arg.starts_with("sf:") {
+        if arg == "censussf" || arg == "mastersf" || arg == "scoresf" || arg == "sfprobe" || arg.starts_with("sfmeasure") || arg.starts_with("sf:") {
             return studio_film::master::run(&arg);
         }
     }

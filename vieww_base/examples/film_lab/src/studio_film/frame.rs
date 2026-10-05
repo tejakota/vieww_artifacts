@@ -110,6 +110,18 @@ pub struct Plate {
     /// in a second box drew a box around a box. `radius` still clips —
     /// set it to the device's own corner at destination scale.
     pub bare: bool,
+    /// A bare device **reshaping** into another: `(other snapshot, m)`
+    /// lerps this plate's silhouette toward the other snapshot's by `m`
+    /// (0 = its own shape, 1 = the other's), contents riding the
+    /// rectangle. Two plates of one cut pass each other's keys with
+    /// complementary `m`, so the outgoing and incoming devices share one
+    /// outline while the pixels cross — the device changes shape rather
+    /// than two devices ghosting through each other.
+    pub morph: Option<(&'static str, f32)>,
+    /// Map `src` onto `dst` with independent x / y scales — for a region
+    /// that is being *reshaped* into something else (the studio's panes
+    /// becoming the mark's panels), not merely moved.
+    pub stretch: bool,
 }
 
 #[derive(Default)]

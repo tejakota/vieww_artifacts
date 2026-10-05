@@ -1118,6 +1118,25 @@ pub fn type_on(
     progress: f32,
     clock: f32,
 ) -> WidgetNode {
+    type_on_with(full, at, y, style, progress, clock, true)
+}
+
+/// [`type_on`] without a caret — a line that *writes itself* rather than
+/// being typed by someone: blank, then letters at full ink, left to right,
+/// never a dim draft of the whole line waiting to be lit.
+pub fn type_on_bare(full: &str, at: TypeAt, y: f32, style: TextStyle, progress: f32) -> WidgetNode {
+    type_on_with(full, at, y, style, progress, 0.0, false)
+}
+
+fn type_on_with(
+    full: &str,
+    at: TypeAt,
+    y: f32,
+    style: TextStyle,
+    progress: f32,
+    clock: f32,
+    caret: bool,
+) -> WidgetNode {
     let size = style.size;
     let p = clamp01(progress);
     let total = full.chars().count();
@@ -1157,7 +1176,7 @@ pub fn type_on(
     // rather than as an input still waiting.
     let done = typed_n >= total;
     let _ = clock;
-    if !done {
+    if !done && caret {
         stack = stack.push(
             Positioned::new()
                 .left(x0 + caret_x)

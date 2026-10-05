@@ -111,6 +111,7 @@ pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
         "censussf" => census(),
         "mastersf" => master(),
         "sfprobe" => super::probe::run(),
+        "scoresf" => score_and_mux(&work_root().join("studio_film.mp4")),
         other if other.starts_with("sfmeasure") => measure(other.trim_start_matches("sfmeasure").trim_start_matches(':')),
         other => {
             let name = other.trim_start_matches("sf:").to_ascii_lowercase();
@@ -397,6 +398,14 @@ impl Rig {
                 }
                 self.take_snapshots(s.id, abs);
                 let studio = self.studio.clone().unwrap();
+                // The studio's own per-frame hooks, in the order its window
+                // loop runs them (`apps/viewwstudio/src/main.rs`, steps 5–6):
+                // read the render tree for the Inspector and the damage and
+                // semantics for the overlays, off the frame just drawn. Each
+                // is an early return while its view is closed, so scenes that
+                // open none of them are untouched.
+                studio.capture_tree(&self.driver);
+                studio.capture_overlays(&mut self.driver);
                 self.driver.set_root(shell_only(&studio));
                 self.driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
                 let mut st = Stack::new().push(Positioned::fill().child(tree));
@@ -430,6 +439,7 @@ impl Rig {
                 snap: None,
                 card: true,
                 bare: false,
+                morph: None, stretch: false,
             });
         }
 
@@ -570,16 +580,55 @@ fn compose(rig: &Rig) -> Scene {
             // content box (a sharp rectangle) and grows into its own
             // curved window, corners easing in, contents scaling within.
             // Bare plates never morph — they are placed, not windowed.
-            let mut dst = w.apply_rect(p.dst);
-            let mut r = p.radius * w.a;
+            // A bare plate is a device, and a device is its own frame:
+            // the plate's `src` is the pane the device sits in, so the
+            // stage behind it — its fill, its zoom readout, its chip —
+            // would ride along as a box around the box. The studio
+            // records the device's silhouette as the shadow its body
+            // casts; the plate crops to exactly that rounded rectangle
+            // and keeps the pane's own mapping, so a tablet still lands
+            // bigger than a phone on the same stage.
+            let k = p.dst.width() / p.src.width().max(1.0);
+            let place = |sil: Rect| Rect::new(
+                p.dst.left + (sil.left - p.src.left) * k,
+                p.dst.top + (sil.top - p.src.top) * k,
+                p.dst.left + (sil.right - p.src.left) * k,
+                p.dst.top + (sil.bottom - p.src.top) * k,
+            );
+            let (p_src, p_dst, p_radius) = if p.bare {
+                match device_silhouette(src_scene, p.src) {
+                    Some((sil, cr)) => {
+                        let mut d = place(sil);
+                        let mut cr = cr * k;
+                        // The reshape: this device's outline travels toward
+                        // the other snapshot's by `m`.
+                        if let Some((other, m)) = p.morph {
+                            let o = rig.snaps.get(other).and_then(|sc| device_silhouette(sc, p.src));
+                            if let Some((osil, ocr)) = o {
+                                d = lerp_rect(d, place(osil), m);
+                                cr += (ocr * k - cr) * m;
+                            }
+                        }
+                        (sil, d, cr)
+                    }
+                    None => (p.src, p.dst, p.radius),
+                }
+            } else {
+                (p.src, p.dst, p.radius)
+            };
+            let mut dst = w.apply_rect(p_dst);
+            let mut r = p_radius * w.a;
             if let Some(cut) = &rig.cut {
                 if p.card && cut.morph && cut.e < 0.999 {
                     dst = lerp_rect(cut.prev_box, dst, cut.e);
                     r = cut.prev_radius + (r - cut.prev_radius) * cut.e;
                 }
             }
-            let s = dst.width() / p.src.width().max(1.0);
-            let t = Transform::new(s, 0.0, 0.0, s, dst.left - p.src.left * s, dst.top - p.src.top * s);
+            // Uniform everywhere but mid-reshape, where the contents ride
+            // the outline's own aspect for the half-second it changes.
+            let sx = dst.width() / p_src.width().max(1.0);
+            let sy = if p.morph.is_some() || p.stretch { dst.height() / p_src.height().max(1.0) } else { sx };
+            let t = Transform::new(sx, 0.0, 0.0, sy, dst.left - p_src.left * sx, dst.top - p_src.top * sy);
             if p.alpha <= 0.004 {
                 continue;
             }
@@ -596,7 +645,7 @@ fn compose(rig: &Rig) -> Scene {
             if !p.bare {
                 f.fill_rrect(dst, r, window_color().into());
             }
-            f.append(&round_clip(src_scene, t, dst, r), Transform::IDENTITY);
+            f.append(&round_clip(src_scene, t, dst, r, p.bare), Transform::IDENTITY);
             if p.card {
                 f.stroke_rrect(dst, r, Stroke::new(1.0), pf::alpha(Color::WHITE, 0.10).into());
             }
@@ -624,13 +673,56 @@ fn compose(rig: &Rig) -> Scene {
     frame_scene
 }
 
+/// The device inside `within` — the largest rounded silhouette the studio
+/// casts a shadow for there (the preview's device body records its own
+/// outline as a `DrawShadow` caster), with its corner, in the app's
+/// 1920×1080 space. `None` when the region holds no device.
+fn device_silhouette(scene: &Scene, within: Rect) -> Option<(Rect, f32)> {
+    let mut best: Option<(Rect, f32)> = None;
+    for c in scene.commands() {
+        if let Command::DrawShadow { rect, radius, transform, .. } = c {
+            let r = transform.apply_rect(*rect);
+            let inside = r.left >= within.left - 1.0
+                && r.top >= within.top - 1.0
+                && r.right <= within.right + 1.0
+                && r.bottom <= within.bottom + 1.0;
+            let big = r.width() * r.height() > within.width() * within.height() * 0.12;
+            let not_pane = r.width() < within.width() * 0.995 || r.height() < within.height() * 0.995;
+            if inside && big && not_pane && *radius >= 4.0 {
+                let cr = *radius * transform.a.abs().max(1e-3);
+                if best.map_or(true, |(b, _)| r.width() * r.height() > b.width() * b.height()) {
+                    best = Some((r, cr));
+                }
+            }
+        }
+    }
+    best
+}
+
 /// `src` through `t`, confined to the rounded rectangle `dst` — the plate's
 /// own corners, so a quoted pane reads as a card rather than a crop.
-fn round_clip(src: &Scene, t: Transform, dst: Rect, r: f32) -> Scene {
+fn round_clip(src: &Scene, t: Transform, dst: Rect, r: f32, strict: bool) -> Scene {
     let mut out = Scene::default();
     let path = vieww_foundation::Path::rounded_rect(dst, r.max(0.0));
+    let slack = 3.0 * t.a.abs().max(0.25);
     for c in src.commands() {
         let mut c = c.transformed(t);
+        // A device plate takes the device and nothing that merely
+        // overlaps it: the pane's fill, the readout and the chip the
+        // stage floats over the bezel all reach past the silhouette, and
+        // a clip would leave their slivers on the glass.
+        if strict && !matches!(c, Command::PushLayer { .. } | Command::PopLayer) {
+            // What the command can actually touch: its reach, through
+            // its own clip (a scrolled list inside the screen reaches far
+            // past the glass but is clipped to it).
+            let mut b = c.bounds();
+            if let Some(cb) = c.clip().bounds() {
+                b = Rect::new(b.left.max(cb.left), b.top.max(cb.top), b.right.min(cb.right), b.bottom.min(cb.bottom));
+            }
+            if b.left < dst.left - slack || b.top < dst.top - slack || b.right > dst.right + slack || b.bottom > dst.bottom + slack {
+                continue;
+            }
+        }
         // A shadow cast by something outside the plate would still blur
         // into it; the plate quotes a region, not its neighbours' shadows.
         if let Command::DrawShadow { rect, transform, .. } = &c {
@@ -714,6 +806,28 @@ fn finish_frame(rig: &Rig, renderer: &mut NativeRenderer) -> Result<Vec<u8>, Box
 
 // ── Pass 1 — the census ─────────────────────────────────────────────────────
 
+/// The crate receipt's gate: the film's named list and the workspace's
+/// own manifest must be the same set, and every crate the film calls new
+/// must exist. A film that shows a stale crate count is refused here,
+/// before a single frame is rendered.
+fn check_crates() -> Result<(), Box<dyn std::error::Error>> {
+    let ws = super::workspace_crates();
+    let mut a: Vec<&str> = ws.iter().map(|c| c.trim_start_matches("vieww-")).collect();
+    let mut b: Vec<&str> = pf::CRATES.iter().map(|c| c.trim_start_matches("vieww-")).collect();
+    a.sort_unstable();
+    b.sort_unstable();
+    if a != b {
+        return Err(format!("the film's crate list has drifted from vieww_base/Cargo.toml: manifest {a:?} vs film {b:?}").into());
+    }
+    for n in super::NEW_CRATES {
+        if !ws.contains(&n) {
+            return Err(format!("NEW_CRATES names {n}, which the workspace does not have").into());
+        }
+    }
+    println!("  crates · {} in the manifest, {} new — the film's list agrees", ws.len(), super::NEW_CRATES.len());
+    Ok(())
+}
+
 pub fn census() -> Result<(), Box<dyn std::error::Error>> {
     let all = scenes();
     let n_total = total_frames();
@@ -724,6 +838,7 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
         scale_factor()
     );
     std::fs::create_dir_all(work_root())?;
+    check_crates()?;
 
     let mut rig = Rig::new();
     let mut renderer = NativeRenderer::new();
@@ -983,6 +1098,7 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
     if !status.success() {
         return Err("concat failed".into());
     }
+    score_and_mux(&mp4)?;
     println!(
         "\nmaster assembled — {} segments · {:.1} min wall · {} sheets · {} frames",
         all.len(),
@@ -991,6 +1107,33 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         total_frames()
     );
     println!("  mp4 → {}", mp4.display());
+    Ok(())
+}
+
+/// Synthesise the score (`super::score`, vieww-audio end to end) and lay
+/// it under the assembled picture: the video stream is copied untouched,
+/// the WAV is encoded to AAC beside it.
+fn score_and_mux(mp4: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    let t0 = Instant::now();
+    let wav = super::score::write(&work_root())?;
+    println!("  score → {} ({:.1}s, vieww-audio)", wav.display(), t0.elapsed().as_secs_f32());
+    if !mp4.exists() {
+        return Ok(());
+    }
+    let tmp = mp4.with_extension("scored.mp4");
+    let status = ProcCommand::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-i"])
+        .arg(mp4)
+        .arg("-i")
+        .arg(&wav)
+        .args(["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart"])
+        .arg(&tmp)
+        .status()?;
+    if !status.success() {
+        return Err("mux failed".into());
+    }
+    std::fs::rename(&tmp, mp4)?;
+    println!("  scored → {}", mp4.display());
     Ok(())
 }
 

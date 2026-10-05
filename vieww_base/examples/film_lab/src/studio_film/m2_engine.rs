@@ -14,7 +14,7 @@ use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, sprin
 use crate::product_film as pf;
 use crate::three_d::Vec3;
 use super::filmkit as fk;
-use super::{ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, ENGINE, INK, LEDGER, MUTED, SYN_TYPE, CERT_CRATES};
+use super::{ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, ENGINE, INK, LEDGER, MUTED, SYN_TYPE};
 
 /// The engine's headline crates — the ones a film can name without
 /// lying. The full count is the workspace's own 49 (see Z19, which shows
@@ -42,6 +42,26 @@ const BUDGET_MS: f32 = 16.6;
 const GRAPH_C: Offset = Offset::new(1370.0, 610.0);
 const RING_IN: f32 = 130.0;
 const RING_OUT: f32 = 250.0;
+/// The new orbit — an ellipse, the cubes' own tilted plane, wide enough
+/// to clear the core's labels.
+const NEW_RX: f32 = 392.0;
+const NEW_RY: f32 = 278.0;
+
+/// Where the `k`th new crate sits on the orbit, by angle (degrees, 0 =
+/// right, clockwise on screen). Not evenly spaced — placed in the gaps
+/// the core leaves: every slot keeps clear of the outer core rays at
+/// ±60° / ±120° (whose labels sit just inside the orbit) and of the
+/// horizontal pair, so no new name ever lands on an old one.
+const NEW_SLOTS: [f32; 13] = [-98.0, -82.0, -42.0, -26.0, -11.0, 11.0, 26.0, 42.0, 90.0, 141.0, 162.0, 198.0, 219.0];
+
+fn new_angle(k: usize) -> f32 {
+    NEW_SLOTS[k % NEW_SLOTS.len()].to_radians()
+}
+
+fn new_at(k: usize) -> Offset {
+    let a = new_angle(k);
+    Offset::new(GRAPH_C.dx + NEW_RX * a.cos(), GRAPH_C.dy + NEW_RY * a.sin())
+}
 
 // ── Z04 · the_engine ────────────────────────────────────────────────────────
 
@@ -187,16 +207,115 @@ pub fn the_engine(ctx: &pf::Ctx) -> WidgetNode {
         ));
     }
 
-    // The crate count — the workspace's own number, counting up.
-    let count_p = clamp01((t - 0.55) / 0.30);
+    // The new orbit — the capability crates that joined the engine after
+    // its first cut (3D, audio, video, physics, charts…). A wider,
+    // tilted ring — an orbital plane, the cubes' own — draws itself
+    // round the core, then each crate lands on it with a pop and a
+    // spoke back to the heart, and the count *climbs past* the old
+    // number on screen: the film says the workspace grew, and shows
+    // where.
+    let new_n = super::NEW_CRATES.len();
+    let ws_n = super::workspace_crates().len();
+    let core_n = ws_n - new_n;
+    let ring_p = ease_in_out(clamp01((t - 0.52) / 0.10));
+    let land = move |k: usize| clamp01((t - 0.58 - k as f32 * 0.016) / 0.05);
+    if ring_p > 0.01 {
+        stack = stack.push(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+            let c = GRAPH_C;
+            // The orbit, drawn as it is travelled — a polyline sweep.
+            let mut path = Path::new();
+            let steps = 160;
+            let sweep = ring_p * std::f32::consts::TAU;
+            for k in 0..=steps {
+                let a = -std::f32::consts::FRAC_PI_2 + sweep * k as f32 / steps as f32;
+                let p = Offset::new(c.dx + NEW_RX * a.cos(), c.dy + NEW_RY * a.sin());
+                if k == 0 { path.move_to(p); } else { path.line_to(p); }
+            }
+            book.stroke(path, pf::alpha(BRAND_FAR, 0.22 + 0.10 * ring_p), 1.2);
+            for k in 0..super::NEW_CRATES.len() {
+                let p = land(k);
+                if p <= 0.0 {
+                    continue;
+                }
+                let at = new_at(k);
+                // The spoke home — dashed, faint: these plug into the core.
+                let e = ease_out_cubic(p);
+                let mut d = 0.0;
+                let (dx, dy) = (at.dx - c.dx, at.dy - c.dy);
+                let len = (dx * dx + dy * dy).sqrt();
+                while d < len * e {
+                    let a0 = d / len;
+                    let a1 = ((d + 6.0) / len).min(e);
+                    let mut sp = Path::new();
+                    sp.move_to(Offset::new(at.dx - dx * a0, at.dy - dy * a0)).line_to(Offset::new(at.dx - dx * a1, at.dy - dy * a1));
+                    book.stroke(sp, pf::alpha(BRAND_FAR, 0.20), 1.0);
+                    d += 14.0;
+                }
+                // The node — overshooting to size, a ring thrown off it.
+                let q = p - 1.0;
+                let pop = (1.0 + 2.4 * q * q * q + 1.4 * q * q).max(0.0);
+                book.circle(at, 7.5 * pop, pf::alpha(BRAND_FAR, 0.95));
+                book.circle(at, 3.2 * pop, pf::alpha(Color::WHITE, 0.85));
+                if p < 1.0 {
+                    book.ring(at, 8.0 + 18.0 * ease_out_expo(p), 1.2, pf::alpha(BRAND_FAR, 0.7 * (1.0 - p)));
+                }
+            }
+        }))));
+        for (k, name) in super::NEW_CRATES.iter().enumerate() {
+            let p = land(k);
+            if p <= 0.0 {
+                continue;
+            }
+            let ang = new_angle(k);
+            let (ux, uy) = (ang.cos(), ang.sin());
+            let at = Offset::new(GRAPH_C.dx + (NEW_RX + 18.0) * ux, GRAPH_C.dy + (NEW_RY + 14.0) * uy);
+            let (left, align) = if ux > 0.3 {
+                (at.dx, TextAlign::Left)
+            } else if ux < -0.3 {
+                (at.dx - 160.0, TextAlign::Right)
+            } else {
+                (at.dx - 80.0, TextAlign::Center)
+            };
+            let top = if ux.abs() <= 0.3 { if uy < 0.0 { at.dy - 30.0 } else { at.dy - 2.0 } } else { at.dy - 15.0 };
+            stack = stack.push(pf::type_on_bare(
+                name.trim_start_matches("vieww-"),
+                match align {
+                    TextAlign::Left => pf::TypeAt::Left(left as i32),
+                    TextAlign::Right => pf::TypeAt::Left((left + 160.0 - name.trim_start_matches("vieww-").len() as f32 * 12.2) as i32),
+                    _ => pf::TypeAt::CenteredOn((left + 80.0) as i32),
+                },
+                top,
+                pf::geist_mono(19.0).letter_spacing(0.8).color(pf::alpha(BRAND_FAR, 0.95)),
+                clamp01(p * 2.0),
+            ));
+        }
+    }
+
+    // The crate count — the workspace's own number, read from its
+    // manifest. It counts to the first cut's core, holds there a beat,
+    // then climbs one per crate as the new orbit lands — past the old
+    // number, on screen.
+    let count_p = clamp01((t - 0.36) / 0.14);
     if count_p > 0.01 {
-        let n = pf::count_up(CERT_CRATES as u64, count_p);
+        let landed = (0..new_n).filter(|k| land(*k) >= 1.0).count();
+        let n = pf::count_up(core_n as u64, count_p) as usize + landed;
+        let grown = landed > 0;
         stack = stack.push(super::frame::label(
             180.0, 690.0, 700.0, 60.0,
             format!("{n} crates · one core"),
             pf::geist(40.0).bold().color(pf::alpha(INK, 0.95)),
             TextAlign::Left, count_p.min(1.0),
         ));
+        if grown {
+            let line = format!("+{landed} since the first cut — 3D, audio, video, physics, charts");
+            stack = stack.push(pf::type_on_bare(
+                &line,
+                pf::TypeAt::Left(182),
+                752.0,
+                pf::geist_mono(19.0).letter_spacing(0.6).color(pf::alpha(BRAND_FAR, 0.95)),
+                clamp01((t - 0.585) / 0.10),
+            ));
+        }
     }
 
     // The film's voice.
@@ -284,7 +403,11 @@ pub fn the_pipeline(ctx: &pf::Ctx) -> WidgetNode {
         // The connector to the next station — a slight arc that draws
         // itself, then flows. The line is the pipeline.
         if i < STOPS.len() - 1 {
-            let wire_p = ease_out_cubic(clamp01((t - t0 - 0.08) / 0.16));
+            // The road waits for both of its ends: the wire to the next
+            // station draws only once that station has landed (its own
+            // arrival starts 0.09 later and is all but settled 0.10 after
+            // that), and the traffic on it waits for the wire.
+            let wire_p = ease_out_cubic(clamp01((t - t0 - 0.19) / 0.10));
             if wire_p > 0.01 {
                 let x0 = x + 264.0;
                 let from = Offset::new(x0, 394.0);

@@ -101,7 +101,7 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         let rail_t0 = 0.14 + i as f32 * 0.06;
         let rail_p = ease_out_cubic(clamp01((t - rail_t0) / 0.16));
         let card_p = ease_out_cubic(clamp01((t - rail_t0 - 0.05) / 0.18));
-        let flaw_p = clamp01((t - 0.52 - i as f32 * 0.05) / 0.12);
+        let flaw_p = clamp01((ctx.sec - (0.52 + i as f32 * 0.05) * 12.0) / 0.55);
         if rail_p <= 0.01 && card_p <= 0.01 {
             continue;
         }
@@ -143,12 +143,18 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
                 pf::geist_mono(21.0).letter_spacing(2.0).color(pf::alpha(INK, 0.94)),
                 TextAlign::Center, card_p,
             ));
-            stack = stack.push(super::frame::label(
-                station.left - 30.0, station.bottom + 44.0 + rise, station.width() + 60.0, 26.0,
-                flaw.to_string(),
-                pf::geist_mono(17.0).letter_spacing(0.6).color(pf::alpha(BREAK_RED, 0.95)),
-                TextAlign::Center, card_p * flaw_p,
-            ));
+            // Written, not faded: every letter that is on screen is at
+            // full red from its first frame, and the line fills left to
+            // right from blank on the scene's real clock (0.55 s a line).
+            if flaw_p > 0.0 {
+                stack = stack.push(pf::type_on_bare(
+                    flaw,
+                    pf::TypeAt::CenteredOn((station.left + station.width() * 0.5) as i32),
+                    station.bottom + 44.0 + rise + 1.0,
+                    pf::geist_mono(17.0).letter_spacing(0.6).color(pf::alpha(BREAK_RED, 0.95)),
+                    flaw_p,
+                ));
+            }
         }
     }
 
@@ -336,66 +342,121 @@ const JAR: super::models::Jar = super::models::Jar { left: 1380.0, top: 400.0, r
 /// This scene's length — the coin drops are timed in seconds.
 const Z02_SECONDS: f32 = 12.0;
 
-// ── The toll's stamp — a rubber stamp, not a fade ───────────────────────
+// ── The toll's flip — the price printed on the back of the feature ─────
 
-/// The stamp's state `s` seconds after its gate paid. The toll used to
-/// fade in behind a soft flash — two opacity moves, nothing physical.
-/// It now arrives the way a toll actually arrives: **stamped.** The
-/// stamp descends inflated from above, lands at 0.14 s, squashes on the
-/// bar and recovers, throws two crisp impact rings and six flecks of
-/// ink, and its ink sets to rest by 0.45 s. The bar itself takes the
-/// hit — a two-pixel judder the landing prints on it.
+/// The toll's life `s` seconds after its gate paid.
+///
+/// The toll used to fade in behind a soft flash, then it was stamped on.
+/// Both treated the cost as something *added* to the feature. It isn't:
+/// it was always there, on the other side. So now the feature's own bar
+/// is **cut** — a perforation runs down through it, tracing a tile out
+/// of the bar's right end — and the tile **flips over** on its
+/// horizontal axis like a price tag turned in the hand. Its face is the
+/// bar's own grey; its back is the toll, in red. The flip overshoots,
+/// slaps flat (the bar takes the hit — the judder), and the word on the
+/// back writes itself. Nothing glows, nothing fades: a seam, a turn, a
+/// landing.
 #[derive(Clone, Copy)]
-struct StampLife {
-    on: bool,
-    landed: bool,
-    /// Scale about the stamp's own centre.
-    sx: f32,
-    sy: f32,
-    /// Vertical offset — the descent.
-    dy: f32,
-    /// The thrown ink's flight, 0..1.
-    fly: f32,
-    /// The ink setting — the fill darkening to rest, 0..1.
-    ink: f32,
-    /// The impact rings' progress, 0..1.
-    ring: f32,
+struct TollFlip {
+    /// The perforation's progress down the tile's outline, 0..1.
+    seam: f32,
+    /// The tile's turn, radians: 0 = face up, π = the toll showing.
+    turn: f32,
+    /// Seconds since the tile landed flat on its back (negative before).
+    since_land: f32,
 }
 
-const STAMP_AIRBORNE: f32 = 0.14;
+/// When the seam starts, relative to the pay beat.
+const SEAM_AT: f32 = -0.42;
+/// How long the perforation takes to run round the tile.
+const SEAM_LEN: f32 = 0.36;
+/// How long the turn takes, overshoot included.
+const FLIP_LEN: f32 = 0.46;
 
-fn stamp_life(s: f32) -> StampLife {
-    let mut st = StampLife {
-        on: s > 0.0,
-        landed: s >= STAMP_AIRBORNE,
-        sx: 1.0,
-        sy: 1.0,
-        dy: 0.0,
-        fly: 0.0,
-        ink: 0.0,
-        ring: 0.0,
-    };
-    if !st.on {
-        return st;
+fn toll_flip(s: f32) -> TollFlip {
+    let seam = clamp01((s - SEAM_AT) / SEAM_LEN);
+    let u = clamp01(s / FLIP_LEN);
+    // A turn that carries past flat and settles back: ease-out-back on π.
+    let c1 = 1.9;
+    let c3 = c1 + 1.0;
+    let back = 1.0 + c3 * (u - 1.0).powi(3) + c1 * (u - 1.0).powi(2);
+    let turn = if s <= 0.0 { 0.0 } else { std::f32::consts::PI * back };
+    TollFlip { seam, turn, since_land: s - FLIP_LEN * 0.62 }
+}
+
+/// Draw the toll tile in its bar, `r` the tile's flat rectangle.
+fn draw_toll_tile(book: &mut Sketchbook, r: Rect, f: TollFlip) {
+    // The perforation — dashes running round the tile's outline, drawn
+    // to their own progress, on the bar before anything moves.
+    if f.seam > 0.0 && f.turn <= 0.0 {
+        let per = 2.0 * (r.width() + r.height());
+        let run = per * ease_out_cubic(f.seam);
+        let mut d = 0.0;
+        while d < run {
+            let seg = (run - d).min(7.0);
+            let p0 = perimeter_at(r, d);
+            let p1 = perimeter_at(r, d + seg);
+            let mut path = Path::new();
+            path.move_to(p0).line_to(p1);
+            book.stroke(path, pf::alpha(BREAK_RED, 0.85), 1.4);
+            d += 12.0;
+        }
+        // The cut tile lifts a hair off the bar as the seam closes.
+        let lift = clamp01((f.seam - 0.8) / 0.2);
+        if lift > 0.0 {
+            book.rrect(r, 8.0, pf::alpha(pf::SURFACE_2, 0.9 * lift));
+        }
+        return;
     }
-    if !st.landed {
-        // The descent — inflated and dropping in from above.
-        let u = ease_out_cubic(s / STAMP_AIRBORNE);
-        st.sx = 1.0 + 0.45 * (1.0 - u);
-        st.sy = st.sx;
-        st.dy = -(1.0 - u) * 26.0;
+    if f.turn <= 0.0 {
+        return;
+    }
+    // The turn: the tile's height is |cos θ| about its centre line, with
+    // a sliver of thickness when it stands edge-on, and a shadow on the
+    // bar that widens as the tile rises off it.
+    let cy = (r.top + r.bottom) * 0.5;
+    let cos = f.turn.cos();
+    let h = r.height() * cos.abs();
+    let lift = f.turn.sin().max(0.0);
+    let face = pf::xywh(r.left, cy - h * 0.5 - lift * 6.0, r.width(), h.max(2.0));
+    // The hole the tile left in the bar — a darker recess.
+    book.rrect(r, 8.0, pf::alpha(Color::BLACK, 0.28));
+    if lift > 0.02 {
+        book.rrect(
+            pf::xywh(r.left + 6.0, cy - 2.0 + lift * 10.0, r.width() - 12.0, 6.0 + 10.0 * lift),
+            6.0,
+            pf::alpha(Color::BLACK, 0.25 * lift),
+        );
+    }
+    if cos > 0.0 {
+        // Still face up — the bar's own grey, lit as it turns toward us.
+        book.rrect(face, 8.0, pf::mix(pf::SURFACE_2, Color::WHITE, 0.10 * lift));
+        book.stroke_rrect(face, 8.0, pf::alpha(Color::WHITE, 0.10), 1.0);
     } else {
-        // The landing squash, then recovery.
-        let u = clamp01((s - STAMP_AIRBORNE) / 0.16);
-        let sq = 0.10 * (u * std::f32::consts::PI).sin();
-        st.sx = 1.0 + sq * 0.4;
-        st.sy = 1.0 - sq;
-        // Everything the hit throws, keyed to the landing.
-        st.ink = ease_out_cubic(clamp01((s - STAMP_AIRBORNE) / 0.30));
-        st.fly = ease_out_expo(clamp01((s - STAMP_AIRBORNE + 0.02) / 0.46));
-        st.ring = clamp01((s - STAMP_AIRBORNE + 0.02) / 0.50);
+        // The back — the toll. Deep red ground, a crisp red edge.
+        book.rrect(face, 8.0, pf::mix(Color::rgb(46, 16, 20), BREAK_RED, 0.12 + 0.18 * lift));
+        book.stroke_rrect(face, 8.0, pf::alpha(BREAK_RED, 0.95), 1.3);
     }
-    st
+    // Edge-on: the tile's thickness, a bright line.
+    if cos.abs() < 0.22 {
+        let a = 1.0 - cos.abs() / 0.22;
+        book.rect(pf::xywh(r.left, cy - 1.0 - lift * 6.0, r.width(), 2.0), pf::alpha(Color::WHITE, 0.45 * a));
+    }
+}
+
+/// The point `d` along the rectangle's outline, clockwise from top-left.
+fn perimeter_at(r: Rect, d: f32) -> Offset {
+    let (w, h) = (r.width(), r.height());
+    let d = d.rem_euclid(2.0 * (w + h));
+    if d < w {
+        Offset::new(r.left + d, r.top)
+    } else if d < w + h {
+        Offset::new(r.right, r.top + (d - w))
+    } else if d < 2.0 * w + h {
+        Offset::new(r.right - (d - w - h), r.bottom)
+    } else {
+        Offset::new(r.left, r.bottom - (d - 2.0 * w - h))
+    }
 }
 
 /// Every coin the tolls drop: eight per gate, from the moment it pays.
@@ -407,7 +468,7 @@ fn toll_drops() -> Vec<super::models::Drop> {
         for k in 0..8 {
             let r = 19.0 + rng.f01() * 7.0;
             let x = JAR.left + r + 4.0 + rng.f01() * (JAR.right - JAR.left - 2.0 * r - 8.0);
-            out.push(super::models::Drop { at: pay + k as f32 * 0.07, x, r, gate });
+            out.push(super::models::Drop { at: pay + FLIP_LEN * 0.62 + k as f32 * 0.07, x, r, gate });
         }
     }
     out
@@ -507,17 +568,17 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
         let y = 320.0 + i as f32 * 134.0;
         let gate_w = 980.0 * ease_out_expo(in_p);
         let (gate, toll) = (*gate, *toll);
-        let stamp = stamp_life(since_pay);
+        let flip = toll_flip(since_pay);
         // The judder the landing prints on the bar (and its words).
-        let judder = if (0.10..0.30).contains(&since_pay) {
-            let u = (since_pay - 0.10) / 0.20;
+        let judder = if (0.0..0.20).contains(&flip.since_land) {
+            let u = flip.since_land / 0.20;
             (u * std::f32::consts::TAU * 2.0).sin() * 2.4 * (1.0 - u)
         } else {
             0.0
         };
         // The toll, paid, flows to the gauge — every cost travels, from
         // the moment the stamp lands.
-        let flow_a = clamp01((since_pay - 0.16) / 0.40);
+        let flow_a = clamp01((flip.since_land - 0.02) / 0.40);
         if flow_a > 0.01 {
             let from = Offset::new(160.0 + gate_w, y + 48.0);
             let to = Offset::new(JAR.left + 40.0 + i as f32 * 60.0, JAR.top - 20.0);
@@ -540,40 +601,10 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
                         let w = gate_w.max(0.0);
                         book.rrect(pf::xywh(0.0, 8.0, w, 80.0), 14.0, pf::alpha(pf::SURFACE, 0.92));
                         book.stroke_rrect(pf::xywh(0.0, 8.0, w, 80.0), 14.0, pf::alpha(Color::WHITE, 0.05), 1.0);
-                        // The toll's stamp — right-aligned inside the bar,
-                        // arriving the way a toll does.
-                        if stamp.on && w > 220.0 {
-                            let centre = Offset::new(w - 130.0, 48.0 + stamp.dy);
-                            let (sw, sh) = (216.0 * stamp.sx, 52.0 * stamp.sy);
-                            let r = Rect::new(
-                                centre.dx - sw * 0.5,
-                                centre.dy - sh * 0.5,
-                                centre.dx + sw * 0.5,
-                                centre.dy + sh * 0.5,
-                            );
-                            // The impact — two crisp rings, drawn light the
-                            // vector way (the soft flash this replaces was
-                            // the one blurred bloom left in the scene).
-                            if stamp.ring > 0.0 && stamp.ring < 1.0 {
-                                let e = ease_out_expo(stamp.ring);
-                                book.ring(centre, 60.0 + 72.0 * e, 1.6, pf::alpha(BREAK_RED, 0.55 * (1.0 - stamp.ring)));
-                                book.ring(centre, 44.0 + 42.0 * e, 1.0, pf::alpha(BREAK_RED, 0.35 * (1.0 - stamp.ring)));
-                            }
-                            // The flecks of ink the hit throws.
-                            if stamp.fly > 0.0 && stamp.fly < 1.0 {
-                                for k in 0..6 {
-                                    let ang = k as f32 * std::f32::consts::TAU / 6.0 + 0.35;
-                                    let d = 42.0 + 60.0 * ease_out_expo(stamp.fly);
-                                    book.circle(
-                                        Offset::new(centre.dx + ang.cos() * d * 1.3, centre.dy + ang.sin() * d * 0.6),
-                                        (2.6 - 1.8 * stamp.fly).max(0.6),
-                                        pf::alpha(BREAK_RED, 0.9 * (1.0 - stamp.fly)),
-                                    );
-                                }
-                            }
-                            // The stamp itself, its ink setting to rest.
-                            book.rrect(r, 10.0, pf::alpha(BREAK_RED, 0.10 + 0.07 * stamp.ink));
-                            book.stroke_rrect(r, 10.0, pf::alpha(BREAK_RED, 0.70 + 0.25 * stamp.ink), 1.2);
+                        // The toll's tile — right-aligned inside the bar:
+                        // cut out of it, then turned over (see [`toll_flip`]).
+                        if w > 220.0 {
+                            draw_toll_tile(book, pf::xywh(w - 238.0, 22.0, 216.0, 52.0), flip);
                         }
                     },
                 ))),
@@ -586,12 +617,15 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
             TextAlign::Left, in_p,
         ));
         // The toll's own word — printed the instant the stamp lands.
-        if stamp.landed && gate_w > 220.0 {
-            stack = stack.push(super::frame::label(
-                160.0 + gate_w - 238.0, y + 22.0 + judder, 216.0, 52.0,
-                toll.to_string(),
-                pf::geist_mono(18.0).letter_spacing(0.8).color(BREAK_RED),
-                TextAlign::Center, clamp01((since_pay - STAMP_AIRBORNE) / 0.12),
+        if flip.since_land > 0.0 && gate_w > 220.0 {
+            // Written on the back the moment it lies flat — letters at
+            // full red from blank, no fade.
+            stack = stack.push(pf::type_on_bare(
+                toll,
+                pf::TypeAt::CenteredOn((160.0 + gate_w - 130.0) as i32),
+                y + 35.0 + judder,
+                pf::geist_mono(19.0).letter_spacing(0.8).color(pf::mix(BREAK_RED, Color::WHITE, 0.25)),
+                clamp01(flip.since_land / 0.32),
             ));
         }
     }
