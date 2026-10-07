@@ -74,6 +74,7 @@
 
 use std::fmt;
 
+pub mod csg;
 pub mod gltf;
 pub mod modifiers;
 

@@ -35,6 +35,11 @@
 //! | rasterizer, shadows, culling, stats | [`render`] |
 //! | picking, projection | [`raycast`](mod@raycast) |
 //! | path tracing | [`pathtrace`] |
+//! | skinning (LBS + dual quaternion) and morph targets | [`skin`] |
+//! | custom fragment shaders and node materials | [`shader`] |
+//! | post-processing: SSAO, SSR, DoF, bloom, tone mapping, grading, FXAA | [`post`] |
+//! | meshlets, cone culling and cluster LOD (Nanite's shape) | [`meshlet`] |
+//! | stereo eyes, side-by-side and anaglyph | [`stereo`] |
 //! | the widget | [`widget`] |
 //!
 //! ```
@@ -55,17 +60,26 @@
 pub mod geometry;
 pub mod import;
 pub mod math;
+pub mod meshlet;
 pub mod pathtrace;
+pub mod post;
 pub mod raycast;
 pub mod render;
 pub mod scene;
+pub mod shader;
+pub mod skin;
+pub mod stereo;
 pub mod widget;
 
 pub use import::{apply_animation, import_gltf};
 pub use math::{Mat4, Quat, Vec3};
 pub use pathtrace::{Accumulator, PathTracer, TraceScene};
 pub use raycast::{project, raycast, Hit, Ray};
-pub use render::{RenderStats, Renderer};
+pub use post::{Pass, PostStack, ToneCurve};
+pub use render::{Frame, RenderStats, Renderer};
+pub use shader::{FragmentShader, ShaderGraph};
+pub use skin::{SkinnedMesh, Skinning};
+pub use stereo::StereoRig;
 pub use scene::{
     Camera, Content, Filter, Light, Material, Node, NodeDesc, NodeId, OrbitControls, Projection,
     ReconcileStats, Rgb, Scene, Shading, Texture,

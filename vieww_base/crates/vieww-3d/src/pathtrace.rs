@@ -161,7 +161,22 @@ impl TraceScene {
                     };
                     lights.push((*l, world.get_translation(), dir));
                 }
-                Content::Empty => {}
+                Content::Clustered { lods, material, .. } => {
+                    if let Some(l) = lods.levels.first() {
+                        add_mesh(world, &l.mesh, material);
+                    }
+                }
+                Content::Skinned {
+                    skin,
+                    material,
+                    morph_weights,
+                } => {
+                    let bones: Vec<crate::math::Mat4> =
+                        skin.bones.iter().map(|b| scene.node(*b).world()).collect();
+                    let jm = crate::skin::joint_matrices(&world, &bones, &skin.inverse_bind);
+                    add_mesh(world, &crate::skin::deform(skin, &jm, morph_weights), material);
+                }
+                Content::Empty | Content::Points { .. } => {}
             }
         }
         let mut s = Self {

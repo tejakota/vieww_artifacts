@@ -15,6 +15,7 @@ use vieww_mesh::gltf::Gltf;
 use crate::geometry::bounding_sphere;
 use crate::math::{Mat4, Quat, Vec3};
 use crate::scene::{Content, Material, Node, NodeId, Rgb, Scene};
+use crate::skin::SkinnedMesh;
 
 fn material(g: &Gltf, index: Option<usize>) -> Material {
     let Some(m) = index.and_then(|i| g.materials.get(i)) else {
@@ -83,6 +84,8 @@ fn decompose(m: &[f32; 16]) -> (Vec3, Quat, Vec3) {
 /// each glTF node (indexed like `g.nodes`).
 pub fn import_gltf(scene: &mut Scene, g: &Gltf, parent: Option<NodeId>) -> Vec<Option<NodeId>> {
     let mut ids = vec![None; g.nodes.len()];
+    // Skinned/morphing primitives wait for every joint node to exist.
+    let mut deferred: Vec<(NodeId, usize, usize, usize)> = Vec::new();
     let mut stack: Vec<(usize, Option<NodeId>)> =
         g.roots().into_iter().rev().map(|r| (r, parent)).collect();
     while let Some((i, par)) = stack.pop() {
@@ -108,7 +111,7 @@ pub fn import_gltf(scene: &mut Scene, g: &Gltf, parent: Option<NodeId>) -> Vec<O
         if let Some(mesh) = n.mesh.and_then(|m| g.meshes.get(m)) {
             for (k, p) in mesh.primitives.iter().enumerate() {
                 let bounds = bounding_sphere(&p.mesh);
-                scene.add(
+                let prim = scene.add(
                     Node::new(
                         &format!("{name}/prim{k}"),
                         Content::Mesh {
@@ -119,17 +122,54 @@ pub fn import_gltf(scene: &mut Scene, g: &Gltf, parent: Option<NodeId>) -> Vec<O
                     ),
                     Some(id),
                 );
+                if !p.joints.is_empty() || !p.targets.is_empty() {
+                    deferred.push((prim, i, n.mesh.unwrap_or(0), k));
+                }
             }
         }
         for &c in n.children.iter().rev() {
             stack.push((c, Some(id)));
         }
     }
+    for (prim, node, mesh, k) in deferred {
+        let gm = &g.meshes[mesh];
+        let p = &gm.primitives[k];
+        let mut skin = SkinnedMesh::morphing(p.mesh.clone(), p.targets.clone());
+        if let Some(sk) = g.nodes[node].skin.and_then(|s| g.skins.get(s)) {
+            let bones: Option<Vec<NodeId>> = sk.joints.iter().map(|j| ids[*j]).collect();
+            if let (Some(bones), false) = (bones, p.joints.is_empty()) {
+                skin = SkinnedMesh::skinned(
+                    p.mesh.clone(),
+                    p.joints.clone(),
+                    p.weights.clone(),
+                    bones,
+                    sk.inverse_bind.iter().map(Mat4::from_cols_array).collect(),
+                )
+                .with_targets(p.targets.clone());
+            }
+        }
+        scene.node_mut(prim).content = Content::Skinned {
+            skin: Arc::new(skin),
+            material: Arc::new(material(g, p.material)),
+            morph_weights: gm.weights.clone(),
+        };
+    }
     ids
 }
 
-/// Pose the imported nodes with animation `index` at `t` seconds.
+/// Pose the imported nodes with animation `index` at `t` seconds — TRS
+/// channels on nodes, and `weights` channels on their morphing primitives.
 pub fn apply_animation(scene: &mut Scene, g: &Gltf, ids: &[Option<NodeId>], index: usize, t: f32) {
+    for (i, w) in g.sample_weights(index, t).into_iter().enumerate() {
+        let (Some(w), Some(Some(id))) = (w, ids.get(i)) else {
+            continue;
+        };
+        for c in scene.node(*id).children().to_vec() {
+            if let Content::Skinned { morph_weights, .. } = &mut scene.node_mut(c).content {
+                morph_weights.clone_from(&w);
+            }
+        }
+    }
     for (i, pose) in g.sample(index, t).into_iter().enumerate() {
         let Some(Some(id)) = ids.get(i) else { continue };
         if pose.translation.is_none() && pose.rotation.is_none() && pose.scale.is_none() {

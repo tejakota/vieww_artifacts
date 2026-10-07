@@ -221,6 +221,10 @@ pub struct Material {
     pub flat: bool,
     pub cast_shadow: bool,
     pub receive_shadow: bool,
+    /// A custom fragment program run after the lighting model
+    /// (`ShaderMaterial` / a compiled node graph). Its alpha multiplies
+    /// opacity.
+    pub shader: Option<crate::shader::FragmentShader>,
 }
 
 impl Material {
@@ -236,7 +240,15 @@ impl Material {
             flat: false,
             cast_shadow: true,
             receive_shadow: true,
+            shader: None,
         }
+    }
+
+    /// Run `shader` for every fragment of this material.
+    #[must_use]
+    pub fn shader(mut self, shader: crate::shader::FragmentShader) -> Self {
+        self.shader = Some(shader);
+        self
     }
 
     #[must_use]
@@ -369,9 +381,77 @@ pub enum Content {
         bounds: (Vec3, f32),
     },
     Light(Light),
+    /// A skinned and/or morphing mesh, deformed every frame from its bones'
+    /// world matrices and `morph_weights` (`SkinnedMesh` + shape keys).
+    Skinned {
+        skin: Arc<crate::skin::SkinnedMesh>,
+        material: Arc<Material>,
+        morph_weights: Vec<f32>,
+    },
+    /// A point cloud drawn as depth-tested round splats of world `size`
+    /// (TouchDesigner POPs, Three.js `Points`, Blender point clouds).
+    Points {
+        points: Arc<Vec<Vec3>>,
+        colors: Arc<Vec<Rgb>>,
+        size: f32,
+        bounds: (Vec3, f32),
+    },
+    /// Meshlets with a cluster-LOD chain: per-frame level selection by
+    /// projected error, frustum and normal-cone culling per cluster.
+    Clustered {
+        lods: Arc<crate::meshlet::ClusterLods>,
+        material: Arc<Material>,
+        bounds: (Vec3, f32),
+        /// Maximum projected error, in pixels.
+        threshold_px: f32,
+    },
 }
 
 impl Content {
+    /// A skinned/morphing mesh with its material.
+    #[must_use]
+    pub fn skinned(skin: crate::skin::SkinnedMesh, material: Material) -> Self {
+        Self::Skinned {
+            skin: Arc::new(skin),
+            material: Arc::new(material),
+            morph_weights: Vec::new(),
+        }
+    }
+
+    /// A point cloud; `colors` may be shorter than `points` (the last colour repeats).
+    #[must_use]
+    pub fn points(points: Vec<Vec3>, colors: Vec<Rgb>, size: f32) -> Self {
+        let mut lo = Vec3::splat(f32::INFINITY);
+        let mut hi = Vec3::splat(f32::NEG_INFINITY);
+        for p in &points {
+            lo = lo.min(*p);
+            hi = hi.max(*p);
+        }
+        let bounds = if points.is_empty() {
+            (Vec3::ZERO, 0.0)
+        } else {
+            ((lo + hi) * 0.5, (hi - lo).length() * 0.5 + size)
+        };
+        Self::Points {
+            points: Arc::new(points),
+            colors: Arc::new(colors),
+            size,
+            bounds,
+        }
+    }
+
+    /// Cluster `mesh` into meshlets with `levels` LOD levels.
+    #[must_use]
+    pub fn clustered(mesh: &Mesh, levels: usize, material: Material) -> Self {
+        let bounds = bounding_sphere(mesh);
+        Self::Clustered {
+            lods: Arc::new(crate::meshlet::ClusterLods::build(mesh, levels)),
+            material: Arc::new(material),
+            bounds,
+            threshold_px: 1.0,
+        }
+    }
+
     /// A mesh with a material (the bounding sphere is computed here, once).
     #[must_use]
     pub fn mesh(mesh: Mesh, material: Material) -> Self {

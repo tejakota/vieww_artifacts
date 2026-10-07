@@ -24,9 +24,12 @@
 //! | scenes | every scene's roots and the default `scene` |
 //! | animations | node TRS channels with `LINEAR`, `STEP` and `CUBICSPLINE` samplers, sampled by [`Gltf::sample`] |
 //!
-//! Not read, and named so nobody hunts for them: skins and morph targets
-//! (skinned 3D characters — the 2D bone system lives in `vieww-animation`),
-//! textures and images (a material's `baseColorTexture` index is kept in
+//! | skins | `skins` (joints, `inverseBindMatrices`, `skeleton`), per-vertex `JOINTS_0`/`WEIGHTS_0`, the node's `skin` |
+//! | morph targets | per-primitive `targets` (`POSITION`/`NORMAL` deltas), the mesh's default `weights`, and `weights` animation channels ([`Gltf::sample_weights`]) |
+//!
+//! Skinning and morphing themselves are evaluated by `vieww-3d::skin`.
+//!
+//! Not read, and named so nobody hunts for them: textures and images (a material's `baseColorTexture` index is kept in
 //! [`GltfMaterial::base_color_texture`] for a caller with an image decoder),
 //! cameras, lights (`KHR_lights_punctual`) and every other extension.
 
@@ -88,6 +91,33 @@ impl Default for GltfMaterial {
 pub struct Primitive {
     pub mesh: Mesh,
     pub material: Option<usize>,
+    /// Up to four joint indices per vertex (into the skin's `joints`);
+    /// empty for an unskinned primitive.
+    pub joints: Vec<[u16; 4]>,
+    /// The matching weights, normalised to sum to one.
+    pub weights: Vec<[f32; 4]>,
+    /// Morph targets: per-vertex deltas.
+    pub targets: Vec<MorphTarget>,
+}
+
+/// One morph target (blend shape): deltas added to the base, scaled by its weight.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MorphTarget {
+    pub positions: Vec<[f32; 3]>,
+    /// Empty when the target moves positions only.
+    pub normals: Vec<[f32; 3]>,
+}
+
+/// A skin: the joints a skinned mesh is bound to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Skin {
+    pub name: String,
+    /// Node indices of the joints, in the order `JOINTS_0` refers to them.
+    pub joints: Vec<usize>,
+    /// One column-major inverse bind matrix per joint (identity if absent).
+    pub inverse_bind: Vec<[f32; 16]>,
+    /// The skeleton root, when the file names one.
+    pub skeleton: Option<usize>,
 }
 
 /// A glTF mesh: one or more primitives.
@@ -95,6 +125,8 @@ pub struct Primitive {
 pub struct GltfMesh {
     pub name: String,
     pub primitives: Vec<Primitive>,
+    /// Default morph-target weights.
+    pub weights: Vec<f32>,
 }
 
 /// A node of the hierarchy.
@@ -109,6 +141,8 @@ pub struct GltfNode {
     pub scale: [f32; 3],
     /// Column-major, when the file gave a matrix instead of TRS.
     pub matrix: Option<[f32; 16]>,
+    /// The skin this node's mesh is bound with.
+    pub skin: Option<usize>,
 }
 
 /// Which property an animation channel drives.
@@ -117,6 +151,8 @@ pub enum Path {
     Translation,
     Rotation,
     Scale,
+    /// Morph-target weights (values are `width` wide; see [`Channel::wide`]).
+    Weights,
 }
 
 /// How a sampler interpolates.
@@ -137,6 +173,10 @@ pub struct Channel {
     /// One value per key (per key *triple* — in-tangent, value,
     /// out-tangent — for cubic splines), padded to four components.
     pub values: Vec<[f32; 4]>,
+    /// For [`Path::Weights`]: every key's full weight vector, `width` per key
+    /// (per key triple for cubic splines). Empty for TRS channels.
+    pub wide: Vec<f32>,
+    pub width: usize,
 }
 
 /// A named set of channels.
@@ -167,6 +207,7 @@ pub struct Gltf {
     pub scenes: Vec<Vec<usize>>,
     pub default_scene: Option<usize>,
     pub animations: Vec<Animation>,
+    pub skins: Vec<Skin>,
 }
 
 /// A node's sampled transform override.
@@ -191,6 +232,39 @@ fn nlerp(a: [f32; 4], b: [f32; 4], t: f32) -> [f32; 4] {
 }
 
 impl Channel {
+    /// A weights channel's full vector at `t` (linear or step; cubic keys
+    /// use their value element).
+    #[must_use]
+    pub fn sample_wide(&self, t: f32) -> Vec<f32> {
+        let n = self.times.len();
+        let w = self.width.max(1);
+        if n == 0 || self.wide.is_empty() {
+            return Vec::new();
+        }
+        let cubic = self.interpolation == Interpolation::CubicSpline;
+        let key = |k: usize| {
+            let at = if cubic { (k * 3 + 1) * w } else { k * w };
+            &self.wide[at..at + w]
+        };
+        if t <= self.times[0] {
+            return key(0).to_vec();
+        }
+        if t >= self.times[n - 1] {
+            return key(n - 1).to_vec();
+        }
+        let i = self.times.partition_point(|&x| x <= t) - 1;
+        let dt = self.times[i + 1] - self.times[i];
+        let u = if dt > 0.0 { (t - self.times[i]) / dt } else { 0.0 };
+        if self.interpolation == Interpolation::Step {
+            return key(i).to_vec();
+        }
+        key(i)
+            .iter()
+            .zip(key(i + 1))
+            .map(|(a, b)| a + (b - a) * u)
+            .collect()
+    }
+
     /// The channel's value at `t` (clamped to its keys).
     #[must_use]
     pub fn sample(&self, t: f32) -> [f32; 4] {
@@ -272,6 +346,23 @@ impl Gltf {
                 Path::Translation => pose.translation = Some([v[0], v[1], v[2]]),
                 Path::Rotation => pose.rotation = Some(v),
                 Path::Scale => pose.scale = Some([v[0], v[1], v[2]]),
+                Path::Weights => {}
+            }
+        }
+        out
+    }
+
+    /// Sample the morph weights animation `index` drives at `t`: one entry
+    /// per node, `None` where no weights channel targets it.
+    #[must_use]
+    pub fn sample_weights(&self, index: usize, t: f32) -> Vec<Option<Vec<f32>>> {
+        let mut out = vec![None; self.nodes.len()];
+        let Some(anim) = self.animations.get(index) else {
+            return out;
+        };
+        for c in anim.channels.iter().filter(|c| c.path == Path::Weights) {
+            if let Some(slot) = out.get_mut(c.node) {
+                *slot = Some(c.sample_wide(t));
             }
         }
         out
@@ -677,9 +768,63 @@ fn load(
             if !mesh.has_normals() {
                 mesh.compute_normals();
             }
+            let mut joints = Vec::new();
+            let mut weights = Vec::new();
+            if let (Some(ja), Some(wa)) = (idx(attrs, "JOINTS_0"), idx(attrs, "WEIGHTS_0")) {
+                let (j, jw) = bufs.read(doc, ja)?;
+                let (w, ww) = bufs.read(doc, wa)?;
+                if jw != 4 || ww != 4 || j.len() != nverts * 4 || w.len() != nverts * 4 {
+                    return err("JOINTS_0/WEIGHTS_0 must be VEC4 per vertex");
+                }
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                {
+                    joints = j
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .map(|c| c.map(|v| v as u16))
+                        .collect();
+                }
+                weights = w
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|c| {
+                        let s: f32 = c.iter().sum();
+                        if s > 0.0 {
+                            c.map(|v| v / s)
+                        } else {
+                            [1.0, 0.0, 0.0, 0.0]
+                        }
+                    })
+                    .collect();
+            }
+            let mut targets = Vec::new();
+            for t in arr(p, "targets") {
+                let mut mt = MorphTarget::default();
+                let vec3 = |a: usize| -> Result<Vec<[f32; 3]>, GltfError> {
+                    let (v, w) = bufs.read(doc, a)?;
+                    if w != 3 || v.len() != nverts * 3 {
+                        return err("morph target attribute must be VEC3 per vertex");
+                    }
+                    Ok(v.as_chunks::<3>().0.iter().map(|c| [c[0], c[1], c[2]]).collect())
+                };
+                if let Some(a) = idx(t, "POSITION") {
+                    mt.positions = vec3(a)?;
+                } else {
+                    mt.positions = vec![[0.0; 3]; nverts];
+                }
+                if let Some(a) = idx(t, "NORMAL") {
+                    mt.normals = vec3(a)?;
+                }
+                targets.push(mt);
+            }
             primitives.push(Primitive {
                 mesh,
                 material: idx(p, "material"),
+                joints,
+                weights,
+                targets,
             });
         }
         meshes.push(GltfMesh {
@@ -689,6 +834,7 @@ fn load(
                 .unwrap_or("")
                 .to_owned(),
             primitives,
+            weights: m.get("weights").and_then(Json::as_f32_vec).unwrap_or_default(),
         });
     }
 
@@ -717,6 +863,7 @@ fn load(
                 rotation: floats(n, "rotation", [0.0, 0.0, 0.0, 1.0]),
                 scale: floats(n, "scale", [1.0; 3]),
                 matrix,
+                skin: idx(n, "skin"),
             }
         })
         .collect::<Vec<_>>();
@@ -744,7 +891,8 @@ fn load(
                 Some("translation") => Path::Translation,
                 Some("rotation") => Path::Rotation,
                 Some("scale") => Path::Scale,
-                _ => continue, // morph-target weights: not supported
+                Some("weights") => Path::Weights,
+                _ => continue,
             };
             let Some(node) = idx(target, "node") else {
                 continue;
@@ -765,6 +913,27 @@ fn load(
                 doc,
                 idx(s, "output").ok_or_else(|| GltfError("sampler.output".into()))?,
             )?;
+            let keys = times.len()
+                * if interpolation == Interpolation::CubicSpline {
+                    3
+                } else {
+                    1
+                };
+            if path == Path::Weights {
+                if keys == 0 || vals.len() % keys != 0 {
+                    return err("weights sampler output does not divide by its keys");
+                }
+                channels.push(Channel {
+                    node,
+                    path,
+                    interpolation,
+                    width: vals.len() / keys,
+                    wide: vals,
+                    times,
+                    values: Vec::new(),
+                });
+                continue;
+            }
             let values = vals
                 .chunks_exact(width)
                 .map(|c| {
@@ -788,6 +957,8 @@ fn load(
                 interpolation,
                 times,
                 values,
+                wide: Vec::new(),
+                width: 0,
             });
         }
         animations.push(Animation {
@@ -800,7 +971,35 @@ fn load(
         });
     }
 
+    let mut skins = Vec::new();
+    for sk in arr(doc, "skins") {
+        let joints: Vec<usize> = arr(sk, "joints").iter().filter_map(Json::as_usize).collect();
+        if joints.iter().any(|&j| j >= nodes.len()) {
+            return err("a skin joint refers past the node list");
+        }
+        let identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let inverse_bind = match idx(sk, "inverseBindMatrices") {
+            Some(a) => {
+                let (m, w) = bufs.read(doc, a)?;
+                if w != 16 || m.len() != joints.len() * 16 {
+                    return err("inverseBindMatrices must be one MAT4 per joint");
+                }
+                m.as_chunks::<16>().0.to_vec()
+            }
+            None => vec![identity; joints.len()],
+        };
+        skins.push(Skin {
+            name: sk.get("name").and_then(Json::as_str).unwrap_or("").to_owned(),
+            joints,
+            inverse_bind,
+            skeleton: idx(sk, "skeleton"),
+        });
+    }
+
     Ok(Gltf {
+        skins,
         meshes,
         materials,
         nodes,
@@ -1061,6 +1260,8 @@ mod tests {
             interpolation: Interpolation::Linear,
             times: vec![0.0, 1.0],
             values: vec![[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 0.0]],
+            wide: Vec::new(),
+            width: 0,
         };
         let q = c.sample(0.5);
         let len = q.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -1165,5 +1366,69 @@ mod tests {
         let g = parse_gltf(&text, &|_| None).unwrap();
         assert_eq!(g.meshes[0].primitives[0].mesh, m);
         assert_eq!(g.materials[0].base_color, [0.2, 0.4, 0.6, 1.0]);
+    }
+
+    #[test]
+    fn skins_joints_weights_and_morph_targets_are_read() {
+        let mut b: Vec<u8> = Vec::new();
+        let f = |b: &mut Vec<u8>, v: &[f32]| v.iter().for_each(|x| b.extend(x.to_le_bytes()));
+        f(&mut b, &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]); // 0..36 positions
+        for i in [0u16, 1, 2] {
+            b.extend(i.to_le_bytes()); // 36..42 indices
+        }
+        b.extend([0, 0]); // pad to 44
+        b.extend([0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0]); // 44..56 joints (u8)
+        f(&mut b, &[2.0, 2.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]); // 56..104 weights (unnormalised)
+        f(&mut b, &[0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]); // 104..140 target deltas
+        let id = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+        f(&mut b, &id);
+        let mut ib2 = id;
+        ib2[12] = -1.0;
+        f(&mut b, &ib2); // 140..268 IBMs
+        f(&mut b, &[0.0, 1.0]); // 268..276 times
+        f(&mut b, &[0.0, 1.0]); // 276..284 weight keys
+        assert_eq!(b.len(), 284);
+        let uri = format!("data:application/octet-stream;base64,{}", base64_encode(&b));
+        let text = format!(
+            r#"{{"asset": {{"version": "2.0"}},
+            "buffers": [{{"byteLength": 284, "uri": "{uri}"}}],
+            "bufferViews": [
+              {{"buffer": 0, "byteOffset": 0, "byteLength": 36}},
+              {{"buffer": 0, "byteOffset": 36, "byteLength": 6}},
+              {{"buffer": 0, "byteOffset": 44, "byteLength": 12}},
+              {{"buffer": 0, "byteOffset": 56, "byteLength": 48}},
+              {{"buffer": 0, "byteOffset": 104, "byteLength": 36}},
+              {{"buffer": 0, "byteOffset": 140, "byteLength": 128}},
+              {{"buffer": 0, "byteOffset": 268, "byteLength": 8}},
+              {{"buffer": 0, "byteOffset": 276, "byteLength": 8}}],
+            "accessors": [
+              {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+              {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}},
+              {{"bufferView": 2, "componentType": 5121, "count": 3, "type": "VEC4"}},
+              {{"bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC4"}},
+              {{"bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC3"}},
+              {{"bufferView": 5, "componentType": 5126, "count": 2, "type": "MAT4"}},
+              {{"bufferView": 6, "componentType": 5126, "count": 2, "type": "SCALAR"}},
+              {{"bufferView": 7, "componentType": 5126, "count": 2, "type": "SCALAR"}}],
+            "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0, "JOINTS_0": 2, "WEIGHTS_0": 3}},
+                "indices": 1, "targets": [{{"POSITION": 4}}]}}], "weights": [0.25]}}],
+            "skins": [{{"joints": [1, 2], "inverseBindMatrices": 5, "skeleton": 1}}],
+            "nodes": [{{"mesh": 0, "skin": 0}}, {{"children": [2]}}, {{"translation": [1, 0, 0]}}],
+            "animations": [{{"samplers": [{{"input": 6, "output": 7}}],
+                "channels": [{{"sampler": 0, "target": {{"node": 0, "path": "weights"}}}}]}}]}}"#
+        );
+        let g = parse_gltf(&text, &|_| None).unwrap();
+        let p = &g.meshes[0].primitives[0];
+        assert_eq!(p.joints[0], [0, 1, 0, 0]);
+        assert_eq!(p.weights[0], [0.5, 0.5, 0.0, 0.0], "normalised");
+        assert_eq!(p.targets.len(), 1);
+        assert_eq!(p.targets[0].positions[2], [0.0, 0.0, 1.0]);
+        assert_eq!(g.meshes[0].weights, vec![0.25]);
+        assert_eq!(g.nodes[0].skin, Some(0));
+        assert_eq!(g.skins[0].joints, vec![1, 2]);
+        assert_eq!(g.skins[0].inverse_bind[1][12], -1.0);
+        let w = g.sample_weights(0, 0.5);
+        assert!((w[0].as_ref().unwrap()[0] - 0.5).abs() < 1e-6);
+        assert!(w[1].is_none());
     }
 }

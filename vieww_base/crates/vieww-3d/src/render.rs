@@ -55,6 +55,16 @@ pub struct RenderStats {
     pub shadow_triangles: usize,
     /// Objects drawn in the transparent pass.
     pub transparent: usize,
+    /// Meshlets considered across clustered meshes.
+    pub clusters: usize,
+    /// Meshlets rejected by the frustum or the normal cone.
+    pub clusters_culled: usize,
+    /// Point-cloud splats drawn.
+    pub points: usize,
+    /// Vertices deformed by skinning or morphing this frame.
+    pub skinned_vertices: usize,
+    /// Fragments that ran a custom shader.
+    pub shaded_custom: usize,
 }
 
 /// Renders scenes. Configure, then call [`render`](Self::render).
@@ -68,6 +78,8 @@ pub struct Renderer {
     pub shadow_size: u32,
     /// Multiplies every light (a camera's exposure).
     pub exposure: f32,
+    /// Seconds, handed to custom fragment shaders.
+    pub time: f32,
 }
 
 impl Renderer {
@@ -79,7 +91,15 @@ impl Renderer {
             samples: 2,
             shadow_size: 1024,
             exposure: 1.0,
+            time: 0.0,
         }
+    }
+
+    /// The time custom shaders see.
+    #[must_use]
+    pub const fn at_time(mut self, seconds: f32) -> Self {
+        self.time = seconds;
+        self
     }
 
     #[must_use]
@@ -139,6 +159,45 @@ struct Target {
     h: usize,
     color: Vec<Rgb>,
     depth: Vec<f32>,
+    /// View-space position and normal of the nearest opaque surface.
+    position: Vec<Vec3>,
+    normal: Vec<Vec3>,
+}
+
+/// A rendered frame before display encoding — the G-buffer post-processing
+/// reads (`EffectComposer`'s render target, EEVEE's buffers).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Frame {
+    pub width: usize,
+    pub height: usize,
+    /// Linear HDR radiance (not clamped).
+    pub color: Vec<Rgb>,
+    /// View-space position of the nearest opaque surface (`z < 0` in front
+    /// of the camera); background pixels have `z = −∞`.
+    pub position: Vec<Vec3>,
+    /// View-space unit normal (zero on background).
+    pub normal: Vec<Vec3>,
+    /// The projection used, for screen-space effects that re-project.
+    pub projection: Mat4,
+}
+
+impl Frame {
+    /// Distance along the view axis (`−z`), `∞` for background.
+    #[must_use]
+    pub fn depth(&self, x: usize, y: usize) -> f32 {
+        -self.position[y * self.width + x].z
+    }
+
+    /// sRGB-encode (clamped) into an image — what `Renderer::render` returns.
+    #[must_use]
+    pub fn to_image(&self) -> Image {
+        let mut px = Vec::with_capacity(self.width * self.height * 4);
+        for c in &self.color {
+            px.extend_from_slice(&[srgb(c.r), srgb(c.g), srgb(c.b), 255]);
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        Image::from_rgba8(px, self.width as u32, self.height as u32)
+    }
 }
 
 struct LightW {
@@ -231,6 +290,15 @@ impl Renderer {
     /// Render `scene` from `camera` into an RGBA8 image.
     #[must_use]
     pub fn render(&self, scene: &mut Scene, camera: &Camera) -> (Image, RenderStats) {
+        let (frame, stats) = self.render_frame(scene, camera);
+        (frame.to_image(), stats)
+    }
+
+    /// Render into a linear [`Frame`] (colour + view-space position and
+    /// normal), for [`post`](crate::post) processing.
+    #[must_use]
+    #[allow(clippy::too_many_lines)]
+    pub fn render_frame(&self, scene: &mut Scene, camera: &Camera) -> (Frame, RenderStats) {
         let mut stats = RenderStats::default();
         scene.update_world();
         let s = self.samples.clamp(1, 4) as usize;
@@ -267,6 +335,7 @@ impl Renderer {
 
         // Drawables.
         let mut items = Vec::new();
+        let mut clouds = Vec::new();
         for id in scene.traverse() {
             if !scene.effectively_visible(id) {
                 continue;
@@ -323,6 +392,44 @@ impl Renderer {
                         push(world, mesh, material, *bounds, &mut stats);
                     }
                 }
+                Content::Skinned {
+                    skin,
+                    material,
+                    morph_weights,
+                } => {
+                    let bones: Vec<Mat4> =
+                        skin.bones.iter().map(|b| scene.node(*b).world()).collect();
+                    let jm = crate::skin::joint_matrices(&world, &bones, &skin.inverse_bind);
+                    let mesh = crate::skin::deform(skin, &jm, morph_weights);
+                    stats.skinned_vertices += mesh.positions.len();
+                    let bounds = crate::geometry::bounding_sphere(&mesh);
+                    push(world, &Arc::new(mesh), material, bounds, &mut stats);
+                }
+                Content::Clustered {
+                    lods,
+                    material,
+                    bounds,
+                    threshold_px,
+                } => {
+                    let c = world.transform_point(bounds.0);
+                    let d = (c - camera.position).length();
+                    let fov = match camera.projection {
+                        crate::scene::Projection::Perspective { fov_y, .. } => fov_y,
+                        crate::scene::Projection::Orthographic { .. } => 0.8,
+                    };
+                    #[allow(clippy::cast_precision_loss)]
+                    let level =
+                        lods.select(d, fov, self.height as f32, world.max_scale(), *threshold_px);
+                    let (mesh, cs) = lods.gather(level, &world, camera.position, &planes);
+                    stats.clusters += cs.clusters;
+                    stats.clusters_culled += cs.frustum_culled + cs.cone_culled;
+                    if !mesh.indices.is_empty() {
+                        push(world, &Arc::new(mesh), material, *bounds, &mut stats);
+                    }
+                }
+                Content::Points { .. } => {
+                    clouds.push(id);
+                }
                 Content::Empty | Content::Light(_) => {}
             }
         }
@@ -335,6 +442,8 @@ impl Renderer {
             h,
             color: vec![scene.background; w * h],
             depth: vec![f32::INFINITY; w * h],
+            position: vec![Vec3::new(0.0, 0.0, f32::NEG_INFINITY); w * h],
+            normal: vec![Vec3::ZERO; w * h],
         };
         let (opaque, mut transparent): (Vec<&Item>, Vec<&Item>) =
             items.iter().partition(|i| i.material.opacity >= 1.0);
@@ -347,28 +456,74 @@ impl Renderer {
             fog: scene.fog,
             view,
             exposure: self.exposure,
+            time: self.time,
         };
-        for item in opaque.iter().chain(transparent.iter()) {
+        for item in &opaque {
+            draw_item(item, &vp, &mut target, &ctx, &mut stats);
+        }
+        for id in clouds {
+            let n = scene.node(id);
+            if let Content::Points {
+                points,
+                colors,
+                size,
+                ..
+            } = &n.content
+            {
+                draw_points(
+                    &n.world(),
+                    points,
+                    colors,
+                    *size,
+                    &view,
+                    &proj,
+                    &mut target,
+                    &mut stats,
+                );
+            }
+        }
+        for item in &transparent {
             draw_item(item, &vp, &mut target, &ctx, &mut stats);
         }
 
         // Resolve.
-        let mut px = Vec::with_capacity(self.width as usize * self.height as usize * 4);
+        let (ow, oh) = (self.width as usize, self.height as usize);
+        let mut color = Vec::with_capacity(ow * oh);
+        let mut position = Vec::with_capacity(ow * oh);
+        let mut normal = Vec::with_capacity(ow * oh);
         #[allow(clippy::cast_precision_loss)]
         let norm = 1.0 / (s * s) as f32;
-        for y in 0..self.height as usize {
-            for x in 0..self.width as usize {
+        for y in 0..oh {
+            for x in 0..ow {
                 let mut acc = Rgb::BLACK;
+                let mut best = (y * s) * w + x * s;
                 for sy in 0..s {
                     for sx in 0..s {
-                        acc = acc.add(target.color[(y * s + sy) * w + x * s + sx]);
+                        let k = (y * s + sy) * w + x * s + sx;
+                        acc = acc.add(target.color[k]);
+                        // Geometry: the nearest sample of the block (no
+                        // averaging across silhouettes).
+                        if target.position[k].z > target.position[best].z {
+                            best = k;
+                        }
                     }
                 }
-                let c = acc.scale(norm);
-                px.extend_from_slice(&[srgb(c.r), srgb(c.g), srgb(c.b), 255]);
+                color.push(acc.scale(norm));
+                position.push(target.position[best]);
+                normal.push(target.normal[best]);
             }
         }
-        (Image::from_rgba8(px, self.width, self.height), stats)
+        (
+            Frame {
+                width: ow,
+                height: oh,
+                color,
+                position,
+                normal,
+                projection: proj,
+            },
+            stats,
+        )
     }
 
     fn shadow_pass(
@@ -508,6 +663,7 @@ struct ShadeCtx<'a> {
     fog: Option<(Rgb, f32, f32)>,
     view: Mat4,
     exposure: f32,
+    time: f32,
 }
 
 #[allow(
@@ -669,12 +825,34 @@ fn draw_item(
                         v[0].uv[0] * q0 + v[1].uv[0] * q1 + v[2].uv[0] * q2,
                         v[0].uv[1] * q0 + v[1].uv[1] * q1 + v[2].uv[1] * q2,
                     ];
-                    let (color, alpha) = shade(mat, world, n, uv, ctx);
+                    let (mut color, mut alpha) = shade(mat, world, n, uv, ctx);
+                    if let Some(prog) = &mat.shader {
+                        let mut albedo = mat.color;
+                        if let Some(t) = &mat.map {
+                            let s = t.sample(uv[0], uv[1]);
+                            albedo = albedo.mul(Rgb::new(s[0], s[1], s[2]));
+                        }
+                        let out = prog.run(&crate::shader::Fragment {
+                            world,
+                            normal: n,
+                            uv,
+                            view: (ctx.eye - world).normalize(),
+                            screen: [px, py],
+                            time: ctx.time,
+                            lit: color,
+                            albedo,
+                        });
+                        color = Rgb::new(out[0], out[1], out[2]);
+                        alpha *= out[3];
+                        stats.shaded_custom += 1;
+                    }
                     stats.fragments += 1;
                     let a = alpha * mat.opacity;
                     if a >= 1.0 {
                         target.color[idx] = color;
                         target.depth[idx] = z;
+                        target.position[idx] = ctx.view.transform_point(world);
+                        target.normal[idx] = ctx.view.transform_vector(n).normalize();
                     } else {
                         target.color[idx] = target.color[idx].lerp(color, a.clamp(0.0, 1.0));
                         // Transparent surfaces do not write depth.
@@ -712,6 +890,75 @@ fn draw_line(a: [f32; 3], b: [f32; 3], target: &mut Target, color: Rgb, stats: &
             target.color[idx] = color;
             target.depth[idx] = z - 1e-4;
             stats.fragments += 1;
+        }
+    }
+}
+
+/// Round, depth-tested splats of world `size`, perspective-scaled.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap
+)]
+fn draw_points(
+    model: &Mat4,
+    points: &[Vec3],
+    colors: &[Rgb],
+    size: f32,
+    view: &Mat4,
+    proj: &Mat4,
+    target: &mut Target,
+    stats: &mut RenderStats,
+) {
+    let (w, h) = (target.w as f32, target.h as f32);
+    let scale = model.max_scale();
+    for (i, p) in points.iter().enumerate() {
+        let vpos = view.transform_point(model.transform_point(*p));
+        if vpos.z >= -1e-4 {
+            continue;
+        }
+        let c = proj.mul_vec4([vpos.x, vpos.y, vpos.z, 1.0]);
+        let iw = 1.0 / c[3];
+        let (sx, sy, z) = (
+            (c[0] * iw * 0.5 + 0.5) * w,
+            (0.5 - c[1] * iw * 0.5) * h,
+            c[2] * iw,
+        );
+        if !(-1.0..=1.0).contains(&z) {
+            continue;
+        }
+        // Radius in pixels: project a view-space offset of `size`.
+        let edge = proj.mul_vec4([vpos.x + size * scale, vpos.y, vpos.z, 1.0]);
+        let r = ((edge[0] / edge[3] - c[0] * iw).abs() * 0.5 * w).max(0.5);
+        let color = colors
+            .get(i)
+            .or_else(|| colors.last())
+            .copied()
+            .unwrap_or(Rgb::WHITE);
+        let (x0, x1) = ((sx - r).floor().max(0.0) as i64, (sx + r).ceil().min(w - 1.0) as i64);
+        let (y0, y1) = ((sy - r).floor().max(0.0) as i64, (sy + r).ceil().min(h - 1.0) as i64);
+        let mut drew = false;
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let (dx, dy) = (x as f32 + 0.5 - sx, y as f32 + 0.5 - sy);
+                if dx * dx + dy * dy > r * r {
+                    continue;
+                }
+                let idx = y as usize * target.w + x as usize;
+                if z < target.depth[idx] {
+                    target.depth[idx] = z;
+                    target.color[idx] = color;
+                    target.position[idx] = vpos;
+                    target.normal[idx] = Vec3::Z;
+                    stats.fragments += 1;
+                    drew = true;
+                }
+            }
+        }
+        if drew {
+            stats.points += 1;
         }
     }
 }

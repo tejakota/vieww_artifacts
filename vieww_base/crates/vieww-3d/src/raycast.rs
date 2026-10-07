@@ -178,7 +178,17 @@ pub fn raycast(scene: &mut Scene, ray: &Ray) -> Vec<Hit> {
                     test(world, m, *bounds, None);
                 }
             }
-            Content::Empty | Content::Light(_) => {}
+            Content::Clustered { lods, bounds, .. } => {
+                if let Some(l) = lods.levels.first() {
+                    test(world, &l.mesh, *bounds, None);
+                }
+            }
+            Content::Skinned { skin, morph_weights, .. } => {
+                let m = crate::skin::morph(skin, morph_weights);
+                let b = crate::geometry::bounding_sphere(&m);
+                test(world, &m, b, None);
+            }
+            Content::Empty | Content::Light(_) | Content::Points { .. } => {}
         }
     }
     hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));

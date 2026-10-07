@@ -136,6 +136,37 @@ fn y_range(mesh: &Mesh) -> (f32, f32) {
     mesh.bounds().map_or((0.0, 1.0), |(lo, hi)| (lo[1], hi[1]))
 }
 
+/// An axis-aligned cube of edge `size` centred on the origin: 8 shared
+/// corners, 12 triangles wound counter-clockwise seen from outside, normals
+/// computed — the closed solid booleans and modifiers start from.
+#[must_use]
+pub fn cube(size: f32) -> Mesh {
+    let h = size * 0.5;
+    let mut m = Mesh {
+        positions: vec![
+            [-h, -h, -h],
+            [h, -h, -h],
+            [h, h, -h],
+            [-h, h, -h],
+            [-h, -h, h],
+            [h, -h, h],
+            [h, h, h],
+            [-h, h, h],
+        ],
+        indices: vec![
+            0, 3, 2, 0, 2, 1, // -z
+            4, 5, 6, 4, 6, 7, // +z
+            0, 1, 5, 0, 5, 4, // -y
+            3, 7, 6, 3, 6, 2, // +y
+            0, 4, 7, 0, 7, 3, // -x
+            1, 2, 6, 1, 6, 5, // +x
+        ],
+        ..Mesh::default()
+    };
+    m.compute_normals();
+    m
+}
+
 /// Merge vertices within `distance` (grid-hashed); attributes of the first
 /// vertex win; UVs are dropped because merged vertices may disagree.
 #[must_use]
