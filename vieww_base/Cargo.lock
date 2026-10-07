@@ -5335,7 +5335,6 @@ dependencies = [
 name = "vieww-image"
 version = "0.1.0"
 dependencies = [
- "image",
  "vieww-foundation",
 ]
 
@@ -5590,8 +5589,8 @@ dependencies = [
 name = "vieww-video"
 version = "0.1.0"
 dependencies = [
- "image",
  "vieww-foundation",
+ "vieww-image",
 ]
 
 [[package]]

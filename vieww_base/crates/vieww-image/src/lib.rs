@@ -13,9 +13,10 @@
 //! - [`atlas`] — shelf-packing layout for a batch of images into one target
 //!   size, reporting which requests (if any) did not fit, plus a real
 //!   pixel-copying compositor that produces the packed atlas image.
-//! - [`sequence`] — animated GIF decoding through `image`'s own
-//!   `AnimationDecoder`, and looking up which frame is showing at a given
-//!   elapsed time.
+//! - [`codec`] — vieww's own PNG, GIF, JPEG, BMP and DEFLATE/zlib
+//!   encoders and decoders, written from the specifications.
+//! - [`sequence`] — animated GIF decoding through [`codec::gif`], and
+//!   looking up which frame is showing at a given elapsed time.
 //! - [`profile`] — colour-space tagging (reusing
 //!   [`vieww_foundation::ColorSpace`]) and bulk sRGB-transfer-function
 //!   conversion for whole image buffers. Deliberately *not* general ICC
@@ -26,6 +27,7 @@
 //!   `vieww-asset`'s unbounded-until-`clear()` cache.
 
 pub mod atlas;
+pub mod codec;
 pub mod mipmap;
 pub mod profile;
 pub mod residency;

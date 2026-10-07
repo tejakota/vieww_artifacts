@@ -16,8 +16,9 @@ categories.workspace = true
 # pipeline, no second texture upload story, and a platform decoder's output
 # drops straight into a widget that was written for stills.
 vieww-foundation.workspace = true
-# PNG / GIF encoding for the frame sinks in `export`.
-image = { version = "0.25", default-features = false, features = ["png", "gif"] }
+# vieww's own PNG / GIF / JPEG codecs — the frame sinks in `export`, the
+# MJPEG decoder in `avi`, and image I/O for the CV tools.
+vieww-image.workspace = true
 
 [lints]
 workspace = true

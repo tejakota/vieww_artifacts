@@ -238,10 +238,13 @@ pub fn read_y4m(bytes: &[u8]) -> Result<FrameSequence, String> {
     Ok(FrameSequence::new(frames, fps))
 }
 
-/// Writes an animated GIF.
+/// Writes an animated GIF with vieww's own encoder
+/// ([`vieww_image::codec::gif`]): frames are collected, each gets a
+/// median-cut palette, and the file is written on [`finish`](FrameSink::finish).
 pub struct GifWriter<W: Write> {
-    encoder: Option<image::codecs::gif::GifEncoder<W>>,
-    delay_ms: u32,
+    out: Option<W>,
+    pending: Vec<(Vec<u8>, u16)>,
+    delay_cs: u16,
     width: u32,
     height: u32,
     pub frames: usize,
@@ -251,7 +254,7 @@ impl<W: Write> std::fmt::Debug for GifWriter<W> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GifWriter")
             .field("frames", &self.frames)
-            .field("delay_ms", &self.delay_ms)
+            .field("delay_cs", &self.delay_cs)
             .finish_non_exhaustive()
     }
 }
@@ -262,14 +265,17 @@ impl<W: Write> GifWriter<W> {
     ///
     /// # Errors
     ///
-    /// The encoder refusing its settings.
+    /// A frame larger than GIF's 65,535-pixel sides.
     pub fn new(out: W, width: u32, height: u32, fps: u32) -> io::Result<Self> {
-        let mut enc = image::codecs::gif::GifEncoder::new_with_speed(out, 10);
-        enc.set_repeat(image::codecs::gif::Repeat::Infinite)
-            .map_err(io::Error::other)?;
+        if width > 65_535 || height > 65_535 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "GIF sides are 16-bit"));
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        let delay_cs = (100 / fps.max(1)).max(1) as u16;
         Ok(Self {
-            encoder: Some(enc),
-            delay_ms: 1000 / fps.max(1),
+            out: Some(out),
+            pending: Vec::new(),
+            delay_cs,
             width,
             height,
             frames: 0,
@@ -282,26 +288,26 @@ impl<W: Write> FrameSink for GifWriter<W> {
         if f.width() != self.width || f.height() != self.height {
             return Err(mismatch(self.width, self.height, f));
         }
-        let buf = image::RgbaImage::from_raw(f.width(), f.height(), f.pixels().to_vec())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "pixel buffer size"))?;
-        let frame = image::Frame::from_parts(
-            buf,
-            0,
-            0,
-            image::Delay::from_numer_denom_ms(self.delay_ms, 1),
-        );
-        self.encoder
-            .as_mut()
-            .ok_or_else(|| io::Error::other("finished"))?
-            .encode_frame(frame)
-            .map_err(io::Error::other)?;
+        if self.out.is_none() {
+            return Err(io::Error::other("finished"));
+        }
+        self.pending.push((f.pixels().to_vec(), self.delay_cs));
         self.frames += 1;
         Ok(())
     }
 
     fn finish(&mut self) -> io::Result<()> {
-        // Dropping the encoder writes the trailer.
-        self.encoder.take();
+        if let Some(mut out) = self.out.take() {
+            #[allow(clippy::cast_possible_truncation)]
+            let bytes = vieww_image::codec::gif::encode(
+                self.width as u16,
+                self.height as u16,
+                &std::mem::take(&mut self.pending),
+                0,
+            );
+            out.write_all(&bytes)?;
+            out.flush()?;
+        }
         Ok(())
     }
 }
@@ -336,9 +342,8 @@ impl PngSequence {
 
 impl FrameSink for PngSequence {
     fn push(&mut self, f: &Image) -> io::Result<()> {
-        let buf = image::RgbaImage::from_raw(f.width(), f.height(), f.pixels().to_vec())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "pixel buffer size"))?;
-        buf.save(self.path(self.frames)).map_err(io::Error::other)?;
+        let bytes = vieww_image::codec::png::encode(f.width(), f.height(), f.pixels());
+        std::fs::write(self.path(self.frames), bytes)?;
         self.frames += 1;
         Ok(())
     }
@@ -558,14 +563,11 @@ mod tests {
             g.finish().unwrap();
         }
         assert!(out.starts_with(b"GIF89a"));
-        use image::AnimationDecoder;
-        let dec = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(out)).unwrap();
-        let frames: Vec<_> = dec.into_frames().collect::<Result<_, _>>().unwrap();
-        assert_eq!(frames.len(), 2);
-        let px = frames[1].buffer().get_pixel(2, 2);
+        let g = vieww_image::codec::gif::decode(&out).unwrap();
+        assert_eq!(g.frames.len(), 2);
+        let px = &g.frames[1].rgba[(2 * 8 + 2) * 4..(2 * 8 + 2) * 4 + 4];
         assert!(px[2] > 240 && px[0] < 15);
-        let (n, d) = frames[0].delay().numer_denom_ms();
-        assert_eq!(n / d.max(1), 100);
+        assert_eq!(g.frames[0].delay_cs, 10);
     }
 
     #[test]
@@ -576,6 +578,8 @@ mod tests {
         s.push(&frame(4, 5, 6)).unwrap();
         assert!(s.path(1).exists());
         assert!(s.path(1).to_string_lossy().ends_with("shot-00001.png"));
+        let back = vieww_image::codec::png::decode(&std::fs::read(s.path(1)).unwrap()).unwrap();
+        assert_eq!(&back.rgba[..4], &[4, 5, 6, 255]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

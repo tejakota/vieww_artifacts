@@ -1,33 +1,18 @@
 //! Animated images: decoding a GIF's frames and stepping through them by
 //! elapsed time.
 //!
-//! # Real decode, via `image`'s own animation API
+//! # Real decode, by vieww's own GIF decoder
 //!
-//! There is no GPU-shaped reason to stub this out — GIF frame decoding is
-//! ordinary CPU work, and the `image` crate already does the hard parts
-//! (LZW decompression, palette resolution, and — critically — compositing
-//! each frame against the ones before it according to its disposal method,
-//! so what [`AnimatedImage::decode_gif`] receives from `image::AnimationDecoder`
-//! is already a full, canvas-sized RGBA8 frame with nothing partial about
-//! it). This module's job is just the part `image` does not have a use for:
-//! turning that frame sequence into [`vieww_foundation::Image`]s and
-//! answering "which frame is showing at time T", which is what an animated
-//! widget actually needs every tick.
-//!
-//! # What decode-time compositing means for callers
-//!
-//! A GIF frame can cover less than the whole canvas and rely on the
-//! previous frame (or the background) showing through the rest, per its
-//! disposal method. `image::codecs::gif::GifDecoder`'s `AnimationDecoder`
-//! implementation resolves all of that internally and always yields
-//! full-canvas frames at `(0, 0)` — so every [`Frame::image`] here is ready
-//! to draw on its own with no compositing left for a caller to get wrong.
+//! [`crate::codec::gif`] does the LZW, the palettes and — critically — the
+//! compositing of each frame against the ones before it according to its
+//! disposal method, so what [`AnimatedImage::decode_gif`] receives is
+//! already a full, canvas-sized RGBA8 frame. This module turns that frame
+//! sequence into [`vieww_foundation::Image`]s and answers "which frame is
+//! showing at time T", which is what an animated widget needs every tick.
 
 use std::fmt;
-use std::io::Cursor;
 use std::time::Duration;
 
-use image::AnimationDecoder;
 use vieww_foundation::Image;
 
 /// One decoded frame: its pixels and how long it stays on screen.
@@ -46,7 +31,7 @@ pub struct AnimatedImage {
 /// Why a byte sequence could not be decoded as an animated image.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SequenceError {
-    /// The `image` crate rejected the bytes.
+    /// The decoder rejected the bytes.
     Decode(String),
     /// It decoded, but produced zero frames — not a usable animation.
     NoFrames,
@@ -73,33 +58,19 @@ impl AnimatedImage {
     /// animation with no frames at all (a technically valid but useless
     /// GIF — one with a global palette and no image blocks).
     pub fn decode_gif(bytes: &[u8]) -> Result<Self, SequenceError> {
-        let decoder = image::codecs::gif::GifDecoder::new(Cursor::new(bytes))
+        let gif = crate::codec::gif::decode(bytes)
             .map_err(|error| SequenceError::Decode(error.to_string()))?;
-
-        let decoded_frames = decoder
-            .into_frames()
-            .collect_frames()
-            .map_err(|error| SequenceError::Decode(error.to_string()))?;
-
-        if decoded_frames.is_empty() {
+        if gif.frames.is_empty() {
             return Err(SequenceError::NoFrames);
         }
-
-        let frames = decoded_frames
+        let (width, height) = (gif.width, gif.height);
+        let frames = gif
+            .frames
             .into_iter()
-            .map(|frame| {
-                let (numerator, denominator) = frame.delay().numer_denom_ms();
-                // Exact integer nanoseconds rather than a float millisecond
-                // round trip, so a whole-millisecond delay (which is all a
-                // GIF's 10ms-quantised delay ever produces) survives decode
-                // bit-for-bit instead of depending on `f64` rounding.
-                let delay_nanos = u64::from(numerator) * 1_000_000 / u64::from(denominator.max(1));
-                let buffer = frame.into_buffer();
-                let (width, height) = (buffer.width(), buffer.height());
-                Frame {
-                    image: Image::from_rgba8(buffer.into_raw(), width, height),
-                    delay: Duration::from_nanos(delay_nanos),
-                }
+            .map(|frame| Frame {
+                image: Image::from_rgba8(frame.rgba, width, height),
+                // Centiseconds, exactly.
+                delay: Duration::from_millis(u64::from(frame.delay_cs) * 10),
             })
             .collect();
 
@@ -163,38 +134,18 @@ impl AnimatedImage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::{Delay, Frame as EncodeFrame, RgbaImage};
+    use crate::codec::gif::encode;
 
     /// A tiny synthetic 2-frame GIF: a 2x2 solid-red frame held for 30ms,
-    /// then a 2x2 solid-blue frame held for 50ms. Encoded at test time with
-    /// `image`'s own GIF encoder, so the round trip through both halves of
-    /// `image`'s GIF support is exercised with no external fixture to lose
-    /// or go stale.
+    /// then a 2x2 solid-blue frame held for 50ms — encoded at test time by
+    /// vieww's own GIF encoder, so both halves of the codec are exercised.
     fn two_frame_gif() -> Vec<u8> {
-        let red = RgbaImage::from_raw(2, 2, [255, 0, 0, 255].repeat(4)).expect("2x2 red");
-        let blue = RgbaImage::from_raw(2, 2, [0, 0, 255, 255].repeat(4)).expect("2x2 blue");
-
-        let mut bytes = Vec::new();
-        {
-            let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
-            encoder
-                .encode_frame(EncodeFrame::from_parts(
-                    red,
-                    0,
-                    0,
-                    Delay::from_numer_denom_ms(30, 1),
-                ))
-                .expect("encode red frame");
-            encoder
-                .encode_frame(EncodeFrame::from_parts(
-                    blue,
-                    0,
-                    0,
-                    Delay::from_numer_denom_ms(50, 1),
-                ))
-                .expect("encode blue frame");
-        }
-        bytes
+        encode(
+            2,
+            2,
+            &[([255, 0, 0, 255].repeat(4), 3), ([0, 0, 255, 255].repeat(4), 5)],
+            0,
+        )
     }
 
     #[test]
@@ -269,19 +220,7 @@ mod tests {
 
     #[test]
     fn a_single_frame_gif_decodes_to_one_frame_and_never_wraps() {
-        let solid = RgbaImage::from_raw(1, 1, vec![9, 9, 9, 255]).expect("1x1");
-        let mut bytes = Vec::new();
-        {
-            let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
-            encoder
-                .encode_frame(EncodeFrame::from_parts(
-                    solid,
-                    0,
-                    0,
-                    Delay::from_numer_denom_ms(10, 1),
-                ))
-                .expect("encode");
-        }
+        let bytes = encode(1, 1, &[(vec![9, 9, 9, 255], 1)], 0);
 
         let animated = AnimatedImage::decode_gif(&bytes).expect("decode");
         assert_eq!(animated.frame_count(), 1);

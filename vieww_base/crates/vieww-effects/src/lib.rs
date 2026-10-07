@@ -14,6 +14,7 @@
 //! they are what the GPU implementations are tested against.
 
 pub mod cpu;
+pub mod synth;
 pub mod widgets;
 
 pub use widgets::{BackdropBlur, BackdropFilter, Blend, BlendMode, Filter, FilterChain};

@@ -8,11 +8,21 @@
 //! demand; [`VideoPlayer`] is the state machine of playback — play, pause,
 //! seek, rate, loop — advanced by frame deltas and sampled into a frame.
 //!
-//! What it is *not* is a codec. No H.264, no VP9, no container parsing:
-//! those are platform work (Android's `MediaCodec`, the browser's
-//! `<video>`), and the seam for them is exactly this crate's trait — a
-//! platform crate implements [`VideoSource`] over its decoder and the
-//! player, the seeking, the clock and the widget story work unchanged. That
+//! It decodes and encodes **Motion-JPEG in AVI** itself ([`avi`], on
+//! vieww's own JPEG codec) and reads/writes Y4M. Inter-frame codecs
+//! (H.264, VP9, AV1) are platform work (Android's `MediaCodec`, the
+//! browser's `<video>`), and the seam for them is exactly this crate's
+//! trait — a platform crate implements [`VideoSource`] over its decoder and
+//! the player, the seeking, the clock and the widget story work unchanged.
+//!
+//! Around playback sit the compositor's tools: [`comp`] (layers, mattes,
+//! precomps), [`matte`] keys, [`track`] point tracking and stabilisation,
+//! [`cv`] (features, Lucas–Kanade and Horn–Schunck flow, blobs), [`solve`]
+//! (homographies, RANSAC, planar camera solve, corner pin), [`roto`]
+//! (GrabCut segmentation with temporal propagation), [`warp`] (puppet pins
+//! by moving least squares), [`upscale`] (Lanczos, bicubic and a learned
+//! RAISR upscaler), [`motion_blur`] (shutter accumulation, vector blur) and
+//! [`queue`] (a render queue with output modules). That
 //! division is the same one the framework draws everywhere else: the
 //! *system* part is platform-shaped, and the *policy* part is
 //! deterministic and testable, which is the part worth owning.
@@ -70,10 +80,18 @@ use vieww_foundation::Image;
 
 pub use vieww_foundation as foundation;
 
+pub mod avi;
 pub mod comp;
+pub mod cv;
 pub mod export;
 pub mod matte;
+pub mod motion_blur;
+pub mod queue;
+pub mod roto;
+pub mod solve;
 pub mod track;
+pub mod upscale;
+pub mod warp;
 
 /// A frame's pixels, decoded and drawable.
 ///
