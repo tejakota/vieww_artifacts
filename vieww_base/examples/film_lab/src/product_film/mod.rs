@@ -58,7 +58,7 @@ use vieww_foundation::{Color, Offset, Rect, Size, Transform};
 pub use vieww_widget::prelude::*;
 pub use vieww_widget::{Opacity, Painting, PaintWith};
 
-pub use crate::film_lib::Rng;
+pub(crate) use crate::film_lib::Rng;
 
 // ── The canvas ──────────────────────────────────────────────────────────────
 
