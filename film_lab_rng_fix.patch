@@ -1,0 +1,32 @@
+From 8f9d2875e7010fff543d8715fdba728df074b776 Mon Sep 17 00:00:00 2001
+From: tejakota <krishnatejakota@gmail.com>
+Date: Wed, 7 Oct 2026 13:17:16 +0530
+Subject: [PATCH] =?UTF-8?q?film=5Flab:=20Rng=20re-export=20back=20to=20pub?=
+ =?UTF-8?q?(crate)=20=E2=80=94=20the=20merge=20reintroduced=20`pub=20use`,?=
+ =?UTF-8?q?=20which=20fails=20E0365?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AxW1tVBZkZbKyQvXtosuPu
+---
+ vieww_base/examples/film_lab/src/product_film/mod.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vieww_base/examples/film_lab/src/product_film/mod.rs b/vieww_base/examples/film_lab/src/product_film/mod.rs
+index d5b7002..7a0ac88 100644
+--- a/vieww_base/examples/film_lab/src/product_film/mod.rs
++++ b/vieww_base/examples/film_lab/src/product_film/mod.rs
+@@ -58,7 +58,7 @@ use vieww_foundation::{Color, Offset, Rect, Size, Transform};
+ pub use vieww_widget::prelude::*;
+ pub use vieww_widget::{Opacity, Painting, PaintWith};
+ 
+-pub use crate::film_lib::Rng;
++pub(crate) use crate::film_lib::Rng;
+ 
+ // ── The canvas ──────────────────────────────────────────────────────────────
+ 
+-- 
+2.43.0
+
