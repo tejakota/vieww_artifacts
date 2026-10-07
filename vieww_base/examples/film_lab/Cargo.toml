@@ -12,6 +12,14 @@ publish = false
 image = { version = "0.25", default-features = false, features = ["png"] }
 vieww = { workspace = true, features = ["native"] }
 vieww-animation.workspace = true
+vieww-mesh.workspace = true
+vieww-physics.workspace = true
+# Z19 lays the crates out as a squarified treemap of their own source.
+vieww-dataviz.workspace = true
+# The keynote cut: the mark in real 3D (Z10D) and the score, synthesised
+# by the framework (studio_film::score).
+vieww-3d.workspace = true
+vieww-audio.workspace = true
 vieww-foundation.workspace = true
 vieww-paint = { workspace = true, features = ["native"] }
 vieww-render.workspace = true

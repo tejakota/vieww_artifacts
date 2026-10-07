@@ -55,66 +55,66 @@
 //! scale.
 
 use vieww_foundation::{Color, Offset, Rect, Size, Transform};
-pub(crate) use vieww_widget::prelude::*;
-pub(crate) use vieww_widget::{Opacity, PaintWith, Painting};
+pub use vieww_widget::prelude::*;
+pub use vieww_widget::{Opacity, Painting, PaintWith};
 
-pub(crate) use crate::film_lib::Rng;
+pub use crate::film_lib::Rng;
 
 // ── The canvas ──────────────────────────────────────────────────────────────
 
-pub(crate) const W: f32 = 1920.0;
-pub(crate) const H: f32 = 1080.0;
-pub(crate) const CANVAS: Size = Size::new(W, H);
-pub(crate) const FPS: f32 = 60.0;
+pub const W: f32 = 1920.0;
+pub const H: f32 = 1080.0;
+pub const CANVAS: Size = Size::new(W, H);
+pub const FPS: f32 = 60.0;
 
 // ── The palette — the brand's, quoted ───────────────────────────────────────
 
 /// The page's ground `oklch(0.16 0.006 60)`.
-pub(crate) const GROUND: Color = Color::rgb(0x0F, 0x0D, 0x0B);
-pub(crate) const BG_DEEP: Color = Color::rgb(0x0A, 0x09, 0x08);
-pub(crate) const SURFACE: Color = Color::rgb(0x1B, 0x17, 0x15);
-pub(crate) const SURFACE_2: Color = Color::rgb(0x2B, 0x25, 0x21);
-pub(crate) const LINE: Color = Color::rgb(0x2A, 0x28, 0x26);
-pub(crate) const INK: Color = Color::rgb(0xF8, 0xF4, 0xF2);
-pub(crate) const MUTED: Color = Color::rgb(0xA6, 0x9C, 0x95);
-pub(crate) const FAINT: Color = Color::rgb(0x78, 0x71, 0x6C);
+pub const GROUND: Color = Color::rgb(0x0F, 0x0D, 0x0B);
+pub const BG_DEEP: Color = Color::rgb(0x0A, 0x09, 0x08);
+pub const SURFACE: Color = Color::rgb(0x1B, 0x17, 0x15);
+pub const SURFACE_2: Color = Color::rgb(0x2B, 0x25, 0x21);
+pub const LINE: Color = Color::rgb(0x2A, 0x28, 0x26);
+pub const INK: Color = Color::rgb(0xF8, 0xF4, 0xF2);
+pub const MUTED: Color = Color::rgb(0xA6, 0x9C, 0x95);
+pub const FAINT: Color = Color::rgb(0x78, 0x71, 0x6C);
 
 /// The accent on a dark ground — the studio's own purple, far stop.
-pub(crate) const ACCENT: Color = Color::rgb(0xB4, 0x91, 0xFF);
+pub const ACCENT: Color = Color::rgb(0xB4, 0x91, 0xFF);
 /// The accent a button is filled with — the deep stop.
-pub(crate) const ACCENT_DEEP: Color = Color::rgb(0x7E, 0x5C, 0xE8);
+pub const ACCENT_DEEP: Color = Color::rgb(0x7E, 0x5C, 0xE8);
 /// `bg-primary/10` — the wash an icon square sits on.
-pub(crate) const WASH: Color = Color::rgb(0x22, 0x1C, 0x33);
+pub const WASH: Color = Color::rgb(0x22, 0x1C, 0x33);
 
 // The syntax ramp — the film's secondary register, quoted from the page.
-pub(crate) const SYN_KEYWORD: Color = Color::rgb(0xEF, 0xA3, 0xFF);
-pub(crate) const SYN_TYPE: Color = Color::rgb(0x48, 0xD7, 0xFE);
-pub(crate) const SYN_STRING: Color = Color::rgb(0x59, 0xD3, 0x8C);
-pub(crate) const SYN_NUMBER: Color = Color::rgb(0xFF, 0x8F, 0x9A);
-pub(crate) const SYN_COMMENT: Color = Color::rgb(0x85, 0x7F, 0x7A);
-pub(crate) const SYN_MACRO: Color = Color::rgb(0xFE, 0xB2, 0x63);
-pub(crate) const SYN_FUNCTION: Color = Color::rgb(0xFF, 0xBB, 0x6D);
-pub(crate) const SYN_PUNCT: Color = Color::rgb(0xA3, 0x9D, 0x98);
+pub const SYN_KEYWORD: Color = Color::rgb(0xEF, 0xA3, 0xFF);
+pub const SYN_TYPE: Color = Color::rgb(0x48, 0xD7, 0xFE);
+pub const SYN_STRING: Color = Color::rgb(0x59, 0xD3, 0x8C);
+pub const SYN_NUMBER: Color = Color::rgb(0xFF, 0x8F, 0x9A);
+pub const SYN_COMMENT: Color = Color::rgb(0x85, 0x7F, 0x7A);
+pub const SYN_MACRO: Color = Color::rgb(0xFE, 0xB2, 0x63);
+pub const SYN_FUNCTION: Color = Color::rgb(0xFF, 0xBB, 0x6D);
+pub const SYN_PUNCT: Color = Color::rgb(0xA3, 0x9D, 0x98);
 
 // The film's own role colours, all derived from the two ramps above.
 /// The old world's terminal green — the register of the pain act.
-pub(crate) const TERM_GREEN: Color = Color::rgb(63, 185, 80);
+pub const TERM_GREEN: Color = Color::rgb(63, 185, 80);
 /// The engine's cyan — the machine act.
-pub(crate) const ENGINE: Color = SYN_TYPE;
+pub const ENGINE: Color = SYN_TYPE;
 /// The receipts' mint — the ledger act.
-pub(crate) const LEDGER: Color = SYN_STRING;
+pub const LEDGER: Color = SYN_STRING;
 /// The break's red — the moment the old world fails.
-pub(crate) const BREAK_RED: Color = SYN_NUMBER;
+pub const BREAK_RED: Color = SYN_NUMBER;
 /// The mark's ground — `viewwstudio::ui::brand::GROUND`, quoted.
-pub(crate) const MARK_GROUND: Color = Color::rgb(0x14, 0x16, 0x1A);
+pub const MARK_GROUND: Color = Color::rgb(0x14, 0x16, 0x1A);
 /// The mark's editor panel — `viewwstudio::ui::brand::PANEL`, quoted.
-pub(crate) const MARK_PANEL: Color = Color::rgb(0x46, 0x4E, 0x5E);
+pub const MARK_PANEL: Color = Color::rgb(0x46, 0x4E, 0x5E);
 
 // ── The scene registry ──────────────────────────────────────────────────────
 
 /// How a scene renders.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Kind {
+pub enum Kind {
     /// A pure widget tree — a function of the frame's ctx.
     Pure,
     /// The **actual studio**: the harness mounts `Shell { studio }` on the
@@ -125,7 +125,7 @@ pub(crate) enum Kind {
 
 /// What a scene may read: its own clock, the film clock, the tap ladder,
 /// and the census pass's measured numbers (zeros until the census ran).
-pub(crate) struct Ctx<'a> {
+pub struct Ctx<'a> {
     /// `t` in `[0, 1)` within the scene.
     pub t: f32,
     /// Seconds into the scene.
@@ -159,14 +159,17 @@ impl Ctx<'_> {
     /// difference of scale and pretending otherwise would put the layers
     /// out of register. A layer that also wants to recede under a push
     /// scales itself.
-    pub(crate) fn parallax(&self, depth: f32) -> Offset {
+    pub fn parallax(&self, depth: f32) -> Offset {
         let c = self.cam;
-        Offset::new((c.at.dx - W * 0.5) * depth, (c.at.dy - H * 0.5) * depth)
+        Offset::new(
+            (c.at.dx - W * 0.5) * depth,
+            (c.at.dy - H * 0.5) * depth,
+        )
     }
 }
 
 /// One scene in the film.
-pub(crate) struct SceneDef {
+pub struct SceneDef {
     /// "P01" — the scene id.
     pub id: &'static str,
     /// "the_two_points" — the scene name.
@@ -182,196 +185,58 @@ pub(crate) struct SceneDef {
 
 impl SceneDef {
     /// Frames this scene emits at master cadence — derived, never typed.
-    pub(crate) fn frames(&self) -> usize {
+    pub fn frames(&self) -> usize {
         (self.seconds * FPS).round() as usize
     }
 }
 
 /// The twenty-three scenes, in cut order.
-pub(crate) fn scenes() -> Vec<SceneDef> {
+pub fn scenes() -> Vec<SceneDef> {
     vec![
         // ── Prologue · THE QUESTION ──────────────────────────────────────
-        SceneDef {
-            id: "P01",
-            name: "the_two_points",
-            seconds: 12.0,
-            kind: Kind::Pure,
-            build: s01_the_two_points::build,
-        },
+        SceneDef { id: "P01", name: "the_two_points", seconds: 12.0, kind: Kind::Pure, build: s01_the_two_points::build },
         // ── Movement I · THE FAR — the old world's four pains ────────────
-        SceneDef {
-            id: "A01",
-            name: "the_wait",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: a01_the_wait::build,
-        },
-        SceneDef {
-            id: "A02",
-            name: "the_tolls",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: a02_the_tolls::build,
-        },
-        SceneDef {
-            id: "A03",
-            name: "the_jank",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: a03_the_jank::build,
-        },
-        SceneDef {
-            id: "A04",
-            name: "the_drift",
-            seconds: 16.0,
-            kind: Kind::Pure,
-            build: a04_the_drift::build,
-        },
+        SceneDef { id: "A01", name: "the_wait", seconds: 14.0, kind: Kind::Pure, build: a01_the_wait::build },
+        SceneDef { id: "A02", name: "the_tolls", seconds: 14.0, kind: Kind::Pure, build: a02_the_tolls::build },
+        SceneDef { id: "A03", name: "the_jank", seconds: 14.0, kind: Kind::Pure, build: a03_the_jank::build },
+        SceneDef { id: "A04", name: "the_drift", seconds: 16.0, kind: Kind::Pure, build: a04_the_drift::build },
         // ── Movement II · THE ENGINE — what vieww is ─────────────────────
-        SceneDef {
-            id: "B01",
-            name: "three_trees",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: b01_three_trees::build,
-        },
-        SceneDef {
-            id: "B02",
-            name: "the_crates",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: b02_the_crates::build,
-        },
-        SceneDef {
-            id: "B03",
-            name: "the_rasterizer",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: b03_the_rasterizer::build,
-        },
-        SceneDef {
-            id: "B04",
-            name: "the_budget",
-            seconds: 16.0,
-            kind: Kind::Pure,
-            build: b04_the_budget::build,
-        },
+        SceneDef { id: "B01", name: "three_trees", seconds: 14.0, kind: Kind::Pure, build: b01_three_trees::build },
+        SceneDef { id: "B02", name: "the_crates", seconds: 14.0, kind: Kind::Pure, build: b02_the_crates::build },
+        SceneDef { id: "B03", name: "the_rasterizer", seconds: 14.0, kind: Kind::Pure, build: b03_the_rasterizer::build },
+        SceneDef { id: "B04", name: "the_budget", seconds: 16.0, kind: Kind::Pure, build: b04_the_budget::build },
         // ── Movement III · THE STUDIO — the real app, driven live ────────
-        SceneDef {
-            id: "C01",
-            name: "studio_opens",
-            seconds: 10.0,
-            kind: Kind::Studio,
-            build: c01_studio_opens::build,
-        },
-        SceneDef {
-            id: "C02",
-            name: "first_paint",
-            seconds: 12.0,
-            kind: Kind::Studio,
-            build: c02_first_paint::build,
-        },
-        SceneDef {
-            id: "C03",
-            name: "live_compose",
-            seconds: 12.0,
-            kind: Kind::Studio,
-            build: c03_live_compose::build,
-        },
-        SceneDef {
-            id: "C04",
-            name: "the_tap",
-            seconds: 8.0,
-            kind: Kind::Studio,
-            build: c04_the_tap::build,
-        },
-        SceneDef {
-            id: "C05",
-            name: "say_to_rust",
-            seconds: 16.0,
-            kind: Kind::Studio,
-            build: c05_say_to_rust::build,
-        },
-        SceneDef {
-            id: "C06",
-            name: "state_carries",
-            seconds: 12.0,
-            kind: Kind::Studio,
-            build: c06_state_carries::build,
-        },
-        SceneDef {
-            id: "C07",
-            name: "three_frames",
-            seconds: 12.0,
-            kind: Kind::Studio,
-            build: c07_three_frames::build,
-        },
-        SceneDef {
-            id: "C08",
-            name: "the_tokens",
-            seconds: 10.0,
-            kind: Kind::Studio,
-            build: c08_the_tokens::build,
-        },
-        SceneDef {
-            id: "C09",
-            name: "build_ships",
-            seconds: 12.0,
-            kind: Kind::Studio,
-            build: c09_build_ships::build,
-        },
+        SceneDef { id: "C01", name: "studio_opens", seconds: 10.0, kind: Kind::Studio, build: c01_studio_opens::build },
+        SceneDef { id: "C02", name: "first_paint", seconds: 12.0, kind: Kind::Studio, build: c02_first_paint::build },
+        SceneDef { id: "C03", name: "live_compose", seconds: 12.0, kind: Kind::Studio, build: c03_live_compose::build },
+        SceneDef { id: "C04", name: "the_tap", seconds: 8.0, kind: Kind::Studio, build: c04_the_tap::build },
+        SceneDef { id: "C05", name: "say_to_rust", seconds: 16.0, kind: Kind::Studio, build: c05_say_to_rust::build },
+        SceneDef { id: "C06", name: "state_carries", seconds: 12.0, kind: Kind::Studio, build: c06_state_carries::build },
+        SceneDef { id: "C07", name: "three_frames", seconds: 12.0, kind: Kind::Studio, build: c07_three_frames::build },
+        SceneDef { id: "C08", name: "the_tokens", seconds: 10.0, kind: Kind::Studio, build: c08_the_tokens::build },
+        SceneDef { id: "C09", name: "build_ships", seconds: 12.0, kind: Kind::Studio, build: c09_build_ships::build },
         // ── Movement IV · THE PROOF — the ledger, the pull-back ──────────
-        SceneDef {
-            id: "D01",
-            name: "the_ledger",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: d01_the_ledger::build,
-        },
-        SceneDef {
-            id: "D02",
-            name: "the_pullback",
-            seconds: 12.0,
-            kind: Kind::Pure,
-            build: d02_the_pullback::build,
-        },
+        SceneDef { id: "D01", name: "the_ledger", seconds: 14.0, kind: Kind::Pure, build: d01_the_ledger::build },
+        SceneDef { id: "D02", name: "the_pullback", seconds: 12.0, kind: Kind::Pure, build: d02_the_pullback::build },
         // ── Movement V · ZERO — the release ──────────────────────────────
-        SceneDef {
-            id: "D03",
-            name: "zero_distance",
-            seconds: 14.0,
-            kind: Kind::Pure,
-            build: d03_zero_distance::build,
-        },
-        SceneDef {
-            id: "D04",
-            name: "the_endcard",
-            seconds: 18.0,
-            kind: Kind::Pure,
-            build: d04_the_endcard::build,
-        },
-        SceneDef {
-            id: "D05",
-            name: "the_hold",
-            seconds: 10.0,
-            kind: Kind::Pure,
-            build: d05_the_hold::build,
-        },
+        SceneDef { id: "D03", name: "zero_distance", seconds: 14.0, kind: Kind::Pure, build: d03_zero_distance::build },
+        SceneDef { id: "D04", name: "the_endcard", seconds: 18.0, kind: Kind::Pure, build: d04_the_endcard::build },
+        SceneDef { id: "D05", name: "the_hold", seconds: 10.0, kind: Kind::Pure, build: d05_the_hold::build },
     ]
 }
 
 /// Absolute film seconds where scene `index` starts.
-pub(crate) fn scene_start(index: usize) -> f32 {
+pub fn scene_start(index: usize) -> f32 {
     scenes().iter().take(index).map(|s| s.seconds).sum()
 }
 
 /// The film's total frame count — the sum of the scene table, emitted.
-pub(crate) fn total_frames() -> usize {
+pub fn total_frames() -> usize {
     scenes().iter().map(|s| s.frames()).sum()
 }
 
 /// The film's total seconds — derived, never typed.
-pub(crate) fn total_seconds() -> f32 {
+pub fn total_seconds() -> f32 {
     scenes().iter().map(|s| s.seconds).sum()
 }
 
@@ -387,21 +252,21 @@ pub(crate) fn total_seconds() -> f32 {
 /// the real studio at master resolution (the census's `alive_seconds`,
 /// printed beside the narration wherever it is quoted); 16 ms is one
 /// frame at 60 fps — the floor.
-pub(crate) fn distance_ms(abs: f32) -> f32 {
+pub fn distance_ms(abs: f32) -> f32 {
     // (film seconds, ms) — the collapse's key frames.
     const STORY: &[(f32, f32)] = &[
-        (0.0, 45_000.0),  // the question is asked
-        (58.0, 45_000.0), // the whole pain act holds it
-        (72.0, 45_000.0), // the tolls still stand
-        (86.0, 8_400.0),  // three trees land
-        (100.0, 2_600.0), // the rasterizer
-        (114.0, 620.0),   // the budget holds
-        (128.0, 120.0),   // the studio opens
-        (140.0, 32.0),    // first paint — near the real measure
-        (232.0, 32.0),    // the whole studio act
-        (258.0, 16.0),    // one frame
-        (274.0, 16.0),    // held
-        (300.0, 1.0),     // zero — the caret touches the screen
+        (0.0, 45_000.0),   // the question is asked
+        (58.0, 45_000.0),  // the whole pain act holds it
+        (72.0, 45_000.0),  // the tolls still stand
+        (86.0, 8_400.0),   // three trees land
+        (100.0, 2_600.0),  // the rasterizer
+        (114.0, 620.0),    // the budget holds
+        (128.0, 120.0),    // the studio opens
+        (140.0, 32.0),     // first paint — near the real measure
+        (232.0, 32.0),     // the whole studio act
+        (258.0, 16.0),     // one frame
+        (274.0, 16.0),     // held
+        (300.0, 1.0),      // zero — the caret touches the screen
     ];
     let abs = abs.clamp(0.0, total_seconds());
     let mut ms = STORY[0].1;
@@ -424,7 +289,7 @@ pub(crate) fn distance_ms(abs: f32) -> f32 {
 }
 
 /// The distance readout's spelling — comma-grouped, `ms` suffixed.
-pub(crate) fn distance_text(ms: f32) -> String {
+pub fn distance_text(ms: f32) -> String {
     if ms >= 1000.0 {
         format!("{} ms", group_commas(ms.round() as u64))
     } else if ms >= 100.0 {
@@ -441,7 +306,7 @@ pub(crate) fn distance_text(ms: f32) -> String {
 /// opens (C02, `AcceptLive`) · the compose edit (C03) · the demo row's
 /// tap fires (C04, `PointerUp`) · Render fires (C05) · *Add one* is
 /// tapped (C05) · the build view opens (C09) · the devices land (C09).
-pub(crate) fn taps() -> Vec<f32> {
+pub fn taps() -> Vec<f32> {
     let at = |i: usize, frac: f32| scene_start(i) + scenes()[i].seconds * frac;
     vec![
         at(10, 2.20 / 12.0), // 1 · AcceptLive at 140.2
@@ -455,12 +320,12 @@ pub(crate) fn taps() -> Vec<f32> {
 }
 
 /// The witness counter at absolute time `abs`.
-pub(crate) fn ladder_at(abs: f32) -> u32 {
+pub fn ladder_at(abs: f32) -> u32 {
     taps().iter().filter(|&&tap| abs >= tap).count() as u32
 }
 
 /// A short pulse envelope right after the most recent tap.
-pub(crate) fn tap_pulse(abs: f32) -> f32 {
+pub fn tap_pulse(abs: f32) -> f32 {
     let mut best = 0.0f32;
     for &tap in taps().iter() {
         if abs >= tap {
@@ -473,7 +338,7 @@ pub(crate) fn tap_pulse(abs: f32) -> f32 {
 }
 
 /// The session clock — mm:ss of the session, which is the film.
-pub(crate) fn session_clock(abs: f32) -> String {
+pub fn session_clock(abs: f32) -> String {
     let shown = abs.min(total_seconds());
     format!("{:02}:{:02}", (shown / 60.0) as u32, (shown % 60.0) as u32)
 }
@@ -483,7 +348,7 @@ pub(crate) fn session_clock(abs: f32) -> String {
 /// The film's own audit, plus the live probes. Every field is measured or
 /// derived; none is typed by a human.
 #[derive(Default, Clone)]
-pub(crate) struct Probe {
+pub struct Probe {
     /// Total frames — derived (Σ seconds × 60).
     pub frames: u64,
     /// Fill + stroke commands across the whole film.
@@ -511,13 +376,11 @@ pub(crate) struct Probe {
 
 impl Probe {
     /// Parse the house-format `key=value` receipt the census wrote.
-    pub(crate) fn load(path: &std::path::Path) -> Option<Probe> {
+    pub fn load(path: &std::path::Path) -> Option<Probe> {
         let body = std::fs::read_to_string(path).ok()?;
         let mut p = Probe::default();
         for line in body.lines() {
-            let Some((k, v)) = line.split_once('=') else {
-                continue;
-            };
+            let Some((k, v)) = line.split_once('=') else { continue };
             let v = v.trim();
             match k.trim() {
                 "frames" => p.frames = v.parse().ok()?,
@@ -538,12 +401,15 @@ impl Probe {
     }
 
     /// The bench identity line, emitted from the environment itself.
-    pub(crate) fn bench_identity(fonts: u32) -> String {
+    pub fn bench_identity(fonts: u32) -> String {
         format!(
             "{} · {} · rust {} · {} embedded faces",
             std::env::consts::OS,
             std::env::consts::ARCH,
-            "1.98.1",
+            // Asked of the compiler that built this binary (build.rs),
+            // never typed: the bench identity is a receipt like every
+            // other number the film puts on screen.
+            env!("FILM_RUSTC_VERSION"),
             fonts,
         )
     }
@@ -555,21 +421,25 @@ impl Probe {
 /// `vieww_base/docs/VIEWW-PHASE-STATUS.md` (2-core container, lavapipe,
 /// rustc 1.95.0). The ledger scene counts these up; nothing here is
 /// measured by the film, and it says so.
-pub(crate) const CERT_STARTUP_MS: f32 = 27.5;
-pub(crate) const CERT_P95_MS: f32 = 11.4;
-pub(crate) const CERT_WORST_MS: f32 = 13.1;
-pub(crate) const CERT_TESTS: u64 = 4_225;
-pub(crate) const CERT_VULKAN_TESTS: u64 = 37;
-pub(crate) const CERT_CRATES: usize = 36;
-pub(crate) const CERT_FRAMES_STEADY: u64 = 60;
-pub(crate) const CERT_ALLOCS_STEADY: u64 = 0;
+pub const CERT_STARTUP_MS: f32 = 27.5;
+pub const CERT_P95_MS: f32 = 11.4;
+pub const CERT_WORST_MS: f32 = 13.1;
+pub const CERT_TESTS: u64 = 4_225;
+pub const CERT_VULKAN_TESTS: u64 = 37;
+pub const CERT_CRATES: usize = 49;
+pub const CERT_FRAMES_STEADY: u64 = 60;
+pub const CERT_ALLOCS_STEADY: u64 = 0;
 
-// ── The 36 crates — the engine scene's manifest, quoted ─────────────────────
+// ── The 49 crates — the engine scene's manifest, quoted ─────────────────────
 
-/// The workspace's 36 crates, verbatim from `vieww_base/Cargo.toml`.
-/// B02 counts this list at runtime; the count on screen is the list's
-/// own length.
-pub(crate) const CRATES: [&str; 36] = [
+/// The workspace's 49 crates, verbatim from `vieww_base/Cargo.toml`
+/// (the `crates/` members; the two `apps/` are the products built on them,
+/// not the engine). B02 and the receipts scene count this list at runtime;
+/// the count on screen is the list's own length. The thirteen additions
+/// over the first cut — audio, video, mesh, 3d, canvas, dataviz, graph,
+/// game, collab, lottie, network, physics, embed — are the capabilities
+/// Z10B shows running live.
+pub const CRATES: [&str; 49] = [
     "vieww-foundation",
     "vieww-widget",
     "vieww-element",
@@ -577,6 +447,19 @@ pub(crate) const CRATES: [&str; 36] = [
     "vieww-hal",
     "vieww-text",
     "vieww-animation",
+    "vieww-audio",
+    "vieww-video",
+    "vieww-mesh",
+    "vieww-3d",
+    "vieww-canvas",
+    "vieww-dataviz",
+    "vieww-graph",
+    "vieww-game",
+    "vieww-collab",
+    "vieww-lottie",
+    "vieww-network",
+    "vieww-physics",
+    "vieww-embed",
     "vieww-asset",
     "vieww-gestures",
     "vieww-render",
@@ -614,38 +497,38 @@ pub(crate) const CRATES: [&str; 36] = [
 /// verbatim (`viewwstudio::ui::brand::revealed`) so the film's logo and
 /// the product's cannot drift. `editor` and `preview` run `0..=1` and are
 /// each a fade and a scale about the panel's own centre.
-pub(crate) fn brand_mark(side: f32, editor: f32, preview: f32) -> WidgetNode {
+pub fn brand_mark(side: f32, editor: f32, preview: f32) -> WidgetNode {
     viewwstudio::ui::brand::revealed(side, editor, preview)
 }
 
 // ── Color arithmetic ─────────────────────────────────────────────────────────
 
-pub(crate) fn alpha(c: Color, a: f32) -> Color {
+pub fn alpha(c: Color, a: f32) -> Color {
     Color::rgba(c.r, c.g, c.b, (a * 255.0).clamp(0.0, 255.0) as u8)
 }
 
-pub(crate) fn mix(a: Color, b: Color, t: f32) -> Color {
+pub fn mix(a: Color, b: Color, t: f32) -> Color {
     a.lerp(b, t.clamp(0.0, 1.0))
 }
 
 /// A rect from origin + size — the (x, y, w, h) habit.
-pub(crate) fn xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
+pub fn xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
     Rect::new(x, y, x + w.max(0.0), y + h.max(0.0))
 }
 
 /// Lighten toward white (a "tint").
-pub(crate) fn tint(c: Color, t: f32) -> Color {
+pub fn tint(c: Color, t: f32) -> Color {
     mix(c, Color::WHITE, t)
 }
 
-pub(crate) fn clamp01(t: f32) -> f32 {
+pub fn clamp01(t: f32) -> f32 {
     t.clamp(0.0, 1.0)
 }
 
 /// An *analytic* underdamped spring settle — the scrub-safe shadow of the
 /// real `SpringAnimation`, used wherever the film's clock (not a ticker)
 /// drives the motion.
-pub(crate) fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
+pub fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
     let t = clamp01(t);
     let decay = (-zeta * omega * t).exp();
     1.0 - decay * ((1.0 - zeta * zeta).sqrt() * omega * t).cos()
@@ -656,20 +539,16 @@ pub(crate) fn spring_out(t: f32, omega: f32, zeta: f32) -> f32 {
 /// The site's Geist faces, included from the site's own assets — the
 /// brand's typography, byte-for-byte what the product page ships.
 const GEIST: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Regular.ttf");
-const GEIST_MEDIUM: &[u8] =
-    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Medium.ttf");
-const GEIST_BOLD: &[u8] =
-    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Bold.ttf");
-const GEIST_MONO: &[u8] =
-    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Regular.ttf");
-const GEIST_MONO_MEDIUM: &[u8] =
-    include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Medium.ttf");
+const GEIST_MEDIUM: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Medium.ttf");
+const GEIST_BOLD: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-Geist-Bold.ttf");
+const GEIST_MONO: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Regular.ttf");
+const GEIST_MONO_MEDIUM: &[u8] = include_bytes!("../../../../apps/viewwsite/assets/fonts/vw-GeistMono-Medium.ttf");
 
 /// The film's font store: the embedded faces for the generic families —
 /// exactly the store the real studio binary runs — with the site's Geist
 /// registered behind them for the film's *own* voice. No system scan: the
 /// store is a property of the checkout, and glyph determinism with it.
-pub(crate) fn fonts() -> vieww_text::FontStore {
+pub fn fonts() -> vieww_text::FontStore {
     let mut store = vieww_text::FontStore::embedded_only();
     store.load_font_data(GEIST.to_vec());
     store.load_font_data(GEIST_MEDIUM.to_vec());
@@ -680,19 +559,19 @@ pub(crate) fn fonts() -> vieww_text::FontStore {
 }
 
 /// A text style in the brand's Geist (the film's display voice).
-pub(crate) fn geist(size: f32) -> TextStyle {
+pub fn geist(size: f32) -> TextStyle {
     TextStyle::new(size).family(vieww_foundation::FontFamily::Named("Geist"))
 }
 
 /// A text style in the brand's Geist Mono (the film's instrument voice).
-pub(crate) fn geist_mono(size: f32) -> TextStyle {
+pub fn geist_mono(size: f32) -> TextStyle {
     TextStyle::new(size).family(vieww_foundation::FontFamily::Named("Geist Mono"))
 }
 
 // ── Shared composition helpers — the film's house look ───────────────────────
 
 /// A soft radial glow blob, drawn as its own blurred layer.
-pub(crate) fn glow(book: &mut Sketchbook, x: f32, y: f32, r: f32, color: Color, a: f32) {
+pub fn glow(book: &mut Sketchbook, x: f32, y: f32, r: f32, color: Color, a: f32) {
     book.layer(1.0, (r * 0.16).max(2.0), None, |g| {
         g.circle(
             Offset::new(x, y),
@@ -707,7 +586,7 @@ pub(crate) fn glow(book: &mut Sketchbook, x: f32, y: f32, r: f32, color: Color, 
 }
 
 /// The standard star field — sparse, calm, deterministic.
-pub(crate) fn stars(book: &mut Sketchbook, w: f32, h: f32, seed: u64, n: usize, t: f32, base: f32) {
+pub fn stars(book: &mut Sketchbook, w: f32, h: f32, seed: u64, n: usize, t: f32, base: f32) {
     stars_deep(book, w, h, seed, n, t, base, Offset::ZERO);
 }
 
@@ -723,7 +602,7 @@ pub(crate) fn stars(book: &mut Sketchbook, w: f32, h: f32, seed: u64, n: usize, 
 ///
 /// `pan` is the camera displacement to work against — `Ctx::parallax(1.0)`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn stars_deep(
+pub fn stars_deep(
     book: &mut Sketchbook,
     w: f32,
     h: f32,
@@ -757,7 +636,7 @@ pub(crate) fn stars_deep(
 }
 
 /// The corner vignette.
-pub(crate) fn vignette(book: &mut Sketchbook, w: f32, h: f32, strength: f32) {
+pub fn vignette(book: &mut Sketchbook, w: f32, h: f32, strength: f32) {
     book.rect(
         Rect::new(0.0, 0.0, w, h),
         Gradient::radial(Offset::new(0.5, 0.5), 0.80)
@@ -771,7 +650,7 @@ pub(crate) fn vignette(book: &mut Sketchbook, w: f32, h: f32, strength: f32) {
 
 /// The standard ground gradient — the site's warm ground, deepening at
 /// the floor.
-pub(crate) fn ground(book: &mut Sketchbook, w: f32, h: f32) {
+pub fn ground(book: &mut Sketchbook, w: f32, h: f32) {
     book.rect(
         Rect::new(0.0, 0.0, w, h),
         Gradient::vertical().with_dither().with_stops(&[
@@ -783,7 +662,7 @@ pub(crate) fn ground(book: &mut Sketchbook, w: f32, h: f32) {
 }
 
 /// A generic "deep space" backdrop painting: ground + stars + vignette.
-pub(crate) fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
+pub fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
     Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -822,13 +701,13 @@ pub(crate) fn backdrop(t: f32, seed: u64, star_n: usize) -> WidgetNode {
 // reads.
 
 /// The reserved band's height. Nothing outside `mod.rs` lays out inside it.
-pub(crate) const BAND_H: f32 = 146.0;
+pub const BAND_H: f32 = 280.0;
 /// The older caption line — higher in the band, and dimmer.
-pub(crate) const CAP_Y0: f32 = 64.0;
+pub const CAP_Y0: f32 = 98.0;
 /// The newest caption line — the bottom of the band, at full weight.
-pub(crate) const CAP_Y1: f32 = 98.0;
+pub const CAP_Y1: f32 = 152.0;
 /// The movement label's baseline inside the band.
-pub(crate) const ACT_Y: f32 = 44.0;
+pub const ACT_Y: f32 = 40.0;
 
 /// Map a scene's legacy bottom-third caption `y` into the band.
 ///
@@ -856,34 +735,34 @@ fn band_slot(legacy_y: f32) -> f32 {
 /// smear for the whole hundred and four seconds. The scrim holds the two
 /// apart. It stops short of opaque on purpose: the app is still faintly
 /// there under the film's voice, which is the honest picture.
-pub(crate) fn band_scrim(strength: f32) -> WidgetNode {
+pub fn band_scrim(strength: f32) -> WidgetNode {
     if strength <= 0.01 {
         return Stack::new().into();
     }
     chrome(
-        Positioned::new()
-            .left(0.0)
-            .top(0.0)
-            .width(W)
-            .height(BAND_H + 30.0)
-            .child(Painting::sized(
-                Size::new(W, BAND_H + 30.0),
-                // The band's own height, not the size handed in: chrome is
-                // composited inside a full-canvas box, so painting to `s`
-                // stretched this gradient over all 1080 rows and dropped the
-                // whole frame to a third of its luminance.
-                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    book.rect(
-                        xywh(0.0, 0.0, W, BAND_H + 30.0),
-                        Gradient::vertical().with_dither().with_stops(&[
-                            (0.0, alpha(BG_DEEP, 0.94 * strength)),
-                            (0.62, alpha(BG_DEEP, 0.90 * strength)),
-                            (1.0, alpha(BG_DEEP, 0.0)),
-                        ]),
-                    );
-                }),
-            ))
-            .into(),
+    Positioned::new()
+        .left(0.0)
+        .top(0.0)
+        .width(W)
+        .height(BAND_H + 30.0)
+        .child(Painting::sized(
+            Size::new(W, BAND_H + 30.0),
+            // The band's own height, not the size handed in: chrome is
+            // composited inside a full-canvas box, so painting to `s`
+            // stretched this gradient over all 1080 rows and dropped the
+            // whole frame to a third of its luminance.
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                book.rect(
+                    xywh(0.0, 0.0, W, BAND_H + 30.0),
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, alpha(BG_DEEP, 0.94 * strength)),
+                        (0.62, alpha(BG_DEEP, 0.90 * strength)),
+                        (1.0, alpha(BG_DEEP, 0.0)),
+                    ]),
+                );
+            }),
+        ))
+        .into(),
     )
 }
 
@@ -892,7 +771,7 @@ pub(crate) fn band_scrim(strength: f32) -> WidgetNode {
 ///
 /// The `y` argument is a scene's legacy bottom-third coordinate and is
 /// remapped through [`band_slot`]; see the band note above.
-pub(crate) fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
+pub fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
     let a = crate::film_lib::ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
@@ -906,40 +785,42 @@ pub(crate) fn caption(text: &str, y: f32, appear: f32) -> WidgetNode {
     let a = if older { a * 0.55 } else { a };
     let rise = (1.0 - a) * 14.0;
     chrome(
-        Stack::new()
-            .push(
-                Positioned::new()
-                    .left(180.0)
-                    .top(y + rise)
-                    .width(10.0)
-                    .height(28.0)
-                    .child(Opacity::new(a).child(Painting::sized(
-                        Size::new(10.0, 28.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(0.0, 0.0, 4.0, 28.0), 2.0, alpha(ACCENT, 0.9));
-                        }),
-                    ))),
-            )
-            .push(
-                Positioned::new()
-                    .left(202.0)
-                    .top(y + rise)
-                    .width(1560.0)
-                    .height(32.0)
-                    .child(
-                        Opacity::new(a).child(
-                            Text::new(text)
-                                .style(geist_mono(22.0).letter_spacing(1.8).color(alpha(INK, 0.92)))
-                                .align(TextAlign::Left),
-                        ),
-                    ),
-            )
-            .into(),
+    Stack::new()
+        .push(
+            Positioned::new()
+                .left(84.0)
+                .top(y + rise)
+                .width(12.0)
+                .height(36.0)
+                .child(Opacity::new(a).child(Painting::sized(
+                    Size::new(12.0, 36.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        book.rrect(xywh(0.0, 0.0, 5.0, 36.0), 2.5, alpha(ACCENT, 0.9));
+                    }),
+                ))),
+        )
+        .push(
+            Positioned::new()
+                .left(112.0)
+                .top(y + rise)
+                .width(1724.0)
+                .height(42.0)
+                .child(Opacity::new(a).child(
+                    Text::new(text)
+                        .style(
+                            geist_mono(28.0)
+                                .letter_spacing(1.6)
+                                .color(alpha(INK, 0.94)),
+                        )
+                        .align(TextAlign::Left),
+                )),
+        )
+        .into(),
     )
 }
 
 /// A centered caption — key info stays center-frame.
-pub(crate) fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
+pub fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
     let a = crate::film_lib::ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
@@ -952,13 +833,15 @@ pub(crate) fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
                 .top(y + rise)
                 .width(W)
                 .height(32.0)
-                .child(
-                    Opacity::new(a).child(
-                        Text::new(text)
-                            .style(geist_mono(22.0).letter_spacing(1.8).color(alpha(INK, 0.92)))
-                            .align(TextAlign::Center),
-                    ),
-                ),
+                .child(Opacity::new(a).child(
+                    Text::new(text)
+                        .style(
+                            geist_mono(22.0)
+                                .letter_spacing(1.8)
+                                .color(alpha(INK, 0.92)),
+                        )
+                        .align(TextAlign::Center),
+                )),
         )
         .into()
 }
@@ -967,22 +850,25 @@ pub(crate) fn caption_center(text: &str, y: f32, appear: f32) -> WidgetNode {
 /// what `chip` draws, and the two had drifted: the row added a flat 26 px
 /// for a box whose real horizontal inset is `2 × 11` plus a 1 px border a
 /// side. One constant, one truth.
-pub(crate) const CHIP_PAD_X: f32 = 11.0;
+pub const CHIP_PAD_X: f32 = 11.0;
 
 /// A small chip — rounded label with a soft border, the receipts' container.
-pub(crate) fn chip(text: impl Into<String>, size: f32, fg: Color) -> WidgetNode {
+pub fn chip(text: impl Into<String>, size: f32, fg: Color) -> WidgetNode {
     Container::new()
         .color(alpha(SURFACE, 0.88))
         .radius(7.0)
         .border(vieww_foundation::Border::new(alpha(fg, 0.22), 1.0))
         .padding(vieww_foundation::EdgeInsets::symmetric(7.0, CHIP_PAD_X))
-        .child(Text::new(text).style(geist_mono(size).letter_spacing(1.1).color(fg)))
+        .child(
+            Text::new(text)
+                .style(geist_mono(size).letter_spacing(1.1).color(fg)),
+        )
         .into()
 }
 
 /// A receipt chip row — chips laid out left-to-right at a baseline,
 /// fading in staggered.
-pub(crate) fn chip_row(chips: &[(&str, Color)], x: f32, y: f32, appear: f32) -> WidgetNode {
+pub fn chip_row(chips: &[(&str, Color)], x: f32, y: f32, appear: f32) -> WidgetNode {
     let a = crate::film_lib::ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
@@ -1016,12 +902,12 @@ pub(crate) fn chip_row(chips: &[(&str, Color)], x: f32, y: f32, appear: f32) -> 
 }
 
 /// Comma-grouped integer — the receipts' spelling.
-pub(crate) fn group_commas(n: u64) -> String {
+pub fn group_commas(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();
     let bytes = s.as_bytes();
     for (i, c) in bytes.iter().enumerate() {
-        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
+        if i > 0 && (bytes.len() - i) % 3 == 0 {
             out.push(',');
         }
         out.push(*c as char);
@@ -1030,7 +916,7 @@ pub(crate) fn group_commas(n: u64) -> String {
 }
 
 /// Geist Mono's advance in ems — layout arithmetic for the mono grid.
-pub(crate) const GEIST_MONO_ADV: f32 = 0.6035;
+pub const GEIST_MONO_ADV: f32 = 0.6035;
 
 /// A Geist Mono run's pixel width, **advance only** — no tracking.
 ///
@@ -1038,7 +924,7 @@ pub(crate) const GEIST_MONO_ADV: f32 = 0.6035;
 /// This one stays because a few call sites genuinely want the bare grid
 /// (a glyph cell, a column step), and because silently folding tracking in
 /// here would move those.
-pub(crate) fn gmono_w(size: f32, chars: usize) -> f32 {
+pub fn gmono_w(size: f32, chars: usize) -> f32 {
     size * GEIST_MONO_ADV * chars as f32
 }
 
@@ -1069,7 +955,7 @@ thread_local! {
 
 /// Register a node in **screen space** — composited over the frame, after
 /// the camera, at a fixed size.
-pub(crate) fn chrome(node: WidgetNode) -> WidgetNode {
+pub fn chrome(node: WidgetNode) -> WidgetNode {
     CHROME.with(|c| c.borrow_mut().push(node));
     Stack::new().into()
 }
@@ -1079,7 +965,7 @@ pub(crate) fn chrome(node: WidgetNode) -> WidgetNode {
 /// The master calls this straight after building a scene, so what comes
 /// back is exactly what this frame registered and the buffer is left
 /// empty for the next one.
-pub(crate) fn take_chrome() -> WidgetNode {
+pub fn take_chrome() -> WidgetNode {
     let items = CHROME.with(|c| std::mem::take(&mut *c.borrow_mut()));
     let mut stack = Stack::new();
     for item in items {
@@ -1090,7 +976,7 @@ pub(crate) fn take_chrome() -> WidgetNode {
 
 /// Throw away anything registered but not drained — the census and the
 /// calibration probe build frames they never composite.
-pub(crate) fn clear_chrome() {
+pub fn clear_chrome() {
     CHROME.with(|c| c.borrow_mut().clear());
 }
 
@@ -1123,7 +1009,7 @@ thread_local! {
 
 /// Where the shaper puts a caret `bytes` into `text`, and how wide the
 /// whole run is — both in logical pixels, both measured.
-pub(crate) fn measured_caret(text: &str, style: TextStyle, bytes: usize) -> (f32, f32) {
+pub fn measured_caret(text: &str, style: TextStyle, bytes: usize) -> (f32, f32) {
     use std::hash::{Hash, Hasher};
     let key = {
         let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -1171,7 +1057,7 @@ pub(crate) fn measured_caret(text: &str, style: TextStyle, bytes: usize) -> (f32
 /// This is still an estimate and still assumes a monospace face. Anything
 /// that has to land on a glyph — a caret above all — should use
 /// [`measured_caret`] instead and ask the shaper.
-pub(crate) fn gmono_tw(size: f32, chars: usize, tracking: f32) -> f32 {
+pub fn gmono_tw(size: f32, chars: usize, tracking: f32) -> f32 {
     if chars == 0 {
         return 0.0;
     }
@@ -1182,7 +1068,7 @@ pub(crate) fn gmono_tw(size: f32, chars: usize, tracking: f32) -> f32 {
 
 /// How a type-on line is placed horizontally.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TypeAt {
+pub enum TypeAt {
     /// Left edge pinned at `x`.
     Left(i32),
     /// The **finished** line centred on `x`. The line does not re-centre as
@@ -1214,15 +1100,42 @@ pub(crate) enum TypeAt {
 ///
 /// Here the text and the caret are computed from **one** `x0` and **one**
 /// tracked measurement, so they cannot disagree by construction, and the
-/// blink is suppressed while a character is actually landing — a real
-/// caret is solid while you type and only blinks once you stop.
-pub(crate) fn type_on(
+/// caret is solid while a character is actually landing — a real
+/// caret is solid while you type.
+///
+/// 4. **The caret outstays its welcome.** The caret used to blink on a
+///    finished line for the rest of the scene — a caret that keeps
+///    blinking after the typing is done reads as a stuck input, not a
+///    live one. It now leaves the moment the line is whole: the last
+///    character's landing masks the departure, and the line rests as
+///    type. (`clock` stays in the signature — the blink phase it drove
+///    is retired, and callers keep their call sites.)
+pub fn type_on(
     full: &str,
     at: TypeAt,
     y: f32,
     style: TextStyle,
     progress: f32,
     clock: f32,
+) -> WidgetNode {
+    type_on_with(full, at, y, style, progress, clock, true)
+}
+
+/// [`type_on`] without a caret — a line that *writes itself* rather than
+/// being typed by someone: blank, then letters at full ink, left to right,
+/// never a dim draft of the whole line waiting to be lit.
+pub fn type_on_bare(full: &str, at: TypeAt, y: f32, style: TextStyle, progress: f32) -> WidgetNode {
+    type_on_with(full, at, y, style, progress, 0.0, false)
+}
+
+fn type_on_with(
+    full: &str,
+    at: TypeAt,
+    y: f32,
+    style: TextStyle,
+    progress: f32,
+    clock: f32,
+    caret: bool,
 ) -> WidgetNode {
     let size = style.size;
     let p = clamp01(progress);
@@ -1250,14 +1163,20 @@ pub(crate) fn type_on(
             .top(y)
             .width(full_w + size)
             .height(size * 1.45)
-            .child(Text::new(shown).style(style).align(TextAlign::Left)),
+            .child(
+                Text::new(shown)
+                    .style(style)
+                    .align(TextAlign::Left),
+            ),
     );
 
     // The caret sits one advance past the last glyph — solid while the line
-    // is still landing, blinking once it has settled.
+    // is still landing, gone the moment it is whole. The last character's
+    // arrival masks the departure, so the line settles as finished type
+    // rather than as an input still waiting.
     let done = typed_n >= total;
-    let settled = (clock * 2.4).fract() < 0.55;
-    if !done || settled {
+    let _ = clock;
+    if !done && caret {
         stack = stack.push(
             Positioned::new()
                 .left(x0 + caret_x)
@@ -1266,7 +1185,7 @@ pub(crate) fn type_on(
                 .height(size * 1.02)
                 .child(
                     Container::new()
-                        .color(alpha(style.color, if done { 0.75 } else { 0.95 }))
+                        .color(alpha(style.color, 0.95))
                         .radius(1.5),
                 ),
         );
@@ -1275,7 +1194,7 @@ pub(crate) fn type_on(
 }
 
 /// A count-up value — integer part eased, so digits roll to their rest.
-pub(crate) fn count_up(target: u64, progress: f32) -> u64 {
+pub fn count_up(target: u64, progress: f32) -> u64 {
     let e = crate::film_lib::ease_out_cubic(progress.clamp(0.0, 1.0));
     ((target as f32 * e).round()) as u64
 }
@@ -1308,7 +1227,7 @@ pub(crate) fn count_up(target: u64, progress: f32) -> u64 {
 
 /// A 2D camera over the finished frame: a zoom about a held world point.
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) struct Cam {
+pub struct Cam {
     /// Magnification. 1.0 is the canvas, 1:1.
     pub zoom: f32,
     /// The world point pinned to the centre of frame.
@@ -1317,21 +1236,18 @@ pub(crate) struct Cam {
 
 impl Cam {
     /// The canvas, untouched — and the identity the studio act holds.
-    pub(crate) const STILL: Cam = Cam {
+    pub const STILL: Cam = Cam {
         zoom: 1.0,
         at: Offset::new(W * 0.5, H * 0.5),
     };
 
     /// A zoom about the canvas centre.
-    pub(crate) fn zoom(z: f32) -> Cam {
-        Cam {
-            zoom: z,
-            ..Cam::STILL
-        }
+    pub fn zoom(z: f32) -> Cam {
+        Cam { zoom: z, ..Cam::STILL }
     }
 
     /// A zoom about an arbitrary held point.
-    pub(crate) fn at(z: f32, x: f32, y: f32) -> Cam {
+    pub fn at(z: f32, x: f32, y: f32) -> Cam {
         Cam {
             zoom: z,
             at: Offset::new(x, y),
@@ -1340,14 +1256,14 @@ impl Cam {
 
     /// True when this camera cannot change a pixel, so the master can skip
     /// the copy entirely.
-    pub(crate) fn is_still(&self) -> bool {
+    pub fn is_still(&self) -> bool {
         (self.zoom - 1.0).abs() < 1.0e-4
             && (self.at.dx - W * 0.5).abs() < 0.01
             && (self.at.dy - H * 0.5).abs() < 0.01
     }
 
     /// Nudge the camera by a screen-space offset — the shake's door in.
-    pub(crate) fn nudged(self, dx: f32, dy: f32) -> Cam {
+    pub fn nudged(self, dx: f32, dy: f32) -> Cam {
         Cam {
             at: Offset::new(self.at.dx + dx, self.at.dy + dy),
             ..self
@@ -1356,7 +1272,7 @@ impl Cam {
 
     /// The transform that takes world space to screen space: the held
     /// point lands at frame centre, everything else scales about it.
-    pub(crate) fn transform(&self) -> Transform {
+    pub fn transform(&self) -> Transform {
         let z = self.zoom.max(0.05);
         Transform::new(
             z,
@@ -1370,7 +1286,7 @@ impl Cam {
 }
 
 /// Interpolate two cameras. Eased by the caller — this is the straight line.
-pub(crate) fn cam_lerp(a: Cam, b: Cam, t: f32) -> Cam {
+pub fn cam_lerp(a: Cam, b: Cam, t: f32) -> Cam {
     let t = clamp01(t);
     Cam {
         zoom: a.zoom + (b.zoom - a.zoom) * t,
@@ -1386,7 +1302,7 @@ pub(crate) fn cam_lerp(a: Cam, b: Cam, t: f32) -> Cam {
 /// `since` is seconds since the hit. The shake is deterministic (it is a
 /// function of `since` alone, not of a running RNG) because the film's
 /// whole contract is that a frame is a function of the checkout.
-pub(crate) fn cam_shake(since: f32, amplitude: f32) -> (f32, f32) {
+pub fn cam_shake(since: f32, amplitude: f32) -> (f32, f32) {
     if !(0.0..0.55).contains(&since) {
         return (0.0, 0.0);
     }
@@ -1406,7 +1322,7 @@ pub(crate) fn cam_shake(since: f32, amplitude: f32) -> (f32, f32) {
 /// reads differently from one that is still travelling when the cut
 /// comes, and the film had exactly one easing curve doing eighty percent
 /// of the work.
-pub(crate) fn camera(id: &str, t: f32, sec: f32) -> Cam {
+pub fn camera(id: &str, t: f32, sec: f32) -> Cam {
     use crate::film_lib::{ease_in_out, ease_out_cubic, ease_out_expo, smoothstep};
     match id {
         // The question, asked closer than it was posed.
@@ -1457,7 +1373,11 @@ pub(crate) fn camera(id: &str, t: f32, sec: f32) -> Cam {
         // A slow drift across the constellation, never arriving.
         "B02" => {
             let d = ease_in_out(t);
-            cam_lerp(Cam::at(1.10, 900.0, 430.0), Cam::at(1.02, 1010.0, 480.0), d)
+            cam_lerp(
+                Cam::at(1.10, 900.0, 430.0),
+                Cam::at(1.02, 1010.0, 480.0),
+                d,
+            )
         }
 
         // The film's one real push: from the glyph, down to a single
@@ -1498,11 +1418,7 @@ pub(crate) fn camera(id: &str, t: f32, sec: f32) -> Cam {
         }
 
         // A last, barely-there settle onto the mark.
-        "D04" => cam_lerp(
-            Cam::zoom(1.035),
-            Cam::zoom(1.0),
-            ease_out_expo(clamp01(t / 0.5)),
-        ),
+        "D04" => cam_lerp(Cam::zoom(1.035), Cam::zoom(1.0), ease_out_expo(clamp01(t / 0.5))),
 
         _ => Cam::STILL,
     }
@@ -1545,7 +1461,7 @@ const CUT_IN: f32 = 0.34;
 const CUT_OUT: f32 = 0.26;
 
 /// Acceleration — the curve the film did not have.
-pub(crate) fn ease_in_cubic(t: f32) -> f32 {
+pub fn ease_in_cubic(t: f32) -> f32 {
     let t = clamp01(t);
     t * t * t
 }
@@ -1553,7 +1469,7 @@ pub(crate) fn ease_in_cubic(t: f32) -> f32 {
 /// What the master needs to render one frame: where the camera is, and how
 /// much of the frame is present.
 #[derive(Clone, Copy)]
-pub(crate) struct Shot {
+pub struct Shot {
     pub cam: Cam,
     /// Global frame opacity, and the luminance ramp across a cut. 1.0 is
     /// the scene as authored.
@@ -1594,7 +1510,7 @@ fn cut_handles(index: usize, base: Cam) -> (Cam, Cam) {
 
 /// The full shot for a frame: the scene's camera plan, with the cut's
 /// handles composed on either end.
-pub(crate) fn shot(id: &str, index: usize, seconds: f32, t: f32, sec: f32) -> Shot {
+pub fn shot(id: &str, index: usize, seconds: f32, t: f32, sec: f32) -> Shot {
     use crate::film_lib::ease_out_expo;
 
     let base = camera(id, t, sec);
@@ -1622,10 +1538,7 @@ pub(crate) fn shot(id: &str, index: usize, seconds: f32, t: f32, sec: f32) -> Sh
         };
     }
 
-    Shot {
-        cam: base,
-        alpha: 1.0,
-    }
+    Shot { cam: base, alpha: 1.0 }
 }
 
 // ── The gap — the film's spine, drawn where a scene needs it ────────────────
@@ -1635,7 +1548,7 @@ pub(crate) fn shot(id: &str, index: usize, seconds: f32, t: f32, sec: f32) -> Sh
 /// `[0, 1]` moves the *right* endpoint toward the left (1 = the poles
 /// touch). `sag` bends the line under the tolls' weight; `fray` (in
 /// `[0, 1]`) breaks the dashes into disorder — the drift act's fraying.
-pub(crate) fn gap_line(
+pub fn gap_line(
     book: &mut Sketchbook,
     y: f32,
     x0: f32,
@@ -1689,37 +1602,24 @@ pub(crate) fn gap_line(
 
 /// The left pole — the caret: a blinking terminal point with a dormant
 /// glow (the thought, waiting to become a screen).
-pub(crate) fn pole_caret(book: &mut Sketchbook, x: f32, y: f32, sec: f32, a: f32) {
+pub fn pole_caret(book: &mut Sketchbook, x: f32, y: f32, sec: f32, a: f32) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 {
         return;
     }
     let on = (sec * 2.2).fract() < 0.55;
     glow(book, x, y, 90.0, ACCENT, a * 0.16);
-    book.ring(
-        Offset::new(x, y),
-        13.0,
-        1.2,
-        alpha(tint(ACCENT, 0.4), a * 0.7),
-    );
+    book.ring(Offset::new(x, y), 13.0, 1.2, alpha(tint(ACCENT, 0.4), a * 0.7));
     if on {
-        book.rrect(
-            xywh(x - 2.5, y - 22.0, 5.0, 44.0),
-            2.0,
-            alpha(tint(ACCENT, 0.4), a),
-        );
-        book.rrect(
-            xywh(x - 1.5, y - 18.0, 3.0, 36.0),
-            1.5,
-            alpha(Color::WHITE, a * 0.85),
-        );
+        book.rrect(xywh(x - 2.5, y - 22.0, 5.0, 44.0), 2.0, alpha(tint(ACCENT, 0.4), a));
+        book.rrect(xywh(x - 1.5, y - 18.0, 3.0, 36.0), 1.5, alpha(Color::WHITE, a * 0.85));
     }
 }
 
 /// The right pole — the screen: a device outline waiting to light up.
 /// `lit` in `[0, 1]` is how awake it is; the outline is a rounded rect
 /// with a home tick beneath it, and when lit, a soft inner glow.
-pub(crate) fn pole_screen(book: &mut Sketchbook, x: f32, y: f32, lit: f32, a: f32, color: Color) {
+pub fn pole_screen(book: &mut Sketchbook, x: f32, y: f32, lit: f32, a: f32, color: Color) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 {
         return;
@@ -1758,7 +1658,7 @@ pub(crate) fn pole_screen(book: &mut Sketchbook, x: f32, y: f32, lit: f32, a: f3
 /// The distance readout — the film's persistent instrument: a centered
 /// chip at the bottom of the frame carrying the one number the film is
 /// about.
-pub(crate) fn distance_chip(abs: f32, a: f32) -> WidgetNode {
+pub fn distance_chip(abs: f32, a: f32) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
@@ -1784,120 +1684,103 @@ pub(crate) fn distance_chip(abs: f32, a: f32) -> WidgetNode {
     let x = (W * 0.5 - w * 0.5).round();
 
     chrome(
-        Stack::new()
-            .push(
-                Positioned::new()
-                    .left(x)
-                    .top(1008.0)
-                    .width(w)
-                    .height(PILL_H)
-                    .child(Opacity::new(a).child(Painting::sized(
-                        Size::new(w, PILL_H),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            book.rrect(xywh(0.0, 0.0, w, PILL_H), 9.0, alpha(SURFACE_2, 0.92));
-                            book.stroke_rrect(
-                                xywh(0.0, 0.0, w, PILL_H),
-                                9.0,
-                                alpha(ACCENT, 0.28),
-                                1.1,
-                            );
-                            book.circle(Offset::new(16.0, PILL_H * 0.5), 3.5, alpha(ACCENT, 0.7));
-                        }),
-                    ))),
-            )
-            .push(
-                Positioned::new()
-                    .left(x + PAD_L)
-                    .top(1008.0 + (PILL_H - SIZE * 1.34) * 0.5)
-                    .width(text_w + SIZE)
-                    .height(SIZE * 1.34)
-                    .child(
-                        Opacity::new(a).child(
-                            Text::new(line)
-                                .style(
-                                    geist_mono(SIZE)
-                                        .letter_spacing(TRACK)
-                                        .color(alpha(INK, 0.9)),
-                                )
-                                .align(TextAlign::Left),
-                        ),
-                    ),
-            )
-            .into(),
+    Stack::new()
+        .push(
+            Positioned::new()
+                .left(x)
+                .top(1008.0)
+                .width(w)
+                .height(PILL_H)
+                .child(Opacity::new(a).child(Painting::sized(
+                    Size::new(w, PILL_H),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        book.rrect(xywh(0.0, 0.0, w, PILL_H), 9.0, alpha(SURFACE_2, 0.92));
+                        book.stroke_rrect(
+                            xywh(0.0, 0.0, w, PILL_H),
+                            9.0,
+                            alpha(ACCENT, 0.28),
+                            1.1,
+                        );
+                        book.circle(Offset::new(16.0, PILL_H * 0.5), 3.5, alpha(ACCENT, 0.7));
+                    }),
+                ))),
+        )
+        .push(
+            Positioned::new()
+                .left(x + PAD_L)
+                .top(1008.0 + (PILL_H - SIZE * 1.34) * 0.5)
+                .width(text_w + SIZE)
+                .height(SIZE * 1.34)
+                .child(Opacity::new(a).child(
+                    Text::new(line)
+                        .style(
+                            geist_mono(SIZE)
+                                .letter_spacing(TRACK)
+                                .color(alpha(INK, 0.9)),
+                        )
+                        .align(TextAlign::Left),
+                )),
+        )
+        .into(),
     )
 }
 
 /// The act chip — the movement's name.
-pub(crate) fn act_chip(movement: &str, name: &str, appear: f32) -> WidgetNode {
+pub fn act_chip(movement: &str, name: &str, appear: f32) -> WidgetNode {
     let a = crate::film_lib::ease_out_cubic(appear.clamp(0.0, 1.0));
     if a <= 0.01 {
         return Stack::new().into();
     }
     chrome(
-        Stack::new()
-            .push(
-                Positioned::new()
-                    .left(178.0)
-                    .top(ACT_Y)
-                    .width(700.0)
-                    .height(26.0)
-                    .child(
-                        Opacity::new(a).child(
-                            Text::new(format!("{movement} — {name}"))
-                                .style(
-                                    geist_mono(15.0)
-                                        .letter_spacing(4.5)
-                                        .color(alpha(MUTED, 0.85)),
-                                )
-                                .align(TextAlign::Left),
-                        ),
-                    ),
-            )
-            .into(),
+    Stack::new()
+        .push(
+            Positioned::new()
+                .left(112.0)
+                .top(ACT_Y)
+                .width(1200.0)
+                .height(30.0)
+                .child(Opacity::new(a).child(
+                    Text::new(format!("{movement} — {name}"))
+                        .style(
+                            geist_mono(19.0)
+                                .letter_spacing(6.0)
+                                .color(alpha(MUTED, 0.88)),
+                        )
+                        .align(TextAlign::Left),
+                )),
+        )
+        .into(),
     )
 }
 
 /// The film's progress rail — a hairline at the very bottom, one tick per
 /// scene, the playhead sliding.
-pub(crate) fn progress_rail(abs: f32) -> WidgetNode {
+pub fn progress_rail(abs: f32) -> WidgetNode {
     let total = total_seconds();
     let frac = (abs / total).clamp(0.0, 1.0);
     let starts: Vec<f32> = (0..scenes().len()).map(scene_start).collect();
     chrome(
-        Painting::sized(
-            Size::new(W, 26.0),
-            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                let x0 = 180.0;
-                let x1 = W - 180.0;
-                let y = 18.0;
-                book.line(
-                    Offset::new(x0, y),
-                    Offset::new(x1, y),
-                    alpha(Color::WHITE, 0.07),
-                    1.0,
-                );
-                for (i, st) in starts.iter().enumerate() {
-                    let x = x0 + (x1 - x0) * (st / total);
-                    // The five movements' boundaries.
-                    let major = i == 0 || i == 1 || i == 5 || i == 9 || i == 18 || i == 20;
-                    book.line(
-                        Offset::new(x, y - if major { 6.0 } else { 4.0 }),
-                        Offset::new(x, y + if major { 6.0 } else { 4.0 }),
-                        alpha(Color::WHITE, if major { 0.22 } else { 0.13 }),
-                        1.0,
-                    );
-                }
-                let px = x0 + (x1 - x0) * frac;
-                book.circle(Offset::new(px, y), 3.0, alpha(ACCENT, 0.9));
-                book.line(
-                    Offset::new(px, y),
-                    Offset::new(px, y + 10.0),
-                    alpha(ACCENT, 0.55),
-                    1.2,
-                );
-            }),
-        )
-        .into(),
+    Painting::sized(Size::new(W, 26.0), PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+        let x0 = 180.0;
+        let x1 = W - 180.0;
+        let y = 18.0;
+        book.line(Offset::new(x0, y), Offset::new(x1, y), alpha(Color::WHITE, 0.07), 1.0);
+        for (i, st) in starts.iter().enumerate() {
+            let x = x0 + (x1 - x0) * (st / total);
+            // The five movements' boundaries.
+            let major = i == 0 || i == 1 || i == 5 || i == 9 || i == 18 || i == 20;
+            book.line(
+                Offset::new(x, y - if major { 6.0 } else { 4.0 }),
+                Offset::new(x, y + if major { 6.0 } else { 4.0 }),
+                alpha(Color::WHITE, if major { 0.22 } else { 0.13 }),
+                1.0,
+            );
+        }
+        let px = x0 + (x1 - x0) * frac;
+        book.circle(Offset::new(px, y), 3.0, alpha(ACCENT, 0.9));
+        book.line(Offset::new(px, y), Offset::new(px, y + 10.0), alpha(ACCENT, 0.55), 1.2);
+    }))
+    .into(),
     )
 }
 
@@ -1909,7 +1792,7 @@ pub(crate) fn progress_rail(abs: f32) -> WidgetNode {
 
 /// The witness chip — bottom-right: the counter of human touches, blooming
 /// on every tap.
-pub(crate) fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
+pub fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
     Stack::new()
         .push(
             Positioned::new()
@@ -1917,32 +1800,17 @@ pub(crate) fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
                 .top(976.0)
                 .width(240.0)
                 .height(38.0)
-                .child(Painting::sized(
-                    Size::new(240.0, 38.0),
-                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                .child(Painting::sized(Size::new(240.0, 38.0), PaintWith::new(
+                    move |book: &mut Sketchbook, _s: Size| {
                         if pulse > 0.02 {
                             glow(book, 120.0, 19.0, 90.0, ACCENT, pulse * 0.30);
                         }
                         book.rrect(xywh(0.0, 2.0, 240.0, 34.0), 9.0, alpha(SURFACE_2, 0.92));
-                        book.stroke_rrect(
-                            xywh(0.0, 2.0, 240.0, 34.0),
-                            9.0,
-                            alpha(ACCENT, 0.30),
-                            1.1,
-                        );
-                        book.circle(
-                            Offset::new(22.0, 19.0),
-                            5.0,
-                            alpha(ACCENT, 0.55 + pulse * 0.45),
-                        );
-                        book.ring(
-                            Offset::new(22.0, 19.0),
-                            9.0 + pulse * 5.0,
-                            1.2,
-                            alpha(ACCENT, 0.5 * pulse),
-                        );
-                    }),
-                )),
+                        book.stroke_rrect(xywh(0.0, 2.0, 240.0, 34.0), 9.0, alpha(ACCENT, 0.30), 1.1);
+                        book.circle(Offset::new(22.0, 19.0), 5.0, alpha(ACCENT, 0.55 + pulse * 0.45));
+                        book.ring(Offset::new(22.0, 19.0), 9.0 + pulse * 5.0, 1.2, alpha(ACCENT, 0.5 * pulse));
+                    },
+                ))),
         )
         .push(
             Positioned::new()
@@ -1960,7 +1828,7 @@ pub(crate) fn witness_chip(ladder: u32, pulse: f32) -> WidgetNode {
 }
 
 /// The session chip — the film's clock, under the witness.
-pub(crate) fn session_chip(abs: f32, a: f32) -> WidgetNode {
+pub fn session_chip(abs: f32, a: f32) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
@@ -1971,24 +1839,18 @@ pub(crate) fn session_chip(abs: f32, a: f32) -> WidgetNode {
                 .top(1016.0)
                 .width(240.0)
                 .height(28.0)
-                .child(
-                    Opacity::new(a).child(
-                        Text::new(format!("session · {}", session_clock(abs)))
-                            .style(
-                                geist_mono(13.0)
-                                    .letter_spacing(1.6)
-                                    .color(alpha(MUTED, 0.9)),
-                            )
-                            .align(TextAlign::Left),
-                    ),
-                ),
+                .child(Opacity::new(a).child(
+                    Text::new(format!("session · {}", session_clock(abs)))
+                        .style(geist_mono(13.0).letter_spacing(1.6).color(alpha(MUTED, 0.9)))
+                        .align(TextAlign::Left),
+                )),
         )
         .into()
 }
 
 /// The studio scenes' shared chrome: the caption scrim, the act chip,
 /// the witness, and the session clock.
-pub(crate) fn studio_chrome(ctx: &Ctx) -> Stack {
+pub fn studio_chrome(ctx: &Ctx) -> Stack {
     let abs = ctx.abs;
     Stack::new()
         .push(Positioned::fill().child(Painting::sized(
@@ -2041,17 +1903,13 @@ pub(crate) fn studio_chrome(ctx: &Ctx) -> Stack {
                 )),
         )
         .push(band_scrim(1.0))
-        .push(act_chip(
-            "MOVEMENT III",
-            "THE STUDIO",
-            clamp01((ctx.sec - 0.3) / 0.5),
-        ))
+        .push(act_chip("MOVEMENT III", "THE STUDIO", clamp01((ctx.sec - 0.3) / 0.5)))
         .push(witness_chip(ctx.ladder, tap_pulse(ctx.abs)))
         .push(session_chip(abs, clamp01((ctx.sec - 1.2) / 0.6)))
 }
 
 /// The tap ring — the film's annotation of a real interaction.
-pub(crate) fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
+pub fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
     if !(0.0..=1.0).contains(&since) {
         return Stack::new().into();
     }
@@ -2071,12 +1929,7 @@ pub(crate) fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
                         let cx = size * 0.5;
                         let cy = size * 0.5;
                         book.ring(Offset::new(cx, cy), r, 2.6, alpha(ACCENT, a * 0.85));
-                        book.ring(
-                            Offset::new(cx, cy),
-                            r * 0.6,
-                            1.4,
-                            alpha(tint(ACCENT, 0.4), a * 0.6),
-                        );
+                        book.ring(Offset::new(cx, cy), r * 0.6, 1.4, alpha(tint(ACCENT, 0.4), a * 0.6));
                         if a > 0.5 {
                             glow(book, cx, cy, 90.0, ACCENT, (a - 0.5) * 0.5);
                         }
@@ -2087,7 +1940,7 @@ pub(crate) fn tap_ring_at(at: Offset, since: f32) -> WidgetNode {
 }
 
 /// A receipt chip row pinned bottom-right.
-pub(crate) fn receipt_row(chips: &[(&str, Color)], appear: f32) -> WidgetNode {
+pub fn receipt_row(chips: &[(&str, Color)], appear: f32) -> WidgetNode {
     // The editor's empty lower half, not the preview pane's paragraph.
     //
     // Pinned at `W - 900` this row landed exactly on the preview's
@@ -2100,7 +1953,7 @@ pub(crate) fn receipt_row(chips: &[(&str, Color)], appear: f32) -> WidgetNode {
 // ── Film grain and dust — the film's air ─────────────────────────────────────
 
 /// Film grain — round specks, per-frame seed.
-pub(crate) fn grain(book: &mut Sketchbook, w: f32, h: f32, frame_i: u64, strength: f32) {
+pub fn grain(book: &mut Sketchbook, w: f32, h: f32, frame_i: u64, strength: f32) {
     let mut rng = Rng::new(0x6A1D ^ frame_i.wrapping_mul(0x9E37));
     let n = (240.0 * strength) as usize;
     for _ in 0..n {
@@ -2111,17 +1964,13 @@ pub(crate) fn grain(book: &mut Sketchbook, w: f32, h: f32, frame_i: u64, strengt
         book.circle(
             Offset::new(x, y),
             0.5 + rng.f01() * 0.7,
-            if bright {
-                alpha(Color::WHITE, a)
-            } else {
-                alpha(Color::BLACK, a * 1.6)
-            },
+            if bright { alpha(Color::WHITE, a) } else { alpha(Color::BLACK, a * 1.6) },
         );
     }
 }
 
 /// Slow dust motes — the wait's air.
-pub(crate) fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, strength: f32) {
+pub fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, strength: f32) {
     dust_deep(book, w, h, t, seed, strength, Offset::ZERO);
 }
 
@@ -2131,7 +1980,7 @@ pub(crate) fn dust(book: &mut Sketchbook, w: f32, h: f32, t: f32, seed: u64, str
 /// it: a negative depth. Against a push this is what makes the move feel
 /// like the lens travelling through something rather than the picture
 /// getting bigger.
-pub(crate) fn dust_deep(
+pub fn dust_deep(
     book: &mut Sketchbook,
     w: f32,
     h: f32,
@@ -2149,10 +1998,7 @@ pub(crate) fn dust_deep(
         let fall = t * 12.0 * rng.f01();
         let depth = -0.18 - rng.f01() * 0.26;
         book.circle(
-            Offset::new(
-                bx + drift + pan.dx * depth,
-                (by + fall) % h + pan.dy * depth,
-            ),
+            Offset::new(bx + drift + pan.dx * depth, (by + fall) % h + pan.dy * depth),
             r,
             alpha(MUTED, 0.22 * strength),
         );
@@ -2170,26 +2016,35 @@ pub(crate) fn dust_deep(
 /// tilted plane occupies — and an earlier film in this lab used it. This
 /// one never did.
 ///
-/// The two halves work together: `project_rect` gives the exact
-/// perspective quad, which becomes the **clip**, so the panel's silhouette
-/// is genuinely projected; the contents ride an affine transform fitted to
-/// that quad. An affine cannot reproduce a perspective divide — parallel
-/// lines stay parallel — but across a panel of a few hundred pixels at the
-/// small angles used here the error is under a pixel, and the alternative
-/// is re-projecting every child by hand. The silhouette is exact, the fill
-/// is a very good approximation, and this comment is the honest account of
-/// which is which.
+/// **Piecewise affine, 2×2.** A single affine fitted to the projected
+/// corners maps the panel to a *parallelogram*: its verticals stay
+/// vertical, the trapezoid exists only in the clip, and since the content
+/// never reaches the clip's slanted edge the panel renders as a rotated
+/// rectangle — displaced, but flat. (That was this function's first cut,
+/// measured on the render: side edges vertical to 0.3 px.)
+///
+/// So the panel is drawn as four quadrants, each with its own affine
+/// fitted to its own three projected corners. Perspective maps straight
+/// lines to straight lines, so every cell edge lands exactly on the
+/// true projected edge, adjacent cells agree exactly along their shared
+/// seam (both affines pass through the same two corners, and both map
+/// the straight seam to the straight line between them), and the union
+/// silhouette is the true perspective quad. Only the interior carries
+/// error — a quarter of the corner discrepancy at each cell's centre,
+/// ~3 px on a 300 px panel at 26° — where nothing is anchored to
+/// anything. The cost is the source drawn four times, clipped to
+/// disjoint quadrants.
 ///
 /// `focal` is in logical pixels: larger is a longer lens.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn panel_3d(
+pub fn panel_3d(
     book: &mut Sketchbook,
     rect: Rect,
     yaw: f32,
     pitch: f32,
     focal: f32,
     alpha_mul: f32,
-    source: impl FnOnce(&mut Sketchbook),
+    source: impl Fn(&mut Sketchbook),
 ) {
     use vieww_foundation::Transform3;
 
@@ -2208,47 +2063,54 @@ pub(crate) fn panel_3d(
         .then(Transform3::translation(cx, cy, 0.0))
         .then(Transform3::perspective(focal));
 
-    let Some(quad) = t3.project_rect(rect) else {
-        // Behind the camera — draw it flat rather than not at all.
-        source(book);
-        return;
-    };
+    // A cell that cannot be projected (behind the camera) is skipped
+    // rather than failing the panel; at the angles this function is
+    // called with it does not happen.
+    let a_mul = alpha_mul.clamp(0.0, 1.0);
+    for (x0, x1) in [(rect.left, cx), (cx, rect.right)] {
+        for (y0, y1) in [(rect.top, cy), (cy, rect.bottom)] {
+            let Some(quad) = t3.project_rect(Rect::new(x0, y0, x1, y1)) else {
+                continue;
+            };
+            let (Some(tl), Some(tr), Some(bl)) = (
+                t3.project(Offset::new(x0, y0), 0.0),
+                t3.project(Offset::new(x1, y0), 0.0),
+                t3.project(Offset::new(x0, y1), 0.0),
+            ) else {
+                continue;
+            };
+            // The affine through the cell's own three corners: the top
+            // edge gives the x basis, the left edge the y basis.
+            let wsp = (x1 - x0).max(1.0);
+            let hsp = (y1 - y0).max(1.0);
+            let ax = (tr.dx - tl.dx) / wsp;
+            let ay = (tr.dy - tl.dy) / wsp;
+            let bx = (bl.dx - tl.dx) / hsp;
+            let by = (bl.dy - tl.dy) / hsp;
+            let fit = Transform::new(
+                ax,
+                ay,
+                bx,
+                by,
+                tl.dx - (ax * x0 + bx * y0),
+                tl.dy - (ay * x0 + by * y0),
+            );
 
-    // Fit an affine to the projected corners: the top edge gives the x
-    // basis, the left edge the y basis. With no perspective this is exact;
-    // with a little, it is the best affine through the same corners.
-    let tl = t3.project(Offset::new(rect.left, rect.top), 0.0);
-    let tr = t3.project(Offset::new(rect.right, rect.top), 0.0);
-    let bl = t3.project(Offset::new(rect.left, rect.bottom), 0.0);
-    let (Some(tl), Some(tr), Some(bl)) = (tl, tr, bl) else {
-        source(book);
-        return;
-    };
-    let wsp = (rect.right - rect.left).max(1.0);
-    let hsp = (rect.bottom - rect.top).max(1.0);
-    let ax = (tr.dx - tl.dx) / wsp;
-    let ay = (tr.dy - tl.dy) / wsp;
-    let bx = (bl.dx - tl.dx) / hsp;
-    let by = (bl.dy - tl.dy) / hsp;
-    let fit = Transform::new(
-        ax,
-        ay,
-        bx,
-        by,
-        tl.dx - (ax * rect.left + bx * rect.top),
-        tl.dy - (ay * rect.left + by * rect.top),
-    );
-
-    // The clip is the *projected* quad, so it is already in screen space
-    // and must sit outside the transform — `Sketchbook::window` puts its
-    // clip inside, which would project it a second time.
-    book.layer(alpha_mul.clamp(0.0, 1.0), 0.0, Some(quad), |g| {
-        g.transformed(fit, source);
-    });
+            // The clip is the *projected* cell quad, so it is already in
+            // screen space and must sit outside the transform —
+            // `Sketchbook::window` puts its clip inside, which would
+            // project it a second time.
+            book.layer(a_mul, 0.0, Some(quad), |g| {
+                // Borrow, not move: the loop draws the source once per
+                // quadrant, and an `Fn` source is shareable by design.
+                g.transformed(fit, |b| source(b));
+            });
+        }
+    }
 }
 
 /// A full-frame flash — the match-cut breath between scenes.
-pub(crate) fn flash(book: &mut Sketchbook, w: f32, h: f32, a: f32, color: Color) {
+pub fn flash(book: &mut Sketchbook, w: f32, h: f32, a: f32, color: Color) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.004 {
         return;
@@ -2258,6 +2120,9 @@ pub(crate) fn flash(book: &mut Sketchbook, w: f32, h: f32, a: f32, color: Color)
 
 // ── The scene modules ────────────────────────────────────────────────────────
 
+pub mod master;
+pub mod script;
+mod s01_the_two_points;
 mod a01_the_wait;
 mod a02_the_tolls;
 mod a03_the_jank;
@@ -2280,6 +2145,3 @@ mod d02_the_pullback;
 mod d03_zero_distance;
 mod d04_the_endcard;
 mod d05_the_hold;
-pub(crate) mod master;
-mod s01_the_two_points;
-pub(crate) mod script;

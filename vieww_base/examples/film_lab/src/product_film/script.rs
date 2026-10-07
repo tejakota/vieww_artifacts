@@ -28,28 +28,25 @@ use std::time::Duration;
 
 use vieww_foundation::{Offset, PointerEvent, PointerId, Size, TextEditingValue, TextSelection};
 use vieww_render::FrameDriver;
-use vieww_widget::prelude::*;
-use vieww_widget::WidgetNode;
-use viewwstudio::command::Command;
 use viewwstudio::compile::{Session, Toolchain};
 use viewwstudio::state::{Platform, RightTab, Studio, View};
+use viewwstudio::command::Command;
 use viewwstudio::{Shell, Workspace};
+use vieww_widget::prelude::*;
+use vieww_widget::WidgetNode;
 
 use super::{H, W};
 
 /// The film's window — the studio runs full-bleed at logical master size.
 /// (SCALE_FACTOR never changes this: the studio lays out in logical
 /// points; only the raster multiplies.)
-pub(crate) const WINDOW: Size = Size::new(W, H);
+pub const WINDOW: Size = Size::new(W, H);
 
 /// The workspace the film opens: the studio's own demo screens plus the
 /// film's say program (`counter.say`, the grammar verbatim from the
 /// studio's `docs/06-say.md`). Committed beside this source.
-pub(crate) fn workspace_path() -> PathBuf {
-    PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/product_film_workspace"
-    ))
+pub fn workspace_path() -> PathBuf {
+    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/product_film_workspace"))
 }
 
 /// The target directory the toolchain compiles against: **the release
@@ -57,20 +54,18 @@ pub(crate) fn workspace_path() -> PathBuf {
 /// compilation — the one arrangement where the preview's `TypeId`s
 /// match and the compiled screen actually mounts (see the studio's own
 /// Cargo.toml note on why).
-pub(crate) fn target_dir() -> PathBuf {
+pub fn target_dir() -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/release"))
 }
 
 /// Mount the actual studio on the film's driver. Returns the studio
 /// handle; the caller mounts [`shell_root`] as (part of) the root.
-pub(crate) fn mount(driver: &mut FrameDriver) -> Studio {
+pub fn mount(driver: &mut FrameDriver) -> Studio {
     viewwstudio::install(driver);
     let runtime = driver.elements().runtime().clone();
     let workspace = Workspace::open(&workspace_path());
-    let studio = Studio::with_workspace(&runtime, workspace).with_toolchain(
-        Toolchain::discover(&target_dir()),
-        Session::new(0x51_2F1D).ok(),
-    );
+    let studio = Studio::with_workspace(&runtime, workspace)
+        .with_toolchain(Toolchain::discover(&target_dir()), Session::new(0x51_2F1D).ok());
     studio.dark.set(true);
     studio.note_window_size(WINDOW);
     studio
@@ -78,11 +73,9 @@ pub(crate) fn mount(driver: &mut FrameDriver) -> Studio {
 
 /// A studio scene's root: the real Shell full-bleed, with the film's
 /// overlay chrome riding on top.
-pub(crate) fn shell_root(studio: &Studio, overlay: WidgetNode) -> WidgetNode {
+pub fn shell_root(studio: &Studio, overlay: WidgetNode) -> WidgetNode {
     Stack::new()
-        .push(Positioned::fill().child(Shell {
-            studio: studio.clone(),
-        }))
+        .push(Positioned::fill().child(Shell { studio: studio.clone() }))
         .push(Positioned::fill().child(overlay))
         .into()
 }
@@ -95,26 +88,26 @@ pub(crate) fn shell_root(studio: &Studio, overlay: WidgetNode) -> WidgetNode {
 // The open tabs: card_grid.rs (0) · landing_screen.rs (1) · live.rs (2)
 // · settings_form.rs (3) · screen.rs (4) · …
 
-pub(crate) const TAB_CARD_GRID: usize = 0;
-pub(crate) const TAB_LIVE: usize = 2;
+pub const TAB_CARD_GRID: usize = 0;
+pub const TAB_LIVE: usize = 2;
 
 // ── The tap coordinates — hit-tested against the real tree ──────────────────
 
 /// The live demo's Home screen "Open settings" button — the first
 /// tappable control the scan finds (the rows are text; the button acts).
 /// Verified by `pfcal`: the scan's route-changing tap.
-pub(crate) const TAP_LIVE_ROW: Offset = Offset::new(1576.0, 450.0);
+pub const TAP_LIVE_ROW: Offset = Offset::new(1576.0, 450.0);
 
 /// The compiled counter's *Add one* button (in the preview pane).
 /// Verified by `pfcal`: the pixel-hunted button centre, whose tap moved
 /// the count 0 → 1 (the receipts in `calibrate/`).
-pub(crate) const TAP_ADD_ONE: Offset = Offset::new(1594.0, 346.0);
+pub const TAP_ADD_ONE: Offset = Offset::new(1594.0, 346.0);
 
 // ── The action vocabulary ────────────────────────────────────────────────────
 
 /// One scripted touch of the real studio.
 #[derive(Clone)]
-pub(crate) enum Action {
+pub enum Action {
     /// Set the active editor tab (the buffers the workspace opened).
     ActiveTab(usize),
     /// Open a buffer by workspace-relative path — the file-tree click.
@@ -154,50 +147,50 @@ pub(crate) enum Action {
 
 /// The script — every touch of the real studio, in film seconds. The
 /// witness ladder's taps are exactly these times (see `taps()`).
-pub(crate) fn script() -> Vec<(f32, Action)> {
+pub fn script() -> Vec<(f32, Action)> {
     vec![
         // ── C01 · the studio opens (128–138) ────────────────────────────
-        (128.4, Action::PanelOpen(false)), // the wide frame
+        (128.4, Action::PanelOpen(false)),       // the wide frame
         (129.0, Action::ActiveTab(TAB_LIVE)),
         // ── C02 · first paint (138–150) ─────────────────────────────────
         (139.0, Action::Run(Command::LivePreview)), // the caution dialog — a real dialog
-        (140.2, Action::AcceptLive),                // the demo mounts           [tap 1]
+        (140.2, Action::AcceptLive),                 // the demo mounts           [tap 1]
         // ── C03 · live compose (150–162) ────────────────────────────────
-        (151.0, Action::ShowDamage(true)), // the real damage overlay wakes
+        (151.0, Action::ShowDamage(true)),           // the real damage overlay wakes
         (154.0, Action::SetLiveTitle("My own inbox".into())), // the keystroke [tap 2]
         (157.5, Action::SetLiveRow("Release cut is ready".into())),
         (159.8, Action::ShowDamage(false)),
         // ── C04 · the tap (162–170) ─────────────────────────────────────
         (166.38, Action::PointerDown(TAP_LIVE_ROW)),
-        (166.50, Action::PointerUp(TAP_LIVE_ROW)), // the route changes         [tap 3]
+        (166.50, Action::PointerUp(TAP_LIVE_ROW)),   // the route changes         [tap 3]
         // ── C05 · say → rust (170–186) ──────────────────────────────────
         (171.0, Action::OpenPath("counter.say".into())),
         (171.4, Action::TypeSay(40)),
         (172.4, Action::TypeSay(96)),
         (173.4, Action::TypeSay(152)),
         (174.4, Action::TypeSay(208)),
-        (175.4, Action::TypeSay(usize::MAX)), // the whole program
-        (176.2, Action::Render),              // rustc runs                [tap 4]
+        (175.4, Action::TypeSay(usize::MAX)),        // the whole program
+        (176.2, Action::Render),                     // rustc runs                [tap 4]
         (177.0, Action::Settle),
         (178.5, Action::PointerDown(TAP_ADD_ONE)),
-        (178.62, Action::PointerUp(TAP_ADD_ONE)), // count 0 → 1               [tap 5]
+        (178.62, Action::PointerUp(TAP_ADD_ONE)),    // count 0 → 1               [tap 5]
         // ── C06 · state carries (186–198) ───────────────────────────────
         // One word of the say program changes (the heading), then Render
         // again — the `keep`ed count must survive the recompile.
         (187.8, Action::SetLiveTitle("::carry".into())),
         (188.1, Action::Render),
-        (189.0, Action::Settle), // count is STILL 1
+        (189.0, Action::Settle),                      // count is STILL 1
         // ── C07 · three frames (198–210) ────────────────────────────────
         (200.5, Action::Platform(Platform::Android)),
         (203.0, Action::Platform(Platform::Ios)),
         (205.5, Action::Platform(Platform::Desktop)),
         // ── C08 · the tokens (210–220) ──────────────────────────────────
-        (211.0, Action::View(View::Tokens)), // the token editor
-        (214.5, Action::Accent("Teal".into())), // live re-theming, one accent
-        (216.2, Action::Accent("Purple".into())), // …and back to the brand's
+        (211.0, Action::View(View::Tokens)),         // the token editor
+        (214.5, Action::Accent("Teal".into())),      // live re-theming, one accent
+        (216.2, Action::Accent("Purple".into())),    // …and back to the brand's
         // ── C09 · build ships (220–232) ─────────────────────────────────
         (221.0, Action::View(View::Toolchain)),
-        (223.3, Action::View(View::Export)), // the build view           [tap 6]
+        (223.3, Action::View(View::Export)),         // the build view           [tap 6]
         (228.8, Action::RightTab(RightTab::Devices)), // the package lands        [tap 7]
     ]
 }
@@ -207,7 +200,7 @@ pub(crate) fn script() -> Vec<(f32, Action)> {
 /// The film's say program, read from the workspace at mount (the same
 /// file the studio will compile — the film cannot type anything the
 /// buffer does not contain).
-pub(crate) fn say_source() -> String {
+pub fn say_source() -> String {
     std::fs::read_to_string(workspace_path().join("counter.say")).unwrap_or_default()
 }
 
@@ -237,8 +230,24 @@ fn set_text(text: String) -> TextEditingValue {
 /// deferred to the up's frame and both dispatch back-to-back against
 /// the same drawn tree. The tap lands at its release time — which is
 /// when the witness ladder counts it anyway.
-pub(crate) fn apply_up_to(driver: &mut FrameDriver, studio: &Studio, abs: f32, cursor: &mut usize) {
-    let script = script();
+pub fn apply_up_to(driver: &mut FrameDriver, studio: &Studio, abs: f32, cursor: &mut usize) {
+    apply_list(driver, studio, &script(), abs, cursor);
+}
+
+/// Apply **any** session list — this film's own, or a guest film's —
+/// up to `abs`, resuming from `cursor`.
+///
+/// `studio_film` drives the same app through this door: one vocabulary,
+/// one set of rules. The pointer-pair rule is the list's, not the
+/// caller's — a `PointerDown` whose release is not yet due is deferred,
+/// and both halves land in one frame.
+pub fn apply_list(
+    driver: &mut FrameDriver,
+    studio: &Studio,
+    script: &[(f32, Action)],
+    abs: f32,
+    cursor: &mut usize,
+) {
     let clock = Duration::from_secs_f64(abs.max(0.0) as f64);
     while *cursor < script.len() {
         let (at, action) = &script[*cursor];
@@ -330,9 +339,7 @@ fn apply_one(driver: &mut FrameDriver, studio: &Studio, action: Action, clock: D
 /// Edit the active buffer with a whole-text transform (the editor sees
 /// a paste; its comforts do not fire).
 fn edit_with(studio: &Studio, f: impl FnOnce(String) -> String) {
-    let Some(buffer) = studio.active() else {
-        return;
-    };
+    let Some(buffer) = studio.active() else { return };
     let mut value = buffer.value.clone();
     value.text = f(value.text.clone());
     value.selection = TextSelection::collapsed(value.text.chars().count());
@@ -358,13 +365,9 @@ fn type_say(studio: &Studio, n: usize) {
     } else {
         source.chars().take(n).collect()
     };
-    let Some(i) = find_tab(studio, "counter.say") else {
-        return;
-    };
+    let Some(i) = find_tab(studio, "counter.say") else { return };
     studio.active_buffer.set(i);
-    let Some(buffer) = studio.active() else {
-        return;
-    };
+    let Some(buffer) = studio.active() else { return };
     // Only edit when the text actually changes — the undo history stays
     // honest (one entry per burst, none for re-sets).
     if buffer.value.text == prefix {
@@ -377,19 +380,17 @@ fn type_say(studio: &Studio, n: usize) {
 /// heading), so the recompile mounts a *different* screen — and the
 /// `keep`ed count must ride across it.
 fn edit_say_heading(studio: &Studio) {
-    let Some(i) = find_tab(studio, "counter.say") else {
-        return;
-    };
+    let Some(i) = find_tab(studio, "counter.say") else { return };
     studio.active_buffer.set(i);
-    edit_with(studio, |text| {
-        text.replace("a heading \"Counter\"", "a heading \"Counted\"")
-    });
+    edit_with(studio, |text| text.replace("a heading \"Counter\"", "a heading \"Counted\""));
 }
 
 /// Which tab holds `name`, if the workspace opened it.
 fn find_tab(studio: &Studio, name: &str) -> Option<usize> {
     let buffers = studio.buffers.get();
-    buffers.iter().position(|b| b.name == name)
+    buffers
+        .iter()
+        .position(|b| b.name == name)
 }
 
 /// Poll the compile to completion — the wall-clock wait the film takes
@@ -404,6 +405,6 @@ fn settle(studio: &Studio) {
 }
 
 /// Is a compile in flight (for the harness's probes)?
-pub(crate) fn is_compiling(studio: &Studio) -> bool {
+pub fn is_compiling(studio: &Studio) -> bool {
     studio.is_compiling()
 }

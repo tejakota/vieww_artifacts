@@ -233,6 +233,7 @@ mod keynote;
 mod keynote_v5;
 mod keynote_z;
 mod product_film;
+mod studio_film;
 mod three_d;
 
 use film_lib::{anim_gif_strided, contact_sheet_strided, out_root, render_with, Experiment};
@@ -482,6 +483,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // (`product_film/master.rs`).
         if arg == "censuspf" || arg == "masterpf" || arg == "pfcal" || arg.starts_with("pf:") {
             return product_film::master::run(&arg);
+        }
+        // THE GAP, THE ENGINE, THE STUDIO — the viewwstudio product film
+        // built on this branch's brief: need → engine → studio → proof →
+        // release, at this film's own 30 fps, mounted on the same real
+        // app and rendered by the same engine (`studio_film/master.rs`).
+        if arg == "censussf" || arg == "mastersf" || arg == "scoresf" || arg == "sfprobe" || arg.starts_with("sfmeasure") || arg.starts_with("sf:") {
+            return studio_film::master::run(&arg);
         }
     }
     let filter = std::env::args().nth(1);
