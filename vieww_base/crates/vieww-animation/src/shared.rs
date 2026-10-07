@@ -100,6 +100,65 @@ pub fn with_spring(value: &SharedValue, target: f32, stiffness: f32, damping: f3
     })
 }
 
+/// A pan gesture bound to a shared value — Reanimated's
+/// `Gesture.Pan().onChange(...)` worklet pattern (§2.12 L6).
+///
+/// The gesture layer calls [`update`](Self::update) from wherever pointer
+/// events arrive (on the UI thread, in Reanimated's model); the value is
+/// written immediately, with no rebuild or message hop in between.
+/// [`end`](Self::end) hands back the release animation as a [`Worklet`] for
+/// the [`UiThread`]: an [`Inertia`](crate::inertia::Inertia) glide from the
+/// release velocity, snapped to the nearest of `snap_points` (or free).
+#[derive(Debug, Clone)]
+pub struct PanBinding {
+    value: SharedValue,
+    start: f32,
+    tracker: crate::inertia::VelocityTracker,
+    pub snap_points: Vec<f32>,
+    pub bounds: (f32, f32),
+}
+
+impl PanBinding {
+    #[must_use]
+    pub fn new(value: &SharedValue) -> Self {
+        Self {
+            value: value.clone(),
+            start: value.get(),
+            tracker: crate::inertia::VelocityTracker::new(0.1),
+            snap_points: Vec::new(),
+            bounds: (f32::NEG_INFINITY, f32::INFINITY),
+        }
+    }
+
+    /// Finger down.
+    pub fn begin(&mut self) {
+        self.start = self.value.get();
+        self.tracker.clear();
+    }
+
+    /// Finger moved: `translation` since `begin`, at `seconds` on any clock.
+    pub fn update(&mut self, translation: f32, seconds: f32) {
+        let v = (self.start + translation).clamp(self.bounds.0, self.bounds.1);
+        self.value.set(v);
+        self.tracker.add(seconds, v);
+    }
+
+    /// Finger up: the release worklet (a no-op worklet when already at rest).
+    #[must_use]
+    pub fn end(&mut self) -> Worklet {
+        let velocity = self.tracker.velocity();
+        let mut glide = crate::inertia::Inertia::new(self.value.get(), velocity).bounds(self.bounds.0, self.bounds.1);
+        if !self.snap_points.is_empty() {
+            glide = glide.snap(crate::inertia::Snap::Values(self.snap_points.clone()));
+        }
+        let v = self.value.clone();
+        Box::new(move |elapsed| {
+            v.set(glide.position(elapsed));
+            elapsed < glide.duration()
+        })
+    }
+}
+
 struct Registered {
     worklet: Worklet,
     started: Option<Instant>,
@@ -298,5 +357,25 @@ mod tests {
             wb(Duration::from_millis(i * 30));
         }
         assert!((a.get() - b.get()).abs() < 1e-5);
+    }
+
+    #[test]
+    fn a_pan_binding_writes_through_and_flings_to_a_snap_point() {
+        let x = SharedValue::new(0.0);
+        let mut pan = PanBinding::new(&x);
+        pan.snap_points = vec![0.0, 300.0, 600.0];
+        pan.begin();
+        for i in 0..=10 {
+            #[allow(clippy::cast_precision_loss)]
+            let t = i as f32 * 0.016;
+            pan.update(1500.0 * t, t);
+        }
+        assert!((x.get() - 240.0).abs() < 1e-3, "the value follows the finger directly");
+        let mut release = pan.end();
+        let mut t = Duration::ZERO;
+        while release(t) {
+            t += Duration::from_millis(16);
+        }
+        assert!((x.get() - 600.0).abs() < 0.5, "a fast throw carries to the next stop: {}", x.get());
     }
 }

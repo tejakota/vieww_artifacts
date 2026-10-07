@@ -27,6 +27,7 @@
 //!   `vieww-asset`'s unbounded-until-`clear()` cache.
 
 pub mod atlas;
+pub mod bitmap_font;
 pub mod codec;
 pub mod mipmap;
 pub mod profile;

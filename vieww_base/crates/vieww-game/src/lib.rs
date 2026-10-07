@@ -24,6 +24,8 @@ use std::fmt;
 use vieww_foundation::json::Json;
 use vieww_foundation::{Offset, Transform};
 
+pub mod ai;
+
 /// An entity: an index and a generation, so a stale handle to a despawned
 /// entity never aliases a new one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

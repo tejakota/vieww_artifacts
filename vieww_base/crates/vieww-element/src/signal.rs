@@ -64,6 +64,9 @@ struct RuntimeInner {
     memos: RefCell<FastMap<SignalId, std::rc::Weak<dyn Recompute>>>,
     /// Memos whose inputs changed and whose value has not been re-derived yet.
     stale: RefCell<FastSet<SignalId>>,
+    /// Writes per signal — the version a [`Snapshot`](crate::Snapshot)
+    /// checks for conflicting concurrent writes.
+    versions: RefCell<FastMap<SignalId, u64>>,
 }
 
 /// The type-erased half of a [`Memo`], so the runtime can re-derive one without
@@ -168,6 +171,7 @@ impl Runtime {
     /// Mark every reader of `signal`: an element to rebuild, a memo to
     /// re-derive.
     fn notify(&self, signal: SignalId) {
+        *self.inner.versions.borrow_mut().entry(signal).or_insert(0) += 1;
         let readers: Vec<Reader> = {
             let subscribers = self.inner.subscribers.borrow();
             let Some(readers) = subscribers.get(&signal) else {
@@ -187,6 +191,12 @@ impl Runtime {
                 }
             }
         }
+    }
+
+    /// How many notifying writes `signal` has had.
+    #[must_use]
+    pub fn version(&self, signal: SignalId) -> u64 {
+        self.inner.versions.borrow().get(&signal).copied().unwrap_or(0)
     }
 
     /// Drop every subscription held by `element`.

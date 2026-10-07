@@ -51,6 +51,7 @@ mod scroll;
 pub mod scroll_anim;
 pub mod shared_element;
 mod signal;
+pub mod snapshot;
 pub mod transition;
 mod tree;
 
@@ -64,6 +65,7 @@ pub use inspect::Hotspot;
 pub use navigator::NavigatorController;
 pub use scroll::ScrollController;
 pub use signal::{Memo, Runtime, Signal, SignalId};
+pub use snapshot::{Conflict, Snapshot};
 pub use tree::ElementTree;
 
 pub use vieww_animation as animation_layer;

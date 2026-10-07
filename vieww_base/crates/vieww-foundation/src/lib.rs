@@ -112,7 +112,7 @@ pub use service::{
     Clipboard, DeepLink, DeepLinks, KeyBacking, MemoryClipboard, MemorySecureStorage,
     MemoryStorage, SecureStorage, ServiceError, Services, SharedServices, Storage,
 };
-pub use sketch::{Brush, Sketch, Sketchbook};
+pub use sketch::{affine_between, Brush, Sketch, Sketchbook};
 pub use svg::{parse_path_data, SvgPathError};
 pub use text::{FontFamily, FontWeight, TextAlign, TextDirection, TextStyle};
 pub use text_layout::{TextLayoutProbe, TextLayoutReport};

@@ -10,6 +10,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+# Curves for the stage's tweens.
+vieww-animation.workspace = true
 vieww-foundation.workspace = true
 vieww-widget.workspace = true
 

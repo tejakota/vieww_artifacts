@@ -53,6 +53,7 @@ fn replay(canvas: &mut dyn Canvas, item: &Sketch) {
             radius,
             shadow,
         } => canvas.draw_shadow(*rect, *radius, *shadow),
+        Sketch::Image { rect, image } => canvas.draw_image(*rect, image),
         Sketch::Layer {
             alpha,
             blur,
@@ -135,6 +136,7 @@ fn bounds_of(items: &[Sketch]) -> vieww_foundation::Rect {
                 path, width, style, ..
             } => grow(path.bounds().inflate(*width / 2.0 * style.reach_factor())),
             Sketch::Shadow { rect, shadow, .. } => grow(shadow.bounds(*rect)),
+            Sketch::Image { rect, .. } => grow(*rect),
             Sketch::Layer { children, blur, .. } => {
                 grow(bounds_of(children).inflate(*blur * 3.0));
             }

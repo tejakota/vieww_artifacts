@@ -38,6 +38,7 @@
 //! ```
 
 use crate::color::Color;
+use crate::image::Image;
 use crate::geometry::{Offset, Rect};
 use crate::paint::{BlendMode, Gradient, Shadow, StrokeStyle};
 use crate::path::Path;
@@ -118,6 +119,13 @@ pub enum Sketch {
     /// resolved group combines with what is already behind it: the 22 modes
     /// the rasterizer honours are all reachable from a sketch layer, where
     /// before every one of them composited `Normal` (todo-upgrades U-01).
+    /// A straight-alpha RGBA image stretched over `rect`, bilinearly
+    /// sampled (mip-mapped when minified). Under a [`Transformed`]
+    /// parent it is affinely warped — the primitive behind textured
+    /// meshes, sprite atlases, bitmap fonts and image patterns.
+    ///
+    /// [`Transformed`]: Sketch::Transformed
+    Image { rect: Rect, image: Image },
     Layer {
         alpha: f32,
         blur: f32,
@@ -147,6 +155,9 @@ impl Sketch {
                 path, brush, width, ..
             } => path.is_empty() || brush.is_invisible() || *width <= 0.0,
             Self::Shadow { shadow, .. } => shadow.is_invisible(),
+            Self::Image { rect, image } => {
+                rect.width() <= 0.0 || rect.height() <= 0.0 || image.width() == 0 || image.height() == 0
+            }
             Self::Layer {
                 alpha, children, ..
             } => *alpha <= 0.0 || children.iter().all(Self::is_invisible),
@@ -483,6 +494,74 @@ impl Sketchbook {
         })
     }
 
+    /// Draw `image` stretched over `rect`.
+    pub fn image(&mut self, rect: Rect, image: Image) -> &mut Self {
+        self.push(Sketch::Image { rect, image })
+    }
+
+    /// Draw a **textured triangle mesh** — PixiJS' `Mesh`, Rive/Spine's
+    /// deformed images, Skia's `drawVertices` with a shader: each triangle
+    /// is the image affinely mapped from its `uvs` (0..1) to its
+    /// `positions`, clipped to the triangle. Triangles are inflated by a
+    /// quarter pixel so shared edges do not show seams.
+    pub fn textured_mesh(
+        &mut self,
+        image: &Image,
+        positions: &[Offset],
+        uvs: &[Offset],
+        indices: &[u32],
+    ) -> &mut Self {
+        let (w, h) = (image.width() as f32, image.height() as f32);
+        for t in indices.as_chunks::<3>().0 {
+            let p = t.map(|i| positions[i as usize]);
+            let q = t.map(|i| Offset::new(uvs[i as usize].dx * w, uvs[i as usize].dy * h));
+            let Some(m) = affine_between(q, p) else { continue };
+            let c = Offset::new((p[0].dx + p[1].dx + p[2].dx) / 3.0, (p[0].dy + p[1].dy + p[2].dy) / 3.0);
+            let grow = |v: Offset| {
+                let (dx, dy) = (v.dx - c.dx, v.dy - c.dy);
+                let l = (dx * dx + dy * dy).sqrt().max(1e-6);
+                Offset::new(v.dx + dx / l * 0.25, v.dy + dy / l * 0.25)
+            };
+            let mut clip = Path::new();
+            clip.move_to(grow(p[0]));
+            clip.line_to(grow(p[1]));
+            clip.line_to(grow(p[2]));
+            clip.close();
+            let img = image.clone();
+            self.layer(1.0, 0.0, Some(clip), |g| {
+                g.transformed(m, |k| {
+                    k.image(Rect::new(0.0, 0.0, w, h), img);
+                });
+            });
+        }
+        self
+    }
+
+    /// Fill `area` with `tile` repeated every `size` from `origin` — WPF and
+    /// Avalonia's `ImageBrush`/`VisualBrush` with `TileMode.Tile`, CSS's
+    /// `background-repeat` (render a widget subtree to an image first to
+    /// tile a *visual*).
+    pub fn pattern(&mut self, area: Path, tile: &Image, origin: Offset, size: crate::Size) -> &mut Self {
+        let b = area.bounds();
+        if size.width <= 0.0 || size.height <= 0.0 {
+            return self;
+        }
+        let x0 = origin.dx + ((b.left - origin.dx) / size.width).floor() * size.width;
+        let y0 = origin.dy + ((b.top - origin.dy) / size.height).floor() * size.height;
+        let tile = tile.clone();
+        self.layer(1.0, 0.0, Some(area), |g| {
+            let mut y = y0;
+            while y < b.bottom {
+                let mut x = x0;
+                while x < b.right {
+                    g.image(Rect::new(x, y, x + size.width, y + size.height), tile.clone());
+                    x += size.width;
+                }
+                y += size.height;
+            }
+        })
+    }
+
     /// A group drawn through `transform`.
     pub fn transformed(
         &mut self,
@@ -498,9 +577,59 @@ impl Sketchbook {
     }
 }
 
+/// The affine transform taking the three points `from` onto `to`.
+#[must_use]
+pub fn affine_between(from: [Offset; 3], to: [Offset; 3]) -> Option<Transform> {
+    let (a, b, c) = (from[0], from[1], from[2]);
+    let det = (b.dx - a.dx) * (c.dy - a.dy) - (c.dx - a.dx) * (b.dy - a.dy);
+    if det.abs() < 1e-9 {
+        return None;
+    }
+    // Solve [x' y'] = M [x y 1] for each output coordinate.
+    let solve = |va: f32, vb: f32, vc: f32| {
+        let (db, dc) = (vb - va, vc - va);
+        let m0 = (db * (c.dy - a.dy) - dc * (b.dy - a.dy)) / det;
+        let m1 = (dc * (b.dx - a.dx) - db * (c.dx - a.dx)) / det;
+        (m0, m1, va - m0 * a.dx - m1 * a.dy)
+    };
+    let (sa, sc, stx) = solve(to[0].dx, to[1].dx, to[2].dx);
+    let (sb, sd, sty) = solve(to[0].dy, to[1].dy, to[2].dy);
+    Some(Transform::new(sa, sb, sc, sd, stx, sty))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn affine_between_maps_the_three_points() {
+        let from = [Offset::new(0.0, 0.0), Offset::new(10.0, 0.0), Offset::new(0.0, 5.0)];
+        let to = [Offset::new(3.0, 4.0), Offset::new(13.0, 9.0), Offset::new(-2.0, 14.0)];
+        let m = affine_between(from, to).unwrap();
+        for (f, t) in from.iter().zip(&to) {
+            let r = m.apply(*f);
+            assert!((r.dx - t.dx).abs() < 1e-4 && (r.dy - t.dy).abs() < 1e-4);
+        }
+        assert!(affine_between([from[0]; 3], to).is_none());
+    }
+
+    #[test]
+    fn textured_meshes_and_patterns_record_images() {
+        let img = Image::from_rgba8(vec![255; 4 * 4 * 4], 4, 4);
+        let mut book = Sketchbook::new();
+        book.textured_mesh(
+            &img,
+            &[Offset::new(0.0, 0.0), Offset::new(40.0, 0.0), Offset::new(40.0, 40.0), Offset::new(0.0, 40.0)],
+            &[Offset::new(0.0, 0.0), Offset::new(1.0, 0.0), Offset::new(1.0, 1.0), Offset::new(0.0, 1.0)],
+            &[0, 1, 2, 0, 2, 3],
+        );
+        assert_eq!(book.len(), 2, "one clipped layer per triangle");
+        let mut pat = Sketchbook::new();
+        pat.pattern(Path::rect(Rect::new(0.0, 0.0, 25.0, 10.0)), &img, Offset::ZERO, crate::Size::new(10.0, 10.0));
+        let Sketch::Layer { children, .. } = &pat.items()[0] else { panic!() };
+        assert_eq!(children.len(), 3, "three tiles cover 25 px");
+        assert!(!Sketch::Image { rect: Rect::new(0.0, 0.0, 1.0, 1.0), image: img }.is_invisible());
+    }
 
     #[test]
     fn a_solid_and_a_gradient_are_both_brushes() {

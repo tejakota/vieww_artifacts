@@ -136,6 +136,8 @@ pub struct Graph {
     slots: Vec<Slot>,
     wires: Vec<Wire>,
     time: f32,
+    /// CHOP exports: `(from, output index, to, parameter)`.
+    exports: Vec<(NodeId, usize, NodeId, String)>,
     /// Cooks performed by the most recent `pull`/`cook_all`.
     pub last_cooks: u64,
 }
@@ -284,6 +286,7 @@ impl Graph {
             }
             self.slots[n.0].dirty = true;
             stack.extend(self.wires.iter().filter(|w| w.from == n).map(|w| w.to));
+            stack.extend(self.exports.iter().filter(|e| e.0 == n).map(|e| e.2));
         }
     }
 
@@ -300,6 +303,27 @@ impl Graph {
     #[must_use]
     pub fn param(&self, id: NodeId, name: &str) -> Option<&Value> {
         self.slots[id.0].params.get(name)
+    }
+
+    /// **Export** a channel to a parameter — TouchDesigner's CHOP export
+    /// (§2.8 L7): `from.output` drives `to`'s parameter `param` every cook,
+    /// so any operator's setting can be animated by any channel without a
+    /// wire into an input. The source becomes a dependency: it cooks first,
+    /// and dirtying it dirties the target.
+    ///
+    /// # Errors
+    /// Unknown output.
+    pub fn export(&mut self, from: NodeId, output: &str, to: NodeId, param: &str) -> Result<(), GraphError> {
+        let o = Self::port(&self.slots[from.0].op.outputs(), output)?;
+        self.exports.retain(|e| !(e.2 == to && e.3 == param));
+        self.exports.push((from, o, to, param.to_owned()));
+        self.mark_dirty(to);
+        Ok(())
+    }
+
+    /// Remove an export (the parameter keeps its last value).
+    pub fn unexport(&mut self, to: NodeId, param: &str) {
+        self.exports.retain(|e| !(e.2 == to && e.3 == param));
     }
 
     /// Move the clock; time-dependent operators (and what they feed) go
@@ -338,6 +362,11 @@ impl Graph {
                     stack.push((w.from, false));
                 }
             }
+            for e in self.exports.iter().filter(|e| e.2 == n) {
+                if state[e.0 .0] == 0 {
+                    stack.push((e.0, false));
+                }
+            }
         }
         order
     }
@@ -350,7 +379,16 @@ impl Graph {
                 inputs[w.input] = v.clone();
             }
         }
+        let exported: Vec<(String, Value)> = self
+            .exports
+            .iter()
+            .filter(|e| e.2 == n)
+            .filter_map(|e| self.slots[e.0 .0].cache.get(e.1).map(|v| (e.3.clone(), v.clone())))
+            .collect();
         let slot = &mut self.slots[n.0];
+        for (k, v) in exported {
+            slot.params.insert(k, v);
+        }
         let ctx = CookContext {
             time: self.time,
             previous_cooks: slot.cooks,
@@ -958,5 +996,22 @@ mod tests {
         let trace = ex.fire("BeginPlay", &mut data).unwrap();
         assert_eq!(trace[0], "call Lock Door");
         assert!(ex.fire("Nope", &mut data).is_err());
+    }
+
+    #[test]
+    fn a_channel_exported_to_a_parameter_drives_it() {
+        let mut g = Graph::new();
+        let t = g.add("time", Time);
+        let c = g.add("const", Constant);
+        g.export(t, "seconds", c, "value").unwrap();
+        g.set_time(2.5);
+        assert_eq!(g.pull(c, "out").unwrap().as_f32(), 2.5);
+        g.set_time(4.0);
+        assert_eq!(g.pull(c, "out").unwrap().as_f32(), 4.0, "the time change dirtied the target");
+        assert_eq!(g.param(c, "value").map(Value::as_f32), Some(4.0));
+        g.unexport(c, "value");
+        g.set_time(9.0);
+        assert_eq!(g.pull(c, "out").unwrap().as_f32(), 4.0, "unexported: the last value stays");
+        assert!(g.export(t, "nope", c, "value").is_err());
     }
 }

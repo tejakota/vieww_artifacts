@@ -17,11 +17,25 @@
 //! | `d3-hierarchy` (stratify, sum, treemap, tidy tree, partition) | [`hierarchy`] |
 //! | `d3-force` (Barnes–Hut many-body, links, centre, collide, x/y) | [`force`] |
 //! | `d3-contour` (marching squares) | [`contour`] |
+//! | `d3-delaunay` (triangulation, Voronoi, nearest-site `find`) | [`delaunay`] |
+//! | `d3-geo` (equirectangular, Mercator, orthographic, stereographic, azimuthal equal-area, Albers; graticule, great circles) | [`geo`] |
+//! | `d3-array` (`bin`, `quantile`, `extent`) | [`bin`] |
+//! | `d3-sankey`, `d3-chord` | [`flow`] |
+//! | `d3-zoom`, `d3-brush` | [`interact`] |
+//! | Vega-Lite's grammar (data + mark + encodings → scales, axes, legend) | [`spec`] |
+//! | Manim's `VectorField`/`StreamLines`/`NumberLine`, Matplotlib `quiver`/`streamplot` | [`field`] |
 
+pub mod bin;
 pub mod color;
 pub mod contour;
+pub mod delaunay;
+pub mod field;
+pub mod flow;
 pub mod force;
+pub mod geo;
 pub mod hierarchy;
+pub mod interact;
 pub mod join;
 pub mod scale;
 pub mod shape;
+pub mod spec;

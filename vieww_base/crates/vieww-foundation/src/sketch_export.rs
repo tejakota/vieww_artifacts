@@ -31,6 +31,76 @@ use crate::paint::{BlendMode, Gradient, GradientGeometry, StrokeCap, StrokeJoin,
 use crate::sketch::{Brush, Sketch, Sketchbook};
 use crate::{Color, Path, PathVerb, Rect, Size, Transform};
 
+/// A PNG with stored (uncompressed) zlib blocks — enough to embed an image
+/// in an SVG data URI without a codec dependency in foundation.
+fn png_stored(img: &crate::Image) -> Vec<u8> {
+    fn crc(bytes: &[u8]) -> u32 {
+        let mut c = 0xFFFF_FFFFu32;
+        for &b in bytes {
+            c ^= u32::from(b);
+            for _ in 0..8 {
+                c = if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+            }
+        }
+        c ^ 0xFFFF_FFFF
+    }
+    let chunk = |out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]| {
+        #[allow(clippy::cast_possible_truncation)]
+        out.extend((data.len() as u32).to_be_bytes());
+        let mut body = kind.to_vec();
+        body.extend(data);
+        out.extend(&body);
+        out.extend(crc(&body).to_be_bytes());
+    };
+    let (w, h) = (img.width(), img.height());
+    let mut raw = Vec::with_capacity((w as usize * 4 + 1) * h as usize);
+    for row in img.pixels().chunks((w as usize * 4).max(1)) {
+        raw.push(0);
+        raw.extend(row);
+    }
+    let mut z = vec![0x78, 0x01];
+    let parts: Vec<&[u8]> = raw.chunks(65_535).collect();
+    for (i, p) in parts.iter().enumerate() {
+        z.push(u8::from(i + 1 == parts.len()));
+        #[allow(clippy::cast_possible_truncation)]
+        let l = p.len() as u16;
+        z.extend(l.to_le_bytes());
+        z.extend((!l).to_le_bytes());
+        z.extend(*p);
+    }
+    let (mut a, mut b) = (1u32, 0u32);
+    for &x in &raw {
+        a = (a + u32::from(x)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    z.extend(((b << 16) | a).to_be_bytes());
+    let mut out = vec![137, 80, 78, 71, 13, 10, 26, 10];
+    let mut ihdr = Vec::new();
+    ihdr.extend(w.to_be_bytes());
+    ihdr.extend(h.to_be_bytes());
+    ihdr.extend([8, 6, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &ihdr);
+    chunk(&mut out, b"IDAT", &z);
+    chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+fn base64(data: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut s = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let n = u32::from(c[0]) << 16 | u32::from(*c.get(1).unwrap_or(&0)) << 8 | u32::from(*c.get(2).unwrap_or(&0));
+        for k in 0..4 {
+            if k <= c.len() {
+                s.push(A[((n >> (18 - 6 * k)) & 63) as usize] as char);
+            } else {
+                s.push('=');
+            }
+        }
+    }
+    s
+}
+
 fn css_blend(mode: BlendMode) -> Option<&'static str> {
     Some(match mode {
         BlendMode::Multiply => "multiply",
@@ -305,6 +375,17 @@ impl SvgWriter {
                 }
                 let _ = writeln!(out, "{pad}</g>");
             }
+            Sketch::Image { rect, image } => {
+                let _ = writeln!(
+                    out,
+                    "{pad}<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" href=\"data:image/png;base64,{}\"/>",
+                    n(rect.left),
+                    n(rect.top),
+                    n(rect.width()),
+                    n(rect.height()),
+                    base64(&png_stored(image))
+                );
+            }
             Sketch::Transformed {
                 transform,
                 children,
@@ -575,6 +656,28 @@ impl PdfWriter {
                     self.sketch(child, out, alpha_mul * alpha);
                 }
                 out.push_str("Q\n");
+            }
+            Sketch::Image { rect, image } => {
+                // An inline image (no resources needed), ASCII-hex encoded so
+                // the content stream stays text. PDF inline images carry no
+                // soft mask, so alpha is flattened onto white here.
+                let (w, h) = (image.width(), image.height());
+                let _ = writeln!(
+                    out,
+                    "q {} 0 0 {} {} {} cm BI /W {w} /H {h} /CS /RGB /BPC 8 /F /AHx ID",
+                    n(rect.width()),
+                    n(-rect.height()),
+                    n(rect.left),
+                    n(rect.bottom)
+                );
+                for p in image.pixels().as_chunks::<4>().0 {
+                    let a = u32::from(p[3]);
+                    for c in &p[..3] {
+                        let v = (u32::from(*c) * a + 255 * (255 - a)) / 255;
+                        let _ = write!(out, "{v:02x}");
+                    }
+                }
+                out.push_str(">\nEI Q\n");
             }
             Sketch::Transformed {
                 transform,

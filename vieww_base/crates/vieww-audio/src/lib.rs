@@ -78,9 +78,11 @@ const fn as_f32(rate: u32) -> f32 {
 }
 
 pub mod analysis;
+pub mod device;
 pub mod dsp;
 pub mod midi;
 pub mod player;
+pub mod spatial;
 pub mod wav;
 
 pub use player::{AudioPlayer, NoAudio, PlaybackHandle, RecordedCommand, RecordingPlayer, Sound};

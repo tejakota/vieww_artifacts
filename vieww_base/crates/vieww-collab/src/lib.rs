@@ -22,6 +22,8 @@
 //! Transport is not here — operations are values; send them over
 //! `vieww-network`, a WebSocket, or a shared file.
 
+pub mod undo;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use vieww_foundation::json::Json;

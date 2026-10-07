@@ -19,6 +19,8 @@
 //! rasteriser as everything else) plus a list of [`TextItem`]s for the text
 //! shapes; [`CanvasView`] puts both in the widget tree.
 
+pub mod tween;
+
 use std::collections::BTreeMap;
 use std::fmt;
 
