@@ -901,6 +901,17 @@ fn finish_frame(
     rig: &Rig,
     renderer: &mut NativeRenderer,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    finish_frame_raw(rig, renderer).map(|(px, _)| px)
+}
+
+/// [`finish_frame`], also returning the frame *before* the look — what the
+/// next scene's dissolve blends from, so the look is applied to it once
+/// (finishing an already-finished frame would double the vignette and the
+/// bloom for the dissolve's first frames: a visible dip at every cut).
+fn finish_frame_raw(
+    rig: &Rig,
+    renderer: &mut NativeRenderer,
+) -> Result<(Vec<u8>, Vec<u8>), Box<dyn std::error::Error>> {
     let (rw, rh) = raster_size();
     let s = scale_factor();
     let scene = compose(rig);
@@ -932,6 +943,7 @@ fn finish_frame(
             }
         }
     }
+    let raw = px.clone();
     if super::look::enabled() {
         let fin = super::look::finish_for(
             rig.cur_id,
@@ -944,7 +956,7 @@ fn finish_frame(
         );
         super::look::apply(&fin, &mut px, rw as usize, rh as usize, rig.frame_index);
     }
-    Ok(px)
+    Ok((px, raw))
 }
 
 // ── Pass 1 — the census ─────────────────────────────────────────────────────
@@ -1351,7 +1363,7 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
         let mut last_buf: Option<Vec<u8>> = None;
         for i in 0..n {
             rig.build_frame(s, si, start_abs, i, &probe);
-            let buf = finish_frame(&rig, &mut renderer)?;
+            let (buf, raw) = finish_frame_raw(&rig, &mut renderer)?;
             stdin.write_all(&buf)?;
             if let Some(k) = picks.iter().position(|p| *p == i) {
                 let img = image::RgbaImage::from_raw(rw, rh, buf.clone()).ok_or("invalid frame")?;
@@ -1360,7 +1372,7 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
             if i + 1 == n {
                 // The A of the *next* scene's dissolve — this scene's final
                 // frame, held at full brightness (there is no tail fade).
-                last_buf = Some(buf);
+                last_buf = Some(raw);
             }
             if i % 300 == 0 && i > 0 {
                 println!(
