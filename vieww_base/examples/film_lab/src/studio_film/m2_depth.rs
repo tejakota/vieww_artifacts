@@ -1002,10 +1002,11 @@ pub(crate) fn the_swarm(ctx: &pf::Ctx) -> WidgetNode {
         0.0,
         clamp01((sec - 7.4) / 0.6),
     ));
+    // The box holds the maze *and* its receipt rail.
     frame::boxed(Rect::new(
         X0 - 24.0,
         Y0 - 24.0,
-        X0 + 13.0 * TILE + 24.0,
+        X0 + 13.0 * TILE + 56.0 + 500.0,
         Y0 + 8.0 * TILE + 24.0,
     ));
     stack.into()

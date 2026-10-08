@@ -362,16 +362,20 @@ impl Lut3 {
         let f = c.map(|v| v.clamp(0.0, 1.0) * s);
         let i = f.map(|v| (v.floor() as usize).min(n - 2));
         let t = [f[0] - i[0] as f32, f[1] - i[1] as f32, f[2] - i[2] as f32];
-        let at = |r: usize, g: usize, b: usize| self.data[(b * n + g) * n + r];
+        let base = (i[2] * n + i[1]) * n + i[0];
+        let (dg, db) = (n, n * n);
+        let d = &self.data;
+        let (c000, c100, c010, c110) = (d[base], d[base + 1], d[base + dg], d[base + dg + 1]);
+        let (c001, c101, c011, c111) = (d[base + db], d[base + db + 1], d[base + db + dg], d[base + db + dg + 1]);
         let mut out = [0.0; 3];
         for k in 0..3 {
-            let c00 = at(i[0], i[1], i[2])[k] * (1.0 - t[0]) + at(i[0] + 1, i[1], i[2])[k] * t[0];
-            let c10 = at(i[0], i[1] + 1, i[2])[k] * (1.0 - t[0]) + at(i[0] + 1, i[1] + 1, i[2])[k] * t[0];
-            let c01 = at(i[0], i[1], i[2] + 1)[k] * (1.0 - t[0]) + at(i[0] + 1, i[1], i[2] + 1)[k] * t[0];
-            let c11 = at(i[0], i[1] + 1, i[2] + 1)[k] * (1.0 - t[0]) + at(i[0] + 1, i[1] + 1, i[2] + 1)[k] * t[0];
-            let c0 = c00 * (1.0 - t[1]) + c10 * t[1];
-            let c1 = c01 * (1.0 - t[1]) + c11 * t[1];
-            out[k] = c0 * (1.0 - t[2]) + c1 * t[2];
+            let c00 = c000[k] + (c100[k] - c000[k]) * t[0];
+            let c10 = c010[k] + (c110[k] - c010[k]) * t[0];
+            let c01 = c001[k] + (c101[k] - c001[k]) * t[0];
+            let c11 = c011[k] + (c111[k] - c011[k]) * t[0];
+            let c0 = c00 + (c10 - c00) * t[1];
+            let c1 = c01 + (c11 - c01) * t[1];
+            out[k] = c0 + (c1 - c0) * t[2];
         }
         out
     }
@@ -380,13 +384,28 @@ impl Lut3 {
     /// through a 256-entry-per-axis cache-friendly path.
     pub fn apply_rgba(&self, px: &mut [u8], strength: f32) {
         let k = strength.clamp(0.0, 1.0);
-        for p in px.chunks_exact_mut(4) {
-            let c = [f32::from(p[0]) / 255.0, f32::from(p[1]) / 255.0, f32::from(p[2]) / 255.0];
-            let o = self.sample(c);
-            for j in 0..3 {
-                p[j] = to_u8(c[j] + (o[j] - c[j]) * k);
+        let run = |band: &mut [u8]| {
+            for p in band.chunks_exact_mut(4) {
+                let c = [f32::from(p[0]) / 255.0, f32::from(p[1]) / 255.0, f32::from(p[2]) / 255.0];
+                let o = self.sample(c);
+                for j in 0..3 {
+                    p[j] = to_u8(c[j] + (o[j] - c[j]) * k);
+                }
             }
+        };
+        let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(16);
+        let n = px.len() / 4;
+        if threads <= 1 || n < 65_536 {
+            run(px);
+            return;
         }
+        let per = n.div_ceil(threads) * 4;
+        std::thread::scope(|sc| {
+            for chunk in px.chunks_mut(per) {
+                let run = &run;
+                sc.spawn(move || run(chunk));
+            }
+        });
     }
 
     /// Parse a `.cube` (LUT_3D_SIZE, optional DOMAIN_MIN/MAX, TITLE).

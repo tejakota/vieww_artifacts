@@ -217,6 +217,28 @@ for done.
 (the framebuffer the plan renders into) and `vulkan/swapchain.rs`'s image —
 the barriers are the work; the shader pipeline does not change.
 
+## 2.3 Backdrop blur: GPU and CPU disagree at the layer's edge on Mesa 25.2
+
+**What.** `vulkan_compositor::a_backdrop_blur_blurs_what_is_behind_and_keeps_the_foreground_sharp`
+fails on lavapipe from Mesa 25.2.8: 816 pixels differ by more than 2,
+worst 34, all along the edge of the blurred region (e.g. `(31, 16)`:
+GPU `[143, 162, 215]`, CPU `[177, 186, 186]`). The other 40 Vulkan tests
+pass, including the plain blurred layer.
+
+**Why not.** Found on 2026-10-08 during the fifth gap pass, on a Mesa
+newer than the one the suite was last certified on. The GPU seeds the
+backdrop copy with the layer's rect and blurs inside it (edge samples
+clamp to the copy), while the CPU reference blurs a buffer whose edge
+treatment differs; which one is right is a design decision (CSS
+`backdrop-filter` duplicates edge pixels) before it is a fix.
+
+**Blocks.** Nothing on the CPU path. GPU parity for frosted panels.
+
+**Start.** `cargo test -p vieww-hal --features vulkan -- --ignored --test-threads=1 backdrop`,
+then decide the edge mode in `vieww-paint/src/native/reference.rs`'s
+backdrop seeding and `vieww-hal/src/vulkan/scene.rs`'s `PushLayer` branch
+together, so the two agree by construction.
+
 ---
 
 # 3. Platform and product gaps

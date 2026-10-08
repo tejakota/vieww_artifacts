@@ -109,6 +109,7 @@ fn raster_size() -> (u32, u32) {
 pub(crate) fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         "censussf" => census(),
+        "sfmerge" => merge_census(),
         "mastersf" => master(),
         "sfprobe" => super::probe::run(),
         "scoresf" => score_and_mux(&work_root().join("studio_film.mp4")),
@@ -269,6 +270,26 @@ struct Rig {
     /// the A→B dissolve. Set by the master once per scene; absent in the
     /// census and in previews without a prior master run.
     prev_px: Option<Vec<u8>>,
+    /// The camera: a slow push-in on the world and its room (see
+    /// [`camera`]); the chrome is never moved.
+    cam: Transform,
+    /// What the finishing pass needs to know about this frame.
+    cur_id: &'static str,
+    cur_sec: f32,
+    cur_seconds: f32,
+    opens_movement: bool,
+    frame_index: u32,
+}
+
+/// The camera's push for a scene at progress `t` — a slow, eased dolly-in
+/// of 2.2 % about the frame's centre, so every held picture breathes the
+/// way a filmed one does. The hold continues the end card's push rather
+/// than restarting it.
+fn camera(id: &str, t: f32) -> Transform {
+    let p = crate::film_lib::ease_in_out(clamp01(t));
+    let s = if id == "Z22" { 1.022 + 0.01 * p } else { 1.0 + 0.022 * p };
+    let (cx, cy) = (pf::W * 0.5, pf::H * 0.5);
+    Transform::new(s, 0.0, 0.0, s, cx - cx * s, cy - cy * s)
 }
 
 impl Rig {
@@ -296,6 +317,12 @@ impl Rig {
             world: Transform::IDENTITY,
             cut: None,
             prev_px: None,
+            cam: Transform::IDENTITY,
+            cur_id: "",
+            cur_sec: 0.0,
+            cur_seconds: 1.0,
+            opens_movement: false,
+            frame_index: 0,
         }
     }
 
@@ -377,6 +404,13 @@ impl Rig {
 
         frame::reset();
         pf::clear_chrome();
+        self.cam = camera(s.id, t);
+        self.cur_id = s.id;
+        self.cur_sec = sec;
+        self.cur_seconds = s.seconds;
+        self.opens_movement =
+            si == 0 || super::movement_of(scenes()[si - 1].id) != super::movement_of(s.id);
+        self.frame_index = (start_abs * FPS) as u32 + i as u32;
         let ctx = Ctx {
             t,
             sec,
@@ -491,7 +525,8 @@ impl Rig {
         let len = cut_len(si);
         let morph = si > 0 && scenes()[si - 1].kind != Kind::Studio;
         self.cut = (si > 0 && !seamless && sec < len).then(|| Cut {
-            prev_box: prev_window(si),
+            // The previous scene ended pushed in; its box did too.
+            prev_box: camera(scenes()[si - 1].id, 1.0).apply_rect(prev_window(si)),
             prev_radius: prev_radius(si),
             e: ease_out_cubic(clamp01(sec / len)),
             morph,
@@ -593,7 +628,7 @@ fn compose(rig: &Rig) -> Scene {
     // 1 · ground — carries the frame's alpha (the cold open's fade-up; a
     // later cut's change of light rides the pixel dissolve instead).
     group(&mut frame_scene, full, a, |f| {
-        f.append(rig.ground_driver.scene(), Transform::IDENTITY)
+        f.append(rig.ground_driver.scene(), rig.cam)
     });
 
     // 2 · world — composed into a staging scene first so the whole world
@@ -723,10 +758,10 @@ fn compose(rig: &Rig) -> Scene {
     // and the window morph above is the entrance.
     let wa = rig.alpha;
     if wa >= 0.999 {
-        frame_scene.append(&world, Transform::IDENTITY);
+        frame_scene.append(&world, rig.cam);
     } else if wa > 0.004 {
         frame_scene.push_layer(full, wa, BlendMode::Normal);
-        frame_scene.append(&world, Transform::IDENTITY);
+        frame_scene.append(&world, rig.cam);
         frame_scene.pop_layer();
     }
 
@@ -897,6 +932,18 @@ fn finish_frame(
             }
         }
     }
+    if super::look::enabled() {
+        let fin = super::look::finish_for(
+            rig.cur_id,
+            rig.cur_sec,
+            rig.cur_seconds,
+            rig.cut.as_ref().map(|c| c.e),
+            rig.opens_movement,
+            rw as f32,
+            rh as f32,
+        );
+        super::look::apply(&fin, &mut px, rw as usize, rh as usize, rig.frame_index);
+    }
     Ok(px)
 }
 
@@ -955,11 +1002,25 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     let mut alive_samples: Vec<f64> = Vec::new();
     let mut counted_frames = 0u64;
 
+    // `SF_ONLY` splits the census across processes (each writes a partial
+    // that `sfmerge` sums); without it the census walks the whole film.
+    let only: Option<Vec<String>> = std::env::var("SF_ONLY")
+        .ok()
+        .map(|v| v.split(',').map(|s| s.trim().to_ascii_uppercase()).collect());
     for (si, s) in all.iter().enumerate() {
         let n = frames_of(s);
         let start_abs = scene_start(si);
         let sample_every = (n / 12).max(1);
         let t0 = Instant::now();
+        if only.as_ref().is_some_and(|o| !o.iter().any(|x| x == s.id)) {
+            continue;
+        }
+        if s.kind == Kind::Studio && rig.studio.is_none() {
+            rig.ensure_studio();
+            let mut warm = 0usize;
+            super::script::apply_session_up_to(&mut rig.driver, rig.studio.as_mut().unwrap(), start_abs, &mut warm);
+            rig.cursor = warm;
+        }
 
         for i in 0..n {
             // The alive probe — the live-edit scene: one stopwatch around
@@ -1005,6 +1066,21 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    if only.is_some() {
+        // A partial: raw counters and every sample, for `sfmerge`.
+        let tag = std::env::var("SF_PART").unwrap_or_else(|_| "part".into());
+        let body = format!(
+            "frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nframe_ms_samples={}\nalive_samples={}\nbench={}\n",
+            counted_frames, probe.shapes, probe.glyph_runs, probe.glyphs, probe.layers, probe.filtered, probe.strokes, probe.shadows,
+            frame_ms_samples.iter().map(|v| format!("{v:.3}")).collect::<Vec<_>>().join(";"),
+            alive_samples.iter().map(|v| format!("{v:.3}")).collect::<Vec<_>>().join(";"),
+            Probe::bench_identity(renderer.cached_fonts() as u32),
+        );
+        std::fs::write(work_root().join(format!("census.{tag}.txt")), body)?;
+        std::fs::write(work_root().join(format!("samples.{tag}.txt")), sample_rows.join("\n") + "\n")?;
+        println!("census partial '{tag}' — {counted_frames} frames");
+        return Ok(());
+    }
     frame_ms_samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let median_ms = frame_ms_samples
         .get(frame_ms_samples.len() / 2)
@@ -1059,6 +1135,74 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // ── Pass 2 — the master ─────────────────────────────────────────────────────
+
+/// Sum the census partials (`census.*.txt`) into the manifest.
+pub(crate) fn merge_census() -> Result<(), Box<dyn std::error::Error>> {
+    let root = work_root();
+    let mut sums: HashMap<String, u64> = HashMap::new();
+    let mut ms: Vec<f32> = Vec::new();
+    let mut alive: Vec<f64> = Vec::new();
+    let mut bench = String::new();
+    let mut samples = String::new();
+    let mut parts: Vec<_> = std::fs::read_dir(&root)?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("census.") && n.ends_with(".txt"))
+        })
+        .collect();
+    parts.sort();
+    for p in &parts {
+        for line in std::fs::read_to_string(p)?.lines() {
+            let Some((k, v)) = line.split_once('=') else { continue };
+            match k {
+                "frame_ms_samples" => {
+                    ms.extend(v.split(';').filter_map(|x| x.parse::<f32>().ok()))
+                }
+                "alive_samples" => {
+                    alive.extend(v.split(';').filter_map(|x| x.parse::<f64>().ok()))
+                }
+                "bench" => bench = v.to_owned(),
+                _ => *sums.entry(k.to_owned()).or_default() += v.parse::<u64>().unwrap_or(0),
+            }
+        }
+        let tag = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .trim_start_matches("census.")
+            .trim_end_matches(".txt")
+            .to_owned();
+        if let Ok(rows) = std::fs::read_to_string(root.join(format!("samples.{tag}.txt"))) {
+            samples.push_str(&rows);
+        }
+    }
+    ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    alive.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let g = |k: &str| sums.get(k).copied().unwrap_or(0);
+    let body = format!(
+        "frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nalive_seconds={:.3}\nframe_ms={:.2}\nscale_factor={}\nfps={}\nbench={}\n",
+        g("frames"),
+        g("shapes"),
+        g("glyph_runs"),
+        g("glyphs"),
+        g("layers"),
+        g("filtered_layers"),
+        g("strokes"),
+        g("shadows"),
+        alive.get(alive.len() / 2).copied().unwrap_or(0.0) / 1000.0,
+        ms.get(ms.len() / 2).copied().unwrap_or(0.0),
+        scale_factor(),
+        FPS,
+        bench,
+    );
+    std::fs::write(manifest_path(), &body)?;
+    std::fs::write(samples_path(), samples)?;
+    println!("census merged from {} partials:\n{body}", parts.len());
+    Ok(())
+}
 
 pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
@@ -1179,7 +1323,9 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
                 "-preset",
                 "medium",
                 "-crf",
-                "17",
+                "16",
+                "-tune",
+                "film",
                 "-pix_fmt",
                 "yuv420p",
                 // `aq-mode=3` (auto-variance AQ with dark bias) is the

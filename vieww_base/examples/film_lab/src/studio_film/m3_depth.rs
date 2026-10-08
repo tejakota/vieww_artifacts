@@ -494,7 +494,9 @@ pub(crate) fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
         0.0,
         clamp01((sec - 7.6) / 0.6),
     ));
-    frame::boxed(Rect::new(CARD.left, CARD.top, CARD.right, CARD.bottom));
+    // The box holds the card *and* the event log beside it — boxing the
+    // card alone magnified the log off the right edge of the frame.
+    frame::boxed(Rect::new(CARD.left, CARD.top, 880.0 + 640.0, CARD.bottom));
     stack.into()
 }
 
@@ -799,10 +801,10 @@ pub(crate) fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
         )));
         stack = stack.push(frame::label(
             pipe_card.left + 250.0,
-            pipe_card.top + 120.0,
-            200.0,
-            84.0,
-            format!("sprite {}/16\n12 fps · one atlas", frame_idx + 1),
+            pipe_card.top + 110.0,
+            pipe_card.width() - 280.0,
+            96.0,
+            format!("sprite {}/16\n12 fps\none atlas", frame_idx + 1),
             pf::geist_mono(15.0).color(pf::alpha(MUTED, 0.95)),
             TextAlign::Left,
             clip_a,
@@ -816,9 +818,9 @@ pub(crate) fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
         let mut x = pipe_card.left + 30.0;
         let base_y = pipe_card.top + 330.0;
         for (k, m) in mips.iter().take(5).enumerate() {
-            let h = 150.0 / (1u32 << k) as f32;
+            let h = 120.0 / (1u32 << k) as f32;
             let w = h;
-            let rect = Rect::new(x, base_y + 150.0 - h, x + w, base_y + 150.0);
+            let rect = Rect::new(x, base_y + 120.0 - h, x + w, base_y + 120.0);
             let img = m.clone();
             let label = format!("{}", m.width());
             let level_a = clamp01((mip_a - 0.08 * k as f32) / 0.5);
@@ -843,7 +845,7 @@ pub(crate) fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
             )));
             stack = stack.push(frame::label(
                 x - 20.0,
-                base_y + 158.0,
+                base_y + 126.0,
                 w + 40.0,
                 20.0,
                 label,
@@ -874,13 +876,13 @@ pub(crate) fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
         let fit_all = packed.placements.iter().all(|p| p.is_some());
         stack = stack.push(frame::label(
             pipe_card.left + 30.0,
-            pipe_card.bottom - 96.0,
+            pipe_card.bottom - 40.0,
             pipe_card.width() - 60.0,
             24.0,
             format!(
-                "16 tiles → one 512×512 atlas · {}",
+                "16 tiles → one 512² atlas · {}",
                 if fit_all {
-                    "all packed, 0 rejected"
+                    "0 rejected"
                 } else {
                     "some rejected"
                 }
@@ -911,11 +913,13 @@ pub(crate) fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
         0.0,
         clamp01((sec - 7.4) / 0.6),
     ));
+    // All three panels — the export, the player, the pipeline — fit the
+    // frame (boxing the player alone pushed the outer two off its edges).
     frame::boxed(Rect::new(
-        play_card.left,
-        play_card.top,
-        play_card.right,
-        play_card.bottom,
+        file_card.left,
+        file_card.top,
+        pipe_card.right,
+        pipe_card.bottom.max(file_card.bottom),
     ));
     stack.into()
 }

@@ -76,6 +76,7 @@ pub(crate) mod filmkit;
 pub(crate) mod frame;
 pub(crate) mod kit;
 pub(crate) mod layout;
+pub(crate) mod look;
 pub(crate) mod m0_open;
 pub(crate) mod m1_need;
 pub(crate) mod m2_beyond;

@@ -24,11 +24,12 @@ use super::grade::Lut3;
 /// sRGB byte → linear.
 #[must_use]
 pub fn srgb_to_linear(v: u8) -> f32 {
-    LUT_TO_LINEAR.with(|t| t[v as usize])
+    to_linear_table()[v as usize]
 }
 
-thread_local! {
-    static LUT_TO_LINEAR: [f32; 256] = {
+fn to_linear_table() -> &'static [f32; 256] {
+    static T: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+    T.get_or_init(|| {
         let mut t = [0.0; 256];
         for (i, v) in t.iter_mut().enumerate() {
             #[allow(clippy::cast_precision_loss)]
@@ -36,18 +37,57 @@ thread_local! {
             *v = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
         }
         t
-    };
+    })
 }
 
-/// Linear → sRGB in 0..1 (unclamped input is clamped).
+const ENC_STEPS: usize = 4096;
+
+/// Linear → sRGB (0..1) by table: the encode runs per channel per pixel,
+/// and a `powf` there is most of a frame's finishing budget.
+fn encode_table() -> &'static [f32] {
+    static T: std::sync::OnceLock<Vec<f32>> = std::sync::OnceLock::new();
+    T.get_or_init(|| {
+        (0..=ENC_STEPS)
+            .map(|i| {
+                #[allow(clippy::cast_precision_loss)]
+                let v = (i as f32 / ENC_STEPS as f32).powi(2);
+                if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 }
+            })
+            .collect()
+    })
+}
+
+/// Linear → sRGB in 0..1 (unclamped input is clamped). Tabulated on a
+/// square-root axis (dense in the shadows, where the curve is steep) and
+/// interpolated: error below 1e-4.
 #[must_use]
 pub fn linear_to_srgb(v: f32) -> f32 {
-    let v = v.clamp(0.0, 1.0);
-    if v <= 0.003_130_8 {
-        v * 12.92
-    } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
+    let t = encode_table();
+    #[allow(clippy::cast_precision_loss)]
+    let f = v.clamp(0.0, 1.0).sqrt() * ENC_STEPS as f32;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let i = (f as usize).min(ENC_STEPS - 1);
+    #[allow(clippy::cast_precision_loss)]
+    let fr = f - i as f32;
+    t[i] + (t[i + 1] - t[i]) * fr
+}
+
+/// Run `f` over row bands of `rows` rows of `width`-long items in
+/// parallel (the machine's cores); `f(first_row, band)`.
+pub fn par_rows<T: Send>(data: &mut [T], width: usize, f: impl Fn(usize, &mut [T]) + Sync) {
+    let height = data.len() / width.max(1);
+    let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(16);
+    if threads <= 1 || height < 64 {
+        f(0, data);
+        return;
     }
+    let band = height.div_ceil(threads);
+    std::thread::scope(|sc| {
+        for (k, chunk) in data.chunks_mut(band * width).enumerate() {
+            let f = &f;
+            sc.spawn(move || f(k * band, chunk));
+        }
+    });
 }
 
 /// A linear-light RGB frame.
@@ -71,10 +111,11 @@ impl Linear {
     /// From RGBA8 (sRGB-encoded); alpha is ignored (frames are opaque).
     #[must_use]
     pub fn from_rgba8(px: &[u8], width: usize, height: usize) -> Self {
-        let mut out = Vec::with_capacity(width * height);
-        for p in px.chunks_exact(4) {
-            out.push([srgb_to_linear(p[0]), srgb_to_linear(p[1]), srgb_to_linear(p[2])]);
-        }
+        let t = to_linear_table();
+        let out: Vec<[f32; 3]> = px
+            .chunks_exact(4)
+            .map(|p| [t[p[0] as usize], t[p[1] as usize], t[p[2] as usize]])
+            .collect();
         Self {
             width,
             height,
@@ -86,17 +127,22 @@ impl Linear {
     /// quantisation and the encoder after it.
     pub fn write_rgba8(&self, out: &mut [u8]) {
         const BAYER: [f32; 16] = [0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0];
-        for (i, (c, o)) in self.px.iter().zip(out.chunks_exact_mut(4)).enumerate() {
-            let (x, y) = (i % self.width, i / self.width);
-            let d = (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16.0 - 0.5;
-            for k in 0..3 {
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                {
-                    o[k] = (linear_to_srgb(c[k]) * 255.0 + 0.5 + d).clamp(0.0, 255.0) as u8;
+        let w = self.width;
+        par_rows(out, w * 4, |row0, band| {
+            for (j, o) in band.chunks_exact_mut(4).enumerate() {
+                let i = row0 * w + j;
+                let (x, y) = (i % w, i / w);
+                let c = self.px[i];
+                let d = (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16.0 - 0.5;
+                for k in 0..3 {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    {
+                        o[k] = (linear_to_srgb(c[k]) * 255.0 + 0.5 + d).clamp(0.0, 255.0) as u8;
+                    }
                 }
+                o[3] = 255;
             }
-            o[3] = 255;
-        }
+        });
     }
 
     #[must_use]
@@ -133,70 +179,62 @@ impl Linear {
     pub fn downsample(&self) -> Self {
         let (w, h) = ((self.width / 2).max(1), (self.height / 2).max(1));
         let mut out = Self::new(w, h);
-        for y in 0..h {
-            for x in 0..w {
+        const TAPS: [(isize, isize, f32); 13] = [
+            (0, 0, 0.125),
+            (-1, -1, 0.125),
+            (1, -1, 0.125),
+            (-1, 1, 0.125),
+            (1, 1, 0.125),
+            (-2, -2, 0.03125),
+            (0, -2, 0.0625),
+            (2, -2, 0.03125),
+            (-2, 0, 0.0625),
+            (2, 0, 0.0625),
+            (-2, 2, 0.03125),
+            (0, 2, 0.0625),
+            (2, 2, 0.03125),
+        ];
+        par_rows(&mut out.px, w, |row0, band| {
+            for (j, o) in band.iter_mut().enumerate() {
+                let (x, y) = (j % w, row0 + j / w);
                 #[allow(clippy::cast_possible_wrap)]
                 let (sx, sy) = ((x * 2) as isize, (y * 2) as isize);
-                let g = |dx: isize, dy: isize| self.get(sx + dx, sy + dy);
                 let mut acc = [0.0f32; 3];
-                let taps: [(isize, isize, f32); 13] = [
-                    (0, 0, 0.125),
-                    (-1, -1, 0.125),
-                    (1, -1, 0.125),
-                    (-1, 1, 0.125),
-                    (1, 1, 0.125),
-                    (-2, -2, 0.03125),
-                    (0, -2, 0.0625),
-                    (2, -2, 0.03125),
-                    (-2, 0, 0.0625),
-                    (2, 0, 0.0625),
-                    (-2, 2, 0.03125),
-                    (0, 2, 0.0625),
-                    (2, 2, 0.03125),
-                ];
-                for (dx, dy, wgt) in taps {
-                    let c = g(dx, dy);
+                for (dx, dy, wgt) in TAPS {
+                    let c = self.get(sx + dx, sy + dy);
                     for k in 0..3 {
                         acc[k] += c[k] * wgt;
                     }
                 }
-                out.px[y * w + x] = acc;
+                *o = acc;
             }
-        }
+        });
         out
     }
 
-    /// Upsample `small` with a 3×3 tent and add it, scaled, into `self`.
+    /// Upsample `small` with a tent (four bilinear taps at half-texel
+    /// offsets) and add it, scaled, into `self`.
     pub fn add_upsampled(&mut self, small: &Self, scale: f32) {
         #[allow(clippy::cast_precision_loss)]
         let (sx, sy) = (small.width as f32 / self.width as f32, small.height as f32 / self.height as f32);
-        for y in 0..self.height {
-            for x in 0..self.width {
+        let w = self.width;
+        par_rows(&mut self.px, w, |row0, band| {
+            for (j, p) in band.iter_mut().enumerate() {
+                let (x, y) = (j % w, row0 + j / w);
                 #[allow(clippy::cast_precision_loss)]
                 let (u, v) = ((x as f32 + 0.5) * sx, (y as f32 + 0.5) * sy);
                 let mut acc = [0.0f32; 3];
-                for (dx, dy, wgt) in [
-                    (-1.0, -1.0, 1.0),
-                    (0.0, -1.0, 2.0),
-                    (1.0, -1.0, 1.0),
-                    (-1.0, 0.0, 2.0),
-                    (0.0, 0.0, 4.0),
-                    (1.0, 0.0, 2.0),
-                    (-1.0, 1.0, 1.0),
-                    (0.0, 1.0, 2.0),
-                    (1.0, 1.0, 1.0),
-                ] {
+                for (dx, dy) in [(-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)] {
                     let c = small.sample(u + dx, v + dy);
                     for k in 0..3 {
-                        acc[k] += c[k] * wgt / 16.0;
+                        acc[k] += c[k] * 0.25;
                     }
                 }
-                let p = &mut self.px[y * self.width + x];
                 for k in 0..3 {
                     p[k] += acc[k] * scale;
                 }
             }
-        }
+        });
     }
 }
 
@@ -218,14 +256,30 @@ fn prefilter(c: [f32; 3], threshold: f32, knee: f32) -> [f32; 3] {
 /// upsamples back, added at `intensity`. `radius` (0..1) weights the wide
 /// levels; `tint` colours the scattered light.
 pub fn bloom(frame: &mut Linear, threshold: f32, knee: f32, intensity: f32, radius: f32, tint: [f32; 3]) {
+    bloom_keyed(frame, threshold, knee, intensity, radius, tint, 0.0);
+}
+
+/// [`bloom`] with a **chroma key**: at `chroma_key` 1 only saturated light
+/// scatters (neon accents glow, white type stays crisp); at 0 every
+/// highlight does. Interfaces are mostly white text on dark — a camera's
+/// bloom on every glyph reads as haze — so a UI film keys its glow to
+/// colour, the way a display's own emissive accents read on camera.
+pub fn bloom_keyed(frame: &mut Linear, threshold: f32, knee: f32, intensity: f32, radius: f32, tint: [f32; 3], chroma_key: f32) {
     if intensity <= 0.0 {
         return;
     }
-    let mut bright = Linear::new(frame.width, frame.height);
-    for (o, c) in bright.px.iter_mut().zip(&frame.px) {
-        *o = prefilter(*c, threshold, knee);
+    // Prefilter after the first (13-tap, anti-flicker) downsample: half the
+    // work, and the threshold sees the same averaged light.
+    let mut first = frame.downsample();
+    let key = chroma_key.clamp(0.0, 1.0);
+    for o in &mut first.px {
+        let mx = o[0].max(o[1]).max(o[2]);
+        let mn = o[0].min(o[1]).min(o[2]);
+        let sat = if mx > 1e-5 { (mx - mn) / mx } else { 0.0 };
+        let w = 1.0 - key + key * sat.powf(0.7);
+        *o = prefilter(o.map(|v| v * w), threshold * (1.0 - 0.5 * key), knee);
     }
-    let mut mips = vec![bright.downsample()];
+    let mut mips = vec![first];
     while mips.len() < 7 {
         let last = mips.last().expect("mip");
         if last.width < 8 || last.height < 8 {
@@ -239,13 +293,21 @@ pub fn bloom(frame: &mut Linear, threshold: f32, knee: f32, intensity: f32, radi
         let src = &hi[0];
         lo[i - 1].add_upsampled(src, radius.clamp(0.0, 1.0) * 1.2);
     }
-    let mut glow = Linear::new(frame.width, frame.height);
-    glow.add_upsampled(&mips[0], 1.0);
-    for (o, g) in frame.px.iter_mut().zip(&glow.px) {
-        for k in 0..3 {
-            o[k] += g[k] * intensity * tint[k];
+    // The glow lives at half resolution (it is smooth by construction);
+    // one bilinear tap per output pixel brings it up.
+    let half = &mips[0];
+    #[allow(clippy::cast_precision_loss)]
+    let (sx, sy) = (half.width as f32 / frame.width as f32, half.height as f32 / frame.height as f32);
+    let w = frame.width;
+    par_rows(&mut frame.px, w, |row0, band| {
+        for (j, o) in band.iter_mut().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let g = half.sample(((j % w) as f32 + 0.5) * sx, ((row0 + j / w) as f32 + 0.5) * sy);
+            for k in 0..3 {
+                o[k] += g[k] * intensity * tint[k];
+            }
         }
-    }
+    });
 }
 
 /// Film halation: the red-orange fringe light makes bouncing off the film
@@ -360,13 +422,13 @@ pub fn lens_flare(frame: &mut Linear, pos: (f32, f32), brightness: f32, seed: u3
             let mut add = [0.0f32; 3];
             // Core + six-point starburst.
             let ang = dy.atan2(dx);
-            let star = (ang * 3.0).cos().abs().powf(40.0) * (-d / (diag * 0.12)).exp();
+            let star = (ang * 3.0).cos().abs().powf(160.0) * (-d / (diag * 0.07)).exp() * 0.6;
             let core = (-(d / core_r).powi(2)).exp() * 2.0 + (-d / (core_r * 3.0)).exp() * 0.3;
             for k in 0..3 {
                 add[k] += (core + star * 0.8) * [1.0, 0.92, 0.8][k];
             }
             // Halo ring with a spectral rim.
-            let ring = (-((d - halo_r) / (diag * 0.006)).powi(2)).exp() * 0.06;
+            let ring = (-((d - halo_r) / (diag * 0.006)).powi(2)).exp() * 0.025;
             let rim = [(-((d - halo_r * 1.01) / (diag * 0.005)).powi(2)).exp(), 1.0, (-((d - halo_r * 0.99) / (diag * 0.005)).powi(2)).exp()];
             for k in 0..3 {
                 add[k] += ring * rim[k];
@@ -633,8 +695,10 @@ pub fn natural_vignette(frame: &mut Linear, strength: f32, roundness: f32) {
     #[allow(clippy::cast_precision_loss)]
     let (w, h) = (frame.width as f32, frame.height as f32);
     let aspect = w / h;
-    for y in 0..frame.height {
-        for x in 0..frame.width {
+    let fw = frame.width;
+    par_rows(&mut frame.px, fw, |row0, band| {
+        for (j, p) in band.iter_mut().enumerate() {
+            let (x, y) = (j % fw, row0 + j / fw);
             #[allow(clippy::cast_precision_loss)]
             let mut dx = (x as f32 + 0.5) / w * 2.0 - 1.0;
             #[allow(clippy::cast_precision_loss)]
@@ -643,11 +707,11 @@ pub fn natural_vignette(frame: &mut Linear, strength: f32, roundness: f32) {
             let r2 = (dx * dx + dy * dy) * 0.5;
             let c = 1.0 / (1.0 + r2 * 1.6);
             let fall = 1.0 - strength * (1.0 - c * c);
-            for v in &mut frame.px[y * frame.width + x] {
+            for v in p.iter_mut() {
                 *v *= fall;
             }
         }
-    }
+    });
 }
 
 /// Film grain: luminance-weighted (strongest in the mids, as on stock),
@@ -656,19 +720,20 @@ pub fn film_grain(frame: &mut Linear, amount: f32, frame_seed: u32) {
     if amount <= 0.0 {
         return;
     }
-    for y in 0..frame.height {
-        for x in 0..frame.width {
+    let fw = frame.width;
+    par_rows(&mut frame.px, fw, |row0, band| {
+        for (j, p) in band.iter_mut().enumerate() {
             #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-            let (ix, iy) = (x as i32, y as i32);
+            let (ix, iy) = ((j % fw) as i32, (row0 + j / fw) as i32);
             let n = (hash2(ix, iy, frame_seed) + hash2(ix + 1, iy, frame_seed) * 0.5 + hash2(ix, iy + 1, frame_seed) * 0.5) / 2.0 - 0.5;
-            let p = &mut frame.px[y * frame.width + x];
             let l = luma(*p).clamp(0.0, 1.0);
-            let mid = 4.0 * linear_to_srgb(l) * (1.0 - linear_to_srgb(l)) * 0.85 + 0.15;
+            let e = linear_to_srgb(l);
+            let mid = 4.0 * e * (1.0 - e) * 0.85 + 0.15;
             for v in p.iter_mut() {
                 *v = (*v + n * amount * mid * (v.max(0.002)).sqrt() * 0.6).max(0.0);
             }
         }
-    }
+    });
 }
 
 /// The finishing stack — a camera's order, one call per frame.
@@ -679,6 +744,8 @@ pub struct Finish {
     pub bloom_intensity: f32,
     pub bloom_radius: f32,
     pub bloom_tint: [f32; 3],
+    /// 0 = every highlight blooms, 1 = only saturated light does.
+    pub bloom_chroma_key: f32,
     pub halation: f32,
     pub streaks: f32,
     pub streak_tint: [f32; 3],
@@ -702,6 +769,7 @@ impl Default for Finish {
             bloom_intensity: 0.0,
             bloom_radius: 0.7,
             bloom_tint: [1.0, 1.0, 1.0],
+            bloom_chroma_key: 0.0,
             halation: 0.0,
             streaks: 0.0,
             streak_tint: [0.45, 0.65, 1.0],
@@ -733,7 +801,7 @@ impl Finish {
         if let Some((pos, amount)) = self.rays {
             light_rays(&mut f, pos, self.bloom_threshold, 0.8, amount, 24);
         }
-        bloom(&mut f, self.bloom_threshold, self.bloom_knee, self.bloom_intensity, self.bloom_radius, self.bloom_tint);
+        bloom_keyed(&mut f, self.bloom_threshold, self.bloom_knee, self.bloom_intensity, self.bloom_radius, self.bloom_tint, self.bloom_chroma_key);
         halation(&mut f, self.bloom_threshold, self.halation);
         if self.streaks > 0.0 {
             anamorphic_streaks(&mut f, self.bloom_threshold.max(0.5), 0.5, self.streaks, self.streak_tint);

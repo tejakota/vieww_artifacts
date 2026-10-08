@@ -20,11 +20,20 @@
 //! | plucks | the chord arpeggiated in eighths, stereo echoes | the engine through the proof |
 //! | ui | the studio's own clicks: tolls, crate pops, session actions | where they happen |
 //! | hits | a sub thump and a shimmer | each movement's first frame, the end card |
+//! | risers | filtered noise swelling into each movement boundary, timed to the picture's light swell | the act cuts, the end card |
+//!
+//! **The production** is `vieww-audio`'s `fx` module: the pad is widened by
+//! a two-voice chorus, the plucks, UI sounds and hits share a hall reverb
+//! (Freeverb topology, pre-delay, damped tail), the sub hits are warmed by
+//! tanh saturation, the bus is glued by the compressor, widened mid/side,
+//! and mastered by a look-ahead limiter at −1 dBFS — the chain a mix
+//! engineer would put on it, every stage the framework's own.
 
 use std::path::Path;
 use std::time::Duration;
 
-use vieww_audio::dsp::{apply, Biquad, Compressor, Delay, FilterKind};
+use vieww_audio::dsp::{apply, Biquad, Compressor, Delay, FilterKind, Processor};
+use vieww_audio::fx::{saturate, stereo_width, Chorus, Limiter, Reverb};
 use vieww_audio::{midi::note_to_hz, Envelope, Mixer, Samples, Tone, Waveform};
 
 /// Output rate.
@@ -365,6 +374,45 @@ pub(crate) fn render() -> Samples {
         );
     }
 
+    // ── Risers: noise swelling into each movement boundary ─────────────
+    // A band-passed noise whose centre sweeps up and whose level rises over
+    // the two seconds before the cut, landing on the picture's light swell.
+    let mut riser = vec![0.0_f32; n];
+    {
+        let mut seed = 0x2545_F491_u32;
+        let mut noise = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            (seed >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0
+        };
+        let boundaries: Vec<f32> = super::act_starts().into_iter().skip(1).map(|i| starts[i]).collect();
+        for at in boundaries.into_iter().chain(std::iter::once(z21)) {
+            let len = 2.2_f32;
+            let a = ((at - len) * RATE as f32).max(0.0) as usize;
+            let b = ((at + 0.35) * RATE as f32) as usize;
+            // Three fixed bands, crossfaded upward: the sweep without
+            // retuning a filter mid-stream (which would click).
+            let mut bands = [
+                Biquad::new(FilterKind::BandPass, 450.0, 1.1, RATE as f32),
+                Biquad::new(FilterKind::BandPass, 1600.0, 1.1, RATE as f32),
+                Biquad::new(FilterKind::BandPass, 5200.0, 1.1, RATE as f32),
+            ];
+            for i in a..b.min(n) {
+                let t = (i - a) as f32 / RATE as f32;
+                let p = (t / len).clamp(0.0, 1.0);
+                let x = noise();
+                let w = [(1.0 - p * 2.0).max(0.0), 1.0 - (p * 2.0 - 1.0).abs(), (p * 2.0 - 1.0).max(0.0)];
+                let mut v = 0.0;
+                for (k, f) in bands.iter_mut().enumerate() {
+                    v += f.process(x) * w[k];
+                }
+                let env = if t <= len { p.powf(2.2) } else { (1.0 - (t - len) / 0.35).max(0.0) };
+                riser[i] += v * env * 0.11;
+            }
+        }
+    }
+
     // ── Mix ─────────────────────────────────────────────────────────────
     let pad = apply(&pad.render(), || {
         Biquad::new(FilterKind::LowPass, 1600.0, 0.707, RATE as f32)
@@ -378,23 +426,59 @@ pub(crate) fn render() -> Samples {
     let (pad, pulse, pluck_l, pluck_r) =
         (fit(pad, n), fit(pulse, n), fit(pluck_l, n), fit(pluck_r, n));
     let (ui, hits) = (fit(ui.render(), n), fit(hits.render(), n));
+    // The sub hits, warmed: tanh saturation adds the harmonics that let a
+    // 40 Hz thump be heard on a laptop speaker.
+    let mut hits = hits;
+    saturate(&mut hits, 2.2);
+    for v in &mut hits {
+        *v *= 0.62;
+    }
+    // The pad, widened: a slow two-voice chorus, left and right detuned
+    // against each other.
+    let mut chorus = Chorus::new(RATE, 0.23);
+    chorus.mix = 0.42;
+    chorus.depth = 0.0042;
+    let mut pad_l = vec![0.0_f32; n];
+    let mut pad_r = vec![0.0_f32; n];
+    for i in 0..n {
+        let (a, b) = chorus.tick(pad[i], pad[i]);
+        pad_l[i] = a;
+        pad_r[i] = b;
+    }
+    // The dry bus.
     let mut l = vec![0.0_f32; n];
     let mut r = vec![0.0_f32; n];
     for i in 0..n {
-        let common = pad[i] + pulse[i] + hits[i] + ui[i];
-        l[i] = common + pluck_l[i];
-        r[i] = common + pluck_r[i];
+        let common = pulse[i] + hits[i] + ui[i] + riser[i];
+        l[i] = common + pad_l[i] + pluck_l[i];
+        r[i] = common + pad_r[i] + pluck_r[i];
+    }
+    // The room: one hall for everything, fed by a send (the pulse stays
+    // dry so the beat keeps its edge).
+    let mut hall = Reverb::new(RATE, 0.028);
+    hall.room_size = 0.86;
+    hall.damping = 0.45;
+    hall.width = 1.0;
+    hall.wet = 1.0;
+    hall.dry = 0.0;
+    for i in 0..n {
+        let send_l = (pad_l[i] * 0.35 + pluck_l[i] * 0.6 + ui[i] * 0.55 + hits[i] * 0.4 + riser[i] * 0.5) * 0.9;
+        let send_r = (pad_r[i] * 0.35 + pluck_r[i] * 0.6 + ui[i] * 0.55 + hits[i] * 0.4 + riser[i] * 0.5) * 0.9;
+        let (wl, wr) = hall.tick(send_l, send_r);
+        l[i] += wl * 0.32;
+        r[i] += wr * 0.32;
     }
     let comp = || Compressor::new(-14.0, 3.0, 0.01, 0.25, RATE as f32);
     let l = apply(&Samples::mono(l, RATE), comp).data;
     let r = apply(&Samples::mono(r, RATE), comp).data;
-    // Normalise to −1 dBFS, and fade the last two seconds of the film.
+    // Master: gain to a healthy level, mid/side width, a look-ahead limiter
+    // at −1 dBFS, and the last two seconds faded.
     let peak = l
         .iter()
         .chain(r.iter())
         .fold(0.0_f32, |m, x| m.max(x.abs()))
         .max(1e-6);
-    let gain = 0.89 / peak;
+    let gain = 1.25 / peak;
     let film_n = (total * RATE as f32) as usize;
     let fade = (2.0 * RATE as f32) as usize;
     let mut out = Vec::with_capacity(film_n * 2);
@@ -407,6 +491,8 @@ pub(crate) fn render() -> Samples {
         out.push(l[i] * gain * f);
         out.push(r[i] * gain * f);
     }
+    stereo_width(&mut out, 1.18);
+    Limiter::new(RATE, 0.89).process(&mut out, 2);
     Samples::stereo(out, RATE)
 }
 

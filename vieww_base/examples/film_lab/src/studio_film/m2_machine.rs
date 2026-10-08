@@ -350,7 +350,7 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
     scene.add(
         Node::new(
             "mark",
-            Content::mesh(mark, Material::standard(BRAND_NEAR, 0.35, 0.32)),
+            Content::mesh(mark, Material::standard(BRAND_NEAR, 0.6, 0.24)),
         )
         .at(Vec3::new(
             0.0,
@@ -361,20 +361,31 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
         .scaled(Vec3::splat(1.2)),
         None,
     );
-    // Forty-nine blocks in orbit — one per crate in the manifest.
+    // Forty-nine blocks — one per crate in the manifest. They arrive the
+    // way real objects do: dropped from above into `vieww-physics`' 3D
+    // world (convex boxes, friction, restitution, sleeping), they rain,
+    // bounce and settle on the floor around the mark — then lift off and
+    // take up their orbit. The simulation is precomputed once and sampled
+    // by the clock, so the frame stays a pure function of time.
     let crates = super::workspace_crates().len();
-    let orbit_p = ease_out_expo(clamp01((sec - 1.2) / 2.2));
+    let sim = crate_rain(crates);
+    let lift = ease_in_out(clamp01((sec - 5.6) / 2.2));
+    let orbit_p = 1.0;
     let instances: Vec<Mat4> = (0..crates)
         .map(|k| {
             let a = k as f32 / crates as f32 * std::f32::consts::TAU + sec * 0.22;
             let ring = 2.15 + 0.35 * ((k * 7) % 5) as f32 / 4.0;
             let y = 0.55 + 0.9 * ((k * 3) % 7) as f32 / 6.0;
             let r = ring * orbit_p;
-            Mat4::compose(
-                Vec3::new(r * a.cos(), y * orbit_p + 0.08, r * a.sin()),
-                Quat::from_axis_angle(Vec3::new(0.3, 1.0, 0.2), a * 2.0 + sec),
-                Vec3::splat(0.13 * orbit_p.max(0.01)),
-            )
+            let orbit_pos = Vec3::new(r * a.cos(), y * orbit_p + 0.08, r * a.sin());
+            let orbit_rot = Quat::from_axis_angle(Vec3::new(0.3, 1.0, 0.2), a * 2.0 + sec);
+            let (p, q) = sim.pose(k, sec);
+            let phys_pos = Vec3::new(p[0], p[1], p[2]);
+            let phys_rot = Quat::new(q[1], q[2], q[3], q[0]);
+            let pos = phys_pos.lerp(orbit_pos, lift);
+            let rot = phys_rot.slerp(orbit_rot, lift);
+            let size = 0.18 + (0.13 - 0.18) * lift;
+            Mat4::compose(pos, rot, Vec3::splat(size))
         })
         .collect();
     scene.add(
@@ -382,13 +393,14 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
             "crates",
             Content::instanced(
                 geometry::box_mesh(1.0, 1.0, 1.0),
-                Material::standard(BRAND_FAR, 0.1, 0.5),
+                Material::standard(BRAND_FAR, 0.25, 0.32),
                 instances,
             ),
         ),
         None,
     );
-    let mut floor_mat = Material::standard(Color::rgb(30, 27, 40), 0.0, 0.9);
+    // A glossy floor: the studio's softboxes read in it as long sheens.
+    let mut floor_mat = Material::standard(Color::rgb(34, 30, 46), 0.0, 0.34);
     floor_mat.receive_shadow = true;
     scene.add(
         Node::new(
@@ -397,13 +409,18 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
         ),
         None,
     );
+    // Image-based light: a photographer's studio (softbox key, rim strip,
+    // warm bounce), prefiltered once — diffuse irradiance by spherical
+    // harmonics, reflections by a GGX-convolved chain. The room itself
+    // stays dark; the environment only lights.
+    scene.environment = Some(studio_environment());
     scene.add(
         Node::new(
             "sky",
             Content::Light(Light::Hemisphere {
                 sky: Rgb::from_color(Color::rgb(120, 110, 170)),
                 ground: Rgb::from_color(Color::rgb(20, 16, 28)),
-                intensity: 0.35,
+                intensity: 0.12,
             }),
         ),
         None,
@@ -414,7 +431,7 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
             "key",
             Content::Light(Light::Directional {
                 color: Rgb::new(1.0, 0.96, 0.92),
-                intensity: 1.35,
+                intensity: 1.15,
                 direction: Vec3::new(-sun, -1.0, -0.45),
                 shadow: true,
             }),
@@ -426,7 +443,7 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
             "rim",
             Content::Light(Light::Point {
                 color: Rgb::from_color(BRAND_FAR),
-                intensity: 2.2,
+                intensity: 2.6,
                 range: 9.0,
             }),
         )
@@ -463,10 +480,11 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
     let stat_a = clamp01((sec - 2.6) / 0.6);
     if stat_a > 0.01 {
         let line = format!(
-            "vieww-3d · {} triangles · {} fragments · {} crates in orbit · shadow-mapped",
+            "vieww-3d · {} triangles · {} fragments · {} crates · {} · image-lit, shadow-mapped",
             pf::group_commas(stats.triangles as u64),
             pf::group_commas(stats.fragments as u64),
             crates,
+            if lift > 0.5 { "in orbit".to_string() } else { format!("{} rigid bodies · vieww-physics", crates) },
         );
         stack = stack.push(super::frame::label(
             x,
@@ -499,10 +517,105 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
         clamp01((sec - 0.2) / 0.5),
     ));
     stack = stack.push(super::frame::caption(
-        "Lights, shadows, a depth buffer — the same engine, all the way down.",
+        "Light, reflections, physics, a depth buffer — the same engine, all the way down.",
         966.0,
         clamp01((sec - 4.0) / 0.6),
     ));
     let _ = (MUTED, INK, Offset::ZERO);
     stack.into()
+}
+
+
+/// The studio light the mark is lit by — built and prefiltered once.
+fn studio_environment() -> std::sync::Arc<vieww_3d::Environment> {
+    use vieww_3d::{Background, EnvMap, Environment};
+    static ENV: std::sync::OnceLock<std::sync::Arc<Environment>> = std::sync::OnceLock::new();
+    ENV.get_or_init(|| {
+        std::sync::Arc::new(
+            Environment::new(EnvMap::studio(0.9).rotated(0.6))
+                .intensity(0.85)
+                .background(Background::Color),
+        )
+    })
+    .clone()
+}
+
+/// The crate rain: `n` boxes dropped into a 3D rigid-body world, sampled
+/// at 60 Hz for eight seconds. (position, quaternion as w, x, y, z.)
+pub struct CrateRain {
+    frames: Vec<Vec<([f32; 3], [f32; 4])>>,
+}
+
+impl CrateRain {
+    /// Pose of box `k` at `sec` (held at the first and last samples).
+    pub fn pose(&self, k: usize, sec: f32) -> ([f32; 3], [f32; 4]) {
+        let f = (sec * 60.0).max(0.0);
+        let i = (f.floor() as usize).min(self.frames.len() - 1);
+        let j = (i + 1).min(self.frames.len() - 1);
+        let t = (f - i as f32).clamp(0.0, 1.0);
+        let (a, b) = (self.frames[i][k], self.frames[j][k]);
+        let p = [a.0[0] + (b.0[0] - a.0[0]) * t, a.0[1] + (b.0[1] - a.0[1]) * t, a.0[2] + (b.0[2] - a.0[2]) * t];
+        // Short-arc nlerp is plenty at 60 Hz.
+        let dot: f32 = (0..4).map(|c| a.1[c] * b.1[c]).sum();
+        let s = if dot < 0.0 { -1.0 } else { 1.0 };
+        let mut q = [0.0f32; 4];
+        for c in 0..4 {
+            q[c] = a.1[c] + (b.1[c] * s - a.1[c]) * t;
+        }
+        let l = q.iter().map(|v| v * v).sum::<f32>().sqrt().max(1e-9);
+        (p, q.map(|v| v / l))
+    }
+}
+
+/// Simulate (once per process) the crates falling — the box mark and the
+/// floor are the only static colliders; the mark is approximated by two
+/// slanted slabs, the V's arms.
+pub fn crate_rain(n: usize) -> &'static CrateRain {
+    use vieww_physics::rigid3d::{Body3, Shape3, World3, Q, V3};
+    static RAIN: std::sync::OnceLock<CrateRain> = std::sync::OnceLock::new();
+    RAIN.get_or_init(|| {
+        let mut w = World3::new();
+        w.add(Body3::fixed(Shape3::plane(V3::Y)).with_friction(0.7).with_restitution(0.35));
+        // The mark's two arms, as tilted slabs around its standing pose.
+        for side in [-1.0f32, 1.0] {
+            w.add(
+                Body3::fixed(Shape3::cuboid(V3::new(0.16, 0.95, 0.2)))
+                    .at(V3::new(side * 0.42, 1.2, 0.0))
+                    .rotated(Q::from_axis_angle(V3::Z, side * 0.42)),
+            );
+        }
+        let half = 0.09;
+        let mut ids = Vec::new();
+        for k in 0..n {
+            let a = k as f32 * 2.399_963; // golden angle — an even spread
+            let r = 1.15 + 1.6 * ((k * 37 % 97) as f32 / 97.0).sqrt();
+            let h = 5.6 + 0.12 * k as f32;
+            let mut b = Body3::dynamic(Shape3::cuboid(V3::splat(half)), 650.0)
+                .at(V3::new(r * a.cos(), h, r * a.sin() * 0.8))
+                .rotated(Q::from_axis_angle(V3::new((k % 3) as f32 - 1.0, 1.0, 0.4), k as f32 * 0.7))
+                .with_spin(V3::new(((k * 13) % 7) as f32 - 3.0, ((k * 5) % 5) as f32 - 2.0, ((k * 11) % 9) as f32 * 0.5 - 2.0))
+                .with_restitution(0.42)
+                .with_friction(0.55);
+            b.lin_vel = V3::new(-a.sin() * 0.6, -3.5, a.cos() * 0.6);
+            ids.push(w.add(b));
+        }
+        let mut frames = Vec::new();
+        let snap = |w: &World3| ids.iter().map(|i| {
+            let b = &w.bodies[*i];
+            ([b.pose.p.x, b.pose.p.y, b.pose.p.z], [b.pose.q.w, b.pose.q.x, b.pose.q.y, b.pose.q.z])
+        }).collect::<Vec<_>>();
+        // Blocks are held above the frame until their turn (0.9 s in), so
+        // the rain begins as the mark finishes rising.
+        let hold = 30;
+        for _ in 0..hold {
+            frames.push(snap(&w));
+        }
+        for _ in 0..(8 * 60 - hold) {
+            for _ in 0..4 {
+                w.step(1.0 / 240.0);
+            }
+            frames.push(snap(&w));
+        }
+        CrateRain { frames }
+    })
 }

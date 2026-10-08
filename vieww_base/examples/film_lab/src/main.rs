@@ -482,6 +482,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // release, at this film's own 60 fps, mounted on the same real
         // app and rendered by the same engine (`studio_film/master.rs`).
         if arg == "censussf"
+            || arg == "sfmerge"
             || arg == "mastersf"
             || arg == "scoresf"
             || arg == "sfprobe"

@@ -554,15 +554,19 @@ impl Probe {
 
 // ── The certification receipts — quoted from the repo's own audit ──────────
 
-/// The 2026-09-15 certification run, quoted verbatim from
-/// `vieww_base/docs/VIEWW-PHASE-STATUS.md` (2-core container, lavapipe,
-/// rustc 1.95.0). The ledger scene counts these up; nothing here is
-/// measured by the film, and it says so.
+/// The certification receipts. Timing figures are the 2026-09-15 run,
+/// quoted from `vieww_base/docs/VIEWW-PHASE-STATUS.md` (2-core container,
+/// lavapipe, rustc 1.95.0). The test counts are the 2026-10-08 run of the
+/// fifth gap pass: `cargo test --workspace --release` — 5,224 passed, 0
+/// failed — and the Vulkan suites on lavapipe (Mesa 25.2): 40 of 41 pass;
+/// the one that does not (`a_backdrop_blur_…`, a GPU/CPU edge mismatch on
+/// this Mesa) is recorded in `PENDING.md`, not counted. The ledger scene
+/// counts these up; nothing here is measured by the film, and it says so.
 pub(crate) const CERT_STARTUP_MS: f32 = 27.5;
 pub(crate) const CERT_P95_MS: f32 = 11.4;
 pub(crate) const CERT_WORST_MS: f32 = 13.1;
-pub(crate) const CERT_TESTS: u64 = 4_225;
-pub(crate) const CERT_VULKAN_TESTS: u64 = 37;
+pub(crate) const CERT_TESTS: u64 = 5_224;
+pub(crate) const CERT_VULKAN_TESTS: u64 = 40;
 pub(crate) const CERT_CRATES: usize = 49;
 pub(crate) const CERT_FRAMES_STEADY: u64 = 60;
 pub(crate) const CERT_ALLOCS_STEADY: u64 = 0;
