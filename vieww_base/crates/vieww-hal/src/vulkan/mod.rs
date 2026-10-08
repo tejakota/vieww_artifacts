@@ -22,7 +22,9 @@ use super::{AdapterInfo, Device as HalDevice};
 /// `vieww_gpu::ScenePlan` per frame, rather than building and tearing down a
 /// pipeline per shape the way [`VulkanDevice::render_mesh_to_pixels`] does.
 /// See that module's own doc for the difference and why it matters at 16.7ms.
+pub mod compute;
 pub mod scene;
+pub use compute::{ComputeBuffer, ComputeKernel};
 pub use scene::SceneRenderer;
 
 /// [`VulkanDevice::for_window`] and [`swapchain::VulkanSwapchain`] — real
