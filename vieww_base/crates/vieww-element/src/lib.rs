@@ -47,6 +47,7 @@ pub mod hero;
 mod id;
 mod inspect;
 mod navigator;
+pub mod property;
 mod scroll;
 pub mod scroll_anim;
 pub mod shared_element;

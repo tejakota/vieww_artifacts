@@ -36,6 +36,8 @@ pub mod geo;
 pub mod hierarchy;
 pub mod interact;
 pub mod join;
+pub mod plane;
 pub mod scale;
 pub mod shape;
 pub mod spec;
+pub mod stats;
