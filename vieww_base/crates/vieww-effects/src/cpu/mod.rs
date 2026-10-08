@@ -25,6 +25,8 @@
 //! a vtable per pixel would be slower.
 
 pub mod blend;
+pub mod grade;
+pub mod optics;
 pub mod blur;
 pub mod matrix;
 pub mod pixel;

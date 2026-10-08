@@ -254,7 +254,7 @@ impl Spectrum {
 /// see; for the window sizes a UI analyses (≤ 4096 is typical, 8192 is
 /// generous) the recomputation is a rounding error against the transform
 /// itself.
-fn fft(re: &mut [f32], im: &mut [f32]) {
+pub(crate) fn fft(re: &mut [f32], im: &mut [f32]) {
     let n = re.len();
     debug_assert_eq!(n, im.len());
     debug_assert!(n.is_power_of_two(), "radix-2 needs a power of two");
