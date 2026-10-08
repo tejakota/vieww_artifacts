@@ -229,10 +229,12 @@ mod exp_planck;
 mod exp_slime;
 mod exp_traffic;
 mod film_lib;
-mod keynote;
-mod keynote_v5;
-mod keynote_z;
+// product_film stays as the shared foundation layer (Ctx, Kind,
+// SceneDef, the palette, the receipts, the studio session script) that
+// studio_film builds its cut on — the product film's own master door is
+// retired with the rest of the earlier builds.
 mod product_film;
+// THE film — the viewwstudio keynote cut, the only film this tree builds.
 mod studio_film;
 mod three_d;
 
@@ -460,33 +462,17 @@ fn registry() -> Vec<Experiment> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // The keynote's two passes and its per-scene preview mode — see
-    // `keynote/master.rs` (census · master · kn:<scene>).
+    // THE film — THE GAP, THE ENGINE, THE STUDIO, the viewwstudio keynote
+    // cut. The earlier builds (keynote, keynote_v5, keynote_z, the
+    // product_film master) were retired at the consolidation; their
+    // scenes live on only where studio_film rides them (`product_film`
+    // stays as the foundation layer: Ctx, Kind, SceneDef, the palette,
+    // the studio session script the Studio scenes drive the real app
+    // through).
     if let Some(arg) = std::env::args().nth(1) {
-        if arg == "census" || arg == "master" || arg.starts_with("kn:") {
-            return keynote::master::run(&arg);
-        }
-        // The v5 release film — the viewwstudio keynote — same two passes,
-        // its own preview spelling (`keynote_v5/master.rs`).
-        if arg == "census5" || arg == "master5" || arg.starts_with("k5:") {
-            return keynote_v5::master::run(&arg);
-        }
-        // The z release film — THE SPARK, the viewwstudio keynote's
-        // sixth build — same two passes, its own preview spelling, and
-        // the score door (`keynote_z/master.rs` · `keynote_z/score.rs`).
-        if arg == "censusz" || arg == "masterz" || arg == "kzcal" || arg == "scorez" || arg.starts_with("kz:") {
-            return keynote_z::master::run(&arg);
-        }
-        // The product film — THE DISTANCE, the viewwstudio product
-        // film — same two passes, its own preview spelling, the
-        // SCALE_FACTOR door, and the tap calibration probe
-        // (`product_film/master.rs`).
-        if arg == "censuspf" || arg == "masterpf" || arg == "pfcal" || arg.starts_with("pf:") {
-            return product_film::master::run(&arg);
-        }
         // THE GAP, THE ENGINE, THE STUDIO — the viewwstudio product film
         // built on this branch's brief: need → engine → studio → proof →
-        // release, at this film's own 30 fps, mounted on the same real
+        // release, at this film's own 60 fps, mounted on the same real
         // app and rendered by the same engine (`studio_film/master.rs`).
         if arg == "censussf" || arg == "mastersf" || arg == "scoresf" || arg == "sfprobe" || arg.starts_with("sfmeasure") || arg.starts_with("sf:") {
             return studio_film::master::run(&arg);

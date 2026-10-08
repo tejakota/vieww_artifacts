@@ -1,7 +1,7 @@
 //! studio_film — **THE GAP, THE ENGINE, THE STUDIO** — the viewwstudio
 //! product film, rendered by vieww.
 //!
-//! **The keynote cut.** Five movements, twenty-three scenes, 309 s at
+//! **The keynote cut.** Five movements, thirty-two scenes, 420 s at
 //! 60 fps, one canvas (1920×1080 logical) — and, for the first time, a
 //! soundtrack, synthesised by `vieww-audio` from the film's own timeline
 //! ([`score`]). The emotional arc is the brief's own:
@@ -9,10 +9,10 @@
 //! | movement | scenes | feeling |
 //! |---|---|---|
 //! | I · THE NEED | Z00, Z01, Z02, Z05 | curiosity → need — why another UI/UX framework at all |
-//! | II · THE ENGINE | Z06, Z10C, Z10D, Z10B | relief begins — the engine, *shown*: the crate graph grows, twelve lab plates run live on one wall, the mark in real 3D |
-//! | III · THE STUDIO | Z11–Z17 (+ Z12B, Z13B) | relief, paid — the *actual* viewwstudio: palette, live theming, inspector, semantics, live edits, say → Rust, devices, ship |
-//! | IV · THE PROOF | Z18, Z19, Z19B | trust — real metrics, every number a receipt, and four real apps built on it |
-//! | V · THE RELEASE | Z20–Z22 | resolution — the studio becomes the mark, *beta release available today* |
+//! | II · THE ENGINE | Z06, Z10C, Z10D, Z10B, Z10E, Z10F, Z10G | relief begins — the engine, *shown*: the crate graph grows, twelve lab plates run live on one wall, the mark in real 3D, the shutter, the cook, the swarm |
+//! | III · THE STUDIO | Z11–Z17 (+ Z12B, Z13B, Z13C, Z13D, Z16B) | relief, paid — the *actual* viewwstudio: palette, live theming, inspector, semantics, live edits, say → Rust, devices, ship — and the touches beneath it: the arena, the designer, the shared document |
+//! | IV · THE PROOF | Z18, Z19, Z19B, Z19C, Z19D | trust — real metrics, every number a receipt, four real apps built on it, the frame planning itself, the contrast checked live |
+//! | V · THE RELEASE | Z20, Z20B, Z21, Z22 | resolution — the studio becomes the mark through shared-element flight, *beta release available today* |
 //!
 //! Two scenes' kinds, the house rule: `Pure` scenes are functions of the
 //! frame's [`Ctx`]; `Studio` scenes ride on the **actual `viewwstudio`
@@ -77,13 +77,17 @@ pub mod m0_open;
 pub mod m1_need;
 pub mod m2_engine;
 pub mod m2_beyond;
+pub mod m2_depth;
 pub mod m2_machine;
 pub mod m3_more;
 pub mod m4_built;
 pub mod score;
 pub mod m3_studio;
+pub mod m3_depth;
 pub mod m4_proof;
+pub mod m4_depth;
 pub mod m5_release;
+pub mod m5_depth;
 pub mod master;
 pub mod probe;
 pub mod frame;
@@ -208,17 +212,23 @@ pub const BRAND_FAR: Color = Color::rgb(0xB4, 0x91, 0xFF);
 /// answer has to exist.
 pub const PORTS: [&str; 4] = ["web · react", "android", "ios", "desktop · qt"];
 
-/// The film's scene list — **five minutes nine, twenty-three scenes**.
+/// The film's scene list — **seven minutes, thirty-two scenes**.
 ///
 /// Seconds are the budget; frames derive.
 ///
 /// | movement | scenes | seconds |
 /// |---|---|---|
 /// | I · THE NEED | Z00, Z01, Z02, Z05 | 48 |
-/// | II · THE ENGINE | Z06, Z10C, Z10D, Z10B | 54 |
-/// | III · THE STUDIO | Z11, Z12, Z12B, Z13, Z13B, Z14–Z17 | 124 |
-/// | IV · THE PROOF | Z18, Z19, Z19B | 45 |
-/// | V · THE RELEASE | Z20–Z22 | 38 |
+/// | II · THE ENGINE | Z06, Z10C, Z10D, Z10B, Z10E, Z10F, Z10G | 93 |
+/// | III · THE STUDIO | Z11, Z12, Z12B, Z13, Z13B, Z13C, Z13D, Z14, Z15, Z16, Z16B, Z17 | 159 |
+/// | IV · THE PROOF | Z18, Z19, Z19B, Z19C, Z19D | 70 |
+/// | V · THE RELEASE | Z20, Z20B, Z21, Z22 | 49 |
+///
+/// The depth scenes (the `m*_depth` modules) are the seven-minute cut's
+/// own additions: every framework crate that could carry a beat on screen
+/// got one — motion blur, the dataflow cook, the ECS swarm, the gesture
+/// arena, the designer's Lottie, the shared document, the planned frame,
+/// the checked contrast, and the shared-element flight home.
 ///
 /// The scenes cut from the keynote (Z03 drift, Z04 bridge, Z07 layers,
 /// Z08 pipeline, Z09 motion, Z10 type) are kept in their modules: they
@@ -237,27 +247,37 @@ pub fn scenes() -> Vec<SceneDef> {
         // ── Movement II · THE ENGINE ────────────────────────────────
         // The engine is *shown*, not diagrammed: the crate graph grows,
         // the machine room — real lab plates running live inside this
-        // frame — the mark in real 3D, then the four everyday crafts.
+        // frame — the mark in real 3D, the four everyday crafts, then the
+        // depth: the shutter, the cook, the swarm.
         SceneDef { id: "Z06", name: "the_engine",        seconds: 15.0, kind: Kind::Pure,   build: m2_engine::the_engine },
         SceneDef { id: "Z10C", name: "the_machine_room", seconds: 14.0, kind: Kind::Pure,   build: m2_machine::the_machine_room },
         SceneDef { id: "Z10D", name: "the_mark_in_3d",   seconds: 11.0, kind: Kind::Pure,   build: m2_machine::the_mark_in_3d },
         SceneDef { id: "Z10B", name: "beyond_ui",        seconds: 14.0, kind: Kind::Pure,   build: m2_beyond::beyond_ui },
+        SceneDef { id: "Z10E", name: "the_shutter",      seconds: 13.0, kind: Kind::Pure,   build: m2_depth::the_shutter },
+        SceneDef { id: "Z10F", name: "the_cook",         seconds: 12.0, kind: Kind::Pure,   build: m2_depth::the_cook },
+        SceneDef { id: "Z10G", name: "the_swarm",        seconds: 13.0, kind: Kind::Pure,   build: m2_depth::the_swarm },
         // ── Movement III · THE STUDIO ───────────────────────────────
         SceneDef { id: "Z11", name: "studio_opens",      seconds: 16.0, kind: Kind::Studio, build: m3_studio::studio_opens },
         SceneDef { id: "Z12", name: "the_shell",         seconds: 13.0, kind: Kind::Studio, build: m3_studio::the_shell },
         SceneDef { id: "Z12B", name: "make_it_yours",    seconds: 12.0, kind: Kind::Studio, build: m3_more::make_it_yours },
         SceneDef { id: "Z13", name: "live_compose",      seconds: 15.0, kind: Kind::Studio, build: m3_studio::live_compose },
         SceneDef { id: "Z13B", name: "the_inspector",    seconds: 12.0, kind: Kind::Studio, build: m3_more::the_inspector },
+        SceneDef { id: "Z13C", name: "the_arena",        seconds: 13.0, kind: Kind::Pure,   build: m3_depth::the_arena },
+        SceneDef { id: "Z13D", name: "the_designer",     seconds: 12.0, kind: Kind::Pure,   build: m3_depth::the_designer },
         SceneDef { id: "Z14", name: "say_to_rust",       seconds: 16.0, kind: Kind::Studio, build: m3_studio::say_to_rust },
         SceneDef { id: "Z15", name: "ships_everywhere",  seconds: 14.0, kind: Kind::Studio, build: m3_studio::ships_everywhere },
         SceneDef { id: "Z16", name: "the_devices",       seconds: 13.0, kind: Kind::Studio, build: m3_studio::the_devices },
+        SceneDef { id: "Z16B", name: "together",         seconds: 12.0, kind: Kind::Pure,   build: m3_depth::together },
         SceneDef { id: "Z17", name: "build_and_ship",    seconds: 13.0, kind: Kind::Studio, build: m3_studio::build_and_ship },
         // ── Movement IV · THE PROOF ─────────────────────────────────
         SceneDef { id: "Z18", name: "the_ledger",        seconds: 19.0, kind: Kind::Pure,   build: m4_proof::the_ledger },
         SceneDef { id: "Z19", name: "the_receipts",      seconds: 13.0, kind: Kind::Pure,   build: m4_proof::the_receipts },
         SceneDef { id: "Z19B", name: "built_with_vieww", seconds: 13.0, kind: Kind::Pure,   build: m4_built::built_with_vieww },
+        SceneDef { id: "Z19C", name: "the_frame_itself", seconds: 14.0, kind: Kind::Pure,   build: m4_depth::the_frame_itself },
+        SceneDef { id: "Z19D", name: "the_contrast",     seconds: 11.0, kind: Kind::Pure,   build: m4_depth::the_contrast },
         // ── Movement V · THE RELEASE ────────────────────────────────
         SceneDef { id: "Z20", name: "the_pullback",      seconds: 10.0, kind: Kind::Studio, build: m5_release::the_pullback },
+        SceneDef { id: "Z20B", name: "the_flight",       seconds: 11.0, kind: Kind::Pure,   build: m5_depth::the_flight },
         SceneDef { id: "Z21", name: "the_endcard",       seconds: 18.0, kind: Kind::Pure,   build: m5_release::the_endcard },
         SceneDef { id: "Z22", name: "the_hold",          seconds: 10.0, kind: Kind::Pure,   build: m5_release::the_hold },
     ]
@@ -269,9 +289,9 @@ pub fn scenes() -> Vec<SceneDef> {
 pub fn movement_of(id: &str) -> &'static str {
     match id {
         "Z00" | "Z01" | "Z02" | "Z03" | "Z04" | "Z05" => "MOVEMENT I",
-        "Z06" | "Z07" | "Z08" | "Z09" | "Z10" | "Z10B" | "Z10C" | "Z10D" => "MOVEMENT II",
-        "Z11" | "Z12" | "Z12B" | "Z13" | "Z13B" | "Z14" | "Z15" | "Z16" | "Z17" => "MOVEMENT III",
-        "Z18" | "Z19" | "Z19B" => "MOVEMENT IV",
+        "Z06" | "Z07" | "Z08" | "Z09" | "Z10" | "Z10B" | "Z10C" | "Z10D" | "Z10E" | "Z10F" | "Z10G" => "MOVEMENT II",
+        "Z11" | "Z12" | "Z12B" | "Z13" | "Z13B" | "Z13C" | "Z13D" | "Z14" | "Z15" | "Z16" | "Z16B" | "Z17" => "MOVEMENT III",
+        "Z18" | "Z19" | "Z19B" | "Z19C" | "Z19D" => "MOVEMENT IV",
         _ => "MOVEMENT V",
     }
 }

@@ -29,6 +29,34 @@ vieww-text.workspace = true
 # THE SPARK (keynote_z) renders the *actual* viewwstudio — the real app
 # mounts on the film's own FrameDriver, driven by a frame-indexed script.
 viewwstudio.workspace = true
+# ── The seven-minute cut's depth scenes: every crate that could carry a
+# beat on screen got one ──
+# Z10E: motion blur — the shutter, averaged in linear light.
+vieww-video.workspace = true
+# Z13D: the designer's After Effects export, played natively.
+vieww-lottie.workspace = true
+# Z13D: the asset pipeline — sprite sheet, mips, atlas.
+vieww-image.workspace = true
+vieww-asset.workspace = true
+# Z10F: the dataflow cook — operators, dirty flags, the trail.
+vieww-graph.workspace = true
+# Z10G: the ECS swarm — the fixed loop, A* routing.
+vieww-game.workspace = true
+# Z16B: together — RGA text, presence, the merge.
+vieww-collab.workspace = true
+# Z13C: the arena — recognisers, the fling; the retained canvas stage.
+vieww-gestures.workspace = true
+vieww-canvas.workspace = true
+# Z20B: the flight — shared elements, registry to overlay.
+vieww-element.workspace = true
+# Z19C: the frame itself — lifted, compiled, planned, timed, mounted.
+vieww-scene.workspace = true
+vieww-render-graph.workspace = true
+vieww-render-planner.workspace = true
+vieww-devtools.workspace = true
+vieww-test-harness.workspace = true
+# Z19D: the contrast — WCAG ratios, computed live.
+vieww-accessibility.workspace = true
 
 [lints]
 workspace = true

@@ -47,26 +47,38 @@ fn chord(id: &str) -> &'static [u8] {
         "Z10C" => &[29, 41, 48, 52, 57, 64],    // Fmaj7
         "Z10D" => &[31, 43, 50, 55, 59, 64],    // G6
         "Z10B" => &[33, 45, 52, 55, 60, 64],    // Am7
+        "Z10E" => &[26, 38, 45, 50, 53, 57],    // Dm7 — the shutter's half-light
+        "Z10F" => &[31, 43, 48, 55, 62],        // Gsus4 — the cook's pulse
+        "Z10G" => &[33, 45, 52, 57, 59, 64],    // Am add9 — the swarm's drift
         "Z11" => &[36, 48, 55, 59, 62, 64],     // Cmaj9
         "Z12" => &[33, 45, 52, 55, 60],         // Am7
         "Z12B" => &[29, 41, 48, 52, 57, 64],    // Fmaj7
         "Z13" => &[31, 43, 50, 55, 59],         // G
         "Z13B" => &[28, 40, 47, 52, 55, 59],    // Em7
+        "Z13C" => &[36, 48, 55, 60, 64],        // C — the arena's clarity
+        "Z13D" => &[26, 38, 45, 50, 53, 57],    // Dm7 — the designer's turn
         "Z14" => &[29, 41, 48, 52, 57],         // Fmaj7
         "Z15" => &[36, 48, 55, 60, 64, 67],     // C
         "Z16" => &[33, 45, 52, 57, 60, 64],     // Am
+        "Z16B" => &[29, 41, 48, 52, 57, 64],    // Fmaj7 — the merge's warmth
         "Z17" => &[31, 43, 50, 55, 60, 62],     // G sus4 → the build
         "Z18" => &[33, 45, 52, 55, 60, 64],     // Am7
         "Z19" => &[29, 41, 48, 52, 57, 60],     // Fmaj7
         "Z19B" => &[31, 43, 50, 55, 59, 62],    // G
+        "Z19C" => &[33, 45, 52, 55, 60, 64],    // Am7 — the frame, inward
+        "Z19D" => &[29, 41, 48, 53, 57],        // F — the check, plain
         "Z20" => &[31, 43, 50, 55, 60, 62],     // G sus — the lift
+        "Z20B" => &[31, 43, 50, 55, 59, 67],    // G — the flight, opening
         _ => &[24, 36, 43, 48, 52, 55, 60, 64, 67], // C — home
     }
 }
 
 /// Whether the pulse and plucks play under a scene.
 fn moving(id: &str) -> bool {
-    !matches!(id, "Z00" | "Z01" | "Z02" | "Z05" | "Z20" | "Z21" | "Z22")
+    !matches!(
+        id,
+        "Z00" | "Z01" | "Z02" | "Z05" | "Z20" | "Z20B" | "Z21" | "Z22"
+    )
 }
 
 fn tone(note: f32, wave: Waveform, hold: f32, attack: f32, release: f32) -> Tone {
@@ -183,6 +195,48 @@ pub fn render() -> Samples {
         let land = z06 + (0.58 + k as f32 * 0.016 + 0.05) * 15.0;
         let m = 72.0 + PENTA[k % 5] + 12.0 * (k / 5) as f32;
         ui.tone_at(tone(m, Waveform::Sine, 0.01, 0.002, 0.5), ms(land), 0.05);
+    }
+    // Z10E: the shutter's tick, each sample landing as the angle sweeps.
+    let z10e = start_of("Z10E");
+    for k in 0..8 {
+        let at = z10e + 2.2 + k as f32 * 0.55;
+        ui.tone_at(tone(84.0, Waveform::Square, 0.003, 0.001, 0.04), ms(at), 0.016);
+    }
+    // Z10G: the wall opens, the path is found again.
+    let z10g = start_of("Z10G");
+    ui.tone_at(tone(38.0, Waveform::Sine, 0.06, 0.003, 0.35), ms(z10g + 6.5), 0.30);
+    ui.tone_at(tone(79.0, Waveform::Sine, 0.02, 0.002, 0.6), ms(z10g + 6.9), 0.05);
+    // Z13C: the tap, the drag's win, the release.
+    let z13c = start_of("Z13C");
+    ui.tone_at(tone(91.0, Waveform::Sine, 0.006, 0.001, 0.08), ms(z13c + 2.25), 0.05);
+    ui.tone_at(tone(74.0, Waveform::Square, 0.004, 0.001, 0.06), ms(z13c + 4.4), 0.03);
+    ui.tone_at(tone(62.0, Waveform::Sine, 0.05, 0.002, 0.4), ms(z13c + 6.2), 0.16);
+    // Z13D: each loop of the composition, a pluck.
+    let z13d = start_of("Z13D");
+    for k in 0..6 {
+        ui.tone_at(tone(76.0, Waveform::Triangle, 0.01, 0.002, 0.5), ms(z13d + k as f32 * 2.0), 0.04);
+    }
+    // Z16B: each merge, a shimmer.
+    let z16b = start_of("Z16B");
+    for k in 0..3 {
+        let at = z16b + [4.0, 7.2, 10.4][k];
+        ui.tone_at(tone(96.0, Waveform::Sine, 0.02, 0.01, 0.9), ms(at), 0.03);
+        ui.tone_at(tone(103.0, Waveform::Sine, 0.02, 0.012, 1.1), ms(at + 0.06), 0.022);
+    }
+    // Z19C: the plan compiles, pass by pass.
+    let z19c = start_of("Z19C");
+    for k in 0..4 {
+        ui.tone_at(tone(67.0 + k as f32 * 3.0, Waveform::Sine, 0.008, 0.001, 0.3), ms(z19c + 1.6 + k as f32 * 0.3), 0.04);
+    }
+    // Z19D: each ratio's landing, soft.
+    let z19d = start_of("Z19D");
+    for k in 0..5 {
+        ui.tone_at(tone(72.0 + PENTA[k % 5], Waveform::Sine, 0.01, 0.002, 0.4), ms(z19d + 1.4 + 0.12 * k as f32), 0.035);
+    }
+    // Z20B: the flight rises — a quick ascending arpeggio under the swell.
+    let z20b = start_of("Z20B");
+    for (k, m) in [55.0_f32, 59.0, 62.0, 67.0].iter().enumerate() {
+        ui.tone_at(tone(m + 12.0, Waveform::Triangle, 0.03, 0.004, 0.5), ms(z20b + 3.2 + k as f32 * 0.28), 0.05);
     }
     // The studio: a soft click on every action the session takes.
     for (at, _) in super::script::session() {
