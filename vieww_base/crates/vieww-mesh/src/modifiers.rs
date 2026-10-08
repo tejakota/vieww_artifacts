@@ -94,6 +94,143 @@ pub enum Modifier {
         distance: f32,
     },
     FlipNormals,
+    /// Blender's Solidify: give a surface `thickness` (inward along the
+    /// normals), with rims closing its open boundary.
+    Solidify {
+        thickness: f32,
+    },
+    /// Blender's Wireframe: every edge becomes a square strut of
+    /// `thickness`.
+    Wireframe {
+        thickness: f32,
+    },
+    /// Blender's Wave: a radial ripple in y from the origin of the xz plane,
+    /// `amplitude` high, `wavelength` apart, travelling at `speed` · `time`.
+    Wave {
+        amplitude: f32,
+        wavelength: f32,
+        speed: f32,
+        time: f32,
+        falloff: f32,
+    },
+    /// Blender's Cast (sphere): push vertices toward a sphere of the mesh's
+    /// mean radius by `factor` (0 = unchanged, 1 = a sphere).
+    Cast {
+        factor: f32,
+    },
+}
+
+/// Blender's Screw / a lathe: revolve a profile of `(radius, y)` points
+/// around the y axis through `angle` radians in `segments` steps (closed
+/// when the angle is a full turn), rising `height` over the sweep (a screw).
+#[must_use]
+pub fn lathe(profile: &[[f32; 2]], segments: usize, angle: f32, height: f32) -> Mesh {
+    let segs = segments.max(3);
+    let full = (angle.abs() - std::f32::consts::TAU).abs() < 1e-4 && height.abs() < 1e-9;
+    let rings = if full { segs } else { segs + 1 };
+    let mut m = Mesh::default();
+    for r in 0..rings {
+        #[allow(clippy::cast_precision_loss)]
+        let t = r as f32 / segs as f32;
+        let (s, c) = (angle * t).sin_cos();
+        for (k, p) in profile.iter().enumerate() {
+            m.positions.push([p[0] * c, p[1] + height * t, p[0] * s]);
+            #[allow(clippy::cast_precision_loss)]
+            m.uvs.push([t, k as f32 / (profile.len().max(2) - 1) as f32]);
+        }
+    }
+    let n = profile.len();
+    for r in 0..segs {
+        let r2 = if full { (r + 1) % segs } else { r + 1 };
+        for k in 0..n.saturating_sub(1) {
+            #[allow(clippy::cast_possible_truncation)]
+            let (a, b, c, d) = ((r * n + k) as u32, (r * n + k + 1) as u32, (r2 * n + k) as u32, (r2 * n + k + 1) as u32);
+            m.indices.extend_from_slice(&[a, c, b, b, c, d]);
+        }
+    }
+    m.compute_normals();
+    m
+}
+
+fn solidify(mesh: &Mesh, thickness: f32) -> Mesh {
+    let mut src = mesh.clone();
+    if !src.has_normals() {
+        src.compute_normals();
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let n = src.positions.len() as u32;
+    let mut out = src.clone();
+    for (i, p) in src.positions.iter().enumerate() {
+        let nn = src.normals[i];
+        out.positions.push([p[0] - nn[0] * thickness, p[1] - nn[1] * thickness, p[2] - nn[2] * thickness]);
+        out.normals.push([-nn[0], -nn[1], -nn[2]]);
+        if src.has_uvs() {
+            out.uvs.push(src.uvs[i]);
+        }
+    }
+    for t in src.indices.as_chunks::<3>().0 {
+        out.indices.extend_from_slice(&[t[0] + n, t[2] + n, t[1] + n]);
+    }
+    // Rims: directed edges whose reverse is absent are the boundary.
+    let mut edges = std::collections::HashSet::new();
+    for t in src.indices.as_chunks::<3>().0 {
+        for k in 0..3 {
+            edges.insert((t[k], t[(k + 1) % 3]));
+        }
+    }
+    let mut boundary: Vec<(u32, u32)> = edges.iter().copied().filter(|(a, b)| !edges.contains(&(*b, *a))).collect();
+    boundary.sort_unstable();
+    for (a, b) in boundary {
+        out.indices.extend_from_slice(&[a, a + n, b, b, a + n, b + n]);
+    }
+    out.compute_normals();
+    out
+}
+
+fn wireframe(mesh: &Mesh, thickness: f32) -> Mesh {
+    let mut edges = std::collections::BTreeSet::new();
+    for t in mesh.indices.as_chunks::<3>().0 {
+        for k in 0..3 {
+            let (a, b) = (t[k], t[(k + 1) % 3]);
+            edges.insert((a.min(b), a.max(b)));
+        }
+    }
+    let mut out = Mesh::default();
+    let h = thickness * 0.5;
+    for (a, b) in edges {
+        let (pa, pb) = (mesh.positions[a as usize], mesh.positions[b as usize]);
+        let d = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+        let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        if l < 1e-9 {
+            continue;
+        }
+        let d = [d[0] / l, d[1] / l, d[2] / l];
+        let up = if d[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
+        let cross = |u: [f32; 3], v: [f32; 3]| [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        let norm = |v: [f32; 3]| {
+            let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-12);
+            [v[0] / l, v[1] / l, v[2] / l]
+        };
+        let u = norm(cross(d, up));
+        let v = cross(d, u);
+        #[allow(clippy::cast_possible_truncation)]
+        let base = out.positions.len() as u32;
+        for p in [pa, pb] {
+            for (su, sv) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+                out.positions.push([
+                    p[0] + (u[0] * su + v[0] * sv) * h,
+                    p[1] + (u[1] * su + v[1] * sv) * h,
+                    p[2] + (u[2] * su + v[2] * sv) * h,
+                ]);
+            }
+        }
+        for k in 0..4u32 {
+            let (a0, a1, b0, b1) = (base + k, base + (k + 1) % 4, base + 4 + k, base + 4 + (k + 1) % 4);
+            out.indices.extend_from_slice(&[a0, a1, b0, a1, b1, b0]);
+        }
+    }
+    out.compute_normals();
+    out
 }
 
 /// Modifiers in order.
@@ -432,6 +569,39 @@ impl Modifier {
                     out.indices.extend(mesh.indices.iter().map(|i| i + base));
                 }
                 out
+            }
+            Self::Solidify { thickness } => solidify(mesh, thickness),
+            Self::Wireframe { thickness } => wireframe(mesh, thickness),
+            Self::Wave {
+                amplitude,
+                wavelength,
+                speed,
+                time,
+                falloff,
+            } => map_positions(mesh, |p| {
+                let r = (p[0] * p[0] + p[2] * p[2]).sqrt();
+                let k = std::f32::consts::TAU / wavelength.max(1e-6);
+                let fall = if falloff > 0.0 { (-r / falloff).exp() } else { 1.0 };
+                [p[0], p[1] + amplitude * fall * (k * r - speed * time * k).sin(), p[2]]
+            }),
+            Self::Cast { factor } => {
+                let n = mesh.positions.len().max(1);
+                let c = mesh.positions.iter().fold([0.0f32; 3], |a, p| [a[0] + p[0], a[1] + p[1], a[2] + p[2]]);
+                #[allow(clippy::cast_precision_loss)]
+                let c = c.map(|v| v / n as f32);
+                #[allow(clippy::cast_precision_loss)]
+                let radius = mesh
+                    .positions
+                    .iter()
+                    .map(|p| ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2)).sqrt())
+                    .sum::<f32>()
+                    / n as f32;
+                map_positions(mesh, |p| {
+                    let d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+                    let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt().max(1e-12);
+                    let s = 1.0 + (radius / l - 1.0) * factor;
+                    [c[0] + d[0] * s, c[1] + d[1] * s, c[2] + d[2] * s]
+                })
             }
             Self::Subdivide { levels, smooth } => (0..levels).fold(mesh.clone(), |m, _| {
                 if smooth {
@@ -784,5 +954,55 @@ mod tests {
             .with(Modifier::Weld { distance: 1e-4 });
         let out = s.apply(&cube());
         assert_eq!(out.positions.len(), 12, "the shared face welded");
+    }
+
+    fn signed_volume(m: &Mesh) -> f32 {
+        m.indices
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|t| {
+                let (a, b, c) = (m.positions[t[0] as usize], m.positions[t[1] as usize], m.positions[t[2] as usize]);
+                (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6.0
+            })
+            .sum()
+    }
+
+    #[test]
+    fn a_lathed_cylinder_has_the_cylinder_volume() {
+        // Closed profile: axis → rim → rim → axis.
+        let m = lathe(&[[0.0, 0.0], [1.0, 0.0], [1.0, 2.0], [0.0, 2.0]], 96, std::f32::consts::TAU, 0.0);
+        let v = signed_volume(&m).abs();
+        assert!((v - std::f32::consts::PI * 2.0).abs() < 0.02, "{v}");
+        let screw = lathe(&[[1.0, 0.0], [1.2, 0.0]], 32, std::f32::consts::TAU * 2.0, 3.0);
+        let (_, hi) = screw.bounds().expect("b");
+        assert!((hi[1] - 3.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn solidify_turns_a_plane_into_a_closed_slab() {
+        // A unit quad in xz, facing +y.
+        let quad = Mesh {
+            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+            normals: vec![],
+            uvs: vec![],
+            indices: vec![0, 2, 1, 0, 3, 2],
+        };
+        let slab = Modifier::Solidify { thickness: 0.25 }.apply(&quad);
+        assert_eq!(slab.triangles(), 2 + 2 + 8);
+        assert!((signed_volume(&slab).abs() - 0.25).abs() < 1e-4);
+    }
+
+    #[test]
+    fn wireframe_makes_one_strut_per_edge_and_cast_spheres_a_cube() {
+        let cube = super::cube(2.0);
+        let wire = Modifier::Wireframe { thickness: 0.05 }.apply(&cube);
+        // 12 cube edges + 6 face diagonals = 18 struts × 8 triangles.
+        assert_eq!(wire.triangles(), 18 * 8);
+        let sph = Modifier::Cast { factor: 1.0 }.apply(&cube);
+        let r: Vec<f32> = sph.positions.iter().map(|p| (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt()).collect();
+        assert!(r.iter().all(|v| (v - r[0]).abs() < 1e-4));
+        let wave = Modifier::Wave { amplitude: 0.5, wavelength: 1.0, speed: 1.0, time: 0.25, falloff: 0.0 }.apply(&cube);
+        assert!(wave.positions.iter().zip(&cube.positions).any(|(a, b)| (a[1] - b[1]).abs() > 0.1));
     }
 }

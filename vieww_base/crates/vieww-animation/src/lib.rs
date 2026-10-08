@@ -73,6 +73,7 @@ pub mod particles;
 pub mod phase;
 pub mod player;
 pub mod retarget;
+pub mod scroll_scene;
 pub mod sequence;
 pub mod shared;
 pub mod skeletal;
