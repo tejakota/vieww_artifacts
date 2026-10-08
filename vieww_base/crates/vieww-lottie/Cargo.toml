@@ -11,6 +11,10 @@ categories.workspace = true
 
 [dependencies]
 vieww-foundation.workspace = true
+# Expressions (`x` on any property) and text animators.
+vieww-animation.workspace = true
+# Embedded image assets (PNG/JPEG/GIF/BMP decoded by vieww's own codecs).
+vieww-image.workspace = true
 
 [lints]
 workspace = true

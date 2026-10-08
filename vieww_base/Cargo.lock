@@ -5371,7 +5371,9 @@ dependencies = [
 name = "vieww-lottie"
 version = "0.1.0"
 dependencies = [
+ "vieww-animation",
  "vieww-foundation",
+ "vieww-image",
 ]
 
 [[package]]
