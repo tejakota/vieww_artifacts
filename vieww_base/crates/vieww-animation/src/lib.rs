@@ -71,11 +71,13 @@ pub mod noise;
 pub mod particle_system;
 pub mod particles;
 pub mod phase;
+pub mod player;
 pub mod retarget;
 pub mod sequence;
 pub mod shared;
 pub mod skeletal;
 pub mod spring;
+pub mod text_animator;
 pub mod state_machine;
 pub mod units;
 

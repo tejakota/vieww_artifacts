@@ -76,6 +76,7 @@ use std::fmt;
 
 pub mod csg;
 pub mod gltf;
+pub mod implicit;
 pub mod modifiers;
 
 /// A point in three dimensions.

@@ -246,6 +246,83 @@ pub struct Layer {
     pub effects: Vec<Effect>,
     pub adjustment: bool,
     pub visible: bool,
+    /// AE's 3D switch: when set and the comp has a [`CompCamera`], the
+    /// layer is a plane in 3D, projected through the camera and lit by the
+    /// comp's [`CompLight`]s.
+    pub three_d: Option<Layer3D>,
+}
+
+/// A 3D layer's extra transform (AE's Z position, X/Y rotation and
+/// Material Options). Coordinates follow AE: x right, y down, z into the
+/// screen; the layer's 2D transform supplies x, y, anchor, scale and Z
+/// rotation.
+#[derive(Debug, Clone)]
+pub struct Layer3D {
+    pub z: Prop,
+    /// Degrees.
+    pub rotation_x: Prop,
+    /// Degrees.
+    pub rotation_y: Prop,
+    pub accepts_lights: bool,
+    /// Diffuse response, 0..1.
+    pub diffuse: f32,
+    /// Light the layer reflects regardless of lights.
+    pub ambient: f32,
+}
+
+impl Default for Layer3D {
+    fn default() -> Self {
+        Self {
+            z: 0.0.into(),
+            rotation_x: 0.0.into(),
+            rotation_y: 0.0.into(),
+            accepts_lights: true,
+            diffuse: 0.5,
+            ambient: 1.0,
+        }
+    }
+}
+
+/// AE's camera layer: a two-node camera (position + point of interest) and
+/// a zoom (the distance at which one comp pixel is one screen pixel).
+#[derive(Debug, Clone)]
+pub struct CompCamera {
+    pub x: Prop,
+    pub y: Prop,
+    pub z: Prop,
+    pub poi_x: Prop,
+    pub poi_y: Prop,
+    pub poi_z: Prop,
+    pub zoom: Prop,
+}
+
+impl CompCamera {
+    /// AE's default camera for a `w × h` comp: centred, looking down +z
+    /// from `-zoom`, so a 3D layer at z = 0 renders exactly as 2D.
+    #[must_use]
+    pub fn default_for(w: u32, h: u32, zoom: f32) -> Self {
+        #[allow(clippy::cast_precision_loss)]
+        let (cx, cy) = (w as f32 * 0.5, h as f32 * 0.5);
+        Self {
+            x: cx.into(),
+            y: cy.into(),
+            z: (-zoom).into(),
+            poi_x: cx.into(),
+            poi_y: cy.into(),
+            poi_z: 0.0.into(),
+            zoom: zoom.into(),
+        }
+    }
+}
+
+/// AE's light layer kinds.
+#[derive(Debug, Clone)]
+pub enum CompLight {
+    Ambient { intensity: f32 },
+    /// From a point, falling off with distance past `falloff_start`.
+    Point { x: Prop, y: Prop, z: Prop, intensity: f32, falloff_start: f32 },
+    /// Parallel rays travelling along (dx, dy, dz).
+    Parallel { dx: f32, dy: f32, dz: f32, intensity: f32 },
 }
 
 impl fmt::Debug for Layer {
@@ -282,7 +359,15 @@ impl Layer {
             effects: Vec::new(),
             adjustment: false,
             visible: true,
+            three_d: None,
         }
+    }
+
+    /// Make this a 3D layer.
+    #[must_use]
+    pub fn three_d(mut self, l: Layer3D) -> Self {
+        self.three_d = Some(l);
+        self
     }
 
     /// An adjustment layer applying `effects` to everything beneath.
@@ -397,6 +482,9 @@ pub struct Composition {
     pub background: Color,
     /// Bottom first.
     pub layers: Vec<Layer>,
+    /// The active camera; without one, 3D layers render as 2D.
+    pub camera: Option<CompCamera>,
+    pub lights: Vec<CompLight>,
 }
 
 impl Composition {
@@ -410,7 +498,100 @@ impl Composition {
             duration,
             background: Color::rgba(0, 0, 0, 0),
             layers: Vec::new(),
+            camera: None,
+            lights: Vec::new(),
         }
+    }
+
+    /// Project a comp-space 3D point through the camera at `t`:
+    /// screen position and depth along the view axis.
+    #[must_use]
+    pub fn project(&self, p: [f32; 3], t: f32) -> Option<(Offset, f32)> {
+        let cam = self.camera.as_ref()?;
+        let eye = [cam.x.at(t), cam.y.at(t), cam.z.at(t)];
+        let poi = [cam.poi_x.at(t), cam.poi_y.at(t), cam.poi_z.at(t)];
+        let f = norm3(sub3(poi, eye));
+        // AE's y is down, so "up" is −y.
+        let r = norm3(cross3(f, [0.0, -1.0, 0.0]));
+        let r = if dot3(r, r) < 1e-12 { [1.0, 0.0, 0.0] } else { r };
+        let u = cross3(r, f);
+        let d = sub3(p, eye);
+        let (x, y, z) = (dot3(d, r), dot3(d, u), dot3(d, f));
+        if z <= 1e-3 {
+            return None;
+        }
+        let zoom = cam.zoom.at(t);
+        #[allow(clippy::cast_precision_loss)]
+        let (cx, cy) = (self.width as f32 * 0.5, self.height as f32 * 0.5);
+        Some((Offset::new(cx + x * zoom / z, cy - y * zoom / z), z))
+    }
+
+    /// Layer pixel `(u, v)` → comp 3D point at `t` (a 3D layer's plane).
+    fn layer_point_3d(&self, i: usize, u: f32, v: f32, t: f32) -> [f32; 3] {
+        let layer = &self.layers[i];
+        let l3 = layer.three_d.clone().unwrap_or_default();
+        let tr = &layer.transform;
+        let (ax, ay) = (tr.anchor_x.at(t), tr.anchor_y.at(t));
+        let mut p = [(u - ax) * tr.scale_x.at(t), (v - ay) * tr.scale_y.at(t), 0.0];
+        p = rot_z(p, tr.rotation.at(t).to_radians());
+        p = rot_y(p, l3.rotation_y.at(t).to_radians());
+        p = rot_x(p, l3.rotation_x.at(t).to_radians());
+        let mut q = [p[0] + tr.x.at(t), p[1] + tr.y.at(t), p[2] + l3.z.at(t)];
+        // Parents contribute their 2D offset (enough for 3D null rigs).
+        let mut par = layer.parent;
+        let mut guard = 0;
+        while let Some(pi) = par {
+            let pl = &self.layers[pi];
+            q[0] += pl.transform.x.at(t) - pl.transform.anchor_x.at(t);
+            q[1] += pl.transform.y.at(t) - pl.transform.anchor_y.at(t);
+            if let Some(p3) = &pl.three_d {
+                q[2] += p3.z.at(t);
+            }
+            par = pl.parent;
+            guard += 1;
+            if guard > self.layers.len() {
+                break;
+            }
+        }
+        q
+    }
+
+    /// Light arriving at a 3D layer (multiplier on its colour).
+    fn light_factor(&self, i: usize, t: f32, w: f32, h: f32) -> f32 {
+        let Some(l3) = &self.layers[i].three_d else { return 1.0 };
+        if !l3.accepts_lights || self.lights.is_empty() {
+            return 1.0;
+        }
+        let c = self.layer_point_3d(i, w * 0.5, h * 0.5, t);
+        let a = self.layer_point_3d(i, 0.0, 0.0, t);
+        let b = self.layer_point_3d(i, w, 0.0, t);
+        let d = self.layer_point_3d(i, 0.0, h, t);
+        // Facing the camera is −z in AE; the normal is two-sided.
+        let mut n = norm3(cross3(sub3(b, a), sub3(d, a)));
+        if let Some(cam) = &self.camera {
+            let eye = [cam.x.at(t), cam.y.at(t), cam.z.at(t)];
+            if dot3(n, sub3(eye, c)) < 0.0 {
+                n = [-n[0], -n[1], -n[2]];
+            }
+        }
+        let mut total = 0.0;
+        for l in &self.lights {
+            total += match l {
+                CompLight::Ambient { intensity } => intensity * l3.ambient,
+                CompLight::Parallel { dx, dy, dz, intensity } => {
+                    let dir = norm3([-dx, -dy, -dz]);
+                    intensity * l3.diffuse * dot3(n, dir).max(0.0)
+                }
+                CompLight::Point { x, y, z, intensity, falloff_start } => {
+                    let lp = [x.at(t), y.at(t), z.at(t)];
+                    let v = sub3(lp, c);
+                    let dist = dot3(v, v).sqrt();
+                    let fall = if dist > *falloff_start { (falloff_start / dist).powi(2) } else { 1.0 };
+                    intensity * l3.diffuse * dot3(n, norm3(v)).max(0.0) * fall
+                }
+            };
+        }
+        total
     }
 
     #[must_use]
@@ -477,17 +658,35 @@ impl Composition {
         for e in &layer.effects {
             img = e(&img, t);
         }
-        let m = self.world_matrix(i, t);
-        let inv = m.invert()?;
+        let (sw, sh) = (i64::from(img.width()), i64::from(img.height()));
+        #[allow(clippy::cast_precision_loss)]
+        let (swf, shf) = (sw as f32, sh as f32);
+        // 2D layers invert an affine; 3D layers under a camera invert the
+        // plane's homography (exact for a projected plane).
+        let inv: Box<dyn Fn(Offset) -> Option<Offset>> = if layer.three_d.is_some() && self.camera.is_some() {
+            let corners = [(0.0, 0.0), (swf, 0.0), (swf, shf), (0.0, shf)];
+            let mut src = Vec::new();
+            let mut dst = Vec::new();
+            for (u, v) in corners {
+                let (p, _) = self.project(self.layer_point_3d(i, u, v, t), t)?;
+                src.push(Offset::new(u, v));
+                dst.push(p);
+            }
+            let hinv = crate::solve::homography(&src, &dst)?.inverse()?;
+            Box::new(move |p| Some(hinv.apply(p)))
+        } else {
+            let m = self.world_matrix(i, t).invert()?;
+            Box::new(move |p| Some(m.apply(p)))
+        };
+        let light = self.light_factor(i, t, swf, shf);
         let op = layer.transform.opacity.at(t).clamp(0.0, 1.0);
         let (w, h) = (self.width as usize, self.height as usize);
-        let (sw, sh) = (i64::from(img.width()), i64::from(img.height()));
         let src = img.pixels();
         let mut out = vec![0.0f32; w * h * 4];
         for y in 0..h {
             for x in 0..w {
                 #[allow(clippy::cast_precision_loss)]
-                let p = inv.apply(Offset::new(x as f32 + 0.5, y as f32 + 0.5));
+                let Some(p) = inv(Offset::new(x as f32 + 0.5, y as f32 + 0.5)) else { continue };
                 let (fx, fy) = (p.dx - 0.5, p.dy - 0.5);
                 let (x0, y0) = (fx.floor(), fy.floor());
                 let (tx, ty) = (fx - x0, fy - y0);
@@ -517,9 +716,10 @@ impl Composition {
                     acc[3] += a;
                 }
                 let o = (y * w + x) * 4;
-                for c in 0..4 {
-                    out[o + c] = acc[c] * op;
+                for c in 0..3 {
+                    out[o + c] = acc[c] * op * light;
                 }
+                out[o + 3] = acc[3] * op;
             }
         }
         Some(out)
@@ -540,7 +740,38 @@ impl Composition {
         .repeat(w * h);
         // Layers used as a matte by the layer below them are not drawn.
         let is_matte = |i: usize| i > 0 && self.layers[i - 1].track_matte.is_some();
-        for (i, layer) in self.layers.iter().enumerate() {
+        // AE's 3D sort: within each contiguous run of 3D layers, farthest
+        // first (by the layer centre's depth from the camera).
+        let mut order: Vec<usize> = (0..self.layers.len()).collect();
+        if self.camera.is_some() {
+            let depth = |i: usize| {
+                let l = &self.layers[i];
+                let (w, h) = self.source_image(l, t).map_or((0.0, 0.0), |im| {
+                    #[allow(clippy::cast_precision_loss)]
+                    (im.width() as f32, im.height() as f32)
+                });
+                self.project(self.layer_point_3d(i, w * 0.5, h * 0.5, t), t)
+                    .map_or(f32::INFINITY, |(_, z)| z)
+            };
+            let mut k = 0;
+            while k < order.len() {
+                if self.layers[k].three_d.is_none() {
+                    k += 1;
+                    continue;
+                }
+                let start = k;
+                while k < order.len() && self.layers[k].three_d.is_some() {
+                    k += 1;
+                }
+                let mut run: Vec<(usize, f32)> = (start..k).map(|i| (i, depth(i))).collect();
+                run.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+                for (j, (i, _)) in run.into_iter().enumerate() {
+                    order[start + j] = i;
+                }
+            }
+        }
+        for i in order {
+            let layer = &self.layers[i];
             if !layer.active(t) || is_matte(i) {
                 continue;
             }
@@ -614,6 +845,36 @@ impl Composition {
         let n = (self.duration * self.fps as f32).round() as usize;
         n.max(1)
     }
+}
+
+fn sub3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+fn norm3(a: [f32; 3]) -> [f32; 3] {
+    let l = dot3(a, a).sqrt();
+    if l < 1e-12 {
+        a
+    } else {
+        [a[0] / l, a[1] / l, a[2] / l]
+    }
+}
+fn rot_x(p: [f32; 3], a: f32) -> [f32; 3] {
+    let (s, c) = a.sin_cos();
+    [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c]
+}
+fn rot_y(p: [f32; 3], a: f32) -> [f32; 3] {
+    let (s, c) = a.sin_cos();
+    [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c]
+}
+fn rot_z(p: [f32; 3], a: f32) -> [f32; 3] {
+    let (s, c) = a.sin_cos();
+    [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]]
 }
 
 fn to_image(acc: &[f32], w: u32, h: u32) -> Image {
@@ -795,5 +1056,51 @@ mod tests {
         assert_eq!(px(&img, 1, 0)[0], 50, "reversed: comp 1.5 → source 0.5");
         assert_eq!(px(&img, 2, 0)[0], 100, "precomp slid by 0.5s");
         assert_eq!(c.frame_count(), 30);
+    }
+
+    #[test]
+    fn a_3d_layer_at_z_zero_under_the_default_camera_renders_as_2d() {
+        let solid = Source::Solid { color: Color::rgb(200, 40, 40), width: 20, height: 10 };
+        let mut flat = Composition::new("flat", 64, 48, 30, 1.0);
+        flat.push(Layer::new("s", solid.clone()).at(32.0, 24.0).anchor(10.0, 5.0));
+        let mut deep = flat.clone();
+        deep.layers[0].three_d = Some(Layer3D::default());
+        deep.camera = Some(CompCamera::default_for(64, 48, 100.0));
+        let (a, b) = (flat.render(0.0), deep.render(0.0));
+        let diff = a.pixels().iter().zip(b.pixels()).filter(|(x, y)| x.abs_diff(**y) > 3).count();
+        assert!(diff < 20, "{diff}");
+    }
+
+    #[test]
+    fn farther_layers_shrink_and_sort_behind_nearer_ones() {
+        let red = Source::Solid { color: Color::rgb(255, 0, 0), width: 20, height: 20 };
+        let blue = Source::Solid { color: Color::rgb(0, 0, 255), width: 20, height: 20 };
+        let mut c = Composition::new("depth", 80, 60, 30, 1.0);
+        c.camera = Some(CompCamera::default_for(80, 60, 80.0));
+        // Pushed in the "wrong" order: the near red layer first.
+        c.push(Layer::new("near", red).at(40.0, 30.0).anchor(10.0, 10.0).three_d(Layer3D::default()));
+        c.push(Layer::new("far", blue).at(40.0, 30.0).anchor(10.0, 10.0).three_d(Layer3D { z: 80.0.into(), ..Layer3D::default() }));
+        let img = c.render(0.0);
+        let px = |x: u32, y: u32| {
+            let k = ((y * 80 + x) * 4) as usize;
+            [img.pixels()[k], img.pixels()[k + 1], img.pixels()[k + 2]]
+        };
+        assert!(px(40, 30)[0] > 200, "near layer must cover the far one");
+        // The far layer is half size: no blue beyond 5 px from the centre.
+        assert!(px(40, 30 + 12)[2] < 10);
+    }
+
+    #[test]
+    fn a_layer_turned_away_from_a_parallel_light_darkens() {
+        let white = Source::Solid { color: Color::rgb(255, 255, 255), width: 20, height: 20 };
+        let mut c = Composition::new("lit", 60, 60, 30, 1.0);
+        c.camera = Some(CompCamera::default_for(60, 60, 100.0));
+        c.lights.push(CompLight::Parallel { dx: 0.0, dy: 0.0, dz: 1.0, intensity: 1.0 });
+        c.push(Layer::new("w", white).at(30.0, 30.0).anchor(10.0, 10.0).three_d(Layer3D { diffuse: 1.0, ambient: 0.0, ..Layer3D::default() }));
+        let facing = c.render(0.0).pixels()[(30 * 60 + 30) * 4];
+        c.layers[0].three_d = Some(Layer3D { rotation_y: 60.0.into(), diffuse: 1.0, ambient: 0.0, ..Layer3D::default() });
+        let turned = c.render(0.0).pixels()[(30 * 60 + 30) * 4];
+        assert!(facing > 240, "{facing}");
+        assert!(turned < facing && turned > 100, "{turned}");
     }
 }
