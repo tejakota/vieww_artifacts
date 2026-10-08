@@ -76,6 +76,7 @@ pub(crate) mod s22_the_pullback;
 pub(crate) mod s23_the_endcard;
 pub(crate) mod s24_the_loop;
 pub(crate) mod script;
+pub(crate) mod score;
 
 pub(crate) use vieww_foundation::{
     Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign, TextStyle,

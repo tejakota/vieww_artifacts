@@ -34,7 +34,7 @@ use crate::{Mixer, Samples};
 pub fn render_sound(sound: &Sound, rate: u32) -> Samples {
     match sound {
         Sound::Buffer(s) => s.clone(),
-        Sound::Tone(t) => Mixer::new(rate).add(t.clone(), 1.0).render(),
+        Sound::Tone(t) => Mixer::new(rate).add(*t, 1.0).render(),
     }
 }
 

@@ -523,7 +523,14 @@ impl Mixer {
     /// tail cut off by a render that ended at the hold is a click at the
     /// end — the very thing the envelope exists to prevent.
     pub fn tone_at(&mut self, tone: Tone, at: Duration, gain: f32) -> &mut Self {
-        let ends = at + tone.hold + tone.envelope.release;
+        // The sounding span is the later of hold and attack, plus the
+        // release — the same arithmetic `Envelope::at` performs when a
+        // hold shorter than its attack releases from the attack's peak.
+        // Counting only `hold + release` here under-measured exactly that
+        // case, and a mixer whose duration stops early cuts the tail it
+        // just promised to keep click-free.
+        let span = tone.hold.max(tone.envelope.attack) + tone.envelope.release;
+        let ends = at + span;
         self.duration = self.duration.max(ends);
         self.sources.push(Source {
             kind: SourceKind::Tone(tone),
@@ -545,6 +552,18 @@ impl Mixer {
     /// The output is mono — every source's channels are summed to one —
     /// because the mixer's job is the *sum*, and stereo is a pan decision
     /// that belongs to whoever places sounds in a field, not to the sum.
+    ///
+    /// Each tone renders only its **own span** — its attack (when the rise
+    /// outlasts the hold, the release falls from the attack's peak; see
+    /// [`Envelope::at`]), its hold, and its release tail. Beyond that span
+    /// the envelope is exactly zero, so the sample it would have summed is
+    /// the identity — and rendering it anyway is quadratic work for linear
+    /// sound. This was not theoretical: the launch film's score schedules
+    /// ~1,300 tones across a 221 s timeline, and the tone loop as it stood
+    /// walked every source to the mix's end — billions of envelope
+    /// evaluations of exactly zero, minutes of wall for a mix that is
+    /// seconds of audio. The span bound makes render linear in the sound
+    /// actually scheduled.
     #[must_use]
     pub fn render(&self) -> Samples {
         let frames = (self.duration.as_secs_f32() * as_f32(self.rate)).ceil() as usize;
@@ -572,7 +591,13 @@ impl Mixer {
                     }
                 }
                 SourceKind::Tone(tone) => {
-                    for (frame, out) in data.iter_mut().enumerate().skip(start) {
+                    // The tone's own span: zero-amplitude beyond it, so the
+                    // loop stops there instead of walking to the mix's end.
+                    let span =
+                        tone.hold.max(tone.envelope.attack) + tone.envelope.release;
+                    let len = (span.as_secs_f32() * as_f32(self.rate)).ceil() as usize;
+                    let end = start.saturating_add(len).min(frames);
+                    for (frame, out) in data.iter_mut().enumerate().take(end).skip(start) {
                         let elapsed = Duration::from_secs_f32(
                             as_f32(self.rate).recip() * (frame - start) as f32,
                         );
@@ -824,5 +849,85 @@ mod tests {
         assert_eq!(tone.at(ms(75)), 1.0);
         // Released: hold ended at 100 ms, release takes 50 ms.
         assert_eq!(tone.at(ms(150)), 0.0);
+    }
+
+    #[test]
+    fn a_short_tone_renders_only_its_own_span() {
+        // The invariant the render loop now relies on: beyond a tone's
+        // attack (when the rise outlasts the hold), hold and release, its
+        // envelope is exactly zero — so the mix there is bit-identically
+        // untouched, whatever else the timeline carries.
+        //
+        // Found by the launch film's score: ~1,300 tones across a 221 s
+        // timeline made the old loop — every source walked to the mix's
+        // end — minutes of wall for seconds of audio. The bound is a
+        // performance claim; this test is its correctness receipt: a
+        // click one second into a ten-second mix leaves every sample
+        // past its tail exactly as it was.
+        let rate = 8_000usize;
+        let mut mixer = Mixer::new(rate as u32);
+        mixer.tone_at(
+            Tone::held(440.0, Waveform::Sine, ms(5))
+                .envelope(Envelope::attack_release(ms(1), ms(40))),
+            ms(1_000),
+            0.5,
+        );
+        // A silent buffer that makes the mix long — the click is the only
+        // sound, and it must not render across the nine seconds after it.
+        mixer
+            .add_buffer(&Samples::mono(vec![0.0; rate * 10], rate as u32), Duration::ZERO, 0.0)
+            .expect("same rate");
+
+        let out = mixer.render();
+        assert_eq!(out.data.len(), rate * 10, "the mix lasts its longest source");
+        // The click sounds 1.000 s → 1.046 s (attack 1 ms, hold 5 ms,
+        // release 40 ms) — samples 8 000 → 8 368 at this rate; two samples
+        // of ceil slack, then silence — *exactly* silence, not
+        // envelope-zero summed onto silence.
+        let tail_end = 8_000 + ((46.0 / 1_000.0) * rate as f32).ceil() as usize + 2;
+        for (i, &s) in out.data.iter().enumerate() {
+            if i > tail_end {
+                assert_eq!(s, 0.0, "sample {i} beyond the click's tail must be untouched");
+            }
+        }
+        // And the click itself is present where it should be.
+        assert!(
+            out.data[8_000..8_050].iter().any(|&s| s != 0.0),
+            "the click's own span carries sound"
+        );
+    }
+
+    #[test]
+    fn a_tone_whose_attack_outlasts_its_hold_releases_from_the_attack_peak() {
+        // The span arithmetic must cover the case `Envelope::at`
+        // documents: a hold shorter than the attack releases from wherever
+        // the rise got to — which lands *later* than hold + release. Both
+        // `tone_at`'s duration accounting and the render loop's bound use
+        // the same `max(hold, attack) + release`, so the tail survives
+        // whole instead of being cut by a mix that ended early.
+        //
+        // 4 Hz square (+1 for the first 125 ms) so the wave contributes a
+        // constant and the envelope is the number under test.
+        let rate = 8_000usize;
+        let mut mixer = Mixer::new(rate as u32);
+        // Hold 0, attack 60 ms, release 20 ms: the release falls from
+        // 60 ms to 80 ms — twenty milliseconds past hold + release.
+        mixer.tone_at(
+            Tone::held(4.0, Waveform::Square, Duration::ZERO)
+                .envelope(Envelope::attack_release(ms(60), ms(20))),
+            Duration::ZERO,
+            1.0,
+        );
+        let out = mixer.render();
+        // The mix lasts the whole sounding span: 80 ms, not 20.
+        assert_eq!(out.data.len(), 8_000 * 80 / 1_000, "the duration covers the attack's tail");
+        let at = |t_ms: usize| out.data[t_ms * 8_000 / 1_000];
+        // Mid-attack: rising through 0.5.
+        assert!((at(30) - 0.5).abs() < 0.02, "mid-attack amplitude is ~0.5: {}", at(30));
+        // Mid-release (70 ms): the fall is at its half.
+        assert!((at(70) - 0.5).abs() < 0.02, "mid-release amplitude is ~0.5: {}", at(70));
+        // The tail is complete: nearly zero by 79 ms, and the last sample
+        // the mix carries is the release's own end.
+        assert!(at(79) < 0.10, "the release completes: {}", at(79));
     }
 }

@@ -1320,12 +1320,56 @@ Alongside the thirteen, the recheck also filled an examples debt: the first gap-
 
 Looking at every capability, rather than only testing it, found two real rendering bugs in code that predates this pass. Both are fixed, with regression tests that fail without the fix. First, `Path::arc_ring` started each band's inner arc from the wrong pen position, so donuts and pie wedges bulged; every `DonutChart`, progress ring and wedge was slightly wrong. Second, the native stroker drew round-join discs with the opposite winding to its segment quads, so thick round-joined strokes came out *beaded*, with a hole at every join. After the pass, the framework crates run **3,912 tests green** and the studio app runs **911**. All new code is clippy-clean under `-D warnings`.
 
+### Fourth pass: the deep subsystems — animation timing, codecs, CV, geo, AI, transports
+
+**A fourth audit asked the layer tables' hardest question yet: not "which capability is missing" but "which subsystem does a framework need before the capability is honest?"** A timing subsystem before keyframes can be frame-exact; codecs before image support means anything; computer vision before the compositor's tools are real; geospatial layouts before maps; game AI before an ECS can be called an engine; real transports before a network layer is more than a shape. All of it landed on `feature/vieww_code_base` — **eighteen thousand lines across eighty files**, each module tested:
+
+| Capability (who had it) | Closed by |
+|---|---|
+| **Lag smoothing, exact frame clocks** (GSAP `lagSmoothing`, every engine's fixed timestep) | `vieww-animation::clock` — `FrameClock`, `LagSmoother`, the GSAP contract verbatim |
+| **Animation units** (CSS `px`/`%`/`em`/`vw`, GSAP directional rotation) | `vieww-animation::units` — every CSS unit, angles, `directional_rotation` |
+| **Velocity tracking + inertia** (GSAP InertiaPlugin, UIKit dynamics) | `vieww-animation::inertia` — `VelocityTracker`, `Inertia` with snap/bounds, `Physics2D` |
+| **Phase + keyframe animators** (SwiftUI `PhaseAnimator`/`KeyframeAnimator`) | `vieww-animation::phase` — both animators, linear/cubic/spring/move keys |
+| **Cinematic sequencing** (Unreal Sequencer, Blender NLA camera cuts, AE camera rig) | `vieww-animation::cinematic` — `Sequencer` with camera cuts, blends, dolly paths, dolly zoom, shake, event markers |
+| **Duplicators** (Cavalry, AE repeaters) | `vieww-animation::duplicator` — distributions and falloffs |
+| **CSG mesh booleans** (Blender, three-csg) | `vieww-mesh::csg` — BSP booleans, volumes checked by inclusion–exclusion |
+| **glTF skins, morph targets** (three.js, Unity, Godot) | `vieww-mesh::gltf` — `JOINTS`/`WEIGHTS`, morph target and weight channels |
+| **Vertex skinning in 3D** (Unity, Unreal, three.js) | `vieww-3d::skin` — LBS + dual-quaternion, the candy-wrapper artefact measured; `Skinned`/`Points`/`Clustered` content kinds |
+| **Custom fragment shaders + node materials** (Unity ShaderGraph, Unreal, TouchDesigner GLSL TOPs) | `vieww-3d::shader` — fragment shaders and node-material graphs on the software renderer |
+| **G-buffer post stack** (Unity URP, Unreal, Godot) | `vieww-3d::post` — SSAO, SSR, DoF, bloom, fog, ACES/Reinhard/filmic tonemapping, grading, chromatic aberration, vignette, grain, FXAA |
+| **Meshlets + cluster LOD** (Unreal Nanite's shape) | `vieww-3d::meshlet` — cone culling, cluster LOD |
+| **Stereo rendering** (Unity/Unreal XR, three.js stereo) | `vieww-3d::stereo` — side-by-side and anaglyph rigs |
+| **Native image codecs** (every framework; vieww previously used the `image` crate) | `vieww-image::codec` — DEFLATE/zlib (all block types, LZ77 + dynamic Huffman), PNG (all colour types, 1–16 bit, Adam7, tRNS; adaptive-filter encoder), animated GIF (LZW, disposal, interlace; median-cut encoder), baseline JPEG (any sampling + restarts; 4:2:0 encoder), BMP — **the `image` dependency is gone from `vieww-image`** |
+| **Bitmap fonts** (game engines, embedded) | `vieww-image::bitmap_font` |
+| **AVI read/write** | `vieww-video::avi` — Motion-JPEG AVI as a `VideoSource` + writer |
+| **Computer vision** (After Effects tracker, Nuke, OpenCV) | `vieww-video::cv` — Shi–Tomasi features, pyramidal Lucas–Kanade, multi-scale Horn–Schunck, blobs; `solve` — DLT homography, RANSAC, Zhang camera solve, corner pin |
+| **Roto / segmentation** (AE Roto Brush) | `vieww-video::roto` — GrabCut (GMMs + Dinic min-cut), optical-flow propagation |
+| **Puppet warp** (AE puppet pins) | `vieww-video::warp` — MLS rigid pins |
+| **Upscaling** (AI upscalers' classical floor) | `vieww-video::upscale` — Lanczos, bicubic, RAISR (the learned upscaler, beating Lanczos on unseen images) |
+| **Motion blur** (render engines) | `vieww-video::motion_blur` — shutter accumulation, vector blur |
+| **Render queue** (AE/Nuke render queue) | `vieww-video::queue` — jobs and output modules |
+| **Live video synthesis** (Hydra, TouchDesigner TOPs) | `vieww-effects::synth` — the Hydra language, live, with positioned parse errors |
+| **Geo/voronoi/sankey/spec-driven charts** (D3 geo, Observable) | `vieww-dataviz::geo`, `delaunay` (Voronoi), `field`/`flow`/`interact`, `spec` (a chart spec language), `bin` |
+| **Game AI** (Unity, Unreal, Godot) | `vieww-game::ai` — steering, behaviour trees, pathfinding, utility AI |
+| **TCP + WebSocket** (every network stack) | `vieww-network::tcp` — sockets and the WebSocket handshake/frames over them |
+| **Spatial audio + ALSA output** (Web Audio PannerNode, every engine) | `vieww-audio::spatial` (distance models matching Web Audio, cones, pitch shift; equal-power pan) + `device` (ALSA PCM output behind the seam, honest about needing hardware) |
+| **Undo/redo over CRDT state** (Figma, Yjs) | `vieww-collab::undo` |
+| **Canvas tweens** (Konva/Fabric tweening) | `vieww-canvas::tween` |
+| **Graph exports** (node editors) | `vieww-graph` export formats |
+| **`AnimatedVisibility`** (Compose, SwiftUI) | `vieww-widget` — the enter/exit/transition widget, slides and fades |
+| **Signal snapshots** (time-travel debugging, Redux devtools) | `vieww-element::snapshot` |
+| **Sketch images + SVG/PDF image embedding** | `vieww-foundation::sketch` / `sketch_export` |
+
+The `image`-crate removal deserves its own line: **`vieww-image` now decodes and encodes PNG, GIF, JPEG and BMP with code written in this repository** — inflate, LZW, DCT and all — which is the same independence the rasterizer already claimed for pixels, extended to the bytes those pixels arrive in.
+
+Rendering the launch film's score through `vieww-audio` then found and fixed two real bugs in the crate: `Mixer::render` walked every tone to the mix's end (quadratic work for linear sound — ~1,300 tones over a 221 s timeline was minutes of wall for seconds of audio; the render is now bounded by each tone's own span), and `Mixer::tone_at` under-measured a mix's duration when an attack outlasts its hold, cutting the very tail the envelope exists to keep click-free. Both carry tests.
+
 ### What honestly remains
 
 1. **iOS on device** — code exists, CI cross-compiles it, and nothing has executed it. That is `PENDING.md` §1.4's item, closed by a machine, not by a commit.
-2. **Device transports** — audio output, camera/video decode, MIDI ports and HTTP sockets remain platform crates' work behind the existing seams (OSC's UDP socket is the one transport shipped, because `std` provides it). Video *export* to H.264 goes through an `ffmpeg` pipe rather than an in-process encoder.
-3. **Learned features** — Roto Brush-style segmentation, AI upscaling and similar model-driven tools are not claimed.
-4. **3D is a software renderer** — correct and deterministic, not a GPU pipeline; skinned glTF meshes import their node hierarchy and animations, but vertex skinning in 3D is not implemented.
+2. **Device transports** — audio output beyond ALSA, camera/video decode, MIDI ports and HTTP sockets remain platform crates' work behind the existing seams (OSC's UDP socket and TCP/WebSocket are the transports shipped, because `std` provides them). Video *export* to H.264 goes through an `ffmpeg` pipe rather than an in-process encoder.
+3. **Learned features** — AI upscaling's classical floor (RAISR) is implemented; diffusion-model tools are not claimed. Roto's GrabCut segmentation is the honest classical boundary.
+4. **3D is a software renderer** — correct and deterministic, not a GPU pipeline; vertex skinning, meshlets, post and stereo are all real, all CPU.
 5. **The GPU and platform items from `PENDING.md`** — unchanged: geometry-edge antialiasing, a GPU frame in a window, macOS/Windows backends, and the rest of the hardware-blocked list.
 
 ---
@@ -1350,6 +1394,8 @@ A third pass went a level deeper: every line of every framework's layer table. I
 - pixel effects, code blocks, two-way binding and sprite sheets.
 
 Eleven more examples (81–91) photograph all of it.
+
+A fourth pass landed the deep subsystems those capabilities lean on: animation timing (lag smoothing, frame clocks, units, inertia, phase animators, cinematic sequencing, duplicators); mesh CSG, glTF skins and morph targets; 3D vertex skinning (LBS + dual-quaternion), custom fragment shaders and node materials, a G-buffer post stack (SSAO, SSR, DoF, bloom, tonemapping, FXAA), meshlets with cluster LOD and stereo rigs; **native image codecs written in-repository (DEFLATE, PNG, animated GIF, baseline JPEG, BMP — the `image` dependency is gone)**; AVI, computer vision (Shi–Tomasi, Lucas–Kanade, Horn–Schunck, homographies, RANSAC, Zhang calibration, GrabCut roto, puppet warp, RAISR upscaling, motion blur, a render queue) and a Hydra-style live video synth; dataviz geo/voronoi/spec; game AI (steering, behaviour trees, pathfinding, utility); TCP and WebSocket transports; spatial audio with an ALSA device seam; CRDT undo; canvas tweens; `AnimatedVisibility`; and signal snapshots for time-travel debugging. The launch film's score — synthesised end-to-end by `vieww-audio` and muxed onto the rendered master — then stress-tested the mixer for the first time at scale and drew two more bug fixes out of it.
 
 What remains is hardware and transports, not architecture. That means an iOS device to run the written-and-cross-compiled iOS path, platform device I/O behind the seams that already exist, and the GPU/platform worklist `PENDING.md` has always carried.
 

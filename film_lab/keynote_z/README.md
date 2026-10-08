@@ -13,6 +13,18 @@ types, the studio's editor types. When the film taps, the studio's demo
 navigates. When the film presses Render, `rustc` runs. The closing
 sting is the contract: *this film was rendered with vieww.*
 
+**And the score is the framework's too:** every note of the soundtrack
+is synthesised by **`vieww-audio`** — `Tone` on `Mixer`, the pad shaped
+by its `Biquad`, the plucks echoed through its `Delay`, the master
+through its `Compressor`, written by its `write_wav`, muxed onto the
+picture with the video stream byte-copied. Nothing sampled, nothing
+imported — the sound is cut to the picture's own timeline, cue by cue
+(the break's crack, each wordmark letter landing, the crate pops, the
+alive keystroke, the tap, `rustc` running, the package landing, the
+ledger's stamp, the end card). The film works muted — no beat *needs*
+its sound — but played aloud, the sound is as much a vieww receipt as
+the pixels.
+
 **3:41 · 24 scenes · 13,260 frames · four acts · viewwstudio the hero,
 vieww the foundation.**
 
@@ -75,12 +87,15 @@ repository rather than the machine. The bench line names its bench.
 ## The artifacts
 
 Per the storage policy: **only the MP4 and the per-scene contact sheets
-ship in-tree** — no raw frames, no GIFs. The sheets are the house audit
-format (`fps=10, scale=480:-1, tile=4x4`).
+ship in-tree** — no raw frames, no GIFs, no standalone WAV (the score
+is byte-reproducible from `scorez`, and the MP4 already carries it as
+AAC). The sheets are the house audit format (`fps=10, scale=480:-1,
+tile=4x4`).
 
 ```
 keynote_z.mp4       the film — 1920×1080 · 60 fps · libx264 crf 18 ·
-                    yuv420p · 3:41 · no audio track (the cut works muted)
+                    yuv420p · 3:41 · AAC 192k stereo (the vieww-audio score,
+                    muxed with -c:v copy — the picture's bytes untouched)
 sheets/S01_*.png …  24 contact sheets, one per scene, 16 strided
                     frames each — the visual audit of every scene
 ```
@@ -93,9 +108,11 @@ The source is the proof — the film is a Rust module in this repo:
 vieww_base/examples/film_lab/src/keynote_z/
 ├── mod.rs          the registry (24 scenes, two kinds), the viewwsite palette,
 │                   the Geist font store, the spark and its grammar
-├── master.rs       the two-pass harness: censusz · masterz · kzcal · kz:<scene>
+├── master.rs       the two-pass harness: censusz · masterz · kzcal · scorez · kz:<scene>
 ├── script.rs       the session — the frame-indexed script that drives the
 │                   REAL studio (actions, taps, compiles, overlays)
+├── score.rs        the soundtrack — synthesised by vieww-audio from the film's
+│                   own timeline (pad · pulse · plucks · the picture's own cues)
 └── s01…s24         the scenes: pure graphics (I, II, IV) and overlay chrome
                     over the mounted Shell (III)
 ```
@@ -107,12 +124,14 @@ the studio's own demo screens plus the film's `counter.say`.
 cd vieww_base
 cargo run --release -p film_lab -- kzcal        # verify the taps (hit-tested)
 cargo run --release -p film_lab -- censusz      # pass 1 — the audit → manifest.txt
-cargo run --release -p film_lab -- masterz      # pass 2 — the MP4 + the sheets
+cargo run --release -p film_lab -- masterz      # pass 2 — the MP4 + the sheets + the score
+cargo run --release -p film_lab -- scorez <mp4> # the score alone, muxed onto an existing master
 cargo run --release -p film_lab -- kz:spark     # one scene, 16 frames, a sheet
 ```
 
-The MP4 carries no audio — sound is the author's, later; every beat is
-captioned by construction, so the cut works muted.
+The score is a pure function of the timeline, not of the pixels —
+`scorez` lays it onto any master cut of the same scene table, which is
+how the committed film carries its sound without a re-render.
 
 ## The lineage
 

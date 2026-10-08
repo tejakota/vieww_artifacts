@@ -472,9 +472,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return keynote_v5::master::run(&arg);
         }
         // The z release film — THE SPARK, the viewwstudio keynote's
-        // sixth build — same two passes, its own preview spelling
-        // (`keynote_z/master.rs`).
-        if arg == "censusz" || arg == "masterz" || arg == "kzcal" || arg.starts_with("kz:") {
+        // sixth build — same two passes, its own preview spelling, and
+        // the score door (`keynote_z/master.rs` · `keynote_z/score.rs`).
+        if arg == "censusz" || arg == "masterz" || arg == "kzcal" || arg == "scorez" || arg.starts_with("kz:") {
             return keynote_z::master::run(&arg);
         }
         // The product film — THE DISTANCE, the viewwstudio product

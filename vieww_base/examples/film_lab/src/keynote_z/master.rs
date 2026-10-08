@@ -63,6 +63,7 @@ pub(crate) fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
         "censusz" => census(),
         "masterz" => master(),
         "kzcal" => calibrate(),
+        "scorez" => score_standalone(),
         other => {
             let name = other.trim_start_matches("kz:").to_ascii_lowercase();
             preview_scene(&name)
@@ -541,7 +542,64 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("  film → {}", mp4.display());
     println!("  sheets → {}", root.join("sheets").display());
+
+    // The score — synthesised by vieww-audio from the film's own
+    // timeline, muxed onto the assembled master. The master is only
+    // finished when it carries its sound.
+    score_and_mux(&mp4)?;
     Ok(())
+}
+
+// ── The score — vieww-audio, end to end ─────────────────────────────────────
+
+/// Synthesise the score ([`super::score`], vieww-audio end to end) and lay
+/// it onto the assembled master: `-c:v copy`, AAC 192k — the picture's
+/// bytes are untouched, only the sound is added.
+fn score_and_mux(mp4: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    let t0 = std::time::Instant::now();
+    std::fs::create_dir_all(work_root())?;
+    let wav = super::score::write(&work_root())?;
+    println!(
+        "  score → {} ({:.1}s, vieww-audio)",
+        wav.display(),
+        t0.elapsed().as_secs_f32()
+    );
+    let tmp = mp4.with_extension("scored.mp4");
+    let status = ProcCommand::new("ffmpeg")
+        .args(["-y", "-loglevel", "error"])
+        .arg("-i")
+        .arg(mp4)
+        .arg("-i")
+        .arg(&wav)
+        .args(["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart"])
+        .arg(&tmp)
+        .status()?;
+    if !status.success() {
+        return Err("mux failed".into());
+    }
+    std::fs::rename(&tmp, mp4)?;
+    println!("  scored → {}", mp4.display());
+    Ok(())
+}
+
+/// `scorez [mp4]` — render the score and mux it onto an existing master
+/// (default: the work root's). The standalone door: the committed film
+/// can carry its sound without a re-render, because the score is a pure
+/// function of the timeline, not of the pixels.
+fn score_standalone() -> Result<(), Box<dyn std::error::Error>> {
+    let target = std::env::args()
+        .nth(2)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| work_root().join("keynote_z.mp4"));
+    if !target.exists() {
+        return Err(format!(
+            "no master at {} — render it (masterz) or pass a path",
+            target.display()
+        )
+        .into());
+    }
+    println!("keynote_z score — muxing onto {}", target.display());
+    score_and_mux(&target)
 }
 
 // ── The preview mode — one scene, sixteen frames, a sheet ──────────────────
