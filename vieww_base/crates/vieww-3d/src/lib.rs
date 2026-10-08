@@ -35,6 +35,8 @@
 //! | rasterizer, shadows, culling, stats | [`render`] |
 //! | picking, projection | [`raycast`](mod@raycast) |
 //! | path tracing | [`pathtrace`] |
+//! | image-based lighting, HDRI, procedural sky, skybox | [`environment`] |
+//! | dynamic diffuse GI (probe volume — Lumen/DDGI) | [`gi`] |
 //! | skinning (LBS + dual quaternion) and morph targets | [`skin`] |
 //! | custom fragment shaders and node materials | [`shader`] |
 //! | post-processing: SSAO, SSR, DoF, bloom, tone mapping, grading, FXAA | [`post`] |
@@ -57,7 +59,9 @@
 //! assert!(stats.fragments > 0);
 //! ```
 
+pub mod environment;
 pub mod geometry;
+pub mod gi;
 pub mod import;
 pub mod math;
 pub mod meshlet;
@@ -71,6 +75,8 @@ pub mod skin;
 pub mod stereo;
 pub mod widget;
 
+pub use environment::{Background, EnvMap, Environment, Sh9};
+pub use gi::{GiStats, IrradianceVolume};
 pub use import::{apply_animation, import_gltf};
 pub use math::{Mat4, Quat, Vec3};
 pub use pathtrace::{Accumulator, PathTracer, TraceScene};

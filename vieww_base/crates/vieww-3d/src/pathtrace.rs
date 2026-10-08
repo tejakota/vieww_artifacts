@@ -62,6 +62,8 @@ pub struct TraceScene {
     materials: Vec<PtMaterial>,
     lights: Vec<(Light, Vec3, Vec3)>,
     sky: Rgb,
+    /// Image-based sky: misses sample this instead of the flat colour.
+    env: Option<Arc<crate::environment::Environment>>,
 }
 
 impl std::fmt::Debug for TraceScene {
@@ -189,6 +191,7 @@ impl TraceScene {
             materials,
             lights,
             sky: scene.background,
+            env: scene.environment.clone(),
         };
         s.build_bvh();
         s
@@ -294,6 +297,21 @@ impl TraceScene {
     pub fn triangles(&self) -> usize {
         self.tris.len()
     }
+
+    /// Radiance arriving along a ray that hits nothing.
+    pub(crate) fn sky_radiance(&self, d: Vec3) -> Rgb {
+        match &self.env {
+            Some(env) => env.map.sample(d).scale(env.intensity),
+            None => self.sky,
+        }
+    }
+
+    /// Does the nearest hit along `ray` see a back face? `None` on a miss.
+    pub(crate) fn hits_backface(&self, ray: &Ray) -> Option<bool> {
+        let (_, ti, _, _) = self.intersect(ray, f32::INFINITY)?;
+        let t = &self.tris[ti];
+        Some(t.e1.cross(t.e2).dot(ray.direction) > 0.0)
+    }
 }
 
 fn slab(o: Vec3, inv: Vec3, lo: Vec3, hi: Vec3, max_t: f32) -> bool {
@@ -316,15 +334,15 @@ fn slab(o: Vec3, inv: Vec3, lo: Vec3, hi: Vec3, max_t: f32) -> bool {
     true
 }
 
-struct Rng(u64);
+pub(crate) struct Rng(u64);
 
 impl Rng {
-    fn new(seed: u64) -> Self {
+    pub(crate) fn new(seed: u64) -> Self {
         let mut r = Self(seed ^ 0x9E37_79B9_7F4A_7C15);
         r.next();
         r
     }
-    fn next(&mut self) -> f32 {
+    pub(crate) fn next(&mut self) -> f32 {
         self.0 = self
             .0
             .wrapping_mul(6_364_136_223_846_793_005)
@@ -474,14 +492,14 @@ impl PathTracer {
         rays.into_inner()
     }
 
-    fn trace(&self, scene: &TraceScene, mut ray: Ray, rng: &mut Rng) -> (Rgb, u64) {
+    pub(crate) fn trace(&self, scene: &TraceScene, mut ray: Ray, rng: &mut Rng) -> (Rgb, u64) {
         let mut throughput = Rgb::WHITE;
         let mut radiance = Rgb::BLACK;
         let mut rays = 0u64;
         for bounce in 0..=self.max_bounces {
             rays += 1;
             let Some((t, ti, u, v)) = scene.intersect(&ray, f32::INFINITY) else {
-                radiance = radiance.add(throughput.mul(scene.sky));
+                radiance = radiance.add(throughput.mul(scene.sky_radiance(ray.direction)));
                 break;
             };
             let tri = &scene.tris[ti];

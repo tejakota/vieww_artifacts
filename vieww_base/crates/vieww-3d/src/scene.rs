@@ -770,6 +770,13 @@ pub struct Scene {
     pub background: Rgb,
     /// Linear fog from `near` to `far` toward `color`.
     pub fog: Option<(Rgb, f32, f32)>,
+    /// Image-based lighting and (optionally) the skybox — see
+    /// [`environment`](crate::environment).
+    pub environment: Option<std::sync::Arc<crate::environment::Environment>>,
+    /// Dynamic diffuse GI — see [`gi`](crate::gi). When present it
+    /// replaces the environment's diffuse term (the probes already saw the
+    /// sky, occluded).
+    pub gi: Option<std::sync::Arc<crate::gi::IrradianceVolume>>,
     content_versions: BTreeMap<String, u64>,
     /// World-matrix recomputations in the last `update_world` — the
     /// dirty flag's receipt.

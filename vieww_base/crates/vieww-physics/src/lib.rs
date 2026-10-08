@@ -27,8 +27,15 @@
 //! * **cloth** — [`cloth`], Verlet/position-based dynamics with tearing.
 //! * **fluids** — [`fluid`], Clavet's double-density-relaxation SPH.
 //!
-//! Still out of scope, by name: 3D rigid bodies (the 3D layer renders, it
-//! does not simulate), soft-body FEM and destruction fracturing.
+//! * **3D rigid bodies** — [`rigid3d`]: spheres, capsules, convex hulls and
+//!   planes; SAT/GJK narrowphase with face clipping; sequential impulses with
+//!   warm starting; ball (with swing cones), hinge (limits, motor), fixed and
+//!   distance joints — enough for ragdolls; CCD, sleeping, ray casts,
+//!   contact events and a character controller.
+//! * **destruction** — [`rigid3d::fracture`]: Voronoi fracture of convex
+//!   bodies (and polygons), seeded around the impact, shattered in place.
+//!
+//! Still out of scope, by name: soft-body FEM.
 //!
 //! # The one rule
 //!
@@ -70,6 +77,7 @@ pub use vieww_foundation as foundation;
 pub mod cloth;
 pub mod fluid;
 pub mod rigid;
+pub mod rigid3d;
 
 /// A two-dimensional vector — [`Offset`] under the name physics reads
 /// better in.

@@ -437,10 +437,30 @@ impl Renderer {
         // Shadow map for the first shadow-casting directional light.
         let shadow = self.shadow_pass(&lights, &items, &mut stats);
 
+        let mut background = vec![scene.background; w * h];
+        if let Some(env) = scene.environment.as_deref() {
+            if env.background_sample(Vec3::Y).is_some() {
+                // The skybox: each sample's view ray, through the inverse
+                // view-projection.
+                let inv = vp.inverse().unwrap_or(Mat4::IDENTITY);
+                #[allow(clippy::cast_precision_loss)]
+                let (wf, hf) = (w as f32, h as f32);
+                for (k, px) in background.iter_mut().enumerate() {
+                    #[allow(clippy::cast_precision_loss)]
+                    let (x, y) = ((k % w) as f32 + 0.5, (k / w) as f32 + 0.5);
+                    let (nx, ny) = (x / wf * 2.0 - 1.0, 1.0 - y / hf * 2.0);
+                    let near = inv.transform_point(Vec3::new(nx, ny, -1.0));
+                    let far = inv.transform_point(Vec3::new(nx, ny, 1.0));
+                    if let Some(c) = env.background_sample((far - near).normalize()) {
+                        *px = c.scale(self.exposure);
+                    }
+                }
+            }
+        }
         let mut target = Target {
             w,
             h,
-            color: vec![scene.background; w * h],
+            color: background,
             depth: vec![f32::INFINITY; w * h],
             position: vec![Vec3::new(0.0, 0.0, f32::NEG_INFINITY); w * h],
             normal: vec![Vec3::ZERO; w * h],
@@ -457,6 +477,8 @@ impl Renderer {
             view,
             exposure: self.exposure,
             time: self.time,
+            env: scene.environment.as_deref(),
+            gi: scene.gi.as_deref(),
         };
         for item in &opaque {
             draw_item(item, &vp, &mut target, &ctx, &mut stats);
@@ -664,6 +686,8 @@ struct ShadeCtx<'a> {
     view: Mat4,
     exposure: f32,
     time: f32,
+    env: Option<&'a crate::environment::Environment>,
+    gi: Option<&'a crate::gi::IrradianceVolume>,
 }
 
 #[allow(
@@ -969,6 +993,44 @@ fn draw_points(
     }
 }
 
+/// The image-based (and probe-GI) term every lit material receives: diffuse
+/// irradiance from the GI volume or the environment's SH, plus the
+/// environment's split-sum specular for glossy shadings.
+fn ambient_ibl(mat: &Material, albedo: Rgb, p: Vec3, n: Vec3, v: Vec3, ctx: &ShadeCtx<'_>) -> Rgb {
+    if ctx.env.is_none() && ctx.gi.is_none() {
+        return Rgb::BLACK;
+    }
+    let (metallic, roughness, spec_scale) = match mat.shading {
+        Shading::Standard {
+            metallic,
+            roughness,
+        } => (metallic, roughness, 1.0),
+        Shading::Phong {
+            shininess,
+            specular,
+        } => (0.0, (2.0 / (shininess + 2.0)).sqrt(), specular),
+        _ => (0.0, 1.0, 0.0),
+    };
+    let irradiance = match (ctx.gi, ctx.env) {
+        (Some(gi), _) => gi.sample(p, n),
+        (None, Some(env)) => env.diffuse(n),
+        (None, None) => Rgb::BLACK,
+    };
+    let n_dot_v = n.dot(v).max(1e-4);
+    let f0 = Rgb::new(0.04, 0.04, 0.04).lerp(albedo, metallic);
+    let mut out = albedo.mul(irradiance).scale((1.0 - metallic) * ctx.exposure);
+    if spec_scale > 0.0 {
+        if let Some(env) = ctx.env {
+            let r = (-v).reflect(n);
+            let (a, b) = crate::environment::env_brdf(roughness, n_dot_v);
+            let pre = env.specular(r, roughness);
+            let k = f0.scale(a).add(Rgb::new(b, b, b));
+            out = out.add(pre.mul(k).scale(spec_scale * ctx.exposure));
+        }
+    }
+    out
+}
+
 fn saturate(x: f32) -> f32 {
     x.clamp(0.0, 1.0)
 }
@@ -1109,7 +1171,7 @@ fn shade(mat: &Material, p: Vec3, n: Vec3, uv: [f32; 2], ctx: &ShadeCtx<'_>) -> 
                 };
                 total = total.add(radiance.mul(contribution));
             }
-            total
+            total.add(ambient_ibl(mat, albedo, p, n, v, ctx))
         }
     };
     let mut out = out.add(mat.emissive);
@@ -1344,5 +1406,34 @@ mod tests {
         let (_, stats) = Renderer::new(32, 32).samples(1).render(&mut s, &cam);
         assert_eq!(stats.objects, 6);
         assert_eq!(stats.triangles, 5 * 12 + 12, "the far LOD level is the box");
+    }
+
+    #[test]
+    fn an_environment_lights_a_scene_with_no_lights_and_draws_the_skybox() {
+        use crate::environment::{Background, EnvMap, Environment};
+        let mut scene = Scene::new();
+        scene.add(
+            Node::new(
+                "ball",
+                Content::mesh(crate::geometry::sphere(1.0, 24, 12), Material::standard(Color::WHITE, 0.0, 0.5)),
+            ),
+            None,
+        );
+        let cam = Camera::perspective(Vec3::new(0.0, 0.0, 4.0), Vec3::ZERO, 0.8);
+        let r = Renderer::new(48, 48);
+        let (dark, _) = r.render(&mut scene, &cam);
+        let sky = EnvMap::gradient(Rgb::new(0.2, 0.4, 1.0), Rgb::new(0.8, 0.8, 0.8), Rgb::new(0.1, 0.1, 0.1));
+        scene.environment = Some(std::sync::Arc::new(Environment::new(sky).background(Background::Map)));
+        let (lit, _) = r.render(&mut scene, &cam);
+        let centre_dark = pixel(&dark, 24, 24);
+        let centre_lit = pixel(&lit, 24, 24);
+        assert!(centre_lit[0] > centre_dark[0] + 40, "{centre_dark:?} {centre_lit:?}");
+        // Corner: no geometry — the sky's upper half is blue-dominant.
+        let corner = pixel(&lit, 2, 2);
+        assert!(corner[2] > corner[0], "{corner:?}");
+        // The ball's top faces the blue zenith, its bottom the dark ground.
+        let top = pixel(&lit, 24, 14);
+        let bottom = pixel(&lit, 24, 34);
+        assert!(top[2] > bottom[2], "{top:?} {bottom:?}");
     }
 }
