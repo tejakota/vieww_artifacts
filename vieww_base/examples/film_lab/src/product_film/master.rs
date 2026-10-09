@@ -682,8 +682,10 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
         scale_factor()
     );
 
-    let mut probe = Probe::default();
-    probe.frames = total as u64;
+    let mut probe = Probe {
+        frames: total as u64,
+        ..Probe::default()
+    };
 
     let mut rig = Rig::new();
     let mut renderer = NativeRenderer::new();
@@ -709,9 +711,11 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     // applied to pass 1.
     let state_path = root.join("census_state.txt");
     let mut start_scene = 0usize;
-    if let Some(state) = std::fs::read_to_string(&state_path).ok() {
+    if let Ok(state) = std::fs::read_to_string(&state_path) {
         for line in state.lines() {
-            let Some((k, v)) = line.split_once('=') else { continue };
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
             let v = v.trim();
             match k.trim() {
                 "next_scene" => start_scene = v.parse().unwrap_or(0),
@@ -724,12 +728,10 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
                 "strokes" => probe.strokes = v.parse().unwrap_or(0),
                 "shadows" => probe.shadows = v.parse().unwrap_or(0),
                 "frame_ms_samples" => {
-                    frame_ms_samples =
-                        v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
+                    frame_ms_samples = v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
                 }
                 "alive_samples" => {
-                    alive_samples =
-                        v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
+                    alive_samples = v.split(',').filter_map(|x| x.trim().parse().ok()).collect()
                 }
                 _ => {}
             }
@@ -737,7 +739,9 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
         if start_scene > 0 {
             println!(
                 "census resume — {} scenes already counted · {} frames · continuing at scene {}",
-                start_scene, counted_frames, start_scene + 1
+                start_scene,
+                counted_frames,
+                start_scene + 1
             );
         }
     }
@@ -754,7 +758,10 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
         // (no raster — the actions are cheap, the compiles are cached) —
         // the same replay the master's own resume performs.
         if start_scene > 0 && si == start_scene && s.kind == Kind::Studio && rig.studio.is_none() {
-            println!("  resuming into the studio act at {} — replaying the session", s.id);
+            println!(
+                "  resuming into the studio act at {} — replaying the session",
+                s.id
+            );
             let _ = rig.studio();
             script::apply_up_to(
                 &mut rig.driver,
@@ -762,7 +769,8 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
                 start_abs,
                 &mut rig.cursor,
             );
-            rig.driver.draw_frame_at(Duration::from_secs_f64(start_abs as f64));
+            rig.driver
+                .draw_frame_at(Duration::from_secs_f64(start_abs as f64));
         }
 
         let n = s.frames();
@@ -821,7 +829,10 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
         // shortest round-trip form, so the samples survive the save/load
         // byte-exact.
         let fmt_samples = |v: &[f64]| {
-            v.iter().map(|x| format!("{x}")).collect::<Vec<_>>().join(",")
+            v.iter()
+                .map(|x| format!("{x}"))
+                .collect::<Vec<_>>()
+                .join(",")
         };
         let state = format!(
             "next_scene={}\ncounted_frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nframe_ms_samples={}\nalive_samples={}\n",

@@ -20,11 +20,20 @@ pub enum Kind {
     Equirectangular,
     Mercator,
     /// Centre of view `(λ₀, φ₀)` in degrees.
-    Orthographic { center: (f64, f64) },
-    Stereographic { center: (f64, f64) },
-    AzimuthalEqualArea { center: (f64, f64) },
+    Orthographic {
+        center: (f64, f64),
+    },
+    Stereographic {
+        center: (f64, f64),
+    },
+    AzimuthalEqualArea {
+        center: (f64, f64),
+    },
     /// Standard parallels φ₁, φ₂ and origin (λ₀, φ₀), degrees.
-    Albers { parallels: (f64, f64), origin: (f64, f64) },
+    Albers {
+        parallels: (f64, f64),
+        origin: (f64, f64),
+    },
 }
 
 /// A configured projection.
@@ -49,7 +58,10 @@ fn unrotate(l: f64, p: f64, center: (f64, f64)) -> (f64, f64) {
     let p0 = center.1 * R;
     let (x, z) = (xr * p0.cos() - zr * p0.sin(), xr * p0.sin() + zr * p0.cos());
     let lon = y.atan2(x) / R + center.0;
-    (((lon + 180.0).rem_euclid(360.0)) - 180.0, z.clamp(-1.0, 1.0).asin() / R)
+    (
+        ((lon + 180.0).rem_euclid(360.0)) - 180.0,
+        z.clamp(-1.0, 1.0).asin() / R,
+    )
 }
 
 impl Projection {
@@ -72,7 +84,10 @@ impl Projection {
                 if lat.abs() > 89.5 {
                     return None;
                 }
-                (lon * R, ((std::f64::consts::FRAC_PI_4 + lat * R * 0.5).tan()).ln())
+                (
+                    lon * R,
+                    ((std::f64::consts::FRAC_PI_4 + lat * R * 0.5).tan()).ln(),
+                )
             }
             Kind::Orthographic { center } => {
                 let (l, p) = rotate(lon, lat, center);
@@ -108,16 +123,25 @@ impl Projection {
                 (rho * th.sin(), rho0 - rho * th.cos())
             }
         };
-        Some((self.translate.0 + x * self.scale, self.translate.1 - y * self.scale))
+        Some((
+            self.translate.0 + x * self.scale,
+            self.translate.1 - y * self.scale,
+        ))
     }
 
     /// Pixels → `(lon, lat)`.
     #[must_use]
     pub fn invert(&self, px: f64, py: f64) -> Option<(f64, f64)> {
-        let (x, y) = ((px - self.translate.0) / self.scale, (self.translate.1 - py) / self.scale);
+        let (x, y) = (
+            (px - self.translate.0) / self.scale,
+            (self.translate.1 - py) / self.scale,
+        );
         match self.kind {
             Kind::Equirectangular => Some((x / R, y / R)),
-            Kind::Mercator => Some((x / R, (2.0 * y.exp().atan() - std::f64::consts::FRAC_PI_2) / R)),
+            Kind::Mercator => Some((
+                x / R,
+                (2.0 * y.exp().atan() - std::f64::consts::FRAC_PI_2) / R,
+            )),
             Kind::Orthographic { center } => {
                 let rho = (x * x + y * y).sqrt();
                 if rho > 1.0 {
@@ -127,7 +151,10 @@ impl Projection {
                 let (p, l) = if rho < 1e-12 {
                     (0.0, 0.0)
                 } else {
-                    ((y * c.sin() / rho).asin(), (x * c.sin()).atan2(rho * c.cos()))
+                    (
+                        (y * c.sin() / rho).asin(),
+                        (x * c.sin()).atan2(rho * c.cos()),
+                    )
                 };
                 Some(unrotate(l, p, center))
             }
@@ -137,7 +164,10 @@ impl Projection {
                 let (p, l) = if rho < 1e-12 {
                     (0.0, 0.0)
                 } else {
-                    ((y * c.sin() / rho).asin(), (x * c.sin()).atan2(rho * c.cos()))
+                    (
+                        (y * c.sin() / rho).asin(),
+                        (x * c.sin()).atan2(rho * c.cos()),
+                    )
                 };
                 Some(unrotate(l, p, center))
             }
@@ -150,7 +180,10 @@ impl Projection {
                 let (p, l) = if rho < 1e-12 {
                     (0.0, 0.0)
                 } else {
-                    ((y * c.sin() / rho).asin(), (x * c.sin()).atan2(rho * c.cos()))
+                    (
+                        (y * c.sin() / rho).asin(),
+                        (x * c.sin()).atan2(rho * c.cos()),
+                    )
                 };
                 Some(unrotate(l, p, center))
             }
@@ -162,7 +195,9 @@ impl Projection {
                 let yy = rho0 - y;
                 let rho = (x * x + yy * yy).sqrt() * n.signum();
                 let th = (x * n.signum()).atan2(yy * n.signum());
-                let lat = ((c - (rho * n).powi(2)) / (2.0 * n)).clamp(-1.0, 1.0).asin();
+                let lat = ((c - (rho * n).powi(2)) / (2.0 * n))
+                    .clamp(-1.0, 1.0)
+                    .asin();
                 Some((origin.0 + th / n / R, lat / R))
             }
         }
@@ -225,7 +260,9 @@ pub fn geo_path(proj: &Projection, lines: &[Vec<(f64, f64)>], closed: bool, max_
                     #[allow(clippy::cast_possible_truncation)]
                     let o = Offset::new(p.0 as f32, p.1 as f32);
                     match prev {
-                        Some(q) if ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt() <= max_jump => {
+                        Some(q)
+                            if ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt() <= max_jump =>
+                        {
                             path.line_to(o);
                         }
                         _ => {
@@ -252,9 +289,15 @@ mod tests {
         vec![
             Kind::Equirectangular,
             Kind::Mercator,
-            Kind::Orthographic { center: (20.0, 30.0) },
-            Kind::Stereographic { center: (-40.0, 10.0) },
-            Kind::AzimuthalEqualArea { center: (100.0, -20.0) },
+            Kind::Orthographic {
+                center: (20.0, 30.0),
+            },
+            Kind::Stereographic {
+                center: (-40.0, 10.0),
+            },
+            Kind::AzimuthalEqualArea {
+                center: (100.0, -20.0),
+            },
             Kind::Albers {
                 parallels: (29.5, 45.5),
                 origin: (-96.0, 37.5),
@@ -271,7 +314,10 @@ mod tests {
                     continue;
                 };
                 let (l2, p2) = p.invert(x, y).unwrap();
-                assert!((l2 - lon).abs() < 1e-6 && (p2 - lat).abs() < 1e-6, "{k:?} {lon},{lat} → {l2},{p2}");
+                assert!(
+                    (l2 - lon).abs() < 1e-6 && (p2 - lat).abs() < 1e-6,
+                    "{k:?} {lon},{lat} → {l2},{p2}"
+                );
             }
         }
     }
@@ -338,7 +384,17 @@ mod tests {
         let p = Projection::new(Kind::Equirectangular, 100.0, (0.0, 0.0));
         let g = graticule(30.0);
         assert!(g.len() > 15);
-        let path = geo_path(&p, &[vec![(160.0, 0.0), (170.0, 0.0), (-170.0, 0.0), (-160.0, 0.0)]], false, 50.0);
+        let path = geo_path(
+            &p,
+            &[vec![
+                (160.0, 0.0),
+                (170.0, 0.0),
+                (-170.0, 0.0),
+                (-160.0, 0.0),
+            ]],
+            false,
+            50.0,
+        );
         assert_eq!(path.open_subpaths(), 2, "the jump is not drawn");
         let globe = Projection::new(Kind::Orthographic { center: (0.0, 0.0) }, 100.0, (0.0, 0.0));
         assert!(!geo_path(&globe, &g, false, 40.0).is_empty());

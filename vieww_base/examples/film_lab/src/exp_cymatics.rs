@@ -88,13 +88,18 @@ fn schedule(t: f32) -> ((u32, u32), (u32, u32), f32, f32) {
 
 /// One grain's seed (plate-local, in [0,1]²) and its descent result.
 struct Grain {
+    // Bookkeeping from the annealing pass; the receipt reads the settled
+    // state, not the seeds it fell from.
+    #[allow(dead_code)]
     su: f32,
+    #[allow(dead_code)]
     sv: f32,
     u: f32,
     v: f32,
     /// |field| at the settled position — the quiet it found.
     quiet: f32,
     /// Distance walked this frame (pixels) — the "heat" of the search.
+    #[allow(dead_code)]
     walked: f32,
 }
 

@@ -144,19 +144,23 @@ impl Gmm {
         };
         let mut n = vec![0usize; k];
         for (a, s) in assign.iter().zip(samples) {
-            for c in 0..3 {
-                g.mean[*a][c] += s[c];
+            for (m, v) in g.mean[*a].iter_mut().zip(s) {
+                *m += v;
             }
             n[*a] += 1;
         }
-        for i in 0..k {
+        for (mean, &count) in g.mean.iter_mut().zip(&n) {
             #[allow(clippy::cast_precision_loss)]
-            let m = n[i].max(1) as f64;
-            g.mean[i] = g.mean[i].map(|v| v / m);
+            let m = count.max(1) as f64;
+            *mean = mean.map(|v| v / m);
         }
         let mut cov = vec![[[0.0; 3]; 3]; k];
         for (a, s) in assign.iter().zip(samples) {
-            let d = [s[0] - g.mean[*a][0], s[1] - g.mean[*a][1], s[2] - g.mean[*a][2]];
+            let d = [
+                s[0] - g.mean[*a][0],
+                s[1] - g.mean[*a][1],
+                s[2] - g.mean[*a][2],
+            ];
             for r in 0..3 {
                 for c in 0..3 {
                     cov[*a][r][c] += d[r] * d[c];
@@ -168,11 +172,11 @@ impl Gmm {
         for i in 0..k {
             #[allow(clippy::cast_precision_loss)]
             let m = n[i].max(1) as f64;
-            for r in 0..3 {
-                for c in 0..3 {
-                    cov[i][r][c] /= m;
+            for (r, row) in cov[i].iter_mut().enumerate() {
+                for v in row.iter_mut() {
+                    *v /= m;
                 }
-                cov[i][r][r] += 1e-3; // regularise flat clusters
+                row[r] += 1e-3; // regularise flat clusters
             }
             #[allow(clippy::cast_precision_loss)]
             {
@@ -186,7 +190,11 @@ impl Gmm {
     }
 
     fn component_cost(&self, i: usize, s: &[f64; 3]) -> f64 {
-        let d = [s[0] - self.mean[i][0], s[1] - self.mean[i][1], s[2] - self.mean[i][2]];
+        let d = [
+            s[0] - self.mean[i][0],
+            s[1] - self.mean[i][1],
+            s[2] - self.mean[i][2],
+        ];
         let mut q = 0.0;
         for r in 0..3 {
             for c in 0..3 {
@@ -207,7 +215,10 @@ impl Gmm {
 
     fn best_component(&self, s: &[f64; 3]) -> usize {
         (0..self.weight.len())
-            .min_by(|&i, &j| self.component_cost(i, s).total_cmp(&self.component_cost(j, s)))
+            .min_by(|&i, &j| {
+                self.component_cost(i, s)
+                    .total_cmp(&self.component_cost(j, s))
+            })
             .unwrap_or(0)
     }
 }
@@ -295,7 +306,10 @@ impl Flow {
                 if !found {
                     break;
                 }
-                let f = stack.iter().map(|&e| self.cap[e]).fold(f64::INFINITY, f64::min);
+                let f = stack
+                    .iter()
+                    .map(|&e| self.cap[e])
+                    .fold(f64::INFINITY, f64::min);
                 for &e in &stack {
                     self.cap[e] -= f;
                     self.cap[e ^ 1] += f;
@@ -367,7 +381,11 @@ pub fn grabcut(img: &Image, trimap: &Trimap, iterations: usize) -> Mask {
     let px = colours(img);
     let n = w * h;
     // Initial labelling: unknown counts as foreground.
-    let mut fg: Vec<bool> = trimap.labels.iter().map(|l| *l != Label::Background).collect();
+    let mut fg: Vec<bool> = trimap
+        .labels
+        .iter()
+        .map(|l| *l != Label::Background)
+        .collect();
     // β from mean squared neighbour contrast.
     let mut sum = 0.0;
     let mut cnt = 0.0;
@@ -412,12 +430,12 @@ pub fn grabcut(img: &Image, trimap: &Trimap, iterations: usize) -> Mask {
         let (s, t) = (n, n + 1);
         let mut g = Flow::new(n + 2);
         let big = 1e9;
-        for i in 0..n {
+        for (i, p) in px.iter().enumerate() {
             let (cs, ct) = match trimap.labels[i] {
                 Label::Foreground => (big, 0.0),
                 Label::Background => (0.0, big),
                 // Source capacity = cost of labelling background.
-                Label::Unknown => (gb.cost(&px[i]), gf.cost(&px[i])),
+                Label::Unknown => (gb.cost(p), gf.cost(p)),
             };
             g.edge(s, i, cs, 0.0);
             g.edge(i, t, ct, 0.0);
@@ -446,7 +464,10 @@ pub fn grabcut(img: &Image, trimap: &Trimap, iterations: usize) -> Mask {
     for y in 1..h.saturating_sub(1) {
         for x in 1..w.saturating_sub(1) {
             let i = y * w + x;
-            let s: f32 = [i - 1, i + 1, i - w, i + w, i].iter().map(|&j| hard[j]).sum();
+            let s: f32 = [i - 1, i + 1, i - w, i + w, i]
+                .iter()
+                .map(|&j| hard[j])
+                .sum();
             alpha[i] = s / 5.0;
         }
     }
@@ -609,6 +630,9 @@ mod tests {
         let side = g.run(s, t);
         assert!(side[s] && !side[t]);
         let residual_out_of_s: f64 = [0usize, 2].iter().map(|&e| g.cap[e]).sum();
-        assert!(residual_out_of_s.abs() < 1e-9, "both source edges saturated");
+        assert!(
+            residual_out_of_s.abs() < 1e-9,
+            "both source edges saturated"
+        );
     }
 }

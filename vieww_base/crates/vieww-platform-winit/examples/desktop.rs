@@ -32,8 +32,9 @@
 //! # What a passing run means
 //!
 //! That the platform layer behaved on **this** machine, in **this** session. It
-//! is not a claim about the GPU (every pixel here is the CPU rasterizer's; see
-//! `PENDING.md` §2.6), and it is not a claim about a second monitor, a HiDPI
+//! is not a claim about the GPU (this example presents CPU-rasterized pixels;
+//! the GPU path is [`App::prefer_gpu`], off by default), and it is not a claim
+//! about a second monitor, a HiDPI
 //! display or a keyboard layout this machine does not have — those are what
 //! `ci/certify/desktop-suite.sh`'s flags are for, because only the operator knows them.
 

@@ -135,7 +135,9 @@ pub struct FrameClock {
 impl FrameClock {
     #[must_use]
     pub const fn new(fps: u32) -> Self {
-        Self { fps: if fps == 0 { 1 } else { fps } }
+        Self {
+            fps: if fps == 0 { 1 } else { fps },
+        }
     }
 
     /// The frames per second.
@@ -149,7 +151,7 @@ impl FrameClock {
     pub fn at(&self, frame: u64) -> Duration {
         // Ceiling, so `frame_at(at(n)) == n` exactly under floor division.
         let fps = u128::from(self.fps);
-        let nanos = (u128::from(frame) * 1_000_000_000 + fps - 1) / fps;
+        let nanos = (u128::from(frame) * 1_000_000_000).div_ceil(fps);
         #[allow(clippy::cast_possible_truncation)]
         Duration::from_nanos(nanos as u64)
     }
@@ -194,7 +196,11 @@ mod tests {
         c.tick(ms(0));
         c.tick(ms(10));
         assert_eq!(c.tick(ms(1010)), ms(30));
-        assert_eq!(c.tick(ms(1020)), ms(40), "time resumes from the forgiven point");
+        assert_eq!(
+            c.tick(ms(1020)),
+            ms(40),
+            "time resumes from the forgiven point"
+        );
         assert_eq!(c.stalls(), 1);
         assert_eq!(c.forgiven(), ms(980));
     }

@@ -79,6 +79,13 @@ pub struct FrameLog {
     /// the whole run — a 600-frame session would otherwise report the share of
     /// its last four seconds and label it the total.
     full_repaint_frames: u64,
+    /// Frames the GPU rasterizer drew — see [`FrameReport::gpu_frames`].
+    ///
+    /// Counted rather than derived because the split is per-frame and
+    /// switchable: an application with `prefer_gpu` on still draws its
+    /// unplannable frames on the CPU, and the interesting number is how
+    /// often each half did the work, not which one was configured.
+    gpu_frames: u64,
     /// Of those, the ones the event loop had slept before.
     ///
     /// **This is the number worth reading.** A frame that repaints everything
@@ -125,6 +132,7 @@ impl FrameLog {
             frames: 0,
             over_budget: 0,
             rasterised: 0,
+            gpu_frames: 0,
             full_repaint_frames: 0,
             idle_full_repaint_frames: 0,
             first: None,
@@ -206,9 +214,19 @@ impl FrameLog {
     /// `stats` is the pipeline's own measurement, which is folded into `work`;
     /// `None` when the scheduler declined to run a frame and only the present
     /// happened.
-    pub fn record(&mut self, stats: Option<FrameStats>, gpu: Duration, pixels: u64, at: Instant) {
+    pub fn record(
+        &mut self,
+        stats: Option<FrameStats>,
+        gpu: Duration,
+        pixels: u64,
+        at: Instant,
+        drawn_on_gpu: bool,
+    ) {
         let work = stats.map_or(gpu, |stats| stats.total + gpu);
         let interval = self.last.map_or(Duration::ZERO, |last| at - last);
+        if drawn_on_gpu {
+            self.gpu_frames += 1;
+        }
 
         if self.first.is_none() {
             self.first = Some(at);
@@ -325,6 +343,7 @@ impl FrameLog {
 
         FrameReport {
             frames: self.frames,
+            gpu_frames: self.gpu_frames,
             elapsed,
             fps,
             over_budget: self.over_budget,
@@ -365,6 +384,15 @@ pub(crate) fn percentile(sorted: &[Duration], p: f64) -> Duration {
 pub struct FrameReport {
     /// Frames presented.
     pub frames: u64,
+    /// Frames the GPU rasterizer drew.
+    ///
+    /// Zero when the application never asked for the GPU path
+    /// (`App::prefer_gpu`), and possibly less than
+    /// [`frames`](Self::frames) when it did: a frame the planner cannot
+    /// express falls back to the CPU, per frame. The split is the answer to
+    /// "is the GPU actually doing it" — a question this workspace has
+    /// explicitly never been able to answer for a real window.
+    pub gpu_frames: u64,
     /// Wall clock from the first presented frame to the last.
     pub elapsed: Duration,
     /// Presented frames per second, over `elapsed`.
@@ -532,6 +560,7 @@ mod tests {
                 work,
                 pixels,
                 start + interval * u32::try_from(frame).unwrap(),
+                false,
             );
         }
         log
@@ -571,9 +600,9 @@ mod tests {
     fn a_frame_over_budget_is_counted_and_the_run_is_not_smooth() {
         let mut log = FrameLog::new(ms(16), 100);
         let start = Instant::now();
-        log.record(None, ms(2), 0, start);
-        log.record(None, ms(40), 0, start + ms(40));
-        log.record(None, ms(2), 0, start + ms(56));
+        log.record(None, ms(2), 0, start, false);
+        log.record(None, ms(40), 0, start + ms(40), false);
+        log.record(None, ms(2), 0, start + ms(56), false);
 
         let report = log.report();
         assert_eq!(report.over_budget, 1);
@@ -605,7 +634,7 @@ mod tests {
             damage_area: 0.0,
             damage_regions: 0,
         };
-        log.record(Some(stats), ms(4), 0, Instant::now());
+        log.record(Some(stats), ms(4), 0, Instant::now(), false);
 
         assert_eq!(
             log.report().worst_work,
@@ -659,7 +688,7 @@ mod tests {
         // `surface_pixels` is zero until the first resize. Every frame is `>=`
         // zero, and counting them would report a startup that never happened.
         let mut log = FrameLog::new(ms(16), 0);
-        log.record(None, ms(1), 0, Instant::now());
+        log.record(None, ms(1), 0, Instant::now(), false);
 
         assert_eq!(log.report().full_repaint_frames, 0);
     }
@@ -672,9 +701,9 @@ mod tests {
         let mut log = FrameLog::new(ms(16), SURFACE);
         let start = Instant::now();
 
-        log.record(None, ms(2), SURFACE, start);
+        log.record(None, ms(2), SURFACE, start, false);
         log.about_to_sleep();
-        log.record(None, ms(2), SURFACE, start + ms(500));
+        log.record(None, ms(2), SURFACE, start + ms(500), false);
 
         let report = log.report();
         assert_eq!(report.full_repaint_frames, 2);
@@ -697,7 +726,7 @@ mod tests {
         let start = Instant::now();
         for frame in 0..30u32 {
             let pixels = if frame % 3 == 0 { SURFACE * 3 } else { 0 };
-            log.record(None, ms(1), pixels, start + ms(16) * frame);
+            log.record(None, ms(1), pixels, start + ms(16) * frame, false);
         }
         let a_third_of_them = log.report();
 
@@ -716,9 +745,9 @@ mod tests {
         let mut log = FrameLog::new(ms(16), 100);
         let start = Instant::now();
         // One catastrophic frame, then a long smooth run that pushes it out.
-        log.record(None, ms(500), 0, start);
+        log.record(None, ms(500), 0, start, false);
         for frame in 1..=u32::try_from(WINDOW).unwrap() {
-            log.record(None, ms(2), 0, start + ms(16) * frame);
+            log.record(None, ms(2), 0, start + ms(16) * frame, false);
         }
 
         let report = log.report();
@@ -739,7 +768,7 @@ mod tests {
         let mut log = FrameLog::new(ms(16), 1000);
         let start = Instant::now();
         // Twelve milliseconds: inside a 60Hz budget, outside a 120Hz one.
-        log.record(None, ms(12), 0, start);
+        log.record(None, ms(12), 0, start, false);
         let before = log.report();
         assert_eq!(before.over_budget, 0);
 
@@ -756,7 +785,7 @@ mod tests {
         );
 
         // And the next frame is measured against it.
-        log.record(None, ms(12), 0, start + ms(16));
+        log.record(None, ms(12), 0, start + ms(16), false);
         assert_eq!(log.report().over_budget, 1, "12ms is late at 120Hz");
     }
 
@@ -771,17 +800,17 @@ mod tests {
         let mut log = FrameLog::new(ms(16), 1000);
         let start = Instant::now();
 
-        log.record(None, ms(2), 0, start);
-        log.record(None, ms(2), 0, start + ms(16));
+        log.record(None, ms(2), 0, start, false);
+        log.record(None, ms(2), 0, start + ms(16), false);
 
         // Nobody is doing anything, so the loop sleeps. Several times over —
         // `about_to_wait` runs for every event the window ignores.
         log.about_to_sleep();
         log.about_to_sleep();
-        log.record(None, ms(2), 0, start + ms(5016));
+        log.record(None, ms(2), 0, start + ms(5016), false);
 
         // And then a frame that really was late, with the loop awake for it.
-        log.record(None, ms(2), 0, start + ms(5116));
+        log.record(None, ms(2), 0, start + ms(5116), false);
 
         let report = log.report();
         assert_eq!(
@@ -811,11 +840,11 @@ mod tests {
         let mut log = FrameLog::new(ms(16), 1000);
         let start = Instant::now();
 
-        log.record(None, ms(2), 0, start);
+        log.record(None, ms(2), 0, start, false);
         log.about_to_sleep();
-        log.record(None, ms(2), 0, start + ms(2000));
+        log.record(None, ms(2), 0, start + ms(2000), false);
         // No sleep this time: the loop was awake and took 250ms to produce it.
-        log.record(None, ms(2), 0, start + ms(2250));
+        log.record(None, ms(2), 0, start + ms(2250), false);
 
         let report = log.report();
         assert_eq!(report.continuous_intervals, 1);
@@ -840,7 +869,7 @@ mod tests {
 
         for frame in 0..5_u32 {
             log.about_to_sleep();
-            log.record(None, ms(2), 0, start + ms(400) * frame);
+            log.record(None, ms(2), 0, start + ms(400) * frame, false);
         }
 
         let report = log.report();

@@ -14,6 +14,13 @@
 //! github.com rather than `static.rust-lang.org`. `ci/check/wasm-check.sh` documents
 //! the download path; this is the path for a machine that cannot take it.
 //!
+//! **Re-certified 2026-10-09 on the pinned 1.98.1 toolchain**, on a machine
+//! that can reach `static.rust-lang.org`: `ci/check/wasm-check.sh` passed in
+//! full — the stage-0 `web-sys` feature audit, `cargo check --all-targets`
+//! and clippy `-D warnings` for `wasm32-unknown-unknown` — and the
+//! `publish = false` this crate carried while it waited for that is gone;
+//! see its `Cargo.toml` for the removal's own record.
+//!
 //! What the first compile found, in full:
 //!
 //! * `vieww-foundation`'s `compile_error!` guard listed five `target_os`

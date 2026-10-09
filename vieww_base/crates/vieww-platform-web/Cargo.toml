@@ -9,22 +9,25 @@ readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
-# **Not published yet, but no longer unverified.** The reason this line was
-# here — "code no compiler has ever seen" — stopped being true on 2026-09-06;
-# see `src/lib.rs`'s status section. It stays until the crate has a test suite
-# of its own rather than one application that exercises it.
-publish = false
+# **Published as of 2026-10-09.** This line said "not published yet, but no
+# longer unverified" while the crate waited on a gate: `ci/check/wasm-check.sh`
+# passing on the pinned toolchain. That has now happened twice — 2026-09-14
+# (with the canvas certified byte-for-byte against the native rasteriser; see
+# the top section of `TRACKER.md`) and 2026-10-09 on rustc 1.98.1, where the
+# full gate ran again: the stage-0 `web-sys` feature audit, `cargo check
+# --all-targets` for `wasm32-unknown-unknown`, and clippy under `-D warnings`.
+# A crate under a versioned release process that has never passed its gate is
+# a false pretence; one that has passed it twice is a crate.
 
 # ── The gating below, and why it stays ──────────────────────────────────────
 #
-# This crate has now been compiled and run (see `src/lib.rs`), so the gating is
-# no longer quarantine. It stays because it is still right: every
+# The compile gating is not quarantine any more, but it is still right: every
 # dependency is under `[target.'cfg(target_arch = "wasm32")'.dependencies]`
 # and `src/lib.rs`'s single module is `#[cfg(target_arch = "wasm32")]`, so on
 # every other target this crate builds to nothing and adds no dependency to
 # resolve. `cargo check --workspace` on a developer's machine is unaffected by
-# its existence, which is deliberate: an unverified crate should not be able
-# to break a verified build.
+# its existence, which is deliberate: a wasm-only crate should not cost a
+# native build anything, verified or not.
 #
 # `ci/check/wasm-check.sh` is the gate. On a machine that cannot reach
 # `static.rust-lang.org`, build `std` from source instead — the recipe is in

@@ -248,7 +248,11 @@ fn grade(c: Rgb, lift: f32, gamma: f32, gain: f32, sat: f32, contrast: f32, temp
     };
     let mut o = Rgb::new(ch(c.r), ch(c.g), ch(c.b));
     let l = luma(o);
-    o = Rgb::new(l + (o.r - l) * sat, l + (o.g - l) * sat, l + (o.b - l) * sat);
+    o = Rgb::new(
+        l + (o.r - l) * sat,
+        l + (o.g - l) * sat,
+        l + (o.b - l) * sat,
+    );
     Rgb::new(
         (o.r * (1.0 + 0.1 * temp)).max(0.0),
         o.g.max(0.0),
@@ -268,7 +272,8 @@ fn to_screen(f: &Frame, p: Vec3) -> Option<(f32, f32)> {
 }
 
 fn hash(x: u32, y: u32, k: u32) -> f32 {
-    let mut h = x.wrapping_mul(0x8da6_b343) ^ y.wrapping_mul(0xd816_3841) ^ k.wrapping_mul(0xcb1a_b31f);
+    let mut h =
+        x.wrapping_mul(0x8da6_b343) ^ y.wrapping_mul(0xd816_3841) ^ k.wrapping_mul(0xcb1a_b31f);
     h ^= h >> 13;
     h = h.wrapping_mul(0x5bd1_e995);
     h ^= h >> 15;
@@ -277,7 +282,11 @@ fn hash(x: u32, y: u32, k: u32) -> f32 {
     v
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn ssao(f: &mut Frame, radius: f32, strength: f32, samples: u32) {
     let (w, h) = (f.width, f.height);
     let mut ao = vec![1.0f32; w * h];
@@ -296,13 +305,18 @@ fn ssao(f: &mut Frame, radius: f32, strength: f32, samples: u32) {
             let mut occ = 0.0;
             for k in 0..samples {
                 // Cosine-ish hemisphere, scaled towards the centre.
-                let (u, v) = (hash(x as u32, y as u32, 2 * k), hash(x as u32, y as u32, 2 * k + 1));
+                let (u, v) = (
+                    hash(x as u32, y as u32, 2 * k),
+                    hash(x as u32, y as u32, 2 * k + 1),
+                );
                 let phi = std::f32::consts::TAU * u;
                 let r = v.sqrt();
                 let dir = t * (r * phi.cos()) + b * (r * phi.sin()) + n * (1.0 - v).sqrt();
                 let s = (k + 1) as f32 / samples as f32;
                 let q = p + dir * (radius * (0.1 + 0.9 * s * s));
-                let Some((sx, sy)) = to_screen(f, q) else { continue };
+                let Some((sx, sy)) = to_screen(f, q) else {
+                    continue;
+                };
                 if sx < 0.0 || sy < 0.0 || sx >= w as f32 || sy >= h as f32 {
                     continue;
                 }
@@ -334,7 +348,11 @@ fn ssao(f: &mut Frame, radius: f32, strength: f32, samples: u32) {
     }
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn ssr(f: &mut Frame, strength: f32, steps: u32, max_distance: f32) {
     let (w, h) = (f.width, f.height);
     let src = f.color.clone();
@@ -355,15 +373,18 @@ fn ssr(f: &mut Frame, strength: f32, steps: u32, max_distance: f32) {
             let step = max_distance / steps.max(1) as f32;
             let mut q = p + n * 0.01;
             for _ in 0..steps {
-                q = q + r * step;
-                let Some((sx, sy)) = to_screen(f, q) else { break };
+                q += r * step;
+                let Some((sx, sy)) = to_screen(f, q) else {
+                    break;
+                };
                 if sx < 0.0 || sy < 0.0 || sx >= w as f32 || sy >= h as f32 {
                     break;
                 }
                 let k = sy as usize * w + sx as usize;
                 let z = f.position[k].z;
                 if z.is_finite() && z >= q.z && z - q.z < step * 2.0 {
-                    let edge = (sx.min(w as f32 - sx).min(sy).min(h as f32 - sy) / (0.1 * w as f32))
+                    let edge = (sx.min(w as f32 - sx).min(sy).min(h as f32 - sy)
+                        / (0.1 * w as f32))
                         .clamp(0.0, 1.0);
                     let amt = strength * (0.2 + 0.8 * fres) * edge;
                     f.color[i] = f.color[i].lerp(src[k], amt);
@@ -374,7 +395,11 @@ fn ssr(f: &mut Frame, strength: f32, steps: u32, max_distance: f32) {
     }
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn dof(f: &mut Frame, focus: f32, aperture: f32, max_r: f32) {
     let (w, h) = (f.width, f.height);
     let coc: Vec<f32> = f
@@ -429,7 +454,9 @@ fn gauss_blur(src: &[Rgb], w: usize, h: usize, sigma: f32) -> Vec<Rgb> {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let r = (sigma * 3.0).ceil().max(1.0) as usize;
     #[allow(clippy::cast_precision_loss)]
-    let k: Vec<f32> = (0..=r).map(|i| (-((i * i) as f32) / (2.0 * sigma * sigma)).exp()).collect();
+    let k: Vec<f32> = (0..=r)
+        .map(|i| (-((i * i) as f32) / (2.0 * sigma * sigma)).exp())
+        .collect();
     let norm = k[0] + 2.0 * k[1..].iter().sum::<f32>();
     let mut tmp = vec![Rgb::BLACK; w * h];
     for y in 0..h {
@@ -565,7 +592,11 @@ fn grain(f: &mut Frame, amount: f32, seed: u32) {
         let n = hash((i % w) as u32, (i / w) as u32, seed) - 0.5;
         let l = luma(*c);
         let k = amount * (1.0 - l).max(0.2);
-        *c = Rgb::new((c.r + n * k).max(0.0), (c.g + n * k).max(0.0), (c.b + n * k).max(0.0));
+        *c = Rgb::new(
+            (c.r + n * k).max(0.0),
+            (c.g + n * k).max(0.0),
+            (c.b + n * k).max(0.0),
+        );
     }
 }
 
@@ -589,7 +620,11 @@ fn fxaa(f: &mut Frame) {
             }
             // Blend along the edge: horizontal edge → blend vertically.
             let horiz = (n + s - 2.0 * m).abs() >= (e + wv - 2.0 * m).abs();
-            let (a, b) = if horiz { (i - w, i + w) } else { (i - 1, i + 1) };
+            let (a, b) = if horiz {
+                (i - w, i + w)
+            } else {
+                (i - 1, i + 1)
+            };
             let blend = (range / hi.max(1e-4)).min(0.5) * 0.5;
             let avg = src[a].add(src[b]).scale(0.5);
             f.color[i] = src[i].lerp(avg, blend * 2.0);
@@ -620,13 +655,19 @@ mod tests {
             None,
         );
         s.add(
-            Node::new("floor", Content::mesh(plane(10.0, 10.0, 1, 1), Material::lambert(Color::WHITE)))
-                .rotated(Quat::from_axis_angle(Vec3::X, -std::f32::consts::FRAC_PI_2)),
+            Node::new(
+                "floor",
+                Content::mesh(plane(10.0, 10.0, 1, 1), Material::lambert(Color::WHITE)),
+            )
+            .rotated(Quat::from_axis_angle(Vec3::X, -std::f32::consts::FRAC_PI_2)),
             None,
         );
         s.add(
-            Node::new("box", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE)))
-                .at(Vec3::new(0.0, 0.5, 0.0)),
+            Node::new(
+                "box",
+                Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::lambert(Color::WHITE)),
+            )
+            .at(Vec3::new(0.0, 0.5, 0.0)),
             None,
         );
         s
@@ -655,7 +696,9 @@ mod tests {
 
     #[test]
     fn ssao_darkens_the_crease_but_not_open_floor() {
-        let (f, _) = Renderer::new(96, 64).samples(1).render_frame(&mut scene(), &cam());
+        let (f, _) = Renderer::new(96, 64)
+            .samples(1)
+            .render_frame(&mut scene(), &cam());
         let before = f.color.clone();
         let mut g = f.clone();
         ssao(&mut g, 0.6, 1.0, 16);
@@ -666,7 +709,10 @@ mod tests {
             .count();
         assert!(darkened > 20, "{darkened}");
         // Background (no geometry) untouched.
-        let bg = before.iter().zip(&g.color).filter(|(a, _)| luma(**a) == 0.0);
+        let bg = before
+            .iter()
+            .zip(&g.color)
+            .filter(|(a, _)| luma(**a) == 0.0);
         for (a, b) in bg {
             assert_eq!(luma(*a), luma(*b));
         }
@@ -700,22 +746,34 @@ mod tests {
                 prev = v;
             }
         }
-        assert_eq!(tone(Rgb::new(5.0, 0.5, -1.0), ToneCurve::None), Rgb::new(1.0, 0.5, 0.0));
+        assert_eq!(
+            tone(Rgb::new(5.0, 0.5, -1.0), ToneCurve::None),
+            Rgb::new(1.0, 0.5, 0.0)
+        );
     }
 
     #[test]
     fn depth_of_field_blurs_out_of_focus_only() {
         let mut s = scene();
         s.add(
-            Node::new("ball", Content::mesh(sphere(0.3, 16, 8), Material::basic(Color::RED)))
-                .at(Vec3::new(-2.0, 0.3, -4.0)),
+            Node::new(
+                "ball",
+                Content::mesh(sphere(0.3, 16, 8), Material::basic(Color::RED)),
+            )
+            .at(Vec3::new(-2.0, 0.3, -4.0)),
             None,
         );
-        let (f, _) = Renderer::new(96, 64).samples(1).render_frame(&mut s, &cam());
+        let (f, _) = Renderer::new(96, 64)
+            .samples(1)
+            .render_frame(&mut s, &cam());
         let focus = f.depth(48, 32);
         let mut g = f.clone();
         dof(&mut g, focus, 40.0, 6.0);
-        assert_eq!(g.color[32 * 96 + 48], f.color[32 * 96 + 48], "in focus stays sharp");
+        assert_eq!(
+            g.color[32 * 96 + 48],
+            f.color[32 * 96 + 48],
+            "in focus stays sharp"
+        );
         let changed = f.color.iter().zip(&g.color).filter(|(a, b)| a != b).count();
         assert!(changed > 50);
     }
@@ -724,11 +782,16 @@ mod tests {
     fn ssr_reflects_a_box_in_a_mirror_floor() {
         let mut s = scene();
         s.add(
-            Node::new("red", Content::mesh(box_mesh(0.8, 0.8, 0.8), Material::basic(Color::RED)))
-                .at(Vec3::new(-0.2, 0.4, -1.2)),
+            Node::new(
+                "red",
+                Content::mesh(box_mesh(0.8, 0.8, 0.8), Material::basic(Color::RED)),
+            )
+            .at(Vec3::new(-0.2, 0.4, -1.2)),
             None,
         );
-        let (f, _) = Renderer::new(96, 64).samples(1).render_frame(&mut s, &cam());
+        let (f, _) = Renderer::new(96, 64)
+            .samples(1)
+            .render_frame(&mut s, &cam());
         let mut g = f.clone();
         ssr(&mut g, 1.0, 64, 6.0);
         let changed = f.color.iter().zip(&g.color).filter(|(a, b)| a != b).count();
@@ -748,7 +811,10 @@ mod tests {
                 temperature: 0.3,
             })
             .with(Pass::ChromaticAberration { amount: 2.0 })
-            .with(Pass::Grain { amount: 0.05, seed: 3 })
+            .with(Pass::Grain {
+                amount: 0.05,
+                seed: 3,
+            })
             .with(Pass::DepthFog {
                 color: Rgb::new(0.1, 0.1, 0.2),
                 density: 0.02,

@@ -27,7 +27,13 @@ pub struct Arrow {
 /// Arrows on a `cols × rows` grid over `(x0, y0, x1, y1)`, each at most
 /// `max_len` long (scaled by magnitude relative to the largest).
 #[must_use]
-pub fn arrows(field: FieldFn<'_>, bounds: (f32, f32, f32, f32), cols: usize, rows: usize, max_len: f32) -> Vec<Arrow> {
+pub fn arrows(
+    field: FieldFn<'_>,
+    bounds: (f32, f32, f32, f32),
+    cols: usize,
+    rows: usize,
+    max_len: f32,
+) -> Vec<Arrow> {
     let (x0, y0, x1, y1) = bounds;
     let mut samples = Vec::new();
     for j in 0..rows {
@@ -46,7 +52,11 @@ pub fn arrows(field: FieldFn<'_>, bounds: (f32, f32, f32, f32), cols: usize, row
         .into_iter()
         .map(|(x, y, u, v, m)| {
             let len = max_len * m / mx;
-            let (dx, dy) = if m > 0.0 { (u / m * len, v / m * len) } else { (0.0, 0.0) };
+            let (dx, dy) = if m > 0.0 {
+                (u / m * len, v / m * len)
+            } else {
+                (0.0, 0.0)
+            };
             let tip = Offset::new(x + dx, y + dy);
             let mut p = Path::new();
             p.move_to(Offset::new(x, y));
@@ -54,11 +64,20 @@ pub fn arrows(field: FieldFn<'_>, bounds: (f32, f32, f32, f32), cols: usize, row
             if len > 1e-6 {
                 let h = len.min(max_len) * 0.3;
                 let (ux, uy) = (dx / len, dy / len);
-                p.move_to(Offset::new(tip.dx - ux * h - uy * h * 0.5, tip.dy - uy * h + ux * h * 0.5));
+                p.move_to(Offset::new(
+                    tip.dx - ux * h - uy * h * 0.5,
+                    tip.dy - uy * h + ux * h * 0.5,
+                ));
                 p.line_to(tip);
-                p.line_to(Offset::new(tip.dx - ux * h + uy * h * 0.5, tip.dy - uy * h - ux * h * 0.5));
+                p.line_to(Offset::new(
+                    tip.dx - ux * h + uy * h * 0.5,
+                    tip.dy - uy * h - ux * h * 0.5,
+                ));
             }
-            Arrow { path: p, magnitude: m }
+            Arrow {
+                path: p,
+                magnitude: m,
+            }
         })
         .collect()
 }
@@ -96,8 +115,13 @@ pub fn streamline(
     existing: &[(f32, f32)],
     separation: f32,
 ) -> Vec<(f32, f32)> {
-    let inside = |p: (f32, f32)| p.0 >= bounds.0 && p.0 <= bounds.2 && p.1 >= bounds.1 && p.1 <= bounds.3;
-    let free = |p: (f32, f32)| existing.iter().all(|q| (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) >= separation * separation);
+    let inside =
+        |p: (f32, f32)| p.0 >= bounds.0 && p.0 <= bounds.2 && p.1 >= bounds.1 && p.1 <= bounds.3;
+    let free = |p: (f32, f32)| {
+        existing
+            .iter()
+            .all(|q| (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) >= separation * separation)
+    };
     let mut halves = [Vec::new(), Vec::new()];
     for (dir, half) in [1.0f32, -1.0].iter().zip(halves.iter_mut()) {
         let mut p = seed;
@@ -119,7 +143,12 @@ pub fn streamline(
 
 /// Evenly spaced streamlines (seeded beside existing ones, Jobard–Lefer).
 #[must_use]
-pub fn streamlines(field: FieldFn<'_>, bounds: (f32, f32, f32, f32), separation: f32, h: f32) -> Vec<Vec<(f32, f32)>> {
+pub fn streamlines(
+    field: FieldFn<'_>,
+    bounds: (f32, f32, f32, f32),
+    separation: f32,
+    h: f32,
+) -> Vec<Vec<(f32, f32)>> {
     let mut lines: Vec<Vec<(f32, f32)>> = Vec::new();
     let mut all: Vec<(f32, f32)> = Vec::new();
     let mut seeds = vec![((bounds.0 + bounds.2) * 0.5, (bounds.1 + bounds.3) * 0.5)];
@@ -127,7 +156,10 @@ pub fn streamlines(field: FieldFn<'_>, bounds: (f32, f32, f32, f32), separation:
     while k < seeds.len() && lines.len() < 400 {
         let s = seeds[k];
         k += 1;
-        if all.iter().any(|q| (q.0 - s.0).powi(2) + (q.1 - s.1).powi(2) < separation * separation) {
+        if all
+            .iter()
+            .any(|q| (q.0 - s.0).powi(2) + (q.1 - s.1).powi(2) < separation * separation)
+        {
             continue;
         }
         let l = streamline(field, s, bounds, h, 2000, &all, separation * 0.5);
@@ -162,13 +194,17 @@ impl NumberLine {
     pub fn number_to_point(&self, x: f64) -> Offset {
         #[allow(clippy::cast_possible_truncation)]
         let t = ((x - self.min) / (self.max - self.min)) as f32;
-        Offset::new(self.start.dx + (self.end.dx - self.start.dx) * t, self.start.dy + (self.end.dy - self.start.dy) * t)
+        Offset::new(
+            self.start.dx + (self.end.dx - self.start.dx) * t,
+            self.start.dy + (self.end.dy - self.start.dy) * t,
+        )
     }
 
     #[must_use]
     pub fn point_to_number(&self, p: Offset) -> f64 {
         let (dx, dy) = (self.end.dx - self.start.dx, self.end.dy - self.start.dy);
-        let t = ((p.dx - self.start.dx) * dx + (p.dy - self.start.dy) * dy) / (dx * dx + dy * dy).max(1e-12);
+        let t = ((p.dx - self.start.dx) * dx + (p.dy - self.start.dy) * dy)
+            / (dx * dx + dy * dy).max(1e-12);
         self.min + f64::from(t) * (self.max - self.min)
     }
 
@@ -222,9 +258,20 @@ mod tests {
     #[test]
     fn streamlines_stop_at_a_sink_and_at_the_border() {
         let sink = |x: f32, y: f32| (-x, -y);
-        let l = streamline(&sink, (2.0, 1.0), (-3.0, -3.0, 3.0, 3.0), 0.1, 1000, &[], 0.0);
+        let l = streamline(
+            &sink,
+            (2.0, 1.0),
+            (-3.0, -3.0, 3.0, 3.0),
+            0.1,
+            1000,
+            &[],
+            0.0,
+        );
         let first = l[0];
-        assert!(first.0.abs() > 2.9 || first.1.abs() > 2.9, "backward runs to the border");
+        assert!(
+            first.0.abs() > 2.9 || first.1.abs() > 2.9,
+            "backward runs to the border"
+        );
         let last = *l.last().unwrap();
         assert!(last.0.hypot(last.1) < 0.2, "forward ends at the sink");
     }
@@ -246,7 +293,13 @@ mod tests {
 
     #[test]
     fn number_line_maps_both_ways() {
-        let nl = NumberLine { start: Offset::new(0.0, 0.0), end: Offset::new(100.0, 0.0), min: -5.0, max: 5.0, step: 1.0 };
+        let nl = NumberLine {
+            start: Offset::new(0.0, 0.0),
+            end: Offset::new(100.0, 0.0),
+            min: -5.0,
+            max: 5.0,
+            step: 1.0,
+        };
         assert_eq!(nl.number_to_point(0.0).dx, 50.0);
         assert!((nl.point_to_number(Offset::new(75.0, 3.0)) - 2.5).abs() < 1e-6);
         assert_eq!(nl.ticks().len(), 11);

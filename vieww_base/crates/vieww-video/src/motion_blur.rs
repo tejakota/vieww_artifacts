@@ -77,12 +77,27 @@ pub fn accumulate(render: impl Fn(f64) -> Image, t: f64, frame: f64, shutter: Sh
     let times = shutter.instants(t, frame);
     let first = render(times[0]);
     let (w, h) = (first.width(), first.height());
-    let mut acc: Vec<f32> = first.pixels().iter().enumerate().map(|(i, &v)| if i % 4 == 3 { f32::from(v) } else { to_linear(v) }).collect();
+    let mut acc: Vec<f32> = first
+        .pixels()
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            if i % 4 == 3 {
+                f32::from(v)
+            } else {
+                to_linear(v)
+            }
+        })
+        .collect();
     for &ti in &times[1..] {
         let img = render(ti);
         assert_eq!((img.width(), img.height()), (w, h), "render size changed");
         for (i, (a, &v)) in acc.iter_mut().zip(img.pixels()).enumerate() {
-            *a += if i % 4 == 3 { f32::from(v) } else { to_linear(v) };
+            *a += if i % 4 == 3 {
+                f32::from(v)
+            } else {
+                to_linear(v)
+            };
         }
     }
     #[allow(clippy::cast_precision_loss)]
@@ -180,7 +195,16 @@ mod tests {
 
     #[test]
     fn a_moving_bar_streaks_and_keeps_its_energy() {
-        let img = accumulate(bar, 0.1, 0.1, Shutter { angle: 360.0, phase: -0.5, samples: 20 });
+        let img = accumulate(
+            bar,
+            0.1,
+            0.1,
+            Shutter {
+                angle: 360.0,
+                phase: -0.5,
+                samples: 20,
+            },
+        );
         let row: Vec<u8> = (0..40).map(|x| img.pixels()[x * 4]).collect();
         let lit = row.iter().filter(|&&v| v > 10).count();
         assert!(lit > 6, "streak {row:?}");
@@ -188,7 +212,16 @@ mod tests {
         let e: f32 = row.iter().map(|&v| to_linear(v)).sum();
         assert!((e - 2.0).abs() < 0.5, "{e}");
         // A still frame (zero-angle shutter) stays sharp.
-        let sharp = accumulate(bar, 0.1, 0.1, Shutter { angle: 0.0, phase: 0.0, samples: 4 });
+        let sharp = accumulate(
+            bar,
+            0.1,
+            0.1,
+            Shutter {
+                angle: 0.0,
+                phase: 0.0,
+                samples: 4,
+            },
+        );
         assert_eq!((0..40).filter(|&x| sharp.pixels()[x * 4] > 10).count(), 2);
     }
 

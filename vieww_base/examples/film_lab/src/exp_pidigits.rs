@@ -75,6 +75,7 @@ struct Run {
     e1: f64,
     /// The phase-space angle θ = arctan√(m/M).
     theta: f64,
+    #[allow(dead_code)]
     total_time: f64,
 }
 
@@ -92,6 +93,7 @@ fn galperin(theta: f64) -> u64 {
 
 /// Run the mechanics for a mass ratio of 100^n, event by event. Returns
 /// the collision count and (when `record`) the full event list.
+#[allow(unused_assignments)]
 fn run(n: u32, record: bool, stop_after: Option<u64>) -> Run {
     let big = M_SMALL * 100.0_f64.powi(n as i32);
     let mut x1 = X_SMALL0; // small block's left face

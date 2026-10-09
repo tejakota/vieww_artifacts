@@ -74,14 +74,14 @@ pub mod widget;
 pub use import::{apply_animation, import_gltf};
 pub use math::{Mat4, Quat, Vec3};
 pub use pathtrace::{Accumulator, PathTracer, TraceScene};
-pub use raycast::{project, raycast, Hit, Ray};
 pub use post::{Pass, PostStack, ToneCurve};
+pub use raycast::{project, raycast, Hit, Ray};
 pub use render::{Frame, RenderStats, Renderer};
-pub use shader::{FragmentShader, ShaderGraph};
-pub use skin::{SkinnedMesh, Skinning};
-pub use stereo::StereoRig;
 pub use scene::{
     Camera, Content, Filter, Light, Material, Node, NodeDesc, NodeId, OrbitControls, Projection,
     ReconcileStats, Rgb, Scene, Shading, Texture,
 };
+pub use shader::{FragmentShader, ShaderGraph};
+pub use skin::{SkinnedMesh, Skinning};
+pub use stereo::StereoRig;
 pub use widget::Viewport3D;

@@ -98,7 +98,7 @@ fn ns_step(cells: &mut Vec<i32>, rng: &mut Rng) -> usize {
 /// including it is the classic way to get a fundamental diagram that sags).
 fn ring_flow(density: f32, steps: usize, seed: u64) -> (f32, f32) {
     let mut rng = Rng::new(seed);
-    let cars = ((L as f32 * density).round() as usize).max(1).min(L);
+    let cars = ((L as f32 * density).round() as usize).clamp(1, L);
     let mut cells = vec![-1i32; L];
     // deterministic even placement, jittered from the seed
     let mut placed = 0usize;

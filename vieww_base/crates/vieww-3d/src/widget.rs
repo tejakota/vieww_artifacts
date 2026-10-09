@@ -78,7 +78,9 @@ impl Viewport3D {
         #[allow(clippy::cast_precision_loss)]
         let (w, h) = (self.renderer.width as f32, self.renderer.height as f32);
         let ray = Ray::from_screen(&self.camera, w, h, x, y);
-        raycast(&mut self.scene.borrow_mut(), &ray).into_iter().next()
+        raycast(&mut self.scene.borrow_mut(), &ray)
+            .into_iter()
+            .next()
     }
 
     /// Write each render's [`RenderStats`] here.

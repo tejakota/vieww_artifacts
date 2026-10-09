@@ -24,9 +24,19 @@ pub fn pan(p: f32) -> (f32, f32) {
 /// A distance model.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Distance {
-    Linear { reference: f32, max: f32, rolloff: f32 },
-    Inverse { reference: f32, rolloff: f32 },
-    Exponential { reference: f32, rolloff: f32 },
+    Linear {
+        reference: f32,
+        max: f32,
+        rolloff: f32,
+    },
+    Inverse {
+        reference: f32,
+        rolloff: f32,
+    },
+    Exponential {
+        reference: f32,
+        rolloff: f32,
+    },
 }
 
 impl Distance {
@@ -34,7 +44,11 @@ impl Distance {
     #[must_use]
     pub fn gain(&self, d: f32) -> f32 {
         match *self {
-            Self::Linear { reference, max, rolloff } => {
+            Self::Linear {
+                reference,
+                max,
+                rolloff,
+            } => {
                 let d = d.clamp(reference, max);
                 1.0 - rolloff.clamp(0.0, 1.0) * (d - reference) / (max - reference).max(1e-6)
             }
@@ -42,7 +56,9 @@ impl Distance {
                 let d = d.max(reference);
                 reference / (reference + rolloff * (d - reference))
             }
-            Self::Exponential { reference, rolloff } => (d.max(reference) / reference).powf(-rolloff),
+            Self::Exponential { reference, rolloff } => {
+                (d.max(reference) / reference).powf(-rolloff)
+            }
         }
     }
 }
@@ -72,7 +88,11 @@ fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 fn len(a: [f32; 3]) -> f32 {
     dot(a, a).sqrt()
@@ -87,7 +107,10 @@ impl Default for Spatializer {
             listener: [0.0; 3],
             forward: [0.0, 0.0, -1.0],
             up: [0.0, 1.0, 0.0],
-            distance: Distance::Inverse { reference: 1.0, rolloff: 1.0 },
+            distance: Distance::Inverse {
+                reference: 1.0,
+                rolloff: 1.0,
+            },
             head_radius: 0.0875,
             speed_of_sound: 343.0,
         }
@@ -122,7 +145,9 @@ impl Spatializer {
         let mut g = self.distance.gain(d);
         if let Some((dir, inner, outer, outside)) = self.cone {
             let away = sub(self.listener, self.source);
-            let c = (dot(away, dir) / (len(away).max(1e-6) * len(dir).max(1e-6))).clamp(-1.0, 1.0).acos();
+            let c = (dot(away, dir) / (len(away).max(1e-6) * len(dir).max(1e-6)))
+                .clamp(-1.0, 1.0)
+                .acos();
             let k = if c <= inner {
                 1.0
             } else if c >= outer {
@@ -158,12 +183,19 @@ impl Spatializer {
         let c = self.cues();
         let rate = mono.rate;
         let src: Vec<f32> = if mono.channels == 2 {
-            mono.data.chunks(2).map(|f| (f[0] + f.get(1).copied().unwrap_or(0.0)) * 0.5).collect()
+            mono.data
+                .chunks(2)
+                .map(|f| (f[0] + f.get(1).copied().unwrap_or(0.0)) * 0.5)
+                .collect()
         } else {
             mono.data.clone()
         };
         // Doppler: resample by the pitch ratio.
-        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
         let n = (src.len() as f32 / c.doppler).round() as usize;
         let at = |pos: f32| -> f32 {
             if pos < 0.0 {
@@ -179,7 +211,11 @@ impl Spatializer {
         };
         #[allow(clippy::cast_precision_loss)]
         let delay = c.itd * rate as f32;
-        let (dl, dr) = if delay > 0.0 { (delay, 0.0) } else { (0.0, -delay) };
+        let (dl, dr) = if delay > 0.0 {
+            (delay, 0.0)
+        } else {
+            (0.0, -delay)
+        };
         let mut out = Vec::with_capacity(n * 2);
         let (mut lp_l, mut lp_r) = (0.0f32, 0.0f32);
         for i in 0..n {
@@ -212,46 +248,87 @@ mod tests {
 
     #[test]
     fn distance_models_match_web_audio() {
-        let inv = Distance::Inverse { reference: 1.0, rolloff: 1.0 };
+        let inv = Distance::Inverse {
+            reference: 1.0,
+            rolloff: 1.0,
+        };
         assert!((inv.gain(4.0) - 0.25).abs() < 1e-6);
         assert_eq!(inv.gain(0.5), 1.0);
-        let lin = Distance::Linear { reference: 1.0, max: 11.0, rolloff: 1.0 };
+        let lin = Distance::Linear {
+            reference: 1.0,
+            max: 11.0,
+            rolloff: 1.0,
+        };
         assert!((lin.gain(6.0) - 0.5).abs() < 1e-6);
         assert_eq!(lin.gain(100.0), 0.0);
-        let exp = Distance::Exponential { reference: 1.0, rolloff: 2.0 };
+        let exp = Distance::Exponential {
+            reference: 1.0,
+            rolloff: 2.0,
+        };
         assert!((exp.gain(2.0) - 0.25).abs() < 1e-6);
     }
 
     #[test]
     fn a_source_on_the_right_is_louder_and_earlier_on_the_right() {
-        let s = Spatializer { source: [2.0, 0.0, 0.0], ..Spatializer::default() };
+        let s = Spatializer {
+            source: [2.0, 0.0, 0.0],
+            ..Spatializer::default()
+        };
         let c = s.cues();
         assert!((c.azimuth - std::f32::consts::FRAC_PI_2).abs() < 1e-4);
         assert!(c.gain.1 > c.gain.0);
-        assert!(c.itd > 0.0006 && c.itd < 0.0007, "≈0.66 ms for a 8.75 cm head: {}", c.itd);
+        assert!(
+            c.itd > 0.0006 && c.itd < 0.0007,
+            "≈0.66 ms for a 8.75 cm head: {}",
+            c.itd
+        );
         let tone: Vec<f32> = (0..4800).map(|i| (i as f32 * 0.05).sin()).collect();
         let out = s.render(&Samples::mono(tone, 48_000));
-        let e = |ch: usize| out.data.iter().skip(ch).step_by(2).map(|v| v * v).sum::<f32>();
+        let e = |ch: usize| {
+            out.data
+                .iter()
+                .skip(ch)
+                .step_by(2)
+                .map(|v| v * v)
+                .sum::<f32>()
+        };
         assert!(e(1) > e(0) * 4.0);
         // The right ear leads: its first non-zero sample comes first (a
         // source at 45° so the far ear is not silent).
-        let s45 = Spatializer { source: [1.0, 0.0, -1.0], ..Spatializer::default() };
+        let s45 = Spatializer {
+            source: [1.0, 0.0, -1.0],
+            ..Spatializer::default()
+        };
         let tone: Vec<f32> = (0..4800).map(|i| (i as f32 * 0.05).sin()).collect();
         let out = s45.render(&Samples::mono(tone, 48_000));
-        let first = |ch: usize| out.data.iter().skip(ch).step_by(2).position(|v| v.abs() > 1e-4).unwrap_or(0);
+        let first = |ch: usize| {
+            out.data
+                .iter()
+                .skip(ch)
+                .step_by(2)
+                .position(|v| v.abs() > 1e-4)
+                .unwrap_or(0)
+        };
         assert!(first(1) < first(0));
     }
 
     #[test]
     fn approaching_sources_rise_in_pitch_and_cones_attenuate() {
-        let s = Spatializer { source: [0.0, 0.0, -10.0], source_velocity: [0.0, 0.0, 34.3], ..Spatializer::default() };
+        let s = Spatializer {
+            source: [0.0, 0.0, -10.0],
+            source_velocity: [0.0, 0.0, 34.3],
+            ..Spatializer::default()
+        };
         assert!((s.cues().doppler - 1.0 / 0.9).abs() < 1e-3);
         let facing_away = Spatializer {
             source: [0.0, 0.0, -2.0],
             cone: Some(([0.0, 0.0, -1.0], 0.3, 0.6, 0.1)),
             ..Spatializer::default()
         };
-        let facing = Spatializer { cone: Some(([0.0, 0.0, 1.0], 0.3, 0.6, 0.1)), ..facing_away };
+        let facing = Spatializer {
+            cone: Some(([0.0, 0.0, 1.0], 0.3, 0.6, 0.1)),
+            ..facing_away
+        };
         assert!(facing.cues().gain.0 > facing_away.cues().gain.0 * 5.0);
     }
 }

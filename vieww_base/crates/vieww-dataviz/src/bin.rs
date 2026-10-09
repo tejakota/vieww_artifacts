@@ -26,10 +26,12 @@ pub enum Thresholds {
 /// `(min, max)` ignoring NaN.
 #[must_use]
 pub fn extent(v: &[f64]) -> Option<(f64, f64)> {
-    v.iter().filter(|x| !x.is_nan()).fold(None, |acc, &x| match acc {
-        None => Some((x, x)),
-        Some((a, b)) => Some((a.min(x), b.max(x))),
-    })
+    v.iter()
+        .filter(|x| !x.is_nan())
+        .fold(None, |acc, &x| match acc {
+            None => Some((x, x)),
+            Some((a, b)) => Some((a.min(x), b.max(x))),
+        })
 }
 
 /// The `p`-quantile (R-7 / d3 definition: linear between order statistics).
@@ -64,10 +66,15 @@ pub fn histogram(values: &[f64], thresholds: &Thresholds) -> Vec<Bin> {
         }
         _ => {
             let count = match thresholds {
-                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                #[allow(
+                    clippy::cast_precision_loss,
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss
+                )]
                 Thresholds::Sturges => ((n.max(1) as f64).log2().ceil() as usize) + 1,
                 Thresholds::FreedmanDiaconis => {
-                    let iqr = quantile(values, 0.75).unwrap_or(0.0) - quantile(values, 0.25).unwrap_or(0.0);
+                    let iqr = quantile(values, 0.75).unwrap_or(0.0)
+                        - quantile(values, 0.25).unwrap_or(0.0);
                     #[allow(clippy::cast_precision_loss)]
                     let width = 2.0 * iqr * (n.max(1) as f64).powf(-1.0 / 3.0);
                     if width > 0.0 {
@@ -138,7 +145,10 @@ mod tests {
 
     #[test]
     fn explicit_thresholds_and_the_closed_last_bin() {
-        let b = histogram(&[0.0, 1.0, 1.5, 2.0, f64::NAN], &Thresholds::Explicit(vec![0.0, 1.0, 2.0]));
+        let b = histogram(
+            &[0.0, 1.0, 1.5, 2.0, f64::NAN],
+            &Thresholds::Explicit(vec![0.0, 1.0, 2.0]),
+        );
         assert_eq!(b.iter().map(|x| x.count).collect::<Vec<_>>(), vec![1, 3]);
     }
 

@@ -14,9 +14,8 @@ use vieww_foundation::{Color, Rect, Sketchbook, TextAlign, TextStyle};
 use vieww_widget::prelude::*;
 
 use super::{
-    ACCENT, BREAK_RED, Ctx, MUTED, SYN_COMMENT, W, alpha, caption, clamp01,
-    distance_chip, gap_line, grain, ground, pole_caret, pole_screen, progress_rail, spring_out,
-    tint, vignette, xywh,
+    alpha, caption, clamp01, distance_chip, gap_line, grain, ground, pole_caret, pole_screen,
+    progress_rail, spring_out, tint, vignette, xywh, Ctx, ACCENT, BREAK_RED, MUTED, SYN_COMMENT, W,
 };
 use crate::film_lib::ease_out_cubic;
 
@@ -32,7 +31,7 @@ const DEVICES: [(f32, f32, f32, f32, f32, &str); 3] = [
     (1260.0, 545.0, 210.0, 260.0, 12.0, "tablet · 834"),
 ];
 
-pub fn build(ctx: &Ctx) -> WidgetNode {
+pub(super) fn build(ctx: &Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let frame_i = (ctx.abs * 60.0) as u64;
@@ -57,7 +56,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
     stack = stack.push(Positioned::fill().child(Painting::sized(
         super::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            gap_line(book, 430.0, 560.0, 1360.0, 0.0, sec, 6.0, fray, BREAK_RED, 0.85);
+            gap_line(
+                book, 430.0, 560.0, 1360.0, 0.0, sec, 6.0, fray, BREAK_RED, 0.85,
+            );
             pole_caret(book, 560.0, 430.0, sec, 1.0);
             // The original screen pole ghosts away — replaced by three.
             let ghost = 1.0 - clamp01((t - 0.06) / 0.2);
@@ -111,28 +112,27 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                 .top(y2 - h2 - 40.0)
                 .width(w2)
                 .height(h2 + 40.0)
-                .child(
-                    super::Opacity::new(device_a).child(Painting::sized(
-                        Size::new(w2, h2 + 40.0),
-                        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                            // Standing in space, not lying on the page.
-                            //
-                            // The splay opens with the drift: square-on
-                            // while the three screens still agree, turning
-                            // away from each other as they stop agreeing.
-                            // The angle *is* the story here, so it is
-                            // driven by `drift_k` rather than the clock.
-                            // A 620 px lens — normal, not long: at 1500
-                            // the perspective divide cancelled the very
-                            // rotation it was there to reveal.
-                            super::panel_3d(
-                                book,
-                                xywh(0.0, 0.0, w2, h2 + 40.0),
-                                yaw,
-                                pitch,
-                                620.0,
-                                1.0,
-                                move |book: &mut Sketchbook| {
+                .child(super::Opacity::new(device_a).child(Painting::sized(
+                    Size::new(w2, h2 + 40.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                        // Standing in space, not lying on the page.
+                        //
+                        // The splay opens with the drift: square-on
+                        // while the three screens still agree, turning
+                        // away from each other as they stop agreeing.
+                        // The angle *is* the story here, so it is
+                        // driven by `drift_k` rather than the clock.
+                        // A 620 px lens — normal, not long: at 1500
+                        // the perspective divide cancelled the very
+                        // rotation it was there to reveal.
+                        super::panel_3d(
+                            book,
+                            xywh(0.0, 0.0, w2, h2 + 40.0),
+                            yaw,
+                            pitch,
+                            620.0,
+                            1.0,
+                            move |book: &mut Sketchbook| {
                                 // The device frame.
                                 let body = xywh(0.0, 40.0, w2, h2);
                                 book.stroke_rrect(body, corner, alpha(MUTED, 0.7), 2.2);
@@ -153,9 +153,9 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 // drift made visible in the line breaks.
                                 let words: Vec<&str> = SCREEN_WORDS.split(' ').collect();
                                 let (line1, line2): (&str, &str) = match di {
-                                    0 => ("the same", "screen"),          // desktop: early break
-                                    1 => ("the same screen", ""),          // phone: one long line, clipped
-                                    _ => ("the same screen", ""),           // tablet: stretched spacing
+                                    0 => ("the same", "screen"),  // desktop: early break
+                                    1 => ("the same screen", ""), // phone: one long line, clipped
+                                    _ => ("the same screen", ""), // tablet: stretched spacing
                                 };
                                 let _ = words;
                                 let fs = if di == 2 { 17.0 } else { 13.0 };
@@ -167,13 +167,25 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                 let bar_w = |text: &str| fs * 0.55 * text.chars().count() as f32;
                                 let spacing = if di == 2 { 14.0 * (1.0 + drift_k) } else { 8.0 };
                                 book.rrect(
-                                    xywh(12.0, ty, (bar_w(line1) * (if di == 2 { 1.4 } else { 1.0 })).min(w2 - 24.0), 7.0),
+                                    xywh(
+                                        12.0,
+                                        ty,
+                                        (bar_w(line1) * (if di == 2 { 1.4 } else { 1.0 }))
+                                            .min(w2 - 24.0),
+                                        7.0,
+                                    ),
                                     3.0,
                                     ink,
                                 );
                                 if !line2.is_empty() {
                                     book.rrect(
-                                        xywh(12.0 + spacing, ty + 14.0, (bar_w(line2) * (if di == 2 { 1.4 } else { 1.0 })).min(w2 - 24.0), 7.0),
+                                        xywh(
+                                            12.0 + spacing,
+                                            ty + 14.0,
+                                            (bar_w(line2) * (if di == 2 { 1.4 } else { 1.0 }))
+                                                .min(w2 - 24.0),
+                                            7.0,
+                                        ),
                                         3.0,
                                         alpha(MUTED, 0.6),
                                     );
@@ -196,11 +208,10 @@ pub fn build(ctx: &Ctx) -> WidgetNode {
                                         2.0,
                                     );
                                 }
-                                },
-                            );
-                        }),
-                    )),
-                ),
+                            },
+                        );
+                    }),
+                ))),
         );
         // The device's label.
         stack = stack.push(

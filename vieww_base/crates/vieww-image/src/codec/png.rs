@@ -50,7 +50,11 @@ pub fn encode(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
         .map(|y| {
             let src = &rgba[y * w * 4..(y + 1) * w * 4];
             if opaque {
-                src.as_chunks::<4>().0.iter().flat_map(|p| [p[0], p[1], p[2]]).collect()
+                src.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .flat_map(|p| [p[0], p[1], p[2]])
+                    .collect()
             } else {
                 src.to_vec()
             }
@@ -78,7 +82,10 @@ pub fn encode(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
                 };
                 line.push(cur[i].wrapping_sub(pred));
             }
-            let score: u64 = line.iter().map(|&v| u64::from((v as i8).unsigned_abs())).sum();
+            let score: u64 = line
+                .iter()
+                .map(|&v| u64::from((v as i8).unsigned_abs()))
+                .sum();
             if score < best.0 {
                 best = (score, f, line);
             }
@@ -134,7 +141,11 @@ fn unfilter(data: &[u8], w: usize, h: usize, hd: &Header) -> Result<Vec<u8>, Cod
         let f = data[y * (stride + 1)];
         let src = &data[y * (stride + 1) + 1..(y + 1) * (stride + 1)];
         for i in 0..stride {
-            let a = if i >= bpp { out[y * stride + i - bpp] } else { 0 };
+            let a = if i >= bpp {
+                out[y * stride + i - bpp]
+            } else {
+                0
+            };
             let b = if y > 0 { out[(y - 1) * stride + i] } else { 0 };
             let c = if y > 0 && i >= bpp {
                 out[(y - 1) * stride + i - bpp]
@@ -189,7 +200,8 @@ fn expand(
         }
     };
     let key16 = |i: usize| -> Option<u16> {
-        trns.get(i * 2..i * 2 + 2).map(|b| u16::from_be_bytes([b[0], b[1]]))
+        trns.get(i * 2..i * 2 + 2)
+            .map(|b| u16::from_be_bytes([b[0], b[1]]))
     };
     for y in 0..h {
         let row = &rows[y * stride..(y + 1) * stride];
@@ -202,7 +214,11 @@ fn expand(
                     out.extend([g, g, g, a]);
                 }
                 2 => {
-                    let (r, g, b) = (sample(row, 3 * x), sample(row, 3 * x + 1), sample(row, 3 * x + 2));
+                    let (r, g, b) = (
+                        sample(row, 3 * x),
+                        sample(row, 3 * x + 1),
+                        sample(row, 3 * x + 2),
+                    );
                     let a = if key16(0) == Some(r) && key16(1) == Some(g) && key16(2) == Some(b) {
                         0
                     } else {
@@ -250,7 +266,8 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, CodecError> {
     let mut palette: Vec<[u8; 3]> = Vec::new();
     let mut trns: Vec<u8> = Vec::new();
     while at + 12 <= bytes.len() {
-        let len = u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]) as usize;
+        let len =
+            u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]) as usize;
         let kind = &bytes[at + 4..at + 8];
         let data = bytes
             .get(at + 8..at + 8 + len)
@@ -370,7 +387,12 @@ mod tests {
 
     #[test]
     fn round_trip_rgba_and_rgb() {
-        for (w, h, a) in [(1, 1, false), (37, 19, true), (64, 48, false), (3, 200, true)] {
+        for (w, h, a) in [
+            (1, 1, false),
+            (37, 19, true),
+            (64, 48, false),
+            (3, 200, true),
+        ] {
             let px = gradient(w, h, a);
             let d = decode(&encode(w, h, &px)).unwrap();
             assert_eq!((d.width, d.height), (w, h));
@@ -385,7 +407,14 @@ mod tests {
     }
 
     /// Build a PNG by hand with arbitrary IHDR fields and raw rows.
-    fn handmade(w: u32, h: u32, depth: u8, color: u8, rows: &[u8], extra: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
+    fn handmade(
+        w: u32,
+        h: u32,
+        depth: u8,
+        color: u8,
+        rows: &[u8],
+        extra: &[(&[u8; 4], Vec<u8>)],
+    ) -> Vec<u8> {
         let mut out = SIG.to_vec();
         let mut ihdr = Vec::new();
         ihdr.extend(w.to_be_bytes());
@@ -425,10 +454,20 @@ mod tests {
 
     #[test]
     fn sixteen_bit_and_grey_alpha() {
-        let png = handmade(1, 1, 16, 6, &[0, 0x12, 0x34, 0xAB, 0xCD, 0xFF, 0x00, 0x80, 0x00], &[]);
+        let png = handmade(
+            1,
+            1,
+            16,
+            6,
+            &[0, 0x12, 0x34, 0xAB, 0xCD, 0xFF, 0x00, 0x80, 0x00],
+            &[],
+        );
         assert_eq!(decode(&png).unwrap().rgba, vec![0x12, 0xAB, 0xFF, 0x80]);
         let ga = handmade(2, 1, 8, 4, &[0, 50, 200, 60, 100], &[]);
-        assert_eq!(decode(&ga).unwrap().rgba, vec![50, 50, 50, 200, 60, 60, 60, 100]);
+        assert_eq!(
+            decode(&ga).unwrap().rgba,
+            vec![50, 50, 50, 200, 60, 60, 60, 100]
+        );
     }
 
     #[test]
@@ -444,8 +483,15 @@ mod tests {
         // 3×3 RGB8 interlaced, hand-built from the pass layout.
         let px: Vec<[u8; 3]> = (0..9u8).map(|i| [i * 20, i, 255 - i]).collect();
         let at = |x: usize, y: usize| px[y * 3 + x];
-        let passes: [(usize, usize, usize, usize); 7] =
-            [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)];
+        let passes: [(usize, usize, usize, usize); 7] = [
+            (0, 0, 8, 8),
+            (4, 0, 8, 8),
+            (0, 4, 4, 8),
+            (2, 0, 4, 4),
+            (0, 2, 2, 4),
+            (1, 0, 2, 2),
+            (0, 1, 1, 2),
+        ];
         let mut raw = Vec::new();
         for (x0, y0, dx, dy) in passes {
             let mut y = y0;
@@ -471,8 +517,8 @@ mod tests {
         chunk(&mut out, b"IDAT", &zlib_compress(&raw));
         chunk(&mut out, b"IEND", &[]);
         let d = decode(&out).unwrap();
-        for i in 0..9 {
-            assert_eq!(&d.rgba[i * 4..i * 4 + 3], &px[i]);
+        for (i, expected) in px.iter().enumerate() {
+            assert_eq!(&d.rgba[i * 4..i * 4 + 3], expected);
         }
     }
 }

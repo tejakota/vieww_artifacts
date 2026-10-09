@@ -113,7 +113,9 @@ mod tests {
 
     #[test]
     fn sniffing_dispatches_every_encoder_output() {
-        let px: Vec<u8> = (0..16 * 16).flat_map(|i: u32| [(i % 16 * 16) as u8, 90, 200, 255]).collect();
+        let px: Vec<u8> = (0..16 * 16)
+            .flat_map(|i: u32| [(i % 16 * 16) as u8, 90, 200, 255])
+            .collect();
         for (bytes, f) in [
             (png::encode(16, 16, &px), Format::Png),
             (gif::encode(16, 16, &[(px.clone(), 1)], 0), Format::Gif),

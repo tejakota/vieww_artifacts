@@ -937,8 +937,14 @@ fn draw_points(
             .or_else(|| colors.last())
             .copied()
             .unwrap_or(Rgb::WHITE);
-        let (x0, x1) = ((sx - r).floor().max(0.0) as i64, (sx + r).ceil().min(w - 1.0) as i64);
-        let (y0, y1) = ((sy - r).floor().max(0.0) as i64, (sy + r).ceil().min(h - 1.0) as i64);
+        let (x0, x1) = (
+            (sx - r).floor().max(0.0) as i64,
+            (sx + r).ceil().min(w - 1.0) as i64,
+        );
+        let (y0, y1) = (
+            (sy - r).floor().max(0.0) as i64,
+            (sy + r).ceil().min(h - 1.0) as i64,
+        );
         let mut drew = false;
         for y in y0..=y1 {
             for x in x0..=x1 {

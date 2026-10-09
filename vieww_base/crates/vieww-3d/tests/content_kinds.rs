@@ -30,7 +30,12 @@ fn cam() -> Camera {
 }
 
 fn lit(img: &vieww_foundation::Image) -> usize {
-    img.pixels().as_chunks::<4>().0.iter().filter(|p| p[0] > 10 || p[1] > 10 || p[2] > 10).count()
+    img.pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[0] > 10 || p[1] > 10 || p[2] > 10)
+        .count()
 }
 
 #[test]
@@ -45,7 +50,10 @@ fn a_morphing_mesh_moves_with_its_weights() {
     let id = s.add(
         Node::new(
             "m",
-            Content::skinned(SkinnedMesh::morphing(mesh, vec![target]), Material::basic(Color::WHITE)),
+            Content::skinned(
+                SkinnedMesh::morphing(mesh, vec![target]),
+                Material::basic(Color::WHITE),
+            ),
         ),
         None,
     );
@@ -68,7 +76,13 @@ fn a_point_cloud_draws_splats() {
             Vec3::new(a.cos() * 1.5, (i as f32 / 100.0) - 1.0, a.sin() * 1.5)
         })
         .collect();
-    s.add(Node::new("pc", Content::points(pts, vec![Rgb::new(1.0, 0.5, 0.2)], 0.03)), None);
+    s.add(
+        Node::new(
+            "pc",
+            Content::points(pts, vec![Rgb::new(1.0, 0.5, 0.2)], 0.03),
+        ),
+        None,
+    );
     let (img, st) = Renderer::new(96, 64).samples(1).render(&mut s, &cam());
     assert!(st.points > 150, "{st:?}");
     assert!(lit(&img) > 150);
@@ -78,7 +92,10 @@ fn a_point_cloud_draws_splats() {
 fn clustered_meshes_cull_their_back_half() {
     let mut s = base();
     s.add(
-        Node::new("c", Content::clustered(&sphere(1.0, 64, 32), 3, Material::lambert(Color::WHITE))),
+        Node::new(
+            "c",
+            Content::clustered(&sphere(1.0, 64, 32), 3, Material::lambert(Color::WHITE)),
+        ),
         None,
     );
     let (img, st) = Renderer::new(96, 64).samples(1).render(&mut s, &cam());
@@ -91,17 +108,37 @@ fn clustered_meshes_cull_their_back_half() {
 fn a_custom_shader_runs_per_fragment() {
     let mut s = base();
     let stripes = FragmentShader::new("stripes", |f| {
-        let k = if (f.world.y * 10.0).floor() as i32 % 2 == 0 { 1.0 } else { 0.0 };
+        let k = if (f.world.y * 10.0).floor() as i32 % 2 == 0 {
+            1.0
+        } else {
+            0.0
+        };
         [k, 0.0, 1.0 - k, 1.0]
     });
     s.add(
-        Node::new("b", Content::mesh(box_mesh(2.0, 2.0, 2.0), Material::basic(Color::WHITE).shader(stripes))),
+        Node::new(
+            "b",
+            Content::mesh(
+                box_mesh(2.0, 2.0, 2.0),
+                Material::basic(Color::WHITE).shader(stripes),
+            ),
+        ),
         None,
     );
     let (img, st) = Renderer::new(64, 48).samples(1).render(&mut s, &cam());
     assert!(st.shaded_custom > 100);
     let px = img.pixels();
-    let reds = px.as_chunks::<4>().0.iter().filter(|p| p[0] > 200 && p[2] < 50).count();
-    let blues = px.as_chunks::<4>().0.iter().filter(|p| p[2] > 200 && p[0] < 50).count();
+    let reds = px
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[0] > 200 && p[2] < 50)
+        .count();
+    let blues = px
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[2] > 200 && p[0] < 50)
+        .count();
     assert!(reds > 50 && blues > 50);
 }

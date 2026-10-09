@@ -51,10 +51,13 @@ pub struct Fragment {
     pub albedo: Rgb,
 }
 
+/// The boxed callable a [`FragmentShader`] wraps.
+pub type FragmentFn = Arc<dyn Fn(&Fragment) -> [f32; 4] + Send + Sync>;
+
 /// A fragment program: `Fragment → linear RGBA`.
 #[derive(Clone)]
 pub struct FragmentShader {
-    f: Arc<dyn Fn(&Fragment) -> [f32; 4] + Send + Sync>,
+    f: FragmentFn,
     name: String,
 }
 
@@ -126,14 +129,24 @@ pub enum ShaderNode {
     /// `smoothstep(e0, e1, a)` per component.
     Smoothstep(Slot, f32, f32),
     /// `(1 − n·v)^power`, broadcast.
-    Fresnel { power: f32 },
+    Fresnel {
+        power: f32,
+    },
     /// Value noise of the world position scaled by `scale`, animated by
     /// time × `speed`, in `0..1`.
-    Noise { scale: f32, speed: f32 },
+    Noise {
+        scale: f32,
+        speed: f32,
+    },
     /// UV checkerboard, `cells` per unit, 0 or 1.
-    Checker { cells: f32 },
+    Checker {
+        cells: f32,
+    },
     /// Stripes across a world axis (0 = x, 1 = y, 2 = z): `0..1` triangle wave.
-    Stripes { axis: u8, frequency: f32 },
+    Stripes {
+        axis: u8,
+        frequency: f32,
+    },
     /// Map the x of `a` through a two-colour ramp.
     Ramp(Slot, [f32; 4], [f32; 4]),
     /// Swizzle one component across all four.
@@ -185,8 +198,16 @@ pub fn value_noise(p: Vec3) -> f32 {
     let l = |a: f32, b: f32, t: f32| a + (b - a) * t;
     let c = |dx, dy, dz| hash3(ix + dx, iy + dy, iz + dz);
     l(
-        l(l(c(0, 0, 0), c(1, 0, 0), u), l(c(0, 1, 0), c(1, 1, 0), u), v),
-        l(l(c(0, 0, 1), c(1, 0, 1), u), l(c(0, 1, 1), c(1, 1, 1), u), v),
+        l(
+            l(c(0, 0, 0), c(1, 0, 0), u),
+            l(c(0, 1, 0), c(1, 1, 0), u),
+            v,
+        ),
+        l(
+            l(c(0, 0, 1), c(1, 0, 1), u),
+            l(c(0, 1, 1), c(1, 1, 1), u),
+            v,
+        ),
         w,
     )
 }
@@ -242,7 +263,12 @@ impl ShaderGraph {
         visiting[s.0] = true;
         let mut ev = |x: Slot| self.eval_rec(x, f, memo, visiting);
         let map2 = |a: [f32; 4], b: [f32; 4], op: fn(f32, f32) -> f32| {
-            [op(a[0], b[0]), op(a[1], b[1]), op(a[2], b[2]), op(a[3], b[3])]
+            [
+                op(a[0], b[0]),
+                op(a[1], b[1]),
+                op(a[2], b[2]),
+                op(a[3], b[3]),
+            ]
         };
         let v = match node {
             ShaderNode::Input(i) => match i {
@@ -273,7 +299,9 @@ impl ShaderGraph {
                 t * t * (3.0 - 2.0 * t)
             }),
             ShaderNode::Fresnel { power } => {
-                [(1.0 - f.normal.dot(f.view).abs()).clamp(0.0, 1.0).powf(*power); 4]
+                [(1.0 - f.normal.dot(f.view).abs())
+                    .clamp(0.0, 1.0)
+                    .powf(*power); 4]
             }
             ShaderNode::Noise { scale, speed } => {
                 [value_noise(f.world * *scale + Vec3::splat(f.time * speed)); 4]
@@ -353,7 +381,10 @@ mod tests {
         let s = FragmentShader::new("uv", |f| [f.uv[0], f.uv[1], 0.0, 1.0]);
         assert_eq!(s.run(&frag()), [0.3, 0.6, 0.0, 1.0]);
         assert_eq!(s, s.clone());
-        assert_ne!(s, FragmentShader::new("uv", |f| [f.uv[0], f.uv[1], 0.0, 1.0]));
+        assert_ne!(
+            s,
+            FragmentShader::new("uv", |f| [f.uv[0], f.uv[1], 0.0, 1.0])
+        );
     }
 
     #[test]
@@ -390,14 +421,20 @@ mod tests {
         let c = g.add(ShaderNode::Checker { cells: 2.0 });
         // uv (0.3, 0.6) × 2 → cells (0, 1) → odd.
         assert_eq!(g.eval(c, &frag()).unwrap()[0], 1.0);
-        let st = g.add(ShaderNode::Stripes { axis: 0, frequency: 1.0 });
+        let st = g.add(ShaderNode::Stripes {
+            axis: 0,
+            frequency: 1.0,
+        });
         assert!((g.eval(st, &frag()).unwrap()[0] - 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn noise_is_bounded_smooth_and_animated() {
         let mut g = ShaderGraph::new();
-        let n = g.add(ShaderNode::Noise { scale: 3.0, speed: 1.0 });
+        let n = g.add(ShaderNode::Noise {
+            scale: 3.0,
+            speed: 1.0,
+        });
         let mut f = frag();
         let mut prev = g.eval(n, &f).unwrap()[0];
         for i in 1..100 {

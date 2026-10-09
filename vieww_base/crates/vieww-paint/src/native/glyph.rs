@@ -10,7 +10,39 @@
 //! which is what makes a glyph and a vector icon share one AA policy instead
 //! of two.
 //!
-//! Hinting stays off (spec §6.1: "matching the current convention").
+//! Hinting stays off (spec §6.1: "matching the current convention") — that
+//! decision, and the subpixel-AA one, are written out below.
+//!
+//! # The two sharpness decisions: subpixel AA is opt-in, hinting is off
+//!
+//! **RGB (LCD) subpixel antialiasing exists, opt-in, as
+//! [`AaMode::Lcd`](super::AaMode::Lcd)** — this note records where the
+//! default's line is drawn and why. Greyscale coverage is one number per
+//! pixel; LCD coverage is three, one per colour channel, and that difference
+//! is only an improvement on a display whose physical stripe layout the
+//! renderer assumed and a liability everywhere else: under rotation (no
+//! correct stripe direction), under translucency and layer compositing
+//! (the fringe enters the blend as colour, not coverage), and on any panel
+//! with the wrong stripe order. So [`AaMode::Lcd`](super::AaMode::Lcd) is a *text* mode with a
+//! fallback contract rather than a scene-wide policy — root surface only,
+//! opaque background only, gamma colour pipeline only, monochrome glyphs
+//! only, silent grayscale fallback for every other case, and a cache entry
+//! keyed apart by `lcd` so a glyph drawn both ways is never served the
+//! wrong mask. The full statement, including what each restriction is
+//! protecting, is [`AaMode`](super::AaMode)'s own doc; Apple's removal of subpixel AA in
+//! macOS Mojave for the compositing reasons above is the industry datum
+//! behind "opt-in with fallback" rather than "always".
+//!
+//! **No hinting.** Hinted rendering distorts a letterform onto the pixel
+//! grid — stems snapped to whole pixels, the design's actual proportions
+//! bent to hit them — and it only pays on low-DPI screens with fonts that
+//! carry real hinting instructions. Unhinted, a 12 px glyph is the honest
+//! sample of the design at 12 px; hinted, it is the design plus a set of
+//! font-specific instructions whose quality this renderer cannot control and
+//! whose effect differs between the CPU and GPU paths, which would end the
+//! byte-exact relationship between them. At the display densities this
+//! framework targets, the sharpness hinting buys is under a pixel and the
+//! fidelity it costs is the letterform.
 //!
 //! # Variable fonts: the shaper already knows, and now this side does too
 //!

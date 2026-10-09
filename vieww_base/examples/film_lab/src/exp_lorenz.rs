@@ -73,16 +73,16 @@ fn step(s: &[f64; 3], dt: f64) -> [f64; 3] {
 const T_END: f64 = 60.0;
 const STEPS: usize = 60 * 240;
 
-/// The full flight + twin, replayed to a film-fraction. Returns
-/// (main trajectory, twin trajectory, separation series, z-maxima pairs).
-fn flight_to(
-    t: f64,
-) -> (
+/// The full flight + twin, replayed to a film-fraction: the main
+/// trajectory, the twin trajectory, the separation series, the z-maxima.
+type Flight = (
     Vec<[f64; 3]>,
     Vec<[f64; 3]>,
     Vec<(f64, f64)>,
     Vec<(f64, f64)>,
-) {
+);
+
+fn flight_to(t: f64) -> Flight {
     let n = ((t * STEPS as f64) as usize).max(2);
     let dt = T_END / STEPS as f64;
     let mut a = [0.1, 0.0, 0.0];

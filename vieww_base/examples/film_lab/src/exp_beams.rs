@@ -55,6 +55,7 @@ struct Shaft {
     /// Base brightness multiplier — no two shafts identical.
     gain: f32,
     /// Sway phase — each shaft breathes on its own clock.
+    #[allow(dead_code)]
     phase: f32,
 }
 

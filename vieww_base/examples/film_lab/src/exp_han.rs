@@ -413,6 +413,7 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
 
 /// The dash-phase frontier's easing (kept separate so the receipt can name it).
 #[must_use]
+#[allow(dead_code)]
 fn ease_out_cubic_x(u: f32) -> f32 {
     let u = clamp01(u);
     1.0 - (1.0 - u).powi(3)

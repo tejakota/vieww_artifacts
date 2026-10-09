@@ -183,7 +183,11 @@ pub fn raycast(scene: &mut Scene, ray: &Ray) -> Vec<Hit> {
                     test(world, &l.mesh, *bounds, None);
                 }
             }
-            Content::Skinned { skin, morph_weights, .. } => {
+            Content::Skinned {
+                skin,
+                morph_weights,
+                ..
+            } => {
                 let m = crate::skin::morph(skin, morph_weights);
                 let b = crate::geometry::bounding_sphere(&m);
                 test(world, &m, b, None);

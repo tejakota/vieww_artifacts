@@ -434,7 +434,10 @@ impl SceneRenderer {
                 },
                 offset: offset * f,
             };
-        // `vieww_gpu::Vertex`, field by field: 2 + 4 + 2 + 1 + 4 + 2 + 4 + 4.
+        // `vieww_gpu::Vertex`, field by field: 2 + 4 + 2 + 1 + 4 + 2 + 4 + 4 + 4.
+        // Offsets in floats: position 0, color 2, uv 6, kind 8, params 9,
+        // local 13, extra 15, shape 19, mask 23 — WGSL location 7 is `mask`
+        // (23), location 8 is `shape` (19).
         let scene_attributes = [
             attribute(0, 2, 0),
             attribute(1, 4, 2),
@@ -443,11 +446,12 @@ impl SceneRenderer {
             attribute(4, 4, 9),
             attribute(5, 2, 13),
             attribute(6, 4, 15),
-            attribute(7, 4, 19),
+            attribute(7, 4, 23),
+            attribute(8, 4, 19),
         ];
         assert_eq!(
             std::mem::size_of::<Vertex>() as u32,
-            23 * f,
+            27 * f,
             "vertex layout drifted"
         );
         let scene_binding = [vk::VertexInputBindingDescription {

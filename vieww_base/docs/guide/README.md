@@ -78,21 +78,26 @@ anything where you want the framework to stay out of the way of a custom
 design system; accessibility, which is a first-class crate rather than an
 afterthought.
 
-**Not there yet:** GPU rendering exists, is real, and now draws **text** as
-well as shapes — but it still cannot draw images, shadows, gradients, shaped
-clips or layers, so any frame containing one of those falls back to the CPU
-rasterizer. That is most real screens. The CPU rasterizer is fast and is what
-every screenshot in this repository was drawn with, but it is a software
-rasterizer and has a software rasterizer's ceiling.
+**Not there yet:** the GPU renderer is real and covers the whole scene
+language — shapes, gradients, images, shadows, clips, layers, blend modes,
+filters, text — and it can drive a window ([`App::prefer_gpu`]), but it has
+only ever executed on *software* Vulkan (`lavapipe`, then SwiftShader), so it
+is verified correct and entirely unmeasured for speed, and its windowed path
+still pays a frame readback on the way to the screen. The CPU rasterizer is
+what a window uses by default, what every screenshot in this repository was
+drawn with, and fast — but it is a software rasterizer with a software
+rasterizer's ceiling, and two of its heaviest gallery screens are over a
+60 Hz full-repaint budget.
 
-The GPU path has also only ever run on `lavapipe`, a *software* Vulkan
-implementation — so it is verified correct and entirely unmeasured for speed.
+macOS and Windows are real code that has only been compiled on Linux-hosted
+cross-checks and CI runners, never by a person on the machine;
+`ci/check/platform-check.sh` is one command each that says so precisely.
+Android and iOS build green on CI runners (the four apps under `apps/`), but
+no frame has reached a device. The web backend is compiled, gated and
+canvas-certified byte-for-byte against the native rasterizer — on
+Chromium only; no Firefox or WebKit run has been scripted.
 
-macOS, Windows, Android and iOS are real code that has never been built on its
-own toolchain; `ci/check/platform-check.sh` is one command each that says so
-precisely. The web backend has never been compiled at all.
-
-If you need a browser target or a hard 120 Hz guarantee today, this is not the
+If you need a hard 120 Hz guarantee today, this is not the
 framework yet, and it is better to know that now.
 [`PENDING.md`](../../PENDING.md) is the full list, kept so that this paragraph
 never has to be the full list.

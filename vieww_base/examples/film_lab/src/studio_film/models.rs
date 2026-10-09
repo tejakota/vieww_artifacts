@@ -17,9 +17,9 @@ use std::sync::OnceLock;
 
 use vieww_foundation::{Color, Offset, Path, Sketchbook};
 
+use super::space::View;
 use crate::product_film as pf;
 use crate::three_d::Vec3;
-use super::space::View;
 
 // ── The mark, as an OBJ ────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ const MARK_PIECES: [&[usize]; 3] = [&[0, 1, 2, 6], &[2, 5, 6], &[2, 3, 4, 5]];
 
 /// The mark as OBJ text: an extrusion of [`MARK`], `depth` thick, with
 /// every face wound outward.
-pub fn mark_obj(depth: f32) -> String {
+pub(crate) fn mark_obj(depth: f32) -> String {
     let n = MARK.len();
     let area: f32 = (0..n)
         .map(|i| {
@@ -77,7 +77,11 @@ pub fn mark_obj(depth: f32) -> String {
     // Sides: one quad per edge, outward.
     for i in 0..n {
         let j = (i + 1) % n;
-        let q = if ccw { [i + n, j + n, j, i] } else { [j + n, i + n, i, j] };
+        let q = if ccw {
+            [i + n, j + n, j, i]
+        } else {
+            [j + n, i + n, i, j]
+        };
         face(&mut s, &q);
     }
     s
@@ -85,7 +89,7 @@ pub fn mark_obj(depth: f32) -> String {
 
 /// The mark drawn flat: the same polygon, filled with the brand
 /// gradient, `half` px from centre to its outer corners.
-pub fn draw_mark_2d(book: &mut Sketchbook, c: Offset, half: f32, a: f32) {
+pub(crate) fn draw_mark_2d(book: &mut Sketchbook, c: Offset, half: f32, a: f32) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 {
         return;
@@ -110,7 +114,7 @@ pub fn draw_mark_2d(book: &mut Sketchbook, c: Offset, half: f32, a: f32) {
 }
 
 /// The mark, loaded through the real OBJ loader once.
-pub fn mark_mesh() -> &'static vieww_mesh::Mesh {
+pub(crate) fn mark_mesh() -> &'static vieww_mesh::Mesh {
     static MESH: OnceLock<vieww_mesh::Mesh> = OnceLock::new();
     MESH.get_or_init(|| vieww_mesh::parse_obj(&mark_obj(0.42)).expect("the mark's OBJ parses"))
 }
@@ -118,7 +122,7 @@ pub fn mark_mesh() -> &'static vieww_mesh::Mesh {
 /// Where a mesh sits: scale, then pitch (about x), then yaw (about y),
 /// then a move.
 #[derive(Clone, Copy)]
-pub struct Pose3 {
+pub(crate) struct Pose3 {
     pub scale: f32,
     pub pitch: f32,
     pub yaw: f32,
@@ -127,7 +131,7 @@ pub struct Pose3 {
 
 /// How a mesh is lit.
 #[derive(Clone, Copy)]
-pub struct Look {
+pub(crate) struct Look {
     pub near: Color,
     pub far: Color,
     pub alpha: f32,
@@ -136,7 +140,7 @@ pub struct Look {
 }
 
 impl Look {
-    pub fn brand(alpha: f32) -> Look {
+    pub(crate) fn brand(alpha: f32) -> Look {
         Look {
             near: super::BRAND_NEAR,
             far: super::BRAND_FAR,
@@ -148,7 +152,13 @@ impl Look {
 
 /// Draw a loaded mesh: transform, cull back faces, sort far to near,
 /// shade each triangle (Lambert + a Blinn glint), fill.
-pub fn draw_mesh(book: &mut Sketchbook, view: &View, mesh: &vieww_mesh::Mesh, pose: Pose3, look: Look) {
+pub(crate) fn draw_mesh(
+    book: &mut Sketchbook,
+    view: &View,
+    mesh: &vieww_mesh::Mesh,
+    pose: Pose3,
+    look: Look,
+) {
     let a = look.alpha.clamp(0.0, 1.0);
     if a <= 0.01 {
         return;
@@ -167,7 +177,11 @@ pub fn draw_mesh(book: &mut Sketchbook, view: &View, mesh: &vieww_mesh::Mesh, po
     let eye = view.cam.eye;
     let mut tris: Vec<(f32, [Offset; 3], Color)> = Vec::new();
     for tri in mesh.indices.chunks(3) {
-        let (p0, p1, p2) = (world[tri[0] as usize], world[tri[1] as usize], world[tri[2] as usize]);
+        let (p0, p1, p2) = (
+            world[tri[0] as usize],
+            world[tri[1] as usize],
+            world[tri[2] as usize],
+        );
         let n = p1.sub(p0).cross(p2.sub(p0)).norm();
         let c = p0.add(p1).add(p2).scale(1.0 / 3.0);
         let to_eye = eye.sub(c).norm();
@@ -209,7 +223,7 @@ pub fn draw_mesh(book: &mut Sketchbook, view: &View, mesh: &vieww_mesh::Mesh, po
 }
 
 /// Triangles and vertices of a mesh — the numbers the film may print.
-pub fn mesh_counts(mesh: &vieww_mesh::Mesh) -> (usize, usize) {
+pub(crate) fn mesh_counts(mesh: &vieww_mesh::Mesh) -> (usize, usize) {
     (mesh.triangles(), mesh.positions.len())
 }
 
@@ -217,7 +231,7 @@ pub fn mesh_counts(mesh: &vieww_mesh::Mesh) -> (usize, usize) {
 
 /// A jar: its inner rect (left, top, right, bottom), in scene units.
 #[derive(Clone, Copy)]
-pub struct Jar {
+pub(crate) struct Jar {
     pub left: f32,
     pub top: f32,
     pub right: f32,
@@ -226,7 +240,7 @@ pub struct Jar {
 
 /// One coin: when it drops (seconds), from where (x), and its radius.
 #[derive(Clone, Copy)]
-pub struct Drop {
+pub(crate) struct Drop {
     pub at: f32,
     pub x: f32,
     pub r: f32,
@@ -237,7 +251,7 @@ pub struct Drop {
 /// Replay the jar from its first drop to `sec`, returning each dropped
 /// coin's position (in drop order). Fixed 1/240 s steps; a coin enters
 /// the world on the step its time comes up.
-pub fn coins_at(jar: Jar, drops: &[Drop], sec: f32) -> Vec<(usize, Offset)> {
+pub(crate) fn coins_at(jar: Jar, drops: &[Drop], sec: f32) -> Vec<(usize, Offset)> {
     use vieww_physics::{Body, Shape, World};
     const DT: f32 = 1.0 / 240.0;
     let mut world = World::with_gravity(Offset::new(0.0, 2400.0));
@@ -265,8 +279,12 @@ pub fn coins_at(jar: Jar, drops: &[Drop], sec: f32) -> Vec<(usize, Offset)> {
         let now = step as f32 * DT;
         while next < drops.len() && drops[next].at <= now {
             let d = drops[next];
-            let body = Body::dynamic(Offset::new(d.x, jar.top - 36.0), Shape::circle(d.r), d.r * d.r * 0.01)
-                .restitution(0.18);
+            let body = Body::dynamic(
+                Offset::new(d.x, jar.top - 36.0),
+                Shape::circle(d.r),
+                d.r * d.r * 0.01,
+            )
+            .restitution(0.18);
             let mut body = body;
             body.velocity = Offset::new(0.0, 380.0);
             world.add_body(body);
@@ -314,11 +332,19 @@ pub fn coins_at(jar: Jar, drops: &[Drop], sec: f32) -> Vec<(usize, Offset)> {
 /// A small waving figure: hips → spine → head, two arms of two bones,
 /// two legs. Returns the bones' world joints as (from, to) segments and
 /// the head's centre, for the time `sec`.
-pub fn figure_at(sec: f32, origin: Offset, scale: f32) -> (Vec<(Offset, Offset, f32)>, Offset) {
+pub(crate) fn figure_at(
+    sec: f32,
+    origin: Offset,
+    scale: f32,
+) -> (Vec<(Offset, Offset, f32)>, Offset) {
     use std::time::Duration;
     use vieww_animation::{BoneTransform as B, Keyframe, Keyframes, SkeletalClip, Skeleton};
     let t = |x: f32, y: f32| B::from_translation(Offset::new(x, y));
-    let rot = |x: f32, y: f32, r: f32| B { translation: Offset::new(x, y), rotation: r, scale: (1.0, 1.0) };
+    let rot = |x: f32, y: f32, r: f32| B {
+        translation: Offset::new(x, y),
+        rotation: r,
+        scale: (1.0, 1.0),
+    };
     let sk = Skeleton::new()
         .bone("hips", None, t(0.0, 0.0))
         .bone("spine", Some("hips"), t(0.0, -60.0))
@@ -385,13 +411,18 @@ pub fn figure_at(sec: f32, origin: Offset, scale: f32) -> (Vec<(Offset, Offset, 
         ("hips", "leg_r", 11.0),
         ("leg_r", "shin_r", 11.0),
     ];
-    let mut segs: Vec<(Offset, Offset, f32)> =
-        pairs.iter().map(|(a, b, w)| (joint(a), joint(b), w * scale)).collect();
+    let mut segs: Vec<(Offset, Offset, f32)> = pairs
+        .iter()
+        .map(|(a, b, w)| (joint(a), joint(b), w * scale))
+        .collect();
     segs.push((joint("shin_r"), joint("foot_r"), 10.0 * scale));
     let neck = joint("neck");
     let spine = joint("spine");
     let (dx, dy) = (neck.dx - spine.dx, neck.dy - spine.dy);
     let len = (dx * dx + dy * dy).sqrt().max(1.0);
-    let head = Offset::new(neck.dx + dx / len * 30.0 * scale, neck.dy + dy / len * 30.0 * scale);
+    let head = Offset::new(
+        neck.dx + dx / len * 30.0 * scale,
+        neck.dy + dy / len * 30.0 * scale,
+    );
     (segs, head)
 }

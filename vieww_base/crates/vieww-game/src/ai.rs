@@ -64,7 +64,9 @@ impl TileMap {
             return 0;
         }
         #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-        self.layers.get(layer).map_or(0, |l| l[y as usize * self.width + x as usize])
+        self.layers
+            .get(layer)
+            .map_or(0, |l| l[y as usize * self.width + x as usize])
     }
 
     pub fn set(&mut self, layer: usize, x: usize, y: usize, id: u16) {
@@ -117,7 +119,12 @@ impl TileMap {
     /// Move a box by `(dx, dy)` one axis at a time, stopping flush against
     /// solid tiles. Returns the new position and which axes were blocked.
     #[must_use]
-    pub fn move_and_collide(&self, pos: (f32, f32), size: (f32, f32), d: (f32, f32)) -> ((f32, f32), (bool, bool)) {
+    pub fn move_and_collide(
+        &self,
+        pos: (f32, f32),
+        size: (f32, f32),
+        d: (f32, f32),
+    ) -> ((f32, f32), (bool, bool)) {
         let t = self.tile_size;
         let mut p = pos;
         let mut hit = (false, false);
@@ -129,14 +136,26 @@ impl TileMap {
             #[allow(clippy::cast_precision_loss)]
             let step = total / n as f32;
             for _ in 0..n {
-                let q = if axis == 0 { (p.0 + step, p.1) } else { (p.0, p.1 + step) };
+                let q = if axis == 0 {
+                    (p.0 + step, p.1)
+                } else {
+                    (p.0, p.1 + step)
+                };
                 if self.box_hits(q.0, q.1, size.0, size.1) {
                     // Snap flush to the tile edge.
                     if axis == 0 {
-                        p.0 = if step > 0.0 { ((p.0 + size.0) / t).ceil() * t - size.0 } else { (p.0 / t).floor() * t };
+                        p.0 = if step > 0.0 {
+                            ((p.0 + size.0) / t).ceil() * t - size.0
+                        } else {
+                            (p.0 / t).floor() * t
+                        };
                         hit.0 = true;
                     } else {
-                        p.1 = if step > 0.0 { ((p.1 + size.1) / t).ceil() * t - size.1 } else { (p.1 / t).floor() * t };
+                        p.1 = if step > 0.0 {
+                            ((p.1 + size.1) / t).ceil() * t - size.1
+                        } else {
+                            (p.1 / t).floor() * t
+                        };
                         hit.1 = true;
                     }
                     break;
@@ -164,7 +183,12 @@ impl PartialOrd for Open {
 
 /// A* on `map`'s solidity from `start` to `goal` (tile coordinates).
 #[must_use]
-pub fn astar(map: &TileMap, start: (usize, usize), goal: (usize, usize), diagonal: bool) -> Option<Vec<(usize, usize)>> {
+pub fn astar(
+    map: &TileMap,
+    start: (usize, usize),
+    goal: (usize, usize),
+    diagonal: bool,
+) -> Option<Vec<(usize, usize)>> {
     let w = map.width;
     let idx = |p: (usize, usize)| p.1 * w + p.0;
     #[allow(clippy::cast_possible_wrap)]
@@ -174,7 +198,10 @@ pub fn astar(map: &TileMap, start: (usize, usize), goal: (usize, usize), diagona
     }
     let h = |p: (usize, usize)| {
         #[allow(clippy::cast_precision_loss)]
-        let (dx, dy) = ((p.0 as f32 - goal.0 as f32).abs(), (p.1 as f32 - goal.1 as f32).abs());
+        let (dx, dy) = (
+            (p.0 as f32 - goal.0 as f32).abs(),
+            (p.1 as f32 - goal.1 as f32).abs(),
+        );
         if diagonal {
             dx.max(dy) + (std::f32::consts::SQRT_2 - 1.0) * dx.min(dy)
         } else {
@@ -198,7 +225,16 @@ pub fn astar(map: &TileMap, start: (usize, usize), goal: (usize, usize), diagona
             path.reverse();
             return Some(path);
         }
-        for (dx, dy) in [(1i64, 0i64), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+        for (dx, dy) in [
+            (1i64, 0i64),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ] {
             if !diagonal && dx != 0 && dy != 0 {
                 continue;
             }
@@ -208,12 +244,20 @@ pub fn astar(map: &TileMap, start: (usize, usize), goal: (usize, usize), diagona
                 continue;
             }
             #[allow(clippy::cast_possible_wrap)]
-            if dx != 0 && dy != 0 && (map.is_solid(cx as i64 + dx, cy as i64) || map.is_solid(cx as i64, cy as i64 + dy)) {
+            if dx != 0
+                && dy != 0
+                && (map.is_solid(cx as i64 + dx, cy as i64)
+                    || map.is_solid(cx as i64, cy as i64 + dy))
+            {
                 continue; // no corner cutting
             }
             #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
             let n = (nx as usize, ny as usize);
-            let cost = if dx != 0 && dy != 0 { std::f32::consts::SQRT_2 } else { 1.0 };
+            let cost = if dx != 0 && dy != 0 {
+                std::f32::consts::SQRT_2
+            } else {
+                1.0
+            };
             let ng = g[cur] + cost;
             if ng < g[idx(n)] {
                 g[idx(n)] = ng;
@@ -316,7 +360,9 @@ impl NavMesh {
         let mut portals = vec![(start, start)];
         for w in corridor.windows(2) {
             let t = self.triangles[w[0]];
-            let k = (0..3).find(|&k| self.neighbours[w[0]][k] == Some(w[1])).expect("adjacent");
+            let k = (0..3)
+                .find(|&k| self.neighbours[w[0]][k] == Some(w[1]))
+                .expect("adjacent");
             let (a, b) = (self.vertices[t[k]], self.vertices[t[(k + 1) % 3]]);
             // Triangles are CCW, so walking out through edge a→b, `b` is on the left.
             portals.push((b, a));
@@ -326,8 +372,14 @@ impl NavMesh {
     }
 }
 
+/// A 2-D point on the navigation mesh (x, y).
+type Point = (f32, f32);
+
+/// A funnel portal: its `(left, right)` edge points.
+type Portal = (Point, Point);
+
 /// Mononen's simple stupid funnel algorithm over `(left, right)` portals.
-fn funnel(portals: &[((f32, f32), (f32, f32))]) -> Vec<(f32, f32)> {
+fn funnel(portals: &[Portal]) -> Vec<Point> {
     let mut path = vec![portals[0].0];
     let (mut apex, mut left, mut right) = (portals[0].0, portals[0].0, portals[0].1);
     let (mut li, mut ri) = (0usize, 0usize);
@@ -551,14 +603,24 @@ mod tests {
         // Walk right into the wall at x = 9 tiles.
         let ((x, y), hit) = m.move_and_collide((20.0, 20.0), (10.0, 10.0), (400.0, 0.0));
         assert!(hit.0 && !hit.1);
-        assert!((x + 10.0 - 144.0).abs() < 1e-3, "flush against the wall: {x}");
+        assert!(
+            (x + 10.0 - 144.0).abs() < 1e-3,
+            "flush against the wall: {x}"
+        );
         assert_eq!(y, 20.0);
     }
 
     #[test]
     fn navmesh_path_is_pulled_taut_around_a_corner() {
         // An L-shaped corridor: (0,0)-(10,0)-(10,10)-(8,10)-(8,2)-(0,2).
-        let v = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (8.0, 10.0), (8.0, 2.0), (0.0, 2.0)];
+        let v = vec![
+            (0.0, 0.0),
+            (10.0, 0.0),
+            (10.0, 10.0),
+            (8.0, 10.0),
+            (8.0, 2.0),
+            (0.0, 2.0),
+        ];
         let t = vec![[0, 4, 5], [0, 1, 4], [1, 2, 4], [2, 3, 4]];
         let nav = NavMesh::new(v, t);
         let p = nav.find_path((1.0, 1.0), (9.0, 9.0)).unwrap();
@@ -568,18 +630,29 @@ mod tests {
         assert_eq!(p[1], (8.0, 2.0));
         let straight = nav.find_path((1.0, 1.0), (7.0, 1.0)).unwrap();
         assert_eq!(straight.len(), 2);
-        assert!(nav.find_path((1.0, 1.0), (5.0, 8.0)).is_none(), "off the mesh");
+        assert!(
+            nav.find_path((1.0, 1.0), (5.0, 8.0)).is_none(),
+            "off the mesh"
+        );
     }
 
     #[test]
     fn behaviour_trees_run_across_ticks() {
         fn far(bb: &mut Blackboard, _: f32) -> Status {
-            if bb["dist"] > 0.0 { Status::Success } else { Status::Failure }
+            if bb["dist"] > 0.0 {
+                Status::Success
+            } else {
+                Status::Failure
+            }
         }
         fn walk(bb: &mut Blackboard, dt: f32) -> Status {
             let d = bb.get_mut("dist").expect("dist");
             *d = (*d - 5.0 * dt).max(0.0);
-            if *d > 0.0 { Status::Running } else { Status::Success }
+            if *d > 0.0 {
+                Status::Running
+            } else {
+                Status::Success
+            }
         }
         fn attack(bb: &mut Blackboard, _: f32) -> Status {
             *bb.entry("hits".into()).or_insert(0.0) += 1.0;

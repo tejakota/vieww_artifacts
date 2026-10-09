@@ -54,6 +54,7 @@ struct Swarm {
     sim_t: f32,
     steps: u64,
     queries: u64,
+    #[allow(dead_code)]
     last_t: f32,
 }
 
@@ -141,8 +142,7 @@ fn advance(target_t: f32) -> (u64, u64) {
         let pred = predator_at(sim_t);
 
         let mut acc = vec![[0.0f32; 2]; N];
-        for i in 0..N {
-            let pi = sw.pos[i];
+        for (i, pi) in sw.pos.iter().enumerate() {
             let gx = ((pi[0] / CELL).floor() as usize).min(gw - 1);
             let gy = ((pi[1] / CELL).floor() as usize).min(gh - 1);
             let (mut sep_x, mut sep_y) = (0.0f32, 0.0f32);
@@ -205,29 +205,29 @@ fn advance(target_t: f32) -> (u64, u64) {
         }
 
         // Integrate: semi-implicit Euler, clamped speed.
-        for i in 0..N {
-            sw.vel[i][0] = (sw.vel[i][0] + acc[i][0] * DT).clamp(-V_MAX, V_MAX);
-            sw.vel[i][1] = (sw.vel[i][1] + acc[i][1] * DT).clamp(-V_MAX, V_MAX);
-            let sp = (sw.vel[i][0].powi(2) + sw.vel[i][1].powi(2)).sqrt();
+        for ((vel, ai), pos) in sw.vel.iter_mut().zip(acc).zip(sw.pos.iter_mut()) {
+            vel[0] = (vel[0] + ai[0] * DT).clamp(-V_MAX, V_MAX);
+            vel[1] = (vel[1] + ai[1] * DT).clamp(-V_MAX, V_MAX);
+            let sp = (vel[0].powi(2) + vel[1].powi(2)).sqrt();
             if sp < V_MIN {
                 let k = V_MIN / sp.max(1e-3);
-                sw.vel[i][0] *= k;
-                sw.vel[i][1] *= k;
+                vel[0] *= k;
+                vel[1] *= k;
             }
-            sw.pos[i][0] += sw.vel[i][0] * DT;
-            sw.pos[i][1] += sw.vel[i][1] * DT;
+            pos[0] += vel[0] * DT;
+            pos[1] += vel[1] * DT;
             // Soft walls.
-            if sw.pos[i][0] < 24.0 {
-                sw.vel[i][0] += (24.0 - sw.pos[i][0]) * 4.0 * DT * 60.0;
+            if pos[0] < 24.0 {
+                vel[0] += (24.0 - pos[0]) * 4.0 * DT * 60.0;
             }
-            if sw.pos[i][0] > 1256.0 {
-                sw.vel[i][0] -= (sw.pos[i][0] - 1256.0) * 4.0 * DT * 60.0;
+            if pos[0] > 1256.0 {
+                vel[0] -= (pos[0] - 1256.0) * 4.0 * DT * 60.0;
             }
-            if sw.pos[i][1] < 24.0 {
-                sw.vel[i][1] += (24.0 - sw.pos[i][1]) * 4.0 * DT * 60.0;
+            if pos[1] < 24.0 {
+                vel[1] += (24.0 - pos[1]) * 4.0 * DT * 60.0;
             }
-            if sw.pos[i][1] > 556.0 {
-                sw.vel[i][1] -= (sw.pos[i][1] - 556.0) * 4.0 * DT * 60.0;
+            if pos[1] > 556.0 {
+                vel[1] -= (pos[1] - 556.0) * 4.0 * DT * 60.0;
             }
         }
         sw.sim_t += DT;
@@ -241,8 +241,11 @@ fn advance(target_t: f32) -> (u64, u64) {
     out
 }
 
-/// The snapshot the renderer draws from (pos + vel, cloned under the lock).
-fn snapshot(target_t: f32) -> (Vec<[f32; 2]>, Vec<[f32; 2]>, Vec<f32>, u64, u64) {
+/// The snapshot the renderer draws from (pos + vel, cloned under the lock):
+/// (positions, velocities, per-boid draw scale, steps, queries).
+type Snapshot = (Vec<[f32; 2]>, Vec<[f32; 2]>, Vec<f32>, u64, u64);
+
+fn snapshot(target_t: f32) -> Snapshot {
     let (steps, _queries) = advance(target_t);
     let guard = SWARM.lock().expect("swarm");
     let sw = guard.as_ref().expect("swarm live");

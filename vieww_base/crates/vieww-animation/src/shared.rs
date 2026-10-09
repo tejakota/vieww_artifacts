@@ -147,7 +147,8 @@ impl PanBinding {
     #[must_use]
     pub fn end(&mut self) -> Worklet {
         let velocity = self.tracker.velocity();
-        let mut glide = crate::inertia::Inertia::new(self.value.get(), velocity).bounds(self.bounds.0, self.bounds.1);
+        let mut glide = crate::inertia::Inertia::new(self.value.get(), velocity)
+            .bounds(self.bounds.0, self.bounds.1);
         if !self.snap_points.is_empty() {
             glide = glide.snap(crate::inertia::Snap::Values(self.snap_points.clone()));
         }
@@ -370,12 +371,19 @@ mod tests {
             let t = i as f32 * 0.016;
             pan.update(1500.0 * t, t);
         }
-        assert!((x.get() - 240.0).abs() < 1e-3, "the value follows the finger directly");
+        assert!(
+            (x.get() - 240.0).abs() < 1e-3,
+            "the value follows the finger directly"
+        );
         let mut release = pan.end();
         let mut t = Duration::ZERO;
         while release(t) {
             t += Duration::from_millis(16);
         }
-        assert!((x.get() - 600.0).abs() < 0.5, "a fast throw carries to the next stop: {}", x.get());
+        assert!(
+            (x.get() - 600.0).abs() < 0.5,
+            "a fast throw carries to the next stop: {}",
+            x.get()
+        );
     }
 }

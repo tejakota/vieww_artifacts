@@ -102,7 +102,7 @@ fn kernel() -> &'static Vec<Vec<f32>> {
             // Gaussian smoothing to the physical width (~0.8°)
             let sigma = 0.8 / step;
             let mut smooth = vec![0.0_f64; nb];
-            for i in 0..nb {
+            for (i, sm_i) in smooth.iter_mut().enumerate() {
                 let mut acc = 0.0;
                 let mut wsum = 0.0;
                 for d in (-(sigma as isize * 3))..=(sigma as isize * 3) {
@@ -113,7 +113,7 @@ fn kernel() -> &'static Vec<Vec<f32>> {
                         wsum += wgt;
                     }
                 }
-                smooth[i] = if wsum > 0.0 { acc / wsum } else { 0.0 };
+                *sm_i = if wsum > 0.0 { acc / wsum } else { 0.0 };
             }
             // normalise each band to its own peak
             let peak = smooth.iter().cloned().fold(0.0_f64, f64::max).max(1e-9);
@@ -426,7 +426,7 @@ pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
         .collect();
     // smooth then find the two tallest local maxima in [36, 56]
     let mut sm = vec![0.0_f64; nb];
-    for i in 0..nb {
+    for (i, sm_i) in sm.iter_mut().enumerate() {
         let mut acc = 0.0;
         let mut wsum = 0.0;
         for d in -8i64..=8 {
@@ -437,7 +437,7 @@ pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
                 wsum += wgt;
             }
         }
-        sm[i] = if wsum > 0.0 { acc / wsum } else { 0.0 };
+        *sm_i = if wsum > 0.0 { acc / wsum } else { 0.0 };
     }
     let mut peaks: Vec<(f64, f64)> = Vec::new(); // (beta, value)
     for i in ((36.0 / step) as usize)..((56.0 / step) as usize) {

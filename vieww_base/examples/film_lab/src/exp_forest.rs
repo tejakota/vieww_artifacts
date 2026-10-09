@@ -62,6 +62,7 @@ struct Seg {
 /// crosses its level and eases to full length, so the tree grows trunk →
 /// limbs → twigs the way a real one does. Subtrees deeper than the wave
 /// are not built at all.
+#[allow(clippy::too_many_arguments)]
 fn grow(
     origin: Vec3,
     dir: Vec3,
@@ -111,13 +112,7 @@ fn grow(
     let r1 = hash01(depth as u32, idx as u32);
     let r2 = hash01(idx as u32, depth as u32 * 7 + 3);
     let r3 = hash01(depth as u32 * 31 + 11, idx as u32 + 17);
-    let kids = if depth == 0 {
-        2
-    } else if r1 < 0.30 {
-        2
-    } else {
-        3
-    };
+    let kids = if depth == 0 || r1 < 0.30 { 2 } else { 3 };
     for k in 0..kids {
         let kr = hash01(idx as u32 * 13 + k, depth as u32 * 17 + 5);
         let (pitch, yaw) = if k == 0 {
@@ -382,11 +377,9 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             .partial_cmp(&a.depth)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    let mut leaves_drawn = 0usize;
     for f in &faces {
         let mut path = Path::new();
         if f.rrect > 0.0 {
-            leaves_drawn += 1;
             let l = f.pts[0]
                 .dx
                 .min(f.pts[1].dx)

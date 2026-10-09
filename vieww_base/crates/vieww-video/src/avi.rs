@@ -23,7 +23,8 @@ use crate::export::FrameSink;
 use crate::{Frame, VideoSource};
 
 fn u32le(b: &[u8], at: usize) -> Option<u32> {
-    b.get(at..at + 4).map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
+    b.get(at..at + 4)
+        .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
 }
 
 /// A parsed MJPEG AVI: frame byte ranges plus the stream header.
@@ -93,10 +94,8 @@ impl MjpegAvi {
                             handler_ok = false;
                         }
                     }
-                    [b'0', b'0', b'd', b'c' | b'b'] => {
-                        if size > 0 {
-                            s.frames.push((body, body_end));
-                        }
+                    [b'0', b'0', b'd', b'c' | b'b'] if size > 0 => {
+                        s.frames.push((body, body_end));
                     }
                     _ => {}
                 }
@@ -138,7 +137,9 @@ impl VideoSource for MjpegAvi {
         self.frames.len()
     }
     fn frame_at(&self, index: usize) -> Option<Frame> {
-        jpeg::decode(self.jpeg_bytes(index)?).ok().map(|d| d.into_image())
+        jpeg::decode(self.jpeg_bytes(index)?)
+            .ok()
+            .map(|d| d.into_image())
     }
 }
 
@@ -192,9 +193,17 @@ fn chunk(id: &[u8; 4], body: &[u8]) -> Vec<u8> {
 impl<W: Write> FrameSink for MjpegWriter<W> {
     fn push(&mut self, f: &Image) -> io::Result<()> {
         if f.width() != self.width || f.height() != self.height {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "frame size changed"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "frame size changed",
+            ));
         }
-        self.chunks.push(jpeg::encode(f.width(), f.height(), f.pixels(), self.quality));
+        self.chunks.push(jpeg::encode(
+            f.width(),
+            f.height(),
+            f.pixels(),
+            self.quality,
+        ));
         self.frames += 1;
         Ok(())
     }
@@ -240,7 +249,10 @@ impl<W: Write> FrameSink for MjpegWriter<W> {
         strf.extend(b"MJPG");
         strf.extend((self.width * self.height * 3).to_le_bytes());
         strf.extend([0u8; 16]);
-        let strl = list(b"strl", &[chunk(b"strh", &strh), chunk(b"strf", &strf)].concat());
+        let strl = list(
+            b"strl",
+            &[chunk(b"strh", &strh), chunk(b"strf", &strf)].concat(),
+        );
         let hdrl = list(b"hdrl", &[chunk(b"avih", &avih), strl].concat());
         let mut movi_body = Vec::new();
         let mut idx = Vec::new();
@@ -270,7 +282,12 @@ mod tests {
         let px: Vec<u8> = (0..32 * 24u32)
             .flat_map(|i| {
                 #[allow(clippy::cast_possible_truncation)]
-                [((i % 32) * 8) as u8, k.wrapping_mul(40), ((i / 32) * 10) as u8, 255]
+                [
+                    ((i % 32) * 8) as u8,
+                    k.wrapping_mul(40),
+                    ((i / 32) * 10) as u8,
+                    255,
+                ]
             })
             .collect();
         Image::from_rgba8(px, 32, 24)

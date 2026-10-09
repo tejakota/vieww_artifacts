@@ -428,6 +428,7 @@ pub(crate) fn draw_mesh(
 }
 
 /// Draw a 3D polyline (already a world-space path) projected to screen.
+#[allow(dead_code)]
 pub(crate) fn draw_polyline3(
     book: &mut Sketchbook,
     points: &[Vec3],

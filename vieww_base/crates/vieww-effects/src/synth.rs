@@ -80,7 +80,9 @@ impl Parser<'_> {
     fn ident(&mut self) -> Result<String, SynthError> {
         self.ws();
         let st = self.i;
-        while self.i < self.s.len() && (self.s[self.i].is_ascii_alphanumeric() || self.s[self.i] == b'_') {
+        while self.i < self.s.len()
+            && (self.s[self.i].is_ascii_alphanumeric() || self.s[self.i] == b'_')
+        {
             self.i += 1;
         }
         if st == self.i {
@@ -111,7 +113,11 @@ impl Parser<'_> {
             if c.is_ascii_digit() || c == b'-' || c == b'.' {
                 let st = self.i;
                 self.i += 1;
-                while self.i < self.s.len() && (self.s[self.i].is_ascii_digit() || self.s[self.i] == b'.' || self.s[self.i] == b'e') {
+                while self.i < self.s.len()
+                    && (self.s[self.i].is_ascii_digit()
+                        || self.s[self.i] == b'.'
+                        || self.s[self.i] == b'e')
+                {
                     self.i += 1;
                 }
                 let t = std::str::from_utf8(&self.s[st..self.i]).unwrap_or("");
@@ -160,7 +166,7 @@ impl Parser<'_> {
             }
             chain.push(c);
         }
-        Ok(node_checked(Node { source, chain }, at)?)
+        node_checked(Node { source, chain }, at)
     }
 }
 
@@ -201,7 +207,12 @@ const TRANSFORMS: [(&str, usize); 24] = [
 ];
 
 fn node_checked(n: Node, at: usize) -> Result<Node, SynthError> {
-    let max = |name: &str, table: &[(&str, usize)]| table.iter().find(|(k, _)| *k == name).map_or(0, |(_, a)| *a);
+    let max = |name: &str, table: &[(&str, usize)]| {
+        table
+            .iter()
+            .find(|(k, _)| *k == name)
+            .map_or(0, |(_, a)| *a)
+    };
     if n.source.args.len() > max(&n.source.name, &SOURCES) {
         return Err(SynthError {
             at,
@@ -248,7 +259,10 @@ impl Synth {
     /// # Errors
     /// Syntax errors, unknown functions and too many arguments, with positions.
     pub fn parse(text: &str) -> Result<Self, SynthError> {
-        let mut p = Parser { s: text.as_bytes(), i: 0 };
+        let mut p = Parser {
+            s: text.as_bytes(),
+            i: 0,
+        };
         let root = p.node()?;
         p.ws();
         if p.i != p.s.len() {
@@ -294,7 +308,10 @@ impl Synth {
                 }
                 "pixelate" => {
                     let (px, py) = (a(0, 20.0).max(1.0), a(1, 20.0).max(1.0));
-                    st = ((st.0 * px).floor() / px + 0.5 / px, (st.1 * py).floor() / py + 0.5 / py);
+                    st = (
+                        (st.0 * px).floor() / px + 0.5 / px,
+                        (st.1 * py).floor() / py + 0.5 / py,
+                    );
                 }
                 "repeat" => {
                     st = ((st.0 * a(0, 3.0)).fract(), (st.1 * a(1, 3.0)).fract());
@@ -310,7 +327,10 @@ impl Synth {
                     st = (r * ang.cos() + 0.5, r * ang.sin() + 0.5);
                 }
                 "scroll" => {
-                    st = (st.0 + a(0, 0.5) + a(2, 0.0) * t, st.1 + a(1, 0.5) + a(3, 0.0) * t);
+                    st = (
+                        st.0 + a(0, 0.5) + a(2, 0.0) * t,
+                        st.1 + a(1, 0.5) + a(3, 0.0) * t,
+                    );
                 }
                 "modulate" => {
                     let m = Self::src(&c.args, 0, uv, t);
@@ -361,8 +381,10 @@ impl Synth {
                     for dx in -1..=1 {
                         #[allow(clippy::cast_precision_loss)]
                         let (cx, cy) = (ix + dx as f32, iy + dy as f32);
-                        let px = cx + 0.5 + 0.4 * (t * sp + hash2(cx, cy) * 6.28).sin();
-                        let py = cy + 0.5 + 0.4 * (t * sp + hash2(cy, cx) * 6.28).cos();
+                        let px =
+                            cx + 0.5 + 0.4 * (t * sp + hash2(cx, cy) * std::f32::consts::TAU).sin();
+                        let py =
+                            cy + 0.5 + 0.4 * (t * sp + hash2(cy, cx) * std::f32::consts::TAU).cos();
                         let d = ((x - px).powi(2) + (y - py).powi(2)).sqrt();
                         if d < best {
                             best = d;
@@ -384,7 +406,12 @@ impl Synth {
             }
             "gradient" => {
                 let sp = a(0, 0.0);
-                [st.0, st.1, (0.5 + 0.5 * (t * sp).sin()).clamp(0.0, 1.0), 1.0]
+                [
+                    st.0,
+                    st.1,
+                    (0.5 + 0.5 * (t * sp).sin()).clamp(0.0, 1.0),
+                    1.0,
+                ]
             }
             "solid" => [a(0, 0.0), a(1, 0.0), a(2, 0.0), 1.0],
             _ => [0.0, 0.0, 0.0, 1.0],
@@ -398,7 +425,12 @@ impl Synth {
                 "invert" => c = [1.0 - c[0], 1.0 - c[1], 1.0 - c[2], c[3]],
                 "contrast" => {
                     let k = a(0, 1.6);
-                    c = [(c[0] - 0.5) * k + 0.5, (c[1] - 0.5) * k + 0.5, (c[2] - 0.5) * k + 0.5, c[3]];
+                    c = [
+                        (c[0] - 0.5) * k + 0.5,
+                        (c[1] - 0.5) * k + 0.5,
+                        (c[2] - 0.5) * k + 0.5,
+                        c[3],
+                    ];
                 }
                 "brightness" => {
                     let k = a(0, 0.4);
@@ -407,7 +439,12 @@ impl Synth {
                 "saturate" => {
                     let k = a(0, 2.0);
                     let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-                    c = [l + (c[0] - l) * k, l + (c[1] - l) * k, l + (c[2] - l) * k, c[3]];
+                    c = [
+                        l + (c[0] - l) * k,
+                        l + (c[1] - l) * k,
+                        l + (c[2] - l) * k,
+                        c[3],
+                    ];
                 }
                 "luma" => {
                     let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
@@ -422,7 +459,12 @@ impl Synth {
                 }
                 "posterize" => {
                     let b = a(0, 3.0).max(1.0);
-                    c = [(c[0] * b).floor() / b, (c[1] * b).floor() / b, (c[2] * b).floor() / b, c[3]];
+                    c = [
+                        (c[0] * b).floor() / b,
+                        (c[1] * b).floor() / b,
+                        (c[2] * b).floor() / b,
+                        c[3],
+                    ];
                 }
                 "hue" | "shift" => {
                     let h = a(0, 0.4) * std::f32::consts::TAU;
@@ -430,7 +472,11 @@ impl Synth {
                     // Rotation about the grey axis.
                     let k = (1.0 - co) / 3.0;
                     let sq = s / 3f32.sqrt();
-                    let m = [[co + k, k - sq, k + sq], [k + sq, co + k, k - sq], [k - sq, k + sq, co + k]];
+                    let m = [
+                        [co + k, k - sq, k + sq],
+                        [k + sq, co + k, k - sq],
+                        [k - sq, k + sq, co + k],
+                    ];
                     c = [
                         m[0][0] * c[0] + m[0][1] * c[1] + m[0][2] * c[2],
                         m[1][0] * c[0] + m[1][1] * c[1] + m[1][2] * c[2],
@@ -450,7 +496,12 @@ impl Synth {
                 }
                 "diff" => {
                     let o = Self::src(&k.args, 0, uv, t);
-                    c = [(c[0] - o[0]).abs(), (c[1] - o[1]).abs(), (c[2] - o[2]).abs(), c[3]];
+                    c = [
+                        (c[0] - o[0]).abs(),
+                        (c[1] - o[1]).abs(),
+                        (c[2] - o[2]).abs(),
+                        c[3],
+                    ];
                 }
                 "blend" => {
                     let o = Self::src(&k.args, 0, uv, t);
@@ -525,15 +576,21 @@ mod tests {
 
     #[test]
     fn solid_and_blend_are_exact() {
-        let img = Synth::parse("solid(1, 0, 0).blend(solid(0, 0, 1), 0.5)").unwrap().render(2, 2, 0.0);
+        let img = Synth::parse("solid(1, 0, 0).blend(solid(0, 0, 1), 0.5)")
+            .unwrap()
+            .render(2, 2, 0.0);
         assert_eq!(&img.pixels()[..4], &[128, 0, 128, 255]);
-        let inv = Synth::parse("solid(0.2, 0.4, 0.6).invert()").unwrap().render(1, 1, 0.0);
+        let inv = Synth::parse("solid(0.2, 0.4, 0.6).invert()")
+            .unwrap()
+            .render(1, 1, 0.0);
         assert_eq!(&inv.pixels()[..3], &[204, 153, 102]);
     }
 
     #[test]
     fn kaleid_is_mirror_symmetric() {
-        let img = Synth::parse("gradient().kaleid(4)").unwrap().render(32, 32, 0.0);
+        let img = Synth::parse("gradient().kaleid(4)")
+            .unwrap()
+            .render(32, 32, 0.0);
         let p = |x: usize, y: usize| img.pixels()[(y * 32 + x) * 4];
         assert_eq!(p(5, 16), p(26, 16), "left-right mirror");
     }
@@ -543,8 +600,14 @@ mod tests {
         let e = Synth::parse("osc(10).wobble(3)").unwrap_err();
         assert!(e.message.contains("wobble"));
         assert_eq!(e.at, 8);
-        assert!(Synth::parse("rotate(1)").unwrap_err().message.contains("not a source"));
-        assert!(Synth::parse("osc(1, 2, 3, 4)").unwrap_err().message.contains("too many"));
+        assert!(Synth::parse("rotate(1)")
+            .unwrap_err()
+            .message
+            .contains("not a source"));
+        assert!(Synth::parse("osc(1, 2, 3, 4)")
+            .unwrap_err()
+            .message
+            .contains("too many"));
         assert!(Synth::parse("osc(1").is_err());
         assert!(Synth::parse("osc(1) junk").is_err());
     }

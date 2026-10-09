@@ -392,7 +392,9 @@ mod tests {
 
     #[test]
     fn friction_reaches_terminal_velocity() {
-        let p = Physics2D::new((0.0, 0.0), 0.0, 0.0).gravity(10.0).friction(2.0);
+        let p = Physics2D::new((0.0, 0.0), 0.0, 0.0)
+            .gravity(10.0)
+            .friction(2.0);
         let (_, vy) = p.velocity(20.0);
         assert!((vy - 5.0).abs() < 1e-3, "terminal = g / c");
         // Position is the integral of velocity.

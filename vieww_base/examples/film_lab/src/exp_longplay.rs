@@ -258,7 +258,7 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
                 beam.line_to(Offset::new(tipx - diry * 34.0, tipy + 0.0));
                 beam.line_to(Offset::new(tipx + diry * 34.0, tipy + 0.0));
                 beam.line_to(Offset::new(lx + 4.0, ly - 58.0));
-                let fade = (-a.cos()).max(0.0).min(1.0);
+                let fade = (-a.cos()).clamp(0.0, 1.0);
                 book.fill(beam, alpha(Color::rgb(250, 246, 230), 0.05 + 0.05 * fade));
             }
             // The lamp itself — flares as the beam sweeps past the camera.

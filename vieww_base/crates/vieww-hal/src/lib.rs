@@ -42,17 +42,20 @@
 //! All of them are `#[ignore]`d, because they need a loader and an ICD:
 //! `cargo test -p vieww-hal --features vulkan -- --ignored --test-threads=1`.
 //!
-//! **`lavapipe` is software.** Nothing here is a performance claim.
+//! **`lavapipe` and SwiftShader are software.** Nothing here is a performance
+//! claim.
 //!
-//! `vulkan::swapchain` is the piece that ships pixels to a screen today:
-//! `vieww-platform-winit` opens one `VulkanDevice` per window and presents
-//! `NativeRenderer`-rasterized, straight-alpha RGBA8 buffers onto it with
-//! `vkCmdCopyBufferToImage`. The GPU *compositing* path —
-//! [`vulkan::SceneRenderer`] executing a whole `vieww_gpu::ScenePlan`,
-//! offscreen layers, blend modes, filters, masks and shadows included — is
-//! complete as a **headless** renderer with readback. Promoting it to the live
-//! window swapchain is a separate integration step and is not done: the
-//! window path still presents the CPU surface.
+//! `vulkan::swapchain` is the piece that ships pixels to a screen: the window
+//! path through `vieww-platform-winit` presents buffers onto it with
+//! `vkCmdCopyBufferToImage`. Those buffers are the CPU rasterizer's — or, for
+//! an application that asked for the GPU path (`vieww-platform-winit`'s
+//! `App::prefer_gpu`), the GPU's own:
+//! [`vulkan::SceneRenderer`] executing a whole `vieww_gpu::ScenePlan`
+//! (offscreen layers, blend modes, filters, masks and shadows included) and
+//! handing its frame back through host memory to the same present path. The
+//! join is done and tested on a real (Xvfb) window; rendering straight onto
+//! the swapchain image instead of paying the readback is the follow-up
+//! `PENDING.md` §2.2 keeps honest about.
 //!
 //! `metal` and `d3d12` are `cfg`-gated to their own operating systems and do
 //! not compile — or appear in this doc build — as part of this Linux build at

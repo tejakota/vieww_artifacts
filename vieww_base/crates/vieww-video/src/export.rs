@@ -268,7 +268,10 @@ impl<W: Write> GifWriter<W> {
     /// A frame larger than GIF's 65,535-pixel sides.
     pub fn new(out: W, width: u32, height: u32, fps: u32) -> io::Result<Self> {
         if width > 65_535 || height > 65_535 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "GIF sides are 16-bit"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "GIF sides are 16-bit",
+            ));
         }
         #[allow(clippy::cast_possible_truncation)]
         let delay_cs = (100 / fps.max(1)).max(1) as u16;

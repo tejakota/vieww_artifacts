@@ -73,18 +73,26 @@ impl UndoManager {
 
     pub fn set(&mut self, doc: &mut Doc, key: &str, value: Option<Json>) -> Op {
         let prev = doc.map.get(key).cloned();
-        self.push(Inverse::Set { key: key.to_owned(), value: prev });
+        self.push(Inverse::Set {
+            key: key.to_owned(),
+            value: prev,
+        });
         doc.set(key, value)
     }
 
     pub fn add(&mut self, doc: &mut Doc, element: &str) -> Op {
         let op = doc.add(element);
-        self.push(Inverse::RemoveTag { element: element.to_owned(), tag: op.stamp() });
+        self.push(Inverse::RemoveTag {
+            element: element.to_owned(),
+            tag: op.stamp(),
+        });
         op
     }
 
     pub fn remove(&mut self, doc: &mut Doc, element: &str) -> Op {
-        self.push(Inverse::Add { element: element.to_owned() });
+        self.push(Inverse::Add {
+            element: element.to_owned(),
+        });
         doc.remove(element)
     }
 
@@ -102,7 +110,13 @@ impl UndoManager {
     pub fn delete(&mut self, doc: &mut Doc, pos: usize, len: usize) -> Vec<Op> {
         let removed: Vec<(Stamp, char)> = (pos..pos + len)
             .filter_map(|i| doc.text.visible_id(i))
-            .filter_map(|id| doc.text.elems.iter().find(|e| e.id == id).map(|e| (id, e.ch)))
+            .filter_map(|id| {
+                doc.text
+                    .elems
+                    .iter()
+                    .find(|e| e.id == id)
+                    .map(|e| (id, e.ch))
+            })
             .collect();
         self.push(Inverse::Reinsert(removed));
         doc.delete(pos, len)
@@ -113,17 +127,38 @@ impl UndoManager {
         match inv {
             Inverse::Set { key, value } => {
                 let prev = doc.map.get(key).cloned();
-                (vec![doc.set(key, value.clone())], Inverse::Set { key: key.clone(), value: prev })
+                (
+                    vec![doc.set(key, value.clone())],
+                    Inverse::Set {
+                        key: key.clone(),
+                        value: prev,
+                    },
+                )
             }
             Inverse::RemoveTag { element, tag } => {
                 let stamp = doc.tick();
-                let op = Op::SetRemove { stamp, element: element.clone(), observed: vec![*tag] };
+                let op = Op::SetRemove {
+                    stamp,
+                    element: element.clone(),
+                    observed: vec![*tag],
+                };
                 doc.apply(&op);
-                (vec![op], Inverse::Add { element: element.clone() })
+                (
+                    vec![op],
+                    Inverse::Add {
+                        element: element.clone(),
+                    },
+                )
             }
             Inverse::Add { element } => {
                 let op = doc.add(element);
-                (vec![op.clone()], Inverse::RemoveTag { element: element.clone(), tag: op.stamp() })
+                (
+                    vec![op.clone()],
+                    Inverse::RemoveTag {
+                        element: element.clone(),
+                        tag: op.stamp(),
+                    },
+                )
             }
             Inverse::Count(d) => (vec![doc.count(*d)], Inverse::Count(-d)),
             Inverse::DeleteIds(ids) => {
@@ -154,7 +189,11 @@ impl UndoManager {
                 // places it directly after the anchor: exactly where it was.
                 for (old, ch) in chars {
                     let stamp = doc.tick();
-                    let op = Op::Insert { stamp, after: Some(*old), ch: *ch };
+                    let op = Op::Insert {
+                        stamp,
+                        after: Some(*old),
+                        ch: *ch,
+                    };
                     doc.apply(&op);
                     self.remap.insert(*old, stamp);
                     ids.push(stamp);
@@ -215,7 +254,11 @@ mod tests {
         u.checkpoint();
         assert_eq!(d.text.value(), "hello");
         u.undo(&mut d);
-        assert_eq!(d.text.value(), "hello world", "deleted text returns in place");
+        assert_eq!(
+            d.text.value(),
+            "hello world",
+            "deleted text returns in place"
+        );
         u.undo(&mut d);
         assert_eq!(d.text.value(), "");
         u.redo(&mut d);

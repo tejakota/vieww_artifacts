@@ -254,7 +254,11 @@ impl Channel {
         }
         let i = self.times.partition_point(|&x| x <= t) - 1;
         let dt = self.times[i + 1] - self.times[i];
-        let u = if dt > 0.0 { (t - self.times[i]) / dt } else { 0.0 };
+        let u = if dt > 0.0 {
+            (t - self.times[i]) / dt
+        } else {
+            0.0
+        };
         if self.interpolation == Interpolation::Step {
             return key(i).to_vec();
         }
@@ -807,7 +811,11 @@ fn load(
                     if w != 3 || v.len() != nverts * 3 {
                         return err("morph target attribute must be VEC3 per vertex");
                     }
-                    Ok(v.as_chunks::<3>().0.iter().map(|c| [c[0], c[1], c[2]]).collect())
+                    Ok(v.as_chunks::<3>()
+                        .0
+                        .iter()
+                        .map(|c| [c[0], c[1], c[2]])
+                        .collect())
                 };
                 if let Some(a) = idx(t, "POSITION") {
                     mt.positions = vec3(a)?;
@@ -834,7 +842,10 @@ fn load(
                 .unwrap_or("")
                 .to_owned(),
             primitives,
-            weights: m.get("weights").and_then(Json::as_f32_vec).unwrap_or_default(),
+            weights: m
+                .get("weights")
+                .and_then(Json::as_f32_vec)
+                .unwrap_or_default(),
         });
     }
 
@@ -973,7 +984,10 @@ fn load(
 
     let mut skins = Vec::new();
     for sk in arr(doc, "skins") {
-        let joints: Vec<usize> = arr(sk, "joints").iter().filter_map(Json::as_usize).collect();
+        let joints: Vec<usize> = arr(sk, "joints")
+            .iter()
+            .filter_map(Json::as_usize)
+            .collect();
         if joints.iter().any(|&j| j >= nodes.len()) {
             return err("a skin joint refers past the node list");
         }
@@ -991,7 +1005,11 @@ fn load(
             None => vec![identity; joints.len()],
         };
         skins.push(Skin {
-            name: sk.get("name").and_then(Json::as_str).unwrap_or("").to_owned(),
+            name: sk
+                .get("name")
+                .and_then(Json::as_str)
+                .unwrap_or("")
+                .to_owned(),
             joints,
             inverse_bind,
             skeleton: idx(sk, "skeleton"),
@@ -1378,9 +1396,14 @@ mod tests {
         }
         b.extend([0, 0]); // pad to 44
         b.extend([0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0]); // 44..56 joints (u8)
-        f(&mut b, &[2.0, 2.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]); // 56..104 weights (unnormalised)
+        f(
+            &mut b,
+            &[2.0, 2.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        ); // 56..104 weights (unnormalised)
         f(&mut b, &[0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]); // 104..140 target deltas
-        let id = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+        let id = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
         f(&mut b, &id);
         let mut ib2 = id;
         ib2[12] = -1.0;

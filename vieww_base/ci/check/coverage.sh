@@ -6,8 +6,10 @@
 #
 # # The exclusions, and why each one
 #
-# The tested set matches the `Test` job in `.github/workflows/ci.yml` exactly,
-# and for that job's reasons rather than for coverage's:
+# The tested set matches the `checks` job in
+# `.github/workflows/framework-checks.yml` (through its `ci/check/checks.sh`
+# stage, which runs `cargo test --workspace --features vieww-paint/native`)
+# exactly, and for that job's reasons rather than for coverage's:
 #
 #   - `vieww-platform-winit` turns on `vieww-paint/gpu` for the whole workspace
 #     through cargo's feature unification, which is the thing DESIGN §11 put the

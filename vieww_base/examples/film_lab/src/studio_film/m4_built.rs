@@ -15,13 +15,15 @@
 
 use std::sync::OnceLock;
 
-use vieww_foundation::{Alignment, BoxFit, Color, Offset, Rect, Shadow, Size, Sketchbook, TextAlign};
+use vieww_foundation::{
+    Alignment, BoxFit, Color, Offset, Rect, Shadow, Size, Sketchbook, TextAlign,
+};
 use vieww_widget::prelude::*;
 use vieww_widget::Clip;
 
+use super::{ACCENT, BG_DEEP, BRAND_FAR, CANVAS, INK, MUTED, SYN_TYPE};
 use crate::film_lib::{clamp01, ease_in_out, ease_out_expo};
 use crate::product_film as pf;
-use super::{ACCENT, BG_DEEP, BRAND_FAR, CANVAS, INK, MUTED, SYN_TYPE};
 
 /// The four apps: folder, display name, where they live. (No platform
 /// claims here — the apps' own READMEs carry those, with their caveats.)
@@ -76,7 +78,7 @@ fn card(i: usize) -> Rect {
     Rect::new(x, y, x + CARD_W, y + CARD_H)
 }
 
-pub fn built_with_vieww(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn built_with_vieww(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let mut stack = Stack::new();
 
@@ -98,13 +100,27 @@ pub fn built_with_vieww(ctx: &pf::Ctx) -> WidgetNode {
         let dy = (1.0 - p) * 26.0;
         let r = Rect::new(r.left, r.top + dy, r.right, r.bottom + dy);
         // The card.
-        stack = stack.push(Positioned::fill().child(Opacity::new(p).child(Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            book.shadow(r, 16.0, Shadow::new(pf::alpha(Color::BLACK, 0.55), Offset::new(0.0, 14.0), 34.0));
-            book.rrect(r, 16.0, Color::rgb(16, 15, 21));
-            book.stroke_rrect(r, 16.0, pf::alpha(Color::WHITE, 0.08), 1.0);
-        })))));
+        stack = stack.push(
+            Positioned::fill().child(Opacity::new(p).child(Painting::sized(
+                CANVAS,
+                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                    book.shadow(
+                        r,
+                        16.0,
+                        Shadow::new(pf::alpha(Color::BLACK, 0.55), Offset::new(0.0, 14.0), 34.0),
+                    );
+                    book.rrect(r, 16.0, Color::rgb(16, 15, 21));
+                    book.stroke_rrect(r, 16.0, pf::alpha(Color::WHITE, 0.08), 1.0);
+                }),
+            ))),
+        );
         // The sheet, panning down its own length — slow, so it reads.
-        let shot = Rect::new(r.left + 300.0, r.top + 14.0, r.right - 14.0, r.bottom - 14.0);
+        let shot = Rect::new(
+            r.left + 300.0,
+            r.top + 14.0,
+            r.right - 14.0,
+            r.bottom - 14.0,
+        );
         let pan = ease_in_out(clamp01((sec - 1.2 - i as f32 * 0.35) / 10.5));
         let node: WidgetNode = match &list[i].image {
             Some(img) => vieww_widget::Image::new(img.clone())
@@ -117,31 +133,75 @@ pub fn built_with_vieww(ctx: &pf::Ctx) -> WidgetNode {
                 .into(),
         };
         stack = stack.push(
-            Positioned::new().left(shot.left).top(shot.top).width(shot.width()).height(shot.height())
+            Positioned::new()
+                .left(shot.left)
+                .top(shot.top)
+                .width(shot.width())
+                .height(shot.height())
                 .child(Opacity::new(p).child(Clip::rounded(10.0).child(node))),
         );
         // The words.
-        stack = stack.push(super::frame::label(r.left + 28.0, r.top + 26.0, 268.0, 64.0, name.to_string(),
-            pf::geist(40.0).bold().color(pf::alpha(INK, 0.97)), TextAlign::Left, p));
-        stack = stack.push(super::frame::label(r.left + 28.0, r.top + 96.0, 250.0, 26.0, platforms.to_string(),
-            pf::geist_mono(16.0).letter_spacing(0.6).color(pf::alpha(SYN_TYPE, 0.95)), TextAlign::Left, p));
+        stack = stack.push(super::frame::label(
+            r.left + 28.0,
+            r.top + 26.0,
+            268.0,
+            64.0,
+            name.to_string(),
+            pf::geist(40.0).bold().color(pf::alpha(INK, 0.97)),
+            TextAlign::Left,
+            p,
+        ));
+        stack = stack.push(super::frame::label(
+            r.left + 28.0,
+            r.top + 96.0,
+            250.0,
+            26.0,
+            platforms.to_string(),
+            pf::geist_mono(16.0)
+                .letter_spacing(0.6)
+                .color(pf::alpha(SYN_TYPE, 0.95)),
+            TextAlign::Left,
+            p,
+        ));
         let what = list[i].what.clone();
         stack = stack.push(
-            Positioned::new().left(r.left + 28.0).top(r.top + 140.0).width(250.0).height(170.0).child(
-                Opacity::new(p * clamp01((sec - 1.6 - i as f32 * 0.35) / 0.6)).child(
-                    Text::new(what).style(pf::geist(19.0).color(pf::alpha(MUTED, 0.95))),
+            Positioned::new()
+                .left(r.left + 28.0)
+                .top(r.top + 140.0)
+                .width(250.0)
+                .height(170.0)
+                .child(
+                    Opacity::new(p * clamp01((sec - 1.6 - i as f32 * 0.35) / 0.6)).child(
+                        Text::new(what).style(pf::geist(19.0).color(pf::alpha(MUTED, 0.95))),
+                    ),
                 ),
-            ),
         );
     }
 
     let tag_a = clamp01((sec - 3.4) / 0.6);
-    stack = stack.push(super::frame::label(GRID_X, GRID_Y - 52.0, 1750.0, 34.0,
+    stack = stack.push(super::frame::label(
+        GRID_X,
+        GRID_Y - 52.0,
+        1750.0,
+        34.0,
         "apps/ in this repository — their own screens, rendered headless by vieww".to_string(),
-        pf::geist_mono(20.0).letter_spacing(0.8).color(pf::alpha(BRAND_FAR, 0.95)), TextAlign::Left, tag_a));
+        pf::geist_mono(20.0)
+            .letter_spacing(0.8)
+            .color(pf::alpha(BRAND_FAR, 0.95)),
+        TextAlign::Left,
+        tag_a,
+    ));
 
-    stack = stack.push(super::frame::caption("Built with vieww. Already.", 1002.0, clamp01((sec - 0.2) / 0.5)));
-    stack = stack.push(super::frame::caption("Four real apps in this repository, on the engine you just saw.", 966.0, clamp01((sec - 4.2) / 0.6)));
+    stack = stack.push(super::frame::caption(
+        "Built with vieww. Already.",
+        1002.0,
+        clamp01((sec - 0.2) / 0.5),
+    ));
+    stack = stack.push(super::frame::caption(
+        "Four real apps in this repository, on the engine you just saw.",
+        966.0,
+        clamp01((sec - 4.2) / 0.6),
+    ));
     let _ = ACCENT;
     stack.into()
 }

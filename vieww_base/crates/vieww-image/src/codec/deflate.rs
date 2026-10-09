@@ -40,7 +40,9 @@ const DIST_EXTRA: [u8; 30] = [
     0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13,
     13,
 ];
-const CL_ORDER: [usize; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+const CL_ORDER: [usize; 19] = [
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
+];
 
 struct Bits<'a> {
     data: &'a [u8],
@@ -60,7 +62,10 @@ impl<'a> Bits<'a> {
     }
     fn need(&mut self, n: u32) -> Result<(), InflateError> {
         while self.nbits < n {
-            let b = *self.data.get(self.pos).ok_or(InflateError("unexpected end of data"))?;
+            let b = *self
+                .data
+                .get(self.pos)
+                .ok_or(InflateError("unexpected end of data"))?;
             self.pos += 1;
             self.bit |= u32::from(b) << self.nbits;
             self.nbits += 8;
@@ -201,7 +206,10 @@ pub fn inflate(data: &[u8]) -> Result<Vec<u8>, InflateError> {
                     return Err(InflateError("stored length check failed"));
                 }
                 let s = p + 4;
-                out.extend_from_slice(data.get(s..s + len).ok_or(InflateError("stored past end"))?);
+                out.extend_from_slice(
+                    data.get(s..s + len)
+                        .ok_or(InflateError("stored past end"))?,
+                );
                 b.pos = s + len;
             }
             1 => {
@@ -226,7 +234,8 @@ pub fn inflate(data: &[u8]) -> Result<Vec<u8>, InflateError> {
                     match sym {
                         0..=15 => lens.push(sym as u8),
                         16 => {
-                            let prev = *lens.last().ok_or(InflateError("repeat with no previous"))?;
+                            let prev =
+                                *lens.last().ok_or(InflateError("repeat with no previous"))?;
                             for _ in 0..3 + b.get(2)? {
                                 lens.push(prev);
                             }
@@ -491,7 +500,11 @@ fn write_block(w: &mut BitWriter, toks: &[Tok], last: bool) {
     }
     let ll = lengths(&lf, 15);
     let dl = lengths(&df, 15);
-    let hlit = (257..=286).rev().find(|&n| ll[n - 1] != 0).unwrap_or(257).max(257);
+    let hlit = (257..=286)
+        .rev()
+        .find(|&n| ll[n - 1] != 0)
+        .unwrap_or(257)
+        .max(257);
     let hdist = (1..=30).rev().find(|&n| dl[n - 1] != 0).unwrap_or(1);
     // Run-length encode the code lengths.
     let all: Vec<u8> = ll[..hlit].iter().chain(&dl[..hdist]).copied().collect();
@@ -536,7 +549,10 @@ fn write_block(w: &mut BitWriter, toks: &[Tok], last: bool) {
         cf[usize::from(*s)] += 1;
     }
     let cl = lengths(&cf, 7);
-    let hclen = (4..=19).rev().find(|&n| cl[CL_ORDER[n - 1]] != 0).unwrap_or(4);
+    let hclen = (4..=19)
+        .rev()
+        .find(|&n| cl[CL_ORDER[n - 1]] != 0)
+        .unwrap_or(4);
     let (lc, dc, cc) = (canonical(&ll), canonical(&dl), canonical(&cl));
 
     w.put(u32::from(last), 1);
@@ -640,7 +656,11 @@ pub fn crc32_update(mut c: u32, data: &[u8]) -> u32 {
             #[allow(clippy::cast_possible_truncation)]
             let mut c = n as u32;
             for _ in 0..8 {
-                c = if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 == 1 {
+                    0xEDB8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
             *e = c;
         }
@@ -701,7 +721,9 @@ mod tests {
                 b
             })
             .collect();
-        let text = "the quick brown fox jumps over the lazy dog. ".repeat(500).into_bytes();
+        let text = "the quick brown fox jumps over the lazy dog. "
+            .repeat(500)
+            .into_bytes();
         let runs: Vec<u8> = (0..70_000u32).map(|i| ((i / 1000) % 7) as u8).collect();
         vec![Vec::new(), vec![7], b"abc".to_vec(), noise, text, runs]
     }
@@ -719,7 +741,11 @@ mod tests {
     fn compresses_redundant_data_and_never_explodes_noise() {
         let s = samples();
         let text = &s[4];
-        assert!(deflate(text).len() * 20 < text.len(), "{}", deflate(text).len());
+        assert!(
+            deflate(text).len() * 20 < text.len(),
+            "{}",
+            deflate(text).len()
+        );
         let noise = &s[3];
         assert!(deflate(noise).len() <= noise.len() + 10);
     }

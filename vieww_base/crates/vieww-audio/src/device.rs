@@ -151,20 +151,33 @@ mod alsa {
     }
 
     impl Pcm {
-        pub(super) fn open(card: u32, device: u32, rate: u32, channels: u32) -> Result<Self, String> {
+        pub(super) fn open(
+            card: u32,
+            device: u32,
+            rate: u32,
+            channels: u32,
+        ) -> Result<Self, String> {
             let path = format!("/dev/snd/pcmC{card}D{device}p");
             let file = OpenOptions::new()
                 .read(true)
                 .write(true)
                 .open(&path)
                 .map_err(|e| format!("{path}: {e}"))?;
-            let full = Interval { min: 0, max: u32::MAX, flags: 0 };
+            let full = Interval {
+                min: 0,
+                max: u32::MAX,
+                flags: 0,
+            };
             let mut p = HwParams {
                 flags: 0,
                 masks: [[u32::MAX; MASK_WORDS]; 3],
                 mres: [[0; MASK_WORDS]; 5],
                 intervals: [full; 12],
-                ires: [Interval { min: 0, max: 0, flags: 0 }; 9],
+                ires: [Interval {
+                    min: 0,
+                    max: 0,
+                    flags: 0,
+                }; 9],
                 rmask: u32::MAX,
                 cmask: 0,
                 info: 0,
@@ -181,14 +194,30 @@ mod alsa {
             set_mask(&mut p.masks[ACCESS], ACCESS_RW_INTERLEAVED);
             set_mask(&mut p.masks[FORMAT], FORMAT_S16_LE);
             set_mask(&mut p.masks[SUBFORMAT], 0);
-            let exact = |v: u32| Interval { min: v, max: v, flags: 0b100 };
+            let exact = |v: u32| Interval {
+                min: v,
+                max: v,
+                flags: 0b100,
+            };
             p.intervals[I_SAMPLE_BITS] = exact(16);
             p.intervals[I_FRAME_BITS] = exact(16 * channels);
             p.intervals[I_CHANNELS] = exact(channels);
             p.intervals[I_RATE] = exact(rate);
-            p.intervals[I_PERIOD_SIZE] = Interval { min: 512, max: 2048, flags: 0b100 };
-            p.intervals[I_PERIODS] = Interval { min: 2, max: 8, flags: 0b100 };
-            p.intervals[I_BUFFER_SIZE] = Interval { min: 2048, max: 16_384, flags: 0b100 };
+            p.intervals[I_PERIOD_SIZE] = Interval {
+                min: 512,
+                max: 2048,
+                flags: 0b100,
+            };
+            p.intervals[I_PERIODS] = Interval {
+                min: 2,
+                max: 8,
+                flags: 0b100,
+            };
+            p.intervals[I_BUFFER_SIZE] = Interval {
+                min: 2048,
+                max: 16_384,
+                flags: 0b100,
+            };
             let fd = file.as_raw_fd();
             // SAFETY: `p` is a correctly sized and laid-out snd_pcm_hw_params
             // that outlives the call; the request number encodes its size.
@@ -365,7 +394,10 @@ mod tests {
 
     #[test]
     fn sounds_render_and_quantise() {
-        let s = render_sound(&Sound::Tone(Tone::held(440.0, Waveform::Sine, Duration::from_millis(50))), 48_000);
+        let s = render_sound(
+            &Sound::Tone(Tone::held(440.0, Waveform::Sine, Duration::from_millis(50))),
+            48_000,
+        );
         let q = to_i16_stereo(&s);
         assert_eq!(q.len(), s.data.len() * 2);
         assert!(q.iter().any(|&v| v > 10_000));
@@ -375,7 +407,14 @@ mod tests {
     fn wav_sink_writes_a_readable_file() {
         let dir = std::env::temp_dir().join(format!("vieww-wavsink-{}", std::process::id()));
         let p = WavSink { dir: dir.clone() }
-            .write("beep", &Sound::Tone(Tone::held(880.0, Waveform::Square, Duration::from_millis(20))))
+            .write(
+                "beep",
+                &Sound::Tone(Tone::held(
+                    880.0,
+                    Waveform::Square,
+                    Duration::from_millis(20),
+                )),
+            )
             .unwrap();
         let back = crate::read_wav(&std::fs::read(&p).unwrap()).unwrap();
         assert!(!back.samples.data.is_empty());
@@ -390,7 +429,11 @@ mod tests {
         assert!(AlsaOutput::open(0, 0, 48_000).is_err());
         let p = AlsaPlayer::default();
         assert!(matches!(
-            p.play(&Sound::Tone(Tone::held(440.0, Waveform::Sine, Duration::from_millis(5)))),
+            p.play(&Sound::Tone(Tone::held(
+                440.0,
+                Waveform::Sine,
+                Duration::from_millis(5)
+            ))),
             Err(ServiceError::Failed(_))
         ));
     }

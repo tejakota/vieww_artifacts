@@ -16,12 +16,12 @@ use std::time::Duration;
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlign};
 use vieww_widget::prelude::*;
 
-use crate::film_lib::{clamp01, ease_out_back, ease_out_cubic, ease_out_expo};
-use crate::product_film as pf;
 use super::{
     frame, ACCENT, BRAND_FAR, BRAND_NEAR, BREAK_RED, CANVAS, INK, LEDGER, MUTED, SURFACE,
     SURFACE_2, SYN_COMMENT, SYN_FUNCTION, SYN_STRING, SYN_TYPE, TERM_GREEN, W,
 };
+use crate::film_lib::{clamp01, ease_out_back, ease_out_cubic, ease_out_expo};
+use crate::product_film as pf;
 
 // ── Z19C · the frame itself ─────────────────────────────────────────────────
 
@@ -37,12 +37,15 @@ fn sample_frame_scene() -> vieww_paint::Scene {
             .push(Positioned::fill().child(Painting::sized(
                 size,
                 PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-                    book.rect(Rect::new(0.0, 0.0, s.width, s.height), Color::rgb(10, 9, 14));
+                    book.rect(
+                        Rect::new(0.0, 0.0, s.width, s.height),
+                        Color::rgb(10, 9, 14),
+                    );
                     // The card — gradient fill, hairline.
                     let card = Rect::new(48.0, 40.0, 300.0, 190.0);
                     book.rrect(card, 14.0, pf::alpha(SURFACE, 0.95));
-                    let g =
-                        Gradient::linear(Offset::new(0.0, 0.0), Offset::new(1.0, 1.0)).with_stops(&[
+                    let g = Gradient::linear(Offset::new(0.0, 0.0), Offset::new(1.0, 1.0))
+                        .with_stops(&[
                             (0.0, pf::alpha(BRAND_NEAR, 0.28)),
                             (1.0, pf::alpha(BRAND_FAR, 0.08)),
                         ]);
@@ -50,10 +53,19 @@ fn sample_frame_scene() -> vieww_paint::Scene {
                     book.stroke_rrect(card, 14.0, pf::alpha(SYN_COMMENT, 0.5), 1.2);
                     // A filtered layer — the blurred strip.
                     book.layer(1.0, 6.0, None, |b| {
-                        b.rrect(Rect::new(70.0, 62.0, 278.0, 88.0), 8.0, pf::alpha(SURFACE_2, 0.9));
+                        b.rrect(
+                            Rect::new(70.0, 62.0, 278.0, 88.0),
+                            8.0,
+                            pf::alpha(SURFACE_2, 0.9),
+                        );
                     });
                     // Rings and a thread — the flows.
-                    book.ring(Offset::new(360.0, 200.0), 38.0, 2.0, pf::alpha(BRAND_FAR, 0.8));
+                    book.ring(
+                        Offset::new(360.0, 200.0),
+                        38.0,
+                        2.0,
+                        pf::alpha(BRAND_FAR, 0.8),
+                    );
                     book.circle(Offset::new(360.0, 200.0), 6.0, pf::alpha(Color::WHITE, 0.9));
                     let mut path = vieww_foundation::Path::new();
                     path.move_to(Offset::new(70.0, 210.0));
@@ -108,7 +120,9 @@ fn plan_receipts() -> FramePlanReceipts {
         match n {
             SceneNode::Layer(l) => {
                 *layers += 1;
-                if l.cost.dynamicity == Dynamicity::Continuous || l.cost.dynamicity == Dynamicity::Frequent {
+                if l.cost.dynamicity == Dynamicity::Continuous
+                    || l.cost.dynamicity == Dynamicity::Frequent
+                {
                     *dynamic += 1;
                 }
                 for c in &l.children {
@@ -116,7 +130,9 @@ fn plan_receipts() -> FramePlanReceipts {
                 }
             }
             SceneNode::Draw(d) => {
-                if d.cost.dynamicity == Dynamicity::Continuous || d.cost.dynamicity == Dynamicity::Frequent {
+                if d.cost.dynamicity == Dynamicity::Continuous
+                    || d.cost.dynamicity == Dynamicity::Frequent
+                {
                     *dynamic += 1;
                 }
             }
@@ -132,7 +148,13 @@ fn plan_receipts() -> FramePlanReceipts {
     let write_bytes: u64 = plan
         .order
         .iter()
-        .flat_map(|&p| graph.pass(p).writes.iter().map(|&r| graph.resource(r).estimated_bytes()))
+        .flat_map(|&p| {
+            graph
+                .pass(p)
+                .writes
+                .iter()
+                .map(|&r| graph.resource(r).estimated_bytes())
+        })
         .sum();
     let unique_bytes: u64 = graph.resources().iter().map(|r| r.estimated_bytes()).sum();
 
@@ -180,18 +202,25 @@ fn plan_receipts() -> FramePlanReceipts {
             damage_regions: 1,
         });
     }
-    let p95 = timeline.p95(64).map(|d| d.as_secs_f32() * 1000.0).unwrap_or(0.0);
+    let p95 = timeline
+        .p95(64)
+        .map(|d| d.as_secs_f32() * 1000.0)
+        .unwrap_or(0.0);
     let histogram = timeline.histogram(64, Duration::from_secs_f32(16.6 / 1000.0), 8);
 
     // The harness — the loop proves it draws.
     let mut harness = vieww_test_harness::TestHarness::new(Size::new(320.0, 180.0));
     harness.mount(
-        Container::new()
-            .width(320.0)
-            .height(180.0)
-            .child(ColoredBox::new(SURFACE).child(Center::new().child(
-                Container::new().width(120.0).height(64.0).child(ColoredBox::new(BRAND_NEAR)),
-            ))),
+        Container::new().width(320.0).height(180.0).child(
+            ColoredBox::new(SURFACE).child(
+                Center::new().child(
+                    Container::new()
+                        .width(120.0)
+                        .height(64.0)
+                        .child(ColoredBox::new(BRAND_NEAR)),
+                ),
+            ),
+        ),
     );
     let report = harness.tick(Duration::from_millis(16));
 
@@ -212,7 +241,7 @@ fn plan_receipts() -> FramePlanReceipts {
 }
 
 /// Z19C — the frame itself: planned, aliased, budgeted, tested.
-pub fn the_frame_itself(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_frame_itself(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let r = plan_receipts();
     // Everything the closures need, taken out of `r` first — the receipts
@@ -289,8 +318,17 @@ pub fn the_frame_itself(ctx: &pf::Ctx) -> WidgetNode {
             let mut y = y0;
             for (_name, n, col) in rows {
                 let w = (n as f32 * 26.0).min(left.width() - 120.0);
-                book.rrect(Rect::new(x0, y, x0 + w.max(40.0), y + 30.0), 6.0, pf::alpha(col, 0.18));
-                book.stroke_rrect(Rect::new(x0, y, x0 + w.max(40.0), y + 30.0), 6.0, pf::alpha(col, 0.6), 1.2);
+                book.rrect(
+                    Rect::new(x0, y, x0 + w.max(40.0), y + 30.0),
+                    6.0,
+                    pf::alpha(col, 0.18),
+                );
+                book.stroke_rrect(
+                    Rect::new(x0, y, x0 + w.max(40.0), y + 30.0),
+                    6.0,
+                    pf::alpha(col, 0.6),
+                    1.2,
+                );
                 y += 44.0;
             }
             // The tree's own shape, drawn as a bracket fan.
@@ -300,9 +338,16 @@ pub fn the_frame_itself(ctx: &pf::Ctx) -> WidgetNode {
                 let mut path = vieww_foundation::Path::new();
                 path.move_to(Offset::new(bx, yy + 15.0));
                 path.line_to(Offset::new(bx + 18.0, yy + 15.0));
-                path.line_to(Offset::new(bx + 18.0, yy + 44.0 * (nodes.min(24) as f32 / 24.0)));
+                path.line_to(Offset::new(
+                    bx + 18.0,
+                    yy + 44.0 * (nodes.min(24) as f32 / 24.0),
+                ));
                 book.stroke(path, pf::alpha(SYN_COMMENT, 0.5), 1.2);
-                book.circle(Offset::new(bx + 26.0, yy + 15.0), 3.0, pf::alpha(SYN_TYPE, 0.7));
+                book.circle(
+                    Offset::new(bx + 26.0, yy + 15.0),
+                    3.0,
+                    pf::alpha(SYN_TYPE, 0.7),
+                );
             }
         }),
     )));
@@ -349,9 +394,22 @@ pub fn the_frame_itself(ctx: &pf::Ctx) -> WidgetNode {
             for (k, (name, placement)) in chip_data.iter().enumerate() {
                 let a = clamp01((pass_in - 0.08 * k as f32) / 0.4);
                 let w = 130.0 + (name.len() as f32 * 7.0).min(120.0);
-                let col = if placement == "CPU" { SYN_TYPE } else { SYN_STRING };
-                book.rrect(Rect::new(x0, y, x0 + w, y + 38.0), 8.0, pf::alpha(col, 0.16 * a));
-                book.stroke_rrect(Rect::new(x0, y, x0 + w, y + 38.0), 8.0, pf::alpha(col, 0.6 * a), 1.3);
+                let col = if placement == "CPU" {
+                    SYN_TYPE
+                } else {
+                    SYN_STRING
+                };
+                book.rrect(
+                    Rect::new(x0, y, x0 + w, y + 38.0),
+                    8.0,
+                    pf::alpha(col, 0.16 * a),
+                );
+                book.stroke_rrect(
+                    Rect::new(x0, y, x0 + w, y + 38.0),
+                    8.0,
+                    pf::alpha(col, 0.6 * a),
+                    1.3,
+                );
                 // The wire from the previous pass.
                 if k > 0 {
                     let mut path = vieww_foundation::Path::new();
@@ -460,9 +518,17 @@ pub fn the_frame_itself(ctx: &pf::Ctx) -> WidgetNode {
                 let hh = *h as f32 / peak as f32 * 120.0;
                 let x = x0 + k as f32 * bw;
                 let col = if k < 6 { TERM_GREEN } else { ACCENT };
-                book.rect(Rect::new(x, y1 - hh, x + bw - 8.0, y1), pf::alpha(col, 0.55 * hist_in));
+                book.rect(
+                    Rect::new(x, y1 - hh, x + bw - 8.0, y1),
+                    pf::alpha(col, 0.55 * hist_in),
+                );
             }
-            book.line(Offset::new(x0, y1), Offset::new(right.right - 24.0, y1), pf::alpha(SYN_COMMENT, 0.4), 1.0);
+            book.line(
+                Offset::new(x0, y1),
+                Offset::new(right.right - 24.0, y1),
+                pf::alpha(SYN_COMMENT, 0.4),
+                1.0,
+            );
         }),
     )));
     stack = stack.push(frame::label(
@@ -493,7 +559,10 @@ pub fn the_frame_itself(ctx: &pf::Ctx) -> WidgetNode {
             right.top + 352.0,
             right.width() - 48.0,
             24.0,
-            format!("1 tick · {} frames drawn · the loop is real", harness_frames),
+            format!(
+                "1 tick · {} frames drawn · the loop is real",
+                harness_frames
+            ),
             pf::geist_mono(15.0).color(pf::alpha(LEDGER, 0.95)),
             TextAlign::Left,
             clamp01((sec - 6.9) / 0.5),
@@ -540,15 +609,40 @@ struct Pair {
 /// itself. The last is the one the engine catches. Const, because the
 /// cards' paint closures capture it and must hold 'static data.
 const PAIRS: [Pair; 5] = [
-    Pair { name: "ink · surface", fg: INK, bg: SURFACE, note: "every caption you have read" },
-    Pair { name: "muted · surface", fg: MUTED, bg: SURFACE, note: "the receipts, the sub-labels" },
-    Pair { name: "white · brand", fg: Color::WHITE, bg: BRAND_NEAR, note: "the studio's own accent" },
-    Pair { name: "accent · deep", fg: ACCENT, bg: Color::rgb(7, 6, 10), note: "the highlights on the dark" },
-    Pair { name: "muted · deep", fg: MUTED, bg: Color::rgb(7, 6, 10), note: "caught — fixed in the next token" },
+    Pair {
+        name: "ink · surface",
+        fg: INK,
+        bg: SURFACE,
+        note: "every caption you have read",
+    },
+    Pair {
+        name: "muted · surface",
+        fg: MUTED,
+        bg: SURFACE,
+        note: "the receipts, the sub-labels",
+    },
+    Pair {
+        name: "white · brand",
+        fg: Color::WHITE,
+        bg: BRAND_NEAR,
+        note: "the studio's own accent",
+    },
+    Pair {
+        name: "accent · deep",
+        fg: ACCENT,
+        bg: Color::rgb(7, 6, 10),
+        note: "the highlights on the dark",
+    },
+    Pair {
+        name: "muted · deep",
+        fg: MUTED,
+        bg: Color::rgb(7, 6, 10),
+        note: "caught — fixed in the next token",
+    },
 ];
 
 /// Z19D — the contrast: WCAG, computed live.
-pub fn the_contrast(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_contrast(ctx: &pf::Ctx) -> WidgetNode {
     use vieww_accessibility::contrast::{contrast_ratio, passes, WcagLevel};
 
     let sec = ctx.sec;
@@ -584,7 +678,15 @@ pub fn the_contrast(ctx: &pf::Ctx) -> WidgetNode {
         let aa = passes(ratio, WcagLevel::Aa, false);
         let aaa = passes(ratio, WcagLevel::Aaa, false);
         let caught = k == 4;
-        let col = if caught { BREAK_RED } else { if aa { TERM_GREEN } else { BREAK_RED } };
+        let col = if caught {
+            BREAK_RED
+        } else {
+            if aa {
+                TERM_GREEN
+            } else {
+                BREAK_RED
+            }
+        };
 
         // The card — the pair's own two tones.
         stack = stack.push(Positioned::fill().child(Painting::sized(
@@ -595,14 +697,40 @@ pub fn the_contrast(ctx: &pf::Ctx) -> WidgetNode {
                 }
                 // The split swatch: the ground, the fg swatch on top.
                 book.rrect(card, 16.0, pf::alpha(p.bg, 1.0 * a));
-                let fg_r = Rect::new(card.left + 22.0, card.top + 22.0, card.right - 22.0, card.top + 118.0);
+                let fg_r = Rect::new(
+                    card.left + 22.0,
+                    card.top + 22.0,
+                    card.right - 22.0,
+                    card.top + 118.0,
+                );
                 book.rrect(fg_r, 10.0, pf::alpha(p.fg, 1.0 * a));
                 book.stroke_rrect(fg_r, 10.0, pf::alpha(p.fg, 0.35 * a), 1.0);
                 // Type specimen in the fg colour on the bg — the pair, in use.
-                book.rect(Rect::new(card.left + 22.0, card.top + 140.0, card.left + 190.0, card.top + 148.0), pf::alpha(p.fg, 0.85 * a));
-                book.rect(Rect::new(card.left + 22.0, card.top + 156.0, card.left + 150.0, card.top + 164.0), pf::alpha(p.fg, 0.6 * a));
+                book.rect(
+                    Rect::new(
+                        card.left + 22.0,
+                        card.top + 140.0,
+                        card.left + 190.0,
+                        card.top + 148.0,
+                    ),
+                    pf::alpha(p.fg, 0.85 * a),
+                );
+                book.rect(
+                    Rect::new(
+                        card.left + 22.0,
+                        card.top + 156.0,
+                        card.left + 150.0,
+                        card.top + 164.0,
+                    ),
+                    pf::alpha(p.fg, 0.6 * a),
+                );
                 // The frame: caught pairs get the red treatment.
-                book.stroke_rrect(card, 16.0, pf::alpha(col, 0.75 * a), if caught { 2.2 } else { 1.4 });
+                book.stroke_rrect(
+                    card,
+                    16.0,
+                    pf::alpha(col, 0.75 * a),
+                    if caught { 2.2 } else { 1.4 },
+                );
             }),
         )));
         // The pair's name and its live ratio.
@@ -637,7 +765,16 @@ pub fn the_contrast(ctx: &pf::Ctx) -> WidgetNode {
                 if aa { "pass" } else { "fail" },
                 if aaa { "pass" } else { "fail" }
             ),
-            pf::geist_mono(15.0).color(pf::alpha(if aaa { TERM_GREEN } else if aa { SYN_STRING } else { BREAK_RED }, 0.95)),
+            pf::geist_mono(15.0).color(pf::alpha(
+                if aaa {
+                    TERM_GREEN
+                } else if aa {
+                    SYN_STRING
+                } else {
+                    BREAK_RED
+                },
+                0.95,
+            )),
             TextAlign::Left,
             clamp01((sec - 2.2 - 0.12 * k as f32) / 0.5),
         ));

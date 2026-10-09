@@ -84,7 +84,9 @@ pub fn puppet_warp(img: &Image, rest: &[Offset], moved: &[Offset], grid: usize) 
             #[allow(clippy::cast_precision_loss)]
             let (fx, fy) = ((x % g) as f32 / g as f32, (y % g) as f32 / g as f32);
             let m = |a: usize, b: usize| map[(cy + b).min(gh - 1) * gw + (cx + a).min(gw - 1)];
-            let lerp = |a: Offset, b: Offset, t: f32| Offset::new(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
+            let lerp = |a: Offset, b: Offset, t: f32| {
+                Offset::new(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t)
+            };
             let s = lerp(lerp(m(0, 0), m(1, 0), fx), lerp(m(0, 1), m(1, 1), fx), fy);
             #[allow(clippy::cast_precision_loss)]
             if s.dx < 0.0 || s.dy < 0.0 || s.dx > (w - 1) as f32 || s.dy > (h - 1) as f32 {
@@ -156,7 +158,15 @@ mod tests {
     #[test]
     fn image_warp_moves_content() {
         let (w, h) = (40usize, 20usize);
-        let px: Vec<u8> = (0..w * h).flat_map(|i| if i % w < 5 { [255, 0, 0, 255] } else { [0, 0, 255, 255] }).collect();
+        let px: Vec<u8> = (0..w * h)
+            .flat_map(|i| {
+                if i % w < 5 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                }
+            })
+            .collect();
         #[allow(clippy::cast_possible_truncation)]
         let img = Image::from_rgba8(px, w as u32, h as u32);
         let rest = [o(2.0, 10.0), o(20.0, 10.0), o(38.0, 10.0)];

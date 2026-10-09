@@ -45,25 +45,25 @@ use crate::product_film as pf;
 // ── The bands ───────────────────────────────────────────────────────────────
 
 /// The header's height: movement label, title, subtitle.
-pub const HEADER_H: f32 = 146.0;
+pub(crate) const HEADER_H: f32 = 146.0;
 /// Where the footer begins: receipts and the rail below.
-pub const FOOTER_Y: f32 = 1000.0;
+pub(crate) const FOOTER_Y: f32 = 1000.0;
 /// **The** side padding — top, right, bottom and left all answer to this
 /// one number and to [`PAD_Y`]: the body, the safe area, the header's
 /// centred type and the rail all stop `PAD_X` from the left and right
 /// edges, and the body keeps `PAD_Y` of air under the header seam and
 /// above the footer seam. One discipline, every band — a frame with
 /// 72 px here and 128 px there is two frames.
-pub const PAD_X: f32 = 128.0;
+pub(crate) const PAD_X: f32 = 128.0;
 /// The body's vertical breathing room inside the header/footer seams.
-pub const PAD_Y: f32 = 16.0;
+pub(crate) const PAD_Y: f32 = 16.0;
 
 /// The body as the scenes were authored against it — the studio scenes
 /// place their plates relative to this rectangle and declare it as their
 /// content box, so it stays fixed. Its sides carry the same [`PAD_X`] as
 /// the safe area, the header and the rail: one padding on all four sides
 /// of the frame.
-pub const BODY: Rect = Rect {
+pub(crate) const BODY: Rect = Rect {
     left: PAD_X,
     top: HEADER_H + PAD_Y,
     right: pf::W - PAD_X,
@@ -73,7 +73,7 @@ pub const BODY: Rect = Rect {
 /// The safe area every scene is fitted into: the same generous padding on
 /// the left and right, and clear air under the header and above the
 /// footer — nothing a scene draws reaches past it.
-pub const SAFE: Rect = Rect {
+pub(crate) const SAFE: Rect = Rect {
     left: PAD_X,
     top: HEADER_H + 36.0,
     right: pf::W - PAD_X,
@@ -91,7 +91,7 @@ struct Line {
 
 /// A rectangle of the live studio, re-composited into the world.
 #[derive(Clone, Debug)]
-pub struct Plate {
+pub(crate) struct Plate {
     /// The region of the application's own 1920×1080 draw list.
     pub src: Rect,
     /// Where it lands in world space (uniform scale: `dst.width / src.width`).
@@ -141,29 +141,35 @@ thread_local! {
 }
 
 /// Clear the frame's registrations — the master calls this before a build.
-pub fn reset() {
+pub(crate) fn reset() {
     REG.with(|r| *r.borrow_mut() = Registry::default());
 }
 
 /// A caption line. The `legacy_y` is the scenes' old slot literal: `>= 990`
 /// is the scene's first statement (its **title**), anything else its second
 /// (its **subtitle**). `appear` fades it in.
-pub fn caption(text: &str, legacy_y: f32, appear: f32) -> WidgetNode {
+pub(crate) fn caption(text: &str, legacy_y: f32, appear: f32) -> WidgetNode {
     let older = legacy_y >= 990.0;
     let text = text.to_string();
-    REG.with(|r| r.borrow_mut().lines.push(Line { text, appear, older }));
+    REG.with(|r| {
+        r.borrow_mut().lines.push(Line {
+            text,
+            appear,
+            older,
+        })
+    });
     Stack::new().into()
 }
 
 /// The scene's headline — when a scene has one, it is the title, and both
 /// captions become the subtitle (the newer replacing the older).
-pub fn headline(text: &str, appear: f32) {
+pub(crate) fn headline(text: &str, appear: f32) {
     let text = text.to_string();
     REG.with(|r| r.borrow_mut().headline = Some((text, appear)));
 }
 
 /// The receipts row — chips in the footer, centred.
-pub fn receipts(chips: &[(&str, Color)], _x: f32, _y: f32, appear: f32) -> WidgetNode {
+pub(crate) fn receipts(chips: &[(&str, Color)], _x: f32, _y: f32, appear: f32) -> WidgetNode {
     let chips: Vec<(String, Color)> = chips.iter().map(|(t, c)| ((*t).to_string(), *c)).collect();
     REG.with(|r| r.borrow_mut().receipts.push((chips, appear)));
     Stack::new().into()
@@ -171,51 +177,52 @@ pub fn receipts(chips: &[(&str, Color)], _x: f32, _y: f32, appear: f32) -> Widge
 
 /// Paint a scene's room full-bleed in screen space — the one surface the
 /// header, the body and the footer share.
-pub fn ground(node: impl Into<WidgetNode>) -> WidgetNode {
+pub(crate) fn ground(node: impl Into<WidgetNode>) -> WidgetNode {
     let node = node.into();
     REG.with(|r| r.borrow_mut().ground.push(node));
     Stack::new().into()
 }
 
 /// A world-space node drawn over the plates (the studio act's overlay).
-pub fn over(node: impl Into<WidgetNode>) -> WidgetNode {
+#[allow(dead_code)]
+pub(crate) fn over(node: impl Into<WidgetNode>) -> WidgetNode {
     let node = node.into();
     REG.with(|r| r.borrow_mut().over.push(node));
     Stack::new().into()
 }
 
 /// A world-space node drawn *under* the plates (a card a plate sits on).
-pub fn under(node: impl Into<WidgetNode>) -> WidgetNode {
+pub(crate) fn under(node: impl Into<WidgetNode>) -> WidgetNode {
     let node = node.into();
     REG.with(|r| r.borrow_mut().under.push(node));
     Stack::new().into()
 }
 
-pub fn take_under() -> Vec<WidgetNode> {
+pub(crate) fn take_under() -> Vec<WidgetNode> {
     REG.with(|r| std::mem::take(&mut r.borrow_mut().under))
 }
 
 /// Composite a region of the live studio at a world rectangle.
-pub fn plate(p: Plate) {
+pub(crate) fn plate(p: Plate) {
     REG.with(|r| r.borrow_mut().plates.push(p));
 }
 
 /// Override the scene's content box for this frame (normally the table in
 /// [`content_box`] decides).
-pub fn boxed(r: Rect) {
+pub(crate) fn boxed(r: Rect) {
     REG.with(|reg| reg.borrow_mut().boxed = Some(r));
 }
 
-pub fn take_ground() -> Vec<WidgetNode> {
+pub(crate) fn take_ground() -> Vec<WidgetNode> {
     REG.with(|r| std::mem::take(&mut r.borrow_mut().ground))
 }
-pub fn take_plates() -> Vec<Plate> {
+pub(crate) fn take_plates() -> Vec<Plate> {
     REG.with(|r| std::mem::take(&mut r.borrow_mut().plates))
 }
-pub fn take_over() -> Vec<WidgetNode> {
+pub(crate) fn take_over() -> Vec<WidgetNode> {
     REG.with(|r| std::mem::take(&mut r.borrow_mut().over))
 }
-pub fn take_boxed() -> Option<Rect> {
+pub(crate) fn take_boxed() -> Option<Rect> {
     REG.with(|r| r.borrow_mut().boxed.take())
 }
 
@@ -224,13 +231,13 @@ pub fn take_boxed() -> Option<Rect> {
 /// The box each scene's content occupies in its own coordinates. Measured
 /// from the scene (`sfmeasure`), written down here, and fitted into
 /// [`BODY`] by [`fit`].
-pub fn content_box(id: &str) -> Rect {
+pub(crate) fn content_box(id: &str) -> Rect {
     super::layout::content_box(id)
 }
 
 /// The uniform transform that puts `content` in the middle of [`BODY`] as
 /// large as the body allows, capped at `max_scale`.
-pub fn fit(content: Rect, max_scale: f32) -> (f32, Offset) {
+pub(crate) fn fit(content: Rect, max_scale: f32) -> (f32, Offset) {
     let s = (SAFE.width() / content.width())
         .min(SAFE.height() / content.height())
         .min(max_scale);
@@ -246,7 +253,7 @@ pub fn fit(content: Rect, max_scale: f32) -> (f32, Offset) {
 /// pullback uses it to hand the mark's rect to the end card across the
 /// cut: a rect is anchored where the *incoming* scene's fit will put it,
 /// which is the only place a transform across a dissolve can continue.
-pub fn fit_of(id: &str) -> (f32, Offset) {
+pub(crate) fn fit_of(id: &str) -> (f32, Offset) {
     fit(content_box(id), super::layout::MAX_SCALE)
 }
 
@@ -257,7 +264,7 @@ pub fn fit_of(id: &str) -> (f32, Offset) {
 /// Three roles, three sizes, one axis: the movement label (small, tracked,
 /// accent), the title (the scene's statement), the subtitle (its
 /// consequence). Everything is centred on the frame's own centre line.
-pub fn header(movement: &str, name: &str, act_a: f32) -> WidgetNode {
+pub(crate) fn header(movement: &str, name: &str, act_a: f32) -> WidgetNode {
     let (lines, headline) = REG.with(|r| {
         let r = r.borrow();
         (r.lines.clone(), r.headline.clone())
@@ -273,7 +280,10 @@ pub fn header(movement: &str, name: &str, act_a: f32) -> WidgetNode {
     let (title, subs): (Option<(String, f32)>, Vec<Line>) = match headline {
         Some((h, a)) => (Some((h, a)), lines.clone()),
         None => {
-            let t = lines.iter().find(|l| l.older).map(|l| (l.text.clone(), l.appear));
+            let t = lines
+                .iter()
+                .find(|l| l.older)
+                .map(|l| (l.text.clone(), l.appear));
             let rest: Vec<Line> = lines.iter().filter(|l| !l.older).cloned().collect();
             (t, rest)
         }
@@ -282,13 +292,23 @@ pub fn header(movement: &str, name: &str, act_a: f32) -> WidgetNode {
         let a = ease_out_cubic(clamp01(appear));
         if a > 0.01 {
             stack = stack.push(
-                Positioned::new().left(PAD_X).top(34.0 + (1.0 - a) * 10.0).width(pf::W - 2.0 * PAD_X).height(58.0).child(
-                    Opacity::new(a).child(
-                        Text::new(text)
-                            .style(pf::geist(40.0).weight(vieww_foundation::FontWeight::Medium).letter_spacing(0.2).color(pf::alpha(pf::INK, 0.97)))
-                            .align(TextAlign::Center),
+                Positioned::new()
+                    .left(PAD_X)
+                    .top(34.0 + (1.0 - a) * 10.0)
+                    .width(pf::W - 2.0 * PAD_X)
+                    .height(58.0)
+                    .child(
+                        Opacity::new(a).child(
+                            Text::new(text)
+                                .style(
+                                    pf::geist(40.0)
+                                        .weight(vieww_foundation::FontWeight::Medium)
+                                        .letter_spacing(0.2)
+                                        .color(pf::alpha(pf::INK, 0.97)),
+                                )
+                                .align(TextAlign::Center),
+                        ),
                     ),
-                ),
             );
         }
     }
@@ -300,32 +320,49 @@ pub fn header(movement: &str, name: &str, act_a: f32) -> WidgetNode {
         match (older, newer) {
             (Some(o), Some(n)) => {
                 let na = ease_out_cubic(clamp01(n.appear));
-                vec![(o.text, ease_out_cubic(clamp01(o.appear)) * (1.0 - na)), (n.text, na)]
+                vec![
+                    (o.text, ease_out_cubic(clamp01(o.appear)) * (1.0 - na)),
+                    (n.text, na),
+                ]
             }
-            _ => subs.iter().map(|l| (l.text.clone(), ease_out_cubic(clamp01(l.appear)))).collect(),
+            _ => subs
+                .iter()
+                .map(|l| (l.text.clone(), ease_out_cubic(clamp01(l.appear))))
+                .collect(),
         }
     } else {
-        subs.iter().map(|l| (l.text.clone(), ease_out_cubic(clamp01(l.appear)))).collect()
+        subs.iter()
+            .map(|l| (l.text.clone(), ease_out_cubic(clamp01(l.appear))))
+            .collect()
     };
     for (text, a) in shown {
         if a <= 0.01 {
             continue;
         }
         stack = stack.push(
-            Positioned::new().left(PAD_X).top(96.0 + (1.0 - a) * 8.0).width(pf::W - 2.0 * PAD_X).height(38.0).child(
-                Opacity::new(a).child(
-                    Text::new(text)
-                        .style(pf::geist(25.0).letter_spacing(0.3).color(pf::alpha(pf::MUTED, 0.98)))
-                        .align(TextAlign::Center),
+            Positioned::new()
+                .left(PAD_X)
+                .top(96.0 + (1.0 - a) * 8.0)
+                .width(pf::W - 2.0 * PAD_X)
+                .height(38.0)
+                .child(
+                    Opacity::new(a).child(
+                        Text::new(text)
+                            .style(
+                                pf::geist(25.0)
+                                    .letter_spacing(0.3)
+                                    .color(pf::alpha(pf::MUTED, 0.98)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()
 }
 
 /// The footer's receipts row, centred.
-pub fn footer_receipts() -> WidgetNode {
+pub(crate) fn footer_receipts() -> WidgetNode {
     let rows = REG.with(|r| r.borrow().receipts.clone());
     let mut stack = Stack::new();
     for (chips, appear) in rows {
@@ -342,7 +379,16 @@ pub fn footer_receipts() -> WidgetNode {
             let ca = clamp01((a - i as f32 * 0.08) / 0.6);
             if ca > 0.01 {
                 let rise = (1.0 - ease_out_cubic(ca)) * 8.0;
-                stack = stack.push(chip_at(x, FOOTER_Y + 8.0 + rise, *w, 34.0, text.clone(), size, *color, ca));
+                stack = stack.push(chip_at(
+                    x,
+                    FOOTER_Y + 8.0 + rise,
+                    *w,
+                    34.0,
+                    text.clone(),
+                    size,
+                    *color,
+                    ca,
+                ));
             }
             x += w + gap;
         }
@@ -352,7 +398,7 @@ pub fn footer_receipts() -> WidgetNode {
 
 /// The progress rail — one tick per scene, major ticks at movements, the
 /// travelled part lit. It spans the padded width, at the frame's foot.
-pub fn rail(abs: f32) -> WidgetNode {
+pub(crate) fn rail(abs: f32) -> WidgetNode {
     let list = super::scenes();
     let total = super::total_seconds();
     let starts: Vec<f32> = (0..list.len()).map(super::scene_start).collect();
@@ -373,7 +419,12 @@ pub fn rail(abs: f32) -> WidgetNode {
                     return;
                 }
                 let (x0, x1, y) = (PAD_X, pf::W - PAD_X, 12.0);
-                book.line(Offset::new(x0, y), Offset::new(x1, y), pf::alpha(Color::WHITE, 0.10 * ra), 1.0);
+                book.line(
+                    Offset::new(x0, y),
+                    Offset::new(x1, y),
+                    pf::alpha(Color::WHITE, 0.10 * ra),
+                    1.0,
+                );
                 for (i, st) in starts.iter().enumerate() {
                     let x = x0 + (x1 - x0) * (st / total);
                     let major = acts.contains(&i);
@@ -386,7 +437,12 @@ pub fn rail(abs: f32) -> WidgetNode {
                     );
                 }
                 let px = x0 + (x1 - x0) * frac;
-                book.line(Offset::new(x0, y), Offset::new(px, y), pf::alpha(super::ACCENT, 0.55 * ra), 1.6);
+                book.line(
+                    Offset::new(x0, y),
+                    Offset::new(px, y),
+                    pf::alpha(super::ACCENT, 0.55 * ra),
+                    1.6,
+                );
                 // No playhead mark: the travelled line itself is the
                 // position — a circle at its tip read as a bug (two bars
                 // and a dot), so the rail ends where the line ends.
@@ -398,7 +454,7 @@ pub fn rail(abs: f32) -> WidgetNode {
 /// The film's default room — used when a scene registers none. The same
 /// dark the scenes' own rooms are built on, so a cut between a scene with a
 /// room and one without is a change of light, not of surface.
-pub fn default_ground(t: f32) -> WidgetNode {
+pub(crate) fn default_ground(t: f32) -> WidgetNode {
     Positioned::fill()
         .child(Painting::sized(
             pf::CANVAS,
@@ -406,11 +462,13 @@ pub fn default_ground(t: f32) -> WidgetNode {
                 let (w, h) = (s.width, s.height);
                 book.rect(
                     Rect::new(0.0, 0.0, w, h),
-                    vieww_foundation::Gradient::vertical().with_dither().with_stops(&[
-                        (0.0, Color::rgb(14, 12, 17)),
-                        (0.55, pf::BG_DEEP),
-                        (1.0, Color::rgb(10, 9, 13)),
-                    ]),
+                    vieww_foundation::Gradient::vertical()
+                        .with_dither()
+                        .with_stops(&[
+                            (0.0, Color::rgb(14, 12, 17)),
+                            (0.55, pf::BG_DEEP),
+                            (1.0, Color::rgb(10, 9, 13)),
+                        ]),
                 );
                 pf::stars(book, w, h, 0x5F11, 50, t, 0.05);
                 pf::vignette(book, w, h, 0.5);
@@ -426,7 +484,7 @@ pub fn default_ground(t: f32) -> WidgetNode {
 /// hung type from the top of its box, so every label sat low in the chip
 /// or card it named; a box that centres its line cannot.
 #[allow(clippy::too_many_arguments)]
-pub fn label(
+pub(crate) fn label(
     x: f32,
     y: f32,
     w: f32,
@@ -448,18 +506,30 @@ pub fn label(
         .top(y)
         .width(w)
         .height(h)
-        .child(Opacity::new(a.min(1.0)).child(
-            Container::new()
-                .width(w)
-                .height(h)
-                .alignment(al)
-                .child(Text::new(text.into()).style(style).align(align)),
-        ))
+        .child(
+            Opacity::new(a.min(1.0)).child(
+                Container::new()
+                    .width(w)
+                    .height(h)
+                    .alignment(al)
+                    .child(Text::new(text.into()).style(style).align(align)),
+            ),
+        )
         .into()
 }
 
 /// A chip — a rounded, bordered label with its text centred both ways.
-pub fn chip_at(x: f32, y: f32, w: f32, h: f32, text: impl Into<String>, size: f32, fg: Color, a: f32) -> WidgetNode {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn chip_at(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    text: impl Into<String>,
+    size: f32,
+    fg: Color,
+    a: f32,
+) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
@@ -468,20 +538,25 @@ pub fn chip_at(x: f32, y: f32, w: f32, h: f32, text: impl Into<String>, size: f3
         .top(y)
         .width(w)
         .height(h)
-        .child(Opacity::new(a.min(1.0)).child(
-            Container::new()
-                .width(w)
-                .height(h)
-                .color(pf::alpha(pf::SURFACE, 0.9))
-                .radius(8.0)
-                .border(vieww_foundation::Border::new(pf::alpha(fg, 0.30), 1.0))
-                .alignment(vieww_foundation::Alignment::CENTER)
-                .child(Text::new(text.into()).style(pf::geist_mono(size).letter_spacing(1.0).color(fg))),
-        ))
+        .child(
+            Opacity::new(a.min(1.0)).child(
+                Container::new()
+                    .width(w)
+                    .height(h)
+                    .color(pf::alpha(pf::SURFACE, 0.9))
+                    .radius(8.0)
+                    .border(vieww_foundation::Border::new(pf::alpha(fg, 0.30), 1.0))
+                    .alignment(vieww_foundation::Alignment::CENTER)
+                    .child(
+                        Text::new(text.into())
+                            .style(pf::geist_mono(size).letter_spacing(1.0).color(fg)),
+                    ),
+            ),
+        )
         .into()
 }
 
 /// A chip's width for `text` at `size` — measured the way `chip_at` draws.
-pub fn chip_w(text: &str, size: f32) -> f32 {
+pub(crate) fn chip_w(text: &str, size: f32) -> f32 {
     pf::gmono_tw(size, text.chars().count(), 1.0) + 2.0 * 14.0
 }

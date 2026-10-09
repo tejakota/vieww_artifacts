@@ -148,7 +148,9 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 fn lerp_c(a: Color, b: Color, t: f32) -> Color {
     let l = |x: u8, y: u8| {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let v = lerp(f32::from(x), f32::from(y), t).round().clamp(0.0, 255.0) as u8;
+        let v = lerp(f32::from(x), f32::from(y), t)
+            .round()
+            .clamp(0.0, 255.0) as u8;
         v
     };
     Color::rgba(l(a.r, b.r), l(a.g, b.g), l(a.b, b.b), l(a.a, b.a))
@@ -255,7 +257,8 @@ impl Timeline {
                 a.scale_y = lerp(from.scale_y, v, k);
             }
             if let Some(v) = to.offset {
-                a.offset = Offset::new(lerp(from.offset.dx, v.dx, k), lerp(from.offset.dy, v.dy, k));
+                a.offset =
+                    Offset::new(lerp(from.offset.dx, v.dx, k), lerp(from.offset.dy, v.dy, k));
             }
             if let Some(v) = to.opacity {
                 a.opacity = lerp(from.opacity, v, k);
@@ -287,8 +290,15 @@ mod tests {
         let l = s.add_layer();
         let id = s.add_shape(
             l,
-            Attrs { fill: Some(Color::rgb(0, 0, 0)), ..Attrs::default() },
-            Shape::Rect { width: 10.0, height: 10.0, corner: 0.0 },
+            Attrs {
+                fill: Some(Color::rgb(0, 0, 0)),
+                ..Attrs::default()
+            },
+            Shape::Rect {
+                width: 10.0,
+                height: 10.0,
+                corner: 0.0,
+            },
         );
         (s, id)
     }
@@ -301,7 +311,12 @@ mod tests {
     fn a_tween_moves_from_where_it_is_to_where_it_goes() {
         let (mut s, id) = stage();
         let mut tl = Timeline::new();
-        tl.to(NodeTween::new(id, To::new().xy(100.0, 50.0).fill(Color::rgb(200, 100, 0)), ms(1000)).curve(Curve::Linear));
+        tl.to(NodeTween::new(
+            id,
+            To::new().xy(100.0, 50.0).fill(Color::rgb(200, 100, 0)),
+            ms(1000),
+        )
+        .curve(Curve::Linear));
         tl.update(&mut s, ms(0));
         tl.update(&mut s, ms(500));
         let a = s.node(id).attrs.clone();
@@ -316,16 +331,26 @@ mod tests {
     fn delay_repeat_and_yoyo() {
         let (mut s, id) = stage();
         let mut tl = Timeline::new();
-        tl.to(NodeTween::new(id, To::new().opacity(0.0), ms(100)).curve(Curve::Linear).delay(ms(50)).repeat(1, true));
+        tl.to(NodeTween::new(id, To::new().opacity(0.0), ms(100))
+            .curve(Curve::Linear)
+            .delay(ms(50))
+            .repeat(1, true));
         tl.update(&mut s, ms(0));
         tl.update(&mut s, ms(40));
         assert_eq!(s.node(id).attrs.opacity, 1.0, "still in the delay");
         tl.update(&mut s, ms(100));
         assert!((s.node(id).attrs.opacity - 0.5).abs() < 1e-3);
         tl.update(&mut s, ms(175));
-        assert!((s.node(id).attrs.opacity - 0.25).abs() < 1e-3, "on the way back");
+        assert!(
+            (s.node(id).attrs.opacity - 0.25).abs() < 1e-3,
+            "on the way back"
+        );
         tl.update(&mut s, ms(1000));
-        assert_eq!(s.node(id).attrs.opacity, 1.0, "a yoyo repeat ends where it began");
+        assert_eq!(
+            s.node(id).attrs.opacity,
+            1.0,
+            "a yoyo repeat ends where it began"
+        );
     }
 
     #[test]

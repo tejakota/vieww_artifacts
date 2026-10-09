@@ -27,7 +27,11 @@ impl Default for ZoomTransform {
 }
 
 impl ZoomTransform {
-    pub const IDENTITY: Self = Self { k: 1.0, x: 0.0, y: 0.0 };
+    pub const IDENTITY: Self = Self {
+        k: 1.0,
+        x: 0.0,
+        y: 0.0,
+    };
 
     #[must_use]
     pub fn apply(&self, p: (f64, f64)) -> (f64, f64) {
@@ -65,7 +69,10 @@ impl ZoomTransform {
     /// `(x0, y0, x1, y1)`), like d3's default constrain.
     #[must_use]
     pub fn constrain(&self, viewport: (f64, f64, f64, f64), content: (f64, f64, f64, f64)) -> Self {
-        let (c0, c1) = (self.apply((content.0, content.1)), self.apply((content.2, content.3)));
+        let (c0, c1) = (
+            self.apply((content.0, content.1)),
+            self.apply((content.2, content.3)),
+        );
         let fix = |lo: f64, hi: f64, v0: f64, v1: f64| -> f64 {
             if hi - lo < v1 - v0 {
                 // Content smaller than the viewport: centre it.
@@ -149,7 +156,11 @@ impl Brush {
         let e = self.extent;
         let cx = |v: f64| v.clamp(e.x0, e.x1);
         let cy = |v: f64| v.clamp(e.y0, e.y1);
-        let (y0, y1) = if self.two_d { (cy(a.1.min(b.1)), cy(a.1.max(b.1))) } else { (e.y0, e.y1) };
+        let (y0, y1) = if self.two_d {
+            (cy(a.1.min(b.1)), cy(a.1.max(b.1)))
+        } else {
+            (e.y0, e.y1)
+        };
         Selection {
             x0: cx(a.0.min(b.0)),
             x1: cx(a.0.max(b.0)),
@@ -195,7 +206,11 @@ impl Brush {
             Drag::Move(a, s) => {
                 let e = self.extent;
                 let dx = (p.0 - a.0).clamp(e.x0 - s.x0, e.x1 - s.x1);
-                let dy = if self.two_d { (p.1 - a.1).clamp(e.y0 - s.y0, e.y1 - s.y1) } else { 0.0 };
+                let dy = if self.two_d {
+                    (p.1 - a.1).clamp(e.y0 - s.y0, e.y1 - s.y1)
+                } else {
+                    0.0
+                };
                 self.selection = Some(Selection {
                     x0: s.x0 + dx,
                     x1: s.x1 + dx,
@@ -242,7 +257,9 @@ impl Brush {
         points
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.0 >= s.x0 && p.0 <= s.x1 && (!self.two_d || (p.1 >= s.y0 && p.1 <= s.y1)))
+            .filter(|(_, p)| {
+                p.0 >= s.x0 && p.0 <= s.x1 && (!self.two_d || (p.1 >= s.y0 && p.1 <= s.y1))
+            })
             .map(|(i, _)| i)
             .collect()
     }
@@ -258,32 +275,66 @@ mod tests {
         let data_under = ZoomTransform::IDENTITY.invert((100.0, 50.0));
         let back = t.apply(data_under);
         assert!((back.0 - 100.0).abs() < 1e-9 && (back.1 - 50.0).abs() < 1e-9);
-        assert_eq!(t.scale_about(100.0, (0.0, 0.0), (0.5, 8.0)).k, 8.0, "clamped");
+        assert_eq!(
+            t.scale_about(100.0, (0.0, 0.0), (0.5, 8.0)).k,
+            8.0,
+            "clamped"
+        );
     }
 
     #[test]
     fn constrain_keeps_content_on_screen() {
-        let t = ZoomTransform { k: 2.0, x: 500.0, y: 0.0 }.constrain((0.0, 0.0, 400.0, 300.0), (0.0, 0.0, 400.0, 300.0));
+        let t = ZoomTransform {
+            k: 2.0,
+            x: 500.0,
+            y: 0.0,
+        }
+        .constrain((0.0, 0.0, 400.0, 300.0), (0.0, 0.0, 400.0, 300.0));
         assert!(t.apply((0.0, 0.0)).0 <= 0.0 + 1e-9);
-        let small = ZoomTransform { k: 0.5, x: 0.0, y: 0.0 }.constrain((0.0, 0.0, 400.0, 300.0), (0.0, 0.0, 400.0, 300.0));
-        assert!((small.apply((200.0, 150.0)).0 - 200.0).abs() < 1e-9, "centred");
+        let small = ZoomTransform {
+            k: 0.5,
+            x: 0.0,
+            y: 0.0,
+        }
+        .constrain((0.0, 0.0, 400.0, 300.0), (0.0, 0.0, 400.0, 300.0));
+        assert!(
+            (small.apply((200.0, 150.0)).0 - 200.0).abs() < 1e-9,
+            "centred"
+        );
     }
 
     #[test]
     fn rescale_maps_the_domain() {
         let s = Continuous::linear((0.0, 10.0), (0.0, 100.0));
-        let t = ZoomTransform { k: 2.0, x: -50.0, y: 0.0 };
+        let t = ZoomTransform {
+            k: 2.0,
+            x: -50.0,
+            y: 0.0,
+        };
         let r = t.rescale(&s, true);
         assert!((r.domain.0 - 2.5).abs() < 1e-9 && (r.domain.1 - 7.5).abs() < 1e-9);
     }
 
     #[test]
     fn brush_draw_move_resize_clear() {
-        let mut b = Brush::xy(Selection { x0: 0.0, y0: 0.0, x1: 100.0, y1: 100.0 });
+        let mut b = Brush::xy(Selection {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 100.0,
+            y1: 100.0,
+        });
         b.start((10.0, 10.0));
         b.update((40.0, 30.0));
         b.end();
-        assert_eq!(b.selection, Some(Selection { x0: 10.0, y0: 10.0, x1: 40.0, y1: 30.0 }));
+        assert_eq!(
+            b.selection,
+            Some(Selection {
+                x0: 10.0,
+                y0: 10.0,
+                x1: 40.0,
+                y1: 30.0
+            })
+        );
         b.start((25.0, 20.0));
         b.update((95.0, 20.0)); // move, clamped to the extent
         b.end();
@@ -293,7 +344,10 @@ mod tests {
         b.update((50.0, 20.0));
         b.end();
         assert_eq!(b.selection.unwrap().x0, 50.0);
-        assert_eq!(b.select(&[(60.0, 15.0), (10.0, 15.0), (60.0, 90.0)]), vec![0]);
+        assert_eq!(
+            b.select(&[(60.0, 15.0), (10.0, 15.0), (60.0, 90.0)]),
+            vec![0]
+        );
         b.start((5.0, 90.0));
         b.end();
         assert_eq!(b.selection, None, "click outside clears");
@@ -301,7 +355,12 @@ mod tests {
 
     #[test]
     fn a_1d_brush_spans_the_full_height() {
-        let mut b = Brush::x(Selection { x0: 0.0, y0: 0.0, x1: 200.0, y1: 40.0 });
+        let mut b = Brush::x(Selection {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 200.0,
+            y1: 40.0,
+        });
         b.start((20.0, 5.0));
         b.update((80.0, 7.0));
         b.end();

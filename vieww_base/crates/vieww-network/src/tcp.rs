@@ -33,7 +33,8 @@ fn conn_err(e: impl std::fmt::Display) -> NetError {
 fn connect(url: &Url, timeout: Duration) -> Result<TcpStream, NetError> {
     if url.scheme() == Scheme::Https {
         return Err(NetError::Connection(
-            "TLS is not implemented in vieww's own transport; use a platform client for https".into(),
+            "TLS is not implemented in vieww's own transport; use a platform client for https"
+                .into(),
         ));
     }
     let addr = (url.host().as_str(), url.port())
@@ -75,7 +76,9 @@ fn read_headers(r: &mut impl BufRead) -> Result<(String, Vec<(String, String)>),
 }
 
 fn header<'a>(h: &'a [(String, String)], name: &str) -> Option<&'a str> {
-    h.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+    h.iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.as_str())
 }
 
 /// Send `req` and read the whole response (blocking), following up to
@@ -83,7 +86,11 @@ fn header<'a>(h: &'a [(String, String)], name: &str) -> Option<&'a str> {
 ///
 /// # Errors
 /// A connection failure, `https`, or a malformed response.
-pub fn fetch(req: &HttpRequest, timeout: Duration, redirects: u32) -> Result<HttpResponse, NetError> {
+pub fn fetch(
+    req: &HttpRequest,
+    timeout: Duration,
+    redirects: u32,
+) -> Result<HttpResponse, NetError> {
     let mut req = req.clone();
     for _ in 0..=redirects {
         let s = connect(&req.url, timeout)?;
@@ -93,11 +100,16 @@ pub fn fetch(req: &HttpRequest, timeout: Duration, redirects: u32) -> Result<Htt
         } else {
             format!("{}:{}", req.url.host(), req.url.port())
         };
-        let mut head = format!("{} {} HTTP/1.1\r\nHost: {host}\r\n", req.method, target(&req.url));
+        let mut head = format!(
+            "{} {} HTTP/1.1\r\nHost: {host}\r\n",
+            req.method,
+            target(&req.url)
+        );
         for (k, v) in &req.headers {
             head.push_str(&format!("{k}: {v}\r\n"));
         }
-        if !req.body.is_empty() || matches!(req.method, Method::Post | Method::Put | Method::Patch) {
+        if !req.body.is_empty() || matches!(req.method, Method::Post | Method::Put | Method::Patch)
+        {
             head.push_str(&format!("Content-Length: {}\r\n", req.body.len()));
         }
         head.push_str("Connection: close\r\nUser-Agent: vieww\r\n\r\n");
@@ -112,8 +124,14 @@ pub fn fetch(req: &HttpRequest, timeout: Duration, redirects: u32) -> Result<Htt
             .and_then(|c| c.parse().ok())
             .ok_or_else(|| NetError::Connection(format!("bad status line: {status_line:?}")))?;
         let mut body = Vec::new();
-        if req.method != Method::Head && !(100..200).contains(&status) && status != 204 && status != 304 {
-            if header(&headers, "transfer-encoding").is_some_and(|v| v.eq_ignore_ascii_case("chunked")) {
+        if req.method != Method::Head
+            && !(100..200).contains(&status)
+            && status != 204
+            && status != 304
+        {
+            if header(&headers, "transfer-encoding")
+                .is_some_and(|v| v.eq_ignore_ascii_case("chunked"))
+            {
                 loop {
                     let mut size = String::new();
                     r.read_line(&mut size).map_err(conn_err)?;
@@ -132,7 +150,9 @@ pub fn fetch(req: &HttpRequest, timeout: Duration, redirects: u32) -> Result<Htt
                     let mut crlf = [0; 2];
                     r.read_exact(&mut crlf).map_err(conn_err)?;
                 }
-            } else if let Some(n) = header(&headers, "content-length").and_then(|v| v.parse::<usize>().ok()) {
+            } else if let Some(n) =
+                header(&headers, "content-length").and_then(|v| v.parse::<usize>().ok())
+            {
                 body = vec![0; n];
                 r.read_exact(&mut body).map_err(conn_err)?;
             } else {
@@ -144,7 +164,13 @@ pub fn fetch(req: &HttpRequest, timeout: Duration, redirects: u32) -> Result<Htt
                 let next = if loc.contains("://") {
                     Url::parse(loc)?
                 } else {
-                    Url::parse(&format!("{}://{}:{}{}", req.url.scheme().as_str(), req.url.host(), req.url.port(), loc))?
+                    Url::parse(&format!(
+                        "{}://{}:{}{}",
+                        req.url.scheme().as_str(),
+                        req.url.host(),
+                        req.url.port(),
+                        loc
+                    ))?
                 };
                 req.url = next;
                 if status == 303 {
@@ -154,7 +180,11 @@ pub fn fetch(req: &HttpRequest, timeout: Duration, redirects: u32) -> Result<Htt
                 continue;
             }
         }
-        return Ok(HttpResponse { status, headers, body });
+        return Ok(HttpResponse {
+            status,
+            headers,
+            body,
+        });
     }
     Err(NetError::Connection("too many redirects".into()))
 }
@@ -169,7 +199,9 @@ pub struct TcpClient {
 
 impl std::fmt::Debug for TcpClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TcpClient").field("timeout", &self.timeout).finish_non_exhaustive()
+        f.debug_struct("TcpClient")
+            .field("timeout", &self.timeout)
+            .finish_non_exhaustive()
     }
 }
 
@@ -204,7 +236,13 @@ impl HttpClient for TcpClient {
 /// SHA-1 (FIPS 180-4). Used only for the WebSocket handshake.
 #[must_use]
 pub fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut h: [u32; 5] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0];
+    let mut h: [u32; 5] = [
+        0x6745_2301,
+        0xEFCD_AB89,
+        0x98BA_DCFE,
+        0x1032_5476,
+        0xC3D2_E1F0,
+    ];
     let mut msg = data.to_vec();
     let bits = (data.len() as u64).wrapping_mul(8);
     msg.push(0x80);
@@ -212,10 +250,15 @@ pub fn sha1(data: &[u8]) -> [u8; 20] {
         msg.push(0);
     }
     msg.extend(bits.to_be_bytes());
-    for block in msg.chunks_exact(64) {
+    for block in msg.as_chunks::<64>().0 {
         let mut w = [0u32; 80];
         for i in 0..16 {
-            w[i] = u32::from_be_bytes([block[4 * i], block[4 * i + 1], block[4 * i + 2], block[4 * i + 3]]);
+            w[i] = u32::from_be_bytes([
+                block[4 * i],
+                block[4 * i + 1],
+                block[4 * i + 2],
+                block[4 * i + 3],
+            ]);
         }
         for i in 16..80 {
             w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
@@ -228,7 +271,12 @@ pub fn sha1(data: &[u8]) -> [u8; 20] {
                 40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1B_BCDC),
                 _ => (b ^ c ^ d, 0xCA62_C1D6),
             };
-            let t = a.rotate_left(5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(*wi);
+            let t = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(*wi);
             e = d;
             d = c;
             c = b.rotate_left(30);
@@ -252,7 +300,9 @@ pub fn base64(data: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut s = String::with_capacity(data.len().div_ceil(3) * 4);
     for c in data.chunks(3) {
-        let n = u32::from(c[0]) << 16 | u32::from(*c.get(1).unwrap_or(&0)) << 8 | u32::from(*c.get(2).unwrap_or(&0));
+        let n = u32::from(c[0]) << 16
+            | u32::from(*c.get(1).unwrap_or(&0)) << 8
+            | u32::from(*c.get(2).unwrap_or(&0));
         for (k, shift) in [18, 12, 6, 0].iter().enumerate() {
             if k <= c.len() {
                 s.push(A[((n >> shift) & 63) as usize] as char);
@@ -294,7 +344,9 @@ impl WebSocket {
     /// # Errors
     /// Connection failures, `wss`, a non-101 answer or a wrong accept key.
     pub fn connect(url: &str, timeout: Duration) -> Result<Self, NetError> {
-        let http = url.replacen("ws://", "http://", 1).replacen("wss://", "https://", 1);
+        let http = url
+            .replacen("ws://", "http://", 1)
+            .replacen("wss://", "https://", 1);
         let u = Url::parse(&http)?;
         let mut s = connect(&u, timeout)?;
         let mut rng = std::time::SystemTime::now()
@@ -324,7 +376,11 @@ impl WebSocket {
         if header(&headers, "sec-websocket-accept") != Some(accept_key(&key).as_str()) {
             return Err(NetError::Connection("Sec-WebSocket-Accept mismatch".into()));
         }
-        Ok(Self { stream: s, client: true, rng })
+        Ok(Self {
+            stream: s,
+            client: true,
+            rng,
+        })
     }
 
     /// Server side: read a client's handshake from `stream` and answer 101.
@@ -343,7 +399,11 @@ impl WebSocket {
             accept_key(&key)
         );
         s.write_all(resp.as_bytes()).map_err(conn_err)?;
-        Ok(Self { stream: s, client: false, rng: 0x9E37_79B9 })
+        Ok(Self {
+            stream: s,
+            client: false,
+            rng: 0x9E37_79B9,
+        })
     }
 
     fn write_frame(&mut self, opcode: u8, payload: &[u8]) -> Result<(), NetError> {
@@ -435,7 +495,11 @@ impl WebSocket {
                 }
                 0xA => continue,
                 0x8 => {
-                    let code = if p.len() >= 2 { u16::from_be_bytes([p[0], p[1]]) } else { 1005 };
+                    let code = if p.len() >= 2 {
+                        u16::from_be_bytes([p[0], p[1]])
+                    } else {
+                        1005
+                    };
                     let why = String::from_utf8_lossy(p.get(2..).unwrap_or(&[])).into_owned();
                     let _ = self.write_frame(0x8, &p);
                     return Ok(Message::Close(code, why));
@@ -448,7 +512,10 @@ impl WebSocket {
             }
             if fin {
                 return Ok(if kind == 0x1 {
-                    Message::Text(String::from_utf8(buf).map_err(|_| NetError::Connection("text frame is not UTF-8".into()))?)
+                    Message::Text(
+                        String::from_utf8(buf)
+                            .map_err(|_| NetError::Connection("text frame is not UTF-8".into()))?,
+                    )
                 } else {
                     Message::Binary(buf)
                 });
@@ -465,13 +532,23 @@ mod tests {
     #[test]
     fn sha1_and_base64_match_the_rfc_vectors() {
         let hex = |b: [u8; 20]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
-        assert_eq!(hex(sha1(b"abc")), "a9993e364706816aba3e25717850c26c9cd0d89d");
+        assert_eq!(
+            hex(sha1(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
         assert_eq!(hex(sha1(b"")), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
         assert_eq!(base64(b"Man"), "TWFu");
         assert_eq!(base64(b"Ma"), "TWE=");
         // RFC 6455 §1.3's worked example.
-        assert_eq!(accept_key("dGhlIHNhbXBsZSBub25jZQ=="), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
-        assert_eq!(hex(sha1(&[b'a'; 100])), "7f9000257a4918d7072655ea468540cdcbd42e0c", "two blocks");
+        assert_eq!(
+            accept_key("dGhlIHNhbXBsZSBub25jZQ=="),
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+        );
+        assert_eq!(
+            hex(sha1(&[b'a'; 100])),
+            "7f9000257a4918d7072655ea468540cdcbd42e0c",
+            "two blocks"
+        );
     }
 
     fn serve(reply: &'static str) -> u16 {
@@ -482,11 +559,16 @@ mod tests {
                 let mut s = s.unwrap();
                 let mut r = BufReader::new(s.try_clone().unwrap());
                 let (line, headers) = read_headers(&mut r).unwrap();
-                let n: usize = header(&headers, "content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+                let n: usize = header(&headers, "content-length")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0);
                 let mut body = vec![0; n];
                 r.read_exact(&mut body).unwrap();
                 if line.starts_with("GET /old") {
-                    s.write_all(b"HTTP/1.1 302 Found\r\nLocation: /new\r\nContent-Length: 0\r\n\r\n").unwrap();
+                    s.write_all(
+                        b"HTTP/1.1 302 Found\r\nLocation: /new\r\nContent-Length: 0\r\n\r\n",
+                    )
+                    .unwrap();
                 } else {
                     let msg = format!("{reply}|{line}|{}", String::from_utf8_lossy(&body));
                     let chunked = format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX-T: y\r\n\r\n{:x}\r\n{msg}\r\n0\r\n\r\n", msg.len());
@@ -525,7 +607,12 @@ mod tests {
 
     #[test]
     fn https_is_refused_by_name() {
-        let e = fetch(&HttpRequest::get(Url::parse("https://example.test/").unwrap()), Duration::from_secs(1), 0).unwrap_err();
+        let e = fetch(
+            &HttpRequest::get(Url::parse("https://example.test/").unwrap()),
+            Duration::from_secs(1),
+            0,
+        )
+        .unwrap_err();
         assert!(e.to_string().contains("TLS"));
     }
 
@@ -543,12 +630,20 @@ mod tests {
                 }
             }
         });
-        let mut ws = WebSocket::connect(&format!("ws://127.0.0.1:{port}/echo"), Duration::from_secs(5)).unwrap();
+        let mut ws = WebSocket::connect(
+            &format!("ws://127.0.0.1:{port}/echo"),
+            Duration::from_secs(5),
+        )
+        .unwrap();
         ws.send(&Message::Text("héllo".into())).unwrap();
         assert_eq!(ws.recv().unwrap(), Message::Text("héllo".into()));
         let big = vec![7u8; 70_000];
         ws.send(&Message::Binary(big.clone())).unwrap();
-        assert_eq!(ws.recv().unwrap(), Message::Binary(big), "64-bit length path");
+        assert_eq!(
+            ws.recv().unwrap(),
+            Message::Binary(big),
+            "64-bit length path"
+        );
         ws.send(&Message::Close(1000, "bye".into())).unwrap();
         assert_eq!(ws.recv().unwrap(), Message::Close(1000, "bye".into()));
     }

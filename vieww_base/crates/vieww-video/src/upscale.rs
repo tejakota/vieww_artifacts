@@ -45,7 +45,13 @@ fn cubic(x: f32) -> f32 {
     }
 }
 
-fn resize_plane(p: &Plane, nw: usize, nh: usize, kernel: &dyn Fn(f32) -> f32, support: f32) -> Plane {
+fn resize_plane(
+    p: &Plane,
+    nw: usize,
+    nh: usize,
+    kernel: &dyn Fn(f32) -> f32,
+    support: f32,
+) -> Plane {
     #[allow(clippy::cast_precision_loss)]
     let (sx, sy) = (p.w as f32 / nw as f32, p.h as f32 / nh as f32);
     let pass = |src: &Plane, out_w: usize, out_h: usize, horizontal: bool, scale: f32| {
@@ -67,9 +73,17 @@ fn resize_plane(p: &Plane, nw: usize, nh: usize, kernel: &dyn Fn(f32) -> f32, su
                         continue;
                     }
                     let n = if horizontal { src.w } else { src.h };
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        clippy::cast_possible_wrap
+                    )]
                     let kk = k.clamp(0, n as i64 - 1) as usize;
-                    let v = if horizontal { src.at(kk, y) } else { src.at(x, kk) };
+                    let v = if horizontal {
+                        src.at(kk, y)
+                    } else {
+                        src.at(x, kk)
+                    };
                     acc += wgt * v;
                     wsum += wgt;
                 }
@@ -84,7 +98,12 @@ fn resize_plane(p: &Plane, nw: usize, nh: usize, kernel: &dyn Fn(f32) -> f32, su
 
 fn planes(img: &Image) -> [Plane; 4] {
     let (w, h) = (img.width() as usize, img.height() as usize);
-    let mut ps = [Plane::new(w, h), Plane::new(w, h), Plane::new(w, h), Plane::new(w, h)];
+    let mut ps = [
+        Plane::new(w, h),
+        Plane::new(w, h),
+        Plane::new(w, h),
+        Plane::new(w, h),
+    ];
     for (i, p) in img.pixels().as_chunks::<4>().0.iter().enumerate() {
         for c in 0..4 {
             ps[c].data[i] = f32::from(p[c]) / 255.0;
@@ -143,10 +162,16 @@ fn hash(gx: &Plane, gy: &Plane, x: usize, y: usize) -> usize {
     let disc = ((a - d).powi(2) + 4.0 * b * b).sqrt();
     let (l1, l2) = ((tr + disc) * 0.5, (tr - disc) * 0.5);
     let theta = (2.0 * b).atan2(a - d) * 0.5; // dominant gradient angle
-    let angle = ((theta.rem_euclid(std::f32::consts::PI) / std::f32::consts::PI) * ANGLES as f32) as usize % ANGLES;
+    let angle = ((theta.rem_euclid(std::f32::consts::PI) / std::f32::consts::PI) * ANGLES as f32)
+        as usize
+        % ANGLES;
     let strength = l1.max(0.0).sqrt();
     let (s1, s2) = (l1.max(0.0).sqrt(), l2.max(0.0).sqrt());
-    let coherence = if s1 + s2 > 1e-9 { (s1 - s2) / (s1 + s2) } else { 0.0 };
+    let coherence = if s1 + s2 > 1e-9 {
+        (s1 - s2) / (s1 + s2)
+    } else {
+        0.0
+    };
     let si = if strength < 0.004 {
         0
     } else if strength < 0.016 {
@@ -232,17 +257,23 @@ impl Raisr {
                     return identity;
                 }
                 let mut m = ata[k];
+                // Index loop: symmetrisation reads column i while writing
+                // row i of the same matrix, which no iterator over `m` can
+                // express.
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..TAPS {
                     for j in 0..i {
                         m[i][j] = m[j][i];
                     }
                     m[i][i] += 1e-3 * (m[i][i] + 1e-6); // ridge, relative
                 }
-                solve(m, atb[k]).map_or(identity, |x| x.map(|v| {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let f = v as f32;
-                    f
-                }))
+                solve(m, atb[k]).map_or(identity, |x| {
+                    x.map(|v| {
+                        #[allow(clippy::cast_possible_truncation)]
+                        let f = v as f32;
+                        f
+                    })
+                })
             })
             .collect();
         Self {
@@ -313,7 +344,13 @@ fn solve(m: [[f64; TAPS]; TAPS], b: [f64; TAPS]) -> Option<[f64; TAPS]> {
 pub fn psnr(a: &Image, b: &Image) -> f64 {
     let mut se = 0.0;
     let mut n = 0.0;
-    for (p, q) in a.pixels().as_chunks::<4>().0.iter().zip(b.pixels().as_chunks::<4>().0) {
+    for (p, q) in a
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.pixels().as_chunks::<4>().0)
+    {
         for c in 0..3 {
             se += (f64::from(p[c]) - f64::from(q[c])).powi(2);
             n += 1.0;
@@ -362,7 +399,12 @@ mod tests {
     fn resamplers_preserve_flat_fields_and_size() {
         let flat = Image::from_rgba8([90, 120, 150, 255].repeat(20 * 10), 20, 10);
         for img in [resize_lanczos(&flat, 47, 23), resize_bicubic(&flat, 7, 31)] {
-            assert!(img.pixels().as_chunks::<4>().0.iter().all(|p| p[..3] == [90, 120, 150]));
+            assert!(img
+                .pixels()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| p[..3] == [90, 120, 150]));
         }
     }
 

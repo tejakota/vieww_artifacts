@@ -46,7 +46,7 @@
 //! a subtle mispacking that puts one glyph's rim inside another's patch — a
 //! bug that looks like a font rendering artefact and is not one.
 //!
-//! # Growth, and what happens when it stops
+//! # Growth, eviction, and what happens when both stop
 //!
 //! The texture starts small and doubles when a glyph will not fit, up to
 //! [`Atlas::MAX_SIDE`]. Doubling reflows every existing entry, which is why
@@ -55,11 +55,18 @@
 //!
 //! Past the maximum, [`Atlas::insert`] returns `None` and the planner records
 //! the glyph as unsupported — the same honest gap every other unplannable
-//! command gets. It does not evict, and that is deliberate for now: evicting
-//! mid-frame would invalidate UVs already written into this frame's vertex
-//! buffer, so a frame that genuinely needs more than 4096x4096 of distinct
-//! glyph coverage belongs on the CPU rasterizer rather than on a GPU path
-//! quietly drawing some of its text with stale coordinates.
+//! command gets. That frame is gone; the one after it is not. The next
+//! [`Atlas::begin_frame`] sees the atlas is full and **compacts**: every glyph
+//! used in the frame just ended is copied out and re-placed, everything else
+//! is dropped, and the frame that only failed for lack of room now plans.
+//! Evicting *mid-frame* is still forbidden — it would invalidate UVs already
+//! written into this frame's vertex buffer, so a frame that drew nine of a
+//! word's ten glyphs would get a tenth sampling stale coordinates, which is
+//! worse than the CPU fallback it got instead. Between frames there is no
+//! such hazard: last frame's vertices are gone, and this frame has written
+//! none. A frame whose glyphs are *all* still live finds nothing to free and
+//! keeps failing — correctly, because a working set that genuinely needs more
+//! than 4096×4096 of distinct glyph coverage is a leak, not a cache miss.
 
 use std::collections::HashMap;
 
@@ -116,6 +123,13 @@ pub struct Atlas {
     /// The tallest glyph on the current shelf — how far up the next shelf goes.
     shelf_height: u32,
     version: u64,
+    /// Which frame `get` and `insert` are currently stamping. A frame is one
+    /// `plan`; see [`begin_frame`](Self::begin_frame).
+    frame: u32,
+    /// Set when an insert failed for lack of room at
+    /// [`MAX_SIDE`](Self::MAX_SIDE) — the compaction trigger, read at the
+    /// *next* frame boundary rather than acted on now.
+    full: bool,
 }
 
 /// A packed glyph's texel rectangle, kept so a resize can reflow it.
@@ -125,6 +139,10 @@ struct Placement {
     y: u32,
     width: u32,
     height: u32,
+    /// The frame this glyph was last used in — the whole of the eviction
+    /// decision. A glyph drawn every frame is never a candidate; one drawn
+    /// once and scrolled away is.
+    last_used: u32,
 }
 
 impl std::fmt::Debug for Atlas {
@@ -182,6 +200,8 @@ impl Atlas {
             shelf_y: 0,
             shelf_height: 0,
             version: crate::generation::next(),
+            frame: 0,
+            full: false,
         };
         atlas.write_white_texel();
         // The first shelf starts below the white texel's row, so no glyph can
@@ -242,9 +262,100 @@ impl Atlas {
     }
 
     /// Where `key` lives, if it is already packed.
-    #[must_use]
-    pub fn get(&self, key: &AtlasKey) -> Option<AtlasSlot> {
-        self.entries.get(key).map(|p| self.slot(*p))
+    ///
+    /// Counts as a use in the current frame: a glyph still being drawn is
+    /// never a compaction candidate. That stamp is a mutation of cache state,
+    /// which is why this takes `&mut self` — a read that changes nothing is
+    /// a read of a dead cache.
+    pub fn get(&mut self, key: &AtlasKey) -> Option<AtlasSlot> {
+        let frame = self.frame;
+        let side = self.side;
+        self.entries.get_mut(key).map(|p| {
+            p.last_used = frame;
+            slot_at(*p, side)
+        })
+    }
+
+    /// Start a frame.
+    ///
+    /// Marks the boundary that makes eviction safe: everything planned
+    /// *before* this call used the coordinates it was given, and nothing has
+    /// been given any since. Bumps the frame counter — which is what `get`
+    /// and `insert` stamp, and what compaction keeps — and, if the previous
+    /// frame left the atlas full, compacts: re-place the glyphs used in that
+    /// frame, drop the rest, clear the full flag. See the module doc for why
+    /// eviction happens here and nowhere else.
+    ///
+    /// [`Planner::plan`](crate::Planner::plan) calls this, so an atlas held
+    /// by a planner never needs it called by hand; the call is public because
+    /// the atlas is and a hand-held one deserves the same safety.
+    pub fn begin_frame(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
+        if !self.full {
+            return;
+        }
+        let previous = self.frame.wrapping_sub(1);
+
+        // Copy out the live set — used in the frame just ended — before the
+        // reset destroys the texels. Sorted by position, which is the order
+        // they were originally packed in: shelf packing is order-deterministic,
+        // so re-placing in this order lands the live set in a layout as tight
+        // as (in fact tighter than) the one it came from, and the `place` in
+        // the loop below cannot fail for a set that already fit.
+        let mut keep: Vec<(AtlasKey, Placement, Vec<u8>)> = self
+            .entries
+            .iter()
+            .filter(|(_, p)| p.last_used == previous)
+            .map(|(k, p)| {
+                let mut bytes = vec![0u8; (p.width * p.height) as usize];
+                for row in 0..p.height {
+                    let from = ((p.y + row) * self.side + p.x) as usize;
+                    let to = (row * p.width) as usize;
+                    let n = p.width as usize;
+                    bytes[to..to + n].copy_from_slice(&self.texels[from..from + n]);
+                }
+                (*k, *p, bytes)
+            })
+            .collect();
+
+        if keep.len() == self.entries.len() {
+            // Everything is live. The working set genuinely exceeds the atlas:
+            // compaction would free nothing, so the atlas stays full and the
+            // honest `insert` failure stands.
+            return;
+        }
+        keep.sort_unstable_by_key(|(_, p, _)| (p.y, p.x));
+
+        // Reset at the *current* side, not the initial one: the live set has
+        // already demanded this much texture once, and growing back to it a
+        // frame later would re-upload four times to arrive at the same place.
+        let side = self.side;
+        self.texels = vec![0; (side * side) as usize];
+        self.write_white_texel();
+        self.entries.clear();
+        self.entries.reserve(keep.len());
+        self.pen_x = 0;
+        self.shelf_y = 1 + Self::PAD;
+        self.shelf_height = 0;
+        for (key, placement, bytes) in keep {
+            let Some(replaced) = self.try_allocate(placement.width, placement.height) else {
+                // Unreachable for a set that fit before — see the comment on
+                // the sort — but a cache must never *depend* on an invariant
+                // it cannot check: a glyph that cannot be re-placed is
+                // dropped, which is a miss, not a corruption.
+                continue;
+            };
+            self.blit(replaced, &bytes);
+            self.entries.insert(
+                key,
+                Placement {
+                    last_used: placement.last_used,
+                    ..replaced
+                },
+            );
+        }
+        self.full = false;
+        self.version = crate::generation::next();
     }
 
     /// Pack `alpha` — `width * height` coverage bytes, row-major — under
@@ -252,7 +363,8 @@ impl Atlas {
     ///
     /// `None` when the glyph cannot be packed even after growing to
     /// [`MAX_SIDE`](Self::MAX_SIDE); see the module doc for why that is
-    /// reported rather than resolved by eviction.
+    /// reported to this frame rather than resolved by eviction — and why the
+    /// frame after it gets a compacted atlas instead of the same failure.
     pub fn insert(
         &mut self,
         key: AtlasKey,
@@ -260,8 +372,11 @@ impl Atlas {
         height: u32,
         alpha: &[u8],
     ) -> Option<AtlasSlot> {
-        if let Some(existing) = self.entries.get(&key) {
-            return Some(self.slot(*existing));
+        if let Some(existing) = self.entries.get_mut(&key) {
+            existing.last_used = self.frame;
+            let placed = *existing;
+            let side = self.side;
+            return Some(slot_at(placed, side));
         }
         if width == 0 || height == 0 {
             return None;
@@ -272,7 +387,8 @@ impl Atlas {
             "coverage buffer must be exactly width * height"
         );
 
-        let placement = self.allocate(width, height)?;
+        let mut placement = self.allocate(width, height)?;
+        placement.last_used = self.frame;
         self.blit(placement, alpha);
         self.entries.insert(key, placement);
         self.version = crate::generation::next();
@@ -288,7 +404,14 @@ impl Atlas {
             }
             // A single glyph larger than the maximum atlas is not a packing
             // failure that growing can fix, and the loop must not spin on it.
-            if width > Self::MAX_SIDE || height > Self::MAX_SIDE || self.side >= Self::MAX_SIDE {
+            if width > Self::MAX_SIDE || height > Self::MAX_SIDE {
+                return None;
+            }
+            if self.side >= Self::MAX_SIDE {
+                // Out of room at the ceiling. This frame's insert fails
+                // honestly; the flag is what makes the *next* frame's
+                // `begin_frame` compact rather than fail the same way.
+                self.full = true;
                 return None;
             }
             self.grow();
@@ -319,6 +442,7 @@ impl Atlas {
             y: self.shelf_y,
             width,
             height,
+            last_used: 0,
         };
         self.pen_x += width + Self::PAD;
         self.shelf_height = self.shelf_height.max(height);
@@ -360,17 +484,23 @@ impl Atlas {
     }
 
     fn slot(&self, at: Placement) -> AtlasSlot {
-        let side = self.side as f32;
-        AtlasSlot {
-            x: at.x,
-            y: at.y,
-            u0: at.x as f32 / side,
-            v0: at.y as f32 / side,
-            u1: (at.x + at.width) as f32 / side,
-            v1: (at.y + at.height) as f32 / side,
-            width: at.width,
-            height: at.height,
-        }
+        slot_at(at, self.side)
+    }
+}
+
+/// [`Atlas::slot`](Atlas::slot)'s arithmetic, free of `self` so a borrow of
+/// `entries` can outlive the call that reads `side`.
+fn slot_at(at: Placement, side: u32) -> AtlasSlot {
+    let side = side as f32;
+    AtlasSlot {
+        x: at.x,
+        y: at.y,
+        u0: at.x as f32 / side,
+        v0: at.y as f32 / side,
+        u1: (at.x + at.width) as f32 / side,
+        v1: (at.y + at.height) as f32 / side,
+        width: at.width,
+        height: at.height,
     }
 }
 
@@ -536,5 +666,154 @@ mod tests {
         assert!((slot.v1 - slot.v0 - 7.0 / side).abs() < 1e-6);
         assert_eq!(slot.width, 5);
         assert_eq!(slot.height, 7);
+    }
+
+    // ------------------------------------------------------------- eviction
+
+    /// Enough 128x128 glyphs to fill a 4096x4096 atlas. Growth keeps every
+    /// shelf at the width it was opened at — a shelf opened while the atlas
+    /// was 512 wide stays 512 wide forever — so the ~930 a fresh 4096 packer
+    /// would take becomes about 680, and a thousand inserts is comfortably
+    /// past full either way. Each glyph carries a value unique enough that a
+    /// texel surviving in the wrong patch is detectable.
+    fn fill(atlas: &mut Atlas) -> usize {
+        let mut packed = 0;
+        for g in 0..1_000u16 {
+            let value = u8::try_from(g % 251 + 1).unwrap();
+            if atlas
+                .insert(key(g), 128, 128, &vec![value; 128 * 128])
+                .is_none()
+            {
+                break;
+            }
+            packed += 1;
+        }
+        packed
+    }
+
+    /// A deliberately filled atlas: the last insert fails, the side is at the
+    /// ceiling, and — the property the whole design rests on — nothing is
+    /// evicted *during* the frame, so every glyph planned so far still
+    /// resolves.
+    #[test]
+    fn a_full_atlas_fails_the_insert_but_evicts_nothing_mid_frame() {
+        let mut atlas = Atlas::new();
+        let packed = fill(&mut atlas);
+
+        assert!(
+            packed > 600,
+            "the test must fill the atlas, packed {packed}"
+        );
+        assert_eq!(atlas.side(), Atlas::MAX_SIDE);
+        assert!(atlas
+            .insert(key(65_535), 128, 128, &[7; 128 * 128])
+            .is_none());
+        // Mid-frame, the atlas is still a valid cache of everything packed.
+        assert!(atlas.get(&key(1)).is_some());
+        assert_eq!(atlas.len(), packed);
+    }
+
+    /// The frame *after* a full one compacts: glyphs still in use are kept
+    /// with their coverage intact, everything else is dropped, and a glyph
+    /// that could not be packed now can be. This is the test the worklist
+    /// asked for when the atlas could not evict — one that fills the atlas
+    /// deliberately rather than waiting for a real application to do it by
+    /// accident. The item is closed; `TRACKER.md`'s 2026-10-09 entry has
+    /// the evidence, and this test is most of it.
+    #[test]
+    fn the_frame_after_a_full_one_compacts_away_the_unused() {
+        let mut atlas = Atlas::new();
+        let packed = fill(&mut atlas);
+        let version_before = atlas.version();
+
+        // Frame 1 opens: everything from the filling frame is live, so the
+        // compaction has nothing to free and the atlas stays full.
+        atlas.begin_frame();
+        assert_eq!(atlas.len(), packed, "all-live compaction frees nothing");
+        assert!(atlas
+            .insert(key(65_535), 128, 128, &[7; 128 * 128])
+            .is_none());
+
+        // Frame 1 draws only the glyphs with ids 0..50 — the "user scrolled
+        // away from the rest" of the story.
+        for g in 0..50u16 {
+            atlas.get(&key(g));
+        }
+        // Frame 2 opens: the stale 600-odd glyphs go, the 50 stay.
+        atlas.begin_frame();
+        assert_eq!(atlas.len(), 50);
+        assert!(atlas.version() > version_before);
+
+        // The glyph that failed twice now packs — the frame that only failed
+        // for lack of room gets its room.
+        assert!(atlas
+            .insert(key(65_535), 128, 128, &[7; 128 * 128])
+            .is_some());
+        assert_eq!(atlas.len(), 51);
+
+        // Coverage survived the compaction: each kept glyph's patch still
+        // holds its own value, in the patch its (new) slot points at.
+        let side = atlas.side();
+        for g in 0..50u16 {
+            let value = u8::try_from(g % 251 + 1).unwrap();
+            let slot = atlas.get(&key(g)).expect("kept glyph still packed");
+            let x0 = (slot.u0 * side as f32).round() as u32;
+            let y0 = (slot.v0 * side as f32).round() as u32;
+            for row in 0..slot.height {
+                for col in 0..slot.width {
+                    assert_eq!(
+                        atlas.texels()[((y0 + row) * side + x0 + col) as usize],
+                        value,
+                        "glyph {g} lost its coverage across the compaction"
+                    );
+                }
+            }
+        }
+
+        // And the reserved texel survived the reset.
+        assert_eq!(atlas.texels()[0], 255);
+    }
+
+    /// A working set that genuinely fills the atlas *and stays live* is not a
+    /// cache-miss pattern — it is a leak — and compaction must say so by
+    /// leaving the atlas full rather than thrashing it every frame.
+    #[test]
+    fn an_all_live_full_atlas_stays_full_rather_than_thrashing() {
+        let mut atlas = Atlas::new();
+        let packed = fill(&mut atlas);
+
+        // Two frames in which every glyph is drawn.
+        atlas.begin_frame();
+        for g in 0..packed as u16 {
+            atlas.get(&key(g));
+        }
+        atlas.begin_frame();
+        for g in 0..packed as u16 {
+            atlas.get(&key(g));
+        }
+        atlas.begin_frame();
+
+        assert_eq!(atlas.len(), packed, "nothing was evictable");
+        assert!(atlas
+            .insert(key(65_535), 128, 128, &[7; 128 * 128])
+            .is_none());
+    }
+
+    /// `begin_frame` on a non-full atlas is a counter bump and nothing else:
+    /// no version change, no re-upload, no churn — a steady frame must cost
+    /// nothing, which is the property that makes proactive compaction the
+    /// wrong default here (unlike the mask atlas, whose entries are cheap to
+    /// re-derive).
+    #[test]
+    fn a_begin_frame_on_a_roomy_atlas_changes_nothing() {
+        let mut atlas = Atlas::new();
+        atlas.insert(key(1), 6, 9, &[54; 54]);
+        let version = atlas.version();
+        let len = atlas.len();
+
+        atlas.begin_frame();
+        assert_eq!(atlas.version(), version);
+        assert_eq!(atlas.len(), len);
+        assert!(atlas.get(&key(1)).is_some());
     }
 }

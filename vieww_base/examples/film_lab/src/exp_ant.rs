@@ -35,9 +35,11 @@ const N: usize = 384;
 /// Total steps the film replays.
 const STEPS: usize = 14000;
 
-/// One replay to step k. Returns (board, last-visit step per cell, ant
-/// position and direction at step k, fresh-cell timeline per 250 steps).
-fn replay(k: usize) -> (Vec<u8>, Vec<i32>, (usize, usize, u8), Vec<u32>) {
+/// One replay to step k: the board, the last-visit step per cell, the
+/// ant (position, direction), and the fresh-cell timeline per 250 steps.
+type Replay = (Vec<u8>, Vec<i32>, (usize, usize, u8), Vec<u32>);
+
+fn replay(k: usize) -> Replay {
     let mut cells = vec![0u8; N * N];
     let mut last_visit = vec![i32::MIN; N * N];
     let mut fresh = vec![0u32; (STEPS / 250) + 2];

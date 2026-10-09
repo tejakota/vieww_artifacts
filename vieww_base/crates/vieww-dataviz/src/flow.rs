@@ -44,9 +44,17 @@ impl SankeyLink {
         let h = self.width * 0.5;
         let mut p = Path::new();
         p.move_to(Offset::new(x0, self.y0 - h));
-        p.cubic_to(Offset::new(xm, self.y0 - h), Offset::new(xm, self.y1 - h), Offset::new(x1, self.y1 - h));
+        p.cubic_to(
+            Offset::new(xm, self.y0 - h),
+            Offset::new(xm, self.y1 - h),
+            Offset::new(x1, self.y1 - h),
+        );
         p.line_to(Offset::new(x1, self.y1 + h));
-        p.cubic_to(Offset::new(xm, self.y1 + h), Offset::new(xm, self.y0 + h), Offset::new(x0, self.y0 + h));
+        p.cubic_to(
+            Offset::new(xm, self.y1 + h),
+            Offset::new(xm, self.y0 + h),
+            Offset::new(x0, self.y0 + h),
+        );
         p.close();
         p
     }
@@ -85,9 +93,9 @@ pub fn sankey(
     }
     // Sinks align right (d3's sankeyJustify).
     let max_col = col.iter().copied().max().unwrap_or(0);
-    for i in 0..n {
+    for (i, c) in col.iter_mut().enumerate() {
         if !links.iter().any(|&(s, _, _)| s == i) {
-            col[i] = max_col;
+            *c = max_col;
         }
     }
     let value: Vec<f32> = (0..n)
@@ -97,7 +105,9 @@ pub fn sankey(
             inn.max(out)
         })
         .collect();
-    let columns: Vec<Vec<usize>> = (0..=max_col).map(|c| (0..n).filter(|&i| col[i] == c).collect()).collect();
+    let columns: Vec<Vec<usize>> = (0..=max_col)
+        .map(|c| (0..n).filter(|&i| col[i] == c).collect())
+        .collect();
     // Vertical scale: the tightest column decides.
     let ky = columns
         .iter()
@@ -109,7 +119,11 @@ pub fn sankey(
         })
         .fold(f32::INFINITY, f32::min);
     #[allow(clippy::cast_precision_loss)]
-    let dx = if max_col == 0 { 0.0 } else { (width - node_width) / max_col as f32 };
+    let dx = if max_col == 0 {
+        0.0
+    } else {
+        (width - node_width) / max_col as f32
+    };
     let mut nodes: Vec<SankeyNode> = (0..n)
         .map(|i| {
             #[allow(clippy::cast_precision_loss)]
@@ -288,7 +302,12 @@ pub fn chord(matrix: &[Vec<f32>], pad: f32) -> (Vec<ChordGroup>, Vec<Chord>) {
 /// A ribbon path at `radius` around `center` (quadratic through the centre).
 #[must_use]
 pub fn ribbon(c: &Chord, center: Offset, radius: f32) -> Path {
-    let pt = |a: f32| Offset::new(center.dx + radius * (a - std::f32::consts::FRAC_PI_2).cos(), center.dy + radius * (a - std::f32::consts::FRAC_PI_2).sin());
+    let pt = |a: f32| {
+        Offset::new(
+            center.dx + radius * (a - std::f32::consts::FRAC_PI_2).cos(),
+            center.dy + radius * (a - std::f32::consts::FRAC_PI_2).sin(),
+        )
+    };
     let mut p = Path::new();
     p.move_to(pt(c.source.1));
     p.extend(&arc_seg(center, radius, c.source.1, c.source.2));
@@ -324,7 +343,10 @@ mod tests {
         // 0,1 → 2 → 3,4
         let links = [(0, 2, 5.0), (1, 2, 3.0), (2, 3, 6.0), (2, 4, 2.0)];
         let (nodes, ls) = sankey(5, &links, 400.0, 200.0, 10.0, 8.0);
-        assert_eq!(nodes.iter().map(|n| n.column).collect::<Vec<_>>(), vec![0, 0, 1, 2, 2]);
+        assert_eq!(
+            nodes.iter().map(|n| n.column).collect::<Vec<_>>(),
+            vec![0, 0, 1, 2, 2]
+        );
         assert_eq!(nodes[2].value, 8.0);
         for n in &nodes {
             assert!(n.y0 >= -1e-3 && n.y1 <= 200.0 + 1e-3, "{n:?}");
@@ -341,11 +363,18 @@ mod tests {
 
     #[test]
     fn chord_groups_are_proportional() {
-        let m = vec![vec![0.0, 10.0, 5.0], vec![5.0, 0.0, 5.0], vec![10.0, 0.0, 0.0]];
+        let m = vec![
+            vec![0.0, 10.0, 5.0],
+            vec![5.0, 0.0, 5.0],
+            vec![10.0, 0.0, 0.0],
+        ];
         let (g, c) = chord(&m, 0.05);
         let span = |x: &ChordGroup| x.end - x.start;
         assert!((span(&g[0]) / span(&g[1]) - 1.5).abs() < 1e-4);
-        assert!((g[2].end + 0.05 - std::f32::consts::TAU).abs() < 1e-4, "groups fill the circle");
+        assert!(
+            (g[2].end + 0.05 - std::f32::consts::TAU).abs() < 1e-4,
+            "groups fill the circle"
+        );
         assert_eq!(c.len(), 3);
         assert!(!ribbon(&c[0], Offset::new(0.0, 0.0), 100.0).is_empty());
     }

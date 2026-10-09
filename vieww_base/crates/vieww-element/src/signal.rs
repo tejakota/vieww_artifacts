@@ -196,7 +196,12 @@ impl Runtime {
     /// How many notifying writes `signal` has had.
     #[must_use]
     pub fn version(&self, signal: SignalId) -> u64 {
-        self.inner.versions.borrow().get(&signal).copied().unwrap_or(0)
+        self.inner
+            .versions
+            .borrow()
+            .get(&signal)
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Drop every subscription held by `element`.

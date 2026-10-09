@@ -116,20 +116,20 @@ impl Net {
     /// connected to one hidden unit in sixteen: the net trained to loss
     /// = ln 2 and 0.6% accuracy and the receipt printed the failure.
     fn forward(&self, x: f32, y: f32, h1: &mut [f32], h2: &mut [f32]) -> f32 {
-        for j in 0..L1 {
+        for (j, h1_j) in h1.iter_mut().enumerate() {
             let z = self.w1[j * L0] * x + self.w1[j * L0 + 1] * y + self.b1[j];
-            h1[j] = z.tanh();
+            *h1_j = z.tanh();
         }
-        for j in 0..L2 {
+        for (j, h2_j) in h2.iter_mut().enumerate() {
             let mut z = self.b2[j];
-            for i in 0..L1 {
-                z += self.w2[j * L1 + i] * h1[i];
+            for (i, &a) in h1.iter().enumerate() {
+                z += self.w2[j * L1 + i] * a;
             }
-            h2[j] = z.tanh();
+            *h2_j = z.tanh();
         }
         let mut out = self.b3[0];
-        for i in 0..L2 {
-            out += self.w3[i] * h2[i];
+        for (i, &a) in h2.iter().enumerate() {
+            out += self.w3[i] * a;
         }
         out
     }
@@ -188,19 +188,19 @@ impl Net {
             gb3[0] += d3;
             // Layer 2.
             let mut d2 = [0.0_f32; L2];
-            for j in 0..L2 {
-                d2[j] = d3 * self.w3[j] * (1.0 - h2[j] * h2[j]);
-                for i in 0..L1 {
-                    gw2[j * L1 + i] += d2[j] * h1[i];
+            for (j, d2_j) in d2.iter_mut().enumerate() {
+                *d2_j = d3 * self.w3[j] * (1.0 - h2[j] * h2[j]);
+                for (i, &a) in h1.iter().enumerate() {
+                    gw2[j * L1 + i] += *d2_j * a;
                 }
-                gb2[j] += d2[j];
+                gb2[j] += *d2_j;
             }
             // Layer 1.
             let mut d1 = [0.0_f32; L1];
             for j in 0..L1 {
                 let mut acc = 0.0;
-                for k in 0..L2 {
-                    acc += d2[k] * self.w2[k * L1 + j];
+                for (k, &d2_k) in d2.iter().enumerate() {
+                    acc += d2_k * self.w2[k * L1 + j];
                 }
                 d1[j] = acc * (1.0 - h1[j] * h1[j]);
                 gw1[j * L0] += d1[j] * p.x;
@@ -235,6 +235,7 @@ impl Net {
     }
 }
 
+#[allow(dead_code)]
 fn j0() -> usize {
     0
 }

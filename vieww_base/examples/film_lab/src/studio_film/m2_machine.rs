@@ -24,9 +24,9 @@ use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlig
 use vieww_widget::prelude::*;
 use vieww_widget::{Clip, Transformed};
 
+use super::{ACCENT, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, INK, MUTED, SYN_TYPE};
 use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo};
 use crate::product_film as pf;
-use super::{ACCENT, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, INK, MUTED, SYN_TYPE};
 
 // ── Z10C · the machine room ─────────────────────────────────────────────────
 
@@ -39,18 +39,58 @@ type PlateFn = fn(f32) -> WidgetNode;
 /// well under a frame-budget's multiple on the lab's own receipt).
 fn wall() -> [(&'static str, PlateFn, f32); 12] {
     [
-        ("eclipse", crate::exp_eclipse::frame, crate::exp_eclipse::SECONDS),
-        ("orrery", crate::exp_orrery::frame, crate::exp_orrery::SECONDS),
-        ("bubble", crate::exp_bubble::frame, crate::exp_bubble::SECONDS),
-        ("cymatics", crate::exp_cymatics::frame, crate::exp_cymatics::SECONDS),
-        ("blackhole", crate::exp_blackhole::frame, crate::exp_blackhole::SECONDS),
-        ("galaxy", crate::exp_galaxy::frame, crate::exp_galaxy::SECONDS),
+        (
+            "eclipse",
+            crate::exp_eclipse::frame,
+            crate::exp_eclipse::SECONDS,
+        ),
+        (
+            "orrery",
+            crate::exp_orrery::frame,
+            crate::exp_orrery::SECONDS,
+        ),
+        (
+            "bubble",
+            crate::exp_bubble::frame,
+            crate::exp_bubble::SECONDS,
+        ),
+        (
+            "cymatics",
+            crate::exp_cymatics::frame,
+            crate::exp_cymatics::SECONDS,
+        ),
+        (
+            "blackhole",
+            crate::exp_blackhole::frame,
+            crate::exp_blackhole::SECONDS,
+        ),
+        (
+            "galaxy",
+            crate::exp_galaxy::frame,
+            crate::exp_galaxy::SECONDS,
+        ),
         ("prism", crate::exp_prism::frame, crate::exp_prism::SECONDS),
-        ("lorenz", crate::exp_lorenz::frame, crate::exp_lorenz::SECONDS),
-        ("aurora", crate::exp_aurora::frame, crate::exp_aurora::SECONDS),
+        (
+            "lorenz",
+            crate::exp_lorenz::frame,
+            crate::exp_lorenz::SECONDS,
+        ),
+        (
+            "aurora",
+            crate::exp_aurora::frame,
+            crate::exp_aurora::SECONDS,
+        ),
         ("ink", crate::exp_ink::frame, crate::exp_ink::SECONDS),
-        ("startrail", crate::exp_startrail::frame, crate::exp_startrail::SECONDS),
-        ("crystal", crate::exp_crystal::frame, crate::exp_crystal::SECONDS),
+        (
+            "startrail",
+            crate::exp_startrail::frame,
+            crate::exp_startrail::SECONDS,
+        ),
+        (
+            "crystal",
+            crate::exp_crystal::frame,
+            crate::exp_crystal::SECONDS,
+        ),
     ]
 }
 
@@ -87,11 +127,13 @@ fn hero_rect() -> Rect {
 fn plate_shapes(name: &str) -> Option<u64> {
     static CACHE: OnceLock<std::collections::HashMap<String, Option<u64>>> = OnceLock::new();
     let map = CACHE.get_or_init(|| {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../film_lab/renders");
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../film_lab/renders");
         wall()
             .iter()
             .map(|(n, _, _)| {
-                let text = std::fs::read_to_string(root.join(n).join("metrics.txt")).unwrap_or_default();
+                let text =
+                    std::fs::read_to_string(root.join(n).join("metrics.txt")).unwrap_or_default();
                 let get = |k: &str| {
                     text.lines()
                         .find_map(|l| l.strip_prefix(k))
@@ -129,7 +171,7 @@ fn live_plate(build: PlateFn, t: f32, r: Rect, a: f32) -> WidgetNode {
         .into()
 }
 
-pub fn the_machine_room(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_machine_room(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let mut stack = Stack::new();
@@ -156,7 +198,8 @@ pub fn the_machine_room(ctx: &pf::Ctx) -> WidgetNode {
             continue;
         }
         let c = cell(i);
-        let d = (((c.left + c.right) * 0.5 - hx).powi(2) + ((c.top + c.bottom) * 0.5 - hy).powi(2)).sqrt();
+        let d = (((c.left + c.right) * 0.5 - hx).powi(2) + ((c.top + c.bottom) * 0.5 - hy).powi(2))
+            .sqrt();
         let p = ease_out_expo(clamp01((sec - 3.6 - d / 1600.0) / 0.7));
         if p <= 0.01 {
             continue;
@@ -174,7 +217,12 @@ pub fn the_machine_room(ctx: &pf::Ctx) -> WidgetNode {
     }
     // The hero last, so it is on top while it travels.
     let (_, hero_build, hero_secs) = plates[HERO];
-    stack = stack.push(live_plate(hero_build, (sec / hero_secs).fract(), hero_at, 1.0));
+    stack = stack.push(live_plate(
+        hero_build,
+        (sec / hero_secs).fract(),
+        hero_at,
+        1.0,
+    ));
 
     // The tiles' names and their own shape counts, once the wall is up.
     let label_a = clamp01((sec - 5.6) / 0.6);
@@ -186,16 +234,37 @@ pub fn the_machine_room(ctx: &pf::Ctx) -> WidgetNode {
                 None => (*name).to_string(),
             };
             let a = label_a * clamp01((sec - 5.6 - i as f32 * 0.05) / 0.3);
-            stack = stack.push(Positioned::new().left(c.left).top(c.bottom - 30.0).width(c.width()).height(30.0).child(
-                Opacity::new(a).child(Painting::sized(Size::new(c.width(), 30.0), PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-                    book.rect(
-                        Rect::new(0.0, 0.0, s.width, s.height),
-                        Gradient::vertical().with_stops(&[(0.0, pf::alpha(Color::BLACK, 0.0)), (1.0, pf::alpha(Color::BLACK, 0.75))]),
-                    );
-                }))),
+            stack = stack.push(
+                Positioned::new()
+                    .left(c.left)
+                    .top(c.bottom - 30.0)
+                    .width(c.width())
+                    .height(30.0)
+                    .child(Opacity::new(a).child(Painting::sized(
+                        Size::new(c.width(), 30.0),
+                        PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+                            book.rect(
+                                Rect::new(0.0, 0.0, s.width, s.height),
+                                Gradient::vertical().with_stops(&[
+                                    (0.0, pf::alpha(Color::BLACK, 0.0)),
+                                    (1.0, pf::alpha(Color::BLACK, 0.75)),
+                                ]),
+                            );
+                        }),
+                    ))),
+            );
+            stack = stack.push(super::frame::label(
+                c.left + 12.0,
+                c.bottom - 28.0,
+                c.width() - 24.0,
+                24.0,
+                text,
+                pf::geist_mono(15.0)
+                    .letter_spacing(0.4)
+                    .color(pf::alpha(INK, 0.92)),
+                TextAlign::Left,
+                a,
             ));
-            stack = stack.push(super::frame::label(c.left + 12.0, c.bottom - 28.0, c.width() - 24.0, 24.0, text,
-                pf::geist_mono(15.0).letter_spacing(0.4).color(pf::alpha(INK, 0.92)), TextAlign::Left, a));
         }
     }
 
@@ -204,20 +273,45 @@ pub fn the_machine_room(ctx: &pf::Ctx) -> WidgetNode {
     let sum_p = clamp01((sec - 7.2) / 1.6);
     if sum_p > 0.0 && total > 0 {
         let n = pf::count_up(total, sum_p);
-        stack = stack.push(super::frame::label(WALL_X, WALL_Y - 56.0, 1740.0, 40.0,
-            format!("{} shapes a frame on this wall — twelve programs, one rasteriser", pf::group_commas(n)),
-            pf::geist_mono(21.0).letter_spacing(0.8).color(pf::alpha(ACCENT, 0.97)), TextAlign::Left, clamp01(sum_p * 3.0)));
+        stack = stack.push(super::frame::label(
+            WALL_X,
+            WALL_Y - 56.0,
+            1740.0,
+            40.0,
+            format!(
+                "{} shapes a frame on this wall — twelve programs, one rasteriser",
+                pf::group_commas(n)
+            ),
+            pf::geist_mono(21.0)
+                .letter_spacing(0.8)
+                .color(pf::alpha(ACCENT, 0.97)),
+            TextAlign::Left,
+            clamp01(sum_p * 3.0),
+        ));
     }
 
-    stack = stack.push(super::frame::caption("This is a UI framework.", 1002.0, clamp01((sec - 0.3) / 0.5)));
-    stack = stack.push(super::frame::caption("Every tile is a vieww program, running live in this frame.", 966.0, clamp01((sec - 5.2) / 0.6)));
+    stack = stack.push(super::frame::caption(
+        "This is a UI framework.",
+        1002.0,
+        clamp01((sec - 0.3) / 0.5),
+    ));
+    stack = stack.push(super::frame::caption(
+        "Every tile is a vieww program, running live in this frame.",
+        966.0,
+        clamp01((sec - 5.2) / 0.6),
+    ));
     let _ = t;
     stack.into()
 }
 
 fn lerp_rect(a: Rect, b: Rect, t: f32) -> Rect {
     let l = |x: f32, y: f32| x + (y - x) * t;
-    Rect::new(l(a.left, b.left), l(a.top, b.top), l(a.right, b.right), l(a.bottom, b.bottom))
+    Rect::new(
+        l(a.left, b.left),
+        l(a.top, b.top),
+        l(a.right, b.right),
+        l(a.bottom, b.bottom),
+    )
 }
 
 // ── Z10D · the mark in 3D ───────────────────────────────────────────────────
@@ -226,8 +320,10 @@ fn lerp_rect(a: Rect, b: Rect, t: f32) -> Rect {
 const R_W: u32 = 1600;
 const R_H: u32 = 760;
 
-pub fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
-    use vieww_3d::{geometry, Camera, Content, Light, Mat4, Material, Node, Quat, Renderer, Rgb, Scene, Vec3};
+pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
+    use vieww_3d::{
+        geometry, Camera, Content, Light, Mat4, Material, Node, Quat, Renderer, Rgb, Scene, Vec3,
+    };
 
     let sec = ctx.sec;
     let mut stack = Stack::new();
@@ -252,10 +348,17 @@ pub fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
     let spin = 0.55 * (sec * 0.55).sin() * (1.0 - 0.6 * clamp01((sec - 7.0) / 3.0));
     let mark = super::models::mark_mesh().clone();
     scene.add(
-        Node::new("mark", Content::mesh(mark, Material::standard(BRAND_NEAR, 0.35, 0.32)))
-            .at(Vec3::new(0.0, 1.2 + 0.06 * (sec * 1.3).sin() - 0.7 * (1.0 - rise), 0.0))
-            .rotated(Quat::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), spin))
-            .scaled(Vec3::splat(1.2)),
+        Node::new(
+            "mark",
+            Content::mesh(mark, Material::standard(BRAND_NEAR, 0.35, 0.32)),
+        )
+        .at(Vec3::new(
+            0.0,
+            1.2 + 0.06 * (sec * 1.3).sin() - 0.7 * (1.0 - rise),
+            0.0,
+        ))
+        .rotated(Quat::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), spin))
+        .scaled(Vec3::splat(1.2)),
         None,
     );
     // Forty-nine blocks in orbit — one per crate in the manifest.
@@ -275,27 +378,59 @@ pub fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
         })
         .collect();
     scene.add(
-        Node::new("crates", Content::instanced(geometry::box_mesh(1.0, 1.0, 1.0), Material::standard(BRAND_FAR, 0.1, 0.5), instances)),
+        Node::new(
+            "crates",
+            Content::instanced(
+                geometry::box_mesh(1.0, 1.0, 1.0),
+                Material::standard(BRAND_FAR, 0.1, 0.5),
+                instances,
+            ),
+        ),
         None,
     );
     let mut floor_mat = Material::standard(Color::rgb(30, 27, 40), 0.0, 0.9);
     floor_mat.receive_shadow = true;
-    scene.add(Node::new("floor", Content::mesh(geometry::plane(18.0, 18.0, 1, 1), floor_mat)), None);
-    scene.add(Node::new("sky", Content::Light(Light::Hemisphere {
-        sky: Rgb::from_color(Color::rgb(120, 110, 170)),
-        ground: Rgb::from_color(Color::rgb(20, 16, 28)),
-        intensity: 0.35,
-    })), None);
-    let sun = 0.6 + 0.25 * (sec * 0.3).sin();
-    scene.add(Node::new("key", Content::Light(Light::Directional {
-        color: Rgb::new(1.0, 0.96, 0.92),
-        intensity: 1.35,
-        direction: Vec3::new(-sun, -1.0, -0.45),
-        shadow: true,
-    })), None);
     scene.add(
-        Node::new("rim", Content::Light(Light::Point { color: Rgb::from_color(BRAND_FAR), intensity: 2.2, range: 9.0 }))
-            .at(Vec3::new(1.8, 2.6, -2.4)),
+        Node::new(
+            "floor",
+            Content::mesh(geometry::plane(18.0, 18.0, 1, 1), floor_mat),
+        ),
+        None,
+    );
+    scene.add(
+        Node::new(
+            "sky",
+            Content::Light(Light::Hemisphere {
+                sky: Rgb::from_color(Color::rgb(120, 110, 170)),
+                ground: Rgb::from_color(Color::rgb(20, 16, 28)),
+                intensity: 0.35,
+            }),
+        ),
+        None,
+    );
+    let sun = 0.6 + 0.25 * (sec * 0.3).sin();
+    scene.add(
+        Node::new(
+            "key",
+            Content::Light(Light::Directional {
+                color: Rgb::new(1.0, 0.96, 0.92),
+                intensity: 1.35,
+                direction: Vec3::new(-sun, -1.0, -0.45),
+                shadow: true,
+            }),
+        ),
+        None,
+    );
+    scene.add(
+        Node::new(
+            "rim",
+            Content::Light(Light::Point {
+                color: Rgb::from_color(BRAND_FAR),
+                intensity: 2.2,
+                range: 9.0,
+            }),
+        )
+        .at(Vec3::new(1.8, 2.6, -2.4)),
         None,
     );
 
@@ -307,14 +442,21 @@ pub fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
         Vec3::new(0.0, 1.05, 0.0),
         0.62,
     );
-    let (image, stats) = Renderer::new(R_W, R_H).samples(2).render(&mut scene, &camera);
+    let (image, stats) = Renderer::new(R_W, R_H)
+        .samples(2)
+        .render(&mut scene, &camera);
 
     let img_a = clamp01(sec / 0.8);
     let (x, y) = (160.0, 236.0);
     stack = stack.push(
-        Positioned::new().left(x).top(y).width(R_W as f32).height(R_H as f32).child(
-            Opacity::new(img_a).child(Clip::rounded(18.0).child(vieww_widget::Image::new(image).label("the vieww mark, rendered by vieww-3d"))),
-        ),
+        Positioned::new()
+            .left(x)
+            .top(y)
+            .width(R_W as f32)
+            .height(R_H as f32)
+            .child(Opacity::new(img_a).child(Clip::rounded(18.0).child(
+                vieww_widget::Image::new(image).label("the vieww mark, rendered by vieww-3d"),
+            ))),
     );
 
     // The renderer's own receipt for this frame.
@@ -326,14 +468,41 @@ pub fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
             pf::group_commas(stats.fragments as u64),
             crates,
         );
-        stack = stack.push(super::frame::label(x, y + R_H as f32 + 14.0, R_W as f32, 30.0, line,
-            pf::geist_mono(19.0).letter_spacing(0.6).color(pf::alpha(SYN_TYPE, 0.95)), TextAlign::Left, stat_a));
+        stack = stack.push(super::frame::label(
+            x,
+            y + R_H as f32 + 14.0,
+            R_W as f32,
+            30.0,
+            line,
+            pf::geist_mono(19.0)
+                .letter_spacing(0.6)
+                .color(pf::alpha(SYN_TYPE, 0.95)),
+            TextAlign::Left,
+            stat_a,
+        ));
     }
     let tag_a = clamp01((sec - 0.8) / 0.6);
-    stack = stack.push(super::frame::chip_at(x + 22.0, y + 22.0, 380.0, 40.0, "rendered live by vieww-3d".to_string(), 19.0, BRAND_FAR, tag_a));
+    stack = stack.push(super::frame::chip_at(
+        x + 22.0,
+        y + 22.0,
+        380.0,
+        40.0,
+        "rendered live by vieww-3d".to_string(),
+        19.0,
+        BRAND_FAR,
+        tag_a,
+    ));
 
-    stack = stack.push(super::frame::caption("Real 3D, in the same frame as your interface.", 1002.0, clamp01((sec - 0.2) / 0.5)));
-    stack = stack.push(super::frame::caption("Lights, shadows, a depth buffer — the same engine, all the way down.", 966.0, clamp01((sec - 4.0) / 0.6)));
+    stack = stack.push(super::frame::caption(
+        "Real 3D, in the same frame as your interface.",
+        1002.0,
+        clamp01((sec - 0.2) / 0.5),
+    ));
+    stack = stack.push(super::frame::caption(
+        "Lights, shadows, a depth buffer — the same engine, all the way down.",
+        966.0,
+        clamp01((sec - 4.0) / 0.6),
+    ));
     let _ = (MUTED, INK, Offset::ZERO);
     stack.into()
 }

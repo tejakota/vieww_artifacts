@@ -468,3 +468,166 @@ fn many_shapes_stay_one_draw_call_and_still_match_the_cpu() {
         "batching must not change the picture"
     );
 }
+
+/// The analytic edge coverage — the antialiasing the GPU path was missing
+/// until 2026-10-09 (see `TRACKER.md`) — verified three ways at once:
+///
+/// 1. **The ramp exists.** A fractional rect and a rounded card must produce
+///    pixels of *intermediate* alpha. The tessellated material this replaces
+///    could not produce one, and "the edge is no longer hard" is the whole
+///    feature.
+/// 2. **Straight edges are exact.** For an axis-aligned edge the SDF's
+///    coverage at a pixel centre is the pixel's covered area — the same
+///    arithmetic the CPU rasterizer's scanline performs — so both renderers
+///    must land on it tightly, not approximately.
+/// 3. **The shader agrees with the Rust mirror.** The expected value comes
+///    from `vieww_gpu::scene::shape_distance` itself, so a shader that
+///    drifts from the arithmetic it was written from fails here even when
+///    both are self-consistent.
+///
+/// Corner arcs get the looser check: the CPU approximates a quarter circle
+/// with four vertical subsamples per pixel row, the SDF is exact, and the
+/// two honest approximations agree to within a fraction of the band.
+#[test]
+#[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
+fn fractional_and_rounded_rects_have_antialiased_edges_like_the_cpu() {
+    let Some((_lock, _device, mut renderer)) = try_renderer() else {
+        return;
+    };
+    let base = Color::rgba(255, 255, 255, 255);
+    let mut scene = Scene::default();
+
+    // Every edge of this rect falls mid-pixel, so every edge pixel is a
+    // partial-coverage pixel.
+    let rect = Rect::new(20.4, 10.35, 70.6, 50.65);
+    fill_rect(&mut scene, rect, Color::rgba(0, 0, 0, 255));
+
+    // The rounded card — the shape a premium interface is made of.
+    let card = Rect::new(30.25, 55.3, 105.75, 84.7);
+    scene.push_command(Command::FillPath {
+        path: Path::rounded_rect(card, 9.0),
+        paint: Paint::solid(Color::rgba(0, 0, 0, 255)),
+        transform: Transform::IDENTITY,
+        clip: Clip::NONE,
+    });
+
+    let plan = plan_scene(&scene, WIDTH as f32, HEIGHT as f32);
+    assert!(plan.is_complete(), "{:?}", plan.unsupported);
+    let gpu = renderer
+        .render(&plan, WIDTH, HEIGHT, base)
+        .expect("render should succeed");
+    let cpu = on_cpu(&scene, base);
+
+    // Interiors agree exactly, as they always did.
+    assert_eq!(
+        interior_mismatches(&gpu, &cpu, 2),
+        0,
+        "interior parity must hold with analytic edges too"
+    );
+
+    // Coverage is read from the red channel, not the alpha: the shapes are
+    // opaque black on an opaque white base, so every pixel is opaque and the
+    // ramp lives in the colour — red is `255 * (1 - coverage)`.
+    let red_of = |buffer: &[u8], x: usize, y: usize| buffer[(y * WIDTH as usize + x) * 4];
+
+    // 1. The ramp exists — mid-band pixels, on both renderers, for both
+    //    shapes. A hard edge has none.
+    let mut partial = 0;
+    for y in 0..HEIGHT as usize {
+        for x in 0..WIDTH as usize {
+            let r = red_of(&gpu, x, y);
+            if (12..243).contains(&r) {
+                partial += 1;
+            }
+        }
+    }
+    assert!(
+        partial > 40,
+        "two fractional-edged shapes must produce dozens of \
+         partial-coverage pixels; found {partial}"
+    );
+
+    // 2 & 3. Straight edges: exact agreement with the SDF's area coverage,
+    //    and therefore with each other. Sampled along all four edges of the
+    //    fractional rect.
+    let edge_samples = [
+        (20, 30),
+        (21, 30),
+        (69, 30),
+        (70, 30),
+        (45, 10),
+        (45, 11),
+        (45, 50),
+        (45, 51),
+    ];
+    for &(x, y) in &edge_samples {
+        let centre = Offset::new(x as f32 + 0.5, y as f32 + 0.5);
+        let d = vieww_gpu::scene::shape_distance(centre, rect, 0.0);
+        let coverage = (0.5 - d).clamp(0.0, 1.0);
+        let expected = (255.0 * (1.0 - coverage)).round();
+        let gpu_r = f32::from(red_of(&gpu, x, y));
+        let cpu_r = f32::from(red_of(&cpu, x, y));
+        // The GPU must land on the SDF's own answer: it is the arithmetic
+        // the shader was written from, and anything looser here would let
+        // the two drift apart silently.
+        assert!(
+            (gpu_r - expected).abs() <= 3.0,
+            "gpu edge pixel ({x}, {y}): {gpu_r} vs the SDF's {expected}"
+        );
+        // The CPU's scanline coverage is exact along vertical edges and
+        // quantised to four vertical subsamples along horizontal ones — 0.125
+        // of a pixel at worst, 32 of 255 — so its agreement with the SDF is
+        // bounded, not exact. That bound is itself the claim: two different
+        // definitions of the same edge, this close.
+        assert!(
+            (cpu_r - expected).abs() <= 34.0,
+            "cpu edge pixel ({x}, {y}): {cpu_r} vs the SDF's {expected}"
+        );
+    }
+
+    // The corner arc: sampled in the neighbourhood of the arc point at 225
+    // degrees — up and left, the direction the top-left corner faces — where
+    // the SDF itself says coverage is partial. On those pixels the GPU must
+    // match the SDF exactly and the CPU approximately: the CPU approximates
+    // the arc with four subsamples per row, the SDF is exact, and both are
+    // honest definitions of the same quarter circle.
+    let arc_centre = Offset::new(card.left + 9.0, card.top + 9.0);
+    let arc_point = Offset::new(
+        arc_centre.dx - 9.0 * std::f32::consts::FRAC_1_SQRT_2,
+        arc_centre.dy - 9.0 * std::f32::consts::FRAC_1_SQRT_2,
+    );
+    let mut partial_corners = 0;
+    for dy in -2i64..=2 {
+        for dx in -2i64..=2 {
+            let x = arc_point.dx as i64 + dx;
+            let y = arc_point.dy as i64 + dy;
+            if x < 0 || y < 0 || x >= WIDTH as i64 || y >= HEIGHT as i64 {
+                continue;
+            }
+            let (x, y) = (x as usize, y as usize);
+            let centre = Offset::new(x as f32 + 0.5, y as f32 + 0.5);
+            let d = vieww_gpu::scene::shape_distance(centre, card, 9.0);
+            let coverage = (0.5 - d).clamp(0.0, 1.0);
+            if coverage <= 0.05 || coverage >= 0.95 {
+                continue;
+            }
+            partial_corners += 1;
+            let expected = (255.0 * (1.0 - coverage)).round();
+            let gpu_r = f32::from(red_of(&gpu, x, y));
+            let cpu_r = f32::from(red_of(&cpu, x, y));
+            assert!(
+                (gpu_r - expected).abs() <= 3.0,
+                "gpu corner pixel ({x}, {y}): {gpu_r} vs the SDF's {expected}"
+            );
+            assert!(
+                (cpu_r - expected).abs() <= 40.0,
+                "cpu corner pixel ({x}, {y}): {cpu_r} vs the SDF's {expected}"
+            );
+        }
+    }
+    assert!(
+        partial_corners >= 2,
+        "the arc's partial-coverage band exists and was sampled: \
+         {partial_corners} pixels"
+    );
+}

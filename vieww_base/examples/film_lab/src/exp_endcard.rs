@@ -64,6 +64,7 @@ const STING_SPAN: f32 = 0.14;
 
 /// The wordmark, centered.
 const MARK_SIZE: f32 = 96.0;
+#[allow(dead_code)]
 const MARK_X: f32 = 0.0; // centered via board width
 const MARK_Y: f32 = 218.0;
 

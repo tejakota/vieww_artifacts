@@ -31,6 +31,7 @@ pub(crate) const CANVAS: Size = Size::new(CANVAS_W, CANVAS_H);
 
 pub(crate) const BG: Color = Color::rgb(10, 10, 12);
 pub(crate) const BG_DEEP: Color = Color::rgb(6, 6, 9);
+#[allow(dead_code)]
 pub(crate) const SURFACE: Color = Color::rgb(18, 18, 22);
 pub(crate) const INK: Color = Color::rgb(240, 240, 242);
 pub(crate) const MUTED: Color = Color::rgb(139, 148, 158);
@@ -335,6 +336,7 @@ impl Receipt {
 
 /// Render one experiment end-to-end: frames → PNGs → metrics.
 /// Returns the receipt; the caller owns contact-sheet assembly (ffmpeg).
+#[allow(dead_code)]
 pub(crate) fn render(
     experiment: &Experiment,
     out_dir: &Path,
@@ -461,6 +463,7 @@ pub(crate) fn render_with(
 /// (`fps=10, scale=480:-1, tile=4x4`), straight from the collaboration
 /// protocol. Runs ffmpeg as a subprocess; ignores failure (the frames are
 /// the artifact, the sheet is the review aid).
+#[allow(dead_code)]
 pub(crate) fn contact_sheet(out_dir: &Path, tile: &str) -> Option<PathBuf> {
     contact_sheet_strided(out_dir, tile, 1)
 }
@@ -570,6 +573,7 @@ fn hardlink_strided(out_dir: &Path, tmp: &Path, stride: usize) -> Option<usize> 
 /// three artifacts — the byte count is read off the file, never
 /// guessed. The mirror of this for already-rendered frame dirs is
 /// `film_lab/tools/make_gifs.sh`.
+#[allow(dead_code)]
 pub(crate) fn anim_gif(out_dir: &Path, fps: u32, width: u32) -> Option<PathBuf> {
     anim_gif_strided(out_dir, fps, width, 1)
 }

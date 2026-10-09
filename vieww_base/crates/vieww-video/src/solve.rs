@@ -88,7 +88,11 @@ fn normaliser(pts: &[Offset]) -> [f64; 9] {
         .map(|p| ((f64::from(p.dx) - cx).powi(2) + (f64::from(p.dy) - cy).powi(2)).sqrt())
         .sum::<f64>()
         / n;
-    let s = if d > 1e-12 { std::f64::consts::SQRT_2 / d } else { 1.0 };
+    let s = if d > 1e-12 {
+        std::f64::consts::SQRT_2 / d
+    } else {
+        1.0
+    };
     [s, 0.0, -s * cx, 0.0, s, -s * cy, 0.0, 0.0, 1.0]
 }
 
@@ -102,6 +106,9 @@ fn solve8(mut a: [[f64; 9]; 8]) -> Option<[f64; 8]> {
         for r in 0..8 {
             if r != c {
                 let f = a[r][c] / a[c][c];
+                // Index loop: the update reads row `c` while writing row `r`
+                // of the same array, which no iterator over `a` can express.
+                #[allow(clippy::needless_range_loop)]
                 for k in c..9 {
                     a[r][k] -= f * a[c][k];
                 }
@@ -122,12 +129,8 @@ pub fn homography(src: &[Offset], dst: &[Offset]) -> Option<Homography> {
         return None;
     }
     let (ts, td) = (normaliser(src), normaliser(dst));
-    let tf = |t: &[f64; 9], p: Offset| {
-        (
-            t[0] * f64::from(p.dx) + t[2],
-            t[4] * f64::from(p.dy) + t[5],
-        )
-    };
+    let tf =
+        |t: &[f64; 9], p: Offset| (t[0] * f64::from(p.dx) + t[2], t[4] * f64::from(p.dy) + t[5]);
     // Normal equations AᵀA h = Aᵀb for the 8 unknowns.
     let mut ata = [[0.0f64; 9]; 8];
     for (p, q) in src.iter().zip(dst) {
@@ -205,7 +208,9 @@ pub fn ransac_homography(
             }
         }
         let (s4, d4): (Vec<Offset>, Vec<Offset>) = idx.iter().map(|&i| (src[i], dst[i])).unzip();
-        let Some(h) = homography(&s4, &d4) else { continue };
+        let Some(h) = homography(&s4, &d4) else {
+            continue;
+        };
         let inl = score(&h);
         let c = inl.iter().filter(|&&b| b).count();
         if best.as_ref().is_none_or(|b| c > b.0) {
@@ -276,8 +281,8 @@ impl Pose {
     #[must_use]
     pub fn center(&self) -> [f64; 3] {
         let mut c = [0.0; 3];
-        for i in 0..3 {
-            c[i] = -(0..3).map(|j| self.r[j][i] * self.t[j]).sum::<f64>();
+        for (ci, col) in c.iter_mut().enumerate() {
+            *col = -(0..3).map(|j| self.r[j][ci] * self.t[j]).sum::<f64>();
         }
         c
     }
@@ -289,7 +294,13 @@ impl Pose {
 pub fn solve_planar_camera(h: &Homography, k: &Intrinsics) -> Option<Pose> {
     let m = &h.0;
     // K⁻¹ H, column by column.
-    let kinv = |c: [f64; 3]| [(c[0] - k.cx * c[2]) / k.fx, (c[1] - k.cy * c[2]) / k.fy, c[2]];
+    let kinv = |c: [f64; 3]| {
+        [
+            (c[0] - k.cx * c[2]) / k.fx,
+            (c[1] - k.cy * c[2]) / k.fy,
+            c[2],
+        ]
+    };
     let h1 = kinv([m[0], m[3], m[6]]);
     let h2 = kinv([m[1], m[4], m[7]]);
     let h3 = kinv([m[2], m[5], m[8]]);
@@ -320,7 +331,11 @@ pub fn solve_planar_camera(h: &Homography, k: &Intrinsics) -> Option<Pose> {
         r1[0] * r2[1] - r1[1] * r2[0],
     ];
     Some(Pose {
-        r: [[r1[0], r2[0], r3[0]], [r1[1], r2[1], r3[1]], [r1[2], r2[2], r3[2]]],
+        r: [
+            [r1[0], r2[0], r3[0]],
+            [r1[1], r2[1], r3[1]],
+            [r1[2], r2[2], r3[2]],
+        ],
         t,
     })
 }
@@ -355,7 +370,10 @@ pub fn corner_pin(src: &Image, quad: [Offset; 4], out_w: u32, out_h: u32) -> Ima
             let (x0, y0) = (fx.floor().max(0.0) as usize, fy.floor().max(0.0) as usize);
             let (x1, y1) = ((x0 + 1).min(iw - 1), (y0 + 1).min(ih - 1));
             #[allow(clippy::cast_precision_loss)]
-            let (ax, ay) = ((fx - x0 as f32).clamp(0.0, 1.0), (fy - y0 as f32).clamp(0.0, 1.0));
+            let (ax, ay) = (
+                (fx - x0 as f32).clamp(0.0, 1.0),
+                (fy - y0 as f32).clamp(0.0, 1.0),
+            );
             let o = (y * out_w as usize + x) * 4;
             for c in 0..4 {
                 let g = |xx: usize, yy: usize| f32::from(sp[(yy * iw + xx) * 4 + c]);
@@ -382,7 +400,12 @@ mod tests {
     #[test]
     fn four_points_define_the_homography_exactly() {
         let src = [o(0.0, 0.0), o(100.0, 0.0), o(100.0, 100.0), o(0.0, 100.0)];
-        let dst = [o(10.0, 20.0), o(130.0, 5.0), o(120.0, 140.0), o(-5.0, 110.0)];
+        let dst = [
+            o(10.0, 20.0),
+            o(130.0, 5.0),
+            o(120.0, 140.0),
+            o(-5.0, 110.0),
+        ];
         let h = homography(&src, &dst).unwrap();
         for (s, d) in src.iter().zip(&dst) {
             let r = h.apply(*s);
@@ -418,15 +441,26 @@ mod tests {
         let k = Intrinsics::from_fov(640, 480, 0.9);
         // A known camera: rotated about x and y, 5 units from the plane.
         let (ax, ay) = (0.4f64, -0.3f64);
-        let rx = [[1.0, 0.0, 0.0], [0.0, ax.cos(), -ax.sin()], [0.0, ax.sin(), ax.cos()]];
-        let ry = [[ay.cos(), 0.0, ay.sin()], [0.0, 1.0, 0.0], [-ay.sin(), 0.0, ay.cos()]];
+        let rx = [
+            [1.0, 0.0, 0.0],
+            [0.0, ax.cos(), -ax.sin()],
+            [0.0, ax.sin(), ax.cos()],
+        ];
+        let ry = [
+            [ay.cos(), 0.0, ay.sin()],
+            [0.0, 1.0, 0.0],
+            [-ay.sin(), 0.0, ay.cos()],
+        ];
         let mut r = [[0.0; 3]; 3];
         for i in 0..3 {
             for j in 0..3 {
                 r[i][j] = (0..3).map(|q| rx[i][q] * ry[q][j]).sum();
             }
         }
-        let truth = Pose { r, t: [0.3, -0.2, 5.0] };
+        let truth = Pose {
+            r,
+            t: [0.3, -0.2, 5.0],
+        };
         let plane: Vec<Offset> = (0..16)
             .map(|i| {
                 #[allow(clippy::cast_precision_loss)]

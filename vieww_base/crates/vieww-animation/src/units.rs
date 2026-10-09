@@ -346,7 +346,11 @@ mod tests {
     fn directional_rotation_picks_the_requested_way() {
         let d = |deg: f32| deg.to_radians();
         let short = Angle::directional(d(350.0), d(10.0), Direction::Short);
-        assert!((short.to_degrees() - 370.0).abs() < 1e-3, "{}", short.to_degrees());
+        assert!(
+            (short.to_degrees() - 370.0).abs() < 1e-3,
+            "{}",
+            short.to_degrees()
+        );
         let cw = Angle::directional(d(10.0), d(350.0), Direction::Clockwise);
         assert!((cw.to_degrees() - 350.0).abs() < 1e-3);
         let ccw = Angle::directional(d(10.0), d(350.0), Direction::CounterClockwise);

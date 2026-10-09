@@ -135,18 +135,18 @@ fn rk4(pos: &mut [[f32; 2]; 3], vel: &mut [[f32; 2]; 3], h: f32) {
     }
 }
 
-/// A full replay to film-fraction `t`: returns (nominal trail, twin trail,
+/// A full replay to film-fraction `t`: (nominal trail, twin trail,
 /// nominal positions, twin positions, separation series [(t, d)]).
-#[must_use]
-fn replay(
-    t: f32,
-) -> (
+type Replay = (
     Vec<[f32; 2]>,
     Vec<[f32; 2]>,
     [[f32; 2]; 3],
     [[f32; 2]; 3],
     Vec<(f32, f32)>,
-) {
+);
+
+#[must_use]
+fn replay(t: f32) -> Replay {
     let mut pos = X0;
     let mut vel = V0;
     let mut twin_pos = X0;

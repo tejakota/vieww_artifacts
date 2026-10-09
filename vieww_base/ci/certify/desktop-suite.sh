@@ -33,8 +33,8 @@
 # `vieww_hal::vulkan`, so a machine with no ICD fails at startup with
 # `Unable to find a Vulkan driver` before a single check runs. On a headless
 # Linux box `mesa-vulkan-drivers` (lavapipe) is enough and is what `--headless`
-# expects; see `PENDING.md` §2.6 for why a *GPU-rendered* frame is still a
-# separate, unclosed question.
+# expects; see `PENDING.md` §2.2 for why a *GPU-rendered* frame still pays a
+# readback on the way to the screen.
 
 set -euo pipefail
 
@@ -56,35 +56,35 @@ timeout_seconds=90
 keep_log=""
 
 while [ "$#" -gt 0 ]; do
-	case "$1" in
-	--no-build) build=0 ;;
-	--debug) profile="" ;;
-	--headless) headless=1 ;;
-	--expect-multi-monitor) expect_multi_monitor=1 ;;
-	--expect-hidpi) expect_hidpi=1 ;;
-	--log)
-		keep_log="${2:?--log needs a file}"
-		shift
-		;;
-	--timeout)
-		timeout_seconds="${2:?--timeout needs seconds}"
-		shift
-		;;
-	-h | --help)
-		sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
-		exit 0
-		;;
-	*)
-		echo "desktop-suite: unknown argument: $1" >&2
-		exit 2
-		;;
-	esac
-	shift
+        case "$1" in
+        --no-build) build=0 ;;
+        --debug) profile="" ;;
+        --headless) headless=1 ;;
+        --expect-multi-monitor) expect_multi_monitor=1 ;;
+        --expect-hidpi) expect_hidpi=1 ;;
+        --log)
+                keep_log="${2:?--log needs a file}"
+                shift
+                ;;
+        --timeout)
+                timeout_seconds="${2:?--timeout needs seconds}"
+                shift
+                ;;
+        -h | --help)
+                sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+                exit 0
+                ;;
+        *)
+                echo "desktop-suite: unknown argument: $1" >&2
+                exit 2
+                ;;
+        esac
+        shift
 done
 
 command -v cargo >/dev/null 2>&1 || {
-	echo "desktop-suite: cargo not found." >&2
-	exit 127
+        echo "desktop-suite: cargo not found." >&2
+        exit 127
 }
 
 case "$(uname -s)" in
@@ -105,24 +105,24 @@ monitors=""
 scales=""
 case "$platform" in
 linux)
-	if [ -n "${DISPLAY:-}" ] && command -v xrandr >/dev/null 2>&1; then
-		monitors="$(xrandr --listmonitors 2>/dev/null | sed -n 's/^Monitors: \([0-9]*\).*/\1/p')"
-	fi
-	;;
+        if [ -n "${DISPLAY:-}" ] && command -v xrandr >/dev/null 2>&1; then
+                monitors="$(xrandr --listmonitors 2>/dev/null | sed -n 's/^Monitors: \([0-9]*\).*/\1/p')"
+        fi
+        ;;
 macos)
-	if command -v system_profiler >/dev/null 2>&1; then
-		monitors="$(system_profiler SPDisplaysDataType 2>/dev/null | grep -c 'Resolution:' || true)"
-		# "Retina" is the user-facing word for a backing scale above 1, and it is
-		# what `system_profiler` prints; the app reports the number itself.
-		scales="$(system_profiler SPDisplaysDataType 2>/dev/null | grep -c 'Retina' || true)"
-	fi
-	;;
+        if command -v system_profiler >/dev/null 2>&1; then
+                monitors="$(system_profiler SPDisplaysDataType 2>/dev/null | grep -c 'Resolution:' || true)"
+                # "Retina" is the user-facing word for a backing scale above 1, and it is
+                # what `system_profiler` prints; the app reports the number itself.
+                scales="$(system_profiler SPDisplaysDataType 2>/dev/null | grep -c 'Retina' || true)"
+        fi
+        ;;
 windows)
-	if command -v powershell >/dev/null 2>&1; then
-		monitors="$(powershell -NoProfile -Command \
-			'(Get-CimInstance -ClassName Win32_VideoController | Measure-Object).Count' 2>/dev/null | tr -d '\r')"
-	fi
-	;;
+        if command -v powershell >/dev/null 2>&1; then
+                monitors="$(powershell -NoProfile -Command \
+                        '(Get-CimInstance -ClassName Win32_VideoController | Measure-Object).Count' 2>/dev/null | tr -d '\r')"
+        fi
+        ;;
 esac
 
 echo "desktop-suite: $platform, $(uname -m)"
@@ -132,24 +132,24 @@ echo "desktop-suite: $platform, $(uname -m)"
 # ------------------------------------------------------------------------- run
 
 if [ "$build" -eq 1 ]; then
-	# shellcheck disable=SC2086 # $profile is a flag or empty, and must word-split.
-	cargo build $profile -p vieww-platform-winit --example desktop
+        # shellcheck disable=SC2086 # $profile is a flag or empty, and must word-split.
+        cargo build $profile -p vieww-platform-winit --example desktop
 fi
 
 runner=()
 if [ "$headless" -eq 1 ]; then
-	command -v xvfb-run >/dev/null 2>&1 || {
-		echo "desktop-suite: --headless needs xvfb-run." >&2
-		exit 127
-	}
-	# A real size rather than the 640x480 default: the demo asks for an 880-tall
-	# window, and a virtual screen shorter than that measures a window the WM
-	# squashed rather than the one the suite meant to open.
-	runner=(xvfb-run -a --server-args="-screen 0 1280x1024x24")
+        command -v xvfb-run >/dev/null 2>&1 || {
+                echo "desktop-suite: --headless needs xvfb-run." >&2
+                exit 127
+        }
+        # A real size rather than the 640x480 default: the demo asks for an 880-tall
+        # window, and a virtual screen shorter than that measures a window the WM
+        # squashed rather than the one the suite meant to open.
+        runner=(xvfb-run -a --server-args="-screen 0 1280x1024x24")
 elif [ "$platform" = "linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
-	echo "desktop-suite: no DISPLAY and no WAYLAND_DISPLAY." >&2
-	echo "  This suite opens real windows. On a headless box use --headless." >&2
-	exit 3
+        echo "desktop-suite: no DISPLAY and no WAYLAND_DISPLAY." >&2
+        echo "  This suite opens real windows. On a headless box use --headless." >&2
+        exit 3
 fi
 
 # The log is evidence, not scratch: a segfault's only trace is in it, and the
@@ -162,8 +162,8 @@ echo "desktop-suite: app output -> $log"
 binary="target/release/examples/desktop"
 [ -n "$profile" ] || binary="target/debug/examples/desktop"
 [ -x "$binary" ] || {
-	echo "desktop-suite: $binary is not built. Drop --no-build." >&2
-	exit 3
+        echo "desktop-suite: $binary is not built. Drop --no-build." >&2
+        exit 3
 }
 
 echo "desktop-suite: running (up to ${timeout_seconds}s; a window will open)"
@@ -181,14 +181,14 @@ app=$!
 
 waited=0
 while [ "$waited" -lt "$timeout_seconds" ]; do
-	if grep -q '__VIEWW_SUITE__ result' "$log" 2>/dev/null; then
-		break
-	fi
-	if ! kill -0 "$app" 2>/dev/null; then
-		break
-	fi
-	sleep 1
-	waited=$((waited + 1))
+        if grep -q '__VIEWW_SUITE__ result' "$log" 2>/dev/null; then
+                break
+        fi
+        if ! kill -0 "$app" 2>/dev/null; then
+                break
+        fi
+        sleep 1
+        waited=$((waited + 1))
 done
 
 # `kill` the process group's leader and let it go; `wait` swallows the status,
@@ -204,20 +204,20 @@ sed -n 's/^__VIEWW_SUITE__ //p' "$log" || true
 echo
 
 if ! grep -q '__VIEWW_SUITE__ result' "$log"; then
-	echo "desktop-suite: FAIL — no report after ${timeout_seconds}s." >&2
-	if [ "$app_status" -gt 128 ] && [ "$app_status" -ne 143 ]; then
-		echo "  The app died on signal $((app_status - 128)) ($(kill -l "$((app_status - 128))" 2>/dev/null))." >&2
-		echo "  For a backtrace: gdb -batch -ex run -ex bt --args $binary" >&2
-	fi
-	echo "  The last thing it said (full log: $log):" >&2
-	tail -40 "$log" >&2
-	exit 1
+        echo "desktop-suite: FAIL — no report after ${timeout_seconds}s." >&2
+        if [ "$app_status" -gt 128 ] && [ "$app_status" -ne 143 ]; then
+                echo "  The app died on signal $((app_status - 128)) ($(kill -l "$((app_status - 128))" 2>/dev/null))." >&2
+                echo "  For a backtrace: gdb -batch -ex run -ex bt --args $binary" >&2
+        fi
+        echo "  The last thing it said (full log: $log):" >&2
+        tail -40 "$log" >&2
+        exit 1
 fi
 
 failures=0
 grep -q '__VIEWW_SUITE__ result PASS' "$log" || {
-	echo "desktop-suite: the in-app suite reported failures." >&2
-	failures=1
+        echo "desktop-suite: the in-app suite reported failures." >&2
+        failures=1
 }
 
 # --------------------------------------------------- what only the operator knows
@@ -231,35 +231,35 @@ density="$(sed -n 's/.*got [0-9.]*x[0-9.]* logical at \([0-9.]*\)x.*/\1/p' "$log
 [ -n "$density" ] && echo "desktop-suite: the window reported a density of ${density}x"
 
 if [ "$expect_hidpi" -eq 1 ]; then
-	if [ -z "$density" ]; then
-		echo "desktop-suite: FAIL — --expect-hidpi, but the app never reported a density." >&2
-		failures=1
-	elif awk "BEGIN{exit !($density > 1)}"; then
-		echo "desktop-suite: ok — HiDPI, as expected (${density}x)"
-	else
-		echo "desktop-suite: FAIL — --expect-hidpi, but the window is at ${density}x." >&2
-		echo "  Either this display is not the HiDPI one, or the scale factor is not" >&2
-		echo "  reaching ViewMetrics. Check which window the app opened on." >&2
-		failures=1
-	fi
+        if [ -z "$density" ]; then
+                echo "desktop-suite: FAIL — --expect-hidpi, but the app never reported a density." >&2
+                failures=1
+        elif awk "BEGIN{exit !($density > 1)}"; then
+                echo "desktop-suite: ok — HiDPI, as expected (${density}x)"
+        else
+                echo "desktop-suite: FAIL — --expect-hidpi, but the window is at ${density}x." >&2
+                echo "  Either this display is not the HiDPI one, or the scale factor is not" >&2
+                echo "  reaching ViewMetrics. Check which window the app opened on." >&2
+                failures=1
+        fi
 fi
 
 if [ "$expect_multi_monitor" -eq 1 ]; then
-	if [ -z "$monitors" ]; then
-		echo "desktop-suite: FAIL — --expect-multi-monitor, but this platform's" >&2
-		echo "  display query found nothing to count." >&2
-		failures=1
-	elif [ "$monitors" -gt 1 ]; then
-		echo "desktop-suite: ok — $monitors displays, as expected"
-	else
-		echo "desktop-suite: FAIL — --expect-multi-monitor, but the OS reports $monitors." >&2
-		failures=1
-	fi
+        if [ -z "$monitors" ]; then
+                echo "desktop-suite: FAIL — --expect-multi-monitor, but this platform's" >&2
+                echo "  display query found nothing to count." >&2
+                failures=1
+        elif [ "$monitors" -gt 1 ]; then
+                echo "desktop-suite: ok — $monitors displays, as expected"
+        else
+                echo "desktop-suite: FAIL — --expect-multi-monitor, but the OS reports $monitors." >&2
+                failures=1
+        fi
 fi
 
 if [ "$failures" -eq 0 ]; then
-	echo "desktop-suite: PASS"
+        echo "desktop-suite: PASS"
 else
-	echo "desktop-suite: FAIL" >&2
+        echo "desktop-suite: FAIL" >&2
 fi
 exit "$failures"

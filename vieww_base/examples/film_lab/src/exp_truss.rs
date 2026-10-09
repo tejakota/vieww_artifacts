@@ -498,6 +498,7 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
 
 // ── The receipt ─────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn receipt_panel(
     ms: &[Member],
     _forces: &[f32],

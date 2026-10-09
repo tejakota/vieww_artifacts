@@ -117,13 +117,13 @@ fn lathe_mesh(reveal: f32) -> (Mesh, usize) {
     let y_top = PROFILE[0].1;
     let y_bot = PROFILE[PROFILE.len() - 1].1;
     let span = (y_top - y_bot).max(1e-6);
-    for i in 0..n - 1 {
+    for (i, row) in profile.iter().enumerate().take(n - 1) {
         for j in 0..LATHE {
             let a = i * LATHE + j;
             let b = i * LATHE + (j + 1) % LATHE;
             let c = (i + 1) * LATHE + (j + 1) % LATHE;
             let d = (i + 1) * LATHE + j;
-            let h = (profile[i].1 - y_bot) / span;
+            let h = (row.1 - y_bot) / span;
             let base = mix(
                 mix(VIOLET_DEEP, Color::rgb(52, 46, 74), 0.55),
                 tint(VIOLET, 0.12),

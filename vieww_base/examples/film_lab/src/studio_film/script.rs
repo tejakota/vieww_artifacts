@@ -20,7 +20,7 @@ use viewwstudio::state::{Device, Platform, RightTab, Studio};
 
 /// One touch of the real studio.
 #[derive(Clone)]
-pub enum Sf {
+pub(crate) enum Sf {
     /// The product film's vocabulary.
     Pf(Action),
     /// Replace `from` with `to` in live.rs, caret left after the edit.
@@ -49,7 +49,7 @@ fn at(id: &str) -> f32 {
 }
 
 /// The session — every action, in order, at absolute film seconds.
-pub fn session() -> Vec<(f32, Sf)> {
+pub(crate) fn session() -> Vec<(f32, Sf)> {
     let z11 = at("Z11");
     let z13 = at("Z13");
     let z14 = at("Z14");
@@ -66,8 +66,17 @@ pub fn session() -> Vec<(f32, Sf)> {
         (z11 + 6.4, Sf::Pf(Action::AcceptLive)),
         // Z13 — two real edits with the studio's damage overlay on.
         (z13 + 1.2, Sf::Pf(Action::ShowDamage(true))),
-        (z13 + 3.4, Sf::EditLive("title \"Inbox\"", "title \"My own inbox\"")),
-        (z13 + 7.6, Sf::EditLive("Draft for v0.3 is ready to review", "Shipped the beta today")),
+        (
+            z13 + 3.4,
+            Sf::EditLive("title \"Inbox\"", "title \"My own inbox\""),
+        ),
+        (
+            z13 + 7.6,
+            Sf::EditLive(
+                "Draft for v0.3 is ready to review",
+                "Shipped the beta today",
+            ),
+        ),
         (z13 + 13.4, Sf::Pf(Action::ShowDamage(false))),
         // Z14 — the say program opens in the real editor.
         (z14 + 0.3, Sf::Pf(Action::OpenPath("counter.say".into()))),
@@ -119,12 +128,23 @@ pub fn session() -> Vec<(f32, Sf)> {
 }
 
 /// The Devices presets Z16 steps through, in order, with when.
-pub fn z16_devices() -> [(f32, Option<usize>); 5] {
-    [(0.0, None), (2.4, Some(0)), (5.0, Some(3)), (7.6, Some(6)), (10.2, Some(4))]
+pub(crate) fn z16_devices() -> [(f32, Option<usize>); 5] {
+    [
+        (0.0, None),
+        (2.4, Some(0)),
+        (5.0, Some(3)),
+        (7.6, Some(6)),
+        (10.2, Some(4)),
+    ]
 }
 
 /// Apply one action to the real studio.
-pub fn apply_one(driver: &mut vieww_render::FrameDriver, studio: &Studio, action: &Sf, abs: f32) {
+pub(crate) fn apply_one(
+    driver: &mut vieww_render::FrameDriver,
+    studio: &Studio,
+    action: &Sf,
+    abs: f32,
+) {
     match action {
         Sf::Pf(a) => {
             let mut c = 0usize;
@@ -132,9 +152,13 @@ pub fn apply_one(driver: &mut vieww_render::FrameDriver, studio: &Studio, action
         }
         Sf::EditLive(from, to) => {
             let buffers = studio.buffers.get();
-            let Some(i) = buffers.iter().position(|b| b.name == "live.rs") else { return };
+            let Some(i) = buffers.iter().position(|b| b.name == "live.rs") else {
+                return;
+            };
             studio.active_buffer.set(i);
-            let Some(buffer) = studio.active() else { return };
+            let Some(buffer) = studio.active() else {
+                return;
+            };
             let text = buffer.value.text.clone();
             let Some(pos) = text.find(from) else { return };
             let new_text = format!("{}{}{}", &text[..pos], to, &text[pos + from.len()..]);
@@ -164,7 +188,7 @@ pub fn apply_one(driver: &mut vieww_render::FrameDriver, studio: &Studio, action
 }
 
 /// Apply the session up to `abs`, resuming from `cursor`.
-pub fn apply_session_up_to(
+pub(crate) fn apply_session_up_to(
     driver: &mut vieww_render::FrameDriver,
     studio: &Studio,
     abs: f32,
@@ -179,18 +203,25 @@ pub fn apply_session_up_to(
 
 /// A named snapshot of the studio: the actions that put it in the state
 /// the snapshot quotes, and the actions that put the live session back.
-pub struct Snap {
+pub(crate) struct Snap {
     pub key: &'static str,
     pub apply: Vec<Sf>,
     pub restore: Vec<Sf>,
 }
 
 /// The snapshots a studio scene quotes, taken once when it is entered.
-pub fn snapshots(id: &str) -> Vec<Snap> {
+pub(crate) fn snapshots(id: &str) -> Vec<Snap> {
     let plat = |key: &'static str, p: Platform, dark: bool| Snap {
         key,
-        apply: vec![Sf::Device(None), Sf::Pf(Action::Platform(p)), Sf::PreviewDark(dark)],
-        restore: vec![Sf::Pf(Action::Platform(Platform::Ios)), Sf::PreviewDark(false)],
+        apply: vec![
+            Sf::Device(None),
+            Sf::Pf(Action::Platform(p)),
+            Sf::PreviewDark(dark),
+        ],
+        restore: vec![
+            Sf::Pf(Action::Platform(Platform::Ios)),
+            Sf::PreviewDark(false),
+        ],
     };
     match id {
         "Z15" | "Z17" => vec![
@@ -214,7 +245,7 @@ pub fn snapshots(id: &str) -> Vec<Snap> {
 }
 
 /// The snapshot key for a Devices preset.
-pub fn device_key(d: Option<usize>) -> &'static str {
+pub(crate) fn device_key(d: Option<usize>) -> &'static str {
     match d {
         None => "dev_default",
         Some(0) => "dev_0",

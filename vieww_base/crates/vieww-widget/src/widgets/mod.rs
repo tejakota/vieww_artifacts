@@ -8,8 +8,8 @@
 
 mod align;
 mod animated;
-mod animated_visibility;
 mod animated_container;
+mod animated_visibility;
 mod aspect_ratio;
 mod async_builder;
 mod block_semantics;
@@ -72,8 +72,8 @@ mod viewport;
 
 pub use align::{Align, Center};
 pub use animated::{Animated, AnimatedBuilder, AnimatedState, CONTROL_DURATION};
-pub use animated_visibility::{AnimatedVisibility, Transition as VisibilityTransition};
 pub use animated_container::{AnimatedContainer, AnimatedContainerState, AnimatedProps};
+pub use animated_visibility::{AnimatedVisibility, Transition as VisibilityTransition};
 pub use aspect_ratio::AspectRatio;
 pub use async_builder::AsyncBuilder;
 pub use block_semantics::BlockSemantics;

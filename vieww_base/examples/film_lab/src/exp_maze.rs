@@ -128,6 +128,7 @@ struct Search {
     order: Vec<u32>,
     expanded: usize,
     path: Vec<(usize, usize)>,
+    #[allow(dead_code)]
     found_at: usize,
 }
 
@@ -280,7 +281,9 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
     let greedy_len = full[2].path.len();
 
     let open_c = open.clone();
-    let runs_draw: Vec<(Vec<u32>, Vec<(usize, usize)>, usize)> = runs
+    // Per-run draw state: the visit order, the path, and the expanded count.
+    type RunDraw = (Vec<u32>, Vec<(usize, usize)>, usize);
+    let runs_draw: Vec<RunDraw> = runs
         .iter()
         .map(|s| (s.order.clone(), s.path.clone(), s.expanded))
         .collect();

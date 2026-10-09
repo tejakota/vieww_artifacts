@@ -46,16 +46,16 @@ use vieww_render::FrameDriver;
 use vieww_widget::prelude::*;
 use viewwstudio::state::Studio;
 
+use super::frame::{self, Plate};
+use super::{frames_of, ladder_at, scene_start, scenes, total_frames, FPS};
 use crate::film_lib::{clamp01, ease_out_cubic};
 use crate::product_film as pf;
 use crate::product_film::script;
 use crate::product_film::{Ctx, Kind, Probe, SceneDef};
-use super::frame::{self, Plate};
-use super::{frames_of, ladder_at, scenes, scene_start, total_frames, FPS};
 
 /// Where this film's artifacts live while being built. `STUDIO_FILM_OUT`
 /// overrides it — the portable door.
-pub fn work_root() -> PathBuf {
+pub(crate) fn work_root() -> PathBuf {
     std::env::var_os("STUDIO_FILM_OUT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/home/z/my-project/download/studio_film"))
@@ -66,13 +66,13 @@ fn manifest_path() -> PathBuf {
 }
 
 /// The census's raster samples, one `scene,commands,ms` row each.
-pub fn samples_path() -> PathBuf {
+pub(crate) fn samples_path() -> PathBuf {
     work_root().join("samples.txt")
 }
 
 /// The census's raster samples as (draw commands, milliseconds) — empty
 /// until a census has run. Read once per process.
-pub fn frame_samples() -> &'static [(f32, f32)] {
+pub(crate) fn frame_samples() -> &'static [(f32, f32)] {
     static S: std::sync::OnceLock<Vec<(f32, f32)>> = std::sync::OnceLock::new();
     S.get_or_init(|| {
         std::fs::read_to_string(samples_path())
@@ -92,7 +92,7 @@ pub fn frame_samples() -> &'static [(f32, f32)] {
 /// The device-resolution multiplier in force for this render — see
 /// [`super::SCALE_FACTOR`]. The `SCALE_FACTOR` environment variable
 /// overrides the constant for a one-off pass.
-pub fn scale_factor() -> f32 {
+pub(crate) fn scale_factor() -> f32 {
     std::env::var("SCALE_FACTOR")
         .ok()
         .and_then(|v| v.parse::<f32>().ok())
@@ -106,13 +106,17 @@ fn raster_size() -> (u32, u32) {
 }
 
 /// Entry point — dispatch on the CLI word.
-pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         "censussf" => census(),
         "mastersf" => master(),
         "sfprobe" => super::probe::run(),
         "scoresf" => score_and_mux(&work_root().join("studio_film.mp4")),
-        other if other.starts_with("sfmeasure") => measure(other.trim_start_matches("sfmeasure").trim_start_matches(':')),
+        other if other.starts_with("sfmeasure") => measure(
+            other
+                .trim_start_matches("sfmeasure")
+                .trim_start_matches(':'),
+        ),
         other => {
             let name = other.trim_start_matches("sf:").to_ascii_lowercase();
             preview(&name)
@@ -125,12 +129,12 @@ pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// The entrance dissolve, seconds — widened ×1.5 at the movement
 /// boundaries by [`cut_len`] (the acts change like chapters, the scenes
 /// inside them like sentences).
-pub const CUT_IN: f32 = 0.45;
+pub(crate) const CUT_IN: f32 = 0.45;
 
 /// How long a movement's label fades at its edges, seconds. No scene
 /// fades out at its tail any more — the next scene's dissolve is the
 /// cut, so the outgoing frame holds to full brightness.
-pub const CUT_OUT: f32 = 0.35;
+pub(crate) const CUT_OUT: f32 = 0.35;
 
 // ── The dissolve grammar ────────────────────────────────────────────────────
 
@@ -309,7 +313,8 @@ impl Rig {
             // the freshly mounted studio's own state. Z14 quotes it.
             for k in 0..3 {
                 self.driver.set_root(shell_only(&studio));
-                self.driver.draw_frame_at(Duration::from_secs_f64(0.01 * k as f64));
+                self.driver
+                    .draw_frame_at(Duration::from_secs_f64(0.01 * k as f64));
             }
             self.snaps.insert("blank", self.driver.scene().clone());
             self.studio = Some(studio);
@@ -347,7 +352,8 @@ impl Rig {
             }
             for k in 0..4 {
                 self.driver.set_root(shell_only(&studio));
-                self.driver.draw_frame_at(Duration::from_secs_f64(abs as f64 + 0.01 * k as f64));
+                self.driver
+                    .draw_frame_at(Duration::from_secs_f64(abs as f64 + 0.01 * k as f64));
             }
             self.snaps.insert(snap.key, self.driver.scene().clone());
             let _ = &snap.restore;
@@ -358,7 +364,8 @@ impl Rig {
             studio.active_buffer.set(saved.4);
         }
         self.driver.set_root(shell_only(&studio));
-        self.driver.draw_frame_at(Duration::from_secs_f64(abs as f64));
+        self.driver
+            .draw_frame_at(Duration::from_secs_f64(abs as f64));
     }
 
     /// Build one frame.
@@ -370,14 +377,22 @@ impl Rig {
 
         frame::reset();
         pf::clear_chrome();
-        let ctx = Ctx { t, sec, abs, ladder: ladder_at(abs), probe, cam: pf::Cam::STILL };
+        let ctx = Ctx {
+            t,
+            sec,
+            abs,
+            ladder: ladder_at(abs),
+            probe,
+            cam: pf::Cam::STILL,
+        };
         let tree = (s.build)(&ctx);
         self.kind = s.kind;
 
         match s.kind {
             Kind::Pure => {
                 self.driver.set_root(tree);
-                self.driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
+                self.driver
+                    .draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
                 let over = frame::take_over();
                 self.has_over = !over.is_empty();
                 if self.has_over {
@@ -387,14 +402,25 @@ impl Rig {
                     }
                     let root: WidgetNode = st.into();
                     self.over_driver.set_root(root);
-                    self.over_driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
+                    self.over_driver
+                        .draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
                 }
             }
             Kind::Studio => {
                 self.ensure_studio();
                 {
-                    let Rig { driver, studio, cursor, .. } = self;
-                    super::script::apply_session_up_to(driver, studio.as_mut().unwrap(), abs, cursor);
+                    let Rig {
+                        driver,
+                        studio,
+                        cursor,
+                        ..
+                    } = self;
+                    super::script::apply_session_up_to(
+                        driver,
+                        studio.as_mut().unwrap(),
+                        abs,
+                        cursor,
+                    );
                 }
                 self.take_snapshots(s.id, abs);
                 let studio = self.studio.clone().unwrap();
@@ -407,7 +433,8 @@ impl Rig {
                 studio.capture_tree(&self.driver);
                 studio.capture_overlays(&mut self.driver);
                 self.driver.set_root(shell_only(&studio));
-                self.driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
+                self.driver
+                    .draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
                 let mut st = Stack::new().push(Positioned::fill().child(tree));
                 for n in frame::take_over() {
                     st = st.push(Positioned::fill().child(n));
@@ -415,7 +442,8 @@ impl Rig {
                 self.has_over = true;
                 let root: WidgetNode = st.into();
                 self.over_driver.set_root(root);
-                self.over_driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
+                self.over_driver
+                    .draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
             }
         }
         let unders = frame::take_under();
@@ -427,7 +455,8 @@ impl Rig {
             }
             let root: WidgetNode = st.into();
             self.under_driver.set_root(root);
-            self.under_driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
+            self.under_driver
+                .draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
         }
         self.plates = frame::take_plates();
         if s.kind == Kind::Studio && self.plates.is_empty() {
@@ -439,7 +468,8 @@ impl Rig {
                 snap: None,
                 card: true,
                 bare: false,
-                morph: None, stretch: false,
+                morph: None,
+                stretch: false,
             });
         }
 
@@ -479,23 +509,29 @@ impl Rig {
             st.into()
         };
         self.ground_driver.set_root(ground_root);
-        self.ground_driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
+        self.ground_driver
+            .draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
 
         // The chrome: header and receipts ride the dissolve; the act label
         // holds inside a movement; the rail never fades.
         let act_a = act_alpha(si, s.seconds, sec, a);
         let header = frame::header(super::movement_of(s.id), super::movement_name(s.id), act_a);
         let chrome = Stack::new()
-            .push(Positioned::fill().child(Opacity::new(a).child(
-                Stack::new()
-                    .push(Positioned::fill().child(strip_act(header, a, act_a)))
-                    .push(Positioned::fill().child(frame::footer_receipts()))
-                    .push(Positioned::fill().child(pf::take_chrome())),
-            )))
+            .push(
+                Positioned::fill().child(
+                    Opacity::new(a).child(
+                        Stack::new()
+                            .push(Positioned::fill().child(strip_act(header, a, act_a)))
+                            .push(Positioned::fill().child(frame::footer_receipts()))
+                            .push(Positioned::fill().child(pf::take_chrome())),
+                    ),
+                ),
+            )
             .push(frame::rail(abs));
         let root: WidgetNode = chrome.into();
         self.chrome_driver.set_root(root);
-        self.chrome_driver.draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
+        self.chrome_driver
+            .draw_frame_at(Duration::from_secs_f64(abs.max(0.0) as f64));
     }
 }
 
@@ -556,7 +592,9 @@ fn compose(rig: &Rig) -> Scene {
 
     // 1 · ground — carries the frame's alpha (the cold open's fade-up; a
     // later cut's change of light rides the pixel dissolve instead).
-    group(&mut frame_scene, full, a, |f| f.append(rig.ground_driver.scene(), Transform::IDENTITY));
+    group(&mut frame_scene, full, a, |f| {
+        f.append(rig.ground_driver.scene(), Transform::IDENTITY)
+    });
 
     // 2 · world — composed into a staging scene first so the whole world
     // takes the frame's opacity at once (the cold open's fade-up; every
@@ -589,12 +627,14 @@ fn compose(rig: &Rig) -> Scene {
             // and keeps the pane's own mapping, so a tablet still lands
             // bigger than a phone on the same stage.
             let k = p.dst.width() / p.src.width().max(1.0);
-            let place = |sil: Rect| Rect::new(
-                p.dst.left + (sil.left - p.src.left) * k,
-                p.dst.top + (sil.top - p.src.top) * k,
-                p.dst.left + (sil.right - p.src.left) * k,
-                p.dst.top + (sil.bottom - p.src.top) * k,
-            );
+            let place = |sil: Rect| {
+                Rect::new(
+                    p.dst.left + (sil.left - p.src.left) * k,
+                    p.dst.top + (sil.top - p.src.top) * k,
+                    p.dst.left + (sil.right - p.src.left) * k,
+                    p.dst.top + (sil.bottom - p.src.top) * k,
+                )
+            };
             let (p_src, p_dst, p_radius) = if p.bare {
                 match device_silhouette(src_scene, p.src) {
                     Some((sil, cr)) => {
@@ -603,7 +643,10 @@ fn compose(rig: &Rig) -> Scene {
                         // The reshape: this device's outline travels toward
                         // the other snapshot's by `m`.
                         if let Some((other, m)) = p.morph {
-                            let o = rig.snaps.get(other).and_then(|sc| device_silhouette(sc, p.src));
+                            let o = rig
+                                .snaps
+                                .get(other)
+                                .and_then(|sc| device_silhouette(sc, p.src));
                             if let Some((osil, ocr)) = o {
                                 d = lerp_rect(d, place(osil), m);
                                 cr += (ocr * k - cr) * m;
@@ -627,8 +670,19 @@ fn compose(rig: &Rig) -> Scene {
             // Uniform everywhere but mid-reshape, where the contents ride
             // the outline's own aspect for the half-second it changes.
             let sx = dst.width() / p_src.width().max(1.0);
-            let sy = if p.morph.is_some() || p.stretch { dst.height() / p_src.height().max(1.0) } else { sx };
-            let t = Transform::new(sx, 0.0, 0.0, sy, dst.left - p_src.left * sx, dst.top - p_src.top * sy);
+            let sy = if p.morph.is_some() || p.stretch {
+                dst.height() / p_src.height().max(1.0)
+            } else {
+                sx
+            };
+            let t = Transform::new(
+                sx,
+                0.0,
+                0.0,
+                sy,
+                dst.left - p_src.left * sx,
+                dst.top - p_src.top * sy,
+            );
             if p.alpha <= 0.004 {
                 continue;
             }
@@ -645,9 +699,17 @@ fn compose(rig: &Rig) -> Scene {
             if !p.bare {
                 f.fill_rrect(dst, r, window_color().into());
             }
-            f.append(&round_clip(src_scene, t, dst, r, p.bare), Transform::IDENTITY);
+            f.append(
+                &round_clip(src_scene, t, dst, r, p.bare),
+                Transform::IDENTITY,
+            );
             if p.card {
-                f.stroke_rrect(dst, r, Stroke::new(1.0), pf::alpha(Color::WHITE, 0.10).into());
+                f.stroke_rrect(
+                    dst,
+                    r,
+                    Stroke::new(1.0),
+                    pf::alpha(Color::WHITE, 0.10).into(),
+                );
             }
             f.pop_layer();
         }
@@ -680,17 +742,24 @@ fn compose(rig: &Rig) -> Scene {
 fn device_silhouette(scene: &Scene, within: Rect) -> Option<(Rect, f32)> {
     let mut best: Option<(Rect, f32)> = None;
     for c in scene.commands() {
-        if let Command::DrawShadow { rect, radius, transform, .. } = c {
+        if let Command::DrawShadow {
+            rect,
+            radius,
+            transform,
+            ..
+        } = c
+        {
             let r = transform.apply_rect(*rect);
             let inside = r.left >= within.left - 1.0
                 && r.top >= within.top - 1.0
                 && r.right <= within.right + 1.0
                 && r.bottom <= within.bottom + 1.0;
             let big = r.width() * r.height() > within.width() * within.height() * 0.12;
-            let not_pane = r.width() < within.width() * 0.995 || r.height() < within.height() * 0.995;
+            let not_pane =
+                r.width() < within.width() * 0.995 || r.height() < within.height() * 0.995;
             if inside && big && not_pane && *radius >= 4.0 {
                 let cr = *radius * transform.a.abs().max(1e-3);
-                if best.map_or(true, |(b, _)| r.width() * r.height() > b.width() * b.height()) {
+                if best.is_none_or(|(b, _)| r.width() * r.height() > b.width() * b.height()) {
                     best = Some((r, cr));
                 }
             }
@@ -717,18 +786,36 @@ fn round_clip(src: &Scene, t: Transform, dst: Rect, r: f32, strict: bool) -> Sce
             // past the glass but is clipped to it).
             let mut b = c.bounds();
             if let Some(cb) = c.clip().bounds() {
-                b = Rect::new(b.left.max(cb.left), b.top.max(cb.top), b.right.min(cb.right), b.bottom.min(cb.bottom));
+                b = Rect::new(
+                    b.left.max(cb.left),
+                    b.top.max(cb.top),
+                    b.right.min(cb.right),
+                    b.bottom.min(cb.bottom),
+                );
             }
-            if b.left < dst.left - slack || b.top < dst.top - slack || b.right > dst.right + slack || b.bottom > dst.bottom + slack {
+            if b.left < dst.left - slack
+                || b.top < dst.top - slack
+                || b.right > dst.right + slack
+                || b.bottom > dst.bottom + slack
+            {
                 continue;
             }
         }
         // A shadow cast by something outside the plate would still blur
         // into it; the plate quotes a region, not its neighbours' shadows.
-        if let Command::DrawShadow { rect, transform, .. } = &c {
+        if let Command::DrawShadow {
+            rect, transform, ..
+        } = &c
+        {
             let r = transform.apply_rect(*rect);
-            if r.right < dst.left || r.left > dst.right || r.bottom < dst.top || r.top > dst.bottom
-                || r.left < dst.left - 2.0 || r.right > dst.right + 2.0 || r.top < dst.top - 2.0 || r.bottom > dst.bottom + 2.0
+            if r.right < dst.left
+                || r.left > dst.right
+                || r.bottom < dst.top
+                || r.top > dst.bottom
+                || r.left < dst.left - 2.0
+                || r.right > dst.right + 2.0
+                || r.top < dst.top - 2.0
+                || r.bottom > dst.bottom + 2.0
             {
                 continue;
             }
@@ -775,11 +862,18 @@ fn clear_color() -> Color {
 /// `cut.e`. The blend is raster-side on purpose — the previous frame
 /// exists as pixels (persisted per scene as PNG, so a render can resume
 /// across processes), and pixels are what a dissolve dissolves.
-fn finish_frame(rig: &Rig, renderer: &mut NativeRenderer) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+fn finish_frame(
+    rig: &Rig,
+    renderer: &mut NativeRenderer,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let (rw, rh) = raster_size();
     let s = scale_factor();
     let scene = compose(rig);
-    let scaled = if (s - 1.0).abs() < 1.0e-4 { scene } else { scene.scaled(s) };
+    let scaled = if (s - 1.0).abs() < 1.0e-4 {
+        scene
+    } else {
+        scene.scaled(s)
+    };
     let (pixels, _report) = renderer.render_to_pixels(&scaled, rw, rh, clear_color())?;
     let mut px = pixels.data().to_vec();
     if let Some(cut) = &rig.cut {
@@ -794,8 +888,10 @@ fn finish_frame(rig: &Rig, renderer: &mut NativeRenderer) -> Result<Vec<u8>, Box
                     let w_old = 256 - w_new;
                     for i in (0..px.len()).step_by(4) {
                         px[i] = ((prev[i] as u16 * w_old + px[i] as u16 * w_new) >> 8) as u8;
-                        px[i + 1] = ((prev[i + 1] as u16 * w_old + px[i + 1] as u16 * w_new) >> 8) as u8;
-                        px[i + 2] = ((prev[i + 2] as u16 * w_old + px[i + 2] as u16 * w_new) >> 8) as u8;
+                        px[i + 1] =
+                            ((prev[i + 1] as u16 * w_old + px[i + 1] as u16 * w_new) >> 8) as u8;
+                        px[i + 2] =
+                            ((prev[i + 2] as u16 * w_old + px[i + 2] as u16 * w_new) >> 8) as u8;
                     }
                 }
             }
@@ -813,7 +909,10 @@ fn finish_frame(rig: &Rig, renderer: &mut NativeRenderer) -> Result<Vec<u8>, Box
 fn check_crates() -> Result<(), Box<dyn std::error::Error>> {
     let ws = super::workspace_crates();
     let mut a: Vec<&str> = ws.iter().map(|c| c.trim_start_matches("vieww-")).collect();
-    let mut b: Vec<&str> = pf::CRATES.iter().map(|c| c.trim_start_matches("vieww-")).collect();
+    let mut b: Vec<&str> = pf::CRATES
+        .iter()
+        .map(|c| c.trim_start_matches("vieww-"))
+        .collect();
     a.sort_unstable();
     b.sort_unstable();
     if a != b {
@@ -824,11 +923,15 @@ fn check_crates() -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!("NEW_CRATES names {n}, which the workspace does not have").into());
         }
     }
-    println!("  crates · {} in the manifest, {} new — the film's list agrees", ws.len(), super::NEW_CRATES.len());
+    println!(
+        "  crates · {} in the manifest, {} new — the film's list agrees",
+        ws.len(),
+        super::NEW_CRATES.len()
+    );
     Ok(())
 }
 
-pub fn census() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     let all = scenes();
     let n_total = total_frames();
     println!(
@@ -884,21 +987,38 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
                 std::hint::black_box(&px);
                 let ms = (t_ms.elapsed().as_secs_f64() * 1000.0) as f32;
                 frame_ms_samples.push(ms);
-                sample_rows.push(format!("{},{},{:.2}", s.id, compose(&rig).commands().len(), ms));
+                sample_rows.push(format!(
+                    "{},{},{:.2}",
+                    s.id,
+                    compose(&rig).commands().len(),
+                    ms
+                ));
             }
             counted_frames += 1;
         }
-        println!("  {} {} · {} frames · census {:.1}s", s.id, s.name, n, t0.elapsed().as_secs_f32());
+        println!(
+            "  {} {} · {} frames · census {:.1}s",
+            s.id,
+            s.name,
+            n,
+            t0.elapsed().as_secs_f32()
+        );
     }
 
     frame_ms_samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let median_ms = frame_ms_samples.get(frame_ms_samples.len() / 2).copied().unwrap_or(0.0);
+    let median_ms = frame_ms_samples
+        .get(frame_ms_samples.len() / 2)
+        .copied()
+        .unwrap_or(0.0);
     probe.frames = counted_frames;
     probe.frame_ms = median_ms;
 
     let mut alive_sorted = alive_samples.clone();
     alive_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let alive_median = alive_sorted.get(alive_sorted.len() / 2).copied().unwrap_or(0.0);
+    let alive_median = alive_sorted
+        .get(alive_sorted.len() / 2)
+        .copied()
+        .unwrap_or(0.0);
     probe.alive_seconds = (alive_median / 1000.0) as f32;
     probe.bench = Probe::bench_identity(renderer.cached_fonts() as u32);
 
@@ -930,14 +1050,17 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
         "  shapes {} · glyph runs {} · layers {} (filtered {}) · strokes {}",
         probe.shapes, probe.glyph_runs, probe.layers, probe.filtered, probe.strokes
     );
-    println!("  alive median {:.3} s · bench: {}", probe.alive_seconds, probe.bench);
+    println!(
+        "  alive median {:.3} s · bench: {}",
+        probe.alive_seconds, probe.bench
+    );
     println!("  manifest → {}", manifest_path().display());
     Ok(())
 }
 
 // ── Pass 2 — the master ─────────────────────────────────────────────────────
 
-pub fn master() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
     let seg_dir = root.join("segments");
     std::fs::create_dir_all(root.join("sheets"))?;
@@ -955,9 +1078,11 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // `SF_ONLY=Z11,Z12` renders just those scenes (resume-friendly).
-    let only: Option<Vec<String>> = std::env::var("SF_ONLY")
-        .ok()
-        .map(|v| v.split(',').map(|s| s.trim().to_ascii_uppercase()).collect());
+    let only: Option<Vec<String>> = std::env::var("SF_ONLY").ok().map(|v| {
+        v.split(',')
+            .map(|s| s.trim().to_ascii_uppercase())
+            .collect()
+    });
 
     let all = scenes();
     let (rw, rh) = raster_size();
@@ -983,14 +1108,23 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         // Entering the studio act mid-run: replay the session from the top
         // (no raster) so the state at `start_abs` is the linear run's.
         if s.kind == Kind::Studio && rig.studio.is_none() {
-            println!("  entering the studio act at {} — mounting the real app", s.id);
+            println!(
+                "  entering the studio act at {} — mounting the real app",
+                s.id
+            );
             rig.ensure_studio();
             let mut warm = 0usize;
-            super::script::apply_session_up_to(&mut rig.driver, rig.studio.as_mut().unwrap(), start_abs, &mut warm);
+            super::script::apply_session_up_to(
+                &mut rig.driver,
+                rig.studio.as_mut().unwrap(),
+                start_abs,
+                &mut warm,
+            );
             rig.cursor = warm;
             let studio = rig.studio.clone().unwrap();
             rig.driver.set_root(shell_only(&studio));
-            rig.driver.draw_frame_at(Duration::from_secs_f64(start_abs as f64));
+            rig.driver
+                .draw_frame_at(Duration::from_secs_f64(start_abs as f64));
         }
 
         // The A of this scene's entrance dissolve: the previous scene's
@@ -1000,32 +1134,54 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         // seamlessly.
         if si > 0 && s.id != "Z22" {
             let prev = &all[si - 1];
-            let path = root.join("cut").join(format!("{:02}_{}.png", si, prev.name));
+            let path = root
+                .join("cut")
+                .join(format!("{:02}_{}.png", si, prev.name));
             let px = std::fs::read(&path)
                 .ok()
                 .and_then(|b| image::load_from_memory(&b).ok())
                 .map(|img| img.to_rgba8().into_raw());
             if px.is_none() {
-                println!("  {} {} · no predecessor frame — plain entrance", s.id, s.name);
+                println!(
+                    "  {} {} · no predecessor frame — plain entrance",
+                    s.id, s.name
+                );
             }
             rig.set_prev_frame(px);
         } else {
             rig.set_prev_frame(None);
         }
 
-        let scene_dir = root.join("frames").join(format!("{:02}_{}", si + 1, s.name));
+        let scene_dir = root
+            .join("frames")
+            .join(format!("{:02}_{}", si + 1, s.name));
         std::fs::remove_dir_all(&scene_dir).ok();
         std::fs::create_dir_all(&scene_dir)?;
         let scene_t0 = Instant::now();
 
         let mut ffmpeg = ProcCommand::new("ffmpeg")
             .args([
-                "-y", "-loglevel", "error",
-                "-f", "rawvideo", "-pix_fmt", "rgba",
-                "-s", &format!("{rw}x{rh}"), "-framerate", &format!("{FPS}"),
-                "-i", "-",
-                "-c:v", "libx264", "-preset", "medium", "-crf", "17",
-                "-pix_fmt", "yuv420p",
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgba",
+                "-s",
+                &format!("{rw}x{rh}"),
+                "-framerate",
+                &format!("{FPS}"),
+                "-i",
+                "-",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "medium",
+                "-crf",
+                "17",
+                "-pix_fmt",
+                "yuv420p",
                 // `aq-mode=3` (auto-variance AQ with dark bias) is the
                 // encoder-side half of the no-radial-glow decision: an
                 // 8-bit yuv420 H.264 quantises a soft luminance ramp on a
@@ -1035,7 +1191,8 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
                 // are linear, dithered, and mostly crisp-edged); this makes
                 // the encoder spend its bits where the dark ramps still
                 // are, so the floors and vignettes stay smooth too.
-                "-x264-params", "aq-mode=3",
+                "-x264-params",
+                "aq-mode=3",
             ])
             .arg(&seg)
             .stdin(Stdio::piped())
@@ -1060,7 +1217,13 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
                 last_buf = Some(buf);
             }
             if i % 300 == 0 && i > 0 {
-                println!("  {} {} · {:>3}% · {:.1} min in", s.id, s.name, i * 100 / n, t0.elapsed().as_secs_f32() / 60.0);
+                println!(
+                    "  {} {} · {:>3}% · {:.1} min in",
+                    s.id,
+                    s.name,
+                    i * 100 / n,
+                    t0.elapsed().as_secs_f32() / 60.0
+                );
             }
         }
         drop(stdin);
@@ -1071,11 +1234,19 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(buf) = last_buf {
             if si + 1 < all.len() && all[si + 1].id != "Z22" {
                 let img = image::RgbaImage::from_raw(rw, rh, buf).ok_or("invalid frame")?;
-                img.save(root.join("cut").join(format!("{:02}_{}.png", si + 1, s.name)))?;
+                img.save(
+                    root.join("cut")
+                        .join(format!("{:02}_{}.png", si + 1, s.name)),
+                )?;
             }
         }
         tile_sheet(&scene_dir, &sheet)?;
-        println!("  {} {} · done in {:.1}s", s.id, s.name, scene_t0.elapsed().as_secs_f32());
+        println!(
+            "  {} {} · done in {:.1}s",
+            s.id,
+            s.name,
+            scene_t0.elapsed().as_secs_f32()
+        );
         let _ = std::fs::remove_dir_all(&scene_dir);
         done_sheets += 1;
     }
@@ -1084,7 +1255,12 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
     let list = seg_dir.join("list.txt");
     let mut body = String::new();
     for (si, s) in all.iter().enumerate() {
-        body.push_str(&format!("file '{}/segments/{:02}_{}.mp4'\n", root.display(), si + 1, s.name));
+        body.push_str(&format!(
+            "file '{}/segments/{:02}_{}.mp4'\n",
+            root.display(),
+            si + 1,
+            s.name
+        ));
     }
     std::fs::write(&list, body)?;
     let mp4 = root.join("studio_film.mp4");
@@ -1116,7 +1292,11 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
 fn score_and_mux(mp4: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     let t0 = Instant::now();
     let wav = super::score::write(&work_root())?;
-    println!("  score → {} ({:.1}s, vieww-audio)", wav.display(), t0.elapsed().as_secs_f32());
+    println!(
+        "  score → {} ({:.1}s, vieww-audio)",
+        wav.display(),
+        t0.elapsed().as_secs_f32()
+    );
     if !mp4.exists() {
         return Ok(());
     }
@@ -1126,7 +1306,21 @@ fn score_and_mux(mp4: &std::path::Path) -> Result<(), Box<dyn std::error::Error>
         .arg(mp4)
         .arg("-i")
         .arg(&wav)
-        .args(["-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart"])
+        .args([
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+        ])
         .arg(&tmp)
         .status()?;
     if !status.success() {
@@ -1143,17 +1337,30 @@ fn score_and_mux(mp4: &std::path::Path) -> Result<(), Box<dyn std::error::Error>
 /// settled picture.
 fn sheet_picks(n: usize) -> Vec<usize> {
     let lo = ((CUT_IN * 1.5 + 0.15) * FPS) as usize;
-    let hi = n.saturating_sub(((CUT_OUT + 0.05) * FPS) as usize + 1).max(lo + 16);
-    (0..16).map(|k| lo + k * (hi - lo) / 15).map(|i| i.min(n - 1)).collect()
+    let hi = n
+        .saturating_sub(((CUT_OUT + 0.05) * FPS) as usize + 1)
+        .max(lo + 16);
+    (0..16)
+        .map(|k| lo + k * (hi - lo) / 15)
+        .map(|i| i.min(n - 1))
+        .collect()
 }
 
 /// Tile `frame_000..015.png` into the house 4×4 contact sheet.
-fn tile_sheet(dir: &std::path::Path, sheet: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+fn tile_sheet(
+    dir: &std::path::Path,
+    sheet: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     let status = ProcCommand::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-framerate", "10"])
         .arg("-i")
         .arg(dir.join("frame_%03d.png"))
-        .args(["-vf", "scale=960:-1:flags=lanczos,tile=4x4:padding=8:color=0x0B0A0E", "-frames:v", "1"])
+        .args([
+            "-vf",
+            "scale=960:-1:flags=lanczos,tile=4x4:padding=8:color=0x0B0A0E",
+            "-frames:v",
+            "1",
+        ])
         .arg(sheet)
         .status()?;
     if !status.success() {
@@ -1169,10 +1376,14 @@ fn find_scene(name: &str) -> Result<(usize, SceneDef), Box<dyn std::error::Error
     all.into_iter()
         .enumerate()
         .find(|(_, s)| {
-            s.id.eq_ignore_ascii_case(name) || s.name.to_ascii_lowercase().contains(&name.to_ascii_lowercase())
+            s.id.eq_ignore_ascii_case(name)
+                || s.name
+                    .to_ascii_lowercase()
+                    .contains(&name.to_ascii_lowercase())
         })
-        .map(|(si, s)| (si, s))
-        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("no scene matches {name:?}").into() })
+        .ok_or_else(|| -> Box<dyn std::error::Error> {
+            format!("no scene matches {name:?}").into()
+        })
 }
 
 fn preview(name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -1191,7 +1402,9 @@ fn preview(name: &str) -> Result<(), Box<dyn std::error::Error>> {
     // one — the preview then shows the true cut, not just the scene.
     if si > 0 && s.id != "Z22" {
         let prev = &scenes()[si - 1];
-        let path = work_root().join("cut").join(format!("{:02}_{}.png", si, prev.name));
+        let path = work_root()
+            .join("cut")
+            .join(format!("{:02}_{}.png", si, prev.name));
         let px = std::fs::read(&path)
             .ok()
             .and_then(|b| image::load_from_memory(&b).ok())
@@ -1201,7 +1414,12 @@ fn preview(name: &str) -> Result<(), Box<dyn std::error::Error>> {
     if s.kind == Kind::Studio {
         rig.ensure_studio();
         let mut warm = 0usize;
-        super::script::apply_session_up_to(&mut rig.driver, rig.studio.as_mut().unwrap(), start_abs, &mut warm);
+        super::script::apply_session_up_to(
+            &mut rig.driver,
+            rig.studio.as_mut().unwrap(),
+            start_abs,
+            &mut warm,
+        );
         rig.cursor = warm;
     }
 
@@ -1216,7 +1434,11 @@ fn preview(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         // frames between picks without rastering them.
         rig.build_frame(&s, si, start_abs, *i, &probe);
         let buf = finish_frame(&rig, &mut renderer)?;
-        println!("  {} frame {i:>4} ({:.0} ms)", s.id, t0.elapsed().as_secs_f64() * 1000.0);
+        println!(
+            "  {} frame {i:>4} ({:.0} ms)",
+            s.id,
+            t0.elapsed().as_secs_f64() * 1000.0
+        );
         let img = image::RgbaImage::from_raw(rw, rh, buf).ok_or("invalid frame")?;
         img.save(root.join(format!("frame_{k:03}.png")))?;
     }
@@ -1245,14 +1467,16 @@ fn measure(which: &str) -> Result<(), Box<dyn std::error::Error>> {
         let start_abs = scene_start(si);
         let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
         for k in 0..48 {
-            let i = (CUT_IN * FPS) as usize + k * (n - (CUT_IN * FPS) as usize - (CUT_OUT * FPS) as usize - 1) / 47;
+            let i = (CUT_IN * FPS) as usize
+                + k * (n - (CUT_IN * FPS) as usize - (CUT_OUT * FPS) as usize - 1) / 47;
             rig.build_frame(s, si, start_abs, i, &probe);
             let mut sc = Scene::default();
             sc.append(rig.driver.scene(), Transform::IDENTITY);
             if rig.has_over {
                 sc.append(rig.over_driver.scene(), Transform::IDENTITY);
             }
-            let (px, _) = renderer.render_to_pixels(&sc, pf::W as u32, pf::H as u32, Color::BLACK)?;
+            let (px, _) =
+                renderer.render_to_pixels(&sc, pf::W as u32, pf::H as u32, Color::BLACK)?;
             let d = px.data();
             for y in 0..pf::H as u32 {
                 for x in 0..pf::W as u32 {
@@ -1266,7 +1490,13 @@ fn measure(which: &str) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        println!("{} {}: Rect {{ left: {x0}.0, top: {y0}.0, right: {x1}.0, bottom: {y1}.0 }}  ({}×{})", s.id, s.name, x1.saturating_sub(x0), y1.saturating_sub(y0));
+        println!(
+            "{} {}: Rect {{ left: {x0}.0, top: {y0}.0, right: {x1}.0, bottom: {y1}.0 }}  ({}×{})",
+            s.id,
+            s.name,
+            x1.saturating_sub(x0),
+            y1.saturating_sub(y0)
+        );
     }
     Ok(())
 }

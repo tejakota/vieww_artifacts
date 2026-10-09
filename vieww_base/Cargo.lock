@@ -5464,6 +5464,7 @@ dependencies = [
  "vieww-element",
  "vieww-foundation",
  "vieww-gestures",
+ "vieww-gpu",
  "vieww-hal",
  "vieww-hardware",
  "vieww-paint",

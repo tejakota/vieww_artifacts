@@ -85,6 +85,7 @@ struct Tissue {
     /// u at the probe, one sample per step.
     trace: Vec<f32>,
     /// u at the second electrode, PROBE_GAP cells further out.
+    #[allow(dead_code)]
     trace2: Vec<f32>,
     /// The spiral tip, sampled every TIP_EVERY steps — the rotor's own
     /// rotation, independent of any electrode.
@@ -312,8 +313,8 @@ fn planar_speed() -> (f32, f32) {
     const N: usize = 340;
     let mut u = vec![0.0_f32; N];
     let mut v = vec![0.0_f32; N];
-    for x in 0..6 {
-        u[x] = 1.0;
+    for u_x in u.iter_mut().take(6) {
+        *u_x = 1.0;
     }
     let (m0, m1) = (80usize, 280usize);
     let (mut t0, mut t1) = (-1.0_f32, -1.0_f32);
@@ -374,8 +375,8 @@ fn paced_speed(cycle: f32) -> (f32, usize) {
     let mut armed = false;
     for step in 0..total {
         if step % stim_every == 0 {
-            for x in 0..6 {
-                u[x] = 1.0;
+            for u_x in u.iter_mut().take(6) {
+                *u_x = 1.0;
             }
             if step == last_stim {
                 armed = true;
@@ -476,6 +477,7 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
     // along the same ray, frame to frame. Cheap because the state is
     // already here: we take the last 120 steps of the replay.
     // Rising-threshold crossings of a trace, in time units.
+    #[allow(dead_code)]
     fn crossings(trace: &[f32], thr: f32) -> Vec<f32> {
         let start = trace.len() / 3;
         let mut out = Vec::new();

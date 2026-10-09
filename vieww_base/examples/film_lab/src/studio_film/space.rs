@@ -21,7 +21,7 @@ use crate::three_d::{Camera, Vec3};
 
 /// A camera and where its picture is centred in the scene.
 #[derive(Clone, Copy)]
-pub struct View {
+pub(crate) struct View {
     pub cam: Camera,
     /// The canvas the camera projects into (its aspect).
     pub canvas: Size,
@@ -31,7 +31,7 @@ pub struct View {
 
 impl View {
     /// A world point in scene coordinates, with its depth and scale.
-    pub fn project(&self, p: Vec3) -> Option<(Offset, f32, f32)> {
+    pub(crate) fn project(&self, p: Vec3) -> Option<(Offset, f32, f32)> {
         let (o, depth, k) = self.cam.project(p, self.canvas)?;
         Some((
             Offset::new(
@@ -43,7 +43,8 @@ impl View {
         ))
     }
 
-    pub fn pt(&self, p: Vec3) -> Option<Offset> {
+    #[allow(dead_code)]
+    pub(crate) fn pt(&self, p: Vec3) -> Option<Offset> {
         self.project(p).map(|(o, _, _)| o)
     }
 }
@@ -52,7 +53,8 @@ impl View {
 /// `(x, y)`. `u` and `v` are unit-length and carry the plane's orientation,
 /// so a drawing made in plane coordinates is in world units.
 #[derive(Clone, Copy)]
-pub struct Plane {
+#[allow(dead_code)]
+pub(crate) struct Plane {
     pub origin: Vec3,
     pub u: Vec3,
     pub v: Vec3,
@@ -63,7 +65,8 @@ impl Plane {
     /// turned by `yaw` about the vertical. Plane `x` runs right, plane `y`
     /// runs *away* from the viewer — so a layout drawn top-to-bottom on
     /// paper lies near-to-far on the floor.
-    pub fn floor(centre: Vec3, yaw: f32) -> Plane {
+    #[allow(dead_code)]
+    pub(crate) fn floor(centre: Vec3, yaw: f32) -> Plane {
         let (s, c) = yaw.sin_cos();
         Plane {
             origin: centre,
@@ -74,31 +77,54 @@ impl Plane {
 
     /// An upright plane (a card standing up) centred at `centre`, facing
     /// the viewer, turned by `yaw` and tipped back by `pitch`.
-    pub fn card(centre: Vec3, yaw: f32, pitch: f32) -> Plane {
+    #[allow(dead_code)]
+    pub(crate) fn card(centre: Vec3, yaw: f32, pitch: f32) -> Plane {
         let u = Vec3::new(1.0, 0.0, 0.0).rot_y(yaw);
         let v = Vec3::new(0.0, -1.0, 0.0).rot_x(pitch).rot_y(yaw);
-        Plane { origin: centre, u, v }
+        Plane {
+            origin: centre,
+            u,
+            v,
+        }
     }
 
-    pub fn at(&self, x: f32, y: f32) -> Vec3 {
+    #[allow(dead_code)]
+    pub(crate) fn at(&self, x: f32, y: f32) -> Vec3 {
         self.origin.add(self.u.scale(x)).add(self.v.scale(y))
     }
 }
 
 /// A polygon on a plane, projected and filled.
-pub fn fill(book: &mut Sketchbook, view: &View, plane: &Plane, pts: &[(f32, f32)], color: Color) {
+#[allow(dead_code)]
+pub(crate) fn fill(
+    book: &mut Sketchbook,
+    view: &View,
+    plane: &Plane,
+    pts: &[(f32, f32)],
+    color: Color,
+) {
     if let Some(path) = path_of(view, plane, pts, true) {
         book.fill(path, color);
     }
 }
 
 /// A polyline (or closed outline) on a plane, projected and stroked.
-pub fn stroke(book: &mut Sketchbook, view: &View, plane: &Plane, pts: &[(f32, f32)], closed: bool, color: Color, width: f32) {
+#[allow(dead_code)]
+pub(crate) fn stroke(
+    book: &mut Sketchbook,
+    view: &View,
+    plane: &Plane,
+    pts: &[(f32, f32)],
+    closed: bool,
+    color: Color,
+    width: f32,
+) {
     if let Some(path) = path_of(view, plane, pts, closed) {
         book.stroke(path, color, width);
     }
 }
 
+#[allow(dead_code)]
 fn path_of(view: &View, plane: &Plane, pts: &[(f32, f32)], closed: bool) -> Option<Path> {
     let mut path = Path::new();
     for (i, (x, y)) in pts.iter().enumerate() {
@@ -116,7 +142,8 @@ fn path_of(view: &View, plane: &Plane, pts: &[(f32, f32)], closed: bool) -> Opti
 }
 
 /// The outline of a rounded rectangle in plane coordinates, as points.
-pub fn rrect_pts(r: Rect, radius: f32) -> Vec<(f32, f32)> {
+#[allow(dead_code)]
+pub(crate) fn rrect_pts(r: Rect, radius: f32) -> Vec<(f32, f32)> {
     let rad = radius.min(r.width() * 0.5).min(r.height() * 0.5).max(0.0);
     let mut out = Vec::with_capacity(40);
     let corners = [
@@ -135,17 +162,42 @@ pub fn rrect_pts(r: Rect, radius: f32) -> Vec<(f32, f32)> {
 }
 
 /// A filled rounded rectangle on a plane.
-pub fn rrect(book: &mut Sketchbook, view: &View, plane: &Plane, r: Rect, radius: f32, color: Color) {
+#[allow(dead_code)]
+pub(crate) fn rrect(
+    book: &mut Sketchbook,
+    view: &View,
+    plane: &Plane,
+    r: Rect,
+    radius: f32,
+    color: Color,
+) {
     fill(book, view, plane, &rrect_pts(r, radius), color);
 }
 
 /// A rounded rectangle's outline on a plane.
-pub fn rrect_stroke(book: &mut Sketchbook, view: &View, plane: &Plane, r: Rect, radius: f32, color: Color, width: f32) {
+#[allow(dead_code)]
+pub(crate) fn rrect_stroke(
+    book: &mut Sketchbook,
+    view: &View,
+    plane: &Plane,
+    r: Rect,
+    radius: f32,
+    color: Color,
+    width: f32,
+) {
     stroke(book, view, plane, &rrect_pts(r, radius), true, color, width);
 }
 
 /// A disc on a plane (a projected circle — an ellipse on screen).
-pub fn disc(book: &mut Sketchbook, view: &View, plane: &Plane, c: (f32, f32), r: f32, color: Color) {
+#[allow(dead_code)]
+pub(crate) fn disc(
+    book: &mut Sketchbook,
+    view: &View,
+    plane: &Plane,
+    c: (f32, f32),
+    r: f32,
+    color: Color,
+) {
     let pts: Vec<(f32, f32)> = (0..24)
         .map(|k| {
             let a = k as f32 / 24.0 * std::f32::consts::TAU;
@@ -158,7 +210,15 @@ pub fn disc(book: &mut Sketchbook, view: &View, plane: &Plane, c: (f32, f32), r:
 /// A point of light in space, sized by perspective: a solid core with a
 /// crisp ring — drawn, not blurred. The soft halo this once had is gone
 /// with the film's radial glows (see `mod.rs`).
-pub fn glow_point(book: &mut Sketchbook, view: &View, p: Vec3, r: f32, color: Color, a: f32) {
+#[allow(dead_code)]
+pub(crate) fn glow_point(
+    book: &mut Sketchbook,
+    view: &View,
+    p: Vec3,
+    r: f32,
+    color: Color,
+    a: f32,
+) {
     if let Some((o, _, k)) = view.project(p) {
         let s = (k * 900.0).clamp(0.3, 3.0);
         let a = a.clamp(0.0, 1.0);

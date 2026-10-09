@@ -53,16 +53,23 @@ placement decision and the frame scheduling are the things vieww exists to
 own, and designing them around another abstraction's model is the outcome
 that choice avoids.
 
-**What the GPU path can draw today**: fills, strokes, transforms, per-shape
-colour, alpha blending, rectangular clips — and **text** — batched into one
-vertex buffer and as few draw calls as the scissor changes allow, verified
-against the CPU rasterizer pixel for pixel (`cargo test -p vieww-hal --features
-vulkan -- --ignored`). **What it cannot**: images, shadows, gradients, shaped
-clips and layers. `vieww_gpu::ScenePlan::is_complete` is the gate that says
-which, and a frame it refuses belongs on the CPU rasterizer — which is what
-every screenshot in this repository was drawn with.
+**What the GPU path can draw today**: every `Command` the scene language has —
+fills, strokes, transforms, per-shape colour, all the gradients per fragment,
+images with mips and rotation, shaped clips, offscreen layers with group
+opacity, all 28 blend modes, layer and backdrop filters, the shadow family,
+monochrome *and* colour text — batched into one vertex buffer and as few draw
+calls as the scissor changes allow, with analytic edge coverage on the rect
+family, and verified against the CPU rasterizer pixel for pixel
+(`cargo test -p vieww-hal --features vulkan -- --ignored`). What it refuses is
+a resource limit, not a feature (`vieww_gpu::ScenePlan::unsupported` says
+which), and `vieww_gpu::ScenePlan::is_complete` is the gate: a frame it
+refuses belongs on the CPU rasterizer — which is what every screenshot in
+this repository was drawn with, and remains the default. The windowed path
+is real: [`App::prefer_gpu`] plans every frame and draws the complete ones
+on the GPU, falling back per frame (`docs/GPU-RENDERER-STATUS.md` is the
+full picture, and `PENDING.md` names what is still honestly missing).
 
-Text was the entry on that second list that mattered, because every real
+Text was the entry on the old "cannot" list that mattered, because every real
 application screen has a label on it: a renderer that cannot draw text cannot
 draw a single real frame, whatever else it supports. `vieww_gpu::Planner` holds
 a glyph atlas and turns a glyph run into one textured quad per glyph, in the

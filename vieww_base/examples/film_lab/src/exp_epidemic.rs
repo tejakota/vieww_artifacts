@@ -361,8 +361,8 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
                 }
             });
             // ── the people ──
-            for i in 0..N {
-                let (c, r, a) = match state[i] {
+            for (i, st) in state.iter().enumerate() {
+                let (c, r, a) = match st {
                     State::S => (mix(MUTED, Color::rgb(70, 80, 100), 0.5), 1.7, 0.75),
                     State::I => (RED, 2.6, 0.95),
                     State::R => (VIOLET, 1.7, 0.5),
@@ -371,8 +371,8 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
             }
             // the infectives get a Plus halo — the wave, visible
             book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
-                for i in 0..N {
-                    if state[i] == State::I {
+                for (i, st) in state.iter().enumerate() {
+                    if *st == State::I {
                         g.circle(Offset::new(px(i), py(i)), 7.0, alpha(RED, 0.13));
                     }
                 }

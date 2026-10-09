@@ -90,14 +90,21 @@ impl AnimatedVisibility {
         if t <= 0.0005 {
             return SizedBox::shrink().into();
         }
-        let ts: &[Transition] = if transitions.is_empty() { &[Transition::Fade] } else { transitions };
+        let ts: &[Transition] = if transitions.is_empty() {
+            &[Transition::Fade]
+        } else {
+            transitions
+        };
         let mut node = child.clone();
         let mut transform = Transform::IDENTITY;
         for tr in ts {
             match *tr {
                 Transition::Fade => node = Opacity::new(t.clamp(0.0, 1.0)).child(node).into(),
                 Transition::Slide(o) => {
-                    transform = transform.then(Transform::translate(Offset::new(o.dx * (1.0 - t), o.dy * (1.0 - t))));
+                    transform = transform.then(Transform::translate(Offset::new(
+                        o.dx * (1.0 - t),
+                        o.dy * (1.0 - t),
+                    )));
                 }
                 Transition::Scale(from) => {
                     let s = from + (1.0 - from) * t;
@@ -138,7 +145,9 @@ mod tests {
     use vieww_foundation::Color;
 
     fn child() -> WidgetNode {
-        ColoredBox::new(Color::RED).child(SizedBox::square(10.0)).into()
+        ColoredBox::new(Color::RED)
+            .child(SizedBox::square(10.0))
+            .into()
     }
 
     #[test]
@@ -149,16 +158,28 @@ mod tests {
 
     #[test]
     fn mid_transition_composes_fade_slide_scale() {
-        let ts = [Transition::Fade, Transition::Slide(Offset::new(0.0, 40.0)), Transition::Scale(0.8)];
+        let ts = [
+            Transition::Fade,
+            Transition::Slide(Offset::new(0.0, 40.0)),
+            Transition::Scale(0.8),
+        ];
         let n = AnimatedVisibility::at(&ts, &child(), 0.5);
         assert_eq!(n.widget_type_id(), TypeId::of::<Transformed>());
-        let full = AnimatedVisibility::at(&[Transition::Slide(Offset::new(0.0, 40.0))], &child(), 1.0);
-        assert_eq!(full.widget_type_id(), TypeId::of::<ColoredBox>(), "at rest there is no wrapper");
+        let full =
+            AnimatedVisibility::at(&[Transition::Slide(Offset::new(0.0, 40.0))], &child(), 1.0);
+        assert_eq!(
+            full.widget_type_id(),
+            TypeId::of::<ColoredBox>(),
+            "at rest there is no wrapper"
+        );
     }
 
     #[test]
     fn it_builds_an_animated() {
-        let a = AnimatedVisibility::new(true).with(Transition::Fade).child(child()).into_animated();
+        let a = AnimatedVisibility::new(true)
+            .with(Transition::Fade)
+            .child(child())
+            .into_animated();
         assert_eq!(a.target(), 1.0);
     }
 }

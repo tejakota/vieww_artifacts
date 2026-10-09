@@ -566,6 +566,82 @@ fn an_application_can_close_its_own_window_and_still_gets_its_report() {
     pass("self-close");
 }
 
+/// A GPU-planned frame presents to a real window.
+///
+/// The worklist's §2.6 ask (closed 2026-10-09; see `TRACKER.md`), made
+/// checkable: the GPU rasterizer could execute
+/// a whole frame and the swapchain could present pixels, and nothing
+/// connected them — the swapchain was presenting the CPU rasterizer's buffer
+/// whatever the GPU could do. [`App::prefer_gpu`] routes frames through
+/// `NativeRenderer::present_planned`, and this scenario asserts, from the
+/// frame log of a *running window on a real compositor*, that frames were
+/// drawn by the GPU: `gpu_frames` counts them, and it is zero for every
+/// application that never asked.
+///
+/// The assertion is `>= 1` and not "all of them", deliberately: a frame the
+/// planner cannot express falls back to the CPU per frame, and how many did
+/// is a property of the scene, not of the plumbing. The claim being tested
+/// is that the join exists and works, which one drawn frame proves and zero
+/// refutes.
+fn a_gpu_planned_frame_presents_to_a_real_window() {
+    vieww_hardware::skip_without!(display, gpu);
+    arm_deadline("a_gpu_planned_frame_presents_to_a_real_window");
+
+    let app = App::new().title("vieww wait-loop: gpu frame").prefer_gpu();
+    let windows = app.windows();
+    let waker = app.waker();
+    let elapsed = Arc::new(AtomicU32::new(0));
+
+    // As in the self-close scenario: close from off the UI thread, after the
+    // loop has settled, so the run is finite and returns its report.
+    std::thread::spawn({
+        let elapsed = Arc::clone(&elapsed);
+        move || {
+            std::thread::sleep(IDLE);
+            elapsed.store(1, Ordering::SeqCst);
+            trace("waking");
+            waker.wake();
+        }
+    });
+
+    let asked = Rc::new(Cell::new(false));
+    let report = app
+        .on_frame({
+            let elapsed = Arc::clone(&elapsed);
+            let asked = Rc::clone(&asked);
+            move |_log| {
+                trace("frame");
+                if elapsed.load(Ordering::SeqCst) == 1 && !asked.get() {
+                    asked.set(true);
+                    trace("closing");
+                    let _ = Windows::close(&*windows, WindowKey::PRIMARY);
+                }
+            }
+        })
+        .run(|driver| driver.set_root(Still))
+        .expect("the window opened, drew, and closed; that is not a failure");
+
+    assert!(
+        asked.get(),
+        "the close was never asked for, so nothing was tested"
+    );
+
+    assert!(
+        report.frames >= 1,
+        "a session that visibly drew reports {} frames",
+        report.frames
+    );
+    assert!(
+        report.gpu_frames >= 1,
+        "prefer_gpu was set and the GPU drew {} of {} frames — the join \
+         between SceneRenderer and the swapchain did not run, and this \
+         scenario is the only thing that checks it on a real window",
+        report.gpu_frames,
+        report.frames
+    );
+    pass("gpu frame");
+}
+
 // A former scenario here, `two_windows_share_one_gpu_device`, counted
 // `vieww_paint::gpu::GpuContext`'s shared-device bookkeeping across two
 // windows. That type is gone with vello — the new Vulkan backend
@@ -594,6 +670,7 @@ const SCENARIOS: &[(&str, fn())] = &[
         "self_close",
         an_application_can_close_its_own_window_and_still_gets_its_report,
     ),
+    ("gpu_frame", a_gpu_planned_frame_presents_to_a_real_window),
 ];
 
 /// Parent: run each scenario in a child. Child: run the one it was named.

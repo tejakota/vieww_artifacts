@@ -156,16 +156,36 @@ fn mat_rotation(m: &Mat4) -> Quat {
     let trace = c0.x + c1.y + c2.z;
     if trace > 0.0 {
         let s = (trace + 1.0).sqrt() * 2.0;
-        Quat::new((c1.z - c2.y) / s, (c2.x - c0.z) / s, (c0.y - c1.x) / s, 0.25 * s)
+        Quat::new(
+            (c1.z - c2.y) / s,
+            (c2.x - c0.z) / s,
+            (c0.y - c1.x) / s,
+            0.25 * s,
+        )
     } else if c0.x > c1.y && c0.x > c2.z {
         let s = (1.0 + c0.x - c1.y - c2.z).sqrt() * 2.0;
-        Quat::new(0.25 * s, (c1.x + c0.y) / s, (c2.x + c0.z) / s, (c1.z - c2.y) / s)
+        Quat::new(
+            0.25 * s,
+            (c1.x + c0.y) / s,
+            (c2.x + c0.z) / s,
+            (c1.z - c2.y) / s,
+        )
     } else if c1.y > c2.z {
         let s = (1.0 + c1.y - c0.x - c2.z).sqrt() * 2.0;
-        Quat::new((c1.x + c0.y) / s, 0.25 * s, (c2.y + c1.z) / s, (c2.x - c0.z) / s)
+        Quat::new(
+            (c1.x + c0.y) / s,
+            0.25 * s,
+            (c2.y + c1.z) / s,
+            (c2.x - c0.z) / s,
+        )
     } else {
         let s = (1.0 + c2.z - c0.x - c1.y).sqrt() * 2.0;
-        Quat::new((c2.x + c0.z) / s, (c2.y + c1.z) / s, 0.25 * s, (c0.y - c1.x) / s)
+        Quat::new(
+            (c2.x + c0.z) / s,
+            (c2.y + c1.z) / s,
+            0.25 * s,
+            (c0.y - c1.x) / s,
+        )
     }
     .normalize()
 }
@@ -193,7 +213,11 @@ impl Dq {
 
 /// The joint matrices for one frame: `meshWorld⁻¹ · jointWorld · inverseBind`.
 #[must_use]
-pub fn joint_matrices(mesh_world: &Mat4, joint_worlds: &[Mat4], inverse_bind: &[Mat4]) -> Vec<Mat4> {
+pub fn joint_matrices(
+    mesh_world: &Mat4,
+    joint_worlds: &[Mat4],
+    inverse_bind: &[Mat4],
+) -> Vec<Mat4> {
     let inv = mesh_world.inverse().unwrap_or(Mat4::IDENTITY);
     joint_worlds
         .iter()
@@ -227,7 +251,10 @@ pub fn deform(m: &SkinnedMesh, joint_mats: &[Mat4], morph_weights: &[f32]) -> Me
                     if ws[k] == 0.0 {
                         continue;
                     }
-                    let jm = joint_mats.get(js[k] as usize).copied().unwrap_or(Mat4::IDENTITY);
+                    let jm = joint_mats
+                        .get(js[k] as usize)
+                        .copied()
+                        .unwrap_or(Mat4::IDENTITY);
                     acc += jm.transform_point(p) * ws[k];
                     if has_n {
                         nacc += jm.transform_vector(n) * ws[k];
@@ -244,7 +271,9 @@ pub fn deform(m: &SkinnedMesh, joint_mats: &[Mat4], morph_weights: &[f32]) -> Me
             let dqs: Vec<Dq> = joint_mats.iter().map(Dq::from_mat).collect();
             for i in 0..out.positions.len() {
                 let (js, ws) = (m.joints[i], m.weights[i]);
-                let pivot = dqs.get(js[0] as usize).map_or([0.0, 0.0, 0.0, 1.0], |d| d.r);
+                let pivot = dqs
+                    .get(js[0] as usize)
+                    .map_or([0.0, 0.0, 0.0, 1.0], |d| d.r);
                 let (mut r, mut d) = ([0.0f32; 4], [0.0f32; 4]);
                 for k in 0..4 {
                     if ws[k] == 0.0 {
@@ -308,7 +337,9 @@ mod tests {
     fn mid_radius(mesh: &Mesh, rings: usize, seg: usize) -> f32 {
         let r = rings / 2;
         let ring = &mesh.positions[r * seg..(r + 1) * seg];
-        let c = ring.iter().fold([0.0f32; 3], |a, p| [a[0] + p[0], a[1] + p[1], a[2] + p[2]]);
+        let c = ring
+            .iter()
+            .fold([0.0f32; 3], |a, p| [a[0] + p[0], a[1] + p[1], a[2] + p[2]]);
         #[allow(clippy::cast_precision_loss)]
         let c = c.map(|v| v / seg as f32);
         #[allow(clippy::cast_precision_loss)]
@@ -364,8 +395,10 @@ mod tests {
 
     #[test]
     fn morph_targets_add_weighted_deltas() {
-        let mut base = Mesh::default();
-        base.positions = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        let base = Mesh {
+            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            ..Mesh::default()
+        };
         let up = MorphTarget {
             positions: vec![[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
             normals: Vec::new(),

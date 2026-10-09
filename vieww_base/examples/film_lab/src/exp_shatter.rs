@@ -609,9 +609,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
         (0.0, 0.0)
     };
 
-    let P_X = 42.0;
-    let P_Y = 42.0;
-    let P_W = 330.0;
+    let p_x = 42.0;
+    let p_y = 42.0;
+    let p_w = 330.0;
 
     let lines = [
         "X-08 · SHATTER · THE WINDOW PATTERN (U-11)".to_string(),
@@ -639,9 +639,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
     let mut stack = Stack::new().push(
         Positioned::new()
-            .left(P_X)
-            .top(P_Y)
-            .width(P_W)
+            .left(p_x)
+            .top(p_y)
+            .width(p_w)
             .height(18.0)
             .child(
                 Text::new(lines[0].clone()).style(
@@ -655,9 +655,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
     for (i, line) in lines.iter().enumerate().skip(1) {
         stack = stack.push(
             Positioned::new()
-                .left(P_X)
-                .top(P_Y + 20.0 + i as f32 * 16.0)
-                .width(P_W)
+                .left(p_x)
+                .top(p_y + 20.0 + i as f32 * 16.0)
+                .width(p_w)
                 .height(15.0)
                 .child(
                     Text::new(line.clone())
@@ -668,22 +668,22 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
     // The receipt's instrument: a speed histogram of the shard field, live.
     let hist = Painting::sized(
-        Size::new(P_W, 54.0),
+        Size::new(p_w, 54.0),
         PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
             book.rrect(
-                Rect::new(0.0, 0.0, P_W, 54.0),
+                Rect::new(0.0, 0.0, p_w, 54.0),
                 10.0,
                 alpha(Color::rgb(16, 16, 21), 0.88),
             );
             book.stroke_rrect(
-                Rect::new(0.0, 0.0, P_W, 54.0),
+                Rect::new(0.0, 0.0, p_w, 54.0),
                 10.0,
                 alpha(Color::WHITE, 0.08),
                 1.0,
             );
             // Bars: speed distribution, sorted ranks, the blurred decile violet.
             let n = field.shards.len().max(1);
-            let bw = (P_W - 24.0) / n as f32;
+            let bw = (p_w - 24.0) / n as f32;
             for (i, s) in field.shards.iter().enumerate() {
                 let v = if struck {
                     speed_now(s, t).min(60.0)
@@ -708,7 +708,7 @@ fn receipt_panel(t: f32) -> WidgetNode {
             }
             book.line(
                 Offset::new(12.0, 46.0),
-                Offset::new(P_W - 12.0, 46.0),
+                Offset::new(p_w - 12.0, 46.0),
                 alpha(Color::WHITE, 0.14),
                 1.0,
             );
@@ -716,9 +716,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
     );
     stack = stack.push(
         Positioned::new()
-            .left(P_X)
-            .top(P_Y + 104.0)
-            .width(P_W)
+            .left(p_x)
+            .top(p_y + 104.0)
+            .width(p_w)
             .height(54.0)
             .child(hist),
     );

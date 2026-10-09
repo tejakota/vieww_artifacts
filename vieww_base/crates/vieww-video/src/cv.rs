@@ -13,6 +13,8 @@
 //! * [`blobs`] — connected components (two-pass union–find) with area,
 //!   centroid and bounding box.
 
+use std::collections::BTreeMap;
+
 use vieww_foundation::{Image, Offset};
 
 /// A single-channel float image.
@@ -42,7 +44,10 @@ impl Plane {
             .as_chunks::<4>()
             .0
             .iter()
-            .map(|p| (0.2126 * f32::from(p[0]) + 0.7152 * f32::from(p[1]) + 0.0722 * f32::from(p[2])) / 255.0)
+            .map(|p| {
+                (0.2126 * f32::from(p[0]) + 0.7152 * f32::from(p[1]) + 0.0722 * f32::from(p[2]))
+                    / 255.0
+            })
             .collect();
         Self { w, h, data }
     }
@@ -72,7 +77,10 @@ impl Plane {
     #[must_use]
     pub fn sample(&self, x: f32, y: f32) -> f32 {
         #[allow(clippy::cast_precision_loss)]
-        let (x, y) = (x.clamp(0.0, (self.w - 1) as f32), y.clamp(0.0, (self.h - 1) as f32));
+        let (x, y) = (
+            x.clamp(0.0, (self.w - 1) as f32),
+            y.clamp(0.0, (self.h - 1) as f32),
+        );
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let (x0, y0) = (x as usize, y as usize);
         #[allow(clippy::cast_precision_loss)]
@@ -96,9 +104,11 @@ impl Plane {
                     self.data[yy as usize * self.w + xx as usize]
                 };
                 gx.data[y * self.w + x] =
-                    (p(1, -1) + 2.0 * p(1, 0) + p(1, 1) - p(-1, -1) - 2.0 * p(-1, 0) - p(-1, 1)) / 8.0;
+                    (p(1, -1) + 2.0 * p(1, 0) + p(1, 1) - p(-1, -1) - 2.0 * p(-1, 0) - p(-1, 1))
+                        / 8.0;
                 gy.data[y * self.w + x] =
-                    (p(-1, 1) + 2.0 * p(0, 1) + p(1, 1) - p(-1, -1) - 2.0 * p(0, -1) - p(1, -1)) / 8.0;
+                    (p(-1, 1) + 2.0 * p(0, 1) + p(1, 1) - p(-1, -1) - 2.0 * p(0, -1) - p(1, -1))
+                        / 8.0;
             }
         }
         (gx, gy)
@@ -119,7 +129,9 @@ impl Plane {
         let mut o = Self::new(self.w, self.h);
         for y in 0..self.h {
             for x in 0..self.w {
-                o.data[y * self.w + x] = (0..5).map(|k| K[k] * t.at(x, (y + k).saturating_sub(2))).sum();
+                o.data[y * self.w + x] = (0..5)
+                    .map(|k| K[k] * t.at(x, (y + k).saturating_sub(2)))
+                    .sum();
             }
         }
         o
@@ -222,7 +234,13 @@ pub struct FlowPoint {
 
 /// Pyramidal Lucas–Kanade: track `points` from `prev` to `next`.
 #[must_use]
-pub fn lucas_kanade(prev: &Plane, next: &Plane, points: &[Offset], window: usize, levels: usize) -> Vec<FlowPoint> {
+pub fn lucas_kanade(
+    prev: &Plane,
+    next: &Plane,
+    points: &[Offset],
+    window: usize,
+    levels: usize,
+) -> Vec<FlowPoint> {
     let (pa, pb) = (pyramid(prev, levels), pyramid(next, levels));
     let grads: Vec<(Plane, Plane)> = pa.iter().map(Plane::gradients).collect();
     let r = (window / 2).max(1) as isize;
@@ -233,7 +251,11 @@ pub fn lucas_kanade(prev: &Plane, next: &Plane, points: &[Offset], window: usize
             let mut ok = true;
             let mut err = 0.0;
             for lvl in (0..pa.len()).rev() {
-                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+                #[allow(
+                    clippy::cast_precision_loss,
+                    clippy::cast_possible_truncation,
+                    clippy::cast_possible_wrap
+                )]
                 let s = (1u32 << lvl) as f32;
                 let (ux, uy) = (pt.dx / s, pt.dy / s);
                 let (a, b) = (&pa[lvl], &pb[lvl]);
@@ -282,7 +304,8 @@ pub fn lucas_kanade(prev: &Plane, next: &Plane, points: &[Offset], window: usize
             }
             let to = Offset::new(pt.dx + g.0, pt.dy + g.1);
             #[allow(clippy::cast_precision_loss)]
-            let inside = to.dx >= 0.0 && to.dy >= 0.0 && to.dx < next.w as f32 && to.dy < next.h as f32;
+            let inside =
+                to.dx >= 0.0 && to.dy >= 0.0 && to.dx < next.w as f32 && to.dy < next.h as f32;
             #[allow(clippy::cast_precision_loss)]
             let n = ((2 * r + 1) * (2 * r + 1)) as f32;
             FlowPoint {
@@ -329,7 +352,12 @@ impl FlowField {
                 _ => (1.0, 0.0, 1.0 - f),
             };
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            px.extend([(r * mag * 255.0) as u8, (g * mag * 255.0) as u8, (b * mag * 255.0) as u8, 255]);
+            px.extend([
+                (r * mag * 255.0) as u8,
+                (g * mag * 255.0) as u8,
+                (b * mag * 255.0) as u8,
+                255,
+            ]);
         }
         #[allow(clippy::cast_possible_truncation)]
         Image::from_rgba8(px, self.w as u32, self.h as u32)
@@ -338,7 +366,13 @@ impl FlowField {
 
 /// Dense Horn–Schunck flow, coarse-to-fine over `levels`.
 #[must_use]
-pub fn horn_schunck(prev: &Plane, next: &Plane, alpha: f32, iterations: usize, levels: usize) -> FlowField {
+pub fn horn_schunck(
+    prev: &Plane,
+    next: &Plane,
+    alpha: f32,
+    iterations: usize,
+    levels: usize,
+) -> FlowField {
     let (pa, pb) = (pyramid(prev, levels), pyramid(next, levels));
     let top = pa.len() - 1;
     let mut u = vec![0.0f32; pa[top].w * pa[top].h];
@@ -366,15 +400,31 @@ pub fn horn_schunck(prev: &Plane, next: &Plane, alpha: f32, iterations: usize, l
             for x in 0..w {
                 #[allow(clippy::cast_precision_loss)]
                 {
-                    warped.data[y * w + x] = b.sample(x as f32 + u[y * w + x], y as f32 + v[y * w + x]);
+                    warped.data[y * w + x] =
+                        b.sample(x as f32 + u[y * w + x], y as f32 + v[y * w + x]);
                 }
             }
         }
         let (ax, ay) = a.gradients();
         let (wx, wy) = warped.gradients();
-        let ix: Vec<f32> = ax.data.iter().zip(&wx.data).map(|(p, q)| (p + q) * 0.5).collect();
-        let iy: Vec<f32> = ay.data.iter().zip(&wy.data).map(|(p, q)| (p + q) * 0.5).collect();
-        let it: Vec<f32> = warped.data.iter().zip(&a.data).map(|(p, q)| p - q).collect();
+        let ix: Vec<f32> = ax
+            .data
+            .iter()
+            .zip(&wx.data)
+            .map(|(p, q)| (p + q) * 0.5)
+            .collect();
+        let iy: Vec<f32> = ay
+            .data
+            .iter()
+            .zip(&wy.data)
+            .map(|(p, q)| (p + q) * 0.5)
+            .collect();
+        let it: Vec<f32> = warped
+            .data
+            .iter()
+            .zip(&a.data)
+            .map(|(p, q)| p - q)
+            .collect();
         let (mut du, mut dv) = (vec![0.0f32; w * h], vec![0.0f32; w * h]);
         let a2 = alpha * alpha;
         for _ in 0..iterations {
@@ -393,7 +443,8 @@ pub fn horn_schunck(prev: &Plane, next: &Plane, alpha: f32, iterations: usize, l
                     };
                     let i = y * w + x;
                     let (ua, va) = (avg(&pu), avg(&pv));
-                    let k = (ix[i] * ua + iy[i] * va + it[i]) / (a2 + ix[i] * ix[i] + iy[i] * iy[i]);
+                    let k =
+                        (ix[i] * ua + iy[i] * va + it[i]) / (a2 + ix[i] * ix[i] + iy[i] * iy[i]);
                     du[i] = ua - ix[i] * k;
                     dv[i] = va - iy[i] * k;
                 }
@@ -420,6 +471,18 @@ pub struct Blob {
     pub centroid: Offset,
     /// `(x0, y0, x1, y1)` inclusive.
     pub bounds: (usize, usize, usize, usize),
+}
+
+/// Per-label accumulation while a `blobs` pass walks the plane.
+#[derive(Debug, Clone, Copy)]
+struct BlobStats {
+    area: usize,
+    sum_x: f64,
+    sum_y: f64,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
 }
 
 /// 8-connected components of `mask > threshold`, largest first, with each
@@ -472,8 +535,7 @@ pub fn blobs(mask: &Plane, threshold: f32) -> (Vec<Blob>, Vec<u32>) {
             }
         }
     }
-    let mut stats: std::collections::BTreeMap<u32, (usize, f64, f64, usize, usize, usize, usize)> =
-        std::collections::BTreeMap::new();
+    let mut stats: BTreeMap<u32, BlobStats> = BTreeMap::new();
     for y in 0..h {
         for x in 0..w {
             let l = label[y * w + x];
@@ -482,30 +544,41 @@ pub fn blobs(mask: &Plane, threshold: f32) -> (Vec<Blob>, Vec<u32>) {
             }
             let r = find(&mut parent, l);
             label[y * w + x] = r;
-            let e = stats.entry(r).or_insert((0, 0.0, 0.0, x, y, x, y));
-            e.0 += 1;
+            let e = stats.entry(r).or_insert(BlobStats {
+                area: 0,
+                sum_x: 0.0,
+                sum_y: 0.0,
+                x0: x,
+                y0: y,
+                x1: x,
+                y1: y,
+            });
+            e.area += 1;
             #[allow(clippy::cast_precision_loss)]
             {
-                e.1 += x as f64;
-                e.2 += y as f64;
+                e.sum_x += x as f64;
+                e.sum_y += y as f64;
             }
-            e.3 = e.3.min(x);
-            e.4 = e.4.min(y);
-            e.5 = e.5.max(x);
-            e.6 = e.6.max(y);
+            e.x0 = e.x0.min(x);
+            e.y0 = e.y0.min(y);
+            e.x1 = e.x1.max(x);
+            e.y1 = e.y1.max(y);
         }
     }
     let mut out: Vec<Blob> = stats
         .into_iter()
-        .map(|(l, (a, sx, sy, x0, y0, x1, y1))| Blob {
+        .map(|(l, s)| Blob {
             label: l,
-            area: a,
+            area: s.area,
             #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-            centroid: Offset::new((sx / a as f64) as f32, (sy / a as f64) as f32),
-            bounds: (x0, y0, x1, y1),
+            centroid: Offset::new(
+                (s.sum_x / s.area as f64) as f32,
+                (s.sum_y / s.area as f64) as f32,
+            ),
+            bounds: (s.x0, s.y0, s.x1, s.y1),
         })
         .collect();
-    out.sort_by(|a, b| b.area.cmp(&a.area));
+    out.sort_by_key(|b| std::cmp::Reverse(b.area));
     (out, label)
 }
 
@@ -535,7 +608,12 @@ mod tests {
         let pts = good_features(&a, 30, 0.05, 6.0);
         assert!(pts.len() > 10);
         let res = lucas_kanade(&a, &b, &pts, 9, 3);
-        let good: Vec<_> = res.iter().filter(|r| r.ok && r.from.dx > 12.0 && r.from.dx < 84.0 && r.from.dy > 12.0 && r.from.dy < 68.0).collect();
+        let good: Vec<_> = res
+            .iter()
+            .filter(|r| {
+                r.ok && r.from.dx > 12.0 && r.from.dx < 84.0 && r.from.dy > 12.0 && r.from.dy < 68.0
+            })
+            .collect();
         assert!(good.len() > 5);
         for r in good {
             assert!((r.to.dx - r.from.dx - 3.4).abs() < 0.15, "{r:?}");
@@ -557,7 +635,10 @@ mod tests {
             }
         }
         let (mu, mv) = (su / n, sv / n);
-        assert!((mu - 2.0).abs() < 0.4 && (mv - 1.0).abs() < 0.4, "({mu}, {mv})");
+        assert!(
+            (mu - 2.0).abs() < 0.4 && (mv - 1.0).abs() < 0.4,
+            "({mu}, {mv})"
+        );
         assert_eq!(f.to_image(4.0).width(), 64);
     }
 
@@ -595,7 +676,7 @@ mod tests {
         assert_eq!(b[1].area, 9);
         assert!((b[1].centroid.dx - 2.0).abs() < 1e-4);
         assert_eq!(b[1].bounds, (1, 1, 3, 3));
-        assert_ne!(labels[1 * 20 + 1], labels[2 * 20 + 10]);
+        assert_ne!(labels[20 + 1], labels[2 * 20 + 10]);
     }
 
     #[test]

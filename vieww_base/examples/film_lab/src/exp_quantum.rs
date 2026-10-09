@@ -268,6 +268,7 @@ const VIOLET_DEEP_LINE: Color = Color::rgb(109, 40, 217);
 
 /// Draw one run: source glow, wavefronts (or the detector's local flash),
 /// barrier, flying particles, the screen with its accumulating histogram.
+#[allow(clippy::too_many_arguments)]
 fn draw_run(
     book: &mut Sketchbook,
     t: f32,
@@ -526,7 +527,7 @@ pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let mut bright = col.clone();
     for _ in 0..2 {
         let src = bright.clone();
-        for i in 0..n {
+        for (i, b) in bright.iter_mut().enumerate() {
             let mut acc = 0.0;
             let mut cnt = 0;
             for k in -4i32..=4 {
@@ -534,7 +535,7 @@ pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
                 acc += src[j];
                 cnt += 1;
             }
-            bright[i] = acc / cnt as f32;
+            *b = acc / cnt as f32;
         }
     }
     // Peaks: local maxima over a ±16-px neighbourhood, above 40% of max,

@@ -26,7 +26,11 @@ fn circum(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> ((f64, f64), f64) {
     if d.abs() < 1e-18 {
         return ((f64::INFINITY, f64::INFINITY), f64::INFINITY);
     }
-    let (a2, b2, c2) = (a.0 * a.0 + a.1 * a.1, b.0 * b.0 + b.1 * b.1, c.0 * c.0 + c.1 * c.1);
+    let (a2, b2, c2) = (
+        a.0 * a.0 + a.1 * a.1,
+        b.0 * b.0 + b.1 * b.1,
+        c.0 * c.0 + c.1 * c.1,
+    );
     let ux = (a2 * (b.1 - c.1) + b2 * (c.1 - a.1) + c2 * (a.1 - b.1)) / d;
     let uy = (a2 * (c.0 - b.0) + b2 * (a.0 - c.0) + c2 * (b.0 - a.0)) / d;
     ((ux, uy), (a.0 - ux).powi(2) + (a.1 - uy).powi(2))
@@ -47,7 +51,10 @@ impl Delaunay {
                 triangles: Vec::new(),
             };
         }
-        let (mut lo, mut hi) = ((f64::INFINITY, f64::INFINITY), (f64::NEG_INFINITY, f64::NEG_INFINITY));
+        let (mut lo, mut hi) = (
+            (f64::INFINITY, f64::INFINITY),
+            (f64::NEG_INFINITY, f64::NEG_INFINITY),
+        );
         for p in points {
             lo = (lo.0.min(p.0), lo.1.min(p.1));
             hi = (hi.0.max(p.0), hi.1.max(p.1));
@@ -69,7 +76,10 @@ impl Delaunay {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let cell = |p: (f64, f64)| -> (i64, i64) {
             let g = 16.0;
-            (((p.0 - lo.0) / span * g) as i64, ((p.1 - lo.1) / span * g) as i64)
+            (
+                ((p.0 - lo.0) / span * g) as i64,
+                ((p.1 - lo.1) / span * g) as i64,
+            )
         };
         order.sort_by_key(|&i| {
             let (cx, cy) = cell(points[i]);
@@ -272,7 +282,11 @@ mod tests {
         let pts = cloud(150);
         let d = Delaunay::new(&pts);
         // Euler: a triangulation of n points with h on the hull has 2n − 2 − h triangles.
-        assert!(d.triangles.len() > 250 && d.triangles.len() < 300, "{}", d.triangles.len());
+        assert!(
+            d.triangles.len() > 250 && d.triangles.len() < 300,
+            "{}",
+            d.triangles.len()
+        );
         for t in &d.triangles {
             let (c, r) = circum(pts[t[0]], pts[t[1]], pts[t[2]]);
             for (i, p) in pts.iter().enumerate() {
@@ -304,11 +318,16 @@ mod tests {
 
     #[test]
     fn small_and_degenerate_inputs() {
-        assert!(Delaunay::new(&[(0.0, 0.0), (1.0, 1.0)]).triangles.is_empty());
+        assert!(Delaunay::new(&[(0.0, 0.0), (1.0, 1.0)])
+            .triangles
+            .is_empty());
         let sq = Delaunay::new(&[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]);
         assert_eq!(sq.triangles.len(), 2);
         assert_eq!(sq.edges().len(), 5);
         let col = Delaunay::new(&[(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)]);
-        assert!(col.triangles.is_empty(), "collinear points have no triangles");
+        assert!(
+            col.triangles.is_empty(),
+            "collinear points have no triangles"
+        );
     }
 }

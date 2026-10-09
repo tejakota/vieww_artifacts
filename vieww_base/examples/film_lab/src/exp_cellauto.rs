@@ -50,8 +50,8 @@ const CA_GENS: usize = 244;
 /// Rule 30 and Rule 110 lookup tables.
 fn rule_table(rule: u8) -> [bool; 8] {
     let mut t = [false; 8];
-    for i in 0..8 {
-        t[i] = (rule >> i) & 1 == 1;
+    for (i, v) in t.iter_mut().enumerate() {
+        *v = (rule >> i) & 1 == 1;
     }
     t
 }
@@ -93,8 +93,8 @@ fn seed_110() -> Vec<bool> {
     let mut s = vec![false; CA_W];
     // A periodic lattice on the left, emptiness on the right — the classic
     // collision setup.
-    for x in 0..CA_W {
-        s[x] = x % 4 < 3 && x < CA_W * 3 / 5;
+    for (x, cell) in s.iter_mut().enumerate() {
+        *cell = x % 4 < 3 && x < CA_W * 3 / 5;
     }
     s
 }
@@ -205,7 +205,7 @@ fn life_seed() -> Vec<Vec<bool>> {
 }
 
 /// Advance Life one generation (torus, B3/S23).
-fn life_step(g: &Vec<Vec<bool>>) -> Vec<Vec<bool>> {
+fn life_step(g: &[Vec<bool>]) -> Vec<Vec<bool>> {
     let mut n = vec![vec![false; LIFE_W]; LIFE_H];
     for y in 0..LIFE_H {
         for x in 0..LIFE_W {
@@ -220,11 +220,7 @@ fn life_step(g: &Vec<Vec<bool>>) -> Vec<Vec<bool>> {
                     count += g[yy][xx] as u8;
                 }
             }
-            n[y][x] = match (g[y][x], count) {
-                (true, 2) | (true, 3) => true,
-                (false, 3) => true,
-                _ => false,
-            };
+            n[y][x] = matches!((g[y][x], count), (true, 2) | (true, 3) | (false, 3));
         }
     }
     n
@@ -361,9 +357,9 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
             let (px, py) = P3;
             let lw = PANE_W / LIFE_W as f32;
             let lh = (PANE_H - 96.0) / LIFE_H as f32;
-            for y in 0..LIFE_H {
-                for x in 0..LIFE_W {
-                    if !life[y][x] {
+            for (y, row) in life.iter().enumerate() {
+                for (x, &alive) in row.iter().enumerate() {
+                    if !alive {
                         continue;
                     }
                     book.rect(

@@ -69,6 +69,9 @@ impl Value {
 /// A row: `(field name, value)` pairs.
 pub type Row<'a> = Vec<(&'a str, Value)>;
 
+/// The compiled colour-lookup closure a `compile` pass builds per encoding.
+type ColorOf = Box<dyn Fn(&BTreeMap<String, Value>) -> Color>;
+
 /// The measurement type of a field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -99,19 +102,35 @@ pub struct Field {
 impl Field {
     #[must_use]
     pub fn quantitative(name: &str) -> Self {
-        Self { name: name.to_owned(), kind: Kind::Quantitative, aggregate: None }
+        Self {
+            name: name.to_owned(),
+            kind: Kind::Quantitative,
+            aggregate: None,
+        }
     }
     #[must_use]
     pub fn nominal(name: &str) -> Self {
-        Self { name: name.to_owned(), kind: Kind::Nominal, aggregate: None }
+        Self {
+            name: name.to_owned(),
+            kind: Kind::Nominal,
+            aggregate: None,
+        }
     }
     #[must_use]
     pub fn ordinal(name: &str) -> Self {
-        Self { name: name.to_owned(), kind: Kind::Ordinal, aggregate: None }
+        Self {
+            name: name.to_owned(),
+            kind: Kind::Ordinal,
+            aggregate: None,
+        }
     }
     #[must_use]
     pub fn temporal(name: &str) -> Self {
-        Self { name: name.to_owned(), kind: Kind::Temporal, aggregate: None }
+        Self {
+            name: name.to_owned(),
+            kind: Kind::Temporal,
+            aggregate: None,
+        }
     }
     #[must_use]
     pub fn aggregate(mut self, a: Aggregate) -> Self {
@@ -150,9 +169,20 @@ pub struct Spec {
 /// One drawable.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MarkGeom {
-    Circle { center: Offset, radius: f32, color: Color },
-    Rect { rect: Rect, color: Color },
-    Path { path: Path, color: Color, filled: bool },
+    Circle {
+        center: Offset,
+        radius: f32,
+        color: Color,
+    },
+    Rect {
+        rect: Rect,
+        color: Color,
+    },
+    Path {
+        path: Path,
+        color: Color,
+        filled: bool,
+    },
 }
 
 /// An axis: ticks as `(pixel position, label)`.
@@ -199,7 +229,10 @@ impl PosScale {
 impl Spec {
     #[must_use]
     pub fn new(mark: Mark) -> Self {
-        Self { mark, encoding: BTreeMap::new() }
+        Self {
+            mark,
+            encoding: BTreeMap::new(),
+        }
     }
 
     #[must_use]
@@ -216,7 +249,9 @@ impl Spec {
     fn aggregate(&self, rows: &[Row<'_>]) -> Vec<BTreeMap<String, Value>> {
         let any = self.encoding.values().any(|f| f.aggregate.is_some());
         let to_map = |r: &Row<'_>| -> BTreeMap<String, Value> {
-            r.iter().map(|(k, v)| ((*k).to_owned(), v.clone())).collect()
+            r.iter()
+                .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                .collect()
         };
         if !any {
             return rows.iter().map(to_map).collect();
@@ -228,7 +263,10 @@ impl Spec {
             .collect();
         let mut groups: BTreeMap<Vec<String>, Vec<&Row<'_>>> = BTreeMap::new();
         for r in rows {
-            let k = keys.iter().map(|f| Self::get(r, &f.name).map(Value::text).unwrap_or_default()).collect();
+            let k = keys
+                .iter()
+                .map(|f| Self::get(r, &f.name).map(Value::text).unwrap_or_default())
+                .collect();
             groups.entry(k).or_default().push(r);
         }
         groups
@@ -239,7 +277,10 @@ impl Spec {
                     m.insert(f.name.clone(), Value::Text(v));
                 }
                 for f in self.encoding.values().filter(|f| f.aggregate.is_some()) {
-                    let vals: Vec<f64> = members.iter().filter_map(|r| Self::get(r, &f.name).and_then(Value::num)).collect();
+                    let vals: Vec<f64> = members
+                        .iter()
+                        .filter_map(|r| Self::get(r, &f.name).and_then(Value::num))
+                        .collect();
                     #[allow(clippy::cast_precision_loss)]
                     let v = match f.aggregate.expect("filtered") {
                         Aggregate::Sum => vals.iter().sum(),
@@ -255,8 +296,16 @@ impl Spec {
             .collect()
     }
 
-    fn pos_scale(&self, ch: Channel, data: &[BTreeMap<String, Value>], range: (f64, f64)) -> Result<(PosScale, Axis), SpecError> {
-        let f = self.encoding.get(&ch).ok_or_else(|| SpecError(format!("no {ch:?} encoding")))?;
+    fn pos_scale(
+        &self,
+        ch: Channel,
+        data: &[BTreeMap<String, Value>],
+        range: (f64, f64),
+    ) -> Result<(PosScale, Axis), SpecError> {
+        let f = self
+            .encoding
+            .get(&ch)
+            .ok_or_else(|| SpecError(format!("no {ch:?} encoding")))?;
         let vals: Vec<&Value> = data.iter().filter_map(|r| r.get(&f.name)).collect();
         if vals.is_empty() {
             return Err(SpecError(format!("field '{}' not in the data", f.name)));
@@ -284,14 +333,28 @@ impl Spec {
                     .iter()
                     .map(|d| {
                         #[allow(clippy::cast_possible_truncation)]
-                        ((b.map(d).unwrap_or(0.0) + b.bandwidth() * 0.5) as f32, d.clone())
+                        (
+                            (b.map(d).unwrap_or(0.0) + b.bandwidth() * 0.5) as f32,
+                            d.clone(),
+                        )
                     })
                     .collect();
-                (PosScale::Band(b), Axis { channel: ch, title, ticks })
+                (
+                    PosScale::Band(b),
+                    Axis {
+                        channel: ch,
+                        title,
+                        ticks,
+                    },
+                )
             }
             Kind::Quantitative | Kind::Temporal => {
                 let nums: Vec<f64> = vals.iter().filter_map(|v| v.num()).collect();
-                let (mut lo, hi) = nums.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, &v| (a.0.min(v), a.1.max(v)));
+                let (mut lo, hi) = nums
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |a, &v| {
+                        (a.0.min(v), a.1.max(v))
+                    });
                 if matches!(self.mark, Mark::Bar | Mark::Area) && f.kind == Kind::Quantitative {
                     lo = lo.min(0.0);
                 }
@@ -306,7 +369,14 @@ impl Spec {
                         (s.map(t) as f32, crate::scale::format_tick(t, step))
                     })
                     .collect();
-                (PosScale::Lin(s), Axis { channel: ch, title, ticks })
+                (
+                    PosScale::Lin(s),
+                    Axis {
+                        channel: ch,
+                        title,
+                        ticks,
+                    },
+                )
             }
         })
     }
@@ -322,7 +392,7 @@ impl Spec {
         let (ys, ya) = self.pos_scale(Channel::Y, &data, (f64::from(height), 0.0))?;
         // Colour.
         let mut legend: Vec<(String, Color)> = Vec::new();
-        let color_of: Box<dyn Fn(&BTreeMap<String, Value>) -> Color> = match self.encoding.get(&Channel::Color) {
+        let color_of: ColorOf = match self.encoding.get(&Channel::Color) {
             None => Box::new(|_| TABLEAU10[0]),
             Some(f) if matches!(f.kind, Kind::Nominal | Kind::Ordinal) => {
                 let mut domain: Vec<String> = Vec::new();
@@ -333,28 +403,46 @@ impl Spec {
                         }
                     }
                 }
-                legend = domain.iter().enumerate().map(|(i, d)| (d.clone(), TABLEAU10[i % 10])).collect();
+                legend = domain
+                    .iter()
+                    .enumerate()
+                    .map(|(i, d)| (d.clone(), TABLEAU10[i % 10]))
+                    .collect();
                 let name = f.name.clone();
                 let lg = legend.clone();
                 Box::new(move |r| {
                     let t = r.get(&name).map(Value::text).unwrap_or_default();
-                    lg.iter().find(|(k, _)| *k == t).map_or(TABLEAU10[0], |(_, c)| *c)
+                    lg.iter()
+                        .find(|(k, _)| *k == t)
+                        .map_or(TABLEAU10[0], |(_, c)| *c)
                 })
             }
             Some(f) => {
-                let nums: Vec<f64> = data.iter().filter_map(|r| r.get(&f.name).and_then(Value::num)).collect();
-                let (lo, hi) = nums.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, &v| (a.0.min(v), a.1.max(v)));
+                let nums: Vec<f64> = data
+                    .iter()
+                    .filter_map(|r| r.get(&f.name).and_then(Value::num))
+                    .collect();
+                let (lo, hi) = nums
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |a, &v| {
+                        (a.0.min(v), a.1.max(v))
+                    });
                 let s = Continuous::linear((lo, if hi > lo { hi } else { lo + 1.0 }), (0.0, 1.0));
                 let name = f.name.clone();
                 #[allow(clippy::cast_possible_truncation)]
-                Box::new(move |r| viridis(s.map(r.get(&name).and_then(Value::num).unwrap_or(lo)) as f32))
+                Box::new(move |r| {
+                    viridis(s.map(r.get(&name).and_then(Value::num).unwrap_or(lo)) as f32)
+                })
             }
         };
         let size_of = |r: &BTreeMap<String, Value>| -> f32 {
             match self.encoding.get(&Channel::Size) {
                 None => 4.0,
                 Some(f) => {
-                    let nums: Vec<f64> = data.iter().filter_map(|q| q.get(&f.name).and_then(Value::num)).collect();
+                    let nums: Vec<f64> = data
+                        .iter()
+                        .filter_map(|q| q.get(&f.name).and_then(Value::num))
+                        .collect();
                     let hi = nums.iter().copied().fold(0.0f64, f64::max).max(1e-9);
                     let s = Continuous::sqrt((0.0, hi), (2.0, 14.0));
                     #[allow(clippy::cast_possible_truncation)]
@@ -374,18 +462,29 @@ impl Spec {
         match self.mark {
             Mark::Point => {
                 for r in &data {
-                    marks.push(MarkGeom::Circle { center: Offset::new(f(px(r)), f(py(r))), radius: size_of(r), color: color_of(r) });
+                    marks.push(MarkGeom::Circle {
+                        center: Offset::new(f(px(r)), f(py(r))),
+                        radius: size_of(r),
+                        color: color_of(r),
+                    });
                 }
             }
             Mark::Bar => {
                 let base = match &ys {
-                    PosScale::Lin(s) => s.map(0.0f64.clamp(s.domain.0.min(s.domain.1), s.domain.0.max(s.domain.1))),
+                    PosScale::Lin(s) => {
+                        s.map(0.0f64.clamp(s.domain.0.min(s.domain.1), s.domain.0.max(s.domain.1)))
+                    }
                     PosScale::Band(..) => f64::from(height),
                 };
                 for r in &data {
                     let (x, y, w) = (px(r), py(r), xs.width().max(2.0));
                     marks.push(MarkGeom::Rect {
-                        rect: Rect::new(f(x - w * 0.5), f(y.min(base)), f(x + w * 0.5), f(y.max(base))),
+                        rect: Rect::new(
+                            f(x - w * 0.5),
+                            f(y.min(base)),
+                            f(x + w * 0.5),
+                            f(y.max(base)),
+                        ),
                         color: color_of(r),
                     });
                 }
@@ -395,7 +494,12 @@ impl Spec {
                 for r in &data {
                     let (x, y) = (px(r), py(r));
                     marks.push(MarkGeom::Rect {
-                        rect: Rect::new(f(x - w * 0.5), f(y - h * 0.5), f(x + w * 0.5), f(y + h * 0.5)),
+                        rect: Rect::new(
+                            f(x - w * 0.5),
+                            f(y - h * 0.5),
+                            f(x + w * 0.5),
+                            f(y + h * 0.5),
+                        ),
                         color: color_of(r),
                     });
                 }
@@ -405,23 +509,43 @@ impl Spec {
                 let mut series: BTreeMap<String, Vec<&BTreeMap<String, Value>>> = BTreeMap::new();
                 let ckey = self.encoding.get(&Channel::Color).map(|f| f.name.clone());
                 for r in &data {
-                    let k = ckey.as_ref().and_then(|c| r.get(c)).map(Value::text).unwrap_or_default();
+                    let k = ckey
+                        .as_ref()
+                        .and_then(|c| r.get(c))
+                        .map(Value::text)
+                        .unwrap_or_default();
                     series.entry(k).or_default().push(r);
                 }
                 for (_, mut pts) in series {
                     pts.sort_by(|a, b| px(a).total_cmp(&px(b)));
-                    let ps: Vec<Offset> = pts.iter().map(|r| Offset::new(f(px(r)), f(py(r)))).collect();
+                    let ps: Vec<Offset> = pts
+                        .iter()
+                        .map(|r| Offset::new(f(px(r)), f(py(r))))
+                        .collect();
                     let color = color_of(pts[0]);
                     if self.mark == Mark::Line {
-                        marks.push(MarkGeom::Path { path: line(&ps, Curve::MonotoneX), color, filled: false });
+                        marks.push(MarkGeom::Path {
+                            path: line(&ps, Curve::MonotoneX),
+                            color,
+                            filled: false,
+                        });
                     } else {
-                        let base: Vec<Offset> = ps.iter().map(|p| Offset::new(p.dx, height)).collect();
-                        marks.push(MarkGeom::Path { path: crate::shape::area(&ps, &base, Curve::MonotoneX), color, filled: true });
+                        let base: Vec<Offset> =
+                            ps.iter().map(|p| Offset::new(p.dx, height)).collect();
+                        marks.push(MarkGeom::Path {
+                            path: crate::shape::area(&ps, &base, Curve::MonotoneX),
+                            color,
+                            filled: true,
+                        });
                     }
                 }
             }
         }
-        Ok(Chart { marks, axes: vec![xa, ya], legend })
+        Ok(Chart {
+            marks,
+            axes: vec![xa, ya],
+            legend,
+        })
     }
 }
 
@@ -431,9 +555,17 @@ mod tests {
 
     fn rows() -> Vec<Row<'static>> {
         let mut v = Vec::new();
-        for (i, (c, s)) in [("A", "x"), ("B", "x"), ("C", "y"), ("A", "y"), ("B", "y")].iter().enumerate() {
+        for (i, (c, s)) in [("A", "x"), ("B", "x"), ("C", "y"), ("A", "y"), ("B", "y")]
+            .iter()
+            .enumerate()
+        {
             #[allow(clippy::cast_precision_loss)]
-            v.push(vec![("cat", Value::from(*c)), ("series", Value::from(*s)), ("v", Value::from(i as f64 * 3.0 + 1.0)), ("t", Value::from(i as f64))]);
+            v.push(vec![
+                ("cat", Value::from(*c)),
+                ("series", Value::from(*s)),
+                ("v", Value::from(i as f64 * 3.0 + 1.0)),
+                ("t", Value::from(i as f64)),
+            ]);
         }
         v
     }
@@ -442,12 +574,17 @@ mod tests {
     fn bars_from_zero_with_band_x() {
         let c = Spec::new(Mark::Bar)
             .encode(Channel::X, Field::nominal("cat"))
-            .encode(Channel::Y, Field::quantitative("v").aggregate(Aggregate::Sum))
+            .encode(
+                Channel::Y,
+                Field::quantitative("v").aggregate(Aggregate::Sum),
+            )
             .compile(&rows(), 300.0, 200.0)
             .unwrap();
         assert_eq!(c.marks.len(), 3, "grouped by category");
         for m in &c.marks {
-            let MarkGeom::Rect { rect, .. } = m else { panic!() };
+            let MarkGeom::Rect { rect, .. } = m else {
+                panic!()
+            };
             assert!((rect.bottom - 200.0).abs() < 1e-3, "bars stand on zero");
         }
         assert_eq!(c.axes[0].ticks.len(), 3);

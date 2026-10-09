@@ -21,7 +21,9 @@ pub fn decode(b: &[u8]) -> Result<Decoded, CodecError> {
     let bpp = u16::from_le_bytes([b[28], b[29]]);
     let comp = u32le(b, 30);
     if !matches!(bpp, 24 | 32) || !(comp == 0 || (comp == 3 && bpp == 32)) {
-        return Err(CodecError::new("bmp: only uncompressed 24/32-bit is supported"));
+        return Err(CodecError::new(
+            "bmp: only uncompressed 24/32-bit is supported",
+        ));
     }
     let (h, top_down) = (raw_h.unsigned_abs(), raw_h < 0);
     let bytes_pp = usize::from(bpp / 8);
@@ -79,7 +81,9 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let px: Vec<u8> = (0..5 * 3).flat_map(|i: u8| [i, i * 2, 255 - i, 100 + i]).collect();
+        let px: Vec<u8> = (0..5 * 3)
+            .flat_map(|i: u8| [i, i * 2, 255 - i, 100 + i])
+            .collect();
         let d = decode(&encode(5, 3, &px)).unwrap();
         assert_eq!((d.width, d.height), (5, 3));
         assert_eq!(d.rgba, px);

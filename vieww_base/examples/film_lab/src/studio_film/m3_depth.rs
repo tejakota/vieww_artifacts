@@ -26,17 +26,17 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use vieww_foundation::{
-    BlendMode, Color, Offset, Path, PointerEvent, PointerId, PointerPhase, Rect, Sketch,
-    Sketchbook, TextAlign, Transform,
+    BlendMode, Color, Offset, Path, PointerEvent, PointerId, Rect, Sketch, Sketchbook, TextAlign,
+    Transform,
 };
 use vieww_widget::prelude::*;
 
-use crate::film_lib::{clamp01, ease_out_expo};
-use crate::product_film as pf;
 use super::{
     filmkit, frame, ACCENT, BRAND_FAR, BRAND_NEAR, CANVAS, FPS, GROUND, INK, LEDGER, MUTED,
     SURFACE, SURFACE_2, SYN_COMMENT, SYN_FUNCTION, SYN_STRING, SYN_TYPE, TERM_GREEN,
 };
+use crate::film_lib::{clamp01, ease_out_expo};
+use crate::product_film as pf;
 
 // ── Z13C · the arena ────────────────────────────────────────────────────────
 
@@ -57,12 +57,21 @@ fn finger_events() -> Vec<(f32, PointerEvent)> {
     let mut out = Vec::new();
     // Phase 1 — the tap try: down, a still hold, up.
     let tap_at = Offset::new(170.0, 140.0);
-    out.push((1.0, PointerEvent::down(id, tap_at, Duration::from_secs_f32(1.0))));
-    out.push((2.2, PointerEvent::up(id, tap_at, Duration::from_secs_f32(2.2))));
+    out.push((
+        1.0,
+        PointerEvent::down(id, tap_at, Duration::from_secs_f32(1.0)),
+    ));
+    out.push((
+        2.2,
+        PointerEvent::up(id, tap_at, Duration::from_secs_f32(2.2)),
+    ));
     // Phase 2 — the drag: down on the star, an S-curve of moves, up.
     let start = Offset::new(390.0, 300.0);
     let end = Offset::new(150.0, 430.0);
-    out.push((3.2, PointerEvent::down(id, start, Duration::from_secs_f32(3.2))));
+    out.push((
+        3.2,
+        PointerEvent::down(id, start, Duration::from_secs_f32(3.2)),
+    ));
     let moves = 12;
     for k in 1..=moves {
         let u = k as f32 / moves as f32;
@@ -72,7 +81,10 @@ fn finger_events() -> Vec<(f32, PointerEvent)> {
             start.dx + (end.dx - start.dx) * u,
             start.dy + (end.dy - start.dy) * u - bend * (1.0 - u),
         );
-        out.push((ts, PointerEvent::moved(id, p, p, Duration::from_secs_f32(ts))));
+        out.push((
+            ts,
+            PointerEvent::moved(id, p, p, Duration::from_secs_f32(ts)),
+        ));
     }
     out.push((6.2, PointerEvent::up(id, end, Duration::from_secs_f32(6.2))));
     out
@@ -142,41 +154,67 @@ fn build_arena() -> ArenaState {
     stage.add_shape(
         layer,
         mk(96.0, 120.0, Some(SURFACE_2)),
-        Shape::Rect { width: 132.0, height: 96.0, corner: 12.0 },
+        Shape::Rect {
+            width: 132.0,
+            height: 96.0,
+            corner: 12.0,
+        },
     );
-    stage.add_shape(layer, mk(210.0, 240.0, Some(GROUND)), Shape::Circle { radius: 34.0 });
+    stage.add_shape(
+        layer,
+        mk(210.0, 240.0, Some(GROUND)),
+        Shape::Circle { radius: 34.0 },
+    );
     let star = stage.add_shape(
         layer,
         mk(390.0, 300.0, Some(BRAND_NEAR)),
-        Shape::Star { points: 5, inner: 22.0, outer: 48.0 },
+        Shape::Star {
+            points: 5,
+            inner: 22.0,
+            outer: 48.0,
+        },
     );
     let mut hex = mk(180.0, 470.0, None);
     hex.stroke = Some(SYN_TYPE);
     hex.stroke_width = 2.0;
-    stage.add_shape(layer, hex, Shape::RegularPolygon { sides: 6, radius: 40.0 });
+    stage.add_shape(
+        layer,
+        hex,
+        Shape::RegularPolygon {
+            sides: 6,
+            radius: 40.0,
+        },
+    );
     let mut arrow = mk(260.0, 545.0, None);
     arrow.stroke = Some(MUTED);
     arrow.stroke_width = 2.0;
     stage.add_shape(
         layer,
         arrow,
-        Shape::Arrow { points: vec![Offset::new(40.0, 0.0), Offset::new(440.0, 0.0)], head: 14.0 },
+        Shape::Arrow {
+            points: vec![Offset::new(40.0, 0.0), Offset::new(440.0, 0.0)],
+            head: 14.0,
+        },
     );
     // The settle flourish: a yoyo on the star once the drag lets go. The
     // timeline is stateful by design — it locks the tween's start to the
     // first frame it sees, which is why the stage persists across frames.
     let mut timeline = vieww_canvas::tween::Timeline::new();
-    timeline.to(
-        vieww_canvas::tween::NodeTween::new(
-            star,
-            vieww_canvas::tween::To::new().scale(1.12).opacity(0.82),
-            Duration::from_secs_f32(0.5),
-        )
-        .curve(vieww_animation::Curve::EASE_IN_OUT)
-        .repeat(3, true)
-        .delay(Duration::from_secs_f32(6.6)),
-    );
-    ArenaState { stage, layer, star, timeline, built_at: -1.0 }
+    timeline.to(vieww_canvas::tween::NodeTween::new(
+        star,
+        vieww_canvas::tween::To::new().scale(1.12).opacity(0.82),
+        Duration::from_secs_f32(0.5),
+    )
+    .curve(vieww_animation::Curve::EASE_IN_OUT)
+    .repeat(3, true)
+    .delay(Duration::from_secs_f32(6.6)));
+    ArenaState {
+        stage,
+        layer,
+        star,
+        timeline,
+        built_at: -1.0,
+    }
 }
 
 /// Advance the arena to `sec`: drag the star, run the tween, scroll the
@@ -194,7 +232,7 @@ fn arena_advance(sec: f32) {
         }
         st.built_at = sec;
         // The drag: while the finger is down on the star, it follows.
-        if sec >= 3.2 && sec <= 6.2 {
+        if (3.2..=6.2).contains(&sec) {
             if let Some(p) = finger_at(sec) {
                 st.stage.attrs_mut(st.star).x = p.dx;
                 st.stage.attrs_mut(st.star).y = p.dy;
@@ -208,12 +246,13 @@ fn arena_advance(sec: f32) {
             st.stage.attrs_mut(st.layer).x = drift;
         }
         // The tween's yoyo settles over the transformed star.
-        st.timeline.update(&mut st.stage, Duration::from_secs_f32(sec));
+        st.timeline
+            .update(&mut st.stage, Duration::from_secs_f32(sec));
     });
 }
 
 /// Z13C — the arena: a finger, its recognisers, and the physics of letting go.
-pub fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
     use vieww_canvas::Transformer;
     use vieww_gestures::{recognize, DragRecognizer, GestureDispatcher, Recognized, TapRecognizer};
 
@@ -238,7 +277,10 @@ pub fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
         .filter(|(t, _)| *t <= sec)
         .map(|(_, e)| e)
         .collect();
-    let last_event_s = finger_events().into_iter().filter(|(t, _)| *t <= sec).last().map(|(t, _)| t);
+    let last_event_s = finger_events()
+        .into_iter()
+        .rfind(|(t, _)| *t <= sec)
+        .map(|(t, _)| t);
     let mut dispatcher = GestureDispatcher::new();
     dispatcher.add(TapRecognizer::new());
     dispatcher.add(DragRecognizer::new());
@@ -271,7 +313,10 @@ pub fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
                     blend: BlendMode::Normal,
                     clip: Some(clip),
                     children: vec![Sketch::Transformed {
-                        transform: Transform::translate(Offset::new(CARD.left + 14.0, CARD.top + 14.0)),
+                        transform: Transform::translate(Offset::new(
+                            CARD.left + 14.0,
+                            CARD.top + 14.0,
+                        )),
                         children: items.clone().into_items(),
                     }],
                 });
@@ -280,7 +325,10 @@ pub fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
             if let Some(tb) = &transformer_book {
                 for item in tb.clone().into_items() {
                     book.push(Sketch::Transformed {
-                        transform: Transform::translate(Offset::new(CARD.left + 14.0, CARD.top + 14.0)),
+                        transform: Transform::translate(Offset::new(
+                            CARD.left + 14.0,
+                            CARD.top + 14.0,
+                        )),
                         children: vec![item],
                     });
                 }
@@ -305,7 +353,10 @@ pub fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
         let mut updates = 0usize;
         let flush = |lines: &mut Vec<(String, Color)>, updates: usize| {
             if updates > 0 {
-                lines.push((format!("DragUpdate ×{updates} — the shape follows"), SYN_TYPE));
+                lines.push((
+                    format!("DragUpdate ×{updates} — the shape follows"),
+                    SYN_TYPE,
+                ));
             }
         };
         for r in &heard {
@@ -397,7 +448,12 @@ pub fn the_arena(ctx: &pf::Ctx) -> WidgetNode {
                     1.2,
                 );
                 book.circle(Offset::new(sx, y), 4.0, pf::alpha(ACCENT, 0.9));
-                book.line(Offset::new(x0, y), Offset::new(x1, y), pf::alpha(SYN_COMMENT, 0.3), 1.0);
+                book.line(
+                    Offset::new(x0, y),
+                    Offset::new(x1, y),
+                    pf::alpha(SYN_COMMENT, 0.3),
+                    1.0,
+                );
             }),
         )));
         stack = stack.push(frame::label(
@@ -476,8 +532,9 @@ fn sprite_sheet() -> vieww_foundation::Image {
                         let rot = k as f32 * 22.5_f32.to_radians();
                         let pts: Vec<Offset> = (0..4)
                             .map(|i| {
-                                let a =
-                                    rot + i as f32 * std::f32::consts::FRAC_PI_2 + std::f32::consts::FRAC_PI_4;
+                                let a = rot
+                                    + i as f32 * std::f32::consts::FRAC_PI_2
+                                    + std::f32::consts::FRAC_PI_4;
                                 Offset::new(cx + 38.0 * a.cos(), cy + 38.0 * a.sin())
                             })
                             .collect();
@@ -527,7 +584,7 @@ fn asset_roundtrip() -> (usize, u32, u32) {
 }
 
 /// Z13D — the designer: Lottie played natively, beside the asset pipeline.
-pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let comp = lottie_comp();
     let mut stack = Stack::new();
@@ -556,11 +613,19 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
             }
             book.rrect(file_card, 16.0, pf::alpha(SURFACE, 0.85 * appear));
             book.stroke_rrect(file_card, 16.0, pf::alpha(SYN_COMMENT, 0.3 * appear), 1.2);
-            let head = Rect::new(file_card.left, file_card.top, file_card.right, file_card.top + 44.0);
+            let head = Rect::new(
+                file_card.left,
+                file_card.top,
+                file_card.right,
+                file_card.top + 44.0,
+            );
             book.rrect(head, 14.0, pf::alpha(SURFACE_2, 0.9 * appear));
             for (k, c) in [ACCENT, SYN_STRING, SYN_COMMENT].iter().enumerate() {
                 book.circle(
-                    Offset::new(file_card.left + 22.0 + k as f32 * 20.0, file_card.top + 22.0),
+                    Offset::new(
+                        file_card.left + 22.0 + k as f32 * 20.0,
+                        file_card.top + 22.0,
+                    ),
                     5.0,
                     pf::alpha(*c, 0.8 * appear),
                 );
@@ -606,7 +671,10 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
         file_card.bottom - 118.0,
         file_card.width() - 48.0,
         24.0,
-        format!("{} bytes · {} layers · {} skipped features", json_len, layers, unsupported),
+        format!(
+            "{} bytes · {} layers · {} skipped features",
+            json_len, layers, unsupported
+        ),
         pf::geist_mono(15.0).color(pf::alpha(LEDGER, 0.95)),
         TextAlign::Left,
         clamp01((sec - 1.6) / 0.5),
@@ -616,7 +684,10 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
         file_card.bottom - 84.0,
         file_card.width() - 48.0,
         24.0,
-        format!("the PNG beside it: {} bytes → {}×{} by vieww-asset", png_bytes, dec_w, dec_h),
+        format!(
+            "the PNG beside it: {} bytes → {}×{} by vieww-asset",
+            png_bytes, dec_w, dec_h
+        ),
         pf::geist_mono(15.0).color(pf::alpha(LEDGER, 0.95)),
         TextAlign::Left,
         clamp01((sec - 5.4) / 0.5),
@@ -698,8 +769,8 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
     let sheet = sprite_sheet();
     let frame_idx = (sec * 12.0).floor() as usize % 16;
     let clip_a = clamp01((sec - 1.2) / 0.6);
-    if let Some(tile) = vieww_image::sprite::SpriteSheet::grid(sheet.clone(), 4, 4)
-        .frame_image(frame_idx)
+    if let Some(tile) =
+        vieww_image::sprite::SpriteSheet::grid(sheet.clone(), 4, 4).frame_image(frame_idx)
     {
         let tile_pos = Rect::new(
             pipe_card.left + 30.0,
@@ -718,7 +789,10 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
                     blur: 0.0,
                     blend: BlendMode::Normal,
                     clip: None,
-                    children: vec![Sketch::Image { rect: tile_pos, image: tile.clone() }],
+                    children: vec![Sketch::Image {
+                        rect: tile_pos,
+                        image: tile.clone(),
+                    }],
                 });
                 book.stroke_rrect(tile_pos, 12.0, pf::alpha(SYN_COMMENT, 0.4 * clip_a), 1.2);
             }),
@@ -759,7 +833,10 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
                         blur: 0.0,
                         blend: BlendMode::Normal,
                         clip: None,
-                        children: vec![Sketch::Image { rect, image: img.clone() }],
+                        children: vec![Sketch::Image {
+                            rect,
+                            image: img.clone(),
+                        }],
                     });
                     book.stroke_rrect(rect, 4.0, pf::alpha(SYN_COMMENT, 0.35 * level_a), 1.0);
                 }),
@@ -802,7 +879,11 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
             24.0,
             format!(
                 "16 tiles → one 512×512 atlas · {}",
-                if fit_all { "all packed, 0 rejected" } else { "some rejected" }
+                if fit_all {
+                    "all packed, 0 rejected"
+                } else {
+                    "some rejected"
+                }
             ),
             pf::geist_mono(15.0).color(pf::alpha(LEDGER, 0.95)),
             TextAlign::Left,
@@ -830,7 +911,12 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
         0.0,
         clamp01((sec - 7.4) / 0.6),
     ));
-    frame::boxed(Rect::new(play_card.left, play_card.top, play_card.right, play_card.bottom));
+    frame::boxed(Rect::new(
+        play_card.left,
+        play_card.top,
+        play_card.right,
+        play_card.bottom,
+    ));
     stack.into()
 }
 
@@ -838,9 +924,21 @@ pub fn the_designer(ctx: &pf::Ctx) -> WidgetNode {
 
 /// One beat of the collaboration script.
 enum Beat {
-    Type { at: f32, who: u32, pos: usize, text: String },
-    Del { at: f32, who: u32, pos: usize, len: usize },
-    Sync { at: f32 },
+    Type {
+        at: f32,
+        who: u32,
+        pos: usize,
+        text: String,
+    },
+    Del {
+        at: f32,
+        who: u32,
+        pos: usize,
+        len: usize,
+    },
+    Sync {
+        at: f32,
+    },
 }
 
 /// The whole session, as it happened — typed, deleted, synced. The base
@@ -848,15 +946,50 @@ enum Beat {
 /// appends ", together." while grace turns the comma into a semicolon.
 fn script() -> Vec<Beat> {
     vec![
-        Beat::Type { at: 1.0, who: 1, pos: 0, text: "one ".to_string() },
-        Beat::Type { at: 1.9, who: 1, pos: 4, text: "design, ".to_string() },
-        Beat::Type { at: 2.8, who: 1, pos: 12, text: "every ".to_string() },
+        Beat::Type {
+            at: 1.0,
+            who: 1,
+            pos: 0,
+            text: "one ".to_string(),
+        },
+        Beat::Type {
+            at: 1.9,
+            who: 1,
+            pos: 4,
+            text: "design, ".to_string(),
+        },
+        Beat::Type {
+            at: 2.8,
+            who: 1,
+            pos: 12,
+            text: "every ".to_string(),
+        },
         Beat::Sync { at: 4.0 },
-        Beat::Type { at: 4.9, who: 2, pos: 18, text: "screen".to_string() },
+        Beat::Type {
+            at: 4.9,
+            who: 2,
+            pos: 18,
+            text: "screen".to_string(),
+        },
         Beat::Sync { at: 7.2 },
-        Beat::Type { at: 7.9, who: 1, pos: 24, text: ", together.".to_string() },
-        Beat::Del { at: 8.6, who: 2, pos: 10, len: 1 },
-        Beat::Type { at: 9.2, who: 2, pos: 10, text: ";".to_string() },
+        Beat::Type {
+            at: 7.9,
+            who: 1,
+            pos: 24,
+            text: ", together.".to_string(),
+        },
+        Beat::Del {
+            at: 8.6,
+            who: 2,
+            pos: 10,
+            len: 1,
+        },
+        Beat::Type {
+            at: 9.2,
+            who: 2,
+            pos: 10,
+            text: ";".to_string(),
+        },
         Beat::Sync { at: 10.4 },
     ]
 }
@@ -907,16 +1040,32 @@ fn collab_replay(sec: f32) -> Session {
     let mut pres_a = Presence::default();
     pres_a.update(1, 1, "ada", ada_at);
     pres_a.update(2, 1, "grace", grace_at);
-    let carets_a = pres_a.positions(&a.text).into_iter().map(|(r, _, p)| (r, p)).collect();
+    let carets_a = pres_a
+        .positions(&a.text)
+        .into_iter()
+        .map(|(r, _, p)| (r, p))
+        .collect();
     let mut pres_b = Presence::default();
     pres_b.update(1, 1, "ada", ada_at);
     pres_b.update(2, 1, "grace", grace_at);
-    let carets_b = pres_b.positions(&b.text).into_iter().map(|(r, _, p)| (r, p)).collect();
-    Session { a: ta, b: tb, ops, merges, equal, carets_a, carets_b }
+    let carets_b = pres_b
+        .positions(&b.text)
+        .into_iter()
+        .map(|(r, _, p)| (r, p))
+        .collect();
+    Session {
+        a: ta,
+        b: tb,
+        ops,
+        merges,
+        equal,
+        carets_a,
+        carets_b,
+    }
 }
 
 /// Z16B — together: two authors, one truth.
-pub fn together(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn together(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let s = collab_replay(sec);
     let mut stack = Stack::new();
@@ -924,7 +1073,10 @@ pub fn together(ctx: &pf::Ctx) -> WidgetNode {
     frame::ground(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, s2: Size| {
-            book.rect(Rect::new(0.0, 0.0, s2.width, s2.height), Color::rgb(7, 6, 10));
+            book.rect(
+                Rect::new(0.0, 0.0, s2.width, s2.height),
+                Color::rgb(7, 6, 10),
+            );
             pf::vignette(book, s2.width, s2.height, 0.55);
         }),
     )));
@@ -943,7 +1095,12 @@ pub fn together(ctx: &pf::Ctx) -> WidgetNode {
             }
             for (r, col) in [(pa_rect, ACCENT), (pb_rect, TERM_GREEN)] {
                 book.rrect(r, 18.0, pf::alpha(SURFACE, 0.9 * appear));
-                book.stroke_rrect(r, 18.0, pf::alpha(col, if merged { 0.6 } else { 0.35 } * appear), 1.6);
+                book.stroke_rrect(
+                    r,
+                    18.0,
+                    pf::alpha(col, if merged { 0.6 } else { 0.35 } * appear),
+                    1.6,
+                );
                 let head = Rect::new(r.left, r.top, r.right, r.top + 46.0);
                 book.rrect(head, 14.0, pf::alpha(SURFACE_2, 0.9 * appear));
             }
@@ -953,16 +1110,35 @@ pub fn together(ctx: &pf::Ctx) -> WidgetNode {
                 Offset::new(pb_rect.left, pb_rect.top + 160.0),
                 30.0,
             );
-            let live = (4.0..4.7).contains(&sec) || (7.2..7.9).contains(&sec) || (10.4..11.4).contains(&sec);
+            let live = (4.0..4.7).contains(&sec)
+                || (7.2..7.9).contains(&sec)
+                || (10.4..11.4).contains(&sec);
             let alpha = if live { 0.85 } else { 0.22 };
-            filmkit::grow_stroke(book, &pts, 1.0, pf::alpha(SYN_COMMENT, alpha * appear), 1.6, appear);
+            filmkit::grow_stroke(
+                book,
+                &pts,
+                1.0,
+                pf::alpha(SYN_COMMENT, alpha * appear),
+                1.6,
+                appear,
+            );
             if live {
                 // Ops in flight — dots crossing the wire.
-                let base = if sec >= 10.4 { 10.4 } else if sec >= 7.2 { 7.2 } else { 4.0 };
+                let base = if sec >= 10.4 {
+                    10.4
+                } else if sec >= 7.2 {
+                    7.2
+                } else {
+                    4.0
+                };
                 let p = ((sec - base) * 2.2).fract();
                 for k in 0..3 {
                     let q = filmkit::point_at(&pts, p - k as f32 * 0.08);
-                    book.circle(q, 4.0, pf::alpha(if k == 0 { ACCENT } else { SYN_TYPE }, 0.8));
+                    book.circle(
+                        q,
+                        4.0,
+                        pf::alpha(if k == 0 { ACCENT } else { SYN_TYPE }, 0.8),
+                    );
                 }
             }
         }),
@@ -1027,7 +1203,10 @@ pub fn together(ctx: &pf::Ctx) -> WidgetNode {
             s = s.push(Positioned::fill().child(Painting::sized(
                 CANVAS,
                 PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-                    book.rect(Rect::new(cx, cy + 3.0, cx + 3.0, cy + 37.0), pf::alpha(ccol, blink));
+                    book.rect(
+                        Rect::new(cx, cy + 3.0, cx + 3.0, cy + 37.0),
+                        pf::alpha(ccol, blink),
+                    );
                 }),
             )));
         }
@@ -1081,7 +1260,10 @@ pub fn together(ctx: &pf::Ctx) -> WidgetNode {
         clamp01((sec - 5.4) / 0.6),
     ));
     let ops_line = format!("{} ops · {} applied on merge", s.ops, s.merges);
-    let equal_line = format!("snapshots equal: {}", if s.equal { "yes" } else { "not yet" });
+    let equal_line = format!(
+        "snapshots equal: {}",
+        if s.equal { "yes" } else { "not yet" }
+    );
     stack = stack.push(frame::receipts(
         &[
             ("vieww-collab · RGA text", ACCENT),
@@ -1092,6 +1274,11 @@ pub fn together(ctx: &pf::Ctx) -> WidgetNode {
         0.0,
         clamp01((sec - 7.4) / 0.6),
     ));
-    frame::boxed(Rect::new(pa_rect.left, pa_rect.top, pb_rect.right, pb_rect.bottom));
+    frame::boxed(Rect::new(
+        pa_rect.left,
+        pa_rect.top,
+        pb_rect.right,
+        pb_rect.bottom,
+    ));
     stack.into()
 }

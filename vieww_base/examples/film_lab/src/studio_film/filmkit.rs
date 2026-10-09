@@ -26,17 +26,16 @@
 use vieww_foundation::{
     Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextAlign, Transform,
 };
-use vieww_widget::prelude::*;
 use vieww_widget::{RichText, Span};
 
+use super::{BRAND_FAR, BRAND_NEAR, CANVAS, INK};
 use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, spring_out, Rng};
 use crate::product_film as pf;
-use super::{BRAND_FAR, BRAND_NEAR, CANVAS, H, INK, W};
 
 // ── Vector flows ────────────────────────────────────────────────────────────
 
 /// Flatten a cubic bezier into a polyline of `n` points.
-pub fn cubic_pts(p0: Offset, c1: Offset, c2: Offset, p1: Offset, n: usize) -> Vec<Offset> {
+pub(crate) fn cubic_pts(p0: Offset, c1: Offset, c2: Offset, p1: Offset, n: usize) -> Vec<Offset> {
     let n = n.max(2);
     (0..=n)
         .map(|i| {
@@ -55,9 +54,9 @@ pub fn cubic_pts(p0: Offset, c1: Offset, c2: Offset, p1: Offset, n: usize) -> Ve
 }
 
 /// An S-curve thread between two points — the film's standard connector.
-pub fn thread_pts(from: Offset, to: Offset, bend: f32) -> Vec<Offset> {
+pub(crate) fn thread_pts(from: Offset, to: Offset, bend: f32) -> Vec<Offset> {
     let dx = to.dx - from.dx;
-    let dy = to.dy - from.dy;
+    let _dy = to.dy - from.dy;
     let c1 = Offset::new(from.dx + dx * 0.42, from.dy + bend);
     let c2 = Offset::new(to.dx - dx * 0.42, to.dy - bend);
     cubic_pts(from, c1, c2, to, 44)
@@ -70,7 +69,7 @@ fn poly_len(pts: &[Offset]) -> f32 {
 }
 
 /// A point `s` of the way along the polyline (by arc length).
-pub fn point_at(pts: &[Offset], s: f32) -> Offset {
+pub(crate) fn point_at(pts: &[Offset], s: f32) -> Offset {
     if pts.is_empty() {
         return Offset::new(0.0, 0.0);
     }
@@ -83,7 +82,11 @@ pub fn point_at(pts: &[Offset], s: f32) -> Offset {
     for w in pts.windows(2) {
         let seg = (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy);
         if acc + seg >= target {
-            let u = if seg < 1.0e-6 { 0.0 } else { (target - acc) / seg };
+            let u = if seg < 1.0e-6 {
+                0.0
+            } else {
+                (target - acc) / seg
+            };
             return Offset::new(
                 w[0].dx + (w[1].dx - w[0].dx) * u,
                 w[0].dy + (w[1].dy - w[0].dy) * u,
@@ -107,7 +110,14 @@ fn path_through(pts: &[Offset]) -> Path {
 
 /// A self-drawing stroke: the dash-length trick — the framework's own
 /// `Dash` does the arithmetic, round caps round the growing tip.
-pub fn grow_stroke(book: &mut Sketchbook, pts: &[Offset], frac: f32, color: Color, width: f32, a: f32) {
+pub(crate) fn grow_stroke(
+    book: &mut Sketchbook,
+    pts: &[Offset],
+    frac: f32,
+    color: Color,
+    width: f32,
+    a: f32,
+) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 || frac <= 0.005 || pts.len() < 2 {
         return;
@@ -122,7 +132,7 @@ pub fn grow_stroke(book: &mut Sketchbook, pts: &[Offset], frac: f32, color: Colo
 /// fading trail trailing behind it. The head is a solid core with a
 /// crisp ring — the blur it once had is gone with the film's radial
 /// glows, and the trail does the softness now.
-pub fn rider(book: &mut Sketchbook, pts: &[Offset], s: f32, color: Color, r: f32, a: f32) {
+pub(crate) fn rider(book: &mut Sketchbook, pts: &[Offset], s: f32, color: Color, r: f32, a: f32) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 || pts.len() < 2 {
         return;
@@ -142,7 +152,8 @@ pub fn rider(book: &mut Sketchbook, pts: &[Offset], s: f32, color: Color, r: f32
 /// A flowing thread: the full path drawn faint, gradient dashes riding
 /// it toward the destination, one bright head leading the pack. This is
 /// the film's "data in transit" — used wherever something flows.
-pub fn flow_thread(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn flow_thread(
     book: &mut Sketchbook,
     from: Offset,
     to: Offset,
@@ -158,7 +169,7 @@ pub fn flow_thread(
 
 /// [`flow_thread`] over an arbitrary polyline — the flow engine the
 /// multi-station scenes (the compile pipeline, the rails) share.
-pub fn flow_along(
+pub(crate) fn flow_along(
     book: &mut Sketchbook,
     pts: &[Offset],
     t: f32,
@@ -188,7 +199,14 @@ pub fn flow_along(
 
 /// A tapered ribbon along `pts` — width breathes along its length.
 /// Drawn as short segments whose width follows a sine envelope.
-pub fn ribbon(book: &mut Sketchbook, pts: &[Offset], width: f32, t: f32, color: Color, a: f32) {
+pub(crate) fn ribbon(
+    book: &mut Sketchbook,
+    pts: &[Offset],
+    width: f32,
+    t: f32,
+    color: Color,
+    a: f32,
+) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 || pts.len() < 3 {
         return;
@@ -207,7 +225,8 @@ pub fn ribbon(book: &mut Sketchbook, pts: &[Offset], width: f32, t: f32, color: 
 /// Particles orbiting an ellipse — orbits with trails, not orbits with
 /// dots. `speed` is radians per second of film time.
 #[allow(clippy::too_many_arguments)]
-pub fn orbit_dots(
+#[allow(dead_code)]
+pub(crate) fn orbit_dots(
     book: &mut Sketchbook,
     center: Offset,
     rx: f32,
@@ -238,7 +257,8 @@ pub fn orbit_dots(
 
 /// A projected grid floor — the vector way to do depth: lines, not
 /// faces. Lines along x and z on the y=0 plane, faded by fog depth.
-pub fn grid_floor_lines(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn grid_floor_lines(
     book: &mut Sketchbook,
     cam: &crate::three_d::Camera,
     canvas: Size,
@@ -255,14 +275,15 @@ pub fn grid_floor_lines(
     if a <= 0.01 {
         return;
     }
-    let mut line = |book: &mut Sketchbook, p0: crate::three_d::Vec3, p1: crate::three_d::Vec3, alpha: f32| {
-        if let (Some((a0, d0, _)), Some((a1, _, _))) =
-            (cam.project(p0, canvas), cam.project(p1, canvas))
-        {
-            let fog = clamp01((d0 - fog_near) / (fog_far - fog_near));
-            book.line(a0, a1, pf::alpha(color, alpha * (1.0 - fog) * a), 1.1);
-        }
-    };
+    let line =
+        |book: &mut Sketchbook, p0: crate::three_d::Vec3, p1: crate::three_d::Vec3, alpha: f32| {
+            if let (Some((a0, d0, _)), Some((a1, _, _))) =
+                (cam.project(p0, canvas), cam.project(p1, canvas))
+            {
+                let fog = clamp01((d0 - fog_near) / (fog_far - fog_near));
+                book.line(a0, a1, pf::alpha(color, alpha * (1.0 - fog) * a), 1.1);
+            }
+        };
     let mut z = z_near;
     while z <= z_far {
         line(
@@ -295,7 +316,7 @@ pub fn grid_floor_lines(
 /// thing they illustrate — *36 crates, one core* — and eight boxes still
 /// circling a claim they have already made are decoration. They were
 /// decoration in the v2 cut, which is the note this answers.
-pub fn cube_orbit(
+pub(crate) fn cube_orbit(
     book: &mut Sketchbook,
     canvas: Size,
     center: Offset,
@@ -307,7 +328,7 @@ pub fn cube_orbit(
     let converge = clamp01(converge);
     let shrink = 1.0 - 0.62 * ease_in_out(converge);
     let a = a * (1.0 - 0.72 * converge);
-    use crate::three_d::{box_mesh, draw_mesh, Camera, MeshStyle, Vec3};
+    use crate::three_d::{box_mesh, Camera, MeshStyle, Vec3};
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 {
         return;
@@ -375,9 +396,14 @@ fn draw_mesh_a(
     // composition's centre is wherever the 2D layout wants it — so the
     // whole world rides the *difference*, not the centre itself.
     book.transformed(
-        Transform::translate(Offset::new(center.dx - canvas.width * 0.5, center.dy - canvas.height * 0.5)),
+        Transform::translate(Offset::new(
+            center.dx - canvas.width * 0.5,
+            center.dy - canvas.height * 0.5,
+        )),
         |b| {
-            book_layer_a(b, a, |bb| crate::three_d::draw_mesh(bb, mesh, cam, canvas, style));
+            book_layer_a(b, a, |bb| {
+                crate::three_d::draw_mesh(bb, mesh, cam, canvas, style)
+            });
         },
     );
 }
@@ -393,7 +419,7 @@ fn book_layer_a(book: &mut Sketchbook, a: f32, draw: impl FnOnce(&mut Sketchbook
 
 /// A projected 3D ring — two ellipse strokes in a tilted plane, with
 /// orbit riders. The end card's halo, drawn in real perspective.
-pub fn ring3(
+pub(crate) fn ring3(
     book: &mut Sketchbook,
     canvas: Size,
     center: Offset,
@@ -432,11 +458,18 @@ pub fn ring3(
             pts.push((moved, depth));
         }
     }
-    let (dmin, dmax) = pts.iter().fold((f32::MAX, f32::MIN), |(lo, hi), (_, d)| (lo.min(*d), hi.max(*d)));
+    let (dmin, dmax) = pts.iter().fold((f32::MAX, f32::MIN), |(lo, hi), (_, d)| {
+        (lo.min(*d), hi.max(*d))
+    });
     for w in pts.windows(2) {
         let near = 1.0 - clamp01(((w[0].1 + w[1].1) * 0.5 - dmin) / (dmax - dmin).max(1.0));
         let color = if near > 0.5 { BRAND_NEAR } else { BRAND_FAR };
-        book.line(w[0].0, w[1].0, pf::alpha(color, (0.16 + 0.32 * near) * a), 1.3 + 0.8 * near);
+        book.line(
+            w[0].0,
+            w[1].0,
+            pf::alpha(color, (0.16 + 0.32 * near) * a),
+            1.3 + 0.8 * near,
+        );
     }
     // Three riders orbit the ring in 3D, projected like everything else.
     for k in 0..3 {
@@ -461,7 +494,7 @@ pub fn ring3(
 /// The two-tone wordmark — **`vieww` in ink, `studio` in the brand's
 /// purple**. One shaped paragraph, two spans, so the seam between the
 /// colours is a glyph boundary, never a layout guess.
-pub fn wordmark(size: f32, a: f32) -> vieww_widget::WidgetNode {
+pub(crate) fn wordmark(size: f32, a: f32) -> vieww_widget::WidgetNode {
     RichText::new(vec![
         Span::new("vieww").color(pf::alpha(INK, 0.97 * a)),
         Span::new("studio").color(pf::alpha(BRAND_NEAR, a)),
@@ -473,17 +506,41 @@ pub fn wordmark(size: f32, a: f32) -> vieww_widget::WidgetNode {
 
 /// Corner brackets that draw themselves — four L-strokes, each grown
 /// to `frac`, with a soft accent halo at the tips while still growing.
-pub fn corner_brackets(book: &mut Sketchbook, r: Rect, frac: f32, color: Color, a: f32, len: f32) {
+#[allow(dead_code)]
+pub(crate) fn corner_brackets(
+    book: &mut Sketchbook,
+    r: Rect,
+    frac: f32,
+    color: Color,
+    a: f32,
+    len: f32,
+) {
     let a = a.clamp(0.0, 1.0);
     if a <= 0.01 || frac <= 0.01 {
         return;
     }
     let (l, t, rt, b) = (r.left, r.top, r.right, r.bottom);
     let corners: [[Offset; 3]; 4] = [
-        [Offset::new(l, t + len), Offset::new(l, t), Offset::new(l + len, t)],
-        [Offset::new(rt - len, t), Offset::new(rt, t), Offset::new(rt, t + len)],
-        [Offset::new(rt, b - len), Offset::new(rt, b), Offset::new(rt - len, b)],
-        [Offset::new(l + len, b), Offset::new(l, b), Offset::new(l, b - len)],
+        [
+            Offset::new(l, t + len),
+            Offset::new(l, t),
+            Offset::new(l + len, t),
+        ],
+        [
+            Offset::new(rt - len, t),
+            Offset::new(rt, t),
+            Offset::new(rt, t + len),
+        ],
+        [
+            Offset::new(rt, b - len),
+            Offset::new(rt, b),
+            Offset::new(rt - len, b),
+        ],
+        [
+            Offset::new(l + len, b),
+            Offset::new(l, b),
+            Offset::new(l, b - len),
+        ],
     ];
     for (i, c) in corners.iter().enumerate() {
         // Each corner draws right-to-top; stagger them a hair.
@@ -494,7 +551,8 @@ pub fn corner_brackets(book: &mut Sketchbook, r: Rect, frac: f32, color: Color, 
 
 /// The token flood — a brand-coloured wash sweeping the frame once,
 /// left to right, the accent asserting itself over everything.
-pub fn token_flood(book: &mut Sketchbook, w: f32, h: f32, p: f32, color: Color) {
+#[allow(dead_code)]
+pub(crate) fn token_flood(book: &mut Sketchbook, w: f32, h: f32, p: f32, color: Color) {
     let p = clamp01(p);
     if p <= 0.001 || p >= 0.999 {
         return;
@@ -507,17 +565,15 @@ pub fn token_flood(book: &mut Sketchbook, w: f32, h: f32, p: f32, color: Color) 
         (1.0, pf::alpha(color, 0.0)),
     ]);
     // Resolve the unit-square gradient over the band's own rect.
-    book.transformed(
-        Transform::translate(Offset::new(x, 0.0)),
-        |b| {
-            b.rect(Rect::new(0.0, 0.0, band, h), g);
-        },
-    );
+    book.transformed(Transform::translate(Offset::new(x, 0.0)), |b| {
+        b.rect(Rect::new(0.0, 0.0, band, h), g);
+    });
 }
 
 /// The light sweep — one diagonal bar of light crossing the studio
 /// once, as the wordmark lands. The sheen that says *this is real*.
-pub fn light_sweep(book: &mut Sketchbook, w: f32, h: f32, p: f32, a: f32) {
+#[allow(dead_code)]
+pub(crate) fn light_sweep(book: &mut Sketchbook, w: f32, h: f32, p: f32, a: f32) {
     let p = clamp01(p);
     if p <= 0.001 || p >= 0.999 || a <= 0.01 {
         return;
@@ -525,10 +581,8 @@ pub fn light_sweep(book: &mut Sketchbook, w: f32, h: f32, p: f32, a: f32) {
     let span = w + h;
     let x = -h * 0.4 + span * p;
     book.transformed(
-        Transform::translate(Offset::new(x, 0.0)).then(Transform::rotate_around(
-            Offset::new(0.0, h * 0.5),
-            -0.16,
-        )),
+        Transform::translate(Offset::new(x, 0.0))
+            .then(Transform::rotate_around(Offset::new(0.0, h * 0.5), -0.16)),
         |b| {
             let band_w = 190.0;
             let g = Gradient::horizontal().with_stops(&[
@@ -543,7 +597,8 @@ pub fn light_sweep(book: &mut Sketchbook, w: f32, h: f32, p: f32, a: f32) {
 
 /// An anchor ring with a label stem — the callout's foot. A ring that
 /// blooms on `p`, a hairline stem rising to the label plate.
-pub fn anchor_foot(book: &mut Sketchbook, at: Offset, p: f32, color: Color, a: f32) {
+#[allow(dead_code)]
+pub(crate) fn anchor_foot(book: &mut Sketchbook, at: Offset, p: f32, color: Color, a: f32) {
     let p = clamp01(p);
     if p <= 0.01 || a <= 0.01 {
         return;
@@ -552,27 +607,48 @@ pub fn anchor_foot(book: &mut Sketchbook, at: Offset, p: f32, color: Color, a: f
     book.ring(at, 10.0 * bloom, 1.6, pf::alpha(color, 0.75 * a));
     book.circle(at, 3.2, pf::alpha(color, 0.95 * a));
     if p < 1.0 {
-        book.ring(at, 10.0 + 16.0 * (1.0 - p), 1.0, pf::alpha(color, 0.3 * (1.0 - p) * a));
+        book.ring(
+            at,
+            10.0 + 16.0 * (1.0 - p),
+            1.0,
+            pf::alpha(color, 0.3 * (1.0 - p) * a),
+        );
     }
 }
 
 /// The studio act's room — a ground that can overscan. Scenes whose
 /// camera dips below zoom 1.0 paint margin so the pullback never
 /// reveals the world's edge.
-pub fn room(book: &mut Sketchbook, w: f32, h: f32, margin: f32, top: Color, mid: Color, bot: Color) {
+pub(crate) fn room(
+    book: &mut Sketchbook,
+    w: f32,
+    h: f32,
+    margin: f32,
+    top: Color,
+    mid: Color,
+    bot: Color,
+) {
     book.rect(
         Rect::new(-margin, -margin, w + margin, h + margin),
-        Gradient::vertical().with_dither().with_stops(&[
-            (0.0, top),
-            (0.55, mid),
-            (1.0, bot),
-        ]),
+        Gradient::vertical()
+            .with_dither()
+            .with_stops(&[(0.0, top), (0.55, mid), (1.0, bot)]),
     );
 }
 
 /// Stars that can overscan with the room — same distribution as
 /// [`pf::stars`], drawn over the margined rect.
-pub fn stars_wide(book: &mut Sketchbook, w: f32, h: f32, margin: f32, seed: u64, n: usize, t: f32, base: f32) {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn stars_wide(
+    book: &mut Sketchbook,
+    w: f32,
+    h: f32,
+    margin: f32,
+    seed: u64,
+    n: usize,
+    t: f32,
+    base: f32,
+) {
     let mut rng = Rng::new(seed);
     for _ in 0..n {
         let x = -margin + rng.f01() * (w + 2.0 * margin);
@@ -598,7 +674,7 @@ pub fn stars_wide(book: &mut Sketchbook, w: f32, h: f32, margin: f32, seed: u64,
 /// accent seam, a hairline edge and a real drop shadow.
 ///
 /// Draw this *first*, then draw the group's content at the same rect.
-pub fn stage_plate(book: &mut Sketchbook, r: Rect, p: f32, color: Color, a: f32) {
+pub(crate) fn stage_plate(book: &mut Sketchbook, r: Rect, p: f32, color: Color, a: f32) {
     let p = clamp01(p);
     if p <= 0.01 || a <= 0.01 {
         return;
@@ -615,7 +691,11 @@ pub fn stage_plate(book: &mut Sketchbook, r: Rect, p: f32, color: Color, a: f32)
     book.shadow(
         Rect::new(body.left, body.top + 10.0, body.right, body.bottom + 10.0),
         radius,
-        vieww_foundation::Shadow::new(pf::alpha(Color::BLACK, 0.62 * a), Offset::new(0.0, 14.0), 42.0),
+        vieww_foundation::Shadow::new(
+            pf::alpha(Color::BLACK, 0.62 * a),
+            Offset::new(0.0, 14.0),
+            42.0,
+        ),
     );
     // The plate itself — near-opaque so the app under it stops shouting.
     book.rrect(
@@ -636,7 +716,12 @@ pub fn stage_plate(book: &mut Sketchbook, r: Rect, p: f32, color: Color, a: f32)
     let seam_w = body.width() * 0.62 * grow;
     if seam_w > 2.0 {
         book.rect(
-            Rect::new(body.left + 22.0, body.top, body.left + 22.0 + seam_w, body.top + 2.0),
+            Rect::new(
+                body.left + 22.0,
+                body.top,
+                body.left + 22.0 + seam_w,
+                body.top + 2.0,
+            ),
             Gradient::horizontal().with_stops(&[
                 (0.0, pf::alpha(color, 0.0)),
                 (0.22, pf::alpha(color, 0.85 * a)),
@@ -648,7 +733,7 @@ pub fn stage_plate(book: &mut Sketchbook, r: Rect, p: f32, color: Color, a: f32)
 
 /// A specular sheen travelling once across a plate — the premium tell.
 /// `p` is the sweep's own progress; outside `0..1` it draws nothing.
-pub fn plate_sheen(book: &mut Sketchbook, r: Rect, p: f32, a: f32) {
+pub(crate) fn plate_sheen(book: &mut Sketchbook, r: Rect, p: f32, a: f32) {
     let p = clamp01(p);
     if p <= 0.001 || p >= 0.999 || a <= 0.01 {
         return;
@@ -673,7 +758,8 @@ pub fn plate_sheen(book: &mut Sketchbook, r: Rect, p: f32, a: f32) {
 /// `budget` share units; the bar fills to `value/scale` on `p`, and the
 /// budget's line is drawn where it actually falls, labelled by the
 /// caller. Over budget is drawn in `over`, under in `under`.
-pub fn budget_bar(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn budget_bar(
     book: &mut Sketchbook,
     r: Rect,
     value: f32,
@@ -720,7 +806,7 @@ pub fn budget_bar(
 
 /// A hairline tick ladder under a gauge — the scale the bars are read
 /// against, so a bar means a number and not a feeling.
-pub fn gauge_ticks(book: &mut Sketchbook, x0: f32, x1: f32, y: f32, n: usize, a: f32) {
+pub(crate) fn gauge_ticks(book: &mut Sketchbook, x0: f32, x1: f32, y: f32, n: usize, a: f32) {
     if a <= 0.01 {
         return;
     }
@@ -736,7 +822,7 @@ pub fn gauge_ticks(book: &mut Sketchbook, x0: f32, x1: f32, y: f32, n: usize, a:
 }
 
 /// The canvas size, re-exported for the painters that need it.
-pub fn canvas() -> Size {
+pub(crate) fn canvas() -> Size {
     CANVAS
 }
 

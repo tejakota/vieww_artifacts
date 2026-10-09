@@ -5,15 +5,15 @@
 //! each ship something slightly else, the tolls every port pays, and
 //! then the question the whole film exists to ask.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Shadow, Sketchbook, TextAlign};
+use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Shadow, Size, Sketchbook, TextAlign};
 use vieww_widget::prelude::*;
 
-use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, Rng};
-use crate::product_film as pf;
 use super::filmkit as fk;
 use super::{
-    BRAND_FAR, BRAND_NEAR, PORTS, ACCENT, BG_DEEP, BREAK_RED, CANVAS, INK, MUTED, SYN_TYPE, W,
+    ACCENT, BG_DEEP, BRAND_FAR, BRAND_NEAR, BREAK_RED, CANVAS, INK, MUTED, PORTS, SYN_TYPE, W,
 };
+use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, Rng};
+use crate::product_film as pf;
 
 // ── Z01 · the_same_picture ──────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ const FLAWS: [&str; 4] = [
     "the brand went grey",
 ];
 
-pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     // `ctx.sec` is unused here since the stage light came out — the
     // picture's breathing now lives in the flows, which are functions
@@ -84,13 +84,14 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
     let card_in = ease_out_expo(clamp01(t / 0.14));
     if card_in > 0.01 {
         stack = stack.push(
-            Transformed::translate(Offset::new(0.0, (1.0 - card_in) * 26.0))
-                .child(Opacity::new(card_in).child(Painting::sized(
+            Transformed::translate(Offset::new(0.0, (1.0 - card_in) * 26.0)).child(
+                Opacity::new(card_in).child(Painting::sized(
                     CANVAS,
                     PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                         draw_truth_card(book, CARD, card_in);
                     }),
-                ))),
+                )),
+            ),
         );
     }
 
@@ -107,28 +108,41 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         }
         let (anchor, port, flaw) = (CARD_ANCHORS[i], PORTS[i], FLAWS[i]);
         let station = *station;
-        stack = stack.push(Painting::sized(CANVAS, PaintWith::new(
-            move |book: &mut Sketchbook, _s: Size| {
+        stack = stack.push(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 // The rail — a cubic that leaves the card's edge and
                 // lands on the station, drawn to its own progress; once
                 // landed, it *flows*: the picture is in transit, and
                 // the dashes say so.
                 if rail_p > 0.01 {
                     let sc = station_center(station);
-                    let end = if station.left < 900.0 { Offset::new(station.right, sc.dy) } else { Offset::new(station.left, sc.dy) };
+                    let end = if station.left < 900.0 {
+                        Offset::new(station.right, sc.dy)
+                    } else {
+                        Offset::new(station.left, sc.dy)
+                    };
                     let pts = fk::thread_pts(anchor, end, 0.0);
                     fk::grow_stroke(book, &pts, rail_p, ACCENT, 1.5, 0.30 + 0.45 * rail_p);
                     let flow = clamp01((rail_p - 0.85) * 7.0);
                     if flow > 0.01 {
-                        fk::flow_along(book, &pts, rail_t0 + t * 1.0 + i as f32 * 1.3, ACCENT, flow * 0.8, 1.3, 0.16);
+                        fk::flow_along(
+                            book,
+                            &pts,
+                            rail_t0 + t * 1.0 + i as f32 * 1.3,
+                            ACCENT,
+                            flow * 0.8,
+                            1.3,
+                            0.16,
+                        );
                     }
                 }
                 // The port card — the same picture, translated.
                 if card_p > 0.01 {
                     draw_port_card(book, station, i, card_p);
                 }
-            },
-        )));
+            }),
+        ));
         // The port's name and its flaw — under the card, never on it: a
         // label laid over the picture it names hides the very drift it is
         // pointing at. The flaw does not arrive dim and wait to be
@@ -138,10 +152,16 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         if card_p > 0.01 {
             let rise = (1.0 - card_p) * 10.0;
             stack = stack.push(super::frame::label(
-                station.left, station.bottom + 12.0 + rise, station.width(), 30.0,
+                station.left,
+                station.bottom + 12.0 + rise,
+                station.width(),
+                30.0,
                 port.to_string(),
-                pf::geist_mono(21.0).letter_spacing(2.0).color(pf::alpha(INK, 0.94)),
-                TextAlign::Center, card_p,
+                pf::geist_mono(21.0)
+                    .letter_spacing(2.0)
+                    .color(pf::alpha(INK, 0.94)),
+                TextAlign::Center,
+                card_p,
             ));
             // Written, not faded: every letter that is on screen is at
             // full red from its first frame, and the line fills left to
@@ -151,7 +171,9 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
                     flaw,
                     pf::TypeAt::CenteredOn((station.left + station.width() * 0.5) as i32),
                     station.bottom + 44.0 + rise + 1.0,
-                    pf::geist_mono(17.0).letter_spacing(0.6).color(pf::alpha(BREAK_RED, 0.95)),
+                    pf::geist_mono(17.0)
+                        .letter_spacing(0.6)
+                        .color(pf::alpha(BREAK_RED, 0.95)),
                     flaw_p,
                 ));
             }
@@ -167,16 +189,30 @@ pub fn the_same_picture(ctx: &pf::Ctx) -> WidgetNode {
         .count();
     if ports_in > 0 {
         stack = stack.push(super::frame::label(
-            560.0, 870.0, 800.0, 36.0,
+            560.0,
+            870.0,
+            800.0,
+            36.0,
             format!("rebuild {ports_in} of 4 — same design, four separate codebases"),
-            pf::geist_mono(22.0).letter_spacing(1.2).color(pf::alpha(MUTED, 0.95)),
-            TextAlign::Center, 1.0,
+            pf::geist_mono(22.0)
+                .letter_spacing(1.2)
+                .color(pf::alpha(MUTED, 0.95)),
+            TextAlign::Center,
+            1.0,
         ));
     }
 
     // The film's voice.
-    stack = stack.push(super::frame::caption("One design. Five separate codebases.", 1002.0, clamp01((t - 0.10) / 0.10)));
-    stack = stack.push(super::frame::caption("Every app is rebuilt for each platform — and each ends up different.", 966.0, clamp01((t - 0.55) / 0.12)));
+    stack = stack.push(super::frame::caption(
+        "One design. Five separate codebases.",
+        1002.0,
+        clamp01((t - 0.10) / 0.10),
+    ));
+    stack = stack.push(super::frame::caption(
+        "Every app is rebuilt for each platform — and each ends up different.",
+        966.0,
+        clamp01((t - 0.55) / 0.12),
+    ));
     stack.into()
 }
 
@@ -191,7 +227,11 @@ fn draw_truth_card(book: &mut Sketchbook, r: Rect, a: f32) {
     book.shadow(
         pf::xywh(r.left, r.top + 6.0, r.width(), r.height()),
         22.0,
-        Shadow::new(pf::alpha(Color::BLACK, 0.59 * a), Offset::new(0.0, 10.0), 34.0),
+        Shadow::new(
+            pf::alpha(Color::BLACK, 0.59 * a),
+            Offset::new(0.0, 10.0),
+            34.0,
+        ),
     );
     let body = pf::xywh(r.left, r.top, r.width(), r.height());
     book.rrect(body, 22.0, pf::alpha(pf::SURFACE, a));
@@ -199,24 +239,26 @@ fn draw_truth_card(book: &mut Sketchbook, r: Rect, a: f32) {
     // The header — the brand's own gradient, clipped to the card's
     // top corners by a zero-blur layer with a rounded clip.
     let header_h = 150.0;
-    book.layer(
-        a,
-        0.0,
-        Some(Path::rounded_rect(body, 22.0)),
-        |clipped| {
-            clipped.rrect(
-                pf::xywh(r.left, r.top, r.width(), header_h),
-                0.0,
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, BRAND_FAR),
-                    (1.0, BRAND_NEAR),
-                ]),
-            );
-        },
-    );
+    book.layer(a, 0.0, Some(Path::rounded_rect(body, 22.0)), |clipped| {
+        clipped.rrect(
+            pf::xywh(r.left, r.top, r.width(), header_h),
+            0.0,
+            Gradient::vertical()
+                .with_dither()
+                .with_stops(&[(0.0, BRAND_FAR), (1.0, BRAND_NEAR)]),
+        );
+    });
     // Title lines on the header.
-    book.rrect(pf::xywh(r.left + 28.0, r.top + 42.0, 190.0, 14.0), 7.0, pf::alpha(Color::WHITE, 0.85 * a));
-    book.rrect(pf::xywh(r.left + 28.0, r.top + 68.0, 120.0, 10.0), 5.0, pf::alpha(Color::WHITE, 0.47 * a));
+    book.rrect(
+        pf::xywh(r.left + 28.0, r.top + 42.0, 190.0, 14.0),
+        7.0,
+        pf::alpha(Color::WHITE, 0.85 * a),
+    );
+    book.rrect(
+        pf::xywh(r.left + 28.0, r.top + 68.0, 120.0, 10.0),
+        5.0,
+        pf::alpha(Color::WHITE, 0.47 * a),
+    );
     // The avatar.
     book.circle(
         Offset::new(r.left + r.width() - 58.0, r.top + header_h - 30.0),
@@ -228,17 +270,46 @@ fn draw_truth_card(book: &mut Sketchbook, r: Rect, a: f32) {
         let y = r.top + header_h + 36.0 + row as f32 * 78.0;
         let row_rect = pf::xywh(r.left + 28.0, y, r.width() - 56.0, 58.0);
         book.rrect(row_rect, 12.0, pf::alpha(pf::SURFACE_2, a));
-        book.circle(Offset::new(row_rect.left + 28.0, y + 29.0), 14.0, pf::alpha(BRAND_NEAR, 0.55 * a));
-        book.rrect(pf::xywh(row_rect.left + 56.0, y + 15.0, 150.0, 9.0), 4.5, pf::alpha(pf::MUTED, 0.7 * a));
-        book.rrect(pf::xywh(row_rect.left + 56.0, y + 32.0, 96.0, 8.0), 4.0, pf::alpha(pf::FAINT, 0.6 * a));
+        book.circle(
+            Offset::new(row_rect.left + 28.0, y + 29.0),
+            14.0,
+            pf::alpha(BRAND_NEAR, 0.55 * a),
+        );
+        book.rrect(
+            pf::xywh(row_rect.left + 56.0, y + 15.0, 150.0, 9.0),
+            4.5,
+            pf::alpha(pf::MUTED, 0.7 * a),
+        );
+        book.rrect(
+            pf::xywh(row_rect.left + 56.0, y + 32.0, 96.0, 8.0),
+            4.0,
+            pf::alpha(pf::FAINT, 0.6 * a),
+        );
     }
     // The accent button.
-    let btn = pf::xywh(r.left + 28.0, r.top + r.height() - 84.0, r.width() - 56.0, 52.0);
-    book.rrect(btn, 14.0, Gradient::horizontal().with_dither().with_stops(&[
-        (0.0, BRAND_NEAR),
-        (1.0, BRAND_FAR),
-    ]));
-    book.rrect(pf::xywh(btn.left + btn.width() * 0.5 - 44.0, btn.top + 19.0, 88.0, 12.0), 6.0, pf::alpha(Color::WHITE, 0.9 * a));
+    let btn = pf::xywh(
+        r.left + 28.0,
+        r.top + r.height() - 84.0,
+        r.width() - 56.0,
+        52.0,
+    );
+    book.rrect(
+        btn,
+        14.0,
+        Gradient::horizontal()
+            .with_dither()
+            .with_stops(&[(0.0, BRAND_NEAR), (1.0, BRAND_FAR)]),
+    );
+    book.rrect(
+        pf::xywh(
+            btn.left + btn.width() * 0.5 - 44.0,
+            btn.top + 19.0,
+            88.0,
+            12.0,
+        ),
+        6.0,
+        pf::alpha(Color::WHITE, 0.9 * a),
+    );
 }
 
 /// A port card — the same picture after its translation, each wrong in
@@ -248,14 +319,22 @@ fn draw_port_card(book: &mut Sketchbook, r: Rect, i: usize, a: f32) {
     book.shadow(
         pf::xywh(r.left, r.top + 4.0, r.width(), r.height()),
         14.0,
-        Shadow::new(pf::alpha(Color::BLACK, 0.43 * a), Offset::new(0.0, 6.0), 18.0),
+        Shadow::new(
+            pf::alpha(Color::BLACK, 0.43 * a),
+            Offset::new(0.0, 6.0),
+            18.0,
+        ),
     );
     match i {
         // web · react — the hue drifts toward blue and a browser chrome
         // appears that the design never asked for.
         0 => {
             book.rrect(body, 8.0, pf::alpha(pf::SURFACE, a));
-            book.rrect(pf::xywh(r.left, r.top, r.width(), 30.0), 8.0, pf::alpha(Color::rgb(38, 40, 48), a));
+            book.rrect(
+                pf::xywh(r.left, r.top, r.width(), 30.0),
+                8.0,
+                pf::alpha(Color::rgb(38, 40, 48), a),
+            );
             for dot in 0..3 {
                 book.circle(
                     Offset::new(r.left + 16.0 + dot as f32 * 16.0, r.top + 15.0),
@@ -263,43 +342,93 @@ fn draw_port_card(book: &mut Sketchbook, r: Rect, i: usize, a: f32) {
                     pf::alpha(pf::FAINT, a),
                 );
             }
-            book.rrect(pf::xywh(r.left + 16.0, r.top + 44.0, r.width() - 32.0, 34.0), 6.0, pf::alpha(SYN_TYPE, 0.5 * a));
+            book.rrect(
+                pf::xywh(r.left + 16.0, r.top + 44.0, r.width() - 32.0, 34.0),
+                6.0,
+                pf::alpha(SYN_TYPE, 0.5 * a),
+            );
             for row in 0..2 {
                 book.rrect(
-                    pf::xywh(r.left + 16.0, r.top + 92.0 + row as f32 * 34.0, r.width() - 32.0, 22.0),
+                    pf::xywh(
+                        r.left + 16.0,
+                        r.top + 92.0 + row as f32 * 34.0,
+                        r.width() - 32.0,
+                        22.0,
+                    ),
                     4.0,
                     pf::alpha(pf::SURFACE_2, a),
                 );
             }
-            book.rrect(pf::xywh(r.left + 16.0, r.top + r.height() - 34.0, r.width() - 32.0, 22.0), 4.0, pf::alpha(SYN_TYPE, 0.6 * a));
+            book.rrect(
+                pf::xywh(
+                    r.left + 16.0,
+                    r.top + r.height() - 34.0,
+                    r.width() - 32.0,
+                    22.0,
+                ),
+                4.0,
+                pf::alpha(SYN_TYPE, 0.6 * a),
+            );
         }
         // android — the spacing collapses and the radius disappears.
         1 => {
             book.rrect(body, 0.0, pf::alpha(pf::SURFACE, a));
-            book.rrect(pf::xywh(r.left + 14.0, r.top + 14.0, r.width() - 28.0, 30.0), 0.0, pf::alpha(BRAND_NEAR, 0.5 * a));
+            book.rrect(
+                pf::xywh(r.left + 14.0, r.top + 14.0, r.width() - 28.0, 30.0),
+                0.0,
+                pf::alpha(BRAND_NEAR, 0.5 * a),
+            );
             for row in 0..3 {
                 book.rrect(
-                    pf::xywh(r.left + 14.0, r.top + 50.0 + row as f32 * 30.0, r.width() - 28.0, 26.0),
+                    pf::xywh(
+                        r.left + 14.0,
+                        r.top + 50.0 + row as f32 * 30.0,
+                        r.width() - 28.0,
+                        26.0,
+                    ),
                     0.0,
                     pf::alpha(pf::SURFACE_2, a),
                 );
             }
-            book.rrect(pf::xywh(r.left + 14.0, r.top + r.height() - 26.0, r.width() - 28.0, 18.0), 0.0, pf::alpha(BRAND_NEAR, 0.65 * a));
+            book.rrect(
+                pf::xywh(
+                    r.left + 14.0,
+                    r.top + r.height() - 26.0,
+                    r.width() - 28.0,
+                    18.0,
+                ),
+                0.0,
+                pf::alpha(BRAND_NEAR, 0.65 * a),
+            );
         }
         // ios — everything is a pill.
         2 => {
             book.rrect(body, 44.0, pf::alpha(pf::SURFACE, a));
-            book.rrect(pf::xywh(r.left + 20.0, r.top + 18.0, r.width() - 40.0, 44.0), 22.0, pf::alpha(BRAND_FAR, 0.5 * a));
+            book.rrect(
+                pf::xywh(r.left + 20.0, r.top + 18.0, r.width() - 40.0, 44.0),
+                22.0,
+                pf::alpha(BRAND_FAR, 0.5 * a),
+            );
             for row in 0..2 {
                 book.rrect(
-                    pf::xywh(r.left + 20.0, r.top + 72.0 + row as f32 * 36.0, r.width() - 40.0, 28.0),
+                    pf::xywh(
+                        r.left + 20.0,
+                        r.top + 72.0 + row as f32 * 36.0,
+                        r.width() - 40.0,
+                        28.0,
+                    ),
                     14.0,
                     pf::alpha(pf::SURFACE_2, a),
                 );
             }
             // The button — a pill too, like everything else here.
             book.rrect(
-                pf::xywh(r.left + 20.0, r.top + r.height() - 46.0, r.width() - 40.0, 30.0),
+                pf::xywh(
+                    r.left + 20.0,
+                    r.top + r.height() - 46.0,
+                    r.width() - 40.0,
+                    30.0,
+                ),
                 15.0,
                 pf::alpha(BRAND_NEAR, 0.65 * a),
             );
@@ -307,15 +436,33 @@ fn draw_port_card(book: &mut Sketchbook, r: Rect, i: usize, a: f32) {
         // desktop · qt — the brand renders as grey, all corners square.
         _ => {
             book.rrect(body, 4.0, pf::alpha(Color::rgb(44, 44, 46), a));
-            book.rrect(pf::xywh(r.left + 14.0, r.top + 12.0, r.width() - 28.0, 26.0), 2.0, pf::alpha(Color::rgb(88, 88, 92), a));
+            book.rrect(
+                pf::xywh(r.left + 14.0, r.top + 12.0, r.width() - 28.0, 26.0),
+                2.0,
+                pf::alpha(Color::rgb(88, 88, 92), a),
+            );
             for row in 0..2 {
                 book.rrect(
-                    pf::xywh(r.left + 14.0, r.top + 46.0 + row as f32 * 32.0, r.width() - 28.0, 24.0),
+                    pf::xywh(
+                        r.left + 14.0,
+                        r.top + 46.0 + row as f32 * 32.0,
+                        r.width() - 28.0,
+                        24.0,
+                    ),
                     2.0,
                     pf::alpha(Color::rgb(58, 58, 62), a),
                 );
             }
-            book.rrect(pf::xywh(r.left + 14.0, r.top + r.height() - 34.0, r.width() - 28.0, 22.0), 2.0, pf::alpha(Color::rgb(120, 120, 126), a));
+            book.rrect(
+                pf::xywh(
+                    r.left + 14.0,
+                    r.top + r.height() - 34.0,
+                    r.width() - 28.0,
+                    22.0,
+                ),
+                2.0,
+                pf::alpha(Color::rgb(120, 120, 126), a),
+            );
         }
     }
     // The arrival — a hairline that cools as the card settles.
@@ -337,7 +484,12 @@ const GATES: [(&str, &str); 4] = [
 ];
 
 /// The jar the tolls pay into (inner walls), in scene units.
-const JAR: super::models::Jar = super::models::Jar { left: 1380.0, top: 400.0, right: 1700.0, bottom: 790.0 };
+const JAR: super::models::Jar = super::models::Jar {
+    left: 1380.0,
+    top: 400.0,
+    right: 1700.0,
+    bottom: 790.0,
+};
 
 /// This scene's length — the coin drops are timed in seconds.
 const Z02_SECONDS: f32 = 12.0;
@@ -380,8 +532,16 @@ fn toll_flip(s: f32) -> TollFlip {
     let c1 = 1.9;
     let c3 = c1 + 1.0;
     let back = 1.0 + c3 * (u - 1.0).powi(3) + c1 * (u - 1.0).powi(2);
-    let turn = if s <= 0.0 { 0.0 } else { std::f32::consts::PI * back };
-    TollFlip { seam, turn, since_land: s - FLIP_LEN * 0.62 }
+    let turn = if s <= 0.0 {
+        0.0
+    } else {
+        std::f32::consts::PI * back
+    };
+    TollFlip {
+        seam,
+        turn,
+        since_land: s - FLIP_LEN * 0.62,
+    }
 }
 
 /// Draw the toll tile in its bar, `r` the tile's flat rectangle.
@@ -423,7 +583,12 @@ fn draw_toll_tile(book: &mut Sketchbook, r: Rect, f: TollFlip) {
     book.rrect(r, 8.0, pf::alpha(Color::BLACK, 0.28));
     if lift > 0.02 {
         book.rrect(
-            pf::xywh(r.left + 6.0, cy - 2.0 + lift * 10.0, r.width() - 12.0, 6.0 + 10.0 * lift),
+            pf::xywh(
+                r.left + 6.0,
+                cy - 2.0 + lift * 10.0,
+                r.width() - 12.0,
+                6.0 + 10.0 * lift,
+            ),
             6.0,
             pf::alpha(Color::BLACK, 0.25 * lift),
         );
@@ -434,13 +599,20 @@ fn draw_toll_tile(book: &mut Sketchbook, r: Rect, f: TollFlip) {
         book.stroke_rrect(face, 8.0, pf::alpha(Color::WHITE, 0.10), 1.0);
     } else {
         // The back — the toll. Deep red ground, a crisp red edge.
-        book.rrect(face, 8.0, pf::mix(Color::rgb(46, 16, 20), BREAK_RED, 0.12 + 0.18 * lift));
+        book.rrect(
+            face,
+            8.0,
+            pf::mix(Color::rgb(46, 16, 20), BREAK_RED, 0.12 + 0.18 * lift),
+        );
         book.stroke_rrect(face, 8.0, pf::alpha(BREAK_RED, 0.95), 1.3);
     }
     // Edge-on: the tile's thickness, a bright line.
     if cos.abs() < 0.22 {
         let a = 1.0 - cos.abs() / 0.22;
-        book.rect(pf::xywh(r.left, cy - 1.0 - lift * 6.0, r.width(), 2.0), pf::alpha(Color::WHITE, 0.45 * a));
+        book.rect(
+            pf::xywh(r.left, cy - 1.0 - lift * 6.0, r.width(), 2.0),
+            pf::alpha(Color::WHITE, 0.45 * a),
+        );
     }
 }
 
@@ -468,13 +640,18 @@ fn toll_drops() -> Vec<super::models::Drop> {
         for k in 0..8 {
             let r = 19.0 + rng.f01() * 7.0;
             let x = JAR.left + r + 4.0 + rng.f01() * (JAR.right - JAR.left - 2.0 * r - 8.0);
-            out.push(super::models::Drop { at: pay + FLIP_LEN * 0.62 + k as f32 * 0.07, x, r, gate });
+            out.push(super::models::Drop {
+                at: pay + FLIP_LEN * 0.62 + k as f32 * 0.07,
+                x,
+                r,
+                gate,
+            });
         }
     }
     out
 }
 
-pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
 
     let mut stack = Stack::new();
@@ -511,19 +688,41 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let drops = toll_drops();
     let coins = super::models::coins_at(JAR, &drops, sec);
-    let paid_n = GATES.iter().enumerate().filter(|(i, _)| t > 0.14 + *i as f32 * 0.14 + 0.22).count();
+    let paid_n = GATES
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| t > 0.14 + *i as f32 * 0.14 + 0.22)
+        .count();
     let jar_a = ease_out_cubic(clamp01((t - 0.08) / 0.12));
-    stack = stack.push(Positioned::fill().child(
-        Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+    stack = stack.push(Positioned::fill().child(Painting::sized(
+        CANVAS,
+        PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
             let j = JAR;
             // The glass: a soft fill and a U-shaped rim.
-            book.rrect(pf::xywh(j.left - 10.0, j.top, j.right - j.left + 20.0, j.bottom - j.top + 10.0), 22.0, pf::alpha(Color::WHITE, 0.03 * jar_a));
+            book.rrect(
+                pf::xywh(
+                    j.left - 10.0,
+                    j.top,
+                    j.right - j.left + 20.0,
+                    j.bottom - j.top + 10.0,
+                ),
+                22.0,
+                pf::alpha(Color::WHITE, 0.03 * jar_a),
+            );
             let mut rim = Path::new();
             rim.move_to(Offset::new(j.left - 10.0, j.top - 6.0))
                 .line_to(Offset::new(j.left - 10.0, j.bottom - 12.0))
-                .cubic_to(Offset::new(j.left - 10.0, j.bottom), Offset::new(j.left - 2.0, j.bottom + 10.0), Offset::new(j.left + 12.0, j.bottom + 10.0))
+                .cubic_to(
+                    Offset::new(j.left - 10.0, j.bottom),
+                    Offset::new(j.left - 2.0, j.bottom + 10.0),
+                    Offset::new(j.left + 12.0, j.bottom + 10.0),
+                )
                 .line_to(Offset::new(j.right - 12.0, j.bottom + 10.0))
-                .cubic_to(Offset::new(j.right + 2.0, j.bottom + 10.0), Offset::new(j.right + 10.0, j.bottom), Offset::new(j.right + 10.0, j.bottom - 12.0))
+                .cubic_to(
+                    Offset::new(j.right + 2.0, j.bottom + 10.0),
+                    Offset::new(j.right + 10.0, j.bottom),
+                    Offset::new(j.right + 10.0, j.bottom - 12.0),
+                )
                 .line_to(Offset::new(j.right + 10.0, j.top - 6.0));
             book.stroke(rim, pf::alpha(Color::WHITE, 0.22 * jar_a), 2.0);
             for (di, at) in &coins {
@@ -532,26 +731,48 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
                 if a <= 0.01 {
                     continue;
                 }
-                let warm = [pf::SYN_MACRO, Color::rgb(240, 138, 76), Color::rgb(232, 98, 82), BREAK_RED][d.gate];
+                let warm = [
+                    pf::SYN_MACRO,
+                    Color::rgb(240, 138, 76),
+                    Color::rgb(232, 98, 82),
+                    BREAK_RED,
+                ][d.gate];
                 book.circle(*at, d.r, pf::alpha(pf::mix(warm, Color::BLACK, 0.25), a));
                 book.circle(*at, d.r - 3.0, pf::alpha(warm, a));
-                book.ring(*at, d.r * 0.55, 1.4, pf::alpha(pf::mix(warm, Color::WHITE, 0.45), 0.8 * a));
-                book.circle(Offset::new(at.dx - d.r * 0.35, at.dy - d.r * 0.4), d.r * 0.18, pf::alpha(Color::WHITE, 0.35 * a));
+                book.ring(
+                    *at,
+                    d.r * 0.55,
+                    1.4,
+                    pf::alpha(pf::mix(warm, Color::WHITE, 0.45), 0.8 * a),
+                );
+                book.circle(
+                    Offset::new(at.dx - d.r * 0.35, at.dy - d.r * 0.4),
+                    d.r * 0.18,
+                    pf::alpha(Color::WHITE, 0.35 * a),
+                );
             }
-        })),
-    ));
+        }),
+    )));
     // The count — above the jar; the reading — under it.
     stack = stack.push(super::frame::label(
-        JAR.left - 60.0, 318.0, JAR.right - JAR.left + 120.0, 52.0,
+        JAR.left - 60.0,
+        318.0,
+        JAR.right - JAR.left + 120.0,
+        52.0,
         format!("{paid_n} of 4 costs"),
         pf::geist(40.0).bold().color(pf::alpha(INK, 0.97)),
-        TextAlign::Center, jar_a,
+        TextAlign::Center,
+        jar_a,
     ));
     stack = stack.push(super::frame::label(
-        JAR.left - 80.0, JAR.bottom + 26.0, JAR.right - JAR.left + 160.0, 30.0,
+        JAR.left - 80.0,
+        JAR.bottom + 26.0,
+        JAR.right - JAR.left + 160.0,
+        30.0,
         "paid again on every platform".to_string(),
         pf::geist_mono(19.0).color(pf::alpha(MUTED, 0.92)),
-        TextAlign::Center, jar_a,
+        TextAlign::Center,
+        jar_a,
     ));
 
     // The gates — each bar slides in, holds, then pays: the toll is
@@ -583,11 +804,12 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
             let from = Offset::new(160.0 + gate_w, y + 48.0);
             let to = Offset::new(JAR.left + 40.0 + i as f32 * 60.0, JAR.top - 20.0);
             let phase = t * 1.0 + i as f32 * 0.9;
-            stack = stack.push(Positioned::fill().child(
-                Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+            stack = stack.push(Positioned::fill().child(Painting::sized(
+                CANVAS,
+                PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                     fk::flow_thread(book, from, to, 40.0, phase, BREAK_RED, flow_a * 0.75, 1.4);
-                })),
-            ));
+                }),
+            )));
         }
         stack = stack.push(
             Positioned::new()
@@ -595,26 +817,40 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
                 .top(y + judder)
                 .width(1060.0)
                 .height(96.0)
-                .child(Painting::sized(Size::new(1060.0, 96.0), PaintWith::new(
-                    move |book: &mut Sketchbook, _s: Size| {
+                .child(Painting::sized(
+                    Size::new(1060.0, 96.0),
+                    PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                         // The gate's bar.
                         let w = gate_w.max(0.0);
-                        book.rrect(pf::xywh(0.0, 8.0, w, 80.0), 14.0, pf::alpha(pf::SURFACE, 0.92));
-                        book.stroke_rrect(pf::xywh(0.0, 8.0, w, 80.0), 14.0, pf::alpha(Color::WHITE, 0.05), 1.0);
+                        book.rrect(
+                            pf::xywh(0.0, 8.0, w, 80.0),
+                            14.0,
+                            pf::alpha(pf::SURFACE, 0.92),
+                        );
+                        book.stroke_rrect(
+                            pf::xywh(0.0, 8.0, w, 80.0),
+                            14.0,
+                            pf::alpha(Color::WHITE, 0.05),
+                            1.0,
+                        );
                         // The toll's tile — right-aligned inside the bar:
                         // cut out of it, then turned over (see [`toll_flip`]).
                         if w > 220.0 {
                             draw_toll_tile(book, pf::xywh(w - 238.0, 22.0, 216.0, 52.0), flip);
                         }
-                    },
-                ))),
+                    }),
+                )),
         );
         // The gate's words.
         stack = stack.push(super::frame::label(
-            160.0 + 32.0, y + 8.0 + judder, 620.0, 80.0,
+            160.0 + 32.0,
+            y + 8.0 + judder,
+            620.0,
+            80.0,
             gate.to_string(),
             pf::geist(30.0).color(pf::alpha(INK, 0.95)),
-            TextAlign::Left, in_p,
+            TextAlign::Left,
+            in_p,
         ));
         // The toll's own word — printed the instant the stamp lands.
         if flip.since_land > 0.0 && gate_w > 220.0 {
@@ -624,22 +860,34 @@ pub fn the_tolls(ctx: &pf::Ctx) -> WidgetNode {
                 toll,
                 pf::TypeAt::CenteredOn((160.0 + gate_w - 130.0) as i32),
                 y + 35.0 + judder,
-                pf::geist_mono(19.0).letter_spacing(0.8).color(pf::mix(BREAK_RED, Color::WHITE, 0.25)),
+                pf::geist_mono(19.0).letter_spacing(0.8).color(pf::mix(
+                    BREAK_RED,
+                    Color::WHITE,
+                    0.25,
+                )),
                 clamp01(flip.since_land / 0.32),
             ));
         }
     }
 
     // The film's voice.
-    stack = stack.push(super::frame::caption("The gaps aren't bugs. They're built in.", 1002.0, clamp01((t - 0.10) / 0.10)));
-    stack = stack.push(super::frame::caption("Every platform pays again — in rewrites, mismatches and slow screens.", 966.0, clamp01((t - 0.62) / 0.12)));
+    stack = stack.push(super::frame::caption(
+        "The gaps aren't bugs. They're built in.",
+        1002.0,
+        clamp01((t - 0.10) / 0.10),
+    ));
+    stack = stack.push(super::frame::caption(
+        "Every platform pays again — in rewrites, mismatches and slow screens.",
+        966.0,
+        clamp01((t - 0.62) / 0.12),
+    ));
     stack.into()
 }
 
 // ── Z03 · the_question ──────────────────────────────────────────────────────
 
 /// The question — the need distilled to one line, asked in the dark.
-pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_question(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -667,17 +915,7 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
                 fov: 0.72,
             };
             fk::grid_floor_lines(
-                book,
-                &cam3,
-                s,
-                1700.0,
-                30.0,
-                2100.0,
-                180.0,
-                BRAND_NEAR,
-                0.85,
-                120.0,
-                1500.0,
+                book, &cam3, s, 1700.0, 30.0, 2100.0, 180.0, BRAND_NEAR, 0.85, 120.0, 1500.0,
             );
             // Motes rising off the floor — depth cues, not dust.
             let mote_a = clamp01((t - 0.12) / 0.3);
@@ -711,9 +949,23 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
             let charge = clamp01((t - 0.60) / 0.34);
             let centre = Offset::new(w * 0.5, 400.0);
             if grow > 0.01 {
-                book.ring(centre, (34.0 + 46.0 * charge) * grow * breath, 2.2, pf::alpha(BRAND_FAR, (0.42 + 0.20 * charge) * grow));
-                book.ring(centre, (34.0 + 46.0 * charge) * grow * breath + 14.0, 1.0, pf::alpha(BRAND_FAR, 0.22 * grow));
-                book.circle(centre, (8.0 + 7.0 * charge) * grow, pf::alpha(Color::WHITE, 0.95));
+                book.ring(
+                    centre,
+                    (34.0 + 46.0 * charge) * grow * breath,
+                    2.2,
+                    pf::alpha(BRAND_FAR, (0.42 + 0.20 * charge) * grow),
+                );
+                book.ring(
+                    centre,
+                    (34.0 + 46.0 * charge) * grow * breath + 14.0,
+                    1.0,
+                    pf::alpha(BRAND_FAR, 0.22 * grow),
+                );
+                book.circle(
+                    centre,
+                    (8.0 + 7.0 * charge) * grow,
+                    pf::alpha(Color::WHITE, 0.95),
+                );
             }
             // Two rings leaving the point, unhurried — the answer
             // beginning before the film has said what it is. Three read
@@ -738,7 +990,9 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
         "What if you built it once…",
         pf::TypeAt::CenteredOn(W as i32 / 2),
         532.0,
-        pf::geist(68.0).letter_spacing(0.4).color(pf::alpha(INK, 0.97)),
+        pf::geist(68.0)
+            .letter_spacing(0.4)
+            .color(pf::alpha(INK, 0.97)),
         clamp01((t - 0.16) / 0.24),
         sec,
     ));
@@ -746,12 +1000,18 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
         "…and it looked right everywhere?",
         pf::TypeAt::CenteredOn(W as i32 / 2),
         636.0,
-        pf::geist(62.0).letter_spacing(0.4).color(pf::alpha(ACCENT, 0.95)),
+        pf::geist(62.0)
+            .letter_spacing(0.4)
+            .color(pf::alpha(ACCENT, 0.95)),
         clamp01((t - 0.44) / 0.24),
         sec - 3.5,
     ));
 
-    stack = stack.push(super::frame::caption("The question every team eventually asks.", 1002.0, clamp01((t - 0.72) / 0.12)));
+    stack = stack.push(super::frame::caption(
+        "The question every team eventually asks.",
+        1002.0,
+        clamp01((t - 0.72) / 0.12),
+    ));
     stack.into()
 }
 
@@ -767,7 +1027,8 @@ pub fn the_question(ctx: &pf::Ctx) -> WidgetNode {
 /// release marks whose vertical offset from the design's own baseline
 /// *is* the drift. The baseline is dead straight and labelled; the four
 /// tracks leave it and never come back.
-pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
+#[allow(dead_code)]
+pub(crate) fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let mut stack = Stack::new();
@@ -805,7 +1066,6 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-
             // The design's own baseline — where every port was supposed
             // to stay. Drawn first, held all scene, never moves.
             let base_p = ease_out_expo(clamp01(t / 0.12));
@@ -819,7 +1079,10 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
                     if x > X0 + (X1 - X0) * base_p {
                         break;
                     }
-                    book.rect(pf::xywh(x - 0.75, BASE_Y - 8.0, 1.5, 16.0), pf::alpha(Color::WHITE, 0.20));
+                    book.rect(
+                        pf::xywh(x - 0.75, BASE_Y - 8.0, 1.5, 16.0),
+                        pf::alpha(Color::WHITE, 0.20),
+                    );
                 }
             }
 
@@ -868,38 +1131,72 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     if axis_a > 0.01 {
         for k in 0..RELEASES {
             let x = X0 + (X1 - X0) * (k as f32 / (RELEASES - 1) as f32);
-            stack = stack.push(Positioned::new().left(x - 60.0).top(BASE_Y + 176.0).width(120.0).height(30.0).child(
-                Opacity::new(axis_a * clamp01((t - 0.10 - k as f32 * 0.02) / 0.14)).child(
-                    Text::new(format!("r{}", k + 1))
-                        .style(pf::geist_mono(21.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.85)))
-                        .align(TextAlign::Center),
-                ),
-            ));
+            stack = stack.push(
+                Positioned::new()
+                    .left(x - 60.0)
+                    .top(BASE_Y + 176.0)
+                    .width(120.0)
+                    .height(30.0)
+                    .child(
+                        Opacity::new(axis_a * clamp01((t - 0.10 - k as f32 * 0.02) / 0.14)).child(
+                            Text::new(format!("r{}", k + 1))
+                                .style(
+                                    pf::geist_mono(21.0)
+                                        .letter_spacing(1.6)
+                                        .color(pf::alpha(MUTED, 0.85)),
+                                )
+                                .align(TextAlign::Center),
+                        ),
+                    ),
+            );
         }
-        stack = stack.push(Positioned::new().left(X0).top(BASE_Y + 214.0).width(1400.0).height(28.0).child(
-            Opacity::new(axis_a).child(
-                Text::new("six releases · one year".to_string())
-                    .style(pf::geist_mono(18.0).letter_spacing(2.6).color(pf::alpha(pf::FAINT, 0.9)))
-                    .align(TextAlign::Center),
-            ),
-        ));
+        stack = stack.push(
+            Positioned::new()
+                .left(X0)
+                .top(BASE_Y + 214.0)
+                .width(1400.0)
+                .height(28.0)
+                .child(
+                    Opacity::new(axis_a).child(
+                        Text::new("six releases · one year".to_string())
+                            .style(
+                                pf::geist_mono(18.0)
+                                    .letter_spacing(2.6)
+                                    .color(pf::alpha(pf::FAINT, 0.9)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
+        );
     }
 
     // The baseline's own label, and the four ports'.
     let lab_a = ease_out_cubic(clamp01((t - 0.14) / 0.14));
     if lab_a > 0.01 {
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(BASE_Y - 17.0).width(220.0).height(34.0).child(
-            Opacity::new(lab_a).child(
-                Text::new("the design".to_string())
-                    .style(pf::geist_mono(23.0).letter_spacing(1.4).color(pf::alpha(INK, 0.94))),
-            ),
-        ));
+        stack = stack.push(
+            Positioned::new()
+                .left(super::MARGIN)
+                .top(BASE_Y - 17.0)
+                .width(220.0)
+                .height(34.0)
+                .child(
+                    Opacity::new(lab_a).child(
+                        Text::new("the design".to_string()).style(
+                            pf::geist_mono(23.0)
+                                .letter_spacing(1.4)
+                                .color(pf::alpha(INK, 0.94)),
+                        ),
+                    ),
+                ),
+        );
     }
     // The four labels sit at their track's own end — except where two
     // ends are closer than a line of type, which is the case for the two
     // that drift the same way. They fan to a minimum pitch, in the order
     // their tracks end, so a label still points at its own track.
-    let mut ends: Vec<(usize, f32)> = (0..4).map(|i| (i, BASE_Y + DRIFT[i][RELEASES - 1])).collect();
+    let mut ends: Vec<(usize, f32)> = (0..4)
+        .map(|i| (i, BASE_Y + DRIFT[i][RELEASES - 1]))
+        .collect();
     ends.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
     let mut placed: Vec<(usize, f32)> = Vec::new();
     for (i, y) in ends {
@@ -914,13 +1211,27 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
         if a <= 0.01 {
             continue;
         }
-        let end_y = placed.iter().find(|(k, _)| *k == i).map(|(_, y)| *y).unwrap_or(BASE_Y);
-        stack = stack.push(Positioned::new().left(X1 + 20.0).top(end_y - 16.0).width(240.0).height(34.0).child(
-            Opacity::new(a).child(
-                Text::new((*port).to_string())
-                    .style(pf::geist_mono(22.0).letter_spacing(1.0).color(pf::alpha(COLORS[i], 0.97))),
-            ),
-        ));
+        let end_y = placed
+            .iter()
+            .find(|(k, _)| *k == i)
+            .map(|(_, y)| *y)
+            .unwrap_or(BASE_Y);
+        stack = stack.push(
+            Positioned::new()
+                .left(X1 + 20.0)
+                .top(end_y - 16.0)
+                .width(240.0)
+                .height(34.0)
+                .child(
+                    Opacity::new(a).child(
+                        Text::new((*port).to_string()).style(
+                            pf::geist_mono(22.0)
+                                .letter_spacing(1.0)
+                                .color(pf::alpha(COLORS[i], 0.97)),
+                        ),
+                    ),
+                ),
+        );
     }
 
     // The count — pixels of drift, summed, arriving as the tracks land.
@@ -928,22 +1239,54 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
     if sum_a > 0.01 {
         let total: f32 = DRIFT.iter().map(|d| d[RELEASES - 1].abs()).sum();
         let shown = pf::count_up(total as u64, clamp01((t - 0.56) / 0.26));
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(296.0).width(900.0).height(96.0).child(
-            Opacity::new(sum_a).child(
-                Text::new(format!("{shown} px apart"))
-                    .style(pf::geist(76.0).bold().letter_spacing(-1.0).color(pf::alpha(INK, 0.97))),
-            ),
-        ));
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(396.0).width(1100.0).height(32.0).child(
-            Opacity::new(sum_a).child(
-                Text::new("after one year — and each version looked fine on its own.".to_string())
-                    .style(pf::geist_mono(21.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.92))),
-            ),
-        ));
+        stack = stack.push(
+            Positioned::new()
+                .left(super::MARGIN)
+                .top(296.0)
+                .width(900.0)
+                .height(96.0)
+                .child(
+                    Opacity::new(sum_a).child(
+                        Text::new(format!("{shown} px apart")).style(
+                            pf::geist(76.0)
+                                .bold()
+                                .letter_spacing(-1.0)
+                                .color(pf::alpha(INK, 0.97)),
+                        ),
+                    ),
+                ),
+        );
+        stack = stack.push(
+            Positioned::new()
+                .left(super::MARGIN)
+                .top(396.0)
+                .width(1100.0)
+                .height(32.0)
+                .child(
+                    Opacity::new(sum_a).child(
+                        Text::new(
+                            "after one year — and each version looked fine on its own.".to_string(),
+                        )
+                        .style(
+                            pf::geist_mono(21.0)
+                                .letter_spacing(0.8)
+                                .color(pf::alpha(MUTED, 0.92)),
+                        ),
+                    ),
+                ),
+        );
     }
 
-    super::frame::caption("The same screen, on four platforms, a year later.", 1002.0, clamp01((t - 0.06) / 0.10));
-    super::frame::caption("Nobody means to drift apart. Everybody does.", 966.0, clamp01((t - 0.60) / 0.10));
+    super::frame::caption(
+        "The same screen, on four platforms, a year later.",
+        1002.0,
+        clamp01((t - 0.06) / 0.10),
+    );
+    super::frame::caption(
+        "Nobody means to drift apart. Everybody does.",
+        966.0,
+        clamp01((t - 0.60) / 0.10),
+    );
     let _ = sec;
     stack.into()
 }
@@ -959,7 +1302,8 @@ pub fn the_drift(ctx: &pf::Ctx) -> WidgetNode {
 /// on a fixed budget clock. The ones that make it land green; the ones
 /// still mid-air when the frame ends fall. The counter at the bottom is
 /// the frames that fell.
-pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
+#[allow(dead_code)]
+pub(crate) fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let mut stack = Stack::new();
@@ -998,7 +1342,6 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(Positioned::fill().child(Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-
             // The two shores — your program on the left, the screen on
             // the right, both solid, both fine. The problem is between.
             for (x, right) in [(LEFT_X, false), (RIGHT_X, true)] {
@@ -1012,7 +1355,12 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
                 book.stroke_rrect(r, 16.0, pf::alpha(Color::WHITE, 0.08), 1.1);
                 for row in 0..5 {
                     book.rrect(
-                        pf::xywh(r.left + 22.0, r.top + 40.0 + row as f32 * 44.0, (r.width() - 44.0) * (0.55 + 0.12 * row as f32).min(1.0), 10.0),
+                        pf::xywh(
+                            r.left + 22.0,
+                            r.top + 40.0 + row as f32 * 44.0,
+                            (r.width() - 44.0) * (0.55 + 0.12 * row as f32).min(1.0),
+                            10.0,
+                        ),
                         5.0,
                         pf::alpha(if right { SYN_TYPE } else { ACCENT }, 0.45),
                     );
@@ -1037,7 +1385,10 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
                         continue;
                     }
                     let x = g0 + (g1 - g0) * at;
-                    book.rect(pf::xywh(x - 1.0, MID_Y - 96.0, 2.0, 192.0), pf::alpha(BREAK_RED, 0.34 * a));
+                    book.rect(
+                        pf::xywh(x - 1.0, MID_Y - 96.0, 2.0, 192.0),
+                        pf::alpha(BREAK_RED, 0.34 * a),
+                    );
                     book.circle(Offset::new(x, MID_Y), 5.0, pf::alpha(BREAK_RED, 0.8 * a));
                 }
 
@@ -1057,10 +1408,22 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
                     let y = MID_Y + if fell { fall * fall * 280.0 } else { 0.0 };
                     let a = if fell { 1.0 - fall } else { 1.0 };
                     let color = if fell { BREAK_RED } else { SYN_TYPE };
-                    book.rrect(pf::xywh(x - 18.0, y - 11.0, 36.0, 22.0), 6.0, pf::alpha(color, 0.9 * a));
-                    book.rrect(pf::xywh(x - 12.0, y - 4.0, 24.0, 3.0), 1.5, pf::alpha(Color::BLACK, 0.4 * a));
+                    book.rrect(
+                        pf::xywh(x - 18.0, y - 11.0, 36.0, 22.0),
+                        6.0,
+                        pf::alpha(color, 0.9 * a),
+                    );
+                    book.rrect(
+                        pf::xywh(x - 12.0, y - 4.0, 24.0, 3.0),
+                        1.5,
+                        pf::alpha(Color::BLACK, 0.4 * a),
+                    );
                     if !fell {
-                        book.rrect(pf::xywh(x - 40.0, y - 2.0, 24.0, 4.0), 2.0, pf::alpha(color, 0.25));
+                        book.rrect(
+                            pf::xywh(x - 40.0, y - 2.0, 24.0, 4.0),
+                            2.0,
+                            pf::alpha(color, 0.25),
+                        );
                     }
                 }
             }
@@ -1070,16 +1433,42 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
     // The shores' names, and the booths'.
     let lab = ease_out_cubic(clamp01((t - 0.10) / 0.14));
     if lab > 0.01 {
-        stack = stack.push(Positioned::new().left(LEFT_X - 190.0).top(MID_Y + 166.0).width(190.0).height(34.0).child(
-            Opacity::new(lab).child(Text::new("your app".to_string())
-                .style(pf::geist_mono(23.0).letter_spacing(1.2).color(pf::alpha(ACCENT, 0.97)))
-                .align(TextAlign::Center)),
-        ));
-        stack = stack.push(Positioned::new().left(RIGHT_X).top(MID_Y + 166.0).width(190.0).height(34.0).child(
-            Opacity::new(lab).child(Text::new("the screen".to_string())
-                .style(pf::geist_mono(23.0).letter_spacing(1.2).color(pf::alpha(SYN_TYPE, 0.97)))
-                .align(TextAlign::Center)),
-        ));
+        stack = stack.push(
+            Positioned::new()
+                .left(LEFT_X - 190.0)
+                .top(MID_Y + 166.0)
+                .width(190.0)
+                .height(34.0)
+                .child(
+                    Opacity::new(lab).child(
+                        Text::new("your app".to_string())
+                            .style(
+                                pf::geist_mono(23.0)
+                                    .letter_spacing(1.2)
+                                    .color(pf::alpha(ACCENT, 0.97)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
+        );
+        stack = stack.push(
+            Positioned::new()
+                .left(RIGHT_X)
+                .top(MID_Y + 166.0)
+                .width(190.0)
+                .height(34.0)
+                .child(
+                    Opacity::new(lab).child(
+                        Text::new("the screen".to_string())
+                            .style(
+                                pf::geist_mono(23.0)
+                                    .letter_spacing(1.2)
+                                    .color(pf::alpha(SYN_TYPE, 0.97)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
+        );
     }
     for (k, (name, at)) in TOLLBOOTHS.iter().enumerate() {
         let a = ease_out_cubic(clamp01((t - 0.20 - k as f32 * 0.05) / 0.16));
@@ -1087,31 +1476,81 @@ pub fn the_bridge(ctx: &pf::Ctx) -> WidgetNode {
             continue;
         }
         let x = LEFT_X + 14.0 + (RIGHT_X - LEFT_X - 28.0) * at;
-        stack = stack.push(Positioned::new().left(x - 110.0).top(MID_Y - 142.0).width(220.0).height(32.0).child(
-            Opacity::new(a).child(Text::new((*name).to_string())
-                .style(pf::geist_mono(21.0).letter_spacing(1.2).color(pf::alpha(BREAK_RED, 0.95)))
-                .align(TextAlign::Center)),
-        ));
+        stack = stack.push(
+            Positioned::new()
+                .left(x - 110.0)
+                .top(MID_Y - 142.0)
+                .width(220.0)
+                .height(32.0)
+                .child(
+                    Opacity::new(a).child(
+                        Text::new((*name).to_string())
+                            .style(
+                                pf::geist_mono(21.0)
+                                    .letter_spacing(1.2)
+                                    .color(pf::alpha(BREAK_RED, 0.95)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
+        );
     }
 
     // The tally — frames that did not make it across in time.
     let tally_a = clamp01((t - 0.30) / 0.12);
     if tally_a > 0.01 {
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(300.0).width(900.0).height(96.0).child(
-            Opacity::new(tally_a).child(
-                Text::new(format!("{dropped} frame{} lost", if dropped == 1 { "" } else { "s" }))
-                    .style(pf::geist(72.0).bold().letter_spacing(-1.0).color(pf::alpha(BREAK_RED, 0.96))),
-            ),
-        ));
-        stack = stack.push(Positioned::new().left(super::MARGIN).top(392.0).width(1200.0).height(32.0).child(
-            Opacity::new(tally_a).child(
-                Text::new("each one got stuck crossing a gap your app never asked for.".to_string())
-                    .style(pf::geist_mono(21.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.92))),
-            ),
-        ));
+        stack = stack.push(
+            Positioned::new()
+                .left(super::MARGIN)
+                .top(300.0)
+                .width(900.0)
+                .height(96.0)
+                .child(
+                    Opacity::new(tally_a).child(
+                        Text::new(format!(
+                            "{dropped} frame{} lost",
+                            if dropped == 1 { "" } else { "s" }
+                        ))
+                        .style(
+                            pf::geist(72.0)
+                                .bold()
+                                .letter_spacing(-1.0)
+                                .color(pf::alpha(BREAK_RED, 0.96)),
+                        ),
+                    ),
+                ),
+        );
+        stack = stack.push(
+            Positioned::new()
+                .left(super::MARGIN)
+                .top(392.0)
+                .width(1200.0)
+                .height(32.0)
+                .child(
+                    Opacity::new(tally_a).child(
+                        Text::new(
+                            "each one got stuck crossing a gap your app never asked for."
+                                .to_string(),
+                        )
+                        .style(
+                            pf::geist_mono(21.0)
+                                .letter_spacing(0.8)
+                                .color(pf::alpha(MUTED, 0.92)),
+                        ),
+                    ),
+                ),
+        );
     }
 
-    super::frame::caption("Many frameworks put a translator in the middle.", 1002.0, clamp01((t - 0.06) / 0.10));
-    super::frame::caption("Every translation costs time — and users feel it as stutter.", 966.0, clamp01((t - 0.52) / 0.10));
+    super::frame::caption(
+        "Many frameworks put a translator in the middle.",
+        1002.0,
+        clamp01((t - 0.06) / 0.10),
+    );
+    super::frame::caption(
+        "Every translation costs time — and users feel it as stutter.",
+        966.0,
+        clamp01((t - 0.52) / 0.10),
+    );
     stack.into()
 }

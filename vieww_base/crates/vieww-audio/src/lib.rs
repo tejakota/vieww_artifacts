@@ -593,8 +593,7 @@ impl Mixer {
                 SourceKind::Tone(tone) => {
                     // The tone's own span: zero-amplitude beyond it, so the
                     // loop stops there instead of walking to the mix's end.
-                    let span =
-                        tone.hold.max(tone.envelope.attack) + tone.envelope.release;
+                    let span = tone.hold.max(tone.envelope.attack) + tone.envelope.release;
                     let len = (span.as_secs_f32() * as_f32(self.rate)).ceil() as usize;
                     let end = start.saturating_add(len).min(frames);
                     for (frame, out) in data.iter_mut().enumerate().take(end).skip(start) {
@@ -875,11 +874,19 @@ mod tests {
         // A silent buffer that makes the mix long — the click is the only
         // sound, and it must not render across the nine seconds after it.
         mixer
-            .add_buffer(&Samples::mono(vec![0.0; rate * 10], rate as u32), Duration::ZERO, 0.0)
+            .add_buffer(
+                &Samples::mono(vec![0.0; rate * 10], rate as u32),
+                Duration::ZERO,
+                0.0,
+            )
             .expect("same rate");
 
         let out = mixer.render();
-        assert_eq!(out.data.len(), rate * 10, "the mix lasts its longest source");
+        assert_eq!(
+            out.data.len(),
+            rate * 10,
+            "the mix lasts its longest source"
+        );
         // The click sounds 1.000 s → 1.046 s (attack 1 ms, hold 5 ms,
         // release 40 ms) — samples 8 000 → 8 368 at this rate; two samples
         // of ceil slack, then silence — *exactly* silence, not
@@ -887,7 +894,10 @@ mod tests {
         let tail_end = 8_000 + ((46.0 / 1_000.0) * rate as f32).ceil() as usize + 2;
         for (i, &s) in out.data.iter().enumerate() {
             if i > tail_end {
-                assert_eq!(s, 0.0, "sample {i} beyond the click's tail must be untouched");
+                assert_eq!(
+                    s, 0.0,
+                    "sample {i} beyond the click's tail must be untouched"
+                );
             }
         }
         // And the click itself is present where it should be.
@@ -920,12 +930,24 @@ mod tests {
         );
         let out = mixer.render();
         // The mix lasts the whole sounding span: 80 ms, not 20.
-        assert_eq!(out.data.len(), 8_000 * 80 / 1_000, "the duration covers the attack's tail");
+        assert_eq!(
+            out.data.len(),
+            8_000 * 80 / 1_000,
+            "the duration covers the attack's tail"
+        );
         let at = |t_ms: usize| out.data[t_ms * 8_000 / 1_000];
         // Mid-attack: rising through 0.5.
-        assert!((at(30) - 0.5).abs() < 0.02, "mid-attack amplitude is ~0.5: {}", at(30));
+        assert!(
+            (at(30) - 0.5).abs() < 0.02,
+            "mid-attack amplitude is ~0.5: {}",
+            at(30)
+        );
         // Mid-release (70 ms): the fall is at its half.
-        assert!((at(70) - 0.5).abs() < 0.02, "mid-release amplitude is ~0.5: {}", at(70));
+        assert!(
+            (at(70) - 0.5).abs() < 0.02,
+            "mid-release amplitude is ~0.5: {}",
+            at(70)
+        );
         // The tail is complete: nearly zero by 79 ms, and the last sample
         // the mix carries is the release's own end.
         assert!(at(79) < 0.10, "the release completes: {}", at(79));

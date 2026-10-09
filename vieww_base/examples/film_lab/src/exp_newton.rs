@@ -44,6 +44,7 @@ pub(crate) const SECONDS: f32 = 12.0;
 
 const GW: usize = 320;
 const GH: usize = 180;
+#[allow(dead_code)]
 const DEGREE: usize = 5;
 const MAX_ITER: usize = 40;
 const TOL: f64 = 1e-10;

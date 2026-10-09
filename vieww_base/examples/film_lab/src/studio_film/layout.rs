@@ -9,13 +9,18 @@
 use vieww_foundation::Rect;
 
 /// The whole application, for the scenes that quote it.
-pub const APP: Rect = Rect { left: 0.0, top: 0.0, right: 1920.0, bottom: 1080.0 };
+pub(crate) const APP: Rect = Rect {
+    left: 0.0,
+    top: 0.0,
+    right: 1920.0,
+    bottom: 1080.0,
+};
 
 /// The largest a fit may magnify — past this, a small scene reads as a
 /// close-up rather than as a composition.
-pub const MAX_SCALE: f32 = 1.45;
+pub(crate) const MAX_SCALE: f32 = 1.45;
 
-pub fn content_box(id: &str) -> Rect {
+pub(crate) fn content_box(id: &str) -> Rect {
     match id {
         "Z11" | "Z12" | "Z12B" | "Z13" | "Z13B" | "Z14" | "Z15" | "Z16" | "Z17" | "Z20" => APP,
         // The machine room's wall and the built-with grid fill the body.
@@ -42,5 +47,10 @@ pub fn content_box(id: &str) -> Rect {
 }
 
 const fn r(left: f32, top: f32, right: f32, bottom: f32) -> Rect {
-    Rect { left, top, right, bottom }
+    Rect {
+        left,
+        top,
+        right,
+        bottom,
+    }
 }

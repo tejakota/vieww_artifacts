@@ -194,8 +194,6 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
         color: Color,
     }
     let mut faces: Vec<Face> = Vec::with_capacity(14_000);
-    let mut lit_count = 0usize;
-    let mut total_windows = 0usize;
 
     let half = GRID as i32 / 2;
     for bz in -half..=half {
@@ -273,7 +271,6 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 let sv = 0.26 / floors as f32; // half-height, wall units
                 for fl in 0..floors {
                     for cl in 0..cols {
-                        total_windows += 1;
                         let u = (cl as f32 + 0.5) / cols as f32;
                         let v = (fl as f32 + 0.75) / floors as f32;
                         // The window's own quad: bottom-left → bottom-right
@@ -291,7 +288,6 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                         }
                         let (lit, warm) = window_lit(bx, bz, fi as u8, fl, cl, t, wave_r);
                         if lit {
-                            lit_count += 1;
                             let col = if warm < 0.18 {
                                 mix(CYAN_SOFT, Color::WHITE, 0.35)
                             } else {

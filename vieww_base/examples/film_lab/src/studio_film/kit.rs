@@ -28,9 +28,9 @@ use vieww_foundation::{Color, IconData, Offset, Rect, Sketchbook};
 use viewwstudio::state::Platform;
 use viewwstudio::ui::icons;
 
+use super::{ACCENT, INK, MUTED};
 use crate::film_lib::clamp01;
 use crate::product_film as pf;
-use super::{ACCENT, INK, MUTED};
 
 // ── The icons ───────────────────────────────────────────────────────────────
 
@@ -39,7 +39,8 @@ use super::{ACCENT, INK, MUTED};
 /// Named rather than passed as a function pointer so a scene can carry a
 /// `const` table of `(label, Ico)` and the icon is resolved at draw time.
 #[derive(Clone, Copy, PartialEq)]
-pub enum Ico {
+#[allow(dead_code)] // the icon set is a vocabulary, not every word in use
+pub(crate) enum Ico {
     Folder,
     File,
     Search,
@@ -73,7 +74,7 @@ pub enum Ico {
 impl Ico {
     /// The studio's own [`IconData`] for this name.
     #[must_use]
-    pub fn data(self) -> IconData {
+    pub(crate) fn data(self) -> IconData {
         match self {
             Self::Folder => icons::folder(),
             Self::File => icons::file(),
@@ -114,7 +115,7 @@ impl Ico {
 /// so alignment is a property of the call rather than of the caller's
 /// arithmetic — which is exactly the class of bug the review asked to be
 /// gone through deeply.
-pub fn icon(book: &mut Sketchbook, ico: Ico, box_: Rect, color: Color, width: f32, a: f32) {
+pub(crate) fn icon(book: &mut Sketchbook, ico: Ico, box_: Rect, color: Color, width: f32, a: f32) {
     if a <= 0.01 {
         return;
     }
@@ -123,7 +124,15 @@ pub fn icon(book: &mut Sketchbook, ico: Ico, box_: Rect, color: Color, width: f3
 
 /// An icon centred on a point, at `side` square — the common case, so the
 /// caller never builds the box itself and never gets it off by a half.
-pub fn icon_at(book: &mut Sketchbook, ico: Ico, at: Offset, side: f32, color: Color, width: f32, a: f32) {
+pub(crate) fn icon_at(
+    book: &mut Sketchbook,
+    ico: Ico,
+    at: Offset,
+    side: f32,
+    color: Color,
+    width: f32,
+    a: f32,
+) {
     let h = side * 0.5;
     icon(
         book,
@@ -139,7 +148,7 @@ pub fn icon_at(book: &mut Sketchbook, ico: Ico, at: Offset, side: f32, color: Co
 /// The tile is square, the icon is 55% of it, and both are centred on the
 /// same point, so a row of these is aligned by construction.
 #[allow(clippy::too_many_arguments)]
-pub fn icon_tile(
+pub(crate) fn icon_tile(
     book: &mut Sketchbook,
     ico: Ico,
     at: Offset,
@@ -174,30 +183,43 @@ pub fn icon_tile(
 
 /// A device to draw, quoted from the studio's `Platform`.
 #[derive(Clone, Copy, PartialEq)]
-pub struct Device {
+#[allow(dead_code)]
+pub(crate) struct Device {
     pub platform: Platform,
 }
 
 impl Device {
-    pub const IOS: Device = Device { platform: Platform::Ios };
-    pub const ANDROID: Device = Device { platform: Platform::Android };
-    pub const DESKTOP: Device = Device { platform: Platform::Desktop };
+    // The device mock layer was retired with the studio's own device chrome;
+    // the constants stay as the vocabulary the earlier cuts spoke.
+    #[allow(dead_code)]
+    pub(crate) const IOS: Device = Device {
+        platform: Platform::Ios,
+    };
+    #[allow(dead_code)]
+    pub(crate) const ANDROID: Device = Device {
+        platform: Platform::Android,
+    };
+    #[allow(dead_code)]
+    pub(crate) const DESKTOP: Device = Device {
+        platform: Platform::Desktop,
+    };
 
     /// The screen's logical size — the studio's own numbers.
     #[must_use]
-    pub fn screen(self) -> (f32, f32) {
+    pub(crate) fn screen(self) -> (f32, f32) {
         self.platform.screen()
     }
 
     /// The safe-area insets, `(top, bottom)` — the studio's own numbers.
     #[must_use]
-    pub fn insets(self) -> (f32, f32) {
+    pub(crate) fn insets(self) -> (f32, f32) {
         self.platform.insets()
     }
 
     /// `"iOS · 393×852"` — the studio's own status-bar line.
     #[must_use]
-    pub fn describe(self) -> String {
+    #[allow(dead_code)]
+    pub(crate) fn describe(self) -> String {
         self.platform.describe()
     }
 
@@ -205,7 +227,7 @@ impl Device {
     /// Phones get a thick bezel and big corners; a desktop window gets a
     /// title bar and small ones.
     #[must_use]
-    pub fn frame_for_height(self, h: f32) -> (f32, f32, f32, f32) {
+    pub(crate) fn frame_for_height(self, h: f32) -> (f32, f32, f32, f32) {
         let (sw, sh) = self.screen();
         let scale = h / sh;
         let w = sw * scale;
@@ -219,12 +241,17 @@ impl Device {
 
 /// What the device's screen is showing.
 #[derive(Clone, Copy, PartialEq)]
-pub enum Screen {
+#[allow(dead_code)]
+pub(crate) enum Screen {
     /// The studio's own empty state — nothing rendered yet.
     Empty,
     /// A list app: an app bar and `rows` rows. `lit` marks the row that
     /// just repainted.
-    List { rows: usize, title_lit: bool, lit_row: Option<usize> },
+    List {
+        rows: usize,
+        title_lit: bool,
+        lit_row: Option<usize>,
+    },
     /// The counter: a number and a button.
     Counter { count: u32, pressed: f32 },
 }
@@ -235,7 +262,8 @@ pub enum Screen {
 /// the width follows from the platform's own aspect ratio — a caller
 /// cannot draw a phone at the wrong shape. `p` lands it, `a` fades it.
 #[allow(clippy::too_many_arguments)]
-pub fn device(
+#[allow(dead_code)]
+pub(crate) fn device(
     book: &mut Sketchbook,
     dev: Device,
     at: Offset,
@@ -257,26 +285,53 @@ pub fn device(
     book.shadow(
         Rect::new(body.left, body.top + 10.0, body.right, body.bottom + 10.0),
         radius,
-        vieww_foundation::Shadow::new(pf::alpha(Color::BLACK, 0.55 * a), Offset::new(0.0, 16.0), 38.0),
+        vieww_foundation::Shadow::new(
+            pf::alpha(Color::BLACK, 0.55 * a),
+            Offset::new(0.0, 16.0),
+            38.0,
+        ),
     );
     // The bezel — a dark shell with a bright hairline, the way a device
     // catches a room light along its edge.
-    book.rrect(body, radius, pf::alpha(Color::rgb(0x16, 0x14, 0x1A), 0.995 * a));
+    book.rrect(
+        body,
+        radius,
+        pf::alpha(Color::rgb(0x16, 0x14, 0x1A), 0.995 * a),
+    );
     book.stroke_rrect(body, radius, pf::alpha(Color::WHITE, 0.16 * a), 1.3);
     book.stroke_rrect(
-        Rect::new(body.left + 1.6, body.top + 1.6, body.right - 1.6, body.bottom - 1.6),
+        Rect::new(
+            body.left + 1.6,
+            body.top + 1.6,
+            body.right - 1.6,
+            body.bottom - 1.6,
+        ),
         radius - 1.6,
         pf::alpha(Color::BLACK, 0.5 * a),
         1.2,
     );
 
-    let (sw, sh) = dev.screen();
+    let (_sw, sh) = dev.screen();
     let scale = hh / sh;
     let screen_rect = match dev.platform {
-        Platform::Desktop => Rect::new(body.left + bezel, body.top + 26.0, body.right - bezel, body.bottom - bezel),
-        _ => Rect::new(body.left + bezel, body.top + bezel, body.right - bezel, body.bottom - bezel),
+        Platform::Desktop => Rect::new(
+            body.left + bezel,
+            body.top + 26.0,
+            body.right - bezel,
+            body.bottom - bezel,
+        ),
+        _ => Rect::new(
+            body.left + bezel,
+            body.top + bezel,
+            body.right - bezel,
+            body.bottom - bezel,
+        ),
     };
-    book.rrect(screen_rect, (radius - bezel).max(2.0), pf::alpha(Color::rgb(0x0B, 0x0A, 0x0F), a));
+    book.rrect(
+        screen_rect,
+        (radius - bezel).max(2.0),
+        pf::alpha(Color::rgb(0x0B, 0x0A, 0x0F), a),
+    );
 
     // The chrome each platform actually has.
     let (top_inset, bottom_inset) = dev.insets();
@@ -296,7 +351,12 @@ pub fn device(
             let iw = screen_rect.width() * 0.34;
             let ih = (bottom_inset * scale * 0.14).clamp(2.0, 5.0);
             book.rrect(
-                pf::xywh(cx - iw * 0.5, screen_rect.bottom - bottom_inset * scale * 0.45, iw, ih),
+                pf::xywh(
+                    cx - iw * 0.5,
+                    screen_rect.bottom - bottom_inset * scale * 0.45,
+                    iw,
+                    ih,
+                ),
                 ih * 0.5,
                 pf::alpha(Color::WHITE, 0.5 * a),
             );
@@ -305,7 +365,10 @@ pub fn device(
             // A punch-hole camera, top-centre, inside the status inset.
             let r = (top_inset * scale * 0.22).clamp(3.0, 9.0);
             book.circle(
-                Offset::new(screen_rect.left + screen_rect.width() * 0.5, screen_rect.top + top_inset * scale * 0.46),
+                Offset::new(
+                    screen_rect.left + screen_rect.width() * 0.5,
+                    screen_rect.top + top_inset * scale * 0.46,
+                ),
                 r,
                 pf::alpha(Color::BLACK, 0.92 * a),
             );
@@ -357,11 +420,22 @@ pub fn device(
 }
 
 /// The previewed program, drawn inside the safe area.
-fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color, scale: f32, a: f32) {
+#[allow(dead_code)]
+fn draw_screen(
+    book: &mut Sketchbook,
+    screen: Screen,
+    safe: Rect,
+    accent: Color,
+    scale: f32,
+    a: f32,
+) {
     let u = scale.max(0.25);
     match screen {
         Screen::Empty => {
-            let c = Offset::new(safe.left + safe.width() * 0.5, safe.top + safe.height() * 0.42);
+            let c = Offset::new(
+                safe.left + safe.width() * 0.5,
+                safe.top + safe.height() * 0.42,
+            );
             book.ring(c, 22.0 * u, 1.5, pf::alpha(MUTED, 0.30 * a));
             icon_at(book, Ico::Play, c, 22.0 * u, MUTED, 1.6, 0.5 * a);
             book.rrect(
@@ -370,11 +444,18 @@ fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color,
                 pf::alpha(MUTED, 0.22 * a),
             );
         }
-        Screen::List { rows, title_lit, lit_row } => {
+        Screen::List {
+            rows,
+            title_lit,
+            lit_row,
+        } => {
             // The app bar, in the app's token colour, with a real icon in
             // it — the bar is a widget, not a coloured rectangle.
             let bar_h = 56.0 * u;
-            book.rect(pf::xywh(safe.left, safe.top, safe.width(), bar_h), pf::alpha(accent, 0.92 * a));
+            book.rect(
+                pf::xywh(safe.left, safe.top, safe.width(), bar_h),
+                pf::alpha(accent, 0.92 * a),
+            );
             icon_at(
                 book,
                 Ico::Panel,
@@ -385,8 +466,12 @@ fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color,
                 0.9 * a,
             );
             book.rrect(
-                pf::xywh(safe.left + 42.0 * u, safe.top + bar_h * 0.5 - 5.0 * u,
-                         if title_lit { 118.0 * u } else { 76.0 * u }, 10.0 * u),
+                pf::xywh(
+                    safe.left + 42.0 * u,
+                    safe.top + bar_h * 0.5 - 5.0 * u,
+                    if title_lit { 118.0 * u } else { 76.0 * u },
+                    10.0 * u,
+                ),
                 5.0 * u,
                 pf::alpha(Color::WHITE, (if title_lit { 0.96 } else { 0.66 }) * a),
             );
@@ -409,7 +494,11 @@ fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color,
                 }
                 let lit = lit_row == Some(i);
                 let r = pf::xywh(safe.left + 12.0 * u, y, safe.width() - 24.0 * u, row_h);
-                book.rrect(r, 10.0 * u, pf::alpha(Color::rgb(0x1B, 0x18, 0x21), 0.96 * a));
+                book.rrect(
+                    r,
+                    10.0 * u,
+                    pf::alpha(Color::rgb(0x1B, 0x18, 0x21), 0.96 * a),
+                );
                 if lit {
                     book.stroke_rrect(r, 10.0 * u, pf::alpha(accent, 0.55 * a), 1.2);
                 }
@@ -423,12 +512,29 @@ fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color,
                     0.9 * a,
                 );
                 book.rrect(
-                    pf::xywh(r.left + 40.0 * u, y + row_h * 0.30, if lit { r.width() * 0.62 } else { r.width() * 0.44 }, 8.0 * u),
+                    pf::xywh(
+                        r.left + 40.0 * u,
+                        y + row_h * 0.30,
+                        if lit {
+                            r.width() * 0.62
+                        } else {
+                            r.width() * 0.44
+                        },
+                        8.0 * u,
+                    ),
                     4.0 * u,
-                    pf::alpha(if lit { INK } else { MUTED }, (if lit { 0.95 } else { 0.55 }) * a),
+                    pf::alpha(
+                        if lit { INK } else { MUTED },
+                        (if lit { 0.95 } else { 0.55 }) * a,
+                    ),
                 );
                 book.rrect(
-                    pf::xywh(r.left + 40.0 * u, y + row_h * 0.60, r.width() * 0.30, 6.0 * u),
+                    pf::xywh(
+                        r.left + 40.0 * u,
+                        y + row_h * 0.60,
+                        r.width() * 0.30,
+                        6.0 * u,
+                    ),
                     3.0 * u,
                     pf::alpha(MUTED, 0.32 * a),
                 );
@@ -445,8 +551,17 @@ fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color,
         }
         Screen::Counter { count, pressed } => {
             let cx = safe.left + safe.width() * 0.5;
-            let plate = pf::xywh(cx - 96.0 * u, safe.top + safe.height() * 0.16, 192.0 * u, safe.height() * 0.26);
-            book.rrect(plate, 16.0 * u, pf::alpha(Color::rgb(0x1A, 0x16, 0x21), 0.96 * a));
+            let plate = pf::xywh(
+                cx - 96.0 * u,
+                safe.top + safe.height() * 0.16,
+                192.0 * u,
+                safe.height() * 0.26,
+            );
+            book.rrect(
+                plate,
+                16.0 * u,
+                pf::alpha(Color::rgb(0x1A, 0x16, 0x21), 0.96 * a),
+            );
             book.stroke_rrect(plate, 16.0 * u, pf::alpha(Color::WHITE, 0.06 * a), 1.0);
             let bw = (safe.width() * 0.62).min(210.0 * u);
             let bh = (safe.height() * 0.11).min(56.0 * u);
@@ -454,9 +569,22 @@ fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color,
             let press = 1.0 - 0.045 * pressed;
             let b = pf::xywh(cx - bw * 0.5 * press, by, bw * press, bh);
             book.rrect(b, bh * 0.30, pf::alpha(accent, (0.85 + 0.15 * pressed) * a));
-            icon_at(book, Ico::Plus, Offset::new(b.left + 26.0 * u, by + bh * 0.5), 17.0 * u, Color::WHITE, 2.0, 0.95 * a);
+            icon_at(
+                book,
+                Ico::Plus,
+                Offset::new(b.left + 26.0 * u, by + bh * 0.5),
+                17.0 * u,
+                Color::WHITE,
+                2.0,
+                0.95 * a,
+            );
             book.rrect(
-                pf::xywh(b.left + 42.0 * u, by + bh * 0.5 - 5.0 * u, bw * 0.42, 10.0 * u),
+                pf::xywh(
+                    b.left + 42.0 * u,
+                    by + bh * 0.5 - 5.0 * u,
+                    bw * 0.42,
+                    10.0 * u,
+                ),
                 5.0 * u,
                 pf::alpha(Color::WHITE, 0.92 * a),
             );
@@ -476,5 +604,12 @@ fn draw_screen(book: &mut Sketchbook, screen: Screen, safe: Rect, accent: Color,
 /// Silence the lints for the entries the scenes reach for by name.
 #[allow(unused)]
 fn _reserved() {
-    let _ = (ACCENT, icon_tile, Ico::Moon, Ico::Split, Ico::Save, Ico::Export);
+    let _ = (
+        ACCENT,
+        icon_tile,
+        Ico::Moon,
+        Ico::Split,
+        Ico::Save,
+        Ico::Export,
+    );
 }

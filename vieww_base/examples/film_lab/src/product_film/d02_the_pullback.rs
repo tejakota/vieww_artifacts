@@ -27,6 +27,7 @@ fn pullback(t: f32) -> f32 {
 
 /// One constellation card: a device frame with a tiny app inside —
 /// abstract content, drawn generically (the film claims no names).
+#[allow(clippy::too_many_arguments)]
 fn card(
     book: &mut Sketchbook,
     x: f32,

@@ -15,9 +15,9 @@
 use super::{CodecError, Decoded};
 
 const ZIGZAG: [usize; 64] = [
-    0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27,
-    20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58,
-    59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
+    0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20,
+    13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59,
+    52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63,
 ];
 
 #[derive(Clone, Default)]
@@ -36,8 +36,8 @@ impl Huff {
             ..Self::default()
         };
         let (mut code, mut k) = (0i32, 0i32);
-        for l in 0..16 {
-            let n = i32::from(counts[l]);
+        for (l, &count) in counts.iter().enumerate() {
+            let n = i32::from(count);
             if n == 0 {
                 h.maxcode[l + 1] = -1;
             } else {
@@ -64,7 +64,10 @@ struct Reader<'a> {
 impl Reader<'_> {
     fn bit(&mut self) -> Result<u32, CodecError> {
         if self.n == 0 {
-            let b = *self.d.get(self.pos).ok_or_else(|| CodecError::new("jpeg: scan past end"))?;
+            let b = *self
+                .d
+                .get(self.pos)
+                .ok_or_else(|| CodecError::new("jpeg: scan past end"))?;
             self.pos += 1;
             if b == 0xFF {
                 let nx = self.d.get(self.pos).copied().unwrap_or(0);
@@ -103,7 +106,11 @@ impl Reader<'_> {
             if code <= h.maxcode[l] {
                 #[allow(clippy::cast_sign_loss)]
                 let i = (h.valptr[l] + code - h.mincode[l]) as usize;
-                return h.values.get(i).copied().ok_or_else(|| CodecError::new("jpeg: bad code"));
+                return h
+                    .values
+                    .get(i)
+                    .copied()
+                    .ok_or_else(|| CodecError::new("jpeg: bad code"));
             }
             #[allow(clippy::cast_possible_wrap)]
             {
@@ -134,7 +141,11 @@ fn idct(block: &[f32; 64], out: &mut [u8; 64]) {
         let mut c = [[0f32; 8]; 8];
         for (x, row) in c.iter_mut().enumerate() {
             for (u, v) in row.iter_mut().enumerate() {
-                let cu = if u == 0 { std::f32::consts::FRAC_1_SQRT_2 } else { 1.0 };
+                let cu = if u == 0 {
+                    std::f32::consts::FRAC_1_SQRT_2
+                } else {
+                    1.0
+                };
                 #[allow(clippy::cast_precision_loss)]
                 {
                     *v = cu * ((2 * x + 1) as f32 * u as f32 * std::f32::consts::PI / 16.0).cos();
@@ -182,8 +193,16 @@ fn fdct(px: &[f32; 64]) -> [f32; 64] {
                     }
                 }
             }
-            let cu = if u == 0 { std::f32::consts::FRAC_1_SQRT_2 } else { 1.0 };
-            let cv = if v == 0 { std::f32::consts::FRAC_1_SQRT_2 } else { 1.0 };
+            let cu = if u == 0 {
+                std::f32::consts::FRAC_1_SQRT_2
+            } else {
+                1.0
+            };
+            let cv = if v == 0 {
+                std::f32::consts::FRAC_1_SQRT_2
+            } else {
+                1.0
+            };
             out[v * 8 + u] = 0.25 * cu * cv * s;
         }
     }
@@ -238,8 +257,10 @@ pub fn decode(d: &[u8]) -> Result<Decoded, CodecError> {
             continue;
         }
         let len = usize::from(u16::from_be_bytes([
-            *d.get(at).ok_or_else(|| CodecError::new("jpeg: truncated"))?,
-            *d.get(at + 1).ok_or_else(|| CodecError::new("jpeg: truncated"))?,
+            *d.get(at)
+                .ok_or_else(|| CodecError::new("jpeg: truncated"))?,
+            *d.get(at + 1)
+                .ok_or_else(|| CodecError::new("jpeg: truncated"))?,
         ]));
         let seg = d
             .get(at + 2..at + len)
@@ -310,7 +331,9 @@ pub fn decode(d: &[u8]) -> Result<Decoded, CodecError> {
                 return Err(CodecError::new("jpeg: progressive coding is not supported"))
             }
             0xC3 | 0xC5 | 0xC7 | 0xCB | 0xCD | 0xCF => {
-                return Err(CodecError::new("jpeg: lossless/hierarchical coding is not supported"))
+                return Err(CodecError::new(
+                    "jpeg: lossless/hierarchical coding is not supported",
+                ))
             }
             0xC9 => return Err(CodecError::new("jpeg: arithmetic coding is not supported")),
             0xDD => restart = usize::from(u16::from_be_bytes([seg[0], seg[1]])),
@@ -352,7 +375,11 @@ pub fn decode(d: &[u8]) -> Result<Decoded, CodecError> {
                 let total = bx * by;
                 let mut blk = [0f32; 64];
                 let mut pix = [0u8; 64];
-                let mut decode_block = |c: &mut Comp, r: &mut Reader<'_>, ox: usize, oy: usize| -> Result<(), CodecError> {
+                let mut decode_block = |c: &mut Comp,
+                                        r: &mut Reader<'_>,
+                                        ox: usize,
+                                        oy: usize|
+                 -> Result<(), CodecError> {
                     blk.fill(0.0);
                     let t = r.decode(&dc[c.td])?;
                     let diff = extend(r.receive(u32::from(t))?, u32::from(t));
@@ -393,7 +420,9 @@ pub fn decode(d: &[u8]) -> Result<Decoded, CodecError> {
                     if restart > 0 && n > 0 && n % restart == 0 {
                         // Expect RSTn: realign and reset predictors.
                         r.reset();
-                        while r.pos + 1 < d.len() && !(d[r.pos] == 0xFF && (0xD0..=0xD7).contains(&d[r.pos + 1])) {
+                        while r.pos + 1 < d.len()
+                            && !(d[r.pos] == 0xFF && (0xD0..=0xD7).contains(&d[r.pos + 1]))
+                        {
                             r.pos += 1;
                         }
                         r.pos += 2;
@@ -464,7 +493,11 @@ pub fn decode(d: &[u8]) -> Result<Decoded, CodecError> {
                 let g = to8(sample(&comps[0], x, y));
                 rgba.extend([g, g, g, 255]);
             } else {
-                let (a, b, c) = (sample(&comps[0], x, y), sample(&comps[1], x, y), sample(&comps[2], x, y));
+                let (a, b, c) = (
+                    sample(&comps[0], x, y),
+                    sample(&comps[1], x, y),
+                    sample(&comps[2], x, y),
+                );
                 if rgb_direct {
                     rgba.extend([to8(a), to8(b), to8(c), 255]);
                 } else {
@@ -584,7 +617,11 @@ fn category(v: i32) -> (u8, u16) {
     #[allow(clippy::cast_possible_truncation)]
     let s = (32 - a.leading_zeros()) as u8;
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let bits = if v < 0 { (v - 1 + (1 << s)) as u16 } else { v as u16 };
+    let bits = if v < 0 {
+        (v - 1 + (1 << s)) as u16
+    } else {
+        v as u16
+    };
     (s, bits)
 }
 
@@ -594,7 +631,11 @@ fn category(v: i32) -> (u8, u16) {
 pub fn encode(width: u32, height: u32, rgba: &[u8], quality: u8) -> Vec<u8> {
     let (w, h) = (width as usize, height as usize);
     let quality = u32::from(quality.clamp(1, 100));
-    let scale = if quality < 50 { 5000 / quality } else { 200 - quality * 2 };
+    let scale = if quality < 50 {
+        5000 / quality
+    } else {
+        200 - quality * 2
+    };
     let qt = |base: &[u8; 64]| -> [u8; 64] {
         base.map(|v| {
             #[allow(clippy::cast_possible_truncation)]
@@ -637,8 +678,14 @@ pub fn encode(width: u32, height: u32, rgba: &[u8], quality: u8) -> Vec<u8> {
         out.extend(&vals[..n]);
     }
     out.extend([0xFF, 0xDA, 0, 12, 3, 1, 0x00, 2, 0x11, 3, 0x11, 0, 63, 0]);
-    let (dcl, acl) = (enc_table(&DC_L_BITS, &DC_VALS), enc_table(&AC_L_BITS, &AC_L_VALS));
-    let (dcc, acc) = (enc_table(&DC_C_BITS, &DC_VALS), enc_table(&AC_C_BITS, &AC_C_VALS));
+    let (dcl, acl) = (
+        enc_table(&DC_L_BITS, &DC_VALS),
+        enc_table(&AC_L_BITS, &AC_L_VALS),
+    );
+    let (dcc, acc) = (
+        enc_table(&DC_C_BITS, &DC_VALS),
+        enc_table(&AC_C_BITS, &AC_C_VALS),
+    );
     let px = |x: usize, y: usize| -> [f32; 3] {
         let (x, y) = (x.min(w - 1), y.min(h - 1));
         let p = &rgba[(y * w + x) * 4..(y * w + x) * 4 + 3];
@@ -655,7 +702,12 @@ pub fn encode(width: u32, height: u32, rgba: &[u8], quality: u8) -> Vec<u8> {
         n: 0,
     };
     let mut pred = [0i32; 3];
-    let block = |samples: &[f32; 64], q: &[u8; 64], dc: &[(u16, u8); 256], ac: &[(u16, u8); 256], p: &mut i32, wr: &mut Writer| {
+    let block = |samples: &[f32; 64],
+                 q: &[u8; 64],
+                 dc: &[(u16, u8); 256],
+                 ac: &[(u16, u8); 256],
+                 p: &mut i32,
+                 wr: &mut Writer| {
         let shifted = samples.map(|v| v - 128.0);
         let coef = fdct(&shifted);
         let mut zz = [0i32; 64];
@@ -704,15 +756,19 @@ pub fn encode(width: u32, height: u32, rgba: &[u8], quality: u8) -> Vec<u8> {
                 }
                 block(&s, &ql, &dcl, &acl, &mut pred[0], &mut wr);
             }
-            for ch in 1..3 {
+            for (ch, pred_ch) in pred.iter_mut().enumerate().skip(1) {
                 let mut s = [0f32; 64];
                 for y in 0..8 {
                     for x in 0..8 {
                         let (x0, y0) = (mx * 16 + x * 2, my * 16 + y * 2);
-                        s[y * 8 + x] = (px(x0, y0)[ch] + px(x0 + 1, y0)[ch] + px(x0, y0 + 1)[ch] + px(x0 + 1, y0 + 1)[ch]) / 4.0;
+                        s[y * 8 + x] = (px(x0, y0)[ch]
+                            + px(x0 + 1, y0)[ch]
+                            + px(x0, y0 + 1)[ch]
+                            + px(x0 + 1, y0 + 1)[ch])
+                            / 4.0;
                     }
                 }
-                block(&s, &qc, &dcc, &acc, &mut pred[ch], &mut wr);
+                block(&s, &qc, &dcc, &acc, pred_ch, &mut wr);
             }
         }
     }
@@ -730,7 +786,11 @@ mod tests {
         let mut v = Vec::with_capacity(w * h * 4);
         for y in 0..h {
             for x in 0..w {
-                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                #[allow(
+                    clippy::cast_precision_loss,
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss
+                )]
                 {
                     let fx = x as f32 / w as f32;
                     let fy = y as f32 / h as f32;

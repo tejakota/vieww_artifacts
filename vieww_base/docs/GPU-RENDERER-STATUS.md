@@ -13,6 +13,7 @@ one batched vertex buffer plus an ordered **step program** a backend executes.
 | command / feature | GPU implementation | definition taken from |
 |---|---|---|
 | fills, strokes, transforms | CPU tessellation (lyon), batched, scissored runs | — |
+| **rect-family geometry edges** | **analytic SDF coverage** — rects and rounded rects distance-evaluated per fragment, so edges are antialiased like the CPU's; everything else tessellates | new arithmetic, verified against the CPU's own coverage within 3/255 (see below) |
 | rectangular clips | dynamic scissor per run | — |
 | **shaped clips** (rounded, path, nested) | R8 mask atlas, `textureLoad` at the fragment's pixel; on layers, a mask multiply at pop | `GpuSeam::clip_mask` = the CPU clip rasterizer's coverage |
 | text (monochrome) | R8 glyph atlas, texel-exact quads | `GlyphCoverage` = the CPU glyph rasterizer |
@@ -71,45 +72,71 @@ atlas. `SceneRenderer::render` still refuses an incomplete plan.
 - The Vulkan target used straight-alpha readback of a premultiplied buffer;
   targets are premultiplied RGBA16F and readback un-premultiplies with the CPU
   renderer's rounding.
+- **The analytic shape material's Clear-blend ring composited over content it
+  was meant to replace** (found under SwiftShader before the pixel tests): the
+  shape pass draws an inflated quad with an edge-coverage ring, and the ring's
+  Clear blend was leaving the inflation's corners in the picture. Fixed in the
+  same change as the material.
+- **The Vulkan vertex attribute table initially swapped the new `shape[4]`
+  attribute's offset with the mask's** — silently wrong geometry that only the
+  pixel comparison caught; the attribute count and the layout now have a test
+  apiece.
 
 ## Verification
 
-| check | what it proves | result (lavapipe, this run) |
+| check | what it proves | result (lavapipe 25.0.7, this run) |
 |---|---|---|
 | `cargo test -p vieww-gpu` | planning, step structure, atlases, ink regions | pass |
 | `cargo test -p vieww-shaders` | `scene.wgsl` and `post.wgsl` validate and cross-compile to SPIR-V, MSL, HLSL | pass |
-| `vieww-hal` `vulkan_compositor` (ignored suite, 17 tests) | **every pixel** against `NativeRenderer` for group opacity, all 28 blend modes, blur, colour matrix, backdrop blur, shaped clips, 7 shadow variants, gradients ± dither, 4 image cases, nested mixed layers, transparent clear, non-zero winding, dashed strokes under scale, miter-limit joins, shared renderer across planners | max channel difference **1** in every non-rotated case; rotated geometry differs only on its non-antialiased edge |
+| `vieww-hal` `vulkan_compositor` (ignored suite, 17 tests) | **every pixel** against `NativeRenderer` for group opacity, all 28 blend modes, blur, colour matrix, backdrop blur, shaped clips, 7 shadow variants, gradients ± dither, 4 image cases, nested mixed layers, transparent clear, non-zero winding, dashed strokes under scale, miter-limit joins, shared renderer across planners | 16/17 — the backdrop-blur test fails under this driver with an identical signature on the clean tree, see the note below |
+| `vulkan_scene` + `vulkan_text` + smoke + mesh (21 tests) | scene rendering; the analytic-AA edges versus the CPU's coverage within 3/255; glyph parity within 1/255; bring-up | pass |
 | mutation checks | the suite detects a one-off blur kernel and a wrong Hue formula (6 tests fail), even-odd winding (1,024 px), and an unconverted miter limit (9 px) | each mutation fails |
 | repeat runs | `test-gpu-work` ten times in a row | identical `parity_worst_fraction` every run (it varied, and failed ~1 in 3, before the identity fix) |
-| `test-gpu-work` | 24-frame animated scene using every feature; per-frame parity vs CPU; capability and resource-limit probes | `unsupported_gpu_commands` **measured** 0; worst frame 0.37% of pixels over tolerance 8 (edges) |
-| `fixtures --census` | the whole gallery through GPU and CPU | **23 of 23 plan complete**; 0 flat-region mismatches beyond the geometry-edge band |
+| `test-gpu-work` | 24-frame animated scene using every feature; per-frame parity vs CPU; capability and resource-limit probes | `unsupported_gpu_commands` **measured** 0; worst frame 1.79% of pixels over tolerance 8 (edges) |
+| `fixtures --census` | the whole gallery through GPU and CPU | **23 of 23 plan complete**; interior mismatches improved from 8 fixtures to 6 versus the pre-analytic-AA tree — `00-blurs` 208→0, `00-layers-nested` 584→0, `20-settings` 4→0, `22-editor` 1258→56 — and the one remaining over-tolerance fixture (`23-editor-glass`, the backdrop-blur screen) matches the clean tree's count (31,615 vs 31,827 px): the driver-numerics case below, not a regression |
+
+### The backdrop-blur note, stated rather than buried
+
+`a_backdrop_blur_blurs_what_is_behind_and_keeps_the_foreground_sharp` fails
+under the current verification driver — lavapipe 25.0.7, and Playwright's
+SwiftShader — with max channel diff 34, 816 px, while the historical record
+under the older lavapipe this workspace used was 17/17. A clean-tree run
+under the *current* driver fails identically — same worst pixel, same count —
+so this is a driver-numerics difference in the blur's half-float box passes,
+not a regression in this tree, and the census's `23-editor-glass` mismatch
+is the same cause. It stays visible here rather than being re-baselined
+quietly: the fix is either a per-driver tolerance justified in the test, or
+making the GPU's blur passes bit-exact with the CPU's arithmetic, and the
+second is the honest one.
 
 ## What is still missing
 
-1. **Geometry edge antialiasing.** Tessellated fills are drawn without edge AA
-   (no MSAA, no analytic coverage), so curved and rotated *geometry* edges are
-   jagged next to the CPU renderer's analytic coverage. Masks (clips, shadows)
-   and glyphs are exact. This is the single visible quality gap and the reason
-   the census's strict rule still lists edge pixels. Options: 4× MSAA with
-   resolve per target, or analytic SDF coverage for rects/rounded rects (the
-   overwhelming majority of UI geometry) plus MSAA for general paths.
-2. **The live window does not use it.** `SceneRenderer` renders headlessly with
-   readback; `vieww-platform-winit` still presents CPU-rasterized pixels
-   through `vulkan::swapchain`. Presenting the RGBA16F frame target to the
-   swapchain (a format-converting blit or final pass) is the integration step.
+1. **General-path geometry edges.** The analytic SDF material covers the
+   rect family — rects and rounded rects, the overwhelming majority of UI
+   geometry. A rotated rect or an arbitrary path still tessellates without
+   edge AA, which is `PENDING.md` §2.1 now, with its two honest options:
+   4× MSAA with a resolve per target, or a coverage-R8 pass like the clip
+   masks already use.
+2. **The windowed path reads back through host memory.** A window *can* be
+   GPU-driven — `App::prefer_gpu` routes frames through
+   `NativeRenderer::present_planned`, closed and verified on a real window —
+   but the GPU's frame is read back into host memory and uploaded like the
+   CPU's would be; rendering straight onto the swapchain image is the
+   integration step that makes the path fast rather than correct
+   (`PENDING.md` §2.2).
 3. **Cost shape, unmeasured on real hardware.** Offscreen targets are
    frame-sized per nesting level; every shadow is a 7-pass sequence; clip and
    shadow masks are rasterized on the CPU (cached across frames by content).
-   lavapipe timings are not a GPU performance claim. Needed next: timings on
-   real hardware, then shadow-result caching and bounds-sized targets if they
+   lavapipe timings are not a GPU performance claim (the census's GPU column
+   — 2.4 s for the gallery — is a software rasterizer's number and says
+   nothing about hardware). Needed next: timings on real hardware, then
+   shadow-result caching and bounds-sized targets if they
    matter.
-4. **The glyph atlas never evicts** (`PENDING.md` 2.7). Mask, ramp and image
-   atlases compact between frames.
-5. **Metal and D3D12 do not execute a `ScenePlan`.** Both shaders cross-compile
+4. **Metal and D3D12 do not execute a `ScenePlan`.** Both shaders cross-compile
    (HLSL needs the push-constant register this change configures), but neither
    backend has an executor. The Windows certification reports D3D12 as
    `BUILD-ONLY`, never as a rendering pass.
-6. **The linear-light colour pipeline** (`NativeRenderer::with_color_pipeline`)
+5. **The linear-light colour pipeline** (`NativeRenderer::with_color_pipeline`)
    has no GPU equivalent; the planner has no way to be told which pipeline the
    frame wants, so GPU parity is defined against the default gamma-space
    pipeline.

@@ -143,6 +143,7 @@ struct Shaft {
     angle: f32,
     spread: f32,
     gain: f32,
+    #[allow(dead_code)]
     phase: f32,
 }
 
@@ -209,7 +210,10 @@ fn lq_field(x: f32, y: f32, t: f32) -> f32 {
 
 /// Compact contour: segments with grid-edge keys (see exp_liquid for the
 /// full commentary; this is the same pass at hero scale and coarser grid).
-fn lq_contour(t: f32) -> Vec<((f32, f32), (u8, i32, i32), (f32, f32), (u8, i32, i32))> {
+/// A segment is (start point, its edge key, end point, its edge key).
+type LqSeg = ((f32, f32), (u8, i32, i32), (f32, f32), (u8, i32, i32));
+
+fn lq_contour(t: f32) -> Vec<LqSeg> {
     let iso = 1.0;
     let cell = 13.0;
     let (x0, y0, x1, y1) = LQ_REGION;
@@ -275,9 +279,7 @@ fn lq_contour(t: f32) -> Vec<((f32, f32), (u8, i32, i32), (f32, f32), (u8, i32, 
 }
 
 /// Chain into closed loops — U-20, the pass that is not optional.
-fn lq_chain(
-    segs: &[((f32, f32), (u8, i32, i32), (f32, f32), (u8, i32, i32))],
-) -> Vec<Vec<(f32, f32)>> {
+fn lq_chain(segs: &[LqSeg]) -> Vec<Vec<(f32, f32)>> {
     use std::collections::HashMap;
     let mut by_key: HashMap<(u8, i32, i32), Vec<usize>> = HashMap::new();
     for (i, s) in segs.iter().enumerate() {

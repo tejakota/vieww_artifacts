@@ -130,7 +130,11 @@ pub enum Behaviour {
     /// Multiply opacity by `1 − amount·w`.
     Fade(f32),
     /// Add seeded noise to position (amplitude, frequency).
-    Jitter { amplitude: f32, frequency: f32, seed: u64 },
+    Jitter {
+        amplitude: f32,
+        frequency: f32,
+        seed: u64,
+    },
     /// A travelling sine wave in y: amplitude, wavelength in copies, speed.
     Wave {
         amplitude: f32,
@@ -172,7 +176,11 @@ impl Duplicator {
                     ((start.0 + step.0 * k, start.1 + step.1 * k), 0.0)
                 })
                 .collect(),
-            Distribution::Grid { cols, rows, spacing } => {
+            Distribution::Grid {
+                cols,
+                rows,
+                spacing,
+            } => {
                 let mut v = Vec::with_capacity(cols * rows);
                 #[allow(clippy::cast_precision_loss)]
                 let (cx, cy) = (
@@ -182,10 +190,7 @@ impl Duplicator {
                 for r in 0..*rows {
                     for c in 0..*cols {
                         #[allow(clippy::cast_precision_loss)]
-                        v.push((
-                            (c as f32 * spacing.0 - cx, r as f32 * spacing.1 - cy),
-                            0.0,
-                        ));
+                        v.push(((c as f32 * spacing.0 - cx, r as f32 * spacing.1 - cy), 0.0));
                     }
                 }
                 v
@@ -237,7 +242,11 @@ impl Duplicator {
             .map(|(i, (p, r))| Instance {
                 index: i,
                 #[allow(clippy::cast_precision_loss)]
-                t: if n > 1 { i as f32 / (n - 1) as f32 } else { 0.0 },
+                t: if n > 1 {
+                    i as f32 / (n - 1) as f32
+                } else {
+                    0.0
+                },
                 position: p,
                 rotation: r,
                 scale: 1.0,

@@ -61,11 +61,18 @@ fn attrs(line: &str) -> HashMap<String, String> {
     let mut m = HashMap::new();
     let mut rest = line;
     while let Some(eq) = rest.find('=') {
-        let key = rest[..eq].split_whitespace().last().unwrap_or("").to_owned();
+        let key = rest[..eq]
+            .split_whitespace()
+            .last()
+            .unwrap_or("")
+            .to_owned();
         let after = &rest[eq + 1..];
         let (val, next) = if let Some(stripped) = after.strip_prefix('"') {
             let end = stripped.find('"').unwrap_or(stripped.len());
-            (stripped[..end].to_owned(), &stripped[(end + 1).min(stripped.len())..])
+            (
+                stripped[..end].to_owned(),
+                &stripped[(end + 1).min(stripped.len())..],
+            )
         } else {
             let end = after.find(char::is_whitespace).unwrap_or(after.len());
             (after[..end].to_owned(), &after[end..])
@@ -83,7 +90,9 @@ impl BitmapFont {
     /// No `common` line or no glyphs.
     pub fn parse_fnt(text: &str) -> Result<Self, String> {
         let mut f = Self::default();
-        let num = |m: &HashMap<String, String>, k: &str| m.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+        let num = |m: &HashMap<String, String>, k: &str| {
+            m.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0)
+        };
         let mut saw_common = false;
         for line in text.lines() {
             let tag = line.split_whitespace().next().unwrap_or("");
@@ -104,16 +113,19 @@ impl BitmapFont {
                     let id = num(&a, "id") as u32;
                     if let Some(c) = char::from_u32(id) {
                         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                        f.glyphs.insert(c, Glyph {
-                            x: num(&a, "x"),
-                            y: num(&a, "y"),
-                            width: num(&a, "width"),
-                            height: num(&a, "height"),
-                            xoffset: num(&a, "xoffset"),
-                            yoffset: num(&a, "yoffset"),
-                            xadvance: num(&a, "xadvance"),
-                            page: num(&a, "page") as usize,
-                        });
+                        f.glyphs.insert(
+                            c,
+                            Glyph {
+                                x: num(&a, "x"),
+                                y: num(&a, "y"),
+                                width: num(&a, "width"),
+                                height: num(&a, "height"),
+                                xoffset: num(&a, "xoffset"),
+                                yoffset: num(&a, "yoffset"),
+                                xadvance: num(&a, "xadvance"),
+                                page: num(&a, "page") as usize,
+                            },
+                        );
                     }
                 }
                 "kerning" => {
@@ -138,7 +150,12 @@ impl BitmapFont {
     /// Lay out `text` (newlines break lines; unknown characters use `?`
     /// or are skipped), wrapping at `max_width` when given.
     #[must_use]
-    pub fn layout(&self, text: &str, align: Align, max_width: Option<f32>) -> (Vec<Placed>, f32, f32) {
+    pub fn layout(
+        &self,
+        text: &str,
+        align: Align,
+        max_width: Option<f32>,
+    ) -> (Vec<Placed>, f32, f32) {
         let mut lines: Vec<Vec<Placed>> = vec![Vec::new()];
         let mut widths = vec![0.0f32];
         let mut x = 0.0f32;
@@ -151,10 +168,18 @@ impl BitmapFont {
                 prev = None;
                 continue;
             }
-            let Some(g) = self.glyphs.get(&ch).or_else(|| self.glyphs.get(&'?')).copied() else {
+            let Some(g) = self
+                .glyphs
+                .get(&ch)
+                .or_else(|| self.glyphs.get(&'?'))
+                .copied()
+            else {
                 continue;
             };
-            let kern = prev.and_then(|p| self.kerning.get(&(p, ch))).copied().unwrap_or(0.0);
+            let kern = prev
+                .and_then(|p| self.kerning.get(&(p, ch)))
+                .copied()
+                .unwrap_or(0.0);
             if let Some(mw) = max_width {
                 if x + kern + g.xadvance > mw && x > 0.0 {
                     // Wrap at the last space on this line, if there is one.
@@ -170,8 +195,12 @@ impl BitmapFont {
                                 p
                             })
                             .collect();
-                        *widths.last_mut().expect("w") = line.last().map_or(0.0, |p| p.at.dx - p.glyph.xoffset + p.glyph.xadvance);
-                        x = moved.last().map_or(0.0, |p| p.at.dx - p.glyph.xoffset + p.glyph.xadvance);
+                        *widths.last_mut().expect("w") = line
+                            .last()
+                            .map_or(0.0, |p| p.at.dx - p.glyph.xoffset + p.glyph.xadvance);
+                        x = moved
+                            .last()
+                            .map_or(0.0, |p| p.at.dx - p.glyph.xoffset + p.glyph.xadvance);
                         lines.push(moved);
                         widths.push(x);
                     } else {
@@ -213,14 +242,24 @@ impl BitmapFont {
 
     /// Record `text` at `origin` (top-left), scaled by `scale`, using the
     /// atlas `pages`.
-    pub fn draw(&self, book: &mut Sketchbook, pages: &[Image], text: &str, origin: Offset, scale: f32, align: Align) {
+    pub fn draw(
+        &self,
+        book: &mut Sketchbook,
+        pages: &[Image],
+        text: &str,
+        origin: Offset,
+        scale: f32,
+        align: Align,
+    ) {
         let (placed, _, _) = self.layout(text, align, None);
         for p in placed {
             let g = p.glyph;
             if g.width <= 0.0 || g.height <= 0.0 {
                 continue;
             }
-            let Some(page) = pages.get(g.page) else { continue };
+            let Some(page) = pages.get(g.page) else {
+                continue;
+            };
             let dst = Rect::new(
                 origin.dx + p.at.dx * scale,
                 origin.dy + p.at.dy * scale,
@@ -232,7 +271,14 @@ impl BitmapFont {
             let img = page.clone();
             book.layer(1.0, 0.0, Some(Path::rect(dst)), |b| {
                 b.transformed(
-                    Transform::new(scale, 0.0, 0.0, scale, dst.left - g.x * scale, dst.top - g.y * scale),
+                    Transform::new(
+                        scale,
+                        0.0,
+                        0.0,
+                        scale,
+                        dst.left - g.x * scale,
+                        dst.top - g.y * scale,
+                    ),
                     |k| {
                         k.image(Rect::new(0.0, 0.0, pw, ph), img);
                     },
@@ -287,7 +333,10 @@ kerning first=65 second=86 amount=-2
         let f = BitmapFont::parse_fnt(FNT).unwrap();
         let (p, w, _) = f.layout("AVA\nA", Align::Right, None);
         let last = p.last().unwrap();
-        assert!((last.at.dx - (w - 11.0 + 1.0)).abs() < 1e-4, "right-aligned");
+        assert!(
+            (last.at.dx - (w - 11.0 + 1.0)).abs() < 1e-4,
+            "right-aligned"
+        );
         assert_eq!(last.at.dy, 24.0, "second line");
         let (wrapped, ww, hh) = f.layout("AA AA AA", Align::Left, Some(30.0));
         assert!(ww <= 30.0);
@@ -300,7 +349,14 @@ kerning first=65 second=86 amount=-2
         let f = BitmapFont::parse_fnt(FNT).unwrap();
         let page = Image::from_rgba8(vec![255; 64 * 64 * 4], 64, 64);
         let mut book = Sketchbook::new();
-        f.draw(&mut book, &[page], "A V", Offset::new(10.0, 10.0), 2.0, Align::Left);
+        f.draw(
+            &mut book,
+            &[page],
+            "A V",
+            Offset::new(10.0, 10.0),
+            2.0,
+            Align::Left,
+        );
         assert_eq!(book.len(), 2, "the space has no quad");
     }
 }

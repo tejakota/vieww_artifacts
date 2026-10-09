@@ -133,7 +133,10 @@ fn finish(mesh: &Mesh, indices: Vec<u32>) -> Meshlet {
         hi = hi.max(*p);
     }
     let center = (lo + hi) * 0.5;
-    let radius = pts.iter().map(|p| (*p - center).length()).fold(0.0, f32::max);
+    let radius = pts
+        .iter()
+        .map(|p| (*p - center).length())
+        .fold(0.0, f32::max);
     let normals: Vec<Vec3> = indices
         .as_chunks::<3>()
         .0
@@ -205,7 +208,9 @@ impl ClusterLods {
     pub fn build(mesh: &Mesh, levels: usize) -> Self {
         let diag = mesh
             .bounds()
-            .map_or(1.0, |(lo, hi)| (Vec3::from_array(hi) - Vec3::from_array(lo)).length())
+            .map_or(1.0, |(lo, hi)| {
+                (Vec3::from_array(hi) - Vec3::from_array(lo)).length()
+            })
             .max(1e-6);
         let mut out = vec![ClusterLevel {
             mesh: mesh.clone(),
@@ -232,7 +237,14 @@ impl ClusterLods {
     /// The coarsest level whose error, projected at `distance` with vertical
     /// fov `fov` into a `height_px` tall image, is under `threshold_px`.
     #[must_use]
-    pub fn select(&self, distance: f32, fov: f32, height_px: f32, scale: f32, threshold_px: f32) -> usize {
+    pub fn select(
+        &self,
+        distance: f32,
+        fov: f32,
+        height_px: f32,
+        scale: f32,
+        threshold_px: f32,
+    ) -> usize {
         let px_per_unit = height_px / (2.0 * distance.max(1e-4) * (fov * 0.5).tan());
         let mut best = 0;
         for (i, l) in self.levels.iter().enumerate() {

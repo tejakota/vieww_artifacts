@@ -154,7 +154,11 @@ pub fn decode(bytes: &[u8]) -> Result<Gif, CodecError> {
     let sub_blocks = |at: &mut usize| -> Result<Vec<u8>, CodecError> {
         let mut out = Vec::new();
         loop {
-            let n = usize::from(*bytes.get(*at).ok_or_else(|| CodecError::new("gif: truncated"))?);
+            let n = usize::from(
+                *bytes
+                    .get(*at)
+                    .ok_or_else(|| CodecError::new("gif: truncated"))?,
+            );
             *at += 1;
             if n == 0 {
                 return Ok(out);
@@ -170,7 +174,9 @@ pub fn decode(bytes: &[u8]) -> Result<Gif, CodecError> {
     while at < bytes.len() {
         match bytes[at] {
             0x21 => {
-                let label = *bytes.get(at + 1).ok_or_else(|| CodecError::new("gif: truncated"))?;
+                let label = *bytes
+                    .get(at + 1)
+                    .ok_or_else(|| CodecError::new("gif: truncated"))?;
                 at += 2;
                 let data = sub_blocks(&mut at)?;
                 if label == 0xF9 && data.len() >= 4 {
@@ -201,7 +207,9 @@ pub fn decode(bytes: &[u8]) -> Result<Gif, CodecError> {
                     None
                 };
                 let table = local.as_ref().unwrap_or(&global);
-                let min = *bytes.get(at).ok_or_else(|| CodecError::new("gif: truncated"))?;
+                let min = *bytes
+                    .get(at)
+                    .ok_or_else(|| CodecError::new("gif: truncated"))?;
                 at += 1;
                 let lzw = sub_blocks(&mut at)?;
                 let idx = lzw_decode(&lzw, min, fw * fh)?;
@@ -398,7 +406,11 @@ pub fn encode(width: u16, height: u16, frames: &[(Vec<u8>, u16)], loops: u16) ->
         assert_eq!(rgba.len(), w * h * 4, "frame size");
         let px = rgba.as_chunks::<4>().0;
         let has_alpha = px.iter().any(|p| p[3] < 128);
-        let opaque: Vec<[u8; 3]> = px.iter().filter(|p| p[3] >= 128).map(|p| [p[0], p[1], p[2]]).collect();
+        let opaque: Vec<[u8; 3]> = px
+            .iter()
+            .filter(|p| p[3] >= 128)
+            .map(|p| [p[0], p[1], p[2]])
+            .collect();
         let mut pal = median_cut(&opaque, if has_alpha { 255 } else { 256 });
         let tindex = if has_alpha {
             pal.push([0, 0, 0]);
@@ -512,7 +524,15 @@ mod tests {
 
     #[test]
     fn transparency_is_preserved() {
-        let px: Vec<u8> = (0..16).flat_map(|i| if i % 2 == 0 { [255, 0, 0, 255] } else { [0, 0, 0, 0] }).collect();
+        let px: Vec<u8> = (0..16)
+            .flat_map(|i| {
+                if i % 2 == 0 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 0, 0]
+                }
+            })
+            .collect();
         let g = decode(&encode(4, 4, &[(px.clone(), 1)], 0)).unwrap();
         assert_eq!(g.frames[0].rgba, px);
     }

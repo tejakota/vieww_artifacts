@@ -81,7 +81,10 @@ impl Snapshot {
     /// The snapshot's view of `s` (never subscribes).
     pub fn read<T: Clone + 'static>(&mut self, s: &Signal<T>) -> T {
         self.touch(s);
-        self.values[&s.id()].downcast_ref::<T>().cloned().unwrap_or_else(|| s.peek())
+        self.values[&s.id()]
+            .downcast_ref::<T>()
+            .cloned()
+            .unwrap_or_else(|| s.peek())
     }
 
     /// Buffer a write, visible to this snapshot only until `apply`.

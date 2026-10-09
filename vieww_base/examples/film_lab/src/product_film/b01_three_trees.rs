@@ -39,6 +39,7 @@ fn tree_glyph(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, t: f32, a: f32, c
     let sway = (t * 0.8 + cx * 0.01).sin() * 0.02;
     let depth = 3;
     // Recursive binary fan: each level half the span, tilted by sway.
+    #[allow(clippy::too_many_arguments)]
     fn fan(
         book: &mut Sketchbook,
         x0: f32,
@@ -47,7 +48,7 @@ fn tree_glyph(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, t: f32, a: f32, c
         level: usize,
         depth: usize,
         sway: f32,
-        t: f32,
+        _t: f32,
         a: f32,
         color: Color,
     ) {
@@ -76,7 +77,7 @@ fn tree_glyph(book: &mut Sketchbook, cx: f32, cy: f32, r: f32, t: f32, a: f32, c
                 level + 1,
                 depth,
                 sway + k * 0.1,
-                t,
+                _t,
                 a,
                 color,
             );

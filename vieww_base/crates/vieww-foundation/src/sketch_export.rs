@@ -39,7 +39,11 @@ fn png_stored(img: &crate::Image) -> Vec<u8> {
         for &b in bytes {
             c ^= u32::from(b);
             for _ in 0..8 {
-                c = if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 == 1 {
+                    0xEDB8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
         }
         c ^ 0xFFFF_FFFF
@@ -89,7 +93,9 @@ fn base64(data: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut s = String::with_capacity(data.len().div_ceil(3) * 4);
     for c in data.chunks(3) {
-        let n = u32::from(c[0]) << 16 | u32::from(*c.get(1).unwrap_or(&0)) << 8 | u32::from(*c.get(2).unwrap_or(&0));
+        let n = u32::from(c[0]) << 16
+            | u32::from(*c.get(1).unwrap_or(&0)) << 8
+            | u32::from(*c.get(2).unwrap_or(&0));
         for k in 0..4 {
             if k <= c.len() {
                 s.push(A[((n >> (18 - 6 * k)) & 63) as usize] as char);

@@ -282,6 +282,9 @@ pub struct App {
     refresh_hz: f32,
     /// Whether [`App::refresh_rate`] was called. Detection defers to it.
     refresh_stated: bool,
+    /// Whether each frame is planned and, when the plan is complete,
+    /// rasterised by the GPU — see [`App::prefer_gpu`].
+    prefer_gpu: bool,
     stop: Stop,
     /// Called once per frame each, in the order they were added. See
     /// [`App::on_frame`].
@@ -361,6 +364,7 @@ impl App {
             theme: None,
             refresh_hz: 60.0,
             refresh_stated: false,
+            prefer_gpu: false,
             stop: Stop::OnClose,
             on_frame: Vec::new(),
             after_frame: Vec::new(),
@@ -492,6 +496,28 @@ impl App {
         assert!(hz.is_finite() && hz > 0.0, "refresh rate must be positive");
         self.refresh_hz = hz;
         self.refresh_stated = true;
+        self
+    }
+
+    /// Plan every frame, and rasterise on the GPU when the plan is complete.
+    ///
+    /// Off by default, because the CPU rasterizer is this framework's own
+    /// and its quality is the bar; the GPU path is the one `vieww-gpu`
+    /// plans and `vieww-hal`'s `SceneRenderer` executes — one batched draw
+    /// for a whole frame, edges covered analytically. A frame the planner
+    /// cannot express falls back to the CPU rasterizer in full, per frame:
+    /// turning this on never turns the CPU path off, it only makes the GPU
+    /// available to the frames it can draw.
+    ///
+    /// What it costs today: the GPU's frame is read back into host memory
+    /// and uploaded like the CPU's would be, and there is no damage-driven
+    /// repaint — every GPU frame is a full one. See
+    /// [`NativeRenderer::present_planned`](crate::native::NativeRenderer::present_planned)
+    /// for the shape and the follow-up that makes it fast rather than
+    /// merely correct.
+    #[must_use]
+    pub const fn prefer_gpu(mut self) -> Self {
+        self.prefer_gpu = true;
         self
     }
 
@@ -1283,17 +1309,39 @@ impl WindowState {
         } else {
             Some(self.driver.damage())
         };
-        let presented = gpu.renderer.present_damaged(
-            &mut gpu.surface,
-            self.driver.scene(),
-            damage,
-            self.background,
-            logical_size,
-            self.scale,
-        );
+        // **Which rasterizer draws is the application's call, per config.**
+        //
+        // `prefer_gpu` routes through `present_planned`: the frame is planned
+        // first, drawn by the GPU rasterizer when the plan is complete, and
+        // drawn here by the CPU when it is not. The damage computed above is
+        // only meaningful to the CPU half — the GPU path is a whole-frame
+        // rasterizer — but it is computed unconditionally anyway so the
+        // stats below keep one shape whichever path a frame took.
+        let presented = if shared.config.prefer_gpu {
+            gpu.renderer
+                .present_planned(
+                    &mut gpu.surface,
+                    self.driver.scene(),
+                    self.background,
+                    logical_size,
+                    self.scale,
+                )
+                .map(|frame| (frame.report, frame.drawn_on_gpu))
+        } else {
+            gpu.renderer
+                .present_damaged(
+                    &mut gpu.surface,
+                    self.driver.scene(),
+                    damage,
+                    self.background,
+                    logical_size,
+                    self.scale,
+                )
+                .map(|report| (report, false))
+        };
 
         match presented {
-            Ok(report) => {
+            Ok((report, drawn_on_gpu)) => {
                 // A wall-clock measurement around the call, unlike
                 // `vieww_paint::gpu::GpuRenderer::present_with`'s own doc
                 // warning against exactly that: that backend's
@@ -1344,7 +1392,8 @@ impl WindowState {
                         _ => surface,
                     }
                 };
-                self.log.record(stats, elapsed, pixels, Instant::now());
+                self.log
+                    .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
                 let _ = report;
                 // After the frame, not before: the semantics describe what is
                 // now on screen, and a screen reader announcing a control a

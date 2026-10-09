@@ -38,8 +38,8 @@
 //! ```
 
 use crate::color::Color;
-use crate::image::Image;
 use crate::geometry::{Offset, Rect};
+use crate::image::Image;
 use crate::paint::{BlendMode, Gradient, Shadow, StrokeStyle};
 use crate::path::Path;
 use crate::transform::Transform;
@@ -156,7 +156,10 @@ impl Sketch {
             } => path.is_empty() || brush.is_invisible() || *width <= 0.0,
             Self::Shadow { shadow, .. } => shadow.is_invisible(),
             Self::Image { rect, image } => {
-                rect.width() <= 0.0 || rect.height() <= 0.0 || image.width() == 0 || image.height() == 0
+                rect.width() <= 0.0
+                    || rect.height() <= 0.0
+                    || image.width() == 0
+                    || image.height() == 0
             }
             Self::Layer {
                 alpha, children, ..
@@ -515,8 +518,13 @@ impl Sketchbook {
         for t in indices.as_chunks::<3>().0 {
             let p = t.map(|i| positions[i as usize]);
             let q = t.map(|i| Offset::new(uvs[i as usize].dx * w, uvs[i as usize].dy * h));
-            let Some(m) = affine_between(q, p) else { continue };
-            let c = Offset::new((p[0].dx + p[1].dx + p[2].dx) / 3.0, (p[0].dy + p[1].dy + p[2].dy) / 3.0);
+            let Some(m) = affine_between(q, p) else {
+                continue;
+            };
+            let c = Offset::new(
+                (p[0].dx + p[1].dx + p[2].dx) / 3.0,
+                (p[0].dy + p[1].dy + p[2].dy) / 3.0,
+            );
             let grow = |v: Offset| {
                 let (dx, dy) = (v.dx - c.dx, v.dy - c.dy);
                 let l = (dx * dx + dy * dy).sqrt().max(1e-6);
@@ -541,7 +549,13 @@ impl Sketchbook {
     /// Avalonia's `ImageBrush`/`VisualBrush` with `TileMode.Tile`, CSS's
     /// `background-repeat` (render a widget subtree to an image first to
     /// tile a *visual*).
-    pub fn pattern(&mut self, area: Path, tile: &Image, origin: Offset, size: crate::Size) -> &mut Self {
+    pub fn pattern(
+        &mut self,
+        area: Path,
+        tile: &Image,
+        origin: Offset,
+        size: crate::Size,
+    ) -> &mut Self {
         let b = area.bounds();
         if size.width <= 0.0 || size.height <= 0.0 {
             return self;
@@ -554,7 +568,10 @@ impl Sketchbook {
             while y < b.bottom {
                 let mut x = x0;
                 while x < b.right {
-                    g.image(Rect::new(x, y, x + size.width, y + size.height), tile.clone());
+                    g.image(
+                        Rect::new(x, y, x + size.width, y + size.height),
+                        tile.clone(),
+                    );
                     x += size.width;
                 }
                 y += size.height;
@@ -603,8 +620,16 @@ mod tests {
 
     #[test]
     fn affine_between_maps_the_three_points() {
-        let from = [Offset::new(0.0, 0.0), Offset::new(10.0, 0.0), Offset::new(0.0, 5.0)];
-        let to = [Offset::new(3.0, 4.0), Offset::new(13.0, 9.0), Offset::new(-2.0, 14.0)];
+        let from = [
+            Offset::new(0.0, 0.0),
+            Offset::new(10.0, 0.0),
+            Offset::new(0.0, 5.0),
+        ];
+        let to = [
+            Offset::new(3.0, 4.0),
+            Offset::new(13.0, 9.0),
+            Offset::new(-2.0, 14.0),
+        ];
         let m = affine_between(from, to).unwrap();
         for (f, t) in from.iter().zip(&to) {
             let r = m.apply(*f);
@@ -619,16 +644,37 @@ mod tests {
         let mut book = Sketchbook::new();
         book.textured_mesh(
             &img,
-            &[Offset::new(0.0, 0.0), Offset::new(40.0, 0.0), Offset::new(40.0, 40.0), Offset::new(0.0, 40.0)],
-            &[Offset::new(0.0, 0.0), Offset::new(1.0, 0.0), Offset::new(1.0, 1.0), Offset::new(0.0, 1.0)],
+            &[
+                Offset::new(0.0, 0.0),
+                Offset::new(40.0, 0.0),
+                Offset::new(40.0, 40.0),
+                Offset::new(0.0, 40.0),
+            ],
+            &[
+                Offset::new(0.0, 0.0),
+                Offset::new(1.0, 0.0),
+                Offset::new(1.0, 1.0),
+                Offset::new(0.0, 1.0),
+            ],
             &[0, 1, 2, 0, 2, 3],
         );
         assert_eq!(book.len(), 2, "one clipped layer per triangle");
         let mut pat = Sketchbook::new();
-        pat.pattern(Path::rect(Rect::new(0.0, 0.0, 25.0, 10.0)), &img, Offset::ZERO, crate::Size::new(10.0, 10.0));
-        let Sketch::Layer { children, .. } = &pat.items()[0] else { panic!() };
+        pat.pattern(
+            Path::rect(Rect::new(0.0, 0.0, 25.0, 10.0)),
+            &img,
+            Offset::ZERO,
+            crate::Size::new(10.0, 10.0),
+        );
+        let Sketch::Layer { children, .. } = &pat.items()[0] else {
+            panic!()
+        };
         assert_eq!(children.len(), 3, "three tiles cover 25 px");
-        assert!(!Sketch::Image { rect: Rect::new(0.0, 0.0, 1.0, 1.0), image: img }.is_invisible());
+        assert!(!Sketch::Image {
+            rect: Rect::new(0.0, 0.0, 1.0, 1.0),
+            image: img
+        }
+        .is_invisible());
     }
 
     #[test]

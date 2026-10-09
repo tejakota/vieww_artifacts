@@ -80,13 +80,9 @@ fn build_tree() -> Vec<Filament> {
         let tip = *pts.last().unwrap();
         out.push(Filament { pts, gen, t_start });
         // Branch: 2 children, splayed; deeper generations branch less.
-        let n = if gen < 4 {
-            2
-        } else if rng.f01() < 0.6 {
-            2
-        } else {
-            1
-        };
+        // (`||` short-circuits on `gen < 4`, so the RNG roll — and every
+        // draw after it — stays exactly where the retired cut made it.)
+        let n = if gen < 4 || rng.f01() < 0.6 { 2 } else { 1 };
         let spread = 0.42 + gen as f32 * 0.06;
         for i in 0..n {
             let dir = if n == 1 {

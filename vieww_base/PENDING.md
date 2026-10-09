@@ -17,23 +17,33 @@ When an item here is finished it moves to `TRACKER.md` with the evidence
 attached, and its entry here is deleted rather than ticked. A file of
 struck-through lines is an archive; this is meant to be a worklist.
 
-Every item says four things: **what** it is, **why** it is not done, **what it
-blocks**, and **where to start** — a real command or a real file, not a
+Every item says four things: **what** it is, **why** it is not done, **what**
+it blocks, and **where to start** — a real command or a real file, not a
 gesture. An item that cannot say the fourth is not understood well enough to be
 written down yet, and there are two of those, marked as such.
 
 ## Read this before believing anything is easy here
 
-Two facts sit behind most of the list and are not repeated in every entry:
+Three facts sit behind most of the list and are not repeated in every entry:
 
 1. **No code in this workspace has ever run on real graphics hardware.** The
-   GPU path is verified against `lavapipe`, Mesa's *software* Vulkan
-   implementation. Every GPU statement anywhere in this repository is a
-   correctness claim and none of them is a performance claim.
-2. **Only Linux has ever been built.** macOS, Windows, iOS, Android and the web
-   are real, reviewed, unit-tested code that no compiler for that target has
-   ever seen. `ci/check/platform-check.sh` is one command each that says so
-   precisely, and is where every one of those entries starts.
+   GPU path is verified against software Vulkan implementations — `lavapipe`
+   on the original machine, Playwright's SwiftShader ICD on the current one.
+   Every GPU statement anywhere in this repository is a correctness claim and
+   none of them is a performance claim.
+2. **Every line of the framework has been compiled only on Linux, Android and
+   iOS.** The "Build Mobile Apps" workflow has built the four apps — which
+   compile the vieww crates they depend on — green on GitHub runners since
+   2026-10-05 (23 runs, latest success 2026-10-08). macOS and Windows are real,
+   reviewed, unit-tested code that no compiler for that target has ever seen;
+   the `framework-checks` workflow added beside it runs
+   `ci/check/platform-check.sh macos` and `windows` on every push, and
+   `ci/check/platform-check.sh` remains one command each for a person with the
+   machine.
+3. **A frame has never reached a physical screen on any platform but Linux.**
+   Compiling for Android and iOS is not running there: the device suites
+   (`ci/mobile/device-suite.sh`, `ci/mobile/a11y-android.sh`) need hardware
+   plugged in, and no run of them is recorded.
 
 ---
 
@@ -46,9 +56,12 @@ them can be closed by reading the code more carefully.
 
 **What.** Run `cargo test -p vieww-hal --features vulkan -- --ignored` on a
 machine with a discrete or integrated GPU, and measure `examples/fixtures` with
-`Placement::Gpu` where `ScenePlan::is_complete` allows it.
+`Placement::Gpu` where `ScenePlan::is_complete` allows it. The windowed GPU path
+([`App::prefer_gpu`]) is now real and exercised on a real (Xvfb) window under
+SwiftShader — but a software rasterizer presenting to a virtual display is
+still not hardware.
 
-**Why not.** This machine has no GPU. `lavapipe` stands in, and it is a
+**Why not.** This machine has no GPU. SwiftShader stands in, and it is a
 software rasterizer wearing a Vulkan interface — it can prove that the shader
 maths, the vertex layout, the atlas coordinates and the blend state are right,
 and it can prove nothing whatever about speed.
@@ -75,7 +88,9 @@ not ported, and neither is `SceneRenderer`.
 **Why not.** No macOS Rust target and no Xcode here, so not one line of it can
 be type-checked, let alone run. The module's own doc explains at length why an
 unverified 150-line pipeline port was not written blind, and that reasoning
-still holds.
+still holds. The `framework-checks` workflow compiles the workspace on a macOS
+runner every push; that is the compile half, and it is new — the port itself
+still needs a person on the machine.
 
 **Blocks.** macOS and iOS entirely — they share this backend.
 
@@ -91,7 +106,9 @@ source, so the port is translation rather than discovery), translating WGSL with
 **What.** `crates/vieww-hal/src/d3d12.rs` does adapter and device bring-up and
 one command queue. No render pipeline.
 
-**Why not.** As above: no Windows target, no MSVC.
+**Why not.** As above: no Windows target, no MSVC here — though the
+`framework-checks` workflow now compiles the workspace on a Windows runner
+every push, which is the compile half of this entry.
 
 **Blocks.** Windows GPU rendering. Note that Windows also has a *separate*
 unsolved problem — see 5.3.
@@ -101,11 +118,13 @@ toolchain.
 
 ## 1.4 iOS
 
-**What.** `crates/vieww-platform-winit/src/ios.rs` is 140 lines of real code
-that has never been compiled. No frame has ever reached an iPhone, simulated or
-real.
+**What.** `vieww-platform-winit`'s iOS support is real code — and the four
+apps' iOS IPAs now build green on GitHub's macOS runners (see fact 2 above) —
+but no frame has ever reached an iPhone, simulated or real: the runners build
+and sign, they do not run.
 
-**Why not.** The iOS SDK exists only on macOS.
+**Why not.** The iOS SDK exists only on macOS, and the runners do not boot
+simulators.
 
 **Blocks.** The mobile half of "cross-platform".
 
@@ -116,12 +135,12 @@ real.
 ## 1.5 Android
 
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
-(`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and a
-hot-reload path — none of it exercised here.
+(`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
+a hot-reload path. The APKs build green on runners; nothing has ever run on a
+device.
 
-**Why not.** `rustup target add aarch64-linux-android` needs
-`static.rust-lang.org`, which this machine's network policy does not reach; and
-there is no NDK and no device.
+**Why not.** The runners build and upload; there is no attached phone and no
+device cloud in the loop.
 
 **Blocks.** The other mobile half.
 
@@ -134,155 +153,117 @@ rather than guessing.
 
 **What.** The byte-for-byte canvas parity (`examples/test-web`,
 `verify_web.py`) is a Chromium-on-Linux result. `ci/check/wasm-check.sh` passed on
-2026-09-14; see `TRACKER.md`. (This entry used to say the crate had never been
-compiled, which stopped being true then.)
+2026-09-14 and again on 2026-10-09 on the pinned toolchain; see `TRACKER.md`.
 
 **Why not.** No Firefox/WebKit run has been scripted.
 
 **Start.** `verify_web.py` drives Playwright; `p.firefox` and `p.webkit` are the
 same API.
 
-## 1.7 A full-suite run on the pinned toolchain
-
-**What.** `cargo test --workspace --no-fail-fast` passed in one pass on
-2026-09-15 (4,225 tests, 0 failures) — on rustc **1.95.0**, because the
-machine could not download the pinned 1.98.1. Lints differ between the two
-(1.95's clippy flags pre-existing `collapsible_match`/`ptr_arg` sites in
-`test-text-fidelity` and `viewwstudio`'s examples under a workspace-wide
-`-D warnings`; the certification's core crates are clean).
-
-**Start.** `ci/certify/certify.sh` on a machine that can install 1.98.1.
-
 ---
 
 # 2. GPU renderer coverage
 
-`vieww_gpu::ScenePlan::is_complete` is the gate. As of 2026-09-15 every
-`Command` plans on the GPU — images, shadows (outer/inset/rotated), gradients
-(per fragment), shaped clips, layers with group opacity, all 28 blend modes,
-layer and backdrop filters — and all 23 gallery fixtures plan complete. The old
-items 2.1–2.5 moved to `TRACKER.md` with their evidence; the full picture is
+`vieww_gpu::ScenePlan::is_complete` is the gate. As of 2026-10-09 every
+`Command` plans on the GPU, geometry edges are antialiased analytically for the
+rect family, a GPU frame can be presented to a real window
+([`App::prefer_gpu`]), and the glyph atlas evicts between frames — all closed
+with evidence in `TRACKER.md`; the full picture is
 [`docs/GPU-RENDERER-STATUS.md`](./docs/GPU-RENDERER-STATUS.md). What remains:
 
-## 2.0 Geometry edges are not antialiased on the GPU
+## 2.1 General-path edges are still tessellated without AA
 
-**What.** Tessellated fills and strokes are rasterized without edge coverage:
-no MSAA and no analytic AA. Masks (clips, shadows) and glyphs are exact, so
-the difference is confined to geometry edges — but on a rounded card that is
-not clipped by a mask it is visible, and it is why `fixtures --census`'s strict
-interior rule still counts edge pixels.
+**What.** Fills and strokes that are not rects or rounded rects — arbitrary
+paths, rotated rectangles — rasterize through the tessellated material, which
+has no edge coverage. The analytic SDF material covers the rect family because
+that is the overwhelming majority of UI geometry; a rotated card still has a
+jagged edge next to the CPU renderer's.
 
-**Why not.** Not attempted in the compositor work; it is its own design
-decision (4× MSAA with a resolve per offscreen target vs. analytic SDF coverage
-for rects/rounded rects plus MSAA for general paths).
+**Why not.** The analytic path is per-shape: a distance function per geometry
+family. Rects and rounded rects share one; a general path would need either
+MSAA on the tessellated material or a per-pixel coverage buffer, and the two
+have different costs and different seams with the compositor.
 
-**Blocks.** A claim of visual parity with the CPU renderer for arbitrary
-geometry, and the premium look of the GPU path.
+**Blocks.** Visual parity with the CPU renderer for arbitrary geometry — the
+census still records edge-band differences on rotated/curved geometry, and it
+now records *only* those.
 
-**Start.** `crates/vieww-gpu/src/scene.rs`'s `emit_painted` (where geometry
-becomes vertices) and `crates/vieww-shaders/shaders/scene.wgsl`'s SOLID
-material. Measure with `fixtures --census`: the strict counts should fall to
-zero.
+**Start.** `crates/vieww-gpu/src/scene.rs`'s `emit_shape_painted` (where the
+rect family routes to the analytic material) and
+`crates/vieww-shaders/shaders/scene.wgsl`'s `shape_distance`. The two honest
+options are 4× MSAA on the tessellated material with a resolve per target, or
+a coverage-R8 pass like the clip masks already use. Measure with
+`cargo run --release -p fixtures -- <outdir> --census`.
 
-## 2.6 A GPU frame has never reached a window
+## 2.2 The GPU windowed path reads back through host memory
 
-**What.** `SceneRenderer` renders headlessly and reads the pixels back.
-`vulkan::swapchain` presents pixels, but the pixels it presents are the CPU
-rasterizer's. Nothing connects the two.
+**What.** `NativeRenderer::present_planned` executes a complete plan with
+`SceneRenderer`, reads the pixels back into a host buffer, and presents that
+through the swapchain exactly as the CPU rasterizer's buffer would be. Every
+GPU frame pays a full-frame readback plus a full-frame upload that a
+render-to-swapchain-image path would not.
 
-**Why not.** Until `is_complete` could say yes to a real screen, a GPU present
-path would have had nothing to present. That is now untrue — every fixture
-plans complete and executes headlessly — so this is the next integration step,
-after 2.0: a frame target presented as-is on screen would show the jagged
-geometry edges 2.0 describes.
+**Why not.** The scene pipeline renders into its own framebuffer, not a
+`VK_KHR_swapchain` image: targeting the presentable image means importing it,
+matching its format, and handling the acquire/release barriers — its own
+design step, taken deliberately *after* the correctness join landed rather
+than together with it.
 
-**Blocks.** Any end-to-end GPU claim at all. The correctness suite reads back
-into a buffer; a window is a different code path with its own failure modes
-(resize, vsync, swapchain recreation, presentation mode).
+**Blocks.** The GPU windowed path being *fast*, rather than correct. This is
+the follow-up §2.6 named when it was closed, kept here so it is not mistaken
+for done.
 
-**Start.** `crates/vieww-hal/src/vulkan/swapchain.rs`, and
-`vieww-platform-winit`'s `NativeRenderer::for_window_with`, which already takes
-the rasterizer as a parameter — the seam for choosing a GPU path is already
-there.
-
-## 2.7 The atlas cannot evict
-
-**What.** `Atlas::insert` returns `None` when the texture is full at 4096², and
-the planner reports the glyph as a gap so the whole frame goes to the CPU. It
-never evicts.
-
-**Why not.** Deliberate, and documented in `crates/vieww-gpu/src/atlas.rs`:
-evicting mid-frame would invalidate UVs already written into this frame's
-vertex buffer, and a frame that drew nine of a word's ten glyphs is worse than
-a frame drawn on the CPU.
-
-**Blocks.** Nothing yet. 4096² of *distinct* glyph coverage is a very large
-working set, and no measurement has ever hit it.
-
-**Start.** Only when a real application hits it. The fix is generational —
-evict between frames, never within one — and it should be written with a test
-that fills the atlas deliberately rather than in response to a guess.
+**Start.** `crates/vieww-hal/src/vulkan/scene.rs`'s `SceneRenderer::render_planned`
+(the framebuffer the plan renders into) and `vulkan/swapchain.rs`'s image —
+the barriers are the work; the shader pipeline does not change.
 
 ---
 
-# 3. Text and typography
+# 3. Platform and product gaps
 
-The shaping stack is `cosmic-text`/`harfrust` and is genuinely good: real
-shaping, bidi, font fallback, grapheme-correct editing, IME preedit. What is
-missing is in the *rasterizer*, and it is visible.
+## 3.1 Outgoing drag-and-drop is a stub
 
-## 3.1 Colour fonts — emoji do not render
+**What.** `vieww-interaction`'s `NullDragStarter`. Dragging a file *out* of a
+vieww window to another application does nothing.
 
-**What.** `CBDT` (bitmap) and `COLR` (layered vector) glyphs are out of scope
-in `crates/vieww-paint/src/native/glyph.rs`. A glyph with no monochrome outline
-comes back as `GlyphAlpha::NoOutline` and draws nothing.
+**Why not.** No portable API in `winit` 0.30 — tracked upstream as winit issue
+#1550. The stub is honest and documented rather than faking a success path.
 
-**Why not.** The rasterizer is a coverage-mask rasterizer end to end: one alpha
-value per pixel, multiplied by one colour. A colour glyph is not that shape,
-and neither is the glyph atlas that was just built on the same assumption.
+**Blocks.** File-manager-shaped applications.
 
-**Blocks.** Emoji anywhere — in a label, in a text field, in a chat. For a
-framework whose pitch is polish, this is the most visible single gap in it: a
-user typing 🎉 sees nothing at all.
+**Start.** Per-platform, below winit: `NSDraggingSession` on macOS,
+`DoDragDrop` on Windows, XDND / the `wlr-data-control` protocol on Linux.
 
-**Start.** `skrifa` is already a dependency (via `cosmic-text`) and reads both
-tables. The design decision to make first, and to write down, is what the
-rasterizer's glyph result becomes when it is no longer "an alpha bitmap" —
-because `GlyphAlpha`, `InkedGlyph`, the raster cache, the compositor's
-`composite_coverage` path and `vieww_gpu::Atlas` all assume single-channel
-coverage today. Doing this properly means an `RGBA` glyph variant threaded
-through all five, not a special case bolted to one.
+## 3.2 The display refresh rate is not read from the platform
 
-## 3.2 Variable fonts
+**What.** `winit`'s `refresh_rate_millihertz` returns `None` unconditionally on
+this backend — the framework carries a `FIXME` quoting that. `App::refresh_rate`
+lets an application state it instead.
 
-**What.** No `fvar` axis support. A variable font renders at its default
-instance only.
+**Why not.** Upstream.
 
-**Why not.** Same module, same scope note.
+**Blocks.** Correct frame budgeting on a 120 Hz display without the application
+saying so. Mis-states the jank count and nothing else.
 
-**Blocks.** Anything shipping a modern variable typeface and expecting to pick
-a weight from it. Less visible than 3.1 because the fallback is a real,
-correct-looking glyph.
+**Start.** `crates/vieww-platform-winit/src/app.rs` and `insets.rs`.
 
-**Start.** `skrifa` handles instancing; the axis coordinates need to reach
-`GlyphCache::outline`, and — this is the part to be careful about — into
-`GlyphKey`, or two instances of one glyph will share a cache entry and an atlas
-patch. That is a silently-wrong-pixels bug, not a missing-feature bug.
+## 3.3 viewwstudio's panic boundary cannot work on Windows
 
-## 3.3 No subpixel antialiasing, no hinting
+**What.** The studio `dlopen`s a preview `cdylib` and catches panics from it.
+That requires host and guest to share one `libstd`, which `.cargo/config.toml`
+arranges with `-C prefer-dynamic` — **and the MSVC toolchain ships no dynamic
+std**, so the flag is deliberately not set there.
 
-**What.** Greyscale AA only, unhinted.
+**Why not.** Not fixable with a flag. `.cargo/config.toml` says so, at length,
+and names the real answer: an out-of-process preview.
 
-**Why not.** Both are deliberate-by-omission rather than decided. Subpixel AA
-is also a genuine trade — it is LCD-geometry-dependent, it breaks under
-rotation and translucency, and Apple removed it.
+**Blocks.** A Windows studio. A guest panic there takes the window and the
+unsaved buffer with it.
 
-**Blocks.** Nothing functional. It is a sharpness difference on low-DPI
-displays, and it is where "premium" is judged by people comparing side by side.
-
-**Start.** Write down the decision before writing code — a note in
-`native/glyph.rs` saying "greyscale only, and here is why" would close this as
-a *question* even if it never closes as a feature.
+**Start.** Design the out-of-process preview. This is the largest single item
+in this file that is *not* GPU work, and it is worth doing for every platform,
+not only Windows — an in-process guest is a hazard everywhere and merely a
+survivable one on Linux and macOS.
 
 ---
 
@@ -313,123 +294,36 @@ instruction counts are the only stable signal.
 
 ---
 
-# 5. Platform and product gaps
+# 5. Process and infrastructure
 
-## 5.1 Outgoing drag-and-drop is a stub
+## 5.1 The coverage number is produced, not watched
 
-**What.** `vieww-interaction`'s `NullDragStarter`. Dragging a file *out* of a
-vieww window to another application does nothing.
+**What.** `ci/check/coverage.sh` has now produced a number (2026-10-09, on the
+pinned toolchain — see `TRACKER.md`), and the `framework-checks` workflow runs
+it on every push with `continue-on-error: true`. It is evidence, not yet a
+gate that blocks a merge: the floor (70% of lines) held on the machine that
+produced the first number, but one number on one machine is not a baseline
+anyone should be fired over.
 
-**Why not.** No portable API in `winit` 0.30 — tracked upstream as winit issue
-#1550. The stub is honest and documented rather than faking a success path.
+**Why not.** Turning it into a hard gate is a decision about the project's
+risk appetite, made better after the workflow has produced numbers on a few
+dozen runs.
 
-**Blocks.** File-manager-shaped applications.
+**Blocks.** Nothing today; a slow regression in test coverage would land
+quietly.
 
-**Start.** Per-platform, below winit: `NSDraggingSession` on macOS,
-`DoDragDrop` on Windows, XDND / the `wlr-data-control` protocol on Linux.
-
-## 5.2 The display refresh rate is not read from the platform
-
-**What.** `winit`'s `refresh_rate_millihertz` returns `None` unconditionally on
-this backend — the framework carries a `FIXME` quoting that. `App::refresh_rate`
-lets an application state it instead.
-
-**Why not.** Upstream.
-
-**Blocks.** Correct frame budgeting on a 120 Hz display without the application
-saying so. Mis-states the jank count and nothing else.
-
-**Start.** `crates/vieww-platform-winit/src/app.rs:1099` and `insets.rs:296`.
-
-## 5.3 viewwstudio's panic boundary cannot work on Windows
-
-**What.** The studio `dlopen`s a preview `cdylib` and catches panics from it.
-That requires host and guest to share one `libstd`, which `.cargo/config.toml`
-arranges with `-C prefer-dynamic` — **and the MSVC toolchain ships no dynamic
-std**, so the flag is deliberately not set there.
-
-**Why not.** Not fixable with a flag. `.cargo/config.toml` says so, at length,
-and names the real answer: an out-of-process preview.
-
-**Blocks.** A Windows studio. A guest panic there takes the window and the
-unsaved buffer with it.
-
-**Start.** Design the out-of-process preview. This is the largest single item
-in this file that is *not* GPU work, and it is worth doing for every platform,
-not only Windows — an in-process guest is a hazard everywhere and merely a
-survivable one on Linux and macOS.
-
-## 5.4 `ListView` cannot be scrolled to an index programmatically
-
-**What.** Noted in `crates/vieww-widget/src/controls/list_view.rs:225`: the
-framework has no way to answer a scroll-to-index request back through a signal.
-
-**Why not.** Needs a controller shape the widget layer does not have yet.
-
-**Blocks.** "Jump to result", "restore scroll position", and anything
-keyboard-driven over a long list.
-
-**Start.** The mechanism probably wants to look like the existing
-`Inherited<T>` publish-and-read machinery rather than a new one.
+**Start.** Remove `continue-on-error` from the coverage job in
+`.github/workflows/framework-checks.yml` once its numbers have a history, and
+keep the "missing tool is not a failure" shape the web-sys audit stage has.
 
 ---
 
-# 6. Process and infrastructure
-
-## 6.1 The coverage gate has never produced a number
-
-**What.** `ci/check/coverage.sh` exists, enforces a floor with
-`--fail-under-lines`, and is **not** called from `ci/check/checks.sh`.
-
-**Why not.** It needs `cargo-llvm-cov`, which is a crates.io binary and not a
-rustup component, so nothing in `rust-toolchain.toml` can install it. The
-script's own preflight explains that its absence used to present as "your tests
-regressed", because `cargo llvm-cov` exits non-zero for both.
-
-**Blocks.** Any statement about how much of this workspace is actually covered.
-Given how much of it is platform code that cannot run here, the number is
-probably interesting.
-
-**Start.** `cargo install cargo-llvm-cov && ./ci/check/coverage.sh`. Then decide
-whether it joins `ci/check/checks.sh` — and if it does, it needs the same
-"missing tool is not a failure" shape the web-sys audit stage got.
-
-## 6.2 There is no CI workflow, and there never was one here
-
-**What.** No `.github/workflows`, or any other CI definition.
-
-**Why not.** `TRACKER.md` records that the release archive this workspace came
-from contained **no dotfiles at all** — `.cargo/config.toml` was reconstructed
-because its absence had a diagnosable symptom, and anything else that lived in a
-dotfile is simply gone with no record of what it contained.
-
-**Blocks.** Everything in `ci/` running automatically. Every gate in this
-repository is currently a gate somebody has to remember to run.
-
-**Start.** `ci/check/checks.sh` is already "everything CI runs, in order" and is
-designed to be the single entry point. A workflow that runs it on Linux, plus
-`ci/check/platform-check.sh` on macOS and Windows runners, would close most of §1
-without anyone owning the hardware.
-
-## 6.3 `vieww-platform-web` is `publish = false`
-
-**What.** Deliberate, and correct: publishing code no compiler has seen, under
-a version number that looks like every other crate's, would let an application
-depend on it on false pretences.
-
-**Blocks.** Nothing. Listed so nobody "fixes" it before 1.6.
-
-**Start.** When `ci/check/wasm-check.sh` passes: remove the line, delete the banner
-in that crate's `src/lib.rs`, and move its row in `TRACKER.md`.
-
----
-
-# 7. Known-unknowns
+# 6. Known-unknowns
 
 Two things are worth working on and are not yet understood well enough to have
 a "start here". They are listed so they are not mistaken for oversights.
 
-## 7.1 Is the GPU path actually worth it on this workload?
+## 6.1 Is the GPU path actually worth it on this workload?
 
 Nobody knows. The CPU rasterizer is unusually good — a full studio frame in
 about 49 ms of wall clock after a 1.73× improvement, and a *retained* repaint
@@ -440,7 +334,7 @@ product and the GPU path is for animation-heavy screens". §1.1 is what would
 tell us, and until it happens this repository should be careful not to imply an
 answer it does not have.
 
-## 7.2 What is the story for embedded native views?
+## 6.2 What is the story for embedded native views?
 
 Video, a map, a web view, a camera preview — anything the OS draws that vieww
 must position and clip but not rasterize. `vieww_foundation::capability` has
@@ -470,3 +364,7 @@ written where the decision lives.
 - **Renaming crates to match an earlier architecture sketch**
   (`vieww-window`, `vieww-native`). The functionality exists under other names;
   a risky rename to match a document is not a fix.
+- **COLRv1 paint graphs.** The colour-glyph resolver does COLRv0 exactly and
+  bitmap strikes, and stays out of v1 deliberately: an approximate paint-graph
+  interpreter is worse than none. See
+  `crates/vieww-paint/src/native/color_glyphs.rs`'s module doc.

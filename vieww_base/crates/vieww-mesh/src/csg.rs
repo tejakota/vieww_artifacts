@@ -108,22 +108,21 @@ fn split(
     back: &mut Vec<Poly>,
 ) {
     let mut kind = 0u8;
-    let types: Vec<u8> = p
-        .v
-        .iter()
-        .map(|v| {
-            let t = plane.n.dot(*v) - plane.w;
-            let k = if t < -EPS {
-                BACK
-            } else if t > EPS {
-                FRONT
-            } else {
-                COPLANAR
-            };
-            kind |= k;
-            k
-        })
-        .collect();
+    let types: Vec<u8> =
+        p.v.iter()
+            .map(|v| {
+                let t = plane.n.dot(*v) - plane.w;
+                let k = if t < -EPS {
+                    BACK
+                } else if t > EPS {
+                    FRONT
+                } else {
+                    COPLANAR
+                };
+                kind |= k;
+                k
+            })
+            .collect();
     match kind {
         COPLANAR => {
             if plane.n.dot(p.plane.n) > 0.0 {

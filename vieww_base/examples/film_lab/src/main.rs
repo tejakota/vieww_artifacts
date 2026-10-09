@@ -107,7 +107,7 @@
 //! - `storm` — the weather axis: supercell + recursive lightning trees
 //! - `kaleido` — the symmetry axis: D12, the mirror measured from the raster
 //! - `ink` — the diffusion axis: one drop becomes a nebula, then dilutes
-
+//!
 //! Round 10 — the closing round: twelve machines of emergence and signature:
 //! - `sandpile` — the criticality axis II: BTW, avalanches as a power law
 //! - `percolation` — the connectivity axis: p_c, the spanning transition
@@ -232,7 +232,14 @@ mod film_lib;
 // product_film stays as the shared foundation layer (Ctx, Kind,
 // SceneDef, the palette, the receipts, the studio session script) that
 // studio_film builds its cut on — the product film's own master door is
-// retired with the rest of the earlier builds.
+// retired with the rest of the earlier builds. Everything only the retired
+// masters called (the scene `build` doors, the camera/chrome/caption
+// helpers, the palette constants only those scenes read) is therefore dead
+// by design: the sources stay so the retired cuts stay byte-reproducible,
+// and only `script` (the studio session) is live, ridden by studio_film.
+// Suppressing dead_code module-wide is the honest shape of that policy —
+// deleting the dead half would delete the reproducibility.
+#[allow(dead_code)]
 mod product_film;
 // THE film — the viewwstudio keynote cut, the only film this tree builds.
 mod studio_film;
@@ -474,7 +481,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // built on this branch's brief: need → engine → studio → proof →
         // release, at this film's own 60 fps, mounted on the same real
         // app and rendered by the same engine (`studio_film/master.rs`).
-        if arg == "censussf" || arg == "mastersf" || arg == "scoresf" || arg == "sfprobe" || arg.starts_with("sfmeasure") || arg.starts_with("sf:") {
+        if arg == "censussf"
+            || arg == "mastersf"
+            || arg == "scoresf"
+            || arg == "sfprobe"
+            || arg.starts_with("sfmeasure")
+            || arg.starts_with("sf:")
+        {
             return studio_film::master::run(&arg);
         }
     }

@@ -111,7 +111,7 @@ pub use fab::{FloatingActionButton, FAB_SIZE};
 pub use file_drop_zone::FileDropZone;
 pub use grid_view::GridView;
 pub use inline_error::InlineError;
-pub use list_view::{ExtentBuilder, ItemBuilder, ListView};
+pub use list_view::{ExtentBuilder, ItemBuilder, ListView, RowAlignment};
 pub use markdown::{LinkFn, Markdown};
 pub use menu::{Menu, MenuItem, MENU_MAX_WIDTH, MENU_MIN_WIDTH};
 pub use navigator::{

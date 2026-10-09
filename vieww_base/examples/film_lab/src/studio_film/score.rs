@@ -39,36 +39,36 @@ fn ms(s: f32) -> Duration {
 /// The chord under each scene, as MIDI notes (low to high).
 fn chord(id: &str) -> &'static [u8] {
     match id {
-        "Z00" => &[33, 45, 52, 57, 60],         // A minor, bare
-        "Z01" => &[33, 45, 52, 55, 60],         // Am7
-        "Z02" => &[29, 41, 48, 53, 57],         // F
-        "Z05" => &[28, 40, 47, 52, 57],         // E sus4 — the question
-        "Z06" => &[36, 48, 55, 60, 64, 74],     // C add9 — the relief
-        "Z10C" => &[29, 41, 48, 52, 57, 64],    // Fmaj7
-        "Z10D" => &[31, 43, 50, 55, 59, 64],    // G6
-        "Z10B" => &[33, 45, 52, 55, 60, 64],    // Am7
-        "Z10E" => &[26, 38, 45, 50, 53, 57],    // Dm7 — the shutter's half-light
-        "Z10F" => &[31, 43, 48, 55, 62],        // Gsus4 — the cook's pulse
-        "Z10G" => &[33, 45, 52, 57, 59, 64],    // Am add9 — the swarm's drift
-        "Z11" => &[36, 48, 55, 59, 62, 64],     // Cmaj9
-        "Z12" => &[33, 45, 52, 55, 60],         // Am7
-        "Z12B" => &[29, 41, 48, 52, 57, 64],    // Fmaj7
-        "Z13" => &[31, 43, 50, 55, 59],         // G
-        "Z13B" => &[28, 40, 47, 52, 55, 59],    // Em7
-        "Z13C" => &[36, 48, 55, 60, 64],        // C — the arena's clarity
-        "Z13D" => &[26, 38, 45, 50, 53, 57],    // Dm7 — the designer's turn
-        "Z14" => &[29, 41, 48, 52, 57],         // Fmaj7
-        "Z15" => &[36, 48, 55, 60, 64, 67],     // C
-        "Z16" => &[33, 45, 52, 57, 60, 64],     // Am
-        "Z16B" => &[29, 41, 48, 52, 57, 64],    // Fmaj7 — the merge's warmth
-        "Z17" => &[31, 43, 50, 55, 60, 62],     // G sus4 → the build
-        "Z18" => &[33, 45, 52, 55, 60, 64],     // Am7
-        "Z19" => &[29, 41, 48, 52, 57, 60],     // Fmaj7
-        "Z19B" => &[31, 43, 50, 55, 59, 62],    // G
-        "Z19C" => &[33, 45, 52, 55, 60, 64],    // Am7 — the frame, inward
-        "Z19D" => &[29, 41, 48, 53, 57],        // F — the check, plain
-        "Z20" => &[31, 43, 50, 55, 60, 62],     // G sus — the lift
-        "Z20B" => &[31, 43, 50, 55, 59, 67],    // G — the flight, opening
+        "Z00" => &[33, 45, 52, 57, 60],             // A minor, bare
+        "Z01" => &[33, 45, 52, 55, 60],             // Am7
+        "Z02" => &[29, 41, 48, 53, 57],             // F
+        "Z05" => &[28, 40, 47, 52, 57],             // E sus4 — the question
+        "Z06" => &[36, 48, 55, 60, 64, 74],         // C add9 — the relief
+        "Z10C" => &[29, 41, 48, 52, 57, 64],        // Fmaj7
+        "Z10D" => &[31, 43, 50, 55, 59, 64],        // G6
+        "Z10B" => &[33, 45, 52, 55, 60, 64],        // Am7
+        "Z10E" => &[26, 38, 45, 50, 53, 57],        // Dm7 — the shutter's half-light
+        "Z10F" => &[31, 43, 48, 55, 62],            // Gsus4 — the cook's pulse
+        "Z10G" => &[33, 45, 52, 57, 59, 64],        // Am add9 — the swarm's drift
+        "Z11" => &[36, 48, 55, 59, 62, 64],         // Cmaj9
+        "Z12" => &[33, 45, 52, 55, 60],             // Am7
+        "Z12B" => &[29, 41, 48, 52, 57, 64],        // Fmaj7
+        "Z13" => &[31, 43, 50, 55, 59],             // G
+        "Z13B" => &[28, 40, 47, 52, 55, 59],        // Em7
+        "Z13C" => &[36, 48, 55, 60, 64],            // C — the arena's clarity
+        "Z13D" => &[26, 38, 45, 50, 53, 57],        // Dm7 — the designer's turn
+        "Z14" => &[29, 41, 48, 52, 57],             // Fmaj7
+        "Z15" => &[36, 48, 55, 60, 64, 67],         // C
+        "Z16" => &[33, 45, 52, 57, 60, 64],         // Am
+        "Z16B" => &[29, 41, 48, 52, 57, 64],        // Fmaj7 — the merge's warmth
+        "Z17" => &[31, 43, 50, 55, 60, 62],         // G sus4 → the build
+        "Z18" => &[33, 45, 52, 55, 60, 64],         // Am7
+        "Z19" => &[29, 41, 48, 52, 57, 60],         // Fmaj7
+        "Z19B" => &[31, 43, 50, 55, 59, 62],        // G
+        "Z19C" => &[33, 45, 52, 55, 60, 64],        // Am7 — the frame, inward
+        "Z19D" => &[29, 41, 48, 53, 57],            // F — the check, plain
+        "Z20" => &[31, 43, 50, 55, 60, 62],         // G sus — the lift
+        "Z20B" => &[31, 43, 50, 55, 59, 67],        // G — the flight, opening
         _ => &[24, 36, 43, 48, 52, 55, 60, 64, 67], // C — home
     }
 }
@@ -82,7 +82,8 @@ fn moving(id: &str) -> bool {
 }
 
 fn tone(note: f32, wave: Waveform, hold: f32, attack: f32, release: f32) -> Tone {
-    Tone::held(note_to_hz(note), wave, ms(hold)).envelope(Envelope::attack_release(ms(attack), ms(release)))
+    Tone::held(note_to_hz(note), wave, ms(hold))
+        .envelope(Envelope::attack_release(ms(attack), ms(release)))
 }
 
 /// Pad the buffer (mono) to `n` frames.
@@ -92,12 +93,18 @@ fn fit(mut s: Samples, n: usize) -> Vec<f32> {
 }
 
 /// Render the whole score; returns interleaved stereo at [`RATE`].
-pub fn render() -> Samples {
+pub(crate) fn render() -> Samples {
     let scenes = super::scenes();
     let total: f32 = scenes.iter().map(|s| s.seconds).sum();
     let n = (total * RATE as f32).ceil() as usize + RATE as usize;
     let starts: Vec<f32> = (0..scenes.len()).map(super::scene_start).collect();
-    let start_of = |id: &str| scenes.iter().position(|s| s.id == id).map(|i| starts[i]).unwrap_or(0.0);
+    let start_of = |id: &str| {
+        scenes
+            .iter()
+            .position(|s| s.id == id)
+            .map(|i| starts[i])
+            .unwrap_or(0.0)
+    };
 
     let mut pad = Mixer::new(RATE);
     let mut pulse = Mixer::new(RATE);
@@ -126,10 +133,22 @@ pub fn render() -> Samples {
             // The bass of the chord as a sine an octave down; the rest as
             // two slightly detuned triangles — width without noise.
             if k == 0 {
-                pad.tone_at(tone(m, Waveform::Sine, s.seconds, 1.4, 2.2), ms(at), 0.16 * arc);
+                pad.tone_at(
+                    tone(m, Waveform::Sine, s.seconds, 1.4, 2.2),
+                    ms(at),
+                    0.16 * arc,
+                );
             } else {
-                pad.tone_at(tone(m + 0.04, Waveform::Triangle, s.seconds, 1.6, 2.4), ms(at), v);
-                pad.tone_at(tone(m - 0.04, Waveform::Sine, s.seconds, 1.9, 2.6), ms(at), v * 0.8);
+                pad.tone_at(
+                    tone(m + 0.04, Waveform::Triangle, s.seconds, 1.6, 2.4),
+                    ms(at),
+                    v,
+                );
+                pad.tone_at(
+                    tone(m - 0.04, Waveform::Sine, s.seconds, 1.9, 2.6),
+                    ms(at),
+                    v * 0.8,
+                );
             }
         }
         if moving(s.id) {
@@ -139,21 +158,33 @@ pub fn render() -> Samples {
             if beat_clock < at {
                 beat_clock = at + (BEAT - ((at - beat_clock) % BEAT)) % BEAT;
             }
-            let studio = s.id.starts_with("Z11") || s.id.starts_with("Z12") || s.id.starts_with("Z13");
+            let studio =
+                s.id.starts_with("Z11") || s.id.starts_with("Z12") || s.id.starts_with("Z13");
             let gain = if studio { 0.10 } else { 0.15 };
             let mut b = beat_clock;
             let mut step = 0usize;
             let upper: Vec<f32> = notes[1..].iter().map(|&m| f32::from(m) + 12.0).collect();
             const ARP: [usize; 8] = [0, 2, 1, 3, 2, 4, 3, 1];
             while b < end - 0.05 {
-                pulse.tone_at(tone(f32::from(notes[0]) + 12.0, Waveform::Sine, 0.04, 0.004, 0.32), ms(b), gain);
+                pulse.tone_at(
+                    tone(
+                        f32::from(notes[0]) + 12.0,
+                        Waveform::Sine,
+                        0.04,
+                        0.004,
+                        0.32,
+                    ),
+                    ms(b),
+                    gain,
+                );
                 for half in 0..2 {
                     let t = b + half as f32 * BEAT * 0.5;
                     if t >= end - 0.05 {
                         break;
                     }
                     let m = upper[ARP[step % ARP.len()] % upper.len()];
-                    let g = if studio { 0.030 } else { 0.042 } * if step % 4 == 0 { 1.2 } else { 1.0 };
+                    let g = if studio { 0.030 } else { 0.042 }
+                        * if step.is_multiple_of(4) { 1.2 } else { 1.0 };
                     pluck.tone_at(tone(m, Waveform::Triangle, 0.01, 0.003, 0.42), ms(t), g);
                     step += 1;
                 }
@@ -168,16 +199,50 @@ pub fn render() -> Samples {
     let z21 = start_of("Z21");
     for (k, &m) in [43.0_f32, 50.0, 55.0, 62.0, 67.0].iter().enumerate() {
         let a = z20 + 2.0 + k as f32 * 0.6;
-        pad.tone_at(tone(m, Waveform::Saw, (z21 - a - 0.05).max(0.1), 5.0, 0.12), ms(a), 0.012);
+        pad.tone_at(
+            tone(m, Waveform::Saw, (z21 - a - 0.05).max(0.1), 5.0, 0.12),
+            ms(a),
+            0.012,
+        );
     }
 
     // ── Hits: each movement's first frame, and the end card ────────────
     for id in ["Z06", "Z11", "Z18", "Z21"] {
         let at = start_of(id);
         let big = id == "Z21";
-        hits.tone_at(tone(28.0, Waveform::Sine, 0.08, 0.005, if big { 2.4 } else { 1.1 }), ms(at), if big { 0.55 } else { 0.38 });
-        hits.tone_at(tone(96.0, Waveform::Sine, 0.02, 0.01, if big { 3.0 } else { 1.6 }), ms(at + 0.02), 0.035);
-        hits.tone_at(tone(103.0, Waveform::Sine, 0.02, 0.01, if big { 3.4 } else { 1.8 }), ms(at + 0.09), 0.025);
+        hits.tone_at(
+            tone(
+                28.0,
+                Waveform::Sine,
+                0.08,
+                0.005,
+                if big { 2.4 } else { 1.1 },
+            ),
+            ms(at),
+            if big { 0.55 } else { 0.38 },
+        );
+        hits.tone_at(
+            tone(
+                96.0,
+                Waveform::Sine,
+                0.02,
+                0.01,
+                if big { 3.0 } else { 1.6 },
+            ),
+            ms(at + 0.02),
+            0.035,
+        );
+        hits.tone_at(
+            tone(
+                103.0,
+                Waveform::Sine,
+                0.02,
+                0.01,
+                if big { 3.4 } else { 1.8 },
+            ),
+            ms(at + 0.09),
+            0.025,
+        );
     }
 
     // ── The UI's own sounds, where the picture makes them ───────────────
@@ -185,8 +250,16 @@ pub fn render() -> Samples {
     let z02 = start_of("Z02");
     for g in 0..4 {
         let land = z02 + (0.14 + g as f32 * 0.14 + 0.22) * 12.0 + 0.46 * 0.62;
-        ui.tone_at(tone(40.0, Waveform::Sine, 0.03, 0.002, 0.22), ms(land), 0.22);
-        ui.tone_at(tone(88.0, Waveform::Square, 0.004, 0.001, 0.05), ms(land), 0.018);
+        ui.tone_at(
+            tone(40.0, Waveform::Sine, 0.03, 0.002, 0.22),
+            ms(land),
+            0.22,
+        );
+        ui.tone_at(
+            tone(88.0, Waveform::Square, 0.004, 0.001, 0.05),
+            ms(land),
+            0.018,
+        );
     }
     // Z06: every new crate that pops onto the orbit, rising.
     let z06 = start_of("Z06");
@@ -200,57 +273,110 @@ pub fn render() -> Samples {
     let z10e = start_of("Z10E");
     for k in 0..8 {
         let at = z10e + 2.2 + k as f32 * 0.55;
-        ui.tone_at(tone(84.0, Waveform::Square, 0.003, 0.001, 0.04), ms(at), 0.016);
+        ui.tone_at(
+            tone(84.0, Waveform::Square, 0.003, 0.001, 0.04),
+            ms(at),
+            0.016,
+        );
     }
     // Z10G: the wall opens, the path is found again.
     let z10g = start_of("Z10G");
-    ui.tone_at(tone(38.0, Waveform::Sine, 0.06, 0.003, 0.35), ms(z10g + 6.5), 0.30);
-    ui.tone_at(tone(79.0, Waveform::Sine, 0.02, 0.002, 0.6), ms(z10g + 6.9), 0.05);
+    ui.tone_at(
+        tone(38.0, Waveform::Sine, 0.06, 0.003, 0.35),
+        ms(z10g + 6.5),
+        0.30,
+    );
+    ui.tone_at(
+        tone(79.0, Waveform::Sine, 0.02, 0.002, 0.6),
+        ms(z10g + 6.9),
+        0.05,
+    );
     // Z13C: the tap, the drag's win, the release.
     let z13c = start_of("Z13C");
-    ui.tone_at(tone(91.0, Waveform::Sine, 0.006, 0.001, 0.08), ms(z13c + 2.25), 0.05);
-    ui.tone_at(tone(74.0, Waveform::Square, 0.004, 0.001, 0.06), ms(z13c + 4.4), 0.03);
-    ui.tone_at(tone(62.0, Waveform::Sine, 0.05, 0.002, 0.4), ms(z13c + 6.2), 0.16);
+    ui.tone_at(
+        tone(91.0, Waveform::Sine, 0.006, 0.001, 0.08),
+        ms(z13c + 2.25),
+        0.05,
+    );
+    ui.tone_at(
+        tone(74.0, Waveform::Square, 0.004, 0.001, 0.06),
+        ms(z13c + 4.4),
+        0.03,
+    );
+    ui.tone_at(
+        tone(62.0, Waveform::Sine, 0.05, 0.002, 0.4),
+        ms(z13c + 6.2),
+        0.16,
+    );
     // Z13D: each loop of the composition, a pluck.
     let z13d = start_of("Z13D");
     for k in 0..6 {
-        ui.tone_at(tone(76.0, Waveform::Triangle, 0.01, 0.002, 0.5), ms(z13d + k as f32 * 2.0), 0.04);
+        ui.tone_at(
+            tone(76.0, Waveform::Triangle, 0.01, 0.002, 0.5),
+            ms(z13d + k as f32 * 2.0),
+            0.04,
+        );
     }
     // Z16B: each merge, a shimmer.
     let z16b = start_of("Z16B");
     for k in 0..3 {
         let at = z16b + [4.0, 7.2, 10.4][k];
         ui.tone_at(tone(96.0, Waveform::Sine, 0.02, 0.01, 0.9), ms(at), 0.03);
-        ui.tone_at(tone(103.0, Waveform::Sine, 0.02, 0.012, 1.1), ms(at + 0.06), 0.022);
+        ui.tone_at(
+            tone(103.0, Waveform::Sine, 0.02, 0.012, 1.1),
+            ms(at + 0.06),
+            0.022,
+        );
     }
     // Z19C: the plan compiles, pass by pass.
     let z19c = start_of("Z19C");
     for k in 0..4 {
-        ui.tone_at(tone(67.0 + k as f32 * 3.0, Waveform::Sine, 0.008, 0.001, 0.3), ms(z19c + 1.6 + k as f32 * 0.3), 0.04);
+        ui.tone_at(
+            tone(67.0 + k as f32 * 3.0, Waveform::Sine, 0.008, 0.001, 0.3),
+            ms(z19c + 1.6 + k as f32 * 0.3),
+            0.04,
+        );
     }
     // Z19D: each ratio's landing, soft.
     let z19d = start_of("Z19D");
     for k in 0..5 {
-        ui.tone_at(tone(72.0 + PENTA[k % 5], Waveform::Sine, 0.01, 0.002, 0.4), ms(z19d + 1.4 + 0.12 * k as f32), 0.035);
+        ui.tone_at(
+            tone(72.0 + PENTA[k % 5], Waveform::Sine, 0.01, 0.002, 0.4),
+            ms(z19d + 1.4 + 0.12 * k as f32),
+            0.035,
+        );
     }
     // Z20B: the flight rises — a quick ascending arpeggio under the swell.
     let z20b = start_of("Z20B");
     for (k, m) in [55.0_f32, 59.0, 62.0, 67.0].iter().enumerate() {
-        ui.tone_at(tone(m + 12.0, Waveform::Triangle, 0.03, 0.004, 0.5), ms(z20b + 3.2 + k as f32 * 0.28), 0.05);
+        ui.tone_at(
+            tone(m + 12.0, Waveform::Triangle, 0.03, 0.004, 0.5),
+            ms(z20b + 3.2 + k as f32 * 0.28),
+            0.05,
+        );
     }
     // The studio: a soft click on every action the session takes.
     for (at, _) in super::script::session() {
         ui.tone_at(tone(91.0, Waveform::Sine, 0.004, 0.001, 0.05), ms(at), 0.03);
-        ui.tone_at(tone(79.0, Waveform::Triangle, 0.004, 0.001, 0.08), ms(at), 0.02);
+        ui.tone_at(
+            tone(79.0, Waveform::Triangle, 0.004, 0.001, 0.08),
+            ms(at),
+            0.02,
+        );
     }
 
     // ── Mix ─────────────────────────────────────────────────────────────
-    let pad = apply(&pad.render(), || Biquad::new(FilterKind::LowPass, 1600.0, 0.707, RATE as f32));
-    let pulse = apply(&pulse.render(), || Biquad::new(FilterKind::LowPass, 900.0, 0.707, RATE as f32));
+    let pad = apply(&pad.render(), || {
+        Biquad::new(FilterKind::LowPass, 1600.0, 0.707, RATE as f32)
+    });
+    let pulse = apply(&pulse.render(), || {
+        Biquad::new(FilterKind::LowPass, 900.0, 0.707, RATE as f32)
+    });
     let pluck = pluck.render();
     let pluck_l = apply(&pluck, || Delay::new(BEAT * 0.75, RATE as f32, 0.38, 0.32));
     let pluck_r = apply(&pluck, || Delay::new(BEAT * 0.5, RATE as f32, 0.42, 0.36));
-    let (pad, pulse, pluck_l, pluck_r) = (fit(pad, n), fit(pulse, n), fit(pluck_l, n), fit(pluck_r, n));
+    let (pad, pulse, pluck_l, pluck_r) =
+        (fit(pad, n), fit(pulse, n), fit(pluck_l, n), fit(pluck_r, n));
     let (ui, hits) = (fit(ui.render(), n), fit(hits.render(), n));
     let mut l = vec![0.0_f32; n];
     let mut r = vec![0.0_f32; n];
@@ -263,13 +389,21 @@ pub fn render() -> Samples {
     let l = apply(&Samples::mono(l, RATE), comp).data;
     let r = apply(&Samples::mono(r, RATE), comp).data;
     // Normalise to −1 dBFS, and fade the last two seconds of the film.
-    let peak = l.iter().chain(r.iter()).fold(0.0_f32, |m, x| m.max(x.abs())).max(1e-6);
+    let peak = l
+        .iter()
+        .chain(r.iter())
+        .fold(0.0_f32, |m, x| m.max(x.abs()))
+        .max(1e-6);
     let gain = 0.89 / peak;
     let film_n = (total * RATE as f32) as usize;
     let fade = (2.0 * RATE as f32) as usize;
     let mut out = Vec::with_capacity(film_n * 2);
     for i in 0..film_n {
-        let f = if i + fade > film_n { (film_n - i) as f32 / fade as f32 } else { 1.0 };
+        let f = if i + fade > film_n {
+            (film_n - i) as f32 / fade as f32
+        } else {
+            1.0
+        };
         out.push(l[i] * gain * f);
         out.push(r[i] * gain * f);
     }
@@ -277,7 +411,7 @@ pub fn render() -> Samples {
 }
 
 /// Render the score and write it as `score.wav` under `root`.
-pub fn write(root: &Path) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+pub(crate) fn write(root: &Path) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let samples = render();
     let bytes = vieww_audio::wav::write_wav(&samples).map_err(|e| format!("{e:?}"))?;
     let path = root.join("score.wav");

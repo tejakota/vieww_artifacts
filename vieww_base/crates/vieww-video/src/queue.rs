@@ -67,7 +67,12 @@ impl std::fmt::Debug for Job {
 }
 
 impl Job {
-    pub fn new(name: &str, range: std::ops::Range<u64>, fps: u32, source: impl Fn(u64) -> Image + 'static) -> Self {
+    pub fn new(
+        name: &str,
+        range: std::ops::Range<u64>,
+        fps: u32,
+        source: impl Fn(u64) -> Image + 'static,
+    ) -> Self {
         Self {
             name: name.to_owned(),
             source: Box::new(source),
@@ -142,7 +147,10 @@ fn file(p: &PathBuf) -> io::Result<std::io::BufWriter<std::fs::File>> {
 fn run(job: &mut Job, ji: usize, progress: Progress<'_>) -> io::Result<u64> {
     let total = job.range.end.saturating_sub(job.range.start);
     if total == 0 {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty frame range"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "empty frame range",
+        ));
     }
     let first = (job.source)(job.range.start);
     let (w, h) = (first.width(), first.height());
@@ -151,7 +159,9 @@ fn run(job: &mut Job, ji: usize, progress: Progress<'_>) -> io::Result<u64> {
         sinks.push(match o {
             OutputModule::PngSequence { dir, prefix } => Sink::Png(PngSequence::new(dir, prefix)?),
             OutputModule::Gif { path } => Sink::Gif(GifWriter::new(file(path)?, w, h, job.fps)?),
-            OutputModule::Y4m { path } => Sink::Y4m(Y4mWriter::new(file(path)?, w, h, (job.fps, 1))),
+            OutputModule::Y4m { path } => {
+                Sink::Y4m(Y4mWriter::new(file(path)?, w, h, (job.fps, 1)))
+            }
             OutputModule::Mjpeg { path, quality } => {
                 Sink::Mjpeg(MjpegWriter::new(file(path)?, w, h, job.fps, *quality))
             }
@@ -202,22 +212,37 @@ mod tests {
         let mut q = RenderQueue::new();
         q.add(
             Job::new("master", 0..5, 24, src)
-                .output(OutputModule::PngSequence { dir: dir.join("png"), prefix: "f".into() })
-                .output(OutputModule::Mjpeg { path: dir.join("proxy.avi"), quality: 85 })
-                .output(OutputModule::Gif { path: dir.join("preview.gif") })
+                .output(OutputModule::PngSequence {
+                    dir: dir.join("png"),
+                    prefix: "f".into(),
+                })
+                .output(OutputModule::Mjpeg {
+                    path: dir.join("proxy.avi"),
+                    quality: 85,
+                })
+                .output(OutputModule::Gif {
+                    path: dir.join("preview.gif"),
+                })
                 .output(OutputModule::Memory),
         );
         q.add(Job::new("empty", 3..3, 24, src));
         let mut seen = Vec::new();
         q.render(&mut |j, d, t| seen.push((j, d, t)));
-        assert!(matches!(q.jobs[0].status, JobStatus::Done { frames: 5, .. }));
-        assert!(matches!(q.jobs[1].status, JobStatus::Failed(_)), "the bad job fails alone");
+        assert!(matches!(
+            q.jobs[0].status,
+            JobStatus::Done { frames: 5, .. }
+        ));
+        assert!(
+            matches!(q.jobs[1].status, JobStatus::Failed(_)),
+            "the bad job fails alone"
+        );
         assert_eq!(seen.last(), Some(&(0, 5, 5)));
         assert_eq!(q.jobs[0].memory.len(), 5);
         assert!(dir.join("png/f-00004.png").exists());
         let avi = MjpegAvi::parse(std::fs::read(dir.join("proxy.avi")).unwrap()).unwrap();
         assert_eq!(avi.frame_count(), 5);
-        let gif = vieww_image::codec::gif::decode(&std::fs::read(dir.join("preview.gif")).unwrap()).unwrap();
+        let gif = vieww_image::codec::gif::decode(&std::fs::read(dir.join("preview.gif")).unwrap())
+            .unwrap();
         assert_eq!(gif.frames.len(), 5);
         let _ = std::fs::remove_dir_all(&dir);
     }

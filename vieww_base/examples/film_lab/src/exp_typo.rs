@@ -48,6 +48,7 @@ const BUCKETS: usize = 4;
 
 struct Storm {
     /// Letter start positions (line space, origin at line centre).
+    #[allow(dead_code)]
     starts: Vec<Offset>,
     /// Non-space letter indices (for rendering).
     chars: Vec<(char, usize)>,
@@ -92,8 +93,8 @@ fn storm() -> &'static Storm {
         let total: f32 = adv.iter().sum::<f32>() - em * 0.16;
         let mut starts = Vec::with_capacity(LINE.len());
         let mut x = -total * 0.5;
-        for (i, a) in adv.iter().enumerate() {
-            starts.push(Offset::new(x + if i == 0 { 0.0 } else { 0.0 }, 0.0));
+        for a in adv.iter() {
+            starts.push(Offset::new(x, 0.0));
             x += a;
         }
 
@@ -298,9 +299,11 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
 
     // Build per-letter state: bucket, speed, alpha, size, rotation.
     struct LetterState {
+        #[allow(dead_code)]
         idx: usize,
         ch: char,
         pos: Offset,
+        #[allow(dead_code)]
         speed: f32,
         bucket: usize,
         rot: f32,

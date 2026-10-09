@@ -84,6 +84,7 @@ const CHROME_PERIOD: f32 = 6.0;
 /// mark's left edge, baseline at y = 0), and its measured width.
 pub(crate) struct Letter {
     pub(crate) outline: Path,
+    #[allow(dead_code)]
     pub(crate) width: f32,
 }
 

@@ -16,24 +16,54 @@ use std::time::Duration;
 use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook, TextAlign};
 use vieww_widget::prelude::*;
 
-use crate::film_lib::{clamp01, ease_in_out, ease_out_expo};
-use crate::product_film as pf;
 use super::{
     frame, ACCENT, BRAND_FAR, BRAND_NEAR, CANVAS, INK, LEDGER, MUTED, SURFACE, SURFACE_2,
     SYN_COMMENT, SYN_TYPE, TERM_GREEN,
 };
+use crate::film_lib::{clamp01, ease_in_out, ease_out_expo};
+use crate::product_film as pf;
 
 /// The three source screens, as rects on the frame.
 const SCREENS: [Rect; 3] = [
-    Rect { left: 190.0, top: 300.0, right: 640.0, bottom: 660.0 },
-    Rect { left: 680.0, top: 300.0, right: 1130.0, bottom: 660.0 },
-    Rect { left: 1170.0, top: 300.0, right: 1620.0, bottom: 660.0 },
+    Rect {
+        left: 190.0,
+        top: 300.0,
+        right: 640.0,
+        bottom: 660.0,
+    },
+    Rect {
+        left: 680.0,
+        top: 300.0,
+        right: 1130.0,
+        bottom: 660.0,
+    },
+    Rect {
+        left: 1170.0,
+        top: 300.0,
+        right: 1620.0,
+        bottom: 660.0,
+    },
 ];
 
 /// The endcard's landing zones, as rects on the frame.
-const LAND_MARK: Rect = Rect { left: 760.0, top: 480.0, right: 1160.0, bottom: 600.0 };
-const LAND_ACCENT: Rect = Rect { left: 1140.0, top: 470.0, right: 1180.0, bottom: 510.0 };
-const LAND_CHIP: Rect = Rect { left: 820.0, top: 640.0, right: 1100.0, bottom: 684.0 };
+const LAND_MARK: Rect = Rect {
+    left: 760.0,
+    top: 480.0,
+    right: 1160.0,
+    bottom: 600.0,
+};
+const LAND_ACCENT: Rect = Rect {
+    left: 1140.0,
+    top: 470.0,
+    right: 1180.0,
+    bottom: 510.0,
+};
+const LAND_CHIP: Rect = Rect {
+    left: 820.0,
+    top: 640.0,
+    right: 1100.0,
+    bottom: 684.0,
+};
 
 /// Where each screen's tagged element sits inside that screen.
 fn source_tag_rects() -> Vec<(&'static str, Rect)> {
@@ -60,7 +90,7 @@ fn source_tag_rects() -> Vec<(&'static str, Rect)> {
 }
 
 /// Z20B — the flight: elements fly, the studio becomes the mark.
-pub fn the_flight(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_flight(ctx: &pf::Ctx) -> WidgetNode {
     use vieww_animation::duplicator::{Behaviour, Distribution, Duplicator, Falloff};
     use vieww_animation::particles::ParticleField;
     use vieww_element::{SharedFlight, SharedRegistry, SharedTag};
@@ -113,7 +143,12 @@ pub fn the_flight(ctx: &pf::Ctx) -> WidgetNode {
                     );
                 }
                 book.rrect(
-                    Rect::new(inner.left, inner.top + 60.0, inner.left + 96.0, inner.top + 88.0),
+                    Rect::new(
+                        inner.left,
+                        inner.top + 60.0,
+                        inner.left + 96.0,
+                        inner.top + 88.0,
+                    ),
                     5.0,
                     pf::alpha([BRAND_NEAR, SYN_TYPE, TERM_GREEN][k], 0.5 * a),
                 );
@@ -172,7 +207,11 @@ pub fn the_flight(ctx: &pf::Ctx) -> WidgetNode {
                 return;
             }
             // The landing zones' ghost frames — where home is.
-            for (r, col) in [(LAND_MARK, BRAND_FAR), (LAND_ACCENT, ACCENT), (LAND_CHIP, SYN_TYPE)] {
+            for (r, col) in [
+                (LAND_MARK, BRAND_FAR),
+                (LAND_ACCENT, ACCENT),
+                (LAND_CHIP, SYN_TYPE),
+            ] {
                 book.stroke_rrect(r, 10.0, pf::alpha(col, 0.35 * end_a), 1.2);
             }
         }),
@@ -192,8 +231,14 @@ pub fn the_flight(ctx: &pf::Ctx) -> WidgetNode {
                             14.0,
                             pf::alpha(SURFACE, 0.95),
                         );
-                        book.rect(Rect::new(18.0, 22.0, s.width - 18.0, 34.0), pf::alpha(INK, 0.92));
-                        book.rect(Rect::new(18.0, 44.0, s.width * 0.62, 56.0), pf::alpha(BRAND_NEAR, 0.92));
+                        book.rect(
+                            Rect::new(18.0, 22.0, s.width - 18.0, 34.0),
+                            pf::alpha(INK, 0.92),
+                        );
+                        book.rect(
+                            Rect::new(18.0, 44.0, s.width * 0.62, 56.0),
+                            pf::alpha(BRAND_NEAR, 0.92),
+                        );
                     }),
                 )));
                 card.into()
@@ -223,9 +268,21 @@ pub fn the_flight(ctx: &pf::Ctx) -> WidgetNode {
                 card = card.push(Positioned::fill().child(Painting::sized(
                     Size::new(LAND_CHIP.width(), LAND_CHIP.height()),
                     PaintWith::new(move |book: &mut Sketchbook, s: Size| {
-                        book.rrect(Rect::new(0.0, 0.0, s.width, s.height), 9.0, pf::alpha(SYN_TYPE, 0.3));
-                        book.stroke_rrect(Rect::new(0.0, 0.0, s.width, s.height), 9.0, pf::alpha(SYN_TYPE, 0.8), 1.6);
-                        book.rect(Rect::new(10.0, s.height * 0.4, s.width - 10.0, s.height * 0.6), pf::alpha(SYN_TYPE, 0.5));
+                        book.rrect(
+                            Rect::new(0.0, 0.0, s.width, s.height),
+                            9.0,
+                            pf::alpha(SYN_TYPE, 0.3),
+                        );
+                        book.stroke_rrect(
+                            Rect::new(0.0, 0.0, s.width, s.height),
+                            9.0,
+                            pf::alpha(SYN_TYPE, 0.8),
+                            1.6,
+                        );
+                        book.rect(
+                            Rect::new(10.0, s.height * 0.4, s.width - 10.0, s.height * 0.6),
+                            pf::alpha(SYN_TYPE, 0.5),
+                        );
                     }),
                 )));
                 card.into()
@@ -235,13 +292,14 @@ pub fn the_flight(ctx: &pf::Ctx) -> WidgetNode {
     stack = stack.push(overlay);
 
     // ── The send-off: the framework's own duplicator and particles. ────
-    let ring_d = Duplicator::new(Distribution::Radial { count: 28, radius: 300.0, orient: true })
-        .behaviour(Behaviour::Rotate(0.5), Falloff::None)
-        .behaviour(Behaviour::Scale(0.4), Falloff::Index { from: 1.0, to: 0.5 })
-        .behaviour(
-            Behaviour::Fade(0.6),
-            Falloff::Index { from: 0.1, to: 0.7 },
-        );
+    let ring_d = Duplicator::new(Distribution::Radial {
+        count: 28,
+        radius: 300.0,
+        orient: true,
+    })
+    .behaviour(Behaviour::Rotate(0.5), Falloff::None)
+    .behaviour(Behaviour::Scale(0.4), Falloff::Index { from: 1.0, to: 0.5 })
+    .behaviour(Behaviour::Fade(0.6), Falloff::Index { from: 0.1, to: 0.7 });
     let instances = ring_d.evaluate(sec);
     let sparks = ParticleField::new(110.0, 2.4)
         .origin(Offset::new(960.0, 560.0))

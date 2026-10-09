@@ -103,7 +103,10 @@ impl CameraState {
     pub fn orbit(mut self, radians: f32) -> Self {
         let r = sub(self.eye, self.target);
         let (s, c) = radians.sin_cos();
-        self.eye = add(self.target, [r[0] * c + r[2] * s, r[1], -r[0] * s + r[2] * c]);
+        self.eye = add(
+            self.target,
+            [r[0] * c + r[2] * s, r[1], -r[0] * s + r[2] * c],
+        );
         self
     }
 

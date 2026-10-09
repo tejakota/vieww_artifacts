@@ -101,8 +101,7 @@ fn rebuild_count(t: f32) -> u32 {
 /// Total writes emitted by `t`, across all gestures.
 fn total_writes(t: f32) -> u32 {
     let mut n = 0;
-    for g in 0..GESTURES.len() {
-        let (a, b, _, _, total) = GESTURES[g];
+    for (g, &(a, b, _, _, total)) in GESTURES.iter().enumerate() {
         if t > b {
             n += total;
         } else if t >= a {
@@ -446,8 +445,7 @@ fn scrub_track(t: f32) -> WidgetNode {
             // jitter so the rail reads as a spill, not a comb.
             let mut rng = Rng::new(0xC0A1u64 + (t.to_bits() % 97) as u64);
             let mut drawn = 0;
-            for g in 0..GESTURES.len() {
-                let (a, b, from, to, total) = GESTURES[g];
+            for (g, &(a, b, from, to, total)) in GESTURES.iter().enumerate() {
                 let n = if t > b {
                     total
                 } else if t >= a {

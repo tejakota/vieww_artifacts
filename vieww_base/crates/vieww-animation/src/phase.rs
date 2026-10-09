@@ -102,9 +102,7 @@ impl<T: Lerp> PhaseAnimator<T> {
         }
         let cycle = self.cycle();
         let mut t = if self.repeat && !cycle.is_zero() {
-            Duration::from_nanos(
-                u64::try_from(elapsed.as_nanos() % cycle.as_nanos()).unwrap_or(0),
-            )
+            Duration::from_nanos(u64::try_from(elapsed.as_nanos() % cycle.as_nanos()).unwrap_or(0))
         } else {
             elapsed
         };
@@ -114,7 +112,12 @@ impl<T: Lerp> PhaseAnimator<T> {
                 (&self.phases[i - 1].value, &p.value, p.duration, p.curve)
             } else if self.repeat {
                 let p = &self.phases[1];
-                (&self.phases[n - 1].value, &self.phases[0].value, p.duration, p.curve)
+                (
+                    &self.phases[n - 1].value,
+                    &self.phases[0].value,
+                    p.duration,
+                    p.curve,
+                )
             } else {
                 break;
             };
@@ -126,7 +129,9 @@ impl<T: Lerp> PhaseAnimator<T> {
         }
         (
             if self.repeat { 0 } else { n - 1 },
-            self.phases[if self.repeat { 0 } else { n - 1 }].value.clone(),
+            self.phases[if self.repeat { 0 } else { n - 1 }]
+                .value
+                .clone(),
         )
     }
 
@@ -250,9 +255,7 @@ impl KeyframeTrack {
                         + 3.0 * (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * u2);
                 (v, dv / d)
             }
-            Kind::Spring { response, damping } => {
-                spring(from, k.value, v0, response, damping, t)
-            }
+            Kind::Spring { response, damping } => spring(from, k.value, v0, response, damping, t),
         }
     }
 }
@@ -412,16 +415,14 @@ mod tests {
 
     #[test]
     fn spring_carries_entry_velocity() {
-        let moving = KeyframeTrack::new(0.0)
-            .key(Kind::Linear, 1.0, ms(100))
-            .key(
-                Kind::Spring {
-                    response: 0.5,
-                    damping: 1.0,
-                },
-                1.0,
-                ms(1000),
-            );
+        let moving = KeyframeTrack::new(0.0).key(Kind::Linear, 1.0, ms(100)).key(
+            Kind::Spring {
+                response: 0.5,
+                damping: 1.0,
+            },
+            1.0,
+            ms(1000),
+        );
         // Arriving at the target already moving, the spring overshoots it.
         assert!(moving.value(ms(150)) > 1.0);
     }

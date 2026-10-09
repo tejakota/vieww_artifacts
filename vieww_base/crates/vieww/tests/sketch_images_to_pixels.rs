@@ -11,7 +11,15 @@ const SIDE: u32 = 128;
 
 fn checker() -> Image {
     // 4×4: left half red, right half blue.
-    let px: Vec<u8> = (0..16).flat_map(|i| if i % 4 < 2 { [255, 0, 0, 255] } else { [0, 0, 255, 255] }).collect();
+    let px: Vec<u8> = (0..16)
+        .flat_map(|i| {
+            if i % 4 < 2 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 0, 255, 255]
+            }
+        })
+        .collect();
     Image::from_rgba8(px, 4, 4)
 }
 
@@ -48,8 +56,18 @@ fn a_textured_mesh_flips_the_image_by_its_uvs() {
     let mut book = Sketchbook::new();
     book.textured_mesh(
         &checker(),
-        &[Offset::new(0.0, 0.0), Offset::new(128.0, 0.0), Offset::new(128.0, 128.0), Offset::new(0.0, 128.0)],
-        &[Offset::new(1.0, 0.0), Offset::new(0.0, 0.0), Offset::new(0.0, 1.0), Offset::new(1.0, 1.0)],
+        &[
+            Offset::new(0.0, 0.0),
+            Offset::new(128.0, 0.0),
+            Offset::new(128.0, 128.0),
+            Offset::new(0.0, 128.0),
+        ],
+        &[
+            Offset::new(1.0, 0.0),
+            Offset::new(0.0, 0.0),
+            Offset::new(0.0, 1.0),
+            Offset::new(1.0, 1.0),
+        ],
         &[0, 1, 2, 0, 2, 3],
     );
     let px = render(book);
@@ -64,10 +82,19 @@ fn a_textured_mesh_flips_the_image_by_its_uvs() {
 #[test]
 fn a_pattern_tiles_inside_its_area() {
     let mut book = Sketchbook::new();
-    book.pattern(Path::rect(Rect::new(0.0, 0.0, 64.0, 64.0)), &checker(), Offset::ZERO, Size::new(16.0, 16.0));
+    book.pattern(
+        Path::rect(Rect::new(0.0, 0.0, 64.0, 64.0)),
+        &checker(),
+        Offset::ZERO,
+        Size::new(16.0, 16.0),
+    );
     let px = render(book);
     assert_eq!(px.pixel(4, 4), Color::rgba(255, 0, 0, 255));
     assert_eq!(px.pixel(12, 4), Color::rgba(0, 0, 255, 255));
-    assert_eq!(px.pixel(20, 4), Color::rgba(255, 0, 0, 255), "the next tile repeats");
+    assert_eq!(
+        px.pixel(20, 4),
+        Color::rgba(255, 0, 0, 255),
+        "the next tile repeats"
+    );
     assert_eq!(px.pixel(100, 100), Color::WHITE, "clipped to the area");
 }

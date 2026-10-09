@@ -116,45 +116,41 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     });
 
     // ── The lensed star field ──────────────────────────────────────────────
-    let mut swallowed = 0usize;
-    {
-        let mut rng = Rng::new(0x57A2);
-        for i in 0..STARS {
-            let x = rng.f01() * w;
-            let y = rng.f01() * h;
-            let r0 = (x - c.dx).hypot(y - c.dy);
-            // Stars behind the shadow do not exist for us.
-            if r0 < R_SHADOW * 1.1 {
-                swallowed += 1;
-                continue;
-            }
-            let d = deflect(r0);
-            let sx = c.dx + (x - c.dx) * d;
-            let sy = c.dy + (y - c.dy) * d;
-            // Skip if lensed out of frame.
-            if sx < 0.0 || sx > w || sy < 0.0 || sy > h {
-                continue;
-            }
-            let tw = 0.5 + 0.5 * (t * 2.4 + i as f32 * 1.93).sin();
-            let base_a = 0.10 + 0.42 * rng.f01();
-            let size = 0.4 + rng.f01() * 1.2;
-            // Tangential smear where the lens is strong.
-            if r0 < R_PHOTON * 2.4 {
-                let ang = (y - c.dy).atan2(x - c.dx);
-                let arc_len = 0.10 + (R_PHOTON * 2.4 / r0 - 1.0).max(0.0) * 0.22;
-                let path = Path::arc(Offset::new(sx, sy), r0 * d, ang - arc_len, arc_len * 2.0);
-                book.stroke(
-                    path,
-                    alpha(Color::WHITE, base_a * 0.8 * (0.6 + 0.4 * tw)),
-                    1.0,
-                );
-            } else {
-                book.circle(
-                    Offset::new(sx, sy),
-                    size,
-                    alpha(Color::WHITE, base_a * (0.6 + 0.4 * tw)),
-                );
-            }
+    let mut rng = Rng::new(0x57A2);
+    for i in 0..STARS {
+        let x = rng.f01() * w;
+        let y = rng.f01() * h;
+        let r0 = (x - c.dx).hypot(y - c.dy);
+        // Stars behind the shadow do not exist for us.
+        if r0 < R_SHADOW * 1.1 {
+            continue;
+        }
+        let d = deflect(r0);
+        let sx = c.dx + (x - c.dx) * d;
+        let sy = c.dy + (y - c.dy) * d;
+        // Skip if lensed out of frame.
+        if sx < 0.0 || sx > w || sy < 0.0 || sy > h {
+            continue;
+        }
+        let tw = 0.5 + 0.5 * (t * 2.4 + i as f32 * 1.93).sin();
+        let base_a = 0.10 + 0.42 * rng.f01();
+        let size = 0.4 + rng.f01() * 1.2;
+        // Tangential smear where the lens is strong.
+        if r0 < R_PHOTON * 2.4 {
+            let ang = (y - c.dy).atan2(x - c.dx);
+            let arc_len = 0.10 + (R_PHOTON * 2.4 / r0 - 1.0).max(0.0) * 0.22;
+            let path = Path::arc(Offset::new(sx, sy), r0 * d, ang - arc_len, arc_len * 2.0);
+            book.stroke(
+                path,
+                alpha(Color::WHITE, base_a * 0.8 * (0.6 + 0.4 * tw)),
+                1.0,
+            );
+        } else {
+            book.circle(
+                Offset::new(sx, sy),
+                size,
+                alpha(Color::WHITE, base_a * (0.6 + 0.4 * tw)),
+            );
         }
     }
 

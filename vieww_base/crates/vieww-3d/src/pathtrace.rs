@@ -174,7 +174,11 @@ impl TraceScene {
                     let bones: Vec<crate::math::Mat4> =
                         skin.bones.iter().map(|b| scene.node(*b).world()).collect();
                     let jm = crate::skin::joint_matrices(&world, &bones, &skin.inverse_bind);
-                    add_mesh(world, &crate::skin::deform(skin, &jm, morph_weights), material);
+                    add_mesh(
+                        world,
+                        &crate::skin::deform(skin, &jm, morph_weights),
+                        material,
+                    );
                 }
                 Content::Empty | Content::Points { .. } => {}
             }

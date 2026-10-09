@@ -10,12 +10,12 @@ use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextAlig
 use vieww_widget::prelude::*;
 use vieww_widget::{RichText, Span};
 
-use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, spring_out};
-use crate::product_film as pf;
 use super::filmkit as fk;
 use super::{
-    ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, INK, MUTED, SYN_TYPE, TERM_GREEN, W,
+    ACCENT, ACCENT_DEEP, BG_DEEP, BRAND_FAR, BRAND_NEAR, CANVAS, MUTED, SYN_TYPE, TERM_GREEN, W,
 };
+use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo, spring_out};
+use crate::product_film as pf;
 
 /// The repository — the call to action.
 const REPO: &str = "github.com/tejakota/vieww_artifacts";
@@ -57,7 +57,7 @@ fn mark_anchor() -> Rect {
     )
 }
 
-pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
 
@@ -95,7 +95,19 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
                     target: crate::three_d::Vec3::new(0.0, 170.0, 420.0),
                     fov: 0.72,
                 };
-                fk::grid_floor_lines(book, &cam3, s, 1700.0, 30.0, 2100.0, 180.0, BRAND_NEAR, 0.75 * floor_p, 120.0, 1500.0);
+                fk::grid_floor_lines(
+                    book,
+                    &cam3,
+                    s,
+                    1700.0,
+                    30.0,
+                    2100.0,
+                    180.0,
+                    BRAND_NEAR,
+                    0.75 * floor_p,
+                    120.0,
+                    1500.0,
+                );
             }
             pf::vignette(book, w, h, 0.55);
         }),
@@ -115,12 +127,26 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     let side = anchor.width();
     let app_world = super::layout::APP;
     let lerp = |a: f32, b: f32, u: f32| a + (b - a) * u;
-    let lerp_r = |a: Rect, b: Rect, u: f32| Rect::new(lerp(a.left, b.left, u), lerp(a.top, b.top, u), lerp(a.right, b.right, u), lerp(a.bottom, b.bottom, u));
+    let lerp_r = |a: Rect, b: Rect, u: f32| {
+        Rect::new(
+            lerp(a.left, b.left, u),
+            lerp(a.top, b.top, u),
+            lerp(a.right, b.right, u),
+            lerp(a.bottom, b.bottom, u),
+        )
+    };
     // The mark's own geometry — `viewwstudio::ui::brand`'s panel
     // fractions (x, y, w, h of the side), restated here because the
     // module keeps them private; the final hand-off to the real
     // `brand::revealed` below is what proves they agree.
-    let frac = |f: (f32, f32, f32, f32)| Rect::new(anchor.left + side * f.0, anchor.top + side * f.1, anchor.left + side * (f.0 + f.2), anchor.top + side * (f.1 + f.3));
+    let frac = |f: (f32, f32, f32, f32)| {
+        Rect::new(
+            anchor.left + side * f.0,
+            anchor.top + side * f.1,
+            anchor.left + side * (f.0 + f.2),
+            anchor.top + side * (f.1 + f.3),
+        )
+    };
     let mark_editor = frac((0.16, 0.20, 0.40, 0.60));
     let mark_preview = frac((0.44, 0.32, 0.40, 0.48));
 
@@ -128,15 +154,30 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     // until it is a little wider than the mark, centred where the mark
     // will be.
     let shrink = ease_in_out(clamp01(t / 0.46));
-    let (acx, acy) = ((anchor.left + anchor.right) * 0.5, (anchor.top + anchor.bottom) * 0.5);
+    let (acx, acy) = (
+        (anchor.left + anchor.right) * 0.5,
+        (anchor.top + anchor.bottom) * 0.5,
+    );
     let ww = side * 1.55;
     let wh = ww * app_world.height() / app_world.width();
-    let small = Rect::new(acx - ww * 0.5, acy - wh * 0.5, acx + ww * 0.5, acy + wh * 0.5);
+    let small = Rect::new(
+        acx - ww * 0.5,
+        acy - wh * 0.5,
+        acx + ww * 0.5,
+        acy + wh * 0.5,
+    );
     let window = lerp_r(app_world, small, shrink);
     // Where a region of the app sits inside the collapsing window — the
     // plate maps the app by the window's width, so the panes ride with it.
     let k = window.width() / app_world.width();
-    let inside = |r: Rect| Rect::new(window.left + r.left * k, window.top + r.top * k, window.left + r.right * k, window.top + r.bottom * k);
+    let inside = |r: Rect| {
+        Rect::new(
+            window.left + r.left * k,
+            window.top + r.top * k,
+            window.left + r.right * k,
+            window.top + r.bottom * k,
+        )
+    };
 
     // **2 · the two panes lift out of it and become the two panels.** The
     // studio *is* the mark's picture — an editor beside a preview — so
@@ -163,24 +204,38 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
         snap: None,
         card: true,
         bare: false,
-        morph: None, stretch: false,
+        morph: None,
+        stretch: false,
     });
     // The mark's ground, under the panes (drawn beneath the plates), so
     // the panes travel *over* it the way the panels sit on it.
     if ground_a > 0.01 {
         let g = ground;
-        super::frame::under(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            let r = lerp(side * 0.06, side * 0.22, split);
-            book.rrect(g, r, Gradient::vertical().between(
-                pf::alpha(Color::rgb(0x24, 0x27, 0x2E), ground_a),
-                pf::alpha(viewwstudio::ui::brand::GROUND, ground_a),
-            ));
-            book.fill(vieww_foundation::Path::rounded_ring(g, r, 1.0), pf::alpha(Color::WHITE, 0.10 * ground_a));
-        }))));
+        super::frame::under(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                let r = lerp(side * 0.06, side * 0.22, split);
+                book.rrect(
+                    g,
+                    r,
+                    Gradient::vertical().between(
+                        pf::alpha(Color::rgb(0x24, 0x27, 0x2E), ground_a),
+                        pf::alpha(viewwstudio::ui::brand::GROUND, ground_a),
+                    ),
+                );
+                book.fill(
+                    vieww_foundation::Path::rounded_ring(g, r, 1.0),
+                    pf::alpha(Color::WHITE, 0.10 * ground_a),
+                );
+            }),
+        )));
     }
     let pane_a = 1.0 - clamp01((solid - 0.85) / 0.15);
     if t > 0.34 && pane_a > 0.0 {
-        for (src, dst) in [(super::m3_studio::app::EDITOR, ed_dst), (super::m3_studio::app::PREVIEW, pv_dst)] {
+        for (src, dst) in [
+            (super::m3_studio::app::EDITOR, ed_dst),
+            (super::m3_studio::app::PREVIEW, pv_dst),
+        ] {
             super::frame::plate(super::frame::Plate {
                 src,
                 dst,
@@ -189,19 +244,31 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
                 snap: None,
                 card: split < 0.6,
                 bare: false,
-                morph: None, stretch: true,
+                morph: None,
+                stretch: true,
             });
         }
     }
     // The panels' solid faces, over the landing panes.
     if solid > 0.01 {
-        stack = stack.push(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            book.rrect(ed_dst, side * 0.08, pf::alpha(viewwstudio::ui::brand::PANEL, solid));
-            book.rrect(pv_dst, side * 0.08, Gradient::vertical().between(
-                pf::alpha(viewwstudio::ui::brand::ACCENT_FAR, solid),
-                pf::alpha(viewwstudio::ui::brand::ACCENT, solid),
-            ));
-        }))));
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
+                book.rrect(
+                    ed_dst,
+                    side * 0.08,
+                    pf::alpha(viewwstudio::ui::brand::PANEL, solid),
+                );
+                book.rrect(
+                    pv_dst,
+                    side * 0.08,
+                    Gradient::vertical().between(
+                        pf::alpha(viewwstudio::ui::brand::ACCENT_FAR, solid),
+                        pf::alpha(viewwstudio::ui::brand::ACCENT, solid),
+                    ),
+                );
+            }),
+        )));
     }
 
     // **3 · the hand-off.** The real `brand::revealed` takes over at the
@@ -225,34 +292,53 @@ pub fn the_pullback(ctx: &pf::Ctx) -> WidgetNode {
     // is taking the studio's place.
     if panel_p > 0.05 {
         let rays = 7;
-        let centre = Offset::new((anchor.left + anchor.right) * 0.5, (anchor.top + anchor.bottom) * 0.5);
+        let centre = Offset::new(
+            (anchor.left + anchor.right) * 0.5,
+            (anchor.top + anchor.bottom) * 0.5,
+        );
         stack = stack.push(Positioned::fill().child(Painting::sized(
             CANVAS,
             PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                 for k in 0..rays {
                     let ang = k as f32 * std::f32::consts::TAU / rays as f32 + 0.4;
-                    let from = Offset::new(
-                        centre.dx + 980.0 * ang.cos(),
-                        centre.dy + 700.0 * ang.sin(),
-                    );
+                    let from =
+                        Offset::new(centre.dx + 980.0 * ang.cos(), centre.dy + 700.0 * ang.sin());
                     let pts = fk::thread_pts(from, centre, 0.0);
                     let a = panel_p * 0.8;
-                    fk::grow_stroke(book, &pts, clamp01(panel_p * 1.4 - k as f32 * 0.05), BRAND_FAR, 1.1, 0.35 * a);
-                    fk::rider(book, &pts, (t * 0.30 + k as f32 * 0.14) % 1.0, BRAND_NEAR, 2.2, a);
+                    fk::grow_stroke(
+                        book,
+                        &pts,
+                        clamp01(panel_p * 1.4 - k as f32 * 0.05),
+                        BRAND_FAR,
+                        1.1,
+                        0.35 * a,
+                    );
+                    fk::rider(
+                        book,
+                        &pts,
+                        (t * 0.30 + k as f32 * 0.14) % 1.0,
+                        BRAND_NEAR,
+                        2.2,
+                        a,
+                    );
                 }
             }),
         )));
     }
 
     // The words — what the recede means.
-    stack = stack.push(super::frame::caption("The studio steps back. The engine stays.", 1002.0, clamp01((t - 0.55) / 0.14)));
+    stack = stack.push(super::frame::caption(
+        "The studio steps back. The engine stays.",
+        1002.0,
+        clamp01((t - 0.55) / 0.14),
+    ));
     let _ = sec;
     stack.into()
 }
 
 // ── Z13 · the_endcard ───────────────────────────────────────────────────────
 
-pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let probe = ctx.probe;
@@ -313,13 +399,12 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                 .top(332.0)
                 .width(side)
                 .height(side)
-                .child(Opacity::new(mark_in).child(
-                    Transformed::translate(inset).child(
-                        Transformed::scale(k, k).child(
-                            pf::brand_mark(side, 1.0, 1.0),
-                        ),
+                .child(
+                    Opacity::new(mark_in).child(
+                        Transformed::translate(inset)
+                            .child(Transformed::scale(k, k).child(pf::brand_mark(side, 1.0, 1.0))),
                     ),
-                )),
+                ),
         );
         // (The sting's breathing glow behind the mark is gone with the
         // film's radial glows — the orbiting 3D ring above and the
@@ -356,7 +441,14 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                 ] {
                     let pts = fk::thread_pts(from, Offset::new(W * 0.5, 694.0), bend);
                     fk::ribbon(book, &pts, 2.0, sec_v + phase, BRAND_FAR, 0.55 * la);
-                    fk::rider(book, &pts, (sec_v * 0.22 + phase) % 1.0, BRAND_NEAR, 2.4, la);
+                    fk::rider(
+                        book,
+                        &pts,
+                        (sec_v * 0.22 + phase) % 1.0,
+                        BRAND_NEAR,
+                        2.4,
+                        la,
+                    );
                 }
             }),
         )));
@@ -364,22 +456,28 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
     if line_a > 0.01 {
         let target_w = 900.0;
         let uw = target_w * ease_out_expo(line_a);
-        stack = stack.push(Positioned::new().left((W - uw) * 0.5).top(692.0).width(uw).height(5.0).child(
-            Painting::sized(Size::new(uw.max(1.0), 5.0), PaintWith::new(
-                move |book: &mut Sketchbook, s: Size| {
-                    book.rect(
-                        Rect::new(0.0, 0.0, s.width, s.height),
-                        Gradient::horizontal().with_dither().with_stops(&[
-                            (0.0, pf::alpha(ACCENT_DEEP, 0.0)),
-                            (0.18, ACCENT_DEEP),
-                            (0.5, ACCENT),
-                            (0.82, ACCENT_DEEP),
-                            (1.0, pf::alpha(ACCENT_DEEP, 0.0)),
-                        ]),
-                    );
-                },
-            )),
-        ));
+        stack = stack.push(
+            Positioned::new()
+                .left((W - uw) * 0.5)
+                .top(692.0)
+                .width(uw)
+                .height(5.0)
+                .child(Painting::sized(
+                    Size::new(uw.max(1.0), 5.0),
+                    PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+                        book.rect(
+                            Rect::new(0.0, 0.0, s.width, s.height),
+                            Gradient::horizontal().with_dither().with_stops(&[
+                                (0.0, pf::alpha(ACCENT_DEEP, 0.0)),
+                                (0.18, ACCENT_DEEP),
+                                (0.5, ACCENT),
+                                (0.82, ACCENT_DEEP),
+                                (1.0, pf::alpha(ACCENT_DEEP, 0.0)),
+                            ]),
+                        );
+                    }),
+                )),
+        );
     }
 
     // The release line — the film's whole argument, typed on.
@@ -387,7 +485,10 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
         RELEASE,
         pf::TypeAt::CenteredOn(W as i32 / 2),
         740.0,
-        pf::geist(48.0).bold().letter_spacing(3.0).color(pf::alpha(ACCENT, 1.0)),
+        pf::geist(48.0)
+            .bold()
+            .letter_spacing(3.0)
+            .color(pf::alpha(ACCENT, 1.0)),
         clamp01((t - 0.26) / 0.20),
         sec,
     ));
@@ -407,19 +508,21 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                 .top(808.0 + rise)
                 .width(W)
                 .height(34.0)
-                .child(Opacity::new(aud_a).child(
-                    RichText::new(vec![
-                        Span::new("for everyone who ").color(pf::alpha(MUTED, 0.95)),
-                        Span::new("designs").color(pf::alpha(BRAND_NEAR, 0.98)),
-                        Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
-                        Span::new("builds").color(pf::alpha(SYN_TYPE, 0.98)),
-                        Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
-                        Span::new("uses").color(pf::alpha(TERM_GREEN, 0.98)),
-                        Span::new(" it").color(pf::alpha(MUTED, 0.95)),
-                    ])
-                    .style(mono)
-                    .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(aud_a).child(
+                        RichText::new(vec![
+                            Span::new("for everyone who ").color(pf::alpha(MUTED, 0.95)),
+                            Span::new("designs").color(pf::alpha(BRAND_NEAR, 0.98)),
+                            Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
+                            Span::new("builds").color(pf::alpha(SYN_TYPE, 0.98)),
+                            Span::new(" it · ").color(pf::alpha(MUTED, 0.95)),
+                            Span::new("uses").color(pf::alpha(TERM_GREEN, 0.98)),
+                            Span::new(" it").color(pf::alpha(MUTED, 0.95)),
+                        ])
+                        .style(mono)
+                        .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
 
@@ -432,11 +535,17 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
                 .top(858.0 + (1.0 - ease_out_cubic(repo_a)) * 10.0)
                 .width(W)
                 .height(34.0)
-                .child(Opacity::new(repo_a).child(
-                    Text::new(REPO.to_string())
-                        .style(pf::geist_mono(23.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.97)))
-                        .align(TextAlign::Center),
-                )),
+                .child(
+                    Opacity::new(repo_a).child(
+                        Text::new(REPO.to_string())
+                            .style(
+                                pf::geist_mono(23.0)
+                                    .letter_spacing(1.6)
+                                    .color(pf::alpha(MUTED, 0.97)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
+                ),
         );
     }
 
@@ -462,13 +571,22 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
             ),
         );
         stack = stack.push(
-            Positioned::new().left(0.0).top(936.0).width(W).height(30.0).child(
-                Opacity::new(contract_a * 0.9).child(
-                    Text::new(probe.bench.clone())
-                        .style(pf::geist_mono(17.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.85)))
-                        .align(TextAlign::Center),
+            Positioned::new()
+                .left(0.0)
+                .top(936.0)
+                .width(W)
+                .height(30.0)
+                .child(
+                    Opacity::new(contract_a * 0.9).child(
+                        Text::new(probe.bench.clone())
+                            .style(
+                                pf::geist_mono(17.0)
+                                    .letter_spacing(0.8)
+                                    .color(pf::alpha(MUTED, 0.85)),
+                            )
+                            .align(TextAlign::Center),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()
@@ -476,7 +594,7 @@ pub fn the_endcard(ctx: &pf::Ctx) -> WidgetNode {
 
 // ── Z22 · the_hold ──────────────────────────────────────────────────────────
 
-pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     let t = ctx.t;
     let sec = ctx.sec;
     let probe = ctx.probe;
@@ -518,9 +636,14 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
             fk::ring3(book, s, Offset::new(W * 0.5, 424.0), 100.0, sec + 18.0, 0.9);
         }),
     )));
-    stack = stack.push(Positioned::new().left((W - 184.0) * 0.5).top(332.0).width(184.0).height(184.0).child(
-        pf::brand_mark(184.0, 1.0, 1.0),
-    ));
+    stack = stack.push(
+        Positioned::new()
+            .left((W - 184.0) * 0.5)
+            .top(332.0)
+            .width(184.0)
+            .height(184.0)
+            .child(pf::brand_mark(184.0, 1.0, 1.0)),
+    );
     stack = stack.push(
         Positioned::new()
             .left(0.0)
@@ -529,22 +652,28 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
             .height(148.0)
             .child(fk::wordmark(104.0, 1.0)),
     );
-    stack = stack.push(Positioned::new().left((W - 900.0) * 0.5).top(692.0).width(900.0).height(5.0).child(
-        Painting::sized(Size::new(900.0, 5.0), PaintWith::new(
-            move |book: &mut Sketchbook, s: Size| {
-                book.rect(
-                    Rect::new(0.0, 0.0, s.width, s.height),
-                    Gradient::horizontal().with_dither().with_stops(&[
-                        (0.0, pf::alpha(ACCENT_DEEP, 0.0)),
-                        (0.18, ACCENT_DEEP),
-                        (0.5, ACCENT),
-                        (0.82, ACCENT_DEEP),
-                        (1.0, pf::alpha(ACCENT_DEEP, 0.0)),
-                    ]),
-                );
-            },
-        )),
-    ));
+    stack = stack.push(
+        Positioned::new()
+            .left((W - 900.0) * 0.5)
+            .top(692.0)
+            .width(900.0)
+            .height(5.0)
+            .child(Painting::sized(
+                Size::new(900.0, 5.0),
+                PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+                    book.rect(
+                        Rect::new(0.0, 0.0, s.width, s.height),
+                        Gradient::horizontal().with_dither().with_stops(&[
+                            (0.0, pf::alpha(ACCENT_DEEP, 0.0)),
+                            (0.18, ACCENT_DEEP),
+                            (0.5, ACCENT),
+                            (0.82, ACCENT_DEEP),
+                            (1.0, pf::alpha(ACCENT_DEEP, 0.0)),
+                        ]),
+                    );
+                }),
+            )),
+    );
     stack = stack.push(
         Positioned::new()
             .left(0.0)
@@ -553,7 +682,12 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
             .height(66.0)
             .child(
                 Text::new(RELEASE.to_string())
-                    .style(pf::geist(48.0).bold().letter_spacing(3.0).color(pf::alpha(ACCENT, 1.0)))
+                    .style(
+                        pf::geist(48.0)
+                            .bold()
+                            .letter_spacing(3.0)
+                            .color(pf::alpha(ACCENT, 1.0)),
+                    )
                     .align(TextAlign::Center),
             ),
     );
@@ -586,7 +720,11 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
             .height(34.0)
             .child(
                 Text::new(REPO.to_string())
-                    .style(pf::geist_mono(23.0).letter_spacing(1.6).color(pf::alpha(MUTED, 0.97)))
+                    .style(
+                        pf::geist_mono(23.0)
+                            .letter_spacing(1.6)
+                            .color(pf::alpha(MUTED, 0.97)),
+                    )
                     .align(TextAlign::Center),
             ),
     );
@@ -608,11 +746,20 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
                 ),
         );
         stack = stack.push(
-            Positioned::new().left(0.0).top(936.0).width(W).height(30.0).child(
-                Text::new(probe.bench.clone())
-                    .style(pf::geist_mono(17.0).letter_spacing(0.8).color(pf::alpha(MUTED, 0.85)))
-                    .align(TextAlign::Center),
-            ),
+            Positioned::new()
+                .left(0.0)
+                .top(936.0)
+                .width(W)
+                .height(30.0)
+                .child(
+                    Text::new(probe.bench.clone())
+                        .style(
+                            pf::geist_mono(17.0)
+                                .letter_spacing(0.8)
+                                .color(pf::alpha(MUTED, 0.85)),
+                        )
+                        .align(TextAlign::Center),
+                ),
         );
     }
 
@@ -620,11 +767,15 @@ pub fn the_hold(ctx: &pf::Ctx) -> WidgetNode {
     // holds long enough to feel like a promise.
     let fade = clamp01((sec - 10.4) / 2.6);
     if fade > 0.01 {
-        stack = stack.push(Positioned::fill().child(Painting::sized(CANVAS, PaintWith::new(
-            move |book: &mut Sketchbook, s: Size| {
-                book.rect(Rect::new(0.0, 0.0, s.width, s.height), pf::alpha(Color::BLACK, fade));
-            },
-        ))));
+        stack = stack.push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, s: Size| {
+                book.rect(
+                    Rect::new(0.0, 0.0, s.width, s.height),
+                    pf::alpha(Color::BLACK, fade),
+                );
+            }),
+        )));
     }
 
     stack.into()

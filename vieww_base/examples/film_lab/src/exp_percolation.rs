@@ -55,7 +55,7 @@ fn label(p: f64) -> (Vec<i32>, Option<usize>, (usize, usize)) {
     let mut parent: Vec<i32> = vec![-1; GX * GY];
     let mut size: Vec<i32> = vec![0; GX * GY];
 
-    fn find(parent: &mut Vec<i32>, mut i: usize) -> usize {
+    fn find(parent: &mut [i32], mut i: usize) -> usize {
         // path-compressed iterative find; cell is its own root when
         // parent[i] == i (stored as i as i32)
         let mut root = i;
@@ -143,9 +143,13 @@ fn label(p: f64) -> (Vec<i32>, Option<usize>, (usize, usize)) {
 /// The whole sweep analysis, computed once: the bracket (bisection-refined)
 /// and the f(p) curve at 60 steps. Pure functions of the seed and the
 /// lattice — so the frame asks for them, never recomputes them.
-fn sweep_data() -> &'static ((f64, f64, f64, f64), Vec<(f64, f64, bool)>) {
+/// The receipt: (bracket, curve) where a curve point is (p, spanning
+/// fraction, this p spans).
+type Sweep = ((f64, f64, f64, f64), Vec<(f64, f64, bool)>);
+
+fn sweep_data() -> &'static Sweep {
     use std::sync::OnceLock;
-    static SWEEP: OnceLock<((f64, f64, f64, f64), Vec<(f64, f64, bool)>)> = OnceLock::new();
+    static SWEEP: OnceLock<Sweep> = OnceLock::new();
     SWEEP.get_or_init(|| {
         let curve: Vec<(f64, f64, bool)> = {
             let n = 60;
@@ -338,12 +342,11 @@ pub(crate) fn frame(t: f32) -> WidgetNode {
             let cy = |f: f64| py0 + ph - (f * ph as f64) as f32;
             let mut path = Path::new();
             let mut started = false;
-            for &(pp, f, sp) in curve.iter() {
+            for &(pp, f, _) in curve.iter() {
                 if pp > p {
                     break;
                 }
                 let (x, y) = (cx(pp), cy(f));
-                let y = if sp { y } else { y };
                 if !started {
                     path.move_to(Offset::new(x, y));
                     started = true;

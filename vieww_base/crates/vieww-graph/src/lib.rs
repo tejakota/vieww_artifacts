@@ -313,7 +313,13 @@ impl Graph {
     ///
     /// # Errors
     /// Unknown output.
-    pub fn export(&mut self, from: NodeId, output: &str, to: NodeId, param: &str) -> Result<(), GraphError> {
+    pub fn export(
+        &mut self,
+        from: NodeId,
+        output: &str,
+        to: NodeId,
+        param: &str,
+    ) -> Result<(), GraphError> {
         let o = Self::port(&self.slots[from.0].op.outputs(), output)?;
         self.exports.retain(|e| !(e.2 == to && e.3 == param));
         self.exports.push((from, o, to, param.to_owned()));
@@ -383,7 +389,12 @@ impl Graph {
             .exports
             .iter()
             .filter(|e| e.2 == n)
-            .filter_map(|e| self.slots[e.0 .0].cache.get(e.1).map(|v| (e.3.clone(), v.clone())))
+            .filter_map(|e| {
+                self.slots[e.0 .0]
+                    .cache
+                    .get(e.1)
+                    .map(|v| (e.3.clone(), v.clone()))
+            })
             .collect();
         let slot = &mut self.slots[n.0];
         for (k, v) in exported {
@@ -1007,11 +1018,19 @@ mod tests {
         g.set_time(2.5);
         assert_eq!(g.pull(c, "out").unwrap().as_f32(), 2.5);
         g.set_time(4.0);
-        assert_eq!(g.pull(c, "out").unwrap().as_f32(), 4.0, "the time change dirtied the target");
+        assert_eq!(
+            g.pull(c, "out").unwrap().as_f32(),
+            4.0,
+            "the time change dirtied the target"
+        );
         assert_eq!(g.param(c, "value").map(Value::as_f32), Some(4.0));
         g.unexport(c, "value");
         g.set_time(9.0);
-        assert_eq!(g.pull(c, "out").unwrap().as_f32(), 4.0, "unexported: the last value stays");
+        assert_eq!(
+            g.pull(c, "out").unwrap().as_f32(),
+            4.0,
+            "unexported: the last value stays"
+        );
         assert!(g.export(t, "nope", c, "value").is_err());
     }
 }

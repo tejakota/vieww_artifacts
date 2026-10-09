@@ -147,7 +147,9 @@ pub fn anaglyph(left: &Image, right: &Image) -> Image {
         let la = [a[0], a[1], a[2]].map(|v| f32::from(v) / 255.0);
         let ra = [b[0], b[1], b[2]].map(|v| f32::from(v) / 255.0);
         for k in 0..3 {
-            let v = (0..3).map(|j| L[k][j] * la[j] + R[k][j] * ra[j]).sum::<f32>();
+            let v = (0..3)
+                .map(|j| L[k][j] * la[j] + R[k][j] * ra[j])
+                .sum::<f32>();
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             px.push((v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8);
         }
@@ -212,7 +214,10 @@ mod tests {
             None,
         );
         s.add(
-            Node::new("b", Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::basic(Color::WHITE))),
+            Node::new(
+                "b",
+                Content::mesh(box_mesh(1.0, 1.0, 1.0), Material::basic(Color::WHITE)),
+            ),
             None,
         );
         let rig = StereoRig {

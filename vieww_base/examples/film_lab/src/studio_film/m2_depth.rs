@@ -21,13 +21,13 @@
 use vieww_foundation::{Color, Offset, Rect, Size, Sketchbook, TextAlign};
 use vieww_widget::prelude::*;
 
-use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo};
-use crate::product_film as pf;
 use super::{
-    frame, filmkit, ACCENT, BRAND_FAR, BRAND_NEAR, CANVAS, FPS, GROUND, INK, LEDGER, MUTED,
+    filmkit, frame, ACCENT, BRAND_FAR, BRAND_NEAR, CANVAS, FPS, GROUND, INK, LEDGER, MUTED,
     SURFACE, SURFACE_2, SYN_COMMENT, SYN_FUNCTION, SYN_MACRO, SYN_NUMBER, SYN_STRING, SYN_TYPE,
     TERM_GREEN, W,
 };
+use crate::film_lib::{clamp01, ease_in_out, ease_out_cubic, ease_out_expo};
+use crate::product_film as pf;
 
 // ── Z10E · the shutter ──────────────────────────────────────────────────────
 
@@ -108,7 +108,7 @@ fn luma_delta(a: &vieww_foundation::Image, b: &vieww_foundation::Image) -> f32 {
         return 0.0;
     }
     let mut sum = 0.0_f64;
-    for (x, y) in pa.chunks_exact(4).zip(pb.chunks_exact(4)) {
+    for (x, y) in pa.as_chunks::<4>().0.iter().zip(pb.as_chunks::<4>().0) {
         let la = 0.2126 * f32::from(x[0]) + 0.7152 * f32::from(x[1]) + 0.0722 * f32::from(x[2]);
         let lb = 0.2126 * f32::from(y[0]) + 0.7152 * f32::from(y[1]) + 0.0722 * f32::from(y[2]);
         sum += f64::from((la - lb).abs());
@@ -117,7 +117,7 @@ fn luma_delta(a: &vieww_foundation::Image, b: &vieww_foundation::Image) -> f32 {
 }
 
 /// Z10E — the shutter: sharp beside motion-blurred, the angle sweeping live.
-pub fn the_shutter(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_shutter(ctx: &pf::Ctx) -> WidgetNode {
     use vieww_video::motion_blur::{accumulate, Shutter};
 
     let sec = ctx.sec;
@@ -156,7 +156,11 @@ pub fn the_shutter(ctx: &pf::Ctx) -> WidgetNode {
             |u| shutter_subject(u, pw as u32, ph as u32),
             t,
             frame_s,
-            Shutter { angle: f64::from(angle), phase: -0.5, samples },
+            Shutter {
+                angle: f64::from(angle),
+                phase: -0.5,
+                samples,
+            },
         )
     } else {
         sharp.clone()
@@ -164,19 +168,26 @@ pub fn the_shutter(ctx: &pf::Ctx) -> WidgetNode {
     let delta = luma_delta(&sharp, &blurred);
 
     let img_a = clamp01(sec / 0.7);
+    stack =
+        stack.push(
+            Positioned::new()
+                .left(left.left)
+                .top(py)
+                .width(pw)
+                .height(ph)
+                .child(Opacity::new(img_a).child(Clip::rounded(16.0).child(
+                    vieww_widget::Image::new(sharp).label("one frame, one sample — sharp"),
+                ))),
+        );
     stack = stack.push(
-        Positioned::new().left(left.left).top(py).width(pw).height(ph).child(
-            Opacity::new(img_a).child(Clip::rounded(16.0).child(
-                vieww_widget::Image::new(sharp).label("one frame, one sample — sharp"),
-            )),
-        ),
-    );
-    stack = stack.push(
-        Positioned::new().left(right.left).top(py).width(pw).height(ph).child(
-            Opacity::new(img_a).child(Clip::rounded(16.0).child(
+        Positioned::new()
+            .left(right.left)
+            .top(py)
+            .width(pw)
+            .height(ph)
+            .child(Opacity::new(img_a).child(Clip::rounded(16.0).child(
                 vieww_widget::Image::new(blurred).label("the same frame, through the shutter"),
-            )),
-        ),
+            ))),
     );
 
     // The labels under each panel, and the receipt under the blur.
@@ -318,7 +329,9 @@ fn cook_replay(sec: f32) -> (Vec<(&'static str, u64)>, Vec<f32>, f32) {
             out = v;
         }
     }
-    let names = ["time", "lfo", "multiply", "constant", "noise", "remap", "trail"];
+    let names = [
+        "time", "lfo", "multiply", "constant", "noise", "remap", "trail",
+    ];
     let ids = [t_id, lfo, mul, konst, noise, remap, trail];
     let cooks = names
         .iter()
@@ -349,10 +362,12 @@ const COOK_CHAIN_POS: [(f32, f32); 7] = [
     (1368.0, 386.0),
     (660.0, 534.0),
 ];
-const COOK_NAMES: [&str; 7] = ["time", "lfo", "multiply", "noise", "remap", "trail", "constant"];
+const COOK_NAMES: [&str; 7] = [
+    "time", "lfo", "multiply", "noise", "remap", "trail", "constant",
+];
 
 /// Z10F — the cook: the operator network, its counters, and its trail.
-pub fn the_cook(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_cook(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let (cooks, channel, out) = cook_replay(sec);
     let mut stack = Stack::new();
@@ -415,7 +430,9 @@ pub fn the_cook(ctx: &pf::Ctx) -> WidgetNode {
         }),
     )));
 
-    for (k, ((title, sub, col), (x, y))) in COOK_LABELS.iter().zip(COOK_CHAIN_POS.iter()).enumerate() {
+    for (k, ((title, sub, col), (x, y))) in
+        COOK_LABELS.iter().zip(COOK_CHAIN_POS.iter()).enumerate()
+    {
         let a = clamp01((appear - 0.07 * k as f32) / 0.5);
         if a <= 0.01 {
             continue;
@@ -494,7 +511,12 @@ pub fn the_cook(ctx: &pf::Ctx) -> WidgetNode {
             }
             let c = Offset::new(1572.0, 812.0);
             let r = 62.0 + 26.0 * out;
-            book.ring(c, r, 2.4, pf::alpha(pf::mix(BRAND_NEAR, BRAND_FAR, out), 0.85 * out_a));
+            book.ring(
+                c,
+                r,
+                2.4,
+                pf::alpha(pf::mix(BRAND_NEAR, BRAND_FAR, out), 0.85 * out_a),
+            );
             book.ring(c, r * 0.66, 1.2, pf::alpha(SYN_COMMENT, 0.4 * out_a));
             book.circle(c, 4.0, pf::alpha(INK, 0.9 * out_a));
             // The luminous bar — the value itself.
@@ -545,7 +567,13 @@ pub fn the_cook(ctx: &pf::Ctx) -> WidgetNode {
         966.0,
         clamp01((sec - 5.4) / 0.6),
     ));
-    let get = |n: &str| cooks.iter().find(|(k, _)| *k == n).map(|(_, c)| *c).unwrap_or(0);
+    let get = |n: &str| {
+        cooks
+            .iter()
+            .find(|(k, _)| *k == n)
+            .map(|(_, c)| *c)
+            .unwrap_or(0)
+    };
     let const_line = format!("constant cooked ×{}", pf::group_commas(get("constant")));
     let clock_line = format!("clock cooked ×{}", pf::group_commas(get("time")));
     stack = stack.push(frame::receipts(
@@ -600,14 +628,24 @@ fn along(pts: &[Offset], s: f32) -> Offset {
     if pts.is_empty() {
         return Offset::ZERO;
     }
-    let total: f32 = pts.windows(2).map(|w| (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy)).sum();
+    let total: f32 = pts
+        .windows(2)
+        .map(|w| (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy))
+        .sum();
     let target = s.clamp(0.0, total);
     let mut acc = 0.0;
     for w in pts.windows(2) {
         let seg = (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy);
         if acc + seg >= target {
-            let u = if seg < 1.0e-6 { 0.0 } else { (target - acc) / seg };
-            return Offset::new(w[0].dx + (w[1].dx - w[0].dx) * u, w[0].dy + (w[1].dy - w[0].dy) * u);
+            let u = if seg < 1.0e-6 {
+                0.0
+            } else {
+                (target - acc) / seg
+            };
+            return Offset::new(
+                w[0].dx + (w[1].dx - w[0].dx) * u,
+                w[0].dy + (w[1].dy - w[0].dy) * u,
+            );
         }
         acc += seg;
     }
@@ -616,7 +654,9 @@ fn along(pts: &[Offset], s: f32) -> Offset {
 
 /// A polyline's total length.
 fn poly_total(pts: &[Offset]) -> f32 {
-    pts.windows(2).map(|w| (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy)).sum()
+    pts.windows(2)
+        .map(|w| (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy))
+        .sum()
 }
 
 /// Project a point onto a polyline, returning its arc length.
@@ -633,7 +673,10 @@ fn project_arc(pts: &[Offset], p: Offset) -> f32 {
                 / (seg * seg))
                 .clamp(0.0, 1.0)
         };
-        let q = Offset::new(w[0].dx + (w[1].dx - w[0].dx) * u, w[0].dy + (w[1].dy - w[0].dy) * u);
+        let q = Offset::new(
+            w[0].dx + (w[1].dx - w[0].dx) * u,
+            w[0].dy + (w[1].dy - w[0].dy) * u,
+        );
         let d = (p.dx - q.dx).hypot(p.dy - q.dy);
         if d < best_d {
             best_d = d;
@@ -651,7 +694,12 @@ fn maze_path(maze: &[&str]) -> Vec<Offset> {
     astar(&map, (1, 1), (11, 5), false)
         .unwrap_or_default()
         .into_iter()
-        .map(|(c, r)| Offset::new(X0 + c as f32 * TILE + TILE * 0.5, Y0 + r as f32 * TILE + TILE * 0.5))
+        .map(|(c, r)| {
+            Offset::new(
+                X0 + c as f32 * TILE + TILE * 0.5,
+                Y0 + r as f32 * TILE + TILE * 0.5,
+            )
+        })
         .collect()
 }
 
@@ -661,8 +709,8 @@ fn maze_path(maze: &[&str]) -> Vec<Offset> {
 /// `n` times — so the ECS receipts are the loop's own, and the frame stays
 /// a pure function of its index.
 fn swarm_replay(sec: f32) -> (Vec<(Offset, Vec<Offset>)>, usize, usize, usize) {
-    use vieww_game::{Behaviour, Ctx, Game, InputMap, Name, Transform2};
     use std::rc::Rc;
+    use vieww_game::{Behaviour, Ctx, Game, InputMap, Name, Transform2};
 
     /// The agent behaviour: ride the corridor, re-route the moment the wall
     /// opens, remember a short trail.
@@ -740,7 +788,11 @@ fn swarm_replay(sec: f32) -> (Vec<(Offset, Vec<Offset>)>, usize, usize, usize) {
                 .get::<Transform2>(e)
                 .map(|t| t.position)
                 .unwrap_or(Offset::ZERO);
-            let trail = game.world.get::<Trail6>(e).map(|t| t.0.clone()).unwrap_or_default();
+            let trail = game
+                .world
+                .get::<Trail6>(e)
+                .map(|t| t.0.clone())
+                .unwrap_or_default();
             (pos, trail)
         })
         .collect();
@@ -749,7 +801,7 @@ fn swarm_replay(sec: f32) -> (Vec<(Offset, Vec<Offset>)>, usize, usize, usize) {
 }
 
 /// Z10G — the swarm: an ECS world, A* routing, a maze that changes.
-pub fn the_swarm(ctx: &pf::Ctx) -> WidgetNode {
+pub(crate) fn the_swarm(ctx: &pf::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let t_stars = ctx.t;
     let (agents, steps, path_len, searches) = swarm_replay(sec);
@@ -917,7 +969,12 @@ pub fn the_swarm(ctx: &pf::Ctx) -> WidgetNode {
                 CANVAS,
                 PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
                     book.rect(
-                        Rect::new(rail_x - 12.0, y + 32.0, rail_x - 12.0 + text_w * a, y + 33.4),
+                        Rect::new(
+                            rail_x - 12.0,
+                            y + 32.0,
+                            rail_x - 12.0 + text_w * a,
+                            y + 33.4,
+                        ),
                         pf::alpha(underline_col, 0.4 * a),
                     );
                 }),

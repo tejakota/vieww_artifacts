@@ -42,6 +42,13 @@ vieww-widget.workspace = true
 # and `docs/RENDERER-MIGRATION.md` for the full account of the migration.
 vieww-paint = { workspace = true, features = ["native"] }
 vieww-hal = { workspace = true, features = ["vulkan-swapchain"] }
+# The scene planner behind `NativeRenderer::present_planned`: turns a
+# `vieww_paint::Scene` into the batched `ScenePlan` `vieww-hal`'s
+# `SceneRenderer` executes, so a window can ask for the GPU rasterizer per
+# frame and fall back to the CPU when the plan has gaps. Pure CPU-side
+# arithmetic — no Vulkan in it, which is why it is not behind the
+# `vulkan-swapchain` feature with its executor.
+vieww-gpu.workspace = true
 # The generic window-handle traits `vieww_hal::vulkan::VulkanDevice::for_window`
 # takes — `winit::window::Window` already implements them (winit 0.30 depends
 # on the same 0.6 generation), so this adds no new handle type, only the
