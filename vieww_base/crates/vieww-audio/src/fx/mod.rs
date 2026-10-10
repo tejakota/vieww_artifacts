@@ -8,11 +8,13 @@
 //! | [`filter`] | SVF, ladder, one-pole, all-passes, combs, delay lines |
 //! | [`fir`] | Kaiser FIR design, direct FIR, partitioned FFT convolution |
 //! | [`reverb`] | Freeverb, an 8-line FDN with RT60 specification, convolution, synthetic IRs |
+//! | [`delay`] | tempo-synced stereo and ping-pong delay with filtered feedback |
 //! | [`modfx`] | chorus, flanger, phaser, tremolo, auto-pan, vibrato, ring mod |
 //! | [`eq`] | parametric (Butterworth cuts), graphic (ISO), dynamic, linear-phase |
 //! | [`distortion`] | waveshaper (Web Audio curves, Chebyshev, fold), bitcrusher, saturation, exciter, oversampling |
 //! | [`dynamics`] | sidechain/lookahead compressor and expander, brick-wall limiter, gate, transient designer, LR4 crossovers, multiband |
 
+pub mod delay;
 pub mod distortion;
 pub mod dynamics;
 pub mod eq;

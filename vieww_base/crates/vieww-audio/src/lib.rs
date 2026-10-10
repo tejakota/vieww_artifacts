@@ -78,16 +78,22 @@ const fn as_f32(rate: u32) -> f32 {
 }
 
 pub mod analysis;
+pub mod automation;
+pub mod channels;
 pub mod device;
 pub mod dsp;
 pub mod fft;
 pub mod fx;
+pub mod graph;
 pub mod midi;
 pub mod modulation;
 pub mod player;
+pub mod resample;
 pub mod rng;
 pub mod spatial;
+pub mod stream;
 pub mod synth;
+pub mod transport;
 pub mod wav;
 
 pub use player::{AudioPlayer, NoAudio, PlaybackHandle, RecordedCommand, RecordingPlayer, Sound};
@@ -252,7 +258,9 @@ pub enum MixError {
 impl std::fmt::Display for MixError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::RateMismatch => f.write_str("sample rates differ; resample first"),
+            Self::RateMismatch => {
+                f.write_str("sample rates differ; resample first (Samples::resampled)")
+            }
             Self::ChannelMismatch => f.write_str("channel counts differ; downmix first"),
         }
     }
@@ -754,7 +762,7 @@ mod tests {
     fn mix_errors_say_what_to_do() {
         assert_eq!(
             MixError::RateMismatch.to_string(),
-            "sample rates differ; resample first"
+            "sample rates differ; resample first (Samples::resampled)"
         );
         assert_eq!(
             MixError::ChannelMismatch.to_string(),
