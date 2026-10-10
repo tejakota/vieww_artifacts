@@ -1,0 +1,26 @@
+[package]
+name = "vieww-audio-plugin"
+description = "Audio plugins for vieww: CLAP and VST3 wrappers and hosts, written from the formats' C ABIs with no SDK dependency."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# The plugin model (parameters, state) is vieww-audio's; the formats are
+# their C ABIs, transcribed here — no CLAP or VST3 SDK, no bindings crate.
+vieww-audio.workspace = true
+
+[[example]]
+name = "vieww_gain"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "vieww_synth"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true

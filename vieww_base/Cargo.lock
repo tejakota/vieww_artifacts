@@ -5210,6 +5210,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "vieww-audio-plugin"
+version = "0.1.0"
+dependencies = [
+ "vieww-audio",
+]
+
+[[package]]
 name = "vieww-build"
 version = "0.1.0"
 dependencies = [

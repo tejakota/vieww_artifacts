@@ -185,6 +185,17 @@ impl<V: Voice> Poly<V> {
         self.slots.iter().filter(|s| s.voice.is_active()).count()
     }
 
+    /// The voices, to adjust their settings (a filter cutoff, say) in
+    /// place.
+    pub fn voices_mut(&mut self) -> impl Iterator<Item = &mut V> {
+        self.slots.iter_mut().map(|s| &mut s.voice)
+    }
+
+    /// Stop every note: released, or silenced at once if `immediate`.
+    pub fn all_notes_off(&mut self, immediate: bool) {
+        self.all_off(immediate);
+    }
+
     /// Keys currently held (by any voice).
     #[must_use]
     pub fn held_keys(&self) -> Vec<u8> {
