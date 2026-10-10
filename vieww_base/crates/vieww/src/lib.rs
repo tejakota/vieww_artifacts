@@ -73,6 +73,7 @@
 //! ```
 
 pub use vieww_animation as animation;
+pub use vieww_spatial as spatial;
 pub use vieww_audio as audio;
 pub use vieww_effects as effects;
 pub use vieww_element as element;

@@ -26,6 +26,7 @@ members = [
     "crates/vieww-gestures",
     "crates/vieww-render",
     "crates/vieww-scene",
+    "crates/vieww-spatial",
     "crates/vieww-render-graph",
     "crates/vieww-render-planner",
     "crates/vieww-runtime",
@@ -92,12 +93,12 @@ members = [
 # 0.x mean a minor bump may break anything, and it will. It is a promise that
 # the thing has a shape worth depending on and a changelog worth reading.
 #
-# What it is not a claim about: cross-platform GPU completeness (the Vulkan
-# SceneRenderer is real but still has explicit offscreen-compositor gaps — see
-# `vieww_gpu::ScenePlan::is_complete`),
-# platforms other than Linux (real code, never built on their own toolchains),
-# and the web backend (never compiled at all, and `publish = false` for
-# exactly that reason).
+# What it is not a claim about: end-to-end cross-platform GPU completeness.
+# The Vulkan SceneRenderer has broad headless 2D scene support, but resource
+# limits remain and a frame has not yet been certified through real GPU window
+# presentation; see `PENDING.md` and `vieww_gpu::ScenePlan::is_complete`.
+# Platforms other than Linux have not all been built on their own toolchains,
+# and browser/device behavior still needs the platform gates described there.
 version = "0.1.0"
 edition = "2021"
 # **1.89, because that is what the dependency tree actually requires.**
@@ -190,6 +191,7 @@ vieww-devtools = { path = "crates/vieww-devtools", version = "0.1.0" }
 vieww-test-harness = { path = "crates/vieww-test-harness", version = "0.1.0" }
 vieww-say-codegen = { path = "crates/vieww-say-codegen", version = "0.1.0" }
 vieww-scene = { path = "crates/vieww-scene", version = "0.1.0" }
+vieww-spatial = { path = "crates/vieww-spatial", version = "0.1.0" }
 vieww-render-graph = { path = "crates/vieww-render-graph", version = "0.1.0" }
 vieww-render-planner = { path = "crates/vieww-render-planner", version = "0.1.0" }
 vieww-runtime = { path = "crates/vieww-runtime", version = "0.1.0" }

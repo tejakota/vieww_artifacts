@@ -26,6 +26,7 @@ vieww-element.workspace = true
 vieww-gestures.workspace = true
 vieww-render.workspace = true
 vieww-text.workspace = true
+vieww-spatial.workspace = true
 
 # **The harness this crate's own suite runs on.**
 #

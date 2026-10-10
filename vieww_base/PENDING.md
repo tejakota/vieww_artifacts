@@ -79,42 +79,44 @@ real hardware" caveat from this file, `TRACKER.md`, `README.md`,
 `docs/guide/README.md` and `crates/vieww-hal/src/lib.rs` — it is deliberately
 stated in all five.
 
-## 1.2 macOS — the Metal backend
+## 1.2 macOS — the Metal backend: written, type-checked, never run
 
-**What.** `crates/vieww-hal/src/metal.rs` brings a device and a command queue
-up, and stops there. `render_clear_to_pixels` and `render_mesh_to_pixels` are
-not ported, and neither is `SceneRenderer`.
+**What.** `crates/vieww-hal/src/metal.rs` now has `render_clear_to_pixels`
+and `render_mesh_to_pixels` (WGSL → MSL through `vieww-shaders`, which now
+binds real Metal slots instead of naga's `[[user(fake0)]]` placeholders), and
+`tests/metal_smoke.rs` makes the Vulkan smoke suites' claims against it. It
+type-checks and passes `clippy -D warnings` for `aarch64-apple-darwin` and
+`aarch64-apple-ios` from Linux (`ci/check/cross-check.sh`). `SceneRenderer`
+is not ported.
 
-**Why not.** No macOS Rust target and no Xcode here, so not one line of it can
-be type-checked, let alone run. The module's own doc explains at length why an
-unverified 150-line pipeline port was not written blind, and that reasoning
-still holds. The `framework-checks` workflow compiles the workspace on a macOS
-runner every push; that is the compile half, and it is new — the port itself
-still needs a person on the machine.
+**Why not closed.** Type-checked is not run. There is no software Metal, so
+the first execution is the macOS leg of `framework-checks.yml`, which runs the
+suite with `VIEWW_REQUIRE_HARDWARE=gpu` (a missing device fails, not skips).
+The MSL itself has been compiled by nothing yet — `newLibraryWithSource` on
+that runner is its first compiler.
 
-**Blocks.** macOS and iOS entirely — they share this backend.
+**Blocks.** The GPU scene path on macOS and iOS.
 
-**Start.** `ci/check/platform-check.sh macos` on a Mac. Expect the compile to have
-things to say; that is the point. Then port
-`vulkan::VulkanDevice::render_clear_to_pixels` onto the calls
-`src/metal.rs`'s doc lists (they were checked against the real `metal` 0.31
-source, so the port is translation rather than discovery), translating WGSL with
-`naga::back::msl::Writer` instead of the SPIR-V writer.
+**Start.** Read the macOS leg's result. Then port `vulkan/scene.rs`'s
+`SceneRenderer` onto `MetalDevice::pipeline`/`render_target`/`read_texture`.
 
-## 1.3 Windows — the D3D12 backend
+## 1.3 Windows — the D3D12 backend: written, type-checked, never run
 
-**What.** `crates/vieww-hal/src/d3d12.rs` does adapter and device bring-up and
-one command queue. No render pipeline.
+**What.** `crates/vieww-hal/src/d3d12.rs` now has the same pair: naga HLSL
+compiled with `d3dcompiler_47` (SM 5.1), root constants for the uniform, a
+fenced readback, and a WARP fallback behind `VIEWW_D3D12_ALLOW_WARP=1`.
+`tests/d3d12_smoke.rs` mirrors the Metal suite. Type-checks and lints clean
+for `x86_64-pc-windows-msvc`; every built-in shader's HLSL compiles with DXC
+on Linux. `SceneRenderer` is not ported.
 
-**Why not.** As above: no Windows target, no MSVC here — though the
-`framework-checks` workflow now compiles the workspace on a Windows runner
-every push, which is the compile half of this entry.
+**Why not closed.** Never executed. The Windows leg runs it on WARP, which is
+correctness evidence (a conformant D3D12 driver) and never a performance
+number.
 
-**Blocks.** Windows GPU rendering. Note that Windows also has a *separate*
-unsolved problem — see 5.3.
+**Blocks.** Windows GPU rendering. Windows also has a *separate* unsolved
+problem — see 3.3.
 
-**Start.** `ci/check/platform-check.sh windows` on a Windows machine with the MSVC
-toolchain.
+**Start.** Read the Windows leg's result; then port `SceneRenderer`.
 
 ## 1.4 iOS
 

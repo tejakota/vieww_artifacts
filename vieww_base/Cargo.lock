@@ -5161,6 +5161,7 @@ dependencies = [
  "vieww-paint",
  "vieww-physics",
  "vieww-render",
+ "vieww-spatial",
  "vieww-test-harness",
  "vieww-text",
  "vieww-video",
@@ -5578,6 +5579,14 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "naga",
+]
+
+[[package]]
+name = "vieww-spatial"
+version = "0.1.0"
+dependencies = [
+ "vieww-animation",
+ "vieww-foundation",
 ]
 
 [[package]]
