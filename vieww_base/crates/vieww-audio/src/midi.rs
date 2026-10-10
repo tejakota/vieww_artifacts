@@ -50,6 +50,12 @@ pub enum Message {
         value: i16,
     },
     SysEx(Vec<u8>),
+    /// MIDI Time Code quarter frame: `piece << 4 | nibble`.
+    QuarterFrame(u8),
+    /// Song select.
+    SongSelect(u8),
+    /// Tune request.
+    TuneRequest,
     TimingClock,
     Start,
     Continue,
@@ -102,6 +108,9 @@ impl Message {
                 v.push(0xf7);
                 v
             }
+            Self::QuarterFrame(v) => vec![0xf1, v & 0x7f],
+            Self::SongSelect(v) => vec![0xf3, v & 0x7f],
+            Self::TuneRequest => vec![0xf6],
             Self::TimingClock => vec![0xf8],
             Self::Start => vec![0xfa],
             Self::Continue => vec![0xfb],
@@ -186,6 +195,9 @@ impl Message {
             }
             _ => match status {
                 0xf2 => Self::SongPosition(u16::from(d[1]) << 7 | u16::from(d[0])),
+                0xf1 => Self::QuarterFrame(d[0]),
+                0xf3 => Self::SongSelect(d[0]),
+                0xf6 => Self::TuneRequest,
                 0xf8 => Self::TimingClock,
                 0xfa => Self::Start,
                 0xfb => Self::Continue,
@@ -408,9 +420,6 @@ impl Smf {
         let u16at = |i: usize| u16::from_be_bytes([b[i], b[i + 1]]);
         let hlen = u32::from_be_bytes([b[4], b[5], b[6], b[7]]) as usize;
         let (format, ntracks, division) = (u16at(8), u16at(10), u16at(12));
-        if division & 0x8000 != 0 {
-            return Err("SMPTE time division is not supported".into());
-        }
         let mut i = 8 + hlen;
         let mut tracks = Vec::new();
         while tracks.len() < usize::from(ntracks) && i + 8 <= b.len() {
@@ -545,7 +554,8 @@ impl Smf {
     }
 
     /// Tempo changes across all tracks: (tick, µs per quarter), sorted,
-    /// starting with the 120 bpm default.
+    /// starting with the 120 bpm default. For a type-2 file — independent
+    /// patterns — use [`tempo_map_of`](Self::tempo_map_of) instead.
     #[must_use]
     pub fn tempo_map(&self) -> Vec<(u64, u32)> {
         let mut m = vec![(0u64, 500_000u32)];
@@ -560,9 +570,136 @@ impl Smf {
         m
     }
 
-    /// Absolute tick → seconds, honouring every tempo change.
+    /// One track's own tempo map (type 2: each pattern carries its own).
+    #[must_use]
+    pub fn tempo_map_of(&self, track: usize) -> Vec<(u64, u32)> {
+        let mut m = vec![(0u64, 500_000u32)];
+        if let Some(t) = self.tracks.get(track) {
+            for (tick, e) in t {
+                if let TrackEvent::Tempo(us) = e {
+                    m.push((*tick, *us));
+                }
+            }
+        }
+        m.sort_by_key(|x| x.0);
+        m
+    }
+
+    /// SMPTE timing, when the division says so: (frames per second, ticks
+    /// per frame). 29 means 29.97 (drop-frame).
+    #[must_use]
+    pub fn smpte(&self) -> Option<(f64, u32)> {
+        if self.division & 0x8000 == 0 {
+            return None;
+        }
+        let fps = -i32::from(self.division.to_be_bytes()[0].cast_signed());
+        let tpf = u32::from(self.division & 0xFF);
+        let rate = if fps == 29 {
+            30_000.0 / 1001.0
+        } else {
+            f64::from(fps)
+        };
+        Some((rate, tpf))
+    }
+
+    fn seconds_with(&self, map: &[(u64, u32)], tick: u64) -> f64 {
+        #[expect(clippy::cast_precision_loss, reason = "tick counts")]
+        if let Some((fps, tpf)) = self.smpte() {
+            return tick as f64 / (fps * f64::from(tpf.max(1)));
+        }
+        let mut secs = 0.0;
+        let mut last_tick = 0u64;
+        let mut us = 500_000u32;
+        for &(t, tempo) in map {
+            if t >= tick {
+                break;
+            }
+            secs += (t - last_tick) as f64 * f64::from(us) / 1e6 / f64::from(self.division);
+            last_tick = t;
+            us = tempo;
+        }
+        secs + (tick - last_tick) as f64 * f64::from(us) / 1e6 / f64::from(self.division)
+    }
+
+    /// A tick in `track` → seconds, with that track's own tempo for type 2
+    /// files and the merged map otherwise.
+    #[must_use]
+    pub fn tick_to_seconds_in(&self, track: usize, tick: u64) -> f64 {
+        if self.format == 2 {
+            self.seconds_with(&self.tempo_map_of(track), tick)
+        } else {
+            self.tick_to_seconds(tick)
+        }
+    }
+
+    /// Pattern `i` of a type-2 file as a type-0 file of its own.
+    #[must_use]
+    pub fn pattern(&self, i: usize) -> Option<Self> {
+        Some(Self {
+            format: 0,
+            division: self.division,
+            tracks: vec![self.tracks.get(i)?.clone()],
+        })
+    }
+
+    /// A type-0 file from notes in beats — MIDI clip export.
+    #[must_use]
+    pub fn from_notes(notes: &[ClipNote], ppq: u16, bpm: f64) -> Self {
+        let mut t: Vec<(u64, TrackEvent)> = Vec::with_capacity(notes.len() * 2 + 1);
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "tempo in µs"
+        )]
+        t.push((
+            0,
+            TrackEvent::Tempo((60_000_000.0 / bpm.max(1.0)).round() as u32),
+        ));
+        let tick = |b: f64| -> u64 {
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "non-negative ticks"
+            )]
+            let v = (b.max(0.0) * f64::from(ppq)).round() as u64;
+            v
+        };
+        for n in notes {
+            let on = tick(n.start);
+            let off = tick(n.start + n.length).max(on + 1);
+            t.push((
+                off,
+                TrackEvent::Midi(Message::NoteOff {
+                    channel: n.channel,
+                    key: n.key,
+                    velocity: 64,
+                }),
+            ));
+            t.push((
+                on,
+                TrackEvent::Midi(Message::NoteOn {
+                    channel: n.channel,
+                    key: n.key,
+                    velocity: n.velocity.max(1),
+                }),
+            ));
+        }
+        // Offs before ons at the same tick, so a repeated note retriggers.
+        t.sort_by_key(|(tk, e)| (*tk, !matches!(e, TrackEvent::Midi(Message::NoteOff { .. }))));
+        Self {
+            format: 0,
+            division: ppq,
+            tracks: vec![t],
+        }
+    }
+
+    /// Absolute tick → seconds, honouring every tempo change (or SMPTE
+    /// timing).
     #[must_use]
     pub fn tick_to_seconds(&self, tick: u64) -> f64 {
+        if self.smpte().is_some() {
+            return self.seconds_with(&[], tick);
+        }
         let map = self.tempo_map();
         let mut secs = 0.0;
         let mut last_tick = 0u64;
@@ -579,11 +716,12 @@ impl Smf {
     }
 
     /// Every note as (start s, duration s, channel, key, velocity), pairing
-    /// ons with offs.
+    /// ons with offs. Type-2 patterns are each timed by their own tempo
+    /// from zero.
     #[must_use]
     pub fn notes(&self) -> Vec<(f64, f64, u8, u8, u8)> {
         let mut out = Vec::new();
-        for t in &self.tracks {
+        for (ti, t) in self.tracks.iter().enumerate() {
             let mut open: BTreeMap<(u8, u8), (u64, u8)> = BTreeMap::new();
             for (tick, e) in t {
                 if let TrackEvent::Midi(m) = e {
@@ -597,8 +735,14 @@ impl Smf {
                         }
                         Message::NoteOff { channel, key, .. } => {
                             if let Some((s, v)) = open.remove(&(channel, key)) {
-                                let a = self.tick_to_seconds(s);
-                                out.push((a, self.tick_to_seconds(*tick) - a, channel, key, v));
+                                let a = self.tick_to_seconds_in(ti, s);
+                                out.push((
+                                    a,
+                                    self.tick_to_seconds_in(ti, *tick) - a,
+                                    channel,
+                                    key,
+                                    v,
+                                ));
                             }
                         }
                         _ => {}
@@ -608,6 +752,280 @@ impl Smf {
         }
         out.sort_by(|a, b| a.0.total_cmp(&b.0));
         out
+    }
+}
+
+/// A note in a clip, in beats.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClipNote {
+    /// Start, in quarter-note beats.
+    pub start: f64,
+    /// Length, in beats.
+    pub length: f64,
+    /// Channel 0..=15.
+    pub channel: u8,
+    /// Key.
+    pub key: u8,
+    /// Velocity.
+    pub velocity: u8,
+}
+
+/// Follows an incoming MIDI clock (24 pulses per quarter): tempo, play
+/// state and song position — "sync to external".
+#[derive(Debug, Clone, Default)]
+pub struct ClockIn {
+    last: Option<f64>,
+    interval: Option<f64>,
+    /// Pulses since Start (or the song position).
+    pub pulses: u64,
+    /// Whether the master is playing.
+    pub playing: bool,
+}
+
+impl ClockIn {
+    /// Feed a message that arrived at `time` seconds.
+    pub fn feed(&mut self, m: &Message, time: f64) {
+        match m {
+            Message::TimingClock => {
+                if let Some(l) = self.last {
+                    let dt = time - l;
+                    if dt > 0.0 && dt < 0.5 {
+                        // Exponential smoothing: steady against jitter, still
+                        // follows a tempo change within a beat or two.
+                        self.interval = Some(self.interval.map_or(dt, |i| i + (dt - i) * 0.1));
+                    }
+                }
+                self.last = Some(time);
+                if self.playing {
+                    self.pulses += 1;
+                }
+            }
+            Message::Start => {
+                self.playing = true;
+                self.pulses = 0;
+            }
+            Message::Continue => self.playing = true,
+            Message::Stop => self.playing = false,
+            Message::SongPosition(sixteenths) => self.pulses = u64::from(*sixteenths) * 6,
+            _ => {}
+        }
+    }
+
+    /// The master's tempo, once two pulses have arrived.
+    #[must_use]
+    pub fn bpm(&self) -> Option<f64> {
+        self.interval.map(|i| 60.0 / (i * 24.0))
+    }
+
+    /// Position in quarter-note beats.
+    #[must_use]
+    pub fn beat(&self) -> f64 {
+        #[expect(clippy::cast_precision_loss, reason = "pulse counts")]
+        let b = self.pulses as f64 / 24.0;
+        b
+    }
+}
+
+/// MIDI Time Code frame rates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MtcRate {
+    /// 24 fps (film).
+    Fps24,
+    /// 25 fps (PAL).
+    Fps25,
+    /// 29.97 fps drop-frame (NTSC).
+    Fps2997Drop,
+    /// 30 fps.
+    Fps30,
+}
+
+impl MtcRate {
+    /// Frames per second as counted (drop-frame counts 30).
+    #[must_use]
+    pub const fn nominal(self) -> u32 {
+        match self {
+            Self::Fps24 => 24,
+            Self::Fps25 => 25,
+            Self::Fps2997Drop | Self::Fps30 => 30,
+        }
+    }
+
+    const fn code(self) -> u8 {
+        match self {
+            Self::Fps24 => 0,
+            Self::Fps25 => 1,
+            Self::Fps2997Drop => 2,
+            Self::Fps30 => 3,
+        }
+    }
+
+    const fn from_code(c: u8) -> Self {
+        match c & 3 {
+            0 => Self::Fps24,
+            1 => Self::Fps25,
+            2 => Self::Fps2997Drop,
+            _ => Self::Fps30,
+        }
+    }
+}
+
+/// An SMPTE time code position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimeCode {
+    /// Hours 0..=23.
+    pub hours: u8,
+    /// Minutes.
+    pub minutes: u8,
+    /// Seconds.
+    pub seconds: u8,
+    /// Frames.
+    pub frames: u8,
+    /// Rate.
+    pub rate: MtcRate,
+}
+
+impl TimeCode {
+    /// The time code at `seconds` (drop-frame numbering for 29.97).
+    #[must_use]
+    pub fn from_seconds(seconds: f64, rate: MtcRate) -> Self {
+        let s = seconds.max(0.0);
+        let nominal = u64::from(rate.nominal());
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "frame counts"
+        )]
+        let mut frames = if rate == MtcRate::Fps2997Drop {
+            (s * 30_000.0 / 1001.0).floor() as u64
+        } else {
+            (s * nominal as f64).floor() as u64
+        };
+        if rate == MtcRate::Fps2997Drop {
+            // Re-insert the two frame numbers skipped each minute except
+            // every tenth (SMPTE 12M drop-frame).
+            let per10 = 17_982; // frames in 10 minutes
+            let d = frames / per10;
+            let m = frames % per10;
+            frames += 18 * d + if m > 2 { 2 * ((m - 2) / 1798) } else { 0 };
+        }
+        let f = frames % nominal;
+        let total_s = frames / nominal;
+        Self {
+            hours: u8::try_from((total_s / 3600) % 24).unwrap_or(0),
+            minutes: u8::try_from((total_s / 60) % 60).unwrap_or(0),
+            seconds: u8::try_from(total_s % 60).unwrap_or(0),
+            frames: u8::try_from(f).unwrap_or(0),
+            rate,
+        }
+    }
+
+    /// Seconds from 00:00:00:00.
+    #[must_use]
+    pub fn to_seconds(&self) -> f64 {
+        let nominal = u64::from(self.rate.nominal());
+        let total_min = u64::from(self.hours) * 60 + u64::from(self.minutes);
+        let mut frames =
+            (total_min * 60 + u64::from(self.seconds)) * nominal + u64::from(self.frames);
+        if self.rate == MtcRate::Fps2997Drop {
+            frames -= 2 * (total_min - total_min / 10);
+            #[expect(clippy::cast_precision_loss, reason = "frame counts")]
+            return frames as f64 * 1001.0 / 30_000.0;
+        }
+        #[expect(clippy::cast_precision_loss, reason = "frame counts")]
+        let s = frames as f64 / nominal as f64;
+        s
+    }
+
+    /// The eight quarter-frame messages describing this time.
+    #[must_use]
+    pub fn quarter_frames(&self) -> [Message; 8] {
+        let hr = self.hours | (self.rate.code() << 5);
+        let nib = [
+            self.frames & 0xF,
+            self.frames >> 4,
+            self.seconds & 0xF,
+            self.seconds >> 4,
+            self.minutes & 0xF,
+            self.minutes >> 4,
+            hr & 0xF,
+            hr >> 4,
+        ];
+        std::array::from_fn(|i| {
+            Message::QuarterFrame((u8::try_from(i).unwrap_or(0) << 4) | (nib[i] & 0xF))
+        })
+    }
+
+    /// The full-frame SysEx (`F0 7F 7F 01 01 hh mm ss ff F7`).
+    #[must_use]
+    pub fn full_frame(&self) -> Message {
+        Message::SysEx(vec![
+            0x7F,
+            0x7F,
+            0x01,
+            0x01,
+            self.hours | (self.rate.code() << 5),
+            self.minutes,
+            self.seconds,
+            self.frames,
+        ])
+    }
+
+    fn advance(mut self, frames: u8) -> Self {
+        let mut s = self.to_seconds();
+        if self.rate == MtcRate::Fps2997Drop {
+            s += f64::from(frames) * 1001.0 / 30_000.0;
+        } else {
+            s += f64::from(frames) / f64::from(self.rate.nominal());
+        }
+        let r = self.rate;
+        self = Self::from_seconds(s + 1e-9, r);
+        self
+    }
+}
+
+/// Assembles incoming MTC into time codes.
+#[derive(Debug, Clone, Default)]
+pub struct MtcReader {
+    nib: [u8; 8],
+    seen: u8,
+}
+
+impl MtcReader {
+    /// Feed a message; returns a position when a full frame arrives or the
+    /// eighth quarter frame completes a set. Quarter-frame sets describe the
+    /// time two frames ago (the set spans two frames), so the reported time
+    /// is advanced by two frames, as receivers do.
+    pub fn feed(&mut self, m: &Message) -> Option<TimeCode> {
+        match m {
+            Message::QuarterFrame(v) => {
+                let piece = usize::from(v >> 4) & 7;
+                self.nib[piece] = v & 0xF;
+                self.seen |= 1 << piece;
+                if piece == 7 && self.seen == 0xFF {
+                    self.seen = 0;
+                    let hr = self.nib[6] | (self.nib[7] << 4);
+                    let tc = TimeCode {
+                        frames: self.nib[0] | (self.nib[1] << 4),
+                        seconds: self.nib[2] | (self.nib[3] << 4),
+                        minutes: self.nib[4] | (self.nib[5] << 4),
+                        hours: hr & 0x1F,
+                        rate: MtcRate::from_code(hr >> 5),
+                    };
+                    return Some(tc.advance(2));
+                }
+                None
+            }
+            Message::SysEx(d) if d.len() == 8 && d[..4] == [0x7F, 0x7F, 0x01, 0x01] => {
+                Some(TimeCode {
+                    hours: d[4] & 0x1F,
+                    minutes: d[5],
+                    seconds: d[6],
+                    frames: d[7],
+                    rate: MtcRate::from_code(d[4] >> 5),
+                })
+            }
+            _ => None,
+        }
     }
 }
 
@@ -726,6 +1144,178 @@ mod tests {
         assert!((note_to_hz(81.0) - 880.0).abs() < 1e-2);
         assert_eq!(note_name(60), "C4");
         assert_eq!(note_name(70), "A#4");
+    }
+
+    #[test]
+    fn system_common_messages_parse() {
+        let mut p = Parser::new();
+        let got = p.feed(&[0xF1, 0x23, 0xF3, 0x05, 0xF6, 0x90, 60, 100]);
+        assert_eq!(
+            got,
+            vec![
+                Message::QuarterFrame(0x23),
+                Message::SongSelect(5),
+                Message::TuneRequest,
+                Message::NoteOn {
+                    channel: 0,
+                    key: 60,
+                    velocity: 100
+                }
+            ]
+        );
+        for m in &got {
+            assert_eq!(Parser::new().feed(&m.to_bytes()), vec![m.clone()]);
+        }
+    }
+
+    #[test]
+    fn type_2_patterns_keep_their_own_tempo() {
+        let mut smf = Smf::new(480);
+        smf.format = 2;
+        let note = |t: u64, on: bool| {
+            let m = if on {
+                Message::NoteOn {
+                    channel: 0,
+                    key: 60,
+                    velocity: 90,
+                }
+            } else {
+                Message::NoteOff {
+                    channel: 0,
+                    key: 60,
+                    velocity: 0,
+                }
+            };
+            (t, TrackEvent::Midi(m))
+        };
+        smf.tracks.push(vec![
+            (0, TrackEvent::Tempo(500_000)),
+            note(480, true),
+            note(960, false),
+        ]);
+        smf.tracks.push(vec![
+            (0, TrackEvent::Tempo(1_000_000)),
+            note(480, true),
+            note(960, false),
+        ]);
+        let back = Smf::parse(&smf.to_bytes()).unwrap();
+        assert_eq!(back.format, 2);
+        let n = back.notes();
+        assert_eq!(n.len(), 2);
+        // Pattern 0 at 120 BPM: starts at 0.5 s; pattern 1 at 60: at 1.0 s.
+        assert!(
+            (n[0].0 - 0.5).abs() < 1e-9 && (n[1].0 - 1.0).abs() < 1e-9,
+            "{n:?}"
+        );
+        assert_eq!(back.pattern(1).unwrap().tracks.len(), 1);
+    }
+
+    #[test]
+    fn smpte_division_is_timed_by_frames() {
+        let mut smf = Smf::new(0);
+        smf.division = 0xE728; // −25 fps, 40 ticks per frame
+        assert_eq!(smf.smpte(), Some((25.0, 40)));
+        assert!((smf.tick_to_seconds(1000) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn clips_export_and_read_back() {
+        let notes = [
+            ClipNote {
+                start: 0.0,
+                length: 1.0,
+                channel: 0,
+                key: 60,
+                velocity: 100,
+            },
+            ClipNote {
+                start: 1.0,
+                length: 0.5,
+                channel: 0,
+                key: 60,
+                velocity: 80,
+            },
+            ClipNote {
+                start: 1.5,
+                length: 2.0,
+                channel: 1,
+                key: 67,
+                velocity: 70,
+            },
+        ];
+        let smf = Smf::from_notes(&notes, 960, 90.0);
+        let back = Smf::parse(&smf.to_bytes()).unwrap();
+        let got = back.notes();
+        assert_eq!(got.len(), 3, "a repeated note retriggers: {got:?}");
+        let beat = 60.0 / 90.0;
+        assert!((got[1].0 - beat).abs() < 1e-6 && (got[1].1 - 0.5 * beat).abs() < 1e-6);
+        assert_eq!((got[2].2, got[2].3), (1, 67));
+    }
+
+    #[test]
+    fn clock_in_follows_tempo_and_position() {
+        let mut c = ClockIn::default();
+        c.feed(&Message::Start, 0.0);
+        let dt = 60.0 / (128.0 * 24.0);
+        for i in 0..96 {
+            c.feed(&Message::TimingClock, f64::from(i) * dt);
+        }
+        assert!((c.bpm().unwrap() - 128.0).abs() < 0.01);
+        assert!((c.beat() - 4.0).abs() < 1e-9);
+        c.feed(&Message::SongPosition(16), 5.0);
+        assert!((c.beat() - 4.0).abs() < 1e-9, "16 sixteenths = 4 beats");
+        c.feed(&Message::Stop, 5.0);
+        assert!(!c.playing);
+    }
+
+    #[test]
+    fn time_code_round_trips_and_drop_frame_skips() {
+        for rate in [
+            MtcRate::Fps24,
+            MtcRate::Fps25,
+            MtcRate::Fps30,
+            MtcRate::Fps2997Drop,
+        ] {
+            for s in [0.0, 1.5, 59.9, 600.0, 3_725.25] {
+                let tc = TimeCode::from_seconds(s, rate);
+                let back = tc.to_seconds();
+                let frame = 1.0 / f64::from(rate.nominal()) * 1.002;
+                assert!(
+                    back <= s + 1e-9 && s - back < frame,
+                    "{rate:?} {s}: {tc:?} -> {back}"
+                );
+            }
+        }
+        // Drop-frame: frame 1799 is 00:00:59;29 and frame 1800 is
+        // 00:01:00;02 (frames ;00 and ;01 are skipped at the minute).
+        let at = |frame: f64| frame * 1001.0 / 30_000.0;
+        let a = TimeCode::from_seconds(at(1799.5), MtcRate::Fps2997Drop);
+        let b = TimeCode::from_seconds(at(1800.5), MtcRate::Fps2997Drop);
+        assert_eq!((a.seconds, a.frames), (59, 29));
+        assert_eq!((b.minutes, b.seconds, b.frames), (1, 0, 2));
+    }
+
+    #[test]
+    fn quarter_frames_and_full_frames_decode() {
+        let tc = TimeCode {
+            hours: 1,
+            minutes: 2,
+            seconds: 3,
+            frames: 4,
+            rate: MtcRate::Fps25,
+        };
+        let mut r = MtcReader::default();
+        let mut got = None;
+        for m in tc.quarter_frames() {
+            got = r.feed(&m).or(got);
+        }
+        let g = got.unwrap();
+        assert_eq!(
+            (g.hours, g.minutes, g.seconds, g.frames),
+            (1, 2, 3, 6),
+            "plus two frames"
+        );
+        assert_eq!(r.feed(&tc.full_frame()), Some(tc));
     }
 
     #[test]

@@ -87,6 +87,7 @@ pub mod fft;
 pub mod fx;
 pub mod graph;
 pub mod midi;
+pub mod midi_io;
 pub mod modulation;
 pub mod player;
 pub mod resample;

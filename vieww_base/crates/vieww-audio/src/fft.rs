@@ -186,6 +186,76 @@ impl Plan {
     }
 }
 
+/// The inverse MDCT shared by the Vorbis and AAC decoders:
+///
+/// `y[n] = Σ_{k<N/2} X[k]·cos(2π/N·(n + n₀)(k + ½))`, `n₀ = (N/2 + 1)/2`,
+/// for `n` in `0..N` — both specifications' kernel (AAC additionally
+/// scales by `2/N`, which the caller applies). Computed through one
+/// `N`-point complex FFT: `y[n] = Re(e^{iπ(n+n₀)/N} · Σ_k X[k]e^{i2πn₀k/N}
+/// e^{i2πnk/N})`, so the cost is `O(N log N)`.
+#[derive(Debug, Clone)]
+pub struct Imdct {
+    n: usize,
+    plan: Plan,
+    pre: Vec<Complex>,
+    post: Vec<Complex>,
+}
+
+impl Imdct {
+    /// An IMDCT producing `n` outputs from `n/2` coefficients.
+    ///
+    /// # Panics
+    /// If `n` is not a power of two.
+    #[must_use]
+    pub fn new(n: usize) -> Self {
+        #[expect(clippy::cast_precision_loss, reason = "transform sizes")]
+        let nf = n as f64;
+        let n0 = (nf / 2.0 + 1.0) / 2.0;
+        #[expect(clippy::cast_precision_loss, reason = "transform sizes")]
+        let pre = (0..n / 2)
+            .map(|k| Complex::from_angle(2.0 * PI * n0 * k as f64 / nf))
+            .collect();
+        #[expect(clippy::cast_precision_loss, reason = "transform sizes")]
+        let post = (0..n)
+            .map(|i| Complex::from_angle(PI * (i as f64 + n0) / nf).scale(nf))
+            .collect();
+        Self {
+            n,
+            plan: Plan::new(n),
+            pre,
+            post,
+        }
+    }
+
+    /// Output length.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.n
+    }
+
+    /// Always false.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        false
+    }
+
+    /// Transform `x` (`n/2` values) into `y` (`n` values).
+    pub fn run(&self, x: &[f32], y: &mut [f32]) {
+        let mut buf = vec![Complex::ZERO; self.n];
+        for (k, (b, v)) in buf.iter_mut().zip(x).enumerate().take(self.n / 2) {
+            *b = self.pre[k].scale(f64::from(*v));
+        }
+        // Σ a[k] e^{+i2πnk/N} = N · inverse(a)[n]; `post` carries the N.
+        self.plan.inverse(&mut buf);
+        for (i, o) in y.iter_mut().enumerate().take(self.n) {
+            #[expect(clippy::cast_possible_truncation, reason = "f32 audio")]
+            {
+                *o = (self.post[i] * buf[i]).re as f32;
+            }
+        }
+    }
+}
+
 /// One-shot forward transform of a real signal, zero-padded to `n`.
 #[must_use]
 pub fn real_forward(signal: &[f64], n: usize) -> Vec<Complex> {
@@ -254,6 +324,33 @@ mod tests {
                 want += Complex::from_angle(th).scale(*v);
             }
             assert!((got.re - want.re).abs() < 1e-9 && (got.im - want.im).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn imdct_matches_its_definition() {
+        for n in [16usize, 64, 256] {
+            let m = Imdct::new(n);
+            let x: Vec<f32> = (0..n / 2)
+                .map(|k| ((k * 7 % 11) as f32 - 5.0) * 0.1)
+                .collect();
+            let mut y = vec![0.0; n];
+            m.run(&x, &mut y);
+            let nf = n as f64;
+            let n0 = (nf / 2.0 + 1.0) / 2.0;
+            for (i, got) in y.iter().enumerate() {
+                let want: f64 = x
+                    .iter()
+                    .enumerate()
+                    .map(|(k, v)| {
+                        f64::from(*v) * (2.0 * PI / nf * (i as f64 + n0) * (k as f64 + 0.5)).cos()
+                    })
+                    .sum();
+                assert!(
+                    (f64::from(*got) - want).abs() < 1e-4,
+                    "n={n} i={i}: {got} vs {want}"
+                );
+            }
         }
     }
 

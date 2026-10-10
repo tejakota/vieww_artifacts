@@ -461,6 +461,19 @@ pub(crate) mod tests {
         inst_gens: &[(u16, u16)],
         preset_gens: &[(u16, u16)],
     ) -> Vec<u8> {
+        build_with(sample, None, rate, root, inst_gens, preset_gens)
+    }
+
+    /// As [`build`], optionally storing `compressed` (Ogg Vorbis) bytes as
+    /// an SF3 sample instead of 16-bit PCM.
+    pub(crate) fn build_with(
+        sample: &[i16],
+        compressed: Option<&[u8]>,
+        rate: u32,
+        root: u8,
+        inst_gens: &[(u16, u16)],
+        preset_gens: &[(u16, u16)],
+    ) -> Vec<u8> {
         fn chunk(id: &[u8; 4], body: &[u8]) -> Vec<u8> {
             let mut v = id.to_vec();
             v.extend((u32::try_from(body.len()).unwrap()).to_le_bytes());
@@ -482,7 +495,11 @@ pub(crate) mod tests {
             n[..s.len()].copy_from_slice(s.as_bytes());
             n
         }
-        let mut smpl: Vec<u8> = sample.iter().flat_map(|v| v.to_le_bytes()).collect();
+        let mut smpl: Vec<u8> = match compressed {
+            Some(c) => c.to_vec(),
+            None => sample.iter().flat_map(|v| v.to_le_bytes()).collect(),
+        };
+        let stored = u32::try_from(compressed.map_or(sample.len(), <[u8]>::len)).unwrap();
         smpl.extend([0u8; 92]); // 46 zero samples, as the spec requires
         let mut phdr = Vec::new();
         for (n, prog, bag) in [("Sine", 0u16, 0u16), ("EOP", 0, 1)] {
@@ -519,14 +536,21 @@ pub(crate) mod tests {
             .iter()
             .flat_map(|v| v.to_le_bytes())
             .collect();
-        let n = u32::try_from(sample.len()).unwrap();
+        let n = stored;
         let mut shdr = Vec::new();
         shdr.extend(name("sine"));
-        for v in [0, n, 8, n - 8, rate] {
+        let (ls, le) = if compressed.is_some() {
+            (8, 4_000)
+        } else {
+            (8, n - 8)
+        };
+        for v in [0, n, ls, le, rate] {
             shdr.extend(v.to_le_bytes());
         }
         shdr.extend([root, 0]);
-        shdr.extend([0u8, 0, 1, 0]);
+        shdr.extend([0u8, 0]);
+        let kind: u16 = if compressed.is_some() { 0x11 } else { 1 };
+        shdr.extend(kind.to_le_bytes());
         shdr.extend([0u8; 46]);
         let pmod = vec![0u8; 10];
         let body = [
@@ -637,6 +661,25 @@ pub(crate) mod tests {
         let x: Vec<f32> = s.render(16_384).chunks_exact(2).map(|f| f[0]).collect();
         let (m, bin) = crate::synth::testing::spectrum(&x, 48_000.0);
         assert!(crate::synth::testing::level_near(&m, bin, 880.0, 2) > 0.2);
+    }
+
+    #[test]
+    fn sf3_compressed_samples_decode_through_vorbis() {
+        let ogg = include_bytes!("../../tests/fixtures/src.ogg");
+        let file = build_with(&[], Some(ogg), 44_100, 60, &[(54, 1)], &[]);
+        let mut sf = SoundFont::parse(&file).unwrap();
+        assert_eq!(sf.samples[0].kind, 0x11);
+        let inst = sf.instrument(0, 0).unwrap().unwrap();
+        let z = &inst.zones[0];
+        assert_eq!(z.sample.frames(), 17_640, "the Ogg stream, decoded");
+        assert_eq!(
+            (z.loop_start, z.loop_end),
+            (8, 4_000),
+            "SF3 loop points are in decoded frames"
+        );
+        let mut s = super::super::sampler::Sampler::new(inst, 2, 44_100.0);
+        s.note_on(0, 60, 127);
+        assert!(s.render(4_410).iter().any(|v| v.abs() > 0.05));
     }
 
     #[test]
