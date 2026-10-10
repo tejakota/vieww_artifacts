@@ -11,15 +11,21 @@ test_web.js, test_web_bg.wasm). `<baseline-dir>` is what
 What it does, in order:
 
 1. serves `<dist-dir>` over HTTP (the .wasm with `application/wasm`),
-2. opens it in headless Chromium at devicePixelRatio 1,
+2. opens it in a headless browser (see below) at devicePixelRatio 1,
 3. waits for `#boot` to read `mounted` and for the canvas to stop changing,
 4. reads the canvas back with `getImageData` and compares it with
    `native-baseline.rgba` — **byte for byte**,
 5. clicks the canvas, waits for it to settle again, and compares the result
    with `native-tapped.rgba`.
 
+The browser is Chromium unless `VIEWW_WEB_BROWSER` names `firefox` or
+`webkit` — the same three engines Playwright ships, driven through the same
+API, so the parity claim can be made per engine rather than only for the one
+it was first certified on (`PENDING.md` §1.6). Every output line carries the
+engine name, so a log from a three-engine run reads unambiguously.
+
 Prints `web.baseline=EQUAL|DIFFERENT(n bytes)`, `web.tapped=...`, and writes
-`web-<state>.rgba` into `[out-dir]` for inspection. Exit code 0 only when both
+`web-<engine>-<state>.rgba` into `[out-dir]` for inspection. Exit code 0 only when both
 are equal. Exit code 3 when Playwright/Chromium is unavailable — a machine
 skip, which the certification script records as a skip rather than a pass.
 
@@ -40,6 +46,7 @@ import time
 from pathlib import Path
 
 WIDTH, HEIGHT = 960, 600
+ENGINES = ("chromium", "firefox", "webkit")
 
 
 def main() -> int:
@@ -51,6 +58,11 @@ def main() -> int:
     out = Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else baseline
     out.mkdir(parents=True, exist_ok=True)
 
+    engine = os.environ.get("VIEWW_WEB_BROWSER", "chromium")
+    if engine not in ENGINES:
+        print(f"web.verify=FAIL(VIEWW_WEB_BROWSER={engine!r}; one of {', '.join(ENGINES)})")
+        return 2
+    print(f"web.engine={engine}")
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -76,9 +88,9 @@ def main() -> int:
         try:
             with sync_playwright() as p:
                 try:
-                    browser = p.chromium.launch(headless=True)
+                    browser = getattr(p, engine).launch(headless=True)
                 except Exception as error:  # noqa: BLE001 - report any launch failure
-                    print(f"web.verify=MACHINE-SKIPPED(chromium failed to launch: {error})")
+                    print(f"web.verify=MACHINE-SKIPPED({engine} failed to launch: {error})")
                     return 3
                 page = browser.new_page(
                     viewport={"width": WIDTH + 80, "height": HEIGHT + 80},
@@ -104,7 +116,7 @@ def main() -> int:
                 browser.close()
         finally:
             server.shutdown()
-    print(f"web.verify={'PASS' if ok else 'FAIL'}")
+    print(f"web.verify={'PASS' if ok else 'FAIL'} ({engine})")
     return 0 if ok else 1
 
 
@@ -134,7 +146,8 @@ def read_canvas(page) -> bytes:
 
 
 def compare(state: str, actual: bytes, wanted: bytes, out: Path) -> bool:
-    (out / f"web-{state}.rgba").write_bytes(actual)
+    engine = os.environ.get("VIEWW_WEB_BROWSER", "chromium")
+    (out / f"web-{engine}-{state}.rgba").write_bytes(actual)
     if len(actual) != len(wanted):
         print(f"web.{state}=DIFFERENT(size {len(actual)} != {len(wanted)})")
         return False

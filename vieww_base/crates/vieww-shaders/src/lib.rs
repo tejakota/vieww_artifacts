@@ -42,7 +42,9 @@ pub mod library;
 pub mod pipeline_cache;
 pub mod reflection;
 
-pub use compiler::{compile, CompileError, CompiledShader, ParsedShader, ShaderStage};
+pub use compiler::{
+    compile, hlsl_slots, msl_slots, CompileError, CompiledShader, ParsedShader, ShaderStage,
+};
 pub use hot_reload::{ReloadHook, ReloadReport, ReloadableLibrary};
 pub use library::{ShaderLibrary, ShaderSource};
 pub use pipeline_cache::{PipelineCache, PipelineCacheKey};

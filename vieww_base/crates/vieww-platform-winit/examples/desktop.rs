@@ -38,6 +38,10 @@
 //! display or a keyboard layout this machine does not have — those are what
 //! `ci/certify/desktop-suite.sh`'s flags are for, because only the operator knows them.
 
+// On Android the suite is `examples/android.rs`; this file compiles there
+// (it is in the same package) and does nothing — see `main` below.
+#![cfg_attr(target_os = "android", allow(dead_code, unused_imports))]
+
 use vieww_foundation::{Size, TargetPlatform};
 use vieww_platform_winit::App;
 
@@ -55,12 +59,23 @@ mod screen;
 #[path = "shared/device_tests.rs"]
 mod device_tests;
 
+#[cfg(not(target_os = "android"))]
 #[path = "shared/desktop_tests.rs"]
 mod desktop_tests;
 
+#[cfg(not(target_os = "android"))]
 use desktop_tests::DesktopSuite;
 use device_tests::DeviceSuite;
 
+/// The desktop suite needs a desktop: on Android the pasteboard is reached
+/// through the activity (`PlatformClipboard::new(&AndroidApp)`), and the
+/// device suite there is `examples/android.rs`.
+#[cfg(target_os = "android")]
+fn main() {
+    eprintln!("the desktop suite does not run on Android; see examples/android.rs");
+}
+
+#[cfg(not(target_os = "android"))]
 fn main() {
     let perf = screen::PerfLink::new();
     let device = DeviceSuite::new();

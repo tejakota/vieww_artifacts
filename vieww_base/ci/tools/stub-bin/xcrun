@@ -1,0 +1,13 @@
+#!/bin/sh
+# Stand-in `xcrun` for `ci/check/cross-check.sh` on a machine with no Xcode:
+# cc-rs asks it for an Apple SDK path before invoking the (stub) compiler.
+# Answers with an empty directory and a plausible version — enough for a
+# type-check, which never reads a header or links.
+for a in "$@"; do
+	case "$a" in
+	--show-sdk-path) echo /var/empty; exit 0 ;;
+	--show-sdk-version) echo 17.0; exit 0 ;;
+	--show-sdk-platform-path) echo /var/empty; exit 0 ;;
+	esac
+done
+exit 0

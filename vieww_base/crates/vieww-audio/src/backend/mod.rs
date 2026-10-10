@@ -26,14 +26,14 @@
 //! | Android | AAudio |
 //! | Web | Web Audio |
 
-#[cfg(any(unix, windows))]
+#[cfg(all(any(unix, windows), not(target_os = "ios")))]
 mod dl;
 
 #[cfg(any(target_os = "android", all(unix, vieww_check_all)))]
 pub mod aaudio;
 #[cfg(all(target_os = "linux", not(target_os = "android")))]
 pub mod alsa;
-#[cfg(any(target_os = "macos", vieww_check_all))]
+#[cfg(any(target_os = "macos", target_os = "ios", vieww_check_all))]
 pub mod coreaudio;
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]
 pub mod jack;
@@ -283,6 +283,8 @@ pub fn backends() -> Vec<Box<dyn Backend>> {
         v.push(Box::new(wasapi::Wasapi));
         v.push(Box::new(jack::Jack::default()));
     }
+    #[cfg(target_os = "ios")]
+    v.push(Box::new(coreaudio::CoreAudio));
     #[cfg(target_os = "android")]
     v.push(Box::new(aaudio::AAudio));
     #[cfg(target_arch = "wasm32")]
@@ -336,6 +338,10 @@ pub fn open_input(
 /// Tests: whether the environment promises this backend is reachable
 /// (`VIEWW_EXPECT_BACKENDS=jack,pulse`), so "unavailable" must fail.
 #[cfg(test)]
+#[cfg_attr(
+    any(target_os = "android", target_os = "ios"),
+    allow(dead_code, reason = "no backend test on these targets asks")
+)]
 pub(crate) fn expected(name: &str) -> bool {
     std::env::var("VIEWW_EXPECT_BACKENDS").is_ok_and(|v| v.split(',').any(|n| n.trim() == name))
 }

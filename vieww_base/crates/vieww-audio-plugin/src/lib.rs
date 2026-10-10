@@ -606,7 +606,12 @@ pub(crate) fn write_c_str(dst: &mut [std::ffi::c_char], s: &str) {
         n -= 1;
     }
     for (d, b) in dst.iter_mut().zip(&s.as_bytes()[..n]) {
-        *d = b.cast_signed();
+        // `c_char` is `i8` on x86 and Apple targets, `u8` on Linux/Android
+        // arm64: a plain `as` is the bit-preserving cast on both.
+        #[allow(clippy::cast_possible_wrap, clippy::unnecessary_cast)]
+        {
+            *d = *b as std::ffi::c_char;
+        }
     }
     dst[n] = 0;
 }
@@ -927,7 +932,8 @@ mod tests {
     fn c_strings_truncate_on_char_boundaries() {
         let mut buf = [1 as std::ffi::c_char; 6];
         write_c_str(&mut buf, "héllo!");
-        let bytes: Vec<u8> = buf.iter().map(|c| c.cast_unsigned()).collect();
+        #[allow(clippy::cast_sign_loss, clippy::unnecessary_cast)]
+        let bytes: Vec<u8> = buf.iter().map(|c| *c as u8).collect();
         assert_eq!(&bytes[..], b"h\xc3\xa9ll\0");
         let mut tiny = [1 as std::ffi::c_char; 2];
         write_c_str(&mut tiny, "é");

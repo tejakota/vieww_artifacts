@@ -17,7 +17,9 @@
     reason = "VST3 constants keep their C names in patterns"
 )]
 
-use std::ffi::{c_char, c_void, CString};
+#[cfg(unix)]
+use std::ffi::CString;
+use std::ffi::{c_char, c_void};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
 
@@ -73,7 +75,12 @@ fn c_string(b: &[c_char]) -> String {
     let bytes: Vec<u8> = b
         .iter()
         .take_while(|c| **c != 0)
-        .map(|c| c.cast_unsigned())
+        .map(|c| {
+            // `c_char` is signed on some targets and unsigned on others.
+            #[allow(clippy::cast_sign_loss, clippy::unnecessary_cast)]
+            let b = *c as u8;
+            b
+        })
         .collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }

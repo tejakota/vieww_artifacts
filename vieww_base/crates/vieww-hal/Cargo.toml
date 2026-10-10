@@ -57,7 +57,7 @@ raw-window-handle = { version = "0.6", optional = true }
 # `src/lib.rs`, so this dependency is never even resolved, let alone built,
 # on any other OS — this crate's Linux/Windows builds (including this
 # delivery's own CI, which runs on Linux) are unaffected by it existing.
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 metal = { version = "0.31", optional = true }
 
 # The D3D12 backend (spec §4.3, §11.3). Same reasoning as the Metal block
@@ -73,7 +73,10 @@ windows = { version = "0.58", optional = true, features = [
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Direct3D_Fxc",
     "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
 ] }
 
 [features]

@@ -109,22 +109,14 @@ pub struct AdapterInfo {
 #[cfg(feature = "vulkan")]
 pub mod vulkan;
 
-/// The Metal backend (spec §4.3, landing M6) — macOS and iOS.
+/// The Metal backend (spec §4.3) — macOS and iOS.
 ///
-/// **Not compiled on Linux**, in two independent ways: this module is
-/// `cfg`-gated to `target_os = "macos"` here, *and* the `metal` crate it
-/// depends on is itself gated to `target_os = "macos"` in `Cargo.toml`
-/// (behind the optional `metal` feature) — so a Linux build never resolves
-/// the dependency, never sees this module, and is unaffected by either
-/// existing. On macOS with `--features metal`: device/queue bring-up
-/// (`MetalDevice::new`) is real, calling verified `metal` 0.31 APIs; the
-/// full render pipeline is an honest, precisely-scoped stub — see
-/// `src/metal.rs`'s own module doc for exactly what's real, what's deferred,
-/// and why (this sandbox cannot compile-check macOS code at all, so writing
-/// ~150 lines of unverifiable pipeline code would trade a real gap for a
-/// fake-looking fill-in, which `docs/RENDERER-MIGRATION.md`'s own honesty
-/// bar rules out).
-#[cfg(all(target_os = "macos", feature = "metal"))]
+/// Gated twice: here to Apple targets, and the `metal` crate to the same
+/// targets in `Cargo.toml`, so no other build resolves it. Headless clear and
+/// mesh rendering through the shared WGSL library; see `src/metal.rs` for how
+/// it is verified (`ci/check/cross-check.sh` type-checks it from Linux, the
+/// macOS CI leg runs it).
+#[cfg(all(any(target_os = "macos", target_os = "ios"), feature = "metal"))]
 pub mod metal;
 
 /// The Direct3D 12 backend (spec §4.3, landing M8) — Windows.

@@ -1,4 +1,12 @@
-//! Core Audio: macOS's audio system, through Audio Units.
+//! Core Audio: macOS's and iOS's audio system, through Audio Units.
+//!
+//! On iOS both directions use the `RemoteIO` unit — there is no device to
+//! choose, and the HAL property API does not exist. Bus 0 is the speaker,
+//! bus 1 the microphone, exactly as on the macOS `HALOutput` unit, so the
+//! setup below is the same apart from the device lookup. Capture on iOS also
+//! needs the app's `AVAudioSession` in a record category and the user's
+//! microphone permission; without them the unit refuses to start and the
+//! backend reports [`BackendError::Refused`].
 //!
 //! Playback uses the `DefaultOutput` unit (it follows the user's chosen
 //! output device), capture the `HALOutput` unit with input enabled and the
@@ -28,6 +36,7 @@ const fn fourcc(s: &[u8; 4]) -> u32 {
 const K_AUDIO_UNIT_TYPE_OUTPUT: u32 = fourcc(b"auou");
 const K_AUDIO_UNIT_SUBTYPE_DEFAULT_OUTPUT: u32 = fourcc(b"def ");
 const K_AUDIO_UNIT_SUBTYPE_HAL_OUTPUT: u32 = fourcc(b"ahal");
+const K_AUDIO_UNIT_SUBTYPE_REMOTE_IO: u32 = fourcc(b"rioc");
 const K_AUDIO_UNIT_MANUFACTURER_APPLE: u32 = fourcc(b"appl");
 const K_AUDIO_FORMAT_LINEAR_PCM: u32 = fourcc(b"lpcm");
 const K_AUDIO_FORMAT_FLAG_IS_FLOAT: u32 = 1;
@@ -35,14 +44,18 @@ const K_AUDIO_FORMAT_FLAG_IS_PACKED: u32 = 8;
 const K_AUDIO_UNIT_PROPERTY_STREAM_FORMAT: u32 = 8;
 const K_AUDIO_UNIT_PROPERTY_MAXIMUM_FRAMES_PER_SLICE: u32 = 14;
 const K_AUDIO_UNIT_PROPERTY_SET_RENDER_CALLBACK: u32 = 23;
+#[cfg(not(target_os = "ios"))]
 const K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE: u32 = 2000;
 const K_AUDIO_OUTPUT_UNIT_PROPERTY_ENABLE_IO: u32 = 2003;
 const K_AUDIO_OUTPUT_UNIT_PROPERTY_SET_INPUT_CALLBACK: u32 = 2005;
 const K_AUDIO_UNIT_SCOPE_GLOBAL: u32 = 0;
 const K_AUDIO_UNIT_SCOPE_INPUT: u32 = 1;
 const K_AUDIO_UNIT_SCOPE_OUTPUT: u32 = 2;
+#[cfg(not(target_os = "ios"))]
 const K_AUDIO_OBJECT_SYSTEM_OBJECT: u32 = 1;
+#[cfg(not(target_os = "ios"))]
 const K_AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE: u32 = fourcc(b"dIn ");
+#[cfg(not(target_os = "ios"))]
 const K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL: u32 = fourcc(b"glob");
 const MAX_SLICE: u32 = 4_096;
 
@@ -81,6 +94,7 @@ struct AudioBufferList {
     buffers: [AudioBuffer; 1],
 }
 
+#[cfg(not(target_os = "ios"))]
 #[repr(C)]
 struct AudioObjectPropertyAddress {
     selector: u32,
@@ -103,7 +117,10 @@ struct AuRenderCallbackStruct {
     input_proc_ref_con: *mut c_void,
 }
 
-#[cfg_attr(target_os = "macos", link(name = "AudioToolbox", kind = "framework"))]
+#[cfg_attr(
+    any(target_os = "macos", target_os = "ios"),
+    link(name = "AudioToolbox", kind = "framework")
+)]
 unsafe extern "C" {
     fn AudioComponentFindNext(
         component: *mut c_void,
@@ -133,6 +150,7 @@ unsafe extern "C" {
     ) -> OsStatus;
 }
 
+#[cfg(not(target_os = "ios"))]
 #[cfg_attr(target_os = "macos", link(name = "CoreAudio", kind = "framework"))]
 unsafe extern "C" {
     fn AudioObjectGetPropertyData(
@@ -300,16 +318,63 @@ unsafe fn set<T>(
     )
 }
 
+/// The output unit for a direction on this platform.
+const fn subtype(capture: bool) -> u32 {
+    if cfg!(target_os = "ios") {
+        K_AUDIO_UNIT_SUBTYPE_REMOTE_IO
+    } else if capture {
+        K_AUDIO_UNIT_SUBTYPE_HAL_OUTPUT
+    } else {
+        K_AUDIO_UNIT_SUBTYPE_DEFAULT_OUTPUT
+    }
+}
+
+/// macOS: point a `HALOutput` unit at the system's default input device.
+#[cfg(not(target_os = "ios"))]
+unsafe fn select_default_input(unit: AudioUnit) -> Result<(), String> {
+    let addr = AudioObjectPropertyAddress {
+        selector: K_AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE,
+        scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+        element: 0,
+    };
+    let mut device: u32 = 0;
+    let mut size = 4u32;
+    // SAFETY: reading a `u32` property of the system object.
+    status(
+        unsafe {
+            AudioObjectGetPropertyData(
+                K_AUDIO_OBJECT_SYSTEM_OBJECT,
+                &raw const addr,
+                0,
+                std::ptr::null(),
+                &raw mut size,
+                (&raw mut device).cast(),
+            )
+        },
+        "default input device",
+    )?;
+    if device == 0 {
+        return Err("no default input device".into());
+    }
+    // SAFETY: a live unit; `CurrentDevice` takes an `AudioObjectID`.
+    unsafe {
+        set(
+            unit,
+            K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE,
+            K_AUDIO_UNIT_SCOPE_GLOBAL,
+            0,
+            &device,
+            "CurrentDevice",
+        )
+    }
+}
+
 fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, BackendError> {
     let capture = matches!(callback, Callback::Capture(_));
     let ch = config.channels.clamp(1, 32);
     let desc = AudioComponentDescription {
         component_type: K_AUDIO_UNIT_TYPE_OUTPUT,
-        component_sub_type: if capture {
-            K_AUDIO_UNIT_SUBTYPE_HAL_OUTPUT
-        } else {
-            K_AUDIO_UNIT_SUBTYPE_DEFAULT_OUTPUT
-        },
+        component_sub_type: subtype(capture),
         component_manufacturer: K_AUDIO_UNIT_MANUFACTURER_APPLE,
         component_flags: 0,
         component_flags_mask: 0,
@@ -368,35 +433,8 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                     &off,
                     "EnableIO(output)",
                 )?;
-                let addr = AudioObjectPropertyAddress {
-                    selector: K_AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE,
-                    scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
-                    element: 0,
-                };
-                let mut device: u32 = 0;
-                let mut size = 4u32;
-                status(
-                    AudioObjectGetPropertyData(
-                        K_AUDIO_OBJECT_SYSTEM_OBJECT,
-                        &raw const addr,
-                        0,
-                        std::ptr::null(),
-                        &raw mut size,
-                        (&raw mut device).cast(),
-                    ),
-                    "default input device",
-                )?;
-                if device == 0 {
-                    return Err("no default input device".into());
-                }
-                set(
-                    unit,
-                    K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE,
-                    K_AUDIO_UNIT_SCOPE_GLOBAL,
-                    0,
-                    &device,
-                    "CurrentDevice",
-                )?;
+                #[cfg(not(target_os = "ios"))]
+                select_default_input(unit)?;
                 set(
                     unit,
                     K_AUDIO_UNIT_PROPERTY_STREAM_FORMAT,
@@ -512,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn plays_on_the_default_output_or_refuses_cleanly() {
         match CoreAudio.open_output(StreamConfig::default(), Box::new(|b, _| b.fill(0.0))) {
             Ok(s) => assert!(
