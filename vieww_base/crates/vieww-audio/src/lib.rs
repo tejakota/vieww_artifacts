@@ -2,15 +2,28 @@
 //!
 //! # What this crate is, honestly
 //!
-//! **Synthesis, mixing, WAV and the service seam.** Sine waves, envelopes, a
-//! mixer that sums sources into one buffer, a RIFF/WAVE reader and writer,
-//! and an [`AudioPlayer`] trait a platform crate registers so sound can come
-//! out of a device. The comparison table that listed "no audio crate" as a
-//! gap is answered by exactly that, and by nothing it does not say: there is
-//! no MP3/OGG decoder, no 3D spatialisation, no streaming — because a
-//! decoder is a codec (a whole discipline), and this layer's job is to be
-//! the *shape* audio has in a UI framework: a click on a button, a chime on
-//! a notification, a tone under an animation.
+//! **A complete audio engine with one dependency.** It began as the shape
+//! audio has in a UI framework — a click on a button, a chime on a
+//! notification — and that shape is still here ([`Tone`], [`Envelope`],
+//! [`Mixer`], [`AudioPlayer`]). Around it, every piece is written from its
+//! specification in this crate, with no codec, DSP or plugin library
+//! underneath:
+//!
+//! | Area | Modules |
+//! |---|---|
+//! | Synthesis | [`synth`]: band-limited oscillators, wavetable, additive, vector, FM (all 32 DX7 algorithms), subtractive, granular, physical models, sampler with SFZ and SF2/SF3, polyphony with MPE |
+//! | Modulation | [`modulation`]: tempo-synced LFOs, mod matrix, macros, MIDI learn; [`automation`] lanes |
+//! | Effects | [`fx`]: SVF and ladder filters, EQs (parametric, graphic, dynamic, linear-phase), dynamics (compressor, limiter, gate, multiband, transient), reverbs (algorithmic, FDN, convolution), delays, modulation effects, distortion with oversampling |
+//! | Engine | [`graph`] (block-based node graph), [`mixer`] (tracks, buses, sends, sidechains, VCAs, delay compensation), [`parallel`] (multi-core rendering), [`stream`] (lock-free ring), [`resample`], [`channels`] (up to 7.1), [`simd`] |
+//! | Formats | [`wav`], [`codec`]: FLAC, MP3, Ogg Vorbis, AAC-LC (ADTS and MP4), AIFF — decoders verified against reference decodes; [`loader`] (background loading, disk streaming) |
+//! | Music | [`midi`] (SMF, clock, MTC), [`midi_io`], [`transport`] (tempo maps, bars and beats), [`sequencer`] (piano roll, step sequencer, clip launcher, arrangement, arpeggiator) |
+//! | Measurement | [`meter`] (EBU R128 loudness, true peak, VU, PPM, correlation), [`quality`] (THD+N, IMD, dynamic range, sweeps, latency), [`analysis`] |
+//! | State | [`preset`]: parameter metadata, presets in binary and text, banks, A/B, undo, morphing |
+//! | Devices | [`device`] (ALSA), [`player`], [`spatial`] |
+//!
+//! The render paths are allocation-free (a counting-allocator test proves
+//! it for the graph, the mixer, multi-core voices and disk streaming), and
+//! every DSP result is a deterministic function of its inputs.
 //!
 //! # The rule that shapes everything here
 //!
@@ -86,12 +99,20 @@ pub mod dsp;
 pub mod fft;
 pub mod fx;
 pub mod graph;
+pub mod loader;
+pub mod meter;
 pub mod midi;
 pub mod midi_io;
+pub mod mixer;
 pub mod modulation;
+pub mod parallel;
 pub mod player;
+pub mod preset;
+pub mod quality;
 pub mod resample;
 pub mod rng;
+pub mod sequencer;
+pub mod simd;
 pub mod spatial;
 pub mod stream;
 pub mod synth;

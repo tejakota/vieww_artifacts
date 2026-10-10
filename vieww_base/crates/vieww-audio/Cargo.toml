@@ -1,6 +1,6 @@
 [package]
 name = "vieww-audio"
-description = "The vieww audio layer: WAV, tones, a mixer, and the playback service seam."
+description = "The vieww audio engine: synthesis, effects, mixing, codecs, MIDI, sequencing and metering, with no third-party dependencies."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

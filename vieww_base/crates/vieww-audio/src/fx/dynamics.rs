@@ -247,6 +247,14 @@ impl super::Stereo for Dynamics {
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         self.process_stereo_keyed(l, r, None)
     }
+
+    fn process_stereo_with_key(&mut self, l: f32, r: f32, key: (f32, f32)) -> (f32, f32) {
+        self.process_stereo_keyed(l, r, Some(key))
+    }
+
+    fn latency(&self) -> usize {
+        self.lookahead
+    }
 }
 
 /// A lookahead brick-wall limiter.
@@ -368,6 +376,10 @@ impl Processor for Limiter {
 impl super::Stereo for Limiter {
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         self.process_frame(l, r)
+    }
+
+    fn latency(&self) -> usize {
+        self.len
     }
 }
 

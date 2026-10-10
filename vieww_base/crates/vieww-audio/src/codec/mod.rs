@@ -54,6 +54,35 @@ impl Decoded {
             _ => None,
         }
     }
+
+    /// Converted to `rate` (any channel count), the same length in time.
+    #[must_use]
+    pub fn resampled(&self, rate: u32, quality: crate::resample::Quality) -> Self {
+        if rate == self.rate || self.data.is_empty() || self.rate == 0 || rate == 0 {
+            return Self {
+                rate: if rate == 0 { self.rate } else { rate },
+                ..self.clone()
+            };
+        }
+        let ch = usize::from(self.channels.max(1));
+        let mut r = crate::resample::Resampler::new(self.rate, rate, ch, quality);
+        let mut out = Vec::new();
+        r.process(&self.data, &mut out);
+        r.finish(&mut out);
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss,
+            reason = "frame counts"
+        )]
+        let want = (self.frames() as f64 * f64::from(rate) / f64::from(self.rate)).round() as usize;
+        out.resize(want * ch, 0.0);
+        Self {
+            data: out,
+            channels: self.channels,
+            rate,
+        }
+    }
 }
 
 /// Why a stream did not decode.

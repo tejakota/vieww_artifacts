@@ -309,9 +309,7 @@ impl Graph {
                     continue; // self-loops only through delay nodes' own state
                 };
                 for (d, s) in dst.iter_mut().zip(src) {
-                    for (x, y) in d.iter_mut().zip(s) {
-                        *x += y * e.gain;
-                    }
+                    crate::simd::add_scaled(d, s, e.gain);
                 }
             } else {
                 let from_layout = Layout::for_channels(outs);

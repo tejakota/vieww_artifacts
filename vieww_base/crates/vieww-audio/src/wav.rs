@@ -206,6 +206,91 @@ const GUID_TAIL: [u8; 14] = [
     0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71,
 ];
 
+/// Where a WAV file's samples are, from its first bytes alone — what a
+/// disk streamer needs to read the samples in pieces.
+///
+/// `head` is the start of the file (a few kilobytes is plenty; it must
+/// reach the `data` chunk header) and `file_len` its full length. Returns
+/// the format, the byte offset of the first sample, and the byte length
+/// of the sample data. A `data` size of 0 or `0xFFFF_FFFF` (what live
+/// recorders write before they know) means "to the end of the file".
+///
+/// # Errors
+/// Not a WAV, no `fmt ` before `data`, or a format this crate does not
+/// decode.
+pub fn read_wav_header(head: &[u8], file_len: u64) -> Result<(WavInfo, u64, u64), PcmError> {
+    if head.len() < 12 {
+        return Err(PcmError::Truncated);
+    }
+    if &head[0..4] != b"RIFF" || &head[8..12] != b"WAVE" {
+        return Err(PcmError::NotWave);
+    }
+    let mut info: Option<WavInfo> = None;
+    let mut at = 12usize;
+    while at + 8 <= head.len() {
+        let id = &head[at..at + 4];
+        let size = u32::from_le_bytes([head[at + 4], head[at + 5], head[at + 6], head[at + 7]]);
+        let start = at + 8;
+        if id == b"data" {
+            let i = info.ok_or(PcmError::NoFormatChunk)?;
+            let off = start as u64;
+            let avail = file_len.saturating_sub(off);
+            let len = if size == 0 || size == u32::MAX {
+                avail
+            } else {
+                u64::from(size).min(avail)
+            };
+            let frame = (i.format.bytes() * usize::from(i.channels.max(1))) as u64;
+            return Ok((i, off, len - len % frame.max(1)));
+        }
+        let end = start + size as usize;
+        if id == b"fmt " {
+            let f = head.get(start..end).ok_or(PcmError::Truncated)?;
+            if f.len() < 16 {
+                return Err(PcmError::Truncated);
+            }
+            let mut code = u16::from_le_bytes([f[0], f[1]]);
+            let channels = u16::from_le_bytes([f[2], f[3]]);
+            let rate = u32::from_le_bytes([f[4], f[5], f[6], f[7]]);
+            let bits = u16::from_le_bytes([f[14], f[15]]);
+            let mut channel_mask = 0;
+            if code == 0xFFFE {
+                if f.len() < 40 {
+                    return Err(PcmError::Truncated);
+                }
+                channel_mask = u32::from_le_bytes([f[20], f[21], f[22], f[23]]);
+                if f[26..40] != GUID_TAIL {
+                    return Err(PcmError::Unsupported(
+                        "an unknown WAVE_FORMAT_EXTENSIBLE sub-format",
+                    ));
+                }
+                code = u16::from_le_bytes([f[24], f[25]]);
+            }
+            let format = match (code, bits) {
+                (1, 8) => SampleFormat::U8,
+                (1, 16) => SampleFormat::I16,
+                (1, 24) => SampleFormat::I24,
+                (1, 32) => SampleFormat::I32,
+                (3, 32) => SampleFormat::F32,
+                (3, 64) => SampleFormat::F64,
+                (1 | 3, _) => return Err(PcmError::Unsupported("this sample width")),
+                (c, _) => return Err(PcmError::NotPcm(c)),
+            };
+            if channels == 0 {
+                return Err(PcmError::Unsupported("zero channels"));
+            }
+            info = Some(WavInfo {
+                format,
+                channels,
+                rate,
+                channel_mask,
+            });
+        }
+        at = end + (size as usize & 1);
+    }
+    Err(PcmError::Truncated)
+}
+
 /// Decode a WAV file.
 ///
 /// # Errors

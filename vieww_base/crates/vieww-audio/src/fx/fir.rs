@@ -127,8 +127,7 @@ impl Processor for Fir {
         self.pos = if self.pos == 0 { n - 1 } else { self.pos - 1 };
         self.hist[self.pos] = x;
         self.hist[self.pos + n] = x;
-        let window = &self.hist[self.pos..self.pos + n];
-        window.iter().zip(&self.taps).map(|(a, b)| a * b).sum()
+        crate::simd::dot(&self.hist[self.pos..self.pos + n], &self.taps)
     }
 }
 

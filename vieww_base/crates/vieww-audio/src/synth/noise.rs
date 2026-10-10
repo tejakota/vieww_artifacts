@@ -1,6 +1,6 @@
 //! Noise — the raw material of percussion, breath, wind and texture.
 //!
-//! Every colour is a seeded [`Rng`](crate::rng::Rng) shaped by a filter, so
+//! Every colour is a seeded [`Rng`] shaped by a filter, so
 //! a hi-hat rendered twice is the same hi-hat. The colours are named by their
 //! spectral slope:
 //!

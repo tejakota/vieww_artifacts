@@ -5,9 +5,9 @@
 //! (piecewise-linear, with the spec's integer line renderer and inverse-dB
 //! table), residues 0, 1 and 2, mappings with submaps and square-polar
 //! channel coupling, the power-sine windows with long/short transitions,
-//! IMDCT (the crate's shared [`Imdct`](crate::fft::Imdct)), overlap-add,
+//! IMDCT (the crate's shared [`crate::fft::Imdct`]), overlap-add,
 //! and granule-position trimming so the output has exactly the stream's
-//! sample count. Page CRCs are verified by [`ogg`](super::ogg).
+//! sample count. Page CRCs are verified by [`super::ogg`].
 //!
 //! The one fixed table, `floor1_inverse_dB_table`, is the specification's
 //! (values via stb_vorbis, public domain).

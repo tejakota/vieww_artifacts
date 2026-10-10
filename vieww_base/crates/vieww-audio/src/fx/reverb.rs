@@ -13,7 +13,7 @@
 //!   faster, as air does. The test measures RT60 by Schroeder backward
 //!   integration and checks it.
 //! * [`ConvolutionReverb`] — an impulse response through the partitioned
-//!   [`Convolver`](super::fir::Convolver); [`synthetic_ir`] builds a
+//!   [`super::fir::Convolver`]; [`synthetic_ir`] builds a
 //!   plausible room from shaped, decaying stereo noise when no recording is
 //!   at hand.
 
@@ -281,6 +281,10 @@ impl Stereo for ConvolutionReverb {
             self.dry_l.tap(n + 1) * self.dry + wl * self.wet,
             self.dry_r.tap(n + 1) * self.dry + wr * self.wet,
         )
+    }
+
+    fn latency(&self) -> usize {
+        self.left.latency()
     }
 }
 

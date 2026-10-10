@@ -28,6 +28,18 @@ pub trait Stereo {
     /// Process one frame.
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32);
 
+    /// Process one frame with a sidechain key. Effects without a
+    /// sidechain ignore the key.
+    fn process_stereo_with_key(&mut self, l: f32, r: f32, key: (f32, f32)) -> (f32, f32) {
+        let _ = key;
+        self.process_stereo(l, r)
+    }
+
+    /// Delay this effect adds, in samples (a mixer compensates it).
+    fn latency(&self) -> usize {
+        0
+    }
+
     /// Process an interleaved stereo buffer in place.
     fn run_stereo(&mut self, buf: &mut [f32]) {
         for f in buf.chunks_exact_mut(2) {
