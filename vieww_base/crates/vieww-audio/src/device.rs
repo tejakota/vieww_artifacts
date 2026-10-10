@@ -16,11 +16,14 @@
 //! [`WavSink`] is the device-less output: a sound written to a WAV file,
 //! for render pipelines and CI.
 //!
-//! Scope, honestly: verified to compile and to fail cleanly here (the build
-//! machine has no sound card, so `open` reports that); the struct layout
-//! follows `include/uapi/sound/asound.h` for 64-bit Linux. macOS
-//! CoreAudio, Windows WASAPI, Android AAudio and the web's AudioContext are
-//! each a backend of their own behind the same trait.
+//! [`AlsaInput`] is the capture side (`READI`, overrun recovery).
+//!
+//! Scope, honestly: verified to compile and to fail cleanly on machines
+//! without a sound card; the struct layout follows
+//! `include/uapi/sound/asound.h` for 64-bit Linux. Streaming with
+//! callbacks, and every other platform's audio system — PipeWire, JACK,
+//! PulseAudio, Core Audio, WASAPI, AAudio and Web Audio — is in
+//! [`backend`](crate::backend).
 
 use std::path::Path;
 
@@ -125,6 +128,7 @@ mod alsa {
     const PREPARE: u64 = ioc(0, 0x40, 0);
     const DRAIN: u64 = ioc(0, 0x44, 0);
     const WRITEI: u64 = ioc(1, 0x50, std::mem::size_of::<Xferi>() as u64);
+    const READI: u64 = ioc(2, 0x51, std::mem::size_of::<Xferi>() as u64);
 
     // Parameter indices.
     const ACCESS: usize = 0;
@@ -157,7 +161,21 @@ mod alsa {
             rate: u32,
             channels: u32,
         ) -> Result<Self, String> {
-            let path = format!("/dev/snd/pcmC{card}D{device}p");
+            Self::open_dir(card, device, rate, channels, false)
+        }
+
+        /// Open for playback, or (`capture`) for recording.
+        pub(super) fn open_dir(
+            card: u32,
+            device: u32,
+            rate: u32,
+            channels: u32,
+            capture: bool,
+        ) -> Result<Self, String> {
+            let path = format!(
+                "/dev/snd/pcmC{card}D{device}{}",
+                if capture { 'c' } else { 'p' }
+            );
             let file = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -258,6 +276,34 @@ mod alsa {
             Ok(())
         }
 
+        /// Read interleaved frames into `frames`, recovering from overruns
+        /// (the first read starts the capture stream).
+        pub(super) fn read(&mut self, frames: &mut [i16]) -> Result<(), String> {
+            let fd = self.file.as_raw_fd();
+            let ch = self.channels as usize;
+            let mut off = 0;
+            while off < frames.len() {
+                let mut x = Xferi {
+                    result: 0,
+                    buf: frames[off..].as_mut_ptr().cast_const().cast(),
+                    frames: ((frames.len() - off) / ch) as u64,
+                };
+                // SAFETY: `buf` points at room for the remaining frames for
+                // the duration of the call; `x` is a valid snd_xferi.
+                let r = unsafe { ioctl(fd, READI, std::ptr::addr_of_mut!(x)) };
+                if r < 0 {
+                    if errno() == EPIPE {
+                        // SAFETY: PREPARE takes no argument.
+                        unsafe { ioctl(fd, PREPARE) };
+                        continue;
+                    }
+                    return Err(format!("READI failed (errno {})", errno()));
+                }
+                off += usize::try_from(x.result).unwrap_or(0) * ch;
+            }
+            Ok(())
+        }
+
         pub(super) fn drain(&mut self) {
             // SAFETY: DRAIN takes no argument.
             unsafe { ioctl(self.file.as_raw_fd(), DRAIN) };
@@ -274,6 +320,7 @@ mod alsa {
             assert_eq!(std::mem::size_of::<Xferi>(), 24);
             assert_eq!(HW_PARAMS, 0xC260_4111);
             assert_eq!(WRITEI, 0x4018_4150);
+            assert_eq!(READI, 0x8018_4151);
             assert_eq!(PREPARE, 0x4140);
         }
     }
@@ -305,6 +352,22 @@ impl AlsaOutput {
         #[cfg(not(target_os = "linux"))]
         {
             let _ = (card, device, rate);
+            Err("ALSA exists only on Linux".into())
+        }
+    }
+
+    /// Open card/device for `rate` Hz, `channels` channels, `S16_LE`.
+    ///
+    /// # Errors
+    /// As [`open`](Self::open).
+    pub fn open_channels(card: u32, device: u32, rate: u32, channels: u32) -> Result<Self, String> {
+        #[cfg(target_os = "linux")]
+        {
+            alsa::Pcm::open(card, device, rate, channels).map(|pcm| Self { pcm })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (card, device, rate, channels);
             Err("ALSA exists only on Linux".into())
         }
     }
@@ -342,6 +405,52 @@ impl AlsaOutput {
         }
         self.drain();
         Ok(())
+    }
+}
+
+/// A PCM capture stream from an ALSA device.
+pub struct AlsaInput {
+    #[cfg(target_os = "linux")]
+    pcm: alsa::Pcm,
+}
+
+impl std::fmt::Debug for AlsaInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AlsaInput")
+    }
+}
+
+impl AlsaInput {
+    /// Open card/device for capture at `rate` Hz, `channels` channels.
+    ///
+    /// # Errors
+    /// No such device or refused parameters; on non-Linux targets, always.
+    pub fn open(card: u32, device: u32, rate: u32, channels: u32) -> Result<Self, String> {
+        #[cfg(target_os = "linux")]
+        {
+            alsa::Pcm::open_dir(card, device, rate, channels, true).map(|pcm| Self { pcm })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (card, device, rate, channels);
+            Err("ALSA exists only on Linux".into())
+        }
+    }
+
+    /// Fill `frames` with interleaved samples (blocks until they arrive).
+    ///
+    /// # Errors
+    /// The device failed mid-stream.
+    pub fn read(&mut self, frames: &mut [i16]) -> Result<(), String> {
+        #[cfg(target_os = "linux")]
+        {
+            self.pcm.read(frames)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = frames;
+            Err("ALSA exists only on Linux".into())
+        }
     }
 }
 

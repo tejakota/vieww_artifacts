@@ -19,7 +19,7 @@
 //! | Music | [`midi`] (SMF, clock, MTC), [`midi_io`], [`transport`] (tempo maps, bars and beats), [`sequencer`] (piano roll, step sequencer, clip launcher, arrangement, arpeggiator) |
 //! | Measurement | [`meter`] (EBU R128 loudness, true peak, VU, PPM, correlation), [`quality`] (THD+N, IMD, dynamic range, sweeps, latency), [`analysis`] |
 //! | State | [`preset`]: parameter metadata, presets in binary and text, banks, A/B, undo, morphing |
-//! | Devices | [`device`] (ALSA), [`player`], [`spatial`] |
+//! | Devices | [`backend`] (PipeWire, JACK, PulseAudio, ALSA, Core Audio, WASAPI, AAudio, Web Audio — one callback interface, loaded at run time), [`device`], [`player`], [`spatial`] |
 //!
 //! The render paths are allocation-free (a counting-allocator test proves
 //! it for the graph, the mixer, multi-core voices and disk streaming), and
@@ -92,6 +92,7 @@ const fn as_f32(rate: u32) -> f32 {
 
 pub mod analysis;
 pub mod automation;
+pub mod backend;
 pub mod channels;
 pub mod codec;
 pub mod device;
