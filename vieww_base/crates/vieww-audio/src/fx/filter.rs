@@ -223,6 +223,11 @@ impl OnePole {
         }
     }
 
+    /// Move the corner without touching the state.
+    pub fn set_cutoff(&mut self, cutoff: f32, rate: f32) {
+        self.a = (-2.0 * PI * cutoff.max(0.0) / rate).exp();
+    }
+
     /// Jump to `v`.
     pub const fn reset(&mut self, v: f32) {
         self.z = v;

@@ -1,9 +1,25 @@
 //! Effects — filters, reverbs, modulation effects, EQ, distortion and
 //! dynamics. Every effect is a [`Processor`](crate::dsp::Processor) (mono,
 //! one per channel) or a [`Stereo`] processor, so any of them drops into a
-//! [`Chain`](crate::dsp::Chain) or a node of the [`graph`](crate::graph).
+//! [`Chain`](crate::dsp::Chain).
+//!
+//! | Module | Contents |
+//! |---|---|
+//! | [`filter`] | SVF, ladder, one-pole, all-passes, combs, delay lines |
+//! | [`fir`] | Kaiser FIR design, direct FIR, partitioned FFT convolution |
+//! | [`reverb`] | Freeverb, an 8-line FDN with RT60 specification, convolution, synthetic IRs |
+//! | [`modfx`] | chorus, flanger, phaser, tremolo, auto-pan, vibrato, ring mod |
+//! | [`eq`] | parametric (Butterworth cuts), graphic (ISO), dynamic, linear-phase |
+//! | [`distortion`] | waveshaper (Web Audio curves, Chebyshev, fold), bitcrusher, saturation, exciter, oversampling |
+//! | [`dynamics`] | sidechain/lookahead compressor and expander, brick-wall limiter, gate, transient designer, LR4 crossovers, multiband |
 
+pub mod distortion;
+pub mod dynamics;
+pub mod eq;
 pub mod filter;
+pub mod fir;
+pub mod modfx;
+pub mod reverb;
 
 /// A stereo-in, stereo-out effect.
 pub trait Stereo {
