@@ -20,8 +20,10 @@
 //! | [`fm`] | six-operator phase/frequency modulation, the 32 DX7 algorithms, feedback | Yamaha DX7, FM8 |
 //! | [`voice`] | polyphony, voice stealing, unison, legato/glide, MPE | every poly synth |
 //!
-//! Granular, physical-modelling and sample-based synthesis live in
-//! [`granular`], [`physical`] and [`sampler`].
+//! | [`granular`] | grain clouds, sync/async scheduling, four windows, time-stretch and pitch-shift | Granulator, Quanta |
+//! | [`physical`] | Karplus–Strong, clarinet and bowed waveguides, modal bars, mass–spring chains | STK, Modalys |
+//! | [`sampler`] | multisampled zones, loops with crossfades, round robin, keyswitches, release triggers, choke groups | Kontakt, sfizz |
+//! | [`sfz`], [`sf2`] | SFZ and SoundFont 2/3 loaders | — |
 
 pub mod additive;
 pub mod envelope;
@@ -31,6 +33,8 @@ pub mod noise;
 pub mod osc;
 pub mod physical;
 pub mod sampler;
+pub mod sf2;
+pub mod sfz;
 pub mod vector;
 pub mod voice;
 pub mod wavetable;

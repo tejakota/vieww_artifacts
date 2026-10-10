@@ -80,6 +80,7 @@ const fn as_f32(rate: u32) -> f32 {
 pub mod analysis;
 pub mod automation;
 pub mod channels;
+pub mod codec;
 pub mod device;
 pub mod dsp;
 pub mod fft;
