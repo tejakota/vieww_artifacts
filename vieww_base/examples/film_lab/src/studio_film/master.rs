@@ -1013,6 +1013,9 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     let mut sample_rows: Vec<String> = Vec::new();
     let mut alive_samples: Vec<f64> = Vec::new();
     let mut counted_frames = 0u64;
+    // The finishing pass's own cost, measured once on the first raster
+    // sample's real frame (`look::time_once`).
+    let mut finish_ms: Option<f32> = None;
 
     // `SF_ONLY` splits the census across processes (each writes a partial
     // that `sfmerge` sums); without it the census walks the whole film.
@@ -1060,6 +1063,14 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
                 std::hint::black_box(&px);
                 let ms = (t_ms.elapsed().as_secs_f64() * 1000.0) as f32;
                 frame_ms_samples.push(ms);
+                if finish_ms.is_none() {
+                    let (rw, rh) = raster_size();
+                    finish_ms = Some(super::look::time_once(
+                        &px,
+                        rw as usize,
+                        rh as usize,
+                    ));
+                }
                 sample_rows.push(format!(
                     "{},{},{:.2}",
                     s.id,
@@ -1111,7 +1122,7 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     probe.bench = Probe::bench_identity(renderer.cached_fonts() as u32);
 
     let body = format!(
-        "frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nalive_seconds={:.3}\nframe_ms={:.2}\nscale_factor={}\nfps={}\nbench={}\n",
+        "frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nalive_seconds={:.3}\nframe_ms={:.2}\nfinish_ms={:.2}\nscale_factor={}\nfps={}\nbench={}\n",
         probe.frames,
         probe.shapes,
         probe.glyph_runs,
@@ -1122,6 +1133,7 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
         probe.shadows,
         probe.alive_seconds,
         probe.frame_ms,
+        finish_ms.unwrap_or(0.0),
         scale_factor(),
         FPS,
         probe.bench,

@@ -542,13 +542,13 @@ fn studio_environment() -> std::sync::Arc<vieww_3d::Environment> {
 
 /// The crate rain: `n` boxes dropped into a 3D rigid-body world, sampled
 /// at 60 Hz for eight seconds. (position, quaternion as w, x, y, z.)
-pub struct CrateRain {
+pub(crate) struct CrateRain {
     frames: Vec<Vec<([f32; 3], [f32; 4])>>,
 }
 
 impl CrateRain {
     /// Pose of box `k` at `sec` (held at the first and last samples).
-    pub fn pose(&self, k: usize, sec: f32) -> ([f32; 3], [f32; 4]) {
+    pub(crate) fn pose(&self, k: usize, sec: f32) -> ([f32; 3], [f32; 4]) {
         let f = (sec * 60.0).max(0.0);
         let i = (f.floor() as usize).min(self.frames.len() - 1);
         let j = (i + 1).min(self.frames.len() - 1);
@@ -570,7 +570,7 @@ impl CrateRain {
 /// Simulate (once per process) the crates falling — the box mark and the
 /// floor are the only static colliders; the mark is approximated by two
 /// slanted slabs, the V's arms.
-pub fn crate_rain(n: usize) -> &'static CrateRain {
+pub(crate) fn crate_rain(n: usize) -> &'static CrateRain {
     use vieww_physics::rigid3d::{Body3, Shape3, World3, Q, V3};
     static RAIN: std::sync::OnceLock<CrateRain> = std::sync::OnceLock::new();
     RAIN.get_or_init(|| {

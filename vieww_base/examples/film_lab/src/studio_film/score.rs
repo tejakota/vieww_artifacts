@@ -33,7 +33,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use vieww_audio::dsp::{apply, Biquad, Compressor, Delay, FilterKind, Processor};
-use vieww_audio::fx::{saturate, stereo_width, Chorus, Limiter, Reverb};
+use vieww_audio::fx::master::{saturate, stereo_width, Chorus, Limiter, Reverb};
 use vieww_audio::{midi::note_to_hz, Envelope, Mixer, Samples, Tone, Waveform};
 
 /// Output rate.

@@ -23,7 +23,7 @@
 use vieww_effects::cpu::optics::{self, Finish, Linear};
 
 /// Is the finishing pass on? (`SF_FINISH=0` turns it off for A/B.)
-pub fn enabled() -> bool {
+pub(crate) fn enabled() -> bool {
     std::env::var("SF_FINISH").map_or(true, |v| v != "0")
 }
 
@@ -52,7 +52,7 @@ fn base() -> Finish {
 /// The finish for scene `id` at `sec` into it (`seconds` long), with the
 /// entrance dissolve's eased weight `cut` (`None` once whole) and whether
 /// this scene opens a movement. `w`, `h` are the raster size.
-pub fn finish_for(id: &str, sec: f32, seconds: f32, cut: Option<f32>, opens_movement: bool, w: f32, h: f32) -> Finish {
+pub(crate) fn finish_for(id: &str, sec: f32, seconds: f32, cut: Option<f32>, opens_movement: bool, w: f32, h: f32) -> Finish {
     let mut f = base();
     // Movement boundaries: light swells through the dissolve and settles.
     if let (Some(e), true) = (cut, opens_movement) {
@@ -110,13 +110,13 @@ pub fn finish_for(id: &str, sec: f32, seconds: f32, cut: Option<f32>, opens_move
 }
 
 /// Apply `finish` to an RGBA8 frame in place.
-pub fn apply(finish: &Finish, px: &mut [u8], w: usize, h: usize, frame_index: u32) {
+pub(crate) fn apply(finish: &Finish, px: &mut [u8], w: usize, h: usize, frame_index: u32) {
     finish.apply_rgba8(px, w, h, frame_index.wrapping_mul(2_654_435_761));
 }
 
 /// For the census: the per-frame finishing cost on this machine, measured
 /// on a real frame.
-pub fn time_once(px: &[u8], w: usize, h: usize) -> f32 {
+pub(crate) fn time_once(px: &[u8], w: usize, h: usize) -> f32 {
     let mut c = px.to_vec();
     let t = std::time::Instant::now();
     apply(&base(), &mut c, w, h, 1);

@@ -13,6 +13,7 @@
 //! | [`eq`] | parametric (Butterworth cuts), graphic (ISO), dynamic, linear-phase |
 //! | [`distortion`] | waveshaper (Web Audio curves, Chebyshev, fold), bitcrusher, saturation, exciter, oversampling |
 //! | [`dynamics`] | sidechain/lookahead compressor and expander, brick-wall limiter, gate, transient designer, LR4 crossovers, multiband |
+//! | [`master`] | the score bus: Freeverb-topology reverb, FFT convolution, two-voice chorus, mid/side width, tanh saturation, look-ahead limiter |
 
 pub mod delay;
 pub mod distortion;
@@ -20,6 +21,7 @@ pub mod dynamics;
 pub mod eq;
 pub mod filter;
 pub mod fir;
+pub mod master;
 pub mod modfx;
 pub mod reverb;
 
