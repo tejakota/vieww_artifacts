@@ -722,11 +722,11 @@ fn arbitrary_paths_and_strokes_are_antialiased_like_the_cpu_everywhere() {
 
     let mut worst = 0u8;
     let mut partial = 0;
-    for (g, c) in gpu.chunks_exact(4).zip(cpu.chunks_exact(4)) {
+    for (g, c) in gpu.as_chunks::<4>().0.iter().zip(cpu.as_chunks::<4>().0) {
         for ch in 0..4 {
             worst = worst.max(g[ch].abs_diff(c[ch]));
         }
-        if (12..243).contains(&c[0]) && c != [255, 255, 255, 255] {
+        if (12..243).contains(&c[0]) && *c != [255, 255, 255, 255] {
             partial += 1;
         }
     }

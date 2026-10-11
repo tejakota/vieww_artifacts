@@ -44,11 +44,21 @@ pub struct Property {
 impl Property {
     #[must_use]
     pub const fn styled(name: &'static str, default: Value, inherits: bool) -> Self {
-        Self { name, default, inherits, owner: None }
+        Self {
+            name,
+            default,
+            inherits,
+            owner: None,
+        }
     }
     #[must_use]
     pub const fn attached(owner: &'static str, name: &'static str, default: Value) -> Self {
-        Self { name, default, inherits: false, owner: Some(owner) }
+        Self {
+            name,
+            default,
+            inherits: false,
+            owner: Some(owner),
+        }
     }
     /// The key values are stored under.
     #[must_use]
@@ -288,8 +298,12 @@ impl PropertyTree {
 
     fn compound_matches(&self, n: NodeId, c: &Compound) -> bool {
         let node = &self.nodes[n.0];
-        c.type_name.as_ref().is_none_or(|t| *t == node.type_name || t == "*")
-            && c.name.as_ref().is_none_or(|nm| node.name.as_ref() == Some(nm))
+        c.type_name
+            .as_ref()
+            .is_none_or(|t| *t == node.type_name || t == "*")
+            && c.name
+                .as_ref()
+                .is_none_or(|nm| node.name.as_ref() == Some(nm))
             && c.classes.iter().all(|cl| node.classes.contains(cl))
             && c.pseudo.iter().all(|ps| node.pseudo.contains(ps))
     }
@@ -298,7 +312,9 @@ impl PropertyTree {
     #[must_use]
     pub fn matches(&self, n: NodeId, sel: &Selector) -> bool {
         fn go(t: &PropertyTree, n: NodeId, steps: &[(Compound, Comb)]) -> bool {
-            let Some(((c, _), rest)) = steps.split_last() else { return true };
+            let Some(((c, _), rest)) = steps.split_last() else {
+                return true;
+            };
             if !t.compound_matches(n, c) {
                 return false;
             }
@@ -341,7 +357,10 @@ impl PropertyTree {
             if let Some((_, v)) = s.setters.iter().find(|(k, _)| *k == key) {
                 if self.matches(n, &s.selector) {
                     let sp = s.selector.specificity();
-                    if best.as_ref().is_none_or(|(bsp, bi, _)| (sp, i) >= (*bsp, *bi)) {
+                    if best
+                        .as_ref()
+                        .is_none_or(|(bsp, bi, _)| (sp, i) >= (*bsp, *bi))
+                    {
                         best = Some((sp, i, v.clone()));
                     }
                 }
@@ -417,7 +436,10 @@ mod tests {
         let (mut t, win, _, button) = tree();
         assert_eq!(t.get(button, &FONT_SIZE), Value::Number(14.0));
         t.set(win, &FONT_SIZE, Value::Number(20.0));
-        assert_eq!(t.get_with_priority(button, &FONT_SIZE), (Value::Number(20.0), Priority::Inherited));
+        assert_eq!(
+            t.get_with_priority(button, &FONT_SIZE),
+            (Value::Number(20.0), Priority::Inherited)
+        );
         // Non-inheriting properties do not flow.
         t.set(win, &BACKGROUND, Value::Color(1));
         assert_eq!(t.get(button, &BACKGROUND), Value::Color(0xFFFF_FFFF));
@@ -429,7 +451,9 @@ mod tests {
     fn styles_cascade_by_specificity_then_order() {
         let (mut t, _, _, button) = tree();
         t.add_style(Style::new("Button", &[(&BACKGROUND, Value::Color(1))]).expect("style"));
-        t.add_style(Style::new("Button.primary", &[(&BACKGROUND, Value::Color(2))]).expect("style"));
+        t.add_style(
+            Style::new("Button.primary", &[(&BACKGROUND, Value::Color(2))]).expect("style"),
+        );
         t.add_style(Style::new("Button", &[(&BACKGROUND, Value::Color(3))]).expect("style"));
         assert_eq!(t.get(button, &BACKGROUND), Value::Color(3));
         t.add_class(button, "primary");
@@ -442,12 +466,22 @@ mod tests {
     #[test]
     fn pseudo_classes_and_combinators_select() {
         let (mut t, _, panel, button) = tree();
-        t.add_style(Style::new("Button:pointerover", &[(&BACKGROUND, Value::Color(7))]).expect("s"));
+        t.add_style(
+            Style::new("Button:pointerover", &[(&BACKGROUND, Value::Color(7))]).expect("s"),
+        );
         t.add_style(Style::new("Window Button", &[(&FONT_SIZE, Value::Number(30.0))]).expect("s"));
-        t.add_style(Style::new("Window > Button", &[(&FONT_SIZE, Value::Number(99.0))]).expect("s"));
-        assert_eq!(t.get(button, &FONT_SIZE), Value::Number(30.0), "descendant, not child");
+        t.add_style(
+            Style::new("Window > Button", &[(&FONT_SIZE, Value::Number(99.0))]).expect("s"),
+        );
+        assert_eq!(
+            t.get(button, &FONT_SIZE),
+            Value::Number(30.0),
+            "descendant, not child"
+        );
         let ch = t.set_pseudo(button, "pointerover", true);
-        assert!(ch.iter().any(|c| c.property == "Background" && c.new == Value::Color(7)));
+        assert!(ch
+            .iter()
+            .any(|c| c.property == "Background" && c.new == Value::Color(7)));
         assert_eq!(t.get(button, &BACKGROUND), Value::Color(7));
         let direct = t.add("Button", Some(NodeId(0)));
         assert_eq!(t.get(direct, &FONT_SIZE), Value::Number(99.0));
@@ -459,7 +493,10 @@ mod tests {
         let (mut t, _, _, button) = tree();
         t.add_style(Style::new("Button", &[(&BACKGROUND, Value::Color(1))]).expect("s"));
         t.animate(button, &BACKGROUND, Some(Value::Color(5)));
-        assert_eq!(t.get_with_priority(button, &BACKGROUND).1, Priority::Animation);
+        assert_eq!(
+            t.get_with_priority(button, &BACKGROUND).1,
+            Priority::Animation
+        );
         t.set(button, &BACKGROUND, Value::Color(9));
         assert_eq!(t.get(button, &BACKGROUND), Value::Color(9));
         t.clear(button, &BACKGROUND);
@@ -492,6 +529,11 @@ mod tests {
         assert!(Selector::parse("").is_err());
         assert!(Selector::parse("> Button").is_err());
         assert!(Selector::parse("Window >").is_err());
-        assert_eq!(Selector::parse("Button.a.b:hover#x").expect("ok").specificity(), (1, 3, 1));
+        assert_eq!(
+            Selector::parse("Button.a.b:hover#x")
+                .expect("ok")
+                .specificity(),
+            (1, 3, 1)
+        );
     }
 }

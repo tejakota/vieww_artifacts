@@ -108,17 +108,31 @@ impl Reverb {
         const SPREAD: usize = 23;
         #[allow(clippy::cast_precision_loss)]
         let k = rate as f32 / 44_100.0;
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let scale = |n: usize| ((n as f32) * k) as usize;
         let make = |off: usize| {
             (
-                COMBS.iter().map(|n| Comb::new(scale(n + off))).collect::<Vec<_>>(),
-                ALLPASS.iter().map(|n| AllPass::new(scale(n + off))).collect::<Vec<_>>(),
+                COMBS
+                    .iter()
+                    .map(|n| Comb::new(scale(n + off)))
+                    .collect::<Vec<_>>(),
+                ALLPASS
+                    .iter()
+                    .map(|n| AllPass::new(scale(n + off)))
+                    .collect::<Vec<_>>(),
             )
         };
         let (cl, al) = make(0);
         let (cr, ar) = make(SPREAD);
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let pre = ((pre_delay.max(0.0) * rate as f32) as usize).max(1);
         Self {
             combs: [cl, cr],
@@ -167,7 +181,11 @@ impl Reverb {
     #[must_use]
     pub fn process(&mut self, s: &Samples, tail: f32) -> Samples {
         let frames = s.frames();
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let extra = (tail.max(0.0) * s.rate as f32) as usize;
         let mut out = Vec::with_capacity((frames + extra) * 2);
         for i in 0..frames + extra {
@@ -226,7 +244,11 @@ pub fn convolve(signal: &[f32], ir: &[f32]) -> Vec<f32> {
 /// `rt60` seconds, with early reflections and a low-passed late tail.
 #[must_use]
 pub fn impulse_response(rate: u32, rt60: f32, seed: u32) -> Vec<f32> {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     let n = ((rt60.max(0.05) * rate as f32) as usize).max(16);
     let mut s = seed.wrapping_mul(2_654_435_761).max(1);
     let mut rnd = || {
@@ -249,7 +271,11 @@ pub fn impulse_response(rate: u32, rt60: f32, seed: u32) -> Vec<f32> {
     }
     // Early reflections.
     for (t, g) in [(0.007, 0.6), (0.013, 0.45), (0.021, 0.35), (0.034, 0.25)] {
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let i = (t * rate as f32) as usize;
         if i < n {
             ir[i] += g;
@@ -315,7 +341,10 @@ impl Chorus {
         let wr = self.read(1, dr);
         self.i = (self.i + 1) % self.buf.len();
         self.phase = (self.phase + self.rate_hz / self.sr).fract();
-        (l * (1.0 - self.mix) + wl * self.mix, r * (1.0 - self.mix) + wr * self.mix)
+        (
+            l * (1.0 - self.mix) + wl * self.mix,
+            r * (1.0 - self.mix) + wr * self.mix,
+        )
     }
 }
 
@@ -354,7 +383,11 @@ impl Limiter {
     pub fn new(rate: u32, ceiling: f32) -> Self {
         Self {
             ceiling,
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_precision_loss
+            )]
             lookahead: (rate as f32 * 0.005) as usize,
             #[allow(clippy::cast_precision_loss)]
             release: (-1.0 / (rate as f32 * 0.08)).exp(),
@@ -392,7 +425,10 @@ impl Limiter {
                     window.push_back(k);
                 }
             } else if ahead < frames {
-                while window.back().is_some_and(|&j: &usize| need[j] >= need[ahead]) {
+                while window
+                    .back()
+                    .is_some_and(|&j: &usize| need[j] >= need[ahead])
+                {
                     window.pop_back();
                 }
                 window.push_back(ahead);
@@ -401,7 +437,11 @@ impl Limiter {
                 window.pop_front();
             }
             let target = window.front().map_or(1.0, |&j| need[j]);
-            gain = if target < gain { target } else { target + (gain - target) * self.release };
+            gain = if target < gain {
+                target
+            } else {
+                target + (gain - target) * self.release
+            };
             for c in 0..ch {
                 let v = data[f * ch + c] * gain;
                 data[f * ch + c] = v.clamp(-self.ceiling, self.ceiling);
@@ -452,7 +492,9 @@ mod tests {
     fn a_synthetic_room_decays_by_sixty_db_at_its_rt60() {
         let ir = impulse_response(8_000, 0.5, 3);
         assert_eq!(ir.len(), 4_000);
-        let rms = |a: usize, b: usize| (ir[a..b].iter().map(|v| v * v).sum::<f32>() / (b - a) as f32).sqrt();
+        let rms = |a: usize, b: usize| {
+            (ir[a..b].iter().map(|v| v * v).sum::<f32>() / (b - a) as f32).sqrt()
+        };
         let head = rms(400, 800);
         let tail = rms(3_600, 4_000);
         let db = 20.0 * (tail / head).log10();
@@ -476,7 +518,9 @@ mod tests {
 
     #[test]
     fn the_limiter_never_lets_a_peak_through() {
-        let mut d: Vec<f32> = (0..20_000).map(|i| ((i as f32) * 0.01).sin() * if i > 10_000 { 3.0 } else { 0.5 }).collect();
+        let mut d: Vec<f32> = (0..20_000)
+            .map(|i| ((i as f32) * 0.01).sin() * if i > 10_000 { 3.0 } else { 0.5 })
+            .collect();
         Limiter::new(48_000, 0.9).process(&mut d, 1);
         assert!(d.iter().all(|v| v.abs() <= 0.9 + 1e-6));
         // Quiet part untouched (before the look-ahead window of the loud).

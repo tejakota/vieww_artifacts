@@ -71,7 +71,9 @@ impl Hull {
         // line, the farthest from their plane.
         let i0 = 0;
         let i1 = (0..pts.len()).max_by(|&a, &b| {
-            (pts[a] - pts[i0]).length_sq().total_cmp(&(pts[b] - pts[i0]).length_sq())
+            (pts[a] - pts[i0])
+                .length_sq()
+                .total_cmp(&(pts[b] - pts[i0]).length_sq())
         })?;
         let line = (pts[i1] - pts[i0]).normalize();
         let i2 = (0..pts.len()).max_by(|&a, &b| {
@@ -85,7 +87,10 @@ impl Hull {
         }
         let n = n.normalize();
         let i3 = (0..pts.len()).max_by(|&a, &b| {
-            (pts[a] - pts[i0]).dot(n).abs().total_cmp(&(pts[b] - pts[i0]).dot(n).abs())
+            (pts[a] - pts[i0])
+                .dot(n)
+                .abs()
+                .total_cmp(&(pts[b] - pts[i0]).dot(n).abs())
         })?;
         if (pts[i3] - pts[i0]).dot(n).abs() < eps * 10.0 {
             return None;
@@ -106,7 +111,9 @@ impl Hull {
         push(&mut tris, i0, i2, i3);
         push(&mut tris, i1, i2, i3);
         let tri_plane = |t: &[usize; 3]| {
-            let nn = (pts[t[1]] - pts[t[0]]).cross(pts[t[2]] - pts[t[0]]).normalize();
+            let nn = (pts[t[1]] - pts[t[0]])
+                .cross(pts[t[2]] - pts[t[0]])
+                .normalize();
             (nn, nn.dot(pts[t[0]]))
         };
         for (pi, p) in pts.iter().enumerate() {
@@ -159,7 +166,9 @@ impl Hull {
         let planes: Vec<(V3, f32)> = tris
             .iter()
             .map(|t| {
-                let n = (pts[t[1]] - pts[t[0]]).cross(pts[t[2]] - pts[t[0]]).normalize();
+                let n = (pts[t[1]] - pts[t[0]])
+                    .cross(pts[t[2]] - pts[t[0]])
+                    .normalize();
                 (n, n.dot(pts[t[0]]))
             })
             .collect();
@@ -216,7 +225,11 @@ impl Hull {
             let mut simplified = Vec::new();
             let m = loop_v.len();
             for k in 0..m {
-                let (p0, p1, p2) = (pts[loop_v[(k + m - 1) % m]], pts[loop_v[k]], pts[loop_v[(k + 1) % m]]);
+                let (p0, p1, p2) = (
+                    pts[loop_v[(k + m - 1) % m]],
+                    pts[loop_v[k]],
+                    pts[loop_v[(k + 1) % m]],
+                );
                 if (p1 - p0).cross(p2 - p1).length() > eps * eps * 10.0 {
                     simplified.push(loop_v[k]);
                 }
@@ -260,7 +273,11 @@ impl Hull {
                     edges.push(e);
                 }
             }
-            faces.push(Face { verts: idx, normal: n, d });
+            faces.push(Face {
+                verts: idx,
+                normal: n,
+                d,
+            });
         }
         Self {
             verts,
@@ -309,13 +326,29 @@ impl Hull {
                 cov = cov.add(&am.mul(&canon).mul(&am.transpose()).scale(det));
             }
         }
-        let centroid = if vol.abs() > 1e-12 { first / vol } else { V3::ZERO };
+        let centroid = if vol.abs() > 1e-12 {
+            first / vol
+        } else {
+            V3::ZERO
+        };
         // Shift covariance to the centroid: C' = C − V c cᵀ.
         let cc = M3 {
             m: [
-                [centroid.x * centroid.x, centroid.x * centroid.y, centroid.x * centroid.z],
-                [centroid.y * centroid.x, centroid.y * centroid.y, centroid.y * centroid.z],
-                [centroid.z * centroid.x, centroid.z * centroid.y, centroid.z * centroid.z],
+                [
+                    centroid.x * centroid.x,
+                    centroid.x * centroid.y,
+                    centroid.x * centroid.z,
+                ],
+                [
+                    centroid.y * centroid.x,
+                    centroid.y * centroid.y,
+                    centroid.y * centroid.z,
+                ],
+                [
+                    centroid.z * centroid.x,
+                    centroid.z * centroid.y,
+                    centroid.z * centroid.z,
+                ],
             ],
         };
         let c = cov.add(&cc.scale(-vol));
@@ -345,7 +378,12 @@ impl Hull {
     #[must_use]
     pub fn clip(&self, n: V3, d: f32) -> Option<Self> {
         let side = |p: V3| n.dot(p) - d;
-        let mut out: Vec<V3> = self.verts.iter().filter(|p| side(**p) <= 0.0).copied().collect();
+        let mut out: Vec<V3> = self
+            .verts
+            .iter()
+            .filter(|p| side(**p) <= 0.0)
+            .copied()
+            .collect();
         if out.len() == self.verts.len() {
             return Some(self.clone());
         }
@@ -372,7 +410,11 @@ impl Hull {
         for f in &self.faces {
             for k in 1..f.verts.len() - 1 {
                 #[allow(clippy::cast_possible_truncation)]
-                idx.extend_from_slice(&[f.verts[0] as u32, f.verts[k] as u32, f.verts[k + 1] as u32]);
+                idx.extend_from_slice(&[
+                    f.verts[0] as u32,
+                    f.verts[k] as u32,
+                    f.verts[k + 1] as u32,
+                ]);
             }
         }
         (self.verts.clone(), idx)
@@ -405,7 +447,11 @@ mod tests {
         for i in 0..50 {
             #[allow(clippy::cast_precision_loss)]
             let t = i as f32 * 0.37;
-            pts.push(V3::new(t.sin() * 0.5, (t * 1.3).cos() * 0.5, (t * 0.7).sin() * 0.5));
+            pts.push(V3::new(
+                t.sin() * 0.5,
+                (t * 1.3).cos() * 0.5,
+                (t * 0.7).sin() * 0.5,
+            ));
         }
         pts.extend(Hull::cuboid(V3::splat(1.0)).verts);
         let h = Hull::from_points(&pts).expect("hull");
@@ -427,7 +473,11 @@ mod tests {
             pts.push(V3::new(r(), r(), r()));
         }
         let h = Hull::from_points(&pts).expect("hull");
-        let (v, e, f) = (h.verts.len() as i64, h.edges.len() as i64, h.faces.len() as i64);
+        let (v, e, f) = (
+            h.verts.len() as i64,
+            h.edges.len() as i64,
+            h.faces.len() as i64,
+        );
         assert_eq!(v - e + f, 2);
         for p in &pts {
             assert!(h.contains(*p));
@@ -439,7 +489,9 @@ mod tests {
         let h = Hull::cuboid(V3::splat(1.0));
         let half = h.clip(V3::X, 0.0).expect("half");
         assert!((half.mass_props().volume - 4.0).abs() < 1e-3);
-        let diag = h.clip(V3::new(1.0, 1.0, 1.0).normalize(), 0.0).expect("diag");
+        let diag = h
+            .clip(V3::new(1.0, 1.0, 1.0).normalize(), 0.0)
+            .expect("diag");
         assert!((diag.mass_props().volume - 4.0).abs() < 1e-3);
         assert!(h.clip(V3::X, -2.0).is_none());
     }

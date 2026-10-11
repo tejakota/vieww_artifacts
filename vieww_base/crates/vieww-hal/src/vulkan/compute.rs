@@ -48,7 +48,9 @@ pub struct ComputeBuffer {
 
 impl std::fmt::Debug for ComputeBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ComputeBuffer").field("size", &self.size).finish_non_exhaustive()
+        f.debug_struct("ComputeBuffer")
+            .field("size", &self.size)
+            .finish_non_exhaustive()
     }
 }
 
@@ -207,7 +209,9 @@ pub struct ComputeKernel {
 
 impl std::fmt::Debug for ComputeKernel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ComputeKernel").field("bindings", &self.bindings).finish_non_exhaustive()
+        f.debug_struct("ComputeKernel")
+            .field("bindings", &self.bindings)
+            .finish_non_exhaustive()
     }
 }
 
@@ -217,7 +221,12 @@ impl ComputeKernel {
     ///
     /// # Errors
     /// WGSL that does not validate, or pipeline creation failures.
-    pub fn new(gpu: &VulkanDevice, wgsl: &str, entry: &str, bindings: u32) -> Result<Self, VulkanError> {
+    pub fn new(
+        gpu: &VulkanDevice,
+        wgsl: &str,
+        entry: &str,
+        bindings: u32,
+    ) -> Result<Self, VulkanError> {
         Self::with_push_constants(gpu, wgsl, entry, bindings, 0)
     }
 
@@ -270,11 +279,12 @@ impl ComputeKernel {
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(module)
             .name(&name);
-        let info = vk::ComputePipelineCreateInfo::default().stage(stage).layout(layout);
-        let pipeline = unsafe {
-            device.create_compute_pipelines(vk::PipelineCache::null(), &[info], None)
-        }
-        .map_err(|(_, e)| err(e))?[0];
+        let info = vk::ComputePipelineCreateInfo::default()
+            .stage(stage)
+            .layout(layout);
+        let pipeline =
+            unsafe { device.create_compute_pipelines(vk::PipelineCache::null(), &[info], None) }
+                .map_err(|(_, e)| err(e))?[0];
         Ok(Self {
             set_layout,
             layout,
@@ -290,7 +300,12 @@ impl ComputeKernel {
     ///
     /// # Errors
     /// Binding-count mismatches, submission failures.
-    pub fn dispatch(&self, gpu: &VulkanDevice, buffers: &[&ComputeBuffer], groups: [u32; 3]) -> Result<(), VulkanError> {
+    pub fn dispatch(
+        &self,
+        gpu: &VulkanDevice,
+        buffers: &[&ComputeBuffer],
+        groups: [u32; 3],
+    ) -> Result<(), VulkanError> {
         self.dispatch_many(gpu, buffers, &[(groups, Vec::new())])
     }
 
@@ -320,7 +335,9 @@ impl ComputeKernel {
             .descriptor_count(self.bindings.max(1))];
         let pool = unsafe {
             device.create_descriptor_pool(
-                &vk::DescriptorPoolCreateInfo::default().max_sets(1).pool_sizes(&sizes),
+                &vk::DescriptorPoolCreateInfo::default()
+                    .max_sets(1)
+                    .pool_sizes(&sizes),
                 None,
             )
         }
@@ -365,7 +382,12 @@ impl ComputeKernel {
             .map_err(err)?[0];
             let infos: Vec<[vk::DescriptorBufferInfo; 1]> = buffers
                 .iter()
-                .map(|b| [vk::DescriptorBufferInfo::default().buffer(b.buffer).offset(0).range(vk::WHOLE_SIZE)])
+                .map(|b| {
+                    [vk::DescriptorBufferInfo::default()
+                        .buffer(b.buffer)
+                        .offset(0)
+                        .range(vk::WHOLE_SIZE)]
+                })
                 .collect();
             let writes: Vec<vk::WriteDescriptorSet> = infos
                 .iter()
@@ -409,7 +431,9 @@ impl ComputeKernel {
                     if k > 0 {
                         let barrier = vk::MemoryBarrier::default()
                             .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-                            .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE);
+                            .dst_access_mask(
+                                vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE,
+                            );
                         device.cmd_pipeline_barrier(
                             cmd,
                             vk::PipelineStageFlags::COMPUTE_SHADER,
@@ -421,7 +445,13 @@ impl ComputeKernel {
                         );
                     }
                     if self.push_bytes > 0 && !push.is_empty() {
-                        device.cmd_push_constants(cmd, self.layout, vk::ShaderStageFlags::COMPUTE, 0, push);
+                        device.cmd_push_constants(
+                            cmd,
+                            self.layout,
+                            vk::ShaderStageFlags::COMPUTE,
+                            0,
+                            push,
+                        );
                     }
                     device.cmd_dispatch(cmd, groups[0], groups[1], groups[2]);
                 }
@@ -443,7 +473,9 @@ impl ComputeKernel {
                 device
                     .queue_submit(gpu.raw_queue(), &[submit], fence)
                     .map_err(err)?;
-                device.wait_for_fences(&[fence], true, u64::MAX).map_err(err)?;
+                device
+                    .wait_for_fences(&[fence], true, u64::MAX)
+                    .map_err(err)?;
             }
             Ok(())
         })();
@@ -457,7 +489,8 @@ impl Drop for ComputeKernel {
         unsafe {
             self.device.destroy_pipeline(self.pipeline, None);
             self.device.destroy_pipeline_layout(self.layout, None);
-            self.device.destroy_descriptor_set_layout(self.set_layout, None);
+            self.device
+                .destroy_descriptor_set_layout(self.set_layout, None);
             self.device.destroy_shader_module(self.module, None);
         }
     }

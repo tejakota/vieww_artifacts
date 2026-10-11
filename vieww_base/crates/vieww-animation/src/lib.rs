@@ -78,8 +78,8 @@ pub mod sequence;
 pub mod shared;
 pub mod skeletal;
 pub mod spring;
-pub mod text_animator;
 pub mod state_machine;
+pub mod text_animator;
 pub mod units;
 
 pub use controller::{AnimationController, AnimationStatus};

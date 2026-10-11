@@ -225,7 +225,11 @@ fn ease(t: f32, high: f32, low: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     let h = (high / 100.0).clamp(-1.0, 1.0);
     let l = (low / 100.0).clamp(-1.0, 1.0);
-    let up = if h >= 0.0 { t.powf(1.0 + 2.0 * h) } else { 1.0 - (1.0 - t).powf(1.0 - 2.0 * h) };
+    let up = if h >= 0.0 {
+        t.powf(1.0 + 2.0 * h)
+    } else {
+        1.0 - (1.0 - t).powf(1.0 - 2.0 * h)
+    };
     if l >= 0.0 {
         1.0 - (1.0 - up).powf(1.0 + 2.0 * l)
     } else {
@@ -284,7 +288,8 @@ impl RangeSelector {
 }
 
 fn hash(i: u32, k: u32, seed: u32) -> f32 {
-    let mut h = i.wrapping_mul(0x27d4_eb2d) ^ k.wrapping_mul(0x1656_67b1) ^ seed.wrapping_mul(0x9E37_79B9);
+    let mut h =
+        i.wrapping_mul(0x27d4_eb2d) ^ k.wrapping_mul(0x1656_67b1) ^ seed.wrapping_mul(0x9E37_79B9);
     h ^= h >> 15;
     h = h.wrapping_mul(0x85eb_ca6b);
     h ^= h >> 13;
@@ -296,7 +301,11 @@ fn hash(i: u32, k: u32, seed: u32) -> f32 {
 impl WigglySelector {
     /// The wiggle factor (−1..1, scaled by amount) of unit `i` at `t`.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     pub fn factor(&self, i: usize, t: f32) -> f32 {
         let x = t * self.frequency.max(0.0);
         let k = x.floor();
@@ -363,7 +372,11 @@ pub fn cascade_in(rise: f32, softness: f32, based_on: BasedOn, progress: f32) ->
         range: RangeSelector {
             start: progress.clamp(0.0, 1.0) * (100.0 + soft) - soft,
             end: 100.0 + soft,
-            shape: if soft > 0.0 { Shape::RampUp } else { Shape::Square },
+            shape: if soft > 0.0 {
+                Shape::RampUp
+            } else {
+                Shape::Square
+            },
             based_on,
             ..RangeSelector::default()
         },
@@ -397,10 +410,7 @@ mod tests {
         assert!((r.weight(0, 10) - 1.0).abs() < 1e-6);
         assert!((r.weight(2, 10) - 0.5).abs() < 1e-6);
         assert!(r.weight(3, 10).abs() < 1e-6);
-        let shifted = RangeSelector {
-            offset: 50.0,
-            ..r
-        };
+        let shifted = RangeSelector { offset: 50.0, ..r };
         assert!(shifted.weight(0, 10).abs() < 1e-6);
         assert!((shifted.weight(5, 10) - 1.0).abs() < 1e-6);
     }
@@ -441,11 +451,21 @@ mod tests {
     #[test]
     fn a_cascade_reveals_characters_in_order() {
         let text = "vieww";
-        let half = resolve(text, &[cascade_in(20.0, 0.0, BasedOn::Characters, 0.4)], 0.0);
+        let half = resolve(
+            text,
+            &[cascade_in(20.0, 0.0, BasedOn::Characters, 0.4)],
+            0.0,
+        );
         assert!(half[0].opacity > 0.99 && half[1].opacity > 0.99);
         assert!(half[3].opacity < 0.01 && (half[3].offset.1 - 20.0).abs() < 1e-4);
-        let done = resolve(text, &[cascade_in(20.0, 2.0, BasedOn::Characters, 1.0)], 0.0);
-        assert!(done.iter().all(|s| s.opacity > 0.99 && s.offset.1.abs() < 1e-3));
+        let done = resolve(
+            text,
+            &[cascade_in(20.0, 2.0, BasedOn::Characters, 1.0)],
+            0.0,
+        );
+        assert!(done
+            .iter()
+            .all(|s| s.opacity > 0.99 && s.offset.1.abs() < 1e-3));
     }
 
     #[test]

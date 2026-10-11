@@ -34,7 +34,11 @@ fn to_linear_table() -> &'static [f32; 256] {
         for (i, v) in t.iter_mut().enumerate() {
             #[allow(clippy::cast_precision_loss)]
             let c = i as f32 / 255.0;
-            *v = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+            *v = if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
         }
         t
     })
@@ -51,7 +55,11 @@ fn encode_table() -> &'static [f32] {
             .map(|i| {
                 #[allow(clippy::cast_precision_loss)]
                 let v = (i as f32 / ENC_STEPS as f32).powi(2);
-                if v <= 0.003_130_8 { v * 12.92 } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 }
+                if v <= 0.003_130_8 {
+                    v * 12.92
+                } else {
+                    1.055 * v.powf(1.0 / 2.4) - 0.055
+                }
             })
             .collect()
     })
@@ -76,7 +84,9 @@ pub fn linear_to_srgb(v: f32) -> f32 {
 /// parallel (the machine's cores); `f(first_row, band)`.
 pub fn par_rows<T: Send>(data: &mut [T], width: usize, f: impl Fn(usize, &mut [T]) + Sync) {
     let height = data.len() / width.max(1);
-    let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(16);
+    let threads = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .min(16);
     if threads <= 1 || height < 64 {
         f(0, data);
         return;
@@ -128,7 +138,9 @@ impl Linear {
     /// To RGBA8 with a 4×4 ordered dither (±½ LSB) so smooth ramps survive
     /// quantisation and the encoder after it.
     pub fn write_rgba8(&self, out: &mut [u8]) {
-        const BAYER: [f32; 16] = [0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0];
+        const BAYER: [f32; 16] = [
+            0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0,
+        ];
         let w = self.width;
         par_rows(out, w * 4, |row0, band| {
             for (j, o) in band.as_chunks_mut::<4>().0.iter_mut().enumerate() {
@@ -170,7 +182,8 @@ impl Linear {
         let d = self.get(x0 + 1, y0 + 1);
         let mut o = [0.0; 3];
         for k in 0..3 {
-            o[k] = (a[k] * (1.0 - tx) + b[k] * tx) * (1.0 - ty) + (c[k] * (1.0 - tx) + d[k] * tx) * ty;
+            o[k] =
+                (a[k] * (1.0 - tx) + b[k] * tx) * (1.0 - ty) + (c[k] * (1.0 - tx) + d[k] * tx) * ty;
         }
         o
     }
@@ -218,7 +231,10 @@ impl Linear {
     /// offsets) and add it, scaled, into `self`.
     pub fn add_upsampled(&mut self, small: &Self, scale: f32) {
         #[allow(clippy::cast_precision_loss)]
-        let (sx, sy) = (small.width as f32 / self.width as f32, small.height as f32 / self.height as f32);
+        let (sx, sy) = (
+            small.width as f32 / self.width as f32,
+            small.height as f32 / self.height as f32,
+        );
         let w = self.width;
         par_rows(&mut self.px, w, |row0, band| {
             for (j, p) in band.iter_mut().enumerate() {
@@ -257,7 +273,14 @@ fn prefilter(c: [f32; 3], threshold: f32, knee: f32) -> [f32; 3] {
 /// Physically-motivated bloom: threshold, a mip pyramid down, tent
 /// upsamples back, added at `intensity`. `radius` (0..1) weights the wide
 /// levels; `tint` colours the scattered light.
-pub fn bloom(frame: &mut Linear, threshold: f32, knee: f32, intensity: f32, radius: f32, tint: [f32; 3]) {
+pub fn bloom(
+    frame: &mut Linear,
+    threshold: f32,
+    knee: f32,
+    intensity: f32,
+    radius: f32,
+    tint: [f32; 3],
+) {
     bloom_keyed(frame, threshold, knee, intensity, radius, tint, 0.0);
 }
 
@@ -266,7 +289,15 @@ pub fn bloom(frame: &mut Linear, threshold: f32, knee: f32, intensity: f32, radi
 /// highlight does. Interfaces are mostly white text on dark — a camera's
 /// bloom on every glyph reads as haze — so a UI film keys its glow to
 /// colour, the way a display's own emissive accents read on camera.
-pub fn bloom_keyed(frame: &mut Linear, threshold: f32, knee: f32, intensity: f32, radius: f32, tint: [f32; 3], chroma_key: f32) {
+pub fn bloom_keyed(
+    frame: &mut Linear,
+    threshold: f32,
+    knee: f32,
+    intensity: f32,
+    radius: f32,
+    tint: [f32; 3],
+    chroma_key: f32,
+) {
     if intensity <= 0.0 {
         return;
     }
@@ -299,12 +330,18 @@ pub fn bloom_keyed(frame: &mut Linear, threshold: f32, knee: f32, intensity: f32
     // one bilinear tap per output pixel brings it up.
     let half = &mips[0];
     #[allow(clippy::cast_precision_loss)]
-    let (sx, sy) = (half.width as f32 / frame.width as f32, half.height as f32 / frame.height as f32);
+    let (sx, sy) = (
+        half.width as f32 / frame.width as f32,
+        half.height as f32 / frame.height as f32,
+    );
     let w = frame.width;
     par_rows(&mut frame.px, w, |row0, band| {
         for (j, o) in band.iter_mut().enumerate() {
             #[allow(clippy::cast_precision_loss)]
-            let g = half.sample(((j % w) as f32 + 0.5) * sx, ((row0 + j / w) as f32 + 0.5) * sy);
+            let g = half.sample(
+                ((j % w) as f32 + 0.5) * sx,
+                ((row0 + j / w) as f32 + 0.5) * sy,
+            );
             for k in 0..3 {
                 o[k] += g[k] * intensity * tint[k];
             }
@@ -321,7 +358,11 @@ pub fn halation(frame: &mut Linear, threshold: f32, amount: f32) {
     let mut bright = Linear::new(frame.width, frame.height);
     for (o, c) in bright.px.iter_mut().zip(&frame.px) {
         let l = luma(*c);
-        *o = if l > threshold { [l - threshold, 0.0, 0.0] } else { [0.0; 3] };
+        *o = if l > threshold {
+            [l - threshold, 0.0, 0.0]
+        } else {
+            [0.0; 3]
+        };
     }
     let m = bright.downsample().downsample();
     let mut g = Linear::new(frame.width, frame.height);
@@ -335,7 +376,13 @@ pub fn halation(frame: &mut Linear, threshold: f32, amount: f32) {
 
 /// Anamorphic streaks: bright points smeared horizontally (the blue lines
 /// of a cylindrical lens).
-pub fn anamorphic_streaks(frame: &mut Linear, threshold: f32, length: f32, intensity: f32, tint: [f32; 3]) {
+pub fn anamorphic_streaks(
+    frame: &mut Linear,
+    threshold: f32,
+    length: f32,
+    intensity: f32,
+    tint: [f32; 3],
+) {
     if intensity <= 0.0 {
         return;
     }
@@ -431,7 +478,11 @@ pub fn lens_flare(frame: &mut Linear, pos: (f32, f32), brightness: f32, seed: u3
             }
             // Halo ring with a spectral rim.
             let ring = (-((d - halo_r) / (diag * 0.006)).powi(2)).exp() * 0.025;
-            let rim = [(-((d - halo_r * 1.01) / (diag * 0.005)).powi(2)).exp(), 1.0, (-((d - halo_r * 0.99) / (diag * 0.005)).powi(2)).exp()];
+            let rim = [
+                (-((d - halo_r * 1.01) / (diag * 0.005)).powi(2)).exp(),
+                1.0,
+                (-((d - halo_r * 0.99) / (diag * 0.005)).powi(2)).exp(),
+            ];
             for k in 0..3 {
                 add[k] += ring * rim[k];
             }
@@ -463,7 +514,14 @@ pub fn lens_flare(frame: &mut Linear, pos: (f32, f32), brightness: f32, seed: u3
 /// Light rays (god rays): the frame's light above `threshold` streaked
 /// radially away from `center`, `length` (0..1) of the way to the source,
 /// in `samples` steps — AE's CC Light Rays, Unreal's light shafts.
-pub fn light_rays(frame: &mut Linear, center: (f32, f32), threshold: f32, length: f32, intensity: f32, samples: usize) {
+pub fn light_rays(
+    frame: &mut Linear,
+    center: (f32, f32),
+    threshold: f32,
+    length: f32,
+    intensity: f32,
+    samples: usize,
+) {
     if intensity <= 0.0 {
         return;
     }
@@ -473,7 +531,10 @@ pub fn light_rays(frame: &mut Linear, center: (f32, f32), threshold: f32, length
     }
     let src = src.downsample();
     #[allow(clippy::cast_precision_loss)]
-    let (cx, cy) = (center.0 * src.width as f32 / frame.width as f32, center.1 * src.height as f32 / frame.height as f32);
+    let (cx, cy) = (
+        center.0 * src.width as f32 / frame.width as f32,
+        center.1 * src.height as f32 / frame.height as f32,
+    );
     let mut rays = Linear::new(src.width, src.height);
     let n = samples.max(4);
     for y in 0..src.height {
@@ -519,7 +580,10 @@ pub fn zoom_blur(frame: &Linear, center: (f32, f32), amount: f32, samples: usize
             for i in 0..n {
                 #[allow(clippy::cast_precision_loss)]
                 let s = 1.0 - amount * i as f32 / (n - 1) as f32;
-                let c = frame.sample(center.0 + (px - center.0) * s, center.1 + (py - center.1) * s);
+                let c = frame.sample(
+                    center.0 + (px - center.0) * s,
+                    center.1 + (py - center.1) * s,
+                );
                 for k in 0..3 {
                     acc[k] += c[k];
                 }
@@ -587,7 +651,9 @@ pub fn directional_blur(frame: &Linear, angle: f32, length: f32, samples: usize)
 
 fn hash2(x: i32, y: i32, seed: u32) -> f32 {
     #[allow(clippy::cast_sign_loss)]
-    let mut h = (x as u32).wrapping_mul(0x8DA6_B343) ^ (y as u32).wrapping_mul(0xD816_3841) ^ seed.wrapping_mul(0xCB1A_B31F);
+    let mut h = (x as u32).wrapping_mul(0x8DA6_B343)
+        ^ (y as u32).wrapping_mul(0xD816_3841)
+        ^ seed.wrapping_mul(0xCB1A_B31F);
     h ^= h >> 13;
     h = h.wrapping_mul(0x5bd1_e995);
     h ^= h >> 15;
@@ -615,7 +681,15 @@ pub fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
 /// `persistence` amplitude, evolving with `evolution` (a third axis folded
 /// in as a phase), in 0..1. `turbulent` folds each octave (|2n−1|).
 #[must_use]
-pub fn fractal_noise(x: f32, y: f32, octaves: u32, persistence: f32, evolution: f32, turbulent: bool, seed: u32) -> f32 {
+pub fn fractal_noise(
+    x: f32,
+    y: f32,
+    octaves: u32,
+    persistence: f32,
+    evolution: f32,
+    turbulent: bool,
+    seed: u32,
+) -> f32 {
     let mut amp = 1.0;
     let mut freq = 1.0;
     let mut sum = 0.0;
@@ -623,7 +697,11 @@ pub fn fractal_noise(x: f32, y: f32, octaves: u32, persistence: f32, evolution: 
     for o in 0..octaves.max(1) {
         let ev = evolution * (1.0 + o as f32 * 0.37);
         let n0 = value_noise(x * freq + ev, y * freq - ev * 0.7, seed.wrapping_add(o));
-        let n = if turbulent { (n0 * 2.0 - 1.0).abs() } else { n0 };
+        let n = if turbulent {
+            (n0 * 2.0 - 1.0).abs()
+        } else {
+            n0
+        };
         sum += n * amp;
         norm += amp;
         amp *= persistence;
@@ -634,12 +712,27 @@ pub fn fractal_noise(x: f32, y: f32, octaves: u32, persistence: f32, evolution: 
 
 /// Fill a frame with fractal noise at `scale` pixels per cell, as grey.
 #[must_use]
-pub fn fractal_noise_frame(width: usize, height: usize, scale: f32, octaves: u32, evolution: f32, seed: u32) -> Linear {
+pub fn fractal_noise_frame(
+    width: usize,
+    height: usize,
+    scale: f32,
+    octaves: u32,
+    evolution: f32,
+    seed: u32,
+) -> Linear {
     let mut f = Linear::new(width, height);
     for y in 0..height {
         for x in 0..width {
             #[allow(clippy::cast_precision_loss)]
-            let v = fractal_noise(x as f32 / scale, y as f32 / scale, octaves, 0.5, evolution, false, seed);
+            let v = fractal_noise(
+                x as f32 / scale,
+                y as f32 / scale,
+                octaves,
+                0.5,
+                evolution,
+                false,
+                seed,
+            );
             f.px[y * width + x] = [v, v, v];
         }
     }
@@ -648,15 +741,32 @@ pub fn fractal_noise_frame(width: usize, height: usize, scale: f32, octaves: u32
 
 /// AE Turbulent Displace: every pixel pushed by a fractal noise field.
 #[must_use]
-pub fn turbulent_displace(frame: &Linear, amount: f32, size: f32, evolution: f32, seed: u32) -> Linear {
+pub fn turbulent_displace(
+    frame: &Linear,
+    amount: f32,
+    size: f32,
+    evolution: f32,
+    seed: u32,
+) -> Linear {
     let mut out = Linear::new(frame.width, frame.height);
     for y in 0..frame.height {
         for x in 0..frame.width {
             #[allow(clippy::cast_precision_loss)]
             let (fx, fy) = (x as f32, y as f32);
-            let dx = fractal_noise(fx / size, fy / size, 3, 0.5, evolution, false, seed) * 2.0 - 1.0;
-            let dy = fractal_noise(fx / size + 31.7, fy / size - 17.3, 3, 0.5, evolution, false, seed ^ 0x55) * 2.0 - 1.0;
-            out.px[y * frame.width + x] = frame.sample(fx + 0.5 + dx * amount, fy + 0.5 + dy * amount);
+            let dx =
+                fractal_noise(fx / size, fy / size, 3, 0.5, evolution, false, seed) * 2.0 - 1.0;
+            let dy = fractal_noise(
+                fx / size + 31.7,
+                fy / size - 17.3,
+                3,
+                0.5,
+                evolution,
+                false,
+                seed ^ 0x55,
+            ) * 2.0
+                - 1.0;
+            out.px[y * frame.width + x] =
+                frame.sample(fx + 0.5 + dx * amount, fy + 0.5 + dy * amount);
         }
     }
     out
@@ -727,7 +837,11 @@ pub fn film_grain(frame: &mut Linear, amount: f32, frame_seed: u32) {
         for (j, p) in band.iter_mut().enumerate() {
             #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
             let (ix, iy) = ((j % fw) as i32, (row0 + j / fw) as i32);
-            let n = (hash2(ix, iy, frame_seed) + hash2(ix + 1, iy, frame_seed) * 0.5 + hash2(ix, iy + 1, frame_seed) * 0.5) / 2.0 - 0.5;
+            let n = (hash2(ix, iy, frame_seed)
+                + hash2(ix + 1, iy, frame_seed) * 0.5
+                + hash2(ix, iy + 1, frame_seed) * 0.5)
+                / 2.0
+                - 0.5;
             let l = luma(*p).clamp(0.0, 1.0);
             let e = linear_to_srgb(l);
             let mid = 4.0 * e * (1.0 - e) * 0.85 + 0.15;
@@ -803,10 +917,24 @@ impl Finish {
         if let Some((pos, amount)) = self.rays {
             light_rays(&mut f, pos, self.bloom_threshold, 0.8, amount, 24);
         }
-        bloom_keyed(&mut f, self.bloom_threshold, self.bloom_knee, self.bloom_intensity, self.bloom_radius, self.bloom_tint, self.bloom_chroma_key);
+        bloom_keyed(
+            &mut f,
+            self.bloom_threshold,
+            self.bloom_knee,
+            self.bloom_intensity,
+            self.bloom_radius,
+            self.bloom_tint,
+            self.bloom_chroma_key,
+        );
         halation(&mut f, self.bloom_threshold, self.halation);
         if self.streaks > 0.0 {
-            anamorphic_streaks(&mut f, self.bloom_threshold.max(0.5), 0.5, self.streaks, self.streak_tint);
+            anamorphic_streaks(
+                &mut f,
+                self.bloom_threshold.max(0.5),
+                0.5,
+                self.streaks,
+                self.streak_tint,
+            );
         }
         if let Some((pos, b)) = self.flare {
             lens_flare(&mut f, pos, b, 7);
@@ -897,9 +1025,7 @@ mod tests {
     #[test]
     fn vignette_darkens_corners_not_the_centre() {
         let mut f = Linear::new(64, 36);
-        for p in &mut f.px {
-            *p = [0.5; 3];
-        }
+        f.px.fill([0.5; 3]);
         natural_vignette(&mut f, 0.6, 0.5);
         assert!(f.get(32, 18)[0] > 0.49);
         assert!(f.get(0, 0)[0] < 0.4);
@@ -921,7 +1047,11 @@ mod tests {
         let mut c = vec![40u8; 64 * 36 * 4];
         Finish::default().apply_rgba8(&mut c, 64, 36, 3);
         // No effects: dither is ±½ LSB, so every byte stays 40.
-        assert!(c.chunks_exact(4).all(|p| p[0] == 40 && p[3] == 255));
+        assert!(c
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|p| p[0] == 40 && p[3] == 255));
     }
 
     #[test]
@@ -929,7 +1059,10 @@ mod tests {
         let mut f = dot_frame(80, 45, (20, 10), 20.0);
         lens_flare(&mut f, (20.0, 10.0), 0.5, 1);
         light_rays(&mut f, (20.0, 10.0), 0.9, 0.8, 0.5, 12);
-        assert!(f.px.iter().all(|p| p.iter().all(|v| v.is_finite() && *v >= 0.0)));
+        assert!(f
+            .px
+            .iter()
+            .all(|p| p.iter().all(|v| v.is_finite() && *v >= 0.0)));
         assert!(f.get(22, 10)[0] > 0.05);
     }
 }

@@ -117,7 +117,10 @@ fn unwrap_bodymovin(src: &str) -> String {
         if s.is_empty() || s.starts_with("var $bm_rt") {
             continue;
         }
-        let s = s.strip_prefix("$bm_rt =").or_else(|| s.strip_prefix("$bm_rt=")).unwrap_or(s);
+        let s = s
+            .strip_prefix("$bm_rt =")
+            .or_else(|| s.strip_prefix("$bm_rt="))
+            .unwrap_or(s);
         body = s.trim().to_owned();
     }
     body.replace("$bm_sum", "add").replace("$bm_mul", "mul")
@@ -155,7 +158,13 @@ impl Prop {
             }
             let inner = Self::parse(Some(&base), default);
             match Expr::parse(&unwrap_bodymovin(src)) {
-                Ok(e) => return Self::Expression(Box::new(inner), Arc::new(e), PARSE_FR.with(std::cell::Cell::get)),
+                Ok(e) => {
+                    return Self::Expression(
+                        Box::new(inner),
+                        Arc::new(e),
+                        PARSE_FR.with(std::cell::Cell::get),
+                    )
+                }
                 Err(_) => {
                     PARSE_SKIPPED.with(|v| v.borrow_mut().push("expression".into()));
                     return inner;
@@ -388,8 +397,14 @@ impl Grad {
             radial: s.get("t").and_then(Json::as_f64) == Some(2.0),
             start: Prop::parse(s.get("s"), &[0.0, 0.0]),
             end: Prop::parse(s.get("e"), &[100.0, 0.0]),
-            count: g.and_then(|g| g.get("p")).and_then(Json::as_f64).unwrap_or(2.0) as usize,
-            stops: Prop::parse(g.and_then(|g| g.get("k")), &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]),
+            count: g
+                .and_then(|g| g.get("p"))
+                .and_then(Json::as_f64)
+                .unwrap_or(2.0) as usize,
+            stops: Prop::parse(
+                g.and_then(|g| g.get("k")),
+                &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0],
+            ),
         }
     }
 
@@ -403,7 +418,12 @@ impl Grad {
             if extra.len() < 4 {
                 return 1.0;
             }
-            let pairs: Vec<(f32, f32)> = extra.chunks_exact(2).map(|c| (c[0], c[1])).collect();
+            let pairs: Vec<(f32, f32)> = extra
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| (c[0], c[1]))
+                .collect();
             if t <= pairs[0].0 {
                 return pairs[0].1;
             }
@@ -416,7 +436,7 @@ impl Grad {
             pairs[pairs.len() - 1].1
         };
         let mut stops = Vec::new();
-        for c in raw.chunks_exact(4).take(n) {
+        for c in raw.as_chunks::<4>().0.iter().take(n) {
             let a = alpha_at(c[0]) * opacity;
             stops.push((c[0], color_of(&[c[1], c[2], c[3], a], 1.0)));
         }
@@ -756,8 +776,17 @@ struct Mask {
 #[derive(Debug, Clone, PartialEq)]
 enum Effect {
     Blur(Prop),
-    DropShadow { color: Prop, opacity: Prop, direction: Prop, distance: Prop, softness: Prop },
-    Fill { color: Prop, opacity: Prop },
+    DropShadow {
+        color: Prop,
+        opacity: Prop,
+        direction: Prop,
+        distance: Prop,
+        softness: Prop,
+    },
+    Fill {
+        color: Prop,
+        opacity: Prop,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -778,7 +807,7 @@ struct Layer {
     effects: Vec<Effect>,
 }
 
-fn effect_param<'a>(e: &'a Json, i: usize) -> Option<&'a Json> {
+fn effect_param(e: &Json, i: usize) -> Option<&Json> {
     e.get("ef")?.as_array()?.get(i)?.get("v")
 }
 
@@ -811,14 +840,26 @@ fn parse_effects(l: &Json, skipped: &mut BTreeMap<String, usize>) -> Vec<Effect>
 fn parse_text(l: &Json) -> TextLayer {
     let t = l.get("t");
     let mut docs = Vec::new();
-    for k in t.and_then(|t| t.get("d")).and_then(|d| d.get("k")).and_then(Json::as_array).unwrap_or(&[]) {
+    for k in t
+        .and_then(|t| t.get("d"))
+        .and_then(|d| d.get("k"))
+        .and_then(Json::as_array)
+        .unwrap_or(&[])
+    {
         let Some(sd) = k.get("s") else { continue };
-        let fc = sd.get("fc").map(nums).unwrap_or_else(|| vec![0.0, 0.0, 0.0]);
+        let fc = sd
+            .get("fc")
+            .map(nums)
+            .unwrap_or_else(|| vec![0.0, 0.0, 0.0]);
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         docs.push((
             k.get("t").and_then(Json::as_f32).unwrap_or(0.0),
             TextDocument {
-                text: sd.get("t").and_then(Json::as_str).unwrap_or("").replace('\r', "\n"),
+                text: sd
+                    .get("t")
+                    .and_then(Json::as_str)
+                    .unwrap_or("")
+                    .replace('\r', "\n"),
                 font: sd.get("f").and_then(Json::as_str).unwrap_or("").to_owned(),
                 size: sd.get("s").and_then(Json::as_f32).unwrap_or(24.0),
                 color: color_of(&fc, 1.0),
@@ -829,7 +870,11 @@ fn parse_text(l: &Json) -> TextLayer {
         ));
     }
     let mut animators = Vec::new();
-    for a in t.and_then(|t| t.get("a")).and_then(Json::as_array).unwrap_or(&[]) {
+    for a in t
+        .and_then(|t| t.get("a"))
+        .and_then(Json::as_array)
+        .unwrap_or(&[])
+    {
         let sel = a.get("s");
         let g = |k: &str| sel.and_then(|s| s.get(k));
         #[allow(clippy::cast_possible_truncation)]
@@ -841,7 +886,9 @@ fn parse_text(l: &Json) -> TextLayer {
             shape: g("sh").and_then(Json::as_f64).unwrap_or(1.0) as i64,
         };
         let props = a.get("a");
-        let fc = props.and_then(|p| p.get("fc")).map(|j| Prop::parse(Some(j), &[0.0, 0.0, 0.0, 1.0]));
+        let fc = props
+            .and_then(|p| p.get("fc"))
+            .map(|j| Prop::parse(Some(j), &[0.0, 0.0, 0.0, 1.0]));
         let tracking = Prop::parse(props.and_then(|p| p.get("t")), &[0.0]);
         // Animator transforms default to identity (opacity 100 = unchanged).
         animators.push((selector, Xform::parse(props), fc, tracking));
@@ -855,7 +902,11 @@ fn parse_masks(l: &Json) -> Vec<Mask> {
         .unwrap_or(&[])
         .iter()
         .map(|m| Mask {
-            mode: m.get("mode").and_then(Json::as_str).and_then(|s| s.chars().next()).unwrap_or('a'),
+            mode: m
+                .get("mode")
+                .and_then(Json::as_str)
+                .and_then(|s| s.chars().next())
+                .unwrap_or('a'),
             path: BezierProp::parse(m.get("pt")),
             inverted: m.get("inv").and_then(Json::as_bool).unwrap_or(false),
             opacity: Prop::parse(m.get("o"), &[100.0]),
@@ -899,7 +950,10 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
             _ => return None,
         })
     };
-    let bytes: Vec<u8> = s.bytes().filter(|c| !c.is_ascii_whitespace() && *c != b'=').collect();
+    let bytes: Vec<u8> = s
+        .bytes()
+        .filter(|c| !c.is_ascii_whitespace() && *c != b'=')
+        .collect();
     let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
     for chunk in bytes.chunks(4) {
         let mut acc = 0u32;
@@ -938,7 +992,12 @@ fn parse_layers(list: &[Json], skipped: &mut BTreeMap<String, usize>) -> Vec<Lay
                         .unwrap_or("")
                         .to_owned(),
                 ),
-                2 => LayerKind::Image(l.get("refId").and_then(Json::as_str).unwrap_or("").to_owned()),
+                2 => LayerKind::Image(
+                    l.get("refId")
+                        .and_then(Json::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                ),
                 5 => LayerKind::Text(parse_text(l)),
                 other => {
                     *skipped.entry(format!("layer:{other}")).or_default() += 1;
@@ -1033,9 +1092,18 @@ impl Composition {
         let mut assets = BTreeMap::new();
         let mut images = BTreeMap::new();
         for a in doc.get("assets").and_then(Json::as_array).unwrap_or(&[]) {
-            if let (Some(id), Some(p)) = (a.get("id").and_then(Json::as_str), a.get("p").and_then(Json::as_str)) {
-                if let Some(b64) = p.strip_prefix("data:").and_then(|r| r.split_once(";base64,")).map(|(_, d)| d) {
-                    match base64_decode(b64).and_then(|bytes| vieww_image::codec::decode(&bytes).ok()) {
+            if let (Some(id), Some(p)) = (
+                a.get("id").and_then(Json::as_str),
+                a.get("p").and_then(Json::as_str),
+            ) {
+                if let Some(b64) = p
+                    .strip_prefix("data:")
+                    .and_then(|r| r.split_once(";base64,"))
+                    .map(|(_, d)| d)
+                {
+                    match base64_decode(b64)
+                        .and_then(|bytes| vieww_image::codec::decode(&bytes).ok())
+                    {
                         Some(d) => {
                             images.insert(id.to_owned(), d.into_image());
                         }
@@ -1149,7 +1217,10 @@ impl Composition {
                 let img = self.images.get(id)?;
                 #[allow(clippy::cast_precision_loss)]
                 let r = Rect::new(0.0, 0.0, img.width() as f32, img.height() as f32);
-                vec![Sketch::Image { rect: r, image: img.clone() }]
+                vec![Sketch::Image {
+                    rect: r,
+                    image: img.clone(),
+                }]
             }
             LayerKind::Precomp(id) => match (self.assets.get(id), depth < 8) {
                 (Some(sub), true) => self.render_layers(sub, local, depth + 1),
@@ -1185,18 +1256,33 @@ impl Composition {
                         blend: BlendMode::Normal,
                         clip: None,
                         children: vec![
-                            Sketch::Layer { alpha: 1.0, blur: 0.0, blend: BlendMode::Normal, clip: None, children: content },
+                            Sketch::Layer {
+                                alpha: 1.0,
+                                blur: 0.0,
+                                blend: BlendMode::Normal,
+                                clip: None,
+                                children: content,
+                            },
                             Sketch::Layer {
                                 alpha: 1.0,
                                 blur: 0.0,
                                 blend: BlendMode::SrcAtop,
                                 clip: None,
-                                children: vec![Sketch::Fill { path: Path::rect(Rect::new(-1.0e4, -1.0e4, 1.0e4, 1.0e4)), brush: Brush::Solid(c) }],
+                                children: vec![Sketch::Fill {
+                                    path: Path::rect(Rect::new(-1.0e4, -1.0e4, 1.0e4, 1.0e4)),
+                                    brush: Brush::Solid(c),
+                                }],
                             },
                         ],
                     }];
                 }
-                Effect::DropShadow { color, opacity, direction, distance, softness } => {
+                Effect::DropShadow {
+                    color,
+                    opacity,
+                    direction,
+                    distance,
+                    softness,
+                } => {
                     let c = color_of(&color.at(local), opacity.scalar(local) / 255.0);
                     let a = (direction.scalar(local) - 90.0).to_radians();
                     let d = distance.scalar(local);
@@ -1208,13 +1294,22 @@ impl Composition {
                         children: vec![Sketch::Transformed {
                             transform: Transform::translate(Offset::new(a.cos() * d, a.sin() * d)),
                             children: vec![
-                                Sketch::Layer { alpha: 1.0, blur: 0.0, blend: BlendMode::Normal, clip: None, children: content.clone() },
+                                Sketch::Layer {
+                                    alpha: 1.0,
+                                    blur: 0.0,
+                                    blend: BlendMode::Normal,
+                                    clip: None,
+                                    children: content.clone(),
+                                },
                                 Sketch::Layer {
                                     alpha: 1.0,
                                     blur: 0.0,
                                     blend: BlendMode::SrcIn,
                                     clip: None,
-                                    children: vec![Sketch::Fill { path: Path::rect(Rect::new(-1.0e4, -1.0e4, 1.0e4, 1.0e4)), brush: Brush::Solid(c) }],
+                                    children: vec![Sketch::Fill {
+                                        path: Path::rect(Rect::new(-1.0e4, -1.0e4, 1.0e4, 1.0e4)),
+                                        brush: Brush::Solid(c),
+                                    }],
                                 },
                             ],
                         }],
@@ -1245,21 +1340,39 @@ impl Composition {
             if frame < l.ip || frame >= l.op || l.is_matte {
                 continue;
             }
-            let Some(mut sketch) = self.dressed(layers, i, frame, depth) else { continue };
+            let Some(mut sketch) = self.dressed(layers, i, frame, depth) else {
+                continue;
+            };
             if let Some(mode) = l.matte {
                 // The matte is the layer directly above.
                 let matte = (i > 0)
                     .then(|| &layers[i - 1])
                     .filter(|m| frame >= m.ip && frame < m.op)
                     .and_then(|_| self.dressed(layers, i - 1, frame, depth));
-                let blend = if mode == 2 || mode == 4 { BlendMode::DstOut } else { BlendMode::DstIn };
+                let blend = if mode == 2 || mode == 4 {
+                    BlendMode::DstOut
+                } else {
+                    BlendMode::DstIn
+                };
                 let mut kids = vec![sketch];
                 match matte {
-                    Some(m) => kids.push(Sketch::Layer { alpha: 1.0, blur: 0.0, blend, clip: None, children: vec![m] }),
+                    Some(m) => kids.push(Sketch::Layer {
+                        alpha: 1.0,
+                        blur: 0.0,
+                        blend,
+                        clip: None,
+                        children: vec![m],
+                    }),
                     None if blend == BlendMode::DstIn => kids.clear(),
                     None => {}
                 }
-                sketch = Sketch::Layer { alpha: 1.0, blur: 0.0, blend: BlendMode::Normal, clip: None, children: kids };
+                sketch = Sketch::Layer {
+                    alpha: 1.0,
+                    blur: 0.0,
+                    blend: BlendMode::Normal,
+                    clip: None,
+                    children: kids,
+                };
             }
             out.push(sketch);
         }
@@ -1271,16 +1384,29 @@ impl Composition {
     /// for the host to shape and draw with its text stack.
     #[must_use]
     pub fn text_runs(&self, seconds: f32) -> Vec<TextRun> {
-        use vieww_animation::text_animator::{self as ta, BasedOn, RangeSelector, Shape, TextAnimator, AnimatorProps};
+        use vieww_animation::text_animator::{
+            self as ta, AnimatorProps, BasedOn, RangeSelector, Shape, TextAnimator,
+        };
         let frame = self.frame_at(seconds);
         let mut out = Vec::new();
         for (i, l) in self.layers.iter().enumerate().rev() {
-            let LayerKind::Text(t) = &l.kind else { continue };
+            let LayerKind::Text(t) = &l.kind else {
+                continue;
+            };
             if frame < l.ip || frame >= l.op {
                 continue;
             }
             let local = frame - l.st;
-            let Some(doc) = t.docs.iter().rev().find(|(k, _)| *k <= local).or(t.docs.first()).map(|d| d.1.clone()) else { continue };
+            let Some(doc) = t
+                .docs
+                .iter()
+                .rev()
+                .find(|(k, _)| *k <= local)
+                .or(t.docs.first())
+                .map(|d| d.1.clone())
+            else {
+                continue;
+            };
             let animators: Vec<TextAnimator> = t
                 .animators
                 .iter()
@@ -1337,7 +1463,10 @@ impl Composition {
 /// each style in the group to them, bottom style first.
 fn render_items(items: &[Item], f: f32, inherited_trim: &[(f32, f32, f32)]) -> Vec<Sketch> {
     // A repeater repeats everything above it in the list.
-    if let Some(r) = items.iter().position(|it| matches!(it, Item::Repeater { .. })) {
+    if let Some(r) = items
+        .iter()
+        .position(|it| matches!(it, Item::Repeater { .. }))
+    {
         let Item::Repeater {
             copies,
             offset,
@@ -1357,16 +1486,29 @@ fn render_items(items: &[Item], f: f32, inherited_trim: &[(f32, f32, f32)]) -> V
         let p = transform.position.vec2(f);
         let sc = transform.scale.vec2(f);
         let rot = transform.rotation.scalar(f);
-        let (so, eo) = (start_opacity.scalar(f) / 100.0, end_opacity.scalar(f) / 100.0);
+        let (so, eo) = (
+            start_opacity.scalar(f) / 100.0,
+            end_opacity.scalar(f) / 100.0,
+        );
         for i in 0..n {
             #[allow(clippy::cast_precision_loss)]
             let k = i as f32 + off;
             let m = Transform::translate(Offset::new(-a.dx, -a.dy))
-                .then(Transform::scale((sc.dx / 100.0).powf(k), (sc.dy / 100.0).powf(k)))
+                .then(Transform::scale(
+                    (sc.dx / 100.0).powf(k),
+                    (sc.dy / 100.0).powf(k),
+                ))
                 .then(Transform::rotate((rot * k).to_radians()))
-                .then(Transform::translate(Offset::new(a.dx + (p.dx - a.dx) * k, a.dy + (p.dy - a.dy) * k)));
+                .then(Transform::translate(Offset::new(
+                    a.dx + (p.dx - a.dx) * k,
+                    a.dy + (p.dy - a.dy) * k,
+                )));
             #[allow(clippy::cast_precision_loss)]
-            let t = if n > 1 { i as f32 / (n - 1) as f32 } else { 0.0 };
+            let t = if n > 1 {
+                i as f32 / (n - 1) as f32
+            } else {
+                0.0
+            };
             out.push(Sketch::Layer {
                 alpha: (so + (eo - so) * t).clamp(0.0, 1.0),
                 blur: 0.0,
@@ -1477,7 +1619,9 @@ fn render_items(items: &[Item], f: f32, inherited_trim: &[(f32, f32, f32)]) -> V
                 _ => None,
             };
             let merged = match op {
-                Some(op) => paths[1..].iter().fold(paths[0].clone(), |acc, p| acc.boolean(p, op)),
+                Some(op) => paths[1..]
+                    .iter()
+                    .fold(paths[0].clone(), |acc, p| acc.boolean(p, op)),
                 None => {
                     let mut all = Path::new();
                     for p in &paths {
@@ -1730,12 +1874,28 @@ mod tests {
         let items = all(&book);
         // Matte composited with DstIn; the matte layer itself is not drawn
         // on its own.
-        assert!(items.iter().any(|s| matches!(s, Sketch::Layer { blend: BlendMode::DstIn, .. })));
+        assert!(items.iter().any(|s| matches!(
+            s,
+            Sketch::Layer {
+                blend: BlendMode::DstIn,
+                ..
+            }
+        )));
         // The mask became a clip; the blur effect a layer blur.
-        assert!(items.iter().any(|s| matches!(s, Sketch::Layer { clip: Some(_), .. })));
-        assert!(items.iter().any(|s| matches!(s, Sketch::Layer { blur, .. } if (*blur - 4.0).abs() < 1e-5)));
+        assert!(items
+            .iter()
+            .any(|s| matches!(s, Sketch::Layer { clip: Some(_), .. })));
+        assert!(items
+            .iter()
+            .any(|s| matches!(s, Sketch::Layer { blur, .. } if (*blur - 4.0).abs() < 1e-5)));
         // A gradient brush was produced.
-        assert!(items.iter().any(|s| matches!(s, Sketch::Fill { brush: Brush::Gradient(_), .. })));
+        assert!(items.iter().any(|s| matches!(
+            s,
+            Sketch::Fill {
+                brush: Brush::Gradient(_),
+                ..
+            }
+        )));
         // The image layer drew its decoded pixels.
         assert!(items.iter().any(|s| matches!(s, Sketch::Image { .. })));
     }
@@ -1743,11 +1903,19 @@ mod tests {
     #[test]
     fn repeaters_make_copies_fading_from_start_to_end_opacity() {
         let c = Composition::parse(RICH).expect("parse");
-        let LayerKind::Shape(items) = &c.layers[2].kind else { panic!() };
+        let LayerKind::Shape(items) = &c.layers[2].kind else {
+            panic!()
+        };
         let out = render_items(items, 0.0, &[]);
         let alphas: Vec<f32> = out
             .iter()
-            .filter_map(|s| if let Sketch::Layer { alpha, .. } = s { Some(*alpha) } else { None })
+            .filter_map(|s| {
+                if let Sketch::Layer { alpha, .. } = s {
+                    Some(*alpha)
+                } else {
+                    None
+                }
+            })
             .collect();
         assert_eq!(alphas.len(), 4);
         assert!((alphas[0] - 1.0).abs() < 1e-5 && (alphas[3] - 0.25).abs() < 1e-5);
@@ -1756,9 +1924,13 @@ mod tests {
     #[test]
     fn merge_paths_subtract_and_expressions_drive_properties() {
         let c = Composition::parse(RICH).expect("parse");
-        let LayerKind::Shape(items) = &c.layers[3].kind else { panic!() };
+        let LayerKind::Shape(items) = &c.layers[3].kind else {
+            panic!()
+        };
         let out = render_items(items, 0.0, &[]);
-        let Sketch::Fill { path, .. } = &out[0] else { panic!("{out:?}") };
+        let Sketch::Fill { path, .. } = &out[0] else {
+            panic!("{out:?}")
+        };
         assert!(!path.contains(Offset::new(50.0, 50.0), vieww_foundation::FillRule::NonZero));
         assert!(path.contains(Offset::new(33.0, 33.0), vieww_foundation::FillRule::NonZero));
         // `time * 30` at frame 15 (0.5 s) = 15.

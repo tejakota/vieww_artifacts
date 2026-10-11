@@ -930,7 +930,9 @@ mod tests {
         );
         let got: Vec<i32> = dec
             .stdout
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| i32::from(i16::from_le_bytes([c[0], c[1]])))
             .collect();
         assert_eq!(got, want, "ffmpeg decodes our FLAC bit-exactly");

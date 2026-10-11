@@ -300,8 +300,10 @@ mod tests {
         // Floor (white), left wall (red), right wall (green); a sun.
         s.add(
             {
-                let mut floor =
-                    Node::new("floor", Content::mesh(plane(4.0, 4.0, 1, 1), Material::lambert(Color::WHITE)));
+                let mut floor = Node::new(
+                    "floor",
+                    Content::mesh(plane(4.0, 4.0, 1, 1), Material::lambert(Color::WHITE)),
+                );
                 floor.rotation = Quat::from_axis_angle(Vec3::X, -std::f32::consts::FRAC_PI_2);
                 floor
             },
@@ -310,7 +312,10 @@ mod tests {
         s.add(
             Node::new(
                 "red",
-                Content::mesh(box_mesh(0.1, 4.0, 4.0), Material::lambert(Color::rgb(255, 0, 0))),
+                Content::mesh(
+                    box_mesh(0.1, 4.0, 4.0),
+                    Material::lambert(Color::rgb(255, 0, 0)),
+                ),
             )
             .at(Vec3::new(-2.0, 2.0, 0.0)),
             None,
@@ -318,7 +323,10 @@ mod tests {
         s.add(
             Node::new(
                 "green",
-                Content::mesh(box_mesh(0.1, 4.0, 4.0), Material::lambert(Color::rgb(0, 255, 0))),
+                Content::mesh(
+                    box_mesh(0.1, 4.0, 4.0),
+                    Material::lambert(Color::rgb(0, 255, 0)),
+                ),
             )
             .at(Vec3::new(2.0, 2.0, 0.0)),
             None,
@@ -341,7 +349,11 @@ mod tests {
     #[test]
     fn colour_bleeds_from_the_walls_onto_the_floor() {
         let mut s = cornell();
-        let mut gi = IrradianceVolume::new(Vec3::new(-1.9, 0.1, -1.9), Vec3::new(3.8, 3.0, 3.8), [5, 3, 5]);
+        let mut gi = IrradianceVolume::new(
+            Vec3::new(-1.9, 0.1, -1.9),
+            Vec3::new(3.8, 3.0, 3.8),
+            [5, 3, 5],
+        );
         gi.rays_per_probe = 96;
         let stats = gi.bake(&mut s);
         assert_eq!(stats.probes_traced, 75);
@@ -370,7 +382,10 @@ mod tests {
     fn probes_buried_in_geometry_are_classified_dead() {
         let mut s = Scene::new();
         s.add(
-            Node::new("block", Content::mesh(box_mesh(2.0, 2.0, 2.0), Material::lambert(Color::WHITE))),
+            Node::new(
+                "block",
+                Content::mesh(box_mesh(2.0, 2.0, 2.0), Material::lambert(Color::WHITE)),
+            ),
             None,
         );
         // A 3×3×3 grid whose centre probe sits inside the block.
@@ -385,7 +400,11 @@ mod tests {
     #[test]
     fn dynamic_updates_converge_to_the_new_lighting() {
         let mut s = cornell();
-        let mut gi = IrradianceVolume::new(Vec3::new(-1.5, 0.5, -1.5), Vec3::new(3.0, 2.0, 3.0), [2, 2, 2]);
+        let mut gi = IrradianceVolume::new(
+            Vec3::new(-1.5, 0.5, -1.5),
+            Vec3::new(3.0, 2.0, 3.0),
+            [2, 2, 2],
+        );
         gi.rays_per_probe = 48;
         gi.bake(&mut s);
         let before = gi.sample(Vec3::new(0.0, 0.0, 0.0), Vec3::Y).luminance();

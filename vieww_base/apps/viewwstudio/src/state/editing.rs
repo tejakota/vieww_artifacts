@@ -884,10 +884,9 @@ impl Studio {
         // asks) and puts the states back itself. The clock is the studio's
         // frame count, which the child only uses for that one build.
         if let Some(remote) = self.preview_remote.peek() {
-            if let Ok(restored) =
-                remote
-                    .borrow_mut()
-                    .restore_state(&snapshot, std::time::Duration::ZERO)
+            if let Ok(restored) = remote
+                .borrow_mut()
+                .restore_state(&snapshot, std::time::Duration::ZERO)
             {
                 if restored > 0 {
                     self.append_output(vec![format!(

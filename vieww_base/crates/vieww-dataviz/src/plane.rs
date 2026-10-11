@@ -36,7 +36,13 @@ impl NumberPlane {
     /// Lines every `step` (majors) with `minors` subdivisions between, each
     /// sampled every `resolution` units so warps bend smoothly.
     #[must_use]
-    pub fn new(x_range: (f64, f64), y_range: (f64, f64), step: f64, minors: u32, resolution: f64) -> Self {
+    pub fn new(
+        x_range: (f64, f64),
+        y_range: (f64, f64),
+        step: f64,
+        minors: u32,
+        resolution: f64,
+    ) -> Self {
         let mut lines = Vec::new();
         let res = resolution.max(1e-3);
         let sub = step / f64::from(minors + 1);
@@ -57,12 +63,18 @@ impl NumberPlane {
         };
         let mut x = (x_range.0 / sub).ceil() * sub;
         while x <= x_range.1 + 1e-9 {
-            lines.push((kind(x), sample(y_range.0, y_range.1).map(|y| (x, y)).collect()));
+            lines.push((
+                kind(x),
+                sample(y_range.0, y_range.1).map(|y| (x, y)).collect(),
+            ));
             x += sub;
         }
         let mut y = (y_range.0 / sub).ceil() * sub;
         while y <= y_range.1 + 1e-9 {
-            lines.push((kind(y), sample(x_range.0, x_range.1).map(|xx| (xx, y)).collect()));
+            lines.push((
+                kind(y),
+                sample(x_range.0, x_range.1).map(|xx| (xx, y)).collect(),
+            ));
             y += sub;
         }
         // Axes last so they draw on top.
@@ -71,7 +83,11 @@ impl NumberPlane {
             LineKind::Major => 1,
             LineKind::Axis => 2,
         });
-        Self { x_range, y_range, lines }
+        Self {
+            x_range,
+            y_range,
+            lines,
+        }
     }
 
     /// Every sample through `f` (`apply_function`).
@@ -129,7 +145,12 @@ pub mod complex {
 /// Math → screen: `(x_range, y_range)` onto the pixel rect `(l, t, w, h)`,
 /// y flipped.
 #[must_use]
-pub fn to_screen(p: (f64, f64), x_range: (f64, f64), y_range: (f64, f64), rect: (f64, f64, f64, f64)) -> (f64, f64) {
+pub fn to_screen(
+    p: (f64, f64),
+    x_range: (f64, f64),
+    y_range: (f64, f64),
+    rect: (f64, f64, f64, f64),
+) -> (f64, f64) {
     let (l, t, w, h) = rect;
     (
         l + (p.0 - x_range.0) / (x_range.1 - x_range.0) * w,
@@ -146,14 +167,21 @@ pub struct ValueTracker {
 
 impl std::fmt::Debug for ValueTracker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ValueTracker").field("value", &self.value).field("derived", &self.derived).finish()
+        f.debug_struct("ValueTracker")
+            .field("value", &self.value)
+            .field("derived", &self.derived)
+            .finish()
     }
 }
 
 impl ValueTracker {
     #[must_use]
     pub fn new(value: f64) -> Self {
-        Self { value, updaters: Vec::new(), derived: Vec::new() }
+        Self {
+            value,
+            updaters: Vec::new(),
+            derived: Vec::new(),
+        }
     }
 
     /// Register an updater; returns its index into [`derived`](Self::derived).
@@ -194,14 +222,30 @@ mod tests {
     fn the_plane_has_axes_majors_and_minors() {
         let p = NumberPlane::new((-2.0, 2.0), (-1.0, 1.0), 1.0, 1, 0.1);
         let axes = p.lines.iter().filter(|(k, _)| *k == LineKind::Axis).count();
-        let majors = p.lines.iter().filter(|(k, _)| *k == LineKind::Major).count();
-        let minors = p.lines.iter().filter(|(k, _)| *k == LineKind::Minor).count();
+        let majors = p
+            .lines
+            .iter()
+            .filter(|(k, _)| *k == LineKind::Major)
+            .count();
+        let minors = p
+            .lines
+            .iter()
+            .filter(|(k, _)| *k == LineKind::Minor)
+            .count();
         assert_eq!(axes, 2);
         assert_eq!(majors, 4 + 2);
         assert_eq!(minors, 4 + 2);
         assert_eq!(p.lines.last().expect("line").0, LineKind::Axis);
         // Subdivided: a vertical line over 2 units at 0.1 has 21 samples.
-        assert_eq!(p.lines.iter().find(|(k, l)| *k == LineKind::Axis && l[0].0 == 0.0).expect("y axis").1.len(), 21);
+        assert_eq!(
+            p.lines
+                .iter()
+                .find(|(k, l)| *k == LineKind::Axis && l[0].0 == 0.0)
+                .expect("y axis")
+                .1
+                .len(),
+            21
+        );
     }
 
     #[test]
@@ -210,7 +254,9 @@ mod tests {
         let w = p.warped(&complex::square);
         let near = |a: &NumberPlane, b: &NumberPlane| {
             a.lines.iter().zip(&b.lines).all(|((_, la), (_, lb))| {
-                la.iter().zip(lb).all(|(p, q)| (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9)
+                la.iter()
+                    .zip(lb)
+                    .all(|(p, q)| (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9)
             })
         };
         assert!(near(&p.morph(&complex::square, 0.0), &p));
@@ -225,7 +271,12 @@ mod tests {
 
     #[test]
     fn screen_mapping_flips_y() {
-        let s = to_screen((0.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (0.0, 0.0, 200.0, 100.0));
+        let s = to_screen(
+            (0.0, 1.0),
+            (-1.0, 1.0),
+            (-1.0, 1.0),
+            (0.0, 0.0, 200.0, 100.0),
+        );
         assert_eq!(s, (100.0, 0.0));
     }
 

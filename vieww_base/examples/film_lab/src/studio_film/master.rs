@@ -287,7 +287,11 @@ struct Rig {
 /// than restarting it.
 fn camera(id: &str, t: f32) -> Transform {
     let p = crate::film_lib::ease_in_out(clamp01(t));
-    let s = if id == "Z22" { 1.022 + 0.01 * p } else { 1.0 + 0.022 * p };
+    let s = if id == "Z22" {
+        1.022 + 0.01 * p
+    } else {
+        1.0 + 0.022 * p
+    };
     let (cx, cy) = (pf::W * 0.5, pf::H * 0.5);
     Transform::new(s, 0.0, 0.0, s, cx - cx * s, cy - cy * s)
 }
@@ -1019,9 +1023,11 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
 
     // `SF_ONLY` splits the census across processes (each writes a partial
     // that `sfmerge` sums); without it the census walks the whole film.
-    let only: Option<Vec<String>> = std::env::var("SF_ONLY")
-        .ok()
-        .map(|v| v.split(',').map(|s| s.trim().to_ascii_uppercase()).collect());
+    let only: Option<Vec<String>> = std::env::var("SF_ONLY").ok().map(|v| {
+        v.split(',')
+            .map(|s| s.trim().to_ascii_uppercase())
+            .collect()
+    });
     for (si, s) in all.iter().enumerate() {
         let n = frames_of(s);
         let start_abs = scene_start(si);
@@ -1033,7 +1039,12 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
         if s.kind == Kind::Studio && rig.studio.is_none() {
             rig.ensure_studio();
             let mut warm = 0usize;
-            super::script::apply_session_up_to(&mut rig.driver, rig.studio.as_mut().unwrap(), start_abs, &mut warm);
+            super::script::apply_session_up_to(
+                &mut rig.driver,
+                rig.studio.as_mut().unwrap(),
+                start_abs,
+                &mut warm,
+            );
             rig.cursor = warm;
         }
 
@@ -1065,11 +1076,7 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
                 frame_ms_samples.push(ms);
                 if finish_ms.is_none() {
                     let (rw, rh) = raster_size();
-                    finish_ms = Some(super::look::time_once(
-                        &px,
-                        rw as usize,
-                        rh as usize,
-                    ));
+                    finish_ms = Some(super::look::time_once(&px, rw as usize, rh as usize));
                 }
                 sample_rows.push(format!(
                     "{},{},{:.2}",
@@ -1100,7 +1107,10 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
             Probe::bench_identity(renderer.cached_fonts() as u32),
         );
         std::fs::write(work_root().join(format!("census.{tag}.txt")), body)?;
-        std::fs::write(work_root().join(format!("samples.{tag}.txt")), sample_rows.join("\n") + "\n")?;
+        std::fs::write(
+            work_root().join(format!("samples.{tag}.txt")),
+            sample_rows.join("\n") + "\n",
+        )?;
         println!("census partial '{tag}' — {counted_frames} frames");
         return Ok(());
     }
@@ -1180,14 +1190,12 @@ pub(crate) fn merge_census() -> Result<(), Box<dyn std::error::Error>> {
     parts.sort();
     for p in &parts {
         for line in std::fs::read_to_string(p)?.lines() {
-            let Some((k, v)) = line.split_once('=') else { continue };
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
             match k {
-                "frame_ms_samples" => {
-                    ms.extend(v.split(';').filter_map(|x| x.parse::<f32>().ok()))
-                }
-                "alive_samples" => {
-                    alive.extend(v.split(';').filter_map(|x| x.parse::<f64>().ok()))
-                }
+                "frame_ms_samples" => ms.extend(v.split(';').filter_map(|x| x.parse::<f32>().ok())),
+                "alive_samples" => alive.extend(v.split(';').filter_map(|x| x.parse::<f64>().ok())),
                 "bench" => bench = v.to_owned(),
                 _ => *sums.entry(k.to_owned()).or_default() += v.parse::<u64>().unwrap_or(0),
             }

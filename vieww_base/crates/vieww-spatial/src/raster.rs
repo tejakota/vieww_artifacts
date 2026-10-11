@@ -160,7 +160,7 @@ pub fn render_with_config(
     let mut rgba = vec![0_u8; byte_len];
     let mut depth = vec![f32::INFINITY; pixels];
     let background = color_to_rgba8(scene.background);
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&background);
     }
 
@@ -238,7 +238,7 @@ pub fn render_into_with_config(
     }
     let (opaque, transparent) = prepare_draw_order(scene, camera)?;
     let clear = color_to_rgba8(scene.background);
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&clear);
     }
     depth.fill(f32::INFINITY);
@@ -338,7 +338,7 @@ fn draw_object(
     depth: &mut [f32],
 ) {
     let (near, far) = camera.projection.clip_planes();
-    for triangle in object.mesh.indices.chunks_exact(3) {
+    for triangle in object.mesh.indices.as_chunks::<3>().0 {
         let source = [
             object.mesh.vertices[triangle[0] as usize],
             object.mesh.vertices[triangle[1] as usize],
@@ -892,7 +892,9 @@ mod tests {
         let image = render(&scene, camera, 64, 64).unwrap();
         assert!(image
             .pixels()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|p| p[0] > 200 && p[1] < 20));
     }
 

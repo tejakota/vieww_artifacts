@@ -136,7 +136,8 @@ pub fn lathe(profile: &[[f32; 2]], segments: usize, angle: f32, height: f32) -> 
         for (k, p) in profile.iter().enumerate() {
             m.positions.push([p[0] * c, p[1] + height * t, p[0] * s]);
             #[allow(clippy::cast_precision_loss)]
-            m.uvs.push([t, k as f32 / (profile.len().max(2) - 1) as f32]);
+            m.uvs
+                .push([t, k as f32 / (profile.len().max(2) - 1) as f32]);
         }
     }
     let n = profile.len();
@@ -144,7 +145,12 @@ pub fn lathe(profile: &[[f32; 2]], segments: usize, angle: f32, height: f32) -> 
         let r2 = if full { (r + 1) % segs } else { r + 1 };
         for k in 0..n.saturating_sub(1) {
             #[allow(clippy::cast_possible_truncation)]
-            let (a, b, c, d) = ((r * n + k) as u32, (r * n + k + 1) as u32, (r2 * n + k) as u32, (r2 * n + k + 1) as u32);
+            let (a, b, c, d) = (
+                (r * n + k) as u32,
+                (r * n + k + 1) as u32,
+                (r2 * n + k) as u32,
+                (r2 * n + k + 1) as u32,
+            );
             m.indices.extend_from_slice(&[a, c, b, b, c, d]);
         }
     }
@@ -162,14 +168,19 @@ fn solidify(mesh: &Mesh, thickness: f32) -> Mesh {
     let mut out = src.clone();
     for (i, p) in src.positions.iter().enumerate() {
         let nn = src.normals[i];
-        out.positions.push([p[0] - nn[0] * thickness, p[1] - nn[1] * thickness, p[2] - nn[2] * thickness]);
+        out.positions.push([
+            p[0] - nn[0] * thickness,
+            p[1] - nn[1] * thickness,
+            p[2] - nn[2] * thickness,
+        ]);
         out.normals.push([-nn[0], -nn[1], -nn[2]]);
         if src.has_uvs() {
             out.uvs.push(src.uvs[i]);
         }
     }
     for t in src.indices.as_chunks::<3>().0 {
-        out.indices.extend_from_slice(&[t[0] + n, t[2] + n, t[1] + n]);
+        out.indices
+            .extend_from_slice(&[t[0] + n, t[2] + n, t[1] + n]);
     }
     // Rims: directed edges whose reverse is absent are the boundary.
     let mut edges = std::collections::HashSet::new();
@@ -178,10 +189,15 @@ fn solidify(mesh: &Mesh, thickness: f32) -> Mesh {
             edges.insert((t[k], t[(k + 1) % 3]));
         }
     }
-    let mut boundary: Vec<(u32, u32)> = edges.iter().copied().filter(|(a, b)| !edges.contains(&(*b, *a))).collect();
+    let mut boundary: Vec<(u32, u32)> = edges
+        .iter()
+        .copied()
+        .filter(|(a, b)| !edges.contains(&(*b, *a)))
+        .collect();
     boundary.sort_unstable();
     for (a, b) in boundary {
-        out.indices.extend_from_slice(&[a, a + n, b, b, a + n, b + n]);
+        out.indices
+            .extend_from_slice(&[a, a + n, b, b, a + n, b + n]);
     }
     out.compute_normals();
     out
@@ -205,8 +221,18 @@ fn wireframe(mesh: &Mesh, thickness: f32) -> Mesh {
             continue;
         }
         let d = [d[0] / l, d[1] / l, d[2] / l];
-        let up = if d[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
-        let cross = |u: [f32; 3], v: [f32; 3]| [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        let up = if d[1].abs() < 0.9 {
+            [0.0, 1.0, 0.0]
+        } else {
+            [1.0, 0.0, 0.0]
+        };
+        let cross = |u: [f32; 3], v: [f32; 3]| {
+            [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0],
+            ]
+        };
         let norm = |v: [f32; 3]| {
             let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-12);
             [v[0] / l, v[1] / l, v[2] / l]
@@ -225,7 +251,12 @@ fn wireframe(mesh: &Mesh, thickness: f32) -> Mesh {
             }
         }
         for k in 0..4u32 {
-            let (a0, a1, b0, b1) = (base + k, base + (k + 1) % 4, base + 4 + k, base + 4 + (k + 1) % 4);
+            let (a0, a1, b0, b1) = (
+                base + k,
+                base + (k + 1) % 4,
+                base + 4 + k,
+                base + 4 + (k + 1) % 4,
+            );
             out.indices.extend_from_slice(&[a0, a1, b0, a1, b1, b0]);
         }
     }
@@ -581,19 +612,33 @@ impl Modifier {
             } => map_positions(mesh, |p| {
                 let r = (p[0] * p[0] + p[2] * p[2]).sqrt();
                 let k = std::f32::consts::TAU / wavelength.max(1e-6);
-                let fall = if falloff > 0.0 { (-r / falloff).exp() } else { 1.0 };
-                [p[0], p[1] + amplitude * fall * (k * r - speed * time * k).sin(), p[2]]
+                let fall = if falloff > 0.0 {
+                    (-r / falloff).exp()
+                } else {
+                    1.0
+                };
+                [
+                    p[0],
+                    p[1] + amplitude * fall * (k * r - speed * time * k).sin(),
+                    p[2],
+                ]
             }),
             Self::Cast { factor } => {
                 let n = mesh.positions.len().max(1);
-                let c = mesh.positions.iter().fold([0.0f32; 3], |a, p| [a[0] + p[0], a[1] + p[1], a[2] + p[2]]);
+                let c = mesh
+                    .positions
+                    .iter()
+                    .fold([0.0f32; 3], |a, p| [a[0] + p[0], a[1] + p[1], a[2] + p[2]]);
                 #[allow(clippy::cast_precision_loss)]
                 let c = c.map(|v| v / n as f32);
                 #[allow(clippy::cast_precision_loss)]
                 let radius = mesh
                     .positions
                     .iter()
-                    .map(|p| ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2)).sqrt())
+                    .map(|p| {
+                        ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2))
+                            .sqrt()
+                    })
                     .sum::<f32>()
                     / n as f32;
                 map_positions(mesh, |p| {
@@ -962,8 +1007,14 @@ mod tests {
             .0
             .iter()
             .map(|t| {
-                let (a, b, c) = (m.positions[t[0] as usize], m.positions[t[1] as usize], m.positions[t[2] as usize]);
-                (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6.0
+                let (a, b, c) = (
+                    m.positions[t[0] as usize],
+                    m.positions[t[1] as usize],
+                    m.positions[t[2] as usize],
+                );
+                (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+                    + a[2] * (b[0] * c[1] - b[1] * c[0]))
+                    / 6.0
             })
             .sum()
     }
@@ -971,10 +1022,20 @@ mod tests {
     #[test]
     fn a_lathed_cylinder_has_the_cylinder_volume() {
         // Closed profile: axis → rim → rim → axis.
-        let m = lathe(&[[0.0, 0.0], [1.0, 0.0], [1.0, 2.0], [0.0, 2.0]], 96, std::f32::consts::TAU, 0.0);
+        let m = lathe(
+            &[[0.0, 0.0], [1.0, 0.0], [1.0, 2.0], [0.0, 2.0]],
+            96,
+            std::f32::consts::TAU,
+            0.0,
+        );
         let v = signed_volume(&m).abs();
         assert!((v - std::f32::consts::PI * 2.0).abs() < 0.02, "{v}");
-        let screw = lathe(&[[1.0, 0.0], [1.2, 0.0]], 32, std::f32::consts::TAU * 2.0, 3.0);
+        let screw = lathe(
+            &[[1.0, 0.0], [1.2, 0.0]],
+            32,
+            std::f32::consts::TAU * 2.0,
+            3.0,
+        );
         let (_, hi) = screw.bounds().expect("b");
         assert!((hi[1] - 3.0).abs() < 1e-4);
     }
@@ -983,7 +1044,12 @@ mod tests {
     fn solidify_turns_a_plane_into_a_closed_slab() {
         // A unit quad in xz, facing +y.
         let quad = Mesh {
-            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+            positions: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+            ],
             normals: vec![],
             uvs: vec![],
             indices: vec![0, 2, 1, 0, 3, 2],
@@ -1000,9 +1066,24 @@ mod tests {
         // 12 cube edges + 6 face diagonals = 18 struts × 8 triangles.
         assert_eq!(wire.triangles(), 18 * 8);
         let sph = Modifier::Cast { factor: 1.0 }.apply(&cube);
-        let r: Vec<f32> = sph.positions.iter().map(|p| (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt()).collect();
+        let r: Vec<f32> = sph
+            .positions
+            .iter()
+            .map(|p| (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt())
+            .collect();
         assert!(r.iter().all(|v| (v - r[0]).abs() < 1e-4));
-        let wave = Modifier::Wave { amplitude: 0.5, wavelength: 1.0, speed: 1.0, time: 0.25, falloff: 0.0 }.apply(&cube);
-        assert!(wave.positions.iter().zip(&cube.positions).any(|(a, b)| (a[1] - b[1]).abs() > 0.1));
+        let wave = Modifier::Wave {
+            amplitude: 0.5,
+            wavelength: 1.0,
+            speed: 1.0,
+            time: 0.25,
+            falloff: 0.0,
+        }
+        .apply(&cube);
+        assert!(wave
+            .positions
+            .iter()
+            .zip(&cube.positions)
+            .any(|(a, b)| (a[1] - b[1]).abs() > 0.1));
     }
 }

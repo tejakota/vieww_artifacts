@@ -64,8 +64,12 @@ pub fn seeds(hull: &Hull, count: usize, impact: Option<V3>, seed: u64) -> Vec<V3
             Some(c) => {
                 // Gaussian-ish cloud around the impact, radius ~ size/3.
                 let r = size * 0.35 * rng.next_f32().powf(0.7);
-                let d = V3::new(rng.next_f32() * 2.0 - 1.0, rng.next_f32() * 2.0 - 1.0, rng.next_f32() * 2.0 - 1.0)
-                    .normalize();
+                let d = V3::new(
+                    rng.next_f32() * 2.0 - 1.0,
+                    rng.next_f32() * 2.0 - 1.0,
+                    rng.next_f32() * 2.0 - 1.0,
+                )
+                .normalize();
                 c + d * r
             }
             None => V3::new(
@@ -90,7 +94,12 @@ pub fn voronoi_cells(hull: &Hull, seeds: &[V3]) -> Vec<Hull> {
         let mut cell = Some(hull.clone());
         // Nearest neighbours first: they cut the most, so later clips are
         // cheaper.
-        let mut others: Vec<&V3> = seeds.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, p)| p).collect();
+        let mut others: Vec<&V3> = seeds
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .map(|(_, p)| p)
+            .collect();
         others.sort_by(|a, b| (**a - *s).length_sq().total_cmp(&(**b - *s).length_sq()));
         for o in others {
             let Some(c) = cell else { break };
@@ -113,7 +122,14 @@ pub fn voronoi_cells(hull: &Hull, seeds: &[V3]) -> Vec<Hull> {
 ///
 /// The impact `point` and `impulse` are in world space; `pieces` is the
 /// seed count.
-pub fn shatter(world: &mut World3, id: usize, point: V3, impulse: V3, pieces: usize, seed: u64) -> Vec<usize> {
+pub fn shatter(
+    world: &mut World3,
+    id: usize,
+    point: V3,
+    impulse: V3,
+    pieces: usize,
+    seed: u64,
+) -> Vec<usize> {
     let parent = world.bodies[id].clone();
     let Shape3::Convex { hull } = &parent.shape else {
         return vec![id];
@@ -127,11 +143,21 @@ pub fn shatter(world: &mut World3, id: usize, point: V3, impulse: V3, pieces: us
     let cell_seeds = seeds(hull, pieces.max(2), Some(local_impact), seed);
     let cells = voronoi_cells(hull, &cell_seeds);
     let mut ids = Vec::new();
-    let size = hull.verts.iter().map(|v| v.length()).fold(0.0, f32::max).max(1e-3);
+    let size = hull
+        .verts
+        .iter()
+        .map(|v| v.length())
+        .fold(0.0, f32::max)
+        .max(1e-3);
     for (k, cell) in cells.into_iter().enumerate() {
         let mp = cell.mass_props();
         let centred = cell.translated(-mp.centroid);
-        let mut body = Body3::dynamic(Shape3::Convex { hull: Arc::new(centred) }, density);
+        let mut body = Body3::dynamic(
+            Shape3::Convex {
+                hull: Arc::new(centred),
+            },
+            density,
+        );
         body.pose.p = parent.pose.apply(mp.centroid);
         body.pose.q = parent.pose.q;
         body.lin_vel = parent.velocity_at(body.pose.p);
@@ -229,7 +255,8 @@ mod tests {
         let mut w = World3::new();
         w.gravity = V3::ZERO;
         let id = w.add(
-            Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 800.0).with_velocity(V3::new(1.0, 0.0, 0.0)),
+            Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 800.0)
+                .with_velocity(V3::new(1.0, 0.0, 0.0)),
         );
         let m0 = w.bodies[id].mass();
         let p0 = w.bodies[id].lin_vel * m0;
@@ -237,7 +264,9 @@ mod tests {
         assert!(ids.len() >= 8);
         let m: f32 = ids.iter().map(|i| w.bodies[*i].mass()).sum();
         assert!((m - m0).abs() / m0 < 1e-3, "{m} vs {m0}");
-        let p: V3 = ids.iter().fold(V3::ZERO, |acc, i| acc + w.bodies[*i].lin_vel * w.bodies[*i].mass());
+        let p: V3 = ids.iter().fold(V3::ZERO, |acc, i| {
+            acc + w.bodies[*i].lin_vel * w.bodies[*i].mass()
+        });
         assert!((p - p0).length() / p0.length() < 1e-3);
     }
 
@@ -245,9 +274,20 @@ mod tests {
     fn a_blow_sends_pieces_flying_and_they_settle_on_the_floor() {
         let mut w = World3::new();
         w.add(Body3::fixed(Shape3::plane(V3::Y)));
-        let id = w.add(Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 800.0).at(V3::new(0.0, 0.5, 0.0)));
-        let ids = shatter(&mut w, id, V3::new(-0.5, 0.6, 0.0), V3::new(800.0, 200.0, 0.0), 12, 5);
-        let fastest = ids.iter().map(|i| w.bodies[*i].lin_vel.length()).fold(0.0, f32::max);
+        let id =
+            w.add(Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 800.0).at(V3::new(0.0, 0.5, 0.0)));
+        let ids = shatter(
+            &mut w,
+            id,
+            V3::new(-0.5, 0.6, 0.0),
+            V3::new(800.0, 200.0, 0.0),
+            12,
+            5,
+        );
+        let fastest = ids
+            .iter()
+            .map(|i| w.bodies[*i].lin_vel.length())
+            .fold(0.0, f32::max);
         assert!(fastest > 0.5, "{fastest}");
         for _ in 0..720 {
             w.step(1.0 / 120.0);

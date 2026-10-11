@@ -52,7 +52,15 @@ fn base() -> Finish {
 /// The finish for scene `id` at `sec` into it (`seconds` long), with the
 /// entrance dissolve's eased weight `cut` (`None` once whole) and whether
 /// this scene opens a movement. `w`, `h` are the raster size.
-pub(crate) fn finish_for(id: &str, sec: f32, seconds: f32, cut: Option<f32>, opens_movement: bool, w: f32, h: f32) -> Finish {
+pub(crate) fn finish_for(
+    id: &str,
+    sec: f32,
+    seconds: f32,
+    cut: Option<f32>,
+    opens_movement: bool,
+    w: f32,
+    h: f32,
+) -> Finish {
     let mut f = base();
     // Movement boundaries: light swells through the dissolve and settles.
     if let (Some(e), true) = (cut, opens_movement) {

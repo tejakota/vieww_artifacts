@@ -33,9 +33,15 @@ pub struct Edge {
 
 fn parse_edge(tok: &str) -> Option<Edge> {
     let (base, offset) = if let Some(i) = tok.find("+=") {
-        (&tok[..i], tok[i + 2..].trim_end_matches("px").parse::<f32>().ok()?)
+        (
+            &tok[..i],
+            tok[i + 2..].trim_end_matches("px").parse::<f32>().ok()?,
+        )
     } else if let Some(i) = tok.find("-=") {
-        (&tok[..i], -tok[i + 2..].trim_end_matches("px").parse::<f32>().ok()?)
+        (
+            &tok[..i],
+            -tok[i + 2..].trim_end_matches("px").parse::<f32>().ok()?,
+        )
     } else {
         (tok, 0.0)
     };
@@ -45,8 +51,18 @@ fn parse_edge(tok: &str) -> Option<Edge> {
         "bottom" => 1.0,
         "" => 0.0,
         b if b.ends_with('%') => b.trim_end_matches('%').parse::<f32>().ok()? / 100.0,
-        b if b.ends_with("px") => return Some(Edge { fraction: 0.0, offset: offset + b.trim_end_matches("px").parse::<f32>().ok()? }),
-        b => return Some(Edge { fraction: 0.0, offset: offset + b.parse::<f32>().ok()? }),
+        b if b.ends_with("px") => {
+            return Some(Edge {
+                fraction: 0.0,
+                offset: offset + b.trim_end_matches("px").parse::<f32>().ok()?,
+            })
+        }
+        b => {
+            return Some(Edge {
+                fraction: 0.0,
+                offset: offset + b.parse::<f32>().ok()?,
+            })
+        }
     };
     Some(Edge { fraction, offset })
 }
@@ -166,7 +182,9 @@ impl ScrollScene {
             pin_spacing: true,
             toggle: [Action::Play, Action::None, Action::None, Action::None],
             snap: None,
-            pin_screen_y: sp.viewport.fraction * vh + sp.viewport.offset - sp.element.fraction * height - sp.element.offset,
+            pin_screen_y: sp.viewport.fraction * vh + sp.viewport.offset
+                - sp.element.fraction * height
+                - sp.element.offset,
             played: 0.0,
             last_offset: None,
         })
@@ -288,16 +306,26 @@ impl ScrollScene {
         let q = match snap {
             Snap::Step(s) if *s > 0.0 => (p / s).round() * s,
             Snap::Step(_) => p,
-            Snap::Points(pts) => *pts.iter().min_by(|a, b| (**a - p).abs().total_cmp(&(**b - p).abs()))?,
+            Snap::Points(pts) => *pts
+                .iter()
+                .min_by(|a, b| (**a - p).abs().total_cmp(&(**b - p).abs()))?,
         };
-        Some((self.start + q.clamp(0.0, 1.0) * (self.end - self.start), *duration))
+        Some((
+            self.start + q.clamp(0.0, 1.0) * (self.end - self.start),
+            *duration,
+        ))
     }
 
     /// GSAP's debug markers: (scroller-start, scroller-end, start, end) as
     /// screen y's at `offset`.
     #[must_use]
     pub fn markers(&self, offset: f32, start_vp: f32, end_vp: f32) -> [f32; 4] {
-        [start_vp, end_vp, self.start - offset + start_vp, self.end - offset + end_vp]
+        [
+            start_vp,
+            end_vp,
+            self.start - offset + start_vp,
+            self.end - offset + end_vp,
+        ]
     }
 }
 
@@ -308,11 +336,17 @@ mod tests {
     #[test]
     fn positions_resolve_like_gsap() {
         // Element at y=1000, 400 tall, viewport 800.
-        let top_center = Position::parse("top center").expect("p").resolve(1000.0, 400.0, 800.0);
+        let top_center = Position::parse("top center")
+            .expect("p")
+            .resolve(1000.0, 400.0, 800.0);
         assert!((top_center - 600.0).abs() < 1e-4);
-        let bottom_top = Position::parse("bottom top+=100").expect("p").resolve(1000.0, 400.0, 800.0);
+        let bottom_top = Position::parse("bottom top+=100")
+            .expect("p")
+            .resolve(1000.0, 400.0, 800.0);
         assert!((bottom_top - 1300.0).abs() < 1e-4);
-        let pct = Position::parse("top 80%").expect("p").resolve(1000.0, 400.0, 800.0);
+        let pct = Position::parse("top 80%")
+            .expect("p")
+            .resolve(1000.0, 400.0, 800.0);
         assert!((pct - 360.0).abs() < 1e-4);
         assert!(Position::parse("top").is_err());
     }
@@ -327,12 +361,17 @@ mod tests {
         assert!((s.progress(800.0) - 0.5).abs() < 1e-4);
         assert_eq!(s.update(1200.0), vec![(Crossing::Leave, Action::Pause)]);
         assert_eq!(s.update(900.0), vec![(Crossing::EnterBack, Action::Resume)]);
-        assert_eq!(s.update(100.0), vec![(Crossing::LeaveBack, Action::Reverse)]);
+        assert_eq!(
+            s.update(100.0),
+            vec![(Crossing::LeaveBack, Action::Reverse)]
+        );
     }
 
     #[test]
     fn smoothed_scrub_lags_then_catches_up() {
-        let mut s = ScrollScene::new(0.0, 100.0, 100.0, "top top", "bottom top").expect("s").scrub(Some(0.5));
+        let mut s = ScrollScene::new(0.0, 100.0, 100.0, "top top", "bottom top")
+            .expect("s")
+            .scrub(Some(0.5));
         let first = s.tick(100.0, 1.0 / 60.0);
         assert!(first > 0.0 && first < 0.2, "{first}");
         let mut p = first;
@@ -346,7 +385,9 @@ mod tests {
 
     #[test]
     fn pinning_holds_the_element_and_spaces_the_page() {
-        let s = ScrollScene::new(500.0, 200.0, 800.0, "top top", "+=600 top").expect("s").pinned(true);
+        let s = ScrollScene::new(500.0, 200.0, 800.0, "top top", "+=600 top")
+            .expect("s")
+            .pinned(true);
         assert!((s.start - 500.0).abs() < 1e-4);
         // While active the element moves down exactly as the page scrolls.
         assert!((s.pin_offset(700.0) - 200.0).abs() < 1e-4);

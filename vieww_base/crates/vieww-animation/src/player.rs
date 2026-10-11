@@ -76,9 +76,16 @@ pub struct Animation {
 /// Something that happened during an advance.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerEvent {
-    Call { target: String, method: String, args: Vec<f32> },
+    Call {
+        target: String,
+        method: String,
+        args: Vec<f32>,
+    },
     /// Start `clip` at `offset` seconds into it.
-    Audio { clip: String, offset: f32 },
+    Audio {
+        clip: String,
+        offset: f32,
+    },
     Started(String),
     Finished(String),
     Looped(String),
@@ -281,7 +288,11 @@ impl AnimationPlayer {
             }
         }
         self.current = Some(name.to_owned());
-        self.position = if self.speed < 0.0 { self.library[name].length } else { 0.0 };
+        self.position = if self.speed < 0.0 {
+            self.library[name].length
+        } else {
+            0.0
+        };
         self.playing = true;
         ev.push(PlayerEvent::Started(name.to_owned()));
         // Keys at exactly 0 fire on start.
@@ -349,7 +360,9 @@ impl AnimationPlayer {
         if !self.playing {
             return ev;
         }
-        let Some(name) = self.current.clone() else { return ev };
+        let Some(name) = self.current.clone() else {
+            return ev;
+        };
         let a = self.library[&name].clone();
         let mut from = self.position;
         let mut remaining = dt * self.speed;
@@ -370,7 +383,15 @@ impl AnimationPlayer {
                 remaining -= edge - from;
                 from = if remaining > 0.0 { 0.0 } else { a.length };
                 // Keys sitting exactly on the restart edge fire again.
-                a.events(if remaining > 0.0 { -1e-6 } else { a.length + 1e-6 }, from, &mut ev);
+                a.events(
+                    if remaining > 0.0 {
+                        -1e-6
+                    } else {
+                        a.length + 1e-6
+                    },
+                    from,
+                    &mut ev,
+                );
             } else {
                 self.position = edge;
                 self.playing = false;
@@ -433,7 +454,10 @@ mod tests {
             })
             .track(Track::Method {
                 target: "feet".into(),
-                keys: vec![(0.5, "step".into(), vec![1.0]), (1.5, "step".into(), vec![2.0])],
+                keys: vec![
+                    (0.5, "step".into(), vec![1.0]),
+                    (1.5, "step".into(), vec![2.0]),
+                ],
             })
             .track(Track::Audio {
                 keys: vec![(1.0, "thud".into(), 0.0)],
@@ -451,8 +475,18 @@ mod tests {
     #[test]
     fn bezier_tracks_pass_through_their_keys_and_follow_handles() {
         let keys = vec![
-            BezierKey { time: 0.0, value: 0.0, in_handle: (0.0, 0.0), out_handle: (0.5, 2.0) },
-            BezierKey { time: 1.0, value: 1.0, in_handle: (-0.5, 0.0), out_handle: (0.0, 0.0) },
+            BezierKey {
+                time: 0.0,
+                value: 0.0,
+                in_handle: (0.0, 0.0),
+                out_handle: (0.5, 2.0),
+            },
+            BezierKey {
+                time: 1.0,
+                value: 1.0,
+                in_handle: (-0.5, 0.0),
+                out_handle: (0.0, 0.0),
+            },
         ];
         assert!((sample_bezier(&keys, 0.0).unwrap()).abs() < 1e-5);
         assert!((sample_bezier(&keys, 1.0).unwrap() - 1.0).abs() < 1e-5);
@@ -489,24 +523,41 @@ mod tests {
         p.add("walk", walk());
         p.play("walk", 0.0);
         let ev = p.seek(1.4, true);
-        let off = ev.iter().find_map(|e| if let PlayerEvent::Audio { offset, .. } = e { Some(*offset) } else { None });
+        let off = ev.iter().find_map(|e| {
+            if let PlayerEvent::Audio { offset, .. } = e {
+                Some(*offset)
+            } else {
+                None
+            }
+        });
         assert!((off.expect("audio") - 0.4).abs() < 1e-5);
-        assert!(ev.iter().any(|e| matches!(e, PlayerEvent::Call { args, .. } if args == &vec![1.0])));
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, PlayerEvent::Call { args, .. } if args == &vec![1.0])));
     }
 
     #[test]
     fn looping_wraps_and_queued_animations_follow() {
         let mut p = AnimationPlayer::new();
-        p.add("spin", Animation::new(1.0).looping().track(Track::Method {
-            target: "t".into(),
-            keys: vec![(0.25, "tick".into(), vec![])],
-        }));
+        p.add(
+            "spin",
+            Animation::new(1.0).looping().track(Track::Method {
+                target: "t".into(),
+                keys: vec![(0.25, "tick".into(), vec![])],
+            }),
+        );
         p.add("once", Animation::new(0.5));
         p.add("after", Animation::new(0.5));
         p.play("spin", 0.0);
         let ev = p.advance(3.1);
-        let ticks = ev.iter().filter(|e| matches!(e, PlayerEvent::Call { .. })).count();
-        let loops = ev.iter().filter(|e| matches!(e, PlayerEvent::Looped(_))).count();
+        let ticks = ev
+            .iter()
+            .filter(|e| matches!(e, PlayerEvent::Call { .. }))
+            .count();
+        let loops = ev
+            .iter()
+            .filter(|e| matches!(e, PlayerEvent::Looped(_)))
+            .count();
         assert_eq!(ticks, 3);
         assert_eq!(loops, 3);
         p.play("once", 0.0);
@@ -524,17 +575,42 @@ mod tests {
         p.play("walk", 0.0);
         assert!((p.position() - 2.0).abs() < 1e-6);
         let ev = p.advance(0.6);
-        assert!(ev.iter().any(|e| matches!(e, PlayerEvent::Call { args, .. } if args == &vec![2.0])));
+        assert!(ev
+            .iter()
+            .any(|e| matches!(e, PlayerEvent::Call { args, .. } if args == &vec![2.0])));
     }
 
     #[test]
     fn cross_fades_blend_values_and_nested_animations_run() {
         let mut p = AnimationPlayer::new();
-        p.add("a", Animation::new(1.0).track(Track::Value { path: "v".into(), keys: vec![(0.0, 0.0)], mode: UpdateMode::Continuous }));
-        p.add("b", Animation::new(1.0)
-            .track(Track::Value { path: "v".into(), keys: vec![(0.0, 10.0)], mode: UpdateMode::Continuous })
-            .track(Track::Animation { keys: vec![(0.1, "c".into())] }));
-        p.add("c", Animation::new(0.5).track(Track::Value { path: "w".into(), keys: vec![(0.0, 1.0), (0.5, 2.0)], mode: UpdateMode::Continuous }));
+        p.add(
+            "a",
+            Animation::new(1.0).track(Track::Value {
+                path: "v".into(),
+                keys: vec![(0.0, 0.0)],
+                mode: UpdateMode::Continuous,
+            }),
+        );
+        p.add(
+            "b",
+            Animation::new(1.0)
+                .track(Track::Value {
+                    path: "v".into(),
+                    keys: vec![(0.0, 10.0)],
+                    mode: UpdateMode::Continuous,
+                })
+                .track(Track::Animation {
+                    keys: vec![(0.1, "c".into())],
+                }),
+        );
+        p.add(
+            "c",
+            Animation::new(0.5).track(Track::Value {
+                path: "w".into(),
+                keys: vec![(0.0, 1.0), (0.5, 2.0)],
+                mode: UpdateMode::Continuous,
+            }),
+        );
         p.play("a", 0.0);
         p.advance(0.1);
         p.play("b", 0.5);

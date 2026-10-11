@@ -65,7 +65,11 @@ impl PencilBrush {
     }
 
     pub fn move_to(&mut self, p: Offset) {
-        if self.points.last().is_none_or(|l| dist(*l, p) >= self.decimate) {
+        if self
+            .points
+            .last()
+            .is_none_or(|l| dist(*l, p) >= self.decimate)
+        {
             self.points.push(p);
         }
     }
@@ -99,7 +103,9 @@ pub fn moving_average(pts: &[Offset], window: usize) -> Vec<Offset> {
         let lo = i.saturating_sub(half);
         let hi = (i + half).min(pts.len() - 1);
         let n = (hi - lo + 1) as f32;
-        let (sx, sy) = pts[lo..=hi].iter().fold((0.0, 0.0), |a, p| (a.0 + p.dx, a.1 + p.dy));
+        let (sx, sy) = pts[lo..=hi]
+            .iter()
+            .fold((0.0, 0.0), |a, p| (a.0 + p.dx, a.1 + p.dy));
         out.push(Offset::new(sx / n, sy / n));
     }
     out
@@ -130,8 +136,14 @@ pub fn smooth_path(pts: &[Offset]) -> Path {
         let ctrl = pts[i];
         let to = mid(pts[i], pts[i + 1]);
         // Quadratic (from, ctrl, to) as a cubic.
-        let c1 = Offset::new(from.dx + (ctrl.dx - from.dx) * 2.0 / 3.0, from.dy + (ctrl.dy - from.dy) * 2.0 / 3.0);
-        let c2 = Offset::new(to.dx + (ctrl.dx - to.dx) * 2.0 / 3.0, to.dy + (ctrl.dy - to.dy) * 2.0 / 3.0);
+        let c1 = Offset::new(
+            from.dx + (ctrl.dx - from.dx) * 2.0 / 3.0,
+            from.dy + (ctrl.dy - from.dy) * 2.0 / 3.0,
+        );
+        let c2 = Offset::new(
+            to.dx + (ctrl.dx - to.dx) * 2.0 / 3.0,
+            to.dy + (ctrl.dy - to.dy) * 2.0 / 3.0,
+        );
         path.cubic_to(c1, c2, to);
         from = to;
     }
@@ -185,7 +197,10 @@ impl InkBrush {
                 dist(self.samples[i].at, self.samples[i - 1].at) / dt
             };
             let thin = (speed / self.thinning_speed).clamp(0.0, 1.0);
-            let target = self.min_width + (self.max_width - self.min_width) * (1.0 - thin) * self.samples[i].pressure.clamp(0.0, 1.0);
+            let target = self.min_width
+                + (self.max_width - self.min_width)
+                    * (1.0 - thin)
+                    * self.samples[i].pressure.clamp(0.0, 1.0);
             smoothed = smoothed * 0.6 + target * 0.4;
             w.push(smoothed.max(self.min_width));
         }
@@ -215,13 +230,19 @@ impl InkBrush {
         let left: Vec<Offset> = (0..pts.len())
             .map(|i| {
                 let n = normal(i);
-                Offset::new(pts[i].dx + n.dx * widths[i] * 0.5, pts[i].dy + n.dy * widths[i] * 0.5)
+                Offset::new(
+                    pts[i].dx + n.dx * widths[i] * 0.5,
+                    pts[i].dy + n.dy * widths[i] * 0.5,
+                )
             })
             .collect();
         let right: Vec<Offset> = (0..pts.len())
             .map(|i| {
                 let n = normal(i);
-                Offset::new(pts[i].dx - n.dx * widths[i] * 0.5, pts[i].dy - n.dy * widths[i] * 0.5)
+                Offset::new(
+                    pts[i].dx - n.dx * widths[i] * 0.5,
+                    pts[i].dy - n.dy * widths[i] * 0.5,
+                )
             })
             .collect();
         path.move_to(left[0]);
@@ -235,7 +256,13 @@ impl InkBrush {
             path.line_to(*p);
         }
         let n0 = normal(0);
-        cap(&mut path, pts[0], widths[0] * 0.5, Offset::new(-n0.dx, -n0.dy), 8);
+        cap(
+            &mut path,
+            pts[0],
+            widths[0] * 0.5,
+            Offset::new(-n0.dx, -n0.dy),
+            8,
+        );
         path.close();
         path
     }
@@ -285,7 +312,8 @@ impl SprayBrush {
             let a = self.next() * std::f32::consts::TAU;
             let r = self.radius * self.next().sqrt();
             let size = self.dot.0 + (self.dot.1 - self.dot.0) * self.next();
-            self.dots.push((Offset::new(at.dx + r * a.cos(), at.dy + r * a.sin()), size));
+            self.dots
+                .push((Offset::new(at.dx + r * a.cos(), at.dy + r * a.sin()), size));
         }
     }
 
@@ -310,7 +338,12 @@ impl SprayBrush {
 pub fn circle_stamps(samples: &[Sample], radius: f32) -> Path {
     let mut p = Path::new();
     for s in samples {
-        p.extend(&Path::arc(s.at, radius * s.pressure.clamp(0.1, 1.0), 0.0, std::f32::consts::TAU));
+        p.extend(&Path::arc(
+            s.at,
+            radius * s.pressure.clamp(0.1, 1.0),
+            0.0,
+            std::f32::consts::TAU,
+        ));
     }
     p
 }
@@ -338,7 +371,12 @@ mod tests {
 
     #[test]
     fn moving_average_pins_endpoints() {
-        let pts = vec![Offset::new(0.0, 0.0), Offset::new(1.0, 5.0), Offset::new(2.0, 0.0), Offset::new(3.0, 5.0)];
+        let pts = vec![
+            Offset::new(0.0, 0.0),
+            Offset::new(1.0, 5.0),
+            Offset::new(2.0, 0.0),
+            Offset::new(3.0, 5.0),
+        ];
         let s = moving_average(&pts, 3);
         assert_eq!(s[0], pts[0]);
         assert_eq!(s[3], pts[3]);
@@ -348,12 +386,24 @@ mod tests {
     #[test]
     fn ink_is_thinner_when_fast_and_its_outline_encloses_the_path() {
         let mut ink = InkBrush::new(1.0, 10.0);
-        ink.down(Sample { at: Offset::new(0.0, 0.0), pressure: 1.0, time: 0.0 });
+        ink.down(Sample {
+            at: Offset::new(0.0, 0.0),
+            pressure: 1.0,
+            time: 0.0,
+        });
         for i in 1..20 {
-            ink.move_to(Sample { at: Offset::new(i as f32 * 2.0, 0.0), pressure: 1.0, time: i as f32 * 0.1 });
+            ink.move_to(Sample {
+                at: Offset::new(i as f32 * 2.0, 0.0),
+                pressure: 1.0,
+                time: i as f32 * 0.1,
+            });
         }
         for i in 20..40 {
-            ink.move_to(Sample { at: Offset::new(i as f32 * 20.0, 0.0), pressure: 1.0, time: 2.0 + (i - 19) as f32 * 0.005 });
+            ink.move_to(Sample {
+                at: Offset::new(i as f32 * 20.0, 0.0),
+                pressure: 1.0,
+                time: 2.0 + (i - 19) as f32 * 0.005,
+            });
         }
         let w = ink.widths();
         assert!(w[15] > w[38] * 2.0, "{} {}", w[15], w[38]);
@@ -370,7 +420,10 @@ mod tests {
         b.spray(Offset::new(50.0, 50.0));
         assert_eq!(a.dots(), b.dots());
         assert_eq!(a.dots().len(), 20);
-        assert!(a.dots().iter().all(|(c, _)| dist(*c, Offset::new(50.0, 50.0)) <= 10.0 + 1e-4));
+        assert!(a
+            .dots()
+            .iter()
+            .all(|(c, _)| dist(*c, Offset::new(50.0, 50.0)) <= 10.0 + 1e-4));
         assert!(!a.up().is_empty());
     }
 }

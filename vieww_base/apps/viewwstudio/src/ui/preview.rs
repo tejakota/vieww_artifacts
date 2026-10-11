@@ -2096,8 +2096,7 @@ impl Widget for RemoteScreen {
             move |handle: &Option<std::rc::Rc<std::cell::RefCell<dyn ElementState>>>| {
                 // On enter the cursor's position is whatever this pane last
                 // saw — the framework gives hover no coordinates of its own.
-                let at =
-                    with_remote_state(handle.as_ref(), |s| s.cursor).flatten();
+                let at = with_remote_state(handle.as_ref(), |s| s.cursor).flatten();
                 with_remote_state(handle.as_ref(), |s| {
                     s.queue.push(crate::remote::RemoteEvent::Hover(at));
                     s.pending = true;
@@ -2106,10 +2105,16 @@ impl Widget for RemoteScreen {
         let size = self.env.metrics.size;
         let gesture = GestureDetector::new()
             .on_tap_down(move |d| {
-                push(&h1, crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Down(d.local)))
+                push(
+                    &h1,
+                    crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Down(d.local)),
+                )
             })
             .on_tap(move |d| {
-                push(&h2, crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Up(d.local)))
+                push(
+                    &h2,
+                    crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Up(d.local)),
+                )
             })
             .on_drag_update(move |d| {
                 push(
@@ -2118,7 +2123,10 @@ impl Widget for RemoteScreen {
                 )
             })
             .on_drag_end(move |d| {
-                push(&h4, crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Up(d.local)))
+                push(
+                    &h4,
+                    crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Up(d.local)),
+                )
             })
             .on_scroll(move |s| {
                 push(

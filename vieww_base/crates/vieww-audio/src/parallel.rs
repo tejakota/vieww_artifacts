@@ -358,7 +358,7 @@ mod tests {
 
     impl Render for Sine {
         fn render(&mut self, out: &mut [f32]) {
-            for f in out.chunks_exact_mut(2) {
+            for f in out.as_chunks_mut::<2>().0 {
                 let v = self.phase.sin() * 0.1;
                 self.phase += self.step;
                 f[0] = v;

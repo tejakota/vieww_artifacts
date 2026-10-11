@@ -23,7 +23,11 @@ impl<F: Fn([f32; 3]) -> [f32; 3]> ColorOp for F {
 /// Run `op` on every pixel (alpha untouched, premultiplication ignored).
 pub fn apply(px: &mut [u8], op: &dyn ColorOp) {
     for p in px.as_chunks_mut::<4>().0 {
-        let c = op.apply([f32::from(p[0]) / 255.0, f32::from(p[1]) / 255.0, f32::from(p[2]) / 255.0]);
+        let c = op.apply([
+            f32::from(p[0]) / 255.0,
+            f32::from(p[1]) / 255.0,
+            f32::from(p[2]) / 255.0,
+        ]);
         for k in 0..3 {
             p[k] = to_u8(c[k]);
         }
@@ -64,7 +68,8 @@ impl Default for Levels {
 impl ColorOp for Levels {
     fn apply(&self, rgb: [f32; 3]) -> [f32; 3] {
         rgb.map(|v| {
-            let t = ((v - self.in_black) / (self.in_white - self.in_black).max(1e-6)).clamp(0.0, 1.0);
+            let t =
+                ((v - self.in_black) / (self.in_white - self.in_black).max(1e-6)).clamp(0.0, 1.0);
             let t = t.powf(1.0 / self.gamma.max(1e-3));
             self.out_black + (self.out_white - self.out_black) * t
         })
@@ -109,12 +114,18 @@ impl Curve {
         let n = pts.len();
         let xs: Vec<f32> = pts.iter().map(|p| p.0).collect();
         let ys: Vec<f32> = pts.iter().map(|p| p.1).collect();
-        let d: Vec<f32> = (0..n - 1).map(|i| (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i])).collect();
+        let d: Vec<f32> = (0..n - 1)
+            .map(|i| (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]))
+            .collect();
         let mut ms = vec![0.0; n];
         ms[0] = d[0];
         ms[n - 1] = d[n - 2];
         for i in 1..n - 1 {
-            ms[i] = if d[i - 1] * d[i] <= 0.0 { 0.0 } else { (d[i - 1] + d[i]) * 0.5 };
+            ms[i] = if d[i - 1] * d[i] <= 0.0 {
+                0.0
+            } else {
+                (d[i - 1] + d[i]) * 0.5
+            };
         }
         for i in 0..n - 1 {
             if d[i].abs() < 1e-9 {
@@ -144,7 +155,11 @@ impl Curve {
         if x >= self.xs[n - 1] {
             return self.ys[n - 1];
         }
-        let i = self.xs.partition_point(|v| *v <= x).saturating_sub(1).min(n - 2);
+        let i = self
+            .xs
+            .partition_point(|v| *v <= x)
+            .saturating_sub(1)
+            .min(n - 2);
         let h = self.xs[i + 1] - self.xs[i];
         let t = (x - self.xs[i]) / h;
         let (t2, t3) = (t * t, t * t * t);
@@ -157,7 +172,12 @@ impl Curve {
     /// The classic S: deepen shadows, lift highlights by `amount` (0..0.3).
     #[must_use]
     pub fn s_curve(amount: f32) -> Self {
-        Self::new(&[(0.0, 0.0), (0.25, 0.25 - amount), (0.75, 0.75 + amount), (1.0, 1.0)])
+        Self::new(&[
+            (0.0, 0.0),
+            (0.25, 0.25 - amount),
+            (0.75, 0.75 + amount),
+            (1.0, 1.0),
+        ])
     }
 }
 
@@ -192,7 +212,11 @@ pub fn rgb_to_hsl(c: [f32; 3]) -> [f32; 3] {
         return [0.0, 0.0, l];
     }
     let d = max - min;
-    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
     let h = if (max - c[0]).abs() < 1e-7 {
         (c[1] - c[2]) / d + if c[1] < c[2] { 6.0 } else { 0.0 }
     } else if (max - c[1]).abs() < 1e-7 {
@@ -210,7 +234,11 @@ pub fn hsl_to_rgb(c: [f32; 3]) -> [f32; 3] {
     if s <= 1e-7 {
         return [l, l, l];
     }
-    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let p = 2.0 * l - q;
     let f = |mut t: f32| {
         t = t.rem_euclid(1.0);
@@ -243,7 +271,13 @@ impl ColorOp for HueSaturation {
         hsl[1] = (hsl[1] * (1.0 + self.saturation)).clamp(0.0, 1.0);
         let out = hsl_to_rgb(hsl);
         let l = self.lightness;
-        out.map(|v| if l >= 0.0 { v + (1.0 - v) * l } else { v * (1.0 + l) })
+        out.map(|v| {
+            if l >= 0.0 {
+                v + (1.0 - v) * l
+            } else {
+                v * (1.0 + l)
+            }
+        })
     }
 }
 
@@ -355,7 +389,11 @@ impl Lut3 {
 
     /// Trilinear lookup.
     #[must_use]
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     pub fn sample(&self, c: [f32; 3]) -> [f32; 3] {
         let n = self.size;
         let s = (n - 1) as f32;
@@ -366,7 +404,12 @@ impl Lut3 {
         let (dg, db) = (n, n * n);
         let d = &self.data;
         let (c000, c100, c010, c110) = (d[base], d[base + 1], d[base + dg], d[base + dg + 1]);
-        let (c001, c101, c011, c111) = (d[base + db], d[base + db + 1], d[base + db + dg], d[base + db + dg + 1]);
+        let (c001, c101, c011, c111) = (
+            d[base + db],
+            d[base + db + 1],
+            d[base + db + dg],
+            d[base + db + dg + 1],
+        );
         let mut out = [0.0; 3];
         for k in 0..3 {
             let c00 = c000[k] + (c100[k] - c000[k]) * t[0];
@@ -386,14 +429,20 @@ impl Lut3 {
         let k = strength.clamp(0.0, 1.0);
         let run = |band: &mut [u8]| {
             for p in band.as_chunks_mut::<4>().0 {
-                let c = [f32::from(p[0]) / 255.0, f32::from(p[1]) / 255.0, f32::from(p[2]) / 255.0];
+                let c = [
+                    f32::from(p[0]) / 255.0,
+                    f32::from(p[1]) / 255.0,
+                    f32::from(p[2]) / 255.0,
+                ];
                 let o = self.sample(c);
                 for j in 0..3 {
                     p[j] = to_u8(c[j] + (o[j] - c[j]) * k);
                 }
             }
         };
-        let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(16);
+        let threads = std::thread::available_parallelism()
+            .map_or(1, std::num::NonZero::get)
+            .min(16);
         let n = px.len() / 4;
         if threads <= 1 || n < 65_536 {
             run(px);
@@ -446,7 +495,10 @@ impl Lut3 {
                     }
                 }
                 _ => {
-                    let v: Vec<f32> = line.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                    let v: Vec<f32> = line
+                        .split_whitespace()
+                        .filter_map(|x| x.parse().ok())
+                        .collect();
                     if v.len() != 3 {
                         return Err(format!("cube line {}: expected three numbers", n + 1));
                     }
@@ -576,7 +628,12 @@ mod tests {
 
     #[test]
     fn hsl_round_trips() {
-        for c in [[0.1, 0.2, 0.3], [0.9, 0.5, 0.1], [0.4, 0.4, 0.4], [0.0, 1.0, 0.5]] {
+        for c in [
+            [0.1, 0.2, 0.3],
+            [0.9, 0.5, 0.1],
+            [0.4, 0.4, 0.4],
+            [0.0, 1.0, 0.5],
+        ] {
             assert!(close(hsl_to_rgb(rgb_to_hsl(c)), c, 1e-5), "{c:?}");
         }
     }
@@ -612,7 +669,11 @@ mod tests {
         let text = lut.to_cube();
         let back = Lut3::from_cube(&text).expect("cube");
         assert_eq!(back.size, 33);
-        assert!(close(back.sample([0.4, 0.6, 0.2]), lut.sample([0.4, 0.6, 0.2]), 1e-5));
+        assert!(close(
+            back.sample([0.4, 0.6, 0.2]),
+            lut.sample([0.4, 0.6, 0.2]),
+            1e-5
+        ));
         assert!(Lut3::from_cube("LUT_3D_SIZE 2\n0 0 0\n").is_err());
     }
 

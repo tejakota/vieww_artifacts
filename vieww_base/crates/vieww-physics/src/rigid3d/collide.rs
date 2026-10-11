@@ -10,14 +10,23 @@ use super::math::{Q, V3};
 /// A collision shape in body-local coordinates.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shape3 {
-    Sphere { radius: f32 },
+    Sphere {
+        radius: f32,
+    },
     /// A segment along local y from −`half_height` to +`half_height`, swept
     /// by `radius`.
-    Capsule { half_height: f32, radius: f32 },
+    Capsule {
+        half_height: f32,
+        radius: f32,
+    },
     /// Any convex polyhedron (boxes are one).
-    Convex { hull: Arc<Hull> },
+    Convex {
+        hull: Arc<Hull>,
+    },
     /// The half-space `normal · x ≤ 0` in local space. Static bodies only.
-    Plane { normal: V3 },
+    Plane {
+        normal: V3,
+    },
 }
 
 impl Shape3 {
@@ -115,7 +124,10 @@ fn world_hull(h: &Hull, x: &Iso) -> Hull {
 }
 
 fn segment(half: f32, x: &Iso) -> (V3, V3) {
-    (x.apply(V3::new(0.0, -half, 0.0)), x.apply(V3::new(0.0, half, 0.0)))
+    (
+        x.apply(V3::new(0.0, -half, 0.0)),
+        x.apply(V3::new(0.0, half, 0.0)),
+    )
 }
 
 /// Closest points between segments `p1q1` and `p2q2` (Ericson 5.1.9):
@@ -244,7 +256,10 @@ fn reduce(simplex: &[Sv]) -> Option<(V3, Weighted)> {
         }
         3 => {
             let (p, bc) = closest_triangle(simplex[0].w, simplex[1].w, simplex[2].w);
-            let keep = (0..3).filter(|i| bc[*i] > 0.0).map(|i| (simplex[i], bc[i])).collect();
+            let keep = (0..3)
+                .filter(|i| bc[*i] > 0.0)
+                .map(|i| (simplex[i], bc[i]))
+                .collect();
             Some((p, keep))
         }
         _ => {
@@ -297,7 +312,11 @@ pub fn gjk_distance(
         let b = support_b(-d);
         Sv { w: a - b, a, b }
     };
-    let mut d = if initial.length_sq() > 1e-12 { -initial } else { V3::X };
+    let mut d = if initial.length_sq() > 1e-12 {
+        -initial
+    } else {
+        V3::X
+    };
     let mut simplex = vec![sv(d)];
     let mut last = f32::INFINITY;
     for _ in 0..64 {
@@ -485,28 +504,29 @@ fn hull_hull(a: &Hull, b: &Hull) -> Vec<Contact> {
     let cb = b.verts.iter().fold(V3::ZERO, |s, v| s + *v) / b.verts.len() as f32;
     // (overlap, axis A→B, kind) kind: 0 face of A, 1 face of B, 2 edge.
     let mut best: (f32, V3, u8, usize, usize) = (f32::INFINITY, V3::Y, 0, 0, 0);
-    let test = |axis: V3, kind: u8, i: usize, j: usize, best: &mut (f32, V3, u8, usize, usize)| -> bool {
-        let l = axis.length();
-        if l < 1e-6 {
-            return true;
-        }
-        let mut n = axis / l;
-        if n.dot(cb - ca) < 0.0 {
-            n = -n;
-        }
-        let (alo, ahi) = project(a, n);
-        let (blo, bhi) = project(b, n);
-        let overlap = ahi.min(bhi) - alo.max(blo);
-        if overlap <= 0.0 {
-            return false;
-        }
-        // Prefer faces over edges by a small margin (stability).
-        let bias = if kind == 2 { 0.98 } else { 1.0 };
-        if overlap < best.0 * bias {
-            *best = (overlap, n, kind, i, j);
-        }
-        true
-    };
+    let test =
+        |axis: V3, kind: u8, i: usize, j: usize, best: &mut (f32, V3, u8, usize, usize)| -> bool {
+            let l = axis.length();
+            if l < 1e-6 {
+                return true;
+            }
+            let mut n = axis / l;
+            if n.dot(cb - ca) < 0.0 {
+                n = -n;
+            }
+            let (alo, ahi) = project(a, n);
+            let (blo, bhi) = project(b, n);
+            let overlap = ahi.min(bhi) - alo.max(blo);
+            if overlap <= 0.0 {
+                return false;
+            }
+            // Prefer faces over edges by a small margin (stability).
+            let bias = if kind == 2 { 0.98 } else { 1.0 };
+            if overlap < best.0 * bias {
+                *best = (overlap, n, kind, i, j);
+            }
+            true
+        };
     for (i, f) in a.faces.iter().enumerate() {
         if !test(f.normal, 0, i, 0, &mut best) {
             return vec![];
@@ -533,7 +553,8 @@ fn hull_hull(a: &Hull, b: &Hull) -> Vec<Contact> {
     let (depth, n, kind, i, j) = best;
     if kind == 2 {
         let (ea, eb) = (a.edges[i], b.edges[j]);
-        let (_, _, c1, c2) = closest_segments(a.verts[ea.0], a.verts[ea.1], b.verts[eb.0], b.verts[eb.1]);
+        let (_, _, c1, c2) =
+            closest_segments(a.verts[ea.0], a.verts[ea.1], b.verts[eb.0], b.verts[eb.1]);
         return vec![Contact {
             point: (c1 + c2) * 0.5,
             normal: n,
@@ -541,7 +562,11 @@ fn hull_hull(a: &Hull, b: &Hull) -> Vec<Contact> {
         }];
     }
     // Reference face on one hull, incident face on the other.
-    let (rh, ih, flip) = if kind == 0 { (a, b, false) } else { (b, a, true) };
+    let (rh, ih, flip) = if kind == 0 {
+        (a, b, false)
+    } else {
+        (b, a, true)
+    };
     let rn = if flip { -n } else { n };
     let rf = rh
         .faces
@@ -588,7 +613,9 @@ fn reduce_manifold(mut pts: Vec<Contact>) -> Vec<Contact> {
     pts.sort_by(|a, b| b.depth.total_cmp(&a.depth));
     let mut keep = vec![pts[0]];
     let far = |keep: &[Contact], c: &Contact| {
-        keep.iter().map(|k| (k.point - c.point).length_sq()).fold(f32::INFINITY, f32::min)
+        keep.iter()
+            .map(|k| (k.point - c.point).length_sq())
+            .fold(f32::INFINITY, f32::min)
     };
     while keep.len() < 4 {
         let next = pts
@@ -653,19 +680,40 @@ pub fn collide(a: &Shape3, xa: &Iso, b: &Shape3, xb: &Iso) -> Vec<Contact> {
     };
     match (a, b) {
         (Sphere { radius: ra }, Sphere { radius: rb }) => sphere_sphere(xa.p, *ra, xb.p, *rb),
-        (Sphere { radius }, Capsule { half_height, radius: rc }) => {
+        (
+            Sphere { radius },
+            Capsule {
+                half_height,
+                radius: rc,
+            },
+        ) => {
             let (p, q) = segment(*half_height, xb);
             sphere_sphere(xa.p, *radius, closest_on_segment(xa.p, p, q), *rc)
         }
         (Capsule { .. }, Sphere { .. }) => flip(collide(b, xb, a, xa)),
-        (Capsule { half_height: h1, radius: r1 }, Capsule { half_height: h2, radius: r2 }) => {
+        (
+            Capsule {
+                half_height: h1,
+                radius: r1,
+            },
+            Capsule {
+                half_height: h2,
+                radius: r2,
+            },
+        ) => {
             let (a1, b1) = segment(*h1, xa);
             let (a2, b2) = segment(*h2, xb);
             capsule_capsule(a1, b1, *r1, a2, b2, *r2)
         }
         (Sphere { radius }, Convex { hull }) => sphere_hull(xa.p, *radius, &world_hull(hull, xb)),
         (Convex { .. }, Sphere { .. }) => flip(collide(b, xb, a, xa)),
-        (Capsule { half_height, radius }, Convex { hull }) => {
+        (
+            Capsule {
+                half_height,
+                radius,
+            },
+            Convex { hull },
+        ) => {
             let (p, q) = segment(*half_height, xa);
             capsule_hull(p, q, *radius, &world_hull(hull, xb))
         }
@@ -819,7 +867,12 @@ mod tests {
         let qa = Q::from_axis_angle(V3::Z, std::f32::consts::FRAC_PI_4);
         let qb = Q::from_axis_angle(V3::X, std::f32::consts::FRAC_PI_4);
         let h = 0.5 * 2f32.sqrt();
-        let c = collide(&s, &Iso::new(V3::ZERO, qa), &s, &Iso::new(V3::new(0.0, 2.0 * h - 0.05, 0.0), qb));
+        let c = collide(
+            &s,
+            &Iso::new(V3::ZERO, qa),
+            &s,
+            &Iso::new(V3::new(0.0, 2.0 * h - 0.05, 0.0), qb),
+        );
         assert_eq!(c.len(), 1);
         assert!(c[0].normal.y > 0.99);
         assert!((c[0].depth - 0.05).abs() < 2e-3, "{:?}", c[0]);
@@ -834,7 +887,10 @@ mod tests {
         assert_eq!(c.len(), 1);
         assert!((c[0].normal - V3::Y).length() < 1e-5 && (c[0].depth - 0.1).abs() < 1e-5);
         // A capsule lying on the floor touches with both caps.
-        let lying = Iso::new(V3::new(0.0, 0.2, 0.0), Q::from_axis_angle(V3::Z, std::f32::consts::FRAC_PI_2));
+        let lying = Iso::new(
+            V3::new(0.0, 0.2, 0.0),
+            Q::from_axis_angle(V3::Z, std::f32::consts::FRAC_PI_2),
+        );
         let c = collide(&floor, &at(V3::ZERO), &cap, &lying);
         assert_eq!(c.len(), 2);
         // Sphere against capsule, side on.
@@ -845,9 +901,18 @@ mod tests {
         let bx = Shape3::cuboid(V3::splat(1.0));
         let c = collide(&ball, &at(V3::new(0.2, 1.45, 0.0)), &bx, &at(V3::ZERO));
         assert_eq!(c.len(), 1);
-        assert!(c[0].normal.y < -0.99 && (c[0].depth - 0.05).abs() < 1e-3, "{:?}", c);
+        assert!(
+            c[0].normal.y < -0.99 && (c[0].depth - 0.05).abs() < 1e-3,
+            "{:?}",
+            c
+        );
         // Capsule lying on a box: two contacts.
-        let c = collide(&cap, &Iso::new(V3::new(0.0, 1.2, 0.0), lying.q), &bx, &at(V3::ZERO));
+        let c = collide(
+            &cap,
+            &Iso::new(V3::new(0.0, 1.2, 0.0), lying.q),
+            &bx,
+            &at(V3::ZERO),
+        );
         assert_eq!(c.len(), 2, "{c:?}");
     }
 
@@ -857,15 +922,24 @@ mod tests {
         let d = -V3::Y;
         let (t, n) = ray_shape(o, d, 100.0, &Shape3::sphere(1.0), &at(V3::ZERO)).expect("sphere");
         assert!((t - 4.0).abs() < 1e-4 && n.y > 0.99);
-        let (t, _) = ray_shape(o, d, 100.0, &Shape3::cuboid(V3::splat(1.0)), &at(V3::ZERO)).expect("box");
+        let (t, _) =
+            ray_shape(o, d, 100.0, &Shape3::cuboid(V3::splat(1.0)), &at(V3::ZERO)).expect("box");
         assert!((t - 4.0).abs() < 1e-4);
-        let (t, _) = ray_shape(o, d, 100.0, &Shape3::capsule(1.0, 0.5), &at(V3::ZERO)).expect("cap");
+        let (t, _) =
+            ray_shape(o, d, 100.0, &Shape3::capsule(1.0, 0.5), &at(V3::ZERO)).expect("cap");
         assert!((t - 3.5).abs() < 1e-4, "{t}");
         let (t, _) = ray_shape(o, d, 100.0, &Shape3::plane(V3::Y), &at(V3::ZERO)).expect("plane");
         assert!((t - 5.0).abs() < 1e-4);
         assert!(ray_shape(o, V3::Y, 100.0, &Shape3::sphere(1.0), &at(V3::ZERO)).is_none());
         // Side hit on the capsule body.
-        let (t, n) = ray_shape(V3::new(5.0, 0.3, 0.0), -V3::X, 100.0, &Shape3::capsule(1.0, 0.5), &at(V3::ZERO)).expect("side");
+        let (t, n) = ray_shape(
+            V3::new(5.0, 0.3, 0.0),
+            -V3::X,
+            100.0,
+            &Shape3::capsule(1.0, 0.5),
+            &at(V3::ZERO),
+        )
+        .expect("side");
         assert!((t - 4.5).abs() < 1e-4 && n.x > 0.99);
     }
 }

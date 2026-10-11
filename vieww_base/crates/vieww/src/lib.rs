@@ -73,7 +73,6 @@
 //! ```
 
 pub use vieww_animation as animation;
-pub use vieww_spatial as spatial;
 pub use vieww_audio as audio;
 pub use vieww_effects as effects;
 pub use vieww_element as element;
@@ -85,6 +84,7 @@ pub use vieww_network as network;
 pub use vieww_paint as paint;
 pub use vieww_physics as physics;
 pub use vieww_render as render;
+pub use vieww_spatial as spatial;
 pub use vieww_text as text;
 pub use vieww_video as video;
 pub use vieww_widget as widget;

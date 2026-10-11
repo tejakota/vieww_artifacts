@@ -203,7 +203,9 @@ impl SoundFont {
                     (b"sdta", b"smpl") => {
                         raw = sbody.to_vec();
                         smpl = sbody
-                            .as_chunks::<2>().0.iter()
+                            .as_chunks::<2>()
+                            .0
+                            .iter()
                             .map(|c| i16::from_le_bytes([c[0], c[1]]))
                             .collect();
                     }
@@ -658,7 +660,13 @@ pub(crate) mod tests {
         let inst = sf.instrument(0, 0).unwrap().unwrap();
         let mut s = super::super::sampler::Sampler::new(inst, 4, 48_000.0);
         s.note_on(0, 81, 127);
-        let x: Vec<f32> = s.render(16_384).chunks_exact(2).map(|f| f[0]).collect();
+        let x: Vec<f32> = s
+            .render(16_384)
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|f| f[0])
+            .collect();
         let (m, bin) = crate::synth::testing::spectrum(&x, 48_000.0);
         assert!(crate::synth::testing::level_near(&m, bin, 880.0, 2) > 0.2);
     }

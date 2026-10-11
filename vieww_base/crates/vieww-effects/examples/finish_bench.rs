@@ -4,7 +4,7 @@ use vieww_effects::cpu::{grade, optics};
 fn main() {
     let (w, h) = (1920usize, 1080usize);
     let mut px = vec![0u8; w * h * 4];
-    for (i, p) in px.chunks_exact_mut(4).enumerate() {
+    for (i, p) in px.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (x, y) = (i % w, i / w);
         p[0] = (x * 255 / w) as u8;
         p[1] = (y * 255 / h) as u8;
@@ -27,6 +27,14 @@ fn main() {
         let e = t.elapsed();
         lut.apply_rgba(&mut out, 0.6);
         let g = t.elapsed();
-        println!("from {:?} bloom {:?} vig {:?} grain {:?} write {:?} lut {:?}", a, b - a, c - b, d - c, e - d, g - e);
+        println!(
+            "from {:?} bloom {:?} vig {:?} grain {:?} write {:?} lut {:?}",
+            a,
+            b - a,
+            c - b,
+            d - c,
+            e - d,
+            g - e
+        );
     }
 }

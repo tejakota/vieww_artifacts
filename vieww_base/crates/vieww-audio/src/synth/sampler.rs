@@ -649,7 +649,12 @@ mod tests {
     }
 
     fn mono(s: &mut Sampler, n: usize) -> Vec<f32> {
-        s.render(n).chunks_exact(2).map(|f| f[0]).collect()
+        s.render(n)
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|f| f[0])
+            .collect()
     }
 
     #[test]

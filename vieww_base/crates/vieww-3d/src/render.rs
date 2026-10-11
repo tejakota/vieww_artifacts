@@ -1018,7 +1018,9 @@ fn ambient_ibl(mat: &Material, albedo: Rgb, p: Vec3, n: Vec3, v: Vec3, ctx: &Sha
     };
     let n_dot_v = n.dot(v).max(1e-4);
     let f0 = Rgb::new(0.04, 0.04, 0.04).lerp(albedo, metallic);
-    let mut out = albedo.mul(irradiance).scale((1.0 - metallic) * ctx.exposure);
+    let mut out = albedo
+        .mul(irradiance)
+        .scale((1.0 - metallic) * ctx.exposure);
     if spec_scale > 0.0 {
         if let Some(env) = ctx.env {
             let r = (-v).reflect(n);
@@ -1415,19 +1417,31 @@ mod tests {
         scene.add(
             Node::new(
                 "ball",
-                Content::mesh(crate::geometry::sphere(1.0, 24, 12), Material::standard(Color::WHITE, 0.0, 0.5)),
+                Content::mesh(
+                    crate::geometry::sphere(1.0, 24, 12),
+                    Material::standard(Color::WHITE, 0.0, 0.5),
+                ),
             ),
             None,
         );
         let cam = Camera::perspective(Vec3::new(0.0, 0.0, 4.0), Vec3::ZERO, 0.8);
         let r = Renderer::new(48, 48);
         let (dark, _) = r.render(&mut scene, &cam);
-        let sky = EnvMap::gradient(Rgb::new(0.2, 0.4, 1.0), Rgb::new(0.8, 0.8, 0.8), Rgb::new(0.1, 0.1, 0.1));
-        scene.environment = Some(std::sync::Arc::new(Environment::new(sky).background(Background::Map)));
+        let sky = EnvMap::gradient(
+            Rgb::new(0.2, 0.4, 1.0),
+            Rgb::new(0.8, 0.8, 0.8),
+            Rgb::new(0.1, 0.1, 0.1),
+        );
+        scene.environment = Some(std::sync::Arc::new(
+            Environment::new(sky).background(Background::Map),
+        ));
         let (lit, _) = r.render(&mut scene, &cam);
         let centre_dark = pixel(&dark, 24, 24);
         let centre_lit = pixel(&lit, 24, 24);
-        assert!(centre_lit[0] > centre_dark[0] + 40, "{centre_dark:?} {centre_lit:?}");
+        assert!(
+            centre_lit[0] > centre_dark[0] + 40,
+            "{centre_dark:?} {centre_lit:?}"
+        );
         // Corner: no geometry — the sky's upper half is blue-dominant.
         let corner = pixel(&lit, 2, 2);
         assert!(corner[2] > corner[0], "{corner:?}");

@@ -484,7 +484,11 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
             pf::group_commas(stats.triangles as u64),
             pf::group_commas(stats.fragments as u64),
             crates,
-            if lift > 0.5 { "in orbit".to_string() } else { format!("{} rigid bodies · vieww-physics", crates) },
+            if lift > 0.5 {
+                "in orbit".to_string()
+            } else {
+                format!("{} rigid bodies · vieww-physics", crates)
+            },
         );
         stack = stack.push(super::frame::label(
             x,
@@ -525,7 +529,6 @@ pub(crate) fn the_mark_in_3d(ctx: &pf::Ctx) -> WidgetNode {
     stack.into()
 }
 
-
 /// The studio light the mark is lit by — built and prefiltered once.
 fn studio_environment() -> std::sync::Arc<vieww_3d::Environment> {
     use vieww_3d::{Background, EnvMap, Environment};
@@ -554,13 +557,17 @@ impl CrateRain {
         let j = (i + 1).min(self.frames.len() - 1);
         let t = (f - i as f32).clamp(0.0, 1.0);
         let (a, b) = (self.frames[i][k], self.frames[j][k]);
-        let p = [a.0[0] + (b.0[0] - a.0[0]) * t, a.0[1] + (b.0[1] - a.0[1]) * t, a.0[2] + (b.0[2] - a.0[2]) * t];
+        let p = [
+            a.0[0] + (b.0[0] - a.0[0]) * t,
+            a.0[1] + (b.0[1] - a.0[1]) * t,
+            a.0[2] + (b.0[2] - a.0[2]) * t,
+        ];
         // Short-arc nlerp is plenty at 60 Hz.
         let dot: f32 = (0..4).map(|c| a.1[c] * b.1[c]).sum();
         let s = if dot < 0.0 { -1.0 } else { 1.0 };
         let mut q = [0.0f32; 4];
-        for c in 0..4 {
-            q[c] = a.1[c] + (b.1[c] * s - a.1[c]) * t;
+        for (c, q) in q.iter_mut().enumerate() {
+            *q = a.1[c] + (b.1[c] * s - a.1[c]) * t;
         }
         let l = q.iter().map(|v| v * v).sum::<f32>().sqrt().max(1e-9);
         (p, q.map(|v| v / l))
@@ -575,7 +582,11 @@ pub(crate) fn crate_rain(n: usize) -> &'static CrateRain {
     static RAIN: std::sync::OnceLock<CrateRain> = std::sync::OnceLock::new();
     RAIN.get_or_init(|| {
         let mut w = World3::new();
-        w.add(Body3::fixed(Shape3::plane(V3::Y)).with_friction(0.7).with_restitution(0.35));
+        w.add(
+            Body3::fixed(Shape3::plane(V3::Y))
+                .with_friction(0.7)
+                .with_restitution(0.35),
+        );
         // The mark's two arms, as tilted slabs around its standing pose.
         for side in [-1.0f32, 1.0] {
             w.add(
@@ -592,18 +603,32 @@ pub(crate) fn crate_rain(n: usize) -> &'static CrateRain {
             let h = 5.6 + 0.12 * k as f32;
             let mut b = Body3::dynamic(Shape3::cuboid(V3::splat(half)), 650.0)
                 .at(V3::new(r * a.cos(), h, r * a.sin() * 0.8))
-                .rotated(Q::from_axis_angle(V3::new((k % 3) as f32 - 1.0, 1.0, 0.4), k as f32 * 0.7))
-                .with_spin(V3::new(((k * 13) % 7) as f32 - 3.0, ((k * 5) % 5) as f32 - 2.0, ((k * 11) % 9) as f32 * 0.5 - 2.0))
+                .rotated(Q::from_axis_angle(
+                    V3::new((k % 3) as f32 - 1.0, 1.0, 0.4),
+                    k as f32 * 0.7,
+                ))
+                .with_spin(V3::new(
+                    ((k * 13) % 7) as f32 - 3.0,
+                    ((k * 5) % 5) as f32 - 2.0,
+                    ((k * 11) % 9) as f32 * 0.5 - 2.0,
+                ))
                 .with_restitution(0.42)
                 .with_friction(0.55);
             b.lin_vel = V3::new(-a.sin() * 0.6, -3.5, a.cos() * 0.6);
             ids.push(w.add(b));
         }
         let mut frames = Vec::new();
-        let snap = |w: &World3| ids.iter().map(|i| {
-            let b = &w.bodies[*i];
-            ([b.pose.p.x, b.pose.p.y, b.pose.p.z], [b.pose.q.w, b.pose.q.x, b.pose.q.y, b.pose.q.z])
-        }).collect::<Vec<_>>();
+        let snap = |w: &World3| {
+            ids.iter()
+                .map(|i| {
+                    let b = &w.bodies[*i];
+                    (
+                        [b.pose.p.x, b.pose.p.y, b.pose.p.z],
+                        [b.pose.q.w, b.pose.q.x, b.pose.q.y, b.pose.q.z],
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
         // Blocks are held above the frame until their turn (0.9 s in), so
         // the rain begins as the mark finishes rising.
         let hold = 30;

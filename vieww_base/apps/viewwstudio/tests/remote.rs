@@ -389,7 +389,12 @@ fn the_studio_renders_into_a_child_process_when_isolation_is_on() {
         )
         .expect("the child is still drawing");
     assert!(
-        frame.rgba.chunks_exact(4).any(|p| p != [0, 0, 0, 255]),
+        frame
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|p| *p != [0, 0, 0, 255]),
         "the scratch screen drew something"
     );
 }
@@ -523,8 +528,6 @@ pub fn screen() -> impl Widget { Screen }
 /// which is itself under test in the next test, so here it is only a means of
 /// reading the guest, and a crash would fail the frame calls anyway.
 fn ledger_of(remote: &mut RemotePreview) -> String {
-    #[cfg(feature = "remote-debug")]
-    eprintln!("ledger: {:?}", remote.capture_state());
     remote
         .capture_state()
         .expect("the child answers a capture")
@@ -695,7 +698,9 @@ fn the_guest_state_crosses_a_re_render_through_the_child() {
     // The capture: the child walks its own tree.
     let snapshot = remote.capture_state().expect("the capture answers");
     assert!(
-        snapshot.iter().any(|(_, state)| state.contains("ok") && state.starts_with("2|")),
+        snapshot
+            .iter()
+            .any(|(_, state)| state.contains("ok") && state.starts_with("2|")),
         "the snapshot holds the guest's own numbers: {snapshot:?}"
     );
 

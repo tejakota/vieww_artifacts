@@ -24,7 +24,9 @@
 //! ```
 
 use vieww_animation::noise::Perlin;
-use vieww_foundation::{Brush, Color, FillRule, Offset, Path, Rect, Sketch, Sketchbook, StrokeStyle, Transform};
+use vieww_foundation::{
+    Brush, Color, FillRule, Offset, Path, Rect, Sketch, Sketchbook, StrokeStyle, Transform,
+};
 
 /// How `rect`/`ellipse` read their arguments (`rectMode`, `ellipseMode`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -250,7 +252,12 @@ impl P5 {
                     let b = self.style.matrix.apply(Offset::new(1.0, 0.0));
                     ((b.dx - a.dx).powi(2) + (b.dy - a.dy).powi(2)).sqrt()
                 };
-                self.book.stroke_styled(p, Brush::Solid(s), self.style.weight * k, StrokeStyle::rounded());
+                self.book.stroke_styled(
+                    p,
+                    Brush::Solid(s),
+                    self.style.weight * k,
+                    StrokeStyle::rounded(),
+                );
             }
         }
     }
@@ -278,7 +285,9 @@ impl P5 {
         let r = Self::resolve(self.style.ellipse_mode, x, y, w, h);
         let c = Offset::new(r.left + r.width() * 0.5, r.top + r.height() * 0.5);
         let unit = Path::arc(Offset::ZERO, 1.0, 0.0, std::f32::consts::TAU);
-        let p = unit.transformed(Transform::scale(r.width() * 0.5, r.height() * 0.5).then(Transform::translate(c)));
+        let p = unit.transformed(
+            Transform::scale(r.width() * 0.5, r.height() * 0.5).then(Transform::translate(c)),
+        );
         self.draw_path(&p, true);
     }
 
@@ -355,7 +364,11 @@ impl P5 {
     }
     pub fn bezier_vertex(&mut self, c1: (f32, f32), c2: (f32, f32), to: (f32, f32)) {
         if let Some((_, v, _)) = &mut self.shape {
-            v.push(Vert::Bezier(Offset::new(c1.0, c1.1), Offset::new(c2.0, c2.1), Offset::new(to.0, to.1)));
+            v.push(Vert::Bezier(
+                Offset::new(c1.0, c1.1),
+                Offset::new(c2.0, c2.1),
+                Offset::new(to.0, to.1),
+            ));
         }
     }
     /// Catmull–Rom vertex (`curveVertex`): the first and last are guides.
@@ -381,7 +394,16 @@ impl P5 {
 
     fn verts_to_path(verts: &[Vert], close: bool) -> Path {
         let mut p = Path::new();
-        let curves: Vec<Offset> = verts.iter().filter_map(|v| if let Vert::Curve(o) = v { Some(*o) } else { None }).collect();
+        let curves: Vec<Offset> = verts
+            .iter()
+            .filter_map(|v| {
+                if let Vert::Curve(o) = v {
+                    Some(*o)
+                } else {
+                    None
+                }
+            })
+            .collect();
         if curves.len() == verts.len() && curves.len() >= 4 {
             // Catmull–Rom through points 1..n-2.
             p.move_to(curves[1]);
@@ -421,7 +443,9 @@ impl P5 {
 
     /// `endShape(close)`.
     pub fn end_shape(&mut self, close: bool) {
-        let Some((kind, verts, holes)) = self.shape.take() else { return };
+        let Some((kind, verts, holes)) = self.shape.take() else {
+            return;
+        };
         let pts: Vec<Offset> = verts
             .iter()
             .map(|v| match v {
@@ -442,12 +466,12 @@ impl P5 {
                 }
             }
             ShapeKind::Lines => {
-                for pair in pts.chunks_exact(2) {
+                for pair in pts.as_chunks::<2>().0 {
                     self.line(pair[0].dx, pair[0].dy, pair[1].dx, pair[1].dy);
                 }
             }
             ShapeKind::Triangles => {
-                for t in pts.chunks_exact(3) {
+                for t in pts.as_chunks::<3>().0 {
                     self.polygon(&[(t[0].dx, t[0].dy), (t[1].dx, t[1].dy), (t[2].dx, t[2].dy)]);
                 }
             }
@@ -464,8 +488,13 @@ impl P5 {
                 }
             }
             ShapeKind::Quads => {
-                for q in pts.chunks_exact(4) {
-                    self.polygon(&[(q[0].dx, q[0].dy), (q[1].dx, q[1].dy), (q[2].dx, q[2].dy), (q[3].dx, q[3].dy)]);
+                for q in pts.as_chunks::<4>().0 {
+                    self.polygon(&[
+                        (q[0].dx, q[0].dy),
+                        (q[1].dx, q[1].dy),
+                        (q[2].dx, q[2].dy),
+                        (q[3].dx, q[3].dy),
+                    ]);
                 }
             }
         }
@@ -479,7 +508,13 @@ pub trait SketchProgram {
 }
 
 /// Run `program` for `frames` frames, returning each frame's display list.
-pub fn run(program: &mut dyn SketchProgram, width: f32, height: f32, frames: usize, seed: u64) -> Vec<Sketchbook> {
+pub fn run(
+    program: &mut dyn SketchProgram,
+    width: f32,
+    height: f32,
+    frames: usize,
+    seed: u64,
+) -> Vec<Sketchbook> {
     let mut p = P5::new(width, height, seed);
     program.setup(&mut p);
     let mut setup_book = p.end_frame();
@@ -539,15 +574,31 @@ mod tests {
         p.rotate(std::f32::consts::FRAC_PI_2);
         p.scale(2.0, 2.0);
         let q = p.matrix().apply(Offset::new(10.0, 0.0));
-        assert!((q.dx - 50.0).abs() < 1e-4 && (q.dy - 70.0).abs() < 1e-4, "{q:?}");
-        assert!(hit_polygon(&p, &[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)], Offset::new(40.0, 60.0)));
+        assert!(
+            (q.dx - 50.0).abs() < 1e-4 && (q.dy - 70.0).abs() < 1e-4,
+            "{q:?}"
+        );
+        assert!(hit_polygon(
+            &p,
+            &[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)],
+            Offset::new(40.0, 60.0)
+        ));
     }
 
     #[test]
     fn modes_resolve_like_processing() {
-        assert_eq!(P5::resolve(Mode::Center, 10.0, 10.0, 4.0, 6.0), ltwh(8.0, 7.0, 4.0, 6.0));
-        assert_eq!(P5::resolve(Mode::Corners, 10.0, 10.0, 4.0, 6.0), ltwh(4.0, 6.0, 6.0, 4.0));
-        assert_eq!(P5::resolve(Mode::Radius, 10.0, 10.0, 4.0, 6.0), ltwh(6.0, 4.0, 8.0, 12.0));
+        assert_eq!(
+            P5::resolve(Mode::Center, 10.0, 10.0, 4.0, 6.0),
+            ltwh(8.0, 7.0, 4.0, 6.0)
+        );
+        assert_eq!(
+            P5::resolve(Mode::Corners, 10.0, 10.0, 4.0, 6.0),
+            ltwh(4.0, 6.0, 6.0, 4.0)
+        );
+        assert_eq!(
+            P5::resolve(Mode::Radius, 10.0, 10.0, 4.0, 6.0),
+            ltwh(6.0, 4.0, 8.0, 12.0)
+        );
     }
 
     #[test]
@@ -562,7 +613,14 @@ mod tests {
         assert_eq!(p.frame().len(), 1);
         p.fill(Color::WHITE);
         p.begin_shape(ShapeKind::Triangles);
-        for (x, y) in [(0.0, 0.0), (10.0, 0.0), (5.0, 9.0), (20.0, 0.0), (30.0, 0.0), (25.0, 9.0)] {
+        for (x, y) in [
+            (0.0, 0.0),
+            (10.0, 0.0),
+            (5.0, 9.0),
+            (20.0, 0.0),
+            (30.0, 0.0),
+            (25.0, 9.0),
+        ] {
             p.vertex(x, y);
         }
         p.end_shape(true);
@@ -599,6 +657,9 @@ mod tests {
         let frames = run(&mut Orbit, 100.0, 100.0, 5, 1);
         assert_eq!(frames.len(), 5);
         assert!(frames[0].len() > frames[1].len());
-        assert_ne!(format!("{:?}", frames[1].items()), format!("{:?}", frames[2].items()));
+        assert_ne!(
+            format!("{:?}", frames[1].items()),
+            format!("{:?}", frames[2].items())
+        );
     }
 }

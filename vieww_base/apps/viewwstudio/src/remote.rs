@@ -253,7 +253,7 @@ const fn named_key_index(key: NamedKey) -> Option<u8> {
         N::Alt => Some(17),
         N::Meta => Some(18),
         N::CapsLock => Some(19),
-        _ => return None,
+        _ => None,
     }
 }
 
@@ -465,13 +465,11 @@ fn read_event(r: &mut Reader<'_>, at: Duration) -> io::Result<RemoteEvent> {
         EVENT_POINTER_DOWN => RemoteEvent::Pointer(Pointer::Down(offset_of(r)?)),
         EVENT_POINTER_MOVE => RemoteEvent::Pointer(Pointer::Move(offset_of(r)?)),
         EVENT_POINTER_UP => RemoteEvent::Pointer(Pointer::Up(offset_of(r)?)),
-        EVENT_HOVER => {
-            RemoteEvent::Hover(if r.u8()? != 0 {
-                Some(offset_of(r)?)
-            } else {
-                None
-            })
-        }
+        EVENT_HOVER => RemoteEvent::Hover(if r.u8()? != 0 {
+            Some(offset_of(r)?)
+        } else {
+            None
+        }),
         EVENT_KEY => RemoteEvent::Key(read_key_event(r, at)?),
         EVENT_IME => RemoteEvent::Ime(read_ime_event(r)?),
         _ => RemoteEvent::Scroll(ScrollEvent {
@@ -1147,10 +1145,7 @@ pub fn serve(input: &mut impl Read, output: &mut impl Write) -> io::Result<()> {
                             next_pointer += 1;
                             active = Some(id);
                             last = *p;
-                            (
-                                Some(*p),
-                                Some(PointerEvent::down(id, *p, request.at)),
-                            )
+                            (Some(*p), Some(PointerEvent::down(id, *p, request.at)))
                         }
                         RemoteEvent::Pointer(Pointer::Move(p)) => {
                             let Some(id) = active else { continue };
@@ -1163,10 +1158,7 @@ pub fn serve(input: &mut impl Read, output: &mut impl Write) -> io::Result<()> {
                         }
                         RemoteEvent::Pointer(Pointer::Up(p)) => {
                             let Some(id) = active.take() else { continue };
-                            (
-                                Some(*p),
-                                Some(PointerEvent::up(id, *p, request.at)),
-                            )
+                            (Some(*p), Some(PointerEvent::up(id, *p, request.at)))
                         }
                         _ => (None, None),
                     };
@@ -1370,10 +1362,7 @@ mod tests {
         ];
         let bytes = write_frame_request(&env, 1.0, at, Color::BLACK, &batch);
         let back = read_frame_request(&bytes).unwrap();
-        assert_eq!(
-            back.events, batch,
-            "a multi-key batch round-trips in order"
-        );
+        assert_eq!(back.events, batch, "a multi-key batch round-trips in order");
     }
 
     #[test]

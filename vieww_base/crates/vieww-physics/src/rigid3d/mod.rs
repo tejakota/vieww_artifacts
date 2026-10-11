@@ -200,12 +200,16 @@ impl Body3 {
         let inertia = r
             .mul(&self.inv_inertia.inverse().unwrap_or(M3::ZERO))
             .mul(&r.transpose());
-        0.5 * self.mass() * self.lin_vel.length_sq() + 0.5 * self.ang_vel.dot(inertia.mul_v(self.ang_vel))
+        0.5 * self.mass() * self.lin_vel.length_sq()
+            + 0.5 * self.ang_vel.dot(inertia.mul_v(self.ang_vel))
     }
 
     fn aabb(&self) -> (V3, V3) {
         match &self.shape {
-            Shape3::Sphere { radius } => (self.pose.p - V3::splat(*radius), self.pose.p + V3::splat(*radius)),
+            Shape3::Sphere { radius } => (
+                self.pose.p - V3::splat(*radius),
+                self.pose.p + V3::splat(*radius),
+            ),
             Shape3::Capsule {
                 half_height,
                 radius,
@@ -579,7 +583,8 @@ impl World3 {
                     .iter()
                     .find(|k| (k.local_a - local_a).length() < 0.05)
                     .copied();
-                let (jn, jt) = warm.map_or((0.0, [0.0, 0.0]), |w| (w.normal_impulse, w.tangent_impulse));
+                let (jn, jt) =
+                    warm.map_or((0.0, [0.0, 0.0]), |w| (w.normal_impulse, w.tangent_impulse));
                 points.push(Point {
                     ra,
                     rb,
@@ -605,8 +610,12 @@ impl World3 {
                 self.events.push(ContactEvent::Began(p.0, p.1));
             }
             let (a, b) = *p;
-            let moving = |x: &Body3| !x.sleeping && x.kind != BodyKind::Static
-                && (x.lin_vel.length() > self.sleep_linear * 2.0 || x.ang_vel.length() > self.sleep_angular * 2.0);
+            let moving = |x: &Body3| {
+                !x.sleeping
+                    && x.kind != BodyKind::Static
+                    && (x.lin_vel.length() > self.sleep_linear * 2.0
+                        || x.ang_vel.length() > self.sleep_angular * 2.0)
+            };
             if moving(&self.bodies[a]) && self.bodies[b].sleeping {
                 self.bodies[b].sleeping = false;
                 self.bodies[b].sleep_time = 0.0;
@@ -700,7 +709,8 @@ impl World3 {
                     let mut hit: Option<(f32, V3)> = None;
                     for &s in &statics {
                         let sb = &self.bodies[s];
-                        if let Some((t, n)) = ray_shape(b.pose.p, dir, len + r, &sb.shape, &sb.pose) {
+                        if let Some((t, n)) = ray_shape(b.pose.p, dir, len + r, &sb.shape, &sb.pose)
+                        {
                             if hit.is_none_or(|h| t < h.0) {
                                 hit = Some((t, n));
                             }
@@ -774,8 +784,16 @@ impl World3 {
         let (ba, bb) = (&self.bodies[a], &self.bodies[b]);
         let ma = if ba.is_dynamic() { ba.inv_mass } else { 0.0 };
         let mb = if bb.is_dynamic() { bb.inv_mass } else { 0.0 };
-        let ia = if ba.is_dynamic() { ba.inv_inertia_world() } else { M3::ZERO };
-        let ib = if bb.is_dynamic() { bb.inv_inertia_world() } else { M3::ZERO };
+        let ia = if ba.is_dynamic() {
+            ba.inv_inertia_world()
+        } else {
+            M3::ZERO
+        };
+        let ib = if bb.is_dynamic() {
+            bb.inv_inertia_world()
+        } else {
+            M3::ZERO
+        };
         let sa = M3::skew(ra);
         let sb = M3::skew(rb);
         M3::diagonal(V3::splat(ma + mb))
@@ -799,8 +817,16 @@ impl World3 {
 
     fn angular_mass(&self, a: usize, b: usize, axis: V3) -> f32 {
         let (ba, bb) = (&self.bodies[a], &self.bodies[b]);
-        let ia = if ba.is_dynamic() { ba.inv_inertia_world() } else { M3::ZERO };
-        let ib = if bb.is_dynamic() { bb.inv_inertia_world() } else { M3::ZERO };
+        let ia = if ba.is_dynamic() {
+            ba.inv_inertia_world()
+        } else {
+            M3::ZERO
+        };
+        let ib = if bb.is_dynamic() {
+            bb.inv_inertia_world()
+        } else {
+            M3::ZERO
+        };
         let k = axis.dot(ia.mul_v(axis)) + axis.dot(ib.mul_v(axis));
         if k > 1e-12 {
             1.0 / k
@@ -924,11 +950,22 @@ impl World3 {
                 let n = d / len;
                 let rel = (self.bodies[b].velocity_at(pb) - self.bodies[a].velocity_at(pa)).dot(n);
                 let (ba, bb) = (&self.bodies[a], &self.bodies[b]);
-                let ia = if ba.is_dynamic() { ba.inv_inertia_world() } else { M3::ZERO };
-                let ib = if bb.is_dynamic() { bb.inv_inertia_world() } else { M3::ZERO };
+                let ia = if ba.is_dynamic() {
+                    ba.inv_inertia_world()
+                } else {
+                    M3::ZERO
+                };
+                let ib = if bb.is_dynamic() {
+                    bb.inv_inertia_world()
+                } else {
+                    M3::ZERO
+                };
                 let ma = if ba.is_dynamic() { ba.inv_mass } else { 0.0 };
                 let mb = if bb.is_dynamic() { bb.inv_mass } else { 0.0 };
-                let k = ma + mb + ra.cross(n).dot(ia.mul_v(ra.cross(n))) + rb.cross(n).dot(ib.mul_v(rb.cross(n)));
+                let k = ma
+                    + mb
+                    + ra.cross(n).dot(ia.mul_v(ra.cross(n)))
+                    + rb.cross(n).dot(ib.mul_v(rb.cross(n)));
                 if k <= 0.0 {
                     return;
                 }
@@ -1053,7 +1090,9 @@ mod tests {
         for i in 0..5 {
             #[allow(clippy::cast_precision_loss)]
             let y = 0.5 + i as f32 * 1.0;
-            ids.push(w.add(Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 500.0).at(V3::new(0.0, y, 0.0))));
+            ids.push(w.add(
+                Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 500.0).at(V3::new(0.0, y, 0.0)),
+            ));
         }
         run(&mut w, 4.0);
         for (i, id) in ids.iter().enumerate() {
@@ -1061,7 +1100,10 @@ mod tests {
             #[allow(clippy::cast_precision_loss)]
             let expect = 0.5 + i as f32;
             assert!((p.y - expect).abs() < 0.05, "box {i}: {p:?}");
-            assert!(p.x.abs() < 0.05 && p.z.abs() < 0.05, "box {i} drifted: {p:?}");
+            assert!(
+                p.x.abs() < 0.05 && p.z.abs() < 0.05,
+                "box {i} drifted: {p:?}"
+            );
         }
     }
 
@@ -1104,7 +1146,10 @@ mod tests {
         }
         // Drop of 1.75 m to contact; e = 0.9 → rebound ≈ 0.81 × 1.75 + 0.25.
         assert!(bounced);
-        assert!(peak_after_bounce > 1.2 && peak_after_bounce < 1.9, "{peak_after_bounce}");
+        assert!(
+            peak_after_bounce > 1.2 && peak_after_bounce < 1.9,
+            "{peak_after_bounce}"
+        );
     }
 
     #[test]
@@ -1130,7 +1175,10 @@ mod tests {
         let mut w = World3::new();
         w.gravity = V3::ZERO;
         let base = w.add(Body3::fixed(Shape3::sphere(0.1)));
-        let wheel = w.add(Body3::dynamic(Shape3::cuboid(V3::new(1.0, 0.1, 0.1)), 100.0));
+        let wheel = w.add(Body3::dynamic(
+            Shape3::cuboid(V3::new(1.0, 0.1, 0.1)),
+            100.0,
+        ));
         let mut j = w.hinge_joint(base, wheel, V3::ZERO, V3::Y);
         if let Joint3::Hinge { motor, .. } = &mut j {
             *motor = Some((3.0, 50.0));
@@ -1146,7 +1194,10 @@ mod tests {
     fn a_hinge_limit_stops_a_falling_door() {
         let mut w = World3::new();
         let post = w.add(Body3::fixed(Shape3::sphere(0.05)));
-        let arm = w.add(Body3::dynamic(Shape3::cuboid(V3::new(0.5, 0.05, 0.05)), 500.0).at(V3::new(0.5, 0.0, 0.0)));
+        let arm = w.add(
+            Body3::dynamic(Shape3::cuboid(V3::new(0.5, 0.05, 0.05)), 500.0)
+                .at(V3::new(0.5, 0.0, 0.0)),
+        );
         let mut j = w.hinge_joint(post, arm, V3::ZERO, V3::Z);
         if let Joint3::Hinge { limits, .. } = &mut j {
             *limits = Some((-0.3, 0.3));
@@ -1162,8 +1213,10 @@ mod tests {
     fn welded_bodies_move_as_one() {
         let mut w = World3::new();
         ground(&mut w);
-        let a = w.add(Body3::dynamic(Shape3::cuboid(V3::splat(0.25)), 500.0).at(V3::new(0.0, 2.0, 0.0)));
-        let b = w.add(Body3::dynamic(Shape3::cuboid(V3::splat(0.25)), 500.0).at(V3::new(0.5, 2.0, 0.0)));
+        let a = w
+            .add(Body3::dynamic(Shape3::cuboid(V3::splat(0.25)), 500.0).at(V3::new(0.0, 2.0, 0.0)));
+        let b = w
+            .add(Body3::dynamic(Shape3::cuboid(V3::splat(0.25)), 500.0).at(V3::new(0.5, 2.0, 0.0)));
         let j = w.fixed_joint(a, b, V3::new(0.25, 2.0, 0.0));
         w.join(j);
         w.bodies[a].ang_vel = V3::new(0.0, 0.0, 2.0);
@@ -1177,21 +1230,29 @@ mod tests {
         let mut w = World3::new();
         w.gravity = V3::ZERO;
         w.add(Body3::fixed(Shape3::cuboid(V3::new(0.02, 2.0, 2.0))).at(V3::new(5.0, 0.0, 0.0)));
-        let mut bullet = Body3::dynamic(Shape3::sphere(0.05), 8000.0).with_velocity(V3::new(400.0, 0.0, 0.0));
+        let mut bullet =
+            Body3::dynamic(Shape3::sphere(0.05), 8000.0).with_velocity(V3::new(400.0, 0.0, 0.0));
         bullet.ccd = true;
         let id = w.add(bullet);
         for _ in 0..10 {
             w.step(1.0 / 60.0);
         }
-        assert!(w.bodies[id].pose.p.x < 5.0, "tunnelled: {:?}", w.bodies[id].pose.p);
+        assert!(
+            w.bodies[id].pose.p.x < 5.0,
+            "tunnelled: {:?}",
+            w.bodies[id].pose.p
+        );
     }
 
     #[test]
     fn raycasts_find_the_nearest_body() {
         let mut w = World3::new();
         ground(&mut w);
-        let b = w.add(Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 1.0).at(V3::new(0.0, 2.0, 0.0)));
-        let (hit, t, n) = w.raycast(V3::new(0.0, 10.0, 0.0), -V3::Y, 100.0).expect("hit");
+        let b =
+            w.add(Body3::dynamic(Shape3::cuboid(V3::splat(0.5)), 1.0).at(V3::new(0.0, 2.0, 0.0)));
+        let (hit, t, n) = w
+            .raycast(V3::new(0.0, 10.0, 0.0), -V3::Y, 100.0)
+            .expect("hit");
         assert_eq!(hit, b);
         assert!((t - 7.5).abs() < 1e-4 && n.y > 0.99);
     }
@@ -1200,7 +1261,11 @@ mod tests {
     fn contact_events_begin_and_end() {
         let mut w = World3::new();
         ground(&mut w);
-        let ball = w.add(Body3::dynamic(Shape3::sphere(0.5), 1000.0).at(V3::new(0.0, 1.0, 0.0)).with_restitution(0.0));
+        let ball = w.add(
+            Body3::dynamic(Shape3::sphere(0.5), 1000.0)
+                .at(V3::new(0.0, 1.0, 0.0))
+                .with_restitution(0.0),
+        );
         let mut began = false;
         for _ in 0..120 {
             w.step(1.0 / 120.0);
@@ -1229,7 +1294,11 @@ mod tests {
                 1 => Shape3::cuboid(V3::new(0.3, 0.2, 0.25)),
                 _ => Shape3::capsule(0.3, 0.2),
             };
-            w.add(Body3::dynamic(shape, 600.0).at(V3::new((f * 0.7).sin() * 0.6, 0.5 + f * 0.7, (f * 1.3).cos() * 0.6)));
+            w.add(Body3::dynamic(shape, 600.0).at(V3::new(
+                (f * 0.7).sin() * 0.6,
+                0.5 + f * 0.7,
+                (f * 1.3).cos() * 0.6,
+            )));
         }
         run(&mut w, 6.0);
         // Spheres and capsules may keep rolling (there is no rolling

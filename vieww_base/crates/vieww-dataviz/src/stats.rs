@@ -49,7 +49,12 @@ pub fn box_stats(data: &[f64]) -> Option<BoxStats> {
     let iqr = q3 - q1;
     let (lo_f, hi_f) = (q1 - 1.5 * iqr, q3 + 1.5 * iqr);
     let whisker_low = v.iter().copied().find(|x| *x >= lo_f).unwrap_or(v[0]);
-    let whisker_high = v.iter().rev().copied().find(|x| *x <= hi_f).unwrap_or(v[v.len() - 1]);
+    let whisker_high = v
+        .iter()
+        .rev()
+        .copied()
+        .find(|x| *x <= hi_f)
+        .unwrap_or(v[v.len() - 1]);
     #[allow(clippy::cast_precision_loss)]
     let mean = v.iter().sum::<f64>() / v.len() as f64;
     Some(BoxStats {
@@ -60,7 +65,11 @@ pub fn box_stats(data: &[f64]) -> Option<BoxStats> {
         max: v[v.len() - 1],
         whisker_low,
         whisker_high,
-        outliers: v.iter().copied().filter(|x| *x < lo_f || *x > hi_f).collect(),
+        outliers: v
+            .iter()
+            .copied()
+            .filter(|x| *x < lo_f || *x > hi_f)
+            .collect(),
         mean,
     })
 }
@@ -78,7 +87,13 @@ pub fn scott_bandwidth(data: &[f64]) -> f64 {
 /// Gaussian kernel density estimate at `points` evenly spaced over
 /// `[lo, hi]`; `bandwidth` defaults to Scott's rule. Integrates to ~1.
 #[must_use]
-pub fn kde(data: &[f64], lo: f64, hi: f64, points: usize, bandwidth: Option<f64>) -> Vec<(f64, f64)> {
+pub fn kde(
+    data: &[f64],
+    lo: f64,
+    hi: f64,
+    points: usize,
+    bandwidth: Option<f64>,
+) -> Vec<(f64, f64)> {
     let h = bandwidth.unwrap_or_else(|| scott_bandwidth(data));
     #[allow(clippy::cast_precision_loss)]
     let n = data.len().max(1) as f64;
@@ -87,7 +102,10 @@ pub fn kde(data: &[f64], lo: f64, hi: f64, points: usize, bandwidth: Option<f64>
         .map(|i| {
             #[allow(clippy::cast_precision_loss)]
             let x = lo + (hi - lo) * i as f64 / (points.max(2) - 1) as f64;
-            let d: f64 = data.iter().map(|v| (-0.5 * ((x - v) / h).powi(2)).exp()).sum();
+            let d: f64 = data
+                .iter()
+                .map(|v| (-0.5 * ((x - v) / h).powi(2)).exp())
+                .sum();
             (x, d * norm)
         })
         .collect()
@@ -97,12 +115,21 @@ pub fn kde(data: &[f64], lo: f64, hi: f64, points: usize, bandwidth: Option<f64>
 /// widest point is `half_width`. Returns the polygon (value axis = y).
 #[must_use]
 pub fn violin(data: &[f64], center: f64, half_width: f64, points: usize) -> Vec<(f64, f64)> {
-    let Some(b) = box_stats(data) else { return Vec::new() };
+    let Some(b) = box_stats(data) else {
+        return Vec::new();
+    };
     let pad = (b.max - b.min).max(1e-9) * 0.1;
     let d = kde(data, b.min - pad, b.max + pad, points, None);
     let peak = d.iter().map(|p| p.1).fold(0.0, f64::max).max(1e-12);
-    let mut poly: Vec<(f64, f64)> = d.iter().map(|(y, w)| (center + w / peak * half_width, *y)).collect();
-    poly.extend(d.iter().rev().map(|(y, w)| (center - w / peak * half_width, *y)));
+    let mut poly: Vec<(f64, f64)> = d
+        .iter()
+        .map(|(y, w)| (center + w / peak * half_width, *y))
+        .collect();
+    poly.extend(
+        d.iter()
+            .rev()
+            .map(|(y, w)| (center - w / peak * half_width, *y)),
+    );
     poly
 }
 
@@ -123,14 +150,26 @@ pub struct Cell {
 /// Lay a `rows × cols` matrix (row-major) into a `width × height` box with
 /// `gap` between cells.
 #[must_use]
-pub fn heatmap(values: &[f64], rows: usize, cols: usize, width: f64, height: f64, gap: f64) -> Vec<Cell> {
+pub fn heatmap(
+    values: &[f64],
+    rows: usize,
+    cols: usize,
+    width: f64,
+    height: f64,
+    gap: f64,
+) -> Vec<Cell> {
     let (lo, hi) = values
         .iter()
         .filter(|v| v.is_finite())
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+            (a.min(*v), b.max(*v))
+        });
     let span = (hi - lo).max(1e-12);
     #[allow(clippy::cast_precision_loss)]
-    let (cw, ch) = ((width - gap * (cols as f64 - 1.0)) / cols as f64, (height - gap * (rows as f64 - 1.0)) / rows as f64);
+    let (cw, ch) = (
+        (width - gap * (cols as f64 - 1.0)) / cols as f64,
+        (height - gap * (rows as f64 - 1.0)) / rows as f64,
+    );
     let mut out = Vec::with_capacity(rows * cols);
     for r in 0..rows {
         for c in 0..cols {
@@ -144,7 +183,11 @@ pub fn heatmap(values: &[f64], rows: usize, cols: usize, width: f64, height: f64
                 w: cw,
                 h: ch,
                 value: v,
-                t: if v.is_finite() { (v - lo) / span } else { f64::NAN },
+                t: if v.is_finite() {
+                    (v - lo) / span
+                } else {
+                    f64::NAN
+                },
             });
         }
     }
@@ -173,8 +216,20 @@ pub fn linear_fit(xs: &[f64], ys: &[f64]) -> (f64, f64, f64) {
     let b = if sxx > 0.0 { sxy / sxx } else { 0.0 };
     let a = my - b * mx;
     let ss_tot: f64 = ys.iter().map(|y| (y - my).powi(2)).sum();
-    let ss_res: f64 = xs.iter().zip(ys).map(|(x, y)| (y - (a + b * x)).powi(2)).sum();
-    (a, b, if ss_tot > 0.0 { 1.0 - ss_res / ss_tot } else { 1.0 })
+    let ss_res: f64 = xs
+        .iter()
+        .zip(ys)
+        .map(|(x, y)| (y - (a + b * x)).powi(2))
+        .sum();
+    (
+        a,
+        b,
+        if ss_tot > 0.0 {
+            1.0 - ss_res / ss_tot
+        } else {
+            1.0
+        },
+    )
 }
 
 #[cfg(test)]
@@ -195,7 +250,9 @@ mod tests {
 
     #[test]
     fn kde_integrates_to_one() {
-        let d: Vec<f64> = (0..200).map(|i| (f64::from(i) * 0.37).sin() * 3.0).collect();
+        let d: Vec<f64> = (0..200)
+            .map(|i| (f64::from(i) * 0.37).sin() * 3.0)
+            .collect();
         let k = kde(&d, -8.0, 8.0, 400, None);
         let dx = 16.0 / 399.0;
         let area: f64 = k.iter().map(|p| p.1 * dx).sum();

@@ -218,7 +218,9 @@ pub fn snr_db(reference: &[f32], test: &[f32], channels: usize, max_lag: usize) 
 
 #[cfg(test)]
 pub(crate) fn s16le(b: &[u8]) -> Vec<f32> {
-    b.chunks_exact(2)
+    b.as_chunks::<2>()
+        .0
+        .iter()
         .map(|c| f32::from(i16::from_le_bytes([c[0], c[1]])) / 32_768.0)
         .collect()
 }

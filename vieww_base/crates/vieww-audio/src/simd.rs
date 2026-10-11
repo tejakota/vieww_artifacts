@@ -237,11 +237,7 @@ mod scalar {
             }
         }
         let head = a.len() - a.len() % 8;
-        let tail: f32 = a[head..]
-            .iter()
-            .zip(&b[head..])
-            .map(|(x, y)| x * y)
-            .sum();
+        let tail: f32 = a[head..].iter().zip(&b[head..]).map(|(x, y)| x * y).sum();
         acc.iter().sum::<f32>() + tail
     }
 

@@ -137,8 +137,10 @@ pub fn composite_camera_feed(
     let opacity = opacity.clamp(0.0, 1.0);
     let mut output = feed.pixels().to_vec();
     for (destination, source) in output
-        .chunks_exact_mut(4)
-        .zip(overlay.pixels().chunks_exact(4))
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(overlay.pixels().as_chunks::<4>().0)
     {
         let source_alpha = (f32::from(source[3]) / 255.0 * opacity).clamp(0.0, 1.0);
         let destination_alpha = f32::from(destination[3]) / 255.0;
@@ -203,7 +205,7 @@ pub fn pick_scene(scene: &Scene3, ray: Ray3, max_distance: f32) -> Option<SceneH
         if object.mesh.validate().is_err() || !object.transform.is_valid() {
             continue;
         }
-        for triangle in object.mesh.indices.chunks_exact(3) {
+        for triangle in object.mesh.indices.as_chunks::<3>().0 {
             let a = object
                 .transform
                 .transform_point(object.mesh.vertices[triangle[0] as usize].position);
@@ -265,7 +267,7 @@ pub fn pick_object(
     if object.mesh.validate().is_err() || !object.transform.is_valid() {
         return None;
     }
-    for triangle in object.mesh.indices.chunks_exact(3) {
+    for triangle in object.mesh.indices.as_chunks::<3>().0 {
         let a = object
             .transform
             .transform_point(object.mesh.vertices[triangle[0] as usize].position);

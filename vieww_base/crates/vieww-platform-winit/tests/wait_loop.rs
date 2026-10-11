@@ -193,7 +193,9 @@ fn blue_pixels_on_screen() -> Option<usize> {
     }
     Some(
         out.stdout
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .filter(|p| p[0] < 8 && p[1] < 8 && p[2] > 247)
             .count(),
     )

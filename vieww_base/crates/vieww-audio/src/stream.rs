@@ -284,7 +284,7 @@ mod tests {
     fn stream_delivers_a_continuous_signal() {
         let mut counter = 0u64;
         let mut s = Stream::start(2, 64, 2048, move |block| {
-            for f in block.chunks_exact_mut(2) {
+            for f in block.as_chunks_mut::<2>().0 {
                 #[expect(clippy::cast_precision_loss, reason = "test")]
                 let v = (counter % 1000) as f32;
                 f[0] = v;
@@ -297,7 +297,7 @@ mod tests {
         let mut buf = [0.0f32; 2 * 100];
         for _ in 0..40 {
             s.pull(&mut buf);
-            for f in buf.chunks_exact(2) {
+            for f in buf.as_chunks::<2>().0 {
                 #[expect(clippy::cast_precision_loss, reason = "test")]
                 let want = (expect % 1000) as f32;
                 assert_eq!(f[0], want);

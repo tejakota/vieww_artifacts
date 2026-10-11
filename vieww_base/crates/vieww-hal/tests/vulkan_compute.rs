@@ -37,7 +37,8 @@ fn saxpy_matches_the_cpu() {
     let k = ComputeKernel::new(&gpu, wgsl, "main", 2).expect("kernel");
     let bx = ComputeBuffer::from_f32(&gpu, &xs).expect("x");
     let by = ComputeBuffer::from_f32(&gpu, &ys).expect("y");
-    k.dispatch(&gpu, &[&bx, &by], [(n as u32).div_ceil(64), 1, 1]).expect("dispatch");
+    k.dispatch(&gpu, &[&bx, &by], [(n as u32).div_ceil(64), 1, 1])
+        .expect("dispatch");
     let out = by.read_f32(&gpu).expect("read");
     for i in 0..n {
         assert!((out[i] - (2.5 * xs[i] + ys[i])).abs() < 1e-4, "{i}");
@@ -68,15 +69,25 @@ fn a_gpu_particle_system_integrates_like_the_cpu_over_many_steps() {
     let mut cpu: Vec<[f32; 4]> = (0..n)
         .map(|i| {
             let f = i as f32;
-            [f * 0.01, 1.0 + (f * 0.37).sin().abs() * 3.0, (f * 0.13).cos(), (f * 0.71).sin() * 2.0]
+            [
+                f * 0.01,
+                1.0 + (f * 0.37).sin().abs() * 3.0,
+                (f * 0.13).cos(),
+                (f * 0.71).sin() * 2.0,
+            ]
         })
         .collect();
     let flat: Vec<f32> = cpu.iter().flatten().copied().collect();
     let k = ComputeKernel::with_push_constants(&gpu, wgsl, "step", 1, 16).expect("kernel");
     let buf = ComputeBuffer::from_f32(&gpu, &flat).expect("buf");
     let (dt, g, damp) = (1.0f32 / 120.0, 9.81f32, 0.8f32);
-    let push: Vec<u8> = [dt, g, damp, 0.0].iter().flat_map(|v| v.to_le_bytes()).collect();
-    let steps: Vec<([u32; 3], Vec<u8>)> = (0..240).map(|_| ([(n as u32).div_ceil(64), 1, 1], push.clone())).collect();
+    let push: Vec<u8> = [dt, g, damp, 0.0]
+        .iter()
+        .flat_map(|v| v.to_le_bytes())
+        .collect();
+    let steps: Vec<([u32; 3], Vec<u8>)> = (0..240)
+        .map(|_| ([(n as u32).div_ceil(64), 1, 1], push.clone()))
+        .collect();
     k.dispatch_many(&gpu, &[&buf], &steps).expect("dispatch");
     for _ in 0..240 {
         for p in &mut cpu {
@@ -122,11 +133,14 @@ fn a_workgroup_reduction_uses_shared_memory_and_barriers() {
             if (l.x == 0u) { sums[g.x] = scratch[0]; }
         }";
     let groups = 16usize;
-    let data: Vec<u32> = (0..groups * 256).map(|i| (i as u32 * 2_654_435_761) >> 20).collect();
+    let data: Vec<u32> = (0..groups * 256)
+        .map(|i| (i as u32 * 2_654_435_761) >> 20)
+        .collect();
     let k = ComputeKernel::new(&gpu, wgsl, "reduce", 2).expect("kernel");
     let input = ComputeBuffer::from_u32(&gpu, &data).expect("in");
     let sums = ComputeBuffer::from_u32(&gpu, &vec![0; groups]).expect("out");
-    k.dispatch(&gpu, &[&input, &sums], [groups as u32, 1, 1]).expect("dispatch");
+    k.dispatch(&gpu, &[&input, &sums], [groups as u32, 1, 1])
+        .expect("dispatch");
     let got = sums.read_u32(&gpu).expect("read");
     for (gi, s) in got.iter().enumerate() {
         let want: u32 = data[gi * 256..(gi + 1) * 256].iter().sum();

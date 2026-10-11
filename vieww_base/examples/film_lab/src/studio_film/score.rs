@@ -386,7 +386,11 @@ pub(crate) fn render() -> Samples {
             seed ^= seed << 5;
             (seed >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0
         };
-        let boundaries: Vec<f32> = super::act_starts().into_iter().skip(1).map(|i| starts[i]).collect();
+        let boundaries: Vec<f32> = super::act_starts()
+            .into_iter()
+            .skip(1)
+            .map(|i| starts[i])
+            .collect();
         for at in boundaries.into_iter().chain(std::iter::once(z21)) {
             let len = 2.2_f32;
             let a = ((at - len) * RATE as f32).max(0.0) as usize;
@@ -398,17 +402,25 @@ pub(crate) fn render() -> Samples {
                 Biquad::new(FilterKind::BandPass, 1600.0, 1.1, RATE as f32),
                 Biquad::new(FilterKind::BandPass, 5200.0, 1.1, RATE as f32),
             ];
-            for i in a..b.min(n) {
+            for (i, riser) in riser.iter_mut().enumerate().take(b.min(n)).skip(a) {
                 let t = (i - a) as f32 / RATE as f32;
                 let p = (t / len).clamp(0.0, 1.0);
                 let x = noise();
-                let w = [(1.0 - p * 2.0).max(0.0), 1.0 - (p * 2.0 - 1.0).abs(), (p * 2.0 - 1.0).max(0.0)];
+                let w = [
+                    (1.0 - p * 2.0).max(0.0),
+                    1.0 - (p * 2.0 - 1.0).abs(),
+                    (p * 2.0 - 1.0).max(0.0),
+                ];
                 let mut v = 0.0;
                 for (k, f) in bands.iter_mut().enumerate() {
                     v += f.process(x) * w[k];
                 }
-                let env = if t <= len { p.powf(2.2) } else { (1.0 - (t - len) / 0.35).max(0.0) };
-                riser[i] += v * env * 0.11;
+                let env = if t <= len {
+                    p.powf(2.2)
+                } else {
+                    (1.0 - (t - len) / 0.35).max(0.0)
+                };
+                *riser += v * env * 0.11;
             }
         }
     }
@@ -462,8 +474,12 @@ pub(crate) fn render() -> Samples {
     hall.wet = 1.0;
     hall.dry = 0.0;
     for i in 0..n {
-        let send_l = (pad_l[i] * 0.35 + pluck_l[i] * 0.6 + ui[i] * 0.55 + hits[i] * 0.4 + riser[i] * 0.5) * 0.9;
-        let send_r = (pad_r[i] * 0.35 + pluck_r[i] * 0.6 + ui[i] * 0.55 + hits[i] * 0.4 + riser[i] * 0.5) * 0.9;
+        let send_l =
+            (pad_l[i] * 0.35 + pluck_l[i] * 0.6 + ui[i] * 0.55 + hits[i] * 0.4 + riser[i] * 0.5)
+                * 0.9;
+        let send_r =
+            (pad_r[i] * 0.35 + pluck_r[i] * 0.6 + ui[i] * 0.55 + hits[i] * 0.4 + riser[i] * 0.5)
+                * 0.9;
         let (wl, wr) = hall.tick(send_l, send_r);
         l[i] += wl * 0.32;
         r[i] += wr * 0.32;

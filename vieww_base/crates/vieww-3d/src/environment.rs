@@ -163,7 +163,8 @@ impl EnvMap {
             t * t * (3.0 - 2.0 * t)
         };
         Self::from_fn(256, 128, move |d| {
-            let wall = Rgb::new(0.03, 0.03, 0.035).lerp(Rgb::new(0.08, 0.08, 0.09), (d.y + 1.0) * 0.5);
+            let wall =
+                Rgb::new(0.03, 0.03, 0.035).lerp(Rgb::new(0.08, 0.08, 0.09), (d.y + 1.0) * 0.5);
             let k = soft(d, Vec3::new(0.3, 0.8, 0.6), 0.25) * key * 6.0;
             let rim = soft(d, Vec3::new(-0.2, 0.3, -1.0), 0.08) * key * 9.0;
             let fill = soft(d, Vec3::new(-1.0, -0.1, 0.4), 0.2) * key * 1.5;
@@ -565,7 +566,10 @@ impl Environment {
         // Source mips for filtered importance sampling.
         let mut mips = vec![base.clone()];
         while mips.last().is_some_and(|m| m.width() > 8) {
-            let next = mips.last().map(EnvMap::downsample).unwrap_or_else(|| base.clone());
+            let next = mips
+                .last()
+                .map(EnvMap::downsample)
+                .unwrap_or_else(|| base.clone());
             mips.push(next);
         }
         let mut specular = vec![base.clone()];
@@ -577,7 +581,8 @@ impl Environment {
             let a = roughness * roughness;
             // Pick the source mip whose texel roughly matches the lobe.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let mip = ((roughness * (mips.len() as f32 - 1.0)).round() as usize).min(mips.len() - 1);
+            let mip =
+                ((roughness * (mips.len() as f32 - 1.0)).round() as usize).min(mips.len() - 1);
             let src = &mips[mip];
             let level = EnvMap::from_fn(w, h, |r| {
                 let (t, b) = onb(r);
@@ -589,8 +594,8 @@ impl Environment {
                     let phi = 2.0 * PI * xi1;
                     let cos_t = ((1.0 - xi2) / (1.0 + (a * a - 1.0) * xi2)).sqrt();
                     let sin_t = (1.0 - cos_t * cos_t).max(0.0).sqrt();
-                    let hv = (t * (sin_t * phi.cos()) + b * (sin_t * phi.sin()) + r * cos_t)
-                        .normalize();
+                    let hv =
+                        (t * (sin_t * phi.cos()) + b * (sin_t * phi.sin()) + r * cos_t).normalize();
                     let l = (hv * (2.0 * r.dot(hv)) - r).normalize();
                     let ndl = r.dot(l);
                     if ndl > 0.0 {
@@ -661,7 +666,7 @@ impl Environment {
         let c = match self.background {
             Background::Color => return None,
             Background::Map => self.map.sample(d),
-            Background::Blurred(r) => self.specular(d, r) .scale(1.0 / self.intensity.max(1e-6)),
+            Background::Blurred(r) => self.specular(d, r).scale(1.0 / self.intensity.max(1e-6)),
         };
         Some(c.scale(self.background_intensity))
     }
@@ -709,7 +714,12 @@ mod tests {
     #[test]
     fn a_uniform_sky_irradiates_every_normal_equally() {
         let env = Environment::new(EnvMap::uniform(Rgb::new(0.5, 0.25, 1.0)));
-        for n in [Vec3::Y, -Vec3::Y, Vec3::X, Vec3::new(0.3, -0.4, 0.8).normalize()] {
+        for n in [
+            Vec3::Y,
+            -Vec3::Y,
+            Vec3::X,
+            Vec3::new(0.3, -0.4, 0.8).normalize(),
+        ] {
             let e = env.diffuse(n);
             // Uniform radiance L gives E/π = L for every normal.
             assert!(close(e.r, 0.5, 0.02), "{e:?}");

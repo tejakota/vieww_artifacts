@@ -255,9 +255,21 @@ impl Q {
         let (w, x, y, z) = (self.w, self.x, self.y, self.z);
         M3 {
             m: [
-                [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - w * z), 2.0 * (x * z + w * y)],
-                [2.0 * (x * y + w * z), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - w * x)],
-                [2.0 * (x * z - w * y), 2.0 * (y * z + w * x), 1.0 - 2.0 * (x * x + y * y)],
+                [
+                    1.0 - 2.0 * (y * y + z * z),
+                    2.0 * (x * y - w * z),
+                    2.0 * (x * z + w * y),
+                ],
+                [
+                    2.0 * (x * y + w * z),
+                    1.0 - 2.0 * (x * x + z * z),
+                    2.0 * (y * z - w * x),
+                ],
+                [
+                    2.0 * (x * z - w * y),
+                    2.0 * (y * z + w * x),
+                    1.0 - 2.0 * (x * x + y * y),
+                ],
             ],
         }
     }
@@ -440,7 +452,9 @@ mod tests {
 
     #[test]
     fn matrix_inverse_inverts() {
-        let m = Q::from_axis_angle(V3::Y, 0.4).to_m3().mul(&M3::diagonal(V3::new(2.0, 3.0, 4.0)));
+        let m = Q::from_axis_angle(V3::Y, 0.4)
+            .to_m3()
+            .mul(&M3::diagonal(V3::new(2.0, 3.0, 4.0)));
         let i = m.inverse().expect("invertible");
         let p = m.mul(&i);
         for r in 0..3 {
