@@ -1,19 +1,27 @@
-# Remaining work (handed over 2026-10-11)
+# Remaining work (updated 2026-10-11, after the session that pushed this branch)
 
 Verified state of each item is in `PENDING.md`; this is the short list.
 
-1. **Push** — the branch could not be pushed from the session (GitHub account
-   not linked). Apply `vieww-gap-closure-session.patch` (`git am`) and push.
-2. **Re-run the full studio suite** — `cargo test -p viewwstudio`. Only
-   `tests/remote.rs` (4/4) and clippy were run after the out-of-process
-   preview landed; the full run was cut off by a full disk.
-3. **Out-of-process preview** (PENDING §3.3): forward keyboard/IME, scroll and
-   hover; remote preview-state capture; run `tests/remote.rs` on Windows.
-4. **Metal / D3D12** (PENDING §1.2/§1.3): read the first macOS/Windows CI
-   results of `metal_smoke` / `d3d12_smoke`; then port `SceneRenderer`.
-5. **GPU 3D seam** for `vieww-3d` (not started): a `GpuRenderer` behind the
-   existing `(scene, camera, settings) -> RGBA8` contract, CPU renderer as
-   the pixel oracle; first increment = unlit forward pass on Vulkan.
+1. **Push** — done: both patches (`vieww_premium_pass.patch`,
+   `vieww-gap-closure-session.patch`) are applied on
+   `feature/vieww_code_base2` and the branch is pushed.
+2. **Re-run the full studio suite** — done: `cargo test -p viewwstudio`
+   green, 921 tests over 30 suites, on the pinned toolchain (the run needs
+   `CARGO_INCREMENTAL=0` and no debuginfo on small disks — see the session
+   worklog).
+3. **Out-of-process preview** (PENDING §3.3): the forwarding half is done
+   (keyboard/IME/scroll/hover, remote preview-state capture — commit
+   `782717a`); what remains is running `tests/remote.rs` on Windows, which
+   needs the Windows CI leg.
+4. **Metal / D3D12** (PENDING §1.2/§1.3): render paths, smoke tests and the
+   cross-platform type-check landed (commit `f695c04`); reading the first
+   macOS/Windows CI results and porting `SceneRenderer` remain CI/hardware
+   work.
+5. **GPU 3D seam** — first increment done (PENDING §1.7): `GpuRenderer`
+   behind the `(scene, camera) -> RGBA8` contract, unlit forward pass on
+   Vulkan, parity suite `tests/gpu_unlit.rs` green on lavapipe and wired
+   into the `framework-checks` workflow. Next: lighting (Lambert + one
+   shadow map), then textures, then the transparent pass.
 6. **SIMD compositing** for the two over-budget fixtures (PENDING §4.1) —
    measure with callgrind, not wall clock.
 7. **Animated general paths on GPU** (PENDING §2.1 residual) — measure, then
@@ -21,4 +29,6 @@ Verified state of each item is in `PENDING.md`; this is the short list.
 8. **Hardware runs**: real GPU (§1.1), iOS simulator/device (§1.4), Android
    device (§1.5), Firefox/WebKit web parity (§1.6), a two-monitor refresh-rate
    check (§3.2).
-9. **Coverage gate** (§5.1): drop `continue-on-error` once it has history.
+9. **Coverage gate** (§5.1) — closed: the `framework-checks` workflow's
+   coverage job already runs `ci/check/coverage.sh` as a hard gate (no
+   `continue-on-error`; the script fails below the 70% floor).

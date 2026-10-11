@@ -39,6 +39,7 @@
 //! | dynamic diffuse GI (probe volume — Lumen/DDGI) | [`gi`] |
 //! | skinning (LBS + dual quaternion) and morph targets | [`skin`] |
 //! | custom fragment shaders and node materials | [`shader`] |
+//! | the GPU seam: `GpuRenderer`, Vulkan behind the CPU contract (`vulkan` feature) | [`gpu`] |
 //! | post-processing: SSAO, SSR, DoF, bloom, tone mapping, grading, FXAA | [`post`] |
 //! | meshlets, cone culling and cluster LOD (Nanite's shape) | [`meshlet`] |
 //! | stereo eyes, side-by-side and anaglyph | [`stereo`] |
@@ -62,6 +63,8 @@
 pub mod environment;
 pub mod geometry;
 pub mod gi;
+#[cfg(feature = "vulkan")]
+pub mod gpu;
 pub mod import;
 pub mod math;
 pub mod meshlet;
@@ -77,6 +80,8 @@ pub mod widget;
 
 pub use environment::{Background, EnvMap, Environment, Sh9};
 pub use gi::{GiStats, IrradianceVolume};
+#[cfg(feature = "vulkan")]
+pub use gpu::GpuRenderer;
 pub use import::{apply_animation, import_gltf};
 pub use math::{Mat4, Quat, Vec3};
 pub use pathtrace::{Accumulator, PathTracer, TraceScene};

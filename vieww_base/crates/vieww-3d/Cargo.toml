@@ -17,6 +17,22 @@ vieww-foundation.workspace = true
 vieww-mesh.workspace = true
 # For the `Viewport3D` widget: a render lands in the tree as an `Image`.
 vieww-widget.workspace = true
+# The GPU seam (`gpu::GpuRenderer`) — optional, and deliberately so. This
+# crate's reason to exist is the CPU oracle; the Vulkan path rides behind the
+# same `(scene, camera) → Image` contract only when a caller asks for it,
+# which keeps every other consumer of vieww-3d (the widget, the film
+# pipeline, path tracing) buildable with no GPU dependency at all, the same
+# "no dependency unless a backend is actually requested" shape `vieww-hal`
+# itself takes. The `vulkan` feature below is what turns it on.
+vieww-hal = { workspace = true, optional = true }
+
+[features]
+default = []
+# The GPU path: `gpu::GpuRenderer`, whose unlit forward pass renders through
+# `vieww-hal`'s Vulkan backend and falls back to the CPU renderer for
+# anything outside the pass's reach. Turning this on adds `ash`/`naga` via
+# `vieww-hal`; leaving it off leaves this crate GPU-free.
+vulkan = ["dep:vieww-hal", "vieww-hal/vulkan"]
 
 [lints]
 workspace = true

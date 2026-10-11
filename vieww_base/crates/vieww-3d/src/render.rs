@@ -246,7 +246,7 @@ struct Item {
 }
 
 /// Six planes `(a, b, c, d)` with inside `a x + b y + c z + d >= 0`.
-fn frustum(vp: &Mat4) -> [[f32; 4]; 6] {
+pub(crate) fn frustum(vp: &Mat4) -> [[f32; 4]; 6] {
     let row = |r: usize| [vp.m[0][r], vp.m[1][r], vp.m[2][r], vp.m[3][r]];
     let (r0, r1, r2, r3) = (row(0), row(1), row(2), row(3));
     let add = |a: [f32; 4], b: [f32; 4]| [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]];
@@ -268,7 +268,7 @@ fn frustum(vp: &Mat4) -> [[f32; 4]; 6] {
     planes
 }
 
-fn sphere_visible(planes: &[[f32; 4]; 6], c: Vec3, r: f32) -> bool {
+pub(crate) fn sphere_visible(planes: &[[f32; 4]; 6], c: Vec3, r: f32) -> bool {
     planes
         .iter()
         .all(|p| p[0] * c.x + p[1] * c.y + p[2] * c.z + p[3] >= -r)

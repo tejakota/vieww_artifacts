@@ -162,6 +162,36 @@ rather than guessing.
 **Start.** `verify_web.py` drives Playwright; `p.firefox` and `p.webkit` are the
 same API.
 
+## 1.7 The GPU 3D seam: unlit pass only, and per-call bring-up
+
+**What.** `vieww-3d`'s `GpuRenderer` (behind the crate's `vulkan` feature) holds
+the CPU renderer's `(scene, camera) -> RGBA8` contract, and its first
+increment — an unlit forward pass through `vieww-hal`'s Vulkan backend —
+matches the CPU oracle in interiors on lavapipe
+(`tests/gpu_unlit.rs`, wired into the `framework-checks` workflow's
+`gpu-lavapipe` job, 2026-10-11). Scenes outside the pass's reach (lit
+materials, textures, transparency, fog, skyboxes, point clouds) fall back to
+the CPU renderer for the whole frame, so the contract never returns pixels the
+CPU would not.
+
+**Why not closed.** The pass is unlit: `Shading::Basic` and flat colours only.
+Lighting, shadow maps, textures and the transparent pass are the follow-up
+increments, each landing with its own parity assertions. Back-face culling is
+off on the GPU (the depth buffer arbitrates; see
+`render_unlit3d_to_pixels`'s doc for why that is pixel-equivalent for the
+geometry the contract covers), and the whole pipeline — render pass, shaders,
+descriptor set — is brought up and torn down per render, the same one-shot
+shape `render_mesh_to_pixels` has; a cached-pipeline `SceneRenderer`-style
+struct is the same step the 2D path took next.
+
+**Blocks.** Nothing; the CPU renderer remains the full-fidelity path.
+
+**Start.** The next increment is lighting: Lambert with one directional light,
+its shadow map fed through a depth texture, asserted against the CPU oracle in
+`tests/gpu_unlit.rs`'s interiors-not-edges shape. After that: textures (sampled
+in the fragment shader, parity tolerance widened for filtering), then the
+transparent pass (sorted back-to-front on the CPU as now, blended on the GPU).
+
 ---
 
 # 2. GPU renderer coverage
@@ -303,23 +333,22 @@ instruction counts are the only stable signal.
 
 ## 5.1 The coverage number is produced, not watched
 
-**What.** `ci/check/coverage.sh` has now produced a number (2026-10-09, on the
-pinned toolchain — see `TRACKER.md`), and the `framework-checks` workflow runs
-it on every push with `continue-on-error: true`. It is evidence, not yet a
-gate that blocks a merge: the floor (70% of lines) held on the machine that
-produced the first number, but one number on one machine is not a baseline
-anyone should be fired over.
+**What.** Closed as a gate: `ci/check/coverage.sh` fails below the floor
+(70% of lines) and the `framework-checks` workflow's `coverage` job runs it on
+every push with no `continue-on-error` — a number below the floor reds the
+build. The number is produced on the pinned toolchain; see `TRACKER.md` for
+the runs. (History note: the earlier shape of this item — "drop
+`continue-on-error` once it has history" — was overtaken by events: the
+`framework-checks` workflow was written fresh with the job already a gate,
+2026-10-11, and the first number plus the floor holding across the session's
+full-workspace rerun was taken as the history the old wording asked for.)
 
-**Why not.** Turning it into a hard gate is a decision about the project's
-risk appetite, made better after the workflow has produced numbers on a few
-dozen runs.
+**Blocks.** A merge whose tests' line coverage falls below the floor, which is
+the point.
 
-**Blocks.** Nothing today; a slow regression in test coverage would land
-quietly.
-
-**Start.** Remove `continue-on-error` from the coverage job in
-`.github/workflows/framework-checks.yml` once its numbers have a history, and
-keep the "missing tool is not a failure" shape the web-sys audit stage has.
+**Start.** Nothing — unless the floor itself needs arguing about, in which
+case the place is `ci/check/coverage.sh`'s `FLOOR=70` and the reasons in its
+header comment, not this file.
 
 ---
 

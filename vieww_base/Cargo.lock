@@ -5173,6 +5173,7 @@ name = "vieww-3d"
 version = "0.1.0"
 dependencies = [
  "vieww-foundation",
+ "vieww-hal",
  "vieww-mesh",
  "vieww-widget",
 ]
