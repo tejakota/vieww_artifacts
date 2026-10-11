@@ -235,18 +235,23 @@ vieww window to another application does nothing.
 **Start.** Per-platform, below winit: `NSDraggingSession` on macOS,
 `DoDragDrop` on Windows, XDND / the `wlr-data-control` protocol on Linux.
 
-## 3.2 The display refresh rate is not read from the platform
+## 3.2 A monitor change re-reads the refresh rate — untested with two monitors
 
-**What.** `winit`'s `refresh_rate_millihertz` returns `None` unconditionally on
-this backend — the framework carries a `FIXME` quoting that. `App::refresh_rate`
-lets an application state it instead.
+**What.** The rate is read from the platform everywhere vieww runs: winit
+answers on macOS, iOS, Windows, X11 and Wayland, and Android (where winit
+hard-codes `None`) is read below it through `Display.getRefreshRate()`. Since
+2026-10-11 it is also re-read when a window moves to another monitor or a
+Wayland surface enters an output (`WindowState::display_may_have_changed`),
+where before it was read only at open.
 
-**Why not.** Upstream.
+**Why not closed.** The re-read has never seen a real monitor change: this
+machine has one virtual display, and Xvfb's single CRTC is all winit's X11
+backend enumerates.
 
-**Blocks.** Correct frame budgeting on a 120 Hz display without the application
-saying so. Mis-states the jank count and nothing else.
+**Blocks.** Nothing until someone drags a window between a 60Hz and a 120Hz
+display; then the `vieww: … reports …Hz` log line should appear again.
 
-**Start.** `crates/vieww-platform-winit/src/app.rs` and `insets.rs`.
+**Start.** Do exactly that, with `RUST_LOG=info`.
 
 ## 3.3 viewwstudio's panic boundary cannot work on Windows
 

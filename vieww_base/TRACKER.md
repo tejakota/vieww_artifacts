@@ -58,12 +58,19 @@ reading to the bottom. The section is still here for continuity, and
    `rgb(251,249,247)`, the Copy button reached by Tab in both (11th stop),
    and both schemes screenshotted. The wasm build lints clean again: two
    wasm-only lints in `vieww-video` and `vieww-audio` were fixed on the way.
-4. **Metal and D3D12 render paths**, type-checked and linted on their own
+4. **Refresh rate (PENDING §3.2), checked against winit 0.30.13's source.**
+   Every platform vieww targets already reports it — winit on macOS, iOS,
+   Windows, X11 and Wayland, this crate's JNI call on Android (the one
+   winit backend that hard-codes `None`, besides Redox). What was missing was
+   *when*: only at window open. It is now re-read on `Moved` and
+   `ScaleFactorChanged` when the window's monitor changed. Not exercised
+   with a real second monitor (see PENDING §3.2).
+5. **Metal and D3D12 render paths**, type-checked and linted on their own
    targets from Linux, never yet executed — `PENDING.md` §1.2/§1.3.
-5. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
+6. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
    Windows and Android from Linux; its first run found five real bugs (see
    the commit).
-6. **`vieww-spatial`** applied from the supplied patch, fixed to build.
+7. **`vieww-spatial`** applied from the supplied patch, fixed to build.
 
 ## The most recent effort (2026-10-09): the PENDING list emptied of everything a machine can close — analytic edges on the GPU, a GPU frame in a real window, atlas eviction, the full gate on the pinned toolchain
 

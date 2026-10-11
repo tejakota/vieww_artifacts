@@ -1028,6 +1028,11 @@ impl Drop for Gpu {
 /// What is **not** here is in [`Shared`], and the split is exactly "does a second
 /// window need its own?".
 struct WindowState {
+    /// The monitor this window's refresh rate was last read from — so a
+    /// window dragged onto another display, or a Wayland surface that had not
+    /// entered an output when it opened, re-reads it. See
+    /// [`WindowState::display_may_have_changed`].
+    display: Option<winit::monitor::MonitorHandle>,
     /// The pointer shape currently set on this window.
     ///
     /// Remembered so a mouse moving *within* one widget costs nothing — see
@@ -1149,7 +1154,28 @@ impl WindowState {
     ///
     /// Pacing does not come from here and never did — the swapchain blocks on
     /// vsync whatever this says. This decides only what counts as *late*.
+    /// Re-read the refresh rate if the window is now on a different monitor
+    /// than the one it was read from.
+    ///
+    /// Opening a window was the only time the rate was read, so a window
+    /// dragged from a 60Hz display onto a 144Hz one kept a 16.7ms budget and
+    /// counted every frame inside 6.9ms as on time — and on Wayland, where a
+    /// fresh surface may not have entered any output yet, `current_monitor`
+    /// is `None` at open and the budget stayed at its default until the
+    /// window was reopened. Called on `Moved` and on `ScaleFactorChanged`
+    /// (which Wayland sends when the surface enters an output); a move within
+    /// one monitor costs one comparison.
+    fn display_may_have_changed(&mut self, shared: &Shared) {
+        let Some(window) = self.gpu.as_ref().map(|gpu| Arc::clone(&gpu.window)) else {
+            return;
+        };
+        if window.current_monitor() != self.display {
+            self.follow_display(shared, &window);
+        }
+    }
+
     fn follow_display(&mut self, shared: &Shared, window: &Window) {
+        self.display = window.current_monitor();
         if shared.config.refresh_stated {
             return;
         }
@@ -2020,6 +2046,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             log,
             lifecycle: Lifecycle::default(),
             background,
+            display: None,
         };
 
         state.follow_display(&self.shared, &window);
@@ -2486,7 +2513,13 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                 return;
             }
             WindowEvent::Resized(size) => self.windows[index].resize(size.width, size.height),
+            WindowEvent::Moved(_) => {
+                let shared = &self.shared;
+                self.windows[index].display_may_have_changed(shared);
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                let shared = &self.shared;
+                self.windows[index].display_may_have_changed(shared);
                 let window = &mut self.windows[index];
                 window.scale = Scale::new(scale_factor);
                 window.input.set_scale(window.scale);
