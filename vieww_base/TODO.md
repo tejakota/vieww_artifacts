@@ -20,7 +20,9 @@ Verified state of each item is in `PENDING.md`; this is the short list.
 5. **GPU 3D seam** — first increment done (PENDING §1.7): `GpuRenderer`
    behind the `(scene, camera) -> RGBA8` contract, unlit forward pass on
    Vulkan, parity suite `tests/gpu_unlit.rs` green on lavapipe and wired
-   into the `framework-checks` workflow. Next: lighting (Lambert + one
+   into the `framework-checks` workflow (whose yml is in
+   `.github/workflows-pending/` until a workflow-scoped token places it).
+   Next: lighting (Lambert + one
    shadow map), then textures, then the transparent pass.
 6. **SIMD compositing** for the two over-budget fixtures (PENDING §4.1) —
    measure with callgrind, not wall clock.
@@ -30,5 +32,7 @@ Verified state of each item is in `PENDING.md`; this is the short list.
    device (§1.5), Firefox/WebKit web parity (§1.6), a two-monitor refresh-rate
    check (§3.2).
 9. **Coverage gate** (§5.1) — closed: the `framework-checks` workflow's
-   coverage job already runs `ci/check/coverage.sh` as a hard gate (no
-   `continue-on-error`; the script fails below the 70% floor).
+   coverage job runs `ci/check/coverage.sh` as a hard gate (no
+   `continue-on-error`; the script fails below the 70% floor) — live once
+   the workflow is placed from `.github/workflows-pending/` (see its
+   README: the push token lacks `workflow` scope).

@@ -169,7 +169,9 @@ the CPU renderer's `(scene, camera) -> RGBA8` contract, and its first
 increment — an unlit forward pass through `vieww-hal`'s Vulkan backend —
 matches the CPU oracle in interiors on lavapipe
 (`tests/gpu_unlit.rs`, wired into the `framework-checks` workflow's
-`gpu-lavapipe` job, 2026-10-11). Scenes outside the pass's reach (lit
+`gpu-lavapipe` job, 2026-10-11 — the workflow file rides in
+`.github/workflows-pending/` until a `workflow`-scoped token places it; see
+that directory's README). Scenes outside the pass's reach (lit
 materials, textures, transparency, fog, skyboxes, point clouds) fall back to
 the CPU renderer for the whole frame, so the contract never returns pixels the
 CPU would not.
@@ -336,7 +338,8 @@ instruction counts are the only stable signal.
 **What.** Closed as a gate: `ci/check/coverage.sh` fails below the floor
 (70% of lines) and the `framework-checks` workflow's `coverage` job runs it on
 every push with no `continue-on-error` — a number below the floor reds the
-build. The number is produced on the pinned toolchain; see `TRACKER.md` for
+build. (The workflow itself is in `.github/workflows-pending/` awaiting a
+`workflow`-scoped token to be placed live; see its README.) The number is produced on the pinned toolchain; see `TRACKER.md` for
 the runs. (History note: the earlier shape of this item — "drop
 `continue-on-error` once it has history" — was overtaken by events: the
 `framework-checks` workflow was written fresh with the job already a gate,
