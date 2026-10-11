@@ -168,34 +168,33 @@ same API.
 
 `vieww_gpu::ScenePlan::is_complete` is the gate. As of 2026-10-09 every
 `Command` plans on the GPU, geometry edges are antialiased analytically for the
-rect family, a GPU frame can be presented to a real window
+rect family and with the CPU's own coverage for every other shape, a GPU frame can be presented to a real window
 ([`App::prefer_gpu`]), and the glyph atlas evicts between frames — all closed
 with evidence in `TRACKER.md`; the full picture is
 [`docs/GPU-RENDERER-STATUS.md`](./docs/GPU-RENDERER-STATUS.md). What remains:
 
-## 2.1 General-path edges are still tessellated without AA
+## 2.1 A general path that changes every frame pays CPU coverage every frame
 
-**What.** Fills and strokes that are not rects or rounded rects — arbitrary
-paths, rotated rectangles — rasterize through the tessellated material, which
-has no edge coverage. The analytic SDF material covers the rect family because
-that is the overwhelming majority of UI geometry; a rotated card still has a
-jagged edge next to the CPU renderer's.
+**What.** Non-analytic shapes — rotated rects, arbitrary paths, every stroke —
+are now antialiased on the GPU with the CPU rasterizer's own coverage
+(`GpuSeam::shape_coverage`, cached in the mask atlas by content; see
+`TRACKER.md` 2026-10-11). A shape that is the same next frame costs nothing
+again. One that *changes* every frame — a morphing path, a stroke being drawn,
+anything rotating — is re-rasterised on the CPU each frame, which is the cost
+the GPU path exists to avoid. Shapes whose patch exceeds ~1.4 Mpx fall back to
+hard-edged tessellation rather than claim the atlas.
 
-**Why not.** The analytic path is per-shape: a distance function per geometry
-family. Rects and rounded rects share one; a general path would need either
-MSAA on the tessellated material or a per-pixel coverage buffer, and the two
-have different costs and different seams with the compositor.
+**Why not.** Parity first, then speed: matching the CPU's edges exactly is
+what made the census's interior verdict fall from 6 fixtures to 2, and an
+MSAA path would differ from the CPU on every edge again.
 
-**Blocks.** Visual parity with the CPU renderer for arbitrary geometry — the
-census still records edge-band differences on rotated/curved geometry, and it
-now records *only* those.
+**Blocks.** Smooth animation of large arbitrary paths on the GPU path.
 
-**Start.** `crates/vieww-gpu/src/scene.rs`'s `emit_shape_painted` (where the
-rect family routes to the analytic material) and
-`crates/vieww-shaders/shaders/scene.wgsl`'s `shape_distance`. The two honest
-options are 4× MSAA on the tessellated material with a resolve per target, or
-a coverage-R8 pass like the clip masks already use. Measure with
-`cargo run --release -p fixtures -- <outdir> --census`.
+**Start.** Measure first — `00-curves`/`00-strokes` in the census are the
+proxies, and on lavapipe the coverage cost is invisible under the readback.
+If it matters on hardware, 4× MSAA on the tessellated material *for shapes
+that changed this frame* is the complementary path; the tessellator and
+`vulkan_mesh_smoke.rs` already exist for it.
 
 ## 2.2 The GPU windowed path reads back through host memory
 

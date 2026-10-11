@@ -187,6 +187,16 @@ impl MaskAtlas {
         self.version = crate::generation::next();
     }
 
+    /// The mask for `key` if it is resident, marked used this frame —
+    /// [`Self::get_or_insert`] without the build, for callers whose build
+    /// needs to read this atlas.
+    pub fn get(&mut self, key: MaskKey) -> Option<MaskSlot> {
+        let frame = self.frame;
+        let entry = self.entries.get_mut(&key)?;
+        entry.last_used = frame;
+        Some(slot(entry))
+    }
+
     /// The mask for `key`, building it with `build` on a miss.
     ///
     /// `build` returns `(device_x, device_y, width, height, alpha)`. `None`

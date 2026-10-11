@@ -631,3 +631,111 @@ fn fractional_and_rounded_rects_have_antialiased_edges_like_the_cpu() {
          {partial_corners} pixels"
     );
 }
+
+/// Every non-analytic shape — a rotated rect, a star, a dashed curved stroke,
+/// a circle under a shaped clip — antialiased like the CPU, edges included.
+///
+/// These used to be tessellated and rasterised hard, which is what the
+/// "two rasterizers differ on every edge" caveat in this file was written
+/// for. Their coverage now comes from the CPU rasterizer through
+/// `GpuSeam::shape_coverage`, so the bound here is the whole picture, not the
+/// interior: one byte of quantisation, plus one for a clip multiplied in at
+/// 8 bits rather than `f32`.
+#[test]
+#[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
+fn arbitrary_paths_and_strokes_are_antialiased_like_the_cpu_everywhere() {
+    let Some((_lock, _device, mut renderer)) = try_renderer() else {
+        return;
+    };
+    let base = Color::rgba(255, 255, 255, 255);
+    let mut scene = Scene::default();
+
+    scene.push_command(Command::FillRect {
+        rect: Rect::new(-15.0, -8.0, 15.0, 8.0),
+        paint: Paint::solid(Color::rgba(20, 40, 200, 255)),
+        transform: Transform {
+            a: 0.866,
+            b: 0.5,
+            c: -0.5,
+            d: 0.866,
+            tx: 25.3,
+            ty: 22.7,
+        },
+        clip: Clip::NONE,
+    });
+
+    let mut star = Path::new();
+    for i in 0..10 {
+        let r = if i % 2 == 0 { 18.0 } else { 7.5 };
+        let a = std::f32::consts::PI * f32::from(i as u8) / 5.0 - 0.3;
+        let p = Offset::new(78.4 + r * a.cos(), 24.6 + r * a.sin());
+        if i == 0 {
+            star.move_to(p);
+        } else {
+            star.line_to(p);
+        }
+    }
+    star.close();
+    scene.push_command(Command::FillPath {
+        path: star,
+        paint: Paint::solid(Color::rgba(200, 30, 60, 230)),
+        transform: Transform::IDENTITY,
+        clip: Clip::NONE,
+    });
+
+    let mut wave = Path::new();
+    wave.move_to(Offset::new(8.0, 70.0));
+    wave.cubic_to(
+        Offset::new(25.0, 45.0),
+        Offset::new(45.0, 95.0),
+        Offset::new(62.0, 66.0),
+    );
+    let style = vieww_foundation::StrokeStyle {
+        dash: Some(vieww_foundation::Dash::new([7.0, 3.5])),
+        ..vieww_foundation::StrokeStyle::default()
+    };
+    scene.push_command(Command::StrokePath {
+        path: wave,
+        stroke: Stroke::new(3.3).styled(style),
+        paint: Paint::solid(Color::rgba(10, 120, 40, 255)),
+        transform: Transform::IDENTITY,
+        clip: Clip::NONE,
+    });
+
+    let mut clip = Clip::NONE;
+    clip.add_rect(Rect::new(70.0, 50.0, 115.0, 88.0));
+    clip.add_path(Path::rounded_rect(Rect::new(70.0, 50.0, 115.0, 88.0), 14.0));
+    scene.push_command(Command::FillPath {
+        path: Path::arc(Offset::new(100.2, 74.6), 19.3, 0.0, std::f32::consts::TAU),
+        paint: Paint::solid(Color::rgba(90, 20, 140, 255)),
+        transform: Transform::IDENTITY,
+        clip,
+    });
+
+    let mut planner = vieww_gpu::Planner::new();
+    let plan = planner.plan(&scene, WIDTH as f32, HEIGHT as f32);
+    assert!(plan.is_complete(), "{:?}", plan.unsupported);
+    let gpu = renderer
+        .render_planned(&planner, &plan, WIDTH, HEIGHT, base)
+        .expect("render should succeed");
+    let cpu = on_cpu(&scene, base);
+
+    let mut worst = 0u8;
+    let mut partial = 0;
+    for (g, c) in gpu.chunks_exact(4).zip(cpu.chunks_exact(4)) {
+        for ch in 0..4 {
+            worst = worst.max(g[ch].abs_diff(c[ch]));
+        }
+        if (12..243).contains(&c[0]) && c != [255, 255, 255, 255] {
+            partial += 1;
+        }
+    }
+    assert!(
+        partial > 100,
+        "the scene must have antialiased edges to compare: {partial}"
+    );
+    assert!(
+        worst <= 2,
+        "worst channel difference {worst}/255 — every edge pixel should be the CPU's"
+    );
+}

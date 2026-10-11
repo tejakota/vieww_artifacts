@@ -11,6 +11,32 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-11: every GPU edge antialiased, Metal and D3D12 render paths, cross-platform type-check
+
+1. **GPU edges for non-analytic shapes (PENDING §2.1, the parity half).**
+   Rotated rects, arbitrary fills and every stroke now draw as one quad over
+   their inked pixels, with coverage from the CPU rasterizer itself
+   (`GpuSeam::shape_coverage`: same polygon construction, flattening and 4×4
+   coverage as `NativeRenderer`), cached in the mask atlas by content with
+   any shaped clip multiplied in. Census on lavapipe, same machine, before →
+   after: worst channel **203 → 47**/255, channels over 1/255 **525,299 →
+   245,647**, fixtures with interior mismatches **6 → 2** (`00-transforms`
+   688→0, `12-avatar-wall` 68→0, `12-avatar` 49→0, `00-blend-modes` 7→0;
+   left: `23-editor-glass`'s known backdrop-blur numerics and `22-editor`'s
+   56 px, both unchanged). New `vulkan_scene` test holds a rotated rect, a
+   star, a dashed curve and a clipped circle within 2/255 on **every** pixel;
+   with the change disabled it fails at 180/255. Consequence worth knowing:
+   for these shapes the GPU-vs-CPU comparison is no longer between two
+   independent rasterizers — the tessellator's independent check now lives
+   in `vulkan_mesh_smoke.rs` and the planner-less path. Residual cost:
+   `PENDING.md` §2.1.
+2. **Metal and D3D12 render paths**, type-checked and linted on their own
+   targets from Linux, never yet executed — `PENDING.md` §1.2/§1.3.
+3. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
+   Windows and Android from Linux; its first run found five real bugs (see
+   the commit).
+4. **`vieww-spatial`** applied from the supplied patch, fixed to build.
+
 ## The most recent effort (2026-10-09): the PENDING list emptied of everything a machine can close — analytic edges on the GPU, a GPU frame in a real window, atlas eviction, the full gate on the pinned toolchain
 
 Scope: `PENDING.md` itself, item by item, with one question per entry — "can

@@ -12,8 +12,8 @@ one batched vertex buffer plus an ordered **step program** a backend executes.
 
 | command / feature | GPU implementation | definition taken from |
 |---|---|---|
-| fills, strokes, transforms | CPU tessellation (lyon), batched, scissored runs | — |
-| **rect-family geometry edges** | **analytic SDF coverage** — rects and rounded rects distance-evaluated per fragment, so edges are antialiased like the CPU's; everything else tessellates | new arithmetic, verified against the CPU's own coverage within 3/255 (see below) |
+| fills, strokes, transforms | non-analytic shapes: one quad over the inked box, coverage from `GpuSeam::shape_coverage` (the CPU rasterizer's own) in the mask atlas, clip multiplied in; tessellation (lyon) only without a planner or for patches over ~1.4 Mpx | the edge *is* the CPU's — `vulkan_scene`'s `arbitrary_paths_and_strokes_are_antialiased_like_the_cpu_everywhere` holds every pixel within 2/255 |
+| **rect-family geometry edges** | **analytic SDF coverage** — rects and rounded rects distance-evaluated per fragment, so edges are antialiased like the CPU's | new arithmetic, verified against the CPU's own coverage within 3/255 (see below) |
 | rectangular clips | dynamic scissor per run | — |
 | **shaped clips** (rounded, path, nested) | R8 mask atlas, `textureLoad` at the fragment's pixel; on layers, a mask multiply at pop | `GpuSeam::clip_mask` = the CPU clip rasterizer's coverage |
 | text (monochrome) | R8 glyph atlas, texel-exact quads | `GlyphCoverage` = the CPU glyph rasterizer |
@@ -111,12 +111,11 @@ second is the honest one.
 
 ## What is still missing
 
-1. **General-path geometry edges.** The analytic SDF material covers the
-   rect family — rects and rounded rects, the overwhelming majority of UI
-   geometry. A rotated rect or an arbitrary path still tessellates without
-   edge AA, which is `PENDING.md` §2.1 now, with its two honest options:
-   4× MSAA with a resolve per target, or a coverage-R8 pass like the clip
-   masks already use.
+1. **Per-frame cost of changing general paths.** Every non-analytic shape is
+   antialiased with the CPU rasterizer's own coverage, placed in the mask
+   atlas (2026-10-11; census worst edge 203→47/255, interior verdict 6→2
+   fixtures). A path that changes every frame is re-rasterised on the CPU
+   every frame — `PENDING.md` §2.1.
 2. **The windowed path reads back through host memory.** A window *can* be
    GPU-driven — `App::prefer_gpu` routes frames through
    `NativeRenderer::present_planned`, closed and verified on a real window —

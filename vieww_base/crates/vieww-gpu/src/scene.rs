@@ -63,7 +63,7 @@ use std::hash::{Hash, Hasher};
 use vieww_foundation::{
     BlendMode, Color, GradientGeometry, Offset, Path, PathVerb, Rect, Transform,
 };
-use vieww_paint::native::{ColorGlyphParts, GlyphAlpha, GlyphCoverage, GpuSeam};
+use vieww_paint::native::{ColorGlyphParts, GlyphAlpha, GlyphCoverage, GpuSeam, SeamShape};
 use vieww_paint::{Clip, Command, Paint, Scene};
 
 use crate::atlas::{Atlas, AtlasKey};
@@ -916,7 +916,119 @@ impl Hash for ClipMaskKey<'_> {
     }
 }
 
+/// The largest shape-coverage patch (in pixels) worth placing in the mask
+/// atlas. Above it the shape is tessellated with hard edges instead: a
+/// full-window rotated backdrop would otherwise claim most of a 4096² atlas
+/// for one draw, and its edges are a sliver of its area.
+const MAX_SHAPE_MASK_PIXELS: u64 = 1366 * 1024;
+
 impl Planner {
+    /// The CPU renderer's own coverage for a non-analytic shape over
+    /// `region`, multiplied by the clip mask the draw already carries, as one
+    /// mask in the atlas. `None` when nothing is inked, the patch is too big
+    /// to be worth it, or the atlas is full — the caller then falls back to
+    /// hard-edged tessellation, which is what every such shape had before.
+    fn shape_mask(
+        &mut self,
+        shape: SeamShape<'_>,
+        transform: Transform,
+        region: PixelRect,
+        clip: &Clip,
+        clip_mask: Option<[f32; 2]>,
+    ) -> Option<(MaskRef, PixelRect)> {
+        let key = {
+            let mut h = std::hash::DefaultHasher::new();
+            "shape".hash(&mut h);
+            match shape {
+                SeamShape::Rect(r) => {
+                    (0u8, [r.left, r.top, r.right, r.bottom].map(f32::to_bits)).hash(&mut h)
+                }
+                SeamShape::Fill(path) => {
+                    1u8.hash(&mut h);
+                    hash_path(path, &mut h);
+                }
+                SeamShape::Stroke(path, stroke) => {
+                    2u8.hash(&mut h);
+                    hash_path(path, &mut h);
+                    // `Debug` of the stroke prints every field, floats in
+                    // their shortest round-trip form — a complete key.
+                    format!("{stroke:?}").hash(&mut h);
+                }
+            }
+            [
+                transform.a,
+                transform.b,
+                transform.c,
+                transform.d,
+                transform.tx,
+                transform.ty,
+            ]
+            .map(f32::to_bits)
+            .hash(&mut h);
+            region.hash(&mut h);
+            if clip_mask.is_some() {
+                ClipMaskKey(clip, region).hash(&mut h);
+            }
+            MaskKey(h.finish())
+        };
+        let rect_of = |slot: MaskSlot| PixelRect {
+            x0: slot.device_x,
+            y0: slot.device_y,
+            x1: slot.device_x + i32::try_from(slot.width).unwrap_or(i32::MAX),
+            y1: slot.device_y + i32::try_from(slot.height).unwrap_or(i32::MAX),
+        };
+        if let Some(slot) = self.masks.get(key) {
+            return Some((MaskRef::from(slot), rect_of(slot)));
+        }
+        // On a miss, the clip's coverage over `region`, read out of the atlas
+        // before the build borrows it.
+        let clip_bytes = clip_mask.map(|offset| {
+            let side = self.masks.side() as usize;
+            let texels = self.masks.texels();
+            let (w, h) = (region.width() as usize, region.height() as usize);
+            let mut out = vec![0u8; w * h];
+            #[expect(clippy::cast_possible_truncation, reason = "integral offsets")]
+            let (ox, oy) = (offset[0] as i32, offset[1] as i32);
+            for y in 0..h {
+                for x in 0..w {
+                    let tx = usize::try_from(region.x0 + x as i32 - ox).ok();
+                    let ty = usize::try_from(region.y0 + y as i32 - oy).ok();
+                    if let (Some(tx), Some(ty)) = (tx, ty) {
+                        if tx < side {
+                            out[y * w + x] = texels.get(ty * side + tx).copied().unwrap_or(0);
+                        }
+                    }
+                }
+            }
+            out
+        });
+        let seam = &self.seam;
+        let slot = self.masks.get_or_insert(key, || {
+            let mut patch = seam.shape_coverage(shape, transform, region.to_rect())?;
+            if u64::from(patch.width) * u64::from(patch.height) > MAX_SHAPE_MASK_PIXELS {
+                return None;
+            }
+            if let Some(clip) = &clip_bytes {
+                let w = region.width() as usize;
+                for y in 0..patch.height as usize {
+                    for x in 0..patch.width as usize {
+                        // The patch lies inside `region` by construction.
+                        let rx = usize::try_from(patch.x - region.x0).unwrap_or(0) + x;
+                        let ry = usize::try_from(patch.y - region.y0).unwrap_or(0) + y;
+                        let c = clip.get(ry * w + rx).copied().unwrap_or(0);
+                        let i = y * patch.width as usize + x;
+                        let product = u16::from(patch.alpha[i]) * u16::from(c);
+                        #[expect(clippy::cast_possible_truncation, reason = "<= 255")]
+                        let byte = ((product + 127) / 255) as u8;
+                        patch.alpha[i] = byte;
+                    }
+                }
+            }
+            Some((patch.x, patch.y, patch.width, patch.height, patch.alpha))
+        })?;
+        Some((MaskRef::from(slot), rect_of(slot)))
+    }
+
     /// The mask for `clip`'s shapes over `region`. `None` only when the atlas
     /// is full; an empty region never reaches here.
     fn clip_mask(&mut self, clip: &Clip, region: PixelRect) -> Option<MaskRef> {
@@ -1047,7 +1159,7 @@ impl Planner {
 /// Emit one fill, stroke, glyph run or image.
 fn plan_primitive(
     out: &mut Builder,
-    planner: Option<&mut Planner>,
+    mut planner: Option<&mut Planner>,
     command: &Command,
     target: PixelRect,
     mask: [f32; 4],
@@ -1074,6 +1186,22 @@ fn plan_primitive(
                     emit_shape_painted(
                         out, planner, device, 0.0, *paint, *rect, *transform, scissor, mask,
                     );
+                    return;
+                }
+            }
+            if let Some(p) = planner.as_deref_mut() {
+                let shape = SeamShape::Rect(*rect);
+                if emit_covered(
+                    out,
+                    p,
+                    shape,
+                    *paint,
+                    *rect,
+                    *transform,
+                    command.clip(),
+                    target,
+                    mask,
+                ) {
                     return;
                 }
             }
@@ -1117,6 +1245,23 @@ fn plan_primitive(
                     }
                 }
             }
+            if let Some(p) = planner.as_deref_mut() {
+                let shape = SeamShape::Fill(path);
+                let bounds = path.bounds();
+                if emit_covered(
+                    out,
+                    p,
+                    shape,
+                    *paint,
+                    bounds,
+                    *transform,
+                    command.clip(),
+                    target,
+                    mask,
+                ) {
+                    return;
+                }
+            }
             let mesh = tessellate_fill(&transformed(path, *transform), TOLERANCE);
             emit_painted(
                 out,
@@ -1147,6 +1292,27 @@ fn plan_primitive(
             // CPU's; and dashes were not applied at all. Both are silent
             // wrongness, not gaps. The dash split is the CPU renderer's own
             // (`GpuSeam`'s `dashed_path`), in the same space it measures in.
+            // `NativeRenderer`'s gradient box for a stroke, so a gradient
+            // stroke maps its ramp over the same unit square.
+            let bounds = path
+                .bounds()
+                .inflate(stroke.reach().max(stroke.width * 0.5 + 1.0));
+            if let Some(p) = planner.as_deref_mut() {
+                let shape = SeamShape::Stroke(path, stroke);
+                if emit_covered(
+                    out,
+                    p,
+                    shape,
+                    *paint,
+                    bounds,
+                    *transform,
+                    command.clip(),
+                    target,
+                    mask,
+                ) {
+                    return;
+                }
+            }
             let dashed = vieww_paint::native::dashed_path(path, &stroke.style.dash);
             let local = dashed.as_ref().unwrap_or(path);
             let scale = (transform.a * transform.d - transform.b * transform.c)
@@ -1158,7 +1324,6 @@ fn plan_primitive(
                 let d = transform.apply(Offset::new(p[0], p[1]));
                 *p = [d.dx, d.dy];
             }
-            let bounds = path.bounds().inflate(stroke.reach());
             emit_painted(
                 out,
                 planner,
@@ -1188,6 +1353,51 @@ fn plan_primitive(
             unreachable!("handled by plan_with");
         }
     }
+}
+
+/// A non-analytic shape drawn as one quad over its inked pixels, with the
+/// CPU renderer's own coverage — clip included — in the mask atlas. This is
+/// what antialiases a rotated rect, an arbitrary path and every stroke the
+/// way `NativeRenderer` does: the edge *is* the CPU's edge, not a triangle
+/// rasteriser's. `false` when the mask could not be made (see
+/// [`Planner::shape_mask`]); the caller tessellates instead.
+#[allow(clippy::too_many_arguments)]
+fn emit_covered(
+    out: &mut Builder,
+    planner: &mut Planner,
+    shape: SeamShape<'_>,
+    paint: Paint,
+    local_bounds: Rect,
+    transform: Transform,
+    clip: &Clip,
+    target: PixelRect,
+    mask: [f32; 4],
+) -> bool {
+    let clip_mask = (mask[2] > 0.5).then_some([mask[0], mask[1]]);
+    let Some((coverage, inked)) = planner.shape_mask(shape, transform, target, clip, clip_mask)
+    else {
+        return false;
+    };
+    #[expect(clippy::cast_precision_loss, reason = "device pixels")]
+    let (x0, y0, x1, y1) = (
+        inked.x0 as f32,
+        inked.y0 as f32,
+        inked.x1 as f32,
+        inked.y1 as f32,
+    );
+    let quad = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    emit_painted(
+        out,
+        Some(planner),
+        &quad,
+        &[0, 1, 2, 0, 2, 3],
+        paint,
+        local_bounds,
+        transform,
+        target.to_rect(),
+        [coverage.offset[0], coverage.offset[1], 1.0, 0.0],
+    );
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2425,6 +2635,48 @@ mod tests {
     }
 
     #[test]
+    fn a_clipped_rotated_shape_is_one_quad_whose_mask_already_holds_the_clip() {
+        let mut scene = Scene::default();
+        scene.push_command(Command::FillRect {
+            rect: Rect::new(0.0, 0.0, 12.0, 12.0),
+            paint: Paint::solid(Color::RED),
+            transform: Transform::rotate(0.4),
+            clip: rounded_clip(),
+        });
+        let mut planner = Planner::new();
+        let plan = planner.plan(&scene, 100.0, 100.0);
+        assert!(plan.is_complete(), "{:?}", plan.unsupported);
+        assert_eq!(plan.vertices.len(), 4);
+        // The clip's own mask and the shape's (clip multiplied in).
+        assert_eq!(planner.mask_atlas().len(), 2);
+        // A second frame of the same scene builds nothing new.
+        let version = planner.mask_atlas().version();
+        let again = planner.plan(&scene, 100.0, 100.0);
+        assert_eq!(again.vertices, plan.vertices);
+        assert_eq!(planner.mask_atlas().version(), version);
+    }
+
+    #[test]
+    fn a_shape_too_big_for_a_mask_is_tessellated_rather_than_dropped() {
+        let mut scene = Scene::default();
+        scene.push_command(Command::FillRect {
+            rect: Rect::new(-2000.0, -2000.0, 2000.0, 2000.0),
+            paint: Paint::solid(Color::RED),
+            transform: Transform::rotate(0.3),
+            clip: Clip::NONE,
+        });
+        let mut planner = Planner::new();
+        let plan = planner.plan(&scene, 3000.0, 3000.0);
+        assert!(plan.is_complete());
+        assert!(!plan.vertices.is_empty());
+        assert!(
+            plan.vertices.iter().all(|v| v.mask[2] == 0.0),
+            "tessellated, no mask"
+        );
+        assert_eq!(planner.mask_atlas().len(), 0);
+    }
+
+    #[test]
     fn a_shaped_clip_becomes_a_mask_with_a_planner_and_a_gap_without_one() {
         let mut scene = Scene::default();
         solid(
@@ -2544,9 +2796,12 @@ mod tests {
             );
             assert_eq!(planner.ramp_atlas().len(), 1);
 
-            // The same gradient on a rotated rect cannot be a shape, so it
-            // takes the tessellated GRADIENT material — still per-fragment,
-            // still one ramp row, corners exactly on the unit square.
+            // The same gradient on a rotated rect cannot be an analytic
+            // shape. It is one quad over its inked bounding box, coverage
+            // from the CPU rasterizer in the mask atlas, painted with the
+            // per-fragment GRADIENT material and one ramp row. The quad's
+            // corners lie outside the rotated rect, so their paint
+            // coordinates leave the unit square — coverage is zero there.
             let mut scene = Scene::default();
             scene.push_command(Command::FillRect {
                 rect: Rect::new(10.0, 10.0, 30.0, 20.0),
@@ -2556,7 +2811,7 @@ mod tests {
                     b: INV_SQRT_2,
                     c: -INV_SQRT_2,
                     d: INV_SQRT_2,
-                    tx: 0.0,
+                    tx: 50.0,
                     ty: 0.0,
                 },
                 clip: Clip::NONE,
@@ -2564,14 +2819,17 @@ mod tests {
             let mut planner = Planner::new();
             let plan = planner.plan(&scene, 100.0, 100.0);
             assert!(plan.is_complete());
+            assert_eq!(plan.vertices.len(), 4, "one quad");
             assert!(plan
                 .vertices
                 .iter()
-                .all(|v| v.texture_kind == material::GRADIENT));
+                .all(|v| v.texture_kind == material::GRADIENT && v.mask[2] > 0.5));
+            assert_eq!(planner.mask_atlas().len(), 1);
             let locals: Vec<[f32; 2]> = plan.vertices.iter().map(|v| v.local).collect();
             assert!(
-                locals.iter().all(|c| (-1e-4..=1.0 + 1e-4).contains(&c[0])
-                    && (-1e-4..=1.0 + 1e-4).contains(&c[1])),
+                locals
+                    .iter()
+                    .any(|c| !(0.0..=1.0).contains(&c[0]) || !(0.0..=1.0).contains(&c[1])),
                 "{locals:?}"
             );
         }
