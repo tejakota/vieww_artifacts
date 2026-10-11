@@ -1326,7 +1326,7 @@ impl WindowState {
                     logical_size,
                     self.scale,
                 )
-                .map(|frame| (frame.report, frame.drawn_on_gpu))
+                .map(|frame| (frame.report, frame.drawn_on_gpu, frame.presented_directly))
         } else {
             gpu.renderer
                 .present_damaged(
@@ -1337,11 +1337,11 @@ impl WindowState {
                     logical_size,
                     self.scale,
                 )
-                .map(|report| (report, false))
+                .map(|report| (report, false, false))
         };
 
         match presented {
-            Ok((report, drawn_on_gpu)) => {
+            Ok((report, drawn_on_gpu, presented_directly)) => {
                 // A wall-clock measurement around the call, unlike
                 // `vieww_paint::gpu::GpuRenderer::present_with`'s own doc
                 // warning against exactly that: that backend's
@@ -1394,6 +1394,9 @@ impl WindowState {
                 };
                 self.log
                     .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
+                if presented_directly {
+                    self.log.note_direct_present();
+                }
                 let _ = report;
                 // After the frame, not before: the semantics describe what is
                 // now on screen, and a screen reader announcing a control a

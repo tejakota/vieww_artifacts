@@ -47,7 +47,17 @@ use ash::vk;
 use vieww_foundation::{BlendMode, Color};
 use vieww_gpu::{FilterOp, MaskRef, PixelRect, Planner, ScenePlan, Step, Vertex};
 
+#[cfg(feature = "vulkan-swapchain")]
+use super::AcquiredImage;
 use super::{translate_wgsl_to_spirv, VulkanDevice, VulkanError};
+
+/// Where `execute` sends the finished frame instead of the readback buffer:
+/// a presentable image, and the semaphore the blit into it must wait on.
+#[derive(Clone, Copy)]
+struct BlitTarget {
+    image: vk::Image,
+    ready: vk::Semaphore,
+}
 
 /// Colour format of every render target.
 const TARGET_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
@@ -707,8 +717,56 @@ impl SceneRenderer {
         let viewport = [width as f32, height as f32, 0.0, 0.0];
         write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
         self.upload_geometry(plan)?;
-        self.execute(plan, width, height, clear)?;
+        self.execute(plan, width, height, clear, None)?;
         self.read_back(width, height)
+    }
+
+    /// Execute a complete `plan` straight into an acquired swapchain image,
+    /// leaving it ready to present — no readback, no host copy, no upload.
+    /// `planner`'s atlases are uploaded first, as in
+    /// [`render_planned`](Self::render_planned).
+    ///
+    /// Only for an **opaque** frame (`clear.a == 255`): the scene targets are
+    /// premultiplied, and a translucent window's pixels would need
+    /// unpremultiplying, which a blit cannot do. The caller checks
+    /// `VulkanDevice::can_blit_scene_frames` once per swapchain.
+    ///
+    /// # Errors
+    ///
+    /// An incomplete plan, a translucent clear, an extent that does not match
+    /// `target`, or any Vulkan call failing. On error `target` is still the
+    /// caller's to present or abandon.
+    #[cfg(feature = "vulkan-swapchain")]
+    pub fn render_planned_to(
+        &mut self,
+        planner: &Planner,
+        plan: &ScenePlan,
+        clear: Color,
+        target: &AcquiredImage,
+    ) -> Result<(), VulkanError> {
+        if !plan.is_complete() {
+            return Err(VulkanError::Vulkan("incomplete plan".into()));
+        }
+        if clear.a != 255 {
+            return Err(VulkanError::Vulkan(
+                "render_planned_to needs an opaque clear; use render_planned".into(),
+            ));
+        }
+        let (width, height) = target.extent();
+        if width == 0 || height == 0 {
+            return Err(VulkanError::Vulkan("zero-sized swapchain image".into()));
+        }
+        self.upload_planner(planner)?;
+        self.ensure_targets(width, height, plan.target_depth + 1)?;
+        #[allow(clippy::cast_precision_loss)]
+        let viewport = [width as f32, height as f32, 0.0, 0.0];
+        write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
+        self.upload_geometry(plan)?;
+        let blit = BlitTarget {
+            image: target.image,
+            ready: target.ready,
+        };
+        self.execute(plan, width, height, clear, Some(blit))
     }
 
     // ── targets ────────────────────────────────────────────────────────────
@@ -787,7 +845,7 @@ impl SceneRenderer {
                 );
             }
         }
-        self.submit_and_wait()
+        self.submit_and_wait(None)
     }
 
     fn target(&self, id: TargetId) -> &Target {
@@ -956,7 +1014,7 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             );
         }
-        self.submit_and_wait()?;
+        self.submit_and_wait(None)?;
 
         if resized || force {
             let info = [vk::DescriptorImageInfo {
@@ -1027,6 +1085,7 @@ impl SceneRenderer {
         width: u32,
         height: u32,
         clear: Color,
+        out: Option<BlitTarget>,
     ) -> Result<(), VulkanError> {
         self.begin_commands()?;
         let a = f32::from(clear.a) / 255.0;
@@ -1178,24 +1237,71 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
             );
-            self.device.cmd_copy_image_to_buffer(
-                cmd,
-                frame,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                self.readback.handle,
-                &[vk::BufferImageCopy {
-                    buffer_offset: 0,
-                    buffer_row_length: 0,
-                    buffer_image_height: 0,
-                    image_subresource: color_layers(),
-                    image_offset: vk::Offset3D::default(),
-                    image_extent: vk::Extent3D {
-                        width,
-                        height,
-                        depth: 1,
-                    },
-                }],
-            );
+        }
+        match out {
+            None => unsafe {
+                self.device.cmd_copy_image_to_buffer(
+                    cmd,
+                    frame,
+                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    self.readback.handle,
+                    &[vk::BufferImageCopy {
+                        buffer_offset: 0,
+                        buffer_row_length: 0,
+                        buffer_image_height: 0,
+                        image_subresource: color_layers(),
+                        image_offset: vk::Offset3D::default(),
+                        image_extent: vk::Extent3D {
+                            width,
+                            height,
+                            depth: 1,
+                        },
+                    }],
+                );
+            },
+            Some(target) => unsafe {
+                // The frame straight into the presentable image. The blit
+                // converts RGBA16F to the swapchain's 8-bit UNORM (and to
+                // BGRA order when that is the format) on the GPU; the frame
+                // is opaque (see `render_planned_to`), so premultiplied and
+                // straight are the same numbers and nothing is lost.
+                transition(
+                    &self.device,
+                    cmd,
+                    target.image,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                );
+                #[expect(clippy::cast_possible_wrap, reason = "frame extents")]
+                let corner = vk::Offset3D {
+                    x: width as i32,
+                    y: height as i32,
+                    z: 1,
+                };
+                self.device.cmd_blit_image(
+                    cmd,
+                    frame,
+                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    target.image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &[vk::ImageBlit {
+                        src_subresource: color_layers(),
+                        src_offsets: [vk::Offset3D::default(), corner],
+                        dst_subresource: color_layers(),
+                        dst_offsets: [vk::Offset3D::default(), corner],
+                    }],
+                    vk::Filter::NEAREST,
+                );
+                transition(
+                    &self.device,
+                    cmd,
+                    target.image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    vk::ImageLayout::PRESENT_SRC_KHR,
+                );
+            },
+        }
+        unsafe {
             transition(
                 &self.device,
                 cmd,
@@ -1204,7 +1310,7 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             );
         }
-        self.submit_and_wait()
+        self.submit_and_wait(out.map(|t| t.ready))
     }
 
     fn draw_runs(
@@ -1363,14 +1469,22 @@ impl SceneRenderer {
         Ok(())
     }
 
-    fn submit_and_wait(&self) -> Result<(), VulkanError> {
+    fn submit_and_wait(&self, wait: Option<vk::Semaphore>) -> Result<(), VulkanError> {
         let cmd = self.command_buffer;
+        let cmds = [cmd];
+        let waits: Vec<vk::Semaphore> = wait.into_iter().collect();
+        // The whole program may run before the swapchain image is free; only
+        // the blit into it must wait.
+        let stages = vec![vk::PipelineStageFlags::TRANSFER; waits.len()];
         unsafe {
             self.device.end_command_buffer(cmd)?;
             self.device.reset_fences(&[self.fence])?;
             self.device.queue_submit(
                 self.queue,
-                &[vk::SubmitInfo::default().command_buffers(&[cmd])],
+                &[vk::SubmitInfo::default()
+                    .command_buffers(&cmds)
+                    .wait_semaphores(&waits)
+                    .wait_dst_stage_mask(&stages)],
                 self.fence,
             )?;
             self.device.wait_for_fences(&[self.fence], true, u64::MAX)?;

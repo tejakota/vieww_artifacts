@@ -116,13 +116,12 @@ second is the honest one.
    atlas (2026-10-11; census worst edge 203→47/255, interior verdict 6→2
    fixtures). A path that changes every frame is re-rasterised on the CPU
    every frame — `PENDING.md` §2.1.
-2. **The windowed path reads back through host memory.** A window *can* be
-   GPU-driven — `App::prefer_gpu` routes frames through
-   `NativeRenderer::present_planned`, closed and verified on a real window —
-   but the GPU's frame is read back into host memory and uploaded like the
-   CPU's would be; rendering straight onto the swapchain image is the
-   integration step that makes the path fast rather than correct
-   (`PENDING.md` §2.2).
+2. **The windowed path no longer reads back** (2026-10-11): an opaque GPU
+   frame is `vkCmdBlitImage`d from the scene's RGBA16F target straight into
+   the acquired swapchain image (`SceneRenderer::render_planned_to`). A
+   translucent window, or a driver without `BLIT_SRC`/`BLIT_DST` on those
+   formats, keeps the readback path; `FrameReport::gpu_direct_frames` says
+   which one ran.
 3. **Cost shape, unmeasured on real hardware.** Offscreen targets are
    frame-sized per nesting level; every shadow is a 7-pass sequence; clip and
    shadow masks are rasterized on the CPU (cached across frames by content).

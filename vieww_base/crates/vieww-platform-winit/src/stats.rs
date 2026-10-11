@@ -86,6 +86,9 @@ pub struct FrameLog {
     /// unplannable frames on the CPU, and the interesting number is how
     /// often each half did the work, not which one was configured.
     gpu_frames: u64,
+    /// Of `gpu_frames`, the ones rendered straight into the swapchain image
+    /// with no readback — see [`FrameReport::gpu_direct_frames`].
+    gpu_direct_frames: u64,
     /// Of those, the ones the event loop had slept before.
     ///
     /// **This is the number worth reading.** A frame that repaints everything
@@ -133,6 +136,7 @@ impl FrameLog {
             over_budget: 0,
             rasterised: 0,
             gpu_frames: 0,
+            gpu_direct_frames: 0,
             full_repaint_frames: 0,
             idle_full_repaint_frames: 0,
             first: None,
@@ -214,6 +218,11 @@ impl FrameLog {
     /// `stats` is the pipeline's own measurement, which is folded into `work`;
     /// `None` when the scheduler declined to run a frame and only the present
     /// happened.
+    /// Mark the frame just [`record`](Self::record)ed as presented directly.
+    pub fn note_direct_present(&mut self) {
+        self.gpu_direct_frames += 1;
+    }
+
     pub fn record(
         &mut self,
         stats: Option<FrameStats>,
@@ -344,6 +353,7 @@ impl FrameLog {
         FrameReport {
             frames: self.frames,
             gpu_frames: self.gpu_frames,
+            gpu_direct_frames: self.gpu_direct_frames,
             elapsed,
             fps,
             over_budget: self.over_budget,
@@ -393,6 +403,11 @@ pub struct FrameReport {
     /// "is the GPU actually doing it" — a question this workspace has
     /// explicitly never been able to answer for a real window.
     pub gpu_frames: u64,
+    /// Of [`gpu_frames`](Self::gpu_frames), those the GPU rendered straight
+    /// into the window's swapchain image: no host readback, no upload.
+    /// The rest went through the readback path — a translucent window, or a
+    /// driver that cannot blit the scene's format into the swapchain's.
+    pub gpu_direct_frames: u64,
     /// Wall clock from the first presented frame to the last.
     pub elapsed: Duration,
     /// Presented frames per second, over `elapsed`.

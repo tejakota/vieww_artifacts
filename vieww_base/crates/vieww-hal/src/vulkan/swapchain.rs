@@ -528,6 +528,197 @@ impl VulkanDevice {
     }
 }
 
+/// A swapchain image acquired for a renderer to write directly — see
+/// [`VulkanDevice::acquire_image`]. It must be handed back exactly once, to
+/// [`VulkanDevice::present_acquired`] or, if rendering failed,
+/// [`VulkanDevice::abandon_acquired`]: an image that is acquired and never
+/// presented is gone from the swapchain, and enough of them make the next
+/// acquire wait forever.
+#[derive(Debug)]
+#[must_use = "an acquired image must be presented or abandoned"]
+pub struct AcquiredImage {
+    pub(crate) index: u32,
+    pub(crate) image: vk::Image,
+    /// Signalled by the presentation engine when the image may be written;
+    /// the first submission that touches the image waits on it.
+    pub(crate) ready: vk::Semaphore,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+}
+
+impl AcquiredImage {
+    /// The image's extent — the swapchain's at acquisition.
+    #[must_use]
+    pub const fn extent(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+}
+
+impl VulkanDevice {
+    /// Whether a scene frame (`R16G16B16A16_SFLOAT`, optimal tiling) can be
+    /// `vkCmdBlitImage`d straight into `swapchain`'s images: the source format
+    /// must support `BLIT_SRC` and the swapchain's `BLIT_DST`. Both are
+    /// mandatory in the Vulkan spec for these formats; this asks rather than
+    /// trusting every driver to have read it.
+    #[must_use]
+    pub fn can_blit_scene_frames(&self, swapchain: &VulkanSwapchain) -> bool {
+        // SAFETY: a query on a live physical device.
+        let (src, dst) = unsafe {
+            (
+                self.instance.get_physical_device_format_properties(
+                    self.physical_device,
+                    vk::Format::R16G16B16A16_SFLOAT,
+                ),
+                self.instance
+                    .get_physical_device_format_properties(self.physical_device, swapchain.format),
+            )
+        };
+        src.optimal_tiling_features
+            .contains(vk::FormatFeatureFlags::BLIT_SRC)
+            && dst
+                .optimal_tiling_features
+                .contains(vk::FormatFeatureFlags::BLIT_DST)
+    }
+
+    /// Acquire the next swapchain image for direct rendering, rebuilding the
+    /// swapchain once if it is out of date. `Ok(None)` when the rebuild
+    /// changed the extent from `expected` — the caller rendered for a size
+    /// that no longer exists, and skipping this frame is the honest answer
+    /// (the matching `Resized` repaints).
+    ///
+    /// # Errors
+    ///
+    /// Acquisition failing even after one rebuild.
+    pub fn acquire_image(
+        &self,
+        swapchain: &mut VulkanSwapchain,
+        expected: (u32, u32),
+    ) -> Result<Option<AcquiredImage>, VulkanError> {
+        let acquire = |sc: &VulkanSwapchain| unsafe {
+            sc.swapchain_loader.acquire_next_image(
+                sc.swapchain,
+                u64::MAX,
+                sc.image_available,
+                vk::Fence::null(),
+            )
+        };
+        let (index, _suboptimal) = match acquire(swapchain) {
+            Ok(result) => result,
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                swapchain.recreate(self, swapchain.width, swapchain.height)?;
+                acquire(swapchain)
+                    .map_err(|e| VulkanError::Vulkan(format!("acquire after rebuild: {e:?}")))?
+            }
+            Err(e) => {
+                return Err(VulkanError::Vulkan(format!(
+                    "acquiring swapchain image: {e:?}"
+                )))
+            }
+        };
+        let image = AcquiredImage {
+            index,
+            image: swapchain.images[index as usize],
+            ready: swapchain.image_available,
+            width: swapchain.width,
+            height: swapchain.height,
+        };
+        if image.extent() != expected {
+            self.abandon_acquired(swapchain, image)?;
+            return Ok(None);
+        }
+        Ok(Some(image))
+    }
+
+    /// Present an image a renderer has finished writing and left in
+    /// `PRESENT_SRC_KHR`, with every submission that wrote it already
+    /// retired (as `SceneRenderer`'s are: it waits on its fence).
+    ///
+    /// # Errors
+    ///
+    /// Presentation failing for a reason other than an out-of-date
+    /// swapchain, which the next acquire handles.
+    pub fn present_acquired(
+        &self,
+        swapchain: &mut VulkanSwapchain,
+        image: AcquiredImage,
+    ) -> Result<(), VulkanError> {
+        let swapchains = [swapchain.swapchain];
+        let image_indices = [image.index];
+        let present_info = vk::PresentInfoKHR::default()
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+        match unsafe {
+            swapchain
+                .swapchain_loader
+                .queue_present(self.queue, &present_info)
+        } {
+            Ok(_) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => Ok(()),
+            Err(e) => Err(VulkanError::Vulkan(format!("presenting: {e:?}"))),
+        }
+    }
+
+    /// Give back an image that will not be rendered: consume its readiness
+    /// semaphore, move it to `PRESENT_SRC_KHR` untouched, and present it, so
+    /// the swapchain keeps all its images and the semaphore can be reused.
+    ///
+    /// # Errors
+    ///
+    /// Any Vulkan call failing.
+    pub fn abandon_acquired(
+        &self,
+        swapchain: &mut VulkanSwapchain,
+        image: AcquiredImage,
+    ) -> Result<(), VulkanError> {
+        swapchain.ensure_upload_resources(self, 4)?;
+        let cmd = swapchain.command_buffer;
+        let barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .image(image.image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        let waits = [image.ready];
+        let stages = [vk::PipelineStageFlags::TOP_OF_PIPE];
+        let cmds = [cmd];
+        unsafe {
+            self.device
+                .reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())?;
+            self.device.begin_command_buffer(
+                cmd,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            self.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+            self.device.end_command_buffer(cmd)?;
+            self.device.queue_submit(
+                self.queue,
+                &[vk::SubmitInfo::default()
+                    .wait_semaphores(&waits)
+                    .wait_dst_stage_mask(&stages)
+                    .command_buffers(&cmds)],
+                vk::Fence::null(),
+            )?;
+            self.device.queue_wait_idle(self.queue)?;
+        }
+        self.present_acquired(swapchain, image)
+    }
+}
+
 impl VulkanSwapchain {
     fn create(
         device: &VulkanDevice,

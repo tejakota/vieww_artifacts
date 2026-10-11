@@ -181,6 +181,24 @@ vieww_widget::widget_node_from!(Still);
 /// the process is blocked in the platform. The trace is the cheapest tool that
 /// works, and it is left in because the next person to touch this file will
 /// need it for the same reason this one did.
+/// Pure-blue pixels on the X display, via ImageMagick's `import`; `None`
+/// when the tool is missing (the scenario then says it did not look).
+fn blue_pixels_on_screen() -> Option<usize> {
+    let out = std::process::Command::new("import")
+        .args(["-window", "root", "-depth", "8", "rgb:-"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(
+        out.stdout
+            .chunks_exact(3)
+            .filter(|p| p[0] < 8 && p[1] < 8 && p[2] > 247)
+            .count(),
+    )
+}
+
 fn trace(what: &str) {
     if std::env::var_os("VIEWW_WAIT_LOOP_TRACE").is_some() {
         eprintln!("wait_loop trace: {what}");
@@ -594,10 +612,16 @@ fn a_gpu_planned_frame_presents_to_a_real_window() {
 
     // As in the self-close scenario: close from off the UI thread, after the
     // loop has settled, so the run is finite and returns its report.
+    let on_screen = Arc::new(std::sync::Mutex::new(None::<usize>));
     std::thread::spawn({
         let elapsed = Arc::clone(&elapsed);
+        let on_screen = Arc::clone(&on_screen);
         move || {
             std::thread::sleep(IDLE);
+            // What the X server is actually showing, while the window is up:
+            // the only evidence that the GPU's frame — not a readback of it —
+            // reached the screen with the right colours.
+            *on_screen.lock().unwrap() = blue_pixels_on_screen();
             elapsed.store(1, Ordering::SeqCst);
             trace("waking");
             waker.wake();
@@ -638,6 +662,24 @@ fn a_gpu_planned_frame_presents_to_a_real_window() {
          scenario is the only thing that checks it on a real window",
         report.gpu_frames,
         report.frames
+    );
+    match *on_screen.lock().unwrap() {
+        // `Still` is a window-filling blue box. A dropped frame reads black,
+        // a swapped channel order reads red; both leave no blue at all.
+        Some(blue) => assert!(
+            blue >= 10_000,
+            "the window should be showing pure blue; the screen has {blue} blue pixels"
+        ),
+        None => eprintln!("wait_loop: no `import` (ImageMagick) — screen contents not checked"),
+    }
+
+    // The background is opaque and lavapipe/SwiftShader blit RGBA16F into
+    // a UNORM swapchain, so every GPU frame here must have skipped the
+    // readback: presented straight from the GPU's own render target.
+    assert_eq!(
+        report.gpu_direct_frames, report.gpu_frames,
+        "{} of {} GPU frames went straight to the swapchain image",
+        report.gpu_direct_frames, report.gpu_frames
     );
     pass("gpu frame");
 }

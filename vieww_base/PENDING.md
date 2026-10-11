@@ -168,8 +168,8 @@ same API.
 
 `vieww_gpu::ScenePlan::is_complete` is the gate. As of 2026-10-09 every
 `Command` plans on the GPU, geometry edges are antialiased analytically for the
-rect family and with the CPU's own coverage for every other shape, a GPU frame can be presented to a real window
-([`App::prefer_gpu`]), and the glyph atlas evicts between frames — all closed
+rect family and with the CPU's own coverage for every other shape, a GPU frame is rendered straight into a real window's
+swapchain image ([`App::prefer_gpu`]), and the glyph atlas evicts between frames — all closed
 with evidence in `TRACKER.md`; the full picture is
 [`docs/GPU-RENDERER-STATUS.md`](./docs/GPU-RENDERER-STATUS.md). What remains:
 
@@ -196,29 +196,7 @@ If it matters on hardware, 4× MSAA on the tessellated material *for shapes
 that changed this frame* is the complementary path; the tessellator and
 `vulkan_mesh_smoke.rs` already exist for it.
 
-## 2.2 The GPU windowed path reads back through host memory
-
-**What.** `NativeRenderer::present_planned` executes a complete plan with
-`SceneRenderer`, reads the pixels back into a host buffer, and presents that
-through the swapchain exactly as the CPU rasterizer's buffer would be. Every
-GPU frame pays a full-frame readback plus a full-frame upload that a
-render-to-swapchain-image path would not.
-
-**Why not.** The scene pipeline renders into its own framebuffer, not a
-`VK_KHR_swapchain` image: targeting the presentable image means importing it,
-matching its format, and handling the acquire/release barriers — its own
-design step, taken deliberately *after* the correctness join landed rather
-than together with it.
-
-**Blocks.** The GPU windowed path being *fast*, rather than correct. This is
-the follow-up §2.6 named when it was closed, kept here so it is not mistaken
-for done.
-
-**Start.** `crates/vieww-hal/src/vulkan/scene.rs`'s `SceneRenderer::render_planned`
-(the framebuffer the plan renders into) and `vulkan/swapchain.rs`'s image —
-the barriers are the work; the shader pipeline does not change.
-
-## 2.3 Backdrop blur: GPU and CPU disagree at the layer's edge on Mesa 25.2
+## 2.2 Backdrop blur: GPU and CPU disagree at the layer's edge on Mesa 25.2
 
 **What.** `vulkan_compositor::a_backdrop_blur_blurs_what_is_behind_and_keeps_the_foreground_sharp`
 fails on lavapipe from Mesa 25.2.8: 816 pixels differ by more than 2,

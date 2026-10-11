@@ -32,7 +32,7 @@ pub use scene::SceneRenderer;
 #[cfg(feature = "vulkan-swapchain")]
 pub mod swapchain;
 #[cfg(feature = "vulkan-swapchain")]
-pub use swapchain::VulkanSwapchain;
+pub use swapchain::{AcquiredImage, VulkanSwapchain};
 
 #[derive(Debug)]
 pub enum VulkanError {

@@ -30,12 +30,26 @@ reading to the bottom. The section is still here for continuity, and
    independent rasterizers — the tessellator's independent check now lives
    in `vulkan_mesh_smoke.rs` and the planner-less path. Residual cost:
    `PENDING.md` §2.1.
-2. **Metal and D3D12 render paths**, type-checked and linted on their own
+2. **The GPU window path renders straight into the swapchain (PENDING
+   §2.2).** `NativeRenderer::present_planned` acquires the swapchain image,
+   and `SceneRenderer::render_planned_to` blits the frame's RGBA16F target
+   into it on the GPU (format conversion and BGRA order included), waiting
+   on the acquire semaphore only at the blit. Per 1366×768 frame that removes
+   an 8.4 MB device→host readback, a CPU unpremultiply/quantise pass, a
+   4.2 MB host→device upload and the BGRA swizzle loop. Opaque frames only —
+   a translucent window keeps the readback, because a blit cannot
+   unpremultiply. Verified on a real Xvfb window under lavapipe:
+   `wait_loop`'s `gpu_frame` now asserts every GPU frame went direct
+   (`FrameReport::gpu_direct_frames`) **and** grabs the X screen with
+   ImageMagick to check the window shows its blue; with the blit disabled the
+   screen has 0 blue pixels and it fails. No timing claimed — lavapipe's
+   numbers are not a GPU's.
+3. **Metal and D3D12 render paths**, type-checked and linted on their own
    targets from Linux, never yet executed — `PENDING.md` §1.2/§1.3.
-3. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
+4. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
    Windows and Android from Linux; its first run found five real bugs (see
    the commit).
-4. **`vieww-spatial`** applied from the supplied patch, fixed to build.
+5. **`vieww-spatial`** applied from the supplied patch, fixed to build.
 
 ## The most recent effort (2026-10-09): the PENDING list emptied of everything a machine can close — analytic edges on the GPU, a GPU frame in a real window, atlas eviction, the full gate on the pinned toolchain
 

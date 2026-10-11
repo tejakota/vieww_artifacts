@@ -239,6 +239,12 @@ pub struct PlannedFrame {
     /// Whether the GPU rasterizer drew this frame. `false` means the planner
     /// had gaps (or the pipelines could not be built), and the CPU drew it.
     pub drawn_on_gpu: bool,
+    /// Whether the GPU frame went straight into the swapchain image, with no
+    /// readback through host memory. `false` for a CPU frame and for a GPU
+    /// frame that took the readback path (a translucent window, or a driver
+    /// without the blit support `VulkanDevice::can_blit_scene_frames` asks
+    /// for).
+    pub presented_directly: bool,
 }
 
 /// The scene to rasterise at the swapchain's extent: the frame itself when
@@ -589,6 +595,38 @@ impl NativeRenderer {
             let height = physical_height as f32;
             let plan = planner.plan(scene.as_ref(), width, height);
             if plan.is_complete() {
+                // Straight into the swapchain image when the frame is opaque
+                // and the driver can blit the scene's RGBA16F into the
+                // swapchain's format: the whole frame stays on the GPU. A
+                // translucent window keeps the readback path, because the
+                // scene targets are premultiplied and a blit cannot divide.
+                if base.a == 255 && self.device.can_blit_scene_frames(&surface.swapchain) {
+                    let acquired = self
+                        .device
+                        .acquire_image(&mut surface.swapchain, (physical_width, physical_height))
+                        .map_err(|error| NativeError::Present(error.to_string()))?;
+                    let Some(image) = acquired else {
+                        // The swapchain was rebuilt to a new size under this
+                        // frame; the matching resize repaints.
+                        return Ok(PlannedFrame {
+                            report: SceneReport::default(),
+                            drawn_on_gpu: true,
+                            presented_directly: true,
+                        });
+                    };
+                    if let Err(error) = renderer.render_planned_to(planner, &plan, base, &image) {
+                        let _ = self.device.abandon_acquired(&mut surface.swapchain, image);
+                        return Err(NativeError::Render(error.to_string()));
+                    }
+                    self.device
+                        .present_acquired(&mut surface.swapchain, image)
+                        .map_err(|error| NativeError::Present(error.to_string()))?;
+                    return Ok(PlannedFrame {
+                        report: SceneReport::default(),
+                        drawn_on_gpu: true,
+                        presented_directly: true,
+                    });
+                }
                 let pixels = renderer
                     .render_planned(planner, &plan, physical_width, physical_height, base)
                     .map_err(|error| NativeError::Render(error.to_string()))?;
@@ -602,6 +640,7 @@ impl NativeRenderer {
                 return Ok(PlannedFrame {
                     report: SceneReport::default(),
                     drawn_on_gpu: true,
+                    presented_directly: false,
                 });
             }
         }
@@ -614,6 +653,7 @@ impl NativeRenderer {
         Ok(PlannedFrame {
             report,
             drawn_on_gpu: false,
+            presented_directly: false,
         })
     }
 }
