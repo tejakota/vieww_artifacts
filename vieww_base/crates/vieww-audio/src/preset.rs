@@ -390,7 +390,7 @@ impl State {
             match tag {
                 b"NAME" => s.name = String::from_utf8_lossy(body).into_owned(),
                 b"PARM" => {
-                    for e in body.chunks_exact(12) {
+                    for e in body.as_chunks::<12>().0 {
                         let id = u32::from_le_bytes([e[0], e[1], e[2], e[3]]);
                         let v =
                             f64::from_le_bytes([e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11]]);

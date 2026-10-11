@@ -144,7 +144,7 @@ impl Reverb {
         let feedback = 0.7 + 0.28 * self.room_size.clamp(0.0, 1.0);
         let damp = self.damping.clamp(0.0, 1.0) * 0.4;
         let mut out = [0.0f32; 2];
-        for ch in 0..2 {
+        for (ch, out) in out.iter_mut().enumerate() {
             let mut s = 0.0;
             for c in &mut self.combs[ch] {
                 s += c.tick(input, feedback, damp);
@@ -152,7 +152,7 @@ impl Reverb {
             for a in &mut self.allpasses[ch] {
                 s = a.tick(s);
             }
-            out[ch] = s;
+            *out = s;
         }
         let w1 = self.wet * (self.width / 2.0 + 0.5);
         let w2 = self.wet * ((1.0 - self.width) / 2.0);
@@ -322,7 +322,7 @@ impl Chorus {
 /// Mid/side width on an interleaved stereo buffer: 0 = mono, 1 = as is,
 /// above 1 = wider.
 pub fn stereo_width(stereo: &mut [f32], width: f32) {
-    for f in stereo.chunks_exact_mut(2) {
+    for f in stereo.as_chunks_mut::<2>().0 {
         let m = (f[0] + f[1]) * 0.5;
         let s = (f[0] - f[1]) * 0.5 * width;
         f[0] = m + s;

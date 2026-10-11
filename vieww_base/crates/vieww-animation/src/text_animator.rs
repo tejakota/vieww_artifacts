@@ -252,7 +252,7 @@ impl RangeSelector {
         let (s, e) = (s / 100.0 * n as f32, e / 100.0 * n as f32);
         let (a, b) = (i as f32, i as f32 + 1.0);
         let w = match self.shape {
-            Shape::Square => ((b.min(e) - a.max(s)).max(0.0)).min(1.0),
+            Shape::Square => (b.min(e) - a.max(s)).clamp(0.0, 1.0),
             _ => {
                 // Shaped selections evaluate at the unit centre.
                 let c = (a + b) * 0.5;

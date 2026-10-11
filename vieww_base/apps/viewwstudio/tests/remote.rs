@@ -10,9 +10,9 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use vieww_foundation::{Color, Offset};
+use vieww_foundation::{Color, ImeEvent, KeyEvent, Offset, ScrollEvent};
 use viewwstudio::compile::{compile, Session, Toolchain};
-use viewwstudio::remote::{Environment, Pointer, RemoteError, RemotePreview};
+use viewwstudio::remote::{Environment, Pointer, RemoteError, RemoteEvent, RemotePreview};
 use viewwstudio::state::Platform;
 
 fn child() -> PathBuf {
@@ -162,7 +162,10 @@ fn a_screen_renders_in_the_child_and_a_tap_reaches_it() {
             1.0,
             Duration::from_millis(16),
             Color::BLACK,
-            &[Pointer::Down(centre), Pointer::Up(centre)],
+            &[
+                RemoteEvent::Pointer(Pointer::Down(centre)),
+                RemoteEvent::Pointer(Pointer::Up(centre)),
+            ],
         )
         .expect("a frame after the tap");
     assert_eq!(
@@ -229,7 +232,10 @@ pub fn screen() -> impl Widget { Screen }
             1.0,
             Duration::from_millis(16),
             Color::BLACK,
-            &[Pointer::Down(c), Pointer::Up(c)],
+            &[
+                RemoteEvent::Pointer(Pointer::Down(c)),
+                RemoteEvent::Pointer(Pointer::Up(c)),
+            ],
         )
         .expect_err("the child died");
     let RemoteError::Crashed { stderr, .. } = &error else {
@@ -295,7 +301,10 @@ pub fn screen() -> impl Widget { Screen }
         1.0,
         Duration::from_millis(16),
         Color::BLACK,
-        &[Pointer::Down(c), Pointer::Up(c)],
+        &[
+            RemoteEvent::Pointer(Pointer::Down(c)),
+            RemoteEvent::Pointer(Pointer::Up(c)),
+        ],
     );
     // With one shared libstd (Linux, macOS) the child's element tree catches
     // it and draws the placeholder; without (MSVC) the child dies. Either is
@@ -383,4 +392,325 @@ fn the_studio_renders_into_a_child_process_when_isolation_is_on() {
         frame.rgba.chunks_exact(4).any(|p| p != [0, 0, 0, 255]),
         "the scratch screen drew something"
     );
+}
+
+/// A guest that records what it was told: taps, text typed into a real
+/// `TextField`, scrolls, and hover. Every kind of event the pane forwards,
+/// held in a state whose snapshot round-trips — so the assertions read the
+/// ledger rather than pixels, and the text is the field's own, not a copy
+/// the test made.
+const INPUT_LEDGER: &str = concat!(
+    include_str!("remote/guest_prelude.rs"),
+    r#"
+use vieww::TextEditingValue;
+
+#[derive(Debug, Default)]
+struct Ledger {
+    taps: u32,
+    text: String,
+    scroll: f32,
+    hovered: bool,
+    pending: bool,
+}
+impl ElementState for Ledger {
+    fn as_any(&self) -> &dyn Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn Any { self }
+    fn take_pending(&mut self) -> bool { std::mem::take(&mut self.pending) }
+    fn snapshot(&self) -> Option<String> {
+        Some(format!("{}|{}|{:.2}|{}", self.taps, self.text, self.scroll, self.hovered))
+    }
+    fn restore(&mut self, saved: &str) -> bool {
+        let mut parts = saved.split('|');
+        self.taps = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+        self.text = parts.next().unwrap_or("").to_owned();
+        self.scroll = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+        self.hovered = parts.next() == Some("true");
+        true
+    }
+}
+
+fn bump(ctx: &BuildContext, f: impl FnOnce(&mut Ledger)) {
+    if let Some(handle) = &ctx.state_handle() {
+        if let Ok(mut state) = handle.try_borrow_mut() {
+            if let Some(l) = state.as_any_mut().downcast_mut::<Ledger>() {
+                f(l);
+                l.pending = true;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Screen;
+impl Widget for Screen {
+    fn debug_name(&self) -> &'static str { "Screen" }
+    fn kind(&self) -> WidgetKind<'_> { WidgetKind::Composed }
+    fn create_state(&self) -> Option<Box<dyn ElementState>> { Some(Box::new(Ledger::default())) }
+    fn build(&self, ctx: &BuildContext) -> WidgetNode {
+        // One handle per closure — an owned `Rc`, so each is `'static`, the
+        // same shape as the prelude's `on_tap`.
+        let mut handles = std::iter::repeat_with(|| ctx.state_handle());
+        let text_handle = handles.next().unwrap();
+        let tap_handle = handles.next().unwrap();
+        let scroll_handle = handles.next().unwrap();
+        let hover_handle = handles.next().unwrap();
+        // The controlled-value round trip: what the field becomes is read
+        // back from the ledger, so a rebuild keeps the text rather than
+        // resetting it — the same contract the studio's own editor follows.
+        let current = ctx
+            .state::<Ledger, _>(|l| l.text.clone())
+            .unwrap_or_default();
+        let field = TextField::new(TextEditingValue::new(current))
+            .on_changed(std::rc::Rc::new(move |value: TextEditingValue| {
+                if let Some(handle) = &text_handle {
+                    if let Ok(mut state) = handle.try_borrow_mut() {
+                        if let Some(l) = state.as_any_mut().downcast_mut::<Ledger>() {
+                            l.text = value.text;
+                            l.pending = true;
+                        }
+                    }
+                }
+            }));
+        let taps = tap_handle;
+        let scrolls = scroll_handle;
+        let hovers = hover_handle;
+        Flex::column()
+            .push(SizedBox::height(72.0).child(field))
+            .push(
+                Flexible::expanded(1).child(
+                GestureDetector::new()
+                    .on_tap(move |_| {
+                        if let Some(handle) = &taps {
+                            if let Ok(mut state) = handle.try_borrow_mut() {
+                                if let Some(l) = state.as_any_mut().downcast_mut::<Ledger>() {
+                                    l.taps += 1;
+                                    l.pending = true;
+                                }
+                            }
+                        }
+                    })
+                    .on_scroll(move |event: vieww::foundation::ScrollEvent| {
+                        if let Some(handle) = &scrolls {
+                            if let Ok(mut state) = handle.try_borrow_mut() {
+                                if let Some(l) = state.as_any_mut().downcast_mut::<Ledger>() {
+                                    l.scroll += event.delta.dy;
+                                    l.pending = true;
+                                }
+                            }
+                        }
+                    })
+                    .on_hover(move |inside: bool| {
+                        if let Some(handle) = &hovers {
+                            if let Ok(mut state) = handle.try_borrow_mut() {
+                                if let Some(l) = state.as_any_mut().downcast_mut::<Ledger>() {
+                                    l.hovered = inside;
+                                    l.pending = true;
+                                }
+                            }
+                        }
+                    })
+                    .child(ColoredBox::new(Color::hex(0x22_88FF))),
+                ),
+            )
+            .into()
+    }
+}
+pub fn screen() -> impl Widget { Screen }
+"#
+);
+
+/// The ledger the child is holding, read through the state-capture request —
+/// which is itself under test in the next test, so here it is only a means of
+/// reading the guest, and a crash would fail the frame calls anyway.
+fn ledger_of(remote: &mut RemotePreview) -> String {
+    #[cfg(feature = "remote-debug")]
+    eprintln!("ledger: {:?}", remote.capture_state());
+    remote
+        .capture_state()
+        .expect("the child answers a capture")
+        .into_iter()
+        .map(|(_, state)| state)
+        .find(|state| state.contains('|') && state.split('|').count() == 4)
+        .unwrap_or_default()
+}
+
+#[test]
+fn keys_ime_scroll_and_hover_reach_the_guest() {
+    let Some(toolchain) = toolchain() else { return };
+    let library = compiled(&toolchain, 0x7E76, INPUT_LEDGER);
+    let mut remote = loaded(&toolchain, &library);
+    let env = Environment::of(Platform::Android);
+
+    remote
+        .frame(&env, 1.0, Duration::ZERO, Color::BLACK, &[])
+        .expect("the first frame draws");
+
+    // Tap the field so it takes focus in the child — the same thing a person
+    // does before typing.
+    let field_tap = Offset::new(206.0, 36.0);
+    remote
+        .frame(
+            &env,
+            1.0,
+            Duration::from_millis(16),
+            Color::BLACK,
+            &[
+                RemoteEvent::Pointer(Pointer::Down(field_tap)),
+                RemoteEvent::Pointer(Pointer::Up(field_tap)),
+            ],
+        )
+        .expect("the tap draws");
+
+    // Type. A key at a time, as a keyboard does — one frame each, the way
+    // a real window delivers them.
+    let mut after_keys = String::new();
+    for (i, c) in "hi".chars().enumerate() {
+        let at = Duration::from_millis(32 + i as u64 * 16);
+        remote
+            .frame(
+                &env,
+                1.0,
+                at,
+                Color::BLACK,
+                &[RemoteEvent::Key(KeyEvent::character(c.to_string(), at))],
+            )
+            .expect("the key draws");
+        after_keys = ledger_of(&mut remote);
+    }
+    assert!(
+        after_keys.contains("hi"),
+        "the keys reached the field: {after_keys:?}"
+    );
+
+    // An IME commit, the way a phone types.
+    remote
+        .frame(
+            &env,
+            1.0,
+            Duration::from_millis(48),
+            Color::BLACK,
+            &[RemoteEvent::Ime(ImeEvent::commit("!"))],
+        )
+        .expect("the commit draws");
+    let after_ime = ledger_of(&mut remote);
+    assert!(
+        after_ime.contains("hi!"),
+        "the IME commit reached the field: {after_ime:?}"
+    );
+
+    // A scroll in the lower half, where the detector is.
+    remote
+        .frame(
+            &env,
+            1.0,
+            Duration::from_millis(64),
+            Color::BLACK,
+            &[RemoteEvent::Scroll(ScrollEvent::new(
+                Offset::new(206.0, 500.0),
+                Offset::new(0.0, -120.0),
+                Duration::from_millis(64),
+            ))],
+        )
+        .expect("the scroll draws");
+    assert!(
+        ledger_of(&mut remote).contains("-120.00"),
+        "the scroll reached the guest"
+    );
+
+    // Hover, at the detector and away from it.
+    remote
+        .frame(
+            &env,
+            1.0,
+            Duration::from_millis(80),
+            Color::BLACK,
+            &[
+                RemoteEvent::Hover(Some(Offset::new(206.0, 500.0))),
+                RemoteEvent::Hover(Some(Offset::new(3.0, 900.0))),
+                RemoteEvent::Hover(None),
+            ],
+        )
+        .expect("the hover draws");
+    let after_hover = ledger_of(&mut remote);
+    assert!(
+        after_hover.ends_with("|false"),
+        "hover came and went: {after_hover:?}"
+    );
+}
+
+#[test]
+fn the_guest_state_crosses_a_re_render_through_the_child() {
+    let Some(toolchain) = toolchain() else { return };
+    let library = compiled(&toolchain, 0x7E77, INPUT_LEDGER);
+    let mut remote = loaded(&toolchain, &library);
+    let env = Environment::of(Platform::Android);
+
+    remote
+        .frame(&env, 1.0, Duration::ZERO, Color::BLACK, &[])
+        .expect("the tree exists");
+
+    // Interact: tap the field, type, tap the detector twice.
+    let field_tap = Offset::new(206.0, 36.0);
+    let at = Duration::from_millis(16);
+    remote
+        .frame(
+            &env,
+            1.0,
+            at,
+            Color::BLACK,
+            &[
+                RemoteEvent::Pointer(Pointer::Down(field_tap)),
+                RemoteEvent::Pointer(Pointer::Up(field_tap)),
+            ],
+        )
+        .expect("focus");
+    for (i, c) in "ok".chars().enumerate() {
+        let kat = Duration::from_millis(32 + i as u64 * 16);
+        remote
+            .frame(
+                &env,
+                1.0,
+                kat,
+                Color::BLACK,
+                &[RemoteEvent::Key(KeyEvent::character(c.to_string(), kat))],
+            )
+            .expect("typed");
+    }
+    let body_tap = Offset::new(206.0, 500.0);
+    for _ in 0..2 {
+        remote
+            .frame(
+                &env,
+                1.0,
+                at,
+                Color::BLACK,
+                &[
+                    RemoteEvent::Pointer(Pointer::Down(body_tap)),
+                    RemoteEvent::Pointer(Pointer::Up(body_tap)),
+                ],
+            )
+            .expect("tapped");
+    }
+
+    // The capture: the child walks its own tree.
+    let snapshot = remote.capture_state().expect("the capture answers");
+    assert!(
+        snapshot.iter().any(|(_, state)| state.contains("ok") && state.starts_with("2|")),
+        "the snapshot holds the guest's own numbers: {snapshot:?}"
+    );
+
+    // A fresh child, the way a Render makes one: the state goes back in.
+    let mut fresh = loaded(&toolchain, &library);
+    let restored = fresh
+        .restore_state(&snapshot, Duration::from_millis(0))
+        .expect("the restore answers");
+    assert!(restored >= 1, "at least the ledger came back");
+    let back = ledger_of(&mut fresh);
+    assert!(
+        back.contains("ok") && back.starts_with("2|"),
+        "the state survived the process boundary: {back:?}"
+    );
+    fresh
+        .frame(&env, 1.0, Duration::from_millis(16), Color::BLACK, &[])
+        .expect("the fresh child draws");
 }

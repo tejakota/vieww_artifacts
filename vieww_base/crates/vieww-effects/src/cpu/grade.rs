@@ -22,7 +22,7 @@ impl<F: Fn([f32; 3]) -> [f32; 3]> ColorOp for F {
 
 /// Run `op` on every pixel (alpha untouched, premultiplication ignored).
 pub fn apply(px: &mut [u8], op: &dyn ColorOp) {
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         let c = op.apply([f32::from(p[0]) / 255.0, f32::from(p[1]) / 255.0, f32::from(p[2]) / 255.0]);
         for k in 0..3 {
             p[k] = to_u8(c[k]);
@@ -385,7 +385,7 @@ impl Lut3 {
     pub fn apply_rgba(&self, px: &mut [u8], strength: f32) {
         let k = strength.clamp(0.0, 1.0);
         let run = |band: &mut [u8]| {
-            for p in band.chunks_exact_mut(4) {
+            for p in band.as_chunks_mut::<4>().0 {
                 let c = [f32::from(p[0]) / 255.0, f32::from(p[1]) / 255.0, f32::from(p[2]) / 255.0];
                 let o = self.sample(c);
                 for j in 0..3 {

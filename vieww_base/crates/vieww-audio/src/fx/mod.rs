@@ -44,7 +44,7 @@ pub trait Stereo {
 
     /// Process an interleaved stereo buffer in place.
     fn run_stereo(&mut self, buf: &mut [f32]) {
-        for f in buf.chunks_exact_mut(2) {
+        for f in buf.as_chunks_mut::<2>().0 {
             let (l, r) = self.process_stereo(f[0], f[1]);
             f[0] = l;
             f[1] = r;

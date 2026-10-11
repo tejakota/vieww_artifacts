@@ -36,7 +36,7 @@ pub trait Render: Send {
 
 impl<V: Voice + Send> Render for Poly<V> {
     fn render(&mut self, out: &mut [f32]) {
-        for f in out.chunks_exact_mut(2) {
+        for f in out.as_chunks_mut::<2>().0 {
             let (l, r) = self.next_stereo();
             f[0] = l;
             f[1] = r;

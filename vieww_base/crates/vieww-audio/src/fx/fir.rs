@@ -201,9 +201,7 @@ impl Convolver {
         let p = self.fdl.len();
         self.fdl_head = (self.fdl_head + p - 1) % p;
         self.fdl[self.fdl_head] = buf;
-        for z in &mut self.acc {
-            *z = Complex::ZERO;
-        }
+        self.acc.fill(Complex::ZERO);
         for (k, h) in self.parts.iter().enumerate() {
             let x = &self.fdl[(self.fdl_head + k) % p];
             for i in 0..n {

@@ -113,7 +113,9 @@ impl Linear {
     pub fn from_rgba8(px: &[u8], width: usize, height: usize) -> Self {
         let t = to_linear_table();
         let out: Vec<[f32; 3]> = px
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|p| [t[p[0] as usize], t[p[1] as usize], t[p[2] as usize]])
             .collect();
         Self {
@@ -129,7 +131,7 @@ impl Linear {
         const BAYER: [f32; 16] = [0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0];
         let w = self.width;
         par_rows(out, w * 4, |row0, band| {
-            for (j, o) in band.chunks_exact_mut(4).enumerate() {
+            for (j, o) in band.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let i = row0 * w + j;
                 let (x, y) = (i % w, i / w);
                 let c = self.px[i];
@@ -405,9 +407,9 @@ pub fn lens_flare(frame: &mut Linear, pos: (f32, f32), brightness: f32, seed: u3
         let r = diag * (0.012 + rand() * 0.05);
         let hue = rand();
         let col = [
-            0.5 + 0.5 * (hue * 6.283).cos(),
-            0.5 + 0.5 * (hue * 6.283 + 2.09).cos(),
-            0.5 + 0.5 * (hue * 6.283 + 4.18).cos(),
+            0.5 + 0.5 * (hue * std::f32::consts::TAU).cos(),
+            0.5 + 0.5 * (hue * std::f32::consts::TAU + std::f32::consts::FRAC_PI_3).cos(),
+            0.5 + 0.5 * (hue * std::f32::consts::TAU + 2.0 * std::f32::consts::FRAC_PI_3).cos(),
         ];
         ghosts.push((t, r, col, rand() < 0.4));
     }

@@ -39,10 +39,18 @@
 //!
 //! # What is not here yet
 //!
-//! Keyboard and text input, scroll and hover are not forwarded — pointer
-//! press, move and release are, which is what a tap and a drag need. The
-//! studio's state capture across Renders (`capture_preview_state`) reads the
-//! in-process element tree and has no remote counterpart.
+//! A Windows run of `tests/remote.rs` — the child, the protocol and the
+//! assertions are platform-neutral, but no Windows machine has run them.
+//!
+//! # Input forwarding, and its one honest limit
+//!
+//! Keys, IME, scrolls, taps and drags are forwarded whole. Hover is
+//! forwarded at the granularity the studio's own tree can observe it: the
+//! pane's enter and leave, plus the position of every tap, drag and scroll —
+//! a bare move of an unpressed cursor *within* the pane produces no event the
+//! widget layer can see (hover is enter/exit in this framework, by design),
+//! so the guest's hover follows the positions it is given and no others.
+//! The doc on [`RemoteEvent::Hover`] says the same thing at the call site.
 
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -51,7 +59,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use vieww_foundation::{
-    Accessibility, Color, EdgeInsets, Offset, PointerEvent, PointerId, Size, ViewMetrics,
+    Accessibility, Color, EdgeInsets, ImeEvent, KeyEvent, KeyState, LogicalKey, Modifiers,
+    NamedKey, Offset, PointerEvent, PointerId, ScrollEvent, Size, ViewMetrics,
 };
 
 use crate::state::Platform;
@@ -91,6 +100,48 @@ pub enum Pointer {
     Down(Offset),
     Move(Offset),
     Up(Offset),
+}
+
+/// One input event for the guest, in the guest's logical coordinates.
+///
+/// Everything the framework's window path feeds its own driver, on the wire:
+/// pointer contact, hover, keys, IME and scrolls. The timestamps are the
+/// request's clock, exactly as the pointer's always were.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RemoteEvent {
+    /// Pointer press, move or release — contact, in the gesture sense.
+    Pointer(Pointer),
+    /// The cursor, without contact. `Some` is where it is (or was last seen
+    /// — see the module doc for the granularity), `None` is it leaving.
+    Hover(Option<Offset>),
+    /// A key. Character keys carry text; named keys carry meaning.
+    Key(KeyEvent),
+    /// Text through an input method — preedits and commits, the composition
+    /// an IME actually does.
+    Ime(ImeEvent),
+    /// A wheel or trackpad scroll, already in the content-moves convention.
+    Scroll(ScrollEvent),
+}
+
+impl From<Pointer> for RemoteEvent {
+    fn from(pointer: Pointer) -> Self {
+        Self::Pointer(pointer)
+    }
+}
+
+impl RemoteEvent {
+    /// Where this event happened, when it happened somewhere — the pane keeps
+    /// the cursor's last known position from it. Keys and IME have no
+    /// position; hover's is the cursor itself.
+    #[must_use]
+    pub const fn position(&self) -> Option<Offset> {
+        match self {
+            Self::Pointer(Pointer::Down(p) | Pointer::Move(p) | Pointer::Up(p)) => Some(*p),
+            Self::Hover(p) => *p,
+            Self::Scroll(s) => Some(s.position),
+            Self::Key(_) | Self::Ime(_) => None,
+        }
+    }
 }
 
 /// One rendered frame of the guest.
@@ -149,14 +200,291 @@ impl std::error::Error for RemoteError {}
 const LOAD: u8 = 1;
 const FRAME: u8 = 2;
 const SHUTDOWN: u8 = 3;
+const CAPTURE: u8 = 4;
+const RESTORE: u8 = 5;
 
 const LOADED: u8 = 1;
 const LOAD_FAILED: u8 = 2;
 const FRAME_DONE: u8 = 3;
+const SNAPSHOT: u8 = 4;
+const RESTORED: u8 = 5;
 
 /// `LOAD_FAILED`'s first byte: why.
 const FAILED_OTHER: u8 = 0;
 const FAILED_ABI: u8 = 1;
+
+/// The event kinds, one byte each, in the order the wire writes them.
+const EVENT_POINTER_DOWN: u8 = 0;
+const EVENT_POINTER_MOVE: u8 = 1;
+const EVENT_POINTER_UP: u8 = 2;
+const EVENT_HOVER: u8 = 3;
+const EVENT_KEY: u8 = 4;
+const EVENT_IME: u8 = 5;
+const EVENT_SCROLL: u8 = 6;
+
+/// [`NamedKey`] as its declaration index — stable because both sides are
+/// built from the same `vieww-foundation`, and the order is the enum's own.
+///
+/// `None` for a variant this side does not know (the enum is
+/// `#[non_exhaustive]`): the writer then sends [`LogicalKey::Unidentified`],
+/// which is the framework's own policy for a key it cannot name — delivered,
+/// not dropped — so a newer foundation's new key still reaches the guest as
+/// *something* rather than being silently misnamed.
+const fn named_key_index(key: NamedKey) -> Option<u8> {
+    use NamedKey as N;
+    match key {
+        N::Enter => Some(0),
+        N::Tab => Some(1),
+        N::Space => Some(2),
+        N::Backspace => Some(3),
+        N::Delete => Some(4),
+        N::Escape => Some(5),
+        N::ArrowLeft => Some(6),
+        N::ArrowRight => Some(7),
+        N::ArrowUp => Some(8),
+        N::ArrowDown => Some(9),
+        N::Home => Some(10),
+        N::End => Some(11),
+        N::PageUp => Some(12),
+        N::PageDown => Some(13),
+        N::Insert => Some(14),
+        N::Shift => Some(15),
+        N::Control => Some(16),
+        N::Alt => Some(17),
+        N::Meta => Some(18),
+        N::CapsLock => Some(19),
+        _ => return None,
+    }
+}
+
+fn named_key_of(index: u8) -> NamedKey {
+    use NamedKey as N;
+    match index {
+        0 => N::Enter,
+        1 => N::Tab,
+        2 => N::Space,
+        3 => N::Backspace,
+        4 => N::Delete,
+        5 => N::Escape,
+        6 => N::ArrowLeft,
+        7 => N::ArrowRight,
+        8 => N::ArrowUp,
+        9 => N::ArrowDown,
+        10 => N::Home,
+        11 => N::End,
+        12 => N::PageUp,
+        13 => N::PageDown,
+        14 => N::Insert,
+        15 => N::Shift,
+        16 => N::Control,
+        17 => N::Alt,
+        18 => N::Meta,
+        _ => N::CapsLock,
+    }
+}
+
+/// [`Modifiers`] as its four bits.
+const fn modifier_bits(m: Modifiers) -> u8 {
+    m.shift() as u8 | (m.control() as u8) << 1 | (m.alt() as u8) << 2 | (m.meta() as u8) << 3
+}
+
+const fn modifiers_of(bits: u8) -> Modifiers {
+    Modifiers::NONE
+        .union(if bits & 1 != 0 {
+            Modifiers::SHIFT
+        } else {
+            Modifiers::NONE
+        })
+        .union(if bits & 2 != 0 {
+            Modifiers::CONTROL
+        } else {
+            Modifiers::NONE
+        })
+        .union(if bits & 4 != 0 {
+            Modifiers::ALT
+        } else {
+            Modifiers::NONE
+        })
+        .union(if bits & 8 != 0 {
+            Modifiers::META
+        } else {
+            Modifiers::NONE
+        })
+}
+
+/// [`LogicalKey`] on the wire: a variant byte, then the character's bytes for
+/// a character key, or the named key's index for a named one.
+fn write_logical_key(w: &mut Writer, key: &LogicalKey) {
+    match key {
+        LogicalKey::Character(text) => {
+            w.u8(0);
+            w.bytes(text.as_bytes());
+        }
+        LogicalKey::Named(named) => match named_key_index(*named) {
+            Some(index) => {
+                w.u8(1);
+                w.u8(index);
+            }
+            None => w.u8(2),
+        },
+        LogicalKey::Unidentified => w.u8(2),
+    }
+}
+
+fn read_logical_key(r: &mut Reader<'_>) -> io::Result<LogicalKey> {
+    Ok(match r.u8()? {
+        0 => LogicalKey::Character(String::from_utf8_lossy(&r.bytes()?).into_owned()),
+        1 => LogicalKey::Named(named_key_of(r.u8()?)),
+        _ => LogicalKey::Unidentified,
+    })
+}
+
+/// [`KeyEvent`] on the wire. The timestamp is the request's clock, so it is
+/// not written — the child stamps it on the way in, as the pointer's always
+/// was.
+fn write_key_event(w: &mut Writer, event: &KeyEvent) {
+    write_logical_key(w, &event.key);
+    w.u8(match event.state {
+        KeyState::Down => 0,
+        KeyState::Up => 1,
+    });
+    w.u8(u8::from(event.repeat));
+    w.u8(modifier_bits(event.modifiers));
+}
+
+fn read_key_event(r: &mut Reader<'_>, at: Duration) -> io::Result<KeyEvent> {
+    let key = read_logical_key(r)?;
+    let state = if r.u8()? == 0 {
+        KeyState::Down
+    } else {
+        KeyState::Up
+    };
+    let repeat = r.u8()? != 0;
+    let modifiers = modifiers_of(r.u8()?);
+    Ok(KeyEvent {
+        key,
+        state,
+        repeat,
+        modifiers,
+        timestamp: at,
+    })
+}
+
+/// [`ImeEvent`] on the wire.
+fn write_ime_event(w: &mut Writer, event: &ImeEvent) {
+    match event {
+        ImeEvent::Enabled => w.u8(0),
+        ImeEvent::Preedit { text, cursor } => {
+            w.u8(1);
+            w.bytes(text.as_bytes());
+            match cursor {
+                Some((a, b)) => {
+                    w.u8(1);
+                    w.u32(*a as u32);
+                    w.u32(*b as u32);
+                }
+                None => w.u8(0),
+            }
+        }
+        ImeEvent::Commit(text) => {
+            w.u8(2);
+            w.bytes(text.as_bytes());
+        }
+        ImeEvent::Disabled => w.u8(3),
+    }
+}
+
+fn read_ime_event(r: &mut Reader<'_>) -> io::Result<ImeEvent> {
+    Ok(match r.u8()? {
+        0 => ImeEvent::Enabled,
+        1 => {
+            let text = String::from_utf8_lossy(&r.bytes()?).into_owned();
+            let cursor = if r.u8()? != 0 {
+                Some((r.u32()? as usize, r.u32()? as usize))
+            } else {
+                None
+            };
+            ImeEvent::Preedit { text, cursor }
+        }
+        2 => ImeEvent::Commit(String::from_utf8_lossy(&r.bytes()?).into_owned()),
+        _ => ImeEvent::Disabled,
+    })
+}
+
+/// [`RemoteEvent`] on the wire. Every event shares the request's timestamp,
+/// written once in the header — the same convention the pointer's has always
+/// used, extended rather than replaced.
+fn write_event(w: &mut Writer, event: &RemoteEvent) {
+    match event {
+        RemoteEvent::Pointer(Pointer::Down(p)) => {
+            w.u8(EVENT_POINTER_DOWN);
+            w.f32(p.dx);
+            w.f32(p.dy);
+        }
+        RemoteEvent::Pointer(Pointer::Move(p)) => {
+            w.u8(EVENT_POINTER_MOVE);
+            w.f32(p.dx);
+            w.f32(p.dy);
+        }
+        RemoteEvent::Pointer(Pointer::Up(p)) => {
+            w.u8(EVENT_POINTER_UP);
+            w.f32(p.dx);
+            w.f32(p.dy);
+        }
+        RemoteEvent::Hover(p) => {
+            w.u8(EVENT_HOVER);
+            match p {
+                Some(p) => {
+                    w.u8(1);
+                    w.f32(p.dx);
+                    w.f32(p.dy);
+                }
+                None => w.u8(0),
+            }
+        }
+        RemoteEvent::Key(event) => {
+            w.u8(EVENT_KEY);
+            write_key_event(w, event);
+        }
+        RemoteEvent::Ime(event) => {
+            w.u8(EVENT_IME);
+            write_ime_event(w, event);
+        }
+        RemoteEvent::Scroll(event) => {
+            w.u8(EVENT_SCROLL);
+            w.f32(event.position.dx);
+            w.f32(event.position.dy);
+            w.f32(event.delta.dx);
+            w.f32(event.delta.dy);
+        }
+    }
+}
+
+fn read_event(r: &mut Reader<'_>, at: Duration) -> io::Result<RemoteEvent> {
+    Ok(match r.u8()? {
+        EVENT_POINTER_DOWN => RemoteEvent::Pointer(Pointer::Down(offset_of(r)?)),
+        EVENT_POINTER_MOVE => RemoteEvent::Pointer(Pointer::Move(offset_of(r)?)),
+        EVENT_POINTER_UP => RemoteEvent::Pointer(Pointer::Up(offset_of(r)?)),
+        EVENT_HOVER => {
+            RemoteEvent::Hover(if r.u8()? != 0 {
+                Some(offset_of(r)?)
+            } else {
+                None
+            })
+        }
+        EVENT_KEY => RemoteEvent::Key(read_key_event(r, at)?),
+        EVENT_IME => RemoteEvent::Ime(read_ime_event(r)?),
+        _ => RemoteEvent::Scroll(ScrollEvent {
+            position: offset_of(r)?,
+            delta: offset_of(r)?,
+            timestamp: at,
+        }),
+    })
+}
+
+fn offset_of(r: &mut Reader<'_>) -> io::Result<Offset> {
+    Ok(Offset::new(r.f32()?, r.f32()?))
+}
 
 /// The largest message either side will accept: a 4096² RGBA frame and change.
 const MAX_MESSAGE: u32 = 4096 * 4096 * 4 + 64;
@@ -280,7 +608,7 @@ fn write_frame_request(
     scale: f32,
     at: Duration,
     base: Color,
-    events: &[Pointer],
+    events: &[RemoteEvent],
 ) -> Vec<u8> {
     let mut w = Writer::default();
     w.u8(platform_byte(env.platform));
@@ -300,14 +628,7 @@ fn write_frame_request(
     }
     w.u32(u32::try_from(events.len()).unwrap_or(0));
     for e in events {
-        let (kind, at) = match *e {
-            Pointer::Down(p) => (0, p),
-            Pointer::Move(p) => (1, p),
-            Pointer::Up(p) => (2, p),
-        };
-        w.u8(kind);
-        w.f32(at.dx);
-        w.f32(at.dy);
+        write_event(&mut w, e);
     }
     w.0
 }
@@ -317,7 +638,7 @@ struct FrameRequest {
     scale: f32,
     at: Duration,
     base: Color,
-    events: Vec<Pointer>,
+    events: Vec<RemoteEvent>,
 }
 
 fn read_frame_request(body: &[u8]) -> io::Result<FrameRequest> {
@@ -339,13 +660,7 @@ fn read_frame_request(body: &[u8]) -> io::Result<FrameRequest> {
     let n = r.u32()? as usize;
     let mut events = Vec::with_capacity(n.min(1024));
     for _ in 0..n {
-        let kind = r.u8()?;
-        let at = Offset::new(r.f32()?, r.f32()?);
-        events.push(match kind {
-            0 => Pointer::Down(at),
-            1 => Pointer::Move(at),
-            _ => Pointer::Up(at),
-        });
+        events.push(read_event(&mut r, at)?);
     }
     Ok(FrameRequest {
         env: Environment {
@@ -548,6 +863,9 @@ impl RemotePreview {
     /// Feed `events`, draw the frame for time `at`, and return its pixels at
     /// the device size times `scale`, over `base`.
     ///
+    /// The events can be anything the window path would feed its own driver
+    /// — see [`RemoteEvent`].
+    ///
     /// # Errors
     ///
     /// [`RemoteError::Crashed`] when the guest killed the child — this frame
@@ -558,7 +876,7 @@ impl RemotePreview {
         scale: f32,
         at: Duration,
         base: Color,
-        events: &[Pointer],
+        events: &[RemoteEvent],
     ) -> Result<Frame, RemoteError> {
         let payload = write_frame_request(env, scale, at, base, events);
         match self.request(FRAME, &payload)? {
@@ -586,6 +904,74 @@ impl RemotePreview {
             ))),
         }
     }
+
+    /// The guest's state, as the in-process path's `capture_preview_state`
+    /// would have taken it — the child walks **its own** tree.
+    ///
+    /// Empty when nothing is mounted or nothing has state to say, which is
+    /// the same answer the in-process capture gives for the same reasons.
+    ///
+    /// # Errors
+    ///
+    /// [`RemoteError::Crashed`] when the child is gone, and
+    /// [`RemoteError::Protocol`] for a malformed reply.
+    pub fn capture_state(&mut self) -> Result<Vec<(String, String)>, RemoteError> {
+        let reply = self.request(CAPTURE, &[])?;
+        let (tag, body) = reply;
+        if tag != SNAPSHOT {
+            return Err(RemoteError::Protocol(format!(
+                "unexpected reply {tag} to Capture"
+            )));
+        }
+        let mut r = Reader(&body);
+        let n = r.u32().map_err(|e| RemoteError::Protocol(e.to_string()))? as usize;
+        let mut out = Vec::with_capacity(n.min(4096));
+        for _ in 0..n {
+            let path = String::from_utf8_lossy(&r.bytes().map_err(protocol)?).into_owned();
+            let state = String::from_utf8_lossy(&r.bytes().map_err(protocol)?).into_owned();
+            out.push((path, state));
+        }
+        Ok(out)
+    }
+
+    /// Put a [`capture_state`](Self::capture_state) snapshot into the tree the
+    /// child is holding, and say how many of them landed. The child builds
+    /// its tree first if no frame has drawn yet, because the studio restores
+    /// one frame *before* the pane asks for its first frame — the same order
+    /// the in-process path's restore works in.
+    ///
+    /// `at` is the clock the build draws at, in the pane's own time.
+    ///
+    /// # Errors
+    ///
+    /// As [`capture_state`](Self::capture_state).
+    pub fn restore_state(
+        &mut self,
+        snapshot: &[(String, String)],
+        at: Duration,
+    ) -> Result<usize, RemoteError> {
+        let mut w = Writer::default();
+        w.u32(u32::try_from(at.as_millis()).unwrap_or(u32::MAX));
+        w.u32(u32::try_from(snapshot.len()).unwrap_or(u32::MAX));
+        for (path, state) in snapshot {
+            w.bytes(path.as_bytes());
+            w.bytes(state.as_bytes());
+        }
+        let (tag, body) = self.request(RESTORE, &w.0)?;
+        if tag != RESTORED {
+            return Err(RemoteError::Protocol(format!(
+                "unexpected reply {tag} to Restore"
+            )));
+        }
+        let mut r = Reader(&body);
+        r.u32()
+            .map(|n| n as usize)
+            .map_err(|e| RemoteError::Protocol(e.to_string()))
+    }
+}
+
+fn protocol(e: io::Error) -> RemoteError {
+    RemoteError::Protocol(e.to_string())
 }
 
 impl Drop for RemotePreview {
@@ -751,26 +1137,61 @@ pub fn serve(input: &mut impl Read, output: &mut impl Write) -> io::Result<()> {
                 let logical = request.env.metrics.size;
                 m.driver.resize(logical);
                 for event in &request.events {
-                    let pointer = match event {
-                        Pointer::Down(p) => {
+                    // The cursor is wherever the last positioned event put it
+                    // — a pointer or scroll implies hover as surely as the
+                    // platform's own CursorMoved does, and the guest's hover
+                    // state should not lag its own taps.
+                    let (hover_position, pointer) = match event {
+                        RemoteEvent::Pointer(Pointer::Down(p)) => {
                             let id = PointerId(next_pointer);
                             next_pointer += 1;
                             active = Some(id);
                             last = *p;
-                            PointerEvent::down(id, *p, request.at)
+                            (
+                                Some(*p),
+                                Some(PointerEvent::down(id, *p, request.at)),
+                            )
                         }
-                        Pointer::Move(p) => {
+                        RemoteEvent::Pointer(Pointer::Move(p)) => {
                             let Some(id) = active else { continue };
                             let previous = last;
                             last = *p;
-                            PointerEvent::moved(id, previous, *p, request.at)
+                            (
+                                Some(*p),
+                                Some(PointerEvent::moved(id, previous, *p, request.at)),
+                            )
                         }
-                        Pointer::Up(p) => {
+                        RemoteEvent::Pointer(Pointer::Up(p)) => {
                             let Some(id) = active.take() else { continue };
-                            PointerEvent::up(id, *p, request.at)
+                            (
+                                Some(*p),
+                                Some(PointerEvent::up(id, *p, request.at)),
+                            )
                         }
+                        _ => (None, None),
                     };
-                    m.driver.handle_pointer(&pointer);
+                    if let Some(p) = hover_position {
+                        m.driver.handle_hover(Some(p));
+                    }
+                    if let Some(pointer) = pointer {
+                        m.driver.handle_pointer(&pointer);
+                        continue;
+                    }
+                    match event {
+                        RemoteEvent::Hover(p) => {
+                            m.driver.handle_hover(*p);
+                        }
+                        RemoteEvent::Key(k) => {
+                            m.driver.handle_key(k);
+                        }
+                        RemoteEvent::Ime(e) => {
+                            m.driver.handle_ime(e);
+                        }
+                        RemoteEvent::Scroll(s) => {
+                            m.driver.handle_scroll(s);
+                        }
+                        RemoteEvent::Pointer(_) => unreachable!("handled above"),
+                    }
                 }
                 m.driver.draw_frame_at(request.at);
                 let scale = if request.scale.is_finite() && request.scale > 0.0 {
@@ -799,6 +1220,62 @@ pub fn serve(input: &mut impl Read, output: &mut impl Write) -> io::Result<()> {
                 send(output, FRAME_DONE, &w.0)?;
             }
             SHUTDOWN => return Ok(()),
+            CAPTURE => {
+                // The same walk the in-process capture makes, on the tree
+                // only this process has. No mounted guest or no state to
+                // say: an empty snapshot, which is the in-process answer too.
+                let snapshot = mounted
+                    .as_mut()
+                    .and_then(|m| {
+                        let elements = m.driver.elements();
+                        let root = elements
+                            .find(crate::ui::preview::GUEST_ROOT)
+                            .map(|e| e.id())?;
+                        Some(elements.snapshot_states(root))
+                    })
+                    .unwrap_or_default();
+                let mut w = Writer::default();
+                w.u32(u32::try_from(snapshot.len()).unwrap_or(u32::MAX));
+                for (path, state) in &snapshot {
+                    w.bytes(path.as_bytes());
+                    w.bytes(state.as_bytes());
+                }
+                send(output, SNAPSHOT, &w.0)?;
+            }
+            RESTORE => {
+                let mut r = Reader(&body);
+                let at = Duration::from_millis(u64::from(r.u32()?));
+                let n = r.u32()? as usize;
+                let mut snapshot = Vec::with_capacity(n.min(4096));
+                for _ in 0..n {
+                    let path = String::from_utf8_lossy(&r.bytes()?).into_owned();
+                    let state = String::from_utf8_lossy(&r.bytes()?).into_owned();
+                    snapshot.push((path, state));
+                }
+                let restored = match mounted.as_mut() {
+                    // The tree the states go back into does not exist until a
+                    // frame has drawn, and the studio restores *before* the
+                    // pane asks for its first one — so draw it here, at the
+                    // clock the host sent, and the states have somewhere to
+                    // land. The pane's next frame request draws again over
+                    // the top, now holding the restored state.
+                    Some(m) => {
+                        m.driver.draw_frame_at(at);
+                        let elements = m.driver.elements();
+                        match elements
+                            .find(crate::ui::preview::GUEST_ROOT)
+                            .map(|e| e.id())
+                        {
+                            Some(root) => elements.restore_states(root, &snapshot),
+                            None => 0,
+                        }
+                    }
+                    None => 0,
+                };
+                let mut w = Writer::default();
+                w.u32(restored as u32);
+                send(output, RESTORED, &w.0)?;
+            }
             _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -837,10 +1314,10 @@ mod tests {
                 text_scale: 1.3,
             },
         };
-        let events = [
-            Pointer::Down(Offset::new(10.0, 20.0)),
-            Pointer::Move(Offset::new(12.5, 21.0)),
-            Pointer::Up(Offset::new(12.5, 21.0)),
+        let events = vec![
+            RemoteEvent::Pointer(Pointer::Down(Offset::new(10.0, 20.0))),
+            RemoteEvent::Pointer(Pointer::Move(Offset::new(12.5, 21.0))),
+            RemoteEvent::Pointer(Pointer::Up(Offset::new(12.5, 21.0))),
         ];
         let bytes = write_frame_request(
             &env,
@@ -855,6 +1332,48 @@ mod tests {
         assert_eq!(back.at, Duration::from_millis(1234));
         assert_eq!(back.base, Color::WHITE);
         assert_eq!(back.events, events);
+    }
+
+    #[test]
+    fn every_event_kind_round_trips() {
+        let env = Environment::of(Platform::Ios);
+        let at = Duration::from_millis(500);
+        let events = vec![
+            RemoteEvent::Hover(Some(Offset::new(3.0, 4.0))),
+            RemoteEvent::Hover(None),
+            RemoteEvent::Key(
+                KeyEvent::character("あ", at)
+                    .with_modifiers(Modifiers::CONTROL.union(Modifiers::SHIFT)),
+            ),
+            RemoteEvent::Key(KeyEvent::named(NamedKey::ArrowLeft, at).repeated()),
+            RemoteEvent::Ime(ImeEvent::Preedit {
+                text: "か".into(),
+                cursor: Some((0, 3)),
+            }),
+            RemoteEvent::Ime(ImeEvent::Enabled),
+            RemoteEvent::Ime(ImeEvent::commit("き")),
+            RemoteEvent::Ime(ImeEvent::Disabled),
+            RemoteEvent::Scroll(ScrollEvent::new(
+                Offset::new(100.0, 200.0),
+                Offset::new(0.0, -48.0),
+                at,
+            )),
+        ];
+        let bytes = write_frame_request(&env, 1.0, at, Color::BLACK, &events);
+        let back = read_frame_request(&bytes).unwrap();
+        assert_eq!(back.events, events, "every field survived the wire");
+
+        // Two keys in one batch — the way a fast typist arrives.
+        let batch = vec![
+            RemoteEvent::Key(KeyEvent::character("o", at)),
+            RemoteEvent::Key(KeyEvent::character("k", at)),
+        ];
+        let bytes = write_frame_request(&env, 1.0, at, Color::BLACK, &batch);
+        let back = read_frame_request(&bytes).unwrap();
+        assert_eq!(
+            back.events, batch,
+            "a multi-key batch round-trips in order"
+        );
     }
 
     #[test]

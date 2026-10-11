@@ -797,7 +797,7 @@ impl Correlation {
 
     /// Feed interleaved stereo.
     pub fn push(&mut self, interleaved: &[f32]) {
-        for f in interleaved.chunks_exact(2) {
+        for f in interleaved.as_chunks::<2>().0 {
             self.tick(f[0], f[1]);
         }
     }
@@ -842,7 +842,7 @@ impl Goniometer {
 
     /// Feed interleaved stereo.
     pub fn push(&mut self, interleaved: &[f32]) {
-        for f in interleaved.chunks_exact(2) {
+        for f in interleaved.as_chunks::<2>().0 {
             self.points[self.pos] = Self::point(f[0], f[1]);
             self.pos = (self.pos + 1) % self.points.len();
             if self.pos == 0 {

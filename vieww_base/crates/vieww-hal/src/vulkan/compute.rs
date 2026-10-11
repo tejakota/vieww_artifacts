@@ -163,7 +163,9 @@ impl ComputeBuffer {
     pub fn read_f32(&self, _gpu: &VulkanDevice) -> Result<Vec<f32>, VulkanError> {
         Ok(self
             .read()?
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
             .collect())
     }
@@ -175,7 +177,9 @@ impl ComputeBuffer {
     pub fn read_u32(&self, _gpu: &VulkanDevice) -> Result<Vec<u32>, VulkanError> {
         Ok(self
             .read()?
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
             .collect())
     }

@@ -231,17 +231,15 @@ pub fn deinterleave(input: &[f32], l: &mut [f32], r: &mut [f32]) {
 mod scalar {
     pub(super) fn dot(a: &[f32], b: &[f32]) -> f32 {
         let mut acc = [0.0f32; 8];
-        let mut ca = a.chunks_exact(8);
-        let mut cb = b.chunks_exact(8);
-        for (x, y) in (&mut ca).zip(&mut cb) {
+        for (x, y) in a.as_chunks::<8>().0.iter().zip(b.as_chunks::<8>().0) {
             for k in 0..8 {
                 acc[k] += x[k] * y[k];
             }
         }
-        let tail: f32 = ca
-            .remainder()
+        let head = a.len() - a.len() % 8;
+        let tail: f32 = a[head..]
             .iter()
-            .zip(cb.remainder())
+            .zip(&b[head..])
             .map(|(x, y)| x * y)
             .sum();
         acc.iter().sum::<f32>() + tail
@@ -291,7 +289,7 @@ mod scalar {
     }
 
     pub(super) fn deinterleave(input: &[f32], l: &mut [f32], r: &mut [f32]) {
-        for (i, f) in input.chunks_exact(2).enumerate() {
+        for (i, f) in input.as_chunks::<2>().0.iter().enumerate() {
             l[i] = f[0];
             r[i] = f[1];
         }

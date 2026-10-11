@@ -1985,10 +1985,15 @@ impl std::fmt::Debug for RemoteScreen {
 
 #[derive(Debug, Default)]
 struct RemoteScreenState {
-    queue: Vec<crate::remote::Pointer>,
+    queue: Vec<crate::remote::RemoteEvent>,
     pending: bool,
     animating: bool,
     started: Option<std::time::Instant>,
+    /// Where the cursor was last seen over the pane — from a tap, a drag or a
+    /// scroll, all of which carry their position. Hover's enter is forwarded
+    /// with this; see the module doc on `remote` for the granularity this
+    /// implies and why it is the honest one.
+    cursor: Option<Offset>,
 }
 
 impl ElementState for RemoteScreenState {
@@ -2068,19 +2073,73 @@ impl Widget for RemoteScreen {
         };
         with_remote_state(handle.as_ref(), |s| s.animating = frame.wants_frame);
         let push = move |handle: &Option<std::rc::Rc<std::cell::RefCell<dyn ElementState>>>,
-                         pointer: crate::remote::Pointer| {
+                         event: crate::remote::RemoteEvent| {
             with_remote_state(handle.as_ref(), |s| {
-                s.queue.push(pointer);
+                // Every event that knows where it happened also knows where
+                // the cursor is.
+                if let Some(position) = event.position() {
+                    s.cursor = Some(position);
+                }
+                s.queue.push(event);
                 s.pending = true;
             });
         };
-        let (h1, h2, h3, h4) = (handle.clone(), handle.clone(), handle.clone(), handle);
+        let (h1, h2, h3, h4, h5, h6) = (
+            handle.clone(),
+            handle.clone(),
+            handle.clone(),
+            handle.clone(),
+            handle.clone(),
+            handle.clone(),
+        );
+        let hover_enter =
+            move |handle: &Option<std::rc::Rc<std::cell::RefCell<dyn ElementState>>>| {
+                // On enter the cursor's position is whatever this pane last
+                // saw — the framework gives hover no coordinates of its own.
+                let at =
+                    with_remote_state(handle.as_ref(), |s| s.cursor).flatten();
+                with_remote_state(handle.as_ref(), |s| {
+                    s.queue.push(crate::remote::RemoteEvent::Hover(at));
+                    s.pending = true;
+                });
+            };
         let size = self.env.metrics.size;
-        GestureDetector::new()
-            .on_tap_down(move |d| push(&h1, crate::remote::Pointer::Down(d.local)))
-            .on_tap(move |d| push(&h2, crate::remote::Pointer::Up(d.local)))
-            .on_drag_update(move |d| push(&h3, crate::remote::Pointer::Move(d.local)))
-            .on_drag_end(move |d| push(&h4, crate::remote::Pointer::Up(d.local)))
+        let gesture = GestureDetector::new()
+            .on_tap_down(move |d| {
+                push(&h1, crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Down(d.local)))
+            })
+            .on_tap(move |d| {
+                push(&h2, crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Up(d.local)))
+            })
+            .on_drag_update(move |d| {
+                push(
+                    &h3,
+                    crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Move(d.local)),
+                )
+            })
+            .on_drag_end(move |d| {
+                push(&h4, crate::remote::RemoteEvent::Pointer(crate::remote::Pointer::Up(d.local)))
+            })
+            .on_scroll(move |s| {
+                push(
+                    &h5,
+                    crate::remote::RemoteEvent::Scroll(vieww_foundation::ScrollEvent::new(
+                        s.position,
+                        s.delta,
+                        s.timestamp,
+                    )),
+                )
+            })
+            .on_hover(move |inside| {
+                if inside {
+                    hover_enter(&h6);
+                } else {
+                    with_remote_state(h6.as_ref(), |s| {
+                        s.queue.push(crate::remote::RemoteEvent::Hover(None));
+                        s.pending = true;
+                    });
+                }
+            })
             .child(
                 SizedBox::from_size(size).child(
                     Image::new(vieww_foundation::Image::from_rgba8(
@@ -2092,11 +2151,142 @@ impl Widget for RemoteScreen {
                     .label("Preview"),
                 ),
             )
-            .into()
+            .into();
+        ForwardInput {
+            handle,
+            child: gesture,
+        }
+        .into()
     }
 }
 
 widget_node_from!(RemoteScreen);
+
+/// Wraps the remote pane and gives its keystrokes and text somewhere to go —
+/// the pane's half of input forwarding, the same shape as the shell's
+/// [`Shortcuts`](crate::ui::Shortcuts) layer.
+///
+/// The object takes focus when the pane is pressed (a press moves focus to the
+/// deepest focusable in the hit path, and nothing inside the pane's picture is
+/// focusable — it is pixels), and from there every key and IME event the studio
+/// would otherwise route to its own editor is forwarded to the child instead.
+/// Keys are **not** consumed on the way: an in-process guest's focused field
+/// also lets a command chord bubble out to the shortcut layer, and the remote
+/// pane should behave the same way rather than eat ⌘S.
+#[derive(Debug, Clone)]
+pub struct ForwardInput {
+    /// The pane's element state, where the events queue.
+    pub(crate) handle: Option<std::rc::Rc<std::cell::RefCell<dyn ElementState>>>,
+    child: WidgetNode,
+}
+
+impl Widget for ForwardInput {
+    fn debug_name(&self) -> &'static str {
+        "ForwardInput"
+    }
+    fn kind(&self) -> WidgetKind<'_> {
+        WidgetKind::RenderSingleChild(&self.child)
+    }
+}
+
+widget_node_from!(ForwardInput);
+
+/// The render object behind [`ForwardInput`] — see that type's doc for the
+/// focus story and the consume policy.
+pub struct RenderForwardInput {
+    pub(crate) handle: Option<std::rc::Rc<std::cell::RefCell<dyn ElementState>>>,
+    /// The pane's laid-out size, so an input method's candidate window opens
+    /// over the preview rather than wherever the window's default is. The
+    /// caret's *true* position is in the child's tree, and asking the child
+    /// where it is on every frame is a round trip this pane does not need.
+    pub(crate) size: std::cell::Cell<vieww_foundation::Size>,
+}
+
+impl std::fmt::Debug for RenderForwardInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RenderForwardInput")
+            .field("size", &self.size.get())
+            .finish_non_exhaustive()
+    }
+}
+
+impl RenderForwardInput {
+    fn queue(&self, event: crate::remote::RemoteEvent) {
+        let Some(handle) = self.handle.as_ref() else {
+            return;
+        };
+        let Ok(mut state) = handle.try_borrow_mut() else {
+            return;
+        };
+        let Some(state) = state.as_any_mut().downcast_mut::<RemoteScreenState>() else {
+            return;
+        };
+        if let Some(position) = event.position() {
+            state.cursor = Some(position);
+        }
+        state.queue.push(event);
+        state.pending = true;
+    }
+}
+
+impl vieww_render::RenderObject for RenderForwardInput {
+    fn layout(
+        &mut self,
+        ctx: &mut vieww_render::LayoutCtx<'_>,
+        constraints: vieww_foundation::Constraints,
+    ) -> vieww_foundation::Size {
+        let Some(&child) = ctx.children().first() else {
+            return constraints.smallest();
+        };
+        let size = ctx.layout_child(child, constraints);
+        ctx.place_child(child, Offset::ZERO);
+        self.size.set(size);
+        size
+    }
+
+    fn is_focusable(&self) -> bool {
+        true
+    }
+
+    fn handle_key(&self, event: &vieww_foundation::KeyEvent) -> bool {
+        self.queue(crate::remote::RemoteEvent::Key(event.clone()));
+        // Not consumed: the studio's own shortcut layer sits further out and
+        // a chord must reach it exactly as it does through an in-process
+        // guest's focused field.
+        false
+    }
+
+    fn handle_ime(&self, event: &vieww_foundation::ImeEvent) -> bool {
+        self.queue(crate::remote::RemoteEvent::Ime(event.clone()));
+        // Edits are the guest's text; session events cost nothing either way.
+        event.is_edit()
+    }
+
+    fn accepts_text(&self) -> bool {
+        // The guest's fields are behind this object, and an input method
+        // should open for them — over this pane, per `ime_cursor_area`.
+        true
+    }
+
+    fn ime_cursor_area(&self) -> Option<vieww_foundation::Rect> {
+        let size = self.size.get();
+        Some(vieww_foundation::Rect::new(
+            0.0,
+            0.0,
+            size.width.max(1.0),
+            size.height.max(1.0),
+        ))
+    }
+
+    /// Never provokes a relayout — see `RenderShortcuts` for the reason.
+    fn layout_differs(&self, _new: &dyn vieww_render::RenderObject) -> bool {
+        false
+    }
+
+    fn debug_name(&self) -> &'static str {
+        "ForwardInput"
+    }
+}
 
 /// What a compiled screen is mounted inside: the simulated device's metrics
 /// and accessibility settings, its adaptive theme, an overlay for its dialogs,

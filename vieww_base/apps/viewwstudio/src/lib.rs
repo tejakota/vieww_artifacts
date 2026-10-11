@@ -120,6 +120,12 @@ pub fn install(driver: &mut vieww_render::FrameDriver) {
     driver.register::<Shortcuts, ui::shortcuts::RenderShortcuts>(|widget| {
         ui::shortcuts::RenderShortcuts::for_studio(widget.studio.clone())
     });
+    driver.register::<ui::preview::ForwardInput, ui::preview::RenderForwardInput>(|widget| {
+        ui::preview::RenderForwardInput {
+            handle: widget.handle.clone(),
+            size: std::cell::Cell::new(vieww_foundation::Size::ZERO),
+        }
+    });
 
     // **The panic policy, set on purpose rather than inherited.**
     //
