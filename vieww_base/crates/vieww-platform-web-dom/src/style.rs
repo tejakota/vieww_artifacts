@@ -22,10 +22,43 @@ use vieww_foundation::{
     Shadow, TextAlign, TextStyle, Transform,
 };
 
+thread_local! {
+    static TOKENS: std::cell::RefCell<Vec<(Color, &'static str)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Name the application's palette colours as CSS custom properties.
+///
+/// After this, every colour the walk emits that **exactly** equals one of
+/// `tokens` is written as `var(--name)` instead of a literal, so the host
+/// page's stylesheet decides what it is — a `@media (prefers-color-scheme:
+/// light)` block that redefines `--ink` re-themes every text run and box
+/// that used it, with no rebuild of the tree and no second palette in Rust.
+///
+/// The widget tree itself stays literal, which is the point: the same tree
+/// still rasterises (the canvas backend has no stylesheet), and a colour
+/// that is not a token — a one-off tint, a translucent wash — is emitted as
+/// it always was. Names are given without the leading `--`.
+///
+/// Per thread, like everything else in a wasm page; call it before
+/// mounting.
+pub fn set_color_tokens(tokens: &[(Color, &'static str)]) {
+    TOKENS.with(|t| *t.borrow_mut() = tokens.to_vec());
+}
+
 /// `rgba()`, because a colour with an alpha is the common case on this target
-/// and `#rrggbbaa` is not understood by every browser vieww supports.
+/// and `#rrggbbaa` is not understood by every browser vieww supports. A
+/// colour registered with [`set_color_tokens`] is `var(--name)`.
 #[must_use]
 pub fn css_color(color: Color) -> String {
+    if let Some(name) = TOKENS.with(|t| {
+        t.borrow()
+            .iter()
+            .find(|(c, _)| *c == color)
+            .map(|(_, name)| *name)
+    }) {
+        return format!("var(--{name})");
+    }
     if color.a == 255 {
         format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
     } else {

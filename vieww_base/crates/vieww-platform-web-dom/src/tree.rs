@@ -61,7 +61,111 @@ pub struct Iframe {
     pub title: String,
 }
 
+/// Whether an element with a click handler needs button semantics added:
+/// anything but a `<button>` or a link is unreachable from the keyboard
+/// otherwise — no tab stop, no Enter, and a screen reader announces it as
+/// plain text.
+pub(crate) fn needs_button_semantics(node: &VNode) -> bool {
+    node.on_click.is_some() && node.tag != "button" && !(node.tag == "a" && node.href.is_some())
+}
+
+fn escape_into(out: &mut String, text: &str, attribute: bool) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' if attribute => out.push_str("&quot;"),
+            _ => out.push(c),
+        }
+    }
+}
+
 impl VNode {
+    /// The subtree as static HTML: the same elements and attributes the live
+    /// mount creates, minus what only a live page has — click listeners and
+    /// the canvas island's application (its `<canvas>` is emitted, empty).
+    ///
+    /// What it is for: a page a crawler or a no-JavaScript reader can read
+    /// (the canvas backend's honest gap, and this backend's whole advantage),
+    /// a snapshot to diff in a test, and a page to screenshot without a wasm
+    /// toolchain.
+    #[must_use]
+    pub fn to_html(&self) -> String {
+        let mut out = String::new();
+        self.write_html(&mut out);
+        out
+    }
+
+    fn write_html(&self, out: &mut String) {
+        let attr = |out: &mut String, name: &str, value: &str| {
+            out.push(' ');
+            out.push_str(name);
+            out.push_str("=\"");
+            escape_into(out, value, true);
+            out.push('"');
+        };
+        out.push('<');
+        out.push_str(self.tag);
+        if !self.css.is_empty() {
+            attr(out, "style", &self.css);
+        }
+        if let Some(class) = &self.class {
+            attr(out, "class", class);
+        }
+        if let Some(id) = &self.id {
+            attr(out, "id", id);
+        }
+        if let Some(label) = &self.label {
+            attr(
+                out,
+                if self.tag == "img" {
+                    "alt"
+                } else {
+                    "aria-label"
+                },
+                label,
+            );
+        }
+        if let Some(href) = &self.href {
+            attr(out, if self.tag == "img" { "src" } else { "href" }, href);
+        }
+        if let Some(iframe) = &self.iframe {
+            if let Some(src) = &iframe.src {
+                attr(out, "src", src);
+            }
+            if let Some(srcdoc) = &iframe.srcdoc {
+                attr(out, "srcdoc", srcdoc);
+            }
+            attr(out, "title", &iframe.title);
+            attr(out, "loading", "lazy");
+        }
+        if let Some((id, _)) = &self.canvas {
+            if self.id.is_none() {
+                attr(out, "id", id);
+            }
+        }
+        if needs_button_semantics(self) {
+            attr(out, "tabindex", "0");
+            attr(out, "role", "button");
+        }
+        out.push('>');
+        if matches!(self.tag, "img" | "br" | "hr" | "input") {
+            return;
+        }
+        if self.children.is_empty() {
+            if let Some(text) = &self.text {
+                escape_into(out, text, false);
+            }
+        }
+        for child in &self.children {
+            child.write_html(out);
+        }
+        out.push_str("</");
+        out.push_str(self.tag);
+        out.push('>');
+    }
+
     fn div(css: String) -> Self {
         Self {
             tag: "div",
@@ -582,6 +686,61 @@ mod tests {
         let mut tree = ElementTree::new();
         let root = tree.mount(widget);
         walk(&tree, root)
+    }
+
+    #[test]
+    fn a_tappable_box_that_is_not_a_button_gets_a_tab_stop_and_a_role() {
+        let tapped = std::rc::Rc::new(std::cell::Cell::new(false));
+        let t = tapped.clone();
+        let nodes = walked(
+            vieww_widget::GestureDetector::new()
+                .on_tap(move |_| t.set(true))
+                .child(vieww_widget::ColoredBox::new(vieww_foundation::Color::RED)),
+        );
+        let node = &nodes[0];
+        assert!(needs_button_semantics(node));
+        let html = node.to_html();
+        assert!(
+            html.contains("tabindex=\"0\"") && html.contains("role=\"button\""),
+            "{html}"
+        );
+        (node.on_click.as_ref().unwrap())();
+        assert!(tapped.get());
+        // A link is already reachable; it gets neither.
+        let link = VNode {
+            tag: "a",
+            href: Some("#x".into()),
+            on_click: node.on_click.clone(),
+            ..VNode::div(String::new())
+        };
+        assert!(!needs_button_semantics(&link));
+    }
+
+    #[test]
+    fn palette_colours_become_css_variables_and_others_stay_literal() {
+        let ink = vieww_foundation::Color::rgb(0xF8, 0xF4, 0xF2);
+        crate::style::set_color_tokens(&[(ink, "ink")]);
+        assert_eq!(crate::style::css_color(ink), "var(--ink)");
+        assert_eq!(
+            crate::style::css_color(vieww_foundation::Color::rgb(1, 2, 3)),
+            "#010203"
+        );
+        crate::style::set_color_tokens(&[]);
+        assert_eq!(crate::style::css_color(ink), "#f8f4f2");
+    }
+
+    #[test]
+    fn static_html_escapes_text_and_attributes() {
+        let mut node = VNode::div("color:red".into());
+        node.label = Some("a \"quoted\" <label>".into());
+        let mut child = VNode::div(String::new());
+        child.text = Some("1 < 2 & 3".into());
+        node.children.push(child);
+        assert_eq!(
+            node.to_html(),
+            "<div style=\"color:red\" aria-label=\"a &quot;quoted&quot; &lt;label&gt;\">\
+             <div>1 &lt; 2 &amp; 3</div></div>"
+        );
     }
 
     #[test]

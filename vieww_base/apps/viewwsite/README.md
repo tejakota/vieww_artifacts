@@ -91,6 +91,18 @@ it could have.
 - **Nothing else moves.** The page presents a frame only when the scene was
   rebuilt, so it is idle at zero frames a second between interactions.
 
-Not yet done: `prefers-color-scheme` (the page is dark-only), a keyboard focus
-order through the tappable rows, and the device-pixel scale, which needs a root
-transform on `NativeRenderer::render_to_pixels` — see `WebSurface::resize`.
+- **Light and dark.** The tree's palette is registered with
+  `vieww_platform_web_dom::set_color_tokens` (`dom::COLOR_TOKENS`), so every
+  text run and box in those colours is emitted as `var(--ink)` and friends,
+  and `index.html`'s `prefers-color-scheme: light` block re-themes the page.
+  Code panels, the terminal and the phone stay dark on purpose.
+- **Keyboard.** Every control is a link or a `<button>` in document order;
+  the DOM backend gives any other tappable box `tabindex`, `role=button` and
+  Enter/Space. The install-commands "Copy" control used to be a `div` with a
+  script listener — unreachable from the keyboard — and is now a button.
+- **Device pixels.** The canvas island renders at `devicePixelRatio`
+  (`WebSurface::resize`); the DOM is CSS pixels, which the browser scales.
+
+`cargo run -p viewwsite --example snapshot -- <dir>` writes the page as static
+HTML without a wasm toolchain — for screenshots in either scheme, review, or a
+crawler.

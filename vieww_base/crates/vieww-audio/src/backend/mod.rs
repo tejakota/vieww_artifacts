@@ -263,6 +263,10 @@ pub trait Backend: Send + Sync {
 
 /// The backends this platform offers, in preference order.
 #[must_use]
+#[allow(
+    clippy::vec_init_then_push,
+    reason = "which pushes run is per-platform cfg; on wasm it is exactly one"
+)]
 pub fn backends() -> Vec<Box<dyn Backend>> {
     #[allow(unused_mut, reason = "empty on some platforms")]
     let mut v: Vec<Box<dyn Backend>> = Vec::new();

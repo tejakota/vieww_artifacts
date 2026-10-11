@@ -44,12 +44,26 @@ reading to the bottom. The section is still here for continuity, and
    ImageMagick to check the window shows its blue; with the blit disabled the
    screen has 0 blue pixels and it fails. No timing claimed — lavapipe's
    numbers are not a GPU's.
-3. **Metal and D3D12 render paths**, type-checked and linted on their own
+3. **viewwsite: light scheme, keyboard reach, and two stale gaps.** The
+   README's three "not yet done" items, checked against the code: the
+   device-pixel scale was already closed (`WebSurface::resize`), and the
+   DOM page's controls were already links in document order — but its
+   "Copy" control was a `div` with a script listener, unreachable by Tab,
+   and any `GestureDetector` the DOM backend emitted had the same problem.
+   Now: `set_color_tokens` in `vieww-platform-web-dom` (palette colours →
+   CSS custom properties), a light theme in `index.html`, button semantics
+   (`tabindex`, `role`, Enter/Space) for every non-button tap target,
+   `VNode::to_html` and a `snapshot` example. Verified in Chromium under
+   emulated dark and light schemes: body background `rgb(15,13,11)` /
+   `rgb(251,249,247)`, the Copy button reached by Tab in both (11th stop),
+   and both schemes screenshotted. The wasm build lints clean again: two
+   wasm-only lints in `vieww-video` and `vieww-audio` were fixed on the way.
+4. **Metal and D3D12 render paths**, type-checked and linted on their own
    targets from Linux, never yet executed — `PENDING.md` §1.2/§1.3.
-4. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
+5. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
    Windows and Android from Linux; its first run found five real bugs (see
    the commit).
-5. **`vieww-spatial`** applied from the supplied patch, fixed to build.
+6. **`vieww-spatial`** applied from the supplied patch, fixed to build.
 
 ## The most recent effort (2026-10-09): the PENDING list emptied of everything a machine can close — analytic edges on the GPU, a GPU frame in a real window, atlas eviction, the full gate on the pinned toolchain
 

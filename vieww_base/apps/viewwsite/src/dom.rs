@@ -38,6 +38,20 @@ const INK_3: Color = Color::rgb(0x78, 0x71, 0x6B);
 const ACCENT: Color = Color::rgb(0xB4, 0x91, 0xFF);
 const LIVE: Color = Color::rgb(0x4E, 0xBE, 0x7D);
 
+/// The palette as CSS custom properties, for
+/// `vieww_platform_web_dom::set_color_tokens`: every text run and box in
+/// these colours is written as `var(--name)`, and `index.html`'s
+/// `prefers-color-scheme: light` block redefines them. The tree stays
+/// literal — it still rasterises, dark, for `examples/render.rs`.
+pub const COLOR_TOKENS: &[(Color, &str)] = &[
+    (GROUND, "ground"),
+    (INK, "ink"),
+    (INK_2, "ink-2"),
+    (INK_3, "ink-3"),
+    (ACCENT, "accent"),
+    (LIVE, "live"),
+];
+
 // ─── the small vocabulary this page is written in ─────────────────────────
 
 fn sans(size: f32, color: Color) -> TextStyle {
@@ -274,12 +288,12 @@ fn button(label: &str, href: &str, filled: bool) -> WidgetNode {
         "display:inline-flex;align-items:center;justify-content:center;gap:8px;\
          border-radius:999px;background:linear-gradient(180deg,#C0A3FF,#7E5CE8);\
          color:#0F0D0B;padding:11px 22px;text-decoration:none;font-weight:600;\
-         box-shadow:0 8px 24px rgba(126,92,232,0.35),inset 0 1px 0 rgba(255,255,255,0.35);\
+         box-shadow:0 8px 24px rgba(126,92,232,0.35),inset 0 1px 0 rgba(var(--glass),0.35);\
          white-space:nowrap"
     } else {
         "display:inline-flex;align-items:center;justify-content:center;gap:8px;\
-         border-radius:999px;border:1px solid rgba(255,255,255,0.16);\
-         background:rgba(255,255,255,0.04);padding:11px 22px;text-decoration:none;\
+         border-radius:999px;border:1px solid rgba(var(--glass),0.16);\
+         background:rgba(var(--glass),0.04);padding:11px 22px;text-decoration:none;\
          backdrop-filter:blur(8px);white-space:nowrap"
     };
     Tag::link(
@@ -417,7 +431,7 @@ fn hero(host: Option<Os>) -> WidgetNode {
 fn status_pill() -> WidgetNode {
     Styled::css(
         "display:inline-flex;align-items:center;gap:9px;border-radius:999px;\
-         border:1px solid rgba(255,255,255,0.12);background:rgba(43,37,33,0.5);\
+         border:1px solid rgba(var(--glass),0.12);background:var(--pill);\
          backdrop-filter:blur(10px);padding:6px 14px;margin:0 auto;width:fit-content;\
          max-width:100%",
         row(
@@ -473,9 +487,9 @@ fn stat_strip() -> WidgetNode {
         .into()
     };
     Styled::css(
-        "max-width:800px;margin:0 auto;border:1px solid rgba(255,255,255,0.10);\
-         border-radius:16px;overflow:hidden;background:rgba(255,255,255,0.08);\
-         box-shadow:0 20px 50px rgba(0,0,0,0.35)",
+        "max-width:800px;margin:0 auto;border:1px solid rgba(var(--glass),0.10);\
+         border-radius:16px;overflow:hidden;background:rgba(var(--glass),0.08);\
+         box-shadow:0 20px 50px var(--shadow-deep)",
         Styled::class(
             "vw-stats",
             Flex::row().children(children![
@@ -527,8 +541,8 @@ fn window_frame(title: &str, asset: &str) -> WidgetNode {
             0.0,
             children![
                 Styled::css(
-                    "border-bottom:1px solid rgba(255,255,255,0.07);\
-                     background:rgba(255,255,255,0.03);padding:11px 14px",
+                    "border-bottom:1px solid rgba(var(--glass),0.07);\
+                     background:rgba(var(--glass),0.03);padding:11px 14px",
                     Flex::row()
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .spacing(10.0)
@@ -767,8 +781,8 @@ fn code_block(filename: &str, lang: &str, source: &[&str]) -> WidgetNode {
             0.0,
             children![
                 Styled::css(
-                    "border-bottom:1px solid rgba(255,255,255,0.07);\
-                     background:rgba(255,255,255,0.03);padding:11px 14px",
+                    "border-bottom:1px solid rgba(var(--glass),0.07);\
+                     background:rgba(var(--glass),0.03);padding:11px 14px",
                     Flex::row()
                         .main_axis_alignment(MainAxisAlignment::SpaceBetween)
                         .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -786,7 +800,7 @@ fn code_block(filename: &str, lang: &str, source: &[&str]) -> WidgetNode {
                                 .collect()
                             ),
                             Styled::css(
-                                "border:1px solid rgba(255,255,255,0.10);border-radius:6px;\
+                                "border:1px solid rgba(var(--glass),0.10);border-radius:6px;\
                                  padding:2px 8px",
                                 text(lang, mono(10.0, INK_3).letter_spacing(1.0))
                             ),
@@ -1016,7 +1030,7 @@ fn figure(asset: &str, title: &str, note: &str) -> WidgetNode {
                      background-color:#0B0A09"
                 )),
                 Styled::css(
-                    "border-top:1px solid rgba(255,255,255,0.07);padding:15px 20px",
+                    "border-top:1px solid rgba(var(--glass),0.07);padding:15px 20px",
                     col(
                         3.0,
                         children![
@@ -1183,19 +1197,25 @@ fn terminal() -> WidgetNode {
             0.0,
             children![
                 Styled::css(
-                    "border-bottom:1px solid rgba(255,255,255,0.07);\
-                     background:rgba(255,255,255,0.03);padding:10px 14px",
+                    "border-bottom:1px solid rgba(var(--glass),0.07);\
+                     background:rgba(var(--glass),0.03);padding:10px 14px",
                     Flex::row()
                         .main_axis_alignment(MainAxisAlignment::SpaceBetween)
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .children(children![
                             text("Linux · one line", mono(11.5, INK_3)),
-                            Styled::class(
-                                "vw-copy",
-                                Styled::css(
-                                    "border:1px solid rgba(255,255,255,0.12);border-radius:7px;\
-                                     padding:3px 10px;cursor:pointer",
-                                    text("Copy", mono(10.5, INK_2))
+                            // A `<button>`, so the keyboard reaches it and Enter
+                            // and Space press it; the page's script listens for
+                            // the click either way.
+                            Tag::new(
+                                "button",
+                                Styled::class(
+                                    "vw-copy",
+                                    Styled::css(
+                                        "border:1px solid rgba(var(--glass),0.12);border-radius:7px;\
+                                         padding:3px 10px;cursor:pointer",
+                                        text("Copy", mono(10.5, INK_2))
+                                    )
                                 )
                             ),
                         ])
@@ -1296,8 +1316,8 @@ fn downloads(host: Option<Os>) -> WidgetNode {
             .into(),
             spacer(36.0),
             reveal(Styled::css(
-                "border:1px solid rgba(255,255,255,0.10);border-radius:16px;overflow:hidden;\
-                 background:rgba(255,255,255,0.02)",
+                "border:1px solid rgba(var(--glass),0.10);border-radius:16px;overflow:hidden;\
+                 background:rgba(var(--glass),0.02)",
                 Styled::class(
                     "vw-rows",
                     col(
@@ -1410,7 +1430,7 @@ fn nav() -> WidgetNode {
                                             sans(15.0, INK).weight(FontWeight::Bold)
                                         ),
                                         Styled::css(
-                                            "border:1px solid rgba(255,255,255,0.12);\
+                                            "border:1px solid rgba(var(--glass),0.12);\
                                              border-radius:999px;padding:2px 8px",
                                             text("0.1.0", mono(10.5, INK_3))
                                         ),
@@ -1470,7 +1490,7 @@ fn footer() -> WidgetNode {
     Tag::new(
         "footer",
         Styled::css(
-            "border-top:1px solid rgba(255,255,255,0.08);padding:56px 0 44px",
+            "border-top:1px solid rgba(var(--glass),0.08);padding:56px 0 44px",
             column(col(
                 40.0,
                 children![
@@ -1543,7 +1563,7 @@ fn footer() -> WidgetNode {
                             ])
                     ),
                     Styled::css(
-                        "border-top:1px solid rgba(255,255,255,0.06);padding-top:22px",
+                        "border-top:1px solid rgba(var(--glass),0.06);padding-top:22px",
                         Styled::class(
                             "vw-footbottom",
                             Flex::row()
@@ -1572,7 +1592,7 @@ fn footer() -> WidgetNode {
 fn divider() -> WidgetNode {
     Styled::empty(
         "max-width:1280px;margin:0 auto;width:100%;height:1px;\
-         background:linear-gradient(90deg,transparent,rgba(255,255,255,0.09),transparent)",
+         background:linear-gradient(90deg,transparent,rgba(var(--glass),0.09),transparent)",
     )
     .into()
 }
@@ -1581,7 +1601,7 @@ fn divider() -> WidgetNode {
 #[must_use]
 pub fn page(host: Option<Os>) -> WidgetNode {
     Styled::css(
-        "background:#0F0D0B;color:#F8F4F2;min-height:100vh",
+        "background:var(--ground);color:var(--ink);min-height:100vh",
         col(
             0.0,
             children![

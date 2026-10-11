@@ -56,7 +56,7 @@ pub mod style;
 pub mod tree;
 pub mod widgets;
 
-pub use style::Style;
+pub use style::{set_color_tokens, Style};
 pub use tree::VNode;
 pub use widgets::{Canvas, Styled, Tag};
 

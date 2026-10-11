@@ -437,7 +437,7 @@ impl FrameSink for FfmpegSink {
 
     fn finish(&mut self) -> io::Result<()> {
         if let Some(mut child) = self.child.take() {
-            drop(child.stdin.take());
+            child.stdin = None;
             let status = child.wait()?;
             if !status.success() {
                 return Err(io::Error::other(format!("ffmpeg exited with {status}")));

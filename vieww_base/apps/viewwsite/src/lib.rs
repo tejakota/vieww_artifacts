@@ -3025,6 +3025,7 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
     // and where it lands a real `vieww-platform-web` application is mounted —
     // the same `Device` tree, painted by `vieww-paint`, a few hundred points
     // below the headline that claims it can be.
+    vieww_platform_web_dom::set_color_tokens(dom::COLOR_TOKENS);
     vieww_platform_web_dom::DomApp::mount("app", dom::page(host))
         .map(std::mem::forget)
         .map_err(|error| error.to_string())?;

@@ -282,6 +282,26 @@ impl Inner {
             mounts.push((id.clone(), mount.clone()));
         }
         if let Some(handler) = &node.on_click {
+            // A tappable box that is not a `<button>` or a link gets what a
+            // button would have had for free: a tab stop, the role a screen
+            // reader announces, and Enter/Space — without which a keyboard
+            // user can see the control and never reach it.
+            if crate::tree::needs_button_semantics(node) {
+                element.set_attribute("tabindex", "0")?;
+                element.set_attribute("role", "button")?;
+                let on_key = handler.clone();
+                let keys = Closure::wrap(Box::new(move |event: web_sys::Event| {
+                    if let Some(key) = event.dyn_ref::<web_sys::KeyboardEvent>() {
+                        if key.key() == "Enter" || key.key() == " " {
+                            event.prevent_default();
+                            on_key();
+                        }
+                    }
+                }) as Box<dyn FnMut(web_sys::Event)>);
+                element
+                    .add_event_listener_with_callback("keydown", keys.as_ref().unchecked_ref())?;
+                self.listeners.push(keys);
+            }
             let handler = handler.clone();
             let closure = Closure::wrap(Box::new(move |_event: web_sys::Event| {
                 handler();
