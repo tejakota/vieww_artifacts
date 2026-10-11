@@ -253,23 +253,22 @@ display; then the `vieww: … reports …Hz` log line should appear again.
 
 **Start.** Do exactly that, with `RUST_LOG=info`.
 
-## 3.3 viewwstudio's panic boundary cannot work on Windows
+## 3.3 The out-of-process preview exists; it is not yet complete or proven on Windows
 
-**What.** The studio `dlopen`s a preview `cdylib` and catches panics from it.
-That requires host and guest to share one `libstd`, which `.cargo/config.toml`
-arranges with `-C prefer-dynamic` — **and the MSVC toolchain ships no dynamic
-std**, so the flag is deliberately not set there.
+**What.** `apps/viewwstudio/src/remote.rs` + the `viewwstudio-preview` binary
+(2026-10-11): each Render's guest runs in a child process, drawn back over a
+pipe; a guest `abort` costs the child, not the studio. Setting "Run preview in
+its own process", on by default on Windows. `tests/remote.rs` (4 tests) passes
+on Linux: frames, taps, 2x scale, abort isolation with the guest's stderr
+returned, later-rebuild panic, and the studio's own Render into a child.
 
-**Why not.** Not fixable with a flag. `.cargo/config.toml` says so, at length,
-and names the real answer: an out-of-process preview.
+**Not done.** Keyboard/IME, scroll and hover are not forwarded; preview state
+capture across Renders (`capture_preview_state`) has no remote counterpart;
+never run on Windows (the reason it exists); the full `viewwstudio` suite was
+not re-run after the change (the disk filled mid-run).
 
-**Blocks.** A Windows studio. A guest panic there takes the window and the
-unsaved buffer with it.
-
-**Start.** Design the out-of-process preview. This is the largest single item
-in this file that is *not* GPU work, and it is worth doing for every platform,
-not only Windows — an in-process guest is a hazard everywhere and merely a
-survivable one on Linux and macOS.
+**Start.** `cargo test -p viewwstudio` on Linux, then on Windows; then add
+key/scroll forwarding to the wire in `remote.rs`.
 
 ---
 

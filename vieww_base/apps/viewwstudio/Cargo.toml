@@ -25,6 +25,10 @@ vieww-element.workspace = true
 vieww-render.workspace = true
 vieww-text.workspace = true
 vieww-gestures.workspace = true
+# The out-of-process preview's child rasterises the guest itself
+# (`src/remote.rs`). Already in this graph through `vieww-platform-winit`;
+# named because the child calls it directly.
+vieww-paint = { workspace = true, features = ["native"] }
 # Say: the English-facing screen language. The studio hands a `.say` buffer
 # to `vieww_say_codegen::compile` ahead of the usual compile step; see
 # `docs/SAY.md`.

@@ -54,6 +54,7 @@ impl Studio {
             inline_diagnostics: self.inline_diagnostics.get(),
             release_profile: self.profile.get() == Profile::Release,
             auto_render: self.auto_render.get(),
+            isolated_preview: self.isolated_preview.get(),
             minimap: self.minimap.get(),
             blink: self.blink_enabled.get(),
             highlight: self.highlight_enabled.get(),
@@ -108,6 +109,7 @@ impl Studio {
             Profile::Debug
         });
         self.auto_render.set(settings.auto_render);
+        self.isolated_preview.set(settings.isolated_preview);
         self.minimap.set(settings.minimap);
         self.blink_enabled.set(settings.blink);
         self.highlight_enabled.set(settings.highlight);

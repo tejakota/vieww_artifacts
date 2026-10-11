@@ -21,7 +21,7 @@
 
 use vieww_foundation::{Alignment, Color, EdgeInsets, FontFamily, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{widget_node_from, Container, Flexible, Inherited, Painting};
+use vieww_widget::{widget_node_from, Container, ElementState, Flexible, Inherited, Painting};
 
 use crate::command::Command;
 use crate::state::{Platform, PreviewState, Studio};
@@ -217,6 +217,7 @@ impl Widget for PreviewPane {
                         platform,
                         state,
                         screen: self.studio.preview_screen.get(),
+                        remote: self.studio.preview_remote.get(),
                         zoom: self.studio.preview_zoom.get(),
                         viewport: self.studio.preview_screen_size(),
                         // The metrics the previewed screen is told — built from
@@ -843,6 +844,8 @@ pub struct Stage {
     pub platform: Platform,
     pub state: PreviewState,
     pub screen: Option<crate::loaded::Preview>,
+    /// The compiled screen running in its own process, instead of `screen`.
+    pub remote: Option<crate::remote::RemoteHandle>,
     /// A zoom the user asked for, or `None` to fit the pane.
     pub zoom: Option<f32>,
     /// What the *previewed screen* is told about text scale and motion. See
@@ -896,6 +899,7 @@ fn stage(chrome: &StudioTheme, scroll: vieww_element::ScrollController, spec: St
         platform,
         state,
         screen,
+        remote,
         zoom,
         viewport,
         accessibility,
@@ -945,7 +949,7 @@ fn stage(chrome: &StudioTheme, scroll: vieww_element::ScrollController, spec: St
         // compiled pipeline in `Failed`. Every word of that was wrong about
         // the picture it was over. The live path has its own caption, so this
         // one steps out of the way.
-        let stale = state.is_stale() && screen.is_some() && !live_preview;
+        let stale = state.is_stale() && (screen.is_some() || remote.is_some()) && !live_preview;
 
         let frame: WidgetNode = if stale {
             // Dimmed, and badged: the frame on screen is older than the buffer,
@@ -958,6 +962,7 @@ fn stage(chrome: &StudioTheme, scroll: vieww_element::ScrollController, spec: St
                     platform,
                     state,
                     screen: screen.as_ref(),
+                    remote: remote.clone(),
                     scale,
                     viewport,
                     accessibility,
@@ -978,6 +983,7 @@ fn stage(chrome: &StudioTheme, scroll: vieww_element::ScrollController, spec: St
                 platform,
                 state,
                 screen: screen.as_ref(),
+                remote: remote.clone(),
                 scale,
                 viewport,
                 accessibility,
@@ -1241,6 +1247,8 @@ pub struct Frame<'a> {
     pub platform: Platform,
     pub state: PreviewState,
     pub screen: Option<&'a crate::loaded::Preview>,
+    /// The compiled screen running in its own process, instead of `screen`.
+    pub remote: Option<crate::remote::RemoteHandle>,
     pub scale: f32,
     /// The size the frame is drawn at, from the Devices tab.
     pub viewport: (f32, f32),
@@ -1282,6 +1290,7 @@ fn device(frame: Frame<'_>) -> WidgetNode {
         platform,
         state,
         screen,
+        remote,
         scale,
         viewport,
         accessibility,
@@ -1397,20 +1406,21 @@ fn device(frame: Frame<'_>) -> WidgetNode {
         )
         .into()
     } else {
-        match screen {
-            Some(preview) => Inherited::new(
-                view_metrics,
-                Inherited::new(
+        match (screen, remote) {
+            (_, Some(remote)) => RemoteScreen {
+                remote,
+                env: crate::remote::Environment {
+                    platform,
+                    dark,
+                    metrics: view_metrics,
                     accessibility,
-                    Theme::new(ThemeData::adaptive(platform.target(), dark)).child(
-                        Overlay::new().child(GuestRoot {
-                            child: preview.node(),
-                        }),
-                    ),
-                ),
-            )
+                },
+            }
             .into(),
-            None => empty_screen(colors, state, scale, clipped),
+            (Some(preview), None) => {
+                guest_tree(preview.node(), view_metrics, accessibility, platform, dark)
+            }
+            (None, None) => empty_screen(colors, state, scale, clipped),
         }
     };
 
@@ -1949,6 +1959,170 @@ fn device_row(
 #[derive(Debug)]
 pub struct GuestRoot {
     pub child: WidgetNode,
+}
+
+/// The compiled screen, drawn by its own process.
+///
+/// Each build asks the child for a frame — with the pointer events queued
+/// since the last one, and the time since this element mounted so the guest's
+/// animations run — and shows it as an image the size of the device screen.
+/// While the guest is animating the state ticks every frame, so the image
+/// keeps moving; when it is idle, nothing is asked for.
+///
+/// When the child has died, the screen says so with what the guest printed,
+/// and the studio carries on: the next Render starts a fresh process.
+#[derive(Clone)]
+pub struct RemoteScreen {
+    pub remote: crate::remote::RemoteHandle,
+    pub env: crate::remote::Environment,
+}
+
+impl std::fmt::Debug for RemoteScreen {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemoteScreen").finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Default)]
+struct RemoteScreenState {
+    queue: Vec<crate::remote::Pointer>,
+    pending: bool,
+    animating: bool,
+    started: Option<std::time::Instant>,
+}
+
+impl ElementState for RemoteScreenState {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+    fn tick(&mut self, _now: std::time::Duration) -> bool {
+        self.animating
+    }
+    fn is_animating(&self) -> bool {
+        self.animating
+    }
+    fn take_pending(&mut self) -> bool {
+        std::mem::take(&mut self.pending)
+    }
+}
+
+fn with_remote_state<R>(
+    handle: Option<&std::rc::Rc<std::cell::RefCell<dyn ElementState>>>,
+    f: impl FnOnce(&mut RemoteScreenState) -> R,
+) -> Option<R> {
+    let handle = handle?;
+    let mut state = handle.borrow_mut();
+    state
+        .as_any_mut()
+        .downcast_mut::<RemoteScreenState>()
+        .map(f)
+}
+
+impl Widget for RemoteScreen {
+    fn debug_name(&self) -> &'static str {
+        "RemoteScreen"
+    }
+    fn kind(&self) -> WidgetKind<'_> {
+        WidgetKind::Composed
+    }
+    fn create_state(&self) -> Option<Box<dyn ElementState>> {
+        Some(Box::new(RemoteScreenState::default()))
+    }
+    fn build(&self, ctx: &BuildContext) -> WidgetNode {
+        let handle = ctx.state_handle();
+        let (events, at) = with_remote_state(handle.as_ref(), |s| {
+            let started = *s.started.get_or_insert_with(std::time::Instant::now);
+            (std::mem::take(&mut s.queue), started.elapsed())
+        })
+        .unwrap_or_default();
+        // The studio window's own pixel density, so the guest is drawn crisp
+        // rather than upscaled; the device's is the guest's business.
+        let scale = ctx
+            .inherit::<vieww_foundation::ViewMetrics>()
+            .map_or(1.0, |m| m.device_pixel_ratio)
+            .clamp(1.0, 3.0);
+        let result =
+            self.remote
+                .borrow_mut()
+                .frame(&self.env, scale, at, Color::rgba(0, 0, 0, 0), &events);
+        let frame = match result {
+            Ok(frame) => frame,
+            Err(error) => {
+                with_remote_state(handle.as_ref(), |s| s.animating = false);
+                return Container::new()
+                    .padding(EdgeInsets::all(16.0))
+                    .child(
+                        Text::new(format!(
+                            "{error}\n\nThe studio is fine. Press Render to start a fresh preview."
+                        ))
+                        .style(vieww_foundation::TextStyle {
+                            color: Color::hex(0xD0_5050),
+                            ..vieww_foundation::TextStyle::new(12.0)
+                        }),
+                    )
+                    .into();
+            }
+        };
+        with_remote_state(handle.as_ref(), |s| s.animating = frame.wants_frame);
+        let push = move |handle: &Option<std::rc::Rc<std::cell::RefCell<dyn ElementState>>>,
+                         pointer: crate::remote::Pointer| {
+            with_remote_state(handle.as_ref(), |s| {
+                s.queue.push(pointer);
+                s.pending = true;
+            });
+        };
+        let (h1, h2, h3, h4) = (handle.clone(), handle.clone(), handle.clone(), handle);
+        let size = self.env.metrics.size;
+        GestureDetector::new()
+            .on_tap_down(move |d| push(&h1, crate::remote::Pointer::Down(d.local)))
+            .on_tap(move |d| push(&h2, crate::remote::Pointer::Up(d.local)))
+            .on_drag_update(move |d| push(&h3, crate::remote::Pointer::Move(d.local)))
+            .on_drag_end(move |d| push(&h4, crate::remote::Pointer::Up(d.local)))
+            .child(
+                SizedBox::from_size(size).child(
+                    Image::new(vieww_foundation::Image::from_rgba8(
+                        frame.rgba,
+                        frame.width,
+                        frame.height,
+                    ))
+                    .fit(vieww_foundation::BoxFit::Fill)
+                    .label("Preview"),
+                ),
+            )
+            .into()
+    }
+}
+
+widget_node_from!(RemoteScreen);
+
+/// What a compiled screen is mounted inside: the simulated device's metrics
+/// and accessibility settings, its adaptive theme, an overlay for its dialogs,
+/// and the [`GuestRoot`] marker the state capture looks for.
+///
+/// One function, because two processes build it: this pane, for an
+/// in-process preview, and `viewwstudio-preview` (see [`crate::remote`]) for
+/// an isolated one. A guest that looked different depending on which process
+/// drew it would make the isolation itself a source of bugs.
+#[must_use]
+pub fn guest_tree(
+    guest: WidgetNode,
+    view_metrics: vieww_foundation::ViewMetrics,
+    accessibility: vieww_foundation::Accessibility,
+    platform: crate::state::Platform,
+    dark: bool,
+) -> WidgetNode {
+    Inherited::new(
+        view_metrics,
+        Inherited::new(
+            accessibility,
+            Theme::new(ThemeData::adaptive(platform.target(), dark))
+                .child(Overlay::new().child(GuestRoot { child: guest })),
+        ),
+    )
+    .into()
 }
 
 /// The name [`Studio::capture_preview_state`] looks for.

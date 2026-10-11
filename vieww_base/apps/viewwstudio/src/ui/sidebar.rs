@@ -1533,6 +1533,8 @@ impl Sidebar {
         let fmt_signal = self.studio.format_on_save.clone();
         let auto_render = self.studio.auto_render.get();
         let auto_signal = self.studio.auto_render.clone();
+        let isolated = self.studio.isolated_preview.get();
+        let isolated_signal = self.studio.isolated_preview.clone();
         let minimap = self.studio.minimap.get();
         let minimap_signal = self.studio.minimap.clone();
         let blink = self.studio.blink_enabled.get();
@@ -1605,6 +1607,15 @@ impl Sidebar {
                     move || {
                         auto_signal.set(!auto_render);
                     }
+                ),
+                // A guest that aborts, overflows its stack or panics where no
+                // catch reaches takes only its own process. Applies from the
+                // next Render.
+                action_row(
+                    "Run preview in its own process".to_string(),
+                    isolated,
+                    colors,
+                    move || isolated_signal.set(!isolated)
                 ),
                 action_row("Minimap".to_string(), minimap, colors, move || {
                     minimap_signal.set(!minimap)
