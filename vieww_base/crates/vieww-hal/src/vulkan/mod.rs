@@ -1319,6 +1319,109 @@ impl VulkanDevice {
         vp: [f32; 16],
         background: [f32; 3],
     ) -> Result<Vec<u8>, VulkanError> {
+        assert_eq!(
+            positions.len(),
+            colors.len(),
+            "one colour per vertex — the caller packs them together"
+        );
+        // Interleaved: position at offset 0, colour at 12, stride 24.
+        let mut vertices = Vec::with_capacity(positions.len() * 6);
+        for (p, c) in positions.iter().zip(colors) {
+            vertices.extend_from_slice(p);
+            vertices.extend_from_slice(c);
+        }
+        self.render_3d_pass(
+            width,
+            height,
+            &Pass3d {
+                wgsl: vieww_shaders::library::UNLIT3D_WGSL,
+                vertices: bytemuck_cast_f32(&vertices),
+                stride: 24,
+                attributes: &[
+                    (0, vk::Format::R32G32B32_SFLOAT, 0),
+                    (1, vk::Format::R32G32B32_SFLOAT, 12),
+                ],
+                indices,
+                uniforms: bytemuck_cast_f32(&vp),
+                storage: None,
+            },
+            background,
+        )
+    }
+
+    /// Render the **lit 3D forward pass** — `vieww-3d`'s `GpuRenderer`'s second
+    /// increment — and read it back as straight-alpha RGBA8.
+    ///
+    /// `vertices` is a de-indexed triangle list (three per triangle, in
+    /// order), each vertex sixteen floats: world position, world normal,
+    /// linear albedo, linear emissive, each `xyz` then one float — the first
+    /// of those four is 1 for Lambert and 0 for Basic, the second 1 if the
+    /// material receives shadows, the last two unused.
+    /// `uniforms` is the shader's `Uniforms` block, std140, as
+    /// [`vieww_shaders::library::LIT3D_WGSL`] documents it; `shadow_depth` the
+    /// shadow map's depths (empty when there is none). `background` is
+    /// linear, as in [`Self::render_unlit3d_to_pixels`], and so are the
+    /// lifetime and error notes there.
+    ///
+    /// # Errors
+    ///
+    /// Any Vulkan call failing.
+    pub fn render_lit3d_to_pixels(
+        &self,
+        width: u32,
+        height: u32,
+        vertices: &[[f32; 16]],
+        uniforms: &[f32],
+        shadow_depth: &[f32],
+        background: [f32; 3],
+    ) -> Result<Vec<u8>, VulkanError> {
+        let flat: &[f32] = vertices.as_flattened();
+        let indices: Vec<u32> = (0..u32::try_from(vertices.len()).unwrap_or(u32::MAX)).collect();
+        self.render_3d_pass(
+            width,
+            height,
+            &Pass3d {
+                wgsl: vieww_shaders::library::LIT3D_WGSL,
+                vertices: bytemuck_cast_f32(flat),
+                stride: 64,
+                attributes: &[
+                    (0, vk::Format::R32G32B32_SFLOAT, 0),
+                    (1, vk::Format::R32G32B32_SFLOAT, 16),
+                    (2, vk::Format::R32G32B32_SFLOAT, 32),
+                    (3, vk::Format::R32G32B32_SFLOAT, 48),
+                    // The flags ride in the first two pads.
+                    (4, vk::Format::R32_SFLOAT, 12),
+                    (5, vk::Format::R32_SFLOAT, 28),
+                ],
+                indices: &indices,
+                uniforms: bytemuck_cast_f32(uniforms),
+                storage: Some(bytemuck_cast_f32(shadow_depth)),
+            },
+            background,
+        )
+    }
+
+    /// The one-shot depth-tested 3D pass both [`Self::render_unlit3d_to_pixels`]
+    /// and [`Self::render_lit3d_to_pixels`] draw through: an interleaved vertex
+    /// buffer described by `pass.attributes`, an index list, one uniform
+    /// buffer (binding 0, both stages) and an optional fragment-stage storage
+    /// buffer (binding 1), into a cleared colour + depth target that is read
+    /// back as RGBA8. Extracted from the unlit pass unchanged in everything
+    /// but the buffer plumbing, so the two passes cannot drift apart.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::too_many_lines
+    )]
+    fn render_3d_pass(
+        &self,
+        width: u32,
+        height: u32,
+        pass: &Pass3d<'_>,
+        background: [f32; 3],
+    ) -> Result<Vec<u8>, VulkanError> {
+        let indices = pass.indices;
+        let vertex_count = pass.vertices.len() / pass.stride as usize;
         // The CPU oracle's background: sRGB-encode the linear clear colour
         // (the fragment shader does the same for covered pixels), then the
         // UNORM clear rounds it to the byte `to_image` produces. Written here
@@ -1339,7 +1442,7 @@ impl VulkanDevice {
         ];
         let bg_byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
 
-        if positions.is_empty() || indices.is_empty() {
+        if vertex_count == 0 || indices.is_empty() {
             // Nothing to draw: the frame is the encoded background, exactly
             // what the CPU renderer returns for an empty scene.
             let bg_px = [bg_byte(bg[0]), bg_byte(bg[1]), bg_byte(bg[2]), 255];
@@ -1347,12 +1450,12 @@ impl VulkanDevice {
             return Ok(bg_px.repeat(width as usize * height as usize));
         }
         assert_eq!(
-            positions.len(),
-            colors.len(),
-            "one colour per vertex — the caller packs them together"
+            pass.vertices.len() % pass.stride as usize,
+            0,
+            "the vertex bytes are a whole number of vertices"
         );
         assert!(
-            indices.iter().all(|i| (*i as usize) < positions.len()),
+            indices.iter().all(|i| (*i as usize) < vertex_count),
             "indices out of range"
         );
 
@@ -1501,44 +1604,58 @@ impl VulkanDevice {
             .layers(1);
         let framebuffer = unsafe { device.create_framebuffer(&fb_info, None) }?;
 
-        // --- vertex (two bindings: position, colour), index, uniform buffers --
-        let (position_buffer, position_memory) = self.create_host_visible_buffer(
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            bytemuck_cast_vec3(positions),
-        )?;
-        let (color_buffer, color_memory) = self.create_host_visible_buffer(
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            bytemuck_cast_vec3(colors),
-        )?;
+        // --- vertex (one interleaved binding), index, uniform, storage -------
+        let (vertex_buffer, vertex_memory) = self
+            .create_host_visible_buffer(vk::BufferUsageFlags::VERTEX_BUFFER, pass.vertices)?;
         let (index_buffer, index_memory) = self.create_host_visible_buffer(
             vk::BufferUsageFlags::INDEX_BUFFER,
             bytemuck_cast_u32(indices),
         )?;
-        let (ubo, ubo_memory) = self.create_host_visible_buffer(
-            vk::BufferUsageFlags::UNIFORM_BUFFER,
-            bytemuck_cast_f32(&vp),
-        )?;
-        // Bytes, not elements — `vp.len()` would be 16 (floats) and the
-        // descriptor range would hide three quarters of the matrix from the
-        // shader (observed on lavapipe as every column but the first
-        // reading as zero).
-        let ubo_size = std::mem::size_of_val(&vp) as u64;
+        let (ubo, ubo_memory) = self
+            .create_host_visible_buffer(vk::BufferUsageFlags::UNIFORM_BUFFER, pass.uniforms)?;
+        // Bytes, not elements — a float count here hid three quarters of the
+        // view-projection matrix from the shader once (observed on lavapipe
+        // as every column but the first reading as zero).
+        let ubo_size = pass.uniforms.len() as u64;
+        // A storage buffer may not be empty; an absent or empty one is a
+        // single zero word the shader never reads.
+        let storage_bytes: &[u8] = match pass.storage {
+            Some(bytes) if !bytes.is_empty() => bytes,
+            _ => &[0; 4],
+        };
+        let (ssbo, ssbo_memory) = self
+            .create_host_visible_buffer(vk::BufferUsageFlags::STORAGE_BUFFER, storage_bytes)?;
+        let ssbo_size = storage_bytes.len() as u64;
+        let with_storage = pass.storage.is_some();
 
         // --- descriptor set -----------------------------------------------------
-        let binding = vk::DescriptorSetLayoutBinding::default()
+        let mut bindings = vec![vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::VERTEX);
-        let bindings = [binding];
+            .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)];
+        if with_storage {
+            bindings.push(
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            );
+        }
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
         let set_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None) }?;
 
-        let pool_size = vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 1,
-        };
-        let pool_sizes = [pool_size];
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+            },
+        ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
             .max_sets(1);
@@ -1555,21 +1672,35 @@ impl VulkanDevice {
             range: ubo_size,
         };
         let buffer_infos = [buffer_info];
-        let write = vk::WriteDescriptorSet::default()
+        let storage_infos = [vk::DescriptorBufferInfo {
+            buffer: ssbo,
+            offset: 0,
+            range: ssbo_size,
+        }];
+        let mut writes = vec![vk::WriteDescriptorSet::default()
             .dst_set(descriptor_set)
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-            .buffer_info(&buffer_infos);
-        unsafe { device.update_descriptor_sets(&[write], &[]) };
+            .buffer_info(&buffer_infos)];
+        if with_storage {
+            writes.push(
+                vk::WriteDescriptorSet::default()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&storage_infos),
+            );
+        }
+        unsafe { device.update_descriptor_sets(&writes, &[]) };
 
         // --- shaders + pipeline --------------------------------------------------
         let vs_spirv = translate_wgsl_to_spirv(
-            vieww_shaders::library::UNLIT3D_WGSL,
+            pass.wgsl,
             "vs_main",
             naga::ShaderStage::Vertex,
         )?;
         let fs_spirv = translate_wgsl_to_spirv(
-            vieww_shaders::library::UNLIT3D_WGSL,
+            pass.wgsl,
             "fs_main",
             naga::ShaderStage::Fragment,
         )?;
@@ -1595,34 +1726,22 @@ impl VulkanDevice {
                 .name(&fs_entry_point),
         ];
 
-        // Two bindings, stride 12 each: world position at location 0, linear
-        // colour at location 1.
-        let binding_desc = [
-            vk::VertexInputBindingDescription {
+        // One interleaved binding, laid out by the caller's attribute list.
+        let binding_desc = [vk::VertexInputBindingDescription {
+            binding: 0,
+            stride: pass.stride,
+            input_rate: vk::VertexInputRate::VERTEX,
+        }];
+        let attr_desc: Vec<vk::VertexInputAttributeDescription> = pass
+            .attributes
+            .iter()
+            .map(|&(location, format, offset)| vk::VertexInputAttributeDescription {
+                location,
                 binding: 0,
-                stride: std::mem::size_of::<[f32; 3]>() as u32,
-                input_rate: vk::VertexInputRate::VERTEX,
-            },
-            vk::VertexInputBindingDescription {
-                binding: 1,
-                stride: std::mem::size_of::<[f32; 3]>() as u32,
-                input_rate: vk::VertexInputRate::VERTEX,
-            },
-        ];
-        let attr_desc = [
-            vk::VertexInputAttributeDescription {
-                location: 0,
-                binding: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: 0,
-            },
-            vk::VertexInputAttributeDescription {
-                location: 1,
-                binding: 1,
-                format: vk::Format::R32G32B32_SFLOAT,
-                offset: 0,
-            },
-        ];
+                format,
+                offset,
+            })
+            .collect();
         let vertex_input = vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_binding_descriptions(&binding_desc)
             .vertex_attribute_descriptions(&attr_desc);
@@ -1753,12 +1872,7 @@ impl VulkanDevice {
                 &[descriptor_set],
                 &[],
             );
-            device.cmd_bind_vertex_buffers(
-                command_buffer,
-                0,
-                &[position_buffer, color_buffer],
-                &[0, 0],
-            );
+            device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer], &[0]);
             device.cmd_bind_index_buffer(command_buffer, index_buffer, 0, vk::IndexType::UINT32);
             device.cmd_draw_indexed(command_buffer, indices.len() as u32, 1, 0, 0, 0);
             device.cmd_end_render_pass(command_buffer);
@@ -1826,10 +1940,10 @@ impl VulkanDevice {
             device.destroy_buffer(ubo, None);
             device.free_memory(index_memory, None);
             device.destroy_buffer(index_buffer, None);
-            device.free_memory(color_memory, None);
-            device.destroy_buffer(color_buffer, None);
-            device.free_memory(position_memory, None);
-            device.destroy_buffer(position_buffer, None);
+            device.free_memory(ssbo_memory, None);
+            device.destroy_buffer(ssbo, None);
+            device.free_memory(vertex_memory, None);
+            device.destroy_buffer(vertex_buffer, None);
             device.destroy_framebuffer(framebuffer, None);
             device.destroy_render_pass(render_pass, None);
             device.destroy_image_view(depth_view, None);
@@ -1902,16 +2016,22 @@ fn bytemuck_cast_positions(positions: &[[f32; 2]]) -> &[u8] {
     }
 }
 
-fn bytemuck_cast_u32(values: &[u32]) -> &[u8] {
-    unsafe {
-        std::slice::from_raw_parts(values.as_ptr().cast::<u8>(), std::mem::size_of_val(values))
-    }
+/// What [`VulkanDevice::render_3d_pass`] draws.
+struct Pass3d<'a> {
+    wgsl: &'a str,
+    /// Interleaved vertex bytes, `stride` per vertex.
+    vertices: &'a [u8],
+    stride: u32,
+    /// `(location, format, byte offset)` per vertex attribute.
+    attributes: &'a [(u32, vk::Format, u32)],
+    indices: &'a [u32],
+    /// Binding 0, visible to both stages.
+    uniforms: &'a [u8],
+    /// Binding 1, fragment stage, when present.
+    storage: Option<&'a [u8]>,
 }
 
-fn bytemuck_cast_vec3(values: &[[f32; 3]]) -> &[u8] {
-    // SAFETY: as `bytemuck_cast_positions` — `[f32; 3]` has no padding, and
-    // reinterpreting `&[[f32; 3]]` as `&[u8]` of `len * 12` bytes is exactly
-    // what `bytemuck::cast_slice` does, inlined for the same reason.
+fn bytemuck_cast_u32(values: &[u32]) -> &[u8] {
     unsafe {
         std::slice::from_raw_parts(values.as_ptr().cast::<u8>(), std::mem::size_of_val(values))
     }

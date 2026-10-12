@@ -162,37 +162,44 @@ rather than guessing.
 **Start.** `verify_web.py` drives Playwright; `p.firefox` and `p.webkit` are the
 same API.
 
-## 1.7 The GPU 3D seam: unlit pass only, and per-call bring-up
+## 1.7 The GPU 3D seam: unlit and Lambert passes, per-call bring-up
 
 **What.** `vieww-3d`'s `GpuRenderer` (behind the crate's `vulkan` feature) holds
-the CPU renderer's `(scene, camera) -> RGBA8` contract, and its first
-increment — an unlit forward pass through `vieww-hal`'s Vulkan backend —
-matches the CPU oracle in interiors on lavapipe
-(`tests/gpu_unlit.rs`, wired into the `framework-checks` workflow's
-`gpu-lavapipe` job, 2026-10-11 — the workflow file rides in
-`.github/workflows-pending/` until a `workflow`-scoped token places it; see
-that directory's README). Scenes outside the pass's reach (lit
-materials, textures, transparency, fog, skyboxes, point clouds) fall back to
-the CPU renderer for the whole frame, so the contract never returns pixels the
-CPU would not.
+the CPU renderer's `(scene, camera) -> RGBA8` contract with two passes through
+`vieww-hal`'s Vulkan backend, both held to the CPU oracle in interiors on
+lavapipe:
+- **unlit** (2026-10-11) — `Shading::Basic` scenes, `tests/gpu_unlit.rs`;
+- **lit** (2026-10-12) — `Shading::Lambert` (and Basic alongside) under
+  ambient, hemisphere and directional lights, with the shadow map of the first
+  shadow-casting directional light, `tests/gpu_lit.rs`: a smooth and a flat
+  sphere, a rotated box, a coloured second light, a long cast shadow (lit and
+  shadowed ground both asserted), and single-/double-sided back faces.
+  Mutation-checked: disabling the shadow lookup fails it by 1,644 interior
+  pixels, not flipping back-face normals by 4,670.
 
-**Why not closed.** The pass is unlit: `Shading::Basic` and flat colours only.
-Lighting, shadow maps, textures and the transparent pass are the follow-up
-increments, each landing with its own parity assertions. Back-face culling is
-off on the GPU (the depth buffer arbitrates; see
-`render_unlit3d_to_pixels`'s doc for why that is pixel-equivalent for the
-geometry the contract covers), and the whole pipeline — render pass, shaders,
-descriptor set — is brought up and torn down per render, the same one-shot
-shape `render_mesh_to_pixels` has; a cached-pipeline `SceneRenderer`-style
-struct is the same step the 2D path took next.
+The lit pass decides back faces per triangle on the CPU while packing (cull
+single-sided, flip double-sided — the CPU rasterizer's rule, by the side of
+the triangle's plane the eye is on), and uses the **CPU renderer's own shadow
+map**, uploaded as a storage buffer and filtered with the CPU's 3×3 PCF in
+the shader. Both `vieww-hal` passes now share one `render_3d_pass` (the unlit
+one became a thin wrapper; its tests are unchanged and green). Anything
+outside the reach falls back to the CPU renderer for the whole frame; the
+module doc lists it.
+
+**Why not closed.** Phong/Standard/Toon/Normal shading, point and spot lights,
+image-based lighting and GI probes, textures and the transparent pass are not
+in the passes yet. The shadow map is rasterised on the CPU, not the GPU. And
+the whole pipeline — render pass, shaders, descriptor set — is still brought
+up and torn down per render; a cached-pipeline struct is the step the 2D path
+took with `SceneRenderer`.
 
 **Blocks.** Nothing; the CPU renderer remains the full-fidelity path.
 
-**Start.** The next increment is lighting: Lambert with one directional light,
-its shadow map fed through a depth texture, asserted against the CPU oracle in
-`tests/gpu_unlit.rs`'s interiors-not-edges shape. After that: textures (sampled
-in the fragment shader, parity tolerance widened for filtering), then the
-transparent pass (sorted back-to-front on the CPU as now, blended on the GPU).
+**Start.** Point and spot lights, then Phong (the shader's light loop already
+has the CPU's structure — add the cases with the CPU's formulas verbatim, and
+a parity scene each). A GPU-rendered shadow map has to reproduce the CPU's
+`raster_depth` sampling to keep shadow decisions identical, so measure first
+whether the CPU shadow pass matters next to the per-render bring-up.
 
 ---
 

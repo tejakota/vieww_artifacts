@@ -63,6 +63,11 @@ pub const POST_WGSL: &str = include_str!("../shaders/post.wgsl");
 /// way out; what `vieww-hal::vulkan`'s `render_unlit3d_to_pixels` draws for
 /// `vieww-3d`'s `GpuRenderer`.
 pub const UNLIT3D_WGSL: &str = include_str!("../shaders/unlit3d.wgsl");
+/// The lit 3D forward pass — `UNLIT3D_WGSL`'s geometry with `Basic` and
+/// `Lambert` shading, ambient/hemisphere/directional lights and the CPU
+/// renderer's 3x3 PCF shadow lookup; what `vieww-hal::vulkan`'s
+/// `render_lit3d_to_pixels` draws for `vieww-3d`'s `GpuRenderer`.
+pub const LIT3D_WGSL: &str = include_str!("../shaders/lit3d.wgsl");
 /// Two-stop linear gradient.
 pub const GRADIENT_WGSL: &str = include_str!("../shaders/gradient.wgsl");
 /// Textured mesh, optionally tinted.

@@ -200,16 +200,48 @@ impl Frame {
     }
 }
 
-struct LightW {
-    light: Light,
-    position: Vec3,
-    direction: Vec3,
+pub(crate) struct LightW {
+    pub(crate) light: Light,
+    pub(crate) position: Vec3,
+    /// World-space, normalized; zero for lights without a direction.
+    pub(crate) direction: Vec3,
 }
 
-struct ShadowMap {
-    vp: Mat4,
-    size: usize,
-    depth: Vec<f32>,
+/// Every visible light in the scene, in world space and traversal order —
+/// the order the shading loop sums them in. Shared with the GPU path
+/// (`gpu.rs`) so both sum the same lights in the same order.
+pub(crate) fn world_lights(scene: &Scene) -> Vec<LightW> {
+    let mut lights = Vec::new();
+    for id in scene.traverse() {
+        if !scene.effectively_visible(id) {
+            continue;
+        }
+        let n = scene.node(id);
+        if let Content::Light(l) = n.content {
+            let world = n.world();
+            let direction = match l {
+                Light::Directional { direction, .. } | Light::Spot { direction, .. } => {
+                    world.transform_vector(direction).normalize()
+                }
+                _ => Vec3::ZERO,
+            };
+            lights.push(LightW {
+                light: l,
+                position: world.get_translation(),
+                direction,
+            });
+        }
+    }
+    lights
+}
+
+pub(crate) struct ShadowMap {
+    /// Light view-projection (orthographic), column-major.
+    pub(crate) vp: Mat4,
+    pub(crate) size: usize,
+    /// `size * size` NDC depths, row 0 at the top; `INFINITY` where nothing
+    /// casts.
+    pub(crate) depth: Vec<f32>,
 }
 
 impl ShadowMap {
@@ -238,11 +270,11 @@ impl ShadowMap {
     }
 }
 
-struct Item {
-    model: Mat4,
-    mesh: Arc<Mesh>,
-    material: Arc<Material>,
-    view_depth: f32,
+pub(crate) struct Item {
+    pub(crate) model: Mat4,
+    pub(crate) mesh: Arc<Mesh>,
+    pub(crate) material: Arc<Material>,
+    pub(crate) view_depth: f32,
 }
 
 /// Six planes `(a, b, c, d)` with inside `a x + b y + c z + d >= 0`.
@@ -310,28 +342,7 @@ impl Renderer {
         let vp = proj * view;
         let planes = frustum(&vp);
 
-        // Lights, in world space.
-        let mut lights = Vec::new();
-        for id in scene.traverse() {
-            if !scene.effectively_visible(id) {
-                continue;
-            }
-            let n = scene.node(id);
-            if let Content::Light(l) = n.content {
-                let world = n.world();
-                let direction = match l {
-                    Light::Directional { direction, .. } | Light::Spot { direction, .. } => {
-                        world.transform_vector(direction).normalize()
-                    }
-                    _ => Vec3::ZERO,
-                };
-                lights.push(LightW {
-                    light: l,
-                    position: world.get_translation(),
-                    direction,
-                });
-            }
-        }
+        let lights = world_lights(scene);
 
         // Drawables.
         let mut items = Vec::new();
@@ -548,7 +559,11 @@ impl Renderer {
         )
     }
 
-    fn shadow_pass(
+    /// The shadow map for the first shadow-casting directional light, fitted
+    /// to `items` (the frustum-visible drawables). Shared with the GPU path,
+    /// which uploads the result so both renderers make the same shadow
+    /// decisions.
+    pub(crate) fn shadow_pass(
         &self,
         lights: &[LightW],
         items: &[Item],
