@@ -694,6 +694,9 @@ fn a_gpu_planned_frame_presents_to_a_real_window() {
 // see that module's own doc comment. Re-add a scenario here once device
 // sharing exists to measure.
 
+/// How many lines of a failed scenario's trace to print.
+const TRACE_TAIL: usize = 80;
+
 /// The scenarios, by the name a child process is given.
 ///
 /// One table rather than three `if` arms so that the parent's list and the
@@ -742,14 +745,47 @@ fn main() {
     let mut failed = Vec::new();
     for (name, _) in SCENARIOS {
         eprintln!("wait_loop: {name}");
-        let status = std::process::Command::new(&binary)
+        // **Every child runs traced; the trace is printed only if it fails.**
+        //
+        // These scenarios have failed only where nobody was watching: the
+        // idle scenario timed out inside `ci/check/checks.sh` on a GNOME/
+        // Wayland laptop, several times, and passed in every run made by hand
+        // to investigate it — traced or not. A failure that cannot be
+        // reproduced on demand has to bring its own evidence, so both traces
+        // (this file's and the event loop's `VIEWW_TRACE_FRAMES`, which logs
+        // each window event — `Occluded`, `Resized`, `RedrawRequested` — and
+        // each sleep decision) are captured on every run and the last lines
+        // are shown when a scenario fails. A passing run prints what it
+        // always printed. The event-loop trace is deduplicated by design
+        // (see `trace_line` in `src/app.rs`), so it does not change timing.
+        let output = std::process::Command::new(&binary)
             .arg(name)
-            .status()
+            .env("VIEWW_TRACE_FRAMES", "1")
+            .env("VIEWW_WAIT_LOOP_TRACE", "1")
+            .stderr(std::process::Stdio::piped())
+            .output()
             .unwrap_or_else(|error| panic!("could not re-execute {binary:?}: {error}"));
-        if status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if output.status.success() {
+            for line in stderr
+                .lines()
+                .filter(|l| l.starts_with("wait_loop: ") && !l.starts_with("wait_loop: pass"))
+            {
+                eprintln!("{line}");
+            }
             eprintln!("wait_loop: {name} ok");
         } else {
-            eprintln!("wait_loop: {name} FAILED ({status})");
+            let lines: Vec<&str> = stderr.lines().collect();
+            let tail = &lines[lines.len().saturating_sub(TRACE_TAIL)..];
+            eprintln!(
+                "wait_loop: {name} FAILED ({}) — last {} of {} trace lines:",
+                output.status,
+                tail.len(),
+                lines.len()
+            );
+            for line in tail {
+                eprintln!("    | {line}");
+            }
             failed.push(*name);
         }
     }

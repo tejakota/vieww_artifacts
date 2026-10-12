@@ -2466,7 +2466,13 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
     ) {
         let now = self.shared.now();
 
-        trace_line(now, format_args!("event {}", event_name(&event)));
+        // `Occluded` carries the one bit that decides whether this window may
+        // draw at all, so it is the event the trace names with its payload.
+        if let WindowEvent::Occluded(hidden) = event {
+            trace_line(now, format_args!("event Occluded({hidden})"));
+        } else {
+            trace_line(now, format_args!("event {}", event_name(&event)));
+        }
 
         let Some(index) = self.windows.iter().position(|w| w.id == window_id) else {
             // An event for a window that has already gone. Ordinary during a
