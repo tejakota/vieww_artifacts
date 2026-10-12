@@ -1,0 +1,477 @@
+From db1416d15be17e089e4b9c430069a2d1aec779fe Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 12 Oct 2026 15:01:53 +0530
+Subject: [PATCH] ci: scripts executable again; the docs gate green
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Two of the three stages `ci/check/checks.sh --quick` failed on 1.98.1.
+
+- web-sys feature audit: "Permission denied". 30 of the 32 shebang
+  scripts under ci/ (and .github/workflows-pending/restore.sh) were
+  stored as 100644 — the exec bits were lost when the tree was uploaded
+  through the web — so checks.sh's direct `ci/check/wasm-check.sh` call
+  failed on every machine. Modes restored (the two sourced libraries,
+  ci/lib/lean.sh and ci/mobile/android-env.sh, stay 644), and the call
+  now goes through `bash` so a lost bit cannot break the gate again.
+  .cargo/config.toml's NDK linker shims and adb/simctl runners are
+  executed by cargo directly and needed the bit too.
+- docs (`-D warnings`): 24 broken intra-doc links across vieww-3d,
+  vieww-canvas, vieww-dataviz, vieww-gpu, vieww-hal, vieww-platform-
+  winit, vieww-video, vieww-widget and film_lab — redundant explicit
+  targets, links to private items, links to a feature-gated module,
+  a renamed brush, and maths/paths (`[0,1]²`, `w3[i]`, `<name>`) that
+  rustdoc read as links or HTML. Doc text only; the full docs stage
+  now passes.
+
+The third failure (wait_loop's idle scenario timing out on the
+developer's desktop) passes 3/3 here under Xvfb + lavapipe and needs a
+trace from the machine where it hung.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Nd3Ehrf9ktGu82K38kGEjH
+---
+ vieww_base/ci/certify/certify.sh                              | 0
+ vieww_base/ci/certify/desktop-suite.sh                        | 0
+ vieww_base/ci/certify/export-suite.sh                         | 0
+ vieww_base/ci/certify/release-check.sh                        | 0
+ vieww_base/ci/certify/shot-suite.sh                           | 0
+ vieww_base/ci/check/checks.sh                                 | 2 +-
+ vieww_base/ci/check/coverage.sh                               | 0
+ vieww_base/ci/check/platform-check.sh                         | 0
+ vieww_base/ci/check/release-clean-check.sh                    | 0
+ vieww_base/ci/check/size-budget.sh                            | 0
+ vieww_base/ci/check/wasm-check.sh                             | 0
+ vieww_base/ci/mobile/a11y-android.sh                          | 0
+ vieww_base/ci/mobile/adb-runner.sh                            | 0
+ vieww_base/ci/mobile/apk.sh                                   | 0
+ vieww_base/ci/mobile/device-suite.sh                          | 0
+ vieww_base/ci/mobile/ios-app.sh                               | 0
+ vieww_base/ci/mobile/ndk-clang-aarch64.sh                     | 0
+ vieww_base/ci/mobile/ndk-clang-x86_64.sh                      | 0
+ vieww_base/ci/mobile/ndk-clang.sh                             | 0
+ vieww_base/ci/mobile/reload-android.sh                        | 0
+ vieww_base/ci/mobile/reload-guest-android.sh                  | 0
+ vieww_base/ci/mobile/reload-watch-android-test.sh             | 0
+ vieww_base/ci/mobile/reload-watch-android.sh                  | 0
+ vieww_base/ci/mobile/simctl-runner.sh                         | 0
+ vieww_base/ci/release/artifacts.sh                            | 0
+ vieww_base/ci/release/gate.sh                                 | 0
+ vieww_base/ci/release/package-source.sh                       | 0
+ vieww_base/ci/tools/ci-runner-prep.sh                         | 0
+ vieww_base/ci/tools/patch-winit.sh                            | 0
+ vieww_base/ci/tools/screenshots.sh                            | 0
+ vieww_base/crates/vieww-3d/src/lib.rs                         | 2 +-
+ vieww_base/crates/vieww-3d/src/post.rs                        | 2 +-
+ vieww_base/crates/vieww-canvas/src/brush.rs                   | 2 +-
+ vieww_base/crates/vieww-dataviz/src/interact.rs               | 2 +-
+ vieww_base/crates/vieww-gpu/src/scene.rs                      | 2 +-
+ vieww_base/crates/vieww-hal/src/vulkan/scene.rs               | 4 ++--
+ vieww_base/crates/vieww-platform-winit/src/native.rs          | 4 ++--
+ vieww_base/crates/vieww-video/src/motion_blur.rs              | 2 +-
+ .../crates/vieww-widget/src/widgets/animated_visibility.rs    | 2 +-
+ vieww_base/examples/film_lab/src/exp_blendmatrix.rs           | 2 +-
+ vieww_base/examples/film_lab/src/exp_cymatics.rs              | 4 ++--
+ vieww_base/examples/film_lab/src/exp_neural.rs                | 4 ++--
+ vieww_base/examples/film_lab/src/exp_slime.rs                 | 2 +-
+ vieww_base/examples/film_lab/src/film_lib.rs                  | 2 +-
+ vieww_base/examples/film_lab/src/studio_film/filmkit.rs       | 2 +-
+ vieww_base/examples/film_lab/src/studio_film/m5_release.rs    | 2 +-
+ vieww_base/examples/film_lab/src/studio_film/mod.rs           | 4 ++--
+ 47 files changed, 23 insertions(+), 23 deletions(-)
+ mode change 100644 => 100755 vieww_base/ci/certify/certify.sh
+ mode change 100644 => 100755 vieww_base/ci/certify/desktop-suite.sh
+ mode change 100644 => 100755 vieww_base/ci/certify/export-suite.sh
+ mode change 100644 => 100755 vieww_base/ci/certify/release-check.sh
+ mode change 100644 => 100755 vieww_base/ci/certify/shot-suite.sh
+ mode change 100644 => 100755 vieww_base/ci/check/checks.sh
+ mode change 100644 => 100755 vieww_base/ci/check/coverage.sh
+ mode change 100644 => 100755 vieww_base/ci/check/platform-check.sh
+ mode change 100644 => 100755 vieww_base/ci/check/release-clean-check.sh
+ mode change 100644 => 100755 vieww_base/ci/check/size-budget.sh
+ mode change 100644 => 100755 vieww_base/ci/check/wasm-check.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/a11y-android.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/adb-runner.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/apk.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/device-suite.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/ios-app.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/ndk-clang-aarch64.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/ndk-clang-x86_64.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/ndk-clang.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/reload-android.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/reload-guest-android.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/reload-watch-android-test.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/reload-watch-android.sh
+ mode change 100644 => 100755 vieww_base/ci/mobile/simctl-runner.sh
+ mode change 100644 => 100755 vieww_base/ci/release/artifacts.sh
+ mode change 100644 => 100755 vieww_base/ci/release/gate.sh
+ mode change 100644 => 100755 vieww_base/ci/release/package-source.sh
+ mode change 100644 => 100755 vieww_base/ci/tools/ci-runner-prep.sh
+ mode change 100644 => 100755 vieww_base/ci/tools/patch-winit.sh
+ mode change 100644 => 100755 vieww_base/ci/tools/screenshots.sh
+
+diff --git a/vieww_base/ci/certify/certify.sh b/vieww_base/ci/certify/certify.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/certify/desktop-suite.sh b/vieww_base/ci/certify/desktop-suite.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/certify/export-suite.sh b/vieww_base/ci/certify/export-suite.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/certify/release-check.sh b/vieww_base/ci/certify/release-check.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/certify/shot-suite.sh b/vieww_base/ci/certify/shot-suite.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/check/checks.sh b/vieww_base/ci/check/checks.sh
+old mode 100644
+new mode 100755
+index 53031ad..9a602be
+--- a/vieww_base/ci/check/checks.sh
++++ b/vieww_base/ci/check/checks.sh
+@@ -281,7 +281,7 @@ check cargo test --workspace --features vieww-paint/native
+ # on every machine, every time. `ci/check/wasm-check.sh` exits 2 when the target
+ # cannot be installed, which is not a failure of this stage — the audit ran.
+ stage "web-sys feature audit (the half of ci/check/wasm-check.sh that needs no target)"
+-check bash -c 'ci/check/wasm-check.sh || [ $? -eq 2 ]'
++check bash -c 'bash ci/check/wasm-check.sh || [ $? -eq 2 ]'
+ 
+ # **The fixture gallery, as a gate rather than as a gallery.**
+ #
+diff --git a/vieww_base/ci/check/coverage.sh b/vieww_base/ci/check/coverage.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/check/platform-check.sh b/vieww_base/ci/check/platform-check.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/check/release-clean-check.sh b/vieww_base/ci/check/release-clean-check.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/check/size-budget.sh b/vieww_base/ci/check/size-budget.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/check/wasm-check.sh b/vieww_base/ci/check/wasm-check.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/a11y-android.sh b/vieww_base/ci/mobile/a11y-android.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/adb-runner.sh b/vieww_base/ci/mobile/adb-runner.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/apk.sh b/vieww_base/ci/mobile/apk.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/device-suite.sh b/vieww_base/ci/mobile/device-suite.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/ios-app.sh b/vieww_base/ci/mobile/ios-app.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/ndk-clang-aarch64.sh b/vieww_base/ci/mobile/ndk-clang-aarch64.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/ndk-clang-x86_64.sh b/vieww_base/ci/mobile/ndk-clang-x86_64.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/ndk-clang.sh b/vieww_base/ci/mobile/ndk-clang.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/reload-android.sh b/vieww_base/ci/mobile/reload-android.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/reload-guest-android.sh b/vieww_base/ci/mobile/reload-guest-android.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/reload-watch-android-test.sh b/vieww_base/ci/mobile/reload-watch-android-test.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/reload-watch-android.sh b/vieww_base/ci/mobile/reload-watch-android.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/mobile/simctl-runner.sh b/vieww_base/ci/mobile/simctl-runner.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/release/artifacts.sh b/vieww_base/ci/release/artifacts.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/release/gate.sh b/vieww_base/ci/release/gate.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/release/package-source.sh b/vieww_base/ci/release/package-source.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/tools/ci-runner-prep.sh b/vieww_base/ci/tools/ci-runner-prep.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/tools/patch-winit.sh b/vieww_base/ci/tools/patch-winit.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/ci/tools/screenshots.sh b/vieww_base/ci/tools/screenshots.sh
+old mode 100644
+new mode 100755
+diff --git a/vieww_base/crates/vieww-3d/src/lib.rs b/vieww_base/crates/vieww-3d/src/lib.rs
+index c4186cb..c65ca3d 100644
+--- a/vieww_base/crates/vieww-3d/src/lib.rs
++++ b/vieww_base/crates/vieww-3d/src/lib.rs
+@@ -39,7 +39,7 @@
+ //! | dynamic diffuse GI (probe volume — Lumen/DDGI) | [`gi`] |
+ //! | skinning (LBS + dual quaternion) and morph targets | [`skin`] |
+ //! | custom fragment shaders and node materials | [`shader`] |
+-//! | the GPU seam: `GpuRenderer`, Vulkan behind the CPU contract (`vulkan` feature) | [`gpu`] |
++//! | the GPU seam: `GpuRenderer`, Vulkan behind the CPU contract (`vulkan` feature) | `gpu` (with `vulkan`) |
+ //! | post-processing: SSAO, SSR, DoF, bloom, tone mapping, grading, FXAA | [`post`] |
+ //! | meshlets, cone culling and cluster LOD (Nanite's shape) | [`meshlet`] |
+ //! | stereo eyes, side-by-side and anaglyph | [`stereo`] |
+diff --git a/vieww_base/crates/vieww-3d/src/post.rs b/vieww_base/crates/vieww-3d/src/post.rs
+index ec93714..9bacbf1 100644
+--- a/vieww_base/crates/vieww-3d/src/post.rs
++++ b/vieww_base/crates/vieww-3d/src/post.rs
+@@ -3,7 +3,7 @@
+ //! render settings (§2.2, §2.3 L6, §2.14 L6).
+ //!
+ //! A [`PostStack`] is an ordered list of [`Pass`]es run over a
+-//! [`Frame`](crate::render::Frame) — linear HDR colour plus view-space
++//! [`Frame`] — linear HDR colour plus view-space
+ //! position and normal — producing an sRGB [`Image`]. Every pass is a
+ //! readable CPU implementation:
+ //!
+diff --git a/vieww_base/crates/vieww-canvas/src/brush.rs b/vieww_base/crates/vieww-canvas/src/brush.rs
+index f9f0434..264e59f 100644
+--- a/vieww_base/crates/vieww-canvas/src/brush.rs
++++ b/vieww_base/crates/vieww-canvas/src/brush.rs
+@@ -15,7 +15,7 @@
+ //!   and speed (fast = thin), with round caps — the calligraphic look.
+ //! * [`SprayBrush`] scatters dots in a radius per sample, deterministically
+ //!   seeded.
+-//! * [`CircleBrush`] stamps a circle per sample.
++//! * [`circle_stamps`] stamps a circle per sample (Fabric's circle brush).
+ 
+ use vieww_foundation::{Offset, Path};
+ 
+diff --git a/vieww_base/crates/vieww-dataviz/src/interact.rs b/vieww_base/crates/vieww-dataviz/src/interact.rs
+index 7620e14..2b8079a 100644
+--- a/vieww_base/crates/vieww-dataviz/src/interact.rs
++++ b/vieww_base/crates/vieww-dataviz/src/interact.rs
+@@ -5,7 +5,7 @@
+ //!   [`ZoomTransform::scale_about`] zooms keeping a screen point fixed (the
+ //!   wheel/pinch behaviour), [`ZoomTransform::constrain`] keeps the content
+ //!   covering the viewport (`translateExtent`), and `rescale` maps a
+-//!   [`Continuous`](crate::scale::Continuous) scale's domain through it.
++//!   [`Continuous`] scale's domain through it.
+ //! * [`Brush`] is a 1-D or 2-D selection: start a drag on empty space to
+ //!   draw one, drag inside to move it, drag an edge handle to resize it,
+ //!   clamped to the extent; [`Brush::select`] filters points.
+diff --git a/vieww_base/crates/vieww-gpu/src/scene.rs b/vieww_base/crates/vieww-gpu/src/scene.rs
+index f49145b..4e8ca16 100644
+--- a/vieww_base/crates/vieww-gpu/src/scene.rs
++++ b/vieww_base/crates/vieww-gpu/src/scene.rs
+@@ -82,7 +82,7 @@ pub mod material {
+     pub const IMAGE: f32 = 2.0;
+     /// A per-fragment gradient: geometry in `params`, ramp row in `extra`.
+     pub const GRADIENT: f32 = 3.0;
+-    /// A flat colour × analytic rounded-rect coverage (see [`Vertex::shape`]).
++    /// A flat colour × analytic rounded-rect coverage (see [`Vertex::shape`](super::Vertex::shape)).
+     pub const SHAPE_SOLID: f32 = 4.0;
+     /// A per-fragment gradient × analytic rounded-rect coverage.
+     pub const SHAPE_GRADIENT: f32 = 5.0;
+diff --git a/vieww_base/crates/vieww-hal/src/vulkan/scene.rs b/vieww_base/crates/vieww-hal/src/vulkan/scene.rs
+index 0e75c3b..8dae1ee 100644
+--- a/vieww_base/crates/vieww-hal/src/vulkan/scene.rs
++++ b/vieww_base/crates/vieww-hal/src/vulkan/scene.rs
+@@ -6,7 +6,7 @@
+ //! not change between frames: two render passes, three graphics pipelines,
+ //! four texture resources and the descriptor sets that bind them. Per frame
+ //! it uploads whichever atlases changed, writes the vertex and index buffers,
+-//! records **one** command buffer for the plan's whole [`Step`](vieww_gpu::Step) program, and
++//! records **one** command buffer for the plan's whole [`Step`] program, and
+ //! submits it once.
+ //!
+ //! ```text
+@@ -647,7 +647,7 @@ impl SceneRenderer {
+     /// Bring the mask texture up to `masks`, sending only the rectangles that
+     /// changed when the atlas can say which ones those are.
+     ///
+-    /// # Why not just [`Self::upload`]
++    /// # Why not just the whole-texture upload
+     ///
+     /// A non-analytic shape that changes every frame — anything rotating, a
+     /// morphing path — adds a new mask every frame, and a whole-texture upload
+diff --git a/vieww_base/crates/vieww-platform-winit/src/native.rs b/vieww_base/crates/vieww-platform-winit/src/native.rs
+index 011e647..3a4a03d 100644
+--- a/vieww_base/crates/vieww-platform-winit/src/native.rs
++++ b/vieww_base/crates/vieww-platform-winit/src/native.rs
+@@ -529,7 +529,7 @@ impl NativeRenderer {
+     /// [`SceneRenderer`] when the plan is complete, and its pixels take the
+     /// same `present_pixels` path the CPU's always took. A frame the planner
+     /// cannot express falls back to a full CPU repaint — the plan's gaps and
+-    /// the fallback are the same agreement [`ScenePlan::is_complete`] and
++    /// the fallback are the same agreement [`vieww_gpu::ScenePlan::is_complete`] and
+     /// `present_damaged` have always had.
+     ///
+     /// The GPU path is a whole-frame rasterizer: it has no damage regions to
+@@ -547,7 +547,7 @@ impl NativeRenderer {
+     /// # Errors
+     ///
+     /// [`NativeError::Device`] if the GPU rasterizer's pipelines could not
+-    /// be built (once — see [`GpuRaster`]); after that, as
++    /// be built (once — see `GpuRaster`); after that, as
+     /// [`present_damaged`](Self::present_damaged).
+     pub fn present_planned(
+         &mut self,
+diff --git a/vieww_base/crates/vieww-video/src/motion_blur.rs b/vieww_base/crates/vieww-video/src/motion_blur.rs
+index dd2e78e..0e0401c 100644
+--- a/vieww_base/crates/vieww-video/src/motion_blur.rs
++++ b/vieww_base/crates/vieww-video/src/motion_blur.rs
+@@ -7,7 +7,7 @@
+ //!   light, so a bright streak is as bright as it should be). A 180° shutter
+ //!   at 24 fps is open for 1/48 s, centred on the frame.
+ //! * [`vector_blur`] — the post-process: smear each pixel along its motion
+-//!   vector (e.g. a [`FlowField`](crate::cv::FlowField)), for footage
++//!   vector (e.g. a [`FlowField`]), for footage
+ //!   that was not rendered with a shutter.
+ 
+ use vieww_foundation::Image;
+diff --git a/vieww_base/crates/vieww-widget/src/widgets/animated_visibility.rs b/vieww_base/crates/vieww-widget/src/widgets/animated_visibility.rs
+index 38508b2..14996ed 100644
+--- a/vieww_base/crates/vieww-widget/src/widgets/animated_visibility.rs
++++ b/vieww_base/crates/vieww-widget/src/widgets/animated_visibility.rs
+@@ -26,7 +26,7 @@ pub enum Transition {
+     Scale(f32),
+ }
+ 
+-/// See the [module docs](self).
++/// See this module's documentation.
+ #[derive(Clone)]
+ pub struct AnimatedVisibility {
+     visible: bool,
+diff --git a/vieww_base/examples/film_lab/src/exp_blendmatrix.rs b/vieww_base/examples/film_lab/src/exp_blendmatrix.rs
+index 06aa415..b5d7495 100644
+--- a/vieww_base/examples/film_lab/src/exp_blendmatrix.rs
++++ b/vieww_base/examples/film_lab/src/exp_blendmatrix.rs
+@@ -10,7 +10,7 @@
+ //! Saturation, Colour and Luminosity take a different code path than the
+ //! per-channel modes, and no scene before this had ever pushed all four
+ //! (or ColourDodge, or Exclusion) through the native renderer in one
+-//! frame. Sixteen [`blended_layer`] groups per frame — the layer economy
++//! frame. Sixteen `blended_layer` groups per frame — the layer economy
+ //! measured at breadth, the price U-01's fix paid.
+ //!
+ //! The receipt prints the tour position and the group count; the audit
+diff --git a/vieww_base/examples/film_lab/src/exp_cymatics.rs b/vieww_base/examples/film_lab/src/exp_cymatics.rs
+index efef562..5f9d89c 100644
+--- a/vieww_base/examples/film_lab/src/exp_cymatics.rs
++++ b/vieww_base/examples/film_lab/src/exp_cymatics.rs
+@@ -55,7 +55,7 @@ const STEPS: usize = 26;
+ 
+ // ── The Chladni field ───────────────────────────────────────────────────────
+ 
+-/// The blended field at plate-local (u, v) in [0,1]², between modes A and B
++/// The blended field at plate-local (u, v) in `[0,1]²`, between modes A and B
+ /// by `s`. Returns a signed amplitude in roughly [-2, 2].
+ #[must_use]
+ fn field(u: f32, v: f32, a: (u32, u32), b: (u32, u32), s: f32) -> f32 {
+@@ -86,7 +86,7 @@ fn schedule(t: f32) -> ((u32, u32), (u32, u32), f32, f32) {
+ 
+ // ── The grains ──────────────────────────────────────────────────────────────
+ 
+-/// One grain's seed (plate-local, in [0,1]²) and its descent result.
++/// One grain's seed (plate-local, in `[0,1]²`) and its descent result.
+ struct Grain {
+     // Bookkeeping from the annealing pass; the receipt reads the settled
+     // state, not the seeds it fell from.
+diff --git a/vieww_base/examples/film_lab/src/exp_neural.rs b/vieww_base/examples/film_lab/src/exp_neural.rs
+index 9aad571..4093f24 100644
+--- a/vieww_base/examples/film_lab/src/exp_neural.rs
++++ b/vieww_base/examples/film_lab/src/exp_neural.rs
+@@ -111,8 +111,8 @@ impl Net {
+     }
+ 
+     /// Forward pass, exposing the hidden activations for backprop.
+-    /// The output is the FULL readout Σ w3[i]·h2[i] + b3 — the first cut
+-    /// read only w3[0]·h2[0] (a stray helper index), leaving the output
++    /// The output is the FULL readout `Σ w3[i]·h2[i] + b3` — the first cut
++    /// read only `w3[0]·h2[0]` (a stray helper index), leaving the output
+     /// connected to one hidden unit in sixteen: the net trained to loss
+     /// = ln 2 and 0.6% accuracy and the receipt printed the failure.
+     fn forward(&self, x: f32, y: f32, h1: &mut [f32], h2: &mut [f32]) -> f32 {
+diff --git a/vieww_base/examples/film_lab/src/exp_slime.rs b/vieww_base/examples/film_lab/src/exp_slime.rs
+index ad57d08..341742c 100644
+--- a/vieww_base/examples/film_lab/src/exp_slime.rs
++++ b/vieww_base/examples/film_lab/src/exp_slime.rs
+@@ -261,7 +261,7 @@ fn grow_to(t: f64) -> Network {
+ 
+ // ── The instruments ─────────────────────────────────────────────────────────
+ 
+-/// How many food nodes are reachable from FOOD[0] through LIVING tubes only.
++/// How many food nodes are reachable from `FOOD[0]` through LIVING tubes only.
+ fn reachable(edges: &[Edge], skip: Option<usize>) -> usize {
+     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); NODES];
+     for (i, e) in edges.iter().enumerate() {
+diff --git a/vieww_base/examples/film_lab/src/film_lib.rs b/vieww_base/examples/film_lab/src/film_lib.rs
+index d6b6d3a..405cab9 100644
+--- a/vieww_base/examples/film_lab/src/film_lib.rs
++++ b/vieww_base/examples/film_lab/src/film_lib.rs
+@@ -669,7 +669,7 @@ pub(crate) fn anim_gif_strided(
+     Some(gif)
+ }
+ 
+-/// Where experiment output lives: /home/z/my-project/download/film_lab/<name>.
++/// Where experiment output lives: `/home/z/my-project/download/film_lab/<name>`.
+ pub(crate) fn out_root() -> PathBuf {
+     PathBuf::from("/home/z/my-project/download/film_lab")
+ }
+diff --git a/vieww_base/examples/film_lab/src/studio_film/filmkit.rs b/vieww_base/examples/film_lab/src/studio_film/filmkit.rs
+index 677e457..c1baeb3 100644
+--- a/vieww_base/examples/film_lab/src/studio_film/filmkit.rs
++++ b/vieww_base/examples/film_lab/src/studio_film/filmkit.rs
+@@ -9,7 +9,7 @@
+ //! see `frame.rs` and `master.rs`.)
+ //!
+ //! * **The flows.** Vector graphic flows: arc-length-sampled cubics,
+-//!   self-drawing strokes ([`grow_thread`]), gradient dashes flowing
++//!   self-drawing strokes (`grow_thread`), gradient dashes flowing
+ //!   along a path ([`flow_thread`]), comet riders ([`rider`]), tapered
+ //!   ribbons, orbiting particles, projected 3D grid floors and cube
+ //!   orbits. The framework gives the shapes; this file gives them time.
+diff --git a/vieww_base/examples/film_lab/src/studio_film/m5_release.rs b/vieww_base/examples/film_lab/src/studio_film/m5_release.rs
+index 3007af7..9bc9aa9 100644
+--- a/vieww_base/examples/film_lab/src/studio_film/m5_release.rs
++++ b/vieww_base/examples/film_lab/src/studio_film/m5_release.rs
+@@ -32,7 +32,7 @@ fn endcard_mark() -> Rect {
+ }
+ 
+ /// The end card's mark, translated into **this** scene's world — the
+-/// anchor the studio collapses onto. [`frame::fit_of`] is the master's
++/// anchor the studio collapses onto. `frame::fit_of` is the master's
+ /// own fit arithmetic, so the anchor is where the incoming scene's fit
+ /// will actually put the mark on screen; handing the studio's collapse
+ /// to that exact rect is what makes the cut read as a *transform* rather
+diff --git a/vieww_base/examples/film_lab/src/studio_film/mod.rs b/vieww_base/examples/film_lab/src/studio_film/mod.rs
+index bd531d0..fb3eca9 100644
+--- a/vieww_base/examples/film_lab/src/studio_film/mod.rs
++++ b/vieww_base/examples/film_lab/src/studio_film/mod.rs
+@@ -15,7 +15,7 @@
+ //! | V · THE RELEASE | Z20, Z20B, Z21, Z22 | resolution — the studio becomes the mark through shared-element flight, *beta release available today* |
+ //!
+ //! Two scenes' kinds, the house rule: `Pure` scenes are functions of the
+-//! frame's [`Ctx`]; `Studio` scenes ride on the **actual `viewwstudio`
++//! frame's `Ctx`; `Studio` scenes ride on the **actual `viewwstudio`
+ //! app**, mounted once on the film's own driver and driven by this
+ //! film's session script ([`script`]).
+ //!
+@@ -114,7 +114,7 @@ pub(crate) use crate::product_film::{
+ /// its order. The film's crate count is this list's length, so the
+ /// number on screen moves the day a crate lands and can never be the
+ /// last cut's number again. (The census refuses to run if the film's
+-/// named list, [`pf::CRATES`], has drifted from it.)
++/// named list, `pf::CRATES`, has drifted from it.)
+ pub(crate) fn workspace_crates() -> Vec<&'static str> {
+     const MANIFEST: &str = include_str!("../../../../Cargo.toml");
+     MANIFEST
+-- 
+2.43.0
+
