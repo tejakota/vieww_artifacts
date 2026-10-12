@@ -306,28 +306,43 @@ key/scroll forwarding to the wire in `remote.rs`.
 
 # 4. CPU rasterizer performance
 
-## 4.1 Two fixtures are over a 60 Hz full-repaint budget
+## 4.1 Two fixtures are over a 60 Hz full-repaint budget — narrowed, not closed
 
-**What.** `00-layers-nested` (~25 ms) and `23-editor-glass` (~22 ms) against a
-16.7 ms budget, at 1366×679.
+**What.** `00-layers-nested` and `23-editor-glass`, full repaint at their
+sizes, against 16.7 ms. On the session machine (2026-10-12, 2 cores) they
+went from ~28.5 ms and ~27 ms to **~20–22 ms and ~21 ms**; the whole gallery
+from 232.7 ms to 164.6 ms. Every gallery output (30 files: stills, motion
+GIFs, interaction frames) is byte-identical before and after.
 
-**Why not closed.** It is measured, understood and bounded rather than
-neglected: `TRACKER.md`'s rendering-performance section documents a 1.28×
-whole-gallery improvement, the four optimisations that were tried and
-*removed* for making things worse, and the fact that a **retained** repaint of
-the same screen is 9.9 ms and byte-identical — which is what a live window
-actually does. The full-repaint number is the right alarm for a first frame, a
-resize and a theme change.
+**What was done** (TRACKER.md's rendering-performance section has the
+detail):
+- `-C target-cpu=x86-64-v2` restored in `.cargo/config.toml` — the file's
+  reconstruction (`375aa13`) had dropped it, so `floor`/`ceil` were library
+  calls again. Worth ~3% of instructions here.
+- The RGBA8 output conversion as SSE2, four pixels per 16-byte store
+  (`color::write_straight_u8`).
+- `composite_flat`'s and `composite_layer`'s normal-blend rows as SSE2
+  (`native/simd.rs`), branches kept only where they are long, predictable
+  runs (no coverage; an opaque colour at full coverage).
+- A layer's pool clear fused into its composite
+  (`Target::composite_layer_and_clear`) — memory traffic, timed: nested
+  25.7 → 22.0 ms median of ten interleaved runs.
 
-**Blocks.** Resize smoothness on the heaviest screens.
+callgrind, whole fixture run (warm-up + 3 frames + PNG encode): glass
+1,454 M → 1,172 M instructions, nested 1,573 M → 1,005 M.
 
-**Start.** Explicit SIMD in the compositing loops is the one remaining large
-lever; the frame is roughly 200 M instructions for ~4 M blended pixels and the
-cost is spread across compositing (22%), output conversion (16%), layer resolve
-(8%) and blur (7.5%) rather than concentrated. Read the "four optimisations
-that were tried, measured, and removed" section first — the machine's
-run-to-run spread is wider than most of these effects, and `callgrind`
-instruction counts are the only stable signal.
+**Why not closed.** Still ~4–5 ms over. What is left is spread out: blur
+(~12% of glass), shadows, glyph and path rasterisation, the root buffer's
+reset, and — for nested — memory bandwidth on 16-byte-per-pixel layers
+rather than arithmetic (the layer row is ~19 instructions a pixel, near the
+SSE2 floor). A retained repaint of glass is now ~7.5 ms.
+
+**Start.** Measure first, both ways (callgrind counts `rep stosb` per byte,
+so `memset` looks ~20x worse than it is; time anything that moves memory).
+Candidates: an SSE2 blur (the horizontal running sum and the vertical strip
+pass); half-float or 8-bit layer storage for layers that need no extended
+range (cuts nested's traffic in half or more, but changes bytes — needs a
+tolerance decision); AVX2 behind runtime detection.
 
 ---
 

@@ -1472,8 +1472,8 @@ impl NativeRenderer {
                     }
                 }
                 let (parent, parent_origin) = current!();
-                parent.composite_layer(
-                    &frame.target,
+                parent.composite_layer_and_clear(
+                    &mut frame.target,
                     frame.origin.0 - parent_origin.0,
                     frame.origin.1 - parent_origin.1,
                     frame.blend,

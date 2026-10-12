@@ -90,6 +90,7 @@ mod reference;
 mod residency;
 mod rounded_rect;
 mod shadow;
+mod simd;
 mod target;
 
 pub use glyph::{outline_glyph, units_per_em};

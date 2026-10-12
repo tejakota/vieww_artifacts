@@ -10,7 +10,7 @@
 
 use vieww_foundation::BlendMode;
 
-use super::color::{over, Premul};
+use super::color::{over, write_straight_u8, Premul};
 use super::geometry::fill::{LcdMaskView, MaskView, LCD_SUBPIXELS};
 use super::gradient::DeviceRamp;
 use super::linear::{blend_with_pipeline, ColorPipeline};
@@ -524,6 +524,13 @@ impl Target {
 
             let mask = &coverage.row(dy as u32)[dx_start as usize..dx_end as usize];
             let row = &mut self.pixels[base..base + span];
+            // The normal blend in gamma space — nearly every draw — is the
+            // explicit-SIMD row in `native/simd.rs`, byte-identical to the
+            // loop below specialised to `normal`.
+            if normal {
+                super::simd::over_flat_row(row, mask, color, replaces);
+                continue;
+            }
             for (px, &c) in row.iter_mut().zip(mask.iter()) {
                 if c <= 0.0 {
                     continue;
@@ -702,6 +709,20 @@ impl Target {
         // answer for each of them. Nesting makes it worse than a single fill,
         // because every level of depth composites the whole thing again — a
         // 24-deep stack of layers ran this loop 24 times over.
+        let Some((x_start, y_start, x_end, y_end)) = self.layer_window(other, ox, oy) else {
+            return;
+        };
+        self.mark_ink(x_start + ox, y_start + oy, x_end + ox, y_end + oy);
+
+        let normal = mode.is_normal() && matches!(pipeline, ColorPipeline::GammaSpace);
+        let opaque_copy = normal && alpha == 1.0;
+        self.composite_layer_rows(other, (x_start, y_start, x_end, y_end), ox, oy, mode, alpha, pipeline, normal, opaque_copy);
+    }
+
+    /// The part of `other` (in its own coordinates, half-open) that
+    /// [`Self::composite_layer`] reads at `(ox, oy)`: its ink, cut to this
+    /// buffer's writable window. `None` when that is empty.
+    fn layer_window(&self, other: &Target, ox: i32, oy: i32) -> Option<(i32, i32, i32, i32)> {
         let (wx0, wy0, wx1, wy1) = self.writable();
         let mut y_start = (wy0 - oy).max(0);
         let mut y_end = (wy1 - oy).min(other.height as i32);
@@ -722,16 +743,70 @@ impl Target {
                 x_end = x_end.min(ix1);
                 y_end = y_end.min(iy1);
             }
-            None => return,
+            None => return None,
         }
-        if y_start >= y_end || x_start >= x_end {
+        (y_start < y_end && x_start < x_end).then_some((x_start, y_start, x_end, y_end))
+    }
+
+    /// [`Self::composite_layer`], for a layer about to go back to the pool:
+    /// `other` is left fully transparent, with no ink, so the pool's
+    /// [`Self::clear`] has nothing left to do.
+    ///
+    /// When the composite reads the layer's whole ink box under the normal
+    /// blend, the clear happens in the same pass — each pixel is zeroed right
+    /// after it is read, while its cache line is still loaded — instead of as
+    /// a second walk over the same megabytes when the buffer is next handed
+    /// out. Otherwise (a damaged repaint's write mask cutting the read, or
+    /// another blend mode) it composites as usual and the pool clears later,
+    /// exactly as before.
+    pub(crate) fn composite_layer_and_clear(
+        &mut self,
+        other: &mut Target,
+        ox: i32,
+        oy: i32,
+        mode: BlendMode,
+        alpha: f32,
+        pipeline: ColorPipeline,
+    ) {
+        let normal = mode.is_normal() && matches!(pipeline, ColorPipeline::GammaSpace);
+        let window = self.layer_window(other, ox, oy);
+        // Measured, ten interleaved runs each: `00-layers-nested` (24 nested
+        // translucent layers) 25.7 ms -> 22.0 ms median, byte-identical
+        // output. Instruction counts cannot show this one — it is memory
+        // traffic, and callgrind counts the old `memset` per byte — which is
+        // why it was timed rather than profiled.
+        if !(normal && window.is_some() && window == other.ink) {
+            self.composite_layer(other, ox, oy, mode, alpha, pipeline);
             return;
         }
+        let (x_start, y_start, x_end, y_end) = window.expect("checked above");
         self.mark_ink(x_start + ox, y_start + oy, x_end + ox, y_end + oy);
+        let opaque_copy = alpha == 1.0;
+        let (ow, sw) = (other.width as usize, self.width as usize);
+        for y in y_start..y_end {
+            let src_row = y as usize * ow;
+            let dst_row = (y + oy) as usize * sw;
+            let src = &mut other.pixels[src_row + x_start as usize..src_row + x_end as usize];
+            let dst =
+                &mut self.pixels[dst_row + (x_start + ox) as usize..dst_row + (x_end + ox) as usize];
+            super::simd::over_layer_row_take(dst, src, alpha, opaque_copy);
+        }
+        other.ink = None;
+    }
 
-        let normal = mode.is_normal() && matches!(pipeline, ColorPipeline::GammaSpace);
-        let opaque_copy = normal && alpha == 1.0;
-
+    #[allow(clippy::too_many_arguments)]
+    fn composite_layer_rows(
+        &mut self,
+        other: &Target,
+        (x_start, y_start, x_end, y_end): (i32, i32, i32, i32),
+        ox: i32,
+        oy: i32,
+        mode: BlendMode,
+        alpha: f32,
+        pipeline: ColorPipeline,
+        normal: bool,
+        opaque_copy: bool,
+    ) {
         for y in y_start..y_end {
             let src_row = y as usize * other.width as usize;
             let dst_row = (y + oy) as usize * self.width as usize;
@@ -751,6 +826,17 @@ impl Target {
             // Recorded because it is the third plausible-sounding change in
             // this file to measure worse than the code it replaced, and the
             // fourth to measure the opposite of a single-sample estimate.
+            //
+            // The normal blend in gamma space is the explicit-SIMD row in
+            // `native/simd.rs`, byte-identical to the loop below specialised
+            // to `normal`.
+            if normal {
+                let src = &other.pixels[src_row + x_start as usize..src_row + x_end as usize];
+                let dst = &mut self.pixels
+                    [dst_row + (x_start + ox) as usize..dst_row + (x_end + ox) as usize];
+                super::simd::over_layer_row(dst, src, alpha, opaque_copy);
+                continue;
+            }
             for x in x_start..x_end {
                 let src = other.pixels[src_row + x as usize];
                 let src = if alpha == 1.0 { src } else { src.scaled(alpha) };
@@ -789,16 +875,9 @@ impl Target {
     /// If `out` is not exactly four bytes per pixel.
     pub(crate) fn write_rgba8(&self, out: &mut [u8]) {
         assert_eq!(out.len(), self.pixels.len() * 4);
-        // `chunks_exact_mut(4)` and `copy_from_slice` rather than
-        // `as_chunks_mut::<4>()` and an assignment. The typed-length version
-        // looks like it must be cheaper — no runtime length, no panic branch —
-        // and it was tried: **1,203,539,448 instructions against
-        // 1,203,539,565**, a difference of 117 across a whole fixture render.
-        // LLVM already turns this into the same four-byte store. Left as the
-        // more familiar spelling.
-        for (pixel, slot) in self.pixels.iter().zip(out.as_chunks_mut::<4>().0) {
-            slot.copy_from_slice(&pixel.to_straight_u8());
-        }
+        // Four pixels per SSE2 step on x86-64, the scalar path elsewhere and
+        // for the tail — the same bytes either way; see `write_straight_u8`.
+        write_straight_u8(&self.pixels, out);
     }
 
     /// Resize if needed and refill with `color`, reusing this buffer's
@@ -879,9 +958,7 @@ impl Target {
             let row = y as usize * width;
             let pixels = &self.pixels[row + x0 as usize..row + x1 as usize];
             let bytes = &mut out[(row + x0 as usize) * 4..(row + x1 as usize) * 4];
-            for (pixel, slot) in pixels.iter().zip(bytes.as_chunks_mut::<4>().0) {
-                slot.copy_from_slice(&pixel.to_straight_u8());
-            }
+            write_straight_u8(pixels, bytes);
         }
     }
 }
@@ -889,6 +966,51 @@ impl Target {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `composite_layer_and_clear` is `composite_layer` followed by a clear,
+    /// on both of its paths: the fused one (the whole ink box is read) and
+    /// the fallback (a write mask cuts the read, so the pool must clear).
+    #[test]
+    fn composite_and_clear_matches_composite_then_clear() {
+        let tint = |x: u32, y: u32| Premul {
+            r: (x as f32 / 40.0) * 0.6,
+            g: (y as f32 / 30.0) * 0.6,
+            b: 0.1,
+            a: 0.6 + ((x + y) % 5) as f32 * 0.1,
+        };
+        for mask in [None, Some((5, 4, 20, 18))] {
+            let mut layer = Target::new(24, 20);
+            for y in 2..17 {
+                for x in 3..21 {
+                    layer.set(x, y, tint(x as u32, y as u32));
+                }
+            }
+            let ground = Premul { r: 0.2, g: 0.3, b: 0.4, a: 1.0 };
+            let mut expected = Target::filled(40, 30, ground);
+            let mut actual = expected.clone();
+            expected.set_write_mask(mask);
+            actual.set_write_mask(mask);
+            for alpha in [1.0, 0.97] {
+                let mut fused = layer.clone();
+                expected.composite_layer(&layer, 7, 5, BlendMode::Normal, alpha, ColorPipeline::GammaSpace);
+                actual.composite_layer_and_clear(
+                    &mut fused,
+                    7,
+                    5,
+                    BlendMode::Normal,
+                    alpha,
+                    ColorPipeline::GammaSpace,
+                );
+                assert_eq!(actual.pixels, expected.pixels, "mask {mask:?}, alpha {alpha}");
+                assert_eq!(actual.ink(), expected.ink());
+                // Whichever path ran, the buffer is transparent once the
+                // pool's `clear` has had its turn.
+                fused.clear();
+                assert!(fused.pixels.iter().all(|p| *p == Premul::TRANSPARENT));
+                assert_eq!(fused.ink(), None);
+            }
+        }
+    }
 
     fn red() -> Premul {
         Premul::from_straight(vieww_foundation::Color::rgba(255, 0, 0, 255))

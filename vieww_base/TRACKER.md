@@ -1419,6 +1419,26 @@ What changed, in order of what it was worth:
   `compiler-builtins`*. Worth **27.4 ms to 22.7 ms** on `23-editor-glass` by
   itself. See `.cargo/config.toml` for why v2 and not v3.
 
+- **2026-10-12: explicit SSE2 in the three hottest loops, and the layer
+  clear fused into the composite.** The output conversion (four pixels per
+  16-byte store), `composite_flat`'s and `composite_layer`'s normal-blend rows
+  (`native/simd.rs`), and `Target::composite_layer_and_clear`, which zeroes a
+  layer as it reads it so the pool has nothing left to clear. Each is held to
+  the scalar path bit for bit by its own test (every `NaN` counted as one
+  value — see `simd.rs`'s module doc for why that is the only freedom
+  taken), and the whole gallery's 30 outputs are byte-identical before and
+  after. callgrind: glass 1,454 M → 1,172 M, nested 1,573 M → 1,005 M; the
+  gallery 232.7 ms → 164.6 ms in one run each. The flat row keeps two
+  branches on purpose: folding them into selects made glass 10% *worse*
+  (1,301 M → 1,431 M), because every opaque interior pixel then paid for a
+  blend it threw away.
+- **`-C target-cpu=x86-64-v2` restored.** `.cargo/config.toml` was rebuilt
+  from scratch when an archive arrived without it (`375aa13`), and the
+  rebuild did not know about this flag; `floorf`/`ceilf` were back in the
+  profile by name. On this session's machine it was worth ~3%, not the 17%
+  measured originally — the other changes since had removed most of the
+  calls.
+
 ### The two fixtures still over budget, and what that does and does not mean
 
 `00-layers-nested` (24 isolated layers, a deliberate compositor-depth stress)
