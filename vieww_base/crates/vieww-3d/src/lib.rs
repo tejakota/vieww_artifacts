@@ -39,7 +39,7 @@
 //! | dynamic diffuse GI (probe volume — Lumen/DDGI) | [`gi`] |
 //! | skinning (LBS + dual quaternion) and morph targets | [`skin`] |
 //! | custom fragment shaders and node materials | [`shader`] |
-//! | the GPU seam: `GpuRenderer`, Vulkan behind the CPU contract (`vulkan` feature) | [`gpu`] |
+//! | the GPU seam: `GpuRenderer`, Vulkan behind the CPU contract (`vulkan` feature) | `gpu` (with `vulkan`) |
 //! | post-processing: SSAO, SSR, DoF, bloom, tone mapping, grading, FXAA | [`post`] |
 //! | meshlets, cone culling and cluster LOD (Nanite's shape) | [`meshlet`] |
 //! | stereo eyes, side-by-side and anaglyph | [`stereo`] |

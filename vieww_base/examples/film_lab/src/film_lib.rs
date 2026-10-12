@@ -669,7 +669,7 @@ pub(crate) fn anim_gif_strided(
     Some(gif)
 }
 
-/// Where experiment output lives: /home/z/my-project/download/film_lab/<name>.
+/// Where experiment output lives: `/home/z/my-project/download/film_lab/<name>`.
 pub(crate) fn out_root() -> PathBuf {
     PathBuf::from("/home/z/my-project/download/film_lab")
 }

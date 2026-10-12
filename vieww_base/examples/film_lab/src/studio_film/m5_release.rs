@@ -32,7 +32,7 @@ fn endcard_mark() -> Rect {
 }
 
 /// The end card's mark, translated into **this** scene's world — the
-/// anchor the studio collapses onto. [`frame::fit_of`] is the master's
+/// anchor the studio collapses onto. `frame::fit_of` is the master's
 /// own fit arithmetic, so the anchor is where the incoming scene's fit
 /// will actually put the mark on screen; handing the studio's collapse
 /// to that exact rect is what makes the cut read as a *transform* rather

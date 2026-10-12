@@ -26,7 +26,7 @@ pub enum Transition {
     Scale(f32),
 }
 
-/// See the [module docs](self).
+/// See this module's documentation.
 #[derive(Clone)]
 pub struct AnimatedVisibility {
     visible: bool,

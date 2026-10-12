@@ -529,7 +529,7 @@ impl NativeRenderer {
     /// [`SceneRenderer`] when the plan is complete, and its pixels take the
     /// same `present_pixels` path the CPU's always took. A frame the planner
     /// cannot express falls back to a full CPU repaint — the plan's gaps and
-    /// the fallback are the same agreement [`ScenePlan::is_complete`] and
+    /// the fallback are the same agreement [`vieww_gpu::ScenePlan::is_complete`] and
     /// `present_damaged` have always had.
     ///
     /// The GPU path is a whole-frame rasterizer: it has no damage regions to
@@ -547,7 +547,7 @@ impl NativeRenderer {
     /// # Errors
     ///
     /// [`NativeError::Device`] if the GPU rasterizer's pipelines could not
-    /// be built (once — see [`GpuRaster`]); after that, as
+    /// be built (once — see `GpuRaster`); after that, as
     /// [`present_damaged`](Self::present_damaged).
     pub fn present_planned(
         &mut self,

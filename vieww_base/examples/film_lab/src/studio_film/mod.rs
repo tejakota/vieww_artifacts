@@ -15,7 +15,7 @@
 //! | V · THE RELEASE | Z20, Z20B, Z21, Z22 | resolution — the studio becomes the mark through shared-element flight, *beta release available today* |
 //!
 //! Two scenes' kinds, the house rule: `Pure` scenes are functions of the
-//! frame's [`Ctx`]; `Studio` scenes ride on the **actual `viewwstudio`
+//! frame's `Ctx`; `Studio` scenes ride on the **actual `viewwstudio`
 //! app**, mounted once on the film's own driver and driven by this
 //! film's session script ([`script`]).
 //!
@@ -114,7 +114,7 @@ pub(crate) use crate::product_film::{
 /// its order. The film's crate count is this list's length, so the
 /// number on screen moves the day a crate lands and can never be the
 /// last cut's number again. (The census refuses to run if the film's
-/// named list, [`pf::CRATES`], has drifted from it.)
+/// named list, `pf::CRATES`, has drifted from it.)
 pub(crate) fn workspace_crates() -> Vec<&'static str> {
     const MANIFEST: &str = include_str!("../../../../Cargo.toml");
     MANIFEST

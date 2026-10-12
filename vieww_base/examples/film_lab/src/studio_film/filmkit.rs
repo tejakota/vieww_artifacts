@@ -9,7 +9,7 @@
 //! see `frame.rs` and `master.rs`.)
 //!
 //! * **The flows.** Vector graphic flows: arc-length-sampled cubics,
-//!   self-drawing strokes ([`grow_thread`]), gradient dashes flowing
+//!   self-drawing strokes (`grow_thread`), gradient dashes flowing
 //!   along a path ([`flow_thread`]), comet riders ([`rider`]), tapered
 //!   ribbons, orbiting particles, projected 3D grid floors and cube
 //!   orbits. The framework gives the shapes; this file gives them time.

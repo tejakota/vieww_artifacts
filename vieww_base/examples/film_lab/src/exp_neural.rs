@@ -111,8 +111,8 @@ impl Net {
     }
 
     /// Forward pass, exposing the hidden activations for backprop.
-    /// The output is the FULL readout Σ w3[i]·h2[i] + b3 — the first cut
-    /// read only w3[0]·h2[0] (a stray helper index), leaving the output
+    /// The output is the FULL readout `Σ w3[i]·h2[i] + b3` — the first cut
+    /// read only `w3[0]·h2[0]` (a stray helper index), leaving the output
     /// connected to one hidden unit in sixteen: the net trained to loss
     /// = ln 2 and 0.6% accuracy and the receipt printed the failure.
     fn forward(&self, x: f32, y: f32, h1: &mut [f32], h2: &mut [f32]) -> f32 {

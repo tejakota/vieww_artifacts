@@ -3,7 +3,7 @@
 //! render settings (§2.2, §2.3 L6, §2.14 L6).
 //!
 //! A [`PostStack`] is an ordered list of [`Pass`]es run over a
-//! [`Frame`](crate::render::Frame) — linear HDR colour plus view-space
+//! [`Frame`] — linear HDR colour plus view-space
 //! position and normal — producing an sRGB [`Image`]. Every pass is a
 //! readable CPU implementation:
 //!

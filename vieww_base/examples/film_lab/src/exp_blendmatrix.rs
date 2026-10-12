@@ -10,7 +10,7 @@
 //! Saturation, Colour and Luminosity take a different code path than the
 //! per-channel modes, and no scene before this had ever pushed all four
 //! (or ColourDodge, or Exclusion) through the native renderer in one
-//! frame. Sixteen [`blended_layer`] groups per frame — the layer economy
+//! frame. Sixteen `blended_layer` groups per frame — the layer economy
 //! measured at breadth, the price U-01's fix paid.
 //!
 //! The receipt prints the tour position and the group count; the audit

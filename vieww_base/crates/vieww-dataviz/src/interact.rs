@@ -5,7 +5,7 @@
 //!   [`ZoomTransform::scale_about`] zooms keeping a screen point fixed (the
 //!   wheel/pinch behaviour), [`ZoomTransform::constrain`] keeps the content
 //!   covering the viewport (`translateExtent`), and `rescale` maps a
-//!   [`Continuous`](crate::scale::Continuous) scale's domain through it.
+//!   [`Continuous`] scale's domain through it.
 //! * [`Brush`] is a 1-D or 2-D selection: start a drag on empty space to
 //!   draw one, drag inside to move it, drag an edge handle to resize it,
 //!   clamped to the extent; [`Brush::select`] filters points.

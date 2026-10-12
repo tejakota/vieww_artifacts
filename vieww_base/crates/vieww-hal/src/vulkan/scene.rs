@@ -6,7 +6,7 @@
 //! not change between frames: two render passes, three graphics pipelines,
 //! four texture resources and the descriptor sets that bind them. Per frame
 //! it uploads whichever atlases changed, writes the vertex and index buffers,
-//! records **one** command buffer for the plan's whole [`Step`](vieww_gpu::Step) program, and
+//! records **one** command buffer for the plan's whole [`Step`] program, and
 //! submits it once.
 //!
 //! ```text
@@ -647,7 +647,7 @@ impl SceneRenderer {
     /// Bring the mask texture up to `masks`, sending only the rectangles that
     /// changed when the atlas can say which ones those are.
     ///
-    /// # Why not just [`Self::upload`]
+    /// # Why not just the whole-texture upload
     ///
     /// A non-analytic shape that changes every frame — anything rotating, a
     /// morphing path — adds a new mask every frame, and a whole-texture upload

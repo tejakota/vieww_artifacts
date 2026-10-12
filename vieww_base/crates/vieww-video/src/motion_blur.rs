@@ -7,7 +7,7 @@
 //!   light, so a bright streak is as bright as it should be). A 180° shutter
 //!   at 24 fps is open for 1/48 s, centred on the frame.
 //! * [`vector_blur`] — the post-process: smear each pixel along its motion
-//!   vector (e.g. a [`FlowField`](crate::cv::FlowField)), for footage
+//!   vector (e.g. a [`FlowField`]), for footage
 //!   that was not rendered with a shutter.
 
 use vieww_foundation::Image;

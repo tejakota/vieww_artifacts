@@ -281,7 +281,7 @@ check cargo test --workspace --features vieww-paint/native
 # on every machine, every time. `ci/check/wasm-check.sh` exits 2 when the target
 # cannot be installed, which is not a failure of this stage — the audit ran.
 stage "web-sys feature audit (the half of ci/check/wasm-check.sh that needs no target)"
-check bash -c 'ci/check/wasm-check.sh || [ $? -eq 2 ]'
+check bash -c 'bash ci/check/wasm-check.sh || [ $? -eq 2 ]'
 
 # **The fixture gallery, as a gate rather than as a gallery.**
 #

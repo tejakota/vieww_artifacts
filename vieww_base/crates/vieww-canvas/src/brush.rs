@@ -15,7 +15,7 @@
 //!   and speed (fast = thin), with round caps — the calligraphic look.
 //! * [`SprayBrush`] scatters dots in a radius per sample, deterministically
 //!   seeded.
-//! * [`CircleBrush`] stamps a circle per sample.
+//! * [`circle_stamps`] stamps a circle per sample (Fabric's circle brush).
 
 use vieww_foundation::{Offset, Path};
 

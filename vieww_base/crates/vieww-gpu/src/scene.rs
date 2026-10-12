@@ -82,7 +82,7 @@ pub mod material {
     pub const IMAGE: f32 = 2.0;
     /// A per-fragment gradient: geometry in `params`, ramp row in `extra`.
     pub const GRADIENT: f32 = 3.0;
-    /// A flat colour × analytic rounded-rect coverage (see [`Vertex::shape`]).
+    /// A flat colour × analytic rounded-rect coverage (see [`Vertex::shape`](super::Vertex::shape)).
     pub const SHAPE_SOLID: f32 = 4.0;
     /// A per-fragment gradient × analytic rounded-rect coverage.
     pub const SHAPE_GRADIENT: f32 = 5.0;

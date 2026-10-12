@@ -261,7 +261,7 @@ fn grow_to(t: f64) -> Network {
 
 // ── The instruments ─────────────────────────────────────────────────────────
 
-/// How many food nodes are reachable from FOOD[0] through LIVING tubes only.
+/// How many food nodes are reachable from `FOOD[0]` through LIVING tubes only.
 fn reachable(edges: &[Edge], skip: Option<usize>) -> usize {
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); NODES];
     for (i, e) in edges.iter().enumerate() {

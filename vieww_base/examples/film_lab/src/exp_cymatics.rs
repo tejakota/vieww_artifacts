@@ -55,7 +55,7 @@ const STEPS: usize = 26;
 
 // ── The Chladni field ───────────────────────────────────────────────────────
 
-/// The blended field at plate-local (u, v) in [0,1]², between modes A and B
+/// The blended field at plate-local (u, v) in `[0,1]²`, between modes A and B
 /// by `s`. Returns a signed amplitude in roughly [-2, 2].
 #[must_use]
 fn field(u: f32, v: f32, a: (u32, u32), b: (u32, u32), s: f32) -> f32 {
@@ -86,7 +86,7 @@ fn schedule(t: f32) -> ((u32, u32), (u32, u32), f32, f32) {
 
 // ── The grains ──────────────────────────────────────────────────────────────
 
-/// One grain's seed (plate-local, in [0,1]²) and its descent result.
+/// One grain's seed (plate-local, in `[0,1]²`) and its descent result.
 struct Grain {
     // Bookkeeping from the annealing pass; the receipt reads the settled
     // state, not the seeds it fell from.
