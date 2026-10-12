@@ -205,28 +205,47 @@ swapchain image ([`App::prefer_gpu`]), and the glyph atlas evicts between frames
 with evidence in `TRACKER.md`; the full picture is
 [`docs/GPU-RENDERER-STATUS.md`](./docs/GPU-RENDERER-STATUS.md). What remains:
 
-## 2.1 A general path that changes every frame pays CPU coverage every frame
+## 2.1 A general path that changes every frame — measured; the upload was the cost, and is fixed
 
-**What.** Non-analytic shapes — rotated rects, arbitrary paths, every stroke —
-are now antialiased on the GPU with the CPU rasterizer's own coverage
-(`GpuSeam::shape_coverage`, cached in the mask atlas by content; see
-`TRACKER.md` 2026-10-11). A shape that is the same next frame costs nothing
-again. One that *changes* every frame — a morphing path, a stroke being drawn,
-anything rotating — is re-rasterised on the CPU each frame, which is the cost
-the GPU path exists to avoid. Shapes whose patch exceeds ~1.4 Mpx fall back to
-hard-edged tessellation rather than claim the atlas.
+**What.** Non-analytic shapes are antialiased on the GPU with the CPU
+rasterizer's own coverage, cached in the mask atlas by content
+(`GpuSeam::shape_coverage`; `TRACKER.md` 2026-10-11). A shape that changes
+every frame misses that cache every frame. This item asked to measure that
+before reaching for MSAA, and `vieww-gpu`'s `examples/anim_paths` now does:
 
-**Why not.** Parity first, then speed: matching the CPU's edges exactly is
-what made the census's interior verdict fall from 6 fixtures to 2, and an
-MSAA path would differ from the CPU on every edge again.
+```
+scenario (120 frames, 1366x679)   coverage/frame   upload/frame: before   after (mean)
+rotating 12-point star, r=160          0.37 ms             1.05 MB         0.26 MB
+3px stroke drawn along a wave          0.004 ms              —             0.15 MB
+rotating 600x360 rounded panel         1.3 ms              4.19 MB         1.02 MB
+all three                              1.9 ms             16.78 MB         1.91 MB
+```
 
-**Blocks.** Smooth animation of large arbitrary paths on the GPU path.
+The CPU coverage is real but bounded — ~1.3 ms for a large rotating panel —
+and does not justify an MSAA path that would differ from the CPU on every
+edge. **The upload was the cost**: the Vulkan backend re-uploaded the whole
+mask texture on every version change, and the atlas, which compacted only
+on live texels, *grew* to 4096² under churn instead of compacting. Fixed
+2026-10-12:
+- `MaskAtlas::changes_since` reports the rectangles blitted since the frame
+  began (or `Full` after a compaction, a grow, or a skipped frame), and
+  `SceneRenderer::upload_masks` copies only those, keeping the rest of the
+  texture.
+- Compaction triggers on the packing frontier (past three quarters) when at
+  least half the packed texels are dead — so a churning atlas compacts at
+  its size instead of growing, and never every frame.
 
-**Start.** Measure first — `00-curves`/`00-strokes` in the census are the
-proxies, and on lavapipe the coverage cost is invisible under the readback.
-If it matters on hardware, 4× MSAA on the tessellated material *for shapes
-that changed this frame* is the complementary path; the tessellator and
-`vulkan_mesh_smoke.rs` already exist for it.
+Held by `mask_atlas::changes_since_brings_a_texture_exactly_up_to_date`
+(replays the changes onto a model texture across compactions, grows and a
+skipped frame) and `vulkan_scene::partial_mask_uploads_match_full_uploads_frame_for_frame`
+(48 animated frames on lavapipe, each byte-identical to a fresh renderer's
+full upload). The GPU census's parity numbers are unchanged.
+
+**What remains.** Frames with a compaction still upload the whole texture
+(a compaction moves every live mask); a frame with a grow allocates a new
+one. On lavapipe the upload is a memcpy, so the real-GPU benefit — PCIe
+bytes and the submit-and-wait per upload — needs hardware to put a number
+on (§1.1).
 
 ## 2.2 Backdrop blur: GPU and CPU disagree at the layer's edge on Mesa 25.2
 

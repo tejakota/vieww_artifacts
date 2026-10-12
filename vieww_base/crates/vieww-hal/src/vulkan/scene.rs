@@ -109,6 +109,8 @@ pub struct SceneRenderer {
 
     vertices: Buffer,
     indices: Buffer,
+    /// Bytes the last [`SceneRenderer::upload_masks`] sent.
+    mask_upload_bytes: u64,
 }
 
 /// Which image a post descriptor set binds.
@@ -563,6 +565,7 @@ impl SceneRenderer {
             readback: Buffer::EMPTY,
             vertices: Buffer::EMPTY,
             indices: Buffer::EMPTY,
+            mask_upload_bytes: 0,
         };
 
         let uniform_info = [vk::DescriptorBufferInfo {
@@ -629,15 +632,7 @@ impl SceneRenderer {
             Some(images.version()),
             false,
         )?;
-        let masks = planner.mask_atlas();
-        self.upload(
-            Slot::Masks,
-            masks.texels(),
-            masks.side(),
-            masks.side(),
-            Some(masks.version()),
-            false,
-        )?;
+        self.upload_masks(planner.mask_atlas())?;
         let ramps = planner.ramp_atlas();
         self.upload(
             Slot::Ramps,
@@ -647,6 +642,141 @@ impl SceneRenderer {
             Some(ramps.version()),
             false,
         )
+    }
+
+    /// Bring the mask texture up to `masks`, sending only the rectangles that
+    /// changed when the atlas can say which ones those are.
+    ///
+    /// # Why not just [`Self::upload`]
+    ///
+    /// A non-analytic shape that changes every frame — anything rotating, a
+    /// morphing path — adds a new mask every frame, and a whole-texture upload
+    /// on every version change made each of those frames send the entire
+    /// atlas: `vieww-gpu`'s `examples/anim_paths` measured 4.2 MB a frame for
+    /// one rotating panel and 16.8 MB for three moving shapes, against masks
+    /// of a few hundred kilobytes. [`vieww_gpu::MaskAtlas::changes_since`]
+    /// answers which texels differ from the version this texture holds; the
+    /// rest of the texture is kept (the layout transition is from
+    /// `SHADER_READ_ONLY_OPTIMAL`, not `UNDEFINED`, so the driver may not
+    /// discard it). Anything it cannot vouch for is a full upload, as before.
+    ///
+    /// # Errors
+    ///
+    /// Any Vulkan call failing.
+    pub fn upload_masks(&mut self, masks: &vieww_gpu::MaskAtlas) -> Result<(), VulkanError> {
+        let held = self.texture(Slot::Masks).version;
+        let side = masks.side();
+        let same_size = {
+            let t = self.texture(Slot::Masks);
+            t.width == side && t.height == side
+        };
+        self.mask_upload_bytes = 0;
+        let rects = match masks.changes_since(held) {
+            vieww_gpu::MaskChanges::None => return Ok(()),
+            vieww_gpu::MaskChanges::Regions(rects) if same_size => rects,
+            _ => {
+                self.upload(
+                    Slot::Masks,
+                    masks.texels(),
+                    side,
+                    side,
+                    Some(masks.version()),
+                    false,
+                )?;
+                self.mask_upload_bytes = u64::from(side) * u64::from(side);
+                return Ok(());
+            }
+        };
+        let version = Some(masks.version());
+        if rects.is_empty() {
+            self.texture_mut(Slot::Masks).version = version;
+            return Ok(());
+        }
+
+        // Pack each rectangle's rows contiguously in the staging buffer, one
+        // copy region per rectangle.
+        let texels = masks.texels();
+        let mut packed = Vec::new();
+        let mut regions = Vec::with_capacity(rects.len());
+        for &[x, y, w, h] in rects {
+            regions.push(vk::BufferImageCopy {
+                buffer_offset: packed.len() as u64,
+                buffer_row_length: 0,
+                buffer_image_height: 0,
+                image_subresource: color_layers(),
+                image_offset: vk::Offset3D {
+                    x: i32::try_from(x).unwrap_or(i32::MAX),
+                    y: i32::try_from(y).unwrap_or(i32::MAX),
+                    z: 0,
+                },
+                image_extent: vk::Extent3D {
+                    width: w,
+                    height: h,
+                    depth: 1,
+                },
+            });
+            for row in y..y + h {
+                let from = (row * side + x) as usize;
+                packed.extend_from_slice(&texels[from..from + w as usize]);
+            }
+        }
+        let needed = packed.len() as u64;
+        if self.texture(Slot::Masks).staging.capacity < needed {
+            let old = std::mem::replace(&mut self.texture_mut(Slot::Masks).staging, Buffer::EMPTY);
+            unsafe { destroy_buffer(&self.device, old) };
+            let staging = allocate_buffer(
+                &self.device,
+                vk::BufferUsageFlags::TRANSFER_SRC,
+                self.host_visible_memory,
+                needed,
+            )?;
+            self.texture_mut(Slot::Masks).staging = staging;
+        }
+        write_bytes(&self.device, self.texture(Slot::Masks).staging.memory, &packed)?;
+
+        let (image, staging) = {
+            let t = self.texture(Slot::Masks);
+            (t.image, t.staging.handle)
+        };
+        self.begin_commands()?;
+        let cmd = self.command_buffer;
+        unsafe {
+            // From the layout the last upload left it in, so the texels
+            // outside `regions` are kept.
+            transition(
+                &self.device,
+                cmd,
+                image,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+            self.device.cmd_copy_buffer_to_image(
+                cmd,
+                staging,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+            );
+            transition(
+                &self.device,
+                cmd,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
+        }
+        self.submit_and_wait(None)?;
+        self.texture_mut(Slot::Masks).version = version;
+        self.mask_upload_bytes = needed;
+        Ok(())
+    }
+
+    /// How many bytes the most recent [`Self::upload_masks`] sent — the whole
+    /// texture after a full upload, the changed rectangles otherwise, zero
+    /// when nothing changed. For tests and measurement.
+    #[must_use]
+    pub const fn last_mask_upload_bytes(&self) -> u64 {
+        self.mask_upload_bytes
     }
 
     /// [`render`](Self::render), with `planner`'s atlases uploaded first — the

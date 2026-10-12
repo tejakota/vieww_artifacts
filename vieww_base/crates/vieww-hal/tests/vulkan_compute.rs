@@ -133,8 +133,11 @@ fn a_workgroup_reduction_uses_shared_memory_and_barriers() {
             if (l.x == 0u) { sums[g.x] = scratch[0]; }
         }";
     let groups = 16usize;
+    // Knuth's multiplicative hash, which is *meant* to wrap — so
+    // `wrapping_mul`: a plain `*` panics on overflow in a debug test build.
+    // The shift leaves 12 bits, so no group's sum can overflow on the GPU.
     let data: Vec<u32> = (0..groups * 256)
-        .map(|i| (i as u32 * 2_654_435_761) >> 20)
+        .map(|i| (i as u32).wrapping_mul(2_654_435_761) >> 20)
         .collect();
     let k = ComputeKernel::new(&gpu, wgsl, "reduce", 2).expect("kernel");
     let input = ComputeBuffer::from_u32(&gpu, &data).expect("in");
