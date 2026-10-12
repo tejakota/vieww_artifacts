@@ -1086,6 +1086,9 @@ struct WindowState {
     inset_watch: InsetWatch,
     log: FrameLog,
     lifecycle: Lifecycle,
+    /// Whether this window has put a frame on screen yet. See
+    /// [`WindowState::may_draw`].
+    presented: bool,
     /// What this window clears to.
     ///
     /// Per window rather than read from the config, because [`WindowSpec`](vieww_render::window::WindowSpec) lets a
@@ -1273,6 +1276,27 @@ impl WindowState {
         }
     }
 
+    /// Whether the loop may draw this window now: when it is visible, and —
+    /// whatever the compositor says about visibility — once, if it has never
+    /// put a frame on screen.
+    ///
+    /// # Why the first frame is drawn even when "hidden"
+    ///
+    /// On Wayland a toplevel does not exist on screen until its first buffer
+    /// is committed. GNOME's focus-stealing prevention can open a window that
+    /// has no activation token (anything started from a terminal, a test
+    /// harness included) *below* the focused one, and report it occluded
+    /// before it has drawn anything. Declining to draw a hidden window is
+    /// right; declining its *first* frame left it with no buffer, so nothing
+    /// could ever un-hide it: no `Occluded(false)`, no frame, for ever. That
+    /// is the shape of `tests/wait_loop.rs`' idle scenario hanging with zero
+    /// frames on a GNOME/Wayland laptop. One frame into a hidden surface is
+    /// harmless (presenting to it is legal — see [`Lifecycle::has_surface`]);
+    /// after it, hidden windows are left alone as before.
+    fn may_draw(&self) -> bool {
+        self.lifecycle.may_draw(self.presented)
+    }
+
     /// Produce a frame and put it on the screen.
     fn draw(&mut self, shared: &mut Shared) {
         // Before the hooks and before the build, for the same reason
@@ -1420,6 +1444,7 @@ impl WindowState {
                 };
                 self.log
                     .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
+                self.presented = true;
                 if presented_directly {
                     self.log.note_direct_present();
                 }
@@ -2045,6 +2070,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             inset_watch: InsetWatch::new(),
             log,
             lifecycle: Lifecycle::default(),
+            presented: false,
             background,
             display: None,
         };
@@ -2587,7 +2613,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             // `collapsible_match` is denied in this workspace. A window that may
             // not draw falls through to the catch-all below and does nothing,
             // which is what the `if` did.
-            WindowEvent::RedrawRequested if self.windows[index].lifecycle.should_draw() => {
+            WindowEvent::RedrawRequested if self.windows[index].may_draw() => {
                 let (windows, shared) = (&mut self.windows, &mut self.shared);
                 windows[index].draw(shared);
             }
@@ -2782,7 +2808,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             let window = &mut self.windows[index];
             let pending = window.driver.needs_frame();
             let requested = window.scheduler.is_frame_requested();
-            let can_draw = window.lifecycle.should_draw();
+            let can_draw = window.may_draw();
             let key = window.key;
 
             let now = self.shared.now();
