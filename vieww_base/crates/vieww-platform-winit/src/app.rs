@@ -1928,6 +1928,12 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             // and panics if it does not. So the window is born invisible and
             // revealed by the caller, once the adapter is attached.
             .with_visible(false);
+        // **Startup is traced step by step.** A gate run on a GNOME/Wayland
+        // hybrid-GPU laptop hung here — `tests/wait_loop.rs`' idle scenario
+        // printed no window event at all in 20 s while its waker thread fired
+        // on time — and an untraced startup could not say whether the window,
+        // the GPU selection or the swapchain was the step that never returned.
+        trace_line(self.shared.now(), format_args!("startup: creating window"));
         let window = Arc::new(
             event_loop
                 .create_window(attributes)
@@ -1960,8 +1966,21 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // `docs/RENDERER-MIGRATION.md`). One Vulkan device per window is
         // correct, just not `docs/AIMS.md` §B's *Cheaper* win the old vello
         // path had; a follow-up, not a defect.
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: window created ({width}x{height}); opening the GPU"),
+        );
+        let opening = Instant::now();
         let (renderer, surface) = NativeRenderer::for_window(window.as_ref(), width, height)
             .map_err(PlatformError::Gpu)?;
+        trace_line(
+            self.shared.now(),
+            format_args!(
+                "startup: GPU ready in {:?}: {}",
+                opening.elapsed(),
+                renderer.adapter_name()
+            ),
+        );
 
         Ok(NewSurface {
             window,

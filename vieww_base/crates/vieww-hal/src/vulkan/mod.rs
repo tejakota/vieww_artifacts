@@ -267,13 +267,27 @@ impl VulkanDevice {
             .ok()
             .map(|s| s.to_lowercase());
 
+        // `VIEWW_TRACE_FRAMES` — the platform layer's startup/frame trace —
+        // also names each device as it is asked whether it can serve: on a
+        // hybrid laptop, a GPU that is powered down can take its time
+        // answering a surface query, and a stalled startup should say which
+        // device it was waiting on. Read per call; this runs once per window.
+        let trace = std::env::var_os("VIEWW_TRACE_FRAMES").is_some();
         let mut best: Option<(u32, vk::PhysicalDevice, u32)> = None;
         for pd in physical_devices {
-            let Some(family) = accept(pd) else { continue };
             let props = unsafe { instance.get_physical_device_properties(pd) };
             let name = unsafe { CStr::from_ptr(props.device_name.as_ptr()) }
                 .to_string_lossy()
                 .to_lowercase();
+            if trace {
+                eprintln!("vulkan: asking {name} ({:?})", props.device_type);
+            }
+            let Some(family) = accept(pd) else {
+                if trace {
+                    eprintln!("vulkan: {name} cannot serve this request");
+                }
+                continue;
+            };
             if let Some(wanted) = wanted.as_deref() {
                 if name.contains(wanted) {
                     return Some((pd, family));

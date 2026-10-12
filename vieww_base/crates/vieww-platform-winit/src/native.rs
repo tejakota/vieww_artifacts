@@ -277,6 +277,15 @@ impl NativeRenderer {
     /// # Panics
     ///
     /// If `width` or `height` is zero.
+    /// The name of the GPU this renderer presents through, as the driver
+    /// reports it — for the startup trace and for logs, where "which of a
+    /// hybrid laptop's GPUs did it pick" is the first question.
+    #[must_use]
+    pub fn adapter_name(&self) -> String {
+        use vieww_hal::Device as _;
+        self.device.info().name
+    }
+
     pub fn for_window(
         window: &(impl raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle),
         width: u32,
