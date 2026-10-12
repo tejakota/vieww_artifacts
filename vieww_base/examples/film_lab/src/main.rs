@@ -136,6 +136,11 @@
 //! - `pidigits` — the counting axis: π banged out of two blocks
 //! - `pathtrace` — the light-transport axis: 1/√N, fitted; the furnace test
 
+// The experiments test bounds as `x < lo || x > hi`, which is false for NaN,
+// so a NaN value is never culled. `!(lo..=hi).contains(&x)` is true for NaN,
+// so the rewrite clippy suggests would change which particles are culled.
+#![allow(clippy::manual_range_contains)]
+
 mod exp_ant;
 mod exp_aurora;
 mod exp_avatar;
