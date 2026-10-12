@@ -62,7 +62,12 @@ pub(crate) fn over_layer_row(dst: &mut [Premul], src: &[Premul], alpha: f32, opa
 /// [`over_layer_row`], leaving `src` fully transparent: each source pixel is
 /// zeroed in the same pass that reads it. See
 /// `Target::composite_layer_and_clear`.
-pub(crate) fn over_layer_row_take(dst: &mut [Premul], src: &mut [Premul], alpha: f32, opaque_copy: bool) {
+pub(crate) fn over_layer_row_take(
+    dst: &mut [Premul],
+    src: &mut [Premul],
+    alpha: f32,
+    opaque_copy: bool,
+) {
     debug_assert_eq!(dst.len(), src.len());
     #[cfg(target_arch = "x86_64")]
     {
@@ -112,7 +117,12 @@ pub(crate) fn over_layer_row_scalar(
 
 /// The scalar loop `composite_flat` ran for the normal blend, verbatim.
 #[cfg_attr(target_arch = "x86_64", allow(dead_code))]
-pub(crate) fn over_flat_row_scalar(dst: &mut [Premul], mask: &[f32], color: Premul, replaces: bool) {
+pub(crate) fn over_flat_row_scalar(
+    dst: &mut [Premul],
+    mask: &[f32],
+    color: Premul,
+    replaces: bool,
+) {
     for (px, &c) in dst.iter_mut().zip(mask) {
         if c <= 0.0 {
             continue;
@@ -140,8 +150,8 @@ pub(crate) fn over_flat_row_scalar(dst: &mut [Premul], mask: &[f32], color: Prem
 mod sse2 {
     use core::arch::x86_64::{
         __m128, _mm_add_ps, _mm_and_ps, _mm_andnot_ps, _mm_castsi128_ps, _mm_cmpeq_ps,
-        _mm_cmple_ps, _mm_loadu_ps, _mm_mul_ps, _mm_or_ps, _mm_set1_epi32,
-        _mm_set1_ps, _mm_setzero_ps, _mm_shuffle_ps, _mm_storeu_ps, _mm_sub_ps,
+        _mm_cmple_ps, _mm_loadu_ps, _mm_mul_ps, _mm_or_ps, _mm_set1_epi32, _mm_set1_ps,
+        _mm_setzero_ps, _mm_shuffle_ps, _mm_storeu_ps, _mm_sub_ps,
     };
 
     use super::Premul;
@@ -183,7 +193,12 @@ mod sse2 {
     }
 
     #[target_feature(enable = "sse2")]
-    pub(super) fn over_layer_row(dst: &mut [Premul], src: &[Premul], alpha: f32, opaque_copy: bool) {
+    pub(super) fn over_layer_row(
+        dst: &mut [Premul],
+        src: &[Premul],
+        alpha: f32,
+        opaque_copy: bool,
+    ) {
         // Two loops rather than a per-pixel test of `alpha == 1.0`: the scalar
         // path skips the multiply at exactly one, and `x * 1.0` is an identity
         // anyway, so either loop gives the same bits — this one just does not
@@ -221,12 +236,21 @@ mod sse2 {
 
     #[inline]
     #[target_feature(enable = "sse2")]
-    fn layer_loop<const SCALE: bool>(dst: &mut [Premul], src: &[Premul], k: __m128, opaque_copy: bool) {
+    fn layer_loop<const SCALE: bool>(
+        dst: &mut [Premul],
+        src: &[Premul],
+        k: __m128,
+        opaque_copy: bool,
+    ) {
         let zero = _mm_setzero_ps();
         let one = _mm_set1_ps(1.0);
         let copy_ok = flag(opaque_copy);
         for (px, s) in dst.iter_mut().zip(src) {
-            let s = if SCALE { _mm_mul_ps(load(s), k) } else { load(s) };
+            let s = if SCALE {
+                _mm_mul_ps(load(s), k)
+            } else {
+                load(s)
+            };
             let a = _mm_shuffle_ps::<0xFF>(s, s);
             let d = load(px);
             // Precedence as in the scalar loop: skip, then copy, then over.
@@ -276,7 +300,13 @@ mod tests {
     /// Raw bits, except that every `NaN` is one `NaN` — see the module doc's
     /// note on `NaN` sign and payload.
     fn bits(row: &[Premul]) -> Vec<[u32; 4]> {
-        let canon = |v: f32| if v.is_nan() { f32::NAN.to_bits() } else { v.to_bits() };
+        let canon = |v: f32| {
+            if v.is_nan() {
+                f32::NAN.to_bits()
+            } else {
+                v.to_bits()
+            }
+        };
         row.iter()
             .map(|p| [canon(p.r), canon(p.g), canon(p.b), canon(p.a)])
             .collect()
@@ -317,14 +347,26 @@ mod tests {
         }
         fn premul(&mut self) -> Premul {
             let a = self.f();
-            Premul { r: self.f() * a.abs(), g: self.f() * a.abs(), b: self.f() * a.abs(), a }
+            Premul {
+                r: self.f() * a.abs(),
+                g: self.f() * a.abs(),
+                b: self.f() * a.abs(),
+                a,
+            }
         }
     }
 
     fn pixels(rng: &mut Rng, n: usize) -> Vec<Premul> {
         let mut out: Vec<Premul> = EDGES
             .iter()
-            .flat_map(|&a| EDGES.iter().map(move |&c| Premul { r: c, g: c * 0.5, b: 1.0 - c, a }))
+            .flat_map(|&a| {
+                EDGES.iter().map(move |&c| Premul {
+                    r: c,
+                    g: c * 0.5,
+                    b: 1.0 - c,
+                    a,
+                })
+            })
             .collect();
         out.extend((0..n).map(|_| rng.premul()));
         out
@@ -349,21 +391,47 @@ mod tests {
                 let (mut a, mut b) = (dst.clone(), dst.clone());
                 over_layer_row(&mut a, &src, alpha, opaque_copy);
                 over_layer_row_scalar(&mut b, &src, alpha, opaque_copy);
-                assert!(bits(&a) == bits(&b), "layer row: alpha {alpha}, opaque_copy {opaque_copy}");
+                assert!(
+                    bits(&a) == bits(&b),
+                    "layer row: alpha {alpha}, opaque_copy {opaque_copy}"
+                );
             }
         }
         let colors = [
-            Premul { r: 0.2, g: 0.4, b: 0.6, a: 1.0 },
-            Premul { r: 0.1, g: 0.05, b: 0.0, a: 0.25 },
-            Premul { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
-            Premul { r: 0.0, g: 0.0, b: 0.0, a: 0.078 },
+            Premul {
+                r: 0.2,
+                g: 0.4,
+                b: 0.6,
+                a: 1.0,
+            },
+            Premul {
+                r: 0.1,
+                g: 0.05,
+                b: 0.0,
+                a: 0.25,
+            },
+            Premul {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+                a: 1.0,
+            },
+            Premul {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.078,
+            },
         ];
         for color in colors {
             for replaces in [true, false] {
                 let (mut a, mut b) = (dst.clone(), dst.clone());
                 over_flat_row(&mut a, &mask, color, replaces);
                 over_flat_row_scalar(&mut b, &mask, color, replaces);
-                assert!(bits(&a) == bits(&b), "flat row: {color:?}, replaces {replaces}");
+                assert!(
+                    bits(&a) == bits(&b),
+                    "flat row: {color:?}, replaces {replaces}"
+                );
             }
         }
     }

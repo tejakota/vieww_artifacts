@@ -1,38 +1,48 @@
-# Remaining work (updated 2026-10-11, after the session that pushed this branch)
+# Remaining work (updated 2026-10-12)
 
 Verified state of each item is in `PENDING.md`; this is the short list.
 
-1. **Push** — done: both patches (`vieww_premium_pass.patch`,
-   `vieww-gap-closure-session.patch`) are applied on
-   `feature/vieww_code_base2` and the branch is pushed.
-2. **Re-run the full studio suite** — done: `cargo test -p viewwstudio`
-   green, 921 tests over 30 suites, on the pinned toolchain (the run needs
-   `CARGO_INCREMENTAL=0` and no debuginfo on small disks — see the session
-   worklog).
-3. **Out-of-process preview** (PENDING §3.3): the forwarding half is done
-   (keyboard/IME/scroll/hover, remote preview-state capture — commit
-   `782717a`); what remains is running `tests/remote.rs` on Windows, which
-   needs the Windows CI leg.
-4. **Metal / D3D12** (PENDING §1.2/§1.3): render paths, smoke tests and the
-   cross-platform type-check landed (commit `f695c04`); reading the first
-   macOS/Windows CI results and porting `SceneRenderer` remain CI/hardware
-   work.
-5. **GPU 3D seam** — first increment done (PENDING §1.7): `GpuRenderer`
-   behind the `(scene, camera) -> RGBA8` contract, unlit forward pass on
-   Vulkan, parity suite `tests/gpu_unlit.rs` green on lavapipe and wired
-   into the `framework-checks` workflow (whose yml is in
-   `.github/workflows-pending/` until a workflow-scoped token places it).
-   Next: lighting (Lambert + one
-   shadow map), then textures, then the transparent pass.
-6. **SIMD compositing** for the two over-budget fixtures (PENDING §4.1) —
-   measure with callgrind, not wall clock.
-7. **Animated general paths on GPU** (PENDING §2.1 residual) — measure, then
-   MSAA for shapes that changed this frame if it matters.
-8. **Hardware runs**: real GPU (§1.1), iOS simulator/device (§1.4), Android
-   device (§1.5), Firefox/WebKit web parity (§1.6), a two-monitor refresh-rate
-   check (§3.2).
-9. **Coverage gate** (§5.1) — closed: the `framework-checks` workflow's
-   coverage job runs `ci/check/coverage.sh` as a hard gate (no
-   `continue-on-error`; the script fails below the 70% floor) — live once
-   the workflow is placed from `.github/workflows-pending/` (see its
-   README: the push token lacks `workflow` scope).
+## Done on 2026-10-12 (this session's commits, on top of `8fae3b4`)
+
+- **Branch verified**: studio suite 921/921, remote-preview tests, vieww-3d
+  GPU tests, workspace clippy — on Rust 1.97 (the 1.98.1 pin could not be
+  downloaded in the session); `film_lab` given a reasoned
+  `manual_range_contains` allow (the rewrite changes NaN behaviour).
+- **SIMD compositing** (PENDING §4.1, narrowed): SSE2 output conversion and
+  compositing rows, the layer clear fused into the composite,
+  `-C target-cpu=x86-64-v2` restored. Gallery 232.7 → 164.6 ms, every output
+  byte-identical; `layers-nested` ~28.5 → ~20–22 ms, `editor-glass`
+  ~27 → ~21 ms — still over 16.7 ms.
+- **Animated GPU paths** (PENDING §2.1, measured and fixed): CPU coverage is
+  bounded (~1.3 ms for a large rotating panel), so no MSAA; the cost was
+  whole-texture mask uploads (up to 16.8 MB/frame). Now partial uploads and a
+  churn-aware compaction: 1.9 MB/frame mean for three moving shapes.
+- **GPU 3D lit pass** (PENDING §1.7): Lambert under ambient, hemisphere and
+  directional lights, with the CPU's shadow map, back faces culled/flipped as
+  on the CPU — held to the CPU oracle on lavapipe.
+
+## Open
+
+1. **Push** — the session's GitHub access was not linked, so these commits
+   arrive as `vieww-session-2026-10-12.patch` (`git am` on
+   `feature/vieww_code_base2`).
+2. **Place the workflows** (`.github/workflows-pending/restore.sh`) — needs a
+   `workflow`-scoped token. Note: the Vulkan job will be red on the known
+   backdrop-blur edge (PENDING §2.2) until that edge mode is decided.
+3. **Backdrop-blur edge mode** (PENDING §2.2) — a design decision (CSS
+   duplicates edge pixels), then align `reference.rs` and the Vulkan
+   `PushLayer` branch.
+4. **The two over-budget fixtures** (PENDING §4.1) — ~4–5 ms left, spread
+   over blur, shadows, rasterisation and memory traffic. Candidates: SSE2
+   blur; narrower layer storage (changes bytes — needs a tolerance decision);
+   AVX2 behind runtime detection. Time anything that moves memory.
+5. **GPU 3D next increments** (PENDING §1.7): point and spot lights, Phong,
+   textures, the transparent pass; a cached pipeline instead of per-render
+   bring-up; a GPU shadow map only if measured to matter.
+6. **Windows / macOS / hardware** — `tests/remote.rs` on Windows (§3.3),
+   first Metal/D3D12 CI results and the `SceneRenderer` port (§1.2/§1.3), a
+   real GPU (§1.1, including what partial mask uploads save over PCIe), iOS
+   and Android devices (§1.4/§1.5), Firefox/WebKit parity (§1.6), a
+   two-monitor refresh-rate check (§3.2).
+7. **Toolchain** — re-run `ci/check/checks.sh --quick` on the pinned 1.98.1
+   where it can be downloaded; this session's clippy runs were on 1.97.

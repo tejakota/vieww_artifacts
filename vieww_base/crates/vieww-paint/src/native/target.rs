@@ -716,7 +716,17 @@ impl Target {
 
         let normal = mode.is_normal() && matches!(pipeline, ColorPipeline::GammaSpace);
         let opaque_copy = normal && alpha == 1.0;
-        self.composite_layer_rows(other, (x_start, y_start, x_end, y_end), ox, oy, mode, alpha, pipeline, normal, opaque_copy);
+        self.composite_layer_rows(
+            other,
+            (x_start, y_start, x_end, y_end),
+            ox,
+            oy,
+            mode,
+            alpha,
+            pipeline,
+            normal,
+            opaque_copy,
+        );
     }
 
     /// The part of `other` (in its own coordinates, half-open) that
@@ -787,8 +797,8 @@ impl Target {
             let src_row = y as usize * ow;
             let dst_row = (y + oy) as usize * sw;
             let src = &mut other.pixels[src_row + x_start as usize..src_row + x_end as usize];
-            let dst =
-                &mut self.pixels[dst_row + (x_start + ox) as usize..dst_row + (x_end + ox) as usize];
+            let dst = &mut self.pixels
+                [dst_row + (x_start + ox) as usize..dst_row + (x_end + ox) as usize];
             super::simd::over_layer_row_take(dst, src, alpha, opaque_copy);
         }
         other.ink = None;
@@ -985,14 +995,26 @@ mod tests {
                     layer.set(x, y, tint(x as u32, y as u32));
                 }
             }
-            let ground = Premul { r: 0.2, g: 0.3, b: 0.4, a: 1.0 };
+            let ground = Premul {
+                r: 0.2,
+                g: 0.3,
+                b: 0.4,
+                a: 1.0,
+            };
             let mut expected = Target::filled(40, 30, ground);
             let mut actual = expected.clone();
             expected.set_write_mask(mask);
             actual.set_write_mask(mask);
             for alpha in [1.0, 0.97] {
                 let mut fused = layer.clone();
-                expected.composite_layer(&layer, 7, 5, BlendMode::Normal, alpha, ColorPipeline::GammaSpace);
+                expected.composite_layer(
+                    &layer,
+                    7,
+                    5,
+                    BlendMode::Normal,
+                    alpha,
+                    ColorPipeline::GammaSpace,
+                );
                 actual.composite_layer_and_clear(
                     &mut fused,
                     7,
@@ -1001,7 +1023,10 @@ mod tests {
                     alpha,
                     ColorPipeline::GammaSpace,
                 );
-                assert_eq!(actual.pixels, expected.pixels, "mask {mask:?}, alpha {alpha}");
+                assert_eq!(
+                    actual.pixels, expected.pixels,
+                    "mask {mask:?}, alpha {alpha}"
+                );
                 assert_eq!(actual.ink(), expected.ink());
                 // Whichever path ran, the buffer is transparent once the
                 // pool's `clear` has had its turn.

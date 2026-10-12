@@ -732,7 +732,11 @@ impl SceneRenderer {
             )?;
             self.texture_mut(Slot::Masks).staging = staging;
         }
-        write_bytes(&self.device, self.texture(Slot::Masks).staging.memory, &packed)?;
+        write_bytes(
+            &self.device,
+            self.texture(Slot::Masks).staging.memory,
+            &packed,
+        )?;
 
         let (image, staging) = {
             let t = self.texture(Slot::Masks);

@@ -180,7 +180,9 @@ impl MaskAtlas {
     pub fn changes_since(&self, held: Option<u64>) -> MaskChanges<'_> {
         match held {
             Some(v) if v == self.version => MaskChanges::None,
-            Some(v) if v == self.dirty_base && !self.dirty_full => MaskChanges::Regions(&self.dirty),
+            Some(v) if v == self.dirty_base && !self.dirty_full => {
+                MaskChanges::Regions(&self.dirty)
+            }
             _ => MaskChanges::Full,
         }
     }
@@ -480,11 +482,16 @@ mod tests {
                     full_uploads += 1;
                 }
                 MaskChanges::Regions(rects) => {
-                    assert_eq!(texture.len(), atlas.texels().len(), "a region upload never resizes");
+                    assert_eq!(
+                        texture.len(),
+                        atlas.texels().len(),
+                        "a region upload never resizes"
+                    );
                     for &[x, y, w, h] in rects {
                         for row in y..y + h {
                             let i = (row * atlas.side() + x) as usize;
-                            texture[i..i + w as usize].copy_from_slice(&atlas.texels()[i..i + w as usize]);
+                            texture[i..i + w as usize]
+                                .copy_from_slice(&atlas.texels()[i..i + w as usize]);
                             region_bytes += u64::from(w);
                         }
                     }
@@ -514,10 +521,19 @@ mod tests {
                 continue; // the backend misses a frame
             }
             sync(&atlas, &mut texture, &mut held);
-            assert!(texture == atlas.texels(), "frame {frame}: texture differs from atlas");
+            assert!(
+                texture == atlas.texels(),
+                "frame {frame}: texture differs from atlas"
+            );
         }
-        assert!(compactions >= 3, "the test must cross compactions: {compactions}");
-        assert!(full_uploads < 80, "full uploads should be the exception: {full_uploads}");
+        assert!(
+            compactions >= 3,
+            "the test must cross compactions: {compactions}"
+        );
+        assert!(
+            full_uploads < 80,
+            "full uploads should be the exception: {full_uploads}"
+        );
         assert!(region_bytes > 0, "region uploads should be the rule");
     }
 

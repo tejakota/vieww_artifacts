@@ -85,7 +85,8 @@ fn scene(shapes: &[Shape], t: f32) -> Scene {
             Shape::Star => scene.push_command(Command::FillPath {
                 path: star(12, 160.0, 70.0),
                 paint: Paint::solid(Color::rgba(200, 80, 40, 255)),
-                transform: Transform::rotate(t).then(Transform::translate(Offset::new(300.0, 340.0))),
+                transform: Transform::rotate(t)
+                    .then(Transform::translate(Offset::new(300.0, 340.0))),
                 clip: Clip::NONE,
             }),
             Shape::Stroke => scene.push_command(Command::StrokePath {
@@ -98,7 +99,8 @@ fn scene(shapes: &[Shape], t: f32) -> Scene {
             Shape::Panel => scene.push_command(Command::FillPath {
                 path: Path::rounded_rect(Rect::new(-300.0, -180.0, 300.0, 180.0), 24.0),
                 paint: Paint::solid(Color::rgba(40, 140, 90, 230)),
-                transform: Transform::rotate(t * 0.3).then(Transform::translate(Offset::new(900.0, 340.0))),
+                transform: Transform::rotate(t * 0.3)
+                    .then(Transform::translate(Offset::new(900.0, 340.0))),
                 clip: Clip::NONE,
             }),
         }
@@ -128,7 +130,11 @@ fn run(shapes: &[Shape], animate: bool) -> Run {
     let mut held: Option<u64> = None;
     let mut fulls = 0;
     for frame in 0..WARMUP + FRAMES {
-        let t = if animate { frame as f32 * (1.0 / 60.0) * 1.7 } else { 0.4 };
+        let t = if animate {
+            frame as f32 * (1.0 / 60.0) * 1.7
+        } else {
+            0.4
+        };
         let scene = scene(shapes, t);
         let start = Instant::now();
         let plan = planner.plan(&scene, W, H);
@@ -144,9 +150,10 @@ fn run(shapes: &[Shape], animate: bool) -> Run {
                 }
                 full
             }
-            MaskChanges::Regions(rects) => {
-                rects.iter().map(|[_, _, w, h]| u64::from(*w) * u64::from(*h)).sum()
-            }
+            MaskChanges::Regions(rects) => rects
+                .iter()
+                .map(|[_, _, w, h]| u64::from(*w) * u64::from(*h))
+                .sum(),
         };
         held = Some(atlas.version());
         if frame >= WARMUP {

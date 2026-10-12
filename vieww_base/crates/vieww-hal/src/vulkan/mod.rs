@@ -1605,14 +1605,14 @@ impl VulkanDevice {
         let framebuffer = unsafe { device.create_framebuffer(&fb_info, None) }?;
 
         // --- vertex (one interleaved binding), index, uniform, storage -------
-        let (vertex_buffer, vertex_memory) = self
-            .create_host_visible_buffer(vk::BufferUsageFlags::VERTEX_BUFFER, pass.vertices)?;
+        let (vertex_buffer, vertex_memory) =
+            self.create_host_visible_buffer(vk::BufferUsageFlags::VERTEX_BUFFER, pass.vertices)?;
         let (index_buffer, index_memory) = self.create_host_visible_buffer(
             vk::BufferUsageFlags::INDEX_BUFFER,
             bytemuck_cast_u32(indices),
         )?;
-        let (ubo, ubo_memory) = self
-            .create_host_visible_buffer(vk::BufferUsageFlags::UNIFORM_BUFFER, pass.uniforms)?;
+        let (ubo, ubo_memory) =
+            self.create_host_visible_buffer(vk::BufferUsageFlags::UNIFORM_BUFFER, pass.uniforms)?;
         // Bytes, not elements — a float count here hid three quarters of the
         // view-projection matrix from the shader once (observed on lavapipe
         // as every column but the first reading as zero).
@@ -1623,8 +1623,8 @@ impl VulkanDevice {
             Some(bytes) if !bytes.is_empty() => bytes,
             _ => &[0; 4],
         };
-        let (ssbo, ssbo_memory) = self
-            .create_host_visible_buffer(vk::BufferUsageFlags::STORAGE_BUFFER, storage_bytes)?;
+        let (ssbo, ssbo_memory) =
+            self.create_host_visible_buffer(vk::BufferUsageFlags::STORAGE_BUFFER, storage_bytes)?;
         let ssbo_size = storage_bytes.len() as u64;
         let with_storage = pass.storage.is_some();
 
@@ -1694,16 +1694,8 @@ impl VulkanDevice {
         unsafe { device.update_descriptor_sets(&writes, &[]) };
 
         // --- shaders + pipeline --------------------------------------------------
-        let vs_spirv = translate_wgsl_to_spirv(
-            pass.wgsl,
-            "vs_main",
-            naga::ShaderStage::Vertex,
-        )?;
-        let fs_spirv = translate_wgsl_to_spirv(
-            pass.wgsl,
-            "fs_main",
-            naga::ShaderStage::Fragment,
-        )?;
+        let vs_spirv = translate_wgsl_to_spirv(pass.wgsl, "vs_main", naga::ShaderStage::Vertex)?;
+        let fs_spirv = translate_wgsl_to_spirv(pass.wgsl, "fs_main", naga::ShaderStage::Fragment)?;
         let vs_module = unsafe {
             device
                 .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&vs_spirv), None)
@@ -1735,12 +1727,14 @@ impl VulkanDevice {
         let attr_desc: Vec<vk::VertexInputAttributeDescription> = pass
             .attributes
             .iter()
-            .map(|&(location, format, offset)| vk::VertexInputAttributeDescription {
-                location,
-                binding: 0,
-                format,
-                offset,
-            })
+            .map(
+                |&(location, format, offset)| vk::VertexInputAttributeDescription {
+                    location,
+                    binding: 0,
+                    format,
+                    offset,
+                },
+            )
             .collect();
         let vertex_input = vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_binding_descriptions(&binding_desc)

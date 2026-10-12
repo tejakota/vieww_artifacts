@@ -201,14 +201,28 @@ impl GpuRenderer {
                     mesh,
                     material,
                     bounds,
-                } => push(&mut items, world, mesh.clone(), material, *bounds, &mut stats),
+                } => push(
+                    &mut items,
+                    world,
+                    mesh.clone(),
+                    material,
+                    *bounds,
+                    &mut stats,
+                ),
                 Content::Instanced {
                     mesh,
                     material,
                     bounds,
                     instances,
                 } => instances.iter().all(|inst| {
-                    push(&mut items, world * *inst, mesh.clone(), material, *bounds, &mut stats)
+                    push(
+                        &mut items,
+                        world * *inst,
+                        mesh.clone(),
+                        material,
+                        *bounds,
+                        &mut stats,
+                    )
                 }),
                 Content::Lod {
                     levels,
@@ -221,9 +235,14 @@ impl GpuRenderer {
                         .find(|(max, _)| d <= *max)
                         .or_else(|| levels.last())
                     {
-                        Some((_, mesh)) => {
-                            push(&mut items, world, mesh.clone(), material, *bounds, &mut stats)
-                        }
+                        Some((_, mesh)) => push(
+                            &mut items,
+                            world,
+                            mesh.clone(),
+                            material,
+                            *bounds,
+                            &mut stats,
+                        ),
                         None => true,
                     }
                 }
@@ -238,7 +257,14 @@ impl GpuRenderer {
                     let mesh = crate::skin::deform(skin, &jm, morph_weights);
                     stats.skinned_vertices += mesh.positions.len();
                     let bounds = crate::geometry::bounding_sphere(&mesh);
-                    push(&mut items, world, Arc::new(mesh), material, bounds, &mut stats)
+                    push(
+                        &mut items,
+                        world,
+                        Arc::new(mesh),
+                        material,
+                        bounds,
+                        &mut stats,
+                    )
                 }
                 Content::Clustered {
                     lods,
@@ -258,7 +284,14 @@ impl GpuRenderer {
                     stats.clusters += cs.clusters;
                     stats.clusters_culled += cs.frustum_culled + cs.cone_culled;
                     mesh.indices.is_empty()
-                        || push(&mut items, world, Arc::new(mesh), material, *bounds, &mut stats)
+                        || push(
+                            &mut items,
+                            world,
+                            Arc::new(mesh),
+                            material,
+                            *bounds,
+                            &mut stats,
+                        )
                 }
                 // Point clouds are a splat pass the GPU path has no drawing
                 // of yet; lights and empty nodes draw nothing.
@@ -271,7 +304,9 @@ impl GpuRenderer {
         }
 
         let bg = [scene.background.r, scene.background.g, scene.background.b];
-        let lit = items.iter().any(|it| it.material.shading == Shading::Lambert);
+        let lit = items
+            .iter()
+            .any(|it| it.material.shading == Shading::Lambert);
         let result = if lit {
             match self.lit_frame(gpu, scene, camera, &vp, &view, &items, &mut stats) {
                 Some(result) => result,
@@ -311,7 +346,10 @@ impl GpuRenderer {
             }
             // The CPU's Basic output is `albedo + emissive`, exposure-free.
             let col = it.material.color.add(it.material.emissive);
-            colors.extend(std::iter::repeat_n([col.r, col.g, col.b], it.mesh.positions.len()));
+            colors.extend(std::iter::repeat_n(
+                [col.r, col.g, col.b],
+                it.mesh.positions.len(),
+            ));
             indices.extend(it.mesh.indices.iter().map(|i| base as u32 + *i));
         }
         // Mat4 is column-major (`m[col][row]`), which flattens to exactly the
@@ -356,7 +394,12 @@ impl GpuRenderer {
         let flat = |m: &Mat4| -> [f32; 16] { std::array::from_fn(|i| m.m[i / 4][i % 4]) };
         u.extend_from_slice(&flat(vp));
         u.extend_from_slice(&flat(&shadow.as_ref().map_or(Mat4::IDENTITY, |s| s.vp)));
-        u.extend_from_slice(&[camera.position.x, camera.position.y, camera.position.z, cpu.exposure]);
+        u.extend_from_slice(&[
+            camera.position.x,
+            camera.position.y,
+            camera.position.z,
+            cpu.exposure,
+        ]);
         u.extend_from_slice(&[
             lights.len() as f32,
             shadow.as_ref().map_or(0.0, |s| s.size as f32),
@@ -366,9 +409,9 @@ impl GpuRenderer {
         for l in &lights {
             let d = l.direction;
             let packed = match l.light {
-                Light::Ambient { color, intensity } => {
-                    [color.r, color.g, color.b, 0.0, 0.0, 0.0, 0.0, intensity, 0.0, 0.0, 0.0, 0.0]
-                }
+                Light::Ambient { color, intensity } => [
+                    color.r, color.g, color.b, 0.0, 0.0, 0.0, 0.0, intensity, 0.0, 0.0, 0.0, 0.0,
+                ],
                 Light::Hemisphere {
                     sky,
                     ground,
@@ -424,7 +467,11 @@ impl GpuRenderer {
         for it in items {
             let mesh = &it.mesh;
             let mat = &it.material;
-            let lambert = if mat.shading == Shading::Lambert { 1.0 } else { 0.0 };
+            let lambert = if mat.shading == Shading::Lambert {
+                1.0
+            } else {
+                0.0
+            };
             let receive = if mat.receive_shadow { 1.0 } else { 0.0 };
             let normal_m = it.model.inverse().map_or(it.model, |m| m.transpose());
             let has_n = mesh.has_normals();
@@ -458,7 +505,11 @@ impl GpuRenderer {
                 }
                 let sign = if back { -1.0 } else { 1.0 };
                 for i in [a, b, c] {
-                    let n = if mat.flat || !has_n { face_n } else { normals[i] } * sign;
+                    let n = if mat.flat || !has_n {
+                        face_n
+                    } else {
+                        normals[i]
+                    } * sign;
                     let p = world[i];
                     vertices.push([
                         p.x,

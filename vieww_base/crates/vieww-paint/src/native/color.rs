@@ -246,9 +246,9 @@ pub(crate) fn write_straight_u8(pixels: &[Premul], out: &mut [u8]) {
 mod sse2 {
     use core::arch::x86_64::{
         __m128, __m128i, _mm_add_ps, _mm_and_ps, _mm_andnot_ps, _mm_castsi128_ps, _mm_cmpgt_ps,
-        _mm_cvttps_epi32, _mm_div_ps, _mm_loadu_ps, _mm_max_ps, _mm_min_ps, _mm_mul_ps,
-        _mm_or_ps, _mm_packs_epi32, _mm_packus_epi16, _mm_set1_ps, _mm_set_epi32,
-        _mm_setzero_ps, _mm_shuffle_ps, _mm_storeu_si128,
+        _mm_cvttps_epi32, _mm_div_ps, _mm_loadu_ps, _mm_max_ps, _mm_min_ps, _mm_mul_ps, _mm_or_ps,
+        _mm_packs_epi32, _mm_packus_epi16, _mm_set1_ps, _mm_set_epi32, _mm_setzero_ps,
+        _mm_shuffle_ps, _mm_storeu_si128,
     };
 
     use super::Premul;
@@ -281,8 +281,7 @@ mod sse2 {
         for (group, slot) in groups.iter().zip(slots) {
             // SAFETY: `Premul` is `repr(C)` with four `f32` fields, so each is
             // 16 readable bytes; `loadu` has no alignment requirement.
-            let [p0, p1, p2, p3] =
-                group
+            let [p0, p1, p2, p3] = group
                 .each_ref()
                 .map(|p| unsafe { _mm_loadu_ps(std::ptr::from_ref(p).cast::<f32>()) });
             let lo = _mm_packs_epi32(convert(p0), convert(p1));
@@ -589,7 +588,12 @@ mod tests {
                 for rotate in 0..3 {
                     let mut ch = [c, c * 0.5, 1.0 - c];
                     ch.rotate_left(rotate);
-                    pixels.push(Premul { r: ch[0], g: ch[1], b: ch[2], a });
+                    pixels.push(Premul {
+                        r: ch[0],
+                        g: ch[1],
+                        b: ch[2],
+                        a,
+                    });
                 }
             }
         }
@@ -604,9 +608,21 @@ mod tests {
         };
         for _ in 0..2_000_000 {
             let a = next();
-            pixels.push(Premul { r: next() * a, g: next() * a, b: next() * a, a });
+            pixels.push(Premul {
+                r: next() * a,
+                g: next() * a,
+                b: next() * a,
+                a,
+            });
         }
-        for len in [pixels.len(), pixels.len() - 1, pixels.len() - 2, pixels.len() - 3, 3, 0] {
+        for len in [
+            pixels.len(),
+            pixels.len() - 1,
+            pixels.len() - 2,
+            pixels.len() - 3,
+            3,
+            0,
+        ] {
             let run = &pixels[..len];
             let mut simd = vec![0u8; len * 4];
             write_straight_u8(run, &mut simd);

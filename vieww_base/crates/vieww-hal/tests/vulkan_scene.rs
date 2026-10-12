@@ -785,7 +785,8 @@ fn partial_mask_uploads_match_full_uploads_frame_for_frame() {
         scene.push_command(Command::FillPath {
             path: Path::rounded_rect(Rect::new(-28.0, -18.0, 28.0, 18.0), 7.0),
             paint: Paint::solid(Color::rgba(30, 120, 80, 220)),
-            transform: Transform::rotate(t * 0.7).then(Transform::translate(Offset::new(115.0, 60.0))),
+            transform: Transform::rotate(t * 0.7)
+                .then(Transform::translate(Offset::new(115.0, 60.0))),
             clip: Clip::NONE,
         });
         // A steady shape: its mask must survive every partial upload.
@@ -817,10 +818,19 @@ fn partial_mask_uploads_match_full_uploads_frame_for_frame() {
             .render_planned(&planner, &plan, W, H, base)
             .expect("render should succeed");
         drop(fresh);
-        assert!(got == want, "frame {frame}: partial-upload pixels differ from a full upload");
+        assert!(
+            got == want,
+            "frame {frame}: partial-upload pixels differ from a full upload"
+        );
     }
-    assert!(partial >= 10, "partial uploads should be common: {partial} partial, {full} full");
-    assert!(full >= 2, "the run should cross compactions and the skipped frame: {full} full");
+    assert!(
+        partial >= 10,
+        "partial uploads should be common: {partial} partial, {full} full"
+    );
+    assert!(
+        full >= 2,
+        "the run should cross compactions and the skipped frame: {full} full"
+    );
     assert!(
         sent * 2 < whole,
         "partial uploads should send well under half the bytes of whole-texture ones: {sent} vs {whole}"

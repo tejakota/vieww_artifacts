@@ -90,7 +90,10 @@ fn assert_parity(gpu: &GpuRenderer, scene: &mut Scene, camera: &Camera, what: &s
     let cpu = on_cpu(scene, camera);
     if let Some(dir) = std::env::var_os("VIEWW_GPU_LIT_DUMP") {
         let dir = std::path::PathBuf::from(dir);
-        let name: String = what.chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect();
+        let name: String = what
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect();
         dump(&dir.join(format!("{name}-gpu.ppm")), image.pixels());
         dump(&dir.join(format!("{name}-cpu.ppm")), &cpu);
     }
@@ -114,7 +117,13 @@ fn light(scene: &mut Scene, name: &str, l: Light) {
     scene.add(Node::new(name, Content::Light(l)), None);
 }
 
-fn mesh(scene: &mut Scene, name: &str, m: vieww_mesh::Mesh, mat: Material, at: Vec3) -> vieww_3d::scene::NodeId {
+fn mesh(
+    scene: &mut Scene,
+    name: &str,
+    m: vieww_mesh::Mesh,
+    mat: Material,
+    at: Vec3,
+) -> vieww_3d::scene::NodeId {
     let mut node = Node::new(name, Content::mesh(m, mat));
     node.position = at;
     scene.add(node, None)
@@ -126,7 +135,14 @@ fn mesh(scene: &mut Scene, name: &str, m: vieww_mesh::Mesh, mat: Material, at: V
 fn lit_scene() -> (Scene, Camera) {
     let mut scene = Scene::new();
     scene.background = Rgb::new(0.02, 0.03, 0.05);
-    light(&mut scene, "amb", Light::Ambient { color: Rgb::WHITE, intensity: 0.08 });
+    light(
+        &mut scene,
+        "amb",
+        Light::Ambient {
+            color: Rgb::WHITE,
+            intensity: 0.08,
+        },
+    );
     light(
         &mut scene,
         "hemi",
@@ -193,10 +209,15 @@ fn lit_scene() -> (Scene, Camera) {
 #[test]
 #[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
 fn lambert_under_ambient_hemisphere_and_directional_matches_the_cpu() {
-    let Some((_lock, gpu)) = try_gpu() else { return };
+    let Some((_lock, gpu)) = try_gpu() else {
+        return;
+    };
     let (mut scene, camera) = lit_scene();
     let cpu = on_cpu(&mut scene, &camera);
-    assert!(lit_pixels(&cpu, [cpu[0], cpu[1], cpu[2]]) > 3000, "the scene must draw");
+    assert!(
+        lit_pixels(&cpu, [cpu[0], cpu[1], cpu[2]]) > 3000,
+        "the scene must draw"
+    );
     assert_parity(&gpu, &mut scene, &camera, "lit scene");
 }
 
@@ -205,10 +226,19 @@ fn lambert_under_ambient_hemisphere_and_directional_matches_the_cpu() {
 #[test]
 #[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
 fn a_shadow_falls_where_the_cpu_says() {
-    let Some((_lock, gpu)) = try_gpu() else { return };
+    let Some((_lock, gpu)) = try_gpu() else {
+        return;
+    };
     let mut scene = Scene::new();
     scene.background = Rgb::BLACK;
-    light(&mut scene, "amb", Light::Ambient { color: Rgb::WHITE, intensity: 0.15 });
+    light(
+        &mut scene,
+        "amb",
+        Light::Ambient {
+            color: Rgb::WHITE,
+            intensity: 0.15,
+        },
+    );
     light(
         &mut scene,
         "sun",
@@ -263,7 +293,9 @@ fn a_shadow_falls_where_the_cpu_says() {
 #[test]
 #[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
 fn back_faces_are_culled_or_flipped_as_on_the_cpu() {
-    let Some((_lock, gpu)) = try_gpu() else { return };
+    let Some((_lock, gpu)) = try_gpu() else {
+        return;
+    };
     for double in [false, true] {
         let mut scene = Scene::new();
         scene.background = Rgb::new(0.1, 0.1, 0.1);
@@ -280,17 +312,35 @@ fn back_faces_are_culled_or_flipped_as_on_the_cpu() {
         );
         let mat = Material::lambert(Color::rgb(90, 140, 230));
         let mat = if double { mat.double_sided() } else { mat };
-        mesh(&mut scene, "plane", geometry::plane(2.0, 1.5, 4, 3), mat, Vec3::ZERO);
+        mesh(
+            &mut scene,
+            "plane",
+            geometry::plane(2.0, 1.5, 4, 3),
+            mat,
+            Vec3::ZERO,
+        );
         // Behind the plane (it faces +z), looking at its back.
         let camera = Camera::perspective(Vec3::new(0.4, 0.3, -3.0), Vec3::ZERO, 0.9);
         let cpu = on_cpu(&mut scene, &camera);
         let drawn = lit_pixels(&cpu, [cpu[0], cpu[1], cpu[2]]);
         if double {
-            assert!(drawn > 2000, "double-sided: the back face is drawn ({drawn})");
+            assert!(
+                drawn > 2000,
+                "double-sided: the back face is drawn ({drawn})"
+            );
         } else {
             assert_eq!(drawn, 0, "single-sided: the back face is culled");
         }
-        assert_parity(&gpu, &mut scene, &camera, if double { "double-sided" } else { "single-sided" });
+        assert_parity(
+            &gpu,
+            &mut scene,
+            &camera,
+            if double {
+                "double-sided"
+            } else {
+                "single-sided"
+            },
+        );
     }
 }
 
@@ -300,7 +350,9 @@ fn back_faces_are_culled_or_flipped_as_on_the_cpu() {
 #[test]
 #[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
 fn a_point_light_falls_back_to_the_cpu_exactly() {
-    let Some((_lock, gpu)) = try_gpu() else { return };
+    let Some((_lock, gpu)) = try_gpu() else {
+        return;
+    };
     let (mut scene, camera) = lit_scene();
     let mut lamp = Node::new(
         "lamp",
