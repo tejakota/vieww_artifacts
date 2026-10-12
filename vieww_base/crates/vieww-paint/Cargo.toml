@@ -51,7 +51,7 @@ gif = "0.14"
 default = []
 native = ["dep:ttf-parser", "dep:png", "dep:skrifa"]
 
-# **The four test targets that need the renderer, and the examples that draw
+# **The five test targets that need the renderer, and the examples that draw
 # with it, declared as needing it.**
 #
 # Without these, `cargo test -p vieww-paint` — the command this crate's own
@@ -78,6 +78,10 @@ required-features = ["native"]
 
 [[test]]
 name = "linear_light_pipeline"
+required-features = ["native"]
+
+[[test]]
+name = "lcd_subpixel"
 required-features = ["native"]
 
 [[example]]
