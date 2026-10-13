@@ -98,6 +98,47 @@ pub const EMBEDDED_FACES: [&[u8]; 6] = [
     EMBEDDED_CJK,
 ];
 
+/// The embedded faces, then every system face — the database
+/// [`FontStore::with_system_fallback`] wraps. Embedded first, so a tie
+/// resolves to the deterministic face. The expensive part: see that method's
+/// "It blocks" section.
+fn system_fallback_database() -> fontdb::Database {
+    let mut db = fontdb::Database::new();
+    register_embedded(&mut db);
+    db.load_system_fonts();
+    db.set_sans_serif_family(EMBEDDED_FAMILY);
+    db.set_monospace_family(EMBEDDED_MONO_FAMILY);
+    db
+}
+
+/// A system font scan in progress — see
+/// [`FontStore::system_fallback_in_background`].
+///
+/// The scanned database is what crosses the thread boundary; the store
+/// itself is built by [`try_take`](Self::try_take) on the thread that will own
+/// it, because a `FontStore` keeps thread-local caches and is not `Send`.
+#[derive(Debug)]
+pub struct PendingSystemFonts {
+    rx: std::sync::mpsc::Receiver<fontdb::Database>,
+}
+
+impl PendingSystemFonts {
+    /// The finished store, once the scan is done; `None` until then. Yields
+    /// it once — later calls return `None`.
+    #[must_use]
+    pub fn try_take(&self) -> Option<FontStore> {
+        self.rx.try_recv().ok().map(FontStore::from_system_database)
+    }
+
+    /// Wait for the scan and return the store — for callers that have
+    /// nothing to draw meanwhile (and for tests). `None` if the scan thread
+    /// died without producing one.
+    #[must_use]
+    pub fn wait(self) -> Option<FontStore> {
+        self.rx.recv().ok().map(FontStore::from_system_database)
+    }
+}
+
 /// Load the embedded fallback faces into `db`, asserting that at least one
 /// of them actually parsed (todo-upgrades U-09).
 ///
@@ -215,15 +256,69 @@ impl FontStore {
     /// rather than the screen going quietly blank. Shipping the coverage is an
     /// application's decision — a 16MB CJK face is not something a UI framework
     /// should put in every binary — and `load` is how it adds one.
+    ///
+    /// # It blocks on a full system font scan
+    ///
+    /// Every face fontconfig lists is opened and its tables read. Warm, that is
+    /// a few milliseconds; on a cold disk cache it is a read per font file, and
+    /// a desktop with a few thousand of them on a slow disk can spend tens of
+    /// seconds here. An application with a window should not wait on it before
+    /// its first frame — see
+    /// [`system_fallback_in_background`](Self::system_fallback_in_background).
     #[must_use]
     pub fn with_system_fallback() -> Self {
-        let mut db = fontdb::Database::new();
-        // First, so a tie resolves to the deterministic face.
-        register_embedded(&mut db);
-        db.load_system_fonts();
-        db.set_sans_serif_family(EMBEDDED_FAMILY);
-        db.set_monospace_family(EMBEDDED_MONO_FAMILY);
+        Self::from_system_database(system_fallback_database())
+    }
 
+    /// [`with_system_fallback`](Self::with_system_fallback)'s scan, on a thread
+    /// of its own: the returned handle yields the finished store once the scan
+    /// is done, and `on_ready` runs on that thread as soon as it is — the hook
+    /// an event loop uses to wake itself so the store can be swapped in.
+    ///
+    /// # Why
+    ///
+    /// The scan is the one step of opening a window whose cost depends on the
+    /// machine's disk rather than on vieww. `vieww-platform-winit`'s
+    /// `tests/wait_loop.rs` timed out inside it, 20 s after a window was
+    /// created, on a laptop whose font files an 11-minute build had evicted
+    /// from the page cache — and every warm run passed. A user launching an
+    /// application after a reboot pays the same. Doing it here lets the first
+    /// frame draw with the embedded faces (Latin, Hebrew, Arabic, the
+    /// framework's own UI) while the rest of the world's scripts arrive a
+    /// moment later.
+    ///
+    /// The result is the same store `with_system_fallback` builds — same
+    /// faces, same registration order, so the same tie-breaking — only built
+    /// later. If a thread cannot be started, the scan runs here instead and
+    /// the handle is ready immediately (without calling `on_ready`, since the
+    /// caller is still in the middle of setting up).
+    pub fn system_fallback_in_background(
+        on_ready: impl FnOnce() + Send + 'static,
+    ) -> PendingSystemFonts {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("vieww-font-scan".to_owned())
+            .spawn({
+                let tx = tx.clone();
+                move || {
+                    // A send fails only if the handle was dropped — the window
+                    // closed before the scan finished — and then nobody wants
+                    // the fonts or the wake.
+                    if tx.send(system_fallback_database()).is_ok() {
+                        on_ready();
+                    }
+                }
+            });
+        if spawned.is_err() {
+            let _ = tx.send(system_fallback_database());
+        }
+        PendingSystemFonts { rx }
+    }
+
+    /// A store over an already-scanned database — the cheap half of
+    /// [`with_system_fallback`](Self::with_system_fallback), which runs on the
+    /// thread that will own the store.
+    fn from_system_database(db: fontdb::Database) -> Self {
         Self {
             system: FontSystem::new_with_locale_and_db("en-US".to_owned(), db),
             data: HashMap::new(),
@@ -633,6 +728,58 @@ impl std::fmt::Debug for FontStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The background scan builds the same store as the blocking one: the
+    /// same faces in the same order (which is what decides a tie), and it
+    /// calls `on_ready` once it has.
+    #[test]
+    fn the_background_scan_builds_the_same_store_and_says_when() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let faces = |store: &FontStore| -> Vec<(String, String, u16)> {
+            store
+                .system
+                .db()
+                .faces()
+                .map(|f| {
+                    (
+                        f.families
+                            .first()
+                            .map(|(name, _)| name.clone())
+                            .unwrap_or_default(),
+                        f.post_script_name.clone(),
+                        f.weight.0,
+                    )
+                })
+                .collect()
+        };
+        let blocking = FontStore::with_system_fallback();
+
+        let told = Arc::new(AtomicBool::new(false));
+        let pending = FontStore::system_fallback_in_background({
+            let told = Arc::clone(&told);
+            move || told.store(true, Ordering::SeqCst)
+        });
+        let background = pending.wait().expect("the scan thread produces a store");
+        assert_eq!(faces(&background), faces(&blocking));
+
+        // `on_ready` runs on the scan thread just after the hand-over.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !told.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(told.load(Ordering::SeqCst), "on_ready was called");
+
+        // `try_take` yields the store once.
+        let pending = FontStore::system_fallback_in_background(|| {});
+        let mut taken = None;
+        while taken.is_none() && std::time::Instant::now() < deadline {
+            taken = pending.try_take();
+        }
+        assert!(taken.is_some(), "try_take yields the finished store");
+        assert!(pending.try_take().is_none(), "and only once");
+    }
 
     #[test]
     fn the_embedded_store_holds_exactly_the_embedded_faces() {

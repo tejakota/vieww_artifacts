@@ -2070,15 +2070,31 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // `open_windows` — minted from the same runtime — mark the right
         // elements pending.
         let mut driver = FrameDriver::with_runtime(logical, self.runtime.clone());
-        // Before `build`, so the first frame already has the coverage: the
-        // default store is embedded-only (Latin, Hebrew, Arabic) and a windowed
-        // application is by definition on a machine with fonts. Without this a
-        // shipped app renders Chinese, Japanese, Korean, Devanagari and Thai as
-        // blank space — see `FontStore::with_system_fallback`.
-        driver.use_system_fonts();
+        // The system font fallback: the default store is embedded-only (Latin,
+        // Hebrew, Arabic) and a windowed application is by definition on a
+        // machine with fonts — without it a shipped app renders Chinese,
+        // Japanese, Korean, Devanagari and Thai as blank space (see
+        // `FontStore::with_system_fallback`).
+        //
+        // **In the background, not before the first frame.** This was
+        // `use_system_fonts()`, a full scan of every system font on this
+        // thread before the window could draw. Its cost is the machine's disk,
+        // not vieww's: on a GNOME laptop whose font files an 11-minute build had
+        // evicted from the page cache, it ran past `tests/wait_loop.rs`' 20 s
+        // deadline — the startup trace ended at `window made visible` with
+        // `system fonts loaded` never printed — while every warm run passed.
+        // A user launching after a reboot paid the same. Now the first frames
+        // draw with the embedded faces, and the scan's thread wakes this loop
+        // when it is done so the next frame adopts the full fallback (see
+        // `FrameDriver::use_system_fonts_in_background`).
+        let proxy = self.shared.proxy.clone();
+        driver.use_system_fonts_in_background(move || {
+            // An error means the loop already stopped: nobody to show them to.
+            let _ = proxy.send_event(UserEvent::Wake);
+        });
         trace_line(
             self.shared.now(),
-            format_args!("startup: system fonts loaded"),
+            format_args!("startup: system font scan started"),
         );
         // Before `build`, so the application's own `set_root` is published
         // under the theme rather than the theme having to re-mount the tree.
