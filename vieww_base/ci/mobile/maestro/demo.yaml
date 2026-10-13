@@ -1,0 +1,57 @@
+# The demo screen driven through what the platform's accessibility layer
+# publishes: every selector below is a label from
+# `crates/vieww-platform-winit/examples/shared/screen.rs` (TAP_LABEL,
+# MENU_LABEL, MENU_ITEMS, CHOICES, the Counter's text). Maestro finds nodes
+# through the same tree a screen reader reads, so a selector that stops
+# matching is either a renamed label or a tree that stopped publishing — the
+# hierarchy dump `ci/mobile/maestro.sh` saves next to the report says which.
+#
+# Same app id on Android (`package.metadata.android`) and iOS (`ios-app.sh`).
+appId: dev.vieww.demo
+name: vieww demo screen
+tags: [smoke]
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Tap me"
+    timeout: 30000
+- takeScreenshot: 01-launched
+
+# The probe button and the counter beside it: a tap reaches the widget, the
+# widget's state changes, and the new text is republished.
+- assertVisible: "Not tapped yet"
+- tapOn: "Tap me"
+- assertVisible: "1 tap"
+- tapOn: "Tap me"
+- assertVisible: "2 taps"
+
+# One signal behind four selectors: choosing "Month" in one must leave a
+# selected/checked "Month" published, and no selected "Day".
+- tapOn:
+    text: "Month"
+    index: 0
+- assertVisible:
+    text: "Month"
+    selected: true
+- assertNotVisible:
+    text: "Day"
+    selected: true
+- takeScreenshot: 02-month-chosen
+
+# The drawer is modal: its items appear and the screen behind goes quiet
+# (the same check `a11y-android.sh --modal` makes with uiautomator).
+- tapOn: "Open the menu"
+- extendedWaitUntil:
+    visible: "Inbox"
+    timeout: 5000
+- assertVisible: "Archive"
+- assertVisible: "Settings"
+- assertNotVisible: "Tap me"
+- takeScreenshot: 03-drawer-open
+# The scrim dismisses it (screen.rs: `on_dismiss`); the items do not.
+- tapOn:
+    point: "95%,50%"
+- extendedWaitUntil:
+    visible: "Tap me"
+    timeout: 5000
+- assertVisible: "2 taps"
