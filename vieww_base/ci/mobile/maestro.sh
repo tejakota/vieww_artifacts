@@ -57,10 +57,35 @@ esac
 
 sleep 10
 maestro "${device[@]}" hierarchy > "$out/hierarchy-before.json" 2> "$out/hierarchy-before.err" || true
+# Is the app still alive? A missing label means nothing until that is known:
+# the first iOS run found "Tap me" absent and a screenshot of the home screen.
+alive=0
+case "$platform" in
+    android)
+        pid="$(adb -s "$serial" shell pidof dev.vieww.demo 2>/dev/null | tr -d '\r' || true)"
+        [[ -n "$pid" ]] && alive=1
+        adb -s "$serial" logcat -d -t 2000 > "$out/logcat.txt" 2>&1 || true
+        ;;
+    ios)
+        if xcrun simctl spawn "$udid" launchctl list 2>/dev/null | grep -q 'dev.vieww.demo'; then alive=1; fi
+        xcrun simctl spawn "$udid" log show --last 3m --style compact \
+            --predicate 'process == "vieww"' > "$out/app-log.txt" 2>&1 || true
+        mkdir -p "$out/crashes"
+        find "$HOME/Library/Logs/DiagnosticReports" -newer "$here/maestro.sh" \
+            \( -name 'vieww*' -o -name '*dev.vieww*' \) -exec cp {} "$out/crashes/" \; 2>/dev/null || true
+        xcrun simctl io "$udid" screenshot "$out/screen-before.png" >/dev/null 2>&1 || true
+        ;;
+esac
+if [[ "$alive" = 1 ]]; then
+    echo "maestro.sh: the app is running"
+else
+    echo "::warning::maestro.sh: dev.vieww.demo is NOT running ten seconds after launch — see app-log / logcat / crashes in the artifact"
+fi
+
 if grep -q '"Tap me"' "$out/hierarchy-before.json" 2>/dev/null; then
     echo "maestro.sh: the semantics tree is visible to Maestro (found \"Tap me\")"
 else
-    echo "maestro.sh: \"Tap me\" is NOT in Maestro's hierarchy — expect the flows to fail on lookup, not on behaviour" >&2
+    echo "::warning::maestro.sh: \"Tap me\" is NOT in Maestro's hierarchy (app running: $alive) — the flows will fail on lookup, not on behaviour"
 fi
 
 status=0
