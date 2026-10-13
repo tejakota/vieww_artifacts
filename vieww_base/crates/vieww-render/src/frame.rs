@@ -1114,9 +1114,17 @@ impl FrameDriver {
     /// Headless callers that render once and want every script on that one
     /// frame should keep calling `use_system_fonts`.
     pub fn use_system_fonts_in_background(&mut self, on_ready: impl FnOnce() + Send + 'static) {
-        self.pending_fonts = Some(vieww_text::FontStore::system_fallback_in_background(
+        self.adopt_fonts_when_ready(vieww_text::FontStore::system_fallback_in_background(
             on_ready,
         ));
+    }
+
+    /// Adopt `pending`'s store on the first [`drive`](Self::drive) after it is
+    /// ready — the general form of
+    /// [`use_system_fonts_in_background`](Self::use_system_fonts_in_background),
+    /// for a caller that started its own background font load.
+    pub fn adopt_fonts_when_ready(&mut self, pending: vieww_text::PendingSystemFonts) {
+        self.pending_fonts = Some(pending);
     }
 
     /// Whether a background font scan has been started and not yet adopted.
@@ -2785,14 +2793,17 @@ mod tests {
         scheduler.request_frame();
         assert!(driver.drive(&mut scheduler, ms(16), || ms(0)).is_some());
 
+        // The embedded-only hand-over, not the system scan: this tests the
+        // adoption, and a real scan's duration is the machine's disk — it ran
+        // past this test's old 10 s bound in `checks.sh` right after a build.
         let ready = Arc::new(AtomicBool::new(false));
-        driver.use_system_fonts_in_background({
+        driver.adopt_fonts_when_ready(vieww_text::FontStore::embedded_only_in_background({
             let ready = Arc::clone(&ready);
             move || ready.store(true, Ordering::SeqCst)
-        });
+        }));
         assert!(driver.fonts_pending());
 
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         while !ready.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }

@@ -295,24 +295,32 @@ impl FontStore {
     pub fn system_fallback_in_background(
         on_ready: impl FnOnce() + Send + 'static,
     ) -> PendingSystemFonts {
-        let (tx, rx) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new()
-            .name("vieww-font-scan".to_owned())
-            .spawn({
-                let tx = tx.clone();
-                move || {
-                    // A send fails only if the handle was dropped — the window
-                    // closed before the scan finished — and then nobody wants
-                    // the fonts or the wake.
-                    if tx.send(system_fallback_database()).is_ok() {
-                        on_ready();
-                    }
-                }
-            });
-        if spawned.is_err() {
-            let _ = tx.send(system_fallback_database());
-        }
-        PendingSystemFonts { rx }
+        database_in_background(system_fallback_database, on_ready)
+    }
+
+    /// The same background hand-over over the **embedded faces only** — no
+    /// system scan, so no disk, so it finishes in milliseconds on any machine.
+    ///
+    /// For tests of the *hand-over* (a driver adopting a finished scan, a loop
+    /// being woken): a test that waits on the real system scan inherits that
+    /// scan's cost, which is the machine's disk — `FrameDriver`'s adoption test
+    /// timed out at 10 s inside `ci/check/checks.sh` right after a build, the
+    /// exact cold-cache case the background scan exists for. Not useful to an
+    /// application, hence hidden.
+    #[doc(hidden)]
+    pub fn embedded_only_in_background(
+        on_ready: impl FnOnce() + Send + 'static,
+    ) -> PendingSystemFonts {
+        database_in_background(
+            || {
+                let mut db = fontdb::Database::new();
+                register_embedded(&mut db);
+                db.set_sans_serif_family(EMBEDDED_FAMILY);
+                db.set_monospace_family(EMBEDDED_MONO_FAMILY);
+                db
+            },
+            on_ready,
+        )
     }
 
     /// A store over an already-scanned database — the cheap half of
@@ -325,7 +333,38 @@ impl FontStore {
             shapes: crate::shape_cache::ShapeCache::default(),
         }
     }
+}
 
+/// Run `scan` on a `vieww-font-scan` thread and hand its database over, calling
+/// `on_ready` once it has — the shared body of
+/// [`FontStore::system_fallback_in_background`] and its test-only sibling.
+fn database_in_background(
+    scan: fn() -> fontdb::Database,
+    on_ready: impl FnOnce() + Send + 'static,
+) -> PendingSystemFonts {
+    {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("vieww-font-scan".to_owned())
+            .spawn({
+                let tx = tx.clone();
+                move || {
+                    // A send fails only if the handle was dropped — the window
+                    // closed before the scan finished — and then nobody wants
+                    // the fonts or the wake.
+                    if tx.send(scan()).is_ok() {
+                        on_ready();
+                    }
+                }
+            });
+        if spawned.is_err() {
+            let _ = tx.send(scan());
+        }
+        PendingSystemFonts { rx }
+    }
+}
+
+impl FontStore {
     /// An application's own faces first, the embedded ones behind them.
     ///
     /// # Why a shipped application needs this and the other three do not
@@ -771,11 +810,14 @@ mod tests {
         }
         assert!(told.load(Ordering::SeqCst), "on_ready was called");
 
-        // `try_take` yields the store once.
-        let pending = FontStore::system_fallback_in_background(|| {});
+        // `try_take` yields the store once. Over the embedded faces only, so
+        // this half does not wait on the disk (see `embedded_only_in_background`).
+        let pending = FontStore::embedded_only_in_background(|| {});
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         let mut taken = None;
         while taken.is_none() && std::time::Instant::now() < deadline {
             taken = pending.try_take();
+            std::thread::yield_now();
         }
         assert!(taken.is_some(), "try_take yields the finished store");
         assert!(pending.try_take().is_none(), "and only once");
