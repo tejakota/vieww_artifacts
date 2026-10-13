@@ -200,6 +200,18 @@ impl Slot {
     }
 }
 
+/// What a blur pass reads past the edge of its region (`post.wgsl`'s
+/// `pc.args.z` for `BOX_H` / `BOX_V`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Edge {
+    /// Transparent: a shadow fades out at its own edge
+    /// (`shadow::box_blur_*`).
+    Transparent,
+    /// The nearest edge pixel, repeated: `effects::blur`'s clamped sampling,
+    /// and CSS's `duplicate` edge mode for `filter` / `backdrop-filter`.
+    Duplicate,
+}
+
 /// Push constants for `post.wgsl`: eight `vec4<f32>`, 128 bytes — the minimum
 /// push-constant size every Vulkan implementation guarantees.
 #[derive(Clone, Copy, Default)]
@@ -1338,7 +1350,7 @@ impl SceneRenderer {
                     seed.push.p[0] = [caster.offset[0], caster.offset[1], 1.0, 0.0];
                     self.pass(&mut rec, seed)?;
                     if let Some(radius) = box_radius {
-                        self.blur(&mut rec, work, patch, radius)?;
+                        self.blur(&mut rec, work, patch, radius, Edge::Transparent)?;
                     }
                     let mut source = TargetId::Level(work);
                     if let Some(inner) = inner {
@@ -1498,9 +1510,14 @@ impl SceneRenderer {
         level: usize,
         rect: PixelRect,
         radius: u32,
+        edge: Edge,
     ) -> Result<(), VulkanError> {
         #[allow(clippy::cast_precision_loss)]
         let r = radius as f32;
+        let edge = match edge {
+            Edge::Transparent => 0.0,
+            Edge::Duplicate => 1.0,
+        };
         for _ in 0..3 {
             let mut h = Pass::new(
                 TargetId::Scratch(level),
@@ -1509,6 +1526,7 @@ impl SceneRenderer {
                 mode::BOX_H,
             );
             h.push.args[1] = r;
+            h.push.args[2] = edge;
             self.pass(rec, h)?;
             let mut v = Pass::new(
                 TargetId::Level(level),
@@ -1517,6 +1535,7 @@ impl SceneRenderer {
                 mode::BOX_V,
             );
             v.push.args[1] = r;
+            v.push.args[2] = edge;
             self.pass(rec, v)?;
         }
         Ok(())
@@ -1531,7 +1550,9 @@ impl SceneRenderer {
         filter: FilterOp,
     ) -> Result<(), VulkanError> {
         if let Some(radius) = filter.box_radius {
-            self.blur(rec, level, rect, radius)?;
+            // Layer and backdrop filters clamp at the rect, as
+            // `effects::blur` does (CSS's `duplicate` edge mode).
+            self.blur(rec, level, rect, radius, Edge::Duplicate)?;
         }
         if let Some(m) = filter.color_matrix {
             let mut pass = Pass::new(

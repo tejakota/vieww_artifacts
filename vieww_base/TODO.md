@@ -29,9 +29,9 @@ Verified state of each item is in `PENDING.md`; this is the short list.
 2. **Place the workflows** (`.github/workflows-pending/restore.sh`) — needs a
    `workflow`-scoped token. Note: the Vulkan job will be red on the known
    backdrop-blur edge (PENDING §2.2) until that edge mode is decided.
-3. **Backdrop-blur edge mode** (PENDING §2.2) — a design decision (CSS
-   duplicates edge pixels), then align `reference.rs` and the Vulkan
-   `PushLayer` branch.
+3. ~~**Backdrop-blur edge mode** (PENDING §2.2)~~ — closed 2026-10-13: GPU
+   layer/backdrop blurs clamp at the edge like `effects::blur` (CSS
+   `duplicate`); shadows keep transparent edges.
 4. **The two over-budget fixtures** (PENDING §4.1) — ~4–5 ms left, spread
    over blur, shadows, rasterisation and memory traffic. Candidates: SSE2
    blur; narrower layer storage (changes bytes — needs a tolerance decision);

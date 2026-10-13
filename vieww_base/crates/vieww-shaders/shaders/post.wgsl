@@ -17,9 +17,17 @@
 //   8 INSET    (1 − src.a) × mask          render_shadow's complement
 //   9 TINT     colour × src.a [× clip]     render_shadow's tint + clip multiply
 //
-// Targets are premultiplied RGBA16F, fetched with `textureLoad`. Pixels
-// outside `pc.region` read as transparent for the blur passes — "outside the
-// buffer is transparent", which is what makes a shadow fade at its own edge.
+// Targets are premultiplied RGBA16F, fetched with `textureLoad`. For the blur
+// passes, pixels outside `pc.region` read one of two ways, chosen by
+// `pc.args.z`:
+//
+//   0  transparent — "outside the buffer is transparent", which is what makes
+//      a shadow fade at its own edge (`shadow::box_blur_*`);
+//   1  the nearest edge pixel — `effects::blur`'s edge-clamped sampling, which
+//      is CSS's `duplicate` edge mode for `filter` and `backdrop-filter`. A
+//      backdrop blur read as transparent past its rect loses alpha along the
+//      edge, and the composite then shows the *unblurred* page through a
+//      frosted panel's rim.
 
 struct Post {
     // x0, y0, x1, y1 in device pixels.
@@ -53,6 +61,12 @@ fn src_at(p: vec2<i32>) -> vec4<f32> {
         return vec4<f32>(0.0);
     }
     return textureLoad(t_src, p, 0);
+}
+
+fn src_clamped(p: vec2<i32>) -> vec4<f32> {
+    let lo = vec2<i32>(i32(pc.region.x), i32(pc.region.y));
+    let hi = vec2<i32>(i32(pc.region.z) - 1, i32(pc.region.w) - 1);
+    return textureLoad(t_src, clamp(p, lo, hi), 0);
 }
 
 fn mask_at(p: vec2<i32>, offset: vec2<f32>) -> f32 {
@@ -215,9 +229,14 @@ fn fs_main(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
             if mode == 2 {
                 step = vec2<i32>(0, 1);
             }
+            let clamped = pc.args.z > 0.5;
             var sum = vec4<f32>(0.0);
             for (var k = -r; k <= r; k = k + 1) {
-                sum = sum + src_at(p + step * k);
+                if clamped {
+                    sum = sum + src_clamped(p + step * k);
+                } else {
+                    sum = sum + src_at(p + step * k);
+                }
             }
             return sum / f32(2 * r + 1);
         }
