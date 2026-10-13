@@ -1,0 +1,405 @@
+name: Framework checks
+
+# The framework's own gate, beside "Build Mobile Apps" (ci.yml), which builds
+# the four apps. Every leg runs a script that already exists under
+# vieww_base/ci/, so a red leg is reproducible locally with the same command.
+#
+#   leg            | runner          | proves
+#   ---------------|-----------------|-----------------------------------------
+#   gate           | ubuntu          | ci/check/checks.sh — fmt, clippy -D
+#                  |                 | warnings, every test, docs. Red = do not
+#                  |                 | merge.
+#   coverage       | ubuntu          | ci/check/coverage.sh's line floor
+#   cross          | ubuntu          | ci/check/cross-check.sh: the workspace
+#                  |                 | type-checks for macOS, iOS, Windows and
+#                  |                 | Android, minutes before those legs finish
+#   gpu-lavapipe   | ubuntu          | the Vulkan suites on Mesa's software
+#                  |                 | Vulkan (incl. vieww-3d's GPU parity
+#                  |                 | suite), and a GPU frame presented to an
+#                  |                 | Xvfb window
+#   macos          | macos (arm64)   | platform-check macos + ios, and the Metal
+#                  |                 | suite on the runner's GPU
+#   windows        | windows         | platform-check windows, and the D3D12
+#                  |                 | suite on WARP (Microsoft's software D3D12)
+#   android        | ubuntu + NDK    | platform-check android
+#   web            | ubuntu          | wasm-check, then canvas parity in
+#                  |                 | Chromium, Firefox and WebKit
+#   android-device | self-hosted     | the device suite on a real phone — only
+#                  |                 | on demand, and only where such a runner
+#                  |                 | is registered
+#
+# What a green run does NOT mean, so nobody reads it that way: the macOS
+# runner's GPU is a paravirtualised Apple GPU and WARP is a CPU rasteriser, so
+# those legs are correctness evidence, never performance evidence. A skipped
+# self-hosted leg is "not run", never "passed".
+
+on:
+  push:
+    branches:
+      - feature/vieww_code_base
+      - feature/vieww_code_base2
+      - "feature/vieww-gap-closure-*"
+    paths:
+      - "vieww_base/**"
+      - ".github/workflows/framework-checks.yml"
+  pull_request:
+    paths:
+      - "vieww_base/**"
+      - ".github/workflows/framework-checks.yml"
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "Also run the Android device suite on a self-hosted runner labelled 'android'"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: framework-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Must equal vieww_base/rust-toolchain.toml; the toolchain file is what
+  # cargo actually obeys, this only pre-installs it in one step.
+  RUST_VERSION: "1.98.1"
+
+defaults:
+  run:
+    shell: bash
+    working-directory: vieww_base
+
+jobs:
+  gate:
+    name: checks.sh (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal --component rustfmt,clippy,llvm-tools-preview
+      - name: System packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libx11-dev libxkbcommon-dev libwayland-dev libgtk-3-dev \
+            libxdo-dev libasound2-dev xvfb
+      - name: Free disk
+        run: bash ci/tools/ci-runner-prep.sh || true
+      - name: The gate
+        run: ci/check/checks.sh
+
+  coverage:
+    name: Coverage floor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and cargo-llvm-cov
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component llvm-tools-preview
+          cargo install cargo-llvm-cov --locked
+      - name: System packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libx11-dev libxkbcommon-dev libwayland-dev libgtk-3-dev libxdo-dev libasound2-dev
+      - name: Free disk
+        run: bash ci/tools/ci-runner-prep.sh || true
+      - name: Coverage
+        run: ci/check/coverage.sh
+
+  cross:
+    name: Type-check for macOS, iOS, Windows, Android (from Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain with std sources
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal --component rust-src
+      - name: Cross type-check
+        run: ci/check/cross-check.sh
+
+  gpu-lavapipe:
+    name: GPU on software Vulkan (lavapipe)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal
+      - name: Mesa Vulkan, Xvfb
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q mesa-vulkan-drivers vulkan-tools libvulkan-dev xvfb \
+            libx11-dev libxkbcommon-dev libwayland-dev
+          echo "VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)" >> "$GITHUB_ENV"
+      - name: Adapter
+        run: vulkaninfo --summary
+      - name: Vulkan suites (headless)
+        run: cargo test --release -p vieww-hal --features vulkan -- --ignored --test-threads=1
+      - name: 3D GPU parity suite (headless)
+        run: cargo test --release -p vieww-3d --features vulkan -- --ignored --test-threads=1
+      - name: A GPU frame presented to a real window
+        env:
+          VIEWW_REQUIRE_HARDWARE: display,gpu
+        run: xvfb-run -a -s "-screen 0 1366x768x24" cargo test --release -p vieww-platform-winit --test wait_loop
+
+  macos:
+    name: macOS and iOS (Metal)
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and iOS targets
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+          rustup target add --toolchain "$RUST_VERSION" aarch64-apple-ios aarch64-apple-ios-sim
+      - name: platform-check macos
+        run: ci/check/platform-check.sh macos
+      - name: platform-check ios
+        run: ci/check/platform-check.sh ios
+      - name: Metal suite on the runner's GPU
+        env:
+          VIEWW_REQUIRE_HARDWARE: gpu
+        run: cargo test -p vieww-hal --features metal -- --ignored --test-threads=1
+      - name: Clippy for the Apple backends
+        run: |
+          cargo clippy -p vieww-hal --features metal --all-targets -- -D warnings
+          cargo clippy -p vieww-audio --all-targets -- -D warnings
+          cargo clippy -p vieww-hal --features metal --target aarch64-apple-ios -- -D warnings
+
+  windows:
+    name: Windows (D3D12 on WARP)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+      - name: platform-check windows
+        run: ci/check/platform-check.sh windows
+      - name: D3D12 suite (WARP when there is no hardware adapter)
+        env:
+          VIEWW_D3D12_ALLOW_WARP: "1"
+          VIEWW_REQUIRE_HARDWARE: gpu
+        run: cargo test -p vieww-hal --features d3d12 -- --ignored --test-threads=1
+      - name: Clippy for the Windows backends
+        run: |
+          cargo clippy -p vieww-hal --features d3d12 --all-targets -- -D warnings
+          cargo clippy -p vieww-audio --all-targets -- -D warnings
+      # PENDING §3.3: the out-of-process preview exists *for* Windows — an
+      # in-process guest's panic cannot be caught there (static libstd) — and
+      # had never run on it.
+      - name: Studio out-of-process preview (PENDING §3.3)
+        run: cargo test -p viewwstudio --test remote -- --test-threads=1
+
+  android:
+    name: Android (compile)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and target
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+          rustup target add --toolchain "$RUST_VERSION" aarch64-linux-android
+      - name: platform-check android
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: ci/check/platform-check.sh android
+
+  web:
+    name: Web (wasm32; Chromium, Firefox, WebKit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and target
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+          rustup target add --toolchain "$RUST_VERSION" wasm32-unknown-unknown
+      - name: wasm-check
+        run: ci/check/wasm-check.sh
+      - name: wasm-bindgen matching Cargo.lock
+        run: |
+          v="$(sed -n '/^name = "wasm-bindgen"$/,/^version/ s/^version = "\(.*\)"/\1/p' Cargo.lock | head -1)"
+          cargo install wasm-bindgen-cli --version "$v" --locked
+      - name: Build the page and the native baseline
+        run: |
+          bash examples/test-web/build-web.sh "$RUNNER_TEMP/web/dist"
+          cargo run --release -p test-web --example baseline -- "$RUNNER_TEMP/web/baseline"
+      - name: Playwright with all three engines
+        run: |
+          python3 -m pip install --user playwright
+          python3 -m playwright install --with-deps chromium firefox webkit
+      - name: Canvas parity per engine
+        run: |
+          status=0
+          for engine in chromium firefox webkit; do
+            VIEWW_WEB_BROWSER=$engine python3 examples/test-web/verify_web.py \
+              "$RUNNER_TEMP/web/dist" "$RUNNER_TEMP/web/baseline" "$RUNNER_TEMP/web/out" || status=1
+          done
+          exit $status
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ""
+      - name: Readbacks
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-readbacks
+          path: ${{ runner.temp }}/web/out
+
+  android-device:
+    name: Android device suite (self-hosted)
+    if: github.event_name == 'workflow_dispatch' && inputs.device
+    runs-on: [self-hosted, android]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Environment
+        run: . ci/mobile/android-env.sh && android_env device-suite
+      - name: APK
+        run: ci/mobile/apk.sh --example android
+      - name: Device suite
+        run: ci/mobile/device-suite.sh
+      - name: Accessibility suite
+        run: ci/mobile/a11y-android.sh
+
+  # PENDING §1.4: "no frame has ever reached an iPhone, real or simulated".
+  # Experimental — reported by the `report` job, not blocking the run.
+  ios-simulator:
+    name: iOS simulator (tests in the sim, a frame on its screen)
+    runs-on: macos-14
+    timeout-minutes: 90
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and simulator target
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup target add --toolchain "$RUST_VERSION" aarch64-apple-ios-sim aarch64-apple-ios
+      - name: Boot a simulator
+        run: |
+          udid=$(xcrun simctl list devices available -j \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for r,v in d.items() if 'iOS' in r for x in v if 'iPhone' in x['name']))")
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+          echo "VIEWW_SIM_DEVICE=$udid" >> "$GITHUB_ENV"
+      - name: Unit tests inside the simulator (simctl-runner)
+        run: cargo test -p vieww-foundation -p vieww-text --target aarch64-apple-ios-sim
+      - name: The ios example on the simulator's screen
+        run: ci/mobile/ios-app.sh --sim
+      - name: Maestro flows on the simulator (ci/mobile/maestro/)
+        run: ci/mobile/maestro.sh ios
+      - name: Screenshot
+        if: always()
+        run: |
+          sleep 5
+          mkdir -p ../ci-artifacts
+          xcrun simctl io booted screenshot ../ci-artifacts/ios-simulator.png || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator
+          path: ci-artifacts/
+          if-no-files-found: ignore
+
+  # PENDING §1.5: the Android device suite, on an emulator instead of a
+  # self-hosted phone — x86_64, because that is what GitHub's Linux runners can
+  # emulate at speed (KVM). Experimental, reported, not blocking.
+  android-emulator:
+    name: Android emulator (APK, device and accessibility suites)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Toolchain, target and cargo-apk
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup target add --toolchain "$RUST_VERSION" x86_64-linux-android
+          cargo install --locked cargo-apk
+      - name: Emulator, APK, suites
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          working-directory: vieww_base
+          # One line: the action runs each line of `script` in its own shell,
+          # so the environment android-env.sh sets would not reach the next.
+          script: bash -ec ". ci/mobile/android-env.sh && android_env device-suite && ci/mobile/apk.sh --example android --target x86_64-linux-android && (ci/mobile/maestro.sh android || echo '::warning::Maestro flows failed (see the maestro-android artifact)') && ci/mobile/device-suite.sh && ci/mobile/a11y-android.sh"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: maestro-android
+          path: ci-artifacts/maestro-android/
+          if-no-files-found: ignore
+
+  # **Results where a session without API access can read them.** Every run's
+  # outcome — each job's conclusion, and the last lines of every failed job's
+  # log — is committed to the branch `ci-results/<branch>`, force-pushed, so
+  # `git fetch origin ci-results/<branch>` is all a reader needs. The sessions
+  # that work on this repository can push and fetch but cannot reach the
+  # GitHub API, so a run nobody can read would be a run that did not happen.
+  report:
+    name: Publish results to ci-results/<branch>
+    if: always()
+    needs: [gate, coverage, cross, gpu-lavapipe, macos, windows, android, web, ios-simulator, android-emulator]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          path: out/artifacts
+      - name: Collect conclusions and failed logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
+        run: |
+          mkdir -p out/logs
+          gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" > out/jobs.json
+          {
+            echo "# ${GITHUB_REF_NAME} @ ${GITHUB_SHA}"
+            echo
+            echo "run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${RUN}"
+            echo
+            jq -r '.jobs[] | select(.name | startswith("Publish") | not) | "- \(.conclusion // .status): \(.name)"' out/jobs.json
+          } > out/SUMMARY.md
+          jq -r '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"' out/jobs.json |
+          while IFS=$'\t' read -r id name; do
+            safe=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_')
+            gh api "repos/$REPO/actions/jobs/$id/logs" 2>/dev/null | tail -n 400 > "out/logs/$safe.log" || true
+          done
+          cat out/SUMMARY.md
+      - name: Push to ci-results/<branch>
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          branch="ci-results/${GITHUB_REF_NAME//\//-}"
+          cd out
+          git init -q
+          git checkout -q -b "$branch"
+          git config user.name "vieww-ci"
+          git config user.email "vieww-ci@users.noreply.github.com"
+          git add -A
+          git commit -q -m "CI results for ${GITHUB_SHA} (${GITHUB_REF_NAME})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$branch"
