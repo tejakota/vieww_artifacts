@@ -1,0 +1,99 @@
+From 8f8997ffd298d579964103b6081a13142f97b1ca Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 09:42:21 +0530
+Subject: [PATCH] startup trace: every step from GPU ready to the first event
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The startup trace (d0e9ddb) caught the wait_loop hang on the affected
+laptop: in both failing scenarios the window was created, GPU selection
+asked Intel, NVIDIA and llvmpipe and chose the NVIDIA 920MX, device and
+swapchain were ready in 60-80 ms — and then nothing for 20 s, not one
+event or sleep decision, while the waker fired on time. The NVIDIA GPU
+was `active`, not runtime-suspended, which rules out the cold-GPU
+theory. The same `create` passes in the next three scenarios of the
+same run.
+
+Six steps sit between `GPU ready` and the loop's first event; each now
+traces its completion: accessibility attached (AccessKit's D-Bus
+connection to the AT-SPI bus — a blocking call with a 25 s default
+timeout when the bus has to be activated, which would also explain why
+only the first scenarios of a run hang), window made visible, system
+fonts loaded (a full font scan, slow on a cold disk cache), tree built,
+display read, window ready. The next failure ends at the step that
+blocked; one ending at `window ready` puts the stall in winit or the
+compositor.
+
+vieww-platform-winit 145/145 under Xvfb; clippy, fmt, docs clean.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Nd3Ehrf9ktGu82K38kGEjH
+---
+ .../crates/vieww-platform-winit/src/app.rs    | 21 +++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/vieww_base/crates/vieww-platform-winit/src/app.rs b/vieww_base/crates/vieww-platform-winit/src/app.rs
+index 255f8ed..f90c39b 100644
+--- a/vieww_base/crates/vieww-platform-winit/src/app.rs
++++ b/vieww_base/crates/vieww-platform-winit/src/app.rs
+@@ -2039,8 +2039,22 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
+             width,
+             height,
+         } = self.surface(event_loop, title, size)?;
++        // Each step from here to the first event is traced too: the trace that
++        // localised the wait_loop hang ended at `GPU ready` with nothing after
++        // it for 20 s, and every step below could be the one — AccessKit's
++        // D-Bus connection to the accessibility bus (a blocking call with a
++        // 25 s default timeout when the bus has to be activated), the system
++        // font scan on a cold disk cache, or the compositor.
+         let accessibility = self.attach_accessibility(event_loop, &window);
++        trace_line(
++            self.shared.now(),
++            format_args!("startup: accessibility attached"),
++        );
+         window.set_visible(true);
++        trace_line(
++            self.shared.now(),
++            format_args!("startup: window made visible"),
++        );
+ 
+         let logical = scale.to_logical_size(width, height);
+         let mut log = FrameLog::new(
+@@ -2062,12 +2076,17 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
+         // shipped app renders Chinese, Japanese, Korean, Devanagari and Thai as
+         // blank space — see `FontStore::with_system_fallback`.
+         driver.use_system_fonts();
++        trace_line(
++            self.shared.now(),
++            format_args!("startup: system fonts loaded"),
++        );
+         // Before `build`, so the application's own `set_root` is published
+         // under the theme rather than the theme having to re-mount the tree.
+         if let Some(theme) = &self.shared.config.theme {
+             driver.set_theme(std::rc::Rc::clone(theme));
+         }
+         build(&mut driver);
++        trace_line(self.shared.now(), format_args!("startup: tree built"));
+ 
+         let mut input = PointerTranslator::new(Scale::ONE);
+         input.set_scale(scale);
+@@ -2095,6 +2114,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
+         };
+ 
+         state.follow_display(&self.shared, &window);
++        trace_line(self.shared.now(), format_args!("startup: display read"));
+         state.gpu = Some(Gpu {
+             window,
+             renderer: ManuallyDrop::new(renderer),
+@@ -2105,6 +2125,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
+         // The window's density is a fact the tree can read, and a `SafeArea`
+         // needs it before the first layout rather than after it.
+         state.refresh_insets(&self.shared);
++        trace_line(self.shared.now(), format_args!("startup: window ready"));
+ 
+         if let Some(context) = &self.shared.crash_context {
+             context.set("surface", format!("{}x{}", logical.width, logical.height));
+-- 
+2.43.0
+
