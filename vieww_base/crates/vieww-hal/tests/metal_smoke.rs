@@ -57,7 +57,7 @@ fn a_clear_reads_back_as_the_requested_colour() {
     ] {
         let pixels = device.render_clear_to_pixels(64, 48, color).unwrap();
         assert_eq!(pixels.len(), 64 * 48 * 4);
-        for px in pixels.chunks_exact(4) {
+        for px in pixels.as_chunks::<4>().0 {
             let close = |a: u8, b: u8| (i32::from(a) - i32::from(b)).abs() <= 1;
             assert!(
                 close(px[0], color.r)
