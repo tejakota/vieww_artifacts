@@ -79,6 +79,10 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain
         run: rustup toolchain install "$RUST_VERSION" --profile minimal --component rustfmt,clippy,llvm-tools-preview
       - name: System packages
@@ -97,6 +101,10 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain and cargo-llvm-cov
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal --component llvm-tools-preview
@@ -116,6 +124,10 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain with std sources
         run: rustup toolchain install "$RUST_VERSION" --profile minimal --component rust-src
       - name: Cross type-check
@@ -127,6 +139,10 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain
         run: rustup toolchain install "$RUST_VERSION" --profile minimal
       - name: Mesa Vulkan, Xvfb
@@ -152,6 +168,10 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain and iOS targets
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
@@ -176,6 +196,10 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain
         run: rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
       - name: platform-check windows
@@ -201,6 +225,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain and target
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
@@ -216,6 +244,10 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain and target
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
@@ -276,6 +308,10 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: Toolchain and simulator target
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal
@@ -316,6 +352,10 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      # Cold builds of the workspace were most of every job's time.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
       - name: KVM for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -325,7 +365,10 @@ jobs:
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal
           rustup target add --toolchain "$RUST_VERSION" x86_64-linux-android
-          cargo install --locked cargo-apk
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-apk
       - name: Emulator, APK, suites
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -337,7 +380,7 @@ jobs:
           working-directory: vieww_base
           # One line: the action runs each line of `script` in its own shell,
           # so the environment android-env.sh sets would not reach the next.
-          script: bash -ec ". ci/mobile/android-env.sh && android_env device-suite && ci/mobile/apk.sh --example android --target x86_64-linux-android && (ci/mobile/maestro.sh android || echo '::warning::Maestro flows failed (see the maestro-android artifact)') && ci/mobile/device-suite.sh && ci/mobile/a11y-android.sh"
+          script: bash -ec ". ci/mobile/android-env.sh && android_env device-suite && ci/mobile/apk.sh --example android --release --target x86_64-linux-android && (ci/mobile/maestro.sh android || echo '::warning::Maestro flows failed (see the maestro-android artifact)') && ci/mobile/device-suite.sh && ci/mobile/a11y-android.sh"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
