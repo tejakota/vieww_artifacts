@@ -61,7 +61,10 @@ if [ "$build" -eq 1 ]; then
     # Release, not debug: a debug vello is ~20x slower, and every frame-time
     # assertion in the suite would then be measuring `rustc -O0`.
     echo "device-suite: building and installing (release)…"
-    if ! cargo apk run -p vieww-platform-winit --example android --release; then
+    # Through apk.sh, detached: `cargo apk run` follows logcat until the app
+    # exits, which on an emulator (no second user profile to make it die
+    # early) is never. apk.sh also picks the device's ABI.
+    if ! "$root/ci/mobile/apk.sh" --example android --release --detach; then
         # A non-zero status here is genuinely ambiguous. `cargo apk run`
         # installs, launches, and *then* dies attaching logcat when the device
         # has a second user profile — `String '10207,1010207' is not a UID` —

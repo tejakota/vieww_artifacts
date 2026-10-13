@@ -50,6 +50,11 @@ if ! command -v xcrun >/dev/null 2>&1; then
 fi
 
 target_kind="sim"
+# `simctl launch --console` streams the app's output until the app exits — and
+# the demo never exits, so a CI step that ran this never returned. Detached is
+# the default under CI, or with --detach.
+detach=0
+[ -n "${CI:-}" ] && detach=1
 profile="release"
 
 while [ "$#" -gt 0 ]; do
@@ -61,6 +66,7 @@ while [ "$#" -gt 0 ]; do
         # is release for the same reason the desktop harness insists on it: a
         # frame rate measured from `rustc -O0` is a report on the compiler.
         --debug) profile="debug" ;;
+        --detach) detach=1 ;;
         --release) profile="release" ;;
         *) echo "ios-app: unknown argument '$1'" >&2; exit 2 ;;
     esac
@@ -172,6 +178,10 @@ if [ "$target_kind" = "sim" ]; then
     # signing set up", and those fail in ways that look nothing alike.
     xcrun simctl install "$device" "$app"
     echo "==> installed, launching"
+    if [ "$detach" = 1 ]; then
+        xcrun simctl launch "$device" "$bundle_id"
+        exit 0
+    fi
     exec xcrun simctl launch --console "$device" "$bundle_id"
 fi
 
