@@ -2039,8 +2039,22 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             width,
             height,
         } = self.surface(event_loop, title, size)?;
+        // Each step from here to the first event is traced too: the trace that
+        // localised the wait_loop hang ended at `GPU ready` with nothing after
+        // it for 20 s, and every step below could be the one — AccessKit's
+        // D-Bus connection to the accessibility bus (a blocking call with a
+        // 25 s default timeout when the bus has to be activated), the system
+        // font scan on a cold disk cache, or the compositor.
         let accessibility = self.attach_accessibility(event_loop, &window);
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: accessibility attached"),
+        );
         window.set_visible(true);
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: window made visible"),
+        );
 
         let logical = scale.to_logical_size(width, height);
         let mut log = FrameLog::new(
@@ -2062,12 +2076,17 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // shipped app renders Chinese, Japanese, Korean, Devanagari and Thai as
         // blank space — see `FontStore::with_system_fallback`.
         driver.use_system_fonts();
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: system fonts loaded"),
+        );
         // Before `build`, so the application's own `set_root` is published
         // under the theme rather than the theme having to re-mount the tree.
         if let Some(theme) = &self.shared.config.theme {
             driver.set_theme(std::rc::Rc::clone(theme));
         }
         build(&mut driver);
+        trace_line(self.shared.now(), format_args!("startup: tree built"));
 
         let mut input = PointerTranslator::new(Scale::ONE);
         input.set_scale(scale);
@@ -2095,6 +2114,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         };
 
         state.follow_display(&self.shared, &window);
+        trace_line(self.shared.now(), format_args!("startup: display read"));
         state.gpu = Some(Gpu {
             window,
             renderer: ManuallyDrop::new(renderer),
@@ -2105,6 +2125,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // The window's density is a fact the tree can read, and a `SafeArea`
         // needs it before the first layout rather than after it.
         state.refresh_insets(&self.shared);
+        trace_line(self.shared.now(), format_args!("startup: window ready"));
 
         if let Some(context) = &self.shared.crash_context {
             context.set("surface", format!("{}x{}", logical.width, logical.height));
