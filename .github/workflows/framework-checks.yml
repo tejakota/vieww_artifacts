@@ -347,13 +347,18 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
             https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar
           mkdir -p "$RUNNER_TEMP/mvk" && tar -xf "$RUNNER_TEMP/mvk.tar" -C "$RUNNER_TEMP/mvk"
-          find "$RUNNER_TEMP/mvk" -maxdepth 6 -path '*simulator*' | head -20
-          lib=$(find "$RUNNER_TEMP/mvk" -path '*simulator*' \( -name 'libMoltenVK.dylib' -o -name 'MoltenVK.framework' \) | head -1)
+          # Case-insensitive: Khronos names folders like `dynamic/dylib/macOS`,
+          # so a simulator slice may be `iOS-Simulator` or `ios-…-simulator`.
+          # The first attempt searched case-sensitively and found nothing.
+          echo "dynamic MoltenVK binaries in the archive:"
+          find "$RUNNER_TEMP/mvk" \( -name 'libMoltenVK.dylib' -o -name 'MoltenVK.framework' \) | sed "s|$RUNNER_TEMP/mvk/||"
+          lib=$(find "$RUNNER_TEMP/mvk" -ipath '*simulator*' \( -name 'libMoltenVK.dylib' -o -name 'MoltenVK.framework' \) | head -1)
           if [ -n "$lib" ]; then
             echo "VIEWW_MOLTENVK=$lib" >> "$GITHUB_ENV"
             echo "MoltenVK simulator slice: $lib"
           else
-            echo "::warning::no dynamic MoltenVK simulator slice found in MoltenVK-ios.tar"
+            echo "::warning::no dynamic MoltenVK simulator slice found in MoltenVK-ios.tar; layout follows"
+            find "$RUNNER_TEMP/mvk" -maxdepth 6 | sed "s|$RUNNER_TEMP/mvk/||" | head -80
           fi
       - name: The ios example on the simulator's screen
         run: ci/mobile/ios-app.sh --sim
