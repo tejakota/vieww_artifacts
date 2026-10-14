@@ -1,0 +1,82 @@
+name: Audio plugins (CLAP / VST3)
+
+# Builds vieww-audio-plugin's example plugins on every desktop platform and
+# proves the CLAP and VST3 wrappers against the formats themselves:
+#
+#   * the crate's unit tests (in-process hosts, ABI layout assertions);
+#   * the built libraries loaded through vieww's own hosts (dlopen /
+#     LoadLibrary, .vst3 bundle layout, module entry points);
+#   * C and C++ hosts compiled against the official CLAP and VST3 headers
+#     (Linux and macOS);
+#   * free-audio/clap-validator and Steinberg's VST3 SDK validator.
+#
+# Everything is driven by crates/vieww-audio-plugin/tools/check-plugins.sh,
+# which runs the same way locally.
+
+on:
+  push:
+    branches:
+      - feature/vieww_code_base
+      - feature/vieww_code_base2
+      - "feature/vieww-gap-closure-*"
+    paths:
+      - "vieww_base/crates/vieww-audio/**"
+      - "vieww_base/crates/vieww-audio-plugin/**"
+      - ".github/workflows/audio-plugins.yml"
+  pull_request:
+    paths:
+      - "vieww_base/crates/vieww-audio/**"
+      - "vieww_base/crates/vieww-audio-plugin/**"
+      - ".github/workflows/audio-plugins.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audio-plugins-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUST_VERSION: "1.98.1"
+
+jobs:
+  plugins:
+    name: Plugins - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: vieww_base
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+          rustup default "$RUST_VERSION"
+
+      - name: Unit tests and clippy
+        run: |
+          cargo test -p vieww-audio-plugin --lib
+          cargo clippy -p vieww-audio-plugin --all-targets -- -D warnings
+
+      - name: Build, bundle and validate (CLAP + VST3)
+        env:
+          WORK: ${{ runner.temp }}/plugin-check
+        run: crates/vieww-audio-plugin/tools/check-plugins.sh --full
+
+      - name: Upload plugin bundles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vieww-plugins-${{ matrix.os }}
+          path: vieww_base/target/plugins/bundles
+          if-no-files-found: ignore

@@ -1,0 +1,14 @@
+frames=19800
+shapes=13571694
+glyph_runs=956854
+glyphs=8428859
+layers=65208
+filtered_layers=42663
+strokes=431175
+shadows=70762
+images=0
+alive_seconds=0.2545
+frame_ms=168.71
+worst_ms=575.99
+crates=36
+bench=linux · x86_64 · rustc ≥1.89 · 7 fonts
