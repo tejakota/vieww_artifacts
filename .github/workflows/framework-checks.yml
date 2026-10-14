@@ -33,21 +33,30 @@ name: Framework checks
 # those legs are correctness evidence, never performance evidence. A skipped
 # self-hosted leg is "not run", never "passed".
 
+# **Manual only** (Actions → Framework checks → Run workflow). Every leg below
+# that has passed is gated behind `run_passed`, so a default run spends its
+# minutes only on what has not passed yet: Firebase Test Lab on real phones,
+# and the self-hosted phone when one exists. Tick "run_passed" to re-check
+# everything, e.g. before a merge.
 on:
-  push:
-    branches:
-      - feature/vieww_code_base
-      - feature/vieww_code_base2
-      - "feature/vieww-gap-closure-*"
-    paths:
-      - "vieww_base/**"
-      - ".github/workflows/framework-checks.yml"
-  pull_request:
-    paths:
-      - "vieww_base/**"
-      - ".github/workflows/framework-checks.yml"
   workflow_dispatch:
     inputs:
+      run_passed:
+        description: "Run already-passing jobs too (gate, coverage, cross, GPU, macOS, Windows, Android, web, iOS simulator, Android emulator)"
+        type: boolean
+        default: false
+      build_apps:
+        description: "Build the apps as downloadable artifacts: Android APKs (arm64 phone, x86_64 emulator), iOS .ipa and simulator .app"
+        type: boolean
+        default: true
+      test_lab_android:
+        description: "Firebase Test Lab, Android: game loop (CPU + GPU) on real phones, plus a Robo crawl (needs GCP_SA_KEY and FTL_PROJECT secrets)"
+        type: boolean
+        default: true
+      test_lab_ios:
+        description: "Firebase Test Lab, iOS: game loop on real iPhones (needs the Apple signing secrets too)"
+        type: boolean
+        default: false
       device:
         description: "Also run the Android device suite on a self-hosted runner labelled 'android'"
         type: boolean
@@ -74,6 +83,8 @@ defaults:
 
 jobs:
   gate:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: checks.sh (Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 150
@@ -103,6 +114,8 @@ jobs:
           path: ci-artifacts/gate.log
 
   coverage:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: Coverage floor
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -126,6 +139,8 @@ jobs:
         run: ci/check/coverage.sh
 
   cross:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: Type-check for macOS, iOS, Windows, Android (from Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -141,6 +156,8 @@ jobs:
         run: ci/check/cross-check.sh
 
   gpu-lavapipe:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: GPU on software Vulkan (lavapipe)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -177,6 +194,8 @@ jobs:
           path: ci-artifacts/gpu-window.log
 
   macos:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: macOS and iOS (Metal)
     runs-on: macos-14
     timeout-minutes: 90
@@ -205,6 +224,8 @@ jobs:
           cargo clippy -p vieww-hal --features metal --target aarch64-apple-ios -- -D warnings
 
   windows:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: Windows (D3D12 on WARP)
     runs-on: windows-2022
     timeout-minutes: 90
@@ -234,6 +255,8 @@ jobs:
         run: cargo test -p viewwstudio --test remote -- --test-threads=1
 
   android:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: Android (compile)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -253,6 +276,8 @@ jobs:
         run: ci/check/platform-check.sh android
 
   web:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: Web (wasm32; Chromium, Firefox, WebKit)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -316,6 +341,8 @@ jobs:
   # PENDING §1.4: "no frame has ever reached an iPhone, real or simulated".
   # Experimental — reported by the `report` job, not blocking the run.
   ios-simulator:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: iOS simulator (tests in the sim, a frame on its screen)
     runs-on: macos-14
     timeout-minutes: 90
@@ -407,6 +434,8 @@ jobs:
   # self-hosted phone — x86_64, because that is what GitHub's Linux runners can
   # emulate at speed (KVM). Experimental, reported, not blocking.
   android-emulator:
+    # Passed (2026-10-14). Runs only when "run_passed" is ticked.
+    if: inputs.run_passed
     name: Android emulator (APK, device and accessibility suites)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -455,6 +484,200 @@ jobs:
           path: ci-artifacts/maestro-android/
           if-no-files-found: ignore
 
+  # **Firebase Test Lab: the device suite on real phones** (ci/mobile/test-lab.sh).
+  # Game loop on three physical phones from different makers — scenario 1 the
+  # CPU rasterizer, scenario 2 the planned GPU path — and a Robo crawl of the
+  # accessibility tree on one. Unchecked until it has run once.
+  #
+  # Secrets: GCP_SA_KEY (a service-account key JSON with the Firebase Test Lab
+  # Admin and Storage Object Viewer roles, or Editor) and FTL_PROJECT (the
+  # Firebase project id). Without them the job says so and stops.
+  # **The apps, as downloadable artifacts** — and the builds the Test Lab jobs
+  # below upload, so nothing is built twice. Release, because a debug build's
+  # frame times mean nothing; signed with the debug keystore android-env.sh
+  # creates, so the APK installs with `adb install` and on Test Lab as is.
+  build-apk:
+    name: Build — Android APKs
+    if: inputs.build_apps || inputs.test_lab_android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
+      - name: Toolchain, targets and cargo-apk
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup target add --toolchain "$RUST_VERSION" aarch64-linux-android x86_64-linux-android
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-apk
+      - name: Release APKs (arm64 for phones, x86_64 for emulators)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: |
+          . ci/mobile/android-env.sh
+          android_env build-apk
+          mkdir -p ../dist
+          for target in aarch64-linux-android x86_64-linux-android; do
+            marker="$(mktemp)"
+            cargo apk build -p vieww-platform-winit --example android --release --target "$target"
+            apk="$(find target -path '*/apk/*' -name '*.apk' -newer "$marker" | head -1)"
+            [ -n "$apk" ] || { echo "::error::no APK for $target"; exit 1; }
+            case "$target" in
+              aarch64*) cp "$apk" ../dist/vieww-arm64.apk ;;
+              x86_64*) cp "$apk" ../dist/vieww-x86_64.apk ;;
+            esac
+          done
+          ls -l ../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vieww-apk
+          path: dist/
+
+  # The iOS builds: an .ipa for real iPhones — signed with the Apple identity
+  # when the IOS_* secrets exist (what Firebase Test Lab needs), ad-hoc
+  # otherwise (device clouds that re-sign) — and a simulator .app to drag onto a
+  # Mac's simulator. MoltenVK is bundled in both: the device slice in the .ipa,
+  # the simulator slice in the .app.
+  build-ipa:
+    name: Build — iOS .ipa and simulator .app
+    if: inputs.build_apps || inputs.test_lab_ios
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      HAS_CERT: ${{ secrets.IOS_CERT_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
+      - name: Toolchain and iOS targets
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup target add --toolchain "$RUST_VERSION" aarch64-apple-ios aarch64-apple-ios-sim
+      - name: MoltenVK (device and simulator slices)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
+            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-all.tar
+          mkdir -p "$RUNNER_TEMP/mvk" && tar -xf "$RUNNER_TEMP/mvk.tar" -C "$RUNNER_TEMP/mvk"
+          dev=$(find "$RUNNER_TEMP/mvk" -path '*dynamic/MoltenVK.xcframework/ios-arm64/MoltenVK.framework' -type d | head -1)
+          sim=$(find "$RUNNER_TEMP/mvk" -path '*dynamic/MoltenVK.xcframework/ios-arm64_x86_64-simulator/MoltenVK.framework' -type d | head -1)
+          [ -n "$dev" ] && [ -n "$sim" ] || { echo "::error::MoltenVK slices not found in MoltenVK-all.tar"; exit 1; }
+          echo "MVK_DEVICE=$dev" >> "$GITHUB_ENV"
+          echo "MVK_SIM=$sim" >> "$GITHUB_ENV"
+      - name: Signing identity into a temporary keychain (when the secrets exist)
+        if: env.HAS_CERT == 'true'
+        env:
+          IOS_CERT_P12: ${{ secrets.IOS_CERT_P12 }}
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+          IOS_IDENTITY: ${{ secrets.IOS_IDENTITY }}
+        run: |
+          keychain="$RUNNER_TEMP/vieww.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          echo "$IOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$IOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain"
+          mapfile -t existing < <(security list-keychains -d user | tr -d '" ')
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          echo "$IOS_PROFILE" | base64 --decode > "$RUNNER_TEMP/vieww.mobileprovision"
+          echo "VIEWW_IOS_PROFILE=$RUNNER_TEMP/vieww.mobileprovision" >> "$GITHUB_ENV"
+          echo "VIEWW_IOS_IDENTITY=$IOS_IDENTITY" >> "$GITHUB_ENV"
+      - name: Simulator .app
+        run: |
+          VIEWW_MOLTENVK="$MVK_SIM" ci/mobile/ios-app.sh --sim --bundle-only
+          mkdir -p ../dist
+          (cd target/ios && zip -qry ../../../dist/vieww-simulator.app.zip vieww.app)
+      - name: Device .ipa
+        run: |
+          VIEWW_MOLTENVK="$MVK_DEVICE" ci/mobile/ios-app.sh --ipa
+          cp target/ios/vieww.ipa ../dist/vieww.ipa
+          ls -l ../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vieww-ios
+          path: dist/
+
+  test-lab-android:
+    name: Firebase Test Lab — Android (real phones)
+    if: inputs.test_lab_android
+    needs: build-apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    continue-on-error: true
+    env:
+      FTL_PROJECT: ${{ secrets.FTL_PROJECT }}
+      HAS_KEY: ${{ secrets.GCP_SA_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Secrets present?
+        run: |
+          if [ "$HAS_KEY" != "true" ] || [ -z "$FTL_PROJECT" ]; then
+            echo "::error::Set the GCP_SA_KEY and FTL_PROJECT repository secrets (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: vieww-apk
+          path: dist
+      - name: Game loop and Robo on Test Lab
+        run: ci/mobile/test-lab.sh android --apk ../dist/vieww-arm64.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-lab-android
+          path: vieww_base/test-lab-results-*/
+          if-no-files-found: ignore
+
+  # The same on real iPhones. Test Lab refuses an ad-hoc signature, so this
+  # needs an Apple development certificate and provisioning profile:
+  # IOS_CERT_P12 (base64 .p12), IOS_CERT_PASSWORD, IOS_PROFILE (base64
+  # .mobileprovision) and IOS_IDENTITY (e.g. "Apple Development: ... (TEAMID)"),
+  # plus GCP_SA_KEY and FTL_PROJECT.
+  test-lab-ios:
+    name: Firebase Test Lab — iOS (real iPhones)
+    if: inputs.test_lab_ios
+    needs: build-ipa
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    continue-on-error: true
+    env:
+      FTL_PROJECT: ${{ secrets.FTL_PROJECT }}
+      HAS_KEY: ${{ secrets.GCP_SA_KEY != '' }}
+      HAS_CERT: ${{ secrets.IOS_CERT_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Secrets present?
+        run: |
+          if [ "$HAS_KEY" != "true" ] || [ -z "$FTL_PROJECT" ] || [ "$HAS_CERT" != "true" ]; then
+            echo "::error::Needs GCP_SA_KEY, FTL_PROJECT and the Apple signing secrets (IOS_CERT_P12, IOS_CERT_PASSWORD, IOS_PROFILE, IOS_IDENTITY) — Test Lab refuses an ad-hoc .ipa."
+            exit 1
+          fi
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: vieww-ios
+          path: dist
+      - name: Game loop on Test Lab
+        run: ci/mobile/test-lab.sh ios --ipa ../dist/vieww.ipa
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-lab-ios
+          path: vieww_base/test-lab-results-*/
+          if-no-files-found: ignore
+
   # **Results where a session without API access can read them.** Every run's
   # outcome — each job's conclusion, and the last lines of every failed job's
   # log — is committed to the branch `ci-results/<branch>`, force-pushed, so
@@ -464,7 +687,7 @@ jobs:
   report:
     name: Publish results to ci-results/<branch>
     if: always()
-    needs: [gate, coverage, cross, gpu-lavapipe, macos, windows, android, web, ios-simulator, android-emulator]
+    needs: [gate, coverage, cross, gpu-lavapipe, macos, windows, android, web, ios-simulator, android-emulator, build-apk, build-ipa, test-lab-android, test-lab-ios]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -513,6 +736,9 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           branch="ci-results/${GITHUB_REF_NAME//\//-}"
+          # The app builds are artifacts to download, not results to read —
+          # tens of MB that would otherwise be committed on every run.
+          rm -rf out/artifacts/vieww-apk out/artifacts/vieww-ios
           cd out
           git init -q
           git checkout -q -b "$branch"
