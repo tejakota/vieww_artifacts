@@ -7,6 +7,7 @@
 #   ci/mobile/ios-app.sh --device           # a plugged-in, trusted iPhone
 #   ci/mobile/ios-app.sh --ipa              # an .ipa for a device cloud to resign
 #   ci/mobile/ios-app.sh --sim --debug      # slower vello; see the note below
+#   ci/mobile/ios-app.sh --sim --bundle-only  # build and bundle, install nowhere (CI artifacts)
 #
 # # `--ipa`, and why it needs no Apple account
 #
@@ -55,6 +56,7 @@ target_kind="sim"
 # the default under CI, or with --detach.
 detach=0
 [ -n "${CI:-}" ] && detach=1
+bundle_only=0
 profile="release"
 
 while [ "$#" -gt 0 ]; do
@@ -67,6 +69,7 @@ while [ "$#" -gt 0 ]; do
         # frame rate measured from `rustc -O0` is a report on the compiler.
         --debug) profile="debug" ;;
         --detach) detach=1 ;;
+        --bundle-only) bundle_only=1 ;;
         --release) profile="release" ;;
         *) echo "ios-app: unknown argument '$1'" >&2; exit 2 ;;
     esac
@@ -168,6 +171,16 @@ sign_nested() {
         [ -e "$item" ] && codesign --force --sign "$identity" --timestamp=none "$item"
     done
 }
+
+# `--bundle-only`: a signed (ad-hoc) bundle and nothing else — for CI, which
+# uploads it as an artifact rather than installing it anywhere. A simulator
+# runs ad-hoc signed bundles; a device would need --ipa or --device.
+if [ "$bundle_only" = 1 ] && [ "$target_kind" != "ipa" ]; then
+    sign_nested -
+    codesign --force --sign - --timestamp=none "$app"
+    echo "==> $app (ad-hoc signed, not installed)"
+    exit 0
+fi
 
 if [ "$target_kind" = "ipa" ]; then
     # **Two signatures, for two kinds of device cloud.**
