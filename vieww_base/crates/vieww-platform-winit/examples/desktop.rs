@@ -75,8 +75,60 @@ fn main() {
     eprintln!("the desktop suite does not run on Android; see examples/android.rs");
 }
 
+/// `log` records to stderr when `RUST_LOG` is set — `info`, `debug` or `trace`
+/// (anything else, or a module filter, means `info`).
+///
+/// # Why an example needs a logger
+///
+/// The platform crate reports through `log` — the refresh rate a window was
+/// given (`vieww: window#primary reports 60.0Hz`), insets, accessibility —
+/// and nothing installed a logger on the desktop, so `RUST_LOG=info` printed
+/// nothing at all. PENDING §3.2's own instructions ("drag the window between
+/// monitors, with `RUST_LOG=info`, and watch for the line") could not have
+/// worked. Android routes `log` into logcat (`examples/android.rs`); this is
+/// the desktop's equivalent, without a new dependency.
+#[cfg(not(target_os = "android"))]
+struct StderrLog(log::LevelFilter);
+
+#[cfg(not(target_os = "android"))]
+impl log::Log for StderrLog {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= self.0
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        if self.enabled(record.metadata()) {
+            eprintln!("[{} {}] {}", record.level(), record.target(), record.args());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+#[cfg(not(target_os = "android"))]
+fn install_logger() {
+    let Some(spec) = std::env::var_os("RUST_LOG") else {
+        return;
+    };
+    let level = match spec.to_string_lossy().trim() {
+        "trace" => log::LevelFilter::Trace,
+        "debug" => log::LevelFilter::Debug,
+        "warn" => log::LevelFilter::Warn,
+        "error" => log::LevelFilter::Error,
+        _ => log::LevelFilter::Info,
+    };
+    // `set_logger` wants a `'static`; leaking one small value once, at
+    // startup, is the plain way to give it that (no `alloc` feature needed,
+    // which `set_boxed_logger` would be).
+    let logger: &'static StderrLog = Box::leak(Box::new(StderrLog(level)));
+    if log::set_logger(logger).is_ok() {
+        log::set_max_level(level);
+    }
+}
+
 #[cfg(not(target_os = "android"))]
 fn main() {
+    install_logger();
     let perf = screen::PerfLink::new();
     let device = DeviceSuite::new();
     let desktop = DesktopSuite::new(&device);
