@@ -211,8 +211,18 @@ impl Widget for Drawer {
             // Tab that walked out of it would land on the screen behind the
             // scrim. Around the panel rather than the whole stack, because the
             // barrier covers the screen.
-            let trapped: WidgetNode = crate::FocusTrap::new(true)
-                .child(pinned.child(panel))
+            //
+            // **Inside the `PositionedDirectional`, not around it.** A
+            // positioned child only positions when it is the `Stack`'s direct
+            // child; wrapped in the trap, the stack saw an ordinary child,
+            // expanded it to the whole surface, and the panel — opaque to hit
+            // testing — covered the scrim it was sized to leave. Every tap on
+            // the "scrim" landed on the panel and the drawer could not be
+            // dismissed by touch at all. Found by the Android emulator's
+            // Maestro flow (2026-10-14); pinned by
+            // `vieww-test-harness/tests/drawer_dismiss.rs`.
+            let trapped: WidgetNode = pinned
+                .child(crate::FocusTrap::new(true).child(panel))
                 .into();
 
             Stack::new()
