@@ -89,11 +89,18 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q libx11-dev libxkbcommon-dev libwayland-dev libgtk-3-dev \
-            libxdo-dev libasound2-dev xvfb
+            libxdo-dev libasound2-dev libxkbcommon-x11-0 xvfb
       - name: Free disk
         run: bash ci/tools/ci-runner-prep.sh || true
       - name: The gate
-        run: ci/check/checks.sh
+        run: |
+          mkdir -p ../ci-artifacts
+          ci/check/checks.sh 2>&1 | tee ../ci-artifacts/gate.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gate-log
+          path: ci-artifacts/gate.log
 
   coverage:
     name: Coverage floor
@@ -112,7 +119,7 @@ jobs:
       - name: System packages
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libx11-dev libxkbcommon-dev libwayland-dev libgtk-3-dev libxdo-dev libasound2-dev
+          sudo apt-get install -y -q libx11-dev libxkbcommon-dev libwayland-dev libgtk-3-dev libxdo-dev libasound2-dev libxkbcommon-x11-0
       - name: Free disk
         run: bash ci/tools/ci-runner-prep.sh || true
       - name: Coverage
@@ -149,7 +156,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q mesa-vulkan-drivers vulkan-tools libvulkan-dev xvfb \
-            libx11-dev libxkbcommon-dev libwayland-dev
+            libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev
           echo "VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)" >> "$GITHUB_ENV"
       - name: Adapter
         run: vulkaninfo --summary
@@ -160,7 +167,14 @@ jobs:
       - name: A GPU frame presented to a real window
         env:
           VIEWW_REQUIRE_HARDWARE: display,gpu
-        run: xvfb-run -a -s "-screen 0 1366x768x24" cargo test --release -p vieww-platform-winit --test wait_loop
+        run: |
+          mkdir -p ../ci-artifacts
+          xvfb-run -a -s "-screen 0 1366x768x24" cargo test --release -p vieww-platform-winit --test wait_loop 2>&1 | tee ../ci-artifacts/gpu-window.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: gpu-window-log
+          path: ci-artifacts/gpu-window.log
 
   macos:
     name: macOS and iOS (Metal)
@@ -429,7 +443,15 @@ jobs:
           jq -r '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"' out/jobs.json |
           while IFS=$'\t' read -r id name; do
             safe=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_')
-            gh api "repos/$REPO/actions/jobs/$id/logs" 2>/dev/null | tail -n 400 > "out/logs/$safe.log" || true
+            # The endpoint answers with a redirect to blob storage; follow it
+            # with curl and keep the error text if there is one, rather than
+            # leaving an empty file that says nothing (first runs did that).
+            {
+              jq -r --arg id "$id" '.jobs[] | select((.id|tostring) == $id) | .steps[] | select(.conclusion == "failure") | "failed step: \(.number) \(.name)"' out/jobs.json
+              curl -sSL --fail-with-body -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$REPO/actions/jobs/$id/logs" 2>&1 | tail -n 600
+            } > "out/logs/$safe.log" || true
           done
           cat out/SUMMARY.md
       - name: Push to ci-results/<branch>
