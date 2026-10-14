@@ -1035,6 +1035,10 @@ struct WindowState {
     /// entered an output when it opened, re-reads it. See
     /// [`WindowState::display_may_have_changed`].
     display: Option<winit::monitor::MonitorHandle>,
+    /// When [`display`](Self::display) was last compared against the window's
+    /// current monitor from the draw path — see
+    /// [`WindowState::recheck_display`].
+    display_checked: Option<Instant>,
     /// The pointer shape currently set on this window.
     ///
     /// Remembered so a mouse moving *within* one widget costs nothing — see
@@ -1167,9 +1171,39 @@ impl WindowState {
     /// counted every frame inside 6.9ms as on time — and on Wayland, where a
     /// fresh surface may not have entered any output yet, `current_monitor`
     /// is `None` at open and the budget stayed at its default until the
-    /// window was reopened. Called on `Moved` and on `ScaleFactorChanged`
-    /// (which Wayland sends when the surface enters an output); a move within
-    /// one monitor costs one comparison.
+    /// window was reopened. Called on `Moved`, on `ScaleFactorChanged`, and
+    /// once a second from the draw path ([`recheck_display`](Self::recheck_display),
+    /// because on Wayland the first two may never come); a move within one
+    /// monitor costs one comparison.
+    /// [`display_may_have_changed`](Self::display_may_have_changed), at most
+    /// once a second, from frames the window is drawing anyway.
+    ///
+    /// # Why the events were not enough
+    ///
+    /// On GNOME/Wayland none of them fire for the case that matters. A fresh
+    /// surface has entered no output when it opens, so `current_monitor` is
+    /// `None` and the open-time read finds nothing; Wayland never sends
+    /// `Moved`; and `ScaleFactorChanged` comes only when the scale *changes* —
+    /// two 1x monitors never send it. A real two-monitor run on a GNOME/Wayland
+    /// laptop (2026-10-14) printed no refresh-rate line at all, at open or
+    /// after dragging the window across, while the desktop suite otherwise
+    /// passed 21/21: the budget had silently stayed at its 60Hz default.
+    ///
+    /// Comparing monitor handles once a second is cheap, and it costs nothing
+    /// for a window that is not drawing — a window nobody sees has no frame
+    /// budget to get wrong.
+    fn recheck_display(&mut self, shared: &Shared) {
+        let now = Instant::now();
+        if self
+            .display_checked
+            .is_some_and(|last| now.duration_since(last) < Duration::from_secs(1))
+        {
+            return;
+        }
+        self.display_checked = Some(now);
+        self.display_may_have_changed(shared);
+    }
+
     fn display_may_have_changed(&mut self, shared: &Shared) {
         let Some(window) = self.gpu.as_ref().map(|gpu| Arc::clone(&gpu.window)) else {
             return;
@@ -2144,6 +2178,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             presented: false,
             background,
             display: None,
+            display_checked: None,
         };
 
         state.follow_display(&self.shared, &window);
@@ -2715,6 +2750,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             // which is what the `if` did.
             WindowEvent::RedrawRequested if self.windows[index].may_draw() => {
                 let (windows, shared) = (&mut self.windows, &mut self.shared);
+                windows[index].recheck_display(shared);
                 windows[index].draw(shared);
             }
             WindowEvent::CursorMoved { position, .. } => {

@@ -111,6 +111,18 @@ if want android || want talkback; then
     fi
 fi
 
+if [ "$phone" = 1 ]; then
+    # The first real run (2026-10-14) stopped here twice, on setup rather than
+    # on vieww: the pinned toolchain had no `aarch64-linux-android` std, and an
+    # older build of the app was installed only for a second user profile
+    # (user 10) while the scripts ask about user 0.
+    abi="$(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
+    case "$abi" in
+        arm64-v8a) rustup target add aarch64-linux-android > "$out/rustup-target.log" 2>&1 ;;
+        x86_64) rustup target add x86_64-linux-android > "$out/rustup-target.log" 2>&1 ;;
+    esac
+fi
+
 if want android && [ "$phone" = 1 ]; then
     # Never on an emulator here: the point is the real GPU's frame times, which
     # device-suite.sh counts fully on a phone.
@@ -118,6 +130,11 @@ if want android && [ "$phone" = 1 ]; then
 fi
 
 if want talkback && [ "$phone" = 1 ]; then
+    # Installed for some user but not user 0 (a work profile / second space):
+    # make it available to user 0, which is who the scripts launch as.
+    if ! adb shell pm list packages --user 0 2>/dev/null | grep -q 'dev.vieww.demo'; then
+        adb shell pm install-existing --user 0 dev.vieww.demo > "$out/install-existing.log" 2>&1 || true
+    fi
     run a11y-talkback ci/mobile/a11y-android.sh --keep
     run a11y-modal    ci/mobile/a11y-android.sh --modal
     # Maestro taps through TalkBack differently; run it with TalkBack off.

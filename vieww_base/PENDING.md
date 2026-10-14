@@ -54,6 +54,24 @@ them can be closed by reading the code more carefully.
 
 ## 1.1 A GPU frame on real graphics hardware
 
+**2026-10-14 — first run on real GPUs** (`ci/hardware/close-remaining.sh`, a
+Kaby Lake laptop under GNOME/Wayland, rustc 1.98.1):
+
+| GPU | Driver | `vieww-hal --features vulkan -- --ignored` | `vieww-3d` GPU | GPU frame in a real window |
+|---|---|---|---|---|
+| Intel HD Graphics 620 | Mesa 26.0.8 | 44/44 (compositor 17/17 incl. backdrop blur) | 7/7 | `wait_loop` 5/5, `gpu_frame` ok |
+| NVIDIA GeForce 920MX | 580.178.04 (PRIME) | 44/44 | — | — |
+
+So the GPU paths are correct on two real drivers, not only on lavapipe and
+SwiftShader — including the backdrop-blur edge mode of §2.2, held to the CPU
+oracle on Mesa's real Intel driver. The desktop suite on the same machine:
+21/21, 1.76 ms median frame (347 fps).
+
+**Still open here:** GPU *timings*. `examples/fixtures` renders on the CPU
+(185.3 ms for the gallery on this laptop; the same two fixtures over budget as
+§4.1, plus the `33-sheet` motion at 14.2 ms mean); it has no switch to plan its
+scenes onto the GPU, which is what "measure with `Placement::Gpu`" needs.
+
 **What.** Run `cargo test -p vieww-hal --features vulkan -- --ignored` on a
 machine with a discrete or integrated GPU, and measure `examples/fixtures` with
 `Placement::Gpu` where `ScenePlan::is_complete` allows it. The windowed GPU path
@@ -341,6 +359,15 @@ backend enumerates.
 display; then the `vieww: … reports …Hz` log line should appear again.
 
 **Start.** Do exactly that, with `RUST_LOG=info`.
+
+**2026-10-14, first attempt on a real two-monitor GNOME/Wayland laptop:** no
+refresh-rate line at all — not at open, not after the drag. Two causes, both
+fixed: the desktop example installed no logger, so `RUST_LOG` printed nothing
+(it now has a minimal stderr logger); and on Wayland none of the three
+re-read triggers fired (`current_monitor` is `None` at open, `Moved` is never
+sent, `ScaleFactorChanged` only when the scale changes). The draw path now
+re-checks the monitor at most once a second (`WindowState::recheck_display`).
+Needs one more run of `ci/hardware/close-remaining.sh monitors`.
 
 ## 3.3 The out-of-process preview exists; it is not yet complete or proven on Windows
 
