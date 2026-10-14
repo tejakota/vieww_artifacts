@@ -190,6 +190,24 @@ covered its own scrim, so a drawer could not be dismissed by touch (fixed in
 `Drawer::build`, pinned by `vieww-test-harness/tests/drawer_dismiss.rs`).
 What only a phone can still answer: real-GPU frame times and TalkBack by ear.
 
+**2026-10-14, on the phone itself** (Redmi Note 7 Pro, Android 16, arm64,
+`ci/hardware/close-remaining.sh`): the device suite reports **15 of 17**
+green — clipboard round trip, semantic click, a real tap, the modal, keyboard
+inset (290 logical px), safe area, density 2.75x, damage tracking, and a real
+guest library `dlopen`ed and executed. TalkBack-bound dump: 30 nodes, 26
+labelled, roles right (Button, RadioButton with `checked`, ProgressBar with its
+value); the modal hides the screen behind it through the bridge (3/3 panel
+items, "Tap me" gone) — confirmed on a device for the first time. Maestro's
+flow passes end to end on the phone.
+
+**The two failures are real and are performance:** median frame **37.4 ms**
+(26 fps), worst 107 ms, 240/240 over the 16.7 ms budget, at 1080x2340. That is
+the CPU rasteriser on the phone's cores (the emulator, on a runner's x86
+cores, measured 41 ms). The GPU path is correct on real Mesa and NVIDIA
+drivers (§1.1) but the Android demo does not use it; trying it on Adreno is
+the next measurement. **TalkBack by ear:** answered "no" — what was wrong is
+not yet recorded.
+
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
 (`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
 a hot-reload path. The APKs build green on runners; nothing has ever run on a
@@ -367,7 +385,12 @@ fixed: the desktop example installed no logger, so `RUST_LOG` printed nothing
 re-read triggers fired (`current_monitor` is `None` at open, `Moved` is never
 sent, `ScaleFactorChanged` only when the scale changes). The draw path now
 re-checks the monitor at most once a second (`WindowState::recheck_display`).
-Needs one more run of `ci/hardware/close-remaining.sh monitors`.
+The second run still printed nothing: the re-check sat on `RedrawRequested`,
+and most frames are drawn straight from `about_to_wait`. It now runs inside
+`WindowState::draw`. Verified on a headless Weston (a real Wayland compositor):
+`vieww: window#primary reports 60.0Hz` now appears, after the open-time read
+found no monitor. A monitor that names no rate is now logged too. Needs one
+more run of `ci/hardware/close-remaining.sh monitors` with two monitors.
 
 ## 3.3 The out-of-process preview exists; it is not yet complete or proven on Windows
 

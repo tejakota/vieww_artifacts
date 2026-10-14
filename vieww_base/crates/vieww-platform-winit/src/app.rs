@@ -1249,6 +1249,18 @@ impl WindowState {
                 })
         });
         let Some(hz) = detected else {
+            // Say so when there *is* a monitor and it will not name a rate:
+            // otherwise "no line" means either this or "never asked", and the
+            // two cost a hardware run each to tell apart.
+            if let Some(monitor) = &self.display {
+                log::info!(
+                    "vieww: {} is on {}, which reports no refresh rate; keeping the current budget",
+                    self.key,
+                    monitor
+                        .name()
+                        .unwrap_or_else(|| "an unnamed monitor".to_owned())
+                );
+            }
             return;
         };
         // A monitor reporting something absurd is a monitor to ignore, not a
@@ -1340,6 +1352,12 @@ impl WindowState {
 
     /// Produce a frame and put it on the screen.
     fn draw(&mut self, shared: &mut Shared) {
+        // Here, not in the `RedrawRequested` arm: most frames are drawn
+        // directly from `about_to_wait` (see the comment at that call), so a
+        // check placed only on `RedrawRequested` ran on the first map and
+        // almost never again — the second two-monitor run on GNOME/Wayland
+        // still printed no refresh-rate line in 18,200 frames.
+        self.recheck_display(shared);
         // Before the hooks and before the build, for the same reason
         // `notify_frame` runs there: a keyboard that came up has to be in the
         // metrics the frame about to be built reads, not the one after it.
@@ -2750,7 +2768,6 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             // which is what the `if` did.
             WindowEvent::RedrawRequested if self.windows[index].may_draw() => {
                 let (windows, shared) = (&mut self.windows, &mut self.shared);
-                windows[index].recheck_display(shared);
                 windows[index].draw(shared);
             }
             WindowEvent::CursorMoved { position, .. } => {
