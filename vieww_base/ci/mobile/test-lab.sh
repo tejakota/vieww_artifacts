@@ -170,6 +170,14 @@ if [ "$platform" = android ] && [ -z "$apk" ]; then
     rm -f "$marker"
     [ -n "$apk" ] || { echo "test-lab: the build produced no APK" >&2; exit 4; }
 fi
+if [ "$platform" = android ]; then
+    # Test Lab refuses an APK without Java code ("One of your APKs that should
+    # contain code has none"); cargo-apk makes exactly that. See apk-add-code.sh.
+    # Harmless on an APK that already went through it (the CI artifact has).
+    [ -n "${CARGO_APK_RELEASE_KEYSTORE:-}" ] || { . ci/mobile/android-env.sh && android_env "test-lab" >/dev/null || true; }
+    ci/mobile/apk-add-code.sh "$apk" "$out/vieww-testlab.apk"
+    apk="$out/vieww-testlab.apk"
+fi
 if [ "$platform" = ios ] && [ -z "$ipa" ]; then
     if [ "$(uname)" != Darwin ]; then
         echo "test-lab: an iOS run needs a signed .ipa (--ipa). Building one needs macOS;" >&2
