@@ -227,6 +227,22 @@ orientation = "portrait"
 # behind its back would throw away the element tree instead.
 config_changes = "orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout|density"
 
+# The launcher entry, spelled out: declaring any intent filter of our own may
+# replace cargo-apk's default one, and an APK with no MAIN/LAUNCHER filter
+# installs and then cannot be opened. A duplicate of the default is harmless.
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.MAIN"]
+categories = ["android.intent.category.LAUNCHER"]
+
+# Firebase Test Lab's Game Loop launch (`examples/android.rs`'s `GameLoop`),
+# exactly as its docs specify: a dedicated filter with this action, the
+# DEFAULT category and this mime type, used for nothing else.
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["com.google.intent.action.TEST_LOOP"]
+categories = ["android.intent.category.DEFAULT"]
+[[package.metadata.android.application.activity.intent_filter.data]]
+mime_type = "application/javascript"
+
 # For `NSLog` in `examples/shared/device_tests.rs`. Already in the lockfile at
 # 0.2.2 via `objc2-ui-kit`, so this costs no new download — it only makes the
 # crate nameable from the examples, which is where the device suite lives.

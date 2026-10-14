@@ -215,9 +215,38 @@ pub(crate) struct DeviceSuite {
     /// screen behind still in the semantics tree — and only the last step of it
     /// ("does TalkBack *say* nothing") needs ears.
     drawer: Rc<RefCell<Option<Signal<bool>>>>,
+    /// Who else gets the report, once it is written — see
+    /// [`when_reported`](Self::when_reported).
+    sink: ReportSink,
+}
+
+/// A callback for the finished report: the same text the log gets.
+///
+/// Its own type only so [`DeviceSuite`] can keep deriving `Debug`, `Clone` and
+/// `Default`.
+type Deliver = Box<dyn FnOnce(&str)>;
+
+#[derive(Clone, Default)]
+struct ReportSink(Rc<RefCell<Option<Deliver>>>);
+
+impl std::fmt::Debug for ReportSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ReportSink")
+    }
 }
 
 impl DeviceSuite {
+    /// Hand the finished report to `deliver` as well as to the log.
+    ///
+    /// For a device cloud: Firebase Test Lab's Game Loop collects a results
+    /// file the app writes (Android: the launch intent's data URI; iOS:
+    /// `Documents/GameLoopResults/`), and a log line nobody downloads is not a
+    /// result. Called once, on the frame the report is printed.
+    #[allow(dead_code)]
+    pub(crate) fn when_reported(&self, deliver: impl FnOnce(&str) + 'static) {
+        *self.sink.0.borrow_mut() = Some(Box::new(deliver));
+    }
+
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -641,14 +670,21 @@ impl DeviceSuite {
     /// The closure to hand to `App::on_frame`.
     pub(crate) fn hook(&self) -> impl FnMut(&FrameLog) + 'static {
         let results = Rc::clone(&self.results);
+        let sink = self.sink.clone();
         move |log| {
             if log.frames() < FRAMES || results.borrow().reported {
                 return;
             }
-            let mut results = results.borrow_mut();
-            frame_checks(&mut results, log);
-            results.reported = true;
-            print(&results);
+            let text = {
+                let mut results = results.borrow_mut();
+                frame_checks(&mut results, log);
+                results.reported = true;
+                print(&results)
+            };
+            let deliver = sink.0.borrow_mut().take();
+            if let Some(deliver) = deliver {
+                deliver(&text);
+            }
         }
     }
 }
@@ -840,28 +876,39 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
 }
 
 /// Write the report out, ending with the sentinel the script greps for.
-fn print(results: &Results) {
-    report!("__VIEWW_SUITE__ begin");
+/// Returns the same lines, joined, for [`DeviceSuite::when_reported`].
+fn print(results: &Results) -> String {
+    let mut text = String::new();
+    let mut line_out = |line: String| {
+        report!("{}", line);
+        text.push_str(&line);
+        text.push('\n');
+    };
+    line_out("__VIEWW_SUITE__ begin".to_owned());
     for line in &results.lines {
         let mark = match line.ok {
             Some(true) => "ok  ",
             Some(false) => "FAIL",
             None => "--  ",
         };
-        report!("__VIEWW_SUITE__ {} {}: {}", mark, line.name, line.detail);
+        line_out(format!(
+            "__VIEWW_SUITE__ {} {}: {}",
+            mark, line.name, line.detail
+        ));
     }
     let failures = results.failures();
-    report!(
+    line_out(format!(
         "__VIEWW_SUITE__ end {} checks, {} failed",
         results.checks(),
         failures
-    );
+    ));
     // A separate, greppable verdict. The script keys on this rather than
     // counting lines itself, so adding a check never changes the script.
-    report!(
+    line_out(format!(
         "__VIEWW_SUITE__ result {}",
         if failures == 0 { "PASS" } else { "FAIL" }
-    );
+    ));
+    text
 }
 
 /// Reads what only a live window knows, from inside the tree.

@@ -81,6 +81,32 @@ fn main() {
     let perf = screen::PerfLink::new();
     let suite = DeviceSuite::new();
 
+    // **Firebase Test Lab's Game Loop collects `Documents/GameLoopResults/`.**
+    // It launches the app through the `firebase-game-loop` URL scheme
+    // (registered by `ci/mobile/ios-app.sh`) and uploads every file in that
+    // directory when the loop ends
+    // (<https://firebase.google.com/docs/test-lab/ios/run-game-loop-test>).
+    // The suite runs by itself at launch, so it needs no scenario to read; the
+    // report is simply also written there, on every run — outside Test Lab
+    // the file is one more copy in the app's own sandbox and nothing reads it.
+    // Without the `firebase-game-loop-complete://` signal (winit owns the app
+    // delegate, and opening URLs from here is not wired) each loop ends at Test
+    // Lab's five-minute timeout rather than early: slower, not wrong.
+    #[cfg(target_os = "ios")]
+    suite.when_reported(|report| {
+        let Some(home) = std::env::var_os("HOME") else {
+            return;
+        };
+        let dir = std::path::Path::new(&home)
+            .join("Documents")
+            .join("GameLoopResults");
+        let written = std::fs::create_dir_all(&dir)
+            .and_then(|()| std::fs::write(dir.join("vieww-suite.txt"), report));
+        if let Err(error) = written {
+            eprintln!("vieww: writing GameLoopResults failed: {error}");
+        }
+    });
+
     let result = App::new()
         .title("vieww")
         .size(PREVIEW)
