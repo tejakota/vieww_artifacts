@@ -44,6 +44,11 @@ case "$platform" in
         serial="$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
         [[ -n "$serial" ]] || { echo "maestro.sh: no adb device" >&2; exit 2; }
         device=(--device "$serial")
+        # A slow emulator raises "Pixel Launcher isn't responding" over
+        # whatever is on screen, and Maestro then sees the dialog instead of
+        # the app (third CI run). Suppress such dialogs, and close one already up.
+        adb -s "$serial" shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 || true
+        adb -s "$serial" shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
         adb -s "$serial" shell am force-stop dev.vieww.demo || true
         # `am start`, not `monkey -c LAUNCHER 1`: monkey's one event is not
         # guaranteed to be the launch alone.

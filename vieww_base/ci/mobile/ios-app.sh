@@ -135,6 +135,21 @@ cat > "$app/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# **MoltenVK.** vieww draws through Vulkan, and iOS has no Vulkan of its own:
+# MoltenVK has to be inside the bundle, at `Frameworks/`, where
+# `vieww-hal`'s loader looks. Without it the GPU cannot open — the first
+# simulator runs in CI sat on a black screen for exactly that reason.
+# `VIEWW_MOLTENVK` names a `libMoltenVK.dylib` or a `MoltenVK.framework` for
+# the slice being built (simulator or device; the xcframework in Khronos'
+# `MoltenVK-ios.tar` release has both).
+if [ -n "${VIEWW_MOLTENVK:-}" ]; then
+    mkdir -p "$app/Frameworks"
+    cp -R "$VIEWW_MOLTENVK" "$app/Frameworks/"
+    echo "==> bundled MoltenVK from $VIEWW_MOLTENVK"
+else
+    echo "ios-app: VIEWW_MOLTENVK is unset — no MoltenVK in the bundle, so the GPU will not open." >&2
+fi
+
 echo "==> bundled $app"
 
 if [ "$target_kind" = "ipa" ]; then

@@ -134,6 +134,16 @@ simulators.
 `ci/mobile/ios-app.sh --sim` — which already exists and already knows how to build a
 `.app`, boot a simulator and install onto it.
 
+**2026-10-14, from the simulator job in CI.** The runners *do* boot
+simulators: the `ios-simulator` job builds, installs and launches the demo.
+It then drew a black screen. With `VIEWW_TRACE_FRAMES` on, the startup trace
+ended at `window created (1260x2361); opening the GPU` — every window opens
+through `vieww-hal`'s Vulkan backend, iOS has no Vulkan, and the bundle had no
+MoltenVK. The failure was silent because `run_app` never returns on iOS and
+`exit()` is ignored there; `fail_to_open` now prints the reason and ends the
+process. Next: MoltenVK in the bundle (`VIEWW_MOLTENVK`, fetched by the CI
+job from Khronos' release), then whatever the first real frame shows.
+
 ## 1.5 Android
 
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite

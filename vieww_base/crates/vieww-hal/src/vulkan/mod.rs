@@ -111,7 +111,7 @@ pub fn load_entry() -> Result<ash::Entry, VulkanError> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 #[allow(
     clippy::unnecessary_wraps,
     reason = "same signature as the macOS fallback"
@@ -120,7 +120,14 @@ fn load_entry_fallback(first: String) -> Result<ash::Entry, VulkanError> {
     Err(VulkanError::Loading(first))
 }
 
-#[cfg(target_os = "macos")]
+/// On iOS there is no system loader and no `$VULKAN_SDK`: MoltenVK has to
+/// travel inside the app. An iOS bundle is flat — the executable sits at the
+/// `.app` root and `Frameworks/` beside it, not at `../Frameworks` as on macOS —
+/// so those paths are tried as well. `ci/mobile/ios-app.sh` puts it there when
+/// `VIEWW_MOLTENVK` names a copy. Without one, the error below now reaches the
+/// screen's owner instead of a silent black window (see `vieww-platform-winit`'s
+/// `fail_to_open`).
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn load_entry_fallback(first: String) -> Result<ash::Entry, VulkanError> {
     use std::path::{Path, PathBuf};
 
@@ -133,6 +140,11 @@ fn load_entry_fallback(first: String) -> Result<ash::Entry, VulkanError> {
         candidates.push(frameworks.join("libvulkan.1.dylib"));
         candidates.push(frameworks.join("libMoltenVK.dylib"));
         candidates.push(dir.join("libvulkan.1.dylib"));
+        // iOS: `<App>.app/Frameworks/…`.
+        let flat = dir.join("Frameworks");
+        candidates.push(flat.join("libMoltenVK.dylib"));
+        candidates.push(flat.join("MoltenVK.framework/MoltenVK"));
+        candidates.push(flat.join("libvulkan.1.dylib"));
     }
     if let Some(sdk) = std::env::var_os("VULKAN_SDK") {
         let sdk = PathBuf::from(sdk);

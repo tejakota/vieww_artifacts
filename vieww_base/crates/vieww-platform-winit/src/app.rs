@@ -2322,6 +2322,29 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
     }
 }
 
+/// A window that could not open: record why, say why, and stop.
+///
+/// # Said, not only recorded
+///
+/// `App::run` hands the recorded error back once `run_app` returns — but on
+/// iOS **`run_app` never returns** (`UIApplicationMain` owns the process) and
+/// `exit()` is ignored, so a GPU that failed to open left a black screen and
+/// no word anywhere. That is what the first iOS simulator runs in CI showed: a
+/// startup trace ending at "opening the GPU", an empty stderr, and an app that
+/// was still "running". So the reason is printed here, on every platform, and
+/// on iOS the process ends — a failure that looks like a failure.
+fn fail_to_open(
+    failure: &mut Option<PlatformError>,
+    error: PlatformError,
+    event_loop: &ActiveEventLoop,
+) {
+    eprintln!("vieww: the window could not open: {error}");
+    *failure = Some(error);
+    event_loop.exit();
+    #[cfg(target_os = "ios")]
+    std::process::exit(1);
+}
+
 impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.windows.is_empty() {
@@ -2343,8 +2366,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                     }
                 },
             ) {
-                self.shared.failure = Some(error);
-                event_loop.exit();
+                fail_to_open(&mut self.shared.failure, error, event_loop);
                 return;
             }
         } else {
@@ -2353,8 +2375,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             for index in 0..self.windows.len() {
                 if self.windows[index].gpu.is_none() {
                     if let Err(error) = self.reopen(event_loop, index) {
-                        self.shared.failure = Some(error);
-                        event_loop.exit();
+                        fail_to_open(&mut self.shared.failure, error, event_loop);
                         return;
                     }
                 }

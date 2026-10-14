@@ -12,6 +12,13 @@ name: vieww demo screen
 tags: [smoke]
 ---
 - launchApp
+# An "isn't responding" dialog from a slow emulator's launcher can sit on top
+# of the app; answer it and carry on (maestro.sh also suppresses them).
+- runFlow:
+    when:
+      visible: "Wait"
+    commands:
+      - tapOn: "Wait"
 - extendedWaitUntil:
     visible: "Tap me"
     timeout: 30000
