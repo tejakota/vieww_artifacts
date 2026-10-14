@@ -826,6 +826,17 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     );
 
     results.observe("frame_report", format!("{report}"));
+    // Which rasterizer drew. With `App::prefer_gpu` a frame the planner cannot
+    // express falls back to the CPU, and a GPU that would not build falls
+    // back for good — so "GPU requested" is not "GPU measured", and the frame
+    // times above mean nothing until this says which one they are.
+    results.observe(
+        "gpu_frames",
+        format!(
+            "{} of {} drawn by the GPU rasterizer ({} straight into the swapchain)",
+            report.gpu_frames, report.frames, report.gpu_direct_frames
+        ),
+    );
 }
 
 /// Write the report out, ending with the sentinel the script greps for.

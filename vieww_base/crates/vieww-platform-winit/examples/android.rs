@@ -550,7 +550,28 @@ mod demo {
             }
         }
 
-        let result = App::new()
+        // **Which rasterizer, chosen on the phone without a rebuild.** The CPU
+        // rasterizer is the default and the bar; `adb shell setprop
+        // debug.vieww.gpu 1` (what `ci/mobile/device-suite.sh --gpu` does)
+        // asks for the planned GPU path instead, so the same build measures
+        // both. Read through `getprop` rather than a new `libc` dependency: an
+        // app may run it, and a `debug.` property needs no root to set. The
+        // first real-phone run (Redmi Note 7 Pro, 2026-10-14) put the CPU
+        // path at a 37ms median at 1080x2340 — this is how the GPU's number
+        // is taken against it.
+        let prefer_gpu = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.gpu")
+            .output()
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1");
+        suite.observe(
+            "rasterizer",
+            if prefer_gpu {
+                "planned GPU path requested (debug.vieww.gpu=1)"
+            } else {
+                "CPU rasterizer (set debug.vieww.gpu=1 for the GPU path)"
+            },
+        );
+        let app = App::new()
             .title("vieww")
             .report_crashes(crashes)
             .on_frame(perf.hook())
@@ -571,34 +592,35 @@ mod demo {
             // device script taps what is on screen rather than a constant
             // that only suited one phone. `after_frame`, not `on_frame`:
             // geometry does not exist until the frame has been laid out.
-            .after_frame(suite.tap_targets())
-            .run_android(android, |driver| {
-                // `FrameDriver::set_root`, *not* `driver.elements().set_root`.
-                // The driver keeps the root so it can re-publish it under an
-                // `Inherited<ViewMetrics>` whenever the safe area changes; going
-                // straight to the element tree leaves `FrameDriver::root` as
-                // `None`, and the republish silently does nothing. That is how
-                // the notch inset was computed correctly and ignored completely.
-                //
-                // The embedded faces come with `RenderTree::new`, so text shapes
-                // without anybody opting into the system's fonts — which on a
-                // phone would be the same 33-second scan it is everywhere else.
-                let demo = screen::Demo::new(driver);
-                perf.attach(&demo);
-                let probe = suite.probe(demo.taps());
-                // The latch `modal_semantics` pulls. Handed over here for the
-                // reason the tap counter is: the hooks were installed before
-                // this closure ran, so the signal did not exist yet.
-                suite.watch_drawer(demo.drawer());
-                // `Inherited<SharedServices>` above the tree is how a widget
-                // reaches the pasteboard — `RenderEditableText` asks its scope
-                // for a `Clipboard`, and finds one only if something published
-                // it here.
-                driver.set_root(Inherited::new(
-                    services,
-                    demo.screen("A frame, on a phone.", TargetPlatform::Android, probe),
-                ));
-            });
+            .after_frame(suite.tap_targets());
+        let app = if prefer_gpu { app.prefer_gpu() } else { app };
+        let result = app.run_android(android, |driver| {
+            // `FrameDriver::set_root`, *not* `driver.elements().set_root`.
+            // The driver keeps the root so it can re-publish it under an
+            // `Inherited<ViewMetrics>` whenever the safe area changes; going
+            // straight to the element tree leaves `FrameDriver::root` as
+            // `None`, and the republish silently does nothing. That is how
+            // the notch inset was computed correctly and ignored completely.
+            //
+            // The embedded faces come with `RenderTree::new`, so text shapes
+            // without anybody opting into the system's fonts — which on a
+            // phone would be the same 33-second scan it is everywhere else.
+            let demo = screen::Demo::new(driver);
+            perf.attach(&demo);
+            let probe = suite.probe(demo.taps());
+            // The latch `modal_semantics` pulls. Handed over here for the
+            // reason the tap counter is: the hooks were installed before
+            // this closure ran, so the signal did not exist yet.
+            suite.watch_drawer(demo.drawer());
+            // `Inherited<SharedServices>` above the tree is how a widget
+            // reaches the pasteboard — `RenderEditableText` asks its scope
+            // for a `Clipboard`, and finds one only if something published
+            // it here.
+            driver.set_root(Inherited::new(
+                services,
+                demo.screen("A frame, on a phone.", TargetPlatform::Android, probe),
+            ));
+        });
 
         match result {
             // Reached when the activity is finished rather than when something

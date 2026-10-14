@@ -208,6 +208,17 @@ drivers (§1.1) but the Android demo does not use it; trying it on Adreno is
 the next measurement. **TalkBack by ear:** answered "no" — what was wrong is
 not yet recorded.
 
+**Follow-up (same day).** TalkBack by ear: **no speech at all**, not only in
+vieww — so the service was written into the settings but evidently not
+speaking. The dump's `clickable="false"` on buttons is cosmetic (AccessKit's
+Android bridge adds `ACTION_CLICK` rather than setting the flag), so vieww's
+tree is not the cause. `close-remaining.sh` now records whether TalkBack is
+actually bound, the speech engine and the accessibility volume
+(`talkback-state.txt`). The GPU half: `examples/android.rs` takes the planned
+GPU rasterizer when `debug.vieww.gpu=1` (`device-suite.sh --gpu`), the suite
+reports `gpu_frames: N of M (K straight into the swapchain)`, and the hardware
+script runs the phone suite on both rasterizers back to back.
+
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
 (`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
 a hot-reload path. The APKs build green on runners; nothing has ever run on a
@@ -391,6 +402,7 @@ and most frames are drawn straight from `about_to_wait`. It now runs inside
 `vieww: window#primary reports 60.0Hz` now appears, after the open-time read
 found no monitor. A monitor that names no rate is now logged too. Needs one
 more run of `ci/hardware/close-remaining.sh monitors` with two monitors.
+**Paused (2026-10-14): no second monitor available.** Open until one is.
 
 ## 3.3 The out-of-process preview exists; it is not yet complete or proven on Windows
 

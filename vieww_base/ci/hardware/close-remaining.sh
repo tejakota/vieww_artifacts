@@ -127,6 +127,18 @@ if want android && [ "$phone" = 1 ]; then
     # Never on an emulator here: the point is the real GPU's frame times, which
     # device-suite.sh counts fully on a phone.
     run android-suite ci/mobile/device-suite.sh
+    # The same build again, on the planned GPU rasterizer: the CPU path above
+    # was 37ms median on the first real run. Its gpu_frames line says whether
+    # the GPU actually drew (a frame it cannot plan, or a GPU that will not
+    # build, falls back to the CPU).
+    run android-suite-gpu ci/mobile/device-suite.sh --gpu
+    adb shell setprop debug.vieww.gpu 0 >/dev/null 2>&1 || true
+    for f in android-suite android-suite-gpu; do
+        {
+            echo "$f: $(grep -o 'frame_time: median [0-9.]*ms, worst [0-9.]*ms' "$out/$f.log" | head -1)"
+            echo "$f: $(grep -o 'gpu_frames: .*' "$out/$f.log" | head -1)"
+        } >> "$summary"
+    done
 fi
 
 if want talkback && [ "$phone" = 1 ]; then
@@ -143,6 +155,33 @@ if want talkback && [ "$phone" = 1 ]; then
     echo
     echo "Listening check: TalkBack is being switched on for one minute of use."
     ci/mobile/a11y-android.sh --keep > /dev/null 2>&1
+    # The first listening check heard nothing at all. Writing TalkBack into
+    # the settings is not the same as TalkBack running and speaking, so record
+    # what the phone says about each link in that chain.
+    sleep 3
+    {
+        echo "--- accessibility services (is TalkBack bound?)"
+        adb shell settings get secure enabled_accessibility_services
+        adb shell settings get secure accessibility_enabled
+        adb shell dumpsys accessibility 2>/dev/null | grep -iE "talkback|bound services|enabled services|touch exploration" | head -20
+        echo "--- talkback package"
+        adb shell dumpsys package com.google.android.marvin.talkback 2>/dev/null | grep -E "versionName|enabled=" | head -4
+        echo "--- speech engine"
+        adb shell settings get secure tts_default_synth
+        adb shell pm list packages 2>/dev/null | grep -iE "tts|speech|google.android.tts" | head
+        echo "--- volumes (accessibility stream is 10, media 3)"
+        adb shell cmd media_session volume --stream 10 --get 2>&1 | tail -2
+        adb shell cmd media_session volume --stream 3 --get 2>&1 | tail -2
+    } > "$out/talkback-state.txt" 2>&1
+    if grep -qi "talkback" <(adb shell dumpsys accessibility 2>/dev/null | grep -i "bound services"); then
+        echo "talkback-state: bound" | tee -a "$summary"
+    else
+        echo "talkback-state: NOT bound — the setting was written but the service is not running (see talkback-state.txt)" | tee -a "$summary"
+    fi
+    echo "  If you hear nothing at all, even on the status bar: check the phone's"
+    echo "  accessibility volume (Settings > Accessibility > TalkBack > Settings), and"
+    echo "  try turning TalkBack on by hand there once — some phones refuse a service"
+    echo "  enabled only through settings."
     echo "  On the phone: swipe right through the demo screen, double-tap 'Tap me',"
     echo "  open the menu and swipe through it. Does every control announce sensibly?"
     pause "Done listening"

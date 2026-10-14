@@ -12,6 +12,7 @@
 #   ci/mobile/device-suite.sh --expect-cutout   # also require non-zero safe-area insets
 #   ci/mobile/device-suite.sh --expect-keyboard # also require the soft keyboard to inset
 #   ci/mobile/device-suite.sh --no-build        # use whatever is already installed
+#   ci/mobile/device-suite.sh --gpu             # the planned GPU rasterizer (debug.vieww.gpu=1)
 #
 # Needs adb, one device attached, and the Android SDK/NDK env the README names.
 
@@ -21,12 +22,14 @@ package="dev.vieww.demo"
 build=1
 expect_cutout=0
 expect_keyboard=0
+gpu=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --no-build) build=0 ;;
         --expect-cutout) expect_cutout=1 ;;
         --expect-keyboard) expect_keyboard=1 ;;
+        --gpu) gpu=1 ;;
         -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "device-suite: unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -38,6 +41,15 @@ adb shell true >/dev/null 2>&1 || { echo "device-suite: no device reachable." >&
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
+
+# The app reads this at launch (examples/android.rs), so it is set before the
+# build-and-launch below, and set either way: a 1 left over from a GPU run
+# would otherwise make the next CPU run measure the GPU.
+adb shell setprop debug.vieww.gpu "$gpu" >/dev/null 2>&1 || true
+if [ "$gpu" = 1 ]; then
+    echo "device-suite: the planned GPU rasterizer (debug.vieww.gpu=1)"
+    [ "$build" = 0 ] && echo "device-suite: --gpu with --no-build only applies if the app is relaunched" >&2
+fi
 
 # shellcheck source=ci/mobile/android-env.sh
 . "$root/ci/mobile/android-env.sh"
