@@ -141,7 +141,8 @@ problem — see 3.3.
 **What.** `vieww-platform-winit`'s iOS support is real code — and the four
 apps' iOS IPAs now build green on GitHub's macOS runners (see fact 2 above) —
 but no frame has ever reached an iPhone, simulated or real: the runners build
-and sign, they do not run.
+and sign, they do not run. *(Superseded: both now have — see the 2026-10-14
+entries below.)*
 
 **Why not.** The iOS SDK exists only on macOS, and the runners do not boot
 simulators.
@@ -177,6 +178,20 @@ size (420x880 on a 393x852 screen), which shifted the accessibility frames by
 `contentsScale` 1.0 on a 3x screen, rendering soft. Both fixed in
 `vieww-platform-winit` (`surface` ignores the requested size on phones;
 `ios::match_layer_scale` before each swapchain rebuild).
+
+**2026-10-14, evening: a real iPhone.** The CI `vieww.ipa` (ad-hoc signed,
+MoltenVK device slice bundled) ran on an **iPhone 13 Pro, iOS 15**, on
+LambdaTest's real-device cloud, which re-signs uploads. Recorded as a screencast:
+the app opens straight into the demo (no black screen — MoltenVK on real
+Apple silicon); taps count (1 → 3 → 4 taps); the system keyboard opens on
+"tap to type" and inserts at the caret, mid-word; the tabs, segmented control,
+radios and bottom bar all switch together; the animated bars and spinners run;
+the menu drawer opens. So the full chain — winit on UIKit, MoltenVK, the
+renderer, touch, IME — works on a real device, not only the simulator.
+**Still not measured there:** the device suite's verdict and frame times (its
+lines are in the device log, which this session did not export), and iOS 16+
+(only iOS 15 was free). Firebase Test Lab still needs a real Apple signing
+identity for the same run unattended.
 
 ## 1.5 Android
 
