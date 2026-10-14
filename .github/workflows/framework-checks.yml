@@ -339,6 +339,22 @@ jobs:
           echo "VIEWW_SIM_DEVICE=$udid" >> "$GITHUB_ENV"
       - name: Unit tests inside the simulator (simctl-runner)
         run: cargo test -p vieww-foundation -p vieww-text --target aarch64-apple-ios-sim
+      # vieww draws through Vulkan and iOS has none: MoltenVK must travel in
+      # the app bundle. Without it the GPU never opened and the simulator sat
+      # on a black screen (startup trace ended at "opening the GPU").
+      - name: MoltenVK for the simulator
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
+            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar
+          mkdir -p "$RUNNER_TEMP/mvk" && tar -xf "$RUNNER_TEMP/mvk.tar" -C "$RUNNER_TEMP/mvk"
+          find "$RUNNER_TEMP/mvk" -maxdepth 6 -path '*simulator*' | head -20
+          lib=$(find "$RUNNER_TEMP/mvk" -path '*simulator*' \( -name 'libMoltenVK.dylib' -o -name 'MoltenVK.framework' \) | head -1)
+          if [ -n "$lib" ]; then
+            echo "VIEWW_MOLTENVK=$lib" >> "$GITHUB_ENV"
+            echo "MoltenVK simulator slice: $lib"
+          else
+            echo "::warning::no dynamic MoltenVK simulator slice found in MoltenVK-ios.tar"
+          fi
       - name: The ios example on the simulator's screen
         run: ci/mobile/ios-app.sh --sim
       - name: Maestro flows on the simulator (ci/mobile/maestro/)
