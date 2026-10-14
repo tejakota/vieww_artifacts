@@ -42,8 +42,11 @@
 //! All of them are `#[ignore]`d, because they need a loader and an ICD:
 //! `cargo test -p vieww-hal --features vulkan -- --ignored --test-threads=1`.
 //!
-//! **`lavapipe` and SwiftShader are software.** Nothing here is a performance
-//! claim.
+//! **`lavapipe` and SwiftShader are software.** Nothing measured on them is a
+//! performance claim. The same suites pass on real drivers too (Intel HD 620
+//! under Mesa and an NVIDIA 920MX, 2026-10-14); the one hardware timing so far
+//! is a phone's (Adreno 612: the planned path 1.7x faster than the CPU
+//! rasterizer) — see `TRACKER.md`.
 //!
 //! `vulkan::swapchain` is the piece that ships pixels to a screen: the window
 //! path through `vieww-platform-winit` presents buffers onto it with

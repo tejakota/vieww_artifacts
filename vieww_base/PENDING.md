@@ -24,26 +24,22 @@ written down yet, and there are two of those, marked as such.
 
 ## Read this before believing anything is easy here
 
-Three facts sit behind most of the list and are not repeated in every entry:
+Three facts sit behind most of the list and are not repeated in every entry
+(all three changed on 2026-10-14; `TRACKER.md` has that day's evidence):
 
-1. **No code in this workspace has ever run on real graphics hardware.** The
-   GPU path is verified against software Vulkan implementations — `lavapipe`
-   on the original machine, Playwright's SwiftShader ICD on the current one.
-   Every GPU statement anywhere in this repository is a correctness claim and
-   none of them is a performance claim.
-2. **Every line of the framework has been compiled only on Linux, Android and
-   iOS.** The "Build Mobile Apps" workflow has built the four apps — which
-   compile the vieww crates they depend on — green on GitHub runners since
-   2026-10-05 (23 runs, latest success 2026-10-08). macOS and Windows are real,
-   reviewed, unit-tested code that no compiler for that target has ever seen;
-   the `framework-checks` workflow added beside it runs
-   `ci/check/platform-check.sh macos` and `windows` on every push, and
-   `ci/check/platform-check.sh` remains one command each for a person with the
-   machine.
-3. **A frame has never reached a physical screen on any platform but Linux.**
-   Compiling for Android and iOS is not running there: the device suites
-   (`ci/mobile/device-suite.sh`, `ci/mobile/a11y-android.sh`) need hardware
-   plugged in, and no run of them is recorded.
+1. **GPU correctness is proven on real hardware; GPU speed is proven on one
+   phone.** The Vulkan suites pass on Intel (Mesa) and NVIDIA drivers, and the
+   planned GPU path is 1.7x faster than the CPU rasterizer on an Adreno 612.
+   No desktop GPU *timing* exists yet (§1.1). Metal has run only on a CI
+   runner's paravirtual GPU and D3D12 only on WARP, so neither has a
+   performance number either.
+2. **Every leg of `framework-checks.yml` has passed** — Linux, macOS (Metal),
+   Windows (D3D12 on WARP), the cross type-check, web in three browsers, the
+   Android emulator and the iOS simulator. The workflow is manual-only; legs
+   that have passed run again only with `run_passed` ticked.
+3. **Frames have reached real screens on Linux, Android and iOS** — a laptop,
+   a Redmi Note 7 Pro and an iPhone 13 Pro. Never yet on a real Mac or a
+   Windows PC with a GPU.
 
 ---
 
@@ -52,248 +48,117 @@ Three facts sit behind most of the list and are not repeated in every entry:
 Not ordinary work. Each of these needs a machine this one is not, and none of
 them can be closed by reading the code more carefully.
 
-## 1.1 A GPU frame on real graphics hardware
+## 1.1 GPU timings on a desktop GPU
 
-**2026-10-14 — first run on real GPUs** (`ci/hardware/close-remaining.sh`, a
-Kaby Lake laptop under GNOME/Wayland, rustc 1.98.1):
+Correctness on real GPUs is closed (TRACKER, 2026-10-14). What is left is
+speed on a desktop.
 
-| GPU | Driver | `vieww-hal --features vulkan -- --ignored` | `vieww-3d` GPU | GPU frame in a real window |
-|---|---|---|---|---|
-| Intel HD Graphics 620 | Mesa 26.0.8 | 44/44 (compositor 17/17 incl. backdrop blur) | 7/7 | `wait_loop` 5/5, `gpu_frame` ok |
-| NVIDIA GeForce 920MX | 580.178.04 (PRIME) | 44/44 | — | — |
+**What.** `examples/fixtures` timed with its scenes planned onto the GPU
+(`Placement::Gpu` where `ScenePlan::is_complete` allows), beside its CPU
+numbers (185.3 ms for the gallery on the Kaby Lake laptop).
 
-So the GPU paths are correct on two real drivers, not only on lavapipe and
-SwiftShader — including the backdrop-blur edge mode of §2.2, held to the CPU
-oracle on Mesa's real Intel driver. The desktop suite on the same machine:
-21/21, 1.76 ms median frame (347 fps).
+**Why not.** The gallery renders only on the CPU; it has no switch to plan its
+scenes onto the GPU.
 
-**Still open here:** GPU *timings*. `examples/fixtures` renders on the CPU
-(185.3 ms for the gallery on this laptop; the same two fixtures over budget as
-§4.1, plus the `33-sheet` motion at 14.2 ms mean); it has no switch to plan its
-scenes onto the GPU, which is what "measure with `Placement::Gpu`" needs.
+**Blocks.** A desktop answer to §6.1. (The phone already has one: 1.7x.)
 
-**What.** Run `cargo test -p vieww-hal --features vulkan -- --ignored` on a
-machine with a discrete or integrated GPU, and measure `examples/fixtures` with
-`Placement::Gpu` where `ScenePlan::is_complete` allows it. The windowed GPU path
-([`App::prefer_gpu`]) is now real and exercised on a real (Xvfb) window under
-SwiftShader — but a software rasterizer presenting to a virtual display is
-still not hardware.
+**Start.** Add a GPU mode to `examples/fixtures` that renders each fixture
+through `vulkan::SceneRenderer` and reports per-fixture time and whether the
+plan was complete; then `ci/hardware/close-remaining.sh gallery`. When the
+numbers exist, update the "unmeasured for speed" wording in
+`docs/guide/README.md`, `crates/vieww-hal/src/lib.rs` and
+`docs/GPU-RENDERER-STATUS.md`.
 
-**Why not.** This machine has no GPU. SwiftShader stands in, and it is a
-software rasterizer wearing a Vulkan interface — it can prove that the shader
-maths, the vertex layout, the atlas coordinates and the blend state are right,
-and it can prove nothing whatever about speed.
+## 1.2 macOS — the Metal backend runs; its scene renderer is not ported
 
-**Blocks.** Every performance claim about the GPU path. Also the only honest
-answer to "is the GPU actually faster than your CPU rasterizer here", which is
-currently unknown in both directions: the CPU path is unusually good, and the
-GPU path is one draw call for a whole frame, and nobody has measured them
-against each other on hardware.
+**What.** `crates/vieww-hal/src/metal.rs` has `render_clear_to_pixels` and
+`render_mesh_to_pixels` (WGSL → MSL through `vieww-shaders`), and
+`tests/metal_smoke.rs` passes on the `framework-checks` macOS runner with
+`VIEWW_REQUIRE_HARDWARE=gpu` — so the generated MSL compiles and draws
+correctly on Apple's driver. `SceneRenderer` is not ported, so on macOS and
+iOS a vieww window renders through Vulkan on MoltenVK (as the simulator and
+the iPhone do), not native Metal.
 
-**Start.** The tests already exist and already run; a GPU-backed machine needs
-to do nothing but run them, then run the gallery. Record the numbers in
-`TRACKER.md` beside the CPU ones, and delete the "no number was measured on
-real hardware" caveat from this file, `TRACKER.md`, `README.md`,
-`docs/guide/README.md` and `crates/vieww-hal/src/lib.rs` — it is deliberately
-stated in all five.
+**Why not closed.** The scene path (`vulkan/scene.rs`) has no Metal twin; the
+runner's GPU is paravirtual, so no number from it is a performance claim.
 
-## 1.2 macOS — the Metal backend: written, type-checked, never run
+**Blocks.** Native Metal rendering (dropping the MoltenVK dependency).
 
-**What.** `crates/vieww-hal/src/metal.rs` now has `render_clear_to_pixels`
-and `render_mesh_to_pixels` (WGSL → MSL through `vieww-shaders`, which now
-binds real Metal slots instead of naga's `[[user(fake0)]]` placeholders), and
-`tests/metal_smoke.rs` makes the Vulkan smoke suites' claims against it. It
-type-checks and passes `clippy -D warnings` for `aarch64-apple-darwin` and
-`aarch64-apple-ios` from Linux (`ci/check/cross-check.sh`). `SceneRenderer`
-is not ported.
+**Start.** Port `SceneRenderer` onto `MetalDevice::pipeline`/`render_target`/
+`read_texture`, passing `post.wgsl`'s `Edge` flag (§2.2).
 
-**Why not closed.** Type-checked is not run. There is no software Metal, so
-the first execution is the macOS leg of `framework-checks.yml`, which runs the
-suite with `VIEWW_REQUIRE_HARDWARE=gpu` (a missing device fails, not skips).
-The MSL itself has been compiled by nothing yet — `newLibraryWithSource` on
-that runner is its first compiler.
+## 1.3 Windows — the D3D12 backend runs on WARP; its scene renderer is not ported
 
-**Blocks.** The GPU scene path on macOS and iOS.
+**What.** `crates/vieww-hal/src/d3d12.rs` has the same pair (naga HLSL via
+`d3dcompiler_47`, root constants, a fenced readback, a WARP fallback behind
+`VIEWW_D3D12_ALLOW_WARP=1`), and `tests/d3d12_smoke.rs` passes on the
+`framework-checks` Windows runner on WARP. `SceneRenderer` is not ported.
 
-**Start.** Read the macOS leg's result. Then port `vulkan/scene.rs`'s
-`SceneRenderer` onto `MetalDevice::pipeline`/`render_target`/`read_texture`.
-
-## 1.3 Windows — the D3D12 backend: written, type-checked, never run
-
-**What.** `crates/vieww-hal/src/d3d12.rs` now has the same pair: naga HLSL
-compiled with `d3dcompiler_47` (SM 5.1), root constants for the uniform, a
-fenced readback, and a WARP fallback behind `VIEWW_D3D12_ALLOW_WARP=1`.
-`tests/d3d12_smoke.rs` mirrors the Metal suite. Type-checks and lints clean
-for `x86_64-pc-windows-msvc`; every built-in shader's HLSL compiles with DXC
-on Linux. `SceneRenderer` is not ported.
-
-**Why not closed.** Never executed. The Windows leg runs it on WARP, which is
-correctness evidence (a conformant D3D12 driver) and never a performance
-number.
+**Why not closed.** WARP is Microsoft's software D3D12: correctness evidence,
+never a performance number, and no real Windows GPU has run it.
 
 **Blocks.** Windows GPU rendering. Windows also has a *separate* unsolved
 problem — see 3.3.
 
-**Start.** Read the Windows leg's result; then port `SceneRenderer`.
+**Start.** Port `SceneRenderer`; then run the suite on a Windows PC with a GPU.
 
-## 1.4 iOS
+## 1.4 iOS — runs on a real iPhone; its numbers are not recorded
 
-**What.** `vieww-platform-winit`'s iOS support is real code — and the four
-apps' iOS IPAs now build green on GitHub's macOS runners (see fact 2 above) —
-but no frame has ever reached an iPhone, simulated or real: the runners build
-and sign, they do not run.
+Closed 2026-10-14 (TRACKER): the simulator (device suite 12/12, 6.8 ms
+median) and a real **iPhone 13 Pro on iOS 15** through LambdaTest's
+real-device cloud, driven by hand: rendering, taps, the system keyboard,
+shared selection, animation and the drawer all work.
 
-**Why not.** The iOS SDK exists only on macOS, and the runners do not boot
-simulators.
+**What is left.**
+- The device suite's verdict and frame times on a real iPhone. The suite
+  prints them as `__VIEWW_SUITE__` lines to the device log; that session's
+  log was not exported.
+- iOS 16 and later on a real device (only iOS 15 was available free).
+- An unattended run: `ci/mobile/test-lab.sh ios` / the `test-lab-ios` job need
+  a `.ipa` signed with a real Apple development identity (`IOS_*` secrets);
+  Firebase Test Lab refuses ad-hoc signatures.
 
-**Blocks.** The mobile half of "cross-platform".
+**Start.** On LambdaTest, type `VIEWW` into Device Logs' filter (or download
+the log) during a run and record the suite's lines here. With an Apple
+developer account: set the `IOS_*` secrets and run the workflow with
+`test_lab_ios` ticked.
 
-**Start.** `ci/check/platform-check.sh ios` for the compile, then
-`ci/mobile/ios-app.sh --sim` — which already exists and already knows how to build a
-`.app`, boot a simulator and install onto it.
+## 1.5 Android — runs on a phone; the GPU path is 4.3 ms over budget
 
-**2026-10-14, from the simulator job in CI.** The runners *do* boot
-simulators: the `ios-simulator` job builds, installs and launches the demo.
-It then drew a black screen. With `VIEWW_TRACE_FRAMES` on, the startup trace
-ended at `window created (1260x2361); opening the GPU` — every window opens
-through `vieww-hal`'s Vulkan backend, iOS has no Vulkan, and the bundle had no
-MoltenVK. The failure was silent because `run_app` never returns on iOS and
-`exit()` is ignored there; `fail_to_open` now prints the reason and ends the
-process. Next: MoltenVK in the bundle (`VIEWW_MOLTENVK`, fetched by the CI
-job from Khronos' release), then whatever the first real frame shows.
-Khronos' `MoltenVK-ios.tar` turned out to carry only the device slice
-(`dynamic/MoltenVK.xcframework/ios-arm64`); the job now takes the simulator
-slice from `MoltenVK-all.tar`, linking the static one into a dylib if no
-dynamic one ships.
+Closed 2026-10-14 (TRACKER): emulator and a real phone (Redmi Note 7 Pro,
+Adreno 612) — device suite, accessibility suite, Maestro, TalkBack by ear, and
+the planned GPU path correct and 1.7x faster than the CPU rasterizer.
 
-**2026-10-14, later: the first vieww frame on an iPhone (simulator).** With the
-dynamic simulator slice bundled and Metal argument buffers off (the
-simulator's paravirtualised GPU has none), the GPU opened in 36 ms, the tree
-built, and the in-app device suite reported **12 of 12 checks green** — safe
-area, density 3x, keyboard inset, the modal drawer, 600 frames at a 6.8 ms
-median. Two defects showed on the way: the window took the desktop preview
-size (420x880 on a 393x852 screen), which shifted the accessibility frames by
-(27, 28) so Maestro tapped beside "Tap me"; and the Metal layer kept
-`contentsScale` 1.0 on a 3x screen, rendering soft. Both fixed in
-`vieww-platform-winit` (`surface` ignores the requested size on phones;
-`ios::match_layer_scale` before each swapchain rebuild).
+**What is left.**
+- **21.0 ms median on the GPU path against a 16.7 ms budget.** Where the time
+  goes — planning on the CPU, the GPU's own work, or the present — is not
+  measured.
+- **The GPU path is not the default.** `examples/android.rs` takes it only
+  with `debug.vieww.gpu=1` or Test Lab's scenario 2.
+- **More than one phone.** `ci/mobile/test-lab.sh android` (and the
+  `test-lab-android` job) runs CPU and GPU scenarios on three phones from
+  different makers. Not run yet: the console rejected the first upload ("One
+  of your APKs that should contain code has none" — a pure-Rust APK has no
+  `classes.dex`); `ci/mobile/apk-add-code.sh` now adds one, and the CI APK
+  build runs it. Test Lab shuts down on 30 September 2027.
 
-## 1.5 Android
+**Start.** A per-frame breakdown in the device suite (plan / submit / present)
+on the phone (`ci/mobile/device-suite.sh --gpu`); then decide the default.
+For more phones: the `GCP_SA_KEY`/`FTL_PROJECT` secrets and the workflow with
+`test_lab_android` ticked, or upload `vieww-arm64.apk` from the `vieww-apk`
+artifact to Test Lab's console as a **Game Loop** test.
 
-**2026-10-14, from the `android-emulator` CI job** (x86_64, API 34, Pixel 6
-profile): the APK builds, signs, installs and launches; Maestro drives the demo
-end to end through the AccessKit tree (taps, the shared selection, the modal
-drawer open and dismissed); the in-app device suite reports green apart from
-the two frame-budget checks, which on an emulator measure SwiftShader and are
-reported as warnings there only. The drawer half found a real bug — the panel
-covered its own scrim, so a drawer could not be dismissed by touch (fixed in
-`Drawer::build`, pinned by `vieww-test-harness/tests/drawer_dismiss.rs`).
-What only a phone can still answer: real-GPU frame times and TalkBack by ear.
+## 1.6 The web backend on other browsers — closed 2026-10-14
 
-**2026-10-14, on the phone itself** (Redmi Note 7 Pro, Android 16, arm64,
-`ci/hardware/close-remaining.sh`): the device suite reports **15 of 17**
-green — clipboard round trip, semantic click, a real tap, the modal, keyboard
-inset (290 logical px), safe area, density 2.75x, damage tracking, and a real
-guest library `dlopen`ed and executed. TalkBack-bound dump: 30 nodes, 26
-labelled, roles right (Button, RadioButton with `checked`, ProgressBar with its
-value); the modal hides the screen behind it through the bridge (3/3 panel
-items, "Tap me" gone) — confirmed on a device for the first time. Maestro's
-flow passes end to end on the phone.
-
-**The two failures are real and are performance:** median frame **37.4 ms**
-(26 fps), worst 107 ms, 240/240 over the 16.7 ms budget, at 1080x2340. That is
-the CPU rasteriser on the phone's cores (the emulator, on a runner's x86
-cores, measured 41 ms). The GPU path is correct on real Mesa and NVIDIA
-drivers (§1.1) but the Android demo does not use it; trying it on Adreno is
-the next measurement. **TalkBack by ear:** answered "no" — what was wrong is
-not yet recorded.
-
-**Follow-up (same day).** TalkBack by ear: **no speech at all**, not only in
-vieww — so the service was written into the settings but evidently not
-speaking. The dump's `clickable="false"` on buttons is cosmetic (AccessKit's
-Android bridge adds `ACTION_CLICK` rather than setting the flag), so vieww's
-tree is not the cause. `close-remaining.sh` now records whether TalkBack is
-actually bound, the speech engine and the accessibility volume
-(`talkback-state.txt`). The GPU half: `examples/android.rs` takes the planned
-GPU rasterizer when `debug.vieww.gpu=1` (`device-suite.sh --gpu`), the suite
-reports `gpu_frames: N of M (K straight into the swapchain)`, and the hardware
-script runs the phone suite on both rasterizers back to back.
-
-**Third phone run (2026-10-14 evening) — TalkBack and Adreno, both answered.**
-
-- **TalkBack by ear: yes.** The service is bound (`Bound services:{TalkBack}`,
-  spoken + haptic feedback) and speech was heard through vieww's screen. The
-  earlier silence was TalkBack not running, not vieww. Closed.
-- **The GPU rasterizer on the Adreno 612:**
-
-| 1080x2340 | CPU rasterizer | planned GPU path |
-|---|---|---|
-| frames drawn by the GPU | 0 / 600 | **600 / 600, all straight into the swapchain** |
-| median frame | 36.6 ms | **21.1 ms** (1.7x) |
-| worst frame | 108 ms | **26.2 ms** (4x) |
-| throughput | 27 fps | **49 fps** |
-| device suite | 15/17 | **16/17** — only the median budget |
-
-  The Adreno driver runs the whole planned path, including the direct present
-  (no readback), and the behavioural checks all hold on it. Still open: the
-  median is 4.5 ms over a 60 Hz budget, so where those 21 ms go (planning on
-  the CPU, the GPU's own work, or the present) is the next measurement; and a
-  GPU frame has not yet been compared by eye with a CPU one — the hardware
-  script now saves a screenshot from each run (`phone-cpu.png`,
-  `phone-gpu.png`).
-
-**Fourth run — the GPU frame on the Adreno is correct, and the numbers repeat.**
-CPU 36.4 ms / GPU 21.0 ms median (worst 115 / 29 ms), 600/600 frames on the GPU,
-all direct. The two screenshots match in everything static — text, button,
-field and caret, tab bar, segmented control, the system keyboard — and differ
-(5.3% of pixels, all above y=1445) only in what changes run to run: the
-animated band's colour, the frame graph's own bars, and the tap count. So the
-GPU path is correct *and* 1.7x faster on this phone. What is left for Android
-is the 4.3 ms between 21 ms and a 60 Hz budget, and whether to make the GPU
-path the Android default.
-
-**Firebase Test Lab (2026-10-14), to widen this beyond one Redmi.**
-`ci/mobile/test-lab.sh android` builds the release APK and runs Test Lab's
-Game Loop on three physical phones from different makers (picked from the live
-catalogue), scenario 1 on the CPU rasterizer and 2 on the GPU path, plus a Robo
-crawl of the accessibility tree on one; results come back as one summary row
-per device and scenario. `test-lab.sh ios --ipa` does the same for iPhones,
-which needs a real Apple development signature (Test Lab refuses ad-hoc). Both
-are jobs in `framework-checks.yml`, which is manual-only now. Not run yet.
-Test Lab is deprecated and shuts down on 30 September 2027.
-
-**What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
-(`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
-a hot-reload path. The APKs build green on runners; nothing has ever run on a
-device.
-
-**Why not.** The runners build and upload; there is no attached phone and no
-device cloud in the loop.
-
-**Blocks.** The other mobile half.
-
-**Start.** `ci/check/platform-check.sh android` for the compile. `ci/mobile/android-env.sh`
-already resolves the SDK and NDK and already knows the traps (a version
-directory without `source.properties` is a half-finished download); ask it
-rather than guessing.
-
-## 1.6 The web backend on other browsers
-
-**What.** The byte-for-byte canvas parity (`examples/test-web`,
-`verify_web.py`) is a Chromium-on-Linux result. `ci/check/wasm-check.sh` passed on
-2026-09-14 and again on 2026-10-09 on the pinned toolchain; see `TRACKER.md`.
-
-**Why not.** No Firefox/WebKit run has been scripted.
-
-**Start.** `verify_web.py` drives Playwright; `p.firefox` and `p.webkit` are the
-same API.
+Canvas parity passes in Chromium, Firefox and WebKit in the `web` leg of
+`framework-checks.yml` (`verify_web.py` through Playwright). See TRACKER.
 
 ## 1.7 The GPU 3D seam: unlit and Lambert passes, per-call bring-up
 
 **What.** `vieww-3d`'s `GpuRenderer` (behind the crate's `vulkan` feature) holds
 the CPU renderer's `(scene, camera) -> RGBA8` contract with two passes through
 `vieww-hal`'s Vulkan backend, both held to the CPU oracle in interiors on
-lavapipe:
+lavapipe (and, 2026-10-14, 7/7 on a real Intel HD 620 under Mesa):
 - **unlit** (2026-10-11) — `Shading::Basic` scenes, `tests/gpu_unlit.rs`;
 - **lit** (2026-10-12) — `Shading::Lambert` (and Basic alongside) under
   ambient, hemisphere and directional lights, with the shadow map of the first
@@ -515,8 +380,8 @@ tolerance decision); AVX2 behind runtime detection.
 **What.** Closed as a gate: `ci/check/coverage.sh` fails below the floor
 (70% of lines) and the `framework-checks` workflow's `coverage` job runs it on
 every push with no `continue-on-error` — a number below the floor reds the
-build. (The workflow itself is in `.github/workflows-pending/` awaiting a
-`workflow`-scoped token to be placed live; see its README.) The number is produced on the pinned toolchain; see `TRACKER.md` for
+build. (The workflow is live at the repository root, `.github/workflows/`,
+and manual-only; the coverage leg runs with `run_passed` ticked.) The number is produced on the pinned toolchain; see `TRACKER.md` for
 the runs. (History note: the earlier shape of this item — "drop
 `continue-on-error` once it has history" — was overtaken by events: the
 `framework-checks` workflow was written fresh with the job already a gate,
@@ -539,14 +404,14 @@ a "start here". They are listed so they are not mistaken for oversights.
 
 ## 6.1 Is the GPU path actually worth it on this workload?
 
-Nobody knows. The CPU rasterizer is unusually good — a full studio frame in
-about 49 ms of wall clock after a 1.73× improvement, and a *retained* repaint
-of the same screen in under 10 ms — and the GPU path is one draw call for a
-whole frame but has never run on hardware. It is entirely possible that for
-dense, static, text-heavy interfaces the honest answer is "the CPU path is the
-product and the GPU path is for animation-heavy screens". §1.1 is what would
-tell us, and until it happens this repository should be careful not to imply an
-answer it does not have.
+Half answered. On a phone, yes: on the Adreno 612 the planned GPU path draws
+the demo in 21.0 ms against the CPU rasterizer's 36.4 ms, and its worst frame
+is 4x better. On a desktop nobody knows yet. The CPU rasterizer there is
+unusually good — a full studio frame in about 49 ms of wall clock, a
+*retained* repaint in under 10 ms, 1.76 ms for the demo on the laptop — so it
+is still possible that for dense, static, text-heavy interfaces on a desktop
+the honest answer is "the CPU path is the product and the GPU path is for
+phones and animation-heavy screens". §1.1 is what would tell us.
 
 ## 6.2 What is the story for embedded native views?
 

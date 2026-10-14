@@ -40,6 +40,41 @@ The release process itself is in
 | `mobile <script>` | `mobile/*.sh` | For example `apk`, `device-suite`, `a11y-android`, `ios-app`, `reload-android`. |
 | `tool <script>` | `tools/*` | `patch-winit.sh`, `subset-fonts.py`. |
 
+## Phones, device clouds and real hardware
+
+| Script | What it does |
+|---|---|
+| `hardware/close-remaining.sh [gpu nvidia gallery android talkback monitors]` | Every hardware-only `PENDING.md` item on one Linux laptop and one Android phone (USB debugging on): the Vulkan suites on the real GPU (and NVIDIA via PRIME), the fixture gallery, the phone's device suite on the CPU and GPU rasterizers with a screenshot each, the TalkBack-bound tree plus a prompted listening check, and the two-monitor refresh-rate check. Writes one `hardware-results-<time>.tar.gz`. |
+| `mobile/apk.sh [--example android] [--release] [--target T]` | Builds the APK (NDK resolved by `mobile/android-env.sh`, which also makes a debug keystore if none exists), installs and launches it. |
+| `mobile/device-suite.sh [--gpu]` | The in-app device suite on the attached phone or emulator; `--gpu` sets `debug.vieww.gpu=1` for the planned GPU path. `VIEWW_SCREENSHOT=file.png` keeps a screenshot. |
+| `mobile/a11y-android.sh [--keep\|--modal\|--off]` | The accessibility tree with TalkBack bound; `--modal` checks a modal hides what is behind it. |
+| `mobile/maestro.sh android\|ios` | Maestro's flows (`mobile/maestro/`) against an installed app, keeping the hierarchy it saw, logs and screenshots. |
+| `mobile/ios-app.sh [--sim\|--ipa\|--bundle-only]` | macOS only. Builds the `.app` with MoltenVK (`VIEWW_MOLTENVK`) bundled; `--ipa` signs with `VIEWW_IOS_IDENTITY`/`VIEWW_IOS_PROFILE` when set, ad-hoc otherwise. |
+| `mobile/test-lab.sh android\|ios\|list` | Firebase Test Lab: Game Loop on real phones (scenario 1 CPU, 2 GPU), Robo on one Android phone, one summary row per device and scenario. Needs `gcloud` and a Firebase project. 5 free physical-device runs a day; Test Lab shuts down 30 September 2027. |
+| `mobile/apk-add-code.sh IN.apk OUT.apk` | Adds the `classes.dex` Test Lab requires to a pure-Rust APK (and sets `hasCode`), then re-aligns and re-signs. `test-lab.sh` and the CI APK build run it. |
+
+Device clouds that re-sign uploads (LambdaTest, for example) take the CI
+`vieww.ipa` as it is; Firebase Test Lab needs it signed with a real Apple
+development identity. Upload Android builds to a cloud as a **Game Loop** or
+app test with `vieww-arm64.apk`.
+
+## The GitHub workflow
+
+`.github/workflows/framework-checks.yml` (at the repository root) is
+**manual-only**: Actions → Framework checks → Run workflow. Inputs:
+
+| Input | Default | Runs |
+|---|---|---|
+| `run_passed` | off | Every leg that has already passed: `checks.sh`, coverage, the cross type-check, lavapipe, macOS/Metal, Windows/WARP, Android compile, web (3 browsers), the Android emulator, the iOS simulator. Tick it before a merge. |
+| `build_apps` | on | The APKs (`vieww-apk` artifact) and the `.ipa` plus simulator `.app` (`vieww-ios`). |
+| `test_lab_android` / `test_lab_ios` | on / off | Firebase Test Lab; needs the `GCP_SA_KEY` and `FTL_PROJECT` secrets (and `IOS_*` for iOS). |
+| `device` | off | The self-hosted phone runner, if one is registered. |
+
+Results are pushed to the `ci-results/<branch>` branch (`SUMMARY.md`,
+`jobs.json`, screenshots). The token used from this workspace cannot push
+workflow files (no `workflow` scope); changes to the YAML go through GitHub's
+web upload.
+
 `.cargo/config.toml` points at `mobile/ndk-clang-*.sh`, `mobile/adb-runner.sh` and `mobile/simctl-runner.sh` as linkers and runners. Keep those paths in sync if you move them.
 
 ## Disk space
@@ -92,4 +127,4 @@ The certification scripts read three environment variables. `gate --mode` sets t
 ## Known gaps in this folder
 
 - `tools/patch-winit.sh` expects `ci/tools/winit-hover.patch`. That file is not in the tree, so the Android hover patch cannot be applied. This does not affect desktop.
-- Hosted CI (`.github/workflows/release-gate.yml`) covers the Windows and macOS CPU passes only. Its runners have no GPU and no display, so GPU and real-window rows need real machines.
+- Hosted CI (`.github/workflows/release-gate.yml`) covers the Windows and macOS CPU passes only. Its runners have no GPU and no display, so GPU and real-window rows need real machines. (`framework-checks.yml` does run the Metal suite on the macOS runner's paravirtual GPU and D3D12 on WARP — correctness, not performance.)

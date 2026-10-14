@@ -80,10 +80,12 @@ afterthought.
 
 **Not there yet:** the GPU renderer is real and covers the whole scene
 language — shapes, gradients, images, shadows, clips, layers, blend modes,
-filters, text — and it can drive a window ([`App::prefer_gpu`]), but it has
-only ever executed on *software* Vulkan (`lavapipe`, then SwiftShader), so it
-is verified correct and entirely unmeasured for speed, and its windowed path
-still pays a frame readback on the way to the screen. The CPU rasterizer is
+filters, text — and it can drive a window ([`App::prefer_gpu`]), drawing
+straight into the swapchain. It is verified correct on real drivers (Intel and
+NVIDIA on Linux, Adreno on Android) and measured on one phone, where it draws
+the demo 1.7x faster than the CPU rasterizer (21.0 ms against 36.4 ms on an
+Adreno 612) — still over a 60 Hz budget there. No desktop GPU timing exists
+yet, and it is not the default anywhere. The CPU rasterizer is
 what a window uses by default, what every screenshot in this repository was
 drawn with, and fast — but it is a software rasterizer with a software
 rasterizer's ceiling, and two of its heaviest gallery screens are over a

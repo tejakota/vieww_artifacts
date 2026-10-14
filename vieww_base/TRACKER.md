@@ -11,6 +11,77 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-14: real hardware — two GPUs, an Android phone, the iOS simulator, a real iPhone
+
+The day the "never run on hardware" caveats came off. Evidence for each line is
+in the named script's output or in `PENDING.md`'s dated notes, which this
+section replaces as the record.
+
+1. **Real GPUs (PENDING §1.1).** `ci/hardware/close-remaining.sh gpu nvidia`
+   on a Kaby Lake laptop, GNOME/Wayland, rustc 1.98.1:
+
+   | GPU | Driver | `vieww-hal --features vulkan -- --ignored` | `vieww-3d` GPU | GPU frame in a real window |
+   |---|---|---|---|---|
+   | Intel HD Graphics 620 | Mesa 26.0.8 | 44/44 (compositor 17/17 incl. backdrop blur) | 7/7 | `wait_loop` 5/5, `gpu_frame` ok |
+   | NVIDIA GeForce 920MX | 580.178.04 (PRIME) | 44/44 | — | — |
+
+   The desktop suite on the same machine: 21/21, 1.76 ms median frame.
+2. **Every CI leg green** (`.github/workflows/framework-checks.yml`, now
+   manual-only, results published to `ci-results/<branch>`): `checks.sh`,
+   the coverage floor, the cross type-check, the Vulkan suites on lavapipe,
+   **the Metal suite on the macOS runner's (paravirtual) Apple GPU** — so the
+   MSL compiled and ran for the first time — **the D3D12 suite on WARP**,
+   Android compile, **canvas parity in Chromium, Firefox and WebKit**, the
+   Android emulator (APK, device suite, accessibility suite, Maestro) and the
+   iOS simulator. Fixes on the way: `chunks_exact` → `as_chunks` (rustc 1.98
+   clippy), libxkbcommon on the runner for `wait_loop`, a debug keystore
+   generated on runners that have none (`android-env.sh`).
+3. **The iOS simulator — the first vieww frame on an iPhone screen.** The
+   black screen was a missing Vulkan: MoltenVK is now bundled
+   (`VIEWW_MOLTENVK`; the simulator slice comes from Khronos'
+   `MoltenVK-all.tar`, the iOS tar has only the device slice) with Metal
+   argument buffers off on the simulator. `fail_to_open` now says why a
+   window could not open and exits, instead of a silent black screen. Device
+   suite **12/12**, 600 frames at 6.8 ms median. Two defects fixed: the window
+   took the desktop preview size on a phone (accessibility frames off by
+   27,28 px, so Maestro tapped beside "Tap me"), and the Metal layer stayed
+   at `contentsScale` 1.0 on a 3x screen (`ios::match_layer_scale`).
+4. **A real iPhone.** The CI `vieww.ipa` (ad-hoc, MoltenVK device slice) on an
+   **iPhone 13 Pro, iOS 15**, through LambdaTest's real-device cloud (which
+   re-signs): renders at once, taps count, the system keyboard inserts at the
+   caret, tabs/segments/radios/bottom bar stay in sync, animations run, the
+   drawer opens. Interactive evidence (a screencast); the suite's numbers on
+   that device are still `PENDING.md` §1.4.
+5. **An Android phone** (Redmi Note 7 Pro, Adreno 612, Android 16, 1080x2340):
+   device suite 15/17 on the CPU rasterizer and **16/17 on the planned GPU
+   path**, which draws 600/600 frames straight into the swapchain:
+
+   | | CPU rasterizer | GPU path |
+   |---|---|---|
+   | median frame | 36.4 ms | **21.0 ms** (1.7x) |
+   | worst frame | 115 ms | **29 ms** |
+
+   The two screenshots match in everything static. TalkBack bound and heard
+   speaking through vieww's tree (an earlier silence was TalkBack not
+   running); the TalkBack-bound tree has 30 nodes, roles and states right, and
+   the modal hides what is behind it through the bridge. Maestro's flow passes
+   on the phone. The GPU path is chosen with `debug.vieww.gpu=1`
+   (`device-suite.sh --gpu`) or Test Lab's scenario 2.
+6. **Bugs that only devices found:** the drawer's panel covered its own
+   scrim, so it could not be dismissed by touch (`Drawer::build`, pinned by
+   `vieww-test-harness/tests/drawer_dismiss.rs`); backdrop blur read past its
+   region as transparent where the CPU oracle clamps (`Edge::Duplicate`,
+   PENDING §2.2); on Wayland the refresh rate was never re-read (the check now
+   runs inside `WindowState::draw`, at most once a second, verified on a
+   headless Weston).
+7. **Tooling.** `ci/hardware/close-remaining.sh` (one command for every
+   hardware-only item, one tarball back); `ci/mobile/maestro.sh` +
+   `maestro/demo.yaml` (Maestro on emulator, simulator and phone);
+   `ci/mobile/test-lab.sh` (Firebase Test Lab: Game Loop on CPU and GPU per
+   phone, Robo, one summary); `ci/mobile/apk-add-code.sh` (adds the
+   `classes.dex` Test Lab requires to a pure-Rust APK); CI jobs that build the
+   APKs and the `.ipa`/simulator `.app` as downloadable artifacts.
+
 ## 2026-10-11: every GPU edge antialiased, Metal and D3D12 render paths, cross-platform type-check
 
 1. **GPU edges for non-analytic shapes (PENDING §2.1, the parity half).**
@@ -174,7 +245,9 @@ machine that can install it, which the machine before this one could not):**
    Windows — the compile half of §1.2/§1.3 on runners nobody has to own.
    The mobile workflow has 23 recorded runs (green 2026-10-08), so the
    framework's Android and iOS *builds* are exercised on runners; a frame on
-   a device remains `PENDING.md` §1.4/§1.5. One mechanical note, recorded
+   a device remains `PENDING.md` §1.4/§1.5. *(Since 2026-10-14: frames on
+   the emulator, the simulator, an Android phone and a real iPhone — see
+   that day's section.)* One mechanical note, recorded
    here rather than hidden: the token this branch was pushed with lacks the
    `workflow` scope, and GitHub refuses workflow-file pushes without it —
    the file is therefore not in this commit; it lands with a workflow-scoped
@@ -496,6 +569,8 @@ set, so per-crate results are the record.
 - Physics beyond 2D translation — rotation, joints, continuous collision —
   is named as out of scope in `vieww-physics`'s module docs.
 - iOS remains `PENDING.md` §1.4: written, cross-compiled in CI, never run.
+  *(Since 2026-10-14 it has run: the simulator and a real iPhone 13 Pro — see
+  that day's section at the top.)*
 - The whole-workspace single-command test run could not complete on this
   machine's disk; per-crate results above are the substitute, and
   `ci/certify/certify.sh` on a bigger machine remains the one command that
