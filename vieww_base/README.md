@@ -26,6 +26,20 @@ deliberately different questions:
 - [`docs/architecture/`](./docs/architecture/README.md) — the *why* behind the
   layering below, one file per group of crates.
 
+## Where it has actually run (2026-10-14)
+
+| Platform | Ran on | GPU path | Evidence |
+|---|---|---|---|
+| Linux | Kaby Lake laptop, GNOME/Wayland; CI runners | Correct on Intel HD 620 (Mesa) and NVIDIA 920MX; lavapipe in CI | `ci/hardware/close-remaining.sh`, `framework-checks` |
+| Android | Redmi Note 7 Pro (Android 16); API 34 emulator | Correct and 1.7x faster than CPU on Adreno 612 (21.0 vs 36.4 ms); not the default | device + accessibility suites, Maestro, TalkBack by ear |
+| iOS | iPhone 13 Pro (iOS 15, LambdaTest); simulator | Vulkan on MoltenVK | simulator suite 12/12; real device driven by hand |
+| macOS | CI runner (paravirtual Apple GPU) | Metal smoke suite passes; no scene renderer | `framework-checks` macOS leg |
+| Windows | CI runner | D3D12 smoke suite on WARP; no scene renderer | `framework-checks` Windows leg |
+| Web | Chromium, Firefox, WebKit | canvas parity | `framework-checks` web leg |
+
+Not yet: a real Mac or Windows GPU, a desktop GPU timing, the device suite's
+numbers on a real iPhone — see `PENDING.md` §1.
+
 ## Layering, and the rule that keeps it a layering
 
 Each stage below depends only on the ones before it — a widget never reaches

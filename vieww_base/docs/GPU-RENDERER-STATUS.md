@@ -122,7 +122,10 @@ second is the honest one.
    translucent window, or a driver without `BLIT_SRC`/`BLIT_DST` on those
    formats, keeps the readback path; `FrameReport::gpu_direct_frames` says
    which one ran.
-3. **Cost shape, unmeasured on real hardware.** Offscreen targets are
+3. **Cost shape, measured on one phone only.** On an Adreno 612 (Android,
+   1080x2340) the planned path draws the demo in 21.0 ms median against the
+   CPU rasterizer's 36.4 ms, 600/600 frames direct into the swapchain
+   (TRACKER, 2026-10-14); no desktop GPU has been timed. Offscreen targets are
    frame-sized per nesting level; every shadow is a 7-pass sequence; clip and
    shadow masks are rasterized on the CPU (cached across frames by content).
    lavapipe timings are not a GPU performance claim (the census's GPU column

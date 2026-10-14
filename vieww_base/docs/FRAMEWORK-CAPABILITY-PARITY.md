@@ -96,8 +96,8 @@ These are not invented from the competitor comparison; the source snapshot's `PE
 
 | Existing pending issue in the repository | Why it affects parity/release confidence |
 |---|---|
-| No certified frame presented to a real GPU window; current live window can use CPU rasterized pixels | A GPU renderer's existence is not equivalent to an end-to-end GPU frame. |
-| Metal backend, D3D12 backend, iOS target and web-on-other-browsers need toolchain/device validation | Multi-platform reach is not proven by compiling one target. |
+| ~~No certified frame presented to a real GPU window~~ — closed 2026-10-14: GPU frames in real windows on Intel and NVIDIA (Linux) and on an Adreno phone, straight into the swapchain. The CPU rasterizer is still the default. | A GPU renderer's existence is not equivalent to an end-to-end GPU frame. |
+| Metal and D3D12 run their smoke suites (macOS runner, WARP) but have no scene renderer; iOS runs on the simulator and a real iPhone 13 Pro; web parity passes in Chromium, Firefox and WebKit (2026-10-14) | Multi-platform reach is not proven by compiling one target. |
 | GPU shape-edge antialiasing, atlas eviction and full category-by-category reference image oracles | Graphics quality and long-running memory behavior require correctness/perf evidence. |
 | Color-font/emoji support, variable fonts, subpixel antialiasing/hinting | Typography parity has important remaining cases. |
 | CPU full-repaint performance exceeds the 60 Hz frame budget for named fixtures | A feature can exist and still fail practical performance goals. |
