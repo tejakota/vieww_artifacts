@@ -219,6 +219,29 @@ GPU rasterizer when `debug.vieww.gpu=1` (`device-suite.sh --gpu`), the suite
 reports `gpu_frames: N of M (K straight into the swapchain)`, and the hardware
 script runs the phone suite on both rasterizers back to back.
 
+**Third phone run (2026-10-14 evening) — TalkBack and Adreno, both answered.**
+
+- **TalkBack by ear: yes.** The service is bound (`Bound services:{TalkBack}`,
+  spoken + haptic feedback) and speech was heard through vieww's screen. The
+  earlier silence was TalkBack not running, not vieww. Closed.
+- **The GPU rasterizer on the Adreno 612:**
+
+| 1080x2340 | CPU rasterizer | planned GPU path |
+|---|---|---|
+| frames drawn by the GPU | 0 / 600 | **600 / 600, all straight into the swapchain** |
+| median frame | 36.6 ms | **21.1 ms** (1.7x) |
+| worst frame | 108 ms | **26.2 ms** (4x) |
+| throughput | 27 fps | **49 fps** |
+| device suite | 15/17 | **16/17** — only the median budget |
+
+  The Adreno driver runs the whole planned path, including the direct present
+  (no readback), and the behavioural checks all hold on it. Still open: the
+  median is 4.5 ms over a 60 Hz budget, so where those 21 ms go (planning on
+  the CPU, the GPU's own work, or the present) is the next measurement; and a
+  GPU frame has not yet been compared by eye with a CPU one — the hardware
+  script now saves a screenshot from each run (`phone-cpu.png`,
+  `phone-gpu.png`).
+
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
 (`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
 a hot-reload path. The APKs build green on runners; nothing has ever run on a

@@ -222,6 +222,16 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
 done
 echo "device-suite: sent $taps tap(s) each at ${tap_x},${tap_y} and ${field_x},${field_y}"
 
+# What the frame looked like, from whichever rasterizer drew it. The suite
+# checks behaviour, not pixels; a screenshot per run is what lets a CPU frame
+# and a GPU frame from the same phone be compared by eye (the first GPU run on
+# an Adreno drew 600/600 frames and nobody had seen one).
+if [ -n "${VIEWW_SCREENSHOT:-}" ]; then
+    adb exec-out screencap -p > "$VIEWW_SCREENSHOT" 2>/dev/null \
+        && echo "device-suite: screenshot in $VIEWW_SCREENSHOT" \
+        || echo "device-suite: screenshot failed" >&2
+fi
+
 if ! echo "$log" | grep -q "__VIEWW_SUITE__ result "; then
     echo "device-suite: the app never finished reporting." >&2
     echo "  It needs 600 frames, so it must be drawing continuously — if the" >&2

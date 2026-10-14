@@ -126,12 +126,12 @@ fi
 if want android && [ "$phone" = 1 ]; then
     # Never on an emulator here: the point is the real GPU's frame times, which
     # device-suite.sh counts fully on a phone.
-    run android-suite ci/mobile/device-suite.sh
+    VIEWW_SCREENSHOT="$out/phone-cpu.png" run android-suite ci/mobile/device-suite.sh
     # The same build again, on the planned GPU rasterizer: the CPU path above
     # was 37ms median on the first real run. Its gpu_frames line says whether
     # the GPU actually drew (a frame it cannot plan, or a GPU that will not
     # build, falls back to the CPU).
-    run android-suite-gpu ci/mobile/device-suite.sh --gpu
+    VIEWW_SCREENSHOT="$out/phone-gpu.png" run android-suite-gpu ci/mobile/device-suite.sh --gpu
     adb shell setprop debug.vieww.gpu 0 >/dev/null 2>&1 || true
     for f in android-suite android-suite-gpu; do
         {
