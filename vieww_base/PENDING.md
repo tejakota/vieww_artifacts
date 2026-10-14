@@ -242,6 +242,16 @@ script runs the phone suite on both rasterizers back to back.
   script now saves a screenshot from each run (`phone-cpu.png`,
   `phone-gpu.png`).
 
+**Fourth run — the GPU frame on the Adreno is correct, and the numbers repeat.**
+CPU 36.4 ms / GPU 21.0 ms median (worst 115 / 29 ms), 600/600 frames on the GPU,
+all direct. The two screenshots match in everything static — text, button,
+field and caret, tab bar, segmented control, the system keyboard — and differ
+(5.3% of pixels, all above y=1445) only in what changes run to run: the
+animated band's colour, the frame graph's own bars, and the tap count. So the
+GPU path is correct *and* 1.7x faster on this phone. What is left for Android
+is the 4.3 ms between 21 ms and a 60 Hz budget, and whether to make the GPU
+path the Android default.
+
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
 (`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
 a hot-reload path. The APKs build green on runners; nothing has ever run on a
