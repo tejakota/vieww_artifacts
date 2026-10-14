@@ -252,6 +252,16 @@ GPU path is correct *and* 1.7x faster on this phone. What is left for Android
 is the 4.3 ms between 21 ms and a 60 Hz budget, and whether to make the GPU
 path the Android default.
 
+**Firebase Test Lab (2026-10-14), to widen this beyond one Redmi.**
+`ci/mobile/test-lab.sh android` builds the release APK and runs Test Lab's
+Game Loop on three physical phones from different makers (picked from the live
+catalogue), scenario 1 on the CPU rasterizer and 2 on the GPU path, plus a Robo
+crawl of the accessibility tree on one; results come back as one summary row
+per device and scenario. `test-lab.sh ios --ipa` does the same for iPhones,
+which needs a real Apple development signature (Test Lab refuses ad-hoc). Both
+are jobs in `framework-checks.yml`, which is manual-only now. Not run yet.
+Test Lab is deprecated and shuts down on 30 September 2027.
+
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
 (`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
 a hot-reload path. The APKs build green on runners; nothing has ever run on a

@@ -131,6 +131,11 @@ cat > "$app/Info.plist" <<PLIST
     <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
     <key>UISupportedInterfaceOrientations</key>
     <array><string>UIInterfaceOrientationPortrait</string></array>
+    <key>CFBundleURLTypes</key>
+    <array><dict>
+        <key>CFBundleURLName</key><string>$bundle_id.game-loop</string>
+        <key>CFBundleURLSchemes</key><array><string>firebase-game-loop</string></array>
+    </dict></array>
 </dict>
 </plist>
 PLIST
@@ -152,14 +157,42 @@ fi
 
 echo "==> bundled $app"
 
+# Frameworks first, then the bundle: a bundle signature covers its nested code,
+# and a nested binary signed after its bundle invalidates it. MoltenVK is the
+# one framework today (see VIEWW_MOLTENVK above).
+sign_nested() {
+    local identity="$1"
+    [ -d "$app/Frameworks" ] || return 0
+    local item
+    for item in "$app/Frameworks"/*; do
+        [ -e "$item" ] && codesign --force --sign "$identity" --timestamp=none "$item"
+    done
+}
+
 if [ "$target_kind" = "ipa" ]; then
-    # Ad-hoc (`-`) rather than a real identity: available on any Mac with Xcode
-    # and no account at all. The device cloud replaces it.
+    # **Two signatures, for two kinds of device cloud.**
     #
-    # Signed rather than left bare because some resigning pipelines refuse a
-    # wholly unsigned Mach-O, and an ad-hoc signature costs nothing.
-    codesign --force --sign - --timestamp=none "$app"
-    echo "==> ad-hoc signed (a device cloud will re-sign this)"
+    # With VIEWW_IOS_IDENTITY (and VIEWW_IOS_PROFILE): a real development
+    # signature. Firebase Test Lab requires one — "sign all artifacts in the
+    # app, for example with a provisioning profile and signing identity" —
+    # and then re-signs with its own profile; an ad-hoc signature is refused
+    # there (https://firebase.google.com/docs/test-lab/ios/run-game-loop-test).
+    #
+    # Without: ad-hoc (`-`), available on any Mac with Xcode and no account,
+    # for the clouds that re-sign anything (BrowserStack, AWS Device Farm).
+    if [ -n "${VIEWW_IOS_IDENTITY:-}" ]; then
+        if [ -n "${VIEWW_IOS_PROFILE:-}" ]; then
+            cp "$VIEWW_IOS_PROFILE" "$app/embedded.mobileprovision"
+        fi
+        sign_nested "$VIEWW_IOS_IDENTITY"
+        codesign --force --sign "$VIEWW_IOS_IDENTITY" --timestamp=none "$app"
+        codesign --verify --deep --verbose "$app"
+        echo "==> signed as $VIEWW_IOS_IDENTITY (Firebase Test Lab will re-sign it)"
+    else
+        sign_nested -
+        codesign --force --sign - --timestamp=none "$app"
+        echo "==> ad-hoc signed (a device cloud will re-sign this; Firebase Test Lab will not accept it)"
+    fi
 
     # An .ipa is a zip with the bundle under `Payload/`. That layout is the whole
     # format — there is no manifest to get wrong.
@@ -238,6 +271,7 @@ cat > "$entitlements" <<'PLIST'
 PLIST
 
 echo "==> signing as $VIEWW_IOS_IDENTITY"
+sign_nested "$VIEWW_IOS_IDENTITY"
 codesign --force --sign "$VIEWW_IOS_IDENTITY" --entitlements "$entitlements" --timestamp=none "$app"
 
 echo "==> installing"
