@@ -391,6 +391,12 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          # A phone-sized screen. The runner's default AVD is 320x640 dp, and
+          # the demo's last control ("Open the menu", below the bottom bar)
+          # fell off it — the first Maestro run that got that far failed on
+          # exactly that. pixel_6 is 411x914 dp, close to the Redmi the device
+          # suite was written on.
+          profile: pixel_6
           working-directory: vieww_base
           # One line: the action runs each line of `script` in its own shell,
           # so the environment android-env.sh sets would not reach the next.
