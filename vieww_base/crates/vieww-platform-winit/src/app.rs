@@ -21,7 +21,9 @@ use vieww_paint::FrameScheduler;
 use vieww_render::element::Runtime;
 use vieww_render::{next_action, FrameDriver, LoopAction, WindowKey};
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+use winit::dpi::LogicalSize;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 #[cfg(target_os = "android")]
@@ -1241,6 +1243,11 @@ impl WindowState {
         // present cannot trust damage — see `Gpu::needs_full_repaint`.
         gpu.needs_full_repaint = true;
 
+        // The swapchain extent on MoltenVK is the layer's bounds times its
+        // `contentsScale`; see `ios::match_layer_scale`.
+        #[cfg(target_os = "ios")]
+        crate::ios::match_layer_scale(&gpu.window);
+
         if let Err(error) = gpu.renderer.resize(&mut gpu.surface, width, height) {
             // A resize is not fatal to the application — the next present
             // will try again against whatever the surface settles on — but
@@ -1920,14 +1927,24 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
     ) -> Result<NewSurface, PlatformError> {
         let attributes = Window::default_attributes()
             .with_title(title.to_owned())
-            .with_inner_size(LogicalSize::new(
-                f64::from(size.width),
-                f64::from(size.height),
-            ))
             // AccessKit's adapter has to exist before the window is ever shown,
             // and panics if it does not. So the window is born invisible and
             // revealed by the caller, once the adapter is attached.
             .with_visible(false);
+        // **A phone decides its own window.** On iOS, winit applies a
+        // requested size to the `UIWindow` frame: the demo's 420x880 desktop
+        // preview became a 420x880 window on a 393x852 iPhone 15 Pro. The frame
+        // was drawn from the top-left and cropped at the right, while the
+        // accessibility frames came out shifted by the difference (27, 28) — so
+        // Maestro, aiming from the tree, tapped seven points above "Tap me"
+        // (first iOS simulator run with a working GPU, 2026-10-14). On a phone
+        // the requested size is ignored, as the iOS example's doc always said
+        // it was; winit's Android backend ignores it anyway.
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        let attributes = attributes.with_inner_size(LogicalSize::new(
+            f64::from(size.width),
+            f64::from(size.height),
+        ));
         // **Startup is traced step by step.** A gate run on a GNOME/Wayland
         // hybrid-GPU laptop hung here — `tests/wait_loop.rs`' idle scenario
         // printed no window event at all in 20 s while its waker thread fired

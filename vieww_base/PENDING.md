@@ -148,6 +148,18 @@ Khronos' `MoltenVK-ios.tar` turned out to carry only the device slice
 slice from `MoltenVK-all.tar`, linking the static one into a dylib if no
 dynamic one ships.
 
+**2026-10-14, later: the first vieww frame on an iPhone (simulator).** With the
+dynamic simulator slice bundled and Metal argument buffers off (the
+simulator's paravirtualised GPU has none), the GPU opened in 36 ms, the tree
+built, and the in-app device suite reported **12 of 12 checks green** — safe
+area, density 3x, keyboard inset, the modal drawer, 600 frames at a 6.8 ms
+median. Two defects showed on the way: the window took the desktop preview
+size (420x880 on a 393x852 screen), which shifted the accessibility frames by
+(27, 28) so Maestro tapped beside "Tap me"; and the Metal layer kept
+`contentsScale` 1.0 on a 3x screen, rendering soft. Both fixed in
+`vieww-platform-winit` (`surface` ignores the requested size on phones;
+`ios::match_layer_scale` before each swapchain rebuild).
+
 ## 1.5 Android
 
 **2026-10-14, from the `android-emulator` CI job** (x86_64, API 34, Pixel 6
