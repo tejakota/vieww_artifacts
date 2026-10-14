@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="31.371" timestamp="2026-10-14T15:38:55">
+    <testcase id="vieww demo screen" name="vieww demo screen" classname="vieww demo screen" file="ci/mobile/maestro/demo.yaml" time="31.334" timestamp="2026-10-14T15:38:55" status="SUCCESS">
+      <properties>
+        <property name="tags" value="smoke"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
