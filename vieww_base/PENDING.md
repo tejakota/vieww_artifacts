@@ -143,8 +143,22 @@ MoltenVK. The failure was silent because `run_app` never returns on iOS and
 `exit()` is ignored there; `fail_to_open` now prints the reason and ends the
 process. Next: MoltenVK in the bundle (`VIEWW_MOLTENVK`, fetched by the CI
 job from Khronos' release), then whatever the first real frame shows.
+Khronos' `MoltenVK-ios.tar` turned out to carry only the device slice
+(`dynamic/MoltenVK.xcframework/ios-arm64`); the job now takes the simulator
+slice from `MoltenVK-all.tar`, linking the static one into a dylib if no
+dynamic one ships.
 
 ## 1.5 Android
+
+**2026-10-14, from the `android-emulator` CI job** (x86_64, API 34, Pixel 6
+profile): the APK builds, signs, installs and launches; Maestro drives the demo
+end to end through the AccessKit tree (taps, the shared selection, the modal
+drawer open and dismissed); the in-app device suite reports green apart from
+the two frame-budget checks, which on an emulator measure SwiftShader and are
+reported as warnings there only. The drawer half found a real bug — the panel
+covered its own scrim, so a drawer could not be dismissed by touch (fixed in
+`Drawer::build`, pinned by `vieww-test-harness/tests/drawer_dismiss.rs`).
+What only a phone can still answer: real-GPU frame times and TalkBack by ear.
 
 **What.** Real code, an NDK-aware build (`ci/mobile/apk.sh`), a device suite
 (`ci/mobile/device-suite.sh`), an accessibility suite (`ci/mobile/a11y-android.sh`) and
