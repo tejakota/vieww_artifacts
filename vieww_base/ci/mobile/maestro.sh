@@ -55,6 +55,10 @@ case "$platform" in
         # The app's own stdout/stderr — vieww's log lines and any panic — go
         # nowhere under a plain launch, and the first run showed a black screen
         # with nothing to say why. Relaunch with both captured.
+        # SIMCTL_CHILD_* reaches the app as its own environment: the startup
+        # trace (window, GPU, accessibility, first tree) says where it stops.
+        # The second CI run had a black screen and an empty stderr without it.
+        SIMCTL_CHILD_VIEWW_TRACE_FRAMES=1 SIMCTL_CHILD_RUST_BACKTRACE=1 \
         xcrun simctl launch --terminate-running-process \
             --stdout="$out/app-stdout.txt" --stderr="$out/app-stderr.txt" \
             "$udid" dev.vieww.demo || true

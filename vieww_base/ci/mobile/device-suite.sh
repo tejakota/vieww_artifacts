@@ -83,7 +83,16 @@ if [ "$build" -eq 1 ]; then
     fi
 fi
 
-pid="$(running_pid)"
+# Poll rather than ask once. `cargo apk run` used to return seconds after the
+# launch; the detached install returns the moment `am start` does, and the
+# first CI run asked `pidof` before the process existed and reported a launch
+# failure for an app that was starting normally.
+pid=""
+for _ in $(seq 1 30); do
+    pid="$(running_pid)"
+    [ -n "$pid" ] && break
+    sleep 1
+done
 if [ -z "$pid" ]; then
     echo "device-suite: $package is not running." >&2
     echo "  Launch it first, or drop --no-build so this script installs it." >&2
