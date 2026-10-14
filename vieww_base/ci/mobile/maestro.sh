@@ -63,7 +63,10 @@ case "$platform" in
         # SIMCTL_CHILD_* reaches the app as its own environment: the startup
         # trace (window, GPU, accessibility, first tree) says where it stops.
         # The second CI run had a black screen and an empty stderr without it.
+        # MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0: vieww-hal sets it itself on
+        # the simulator; repeated here so a cfg surprise cannot cost a run.
         SIMCTL_CHILD_VIEWW_TRACE_FRAMES=1 SIMCTL_CHILD_RUST_BACKTRACE=1 \
+        SIMCTL_CHILD_MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=0 \
         xcrun simctl launch --terminate-running-process \
             --stdout="$out/app-stdout.txt" --stderr="$out/app-stderr.txt" \
             "$udid" dev.vieww.demo || true

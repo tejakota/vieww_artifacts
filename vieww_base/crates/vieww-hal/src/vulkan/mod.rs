@@ -105,6 +105,18 @@ impl super::sealed::Sealed for VulkanDevice {}
 ///
 /// [`VulkanError::Loading`] when no candidate loads.
 pub fn load_entry() -> Result<ash::Entry, VulkanError> {
+    // **The iOS simulator's GPU has no Metal argument buffers.** It is a
+    // paravirtualised device (`AppleParavirtDevice`), and MoltenVK uses
+    // argument buffers by default: the first simulator run with MoltenVK
+    // bundled loaded it, listed its extensions, and then died on
+    // `-[AppleParavirtDevice newArgumentEncoderWithLayout:]: unrecognized
+    // selector`. MoltenVK reads `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` when
+    // it initialises, so it has to be set before the library is loaded — here.
+    // Only on the simulator, and never over a value someone set on purpose.
+    #[cfg(all(target_os = "ios", target_abi = "sim"))]
+    if std::env::var_os("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS").is_none() {
+        std::env::set_var("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0");
+    }
     match unsafe { ash::Entry::load() } {
         Ok(entry) => Ok(entry),
         Err(error) => load_entry_fallback(error.to_string()),
