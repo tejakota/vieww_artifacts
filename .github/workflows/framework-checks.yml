@@ -343,22 +343,48 @@ jobs:
       # the app bundle. Without it the GPU never opened and the simulator sat
       # on a black screen (startup trace ended at "opening the GPU").
       - name: MoltenVK for the simulator
+        # MoltenVK-ios.tar holds only the device slice (ios-arm64) — the
+        # 2026-10-14 run listed it. The simulator needs MoltenVK-all.tar: take
+        # a dynamic simulator slice if it has one, otherwise link the static
+        # simulator slice into a dylib with Xcode's clang.
         run: |
           curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
-            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar
+            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-all.tar
           mkdir -p "$RUNNER_TEMP/mvk" && tar -xf "$RUNNER_TEMP/mvk.tar" -C "$RUNNER_TEMP/mvk"
-          # Case-insensitive: Khronos names folders like `dynamic/dylib/macOS`,
-          # so a simulator slice may be `iOS-Simulator` or `ios-…-simulator`.
-          # The first attempt searched case-sensitively and found nothing.
-          echo "dynamic MoltenVK binaries in the archive:"
-          find "$RUNNER_TEMP/mvk" \( -name 'libMoltenVK.dylib' -o -name 'MoltenVK.framework' \) | sed "s|$RUNNER_TEMP/mvk/||"
-          lib=$(find "$RUNNER_TEMP/mvk" -ipath '*simulator*' \( -name 'libMoltenVK.dylib' -o -name 'MoltenVK.framework' \) | head -1)
-          if [ -n "$lib" ]; then
+          echo "xcframework slices:"
+          find "$RUNNER_TEMP/mvk" -maxdepth 5 -name '*.xcframework' | while read -r x; do
+            echo "  ${x#"$RUNNER_TEMP"/mvk/}: $(ls "$x" | tr '\n' ' ')"
+          done
+          # Every MoltenVK binary in an iOS-simulator slice, sorted by what it
+          # really is: a framework's binary may be static or dynamic.
+          lib=""; static=""
+          while read -r bin; do
+            kind=$(file -b "$bin")
+            echo "  ${bin#"$RUNNER_TEMP"/mvk/}: $kind"
+            case "$kind" in
+              *"dynamically linked shared library"*) [ -z "$lib" ] && lib="$bin" ;;
+              *"ar archive"*) [ -z "$static" ] && static="$bin" ;;
+            esac
+          done < <(find "$RUNNER_TEMP/mvk" -ipath '*/ios-*simulator*' -type f \( -name 'libMoltenVK.dylib' -o -name 'libMoltenVK.a' -o -name 'MoltenVK' \))
+          # A dynamic framework is copied whole (its binary is loaded by path).
+          case "$lib" in */MoltenVK.framework/MoltenVK) lib="${lib%/MoltenVK}" ;; esac
+          if [ -z "$lib" ]; then
+            if [ -n "$static" ]; then
+              echo "linking the static simulator slice: ${static#"$RUNNER_TEMP"/mvk/}"
+              lib="$RUNNER_TEMP/libMoltenVK.dylib"
+              xcrun -sdk iphonesimulator clang -dynamiclib \
+                -target arm64-apple-ios13.0-simulator \
+                -Wl,-force_load,"$static" \
+                -framework Metal -framework Foundation -framework QuartzCore \
+                -framework IOSurface -framework UIKit -framework CoreGraphics \
+                -lc++ -install_name @rpath/libMoltenVK.dylib -o "$lib"
+            fi
+          fi
+          if [ -n "$lib" ] && [ -e "$lib" ]; then
             echo "VIEWW_MOLTENVK=$lib" >> "$GITHUB_ENV"
-            echo "MoltenVK simulator slice: $lib"
+            echo "MoltenVK for the simulator: $lib"
           else
-            echo "::warning::no dynamic MoltenVK simulator slice found in MoltenVK-ios.tar; layout follows"
-            find "$RUNNER_TEMP/mvk" -maxdepth 6 | sed "s|$RUNNER_TEMP/mvk/||" | head -80
+            echo "::warning::no MoltenVK simulator slice (dynamic or static) in MoltenVK-all.tar"
           fi
       - name: The ios example on the simulator's screen
         run: ci/mobile/ios-app.sh --sim
