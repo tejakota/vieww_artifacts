@@ -45,12 +45,19 @@ case "$platform" in
         [[ -n "$serial" ]] || { echo "maestro.sh: no adb device" >&2; exit 2; }
         device=(--device "$serial")
         adb -s "$serial" shell am force-stop dev.vieww.demo || true
-        adb -s "$serial" shell monkey -p dev.vieww.demo -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+        # `am start`, not `monkey -c LAUNCHER 1`: monkey's one event is not
+        # guaranteed to be the launch alone.
+        adb -s "$serial" shell am start -n dev.vieww.demo/android.app.NativeActivity >/dev/null 2>&1 || true
         ;;
     ios)
         udid="${VIEWW_SIM_DEVICE:-$(xcrun simctl list devices booted -j | python3 -c "import json,sys; print(next(x['udid'] for v in json.load(sys.stdin)['devices'].values() for x in v))")}"
         device=(--device "$udid")
-        xcrun simctl launch "$udid" dev.vieww.demo || true
+        # The app's own stdout/stderr — vieww's log lines and any panic — go
+        # nowhere under a plain launch, and the first run showed a black screen
+        # with nothing to say why. Relaunch with both captured.
+        xcrun simctl launch --terminate-running-process \
+            --stdout="$out/app-stdout.txt" --stderr="$out/app-stderr.txt" \
+            "$udid" dev.vieww.demo || true
         ;;
     *) echo "maestro.sh: unknown platform $platform" >&2; exit 2 ;;
 esac

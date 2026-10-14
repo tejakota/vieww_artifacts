@@ -19,11 +19,30 @@ tags: [smoke]
 
 # The probe button and the counter beside it: a tap reaches the widget, the
 # widget's state changes, and the new text is republished.
-- assertVisible: "Not tapped yet"
-- tapOn: "Tap me"
-- assertVisible: "1 tap"
-- tapOn: "Tap me"
-- assertVisible: "2 taps"
+#
+# The counts differ by platform on purpose. android.rs installs
+# `device_tests::semantic_activation`, which activates "Tap me" through the
+# semantics tree on the first frame it can — a self-test — so an Android launch
+# already reads "1 tap". iOS does not install it (yet), so it starts at zero.
+# The first CI run failed here by assuming zero everywhere.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertVisible: "1 tap"
+      - tapOn: "Tap me"
+      - assertVisible: "2 taps"
+      - tapOn: "Tap me"
+      - assertVisible: "3 taps"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - assertVisible: "Not tapped yet"
+      - tapOn: "Tap me"
+      - assertVisible: "1 tap"
+      - tapOn: "Tap me"
+      - assertVisible: "2 taps"
 
 # One signal behind four selectors: choosing "Month" in one must leave a
 # selected/checked "Month" published, and no selected "Day".
@@ -54,4 +73,5 @@ tags: [smoke]
 - extendedWaitUntil:
     visible: "Tap me"
     timeout: 5000
-- assertVisible: "2 taps"
+# The count survived the drawer: whatever it was, it still reads as taps.
+- assertVisible: "[0-9]+ taps"

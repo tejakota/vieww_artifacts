@@ -82,5 +82,5 @@ echo "==> installing $apk"
 adb install -r "$apk"
 package="$(sed -n '/^\[package.metadata.android\]/,/^\[/ s/^package = "\(.*\)"/\1/p' crates/vieww-platform-winit/Cargo.toml | head -1)"
 adb shell am force-stop "$package" >/dev/null 2>&1 || true
-adb shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 >/dev/null
+adb shell am start -n "$package/android.app.NativeActivity" >/dev/null
 echo "==> launched $package (detached; logcat not followed)"
