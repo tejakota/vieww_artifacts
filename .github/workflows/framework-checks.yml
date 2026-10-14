@@ -74,9 +74,6 @@ defaults:
 
 jobs:
   gate:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: checks.sh (Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 150
@@ -106,9 +103,6 @@ jobs:
           path: ci-artifacts/gate.log
 
   coverage:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: Coverage floor
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -132,9 +126,6 @@ jobs:
         run: ci/check/coverage.sh
 
   cross:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: Type-check for macOS, iOS, Windows, Android (from Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -150,9 +141,6 @@ jobs:
         run: ci/check/cross-check.sh
 
   gpu-lavapipe:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: GPU on software Vulkan (lavapipe)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -189,9 +177,6 @@ jobs:
           path: ci-artifacts/gpu-window.log
 
   macos:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: macOS and iOS (Metal)
     runs-on: macos-14
     timeout-minutes: 90
@@ -220,9 +205,6 @@ jobs:
           cargo clippy -p vieww-hal --features metal --target aarch64-apple-ios -- -D warnings
 
   windows:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: Windows (D3D12 on WARP)
     runs-on: windows-2022
     timeout-minutes: 90
@@ -252,9 +234,6 @@ jobs:
         run: cargo test -p viewwstudio --test remote -- --test-threads=1
 
   android:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: Android (compile)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -274,9 +253,6 @@ jobs:
         run: ci/check/platform-check.sh android
 
   web:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: Web (wasm32; Chromium, Firefox, WebKit)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -431,9 +407,6 @@ jobs:
   # self-hosted phone — x86_64, because that is what GitHub's Linux runners can
   # emulate at speed (KVM). Experimental, reported, not blocking.
   android-emulator:
-    # PAUSED 2026-10-14: green on run 38536769152; only the iOS simulator is
-    # being iterated on. Delete these three lines to bring the job back.
-    if: false
     name: Android emulator (APK, device and accessibility suites)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
