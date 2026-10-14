@@ -18,14 +18,14 @@
 //! largest avalanche, the mean, and the grains the edges took. No number
 //! typed by a human.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
+use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, Rng};
+use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, INK, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The machine ─────────────────────────────────────────────────────────────
 
@@ -206,7 +206,10 @@ fn powerlaw_fit() -> (f64, f64, usize, f64) {
     }
     let slope = (n * sxy - sx * sy) / denom;
     let intercept = (sy - slope * sx) / n;
-    let sse: f64 = pts.iter().map(|p| (p.1 - (intercept + slope * p.0)).powi(2)).sum();
+    let sse: f64 = pts
+        .iter()
+        .map(|p| (p.1 - (intercept + slope * p.0)).powi(2))
+        .sum();
     let sst: f64 = pts.iter().map(|p| (p.1 - sy / n).powi(2)).sum();
     let r2 = if sst > 0.0 { 1.0 - sse / sst } else { 0.0 };
     // τ is the NEGATIVE of the log-log slope (N ∝ s^-tau)
@@ -221,7 +224,7 @@ const Y0: f32 = 130.0;
 const CW: f32 = 9.2;
 const CH: f32 = 9.2;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let drops = (t * GRAINS as f32).round() as usize;
     let (pile, live, lost) = replay(drops);
 
@@ -239,10 +242,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — an instrument room at dusk.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 7, 10)),
-                    (1.0, Color::rgb(12, 12, 17)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(7, 7, 10)), (1.0, Color::rgb(12, 12, 17))]),
             );
 
             // ── The pile, one rect per cell, colour = local slope ──
@@ -347,9 +349,9 @@ pub fn frame(t: f32) -> WidgetNode {
                     .collect()
             };
             let peak = bins.iter().map(|b| b.1).fold(0.0_f64, f64::max).max(1.0);
-            let ly = |n: f64| (py0 + ph - ((n / peak).clamp(0.0, 1.0) as f32) * (ph - 30.0));
+            let ly = |n: f64| py0 + ph - ((n / peak).clamp(0.0, 1.0) as f32) * (ph - 30.0);
             // the same axes, for values already in normalised space (the fit)
-            let lyv = |v: f64| (py0 + ph - (v.clamp(0.0, 1.0) as f32) * (ph - 30.0));
+            let lyv = |v: f64| py0 + ph - (v.clamp(0.0, 1.0) as f32) * (ph - 30.0);
             for &(s, n) in bins.iter() {
                 if n < 1.0 {
                     continue;
@@ -440,7 +442,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

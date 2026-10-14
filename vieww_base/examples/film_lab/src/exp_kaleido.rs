@@ -23,15 +23,16 @@
 //! drifting amber sparks and their reflections, a breathing nebula blob on
 //! the axis, concentric arc rulings.
 
-use vieww_foundation::{Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
-    StrokeStyle, Transform};
+use vieww_foundation::{
+    Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle, Transform,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, tint, Rng, AMBER, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// The fold count: the dihedral group's rotation order.
 const FOLDS: usize = 12;
@@ -102,7 +103,7 @@ fn draw_source(book: &mut Sketchbook, t: f32) -> usize {
             let centre = pa * sign;
             let k = 3.0;
             let a = 118.0 + pi as f32 * 15.0;
-            let wob = 0.85 + 0.15 * (t * 6.2832 * 0.9 + pi as f32 * 2.0).sin();
+            let wob = 0.85 + 0.15 * (t * std::f32::consts::TAU * 0.9 + pi as f32 * 2.0).sin();
             let mut fill = Path::new();
             let mut spine = Path::new();
             for s in 0..44 {
@@ -159,7 +160,7 @@ fn draw_source(book: &mut Sketchbook, t: f32) -> usize {
     }
 
     // The nebula blob: on the axis (y = 0), so self-symmetric, breathing.
-    let breathe = 0.8 + 0.2 * (t * 6.2832 * 0.5).sin();
+    let breathe = 0.8 + 0.2 * (t * std::f32::consts::TAU * 0.5).sin();
     let bx = 200.0 * (0.2 + 0.14 * (t * 0.4).cos().abs());
     book.circle(
         Offset::new(bx, 0.0),
@@ -200,7 +201,7 @@ fn spark_points(sparks: &[Spark], t: f32) -> Vec<(f32, f32, f32)> {
     v
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let sparks = sparks();
     let pts = spark_points(&sparks, t);
     let spark_count = pts.len();
@@ -216,10 +217,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the scope's dark tube.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.75).with_dither().with_stops(&[
-                    (0.0, Color::rgb(13, 12, 18)),
-                    (1.0, Color::rgb(5, 5, 8)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.75)
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(13, 12, 18)), (1.0, Color::rgb(5, 5, 8))]),
             );
 
             // THE FOLD — twelve pure rotations of a self-symmetric wedge:
@@ -244,11 +244,7 @@ pub fn frame(t: f32) -> WidgetNode {
                                     (1.0, alpha(AMBER, 0.0)),
                                 ]),
                             );
-                            g2.circle(
-                                Offset::new(x, y),
-                                *size,
-                                alpha(tint(AMBER, 0.55), 0.95),
-                            );
+                            g2.circle(Offset::new(x, y), *size, alpha(tint(AMBER, 0.55), 0.95));
                         }
                     });
                 });
@@ -279,8 +275,18 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // The outer rim: two thin rings + twelve fold-marks at the
             // sector boundaries (the group's signature, drawn deliberately).
-            book.ring(Offset::new(C.0, C.1), 344.0, 1.2, alpha(mix(FAINT, VIOLET, 0.4), 0.5));
-            book.ring(Offset::new(C.0, C.1), 352.0, 2.4, alpha(mix(FAINT, VIOLET, 0.3), 0.3));
+            book.ring(
+                Offset::new(C.0, C.1),
+                344.0,
+                1.2,
+                alpha(mix(FAINT, VIOLET, 0.4), 0.5),
+            );
+            book.ring(
+                Offset::new(C.0, C.1),
+                352.0,
+                2.4,
+                alpha(mix(FAINT, VIOLET, 0.3), 0.3),
+            );
             for k in 0..FOLDS {
                 let a = spin + k as f32 * std::f32::consts::TAU / FOLDS as f32;
                 book.line(
@@ -293,7 +299,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
+    let stack = Stack::new().push(Positioned::fill().child(board));
     stack.push(receipt_panel(spark_count)).into()
 }
 
@@ -306,7 +312,7 @@ pub fn frame(t: f32) -> WidgetNode {
 /// square pair reads 17% "asymmetric" on a field of small AA'd glows that
 /// simply sit in the wrong half of the square; the instrument was wrong,
 /// not the fold). The mean |Δ| per channel is the mirror's own residual.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let spin = 0.10 * std::f32::consts::TAU; // t = 1
     let (cs, sn) = spin.sin_cos();
     let bilinear = |x: f32, y: f32| -> (f32, f32, f32) {
@@ -332,7 +338,10 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
     // A window on the +d side; each pixel mirrored about the bisector line
     // (through C at angle `spin`) and sampled.
     for r in [200.0_f32, 240.0, 280.0] {
-        let (cx, cy) = (C.0 + (spin + 0.055).cos() * r, C.1 + (spin + 0.055).sin() * r);
+        let (cx, cy) = (
+            C.0 + (spin + 0.055).cos() * r,
+            C.1 + (spin + 0.055).sin() * r,
+        );
         let mut acc = (0.0_f32, 0.0, 0.0);
         let mut n = 0.0;
         for dy in -7..=7 {
@@ -362,7 +371,8 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
         ));
     }
     lines.push(
-        "residual = AA + bilinear smoothing only — the fold itself is exact by construction".to_string(),
+        "residual = AA + bilinear smoothing only — the fold itself is exact by construction"
+            .to_string(),
     );
     lines
 }
@@ -397,7 +407,10 @@ fn receipt_panel(spark_pts: usize) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

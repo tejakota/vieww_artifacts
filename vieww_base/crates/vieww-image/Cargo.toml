@@ -12,17 +12,8 @@ categories.workspace = true
 [dependencies]
 vieww-foundation.workspace = true
 
-# Decode stays exactly where `vieww-asset` already does it well (path/bundle
-# resolution, an `image`-crate-backed `decode`/`decode_sized`, an
-# identity-preserving `ImageCache`) — this crate does not re-decode. It reads
-# `image`'s own `AnimationDecoder`/frame API directly for the one decode-time
-# capability `vieww-asset` does not have a use for yet (animated-image frame
-# timing), and otherwise operates on already-decoded `vieww_foundation::Image`
-# pixels.
-[dependencies.image]
-version = "0.25"
-default-features = false
-features = ["png", "gif"]
+# No third-party codec: PNG, GIF, JPEG, BMP and DEFLATE are vieww's own
+# (`codec`), written from the specifications.
 
 [lints]
 workspace = true

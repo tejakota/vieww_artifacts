@@ -4,13 +4,11 @@ members = [
     "crates/three-core",
     "crates/three-format",
     "crates/three-capture",
-    "crates/three-reconstruction",
     "crates/three-runtime",
     "crates/three-vieww",
     "crates/three-social",
     "crates/three-app",
     "crates/three-cli",
-    "examples/capture-demo",
     "examples/vieww-integration",
     "examples/social-app",
 ]
@@ -32,13 +30,11 @@ default-members = [
     "crates/three-core",
     "crates/three-format",
     "crates/three-capture",
-    "crates/three-reconstruction",
     "crates/three-runtime",
     "crates/three-vieww",
     "crates/three-social",
     "crates/three-app",
     "crates/three-cli",
-    "examples/capture-demo",
 ]
 
 [workspace.package]
@@ -80,6 +76,11 @@ three-app = { path = "crates/three-app", version = "0.1.0" }
 vieww = { path = "../../vieww_base/crates/vieww" }
 vieww-platform-winit = { path = "../../vieww_base/crates/vieww-platform-winit" }
 vieww-test-harness = { path = "../../vieww_base/crates/vieww-test-harness" }
+# The framework's own 3D stack — the engine path in the reference viewer:
+# scene, materials, lights, the depth-buffered software rasteriser, and the
+# `Viewport3D` widget. See examples/vieww-integration/src/engine.rs.
+vieww-3d = { path = "../../vieww_base/crates/vieww-3d" }
+vieww-mesh = { path = "../../vieww_base/crates/vieww-mesh" }
 
 # The viewer's per-frame cost is dominated by Vieww's rasterizer and this
 # workspace's projection math, so a debug build inherits the same

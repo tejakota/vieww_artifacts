@@ -53,7 +53,12 @@ pub fn compare_pngs(a: &[u8], b: &[u8]) -> Option<PixelComparison> {
     let mut differing = 0;
     let mut max_delta = 0u8;
 
-    for (pa, pb) in pixels_a.chunks_exact(4).zip(pixels_b.chunks_exact(4)) {
+    for (pa, pb) in pixels_a
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(pixels_b.as_chunks::<4>().0)
+    {
         let mut pixel_differs = false;
         for (&ca, &cb) in pa.iter().zip(pb.iter()) {
             let delta = ca.abs_diff(cb);

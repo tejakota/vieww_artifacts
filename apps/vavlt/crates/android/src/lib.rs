@@ -32,13 +32,14 @@ mod picker;
 
 #[cfg(target_os = "android")]
 use std::path::PathBuf;
-use std::time::Duration;
 #[cfg(target_os = "android")]
 use std::rc::Rc;
 #[cfg(target_os = "android")]
 use std::sync::mpsc::Sender;
 #[cfg(target_os = "android")]
 use std::sync::Arc;
+#[cfg(target_os = "android")]
+use std::time::Duration;
 
 #[cfg(target_os = "android")]
 use vavlt_app::{Message, Platform, Pump, Scrolls, VavltApp, VavltState};

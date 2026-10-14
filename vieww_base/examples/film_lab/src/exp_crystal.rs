@@ -28,13 +28,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, tint, AMBER, CYAN, INK, MUTED, VIOLET,
-    VIOLET_SOFT};
+use crate::film_lib::{alpha, mix, tint, AMBER, CYAN, INK, MUTED, VIOLET, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The field ───────────────────────────────────────────────────────────────
 
@@ -45,10 +44,10 @@ const GY: usize = 90;
 /// The five wave directions, precomputed: θₖ = 2πk/5.
 const DIRS: [(f32, f32); 5] = [
     (1.0, 0.0),
-    (0.309016994, 0.951056516),
-    (-0.809016994, 0.587785252),
-    (-0.809016994, -0.587785252),
-    (0.309016994, -0.951056516),
+    (0.309_017, 0.951_056_54),
+    (-0.809_017, 0.587_785_24),
+    (-0.809_017, -0.587_785_24),
+    (0.309_017, -0.951_056_54),
 ];
 
 /// The field's radial wavenumber (px⁻¹ — one wavelength ≈ 92 px).
@@ -91,7 +90,7 @@ fn band_of(v: f32, breathe: f32) -> usize {
 /// The field's centre.
 const C: (f32, f32) = (640.0, 360.0);
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // **No global phase, on purpose.** A common phase Φ on all five waves
     // maps under 36° rotation to ψ_Φ(R₃₆r) = ψ_{−Φ}(r) — equal to the
     // original only at Φ = 0. The first cut animated Φ and the probe
@@ -122,10 +121,7 @@ pub fn frame(t: f32) -> WidgetNode {
             let h = size.height;
 
             // The room.
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Color::rgb(6, 6, 9),
-            );
+            book.rect(Rect::new(0.0, 0.0, w, h), Color::rgb(6, 6, 9));
 
             // ── The crystal slab: the field, banded, one rect per cell ──
             // The slab's margin — a bevelled specimen window.
@@ -235,7 +231,7 @@ fn ring_correlation(img: &image::RgbaImage, radius: f32, angle: f32) -> f32 {
     (dot / energy.max(1e-6)).clamp(0.0, 1.01)
 }
 
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let mut lines = Vec::new();
     for &r in [170.0_f32, 240.0, 310.0].iter() {
         let c10 = ring_correlation(img, r, std::f32::consts::TAU / 10.0);
@@ -246,14 +242,15 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
         ));
     }
     lines.push(
-        "ten-fold high, six-fold low: the class crystallography forbids — read from the raster".to_string(),
+        "ten-fold high, six-fold low: the class crystallography forbids — read from the raster"
+            .to_string(),
     );
     lines
 }
 
 // ── The receipt ─────────────────────────────────────────────────────────────
 
-fn receipt_panel(phi: f32, pre: f32) -> WidgetNode {
+fn receipt_panel(_phi: f32, pre: f32) -> WidgetNode {
     let lines = [
         "CRYSTAL · THE APERIODICITY AXIS · FIVE WAVES, ONE φ".to_string(),
         format!(
@@ -287,7 +284,10 @@ fn receipt_panel(phi: f32, pre: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

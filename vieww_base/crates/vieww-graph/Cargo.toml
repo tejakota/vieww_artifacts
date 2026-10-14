@@ -1,0 +1,17 @@
+[package]
+name = "vieww-graph"
+description = "The vieww node graph: a dataflow operator network cooked lazily by dirty flags (TouchDesigner, Blender's depsgraph) and a Blueprint-style execution graph."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Expressions (the Expression operator) and noise/LFO sources.
+vieww-animation.workspace = true
+
+[lints]
+workspace = true

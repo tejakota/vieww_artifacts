@@ -14,7 +14,7 @@
 //! reader and no window — which is the only way this would ever be checked at
 //! all.
 
-use accesskit::{Node, NodeId, Rect as AccessRect, Role as AccessRole, Tree, TreeUpdate};
+use accesskit::{Node, NodeId, Rect as AccessRect, Role as AccessRole, TreeInfo, TreeUpdate};
 use vieww_render::{Liveness, Role, SemanticAction, SemanticsNode, SemanticsTree};
 
 use crate::scale::Scale;
@@ -267,7 +267,7 @@ pub(crate) fn tree_update(semantics: &SemanticsTree, scale: Scale) -> Option<Tre
 
     Some(TreeUpdate {
         nodes,
-        tree: Some(Tree::new(root_id)),
+        tree: Some(TreeInfo::new(root_id)),
         tree_id: accesskit::TreeId::ROOT,
         focus,
     })
@@ -283,7 +283,7 @@ pub(crate) fn empty_update() -> TreeUpdate {
     let root = NodeId(0);
     TreeUpdate {
         nodes: vec![(root, Node::new(AccessRole::Window))],
-        tree: Some(Tree::new(root)),
+        tree: Some(TreeInfo::new(root)),
         tree_id: accesskit::TreeId::ROOT,
         focus: root,
     }

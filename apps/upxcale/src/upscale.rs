@@ -185,7 +185,7 @@ pub fn resample(src: &Image, dst_w: u32, dst_h: u32) -> Image {
     // passes would quantise the intermediate, and the horizontal pass's output
     // is exactly where the precision is needed.
     let mut linear = vec![0.0_f32; (sw * sh * 4) as usize];
-    for (i, chunk) in pixels.chunks_exact(4).enumerate() {
+    for (i, chunk) in pixels.as_chunks::<4>().0.iter().enumerate() {
         let a = f32::from(chunk[3]) / 255.0;
         linear[i * 4] = f32::from(chunk[0]) / 255.0 * a;
         linear[i * 4 + 1] = f32::from(chunk[1]) / 255.0 * a;
@@ -240,7 +240,7 @@ pub fn resample(src: &Image, dst_w: u32, dst_h: u32) -> Image {
 /// Divide the colour channels back out by alpha and quantise to `u8`.
 fn unpremultiply(linear: &[f32]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(linear.len());
-    for px in linear.chunks_exact(4) {
+    for px in linear.as_chunks::<4>().0 {
         // The negative lobes can push a channel below zero or past one; clamp
         // before the divide so a tiny alpha cannot amplify an out-of-range
         // colour into a bright speck.

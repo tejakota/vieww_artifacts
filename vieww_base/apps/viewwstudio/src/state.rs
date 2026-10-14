@@ -2269,6 +2269,14 @@ pub struct Studio {
     pub candidate: Rc<std::cell::Cell<usize>>,
     /// The screen the preview is showing, once one has compiled.
     pub preview_screen: Signal<Option<Preview>>,
+    /// The preview running in its own process, when `isolated_preview` is on.
+    /// `preview_screen` is `None` while this is `Some`, and the other way
+    /// round.
+    pub preview_remote: Signal<Option<crate::remote::RemoteHandle>>,
+    /// Run each Render's preview in a child process (`remote`) rather than
+    /// `dlopen`ing it into the studio. On by default on Windows, where the
+    /// in-process panic boundary cannot work (`PENDING.md` §3.3).
+    pub isolated_preview: Signal<bool>,
     /// `rustc`'s side of the conversation, for the Output panel.
     pub output: Signal<Rc<Vec<String>>>,
     /// What the last Render cost, for the Timings panel.
@@ -2708,6 +2716,8 @@ impl Studio {
             session: Rc::new(None),
             candidate: Rc::new(std::cell::Cell::new(0)),
             preview_screen: runtime.signal(None),
+            preview_remote: runtime.signal(None),
+            isolated_preview: runtime.signal(cfg!(windows)),
             output: runtime.signal(Rc::new(Vec::new())),
             timings: runtime.signal(Rc::new(Vec::new())),
             rendered_at: runtime.signal(None),
@@ -3118,11 +3128,13 @@ impl Studio {
         // Back to whatever the preview was before, not to `Failed`: nothing
         // failed, and a red light for a compile the user stopped on purpose is
         // a lie the status bar would carry until the next Render.
-        self.set_preview(if self.preview_screen.peek().is_some() {
-            PreviewState::Rendered
-        } else {
-            PreviewState::Empty
-        });
+        self.set_preview(
+            if self.preview_screen.peek().is_some() || self.preview_remote.peek().is_some() {
+                PreviewState::Rendered
+            } else {
+                PreviewState::Empty
+            },
+        );
     }
 
     /// Whether a compile is in flight. What disables the Render button.
@@ -3232,10 +3244,50 @@ impl Studio {
         }
 
         let loaded = std::time::Instant::now();
-        match Preview::load(library) {
+        // In this process, or in a child that a guest crash cannot take the
+        // studio down with — see `remote`, and `PENDING.md` §3.3 for why
+        // Windows has no other safe option.
+        let outcome = if self.isolated_preview.peek() {
+            match crate::remote::RemotePreview::sibling_binary() {
+                Some(binary) => {
+                    let sysroot = self
+                        .toolchain
+                        .as_ref()
+                        .as_ref()
+                        .ok()
+                        .and_then(|t| t.sysroot_lib.clone());
+                    crate::remote::RemotePreview::spawn(&binary)
+                        .and_then(|mut remote| {
+                            remote.load(library, sysroot.as_deref())?;
+                            Ok(remote)
+                        })
+                        .map(|remote| Loaded::Remote(crate::remote::RemoteHandle::new(remote)))
+                        .map_err(LoadFailure::from)
+                }
+                None => {
+                    log.push(format!(
+                        "isolated preview is on, but `{}` is not next to the studio — loading in process",
+                        crate::remote::CHILD_BINARY
+                    ));
+                    Preview::load(library)
+                        .map(Loaded::InProcess)
+                        .map_err(LoadFailure::from)
+                }
+            }
+        } else {
+            Preview::load(library)
+                .map(Loaded::InProcess)
+                .map_err(LoadFailure::from)
+        };
+        match outcome {
             Ok(preview) => {
                 let load = loaded.elapsed();
-                log.push(format!("loaded {}", library.display()));
+                let isolated = matches!(preview, Loaded::Remote(_));
+                log.push(format!(
+                    "loaded {}{}",
+                    library.display(),
+                    if isolated { " in its own process" } else { "" }
+                ));
                 self.output.set(Rc::new(log));
                 self.timings.set(Rc::new(vec![
                     (
@@ -3243,7 +3295,12 @@ impl Studio {
                         format!("{:.2}s", compiled.duration.as_secs_f32()),
                     ),
                     (
-                        "dlopen + entry".into(),
+                        if isolated {
+                            "spawn + load"
+                        } else {
+                            "dlopen + entry"
+                        }
+                        .into(),
                         format!("{:.1}ms", load.as_secs_f32() * 1000.0),
                     ),
                     (
@@ -3255,10 +3312,22 @@ impl Studio {
                 // `mount "screens/card_grid.rs"` in `live.rs` places the screen
                 // that file last rendered, so every Render quietly updates the
                 // flow the live preview draws. See `livedoc::LiveItem::Mount`.
-                if let Some(path) = self.active().and_then(|buffer| buffer.path.clone()) {
-                    self.live_mounts.borrow_mut().insert(path, preview.clone());
+                match preview {
+                    Loaded::InProcess(preview) => {
+                        if let Some(path) = self.active().and_then(|buffer| buffer.path.clone()) {
+                            self.live_mounts.borrow_mut().insert(path, preview.clone());
+                        }
+                        self.preview_remote.set(None);
+                        self.preview_screen.set(Some(preview));
+                    }
+                    Loaded::Remote(remote) => {
+                        // The previous child, if any, is shut down when its
+                        // handle drops here: one process per Render, so a
+                        // guest's leaks and crashes never outlive it.
+                        self.preview_screen.set(None);
+                        self.preview_remote.set(Some(remote));
+                    }
                 }
-                self.preview_screen.set(Some(preview));
                 self.set_preview(PreviewState::Rendered);
                 // The new tree is built during *this* frame; the state goes
                 // back into it on the next one. See `restore_preview_state`.
@@ -3277,7 +3346,7 @@ impl Studio {
                     self.notify(&warning);
                 }
             }
-            Err(crate::loaded::LoadError::AbiMismatch { host, guest }) => {
+            Err(LoadFailure::Abi { short, long }) => {
                 // Not the buffer's fault, and not the end of the attempt: the
                 // studio picked the wrong one of several vieww rlibs. Advance
                 // and try the next, which is how it finds the right one without
@@ -3305,9 +3374,7 @@ impl Studio {
                         .ok()
                         .is_some_and(|t| next < t.candidates.len());
 
-                log.push(format!(
-                    "vieww ABI mismatch (host {host:#018x}, preview {guest:#018x})"
-                ));
+                log.push(short);
                 if remaining {
                     self.candidate.set(next);
                     log.push(format!("retrying against candidate {next}"));
@@ -3318,7 +3385,7 @@ impl Studio {
                     return;
                 }
 
-                log.push(crate::loaded::LoadError::AbiMismatch { host, guest }.to_string());
+                log.push(long);
                 log.push(
                     "Build and Run has no ABI constraint and works on this project.".to_string(),
                 );
@@ -3327,8 +3394,8 @@ impl Studio {
                 // a failure: see `PreviewState::AbiRefused`.
                 self.set_preview(PreviewState::AbiRefused);
             }
-            Err(error) => {
-                log.push(error.to_string());
+            Err(LoadFailure::Other(error)) => {
+                log.push(error.clone());
                 self.output.set(Rc::new(log));
                 self.diagnostics.update(|diagnostics| {
                     let mut next = (**diagnostics).clone();
@@ -3336,7 +3403,7 @@ impl Studio {
                         file: file_name.to_string(),
                         severity: Severity::Error,
                         code: "load".into(),
-                        message: error.to_string(),
+                        message: error.clone(),
                         help: None,
                         line: 1,
                         column: 1,
@@ -3640,6 +3707,44 @@ fn host_package_manager(program: &str) -> bool {
             program,
             "apt" | "apt-get" | "dnf" | "yum" | "pacman" | "zypper" | "snap"
         )
+    }
+}
+
+/// A loaded preview, wherever it runs.
+enum Loaded {
+    InProcess(Preview),
+    Remote(crate::remote::RemoteHandle),
+}
+
+/// Why a load failed, in the two shapes the Render path treats differently.
+enum LoadFailure {
+    /// A different compilation of `vieww`: try the next candidate rlib.
+    Abi { short: String, long: String },
+    /// Anything else: a diagnostic on the buffer.
+    Other(String),
+}
+
+impl From<crate::loaded::LoadError> for LoadFailure {
+    fn from(error: crate::loaded::LoadError) -> Self {
+        match error {
+            crate::loaded::LoadError::AbiMismatch { host, guest } => Self::Abi {
+                short: format!("vieww ABI mismatch (host {host:#018x}, preview {guest:#018x})"),
+                long: crate::loaded::LoadError::AbiMismatch { host, guest }.to_string(),
+            },
+            other => Self::Other(other.to_string()),
+        }
+    }
+}
+
+impl From<crate::remote::RemoteError> for LoadFailure {
+    fn from(error: crate::remote::RemoteError) -> Self {
+        match error {
+            crate::remote::RemoteError::AbiMismatch(message) => Self::Abi {
+                short: "vieww ABI mismatch in the preview process".into(),
+                long: message,
+            },
+            other => Self::Other(other.to_string()),
+        }
     }
 }
 

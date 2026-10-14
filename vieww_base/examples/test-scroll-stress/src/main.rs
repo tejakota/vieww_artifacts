@@ -261,7 +261,7 @@ fn row_item(row: usize) -> vieww_widget::Text {
         }
     );
     Text::new(label)
-        .color(if row % 7 == 0 { ACCENT } else { INK })
+        .color(if row.is_multiple_of(7) { ACCENT } else { INK })
         .size(13.0)
 }
 

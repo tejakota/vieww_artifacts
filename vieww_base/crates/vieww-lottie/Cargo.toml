@@ -1,0 +1,20 @@
+[package]
+name = "vieww-lottie"
+description = "The vieww Lottie player: Bodymovin JSON (After Effects exports) parsed and rendered frame by frame into vieww's vector display list."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+vieww-foundation.workspace = true
+# Expressions (`x` on any property) and text animators.
+vieww-animation.workspace = true
+# Embedded image assets (PNG/JPEG/GIF/BMP decoded by vieww's own codecs).
+vieww-image.workspace = true
+
+[lints]
+workspace = true

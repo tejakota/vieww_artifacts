@@ -1,0 +1,20 @@
+[package]
+name = "vieww-mesh"
+description = "The vieww mesh layer: OBJ and STL geometry, parsed into triangles."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Foundation, for the vector/point types the rest of the framework already
+# speaks. A mesh's output is consumed by transforms (`Transform3`'s
+# `project_rect` world) and by paint, and inventing a second `Vec3` here
+# would make every consumer convert at the boundary forever.
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

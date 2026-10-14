@@ -1,0 +1,18 @@
+# The iOS deployment target, pinned on both sides of the C/Rust boundary.
+#
+# rustc's aarch64-apple-ios default deployment target is 10.0, but the C deps
+# (zstd-sys) build against whatever SDK Xcode defaults to. Skewed that far
+# apart the linker resolves an iOS 10.0 compiler-rt with no ___chkstk_darwin
+# while the newer C objects call it — an undefined-symbol wall that reads
+# like a broken dependency but is a target-version mismatch (the same wall
+# vavlt hit; see apps/vavlt/.cargo/config.toml for the fuller story). 13.0
+# is the MinimumOSVersion the CI app bundle already declares, so both sides
+# are pinned to it here too.
+#
+# `cargo` applies [env] to rustc and to the C deps' build scripts on every
+# build run from this workspace, CI included. Non-Apple targets ignore the
+# variable entirely, so desktop and Android builds never see it — and this
+# file deliberately configures nothing else: the Android APK build runs
+# through cargo-apk, which sets up its own NDK toolchain.
+[env]
+IPHONEOS_DEPLOYMENT_TARGET = "13.0"

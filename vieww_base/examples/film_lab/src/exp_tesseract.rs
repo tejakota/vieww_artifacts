@@ -20,17 +20,17 @@
 //! Receipts: edges projected (behind-camera drops counted), the live 4D
 //! angles, the w-range spanned this frame.
 
-use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
+use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, tint, FAINT, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT, BG_DEEP,
+    alpha, clamp01, mix, tint, Rng, BG_DEEP, CYAN, CYAN_SOFT, FAINT, MUTED, VIOLET, VIOLET_SOFT,
 };
 use crate::three_d::{Camera, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 7.0;
+pub(crate) const SECONDS: f32 = 7.0;
 
 /// Ghost states behind the present one.
 const GHOSTS: usize = 6;
@@ -105,7 +105,11 @@ fn w_color(w: f32) -> Color {
 fn camera_at(t: f32) -> Camera {
     let theta = 0.5 + t * 0.55;
     Camera {
-        eye: Vec3::new(theta.sin() * 8.2, 1.8 + 0.7 * (t * 0.7).sin(), theta.cos() * 8.2),
+        eye: Vec3::new(
+            theta.sin() * 8.2,
+            1.8 + 0.7 * (t * 0.7).sin(),
+            theta.cos() * 8.2,
+        ),
         target: Vec3::ZERO,
         fov: 0.92,
     }
@@ -134,13 +138,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The void.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(7, 8, 13)),
-                (0.6, BG_DEEP),
-                (1.0, Color::rgb(4, 5, 9)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(7, 8, 13)),
+            (0.6, BG_DEEP),
+            (1.0, Color::rgb(4, 5, 9)),
+        ]),
     );
 
     // Sparse stars — still, patient.
@@ -185,10 +187,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The hyper-flip: XW crossing 45° (mod 90°) — the inner and outer
     // cells trade places. Its proximity drives a soft bloom.
     let xw = t * 1.10;
-    let flip_prox = 1.0 - (((xw + std::f32::consts::FRAC_PI_4) % std::f32::consts::FRAC_PI_2)
-        - std::f32::consts::FRAC_PI_4)
-        .abs()
-        / std::f32::consts::FRAC_PI_4;
+    let flip_prox = 1.0
+        - (((xw + std::f32::consts::FRAC_PI_4) % std::f32::consts::FRAC_PI_2)
+            - std::f32::consts::FRAC_PI_4)
+            .abs()
+            / std::f32::consts::FRAC_PI_4;
 
     // ── The ghost streaks: previous states, evaluated not remembered ─────
     for k in (1..=GHOSTS).rev() {
@@ -214,7 +217,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let width = (1.1 + 2.2 * scale) * (1.0 + flip_prox * 0.35);
             let a = (0.55 + 0.35 * scale) * (1.0 - clamp01((depth - 16.0) / 8.0));
             // Depth fog: far edges sink back into the void.
-            let col = mix(col, Color::rgb(10, 12, 18), clamp01((depth - 9.0) / 9.0) * 0.6);
+            let col = mix(
+                col,
+                Color::rgb(10, 12, 18),
+                clamp01((depth - 9.0) / 9.0) * 0.6,
+            );
             book.line(a0, b0, alpha(col, a), width);
         }
     }
@@ -256,7 +263,7 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

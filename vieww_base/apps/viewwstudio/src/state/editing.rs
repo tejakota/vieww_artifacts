@@ -839,6 +839,16 @@ impl Studio {
         if !self.preview_capture_due.replace(false) {
             return;
         }
+        // The remote pane's tree is in another process — the child walks its
+        // own, over the pipe, and the answer is the same shape the in-process
+        // walk produces. A dead or unloaded child answers empty, which is
+        // what the in-process path says for "nothing to capture" too.
+        if let Some(remote) = self.preview_remote.peek() {
+            if let Ok(snapshot) = remote.borrow_mut().capture_state() {
+                *self.preview_state.borrow_mut() = snapshot;
+            }
+            return;
+        }
         let elements = driver.elements();
         let Some(root) = elements
             .find(crate::ui::preview::GUEST_ROOT)
@@ -867,6 +877,24 @@ impl Studio {
         }
         let snapshot = std::mem::take(&mut *self.preview_state.borrow_mut());
         if snapshot.is_empty() {
+            return;
+        }
+        // The remote pane: hand the snapshot to the child, which builds its
+        // tree (it has not drawn yet — this runs one frame before the pane
+        // asks) and puts the states back itself. The clock is the studio's
+        // frame count, which the child only uses for that one build.
+        if let Some(remote) = self.preview_remote.peek() {
+            if let Ok(restored) = remote
+                .borrow_mut()
+                .restore_state(&snapshot, std::time::Duration::ZERO)
+            {
+                if restored > 0 {
+                    self.append_output(vec![format!(
+                        "restored {restored} of {} pieces of screen state across the render",
+                        snapshot.len()
+                    )]);
+                }
+            }
             return;
         }
         let elements = driver.elements();

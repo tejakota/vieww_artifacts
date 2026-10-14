@@ -402,6 +402,51 @@ fn activity_with_entries() {
     });
 }
 
+/// A mixed selection — camera JPEGs, a PNG export, HEICs, two video clips,
+/// camera raw — so the composition card has something to compose. The clips
+/// class as "Video other" from their names alone, which is exactly the
+/// pre-run state the card describes: the run reads their headers for the
+/// real codec.
+fn mixed_items() -> Vec<Item> {
+    [
+        ("IMG_0001.jpg", 4_500_000u64),
+        ("IMG_0002.jpg", 4_100_000),
+        ("IMG_0003.jpg", 3_800_000),
+        ("export.png", 18_400_000),
+        ("IMG_0004.heic", 2_600_000),
+        ("IMG_0005.heic", 2_400_000),
+        ("clip-h264.mp4", 420_000_000),
+        ("clip-hevc.mov", 180_000_000),
+        ("IMG_0006.dng", 62_000_000),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, (name, bytes))| {
+        Item::new(format!("content://media/picker/mixed/{index}"), name, bytes)
+    })
+    .collect()
+}
+
+/// The Activity tab's treemap, given a vault that has more to it than photos.
+///
+/// No run against it: the card describes what was *handed over*, which
+/// exists the moment the grant does.
+#[test]
+fn activity_composition() {
+    shoot_all("11-activity-composition", |state| {
+        let mixed = mixed_items();
+        state.deliver(Message::Picked(mixed.clone()));
+        for index in 0..mixed.len() {
+            state.deliver(Message::Thumb {
+                index,
+                thumb: swatch((index as u8).wrapping_mul(37)),
+            });
+        }
+        state.go(Screen::Root);
+        state.set_tab(Tab::Activity);
+    });
+}
+
 #[test]
 fn settings() {
     shoot_all("10-settings", |state| {

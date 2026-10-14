@@ -6,9 +6,9 @@
 //! Search is a **joint embedding space**: images and text are both encoded
 //! into vectors of the same dimension, so "how well does this text describe
 //! this photo?" becomes cosine similarity between two vectors, and finding
-//! matches becomes a nearest-neighbour lookup. That structure — [`Embedder`]
-//! + [`EmbeddingIndex`] — is identical whichever encoder is behind it, which
-//! is the whole point of putting a trait here.
+//! matches becomes a nearest-neighbour lookup. That structure — an
+//! [`Embedder`] paired with an [`EmbeddingIndex`] — is identical whichever
+//! encoder is behind it, which is the whole point of putting a trait here.
 //!
 //! # Two encoders, and the honest difference between them
 //!
@@ -164,6 +164,16 @@ impl EmbeddingIndex {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    /// The vector indexed at `index` — the same order `search`'s indices
+    /// refer to, which is the order the photos were indexed in.
+    ///
+    /// The Space view reads these to place every photo by its embedding;
+    /// `None` for a photo whose vector has not landed yet (the index can
+    /// lag the grid while the loader is still working).
+    pub fn vector(&self, index: usize) -> Option<&[f32]> {
+        self.entries.get(index).map(|e| e.vector.as_slice())
     }
 
     pub fn is_empty(&self) -> bool {

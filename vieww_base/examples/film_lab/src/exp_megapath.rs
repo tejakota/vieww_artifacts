@@ -21,16 +21,18 @@
 
 use std::sync::OnceLock;
 
-use vieww_foundation::{Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle,
-    TextStyle};
+use vieww_foundation::{
+    Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, Rng, BG_DEEP, FAINT, INK, MUTED,
-    VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_cubic, mix, Rng, BG_DEEP, FAINT, INK, MUTED, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 11.0;
+pub(crate) const SECONDS: f32 = 11.0;
 
 /// Pitch (gap between turns) at the darkest and brightest field values.
 const PITCH_DENSE: f32 = 1.9;
@@ -188,7 +190,7 @@ fn total_len() -> f32 {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let pts = the_line();
     let total = total_len();
 
@@ -236,10 +238,12 @@ pub fn frame(t: f32) -> WidgetNode {
             let warm = 0.25 + 0.75 * draw_u;
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.47), 0.75).with_dither().with_stops(&[
-                    (0.0, alpha(VIOLET_SOFT, 0.055 * warm)),
-                    (1.0, alpha(VIOLET_SOFT, 0.0)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.47), 0.75)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, alpha(VIOLET_SOFT, 0.055 * warm)),
+                        (1.0, alpha(VIOLET_SOFT, 0.0)),
+                    ]),
             );
 
             // ── THE LINE. One stroke, dash-phase draw-on. ──
@@ -257,17 +261,15 @@ pub fn frame(t: f32) -> WidgetNode {
                     path.clone(),
                     alpha(Color::rgb(255, 250, 240), 0.95),
                     2.6,
-                    StrokeStyle::default().dash(
-                        Dash::new(vec![pulse, total - pulse]).offset(total - pulse_a),
-                    ),
+                    StrokeStyle::default()
+                        .dash(Dash::new(vec![pulse, total - pulse]).offset(total - pulse_a)),
                 );
                 book.stroke_styled(
                     path.clone(),
                     alpha(Color::rgb(196, 160, 255), 0.95),
                     2.8,
                     StrokeStyle::default().dash(
-                        Dash::new(vec![pulse * 0.66, total - pulse * 0.66])
-                            .offset(total - pulse_b),
+                        Dash::new(vec![pulse * 0.66, total - pulse * 0.66]).offset(total - pulse_b),
                     ),
                 );
             }
@@ -275,7 +277,11 @@ pub fn frame(t: f32) -> WidgetNode {
             // The moon's glow — the one non-line element, so the eye has a
             // bright anchor (the dark-plate lesson).
             let (mx, my, mr) = MOON;
-            book.circle(Offset::new(mx, my), mr + 26.0, alpha(Color::rgb(60, 62, 78), 0.5));
+            book.circle(
+                Offset::new(mx, my),
+                mr + 26.0,
+                alpha(Color::rgb(60, 62, 78), 0.5),
+            );
         }),
     );
 
@@ -291,15 +297,24 @@ pub fn frame(t: f32) -> WidgetNode {
 fn receipt_panel(t: f32, segs: usize, total: f32) -> WidgetNode {
     let draw_u = clamp01(t / 0.52);
     let drawn_px = total * ease_out_cubic(draw_u);
-    let laps = if t > 0.46 { ((t - 0.46) * 1.35).floor() } else { 0.0 };
+    let laps = if t > 0.46 {
+        ((t - 0.46) * 1.35).floor()
+    } else {
+        0.0
+    };
     let lines = [
         "MEGAPATH · THE SINGLE-PATH AXIS · ONE LINE".to_string(),
-        format!("segments {segs} · arc {total:.0} px · pitch {:.1}-{:.1} px",
-            PITCH_DENSE, PITCH_SPARSE),
-        format!("drawn {drawn_px:.0} px ({:.0}%) · strokes this frame {}",
-            draw_u * 100.0, if t > 0.46 { 3 } else { 1 }),
+        format!(
+            "segments {segs} · arc {total:.0} px · pitch {:.1}-{:.1} px",
+            PITCH_DENSE, PITCH_SPARSE
+        ),
+        format!(
+            "drawn {drawn_px:.0} px ({:.0}%) · strokes this frame {}",
+            draw_u * 100.0,
+            if t > 0.46 { 3 } else { 1 }
+        ),
         format!("pulse laps {laps:.0} · one Path, one verb, no fills"),
-        format!("field: sky+moon+2 ridges+water · b(x,y) → pitch"),
+        "field: sky+moon+2 ridges+water · b(x,y) → pitch".to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -319,7 +334,10 @@ fn receipt_panel(t: f32, segs: usize, total: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -351,7 +369,10 @@ fn receipt_panel(t: f32, segs: usize, total: f32) -> WidgetNode {
                 let px = 12.0 + (P_W - 24.0) * pulse_a;
                 book.rect(Rect::new(px - 2.0, 12.0, px + 2.0, 28.0), alpha(INK, 0.9));
             }
-            book.rect(Rect::new(12.0, 30.0, 12.0 + (P_W - 24.0) * t, 33.0), alpha(FAINT, 0.5));
+            book.rect(
+                Rect::new(12.0, 30.0, 12.0 + (P_W - 24.0) * t, 33.0),
+                alpha(FAINT, 0.5),
+            );
         }),
     );
     stack = stack.push(

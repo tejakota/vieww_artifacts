@@ -18,15 +18,16 @@
 //! boundary where predictability ends, mapped by the machine itself. All replay,
 //! all seed-deterministic; two runs identical to the byte.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The law (point masses, rigid links, no damping) ─────────────────────────
 
@@ -92,7 +93,7 @@ fn energy(s: &[f64; 4]) -> f64 {
     let (t1, t2, w1, w2) = (s[0], s[1], s[2], s[3]);
     let x1 = L1 * t1.sin();
     let y1 = -L1 * t1.cos();
-    let x2 = x1 + L2 * t2.sin();
+    let _x2 = x1 + L2 * t2.sin();
     let y2 = y1 - L2 * t2.cos();
     let v1x = L1 * w1 * t1.cos();
     let v1y = L1 * w1 * t1.sin();
@@ -147,7 +148,8 @@ fn seed_fate(t1: f64, t2: f64) -> Option<f64> {
     let dt = 1.0 / 300.0;
     let n = 1800usize; // 6 s at 300 steps/s
     let mut s = [t1, t2, 0.0, 0.0];
-    let wind = |th: f64| ((th + std::f64::consts::PI) / (2.0 * std::f64::consts::PI)).floor() as i64;
+    let wind =
+        |th: f64| ((th + std::f64::consts::PI) / (2.0 * std::f64::consts::PI)).floor() as i64;
     let w0 = wind(s[0]);
     for i in 0..n {
         s = step(&s, dt);
@@ -183,7 +185,7 @@ fn basin() -> &'static Vec<Option<f64>> {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let (sa, sb, edrift, div_time) = arm_to(t as f64);
     let basin = basin();
     let flips = basin.iter().filter(|f| f.is_some()).count();
@@ -201,10 +203,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the workshop at dusk.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 16))]),
             );
 
             // ── The live arms, left stage ──
@@ -238,9 +239,7 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // the arms themselves — B (amber, beneath) then A (cyan, on top),
             // so the overlap reads as one hot arm and the peel-off as amber
-            for (series, col, link_w) in
-                [(sb.last(), AMBER, 2.2_f32), (sa.last(), CYAN, 3.0)]
-            {
+            for (series, col, link_w) in [(sb.last(), AMBER, 2.2_f32), (sa.last(), CYAN, 3.0)] {
                 let Some(s) = series else { continue };
                 let (jx, jy) = (
                     PIV.0 + (s[0].sin() * SC as f64) as f32,
@@ -256,8 +255,18 @@ pub fn frame(t: f32) -> WidgetNode {
                     // the amber twin wears a wide soft underglow so it reads
                     // at contact-sheet scale even where the arms coincide
                     book.blended_layer(1.0, 0.0, BlendMode::Plus, None, |g| {
-                        g.line(Offset::new(PIV.0, PIV.1), Offset::new(jx, jy), alpha(AMBER, 0.6), 8.0);
-                        g.line(Offset::new(jx, jy), Offset::new(ex, ey), alpha(AMBER, 0.6), 8.0);
+                        g.line(
+                            Offset::new(PIV.0, PIV.1),
+                            Offset::new(jx, jy),
+                            alpha(AMBER, 0.6),
+                            8.0,
+                        );
+                        g.line(
+                            Offset::new(jx, jy),
+                            Offset::new(ex, ey),
+                            alpha(AMBER, 0.6),
+                            8.0,
+                        );
                         g.ring(Offset::new(jx, jy), 10.0, 3.5, alpha(AMBER, 0.5));
                     });
                 }
@@ -274,13 +283,31 @@ pub fn frame(t: f32) -> WidgetNode {
                         vieww_foundation::StrokeStyle::rounded()
                             .dash(vieww_foundation::Dash::even(11.0))
                     };
-                    book.stroke_styled(mk(Offset::new(PIV.0, PIV.1), Offset::new(jx, jy)),
-                                       alpha(col, 0.98), 4.0, dash_style());
-                    book.stroke_styled(mk(Offset::new(jx, jy), Offset::new(ex, ey)),
-                                       alpha(col, 0.98), 4.0, dash_style());
+                    book.stroke_styled(
+                        mk(Offset::new(PIV.0, PIV.1), Offset::new(jx, jy)),
+                        alpha(col, 0.98),
+                        4.0,
+                        dash_style(),
+                    );
+                    book.stroke_styled(
+                        mk(Offset::new(jx, jy), Offset::new(ex, ey)),
+                        alpha(col, 0.98),
+                        4.0,
+                        dash_style(),
+                    );
                 } else {
-                    book.line(Offset::new(PIV.0, PIV.1), Offset::new(jx, jy), alpha(col, 0.95), link_w);
-                    book.line(Offset::new(jx, jy), Offset::new(ex, ey), alpha(col, 0.95), link_w);
+                    book.line(
+                        Offset::new(PIV.0, PIV.1),
+                        Offset::new(jx, jy),
+                        alpha(col, 0.95),
+                        link_w,
+                    );
+                    book.line(
+                        Offset::new(jx, jy),
+                        Offset::new(ex, ey),
+                        alpha(col, 0.95),
+                        link_w,
+                    );
                 }
                 // joints
                 book.circle(Offset::new(jx, jy), 6.0, Color::rgb(16, 16, 22));
@@ -296,7 +323,11 @@ pub fn frame(t: f32) -> WidgetNode {
             book.circle(Offset::new(PIV.0, PIV.1), 5.0, Color::rgb(20, 20, 26));
             book.ring(Offset::new(PIV.0, PIV.1), 5.0, 1.4, alpha(INK, 0.9));
             // the ceiling mount
-            book.rrect(Rect::new(PIV.0 - 34.0, PIV.1 - 16.0, PIV.0 + 34.0, PIV.1 - 4.0), 3.0, Color::rgb(26, 26, 34));
+            book.rrect(
+                Rect::new(PIV.0 - 34.0, PIV.1 - 16.0, PIV.0 + 34.0, PIV.1 - 4.0),
+                3.0,
+                Color::rgb(26, 26, 34),
+            );
             for dx in [-26.0_f32, -13.0, 0.0, 13.0, 26.0] {
                 book.line(
                     Offset::new(PIV.0 + dx, PIV.1 - 16.0),
@@ -419,7 +450,10 @@ fn receipt_panel(edrift: f64, div_time: f64, flips: usize, seeds: usize) -> Widg
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

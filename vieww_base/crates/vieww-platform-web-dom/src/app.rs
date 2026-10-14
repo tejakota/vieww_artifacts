@@ -209,6 +209,22 @@ impl Inner {
                 }
             }
         }
+        if old.iframe != new.iframe {
+            // A changed embed is a *reload* — the browser replaces the
+            // frame's content — which is exactly what a `src` change means
+            // and what a `srcdoc` change means too. Set both attributes,
+            // and the title with them, so the accessible name follows the
+            // content it names.
+            if let Some(iframe) = &new.iframe {
+                if let Some(src) = &iframe.src {
+                    element.set_attribute("src", src)?;
+                }
+                if let Some(srcdoc) = &iframe.srcdoc {
+                    element.set_attribute("srcdoc", srcdoc)?;
+                }
+                element.set_attribute("title", &iframe.title)?;
+            }
+        }
         if old.children.len() != new.children.len() {
             let created = self.create(new, mounts)?;
             if let Some(parent) = node.parent_node() {
@@ -248,10 +264,44 @@ impl Inner {
         if let Some(href) = &node.href {
             element.set_attribute(if node.tag == "img" { "src" } else { "href" }, href)?;
         }
+        if let Some(iframe) = &node.iframe {
+            if let Some(src) = &iframe.src {
+                element.set_attribute("src", src)?;
+            }
+            if let Some(srcdoc) = &iframe.srcdoc {
+                element.set_attribute("srcdoc", srcdoc)?;
+            }
+            // The one line a screen reader gets from an otherwise opaque
+            // iframe; browsers surface it as the frame's accessible name.
+            element.set_attribute("title", &iframe.title)?;
+            // `loading=lazy` off-screen: an embed below the fold does not
+            // contend with the application's own first paint.
+            element.set_attribute("loading", "lazy")?;
+        }
         if let Some((id, mount)) = &node.canvas {
             mounts.push((id.clone(), mount.clone()));
         }
         if let Some(handler) = &node.on_click {
+            // A tappable box that is not a `<button>` or a link gets what a
+            // button would have had for free: a tab stop, the role a screen
+            // reader announces, and Enter/Space — without which a keyboard
+            // user can see the control and never reach it.
+            if crate::tree::needs_button_semantics(node) {
+                element.set_attribute("tabindex", "0")?;
+                element.set_attribute("role", "button")?;
+                let on_key = handler.clone();
+                let keys = Closure::wrap(Box::new(move |event: web_sys::Event| {
+                    if let Some(key) = event.dyn_ref::<web_sys::KeyboardEvent>() {
+                        if key.key() == "Enter" || key.key() == " " {
+                            event.prevent_default();
+                            on_key();
+                        }
+                    }
+                }) as Box<dyn FnMut(web_sys::Event)>);
+                element
+                    .add_event_listener_with_callback("keydown", keys.as_ref().unchecked_ref())?;
+                self.listeners.push(keys);
+            }
             let handler = handler.clone();
             let closure = Closure::wrap(Box::new(move |_event: web_sys::Event| {
                 handler();

@@ -72,6 +72,20 @@ impl Lifecycle {
         self.is_visible()
     }
 
+    /// [`should_draw`](Self::should_draw), plus one exception: a window that
+    /// has a surface but has **never presented** may draw even while hidden.
+    ///
+    /// On Wayland a toplevel is not on screen until its first buffer is
+    /// committed, and a compositor can report a new window occluded before
+    /// that (GNOME opens a window without an activation token below the
+    /// focused one). Refusing that first frame leaves the window with no
+    /// buffer and nothing that could ever un-hide it. See
+    /// `WindowState::may_draw` in `app.rs` for the hang this caused.
+    #[must_use]
+    pub const fn may_draw(self, presented: bool) -> bool {
+        self.should_draw() || (!presented && self.has_surface())
+    }
+
     /// The state after the platform reports a resume.
     #[must_use]
     pub const fn resumed(self) -> Self {
@@ -173,6 +187,32 @@ impl fmt::Display for Lifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The first frame is drawn even when the window starts out hidden, and
+    /// only the first: after a present, hidden means hidden again. Without a
+    /// surface there is nothing to draw into, presented or not.
+    #[test]
+    fn a_hidden_window_still_draws_its_first_frame_and_only_that() {
+        let hidden = Lifecycle::Resumed.occluded(true);
+        assert_eq!(hidden, Lifecycle::Hidden);
+        assert!(!hidden.should_draw());
+        assert!(
+            hidden.may_draw(false),
+            "the first frame must not be refused"
+        );
+        assert!(
+            !hidden.may_draw(true),
+            "after it, a hidden window is left alone"
+        );
+
+        assert!(Lifecycle::Resumed.may_draw(true));
+        assert!(Lifecycle::Inactive.may_draw(true));
+
+        for no_surface in [Lifecycle::Detached, Lifecycle::Paused] {
+            assert!(!no_surface.may_draw(false));
+            assert!(!no_surface.may_draw(true));
+        }
+    }
 
     #[test]
     fn nothing_is_drawn_before_the_first_resume() {

@@ -205,11 +205,11 @@ pub fn encode_vector(v: &[f32]) -> String {
 }
 
 pub fn decode_vector(s: &str) -> Option<Vec<f32>> {
-    if s.len() % 8 != 0 {
+    if !s.len().is_multiple_of(8) {
         return None;
     }
     let mut out = Vec::with_capacity(s.len() / 8);
-    for chunk in s.as_bytes().chunks_exact(8) {
+    for chunk in s.as_bytes().as_chunks::<8>().0 {
         let text = std::str::from_utf8(chunk).ok()?;
         let mut bytes = [0u8; 4];
         for (i, byte) in bytes.iter_mut().enumerate() {
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn a_vector_survives_a_round_trip_through_the_cache_encoding() {
-        let v = vec![0.0, 1.0, -0.5, 3.141_592_7, f32::MIN_POSITIVE];
+        let v = vec![0.0, 1.0, -0.5, std::f32::consts::PI, f32::MIN_POSITIVE];
         let encoded = encode_vector(&v);
         assert_eq!(decode_vector(&encoded).unwrap(), v, "must be lossless");
     }

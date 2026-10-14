@@ -26,7 +26,10 @@
 
 pub mod blend;
 pub mod blur;
+pub mod grade;
 pub mod matrix;
+pub mod optics;
+pub mod pixel;
 
 pub use blend::blend_pixels;
 pub use blur::{blur_alpha, blur_rgba, boxes_for_gaussian};

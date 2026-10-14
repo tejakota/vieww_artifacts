@@ -18,15 +18,22 @@
 //!
 //! # Simple over fast, deliberately
 //!
-//! Every [`VulkanDevice::present_pixels`] call allocates and destroys its own
-//! staging buffer and command pool and ends with a full `vkQueueWaitIdle` —
-//! the same "create everything fresh, wait, destroy everything" shape
-//! `VulkanDevice::render_clear_to_pixels` already uses. That gives
-//! up frame pipelining (double/triple buffering, present without a host
-//! stall) in exchange for an implementation with no in-flight-resource
-//! lifetime to get wrong on a first landing. Recorded here rather than left
-//! implicit: pipelining `present_pixels` is real follow-up work, not a
-//! silently-accepted permanent shape.
+//! Every [`VulkanDevice::present_pixels`] call ends with a full
+//! `vkQueueWaitIdle` — no frame pipelining (double/triple buffering, present
+//! without a host stall), in exchange for an implementation with no
+//! in-flight-resource lifetime to get wrong on a first landing. Recorded here
+//! rather than left implicit: pipelining `present_pixels` is real follow-up
+//! work, not a silently-accepted permanent shape.
+//!
+//! The staging buffer and command pool, however, are **not** per frame any
+//! more. They live in [`VulkanSwapchain`], are created on the first present
+//! after a window opens (and regrown when the surface does), and are freed
+//! with the swapchain — the `vkQueueWaitIdle` that every present already ends
+//! with is exactly the guarantee the reuse needs: by the time the call
+//! returns, the copy that reads the staging buffer is fully retired, so the
+//! next present may overwrite it. A phone presents ~10 MB a frame; handing
+//! that to the driver's allocator to allocate and free again every frame
+//! showed up as jank no rasteriser could win back.
 //!
 //! # Format handling
 //!
@@ -73,6 +80,28 @@ pub struct VulkanSwapchain {
     /// returning, so the semaphore is never re-signalled before its previous
     /// signal was consumed. See the module docs on "simple over fast".
     image_available: vk::Semaphore,
+    /// The staging buffer `present_pixels` uploads through, kept for the
+    /// swapchain's life rather than created and destroyed per frame.
+    ///
+    /// Per-frame allocation of a multi-megabyte buffer is not a rounding
+    /// error on a phone: `vkAllocateMemory` walks the driver's own heaps, the
+    /// bytes still have to be copied either way, and the free fights the
+    /// allocator on the same thread that has 16 ms to draw in. Reusing one
+    /// buffer is safe for the same reason the semaphore is — every present
+    /// waits for the queue to go idle before returning, so the copy that
+    /// reads this buffer is fully retired before the next one writes it.
+    staging: vk::Buffer,
+    /// The memory bound to `staging`.
+    staging_memory: vk::DeviceMemory,
+    /// How many bytes `staging` holds — what it was last allocated at, which
+    /// is the extent the buffer was created for, grown when the surface does.
+    staging_capacity: vk::DeviceSize,
+    /// The pool `command_buffer` was allocated from, with
+    /// `RESET_COMMAND_BUFFER` so one buffer can be reset and re-recorded
+    /// every frame instead of a pool and a buffer per present.
+    command_pool: vk::CommandPool,
+    /// The one command buffer every present records into.
+    command_buffer: vk::CommandBuffer,
 }
 
 impl std::fmt::Debug for VulkanSwapchain {
@@ -310,26 +339,21 @@ impl VulkanDevice {
 
         let image = swapchain.images[image_index as usize];
 
+        // A rebuild inside the acquire above can have changed the extent out
+        // from under the buffer the caller rasterised against the old one.
+        // Presenting it would copy past the end of the staging buffer; the
+        // caller's next frame after the matching `Resized` repaints in full,
+        // so skipping this one is the honest answer.
+        let rebuilt_expected = (swapchain.width as usize) * (swapchain.height as usize) * 4;
+        if rebuilt_expected != pixels.len() {
+            return Ok(());
+        }
+
         // --- staging buffer, byte-order-converted if the swapchain is BGRA ---
         let byte_len = pixels.len() as u64;
-        let staging_info = vk::BufferCreateInfo::default()
-            .size(byte_len)
-            .usage(vk::BufferUsageFlags::TRANSFER_SRC)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE);
-        let staging = unsafe { self.device.create_buffer(&staging_info, None) }
-            .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
-        let req = unsafe { self.device.get_buffer_memory_requirements(staging) };
-        let mem_type = self.find_memory_type(
-            req.memory_type_bits,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        )?;
-        let alloc_info = vk::MemoryAllocateInfo::default()
-            .allocation_size(req.size)
-            .memory_type_index(mem_type);
-        let memory = unsafe { self.device.allocate_memory(&alloc_info, None) }
-            .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
-        unsafe { self.device.bind_buffer_memory(staging, memory, 0) }
-            .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
+        swapchain.ensure_upload_resources(self, byte_len)?;
+        let staging = swapchain.staging;
+        let memory = swapchain.staging_memory;
         unsafe {
             let ptr = self
                 .device
@@ -339,12 +363,22 @@ impl VulkanDevice {
                     std::ptr::copy_nonoverlapping(pixels.as_ptr(), ptr.cast::<u8>(), pixels.len());
                 }
                 ChannelOrder::Bgra => {
-                    let dst = std::slice::from_raw_parts_mut(ptr.cast::<u8>(), pixels.len());
-                    for (src, dst) in pixels.chunks_exact(4).zip(dst.chunks_exact_mut(4)) {
-                        dst[0] = src[2];
-                        dst[1] = src[1];
-                        dst[2] = src[0];
-                        dst[3] = src[3];
+                    // One pixel per `u32`, so the channels swap with three
+                    // masks and two shifts rather than a byte loop — the loop
+                    // is 2.5 million iterations on a phone, every frame, and
+                    // the swizzle is the only thing it does.
+                    //
+                    // Little-endian, which is every platform this crate's
+                    // Android and desktop targets run on: a pixel's bytes
+                    // `R G B A` read back as `R | G<<8 | B<<16 | A<<24`, and
+                    // the swap the format wants is byte 0 with byte 2.
+                    let count = pixels.len() / 4;
+                    let src = std::slice::from_raw_parts(pixels.as_ptr().cast::<u32>(), count);
+                    let dst = std::slice::from_raw_parts_mut(ptr.cast::<u32>(), count);
+                    for (&s, d) in src.iter().zip(dst.iter_mut()) {
+                        *d = ((s & 0x00FF_0000) >> 16)
+                            | ((s & 0x0000_00FF) << 16)
+                            | (s & 0xFF00_FF00);
                     }
                 }
             }
@@ -352,23 +386,17 @@ impl VulkanDevice {
         }
 
         // --- command buffer: transition -> copy -> transition ---
-        let pool_info = vk::CommandPoolCreateInfo::default().queue_family_index(self.queue_family);
-        let command_pool = unsafe { self.device.create_command_pool(&pool_info, None) }
-            .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
-        let cmd_alloc = vk::CommandBufferAllocateInfo::default()
-            .command_pool(command_pool)
-            .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(1);
-        let command_buffer = unsafe { self.device.allocate_command_buffers(&cmd_alloc) }
-            .map_err(|e| VulkanError::Vulkan(e.to_string()))?[0];
-
+        let command_buffer = swapchain.command_buffer;
         let begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         unsafe {
             self.device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())
+                .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
+            self.device
                 .begin_command_buffer(command_buffer, &begin_info)
+                .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
         }
-        .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
 
         let subresource = vk::ImageSubresourceRange {
             aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -473,11 +501,10 @@ impl VulkanDevice {
                 .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
         }
 
-        unsafe {
-            self.device.destroy_command_pool(command_pool, None);
-            self.device.destroy_buffer(staging, None);
-            self.device.free_memory(memory, None);
-        }
+        // No destroys: the staging buffer, its memory and the command pool
+        // live in the swapchain and are reused next frame — safe because the
+        // `queue_wait_idle` above means the copy is fully retired by the time
+        // this function returns. See `ensure_upload_resources`.
 
         let swapchains = [swapchain.swapchain];
         let image_indices = [image_index];
@@ -498,6 +525,197 @@ impl VulkanDevice {
             }
             Err(e) => Err(VulkanError::Vulkan(format!("presenting: {e:?}"))),
         }
+    }
+}
+
+/// A swapchain image acquired for a renderer to write directly — see
+/// [`VulkanDevice::acquire_image`]. It must be handed back exactly once, to
+/// [`VulkanDevice::present_acquired`] or, if rendering failed,
+/// [`VulkanDevice::abandon_acquired`]: an image that is acquired and never
+/// presented is gone from the swapchain, and enough of them make the next
+/// acquire wait forever.
+#[derive(Debug)]
+#[must_use = "an acquired image must be presented or abandoned"]
+pub struct AcquiredImage {
+    pub(crate) index: u32,
+    pub(crate) image: vk::Image,
+    /// Signalled by the presentation engine when the image may be written;
+    /// the first submission that touches the image waits on it.
+    pub(crate) ready: vk::Semaphore,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+}
+
+impl AcquiredImage {
+    /// The image's extent — the swapchain's at acquisition.
+    #[must_use]
+    pub const fn extent(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+}
+
+impl VulkanDevice {
+    /// Whether a scene frame (`R16G16B16A16_SFLOAT`, optimal tiling) can be
+    /// `vkCmdBlitImage`d straight into `swapchain`'s images: the source format
+    /// must support `BLIT_SRC` and the swapchain's `BLIT_DST`. Both are
+    /// mandatory in the Vulkan spec for these formats; this asks rather than
+    /// trusting every driver to have read it.
+    #[must_use]
+    pub fn can_blit_scene_frames(&self, swapchain: &VulkanSwapchain) -> bool {
+        // SAFETY: a query on a live physical device.
+        let (src, dst) = unsafe {
+            (
+                self.instance.get_physical_device_format_properties(
+                    self.physical_device,
+                    vk::Format::R16G16B16A16_SFLOAT,
+                ),
+                self.instance
+                    .get_physical_device_format_properties(self.physical_device, swapchain.format),
+            )
+        };
+        src.optimal_tiling_features
+            .contains(vk::FormatFeatureFlags::BLIT_SRC)
+            && dst
+                .optimal_tiling_features
+                .contains(vk::FormatFeatureFlags::BLIT_DST)
+    }
+
+    /// Acquire the next swapchain image for direct rendering, rebuilding the
+    /// swapchain once if it is out of date. `Ok(None)` when the rebuild
+    /// changed the extent from `expected` — the caller rendered for a size
+    /// that no longer exists, and skipping this frame is the honest answer
+    /// (the matching `Resized` repaints).
+    ///
+    /// # Errors
+    ///
+    /// Acquisition failing even after one rebuild.
+    pub fn acquire_image(
+        &self,
+        swapchain: &mut VulkanSwapchain,
+        expected: (u32, u32),
+    ) -> Result<Option<AcquiredImage>, VulkanError> {
+        let acquire = |sc: &VulkanSwapchain| unsafe {
+            sc.swapchain_loader.acquire_next_image(
+                sc.swapchain,
+                u64::MAX,
+                sc.image_available,
+                vk::Fence::null(),
+            )
+        };
+        let (index, _suboptimal) = match acquire(swapchain) {
+            Ok(result) => result,
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                swapchain.recreate(self, swapchain.width, swapchain.height)?;
+                acquire(swapchain)
+                    .map_err(|e| VulkanError::Vulkan(format!("acquire after rebuild: {e:?}")))?
+            }
+            Err(e) => {
+                return Err(VulkanError::Vulkan(format!(
+                    "acquiring swapchain image: {e:?}"
+                )))
+            }
+        };
+        let image = AcquiredImage {
+            index,
+            image: swapchain.images[index as usize],
+            ready: swapchain.image_available,
+            width: swapchain.width,
+            height: swapchain.height,
+        };
+        if image.extent() != expected {
+            self.abandon_acquired(swapchain, image)?;
+            return Ok(None);
+        }
+        Ok(Some(image))
+    }
+
+    /// Present an image a renderer has finished writing and left in
+    /// `PRESENT_SRC_KHR`, with every submission that wrote it already
+    /// retired (as `SceneRenderer`'s are: it waits on its fence).
+    ///
+    /// # Errors
+    ///
+    /// Presentation failing for a reason other than an out-of-date
+    /// swapchain, which the next acquire handles.
+    pub fn present_acquired(
+        &self,
+        swapchain: &mut VulkanSwapchain,
+        image: AcquiredImage,
+    ) -> Result<(), VulkanError> {
+        let swapchains = [swapchain.swapchain];
+        let image_indices = [image.index];
+        let present_info = vk::PresentInfoKHR::default()
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+        match unsafe {
+            swapchain
+                .swapchain_loader
+                .queue_present(self.queue, &present_info)
+        } {
+            Ok(_) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => Ok(()),
+            Err(e) => Err(VulkanError::Vulkan(format!("presenting: {e:?}"))),
+        }
+    }
+
+    /// Give back an image that will not be rendered: consume its readiness
+    /// semaphore, move it to `PRESENT_SRC_KHR` untouched, and present it, so
+    /// the swapchain keeps all its images and the semaphore can be reused.
+    ///
+    /// # Errors
+    ///
+    /// Any Vulkan call failing.
+    pub fn abandon_acquired(
+        &self,
+        swapchain: &mut VulkanSwapchain,
+        image: AcquiredImage,
+    ) -> Result<(), VulkanError> {
+        swapchain.ensure_upload_resources(self, 4)?;
+        let cmd = swapchain.command_buffer;
+        let barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .image(image.image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        let waits = [image.ready];
+        let stages = [vk::PipelineStageFlags::TOP_OF_PIPE];
+        let cmds = [cmd];
+        unsafe {
+            self.device
+                .reset_command_buffer(cmd, vk::CommandBufferResetFlags::empty())?;
+            self.device.begin_command_buffer(
+                cmd,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            self.device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier],
+            );
+            self.device.end_command_buffer(cmd)?;
+            self.device.queue_submit(
+                self.queue,
+                &[vk::SubmitInfo::default()
+                    .wait_semaphores(&waits)
+                    .wait_dst_stage_mask(&stages)
+                    .command_buffers(&cmds)],
+                vk::Fence::null(),
+            )?;
+            self.device.queue_wait_idle(self.queue)?;
+        }
+        self.present_acquired(swapchain, image)
     }
 }
 
@@ -604,6 +822,11 @@ impl VulkanSwapchain {
             width: extent.width,
             height: extent.height,
             image_available,
+            staging: vk::Buffer::null(),
+            staging_memory: vk::DeviceMemory::null(),
+            staging_capacity: 0,
+            command_pool: vk::CommandPool::null(),
+            command_buffer: vk::CommandBuffer::null(),
         })
     }
 
@@ -652,11 +875,110 @@ impl VulkanSwapchain {
     /// `vkDestroySwapchainKHR` — a jump through a null pointer in
     /// `libnvidia-glcore` — when the desktop suite closed a window.
     fn destroy_swapchain_only(&mut self, device: &VulkanDevice) {
+        self.destroy_upload_resources(device);
         unsafe {
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
             device.device.destroy_semaphore(self.image_available, None);
         }
+    }
+}
+
+impl VulkanSwapchain {
+    /// Make sure the persistent staging buffer and command buffer exist and
+    /// are large enough for a `bytes`-long upload.
+    ///
+    /// Called once per present, after the acquire (which is where a rebuild
+    /// can have replaced the swapchain and its extent). Allocations happen on
+    /// the first frame after a window opens and again only when the surface
+    /// grows; an unchanged steady state touches no allocator at all.
+    fn ensure_upload_resources(
+        &mut self,
+        device: &VulkanDevice,
+        bytes: vk::DeviceSize,
+    ) -> Result<(), VulkanError> {
+        if self.staging != vk::Buffer::null() && self.staging_capacity >= bytes {
+            return Ok(());
+        }
+        if self.staging != vk::Buffer::null() {
+            self.destroy_upload_resources(device);
+        }
+
+        let staging_info = vk::BufferCreateInfo::default()
+            .size(bytes)
+            .usage(vk::BufferUsageFlags::TRANSFER_SRC)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+        self.staging = unsafe { device.device.create_buffer(&staging_info, None) }
+            .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
+        let req = unsafe { device.device.get_buffer_memory_requirements(self.staging) };
+        let mem_type = device.find_memory_type(
+            req.memory_type_bits,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )?;
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(req.size)
+            .memory_type_index(mem_type);
+        self.staging_memory = match unsafe { device.device.allocate_memory(&alloc_info, None) } {
+            Ok(memory) => memory,
+            Err(e) => {
+                unsafe { device.device.destroy_buffer(self.staging, None) };
+                self.staging = vk::Buffer::null();
+                return Err(VulkanError::Vulkan(e.to_string()));
+            }
+        };
+        self.staging_capacity = bytes;
+        if let Err(e) = unsafe {
+            device
+                .device
+                .bind_buffer_memory(self.staging, self.staging_memory, 0)
+        } {
+            self.destroy_upload_resources(device);
+            return Err(VulkanError::Vulkan(e.to_string()));
+        }
+
+        let pool_info = vk::CommandPoolCreateInfo::default()
+            .queue_family_index(device.queue_family)
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+        self.command_pool = match unsafe { device.device.create_command_pool(&pool_info, None) } {
+            Ok(pool) => pool,
+            Err(e) => {
+                self.destroy_upload_resources(device);
+                return Err(VulkanError::Vulkan(e.to_string()));
+            }
+        };
+        let cmd_alloc = vk::CommandBufferAllocateInfo::default()
+            .command_pool(self.command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+        self.command_buffer = match unsafe { device.device.allocate_command_buffers(&cmd_alloc) } {
+            Ok(buffers) => buffers[0],
+            Err(e) => {
+                self.destroy_upload_resources(device);
+                return Err(VulkanError::Vulkan(e.to_string()));
+            }
+        };
+        Ok(())
+    }
+
+    /// Free the persistent upload resources. Idempotent; the callers —
+    /// [`Self::recreate`], [`Self::release`] — have already waited for the
+    /// device to go idle, which is what retires the copy that reads the
+    /// staging buffer.
+    fn destroy_upload_resources(&mut self, device: &VulkanDevice) {
+        if self.command_pool != vk::CommandPool::null() {
+            unsafe { device.device.destroy_command_pool(self.command_pool, None) };
+            self.command_pool = vk::CommandPool::null();
+            self.command_buffer = vk::CommandBuffer::null();
+        }
+        if self.staging != vk::Buffer::null() {
+            unsafe { device.device.destroy_buffer(self.staging, None) };
+            self.staging = vk::Buffer::null();
+        }
+        if self.staging_memory != vk::DeviceMemory::null() {
+            unsafe { device.device.free_memory(self.staging_memory, None) };
+            self.staging_memory = vk::DeviceMemory::null();
+        }
+        self.staging_capacity = 0;
     }
 }
 

@@ -21,17 +21,16 @@
 //! `SpringAnimation` with interruptibility is proven in exp_mesh's
 //! mid-flight retarget; here the closed form carries the render.
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle, TextAlign};
+use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, spring_out, tint, BG_DEEP, CANVAS, CANVAS_W, FAINT, INK, MUTED, Rng,
-    VIOLET, VIOLET_SOFT,
+    alpha, clamp01, spring_out, tint, Rng, BG_DEEP, CANVAS, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The two springs — the receipt constants, printed nowhere by hand ───────
 
@@ -316,7 +315,13 @@ fn spring_graph(t: f32) -> WidgetNode {
                 book.stroke(p, color, 1.8);
             };
             draw_curve(DROP_OMEGA, DROP_ZETA, DROP_T0, DROP_SPAN, alpha(INK, 0.85));
-            draw_curve(LINE_OMEGA, LINE_ZETA, LINE_T0, LINE_SPAN, alpha(VIOLET_SOFT, 0.9));
+            draw_curve(
+                LINE_OMEGA,
+                LINE_ZETA,
+                LINE_T0,
+                LINE_SPAN,
+                alpha(VIOLET_SOFT, 0.9),
+            );
 
             // The riders — dots at the current t on both curves.
             book.circle(
@@ -325,11 +330,7 @@ fn spring_graph(t: f32) -> WidgetNode {
                 alpha(tint(VIOLET, 0.4), 0.95),
             );
             if line_s_now > 0.0 {
-                book.circle(
-                    Offset::new(x_of(t), y_of(line_s_now)),
-                    4.0,
-                    VIOLET_SOFT,
-                );
+                book.circle(Offset::new(x_of(t), y_of(line_s_now)), 4.0, VIOLET_SOFT);
                 book.ring(
                     Offset::new(x_of(t), y_of(line_s_now)),
                     7.5,
@@ -376,11 +377,7 @@ fn spring_graph(t: f32) -> WidgetNode {
                         "drop  ω {:.1} · ζ {:.2}      line  ω {:.1} · ζ {:.2}",
                         DROP_OMEGA, DROP_ZETA, LINE_OMEGA, LINE_ZETA
                     ))
-                    .style(
-                        TextStyle::new(12.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.9)),
-                    ),
+                    .style(TextStyle::new(12.0).monospace().color(alpha(MUTED, 0.9))),
                 ),
         );
 
@@ -399,7 +396,7 @@ fn spring_graph(t: f32) -> WidgetNode {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -431,10 +428,9 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.30, h * 0.86),
                     w * 0.34,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.10)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.10)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
 
@@ -452,10 +448,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.80).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.80)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );

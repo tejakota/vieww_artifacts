@@ -17,22 +17,17 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, smoothstep, tint, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT};
+use crate::film_lib::{alpha, mix, smoothstep, tint, INK, MUTED, VIOLET, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The flash schedule ──────────────────────────────────────────────────────
 
 /// When lightning fires (timeline t, intensity).
-const FLASHES: [(f32, f32); 4] = [
-    (0.22, 1.0),
-    (0.45, 0.8),
-    (0.66, 1.0),
-    (0.85, 0.65),
-];
+const FLASHES: [(f32, f32); 4] = [(0.22, 1.0), (0.45, 0.8), (0.66, 1.0), (0.85, 0.65)];
 
 /// The flash envelope: near-instant rise, double-strobe decay.
 #[must_use]
@@ -66,7 +61,13 @@ struct Seg {
 
 /// Midpoint-displacement lightning between two points, branching.
 #[must_use]
-fn bolt(rng: &mut crate::film_lib::Rng, a: (f32, f32), b: (f32, f32), depth: u32, gen: u8) -> Vec<Seg> {
+fn bolt(
+    rng: &mut crate::film_lib::Rng,
+    a: (f32, f32),
+    b: (f32, f32),
+    depth: u32,
+    gen: u8,
+) -> Vec<Seg> {
     let mut segs = Vec::new();
     // Subdivide with midpoint displacement.
     let n = 1 << depth; // 2^depth intervals
@@ -154,28 +155,52 @@ fn cloud() -> Vec<Blob> {
         let f = k as f32 / 15.0;
         let x = 240.0 + f * 760.0 + f * f * 130.0; // shear: further right, more offset
         let y = 128.0 + (f - 0.5).powi(2) * 66.0;
-        v.push(Blob { x, y, rx: 84.0 + rng.f01() * 44.0, ry: 38.0 + rng.f01() * 18.0, tone: 0.9 });
+        v.push(Blob {
+            x,
+            y,
+            rx: 84.0 + rng.f01() * 44.0,
+            ry: 38.0 + rng.f01() * 18.0,
+            tone: 0.9,
+        });
     }
     // The mid-tower: the storm's core column.
     for k in 0..14 {
         let f = k as f32 / 13.0;
         let x = 640.0 + rng.sym() * (30.0 + f * 80.0);
         let y = 210.0 + f * 150.0;
-        v.push(Blob { x, y, rx: 76.0 + rng.f01() * 40.0, ry: 46.0 + rng.f01() * 20.0, tone: 0.6 });
+        v.push(Blob {
+            x,
+            y,
+            rx: 76.0 + rng.f01() * 40.0,
+            ry: 46.0 + rng.f01() * 20.0,
+            tone: 0.6,
+        });
     }
     // The wall cloud: the dark base under the tower.
     for k in 0..12 {
         let f = k as f32 / 11.0;
         let x = 560.0 + f * 220.0 + rng.sym() * 20.0;
         let y = 380.0 + rng.f01() * 26.0;
-        v.push(Blob { x, y, rx: 60.0 + rng.f01() * 34.0, ry: 34.0 + rng.f01() * 14.0, tone: 0.25 });
+        v.push(Blob {
+            x,
+            y,
+            rx: 60.0 + rng.f01() * 34.0,
+            ry: 34.0 + rng.f01() * 14.0,
+            tone: 0.25,
+        });
     }
     // Mammatus: lobes hanging under the anvil's overhang.
     for k in 0..14 {
         let f = k as f32 / 13.0;
         let x = 300.0 + f * 620.0 + f * f * 110.0;
         let y = 196.0 + rng.f01() * 18.0;
-        v.push(Blob { x, y, rx: 26.0 + rng.f01() * 14.0, ry: 22.0 + rng.f01() * 12.0, tone: 0.42 });
+        v.push(Blob {
+            x,
+            y,
+            rx: 26.0 + rng.f01() * 14.0,
+            ry: 22.0 + rng.f01() * 12.0,
+            tone: 0.42,
+        });
     }
     v
 }
@@ -196,7 +221,7 @@ fn rain_seeds() -> Vec<(f32, f32, f32, f32)> {
     v
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let flash = flash(t);
     // The storm cell drifts right over the timeline.
     let drift = t * 64.0;
@@ -207,7 +232,7 @@ pub fn frame(t: f32) -> WidgetNode {
     let mut live_idx: Vec<usize> = Vec::new();
     for (i, (t0, _)) in FLASHES.iter().enumerate() {
         let d = t - t0;
-        if d >= 0.0 && d < 0.14 {
+        if (0.0..0.14).contains(&d) {
             live_idx.push(i);
             live_bolts.extend(bolts_for(i));
         }
@@ -259,7 +284,7 @@ pub fn frame(t: f32) -> WidgetNode {
                     g.line(
                         Offset::new(x0 + drift * 0.6, y),
                         Offset::new(x0 + drift * 0.6 + len * slant, y + len),
-                        alpha(lit(Color::rgb(148, 160, 176)), (a * 255.0 * 0.9) as f32 / 255.0),
+                        alpha(lit(Color::rgb(148, 160, 176)), (a * 255.0 * 0.9) / 255.0),
                         1.1,
                     );
                 }
@@ -283,7 +308,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         g.line(
                             Offset::new(s.x0, s.y0),
                             Offset::new(s.x1, s.y1),
-                            alpha(Color::rgb(255, 253, 246), (0.75 + 0.25 * glow_a) * (1.0 - s.gen as f32 * 0.22)),
+                            alpha(
+                                Color::rgb(255, 253, 246),
+                                (0.75 + 0.25 * glow_a) * (1.0 - s.gen as f32 * 0.22),
+                            ),
                             s.w,
                         );
                     }
@@ -339,20 +367,41 @@ pub fn frame(t: f32) -> WidgetNode {
             puddle.close();
             book.fill(
                 puddle,
-                mix(Color::rgb(22, 25, 33), Color::rgb(96, 106, 130), flash * 0.8),
+                mix(
+                    Color::rgb(22, 25, 33),
+                    Color::rgb(96, 106, 130),
+                    flash * 0.8,
+                ),
             );
             // The fence: three posts and two rails, leading line to the storm.
             for k in 0..3 {
                 let fx = 660.0 + k as f32 * 118.0;
-                book.rect(Rect::new(fx, 566.0, fx + 5.0, 598.0), mix(Color::rgb(20, 20, 18), Color::rgb(40, 38, 32), flash * 0.5));
+                book.rect(
+                    Rect::new(fx, 566.0, fx + 5.0, 598.0),
+                    mix(Color::rgb(20, 20, 18), Color::rgb(40, 38, 32), flash * 0.5),
+                );
             }
-            book.rect(Rect::new(650.0, 574.0, 986.0, 579.0), alpha(mix(Color::rgb(24, 24, 22), Color::rgb(46, 44, 38), flash * 0.5), 0.95));
-            book.rect(Rect::new(650.0, 588.0, 986.0, 592.0), alpha(mix(Color::rgb(24, 24, 22), Color::rgb(46, 44, 38), flash * 0.5), 0.9));
+            book.rect(
+                Rect::new(650.0, 574.0, 986.0, 579.0),
+                alpha(
+                    mix(Color::rgb(24, 24, 22), Color::rgb(46, 44, 38), flash * 0.5),
+                    0.95,
+                ),
+            );
+            book.rect(
+                Rect::new(650.0, 588.0, 986.0, 592.0),
+                alpha(
+                    mix(Color::rgb(24, 24, 22), Color::rgb(46, 44, 38), flash * 0.5),
+                    0.9,
+                ),
+            );
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack.push(receipt_panel(flash, bolt_count, live_idx.len())).into()
+    let stack = Stack::new().push(Positioned::fill().child(board));
+    stack
+        .push(receipt_panel(flash, bolt_count, live_idx.len()))
+        .into()
 }
 
 // ── The receipt ─────────────────────────────────────────────────────────────
@@ -363,11 +412,12 @@ fn receipt_panel(flash_env: f32, bolt_count: usize, live_flashes: usize) -> Widg
     let lines = [
         "STORM · THE WEATHER AXIS · THE SUPERCELL".to_string(),
         format!("flashes 4 scheduled · {live_flashes} live · bolt segments {bolt_count} now"),
+        format!("lightning census: {all_segs} segments across all trees (measured from arrays)"),
+        "rain 1,300 streaks · slant 0.22 · cell drift 64 px".to_string(),
         format!(
-            "lightning census: {all_segs} segments across all trees (measured from arrays)"
+            "flash luminance ×{:.2} — the lerp that drew the sky",
+            1.0 + flash_env * 2.1
         ),
-        format!("rain 1,300 streaks · slant 0.22 · cell drift 64 px"),
-        format!("flash luminance ×{:.2} — the lerp that drew the sky", 1.0 + flash_env * 2.1),
     ];
 
     const P_X: f32 = 42.0;
@@ -386,7 +436,10 @@ fn receipt_panel(flash_env: f32, bolt_count: usize, live_flashes: usize) -> Widg
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

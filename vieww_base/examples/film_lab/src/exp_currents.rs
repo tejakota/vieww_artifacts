@@ -18,16 +18,18 @@
 
 use std::sync::OnceLock;
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    StrokeStyle, TextStyle, Dash};
+use vieww_foundation::{
+    BlendMode, Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
-use crate::film_lib::{alpha, clamp01, mix, BG_DEEP, CANVAS, CYAN, CYAN_SOFT, FAINT, INK, MUTED,
-    VIOLET_SOFT, Rng};
+use crate::film_lib::{
+    alpha, clamp01, mix, Rng, BG_DEEP, CANVAS, CYAN, CYAN_SOFT, FAINT, INK, MUTED, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 /// Streamlines integrated through the field.
 const STREAMS: usize = 168;
@@ -124,18 +126,18 @@ fn field() -> &'static (Vec<Stream>, [[f32; 11]; 7]) {
                         (last.dx, last.dy)
                     };
                     // RK2: midpoint velocity decides the step.
-                    let (mx, my) = velocity(
-                        &lattice,
-                        x0 + vx * STEP * 0.5,
-                        y0 + vy * STEP * 0.5,
-                    );
+                    let (mx, my) = velocity(&lattice, x0 + vx * STEP * 0.5, y0 + vy * STEP * 0.5);
                     let len = (mx * mx + my * my).sqrt();
                     if len < 1e-4 {
                         break;
                     }
                     let nx = x0 + mx / len * STEP;
                     let ny = y0 + my / len * STEP;
-                    if nx < -30.0 || nx > CANVAS.width + 30.0 || ny < -30.0 || ny > CANVAS.height + 30.0 {
+                    if nx < -30.0
+                        || nx > CANVAS.width + 30.0
+                        || ny < -30.0
+                        || ny > CANVAS.height + 30.0
+                    {
                         break;
                     }
                     let next = Offset::new(nx, ny);
@@ -178,7 +180,7 @@ fn point_at(s: &Stream, dist: f32) -> Option<Offset> {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let (streams, lattice) = field();
     let fade_in = clamp01(t / 0.08);
 
@@ -248,8 +250,11 @@ pub fn frame(t: f32) -> WidgetNode {
                     // and rides the same march the dashes do.
                     let start = rng.f01() * s.cum.last().copied().unwrap_or(0.0);
                     let phase = t * SECONDS * s.march;
-                    let dist = (start + phase).rem_euclid(s.cum.last().copied().unwrap_or(1.0).max(1.0));
-                    let Some(pt) = point_at(s, dist) else { continue };
+                    let dist =
+                        (start + phase).rem_euclid(s.cum.last().copied().unwrap_or(1.0).max(1.0));
+                    let Some(pt) = point_at(s, dist) else {
+                        continue;
+                    };
                     let col = mix(Color::WHITE, CYAN_SOFT, 0.30);
                     g.circle(pt, 2.4, alpha(col, fade_in));
                     g.circle(pt, 7.0, alpha(CYAN_SOFT, 0.24 * fade_in));
@@ -259,10 +264,12 @@ pub fn frame(t: f32) -> WidgetNode {
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.9).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.40)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.9)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.40)),
+                    ]),
             );
         }),
     );
@@ -291,12 +298,22 @@ fn receipt_panel(t: f32) -> WidgetNode {
 
     let lines = [
         "CURRENTS · CURL NOISE · THE RIVER MARCHES (E-17)".to_string(),
-        format!("streams {} × ≤{} steps · mean {:.0} px · ink {:.0} px",
-            streams.len(), STEPS, mean_len, total_ink),
+        format!(
+            "streams {} × ≤{} steps · mean {:.0} px · ink {:.0} px",
+            streams.len(),
+            STEPS,
+            mean_len,
+            total_ink
+        ),
         format!("|v| max {:.3} · march max {:.0} px/s", smax, march_max),
-        format!("dash [{:.0} {:.0}] · tracers {} · two Plus groups", DASH_ON, DASH_OFF,
-            TRACERS),
-        format!("fade-in {:.0}% · every number integrated, not typed", fade_in * 100.0),
+        format!(
+            "dash [{:.0} {:.0}] · tracers {} · two Plus groups",
+            DASH_ON, DASH_OFF, TRACERS
+        ),
+        format!(
+            "fade-in {:.0}% · every number integrated, not typed",
+            fade_in * 100.0
+        ),
     ];
 
     let mut stack = Stack::new().push(
@@ -323,7 +340,9 @@ fn receipt_panel(t: f32) -> WidgetNode {
                 .height(15.0)
                 .child(
                     Text::new(line.clone()).style(
-                        TextStyle::new(11.0).monospace().color(alpha(mix(MUTED, INK, 0.4), 0.95)),
+                        TextStyle::new(11.0)
+                            .monospace()
+                            .color(alpha(mix(MUTED, INK, 0.4), 0.95)),
                     ),
                 ),
         );
@@ -356,14 +375,20 @@ fn receipt_panel(t: f32) -> WidgetNode {
                     let (vx, vy) = velocity(&field().1, world_x, world_y);
                     let m = (vx * vx + vy * vy).sqrt();
                     let len = 6.0 + 10.0 * (m * 4.0).clamp(0.0, 1.0);
-                    let (dx, dy) = if m > 1e-4 { (vx / m, vy / m) } else { (1.0, 0.0) };
+                    let (dx, dy) = if m > 1e-4 {
+                        (vx / m, vy / m)
+                    } else {
+                        (1.0, 0.0)
+                    };
                     let tail = Offset::new(x - dx * 3.0, y - dy * 3.0);
                     let tip = Offset::new(x + dx * len, y + dy * len);
                     book.line(
                         tail,
                         tip,
-                        alpha(mix(VIOLET_SOFT, CYAN_SOFT, world_x / CANVAS.width),
-                            0.25 + 0.55 * (m * 4.0).clamp(0.0, 1.0)),
+                        alpha(
+                            mix(VIOLET_SOFT, CYAN_SOFT, world_x / CANVAS.width),
+                            0.25 + 0.55 * (m * 4.0).clamp(0.0, 1.0),
+                        ),
                         1.1,
                     );
                     // The arrowhead — two short barbs back from the tip.

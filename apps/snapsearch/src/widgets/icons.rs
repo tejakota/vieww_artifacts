@@ -12,7 +12,7 @@ use vieww::foundation::{IconData, Offset, Path, Rect};
 /// The circle-to-Bézier constant: the control-point distance, as a
 /// fraction of the radius, that makes four cubics approximate a circle to
 /// within about a thousandth of the radius.
-const KAPPA: f32 = 0.552_284_75;
+const KAPPA: f32 = 0.552_284_8;
 
 /// Append a circle to `path`.
 ///

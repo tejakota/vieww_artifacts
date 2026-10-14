@@ -658,7 +658,7 @@ impl VavltState {
                         // thumbnail is expensive on Android. Four thumbnails
                         // per UI wake keeps progressive loading while cutting
                         // rebuilds by roughly 4x for a large selection.
-                        if sent % 4 == 0 {
+                        if sent.is_multiple_of(4) {
                             waker.wake();
                         }
                     }
@@ -668,7 +668,7 @@ impl VavltState {
                 }
             }
             // Flush the final partial batch.
-            if sent % 4 != 0 {
+            if !sent.is_multiple_of(4) {
                 waker.wake();
             }
         }));
@@ -842,6 +842,18 @@ impl VavltState {
                 .filter_map(|(index, _)| items.get(index).cloned())
                 .collect()
         })
+    }
+
+    /// Everything the user handed over, exclusions included — the whole of
+    /// the grant, as the Activity tab's treemap card reads it.
+    ///
+    /// The audit log records the grant as a count; this is the grant as a
+    /// composition. Exclusions are deliberately kept: the card's story is
+    /// "what was handed over", and the plan screen is where exclusions are
+    /// negotiated.
+    #[must_use]
+    pub fn handed_over(&self) -> Vec<Item> {
+        self.items.borrow().clone()
     }
 
     fn included_positions(&self) -> Vec<usize> {

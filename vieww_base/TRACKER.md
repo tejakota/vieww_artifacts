@@ -11,7 +11,497 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
-## The most recent effort (2026-09-15): the GPU compositor, measured standards, one certification command
+## 2026-10-11: every GPU edge antialiased, Metal and D3D12 render paths, cross-platform type-check
+
+1. **GPU edges for non-analytic shapes (PENDING §2.1, the parity half).**
+   Rotated rects, arbitrary fills and every stroke now draw as one quad over
+   their inked pixels, with coverage from the CPU rasterizer itself
+   (`GpuSeam::shape_coverage`: same polygon construction, flattening and 4×4
+   coverage as `NativeRenderer`), cached in the mask atlas by content with
+   any shaped clip multiplied in. Census on lavapipe, same machine, before →
+   after: worst channel **203 → 47**/255, channels over 1/255 **525,299 →
+   245,647**, fixtures with interior mismatches **6 → 2** (`00-transforms`
+   688→0, `12-avatar-wall` 68→0, `12-avatar` 49→0, `00-blend-modes` 7→0;
+   left: `23-editor-glass`'s known backdrop-blur numerics and `22-editor`'s
+   56 px, both unchanged). New `vulkan_scene` test holds a rotated rect, a
+   star, a dashed curve and a clipped circle within 2/255 on **every** pixel;
+   with the change disabled it fails at 180/255. Consequence worth knowing:
+   for these shapes the GPU-vs-CPU comparison is no longer between two
+   independent rasterizers — the tessellator's independent check now lives
+   in `vulkan_mesh_smoke.rs` and the planner-less path. Residual cost:
+   `PENDING.md` §2.1.
+2. **The GPU window path renders straight into the swapchain (PENDING
+   §2.2).** `NativeRenderer::present_planned` acquires the swapchain image,
+   and `SceneRenderer::render_planned_to` blits the frame's RGBA16F target
+   into it on the GPU (format conversion and BGRA order included), waiting
+   on the acquire semaphore only at the blit. Per 1366×768 frame that removes
+   an 8.4 MB device→host readback, a CPU unpremultiply/quantise pass, a
+   4.2 MB host→device upload and the BGRA swizzle loop. Opaque frames only —
+   a translucent window keeps the readback, because a blit cannot
+   unpremultiply. Verified on a real Xvfb window under lavapipe:
+   `wait_loop`'s `gpu_frame` now asserts every GPU frame went direct
+   (`FrameReport::gpu_direct_frames`) **and** grabs the X screen with
+   ImageMagick to check the window shows its blue; with the blit disabled the
+   screen has 0 blue pixels and it fails. No timing claimed — lavapipe's
+   numbers are not a GPU's.
+3. **viewwsite: light scheme, keyboard reach, and two stale gaps.** The
+   README's three "not yet done" items, checked against the code: the
+   device-pixel scale was already closed (`WebSurface::resize`), and the
+   DOM page's controls were already links in document order — but its
+   "Copy" control was a `div` with a script listener, unreachable by Tab,
+   and any `GestureDetector` the DOM backend emitted had the same problem.
+   Now: `set_color_tokens` in `vieww-platform-web-dom` (palette colours →
+   CSS custom properties), a light theme in `index.html`, button semantics
+   (`tabindex`, `role`, Enter/Space) for every non-button tap target,
+   `VNode::to_html` and a `snapshot` example. Verified in Chromium under
+   emulated dark and light schemes: body background `rgb(15,13,11)` /
+   `rgb(251,249,247)`, the Copy button reached by Tab in both (11th stop),
+   and both schemes screenshotted. The wasm build lints clean again: two
+   wasm-only lints in `vieww-video` and `vieww-audio` were fixed on the way.
+4. **Refresh rate (PENDING §3.2), checked against winit 0.30.13's source.**
+   Every platform vieww targets already reports it — winit on macOS, iOS,
+   Windows, X11 and Wayland, this crate's JNI call on Android (the one
+   winit backend that hard-codes `None`, besides Redox). What was missing was
+   *when*: only at window open. It is now re-read on `Moved` and
+   `ScaleFactorChanged` when the window's monitor changed. Not exercised
+   with a real second monitor (see PENDING §3.2).
+5. **Metal and D3D12 render paths**, type-checked and linted on their own
+   targets from Linux, never yet executed — `PENDING.md` §1.2/§1.3.
+6. **`ci/check/cross-check.sh`**: the workspace type-checks for macOS, iOS,
+   Windows and Android from Linux; its first run found five real bugs (see
+   the commit).
+7. **`vieww-spatial`** applied from the supplied patch, fixed to build.
+
+## The most recent effort (2026-10-09): the PENDING list emptied of everything a machine can close — analytic edges on the GPU, a GPU frame in a real window, atlas eviction, the full gate on the pinned toolchain
+
+Scope: `PENDING.md` itself, item by item, with one question per entry — "can
+this be closed by work, or does it need a machine this one is not?". Eleven
+entries closed with evidence; the rest are honestly blocked on hardware or a
+platform toolchain and remain in `PENDING.md`, renumbered and with their
+follow-ups written down as new entries rather than lost with the closure.
+`PENDING.md` §3.1 (colour fonts), §3.2 (variable fonts) and the subpixel half
+of §3.3 turned out to be *already closed in code* — `color_glyphs.rs`,
+`FontData::with_variations`, `AaMode::Lcd` — while the file still listed them;
+that is also fixed, and the record below says so rather than claiming this
+pass wrote them.
+
+**Verified, by things that ran (rustc 1.98.1 — the pinned toolchain, on a
+machine that can install it, which the machine before this one could not):**
+
+1. **The full certification gate on 1.98.1 — `PENDING.md` §1.7.** `ci/certify/
+   certify.sh` ran under Xvfb with the extracted lavapipe ICD. The first pass
+   failed three stages, all real, all fixed in this tree: the workspace was
+   unformatted (98 files from the earlier gap-pass commits; `cargo fmt --all`
+   now passes), clippy's `approx_constant` fired on ten hand-written
+   `0.707…` constants in the new analytic-AA tests, and the wait-loop suite
+   could not open a window because this image has no `libxkbcommon-x11` /
+   `libxcb-xkb` (provided from the system debs, `scripts/` in the run's
+   evidence bundle). Every suite the gate names then ran green: workspace
+   tests (5,079 passed, 0 failed, including all five wait-loop scenarios),
+   layout-stress, animation-stress, text-fidelity, image-effects,
+   scroll-stress, native-surface, premium-ui, the fixture gallery, wasm-check,
+   the web baseline, the desktop suite (21 checks, 0 failed), and
+   `vieww-standard` — every clause held (startup 16.3 ms, worst frame 8.0 ms,
+   p95 7.1 ms). The final rerun (2026-10-09, after the workspace's lint debt
+   was cleared — see the `film_lab` note below) was staged stage-by-stage
+   with certify's own commands into the same `OUT` layout: this 9.9 GB bench
+   cannot host one end-to-end `certify.sh` (its `rm -rf "$OUT"` start makes
+   an interrupted run cost the whole bundle, and the disk filled twice
+   mid-run), so `summary.txt` carries the staging note and the per-stage
+   logs carry the evidence. The staged totals: 5,079 workspace tests (4,162
+   over the workspace minus the two scaffold-heavy packages, plus 911 in
+   `viewwstudio`, plus `vieww-build`'s scaffold build, plus the five
+   wait-loop scenarios under lavapipe), all six stress/fidelity suites, both
+   visual stages, wasm-check, the web baseline, the desktop suite and the
+   standard — all green; the one red is `gpu/vulkan-suite`'s backdrop-blur
+   parity, below.
+2. **Analytic edge coverage for the rect family on the GPU — §2.0.** A
+   signed-distance material in `scene.wgsl` (`shape_distance` /
+   `shape_coverage`), a new `SHAPE_SOLID`/`SHAPE_GRADIENT` material pair, a
+   `shape[4]` vertex attribute, and `emit_shape_painted` routing axis-aligned
+   rects and rounded rects to it. Verified: `vulkan_scene`'s
+   `fractional_and_rounded_rects_have_antialiased_edges_like_the_cpu` — GPU
+   versus CPU SDF within 3/255 on edges — plus the census: interior
+   mismatches fell from 8 fixtures to 6, with `00-blurs` 208→0,
+   `00-layers-nested` 584→0, `20-settings` 4→0 and `22-editor` 1258→56. The
+   one fixture still over tolerance is `23-editor-glass`, the backdrop-blur
+   screen, whose count on the *clean* tree is the same (31,827 vs 31,615 px) —
+   driver blur numerics, not this change; see `docs/GPU-RENDERER-STATUS.md`'s
+   note.
+3. **A GPU frame presented to a real window — §2.6.** `NativeRenderer::
+   present_planned` plans the frame, draws complete plans with
+   `SceneRenderer`, and presents them through the same swapchain path the
+   CPU's pixels always took, falling back per frame otherwise;
+   `App::prefer_gpu` routes the event loop through it, and `FrameReport`
+   grew `gpu_frames` so "is the GPU actually doing it" is a number instead of
+   an inference. Verified by `wait_loop`'s `gpu_frame` scenario on a real
+   Xvfb window under lavapipe: `gpu_frames >= 1` with the window visibly
+   drawing. The readback it pays on the way to the screen is the new
+   `PENDING.md` §2.2.
+4. **The glyph atlas evicts — §2.7.** Generational compaction between frames
+   (never within one), a deliberate-fill test that packs the atlas to its
+   961-glyph capacity and asserts the next frame compacts while keeping
+   still-in-use glyphs at their texels. Growth keeps shelves at their opened
+   width — the pre-existing invariant, now pinned by tests.
+5. **`ListView` programmatic scrolling — §5.4.** `ListView::row_position` /
+   `row_offset_for` + `RowAlignment` in `vieww-widget`; `ScrollController::
+   reveal_row` / `jump_to_row` in `vieww-element`, the jump refreshing the
+   content extent from the list's declared length first so it works before
+   the first layout. 22 tests and doctests.
+6. **The text items, mostly by discovering they were done — §3.1, §3.2,
+   §3.3.** `test-text-fidelity` (a certify stage, green above) renders
+   variable-font instances at interpolated weights, COLRv0 palette layers
+   and CBDT bitmap emoji and asserts on the ink; `glyph.rs` applies
+   variation coordinates before any contour is walked and `FontData::
+   with_variations` mints a fresh cache id per instance. The §3.3 decision
+   note in `native/glyph.rs` was **rewritten** — it had claimed subpixel AA
+   does not exist while `AaMode::Lcd` does; it now states the real policy
+   (opt-in, root-surface-only, grayscale fallback) and the hinting decision.
+7. **The coverage number — §6.1.** `cargo-llvm-cov` installed and the gate
+   wired into the workflow, which runs it on every push
+   (`continue-on-error` until its numbers have a history). The first number
+   is the workflow's to produce: the instrumented build alone grows past
+   5.5 GB against this bench's 9.9 GB root filesystem — the 70% floor was
+   attempted twice here and both runs died on disk (the scaffold tests
+   build full cargo projects into `/tmp`), not on coverage, and a number
+   produced by a run that died is worse than no number. What *was* verified
+   on this machine is the gate's preflight: `cargo-llvm-cov --version`
+   resolves, and rustc's own `llvm-profdata` is present in the sysroot.
+8. **A CI workflow that runs the gate — §6.2.** A new
+   `.github/workflows/framework-checks.yml` beside the existing mobile-build
+   workflow: `ci/check/checks.sh` on Linux (the job whose red means "do not
+   push"), the coverage gate, and `ci/check/platform-check.sh` for macOS and
+   Windows — the compile half of §1.2/§1.3 on runners nobody has to own.
+   The mobile workflow has 23 recorded runs (green 2026-10-08), so the
+   framework's Android and iOS *builds* are exercised on runners; a frame on
+   a device remains `PENDING.md` §1.4/§1.5. One mechanical note, recorded
+   here rather than hidden: the token this branch was pushed with lacks the
+   `workflow` scope, and GitHub refuses workflow-file pushes without it —
+   the file is therefore not in this commit; it lands with a workflow-scoped
+   push or a web-UI upload of the identical content (kept beside the
+   checkout), and everything else in this entry is in the tree and pushed.
+9. **`vieww-platform-web` is publishable — §6.3.** `wasm-check.sh` passed
+   again on 1.98.1 (stage-0 web-sys audit, `cargo check --all-targets`,
+   clippy `-D warnings` for wasm32); the `publish = false` and its banner are
+   gone, with the removal's own record in the crate's `Cargo.toml`.
+10. **The workspace's lint debt cleared — the `checks.sh` gate can go green.**
+    The clippy stage of `ci/check/checks.sh` had never been able to pass on
+    this branch: the earlier gap-pass commits left 13 lints in the framework
+    crates (`needless_range_loop`, `type_complexity`, `approx_constant` in
+    `vieww-effects`/`vieww-image`/`vieww-network`/`vieww-3d`/`vieww-dataviz`/
+    `vieww-game`/`vieww-video`) and `film_lab` — a workspace member since the
+    consolidation — carried 767 more (unused imports and variables from the
+    retired cuts, dead scene doors, `too_many_arguments` on scene fns whose
+    parameters are the cinematography). All fixed or, where the dead code is
+    the *policy* (retired film sources kept for byte-reproducibility),
+    `#[allow(dead_code)]`'d at the module door with the reason in a comment:
+    `product_film` is allowed module-wide (only `script` is live, ridden by
+    `studio_film`); individual retired helpers in `studio_film`, `film_lib`
+    and the round-11 experiment files carry item-level allows. Behaviour
+    neutrality was the rule everywhere: the RNG call order in `exp_ink`'s
+    branch roll is preserved (`||` short-circuits exactly as the retired
+    `if/else` did), counters the receipts never read were removed rather
+    than wired up (wiring them would change the next re-render's
+    `metrics.txt`), and no arithmetic changed. After the sweep:
+    `cargo clippy --workspace --all-targets --features
+    "vieww-paint/native,vieww-hal/vulkan" -- -D warnings` exits 0, `cargo
+    fmt --all -- --check` exits 0, and `cargo check`/`cargo test` still pass
+    (the 5,079 above is *after* the sweep — the films' determinism claim
+    survives the lint fixes by construction, since none of the changed lines
+    feed the FrameDriver).
+
+**What stayed red, and why it is recorded here rather than hidden:** the
+compositor's backdrop-blur parity test fails under this driver (16/17 —
+identical failure on the clean tree, same worst pixel and count; the
+historical 17/17 was an older lavapipe). It is a driver-numerics difference
+in the half-float box passes, pre-existing, and `docs/GPU-RENDERER-STATUS.md`
+carries the full note and the two honest fixes. The GPU stages inside
+certify itself were `SKIPPED(no Vulkan loader/ICD)` — that script's gate
+wants the `vulkaninfo` CLI, which this image cannot install; the same stages
+were run manually with the same ICD and the results above are theirs.
+
+**Machine:** 3 cores, 9.9 GB root filesystem (the gate ran lean:
+`ci/lib/lean.sh`), Xvfb display, lavapipe 25.0.7 from the distro deb. One
+disk-full incident mid-gate (a parallel build of the reviewer's own making)
+took down the wasm-check, web-baseline and desktop stages of the first
+certify pass; each was re-run clean and is green above. The first pass's
+animation-stress and vieww-standard failures were contention from the same
+incident — both pass with the machine otherwise idle. Everything above is a
+correctness claim; no performance claim is made anywhere, and lavapipe
+timings (the census's 2.4 s GPU column) are a software rasterizer's numbers.
+
+## Previous effort (2026-09-30): the layer-table audit — eight new crates, thirty-odd subsystems, eleven photographed examples, two rendering bugs fixed
+
+Scope: every line of every per-framework layer table in the repository-root
+document, asked "can a vieww program do this today?". The creative-tool
+frameworks (After Effects, Blender, TouchDesigner, Unity, Unreal, GSAP,
+Motion Canvas, Manim, D3, Konva, Three.js) name whole subsystems there that
+vieww did not have. The root document's "Third pass" table lists each one
+and what closed it.
+
+**Verified, by things that ran (stable rustc 1.95 on this machine; the pinned
+1.98.1 toolchain could not be downloaded through the sandbox proxy):**
+
+1. **New crates:** `vieww-3d` (scene graph, software rasteriser with
+   shadows/SSAA/culling/LOD/instancing, raycast picking, BVH path tracer,
+   glTF import, `Viewport3D`), `vieww-canvas` (Konva-style stage,
+   hit-testing, events, `Transformer`, JSON), `vieww-dataviz` (D3 scales,
+   joins, shapes, hierarchy layouts, force, contours, colour),
+   `vieww-graph` (cooking node graph + Blueprint exec graph), `vieww-game`
+   (ECS, behaviours, coroutines, prefabs, scenes, input), `vieww-collab`
+   (CRDT doc, ops as JSON, presence), `vieww-lottie` (Bodymovin playback).
+2. **New modules in existing crates:**
+   - `vieww-foundation`: `json`, `path_ops` (booleans, measure, trim,
+     dashes, hit-tests, SVG data) and `sketch_export` (SVG/PDF).
+   - `vieww-animation`: `sequence`, `flow`, `animator`, `fcurve`,
+     `constraints`, `nla`, `expr`, `channels`, `particle_system`,
+     `retarget` and `shared`.
+   - `vieww-mesh`: `gltf` and `modifiers`.
+   - `vieww-physics`: `rigid` (rotation, SAT, joints with limits and
+     motors, CCD, sleeping, queries, character controller), `cloth` and
+     `fluid`.
+   - `vieww-video`: `comp`, `matte`, `track` and `export`.
+   - `vieww-audio`: `midi` and `dsp`.
+   - `vieww-network`: `osc`.
+   - `vieww-effects`: `cpu::pixel`.
+   - `vieww-widget`: `CodeBlock` and `CodeMorph`.
+   - `vieww-element`: `binding`.
+   - `vieww-image`: `sprite`.
+3. **Two pre-existing rendering bugs, found by looking at the pictures and
+   fixed with failing-first regression tests:**
+   - `Path::arc_ring` began its inner arc (and a wedge's arc) from the
+     wrong pen position, so donuts, pie wedges and progress rings bulged.
+     The test is `path_ops::tests::arc_ring_band_and_wedge_have_straight_sides`.
+   - The native stroker stamped round-join discs with the opposite winding
+     to its segment quads, so under nonzero fill every round join became a
+     hole and thick curved strokes rendered beaded. The test is
+     `stroke::orientation_tests::round_joins_do_not_punch_holes`.
+4. **Tests:** every framework crate's tests pass: 3,912 tests across
+   `crates/*`, plus 911 in `apps/viewwstudio`, 0 failed. The one failure
+   found on the way was an overflow in a test's own arithmetic, now fixed.
+   `cargo clippy --workspace --all-targets -D warnings` is clean for
+   everything this pass touched. Clippy still reports some pre-existing
+   warnings in `examples/film_lab`, `examples/test-text-fidelity` and
+   `vieww-paint/src/native/glyph.rs`; this pass did not change those.
+5. **Eleven new feature examples, 81–91,** each run headless through the
+   CPU rasteriser (`VIEWW_SHOT`). Every frame was looked at, and one
+   representative PNG per example is kept in `examples/shots/`:
+   - `81-path-ops`
+   - `82-timelines`
+   - `83-rigging`
+   - `84-particles-retarget`
+   - `85-3d-advanced`
+   - `86-physics`
+   - `87-canvas-dataviz`
+   - `88-graph-game-collab-lottie`
+   - `89-video-effects`
+   - `90-midi-dsp-osc`
+   - `91-code-binding-sprites`
+
+   Example `80-3d-scene` came from the same pass. Shared drawing helpers
+   (a closure painter, captioned panels, grids, shapes) live in the feature
+   harness's `draw` module.
+
+## Previous effort (2026-09-29, later): the cross-framework capability recheck — thirteen capabilities, physics joints, twenty-four photographed examples
+
+Scope was the harder reading of the repository-root document: not "what did
+the gap list say," but "what capability does *every* framework in the
+document's twenty-two layer tables offer, and does vieww answer it?" The
+audit went capability-by-capability; thirteen existed elsewhere and not
+here. All thirteen are now closed, each with tests and a numbered feature
+example run headless, plus a `Joint` in `vieww-physics` and the examples
+debt of the first pass repaid.
+
+**Verified, by things that ran (pinned rustc 1.98.1, this machine):**
+
+1. **`vieww-animation` grew six modules, 68 tests and 2 doctests** (186 lib
+   tests + 16 doctests total, all green, clippy clean): `noise` (seeded
+   Perlin 1/2/3 D + fBm, bounded ±1 by the g·√N/2 argument, lattice-flat
+   and neighbour-coherence pinned); `lfo` (five waveforms as a `Simulation`
+   that honestly never finishes); `particles` (`ParticleField` — a pure
+   function of time: births hashed from `(seed, index)`, closed-form
+   ballistic positions, capacity `rate × lifetime_max` as a theorem,
+   checked empirically across a 600-step sweep); `blend_tree` (`BlendTree1`
+   smoothstep between threshold brackets, `BlendTree2` inverse-distance
+   weights, children at a shared clock); `skeletal::solve_two_bone` (the
+   law of cosines, zig-zag sign pinned by the round-trip test that caught
+   the same-sign bug, unreachable targets extend and say so); keyframe
+   `LoopMode` (loop wraps to frame zero, ping-pong is continuous at the
+   turn); and 27 named `Curve` presets (the GSAP families on Penner's
+   equations — endpoints, mirror symmetry, in-out symmetry, monotone
+   families and the bounce landing values all pinned).
+2. **`vieww-audio::analysis` (new module, 11 tests)**: radix-2
+   Cooley–Tukey FFT (bit-reversal + butterflies), Hann window, `Spectrum`
+   with bin pitches, peak bin and band energy. Its tests round-trip the
+   crate's own synthesis — a rendered 440 Hz tone is *found* at 440 Hz; a
+   two-note mixdown shows both notes' bands dominating quiet bands — the
+   cheapest complete test there is, and no fixture files.
+3. **`vieww-widget` grew four widgets, two shapes and 35 tests** (558 lib
+   tests total, green, clippy clean): `FunctionGraph` (y = f(x), origin
+   axes, NaN as gaps); `MathText` (TeX subset — `^`/`_`, `\frac`,
+   `\sqrt[n]`, Greek, operators — real text runs, layout-box rules,
+   unknown commands stay visible); `SplitText` (per-char and per-word
+   cascades, the window maths pinned at both ends); `Star`/`Polygon` morph
+   shapes (exact corner interpolation; flat sides, envelope and morph
+   round-trip tested). Also fixed while there: `ScatterChart`, `PieChart`,
+   `DonutChart` and `ChartAxes` were never in the widget prelude — a
+   pre-existing gap the new examples flushed out.
+4. **`vieww-physics::Joint` (9 tests)**: the distance joint — rods and
+   tethers, stiffness clamped 0..=1, position correction split by inverse
+   mass and a velocity impulse that cancels along-axis drift. The tests
+   pin the physics the module can honestly claim: a pendulum *swings* (no
+   damping, so the assertion is the circle it stays on), a hanging bob
+   stays put, equal masses meet in the middle with the centre of mass
+   unmoved, a swing does not gain energy. `vieww-physics` total: 22 tests.
+5. **`Lerp` for `(f32, f32)`** in `vieww-animation` — the two-parameter
+   pose a blend tree wants.
+6. **Twenty-four new feature examples, 56–79** (`feature-keyframes` …
+   `feature-ik`): every capability above *and* the first pass's
+   example-less crates — audio, video, mesh, network, physics, embed,
+   skeletal, state machine, keyframes, blend tree, scatter/pie/donut. Each
+   animated one drives a signal from a ticker the *widget* keeps alive
+   (the registry holds tickers weakly — the bug the first shot run
+   produced single frozen frames for, and the reason every clock is a
+   field on its widget now).
+7. **Every one of the twenty-four photographed headless** — `VIEWW_SHOT`
+   through the CPU rasteriser, the `ci/certify/shot-suite.sh` path:
+   **76 PNGs**, animated examples as 5-frame strips verified
+   frame-different (byte-compared; the lfo/morph strips' first and last
+   frames coincide because their clocks wrap — checked, not assumed), and
+   every static example verified non-blank by pixel statistics. The shots
+   live outside the repository (out/ is for capture directories), and the
+   counters were reviewed as they printed.
+8. **`cargo test -p` green on every touched crate** — `vieww-animation`
+   186 + 16 doctests, `vieww-audio` 42 + 4, `vieww-widget` 558, 11 doctests
+   in its other suites, `vieww-physics` 22 + 1 — and `cargo clippy
+   --all-targets` clean on all of them and on all twenty-four examples
+   (the only warning in range is `vieww-foundation`'s pre-existing
+   `Brush` variant-size note, untouched by this pass).
+9. **The facade re-exports every new type** (`BlendTree1/2`, `Particle`,
+   `ParticleField`, `LoopMode`, `Spectrum`, `Joint`, …), the new widgets
+   are in the prelude, and `cargo test -p vieww --test facade_exports`
+   stays green.
+
+**Not verified, and why:**
+
+- The particle field is *ballistic* — constant velocity, constant gravity —
+  and says so in its module docs: drag, attractors and a per-particle force
+  field are integration, which is a different contract than the one this
+  crate makes. Named, not pretended.
+- `MathText` is a TeX *subset*, stated in its module docs, not TeX:
+  matrices, alignment and macro definition are out of scope, and an
+  unknown command renders as visible text rather than vanishing.
+- N-bone IK (FABRIK, CCD) remains out for the reason the skeletal module
+  docs gave before two-bone IK arrived: iterative solvers have convergence
+  behaviour, and the analytic two-bone case does not. The leg chains of a
+  spider are still a named gap.
+- The blend tree's 2D form is inverse-distance weighting rather than
+  Unity's triangulated freeform — a documented choice, and the same
+  answers at the children either way.
+- `SplitText` loses cross-glyph kerning, exactly as GSAP's own split does,
+  and its module docs say so.
+
+## The most recent effort (2026-09-29): the capability gap-closure pass — six new crates, three animation modules, two charts, a real iframe
+
+Scope was the "Identified Gaps" table in the repository-root document
+(`What are the best UI frameworks.md`), which listed thirteen capabilities the
+comparison frameworks have and vieww did not. Three of those were stale (the
+widget catalogue, i18n, and line/bar charts — present all along on this
+branch); the other ten are now closed. Evidence below is from
+`cargo test -p <crate>` on the pinned rustc 1.98.1 on this machine, run
+crate-by-crate; a single whole-workspace `cargo test --workspace` run was
+started but this container's 10 GB disk cannot hold the full test-binary link
+set, so per-crate results are the record.
+
+**Verified, by things that ran:**
+
+1. **`vieww-animation` grew three modules, 44 tests and 3 doctests** (118
+   lib tests total, all green): `keyframe` (`Keyframes<T>` with
+   eased/held/arrival keyframes, out-of-order insertion, same-time
+   replacement, and the staggered `Timeline` of named tracks — 14 tests);
+   `state_machine` (`StateMachine<T>` with declared states and guarded
+   transitions, cross-fades where the from-state keeps playing, one clock
+   advanced by deltas — 13 tests); `skeletal` (2D bones in a
+   parents-before-children flat walk, `Pose`, `SkeletalClip`, linear-blend
+   `Skin` with lazily normalised weights, pose blending — 17 tests, including
+   the two-bone-arm skinning identity that catches a composition-order
+   regression and the default-scale-identity test that catches a
+   degenerate-matrix regression, both of which failed before their fixes).
+2. **`vieww-audio` (new, 30 tests + 3 doctests)**: WAV read/write — 8- and
+   16-bit PCM, chunk-walking (a `LIST` chunk before `data` parses), 8-bit
+   silence-at-128, truncation and missing-chunk errors named by line and
+   kind; `Waveform`/`Envelope`/`Tone` synthesis with continuous-at-boundary
+   envelopes; `Mixer` with saturating sums, stereo downmix-by-mean, phase-
+   locked stagger test, rate refusal; the `AudioPlayer` service trait with
+   `NoAudio` (honest refusal) and `RecordingPlayer` (wiring double).
+3. **`vieww-video` (new, 15 tests + 4 doctests)**: `VideoSource` trait,
+   `FrameSequence`, deterministic `GeneratedVideo` patterns, `VideoPlayer`
+   with delta-driven clock — pause-holds-position, loop wraps counted
+   (forward and backward), speed 2×, negative speed without looping stops
+   at zero, the end is the last frame exactly, empty sources report `None`.
+4. **`vieww-mesh` (new, 18 tests + 1 doctest)**: OBJ — all four face
+   spellings, negative indices, pentagon fan triangulation, scene records
+   skipped, computed normals for files without `vn`, errors with line
+   numbers, the pool/output vertex split (a quad is 4 vertices, not 8);
+   STL — binary and ASCII, size-checked against the `solid`-header trap.
+5. **`vieww-network` (new, 13 tests + 1 doctest)**: `Url` five-part parser
+   (ports, lowercased hosts, refusal of userinfo/unknown schemes with
+   reasons), `HttpRequest`/`HttpResponse`, `HttpClient` on the foundation
+   `Task`, `MemoryClient` with route tables, computed answers and a request
+   log, registration through `Services`.
+6. **`vieww-physics` (new, 13 tests + 1 doctest)**: gravity integration
+   (semi-implicit, checked at two steps), fixed bodies never move, a ball
+   rests on a floor to within 1.5 px, restitution split by the pair-minimum,
+   equal-mass head-on stop with momentum conserved, barge-and-pebble
+   impulse split, all three narrowphase pairings with the a-to-b normal
+   convention pinned both ways, correction leaves a hair under touching by
+   design.
+7. **`vieww-embed` (new, 4 tests + 1 doctest)**: `WebContent` (URL/HTML) →
+   `PlatformViewSpec` of kind `"webview"` with the parameters a native
+   factory expects; `WebView` widget with a themed placeholder build.
+8. **`vieww-platform-web-dom` turns the embed into a real `<iframe>`**: the
+   DOM walk recognises `vieww_embed::WebView` (the same escape-hatch shape
+   `Styled`/`Tag`/`Canvas` use) and emits an `iframe` VNode with `src` or
+   `srcdoc`, a `title` for assistive technology, lazy loading, and the
+   widget's requested size; the patcher sets the attributes on create and
+   on change. 4 new walk tests (`tree::tests`), 7 lib tests total, green.
+9. **`vieww-widget` grew two charts, 29 chart tests green** (523 lib tests
+   total): `ScatterChart` (points in the plane, own-axis normalisation,
+   inset so extreme points keep their edges, the same axis frame as the
+   line chart) and `PieChart`/`DonutChart` (real vector-arc wedges through
+   the `Sketchbook` path API, chunked text legends, whole-percent shares,
+   screen-reader summaries with the shares, negative slices skipped
+   silently, the donut's centre-label overlay).
+10. **The `vieww` facade re-exports every new module and crate** — checked
+    by `cargo check -p vieww`, `cargo test -p vieww --test facade_exports`
+    (green), and the full set of facade integration tests run one binary
+    at a time against the disk limit: `sensitive_capture` (6),
+    `settings_screen` (15), `extensibility` (10), `editor` (22),
+    `paint_to_pixels` (13), `accessibility_preferences` (0),
+    `facade_exports` (1), and every remaining `crates/vieww/tests/*.rs`
+    suite — **zero failures**.
+11. **`cargo clippy --all-targets` clean** on all ten changed or new crates
+    (`vieww`, `vieww-animation`, the six new crates, `vieww-widget`,
+    `vieww-platform-web-dom`) under the pinned 1.98.1.
+
+**Not verified, and why:**
+
+- The audio *device path*, the video *decode path* and the HTTP *transport*
+  are platform work behind the traits, deliberately: this pass ships the
+  shapes, the clocks, the seams and the test doubles, and the registry
+  entries a platform crate registers. Nothing here claims a speaker, a
+  decoder or a socket.
+- GLTF is a recorded scope decision (`vieww-mesh`'s module docs), not a gap
+  forgotten: the `Mesh` type is the seam a loader targets.
+- Physics beyond 2D translation — rotation, joints, continuous collision —
+  is named as out of scope in `vieww-physics`'s module docs.
+- iOS remains `PENDING.md` §1.4: written, cross-compiled in CI, never run.
+- The whole-workspace single-command test run could not complete on this
+  machine's disk; per-crate results above are the substitute, and
+  `ci/certify/certify.sh` on a bigger machine remains the one command that
+  runs everything.
+
+
 
 Scope was a review of the September 15 archive: GPU planner gaps, a
 certification script that did not run most suites, a standard runner that fed
@@ -928,6 +1418,26 @@ What changed, in order of what it was worth:
   no `roundss`, so `f32::floor` and `f32::ceil` were *calls into
   `compiler-builtins`*. Worth **27.4 ms to 22.7 ms** on `23-editor-glass` by
   itself. See `.cargo/config.toml` for why v2 and not v3.
+
+- **2026-10-12: explicit SSE2 in the three hottest loops, and the layer
+  clear fused into the composite.** The output conversion (four pixels per
+  16-byte store), `composite_flat`'s and `composite_layer`'s normal-blend rows
+  (`native/simd.rs`), and `Target::composite_layer_and_clear`, which zeroes a
+  layer as it reads it so the pool has nothing left to clear. Each is held to
+  the scalar path bit for bit by its own test (every `NaN` counted as one
+  value — see `simd.rs`'s module doc for why that is the only freedom
+  taken), and the whole gallery's 30 outputs are byte-identical before and
+  after. callgrind: glass 1,454 M → 1,172 M, nested 1,573 M → 1,005 M; the
+  gallery 232.7 ms → 164.6 ms in one run each. The flat row keeps two
+  branches on purpose: folding them into selects made glass 10% *worse*
+  (1,301 M → 1,431 M), because every opaque interior pixel then paid for a
+  blend it threw away.
+- **`-C target-cpu=x86-64-v2` restored.** `.cargo/config.toml` was rebuilt
+  from scratch when an archive arrived without it (`375aa13`), and the
+  rebuild did not know about this flag; `floorf`/`ceilf` were back in the
+  profile by name. On this session's machine it was worth ~3%, not the 17%
+  measured originally — the other changes since had removed most of the
+  calls.
 
 ### The two fixtures still over budget, and what that does and does not mean
 

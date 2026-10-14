@@ -18,16 +18,18 @@
 //! against the U-06 guard (8 of 32 here — breadth spent on purpose,
 //! the gauge visible so the next plate knows the budget it spent).
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Filtered, Painting, PaintWith, Text};
+use vieww_widget::{Filtered, PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_in_out, mix, BG_DEEP, FAINT, INK, MUTED, VIOLET,
-    VIOLET_SOFT, AMBER, CYAN_SOFT};
+use crate::film_lib::{
+    alpha, ease_in_out, mix, AMBER, BG_DEEP, CYAN_SOFT, FAINT, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 11.0;
+pub(crate) const SECONDS: f32 = 11.0;
 
 /// The cathedral's centre-line.
 const CX: f32 = 640.0;
@@ -53,8 +55,8 @@ fn pane_sigma(i: usize, t: f32) -> f32 {
     0.6 + 11.0 * (d_i - lantern_depth(t)).abs()
 }
 
-pub fn frame(t: f32) -> WidgetNode {
-    let focus = lantern_depth(t);
+pub(crate) fn frame(t: f32) -> WidgetNode {
+    let _focus = lantern_depth(t);
 
     // The board: the nave's stone, the altar's glow, the arches' geometry.
     let board = Painting::sized(
@@ -76,11 +78,13 @@ pub fn frame(t: f32) -> WidgetNode {
             // The altar glow — far down the nave, behind everything.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.42), 0.34).with_dither().with_stops(&[
-                    (0.0, alpha(AMBER, 0.14)),
-                    (0.55, alpha(VIOLET, 0.05)),
-                    (1.0, alpha(VIOLET, 0.0)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.42), 0.34)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.0, alpha(AMBER, 0.14)),
+                        (0.55, alpha(VIOLET, 0.05)),
+                        (1.0, alpha(VIOLET, 0.0)),
+                    ]),
             );
 
             // The floor — perspective lines toward the altar.
@@ -93,7 +97,12 @@ pub fn frame(t: f32) -> WidgetNode {
                     1.0,
                 );
             }
-            book.line(Offset::new(0.0, 430.0), Offset::new(w, 430.0), alpha(FAINT, 0.22), 1.2);
+            book.line(
+                Offset::new(0.0, 430.0),
+                Offset::new(w, 430.0),
+                alpha(FAINT, 0.22),
+                1.2,
+            );
 
             // The arches' stone edges (crisp, outside the frosted groups) —
             // drawn later, on top, so the frost reads as glass not fog.
@@ -153,9 +162,19 @@ pub fn frame(t: f32) -> WidgetNode {
                 let n = 3 + i;
                 for k in 1..n {
                     let x = pw * k as f32 / n as f32;
-                    g.line(Offset::new(x, pw * 0.5), Offset::new(x, ph), alpha(INK, 0.10), 2.0);
+                    g.line(
+                        Offset::new(x, pw * 0.5),
+                        Offset::new(x, ph),
+                        alpha(INK, 0.10),
+                        2.0,
+                    );
                 }
-                g.line(Offset::new(0.0, ph * 0.55), Offset::new(pw, ph * 0.55), alpha(INK, 0.10), 2.0);
+                g.line(
+                    Offset::new(0.0, ph * 0.55),
+                    Offset::new(pw, ph * 0.55),
+                    alpha(INK, 0.10),
+                    2.0,
+                );
             }),
         );
 
@@ -198,7 +217,11 @@ pub fn frame(t: f32) -> WidgetNode {
                     Offset::new(acx + ar, acy),
                 );
                 p.line_to(Offset::new(ax + aw, 408.0));
-                book.stroke(p, alpha(mix(FAINT, INK, 0.24 - d_i * 0.12), 0.55), 2.2 - d_i);
+                book.stroke(
+                    p,
+                    alpha(mix(FAINT, INK, 0.24 - d_i * 0.12), 0.55),
+                    2.2 - d_i,
+                );
             }
         }),
     );
@@ -221,20 +244,23 @@ pub fn frame(t: f32) -> WidgetNode {
                     2.0,
                 );
             }
-            g.circle(Offset::new(rr, rr), rr * 0.30, alpha(Color::rgb(255, 240, 210), 0.8));
+            g.circle(
+                Offset::new(rr, rr),
+                rr * 0.30,
+                alpha(Color::rgb(255, 240, 210), 0.8),
+            );
             g.ring(Offset::new(rr, rr), rr * 0.62, 2.4, alpha(VIOLET_SOFT, 0.6));
         }),
     );
-    let rose = Stack::new()
-        .push(
-            // Inner ring: a modest blur, nested INSIDE the outer.
-            Positioned::new()
-                .left(rx - rr)
-                .top(ry - rr)
-                .width(rr * 2.0)
-                .height(rr * 2.0)
-                .child(Filtered::new().with_blur(2.2).child(rose_inner)),
-        );
+    let rose = Stack::new().push(
+        // Inner ring: a modest blur, nested INSIDE the outer.
+        Positioned::new()
+            .left(rx - rr)
+            .top(ry - rr)
+            .width(rr * 2.0)
+            .height(rr * 2.0)
+            .child(Filtered::new().with_blur(2.2).child(rose_inner)),
+    );
     stack = stack.push(
         Positioned::new()
             .left(rx - rr)
@@ -258,7 +284,12 @@ pub fn frame(t: f32) -> WidgetNode {
     let chain = Painting::sized(
         Size::new(1280.0, 720.0),
         PaintWith::new(move |g: &mut Sketchbook, _sz: Size| {
-            g.line(Offset::new(lx, 0.0), Offset::new(lx, ly - 100.0 * ls + 12.0), alpha(FAINT, 0.38), 1.1);
+            g.line(
+                Offset::new(lx, 0.0),
+                Offset::new(lx, ly - 100.0 * ls + 12.0),
+                alpha(FAINT, 0.38),
+                1.1,
+            );
         }),
     );
     stack = stack.push(Positioned::fill().child(chain));
@@ -281,12 +312,15 @@ pub fn frame(t: f32) -> WidgetNode {
             body.close();
             g.fill(body, alpha(Color::rgb(20, 20, 28), 0.97));
             // The flame.
-            g.circle(Offset::new(cx, top + bh * 0.5), w * 0.13,
+            g.circle(
+                Offset::new(cx, top + bh * 0.5),
+                w * 0.13,
                 Gradient::radial_fill().with_stops(&[
                     (0.0, Color::rgb(255, 252, 236)),
                     (0.55, alpha(AMBER, 0.95)),
                     (1.0, alpha(AMBER, 0.0)),
-                ]));
+                ]),
+            );
             // The cap + ring.
             g.fill(
                 {
@@ -299,7 +333,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 },
                 alpha(Color::rgb(26, 26, 36), 1.0),
             );
-            g.ring(Offset::new(cx, top - h * 0.04), w * 0.16, 1.4, alpha(FAINT, 0.8));
+            g.ring(
+                Offset::new(cx, top - h * 0.04),
+                w * 0.16,
+                1.4,
+                alpha(FAINT, 0.8),
+            );
         }),
     );
     // The lantern's glow — one Plus group (blurred once, warm).
@@ -308,7 +347,11 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |g: &mut Sketchbook, _sz: Size| {
             g.blended_layer(0.9, 9.0, BlendMode::Plus, None, |gl| {
                 gl.circle(Offset::new(130.0, 130.0), 92.0, alpha(AMBER, 0.16));
-                gl.circle(Offset::new(130.0, 130.0), 52.0, alpha(Color::rgb(255, 220, 160), 0.14));
+                gl.circle(
+                    Offset::new(130.0, 130.0),
+                    52.0,
+                    alpha(Color::rgb(255, 220, 160), 0.14),
+                );
             });
         }),
     );
@@ -336,15 +379,22 @@ pub fn frame(t: f32) -> WidgetNode {
         .sepia()
         .brightness(0.92)
         .tint(VIOLET, 0.18)
-        .child(
-            Painting::sized(
-                Size::new(360.0, 74.0),
-                PaintWith::new(move |g: &mut Sketchbook, _sz: Size| {
-                    g.rrect(Rect::new(0.0, 0.0, 360.0, 74.0), 12.0, alpha(Color::rgb(255, 250, 240), 0.05));
-                    g.stroke_rrect(Rect::new(0.0, 0.0, 360.0, 74.0), 12.0, alpha(INK, 0.25), 1.0);
-                }),
-            ),
-        );
+        .child(Painting::sized(
+            Size::new(360.0, 74.0),
+            PaintWith::new(move |g: &mut Sketchbook, _sz: Size| {
+                g.rrect(
+                    Rect::new(0.0, 0.0, 360.0, 74.0),
+                    12.0,
+                    alpha(Color::rgb(255, 250, 240), 0.05),
+                );
+                g.stroke_rrect(
+                    Rect::new(0.0, 0.0, 360.0, 74.0),
+                    12.0,
+                    alpha(INK, 0.25),
+                    1.0,
+                );
+            }),
+        ));
     stack = stack.push(
         Positioned::new()
             .left(852.0)
@@ -360,9 +410,8 @@ pub fn frame(t: f32) -> WidgetNode {
             .width(340.0)
             .height(30.0)
             .child(
-                Text::new("backdrop σ5 · sepia∘bright∘tint = 1 matrix".to_string()).style(
-                    TextStyle::new(13.0).monospace().color(alpha(INK, 0.85)),
-                ),
+                Text::new("backdrop σ5 · sepia∘bright∘tint = 1 matrix".to_string())
+                    .style(TextStyle::new(13.0).monospace().color(alpha(INK, 0.85))),
             ),
     );
 
@@ -383,7 +432,7 @@ fn receipt_panel(t: f32, rose_sweep: f32) -> WidgetNode {
         "FILTERSTACK · THE COMPOSITOR-DEPTH AXIS".to_string(),
         format!("pane σ [{}] · focus = lantern depth", sigmas.join(" ")),
         format!("rose σ sweep {rose_sweep:.1} (24→0.5) · nesting 2"),
-        format!("filtered groups 8/32 (guard) · matrix chain 3→1"),
+        "filtered groups 8/32 (guard) · matrix chain 3→1".to_string(),
         "5 panes + rose×2 + backdrop · Plus glow ×1".to_string(),
     ];
 
@@ -403,7 +452,10 @@ fn receipt_panel(t: f32, rose_sweep: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -433,12 +485,20 @@ fn receipt_panel(t: f32, rose_sweep: f32) -> WidgetNode {
                 let near = ((i as f32 / (ARCHES - 1) as f32) - focus).abs() < 0.34;
                 book.rect(
                     Rect::new(x - 7.0, 44.0 - bar, x + 7.0, 44.0),
-                    alpha(if near { AMBER } else { VIOLET_SOFT }, if near { 0.7 } else { 0.5 }),
+                    alpha(
+                        if near { AMBER } else { VIOLET_SOFT },
+                        if near { 0.7 } else { 0.5 },
+                    ),
                 );
             }
             // The focus playhead.
             let fx = 14.0 + focus * (400.0 - 28.0);
-            book.line(Offset::new(fx, 8.0), Offset::new(fx, 48.0), alpha(INK, 0.8), 1.2);
+            book.line(
+                Offset::new(fx, 8.0),
+                Offset::new(fx, 48.0),
+                alpha(INK, 0.8),
+                1.2,
+            );
         }),
     );
     stack = stack.push(

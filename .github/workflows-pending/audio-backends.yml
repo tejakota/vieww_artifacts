@@ -1,0 +1,138 @@
+name: Audio backends
+
+# vieww-audio's device backends, each on the platform it targets:
+#
+#   * Linux: real JACK (dummy driver), PulseAudio (null sink) and PipeWire
+#     (WirePlumber + a null sink) servers are started, and the backend tests
+#     are told to *expect* them (VIEWW_EXPECT_BACKENDS) — a backend that
+#     reports "unavailable" there fails the job instead of passing quietly.
+#   * macOS (Core Audio) and Windows (WASAPI): the backends build and their
+#     tests run; on runners without an audio device they must refuse
+#     cleanly, which is what is checked.
+#   * Android (AAudio) and the web (Web Audio): cargo check for the target;
+#     the web shim's logic runs under Node with a simulated Web Audio.
+#   * Every backend also type-checks and lints on Linux via
+#     --cfg vieww_check_all.
+
+on:
+  push:
+    branches:
+      - feature/vieww_code_base
+      - "feature/vieww-gap-closure-*"
+    paths:
+      - "vieww_base/crates/vieww-audio/**"
+      - ".github/workflows/audio-backends.yml"
+  pull_request:
+    paths:
+      - "vieww_base/crates/vieww-audio/**"
+      - ".github/workflows/audio-backends.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audio-backends-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUST_VERSION: "1.98.1"
+
+defaults:
+  run:
+    shell: bash
+    working-directory: vieww_base
+
+jobs:
+  linux-servers:
+    name: Linux (PipeWire, JACK, PulseAudio)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+          rustup default "$RUST_VERSION"
+      - name: Install audio servers
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q jackd2 pulseaudio pipewire pipewire-bin wireplumber dbus-x11
+      - name: Start servers
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg"
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          jackd -n vieww-ci -d dummy -r 48000 -p 256 > "$RUNNER_TEMP/jackd.log" 2>&1 &
+          echo "JACK_DEFAULT_SERVER=vieww-ci" >> "$GITHUB_ENV"
+          pulseaudio --daemonize=yes --exit-idle-time=-1 -n \
+            --load="module-null-sink sink_name=null" --load="module-native-protocol-unix"
+          pipewire > "$RUNNER_TEMP/pipewire.log" 2>&1 &
+          sleep 1
+          dbus-run-session -- bash -c "wireplumber > $RUNNER_TEMP/wireplumber.log 2>&1 & sleep 7200" &
+          sleep 3
+          pw-cli create-node adapter '{ factory.name=support.null-audio-sink node.name=vieww-null media.class=Audio/Sink object.linger=true audio.position=[FL FR] }'
+          sleep 1
+          JACK_DEFAULT_SERVER=vieww-ci jack_lsp
+          pactl info | grep -E "Server Name|Default Sink"
+          pw-cli ls Node | grep node.name
+      - name: Backend tests against the running servers
+        env:
+          VIEWW_EXPECT_BACKENDS: jack,pulse,pipewire
+        run: cargo test -p vieww-audio --lib backend::
+      - name: Whole crate
+        run: |
+          cargo test -p vieww-audio
+          cargo clippy -p vieww-audio --all-targets -- -D warnings
+      - name: Every platform's backend type-checks and lints here
+        env:
+          RUSTFLAGS: --cfg vieww_check_all
+          CARGO_TARGET_DIR: target/check-all
+        run: |
+          cargo clippy -p vieww-audio --lib --tests -- -D warnings
+          cargo test -p vieww-audio --lib backend::
+      - name: Server logs
+        if: failure()
+        run: tail -n 50 "$RUNNER_TEMP"/*.log
+
+  desktop:
+    name: ${{ matrix.os }} (native backend)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+          rustup default "$RUST_VERSION"
+      - name: Tests and clippy
+        run: |
+          cargo test -p vieww-audio --lib backend::
+          cargo clippy -p vieww-audio --all-targets -- -D warnings
+
+  targets:
+    name: Android and web
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain and targets
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+          rustup default "$RUST_VERSION"
+          rustup target add aarch64-linux-android wasm32-unknown-unknown
+      - name: AAudio (Android)
+        run: cargo clippy -p vieww-audio --lib --target aarch64-linux-android -- -D warnings
+      - name: Web Audio (wasm32)
+        run: cargo clippy -p vieww-audio --lib --target wasm32-unknown-unknown -- -D warnings
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Web Audio shim (Node, simulated browser)
+        run: node crates/vieww-audio/web/test.mjs

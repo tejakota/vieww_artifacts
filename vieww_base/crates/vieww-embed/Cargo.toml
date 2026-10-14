@@ -1,0 +1,23 @@
+[package]
+name = "vieww-embed"
+description = "The vieww embed layer: web content in the tree, third-party views by name."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Foundation for the `PlatformViewSpec` the capability seam already speaks;
+# widget for the placeholder a non-web backend draws. Between them: nothing.
+# A web view *implementation* is platform work (an iframe here, a WKWebView
+# on iOS, a WebView on Android), and this crate's job is the part all of
+# them share — what the embed asks for, and what the tree shows where it
+# lands.
+vieww-foundation.workspace = true
+vieww-widget.workspace = true
+
+[lints]
+workspace = true

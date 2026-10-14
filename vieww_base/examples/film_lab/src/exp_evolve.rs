@@ -31,15 +31,16 @@
 //! also shifted the mean. Both are now measured against the same parental
 //! population, and h² lands in (0, 1) where the theory says it must.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, RED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 14.0;
+pub(crate) const SECONDS: f32 = 14.0;
 
 // ── The world ───────────────────────────────────────────────────────────────
 
@@ -171,9 +172,8 @@ fn fly(genome: &Genome) -> Flight {
     // the target and sailed past carries genes worth keeping, and scoring
     // it by where it happened to stop throws them away.
     let d = d_min.min(
-        ((path.last().unwrap().0 - TARGET.0).powi(2)
-            + (path.last().unwrap().1 - TARGET.1).powi(2))
-        .sqrt(),
+        ((path.last().unwrap().0 - TARGET.0).powi(2) + (path.last().unwrap().1 - TARGET.1).powi(2))
+            .sqrt(),
     );
     // Fitness: closeness, squared so the gradient is steep near the target;
     // arrival pays for the time it saved; a crash keeps a sixth of its
@@ -291,8 +291,7 @@ fn evolve_to(g: usize) -> Evolution {
         }
         let xs: Vec<f32> = pool.iter().map(trait_x).collect();
         let x_mean = xs.iter().sum::<f32>() / POP as f32;
-        let s_diff =
-            parents.iter().map(|&i| xs[i]).sum::<f32>() / parents.len() as f32 - x_mean;
+        let s_diff = parents.iter().map(|&i| xs[i]).sum::<f32>() / parents.len() as f32 - x_mean;
 
         // ── crossover + mutation ──
         let mut next: Vec<Genome> = Vec::with_capacity(POP);
@@ -340,9 +339,9 @@ fn evolve_to(g: usize) -> Evolution {
 const AX: f32 = 46.0;
 const AY: f32 = 176.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The film walks the generations; within a generation the flight plays.
-    let pos = (t as f32).clamp(0.0, 0.9999) * GENS as f32;
+    let pos = t.clamp(0.0, 0.9999) * GENS as f32;
     let g = pos.floor() as usize;
     let phase = pos.fract();
     let ev = evolve_to(g);
@@ -375,7 +374,11 @@ pub fn frame(t: f32) -> WidgetNode {
         .iter()
         .map(|h| (corrected(h) - h2_mean * h.s).powi(2))
         .sum();
-    let h2_r2 = if ss_tot > 0.0 { 1.0 - ss_res / ss_tot } else { 0.0 };
+    let h2_r2 = if ss_tot > 0.0 {
+        1.0 - ss_res / ss_tot
+    } else {
+        0.0
+    };
     let x_bar = ev.history.last().map(|h| h.x_mean).unwrap_or(0.0);
     let s_last = ev.history.last().map(|h| h.s).unwrap_or(0.0);
     let r_last = ev.history.last().map(|h| h.r).unwrap_or(0.0);
@@ -393,15 +396,19 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(12, 11, 17)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(12, 11, 17))]),
             );
 
             // ── the arena ──
             book.rrect(
-                Rect::new(AX - 14.0, AY - 14.0, AX + ARENA_W + 14.0, AY + ARENA_H + 14.0),
+                Rect::new(
+                    AX - 14.0,
+                    AY - 14.0,
+                    AX + ARENA_W + 14.0,
+                    AY + ARENA_H + 14.0,
+                ),
                 10.0,
                 alpha(Color::rgb(13, 13, 19), 0.95),
             );
@@ -431,7 +438,11 @@ pub fn frame(t: f32) -> WidgetNode {
                     alpha(MINT, 0.95),
                 );
             });
-            book.circle(Offset::new(AX + START.0, AY + START.1), 4.0, alpha(INK, 0.8));
+            book.circle(
+                Offset::new(AX + START.0, AY + START.1),
+                4.0,
+                alpha(INK, 0.8),
+            );
 
             // ── the swarm ──
             let fmax = flights.iter().map(|f| f.fitness).fold(1e-6_f32, f32::max);
@@ -480,10 +491,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 .fold(1e-6_f32, f32::max)
                 .max(1e-6);
             let gx = |i: usize| cx + i as f32 / (GENS - 1) as f32 * cw;
-            for (series, col, wdt) in [
-                (0usize, AMBER, 2.0_f32),
-                (1usize, CYAN, 1.6),
-            ] {
+            for (series, col, wdt) in [(0usize, AMBER, 2.0_f32), (1usize, CYAN, 1.6)] {
                 let mut p = Path::new();
                 for (i, h) in history.iter().enumerate() {
                     let v = if series == 0 { h.0 } else { h.1 };
@@ -544,7 +552,11 @@ pub fn frame(t: f32) -> WidgetNode {
 
             // the generation cursor, across all three meters
             let cursor = gx(gen_index);
-            for (y0, y1) in [(cy - 10.0, cy + ch + 8.0), (by - 8.0, by + bh + 4.0), (dy - 8.0, dy + dh + 4.0)] {
+            for (y0, y1) in [
+                (cy - 10.0, cy + ch + 8.0),
+                (by - 8.0, by + bh + 4.0),
+                (dy - 8.0, dy + dh + 4.0),
+            ] {
                 book.line(
                     Offset::new(cursor, y0),
                     Offset::new(cursor, y1),
@@ -555,8 +567,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let lines = vec![
-        "EVOLVE · THE EVOLUTION AXIS · DESIGN WITHOUT A DESIGNER".to_string(),
+    let lines = ["EVOLVE · THE EVOLUTION AXIS · DESIGN WITHOUT A DESIGNER".to_string(),
         format!(
             "{POP} rockets × {GENES} thrust genes ({STEPS}-step flights) · fitness-proportionate selection, one-point crossover, mutation p = {MUTATE} · the genome is the ONLY thing that flies"
         ),
@@ -579,8 +590,7 @@ pub fn frame(t: f32) -> WidgetNode {
             "THE PRICE: mean pairwise genome distance {div0:.3} → {div:.3} ({:.0}% of the founding diversity spent) — adaptation is paid for in variance",
             div / div0.max(1e-6) * 100.0
         ),
-        "amber best · cyan mean · green bars the arrivals · violet the diversity — every curve read off the same replay".to_string(),
-    ];
+        "amber best · cyan mean · green bars the arrivals · violet the diversity — every curve read off the same replay".to_string()];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -595,25 +605,41 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
     }
     for (x, y, s) in [
-        (806.0_f32, 178.0_f32, "FITNESS — best (amber) · mean (cyan)".to_string()),
+        (
+            806.0_f32,
+            178.0_f32,
+            "FITNESS — best (amber) · mean (cyan)".to_string(),
+        ),
         (806.0, 444.0, "ARRIVALS PER GENERATION".to_string()),
-        (806.0, 578.0, "GENETIC DIVERSITY — the cost of the answer".to_string()),
+        (
+            806.0,
+            578.0,
+            "GENETIC DIVERSITY — the cost of the answer".to_string(),
+        ),
     ] {
         stack = stack.push(
-            Positioned::new().left(x).top(y).width(430.0).height(14.0).child(
-                Text::new(s).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .letter_spacing(0.9)
-                        .color(alpha(MUTED, 0.85)),
+            Positioned::new()
+                .left(x)
+                .top(y)
+                .width(430.0)
+                .height(14.0)
+                .child(
+                    Text::new(s).style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()

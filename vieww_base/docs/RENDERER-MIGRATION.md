@@ -67,6 +67,29 @@ or graphics shader pipeline of its own, because there is nothing left to
 shade; the CPU rasterizer produces final pixels, and Vulkan's only job is
 getting them on screen.
 
+Two things that path originally got wrong on a HiDPI phone, both since
+fixed in `native.rs` and `vieww-hal`'s `swapchain.rs`:
+
+- **It rasterised at logical resolution and nearest-neighbour-upscaled into
+  the swapchain.** On a ~3x-density phone every glyph was drawn at a third
+  of its linear resolution and then tripled — soft text that read as "low
+  resolution", plus a full-frame buffer walk and allocation per present.
+  The fix is `Scene::scaled`: the finished frame — scene, damage and layer
+  filter σ alike — is lifted into physical pixels before rasterising, the
+  same mechanism the web backend and `film_lab`'s `SCALE_FACTOR` receipts
+  already used, so glyphs are scan-converted at device resolution. The
+  follow-up note that used to live in `native.rs` ("composing a
+  physical-space transform through `NativeRenderer::apply`") is closed by
+  it: scaling the command list is strictly more, not less, than composing
+  a transform at apply time — it scales the stored-absolute geometry a
+  per-region transform cannot reach.
+- **It allocated and freed the staging buffer, its device memory and a
+  command pool every frame.** A phone presents ~10 MB per frame; handing
+  that to the driver's allocator each way showed up as jank no rasterizer
+  could win back. Those resources are persistent in `VulkanSwapchain`
+  now — safe because every present already ends in `vkQueueWaitIdle`,
+  which is the exact guarantee reuse needs.
+
 ## 3. Real architectural differences this migration surfaced
 
 Two backends built years apart do not have the same shape everywhere, and

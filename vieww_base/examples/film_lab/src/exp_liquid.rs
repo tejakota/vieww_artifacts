@@ -19,18 +19,19 @@
 //! cells evaluated, segments emitted, loops closed, the drop's merge — every
 //! number counted by the pass that produced it.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_out_cubic, mix, spring_out, tint, BG_DEEP, CANVAS, FAINT, INK, MUTED,
-    VIOLET, VIOLET_SOFT, CYAN_SOFT,
+    alpha, clamp01, ease_out_cubic, mix, tint, BG_DEEP, CANVAS, CYAN_SOFT, FAINT, MUTED, VIOLET,
+    VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 10.0;
+pub(crate) const SECONDS: f32 = 10.0;
 
 // ── The field ───────────────────────────────────────────────────────────────
 
@@ -58,19 +59,73 @@ const REGION: (f32, f32, f32, f32) = (330.0, 170.0, 990.0, 590.0);
 /// The metaballs, deterministically.
 fn balls() -> Vec<Ball> {
     vec![
-        Ball { cx: 640.0, cy: 380.0, ax: 120.0, ay: 60.0, fx: 0.7, fy: 1.1, ph: 0.0,
-            r2: 92.0_f32.powi(2), breath: 0.10 },
-        Ball { cx: 560.0, cy: 340.0, ax: 90.0, ay: 70.0, fx: 1.3, fy: 0.8, ph: 1.9,
-            r2: 70.0_f32.powi(2), breath: 0.14 },
-        Ball { cx: 700.0, cy: 420.0, ax: 80.0, ay: 55.0, fx: 0.9, fy: 1.4, ph: 3.7,
-            r2: 64.0_f32.powi(2), breath: 0.12 },
-        Ball { cx: 610.0, cy: 430.0, ax: 70.0, ay: 45.0, fx: 1.7, fy: 1.2, ph: 5.1,
-            r2: 55.0_f32.powi(2), breath: 0.16 },
-        Ball { cx: 690.0, cy: 330.0, ax: 60.0, ay: 40.0, fx: 1.1, fy: 1.7, ph: 2.6,
-            r2: 48.0_f32.powi(2), breath: 0.18 },
+        Ball {
+            cx: 640.0,
+            cy: 380.0,
+            ax: 120.0,
+            ay: 60.0,
+            fx: 0.7,
+            fy: 1.1,
+            ph: 0.0,
+            r2: 92.0_f32.powi(2),
+            breath: 0.10,
+        },
+        Ball {
+            cx: 560.0,
+            cy: 340.0,
+            ax: 90.0,
+            ay: 70.0,
+            fx: 1.3,
+            fy: 0.8,
+            ph: 1.9,
+            r2: 70.0_f32.powi(2),
+            breath: 0.14,
+        },
+        Ball {
+            cx: 700.0,
+            cy: 420.0,
+            ax: 80.0,
+            ay: 55.0,
+            fx: 0.9,
+            fy: 1.4,
+            ph: 3.7,
+            r2: 64.0_f32.powi(2),
+            breath: 0.12,
+        },
+        Ball {
+            cx: 610.0,
+            cy: 430.0,
+            ax: 70.0,
+            ay: 45.0,
+            fx: 1.7,
+            fy: 1.2,
+            ph: 5.1,
+            r2: 55.0_f32.powi(2),
+            breath: 0.16,
+        },
+        Ball {
+            cx: 690.0,
+            cy: 330.0,
+            ax: 60.0,
+            ay: 40.0,
+            fx: 1.1,
+            fy: 1.7,
+            ph: 2.6,
+            r2: 48.0_f32.powi(2),
+            breath: 0.18,
+        },
         // The drop — handled separately, falls in at t≈0.15.
-        Ball { cx: 640.0, cy: 140.0, ax: 0.0, ay: 0.0, fx: 0.0, fy: 0.0, ph: 0.0,
-            r2: 40.0_f32.powi(2), breath: 0.0 },
+        Ball {
+            cx: 640.0,
+            cy: 140.0,
+            ax: 0.0,
+            ay: 0.0,
+            fx: 0.0,
+            fy: 0.0,
+            ph: 0.0,
+            r2: 40.0_f32.powi(2),
+            breath: 0.0,
+        },
     ]
 }
 
@@ -88,7 +143,10 @@ fn field(x: f32, y: f32, t: f32) -> f32 {
             (b.cx, drop_y(t))
         } else {
             let s = t * SECONDS + b.ph;
-            (b.cx + b.ax * (s * b.fx).sin(), b.cy + b.ay * (s * b.fy).sin())
+            (
+                b.cx + b.ax * (s * b.fx).sin(),
+                b.cy + b.ay * (s * b.fy).sin(),
+            )
         };
         let breathe = 1.0 + b.breath * (t * SECONDS * 1.3 + b.ph).sin();
         let r2 = b.r2 * breathe * breathe;
@@ -141,8 +199,10 @@ fn contour(t: f32, iso: f32) -> (Vec<Seg>, usize, usize) {
             let v10 = at(i + 1, j) - iso;
             let v11 = at(i + 1, j + 1) - iso;
             let v01 = at(i, j + 1) - iso;
-            let code = (v00 > 0.0) as u8 | ((v10 > 0.0) as u8) << 1
-                | ((v11 > 0.0) as u8) << 2 | ((v01 > 0.0) as u8) << 3;
+            let code = (v00 > 0.0) as u8
+                | ((v10 > 0.0) as u8) << 1
+                | ((v11 > 0.0) as u8) << 2
+                | ((v01 > 0.0) as u8) << 3;
             if code == 0 || code == 15 {
                 continue;
             }
@@ -172,8 +232,7 @@ fn contour(t: f32, iso: f32) -> (Vec<Seg>, usize, usize) {
                 ((px(i), py(j) + k * cell), (1u8, i, j))
             };
 
-            let mut emit = |a: ((f32, f32), (u8, i32, i32)),
-                            b: ((f32, f32), (u8, i32, i32))| {
+            let mut emit = |a: ((f32, f32), (u8, i32, i32)), b: ((f32, f32), (u8, i32, i32))| {
                 segs.push(Seg {
                     a: a.0,
                     b: b.0,
@@ -246,12 +305,7 @@ fn chain(segs: &[Seg]) -> Vec<Vec<(f32, f32)>> {
             // Any unused segment at this key?
             let next = by_key
                 .get(&cursor)
-                .and_then(|cands| {
-                    cands
-                        .iter()
-                        .find(|(i, _)| !used[*i])
-                        .copied()
-                });
+                .and_then(|cands| cands.iter().find(|(i, _)| !used[*i]).copied());
             let Some((ni, _which)) = next else { break };
             used[ni] = true;
             let s = &segs[ni];
@@ -273,7 +327,7 @@ fn chain(segs: &[Seg]) -> Vec<Vec<(f32, f32)>> {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let iso = 1.0;
     let (segs, cells, crossed) = contour(t, iso);
     let loops = chain(&segs);
@@ -283,128 +337,135 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new({
             let loops = loops.clone();
             move |book: &mut Sketchbook, size: Size| {
-            let w = size.width;
-            let h = size.height;
+                let w = size.width;
+                let h = size.height;
 
-            // The ground.
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 8, 12)),
-                    (0.6, BG_DEEP),
-                    (1.0, Color::rgb(10, 10, 15)),
-                ]),
-            );
+                // The ground.
+                book.rect(
+                    Rect::new(0.0, 0.0, w, h),
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, Color::rgb(7, 8, 12)),
+                        (0.6, BG_DEEP),
+                        (1.0, Color::rgb(10, 10, 15)),
+                    ]),
+                );
 
-            // Quiet stars.
-            let mut rng = crate::film_lib::Rng::new(0x714);
-            for _ in 0..56 {
-                let x = rng.f01() * w;
-                let y = rng.f01() * h;
-                book.circle(Offset::new(x, y), 0.4 + rng.f01() * 0.7, alpha(Color::WHITE, 0.035));
-            }
-
-            // The mass's measured bounds — the gradient maps to the geometry.
-            let mut bmin = (f32::MAX, f32::MAX);
-            let mut bmax = (f32::MIN, f32::MIN);
-            for l in &loops {
-                for p in l {
-                    bmin.0 = bmin.0.min(p.0);
-                    bmin.1 = bmin.1.min(p.1);
-                    bmax.0 = bmax.0.max(p.0);
-                    bmax.1 = bmax.1.max(p.1);
+                // Quiet stars.
+                let mut rng = crate::film_lib::Rng::new(0x714);
+                for _ in 0..56 {
+                    let x = rng.f01() * w;
+                    let y = rng.f01() * h;
+                    book.circle(
+                        Offset::new(x, y),
+                        0.4 + rng.f01() * 0.7,
+                        alpha(Color::WHITE, 0.035),
+                    );
                 }
-            }
 
-            // The under-glow — Plus-blended, blurred, beneath the mass.
-            if bmax.1 > f32::MIN {
-                book.blended_layer(1.0, 16.0, BlendMode::Plus, None, |g| {
-                    g.circle(
-                        Offset::new((bmin.0 + bmax.0) * 0.5, bmax.1 + 14.0),
-                        (bmax.0 - bmin.0) * 0.55,
-                        Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(VIOLET, 0.22)),
-                            (1.0, alpha(VIOLET, 0.0)),
-                        ]),
-                    );
-                });
-            }
-
-            // The mass itself: each closed loop a Path, filled.
-            let fade = clamp01(t / 0.08);
-            for l in &loops {
-                let mut p = Path::new();
-                p.move_to(Offset::new(l[0].0, l[0].1));
-                for q in &l[1..] {
-                    p.line_to(Offset::new(q.0, q.1));
+                // The mass's measured bounds — the gradient maps to the geometry.
+                let mut bmin = (f32::MAX, f32::MAX);
+                let mut bmax = (f32::MIN, f32::MIN);
+                for l in &loops {
+                    for p in l {
+                        bmin.0 = bmin.0.min(p.0);
+                        bmin.1 = bmin.1.min(p.1);
+                        bmax.0 = bmax.0.max(p.0);
+                        bmax.1 = bmax.1.max(p.1);
+                    }
                 }
-                p.close();
 
-                let y0 = if bmin.1.is_finite() { bmin.1 } else { REGION.1 };
-                let y1 = if bmax.1.is_finite() { bmax.1 } else { REGION.3 };
+                // The under-glow — Plus-blended, blurred, beneath the mass.
+                if bmax.1 > f32::MIN {
+                    book.blended_layer(1.0, 16.0, BlendMode::Plus, None, |g| {
+                        g.circle(
+                            Offset::new((bmin.0 + bmax.0) * 0.5, bmax.1 + 14.0),
+                            (bmax.0 - bmin.0) * 0.55,
+                            Gradient::radial_fill().with_dither().with_stops(&[
+                                (0.0, alpha(VIOLET, 0.22)),
+                                (1.0, alpha(VIOLET, 0.0)),
+                            ]),
+                        );
+                    });
+                }
 
-                // Glass body — vertical, across the mass's own bounds.
-                book.layer(fade, 0.0, None, |g| {
-                    g.fill(
-                        p.clone(),
-                        Gradient::vertical().with_dither().with_stops(&[
-                            (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.25), 0.42)),
-                            (0.45, alpha(VIOLET, 0.36)),
-                            (1.0, alpha(mix(VIOLET, BG_DEEP, 0.45), 0.46)),
+                // The mass itself: each closed loop a Path, filled.
+                let fade = clamp01(t / 0.08);
+                for l in &loops {
+                    let mut p = Path::new();
+                    p.move_to(Offset::new(l[0].0, l[0].1));
+                    for q in &l[1..] {
+                        p.line_to(Offset::new(q.0, q.1));
+                    }
+                    p.close();
+
+                    let y0 = if bmin.1.is_finite() { bmin.1 } else { REGION.1 };
+                    let y1 = if bmax.1.is_finite() { bmax.1 } else { REGION.3 };
+
+                    // Glass body — vertical, across the mass's own bounds.
+                    book.layer(fade, 0.0, None, |g| {
+                        g.fill(
+                            p.clone(),
+                            Gradient::vertical().with_dither().with_stops(&[
+                                (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.25), 0.42)),
+                                (0.45, alpha(VIOLET, 0.36)),
+                                (1.0, alpha(mix(VIOLET, BG_DEEP, 0.45), 0.46)),
+                            ]),
+                        );
+                    });
+
+                    // The highlight — a rider inside the mass (U-11's window,
+                    // smallest form: the clip IS the mass).
+                    let hx = (bmin.0 + bmax.0) * 0.5 + (t * SECONDS * 0.9).sin() * 60.0;
+                    book.layer(fade, 0.0, Some(p.clone()), |g| {
+                        g.circle(
+                            Offset::new(hx, (y0 + y1) * 0.38),
+                            (bmax.0 - bmin.0).min(240.0) * 0.28,
+                            Gradient::radial_fill().with_dither().with_stops(&[
+                                (0.0, alpha(tint(VIOLET_SOFT, 0.55), 0.28)),
+                                (1.0, alpha(VIOLET, 0.0)),
+                            ]),
+                        );
+                    });
+
+                    // Surface tension — the rim.
+                    book.stroke(p.clone(), alpha(tint(VIOLET_SOFT, 0.35), 0.55 * fade), 1.6);
+                }
+
+                // The drop, before it merges — a bead falling toward the field.
+                let dtau = clamp01((t - 0.04) / 0.10);
+                if dtau > 0.0 && t < 0.30 {
+                    let dy = drop_y(t) - 26.0;
+                    let stretch = 1.0 + 0.35 * (t * 30.0).sin().max(0.0) * (1.0 - t / 0.3);
+                    book.layer(1.0, 0.0, None, |g| {
+                        g.circle(
+                            Offset::new(640.0, dy),
+                            17.0 / stretch,
+                            Gradient::radial_fill().with_stops(&[
+                                (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.5), 0.75)),
+                                (0.7, alpha(VIOLET, 0.55)),
+                                (1.0, alpha(VIOLET, 0.0)),
+                            ]),
+                        );
+                        g.circle(
+                            Offset::new(640.0, dy - 14.0 * stretch),
+                            17.0 * stretch,
+                            alpha(VIOLET_SOFT, 0.18),
+                        );
+                    });
+                }
+
+                // The vignette.
+                book.rect(
+                    Rect::new(0.0, 0.0, w, h),
+                    Gradient::radial(Offset::new(0.5, 0.5), 0.9)
+                        .with_dither()
+                        .with_stops(&[
+                            (0.55, alpha(Color::BLACK, 0.0)),
+                            (1.0, alpha(Color::BLACK, 0.40)),
                         ]),
-                    );
-                });
-
-                // The highlight — a rider inside the mass (U-11's window,
-                // smallest form: the clip IS the mass).
-                let hx = (bmin.0 + bmax.0) * 0.5 + (t * SECONDS * 0.9).sin() * 60.0;
-                book.layer(fade, 0.0, Some(p.clone()), |g| {
-                    g.circle(
-                        Offset::new(hx, (y0 + y1) * 0.38),
-                        (bmax.0 - bmin.0).min(240.0) * 0.28,
-                        Gradient::radial_fill().with_dither().with_stops(&[
-                            (0.0, alpha(tint(VIOLET_SOFT, 0.55), 0.28)),
-                            (1.0, alpha(VIOLET, 0.0)),
-                        ]),
-                    );
-                });
-
-                // Surface tension — the rim.
-                book.stroke(p.clone(), alpha(tint(VIOLET_SOFT, 0.35), 0.55 * fade), 1.6);
+                );
             }
-
-            // The drop, before it merges — a bead falling toward the field.
-            let dtau = clamp01((t - 0.04) / 0.10);
-            if dtau > 0.0 && t < 0.30 {
-                let dy = drop_y(t) - 26.0;
-                let stretch = 1.0 + 0.35 * (t * 30.0).sin().max(0.0) * (1.0 - t / 0.3);
-                book.layer(1.0, 0.0, None, |g| {
-                    g.circle(
-                        Offset::new(640.0, dy),
-                        17.0 / stretch,
-                        Gradient::radial_fill().with_stops(&[
-                            (0.0, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.5), 0.75)),
-                            (0.7, alpha(VIOLET, 0.55)),
-                            (1.0, alpha(VIOLET, 0.0)),
-                        ]),
-                    );
-                    g.circle(
-                        Offset::new(640.0, dy - 14.0 * stretch),
-                        17.0 * stretch,
-                        alpha(VIOLET_SOFT, 0.18),
-                    );
-                });
-            }
-
-            // The vignette.
-            book.rect(
-                Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.9).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.40)),
-                ]),
-            );
-        }}),
+        }),
     );
 
     Stack::new()
@@ -430,10 +491,23 @@ fn receipt_panel(
 
     let lines = [
         "U-13 · LIQUID · MARCHING SQUARES (U-20 chained)".to_string(),
-        format!("cells {} · crossed {} · segments {}", cells, crossed, segs.len()),
-        format!("loops {} · chain pts {} · all closed", loops.len(), chain_pts),
-        format!("balls 6 + drop · iso 1.00 · cell 9px"),
-        format!("drop {} at y {:.0}", if t < 0.30 { "falling" } else { "merged" }, drop_y(t)),
+        format!(
+            "cells {} · crossed {} · segments {}",
+            cells,
+            crossed,
+            segs.len()
+        ),
+        format!(
+            "loops {} · chain pts {} · all closed",
+            loops.len(),
+            chain_pts
+        ),
+        "balls 6 + drop · iso 1.00 · cell 9px".to_string(),
+        format!(
+            "drop {} at y {:.0}",
+            if t < 0.30 { "falling" } else { "merged" },
+            drop_y(t)
+        ),
     ];
 
     let mut stack = Stack::new().push(
@@ -459,11 +533,8 @@ fn receipt_panel(
                 .width(P_W)
                 .height(15.0)
                 .child(
-                    Text::new(line.clone()).style(
-                        TextStyle::new(11.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.9)),
-                    ),
+                    Text::new(line.clone())
+                        .style(TextStyle::new(11.0).monospace().color(alpha(MUTED, 0.9))),
                 ),
         );
     }

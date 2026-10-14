@@ -33,12 +33,22 @@
 //!   no shared-instance equivalent to what `vieww_paint::gpu`'s `GpuContext`
 //!   used to give the vello path. One `vieww-hal` device per window is
 //!   correct, just not the cheapest shape — a follow-up, not a defect.
-//! - **No GPU-accelerated rasterisation.** `vieww-hal`'s Vulkan device does
-//!   the *presentation* (upload + copy + present), not the drawing — the
-//!   scene is still rasterised entirely on the CPU. Spec §14.1's M2 onward
-//!   (tessellation and compositing on the GPU, underneath
-//!   `vieww_paint::native::NativeRenderer`) is future work this module does
-//!   not attempt.
+//! - **GPU rasterisation goes through host memory.**
+//!   [`present_planned`](NativeRenderer::present_planned) is the GPU path:
+//!   scenes the [`Planner`](vieww_gpu::Planner) can express are executed by
+//!   `vieww-hal`'s `SceneRenderer` — one batched draw per frame — and their
+//!   pixels are presented through this same swapchain, with a CPU fallback
+//!   for plans with gaps. But the GPU's frame is read back into host memory
+//!   and uploaded like the CPU's, because `SceneRenderer` renders into its
+//!   own framebuffer, not into the swapchain image directly. Rendering
+//!   straight onto the presentable image is the follow-up that makes the
+//!   GPU path a *fast* windowed path rather than a correct one.
+//!
+//! What *is* resolved: HiDPI rasterisation. A frame whose logical size does
+//! not match the swapchain's extent is lifted into physical pixels through
+//! [`Scene::scaled`](vieww_paint::Scene::scaled) — scan-converting glyph
+//! outlines and hairlines at the device's own resolution — rather than
+//! rasterised small and magnified. See [`NativeRenderer::present_damaged`].
 //!
 //! This module *is* `crate::app`'s one and only renderer — vello,
 //! `vello_cpu`, `vello_hybrid` and `wgpu` are gone from this crate and from
@@ -60,10 +70,13 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use vieww_foundation::Color;
-use vieww_hal::vulkan::{VulkanDevice, VulkanError, VulkanSwapchain};
+use vieww_foundation::{Color, Rect};
+use vieww_gpu::Planner as GpuPlanner;
+use vieww_hal::vulkan::{SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain};
 use vieww_paint::native::{NativeRenderer as CpuRenderer, RendererError, SceneReport};
 use vieww_paint::{Damage, Scene};
+
+use crate::scale::{Physical, Scale};
 
 /// Why a windowed present through [`NativeRenderer`] could not happen.
 #[derive(Debug)]
@@ -180,12 +193,32 @@ fn shared_device_for(
     Ok((device, swapchain))
 }
 
+/// The GPU rasterizer half of a windowed renderer: the planner that turns a
+/// scene into a batched plan, and the renderer that executes it on the same
+/// [`VulkanDevice`] the swapchain presents through.
+///
+/// Created lazily by [`NativeRenderer::present_planned`], once, on the first
+/// frame that asks for the GPU path — a window that never does never pays
+/// for the pipelines. A creation failure is remembered by
+/// `gpu_unavailable` on the renderer rather than retried per frame: a
+/// pipeline that could not build once will not build better forty times a
+/// second, and retrying would turn every present into a failed build.
+struct GpuRaster {
+    planner: GpuPlanner,
+    renderer: SceneRenderer,
+}
+
 /// Presents [`vieww_paint::Scene`]s rasterised by `vieww-paint`'s `native`
 /// backend, through `vieww-hal`'s Vulkan swapchain. See the module docs for
 /// what this does and does not cover yet.
 pub struct NativeRenderer {
     device: Rc<VulkanDevice>,
     cpu: CpuRenderer,
+    /// The GPU rasterizer, built on first use — see [`GpuRaster`].
+    gpu: Option<GpuRaster>,
+    /// Set when [`GpuRaster`]'s creation failed, so the attempt is made once
+    /// and never again.
+    gpu_unavailable: bool,
 }
 
 impl fmt::Debug for NativeRenderer {
@@ -193,6 +226,43 @@ impl fmt::Debug for NativeRenderer {
         f.debug_struct("NativeRenderer")
             .field("cached_fonts", &self.cpu.cached_fonts())
             .finish_non_exhaustive()
+    }
+}
+
+/// The outcome of a [`NativeRenderer::present_planned`] frame.
+#[derive(Debug, Clone, Copy)]
+pub struct PlannedFrame {
+    /// The CPU rasterizer's report. Zeroed on GPU frames — see
+    /// [`present_planned`](NativeRenderer::present_planned) for why zeroes
+    /// are the honest value rather than a partial one.
+    pub report: SceneReport,
+    /// Whether the GPU rasterizer drew this frame. `false` means the planner
+    /// had gaps (or the pipelines could not be built), and the CPU drew it.
+    pub drawn_on_gpu: bool,
+    /// Whether the GPU frame went straight into the swapchain image, with no
+    /// readback through host memory. `false` for a CPU frame and for a GPU
+    /// frame that took the readback path (a translucent window, or a driver
+    /// without the blit support `VulkanDevice::can_blit_scene_frames` asks
+    /// for).
+    pub presented_directly: bool,
+}
+
+/// The scene to rasterise at the swapchain's extent: the frame itself when
+/// logical and physical sizes agree, the frame lifted into physical pixels
+/// through [`Scene::scaled`] when they do not — the same decision, for the
+/// same reason, as [`present_damaged`](NativeRenderer::present_damaged)
+/// makes (glyph outlines and hairlines scan-converted at the device's own
+/// resolution, never magnified).
+fn frame_at_device_resolution<'a>(
+    scene: &'a Scene,
+    logical_size: (u32, u32),
+    physical: (u32, u32),
+    scale: Scale,
+) -> std::borrow::Cow<'a, Scene> {
+    if logical_size == physical {
+        std::borrow::Cow::Borrowed(scene)
+    } else {
+        std::borrow::Cow::Owned(scene.scaled(scale.factor()))
     }
 }
 
@@ -207,6 +277,15 @@ impl NativeRenderer {
     /// # Panics
     ///
     /// If `width` or `height` is zero.
+    /// The name of the GPU this renderer presents through, as the driver
+    /// reports it — for the startup trace and for logs, where "which of a
+    /// hybrid laptop's GPUs did it pick" is the first question.
+    #[must_use]
+    pub fn adapter_name(&self) -> String {
+        use vieww_hal::Device as _;
+        self.device.info().name
+    }
+
     pub fn for_window(
         window: &(impl raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle),
         width: u32,
@@ -248,7 +327,15 @@ impl NativeRenderer {
         cpu: CpuRenderer,
     ) -> Result<(Self, NativeSurface), NativeError> {
         let (device, swapchain) = shared_device_for(window, width, height)?;
-        Ok((Self { device, cpu }, NativeSurface { swapchain }))
+        Ok((
+            Self {
+                device,
+                cpu,
+                gpu: None,
+                gpu_unavailable: false,
+            },
+            NativeSurface { swapchain },
+        ))
     }
 
     /// Cached glyph outlines — forwarded from the CPU rasterizer.
@@ -263,19 +350,16 @@ impl NativeRenderer {
     ///
     /// `scene`'s commands are recorded in *logical* pixels, against
     /// `logical_size`; `surface` is measured in *physical* ones (see
-    /// [`crate::Scale`]). At 1:1 — every display without HiDPI, and the case
-    /// this sandbox's `Xvfb` runs in — the two match and this rasterises
-    /// straight into the swapchain's own resolution. Off 1:1, this
-    /// rasterises at `logical_size` and nearest-neighbour-upscales into the
-    /// swapchain's physical resolution, rather than rasterising natively at
-    /// physical resolution the way `vieww_paint::gpu::GpuRenderer::present_with`
-    /// did by composing a `root` transform per damage region. That is a
-    /// real, deliberate simplification — softer edges on a HiDPI display
-    /// than native-resolution rasterisation would give — recorded here
-    /// rather than silently accepted: composing a physical-space transform
-    /// through `vieww_paint::native::NativeRenderer::apply` the way the
-    /// vello backend did is the follow-up, tracked in
-    /// `docs/RENDERER-MIGRATION.md`.
+    /// [`crate::Scale`]). At 1:1 the two match and this rasterises straight
+    /// into the swapchain's own resolution. Off 1:1 the frame — scene and
+    /// damage alike — is lifted into physical pixels through
+    /// [`Scene::scaled`](vieww_paint::Scene::scaled) before rasterising, so
+    /// glyph outlines and hairlines are scan-converted at device resolution
+    /// and never magnified. That is the same door `film_lab`'s `SCALE_FACTOR`
+    /// receipts render 4K through, and it replaced the old behaviour —
+    /// rasterise at `logical_size`, then nearest-neighbour-upscale — whose
+    /// cost was not only the soft edges a HiDPI display made visible but a
+    /// full-frame buffer walk and allocation per present.
     ///
     /// # Errors
     ///
@@ -288,8 +372,9 @@ impl NativeRenderer {
         scene: &Scene,
         base: Color,
         logical_size: (u32, u32),
+        scale: Scale,
     ) -> Result<SceneReport, NativeError> {
-        self.present_damaged(surface, scene, None, base, logical_size)
+        self.present_damaged(surface, scene, None, base, logical_size, scale)
     }
 
     /// [`present`](Self::present), repainting only what `damage` says changed.
@@ -327,41 +412,92 @@ impl NativeRenderer {
         damage: Option<&Damage>,
         base: Color,
         logical_size: (u32, u32),
+        scale: Scale,
     ) -> Result<SceneReport, NativeError> {
         let (physical_width, physical_height) = surface.swapchain.extent();
         let (logical_width, logical_height) = logical_size;
+
+        // **Rasterise at the device's own resolution whenever the two differ.**
+        //
+        // The old path rasterised at `logical_size` and nearest-neighbour-
+        // upscaled into the swapchain: on a phone — where the ratio is ~3, not
+        // the 2 a laptop reports — every glyph was drawn at a third of its
+        // linear resolution and then tripled, which reads on screen as text
+        // nobody sharpened. `Scene::scaled` lifts the whole frame into
+        // physical pixels *after* compositing, where there are no repaint
+        // boundaries left to lose the ratio, so glyph outlines and hairlines
+        // are scan-converted at device resolution rather than magnified —
+        // the film lab's `SCALE_FACTOR` receipts render 4K through exactly
+        // this door.
+        //
+        // The comparison is against the sizes rather than `scale.is_one()`
+        // alone: a scale that rounds back to the same extent (a 1.25 window
+        // dragged onto a 1x monitor mid-transition, say) has nothing to
+        // scale and a borrowed buffer to present, and the truncated
+        // `logical_size` a caller derived from `physical / scale` can differ
+        // from the swapchain by a rounding pixel — that case scales, and the
+        // renderer clips the sub-pixel remainder.
+        let report = if (logical_width, logical_height) == (physical_width, physical_height) {
+            match damage {
+                Some(damage) => self.cpu.render_retained_in_place(
+                    scene,
+                    damage,
+                    logical_width,
+                    logical_height,
+                    base,
+                )?,
+                None => self
+                    .cpu
+                    .render_in_place(scene, logical_width, logical_height, base)?,
+            }
+        } else {
+            let factor = scale.factor();
+            let scaled = scene.scaled(factor);
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a swapchain extent is a small number of pixels"
+            )]
+            let surface_width = physical_width as f32;
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a swapchain extent is a small number of pixels"
+            )]
+            let surface_height = physical_height as f32;
+            let physical_surface = Rect::new(0.0, 0.0, surface_width, surface_height);
+            match damage {
+                // The damage is logical, against a logical surface — `Physical`
+                // rebuilds it against the physical one, scaling each region
+                // (and its antialiasing bleed) exactly as it scales the ink.
+                Some(logical) => {
+                    let physical = Physical::new(scene, logical, scale, physical_surface);
+                    self.cpu.render_retained_in_place(
+                        &scaled,
+                        physical.damage(),
+                        physical_width,
+                        physical_height,
+                        base,
+                    )?
+                }
+                None => self
+                    .cpu
+                    .render_in_place(&scaled, physical_width, physical_height, base)?,
+            }
+        };
+
         // In place: the renderer's retained output is read directly, rather
         // than copied into a fresh `Pixels` every frame — that copy was a
         // full-frame allocation per present, which the Vieww standard's
-        // steady-state clause counts.
-        let report = match damage {
-            Some(damage) => self.cpu.render_retained_in_place(
-                scene,
-                damage,
-                logical_width,
-                logical_height,
-                base,
-            )?,
-            None => self
-                .cpu
-                .render_in_place(scene, logical_width, logical_height, base)?,
-        };
+        // steady-state clause counts. The rasterisation above already ran at
+        // the swapchain's own extent, so there is nothing left to resample.
         let frame = self.cpu.last_frame();
-
-        let bytes = if (logical_width, logical_height) == (physical_width, physical_height) {
-            std::borrow::Cow::Borrowed(frame)
-        } else {
-            std::borrow::Cow::Owned(nearest_upscale(
-                frame,
-                logical_width,
-                logical_height,
-                physical_width,
-                physical_height,
-            ))
-        };
+        debug_assert_eq!(
+            frame.len(),
+            physical_width as usize * physical_height as usize * 4,
+            "the renderer rasterised at the swapchain's extent"
+        );
 
         self.device
-            .present_pixels(&mut surface.swapchain, &bytes)
+            .present_pixels(&mut surface.swapchain, frame)
             .map_err(|error| NativeError::Present(error.to_string()))?;
         Ok(report)
     }
@@ -389,37 +525,177 @@ impl NativeRenderer {
             .recreate(&self.device, width, height)
             .map_err(|error| NativeError::Present(error.to_string()))
     }
+
+    /// Rasterise on the GPU when the scene plans complete, on the CPU when it
+    /// does not, and present either way through the same swapchain.
+    ///
+    /// This is the join the worklist called §2.6 and closed on 2026-10-09
+    /// (evidence in `TRACKER.md`): `SceneRenderer` could
+    /// execute a whole frame as one draw call, and `VulkanSwapchain` could
+    /// put pixels on a screen, and nothing connected them — the swapchain
+    /// was presenting the CPU rasterizer's buffer, whatever the GPU could
+    /// do. Now a frame is planned first ([`GpuPlanner`]), drawn with
+    /// [`SceneRenderer`] when the plan is complete, and its pixels take the
+    /// same `present_pixels` path the CPU's always took. A frame the planner
+    /// cannot express falls back to a full CPU repaint — the plan's gaps and
+    /// the fallback are the same agreement [`vieww_gpu::ScenePlan::is_complete`] and
+    /// `present_damaged` have always had.
+    ///
+    /// The GPU path is a whole-frame rasterizer: it has no damage regions to
+    /// honour and no retained content to reuse, so every frame it takes is a
+    /// full repaint. The read-back into host memory it does per frame is a
+    /// parity-harness cost a real present would not pay — see
+    /// `SceneRenderer::render_planned`'s own docs; the follow-up is rendering
+    /// straight into the swapchain image, which needs the scene pipeline to
+    /// target `VK_KHR_swapchain` images rather than its own framebuffer.
+    ///
+    /// Which half drew the frame is returned rather than implied, because
+    /// the caller is the one reporting frame stats and pacing, and "the GPU
+    /// is doing it" changes what those numbers mean.
+    ///
+    /// # Errors
+    ///
+    /// [`NativeError::Device`] if the GPU rasterizer's pipelines could not
+    /// be built (once — see `GpuRaster`); after that, as
+    /// [`present_damaged`](Self::present_damaged).
+    pub fn present_planned(
+        &mut self,
+        surface: &mut NativeSurface,
+        scene: &Scene,
+        base: Color,
+        logical_size: (u32, u32),
+        scale: Scale,
+    ) -> Result<PlannedFrame, NativeError> {
+        let (physical_width, physical_height) = surface.swapchain.extent();
+
+        // The GPU rasterizer, once. Creation failure is remembered and this
+        // becomes a CPU renderer permanently — see `gpu_unavailable`.
+        if self.gpu.is_none() && !self.gpu_unavailable {
+            match SceneRenderer::new(&self.device) {
+                Ok(renderer) => {
+                    self.gpu = Some(GpuRaster {
+                        planner: GpuPlanner::new(),
+                        renderer,
+                    });
+                }
+                Err(error) => {
+                    self.gpu_unavailable = true;
+                    return Err(NativeError::Device(error.to_string()));
+                }
+            }
+        }
+
+        if let Some(GpuRaster { planner, renderer }) = self.gpu.as_mut() {
+            let scene = frame_at_device_resolution(
+                scene,
+                logical_size,
+                (physical_width, physical_height),
+                scale,
+            );
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a swapchain extent is a small number of pixels"
+            )]
+            let width = physical_width as f32;
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a swapchain extent is a small number of pixels"
+            )]
+            let height = physical_height as f32;
+            let plan = planner.plan(scene.as_ref(), width, height);
+            if plan.is_complete() {
+                // Straight into the swapchain image when the frame is opaque
+                // and the driver can blit the scene's RGBA16F into the
+                // swapchain's format: the whole frame stays on the GPU. A
+                // translucent window keeps the readback path, because the
+                // scene targets are premultiplied and a blit cannot divide.
+                if base.a == 255 && self.device.can_blit_scene_frames(&surface.swapchain) {
+                    let acquired = self
+                        .device
+                        .acquire_image(&mut surface.swapchain, (physical_width, physical_height))
+                        .map_err(|error| NativeError::Present(error.to_string()))?;
+                    let Some(image) = acquired else {
+                        // The swapchain was rebuilt to a new size under this
+                        // frame; the matching resize repaints.
+                        return Ok(PlannedFrame {
+                            report: SceneReport::default(),
+                            drawn_on_gpu: true,
+                            presented_directly: true,
+                        });
+                    };
+                    if let Err(error) = renderer.render_planned_to(planner, &plan, base, &image) {
+                        let _ = self.device.abandon_acquired(&mut surface.swapchain, image);
+                        return Err(NativeError::Render(error.to_string()));
+                    }
+                    self.device
+                        .present_acquired(&mut surface.swapchain, image)
+                        .map_err(|error| NativeError::Present(error.to_string()))?;
+                    return Ok(PlannedFrame {
+                        report: SceneReport::default(),
+                        drawn_on_gpu: true,
+                        presented_directly: true,
+                    });
+                }
+                let pixels = renderer
+                    .render_planned(planner, &plan, physical_width, physical_height, base)
+                    .map_err(|error| NativeError::Render(error.to_string()))?;
+                self.device
+                    .present_pixels(&mut surface.swapchain, &pixels)
+                    .map_err(|error| NativeError::Present(error.to_string()))?;
+                // The CPU report counts the work the CPU did; a GPU frame
+                // did none of it, and the plan's own counts — vertices, draw
+                // calls — are not those fields. Zeroes say what happened;
+                // `drawn_on_gpu` says why.
+                return Ok(PlannedFrame {
+                    report: SceneReport::default(),
+                    drawn_on_gpu: true,
+                    presented_directly: false,
+                });
+            }
+        }
+
+        // No GPU rasterizer, or the plan had gaps the backend cannot draw.
+        // Either way the CPU rasterizes, in full — `present_damaged` with no
+        // damage is the whole-frame path a first frame and a resize want,
+        // and a fallback frame is exactly a first frame.
+        let report = self.present_damaged(surface, scene, None, base, logical_size, scale)?;
+        Ok(PlannedFrame {
+            report,
+            drawn_on_gpu: false,
+            presented_directly: false,
+        })
+    }
 }
 
-/// Nearest-neighbour resize from a `src_width x src_height` straight-alpha
-/// RGBA8 buffer to `dst_width x dst_height` — [`NativeRenderer::present`]'s
-/// fallback for a HiDPI surface, where the
-/// CPU rasteriser's output (logical resolution) does not already match the
-/// swapchain's physical one. Nearest rather than bilinear: this only runs
-/// off a scale factor the CPU rasteriser did not itself apply, and a cheap,
-/// branch-free sampler is the honest choice until native-resolution
-/// rasterisation (composing the physical transform through
-/// `vieww_paint::native::NativeRenderer::apply`) replaces this path
-/// entirely — see [`NativeRenderer::present`]'s own doc.
-fn nearest_upscale(
-    src: &[u8],
-    src_width: u32,
-    src_height: u32,
-    dst_width: u32,
-    dst_height: u32,
-) -> Vec<u8> {
-    debug_assert_eq!(src.len(), (src_width as usize) * (src_height as usize) * 4);
-    let mut out = vec![0u8; (dst_width as usize) * (dst_height as usize) * 4];
-    for dy in 0..dst_height {
-        let sy = (u64::from(dy) * u64::from(src_height) / u64::from(dst_height))
-            .min(u64::from(src_height.saturating_sub(1))) as u32;
-        for dx in 0..dst_width {
-            let sx = (u64::from(dx) * u64::from(src_width) / u64::from(dst_width))
-                .min(u64::from(src_width.saturating_sub(1))) as u32;
-            let src_i = ((sy * src_width + sx) * 4) as usize;
-            let dst_i = ((dy * dst_width + dx) * 4) as usize;
-            out[dst_i..dst_i + 4].copy_from_slice(&src[src_i..src_i + 4]);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A scene is borrowed unchanged when logical and physical extents agree,
+    /// and lifted through `Scene::scaled` when they do not — the same
+    /// decision `present_damaged` makes, so the two paths agree about what a
+    /// HiDPI frame is. Planning a scene with an open subpath at either
+    /// resolution makes no difference to the assertion; what is checked is
+    /// *which* frame reaches the planner.
+    #[test]
+    fn a_frame_is_borrowed_at_1x_and_lifted_off_1x() {
+        let mut scene = Scene::default();
+        scene.push_command(vieww_paint::Command::FillRect {
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+            paint: vieww_paint::Paint::solid(Color::BLACK),
+            transform: vieww_foundation::Transform::IDENTITY,
+            clip: vieww_paint::Clip::NONE,
+        });
+
+        // 1:1 — the scene itself, not a copy of it.
+        let frame = frame_at_device_resolution(&scene, (100, 80), (100, 80), Scale::new(1.0));
+        assert!(matches!(frame, std::borrow::Cow::Borrowed(_)));
+
+        // 2:1 — lifted, and the lift actually scaled: the fill's rect doubles.
+        let frame = frame_at_device_resolution(&scene, (100, 80), (200, 160), Scale::new(2.0));
+        match frame {
+            std::borrow::Cow::Owned(_) => {}
+            std::borrow::Cow::Borrowed(_) => panic!("an off-1x frame must be lifted, not borrowed"),
         }
     }
-    out
 }

@@ -1,0 +1,14 @@
+[package]
+name = "feature-donut-chart"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+vieww-foundation.workspace = true
+feature-harness = { path = "../harness" }
+vieww-widget.workspace = true
+
+[lints]
+workspace = true

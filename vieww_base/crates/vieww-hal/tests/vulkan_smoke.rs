@@ -61,7 +61,7 @@ fn vulkan_render_clear_matches_the_requested_colour_exactly() {
         // — the naga-translated shader writes it as a straight uniform, so
         // the only expected drift is the premultiply/round trip through
         // 8-bit UNORM.
-        for chunk in pixels.chunks_exact(4) {
+        for chunk in pixels.as_chunks::<4>().0 {
             let close = |a: u8, b: u8| (i32::from(a) - i32::from(b)).abs() <= 1;
             assert!(
                 close(chunk[0], color.r)

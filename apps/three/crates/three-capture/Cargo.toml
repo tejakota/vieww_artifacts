@@ -5,7 +5,66 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-description = "Device-independent camera, depth and IMU capture interfaces for 3"
+description = "Device-independent camera and depth capture for 3, with camera2 and AVFoundation backends"
 
 [dependencies]
 three-core.workspace = true
+
+# The camera2 shim's class loader and JNI. Pinned to the version the
+# workspace's platform crate resolves for this target — a second `jni` in
+# the binary would give us a `JavaVM` type that looks identical and is not.
+# `vieww-platform-winit` supplies the `AndroidApp` handle the backend
+# bootstraps from; on every other target this crate stays UI-framework-free.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+vieww-platform-winit.workspace = true
+
+# The AVFoundation backend: objc2 rather than a hand-written objc_msgSend,
+# for the reason vieww's own iOS code gives: how a struct comes back from
+# one is ABI-dependent, and getting it wrong compiles cleanly and reads
+# garbage. The versions must be exactly the ones objc2-av-foundation 0.3
+# resolves for this target (objc2 0.6, objc2-foundation 0.3): a second copy
+# of either would be a second, incompatible `NSString`/`Retained` type and
+# every protocol signature in this file would stop matching.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-core-foundation = "0.3"
+objc2-foundation = { version = "0.3", features = [
+    "NSString",
+    "NSArray",
+    "NSDictionary",
+    "NSValue",
+    "NSObject",
+    "NSError",
+] }
+objc2-av-foundation = { version = "0.3", features = [
+    "AVCaptureDevice",
+    "AVCaptureSession",
+    "AVCaptureInput",
+    "AVCaptureOutputBase",
+    "AVCaptureVideoDataOutput",
+    "AVCaptureDepthDataOutput",
+    "AVCaptureSessionPreset",
+    "AVDepthData",
+    "AVMediaFormat",
+    "objc2-core-media",
+    "dispatch2",
+] }
+objc2-core-video = { version = "0.3", features = [
+    "CVBase",
+    "CVBuffer",
+    "CVImageBuffer",
+    "CVReturn",
+    "CVPixelBuffer",
+] }
+objc2-core-media = { version = "0.3", features = [
+    "CMSampleBuffer",
+    "CMTime",
+    "objc2-core-video",
+] }
+dispatch2 = { version = "0.3", features = ["alloc"] }
+
+[build-dependencies]
+# Compiles and dexes the camera2 Java shim at build time — the vavlt
+# pattern: no Gradle, no AGP, no Kotlin.
+android-build = "0.1"

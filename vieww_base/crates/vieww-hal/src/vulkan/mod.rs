@@ -22,7 +22,9 @@ use super::{AdapterInfo, Device as HalDevice};
 /// `vieww_gpu::ScenePlan` per frame, rather than building and tearing down a
 /// pipeline per shape the way [`VulkanDevice::render_mesh_to_pixels`] does.
 /// See that module's own doc for the difference and why it matters at 16.7ms.
+pub mod compute;
 pub mod scene;
+pub use compute::{ComputeBuffer, ComputeKernel};
 pub use scene::SceneRenderer;
 
 /// [`VulkanDevice::for_window`] and [`swapchain::VulkanSwapchain`] — real
@@ -30,7 +32,7 @@ pub use scene::SceneRenderer;
 #[cfg(feature = "vulkan-swapchain")]
 pub mod swapchain;
 #[cfg(feature = "vulkan-swapchain")]
-pub use swapchain::VulkanSwapchain;
+pub use swapchain::{AcquiredImage, VulkanSwapchain};
 
 #[derive(Debug)]
 pub enum VulkanError {
@@ -103,13 +105,25 @@ impl super::sealed::Sealed for VulkanDevice {}
 ///
 /// [`VulkanError::Loading`] when no candidate loads.
 pub fn load_entry() -> Result<ash::Entry, VulkanError> {
+    // **The iOS simulator's GPU has no Metal argument buffers.** It is a
+    // paravirtualised device (`AppleParavirtDevice`), and MoltenVK uses
+    // argument buffers by default: the first simulator run with MoltenVK
+    // bundled loaded it, listed its extensions, and then died on
+    // `-[AppleParavirtDevice newArgumentEncoderWithLayout:]: unrecognized
+    // selector`. MoltenVK reads `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` when
+    // it initialises, so it has to be set before the library is loaded — here.
+    // Only on the simulator, and never over a value someone set on purpose.
+    #[cfg(all(target_os = "ios", target_abi = "sim"))]
+    if std::env::var_os("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS").is_none() {
+        std::env::set_var("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0");
+    }
     match unsafe { ash::Entry::load() } {
         Ok(entry) => Ok(entry),
         Err(error) => load_entry_fallback(error.to_string()),
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 #[allow(
     clippy::unnecessary_wraps,
     reason = "same signature as the macOS fallback"
@@ -118,7 +132,14 @@ fn load_entry_fallback(first: String) -> Result<ash::Entry, VulkanError> {
     Err(VulkanError::Loading(first))
 }
 
-#[cfg(target_os = "macos")]
+/// On iOS there is no system loader and no `$VULKAN_SDK`: MoltenVK has to
+/// travel inside the app. An iOS bundle is flat — the executable sits at the
+/// `.app` root and `Frameworks/` beside it, not at `../Frameworks` as on macOS —
+/// so those paths are tried as well. `ci/mobile/ios-app.sh` puts it there when
+/// `VIEWW_MOLTENVK` names a copy. Without one, the error below now reaches the
+/// screen's owner instead of a silent black window (see `vieww-platform-winit`'s
+/// `fail_to_open`).
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn load_entry_fallback(first: String) -> Result<ash::Entry, VulkanError> {
     use std::path::{Path, PathBuf};
 
@@ -131,6 +152,11 @@ fn load_entry_fallback(first: String) -> Result<ash::Entry, VulkanError> {
         candidates.push(frameworks.join("libvulkan.1.dylib"));
         candidates.push(frameworks.join("libMoltenVK.dylib"));
         candidates.push(dir.join("libvulkan.1.dylib"));
+        // iOS: `<App>.app/Frameworks/…`.
+        let flat = dir.join("Frameworks");
+        candidates.push(flat.join("libMoltenVK.dylib"));
+        candidates.push(flat.join("MoltenVK.framework/MoltenVK"));
+        candidates.push(flat.join("libvulkan.1.dylib"));
     }
     if let Some(sdk) = std::env::var_os("VULKAN_SDK") {
         let sdk = PathBuf::from(sdk);
@@ -265,13 +291,27 @@ impl VulkanDevice {
             .ok()
             .map(|s| s.to_lowercase());
 
+        // `VIEWW_TRACE_FRAMES` — the platform layer's startup/frame trace —
+        // also names each device as it is asked whether it can serve: on a
+        // hybrid laptop, a GPU that is powered down can take its time
+        // answering a surface query, and a stalled startup should say which
+        // device it was waiting on. Read per call; this runs once per window.
+        let trace = std::env::var_os("VIEWW_TRACE_FRAMES").is_some();
         let mut best: Option<(u32, vk::PhysicalDevice, u32)> = None;
         for pd in physical_devices {
-            let Some(family) = accept(pd) else { continue };
             let props = unsafe { instance.get_physical_device_properties(pd) };
             let name = unsafe { CStr::from_ptr(props.device_name.as_ptr()) }
                 .to_string_lossy()
                 .to_lowercase();
+            if trace {
+                eprintln!("vulkan: asking {name} ({:?})", props.device_type);
+            }
+            let Some(family) = accept(pd) else {
+                if trace {
+                    eprintln!("vulkan: {name} cannot serve this request");
+                }
+                continue;
+            };
             if let Some(wanted) = wanted.as_deref() {
                 if name.contains(wanted) {
                     return Some((pd, family));
@@ -1261,6 +1301,694 @@ impl VulkanDevice {
         Ok(pixels)
     }
 
+    /// Render the **unlit 3D forward pass** — `vieww-3d`'s `GpuRenderer`'s
+    /// first increment — and read the result back as straight-alpha RGBA8.
+    ///
+    /// What this draws: `positions` (world space, metres, whatever the caller's
+    /// `vp` expects) as an indexed triangle list, each vertex carrying its
+    /// item's flat linear `colors` entry, transformed by the 16-float
+    /// column-major `vp` (vieww-3d's `Mat4` flattens to exactly this layout),
+    /// depth-tested against a depth attachment, and written sRGB-encoded with
+    /// alpha 1 — the byte-for-byte contract of `vieww_3d::render::Renderer`
+    /// for an all-`Basic`-materials scene, which is the parity oracle. No
+    /// lights, no shadows, no textures, no blending: that is what "unlit
+    /// forward pass, first increment" means; the shader is
+    /// [`vieww_shaders::library::UNLIT3D_WGSL`].
+    ///
+    /// `background` is the scene's clear colour in **linear** light — encoded
+    /// here with the same sRGB curve the fragment shader uses, so empty
+    /// regions match the CPU's `to_image` background bytes.
+    ///
+    /// Like [`render_mesh_to_pixels`](Self::render_mesh_to_pixels), this takes
+    /// plain slices so `vieww-hal` gains no new dependency (the 3D types stay
+    /// in `vieww-3d`, the pipeline here), and like it this brings the whole
+    /// pipeline up per call and tears it down after — a one-shot shape whose
+    /// cached-pipeline successor is the same step `SceneRenderer` was for the
+    /// 2D path. Error returns before the manual teardown leak that call's
+    /// objects, exactly as in `render_mesh_to_pixels`; the success path (the
+    /// only path a healthy device ever takes) frees everything.
+    ///
+    /// One deliberate choice to name: **back-face culling is off.** The CPU
+    /// rasterizer culls per-triangle by screen-space winding; the GPU pass
+    /// lets the depth buffer arbitrate instead, which produces identical
+    /// pixels for closed opaque geometry — the only kind the unlit pass's
+    /// contract covers today — and defers the winding-convention question to
+    /// the increment that adds lighting (where `double_sided` starts to
+    /// matter).
+    ///
+    /// # Errors
+    ///
+    /// Any Vulkan call failing — as with the other render methods, most
+    /// commonly at instance/device creation on a machine with no ICD, which
+    /// fails before this method is reachable.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::too_many_arguments,
+        clippy::too_many_lines
+    )]
+    pub fn render_unlit3d_to_pixels(
+        &self,
+        width: u32,
+        height: u32,
+        positions: &[[f32; 3]],
+        colors: &[[f32; 3]],
+        indices: &[u32],
+        vp: [f32; 16],
+        background: [f32; 3],
+    ) -> Result<Vec<u8>, VulkanError> {
+        assert_eq!(
+            positions.len(),
+            colors.len(),
+            "one colour per vertex — the caller packs them together"
+        );
+        // Interleaved: position at offset 0, colour at 12, stride 24.
+        let mut vertices = Vec::with_capacity(positions.len() * 6);
+        for (p, c) in positions.iter().zip(colors) {
+            vertices.extend_from_slice(p);
+            vertices.extend_from_slice(c);
+        }
+        self.render_3d_pass(
+            width,
+            height,
+            &Pass3d {
+                wgsl: vieww_shaders::library::UNLIT3D_WGSL,
+                vertices: bytemuck_cast_f32(&vertices),
+                stride: 24,
+                attributes: &[
+                    (0, vk::Format::R32G32B32_SFLOAT, 0),
+                    (1, vk::Format::R32G32B32_SFLOAT, 12),
+                ],
+                indices,
+                uniforms: bytemuck_cast_f32(&vp),
+                storage: None,
+            },
+            background,
+        )
+    }
+
+    /// Render the **lit 3D forward pass** — `vieww-3d`'s `GpuRenderer`'s second
+    /// increment — and read it back as straight-alpha RGBA8.
+    ///
+    /// `vertices` is a de-indexed triangle list (three per triangle, in
+    /// order), each vertex sixteen floats: world position, world normal,
+    /// linear albedo, linear emissive, each `xyz` then one float — the first
+    /// of those four is 1 for Lambert and 0 for Basic, the second 1 if the
+    /// material receives shadows, the last two unused.
+    /// `uniforms` is the shader's `Uniforms` block, std140, as
+    /// [`vieww_shaders::library::LIT3D_WGSL`] documents it; `shadow_depth` the
+    /// shadow map's depths (empty when there is none). `background` is
+    /// linear, as in [`Self::render_unlit3d_to_pixels`], and so are the
+    /// lifetime and error notes there.
+    ///
+    /// # Errors
+    ///
+    /// Any Vulkan call failing.
+    pub fn render_lit3d_to_pixels(
+        &self,
+        width: u32,
+        height: u32,
+        vertices: &[[f32; 16]],
+        uniforms: &[f32],
+        shadow_depth: &[f32],
+        background: [f32; 3],
+    ) -> Result<Vec<u8>, VulkanError> {
+        let flat: &[f32] = vertices.as_flattened();
+        let indices: Vec<u32> = (0..u32::try_from(vertices.len()).unwrap_or(u32::MAX)).collect();
+        self.render_3d_pass(
+            width,
+            height,
+            &Pass3d {
+                wgsl: vieww_shaders::library::LIT3D_WGSL,
+                vertices: bytemuck_cast_f32(flat),
+                stride: 64,
+                attributes: &[
+                    (0, vk::Format::R32G32B32_SFLOAT, 0),
+                    (1, vk::Format::R32G32B32_SFLOAT, 16),
+                    (2, vk::Format::R32G32B32_SFLOAT, 32),
+                    (3, vk::Format::R32G32B32_SFLOAT, 48),
+                    // The flags ride in the first two pads.
+                    (4, vk::Format::R32_SFLOAT, 12),
+                    (5, vk::Format::R32_SFLOAT, 28),
+                ],
+                indices: &indices,
+                uniforms: bytemuck_cast_f32(uniforms),
+                storage: Some(bytemuck_cast_f32(shadow_depth)),
+            },
+            background,
+        )
+    }
+
+    /// The one-shot depth-tested 3D pass both [`Self::render_unlit3d_to_pixels`]
+    /// and [`Self::render_lit3d_to_pixels`] draw through: an interleaved vertex
+    /// buffer described by `pass.attributes`, an index list, one uniform
+    /// buffer (binding 0, both stages) and an optional fragment-stage storage
+    /// buffer (binding 1), into a cleared colour + depth target that is read
+    /// back as RGBA8. Extracted from the unlit pass unchanged in everything
+    /// but the buffer plumbing, so the two passes cannot drift apart.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::too_many_lines
+    )]
+    fn render_3d_pass(
+        &self,
+        width: u32,
+        height: u32,
+        pass: &Pass3d<'_>,
+        background: [f32; 3],
+    ) -> Result<Vec<u8>, VulkanError> {
+        let indices = pass.indices;
+        let vertex_count = pass.vertices.len() / pass.stride as usize;
+        // The CPU oracle's background: sRGB-encode the linear clear colour
+        // (the fragment shader does the same for covered pixels), then the
+        // UNORM clear rounds it to the byte `to_image` produces. Written here
+        // so both the early-out below and the clear value agree on it.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+        fn srgb(v: f32) -> f32 {
+            let v = v.clamp(0.0, 1.0);
+            if v <= 0.003_130_8 {
+                v * 12.92
+            } else {
+                1.055 * v.powf(1.0 / 2.4) - 0.055
+            }
+        }
+        let bg = [
+            srgb(background[0]),
+            srgb(background[1]),
+            srgb(background[2]),
+        ];
+        let bg_byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+
+        if vertex_count == 0 || indices.is_empty() {
+            // Nothing to draw: the frame is the encoded background, exactly
+            // what the CPU renderer returns for an empty scene.
+            let bg_px = [bg_byte(bg[0]), bg_byte(bg[1]), bg_byte(bg[2]), 255];
+            #[allow(clippy::cast_possible_truncation)]
+            return Ok(bg_px.repeat(width as usize * height as usize));
+        }
+        assert_eq!(
+            pass.vertices.len() % pass.stride as usize,
+            0,
+            "the vertex bytes are a whole number of vertices"
+        );
+        assert!(
+            indices.iter().all(|i| (*i as usize) < vertex_count),
+            "indices out of range"
+        );
+
+        let device = &self.device;
+        let format = vk::Format::R8G8B8A8_UNORM;
+
+        // --- colour attachment image (as in render_mesh_to_pixels) -----------
+        let image_info = vk::ImageCreateInfo::default()
+            .image_type(vk::ImageType::TYPE_2D)
+            .format(format)
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .tiling(vk::ImageTiling::OPTIMAL)
+            .usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .initial_layout(vk::ImageLayout::UNDEFINED);
+        let image = unsafe { device.create_image(&image_info, None) }?;
+        let mem_req = unsafe { device.get_image_memory_requirements(image) };
+        let mem_type = self.find_memory_type(
+            mem_req.memory_type_bits,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )?;
+        let image_mem_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(mem_req.size)
+            .memory_type_index(mem_type);
+        let image_memory = unsafe { device.allocate_memory(&image_mem_info, None) }?;
+        unsafe { device.bind_image_memory(image, image_memory, 0) }?;
+
+        let view_info = vk::ImageViewCreateInfo::default()
+            .image(image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(format)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        let image_view = unsafe { device.create_image_view(&view_info, None) }?;
+
+        // --- depth attachment --------------------------------------------------
+        // D32_SFLOAT where the device supports it as a depth attachment
+        // (virtually everywhere), else the spec-mandatory D16_UNORM.
+        let d32 = unsafe {
+            self.instance
+                .get_physical_device_format_properties(self.physical_device, vk::Format::D32_SFLOAT)
+        };
+        let depth_format = if d32
+            .optimal_tiling_features
+            .contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
+        {
+            vk::Format::D32_SFLOAT
+        } else {
+            vk::Format::D16_UNORM
+        };
+        let depth_info = vk::ImageCreateInfo::default()
+            .image_type(vk::ImageType::TYPE_2D)
+            .format(depth_format)
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .tiling(vk::ImageTiling::OPTIMAL)
+            .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .initial_layout(vk::ImageLayout::UNDEFINED);
+        let depth_image = unsafe { device.create_image(&depth_info, None) }?;
+        let depth_req = unsafe { device.get_image_memory_requirements(depth_image) };
+        let depth_mem_type = self.find_memory_type(
+            depth_req.memory_type_bits,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )?;
+        let depth_mem_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(depth_req.size)
+            .memory_type_index(depth_mem_type);
+        let depth_memory = unsafe { device.allocate_memory(&depth_mem_info, None) }?;
+        unsafe { device.bind_image_memory(depth_image, depth_memory, 0) }?;
+        let depth_view_info = vk::ImageViewCreateInfo::default()
+            .image(depth_image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(depth_format)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::DEPTH,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        let depth_view = unsafe { device.create_image_view(&depth_view_info, None) }?;
+
+        // --- render pass + framebuffer -----------------------------------------
+        let color_attachment = vk::AttachmentDescription::default()
+            .format(format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL);
+        let depth_attachment = vk::AttachmentDescription::default()
+            .format(depth_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        let attachments = [color_attachment, depth_attachment];
+        let color_ref = [vk::AttachmentReference {
+            attachment: 0,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        }];
+        let depth_ref = vk::AttachmentReference {
+            attachment: 1,
+            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+        let subpass = vk::SubpassDescription::default()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_ref)
+            .depth_stencil_attachment(&depth_ref);
+        let subpasses = [subpass];
+        let render_pass_info = vk::RenderPassCreateInfo::default()
+            .attachments(&attachments)
+            .subpasses(&subpasses);
+        let render_pass = unsafe { device.create_render_pass(&render_pass_info, None) }?;
+
+        let fb_attachments = [image_view, depth_view];
+        let fb_info = vk::FramebufferCreateInfo::default()
+            .render_pass(render_pass)
+            .attachments(&fb_attachments)
+            .width(width)
+            .height(height)
+            .layers(1);
+        let framebuffer = unsafe { device.create_framebuffer(&fb_info, None) }?;
+
+        // --- vertex (one interleaved binding), index, uniform, storage -------
+        let (vertex_buffer, vertex_memory) =
+            self.create_host_visible_buffer(vk::BufferUsageFlags::VERTEX_BUFFER, pass.vertices)?;
+        let (index_buffer, index_memory) = self.create_host_visible_buffer(
+            vk::BufferUsageFlags::INDEX_BUFFER,
+            bytemuck_cast_u32(indices),
+        )?;
+        let (ubo, ubo_memory) =
+            self.create_host_visible_buffer(vk::BufferUsageFlags::UNIFORM_BUFFER, pass.uniforms)?;
+        // Bytes, not elements — a float count here hid three quarters of the
+        // view-projection matrix from the shader once (observed on lavapipe
+        // as every column but the first reading as zero).
+        let ubo_size = pass.uniforms.len() as u64;
+        // A storage buffer may not be empty; an absent or empty one is a
+        // single zero word the shader never reads.
+        let storage_bytes: &[u8] = match pass.storage {
+            Some(bytes) if !bytes.is_empty() => bytes,
+            _ => &[0; 4],
+        };
+        let (ssbo, ssbo_memory) =
+            self.create_host_visible_buffer(vk::BufferUsageFlags::STORAGE_BUFFER, storage_bytes)?;
+        let ssbo_size = storage_bytes.len() as u64;
+        let with_storage = pass.storage.is_some();
+
+        // --- descriptor set -----------------------------------------------------
+        let mut bindings = vec![vk::DescriptorSetLayoutBinding::default()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)];
+        if with_storage {
+            bindings.push(
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            );
+        }
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let set_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None) }?;
+
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 1,
+            },
+        ];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&pool_sizes)
+            .max_sets(1);
+        let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }?;
+        let set_layouts = [set_layout];
+        let set_alloc = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&set_layouts);
+        let descriptor_set = unsafe { device.allocate_descriptor_sets(&set_alloc) }?[0];
+
+        let buffer_info = vk::DescriptorBufferInfo {
+            buffer: ubo,
+            offset: 0,
+            range: ubo_size,
+        };
+        let buffer_infos = [buffer_info];
+        let storage_infos = [vk::DescriptorBufferInfo {
+            buffer: ssbo,
+            offset: 0,
+            range: ssbo_size,
+        }];
+        let mut writes = vec![vk::WriteDescriptorSet::default()
+            .dst_set(descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .buffer_info(&buffer_infos)];
+        if with_storage {
+            writes.push(
+                vk::WriteDescriptorSet::default()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&storage_infos),
+            );
+        }
+        unsafe { device.update_descriptor_sets(&writes, &[]) };
+
+        // --- shaders + pipeline --------------------------------------------------
+        let vs_spirv = translate_wgsl_to_spirv(pass.wgsl, "vs_main", naga::ShaderStage::Vertex)?;
+        let fs_spirv = translate_wgsl_to_spirv(pass.wgsl, "fs_main", naga::ShaderStage::Fragment)?;
+        let vs_module = unsafe {
+            device
+                .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&vs_spirv), None)
+        }?;
+        let fs_module = unsafe {
+            device
+                .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&fs_spirv), None)
+        }?;
+
+        let entry_point = CString::new("vs_main").unwrap();
+        let fs_entry_point = CString::new("fs_main").unwrap();
+        let stages = [
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vs_module)
+                .name(&entry_point),
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(fs_module)
+                .name(&fs_entry_point),
+        ];
+
+        // One interleaved binding, laid out by the caller's attribute list.
+        let binding_desc = [vk::VertexInputBindingDescription {
+            binding: 0,
+            stride: pass.stride,
+            input_rate: vk::VertexInputRate::VERTEX,
+        }];
+        let attr_desc: Vec<vk::VertexInputAttributeDescription> = pass
+            .attributes
+            .iter()
+            .map(
+                |&(location, format, offset)| vk::VertexInputAttributeDescription {
+                    location,
+                    binding: 0,
+                    format,
+                    offset,
+                },
+            )
+            .collect();
+        let vertex_input = vk::PipelineVertexInputStateCreateInfo::default()
+            .vertex_binding_descriptions(&binding_desc)
+            .vertex_attribute_descriptions(&attr_desc);
+        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: width as f32,
+            height: height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        };
+        let scissor = vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: vk::Extent2D { width, height },
+        };
+        let viewports = [viewport];
+        let scissors = [scissor];
+        let viewport_state = vk::PipelineViewportStateCreateInfo::default()
+            .viewports(&viewports)
+            .scissors(&scissors);
+        // Culling deliberately off — see the method doc.
+        let raster = vk::PipelineRasterizationStateCreateInfo::default()
+            .polygon_mode(vk::PolygonMode::FILL)
+            .cull_mode(vk::CullModeFlags::NONE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            .line_width(1.0);
+        let multisample = vk::PipelineMultisampleStateCreateInfo::default()
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+        // The depth state is the point of the 3D path: LESS keeps the nearest
+        // surface, the same contest the CPU's per-sample depth test runs.
+        let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
+            .depth_test_enable(true)
+            .depth_write_enable(true)
+            .depth_compare_op(vk::CompareOp::LESS);
+        // No blending: the unlit pass is opaque-only, straight colour in.
+        let blend_attachment = vk::PipelineColorBlendAttachmentState::default()
+            .blend_enable(false)
+            .color_write_mask(vk::ColorComponentFlags::RGBA);
+        let blend_attachments = [blend_attachment];
+        let color_blend =
+            vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend_attachments);
+
+        let pipeline_layout_info =
+            vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
+        let pipeline_layout =
+            unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }?;
+
+        let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
+            .stages(&stages)
+            .vertex_input_state(&vertex_input)
+            .input_assembly_state(&input_assembly)
+            .viewport_state(&viewport_state)
+            .rasterization_state(&raster)
+            .multisample_state(&multisample)
+            .depth_stencil_state(&depth_stencil)
+            .color_blend_state(&color_blend)
+            .layout(pipeline_layout)
+            .render_pass(render_pass)
+            .subpass(0);
+        let pipelines = unsafe {
+            device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+        }
+        .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
+        let pipeline = pipelines[0];
+
+        // --- readback buffer ------------------------------------------------------
+        let readback_size = (width as u64) * (height as u64) * 4;
+        let readback_info = vk::BufferCreateInfo::default()
+            .size(readback_size)
+            .usage(vk::BufferUsageFlags::TRANSFER_DST)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+        let readback_buffer = unsafe { device.create_buffer(&readback_info, None) }?;
+        let readback_req = unsafe { device.get_buffer_memory_requirements(readback_buffer) };
+        let readback_mem_type = self.find_memory_type(
+            readback_req.memory_type_bits,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )?;
+        let readback_alloc = vk::MemoryAllocateInfo::default()
+            .allocation_size(readback_req.size)
+            .memory_type_index(readback_mem_type);
+        let readback_memory = unsafe { device.allocate_memory(&readback_alloc, None) }?;
+        unsafe { device.bind_buffer_memory(readback_buffer, readback_memory, 0) }?;
+
+        // --- command buffer ---------------------------------------------------------
+        let pool_info = vk::CommandPoolCreateInfo::default().queue_family_index(self.queue_family);
+        let command_pool = unsafe { device.create_command_pool(&pool_info, None) }?;
+        let cmd_alloc = vk::CommandBufferAllocateInfo::default()
+            .command_pool(command_pool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+        let command_buffer = unsafe { device.allocate_command_buffers(&cmd_alloc) }?[0];
+
+        let begin_info = vk::CommandBufferBeginInfo::default()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+        unsafe { device.begin_command_buffer(command_buffer, &begin_info) }?;
+
+        let clear_values = [
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [bg[0], bg[1], bg[2], 1.0],
+                },
+            },
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            },
+        ];
+        let rp_begin = vk::RenderPassBeginInfo::default()
+            .render_pass(render_pass)
+            .framebuffer(framebuffer)
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: vk::Extent2D { width, height },
+            })
+            .clear_values(&clear_values);
+        unsafe {
+            device.cmd_begin_render_pass(command_buffer, &rp_begin, vk::SubpassContents::INLINE);
+            device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline);
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                pipeline_layout,
+                0,
+                &[descriptor_set],
+                &[],
+            );
+            device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer], &[0]);
+            device.cmd_bind_index_buffer(command_buffer, index_buffer, 0, vk::IndexType::UINT32);
+            device.cmd_draw_indexed(command_buffer, indices.len() as u32, 1, 0, 0, 0);
+            device.cmd_end_render_pass(command_buffer);
+
+            let copy_region = vk::BufferImageCopy {
+                buffer_offset: 0,
+                buffer_row_length: 0,
+                buffer_image_height: 0,
+                image_subresource: vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                },
+                image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+                image_extent: vk::Extent3D {
+                    width,
+                    height,
+                    depth: 1,
+                },
+            };
+            device.cmd_copy_image_to_buffer(
+                command_buffer,
+                image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                readback_buffer,
+                &[copy_region],
+            );
+        }
+        unsafe { device.end_command_buffer(command_buffer) }?;
+
+        let fence_info = vk::FenceCreateInfo::default();
+        let fence = unsafe { device.create_fence(&fence_info, None) }?;
+        let command_buffers = [command_buffer];
+        let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
+        unsafe {
+            device.queue_submit(self.queue, &[submit_info], fence)?;
+            device.wait_for_fences(&[fence], true, u64::MAX)?;
+        }
+
+        let mut pixels = vec![0u8; readback_size as usize];
+        unsafe {
+            let ptr = device.map_memory(
+                readback_memory,
+                0,
+                readback_size,
+                vk::MemoryMapFlags::empty(),
+            )? as *const u8;
+            std::ptr::copy_nonoverlapping(ptr, pixels.as_mut_ptr(), readback_size as usize);
+            device.unmap_memory(readback_memory);
+        }
+
+        unsafe {
+            device.destroy_fence(fence, None);
+            device.destroy_command_pool(command_pool, None);
+            device.destroy_pipeline(pipeline, None);
+            device.destroy_pipeline_layout(pipeline_layout, None);
+            device.destroy_shader_module(vs_module, None);
+            device.destroy_shader_module(fs_module, None);
+            device.destroy_descriptor_pool(descriptor_pool, None);
+            device.destroy_descriptor_set_layout(set_layout, None);
+            device.free_memory(readback_memory, None);
+            device.destroy_buffer(readback_buffer, None);
+            device.free_memory(ubo_memory, None);
+            device.destroy_buffer(ubo, None);
+            device.free_memory(index_memory, None);
+            device.destroy_buffer(index_buffer, None);
+            device.free_memory(ssbo_memory, None);
+            device.destroy_buffer(ssbo, None);
+            device.free_memory(vertex_memory, None);
+            device.destroy_buffer(vertex_buffer, None);
+            device.destroy_framebuffer(framebuffer, None);
+            device.destroy_render_pass(render_pass, None);
+            device.destroy_image_view(depth_view, None);
+            device.free_memory(depth_memory, None);
+            device.destroy_image(depth_image, None);
+            device.destroy_image_view(image_view, None);
+            device.free_memory(image_memory, None);
+            device.destroy_image(image, None);
+        }
+
+        Ok(pixels)
+    }
+
     /// Allocate a host-visible, host-coherent buffer of `usage`, upload
     /// `data` into it immediately, and return the buffer and its backing
     /// memory (owned by the caller — freed alongside everything else at the
@@ -1318,6 +2046,21 @@ fn bytemuck_cast_positions(positions: &[[f32; 2]]) -> &[u8] {
             std::mem::size_of_val(positions),
         )
     }
+}
+
+/// What [`VulkanDevice::render_3d_pass`] draws.
+struct Pass3d<'a> {
+    wgsl: &'a str,
+    /// Interleaved vertex bytes, `stride` per vertex.
+    vertices: &'a [u8],
+    stride: u32,
+    /// `(location, format, byte offset)` per vertex attribute.
+    attributes: &'a [(u32, vk::Format, u32)],
+    indices: &'a [u32],
+    /// Binding 0, visible to both stages.
+    uniforms: &'a [u8],
+    /// Binding 1, fragment stage, when present.
+    storage: Option<&'a [u8]>,
 }
 
 fn bytemuck_cast_u32(values: &[u32]) -> &[u8] {

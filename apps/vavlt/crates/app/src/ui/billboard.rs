@@ -89,7 +89,7 @@ pub fn brightest(photos: &[Photo]) -> Option<usize> {
             // per photograph, over a hundred photographs, on a phone.
             let mut sum = 0u64;
             let mut count = 0u64;
-            for chunk in thumb.pixels.chunks_exact(4).step_by(64) {
+            for chunk in thumb.pixels.as_chunks::<4>().0.iter().step_by(64) {
                 // Rec. 601 luma, integer. Good enough to rank by, and it avoids
                 // a float per pixel.
                 sum += u64::from(chunk[0]) * 299
@@ -97,7 +97,7 @@ pub fn brightest(photos: &[Photo]) -> Option<usize> {
                     + u64::from(chunk[2]) * 114;
                 count += 1;
             }
-            (index, if count == 0 { 0 } else { sum / count })
+            (index, sum.checked_div(count).unwrap_or(0))
         })
         .max_by_key(|(_, luma)| *luma)
         .map(|(index, _)| index)
@@ -151,7 +151,7 @@ pub fn billboard(
             .fit(BoxFit::Cover)
             .into(),
         ),
-        None => layers.push(ghost_tiles(theme).into()),
+        None => layers.push(ghost_tiles(theme)),
     }
 
     // The wash: the tier's colour bled up from the bottom. The one purely

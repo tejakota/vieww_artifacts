@@ -19,16 +19,16 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, ease_out_expo, mix, CANVAS, CYAN, CYAN_SOFT, Rng, VIOLET,
+    alpha, clamp01, ease_in_out, ease_out_expo, mix, Rng, CANVAS, CYAN, CYAN_SOFT, VIOLET,
     VIOLET_DEEP, VIOLET_SOFT,
 };
 use crate::three_d::{displace_y, draw_mesh, grid_mesh, Camera, MeshStyle, Vec3};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 7.0;
+pub(crate) const SECONDS: f32 = 7.0;
 
 /// The landing point in world space — the ocean's origin.
 const ORIGIN: Vec3 = Vec3::new(0.0, 0.0, 0.0);
@@ -40,13 +40,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // The deep: a vertical ramp, colder than exp_mesh — water, not void.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(10, 14, 28)),
-                (0.45, Color::rgb(6, 8, 18)),
-                (1.0, Color::rgb(3, 4, 9)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(10, 14, 28)),
+            (0.45, Color::rgb(6, 8, 18)),
+            (1.0, Color::rgb(3, 4, 9)),
+        ]),
     );
 
     // Phase gates.
@@ -84,10 +82,8 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
                 inner.circle(
                     pt,
                     r * 3.4,
-                    Gradient::radial_fill().with_stops(&[
-                        (0.0, alpha(VIOLET_SOFT, 0.60)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_stops(&[(0.0, alpha(VIOLET_SOFT, 0.60)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
             book.circle(pt, r, Color::WHITE);
@@ -183,7 +179,12 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
 
         let phase = t * SECONDS;
         // 44x44 cells over the same span — the smoothness the audit asked for.
-        let mut ocean = grid_mesh(44, 44, 0.425, mix(VIOLET_DEEP, Color::rgb(12, 18, 44), 0.45));
+        let mut ocean = grid_mesh(
+            44,
+            44,
+            0.425,
+            mix(VIOLET_DEEP, Color::rgb(12, 18, 44), 0.45),
+        );
         for v in &mut ocean.verts {
             v.x -= 9.35;
             v.z -= 9.35;
@@ -359,15 +360,13 @@ fn ellipse_path(path: &mut Path, center: Offset, rx: f32, ry: f32) {
 }
 
 /// The frame: all paint.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     Stack::new()
-        .push(Positioned::fill().child(
-            Painting::sized(
-                CANVAS,
-                PaintWith::new(move |book: &mut Sketchbook, size: Size| {
-                    scene(book, size, t);
-                }),
-            ),
-        ))
+        .push(Positioned::fill().child(Painting::sized(
+            CANVAS,
+            PaintWith::new(move |book: &mut Sketchbook, size: Size| {
+                scene(book, size, t);
+            }),
+        )))
         .into()
 }

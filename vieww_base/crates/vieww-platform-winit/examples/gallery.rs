@@ -458,7 +458,7 @@ fn showcase() -> WidgetNode {
 /// `12 13`, which needs no interpretation. The alternating tint is only an aid
 /// for scrolling fast enough that the labels blur.
 fn row(index: usize) -> WidgetNode {
-    let tint = if index % 2 == 0 { 30 } else { 24 };
+    let tint = if index.is_multiple_of(2) { 30 } else { 24 };
     ColoredBox::new(Color::rgb(tint, tint, tint + 8))
         .child(Padding::all(20.0).child(Text::new(format!("row {index}")).size(15.0).color(LABEL)))
         .into()

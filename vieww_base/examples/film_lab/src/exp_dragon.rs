@@ -19,15 +19,16 @@
 //! measured from pixels, tending to the law's 2, beside the segment count
 //! the drawing actually issued.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, MINT};
+use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MINT, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The curves ──────────────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ fn rot(s: usize, x: usize, y: usize, rx: usize, ry: usize) -> (usize, usize) {
 const DR: (f32, f32, f32, f32) = (70.0, 150.0, 560.0, 500.0);
 const HI: (f32, f32, f32, f32) = (680.0, 150.0, 520.0, 500.0);
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let dragon = dragon_points(13, DR);
     let hilbert = hilbert_points(6);
     let n_seg = dragon.len().saturating_sub(1);
@@ -141,38 +142,46 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — blueprint dark.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 16))]),
             );
 
             // stage backings
             book.rrect(
-                Rect::new(DR.0 - 20.0, DR.1 - 20.0, DR.0 + DR.2 + 20.0, DR.1 + DR.3 + 20.0),
+                Rect::new(
+                    DR.0 - 20.0,
+                    DR.1 - 20.0,
+                    DR.0 + DR.2 + 20.0,
+                    DR.1 + DR.3 + 20.0,
+                ),
                 12.0,
                 alpha(Color::rgb(12, 12, 18), 0.96),
             );
             book.rrect(
-                Rect::new(HI.0 - 20.0, HI.1 - 20.0, HI.0 + HI.2 + 20.0, HI.1 + HI.3 + 20.0),
+                Rect::new(
+                    HI.0 - 20.0,
+                    HI.1 - 20.0,
+                    HI.0 + HI.2 + 20.0,
+                    HI.1 + HI.3 + 20.0,
+                ),
                 12.0,
                 alpha(Color::rgb(12, 12, 18), 0.96),
             );
 
             // ── The dragon: self-drawing, ink cycling the spectrum ──
             let n_seg = dragon.len().saturating_sub(1);
-    let n_hilbert = hilbert.len();
+            let _n_hilbert = hilbert.len();
             let reveal = ((t * 1.0).clamp(0.0, 1.0) * n_seg as f32).round() as usize;
             book.blended_layer(0.55, 0.0, BlendMode::Plus, None, |g| {
                 // the glow pass — chunked so the stroke stays one verb
-                for (chunk_start, chunk) in dragon[..reveal.min(dragon.len())]
-                    .chunks(64)
-                    .enumerate()
+                for (chunk_start, chunk) in
+                    dragon[..reveal.min(dragon.len())].chunks(64).enumerate()
                 {
                     if chunk.len() < 2 {
                         continue;
                     }
-                    let hue = (chunk_start as f32 * 64.0 / n_seg as f32);
+                    let hue = chunk_start as f32 * 64.0 / n_seg as f32;
                     let col = spec(hue);
                     let mut path = Path::new();
                     path.move_to(chunk[0]);
@@ -182,14 +191,11 @@ pub fn frame(t: f32) -> WidgetNode {
                     g.stroke(path, alpha(col, 0.22), 4.2);
                 }
             });
-            for (chunk_start, chunk) in dragon[..reveal.min(dragon.len())]
-                .chunks(64)
-                .enumerate()
-            {
+            for (chunk_start, chunk) in dragon[..reveal.min(dragon.len())].chunks(64).enumerate() {
                 if chunk.len() < 2 {
                     continue;
                 }
-                let hue = (chunk_start as f32 * 64.0 / n_seg as f32);
+                let hue = chunk_start as f32 * 64.0 / n_seg as f32;
                 let col = spec(hue);
                 let mut path = Path::new();
                 path.move_to(chunk[0]);
@@ -209,15 +215,14 @@ pub fn frame(t: f32) -> WidgetNode {
             // ── The Hilbert curve: self-drawing in violet→mint ──
             let hn = hilbert.len();
             let hreveal = ((t * 1.15).clamp(0.0, 1.0) * (hn - 1) as f32).round() as usize;
-            let map = |(ux, uy): (f32, f32)| {
-                Offset::new(HI.0 + ux * HI.2, HI.1 + (1.0 - uy) * HI.3)
-            };
+            let map =
+                |(ux, uy): (f32, f32)| Offset::new(HI.0 + ux * HI.2, HI.1 + (1.0 - uy) * HI.3);
             book.blended_layer(0.5, 0.0, BlendMode::Plus, None, |g| {
                 for (cs, chunk) in hilbert[..hreveal.min(hn)].chunks(64).enumerate() {
                     if chunk.len() < 2 {
                         continue;
                     }
-                    let hue = (cs as f32 * 64.0 / hn as f32);
+                    let hue = cs as f32 * 64.0 / hn as f32;
                     let col = mix(VIOLET, MINT, hue);
                     let mut path = Path::new();
                     path.move_to(map(chunk[0]));
@@ -231,7 +236,7 @@ pub fn frame(t: f32) -> WidgetNode {
                 if chunk.len() < 2 {
                     continue;
                 }
-                let hue = (cs as f32 * 64.0 / hn as f32);
+                let hue = cs as f32 * 64.0 / hn as f32;
                 let col = mix(VIOLET, MINT, hue);
                 let mut path = Path::new();
                 path.move_to(map(chunk[0]));
@@ -291,10 +296,13 @@ fn spec(u: f32) -> Color {
 /// Count boxes of side ε containing dragon ink, inside the dragon's stage
 /// rect only (the Hilbert stage is excluded by construction), then fit
 /// log N vs log(1/ε). The dimension is measured from pixels.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     let (iw, ih) = img.dimensions();
     let in_stage = |x: u32, y: u32| {
-        (x as f32) > DR.0 && (x as f32) < DR.0 + DR.2 && (y as f32) > DR.1 && (y as f32) < DR.1 + DR.3
+        (x as f32) > DR.0
+            && (x as f32) < DR.0 + DR.2
+            && (y as f32) > DR.1
+            && (y as f32) < DR.1 + DR.3
     };
     let mut out = Vec::new();
     let mut fit_pts: Vec<(f64, f64)> = Vec::new();
@@ -381,7 +389,10 @@ fn receipt_panel(n_dragon: usize, n_hilbert: usize, order: usize) -> WidgetNode 
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

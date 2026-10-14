@@ -11,4 +11,7 @@ description = "Capture orchestration and playback runtime for .3 media"
 three-core.workspace = true
 three-format.workspace = true
 three-capture.workspace = true
-three-reconstruction.workspace = true
+
+# The import pipeline decodes the frames ffmpeg extracts; the format crate
+# owns JPEG for the container, this only reads standalone frame files.
+zune-jpeg = "0.5"

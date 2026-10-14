@@ -23,15 +23,14 @@
 //! bit if the coder did its job — a compressed stream should look like
 //! noise, and the plate measures how close to noise this one looks.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook,
-    TextStyle};
+use vieww_foundation::{BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// The passage. Fixed in the source, so the counts, the tree, the code and
 /// every number below are properties of this file and reproduce exactly.
@@ -111,17 +110,22 @@ fn build(merges_to: usize) -> Code {
         nodes.push(n);
         live.push(nodes.len() - 1);
     }
-    let root = *live
-        .iter()
-        .max_by_key(|&&i| nodes[i].weight)
-        .unwrap_or(&0);
+    let root = *live.iter().max_by_key(|&&i| nodes[i].weight).unwrap_or(&0);
 
     // ── the codes, walked out of the finished tree ──
     let mut table: Vec<(char, usize, String)> = Vec::new();
     if stop == total_merges {
         fn walk(nodes: &[Node], i: usize, prefix: String, out: &mut Vec<(char, usize, String)>) {
             if let Some(c) = nodes[i].symbol {
-                out.push((c, nodes[i].weight, if prefix.is_empty() { "0".into() } else { prefix }));
+                out.push((
+                    c,
+                    nodes[i].weight,
+                    if prefix.is_empty() {
+                        "0".into()
+                    } else {
+                        prefix
+                    },
+                ));
                 return;
             }
             if let Some(l) = nodes[i].left {
@@ -179,7 +183,7 @@ fn layout(code: &Code) -> (Vec<(f32, f32)>, usize) {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The film builds the tree, then holds the finished code.
     let full = build(usize::MAX);
     let total_merges = full.merges;
@@ -209,7 +213,7 @@ pub fn frame(t: f32) -> WidgetNode {
     let kraft: f64 = full
         .table
         .iter()
-        .map(|&(_, _, ref code)| 2.0_f64.powi(-(code.len() as i32)))
+        .map(|(_, _, code)| 2.0_f64.powi(-(code.len() as i32)))
         .sum();
     let total_bits: usize = full
         .table
@@ -233,8 +237,18 @@ pub fn frame(t: f32) -> WidgetNode {
         0.0
     };
 
-    let longest = full.table.iter().map(|(_, _, c)| c.len()).max().unwrap_or(0);
-    let shortest = full.table.iter().map(|(_, _, c)| c.len()).min().unwrap_or(0);
+    let longest = full
+        .table
+        .iter()
+        .map(|(_, _, c)| c.len())
+        .max()
+        .unwrap_or(0);
+    let shortest = full
+        .table
+        .iter()
+        .map(|(_, _, c)| c.len())
+        .min()
+        .unwrap_or(0);
     let long_sym = full
         .table
         .iter()
@@ -261,10 +275,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(12, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(12, 11, 16))]),
             );
 
             // ── the tree ──
@@ -385,14 +398,20 @@ pub fn frame(t: f32) -> WidgetNode {
                         sx + c as f32 * bw + bw * 0.78,
                         sy + r as f32 * rh + rh * 0.72,
                     ),
-                    alpha(if ch == '1' { AMBER } else { Color::rgb(40, 52, 72) }, 0.9),
+                    alpha(
+                        if ch == '1' {
+                            AMBER
+                        } else {
+                            Color::rgb(40, 52, 72)
+                        },
+                        0.9,
+                    ),
                 );
             }
         }),
     );
 
-    let lines = vec![
-        "HUFFMAN · THE INFORMATION AXIS · THE FEWEST BITS A SENTENCE CAN HAVE".to_string(),
+    let lines = ["HUFFMAN · THE INFORMATION AXIS · THE FEWEST BITS A SENTENCE CAN HAVE".to_string(),
         format!(
             "a fixed {n_chars}-character passage, {n_symbols} distinct symbols · the queue's tie-break is stated in the source (weight, then birth, then index) so the tree is reproducible"
         ),
@@ -417,8 +436,7 @@ pub fn frame(t: f32) -> WidgetNode {
             "THE STREAM ITSELF: {:.4} of its bits are ones → per-bit entropy {bit_entropy:.6}, i.e. {:.4} bits short of pure noise, which is what a well-coded stream should look like",
             p1,
             1.0 - bit_entropy
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -433,7 +451,10 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -443,13 +464,24 @@ pub fn frame(t: f32) -> WidgetNode {
     for (r, (ch, count, code)) in full.table.iter().take(table_rows).enumerate() {
         let y = 178.0 + r as f32 * (330.0 / table_rows as f32) - 2.0;
         stack = stack.push(
-            Positioned::new().left(790.0).top(y).width(130.0).height(13.0).child(
-                Text::new(format!("{:>4}  {:>4}  {:>2}b", show(*ch), count, code.len())).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .color(alpha(mix(MUTED, INK, 0.5), 0.95)),
+            Positioned::new()
+                .left(790.0)
+                .top(y)
+                .width(130.0)
+                .height(13.0)
+                .child(
+                    Text::new(format!(
+                        "{:>4}  {:>4}  {:>2}b",
+                        show(*ch),
+                        count,
+                        code.len()
+                    ))
+                    .style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .color(alpha(mix(MUTED, INK, 0.5), 0.95)),
+                    ),
                 ),
-            ),
         );
     }
     for (x, y, s) in [

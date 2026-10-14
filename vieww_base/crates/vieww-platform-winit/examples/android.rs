@@ -452,6 +452,153 @@ mod demo {
         )
     }
 
+    /// A launch by Firebase Test Lab's **Game Loop** test.
+    ///
+    /// Test Lab starts the activity with action
+    /// `com.google.intent.action.TEST_LOOP`, an integer extra `scenario`, and a
+    /// data URI naming a results file the app may write
+    /// (<https://firebase.google.com/docs/test-lab/android/game-loop>). The
+    /// manifest's matching intent filter is in this crate's `Cargo.toml`.
+    ///
+    /// The demo already runs its whole device suite by itself, so a game loop
+    /// needs no driver: scenario 1 is the CPU rasterizer, scenario 2 the
+    /// planned GPU path, and the report goes into the results file as well as
+    /// logcat — on every phone in the device matrix at once
+    /// (`ci/mobile/test-lab.sh`).
+    struct GameLoop {
+        scenario: i32,
+        /// The results file, opened for writing through the content resolver.
+        results: Option<std::fs::File>,
+    }
+
+    fn game_loop_launch(android: &AndroidApp) -> Option<GameLoop> {
+        use jni::objects::{JObject, JString, JValue};
+        use jni::{jni_sig, jni_str};
+        use std::os::fd::FromRawFd;
+
+        if android.vm_as_ptr().is_null() || android.activity_as_ptr().is_null() {
+            return None;
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(android.vm_as_ptr().cast()) };
+        let activity_ptr = android.activity_as_ptr();
+
+        let found = vm.attach_current_thread(
+            |env| -> Result<Option<(i32, Option<i32>)>, jni::errors::Error> {
+                let activity = unsafe { JObject::from_raw(env, activity_ptr.cast()) };
+                let intent = env
+                    .call_method(
+                        &activity,
+                        jni_str!("getIntent"),
+                        jni_sig!("()Landroid/content/Intent;"),
+                        &[],
+                    )?
+                    .l()?;
+                if intent.is_null() {
+                    return Ok(None);
+                }
+                let action = env
+                    .call_method(
+                        &intent,
+                        jni_str!("getAction"),
+                        jni_sig!("()Ljava/lang/String;"),
+                        &[],
+                    )?
+                    .l()?;
+                if action.is_null() {
+                    return Ok(None);
+                }
+                let action = env.cast_local::<JString>(action)?.try_to_string(env)?;
+                if action != "com.google.intent.action.TEST_LOOP" {
+                    return Ok(None);
+                }
+                let key = env.new_string("scenario")?;
+                let scenario = env
+                    .call_method(
+                        &intent,
+                        jni_str!("getIntExtra"),
+                        jni_sig!("(Ljava/lang/String;I)I"),
+                        &[JValue::Object(&key), JValue::Int(0)],
+                    )?
+                    .i()?;
+
+                // The results file: `getContentResolver()
+                // .openAssetFileDescriptor(uri, "w").getParcelFileDescriptor()`,
+                // then `detachFd()` so the descriptor is ours to own and close.
+                let uri = env
+                    .call_method(&intent, jni_str!("getData"), jni_sig!("()Landroid/net/Uri;"), &[])?
+                    .l()?;
+                if uri.is_null() {
+                    return Ok(Some((scenario, None)));
+                }
+                let resolver = env
+                    .call_method(
+                        &activity,
+                        jni_str!("getContentResolver"),
+                        jni_sig!("()Landroid/content/ContentResolver;"),
+                        &[],
+                    )?
+                    .l()?;
+                let mode = env.new_string("w")?;
+                let asset = env
+                    .call_method(
+                        &resolver,
+                        jni_str!("openAssetFileDescriptor"),
+                        jni_sig!(
+                            "(Landroid/net/Uri;Ljava/lang/String;)Landroid/content/res/AssetFileDescriptor;"
+                        ),
+                        &[JValue::Object(&uri), JValue::Object(&mode)],
+                    )?
+                    .l()?;
+                if asset.is_null() {
+                    return Ok(Some((scenario, None)));
+                }
+                let parcel = env
+                    .call_method(
+                        &asset,
+                        jni_str!("getParcelFileDescriptor"),
+                        jni_sig!("()Landroid/os/ParcelFileDescriptor;"),
+                        &[],
+                    )?
+                    .l()?;
+                let fd = env
+                    .call_method(&parcel, jni_str!("detachFd"), jni_sig!("()I"), &[])?
+                    .i()?;
+                Ok(Some((scenario, Some(fd))))
+            },
+        );
+        match found {
+            Ok(Some((scenario, fd))) => Some(GameLoop {
+                scenario,
+                // SAFETY: `detachFd` hands over sole ownership of a valid,
+                // open descriptor; nothing on the Java side closes it now.
+                results: fd
+                    .filter(|&fd| fd >= 0)
+                    .map(|fd| unsafe { std::fs::File::from_raw_fd(fd) }),
+            }),
+            Ok(None) => None,
+            Err(error) => {
+                log::warn!("vieww: reading the launch intent for a game loop failed: {error}");
+                None
+            }
+        }
+    }
+
+    /// `Activity.finish()`: tells Test Lab this loop is done (recommended by
+    /// its docs) instead of waiting out the timeout.
+    fn finish_activity(vm_ptr: usize, activity_ptr: usize) {
+        use jni::objects::JObject;
+        use jni::{jni_sig, jni_str};
+        let vm = unsafe { jni::JavaVM::from_raw(vm_ptr as *mut _) };
+        let finished = vm.attach_current_thread(|env| -> Result<(), jni::errors::Error> {
+            let activity = unsafe { JObject::from_raw(env, activity_ptr as *mut _) };
+            env.call_method(&activity, jni_str!("finish"), jni_sig!("()V"), &[])?;
+            Ok(())
+        });
+        if let Err(error) = finished {
+            log::warn!("vieww: finishing the activity after the game loop failed: {error}");
+        }
+    }
+
     pub(crate) fn main(android: AndroidApp) {
         // Rust's panics and `println!` go nowhere on Android unless something
         // redirects them; without this a failure is an app that vanishes with
@@ -470,6 +617,36 @@ mod demo {
         // Runs against the same tree a human is looking at, and reports on a
         // sentinel line after 120 frames. `ci/mobile/device-suite.sh` reads it.
         let suite = DeviceSuite::new();
+
+        // A Firebase Test Lab Game Loop launch, if this is one: its scenario
+        // picks the rasterizer below, and the report also goes into the file
+        // Test Lab collects, after which the activity finishes.
+        let game_loop = game_loop_launch(&android);
+        if let Some(game) = &game_loop {
+            log::info!(
+                "vieww: Firebase Test Lab game loop, scenario {}",
+                game.scenario
+            );
+        }
+        let game_loop_scenario = game_loop.as_ref().map(|game| game.scenario);
+        if let Some(GameLoop { results, .. }) = game_loop {
+            let (vm_ptr, activity_ptr) = (
+                android.vm_as_ptr() as usize,
+                android.activity_as_ptr() as usize,
+            );
+            suite.when_reported(move |report| {
+                use std::io::Write;
+                if let Some(mut file) = results {
+                    if let Err(error) = file
+                        .write_all(report.as_bytes())
+                        .and_then(|()| file.flush())
+                    {
+                        log::warn!("vieww: writing the game-loop results file failed: {error}");
+                    }
+                }
+                finish_activity(vm_ptr, activity_ptr);
+            });
+        }
 
         // A panic on a phone is otherwise silent: it prints to a stderr Android
         // discards, and the process is gone before anybody could have read it.
@@ -550,7 +727,33 @@ mod demo {
             }
         }
 
-        let result = App::new()
+        // **Which rasterizer, chosen on the phone without a rebuild.** The CPU
+        // rasterizer is the default and the bar; `adb shell setprop
+        // debug.vieww.gpu 1` (what `ci/mobile/device-suite.sh --gpu` does)
+        // asks for the planned GPU path instead, so the same build measures
+        // both. Read through `getprop` rather than a new `libc` dependency: an
+        // app may run it, and a `debug.` property needs no root to set. The
+        // first real-phone run (Redmi Note 7 Pro, 2026-10-14) put the CPU
+        // path at a 37ms median at 1080x2340 — this is how the GPU's number
+        // is taken against it.
+        // A Test Lab game loop says which with its scenario (2 = GPU), since a
+        // device cloud cannot `setprop`; otherwise the property decides.
+        let prefer_gpu = match game_loop_scenario {
+            Some(scenario) => scenario == 2,
+            None => std::process::Command::new("/system/bin/getprop")
+                .arg("debug.vieww.gpu")
+                .output()
+                .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1"),
+        };
+        suite.observe(
+            "rasterizer",
+            if prefer_gpu {
+                "planned GPU path requested (debug.vieww.gpu=1)"
+            } else {
+                "CPU rasterizer (set debug.vieww.gpu=1 for the GPU path)"
+            },
+        );
+        let app = App::new()
             .title("vieww")
             .report_crashes(crashes)
             .on_frame(perf.hook())
@@ -571,34 +774,35 @@ mod demo {
             // device script taps what is on screen rather than a constant
             // that only suited one phone. `after_frame`, not `on_frame`:
             // geometry does not exist until the frame has been laid out.
-            .after_frame(suite.tap_targets())
-            .run_android(android, |driver| {
-                // `FrameDriver::set_root`, *not* `driver.elements().set_root`.
-                // The driver keeps the root so it can re-publish it under an
-                // `Inherited<ViewMetrics>` whenever the safe area changes; going
-                // straight to the element tree leaves `FrameDriver::root` as
-                // `None`, and the republish silently does nothing. That is how
-                // the notch inset was computed correctly and ignored completely.
-                //
-                // The embedded faces come with `RenderTree::new`, so text shapes
-                // without anybody opting into the system's fonts — which on a
-                // phone would be the same 33-second scan it is everywhere else.
-                let demo = screen::Demo::new(driver);
-                perf.attach(&demo);
-                let probe = suite.probe(demo.taps());
-                // The latch `modal_semantics` pulls. Handed over here for the
-                // reason the tap counter is: the hooks were installed before
-                // this closure ran, so the signal did not exist yet.
-                suite.watch_drawer(demo.drawer());
-                // `Inherited<SharedServices>` above the tree is how a widget
-                // reaches the pasteboard — `RenderEditableText` asks its scope
-                // for a `Clipboard`, and finds one only if something published
-                // it here.
-                driver.set_root(Inherited::new(
-                    services,
-                    demo.screen("A frame, on a phone.", TargetPlatform::Android, probe),
-                ));
-            });
+            .after_frame(suite.tap_targets());
+        let app = if prefer_gpu { app.prefer_gpu() } else { app };
+        let result = app.run_android(android, |driver| {
+            // `FrameDriver::set_root`, *not* `driver.elements().set_root`.
+            // The driver keeps the root so it can re-publish it under an
+            // `Inherited<ViewMetrics>` whenever the safe area changes; going
+            // straight to the element tree leaves `FrameDriver::root` as
+            // `None`, and the republish silently does nothing. That is how
+            // the notch inset was computed correctly and ignored completely.
+            //
+            // The embedded faces come with `RenderTree::new`, so text shapes
+            // without anybody opting into the system's fonts — which on a
+            // phone would be the same 33-second scan it is everywhere else.
+            let demo = screen::Demo::new(driver);
+            perf.attach(&demo);
+            let probe = suite.probe(demo.taps());
+            // The latch `modal_semantics` pulls. Handed over here for the
+            // reason the tap counter is: the hooks were installed before
+            // this closure ran, so the signal did not exist yet.
+            suite.watch_drawer(demo.drawer());
+            // `Inherited<SharedServices>` above the tree is how a widget
+            // reaches the pasteboard — `RenderEditableText` asks its scope
+            // for a `Clipboard`, and finds one only if something published
+            // it here.
+            driver.set_root(Inherited::new(
+                services,
+                demo.screen("A frame, on a phone.", TargetPlatform::Android, probe),
+            ));
+        });
 
         match result {
             // Reached when the activity is finished rather than when something

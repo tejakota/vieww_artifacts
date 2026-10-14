@@ -157,9 +157,17 @@ impl Widget for Overlays {
         // `Passthrough` otherwise, so the overlay never takes a click. It is a
         // picture of the window, and a picture that swallowed the controls it
         // is drawn over would make the thing it describes unusable while on.
-        Stack::new()
-            .fit(StackFit::Passthrough)
-            .children(layers)
+        //
+        // **And it is hidden from the semantics tree it draws.** Each box's
+        // label is a `Text`, and a `Text` is announced — so with this layer
+        // in the tree, the next frame's capture read every label back as a
+        // new node, drew a label for each of *those*, and so on: the overlay
+        // grew by its own size every frame (the keynote film found it, as a
+        // frame time climbing by ~100 ms a frame and an out-of-memory kill
+        // twelve seconds in). A screen reader should not hear the overlay
+        // either — it is a picture of what the screen reader hears.
+        vieww_widget::ExcludeSemantics::new(true)
+            .child(Stack::new().fit(StackFit::Passthrough).children(layers))
             .into()
     }
 }

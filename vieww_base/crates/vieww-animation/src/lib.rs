@@ -53,14 +53,47 @@ mod simulation;
 mod ticker;
 mod tween;
 
+pub mod animator;
+pub mod blend_tree;
+pub mod channels;
+pub mod cinematic;
+pub mod clock;
+pub mod constraints;
+pub mod duplicator;
+pub mod expr;
+pub mod fcurve;
+pub mod flow;
+pub mod inertia;
+pub mod keyframe;
+pub mod lfo;
+pub mod nla;
+pub mod noise;
+pub mod particle_system;
+pub mod particles;
+pub mod phase;
+pub mod player;
+pub mod retarget;
+pub mod scroll_scene;
+pub mod sequence;
+pub mod shared;
+pub mod skeletal;
 pub mod spring;
+pub mod state_machine;
+pub mod text_animator;
+pub mod units;
 
 pub use controller::{AnimationController, AnimationStatus};
 pub use curve::Curve;
+pub use keyframe::{Keyframe, Keyframes, LoopMode, Timeline, TimelineFrame};
 pub use simulation::{Fling, Motion, Simulation, Spring, MIN_FLING_VELOCITY};
 // `SpringAnimation` is the retargetable, Ticker-driven spring; `Spring` above
 // is the closed-form simulation. See `spring.rs` for why both exist.
+pub use blend_tree::{BlendTree1, BlendTree2, Child1, Child2};
+pub use lfo::{Lfo, Wave};
+pub use particles::{Particle, ParticleField};
+pub use skeletal::{BoneTransform, Pose, SkeletalClip, Skeleton, Skin, Vertex};
 pub use spring::{Spring2D, SpringAnimation, SpringPreset, SpringSpec};
+pub use state_machine::{Guard, StateMachine};
 pub use ticker::{Ticker, Tickers};
 pub use tween::{Lerp, Tween};
 

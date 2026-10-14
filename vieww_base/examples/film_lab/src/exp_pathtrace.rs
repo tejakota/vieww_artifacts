@@ -33,12 +33,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, INK, MINT, MUTED};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 13.0;
+pub(crate) const SECONDS: f32 = 13.0;
 
 // ── The scene: spheres only, in the smallpt tradition ───────────────────────
 
@@ -129,17 +129,62 @@ impl Sphere {
 fn scene() -> Vec<Sphere> {
     vec![
         // left (red), right (cyan), back, front, floor, ceiling
-        Sphere { r: 1e5, p: V3::new(1e5 + 1.0, 40.8, 81.6), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.75, 0.25, 0.25) },
-        Sphere { r: 1e5, p: V3::new(-1e5 + 99.0, 40.8, 81.6), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.25, 0.45, 0.78) },
-        Sphere { r: 1e5, p: V3::new(50.0, 40.8, 1e5), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.75, 0.75, 0.75) },
-        Sphere { r: 1e5, p: V3::new(50.0, 40.8, -1e5 + 250.0), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.0, 0.0, 0.0) },
-        Sphere { r: 1e5, p: V3::new(50.0, 1e5, 81.6), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.75, 0.75, 0.75) },
-        Sphere { r: 1e5, p: V3::new(50.0, -1e5 + 81.6, 81.6), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.75, 0.75, 0.75) },
+        Sphere {
+            r: 1e5,
+            p: V3::new(1e5 + 1.0, 40.8, 81.6),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.75, 0.25, 0.25),
+        },
+        Sphere {
+            r: 1e5,
+            p: V3::new(-1e5 + 99.0, 40.8, 81.6),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.25, 0.45, 0.78),
+        },
+        Sphere {
+            r: 1e5,
+            p: V3::new(50.0, 40.8, 1e5),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.75, 0.75, 0.75),
+        },
+        Sphere {
+            r: 1e5,
+            p: V3::new(50.0, 40.8, -1e5 + 250.0),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.0, 0.0, 0.0),
+        },
+        Sphere {
+            r: 1e5,
+            p: V3::new(50.0, 1e5, 81.6),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.75, 0.75, 0.75),
+        },
+        Sphere {
+            r: 1e5,
+            p: V3::new(50.0, -1e5 + 81.6, 81.6),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.75, 0.75, 0.75),
+        },
         // two spheres
-        Sphere { r: 16.5, p: V3::new(27.0, 16.5, 57.0), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.88, 0.85, 0.80) },
-        Sphere { r: 16.5, p: V3::new(73.0, 16.5, 88.0), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(0.62, 0.55, 0.88) },
+        Sphere {
+            r: 16.5,
+            p: V3::new(27.0, 16.5, 57.0),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.88, 0.85, 0.80),
+        },
+        Sphere {
+            r: 16.5,
+            p: V3::new(73.0, 16.5, 88.0),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(0.62, 0.55, 0.88),
+        },
         // the light
-        Sphere { r: 8.5, p: V3::new(50.0, 81.6 - 6.0, 81.6), emit: V3::new(24.0, 22.0, 19.0), albedo: V3::new(0.0, 0.0, 0.0) },
+        Sphere {
+            r: 8.5,
+            p: V3::new(50.0, 81.6 - 6.0, 81.6),
+            emit: V3::new(24.0, 22.0, 19.0),
+            albedo: V3::new(0.0, 0.0, 0.0),
+        },
     ]
 }
 
@@ -272,13 +317,28 @@ fn render(spp: usize, seed: u64) -> Render {
 fn furnace() -> (f64, f64, f64) {
     let l = 1.0_f64;
     let spheres = vec![
-        Sphere { r: 1e4, p: V3::new(0.0, 0.0, 0.0), emit: V3::new(l, l, l), albedo: V3::new(0.0, 0.0, 0.0) },
+        Sphere {
+            r: 1e4,
+            p: V3::new(0.0, 0.0, 0.0),
+            emit: V3::new(l, l, l),
+            albedo: V3::new(0.0, 0.0, 0.0),
+        },
         // TWO albedo-1 spheres, overlapping, so that rays actually
         // interreflect: a single convex object is a one-bounce test and
         // would pass even if the throughput chain were wrong after the
         // first multiply.
-        Sphere { r: 30.0, p: V3::new(-22.0, 0.0, 0.0), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(1.0, 1.0, 1.0) },
-        Sphere { r: 30.0, p: V3::new(22.0, 0.0, 0.0), emit: V3::new(0.0, 0.0, 0.0), albedo: V3::new(1.0, 1.0, 1.0) },
+        Sphere {
+            r: 30.0,
+            p: V3::new(-22.0, 0.0, 0.0),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(1.0, 1.0, 1.0),
+        },
+        Sphere {
+            r: 30.0,
+            p: V3::new(22.0, 0.0, 0.0),
+            emit: V3::new(0.0, 0.0, 0.0),
+            albedo: V3::new(1.0, 1.0, 1.0),
+        },
     ];
     let cam_o = V3::new(0.0, 0.0, 120.0);
     let mut worst = 0.0_f64;
@@ -341,7 +401,7 @@ fn radiance_deep(
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The film climbs the ladder; every rung already climbed stays on the
     // convergence plot.
     let rung = ((t as f64).clamp(0.0, 1.0) * LADDER.len() as f64).floor() as usize;
@@ -435,10 +495,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(5, 5, 9)),
-                    (1.0, Color::rgb(10, 10, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(5, 5, 9)), (1.0, Color::rgb(10, 10, 15))]),
             );
             let px = 52.0_f32;
             let py = 186.0_f32;
@@ -519,15 +578,17 @@ pub fn frame(t: f32) -> WidgetNode {
                 let on = k <= rung;
                 book.rect(
                     Rect::new(x0, ly + lh * 0.35, x1, ly + lh),
-                    alpha(if on { MINT } else { Color::rgb(30, 30, 40) }, if on { 0.8 } else { 0.9 }),
+                    alpha(
+                        if on { MINT } else { Color::rgb(30, 30, 40) },
+                        if on { 0.8 } else { 0.9 },
+                    ),
                 );
                 let _ = s;
             }
         }),
     );
 
-    let lines = vec![
-        "PATHTRACE · THE LIGHT-TRANSPORT AXIS · NOISE THAT OBEYS A LAW".to_string(),
+    let lines = ["PATHTRACE · THE LIGHT-TRANSPORT AXIS · NOISE THAT OBEYS A LAW".to_string(),
         format!(
             "a Cornell box of {} spheres at {IW}×{IH}, cosine-weighted diffuse bounces to depth {MAX_DEPTH}, no light sampling and no denoiser · {spp} samples/pixel",
             scene().len()
@@ -553,8 +614,7 @@ pub fn frame(t: f32) -> WidgetNode {
         ),
         format!(
             "— and what that cap COSTS: re-tracing the identical paths to depth 16 from the same seeds, the depth-{MAX_DEPTH} image is {depth_bias:+.2}% darker. That is the bias, measured."
-        ),
-    ];
+        )];
 
     let mut stack = Stack::new().push(Positioned::fill().child(board));
     for (i, line) in lines.iter().enumerate() {
@@ -569,25 +629,42 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
     }
     for (x, y, s) in [
-        (52.0_f32, 160.0_f32, "THE RENDER — every pixel is an average of paths, and the grain is the estimator".to_string()),
-        (800.0, 202.0, "RMS(A−B)/2 vs SAMPLES, log–log · grey: the −1/2 law".to_string()),
+        (
+            52.0_f32,
+            160.0_f32,
+            "THE RENDER — every pixel is an average of paths, and the grain is the estimator"
+                .to_string(),
+        ),
+        (
+            800.0,
+            202.0,
+            "RMS(A−B)/2 vs SAMPLES, log–log · grey: the −1/2 law".to_string(),
+        ),
         (800.0, 528.0, "THE SAMPLE LADDER".to_string()),
     ] {
         stack = stack.push(
-            Positioned::new().left(x).top(y).width(700.0).height(14.0).child(
-                Text::new(s).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .letter_spacing(0.9)
-                        .color(alpha(MUTED, 0.85)),
+            Positioned::new()
+                .left(x)
+                .top(y)
+                .width(700.0)
+                .height(14.0)
+                .child(
+                    Text::new(s).style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()

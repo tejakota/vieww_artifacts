@@ -113,9 +113,18 @@ fn run(android: AndroidApp) -> Result<(), String> {
         }
     };
 
-    let first = reloader
-        .as_ref()
-        .map_or_else(|| waiting_screen(&external), Reloader::root);
+    // A guest that panics while building its first tree is treated like no
+    // guest at all: the placeholder goes up and the next push is tried, exactly
+    // as the poll below treats a panicking first arrival.
+    let first = match reloader.as_ref().map(Reloader::root) {
+        Some(Ok(root)) => root,
+        Some(Err(error)) => {
+            log::warn!("vieww-reload: the staged guest panicked while building — {error}");
+            reloader = None;
+            waiting_screen(&external)
+        }
+        None => waiting_screen(&external),
+    };
 
     let app = App::new()
         .title("vieww — hot reload")

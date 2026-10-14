@@ -1,0 +1,22 @@
+[package]
+name = "vieww-network"
+description = "The vieww network layer: requests, responses, and the client seam."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Foundation, for two things: `Task`, the frame-aligned future a network
+# call must return (a UI cannot block on a socket), and `ServiceError`'s
+# vocabulary, which the seam already speaks. No async runtime, no TLS
+# stack: those belong to a platform implementation behind the trait, and
+# dragging them here would make the *shape* of a request untestable
+# without the *weight* of a stack.
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

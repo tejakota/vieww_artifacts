@@ -55,6 +55,7 @@ struct VertexOutput {
     @location(4) local: vec2<f32>,
     @location(5) @interpolate(flat) extra: vec4<f32>,
     @location(6) @interpolate(flat) mask: vec4<f32>,
+    @location(7) @interpolate(flat) shape: vec4<f32>,
 };
 
 @vertex
@@ -67,6 +68,7 @@ fn vs_main(
     @location(5) local: vec2<f32>,
     @location(6) extra: vec4<f32>,
     @location(7) mask: vec4<f32>,
+    @location(8) shape: vec4<f32>,
 ) -> VertexOutput {
     var out: VertexOutput;
     let normalized = position / u.viewport.xy;
@@ -78,6 +80,7 @@ fn vs_main(
     out.local = local;
     out.extra = extra;
     out.mask = mask;
+    out.shape = shape;
     return out;
 }
 
@@ -158,6 +161,26 @@ const BAYER4 = array<f32, 16>(
     0.46875, -0.03125, 0.34375, -0.15625,
 );
 
+// `vieww_gpu::scene::shape_distance`, vertex for vertex — the Rust function
+// is the reference and its tests are the spec; the two are asserted against
+// each other by `vieww-hal`'s parity suite, which renders shapes and compares
+// every pixel's coverage against the Rust arithmetic.
+fn shape_distance(rect: vec4<f32>, radius: f32, p: vec2<f32>) -> f32 {
+    let c = (rect.xy + rect.zw) * 0.5;
+    let half_size = (rect.zw - rect.xy) * 0.5 - vec2<f32>(radius);
+    let q = abs(p - c) - half_size;
+    let outside = max(q, vec2<f32>(0.0));
+    return length(outside) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+// Edge coverage from that distance: a one-pixel ramp, zero a pixel outside
+// the shape, one a pixel inside — the same band the CPU renderer's scanline
+// coverage produces, which is what makes the census's edge comparison
+// meaningful rather than best-effort.
+fn shape_coverage(rect: vec4<f32>, radius: f32, p: vec2<f32>) -> f32 {
+    return clamp(0.5 - shape_distance(rect, radius, p), 0.0, 1.0);
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let px = vec2<i32>(floor(in.clip_position.xy));
@@ -176,13 +199,29 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             let high = image_bilinear(in.extra, uv);
             out = out + (high - out) * frac;
         }
-    } else {
+    } else if in.kind < 3.5 {
         let t = gradient_t(in.extra.z, in.params, in.local);
         out = ramp_at(in.extra.x, t);
         if in.extra.y > 0.5 {
             let offset = BAYER4[((px.y & 3) * 4) + (px.x & 3)] / 255.0;
             out = clamp(out + vec4<f32>(offset), vec4<f32>(0.0), vec4<f32>(1.0));
         }
+    } else if in.kind < 4.5 {
+        // A flat colour, edged analytically.
+        let coverage = shape_coverage(in.shape, in.uv.x, in.clip_position.xy);
+        out = premul(in.color) * coverage;
+    } else {
+        // A gradient, edged analytically: the gradient branch's own maths,
+        // with the shape's rect and radius riding in the fields that branch
+        // never reads.
+        let t = gradient_t(in.extra.z, in.params, in.local);
+        out = ramp_at(in.extra.x, t);
+        if in.extra.y > 0.5 {
+            let offset = BAYER4[((px.y & 3) * 4) + (px.x & 3)] / 255.0;
+            out = clamp(out + vec4<f32>(offset), vec4<f32>(0.0), vec4<f32>(1.0));
+        }
+        let coverage = shape_coverage(in.shape, in.uv.x, in.clip_position.xy);
+        out = out * coverage;
     }
     if in.mask.z > 0.5 {
         let texel = px - vec2<i32>(round(in.mask.xy));

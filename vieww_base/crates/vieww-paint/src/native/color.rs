@@ -17,7 +17,13 @@
 use vieww_foundation::BlendMode;
 
 /// A premultiplied RGBA color, channels in `0.0..=1.0`, `a` the alpha.
+///
+/// `repr(C)` so the four channels are guaranteed adjacent and in `r, g, b, a`
+/// order: [`write_straight_u8`] loads a pixel as one 128-bit register, which
+/// is only sound if that is the layout. (Rust's default representation
+/// happens to produce it for four `f32`s, but does not promise to.)
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[repr(C)]
 pub(crate) struct Premul {
     pub(crate) r: f32,
     pub(crate) g: f32,
@@ -178,6 +184,115 @@ impl Premul {
 /// took the clamp's branches, and they are almost all of them.
 fn to_u8(v: f32) -> u8 {
     (v * 255.0 + 0.5) as u8
+}
+
+/// [`Premul::to_straight_u8`] over a whole run of pixels: `out` receives four
+/// bytes per pixel, straight-alpha RGBA, **byte-identical** to calling
+/// `to_straight_u8` on each one.
+///
+/// # Why this has an explicit SIMD body
+///
+/// This is the frame's way out — every pixel of every frame, drawn or not —
+/// and after the branch-free rewrite of `to_straight_u8` it was still the
+/// single hottest line in `examples/fixtures`' `23-editor-glass` by
+/// callgrind: four scalar saturating float-to-byte casts per pixel, each of
+/// which LLVM lowers to a clamp pair and a `cvttss2si`, and which it does not
+/// vectorise across pixels (the cast's saturation and `NaN` rule are what
+/// stop it).
+///
+/// A `Premul` is exactly one 128-bit register, so on x86-64 the whole
+/// conversion is a handful of SSE2 instructions per pixel and four pixels
+/// pack into one 16-byte store. SSE2 is part of the x86-64 baseline, so there
+/// is no runtime detection and no machine this does not run on.
+///
+/// # Why it is the same bytes, not nearly the same bytes
+///
+/// Operation for operation it is the scalar path:
+///
+/// - the reciprocal is `1.0 / a` by a true IEEE division (`divps`, not the
+///   approximate `rcpps`), zeroed wherever `a > 0.0` is false — which is also
+///   where a `NaN` alpha goes, as in the scalar `if`;
+/// - each colour channel is multiplied by it, then by `255.0`, then `0.5` is
+///   added — separate multiplies and an add, never fused, in that order;
+/// - alpha takes the same `* 255.0 + 0.5` without the reciprocal (its lane is
+///   multiplied by exactly `1.0`, an identity);
+/// - the saturating `as u8` is `max(v, 0)` then `min(v, 255)` then a
+///   truncating convert. `maxps` returns its *second* operand when either is
+///   `NaN`, so `max(v, 0)` maps `NaN` to `0` exactly as the cast does;
+///   anything above 255 — `inf` included — becomes 255; truncation toward
+///   zero is what `as` does inside the range.
+///
+/// `simd_output_matches_scalar_bit_for_bit` holds the two paths to that over
+/// every edge value (zero, one, `NaN`, infinities, negatives, overshoot,
+/// subnormals) and a large random sweep.
+pub(crate) fn write_straight_u8(pixels: &[Premul], out: &mut [u8]) {
+    assert_eq!(out.len(), pixels.len() * 4);
+    // SAFETY: SSE2 is part of the x86-64 baseline — every x86-64 CPU has it,
+    // and rustc enables it for every x86-64 target — so calling a function
+    // that requires it cannot reach a machine without it.
+    #[cfg(target_arch = "x86_64")]
+    let done = unsafe { sse2::write_straight_u8(pixels, out) };
+    #[cfg(not(target_arch = "x86_64"))]
+    let done = 0;
+    for (pixel, slot) in pixels[done..]
+        .iter()
+        .zip(out[done * 4..].as_chunks_mut::<4>().0)
+    {
+        *slot = pixel.to_straight_u8();
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+mod sse2 {
+    use core::arch::x86_64::{
+        __m128, __m128i, _mm_add_ps, _mm_and_ps, _mm_andnot_ps, _mm_castsi128_ps, _mm_cmpgt_ps,
+        _mm_cvttps_epi32, _mm_div_ps, _mm_loadu_ps, _mm_max_ps, _mm_min_ps, _mm_mul_ps, _mm_or_ps,
+        _mm_packs_epi32, _mm_packus_epi16, _mm_set1_ps, _mm_set_epi32, _mm_setzero_ps,
+        _mm_shuffle_ps, _mm_storeu_si128,
+    };
+
+    use super::Premul;
+
+    /// One pixel, as four `i32` lanes in `0..=255`.
+    #[inline]
+    #[target_feature(enable = "sse2")]
+    fn convert(p: __m128) -> __m128i {
+        let zero = _mm_setzero_ps();
+        let one = _mm_set1_ps(1.0);
+        let a = _mm_shuffle_ps::<0xFF>(p, p);
+        // `if a > 0.0 { 1.0 / a } else { 0.0 }`, all four lanes.
+        let inv = _mm_and_ps(_mm_div_ps(one, a), _mm_cmpgt_ps(a, zero));
+        // The alpha lane is multiplied by exactly 1.0 instead.
+        let alpha_lane = _mm_castsi128_ps(_mm_set_epi32(-1, 0, 0, 0));
+        let k = _mm_or_ps(_mm_andnot_ps(alpha_lane, inv), _mm_and_ps(alpha_lane, one));
+        let v = _mm_mul_ps(p, k);
+        let v = _mm_add_ps(_mm_mul_ps(v, _mm_set1_ps(255.0)), _mm_set1_ps(0.5));
+        // Saturating `as u8`: NaN -> 0 (second operand), clamp, truncate.
+        let v = _mm_min_ps(_mm_max_ps(v, zero), _mm_set1_ps(255.0));
+        _mm_cvttps_epi32(v)
+    }
+
+    /// Converts whole groups of four pixels and returns how many it did; the
+    /// caller finishes the remainder with the scalar path.
+    #[target_feature(enable = "sse2")]
+    pub(super) fn write_straight_u8(pixels: &[Premul], out: &mut [u8]) -> usize {
+        let (groups, _) = pixels.as_chunks::<4>();
+        let (slots, _) = out.as_chunks_mut::<16>();
+        for (group, slot) in groups.iter().zip(slots) {
+            // SAFETY: `Premul` is `repr(C)` with four `f32` fields, so each is
+            // 16 readable bytes; `loadu` has no alignment requirement.
+            let [p0, p1, p2, p3] = group
+                .each_ref()
+                .map(|p| unsafe { _mm_loadu_ps(std::ptr::from_ref(p).cast::<f32>()) });
+            let lo = _mm_packs_epi32(convert(p0), convert(p1));
+            let hi = _mm_packs_epi32(convert(p2), convert(p3));
+            let bytes = _mm_packus_epi16(lo, hi);
+            // SAFETY: `slot` is exactly 16 writable bytes; `storeu` has no
+            // alignment requirement.
+            unsafe { _mm_storeu_si128(slot.as_mut_ptr().cast::<__m128i>(), bytes) };
+        }
+        groups.len() * 4
+    }
 }
 
 /// `src` composited over `dst` under `mode`, both premultiplied.
@@ -434,6 +549,92 @@ fn premul_from(straight: [f32; 3], a: f32) -> Premul {
 mod tests {
     use super::*;
     use vieww_foundation::Color;
+
+    /// `write_straight_u8`'s SIMD body against `to_straight_u8`, byte for byte.
+    ///
+    /// Every pairing of a hostile set of channel values with a hostile set of
+    /// alphas (so every case meets every other in some lane), then two
+    /// million pseudo-random pixels around and beyond the valid range. Run
+    /// lengths that are not multiples of four exercise the scalar tail too.
+    #[test]
+    fn simd_output_matches_scalar_bit_for_bit() {
+        let edges = [
+            0.0f32,
+            -0.0,
+            1.0,
+            0.5,
+            1.0 / 255.0,
+            0.5 / 255.0,
+            254.5 / 255.0,
+            1.000_001,
+            0.999_999,
+            1.5,
+            300.0,
+            -0.1,
+            -1.0,
+            f32::MIN_POSITIVE,
+            f32::MIN_POSITIVE / 8.0, // subnormal
+            f32::EPSILON,
+            f32::MAX,
+            f32::MIN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+            -f32::NAN,
+        ];
+        let mut pixels = Vec::new();
+        for &a in &edges {
+            for &c in &edges {
+                for rotate in 0..3 {
+                    let mut ch = [c, c * 0.5, 1.0 - c];
+                    ch.rotate_left(rotate);
+                    pixels.push(Premul {
+                        r: ch[0],
+                        g: ch[1],
+                        b: ch[2],
+                        a,
+                    });
+                }
+            }
+        }
+        // A small deterministic generator (xorshift), so the sweep needs no
+        // dependency and is the same on every run.
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 40) as f32 / (1u64 << 24) as f32 * 1.4 - 0.2
+        };
+        for _ in 0..2_000_000 {
+            let a = next();
+            pixels.push(Premul {
+                r: next() * a,
+                g: next() * a,
+                b: next() * a,
+                a,
+            });
+        }
+        for len in [
+            pixels.len(),
+            pixels.len() - 1,
+            pixels.len() - 2,
+            pixels.len() - 3,
+            3,
+            0,
+        ] {
+            let run = &pixels[..len];
+            let mut simd = vec![0u8; len * 4];
+            write_straight_u8(run, &mut simd);
+            for (i, p) in run.iter().enumerate() {
+                assert_eq!(
+                    &simd[i * 4..i * 4 + 4],
+                    &p.to_straight_u8(),
+                    "pixel {i} of {len}: {p:?}"
+                );
+            }
+        }
+    }
 
     fn opaque(r: u8, g: u8, b: u8) -> Premul {
         Premul::from_straight(Color::rgba(r, g, b, 255))

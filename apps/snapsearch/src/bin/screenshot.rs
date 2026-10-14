@@ -179,6 +179,26 @@ fn main() {
     }
     write(&mut renderer, &mut driver, &out, "09-no-match.png");
 
+    // Frame 10: the Space view — the library as a similarity map, at rest.
+    // The same library, the same embeddings, seen the second way.
+    state.clear_search();
+    state.set_view(snapsearch::state::LibraryView::Space);
+    tick(&mut driver, Duration::from_millis(16));
+    write(&mut renderer, &mut driver, &out, "10-space-map.png");
+
+    // Frame 11: the Space view with a search on screen — matches ringed in
+    // viridis, everything else dimmed to context. The two-subject query from
+    // frame 5 is the interesting one to see *placed*: the sunset and ocean
+    // matches should land in two different parts of the map.
+    state.text_query.set("a sunset over water".to_string());
+    state.run_search();
+    for _ in 0..42 {
+        std::thread::sleep(Duration::from_millis(50));
+        state.advance_clock();
+        tick(&mut driver, Duration::from_millis(50));
+    }
+    write(&mut renderer, &mut driver, &out, "11-space-matches.png");
+
     println!("wrote {}", out.display());
 }
 

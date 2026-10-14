@@ -46,7 +46,9 @@ fn text_scene(fonts: &mut FontStore, text: &str, size: f32) -> Scene {
 /// edges.
 fn fringe_pixels(pixels: &vieww_paint::native::Pixels) -> usize {
     let data = pixels.data();
-    data.chunks_exact(4)
+    data.as_chunks::<4>()
+        .0
+        .iter()
         .filter(|&px| {
             let spread = px[0].max(px[1]).max(px[2]) - px[0].min(px[1]).min(px[2]);
             spread > 1

@@ -31,6 +31,23 @@ rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
 [target.'cfg(target_os = "macos")']
 rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
 
+# ── x86-64: the v2 baseline (SSE4.2), restored ───────────────────────────────
+#
+# The original file carried this and the reconstruction above lost it. Plain
+# `x86-64` is SSE2 only, with no `roundss`, so every `f32::floor`/`f32::ceil`
+# in the rasterizer is a call into `compiler-builtins` (`floorf`/`ceilf` show
+# up by name in a callgrind profile). TRACKER.md measured the flag alone at
+# 27.4 ms -> 22.7 ms on `fixtures`' `23-editor-glass`.
+#
+# v2 and not v3: v2 (SSE4.2, POPCNT, 2009-era) is what Windows 11 and every
+# macOS release that runs on Intel already require, so no supported desktop
+# loses the binary. v3 (AVX2) would exclude real machines still in use.
+#
+# Cargo joins this with the host block above when both match; exporting
+# `RUSTFLAGS` replaces both (see the note there).
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-cpu=x86-64-v2"]
+
 # ── Android: NDK clang through the shims, tests on a device through adb ─────
 [target.aarch64-linux-android]
 linker = "ci/mobile/ndk-clang-aarch64.sh"

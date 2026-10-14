@@ -205,6 +205,32 @@ impl ImageFilter {
             (self.blur_sigma * 3.0).ceil()
         }
     }
+
+    /// This filter as it must read in a space scaled by `factor` about the
+    /// origin.
+    ///
+    /// A filter's blur runs on the layer's **device-pixel** buffer, not on the
+    /// scene's logical geometry — so a scene lifted into physical pixels by
+    /// `vieww_paint::Scene::scaled` (a phone, where the ratio is ~3) has to
+    /// scale the σ with it, or a frosted panel's blur comes out a third of
+    /// its designed radius: sharp on a phone, soft on a desktop, from one
+    /// code path. The colour matrix is dimensionless and passes through
+    /// untouched.
+    ///
+    /// `factor` `1.0` returns the filter unchanged, so a caller scaling a
+    /// scene that is already physical pays nothing.
+    #[must_use]
+    pub fn scaled(self, factor: f32) -> Self {
+        if self.blur_sigma <= 0.0 || (factor - 1.0).abs() < f32::EPSILON {
+            return self;
+        }
+        Self {
+            blur_sigma: self.blur_sigma * factor,
+            blur_angle: self.blur_angle,
+            color_matrix: self.color_matrix,
+            backdrop: self.backdrop,
+        }
+    }
 }
 
 impl Default for ImageFilter {
@@ -362,7 +388,7 @@ pub fn compose_matrices(first: &ColorMatrix, second: &ColorMatrix) -> ColorMatri
 /// Fully transparent pixels are skipped: their colour carries no information
 /// and dividing by zero would invent some.
 pub fn apply_color_matrix_premultiplied(pixels: &mut [u8], matrix: &ColorMatrix) {
-    for pixel in pixels.chunks_exact_mut(4) {
+    for pixel in pixels.as_chunks_mut::<4>().0 {
         let a = f32::from(pixel[3]) / 255.0;
         if a <= 0.0 {
             continue;
@@ -592,6 +618,34 @@ mod tests {
         assert_eq!(ImageFilter::blur(8.0).bounds_expansion(), 24.0);
     }
 
+    /// The phone case: a frosted panel designed at σ 8 must blur σ 24 in a
+    /// space three times denser, with everything else about the filter — the
+    /// direction, the matrix, the backdrop flag — carried across unchanged.
+    #[test]
+    fn scaling_a_filter_scales_the_sigma_and_nothing_else() {
+        let filter = ImageFilter::directional_blur(8.0, 0.75)
+            .with_color(saturation_matrix(0.5))
+            .with_backdrop();
+
+        let scaled = filter.scaled(3.0);
+        assert_eq!(scaled.blur_sigma, 24.0, "the σ travels with the extent");
+        assert_eq!(scaled.blur_angle, filter.blur_angle);
+        assert_eq!(scaled.color_matrix, filter.color_matrix);
+        assert_eq!(scaled.backdrop, filter.backdrop);
+    }
+
+    /// The desktop case, and the one an unfiltered layer takes on every
+    /// phone: scaling has to be free, not a copy that reads as a change.
+    #[test]
+    fn scaling_by_one_or_with_no_blur_changes_nothing() {
+        let blurred = ImageFilter::blur(8.0);
+        assert_eq!(blurred.scaled(1.0), blurred);
+        assert_eq!(ImageFilter::NONE.scaled(3.0), ImageFilter::NONE);
+
+        let matrix_only = ImageFilter::color(grayscale_matrix());
+        assert_eq!(matrix_only.scaled(3.0), matrix_only);
+    }
+
     #[test]
     fn the_identity_matrix_leaves_pixels_alone() {
         let mut pixels = vec![10, 120, 250, 255, 0, 0, 0, 0];
@@ -736,7 +790,10 @@ mod tests {
         const W: usize = 64;
         let mut pixels = vec![255u8; W * W * 4];
         directional_blur_rgba(&mut pixels, W, W, 8.0, 0.6);
-        assert!(pixels.iter().all(|&v| v == 255), "a corner or edge darkened");
+        assert!(
+            pixels.iter().all(|&v| v == 255),
+            "a corner or edge darkened"
+        );
     }
 
     /// A motion blur smears **along** its ray and only along it: a single

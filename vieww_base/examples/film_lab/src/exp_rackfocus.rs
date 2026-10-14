@@ -21,15 +21,15 @@
 
 use vieww_foundation::{Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, mix, smoothstep, spring_out, tint, xywh, BG_DEEP, CANVAS, FAINT,
-    INK, MUTED, Rng, VIOLET, VIOLET_SOFT, CYAN, CYAN_SOFT, MINT,
+    alpha, clamp01, ease_in_out, smoothstep, tint, xywh, Rng, BG_DEEP, CANVAS, CYAN, CYAN_SOFT,
+    FAINT, INK, MINT, MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// Left margin.
 const X: f32 = 120.0;
@@ -92,12 +92,7 @@ fn buffer_layer(t: f32) -> WidgetNode {
                 for gx in 0..10 {
                     let cx = 26.0 + gx as f32 * 34.0;
                     let cy = 26.0 + gy as f32 * 34.0;
-                    book.stroke_rrect(
-                        xywh(cx, cy, 30.0, 30.0),
-                        3.0,
-                        alpha(CYAN, 0.10),
-                        1.0,
-                    );
+                    book.stroke_rrect(xywh(cx, cy, 30.0, 30.0), 3.0, alpha(CYAN, 0.10), 1.0);
                     // Glyph ghosts: runes in a handful of cells.
                     let pick = rng.f01();
                     if pick > 0.62 {
@@ -160,16 +155,12 @@ fn buffer_layer(t: f32) -> WidgetNode {
             }
 
             // A coverage bar — alpha ramp across the bottom.
-            book.rect(
-                xywh(26.0, 300.0, 848.0, 6.0),
-                alpha(Color::WHITE, 0.05),
-            );
+            book.rect(xywh(26.0, 300.0, 848.0, 6.0), alpha(Color::WHITE, 0.05));
             book.rect(
                 xywh(26.0, 300.0, 848.0 * 0.62, 6.0),
-                Gradient::horizontal().with_dither().with_stops(&[
-                    (0.0, alpha(MINT, 0.5)),
-                    (1.0, alpha(CYAN, 0.3)),
-                ]),
+                Gradient::horizontal()
+                    .with_dither()
+                    .with_stops(&[(0.0, alpha(MINT, 0.5)), (1.0, alpha(CYAN, 0.3))]),
             );
         }),
     );
@@ -185,23 +176,22 @@ fn buffer_layer(t: f32) -> WidgetNode {
         "PushLayer { blur: 13.0 }",
         "GlyphRun 1 face 44 px",
     ];
-    let stream = (0..cmds.len())
-        .fold(Stack::new(), |acc, i| {
-            acc.push(
-                Positioned::new()
-                    .left(302.0)
-                    .top(192.0 + i as f32 * 16.0)
-                    .width(560.0)
-                    .height(15.0)
-                    .child(
-                        Text::new(cmds[i]).style(
-                            TextStyle::new(11.0)
-                                .monospace()
-                                .color(alpha(CYAN_SOFT, 0.42)),
-                        ),
+    let stream = (0..cmds.len()).fold(Stack::new(), |acc, i| {
+        acc.push(
+            Positioned::new()
+                .left(302.0)
+                .top(192.0 + i as f32 * 16.0)
+                .width(560.0)
+                .height(15.0)
+                .child(
+                    Text::new(cmds[i]).style(
+                        TextStyle::new(11.0)
+                            .monospace()
+                            .color(alpha(CYAN_SOFT, 0.42)),
                     ),
-            )
-        });
+                ),
+        )
+    });
 
     let body = Stack::new()
         .push(Positioned::fill().child(board))
@@ -230,10 +220,7 @@ fn buffer_layer(t: f32) -> WidgetNode {
                 .top(120.0)
                 .width(900.0)
                 .height(330.0)
-                .child(
-                    Filtered::blur(blur_back(t))
-                        .child(body),
-                ),
+                .child(Filtered::blur(blur_back(t)).child(body)),
         )
         .into()
 }
@@ -283,36 +270,42 @@ fn preview_layer(t: f32) -> WidgetNode {
             for i in 0..24 {
                 let px = 12.0 + i as f32 * 15.0;
                 let py = 100.0 - 70.0 * (i as f32 / 23.0).powi(2) - rng.f01() * 10.0;
-                if i == 0 { p.move_to(Offset::new(px, py)); } else { p.line_to(Offset::new(px, py)); }
+                if i == 0 {
+                    p.move_to(Offset::new(px, py));
+                } else {
+                    p.line_to(Offset::new(px, py));
+                }
             }
             book.stroke(p, alpha(VIOLET_SOFT, 0.8), 2.0);
             // The head dot.
-            book.circle(Offset::new(12.0 + 23.0 * 15.0, 100.0 - 70.0 - 5.0), 4.0, alpha(tint(VIOLET, 0.4), 0.9));
+            book.circle(
+                Offset::new(12.0 + 23.0 * 15.0, 100.0 - 70.0 - 5.0),
+                4.0,
+                alpha(tint(VIOLET, 0.4), 0.9),
+            );
         }),
     );
 
     let body = Stack::new()
-        .push(Positioned::fill().child(
-            Painting::sized(
-                Size::new(430.0, 230.0),
-                PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                    book.rrect(
-                        Rect::new(0.0, 0.0, 430.0, 230.0),
-                        12.0,
-                        Gradient::vertical().with_dither().with_stops(&[
-                            (0.0, alpha(Color::rgb(26, 24, 38), 0.55)),
-                            (1.0, alpha(Color::rgb(16, 15, 24), 0.6)),
-                        ]),
-                    );
-                    book.stroke_rrect(
-                        Rect::new(0.5, 0.5, 429.0, 229.0),
-                        12.0,
-                        alpha(VIOLET_SOFT, 0.22),
-                        1.2,
-                    );
-                }),
-            ),
-        ))
+        .push(Positioned::fill().child(Painting::sized(
+            Size::new(430.0, 230.0),
+            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                book.rrect(
+                    Rect::new(0.0, 0.0, 430.0, 230.0),
+                    12.0,
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, alpha(Color::rgb(26, 24, 38), 0.55)),
+                        (1.0, alpha(Color::rgb(16, 15, 24), 0.6)),
+                    ]),
+                );
+                book.stroke_rrect(
+                    Rect::new(0.5, 0.5, 429.0, 229.0),
+                    12.0,
+                    alpha(VIOLET_SOFT, 0.22),
+                    1.2,
+                );
+            }),
+        )))
         .push(card)
         .push(
             Positioned::new()
@@ -345,10 +338,7 @@ fn preview_layer(t: f32) -> WidgetNode {
                 .top(324.0)
                 .width(430.0)
                 .height(230.0)
-                .child(
-                    Filtered::blur(blur_front(t))
-                        .child(body),
-                ),
+                .child(Filtered::blur(blur_front(t)).child(body)),
         )
         .into()
 }
@@ -360,24 +350,19 @@ const F_Y: f32 = 610.0;
 fn focal_bar(t: f32) -> WidgetNode {
     let f = focal(t);
 
-        let bar = Painting::sized(
+    let bar = Painting::sized(
         Size::new(1040.0, 60.0),
         PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
             // The rail.
-            book.rrect(
-                xywh(0.0, 24.0, 1040.0, 4.0),
-                2.0,
-                alpha(Color::WHITE, 0.07),
-            );
+            book.rrect(xywh(0.0, 24.0, 1040.0, 4.0), 2.0, alpha(Color::WHITE, 0.07));
             // The focus region fill — from buffer (left) to current f.
             let fx = 60.0 + f * 920.0;
             book.rrect(
                 xywh(fx.min(60.0 + 920.0), 24.0, (f * 920.0).abs().max(4.0), 4.0),
                 2.0,
-                Gradient::horizontal().with_dither().with_stops(&[
-                    (0.0, alpha(CYAN, 0.4)),
-                    (1.0, alpha(VIOLET, 0.6)),
-                ]),
+                Gradient::horizontal()
+                    .with_dither()
+                    .with_stops(&[(0.0, alpha(CYAN, 0.4)), (1.0, alpha(VIOLET, 0.6))]),
             );
             // The focal indicator — a triangle-tick riding f.
             book.ring(Offset::new(fx, 26.0), 8.0, 2.0, alpha(VIOLET_SOFT, 0.9));
@@ -452,11 +437,7 @@ fn focal_bar(t: f32) -> WidgetNode {
                         blur_back(t),
                         blur_front(t)
                     ))
-                    .style(
-                        TextStyle::new(12.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.9)),
-                    ),
+                    .style(TextStyle::new(12.0).monospace().color(alpha(MUTED, 0.9))),
                 ),
         )
         .into()
@@ -464,7 +445,7 @@ fn focal_bar(t: f32) -> WidgetNode {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -489,7 +470,11 @@ pub fn frame(t: f32) -> WidgetNode {
                 let y = rng.f01() * h;
                 let r = 0.4 + rng.f01() * 0.9;
                 let tw = 0.5 + 0.5 * (t * 3.0 + rng.f01() * 10.0).sin();
-                let side_c = if x > w * 0.5 { alpha(CYAN, 0.05 + 0.05 * tw) } else { alpha(VIOLET, 0.05 + 0.06 * tw) };
+                let side_c = if x > w * 0.5 {
+                    alpha(CYAN, 0.05 + 0.05 * tw)
+                } else {
+                    alpha(VIOLET, 0.05 + 0.06 * tw)
+                };
                 book.circle(Offset::new(x, y), r, side_c);
             }
 
@@ -498,30 +483,30 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.30, h * 0.62),
                     w * 0.24,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.10)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.10)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
             book.layer(1.0, 34.0, None, |inner| {
                 inner.circle(
                     Offset::new(w * 0.72, h * 0.30),
                     w * 0.22,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(CYAN, 0.07)),
-                        (1.0, alpha(CYAN, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(CYAN, 0.07)), (1.0, alpha(CYAN, 0.0))]),
                 );
             });
 
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.80).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.80)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );

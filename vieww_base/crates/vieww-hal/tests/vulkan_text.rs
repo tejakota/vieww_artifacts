@@ -173,7 +173,9 @@ fn assert_matches_cpu(gpu: &[u8], reference: &[u8], what: &str) {
 /// because two blank images agree perfectly.
 fn inked_pixels(pixels: &[u8], clear: Color) -> usize {
     pixels
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|p| p[0] != clear.r || p[1] != clear.g || p[2] != clear.b || p[3] != clear.a)
         .count()
 }
@@ -495,7 +497,9 @@ fn a_clip_cuts_text_where_the_cpu_cuts_it() {
 
     // And the clip did something, so the comparison above is not vacuous.
     let right_of_clip: usize = gpu
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .enumerate()
         .filter(|(i, p)| i % WIDTH as usize >= 90 && p[0] != 255)
         .count();

@@ -42,17 +42,20 @@
 //! All of them are `#[ignore]`d, because they need a loader and an ICD:
 //! `cargo test -p vieww-hal --features vulkan -- --ignored --test-threads=1`.
 //!
-//! **`lavapipe` is software.** Nothing here is a performance claim.
+//! **`lavapipe` and SwiftShader are software.** Nothing here is a performance
+//! claim.
 //!
-//! `vulkan::swapchain` is the piece that ships pixels to a screen today:
-//! `vieww-platform-winit` opens one `VulkanDevice` per window and presents
-//! `NativeRenderer`-rasterized, straight-alpha RGBA8 buffers onto it with
-//! `vkCmdCopyBufferToImage`. The GPU *compositing* path —
-//! [`vulkan::SceneRenderer`] executing a whole `vieww_gpu::ScenePlan`,
-//! offscreen layers, blend modes, filters, masks and shadows included — is
-//! complete as a **headless** renderer with readback. Promoting it to the live
-//! window swapchain is a separate integration step and is not done: the
-//! window path still presents the CPU surface.
+//! `vulkan::swapchain` is the piece that ships pixels to a screen: the window
+//! path through `vieww-platform-winit` presents buffers onto it with
+//! `vkCmdCopyBufferToImage`. Those buffers are the CPU rasterizer's — or, for
+//! an application that asked for the GPU path (`vieww-platform-winit`'s
+//! `App::prefer_gpu`), the GPU's own:
+//! [`vulkan::SceneRenderer`] executing a whole `vieww_gpu::ScenePlan`
+//! (offscreen layers, blend modes, filters, masks and shadows included) and
+//! handing its frame back through host memory to the same present path. The
+//! join is done and tested on a real (Xvfb) window; rendering straight onto
+//! the swapchain image instead of paying the readback is the follow-up
+//! `PENDING.md` §2.2 keeps honest about.
 //!
 //! `metal` and `d3d12` are `cfg`-gated to their own operating systems and do
 //! not compile — or appear in this doc build — as part of this Linux build at
@@ -106,22 +109,14 @@ pub struct AdapterInfo {
 #[cfg(feature = "vulkan")]
 pub mod vulkan;
 
-/// The Metal backend (spec §4.3, landing M6) — macOS and iOS.
+/// The Metal backend (spec §4.3) — macOS and iOS.
 ///
-/// **Not compiled on Linux**, in two independent ways: this module is
-/// `cfg`-gated to `target_os = "macos"` here, *and* the `metal` crate it
-/// depends on is itself gated to `target_os = "macos"` in `Cargo.toml`
-/// (behind the optional `metal` feature) — so a Linux build never resolves
-/// the dependency, never sees this module, and is unaffected by either
-/// existing. On macOS with `--features metal`: device/queue bring-up
-/// (`MetalDevice::new`) is real, calling verified `metal` 0.31 APIs; the
-/// full render pipeline is an honest, precisely-scoped stub — see
-/// `src/metal.rs`'s own module doc for exactly what's real, what's deferred,
-/// and why (this sandbox cannot compile-check macOS code at all, so writing
-/// ~150 lines of unverifiable pipeline code would trade a real gap for a
-/// fake-looking fill-in, which `docs/RENDERER-MIGRATION.md`'s own honesty
-/// bar rules out).
-#[cfg(all(target_os = "macos", feature = "metal"))]
+/// Gated twice: here to Apple targets, and the `metal` crate to the same
+/// targets in `Cargo.toml`, so no other build resolves it. Headless clear and
+/// mesh rendering through the shared WGSL library; see `src/metal.rs` for how
+/// it is verified (`ci/check/cross-check.sh` type-checks it from Linux, the
+/// macOS CI leg runs it).
+#[cfg(all(any(target_os = "macos", target_os = "ios"), feature = "metal"))]
 pub mod metal;
 
 /// The Direct3D 12 backend (spec §4.3, landing M8) — Windows.

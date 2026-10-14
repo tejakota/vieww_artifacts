@@ -930,7 +930,11 @@ fn sample_ramp(stops: &[(f32, Color)], at: f32) -> Color {
         let (b_off, b_col) = w[1];
         if at >= a_off && at <= b_off {
             let span = b_off - a_off;
-            let t = if span > 1e-9 { (at - a_off) / span } else { 0.0 };
+            let t = if span > 1e-9 {
+                (at - a_off) / span
+            } else {
+                0.0
+            };
             return a_col.lerp(b_col, t);
         }
     }

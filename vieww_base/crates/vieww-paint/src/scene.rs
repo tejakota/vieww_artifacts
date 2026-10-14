@@ -643,7 +643,12 @@ impl Scene {
                     alpha,
                     blend,
                     clip: clip.scaled(factor),
-                    filter,
+                    // The blur runs on the layer's device-pixel buffer, so the
+                    // σ travels with the extent: unscaled, a frosted panel on
+                    // a ~3x phone renders a third of its designed softness
+                    // through this one path while a desktop stays true. See
+                    // `ImageFilter::scaled`.
+                    filter: filter.scaled(factor),
                 },
                 Command::PopLayer => Command::PopLayer,
             })
@@ -1014,7 +1019,26 @@ impl Canvas for Scene {
         // Grown by the blur's reach, or a blurred panel is cut off square at
         // its own edge — the "why does my blur have a hard border" bug. Zero
         // for an unfiltered layer, so nothing changes for the common case.
-        let reach = filter.bounds_expansion();
+        //
+        // **Not for a backdrop filter.** A plain blur spreads the group's own
+        // ink outward, so the rasterisation region genuinely has to include
+        // pixels no command inside the group owns. A backdrop filter has no
+        // ink of its own to spread — its subject is the destination already
+        // painted *underneath its bounds*, and the blur redistributes that
+        // sample within the region, clamped at its edges. Growing the region
+        // anyway makes the layer sample the neighbours' paint and then
+        // composite the blurred copy back **over them**: an adjacent opaque
+        // button's edge comes back eroded into a 3σ ramp and the frosted panel
+        // appears to glow outside its own box. That is exactly what vavlt's
+        // outcome screen did to the solid `Done` button beside the Glass
+        // `Restore` — the white chip lost its right 36 px to the blur and read
+        // as smeared rather than solid. So: a backdrop layer's region is the
+        // declared bounds, ungrown.
+        let reach = if filter.backdrop {
+            0.0
+        } else {
+            filter.bounds_expansion()
+        };
         let bounds = if reach > 0.0 {
             Rect::new(
                 bounds.left - reach,
@@ -1117,8 +1141,9 @@ impl Canvas for Scene {
             // `contents` folds from `Rect::ZERO`, so an empty group collapses
             // the layer to a speck at the origin and the blur lands nowhere
             // near the panel. The declared bounds are the truth here, and
-            // they are already grown by the filter's reach in
-            // `push_filtered_layer`.
+            // `push_filtered_layer` deliberately leaves them ungrown for a
+            // backdrop filter — the blur must not reach past the widget's own
+            // box, for the neighbour-erosion reason documented there.
             let reach = filter.bounds_expansion();
             if filter.backdrop {
                 // Left exactly as declared.
@@ -1344,6 +1369,35 @@ mod tests {
         let mut scene = Scene::new();
         scene.fill_rect(Rect::new(0.0, 0.0, 10.0, 10.0), Color::RED.into());
         assert_eq!(scene.scaled(1.0).fills()[0].0, scene.fills()[0].0);
+    }
+
+    /// The phone case for filters, which the fill-only test above cannot see:
+    /// a layer's blur runs on its device-pixel buffer, so a scene lifted into
+    /// a denser space has to scale the σ with the geometry. Unscaled, a
+    /// frosted panel designed at σ 8 blurs at σ 8 in a 3x buffer — a third of
+    /// its designed softness, and a panel that looks right on a desktop and
+    /// wrong on a phone through the one code path both now share.
+    #[test]
+    fn scaling_a_scene_scales_a_filtered_layer_sigma_with_its_bounds() {
+        let mut scene = Scene::new();
+        scene.push_filtered_layer(
+            Rect::new(0.0, 0.0, 100.0, 50.0),
+            1.0,
+            BlendMode::Normal,
+            ImageFilter::blur(8.0),
+        );
+        scene.fill_rect(Rect::new(0.0, 0.0, 100.0, 50.0), Color::WHITE.into());
+        scene.pop_layer();
+
+        let scaled = scene.scaled(3.0);
+        let Command::PushLayer { bounds, filter, .. } = &scaled.commands()[0] else {
+            panic!("the first command should be the layer");
+        };
+        assert_eq!(filter.blur_sigma, 24.0, "the σ travels with the extent");
+        // The recorded bounds were grown by the unscaled blur's reach (24 =
+        // ceil(3σ)) before scaling, and the scaled reach is exactly 3x that —
+        // so the growth stays proportional rather than compounding.
+        assert_eq!(bounds, &Rect::new(-72.0, -72.0, 372.0, 222.0));
     }
 
     #[test]
@@ -1584,6 +1638,42 @@ mod tests {
     fn an_unbalanced_pop_layer_fails_loudly() {
         let mut scene = Scene::new();
         scene.pop_layer();
+    }
+
+    /// A plain blur's layer region grows by the blur's reach (the case
+    /// `blur_bounds_are_expanded_exactly_once` pins from the renderer side) —
+    /// but a **backdrop** filter's region must stay exactly the declared
+    /// bounds. Growing it makes the renderer sample the neighbours' paint and
+    /// composite the blurred copy back over it, eroding an adjacent opaque
+    /// widget's edge: vavlt's outcome screen lost the right 36 px of the solid
+    /// `Done` button to the Glass `Restore` button's backdrop layer, and the
+    /// white chip read as a smear rather than a chip.
+    #[test]
+    fn a_backdrop_layers_region_is_its_declared_bounds_not_grown_by_reach() {
+        let sigma = 12.0_f32;
+        let declared = Rect::new(211.0, 839.0, 394.0, 895.0);
+
+        let mut scene = Scene::new();
+        scene.push_filtered_layer(
+            declared,
+            1.0,
+            BlendMode::Normal,
+            ImageFilter::backdrop_blur(sigma),
+        );
+        scene.fill_rect(
+            Rect::new(211.0, 839.0, 394.0, 895.0),
+            Color::rgba(45, 46, 48, 220).into(),
+        );
+        scene.pop_layer();
+
+        let Command::PushLayer { bounds, .. } = scene.commands()[0] else {
+            panic!("expected a layer");
+        };
+        assert_eq!(
+            bounds, declared,
+            "a backdrop layer samples and composites only its own box; the \
+             blur clamps at its edges rather than reaching into the neighbours"
+        );
     }
 
     // ------------------------------------------------------ strokes and shadows

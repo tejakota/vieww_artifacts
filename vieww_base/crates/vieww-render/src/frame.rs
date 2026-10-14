@@ -248,6 +248,10 @@ pub struct FrameDriver {
     /// [`Capture`] gives: on some platforms the notification arrives *after* the
     /// pixels were read, so anything reacting to an event has already lost.
     capture: Capture,
+    /// A system font scan running on its own thread, swapped in by
+    /// [`FrameDriver::drive`] when it finishes — see
+    /// [`FrameDriver::use_system_fonts_in_background`].
+    pending_fonts: Option<vieww_text::PendingSystemFonts>,
     /// System accessibility preferences, published as a fourth provider — see
     /// [`Accessibility`]'s module docs for why it is its own rather than a
     /// field on `ViewMetrics`.
@@ -378,6 +382,7 @@ impl FrameDriver {
             size: Size::ZERO,
             metrics: ViewMetrics::plain(surface),
             capture: Capture::default(),
+            pending_fonts: None,
             accessibility: vieww_foundation::Accessibility::default(),
             theme: None,
             file_drag: FileDrag::default(),
@@ -1096,6 +1101,59 @@ impl FrameDriver {
         self.set_fonts(vieww_text::FontStore::with_system_fallback());
     }
 
+    /// [`use_system_fonts`](Self::use_system_fonts) without waiting for the
+    /// scan: frames draw with the embedded faces until it finishes, then the
+    /// next [`drive`](Self::drive) swaps the system fallback in and repaints.
+    ///
+    /// `on_ready` runs on the scan thread when the fonts are ready — pass the
+    /// event loop's waker, so a loop asleep in `ControlFlow::Wait` comes back
+    /// to adopt them. This is what `vieww_platform_winit::App` calls: the
+    /// scan's cost depends on the machine's disk, and on a cold cache it ran
+    /// to tens of seconds before a window's first frame (see
+    /// [`FontStore::system_fallback_in_background`](vieww_text::FontStore::system_fallback_in_background)).
+    /// Headless callers that render once and want every script on that one
+    /// frame should keep calling `use_system_fonts`.
+    pub fn use_system_fonts_in_background(&mut self, on_ready: impl FnOnce() + Send + 'static) {
+        self.adopt_fonts_when_ready(vieww_text::FontStore::system_fallback_in_background(
+            on_ready,
+        ));
+    }
+
+    /// Adopt `pending`'s store on the first [`drive`](Self::drive) after it is
+    /// ready — the general form of
+    /// [`use_system_fonts_in_background`](Self::use_system_fonts_in_background),
+    /// for a caller that started its own background font load.
+    pub fn adopt_fonts_when_ready(&mut self, pending: vieww_text::PendingSystemFonts) {
+        self.pending_fonts = Some(pending);
+    }
+
+    /// Whether a background font scan has been started and not yet adopted.
+    #[must_use]
+    pub const fn fonts_pending(&self) -> bool {
+        self.pending_fonts.is_some()
+    }
+
+    /// Swap in a finished background font scan, if there is one. Every
+    /// render object is re-laid out (`set_fonts`) and the whole surface is
+    /// repainted, since any text may now shape differently.
+    fn adopt_ready_fonts(&mut self, scheduler: &mut FrameScheduler) {
+        let Some(store) = self
+            .pending_fonts
+            .as_ref()
+            .and_then(vieww_text::PendingSystemFonts::try_take)
+        else {
+            return;
+        };
+        self.pending_fonts = None;
+        self.set_fonts(store);
+        self.invalidate();
+        scheduler.request_frame();
+        // Once per process, so reading the variable here costs nothing.
+        if std::env::var_os("VIEWW_TRACE_FRAMES").is_some() {
+            eprintln!("driver: system fonts adopted; relayout and full repaint requested");
+        }
+    }
+
     /// The topmost object under `point`, for an inspector's click-to-pick.
     ///
     /// The driver-level shorthand for `renders().hit_test_identify(..)`, beside
@@ -1565,6 +1623,7 @@ impl FrameDriver {
     where
         C: FnMut() -> Duration,
     {
+        self.adopt_ready_fonts(scheduler);
         let stats = scheduler.pulse(now, self, elapsed);
         if self.needs_frame() {
             scheduler.request_frame();
@@ -2717,6 +2776,46 @@ mod tests {
         );
         assert!(!driver.is_animating(), "and then it stops");
         assert_eq!(driver.scene().fills()[0].1.color, Color::BLUE);
+    }
+
+    /// A background font scan is adopted by the first `drive` after it
+    /// finishes: the driver asks for a frame of its own and repaints, so a
+    /// loop woken by `on_ready` with nothing else to do still shows the new
+    /// fonts — and frames before that drew normally.
+    #[test]
+    fn background_fonts_are_adopted_by_the_next_drive_and_repaint() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let mut scheduler = FrameScheduler::sixty_hz();
+        let mut driver = driver();
+        driver.set_root(SizedBox::from_size(Size::new(40.0, 20.0)));
+        scheduler.request_frame();
+        assert!(driver.drive(&mut scheduler, ms(16), || ms(0)).is_some());
+
+        // The embedded-only hand-over, not the system scan: this tests the
+        // adoption, and a real scan's duration is the machine's disk — it ran
+        // past this test's old 10 s bound in `checks.sh` right after a build.
+        let ready = Arc::new(AtomicBool::new(false));
+        driver.adopt_fonts_when_ready(vieww_text::FontStore::embedded_only_in_background({
+            let ready = Arc::clone(&ready);
+            move || ready.store(true, Ordering::SeqCst)
+        }));
+        assert!(driver.fonts_pending());
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !ready.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(
+            ready.load(Ordering::SeqCst),
+            "the scan finished and said so"
+        );
+
+        // Nothing requested a frame — only the fonts arriving did.
+        let stats = driver.drive(&mut scheduler, ms(32), || ms(0));
+        assert!(stats.is_some(), "adopting the fonts produced a frame");
+        assert!(!driver.fonts_pending(), "and they were adopted");
     }
 
     #[test]

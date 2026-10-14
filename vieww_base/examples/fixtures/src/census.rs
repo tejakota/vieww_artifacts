@@ -19,8 +19,11 @@
 //! # The parity bound, and why it is not "every pixel"
 //!
 //! The two rasterizers are allowed to disagree in exactly one place. The CPU
-//! path computes analytic coverage per scanline; the GPU path triangulates and
-//! lets the hardware sample, with no multisampling. Along a shape's boundary
+//! path computes analytic coverage per scanline; the GPU path covers rects
+//! and rounded rects with its own SDF and every other shape with the CPU's
+//! coverage (`GpuSeam::shape_coverage`), so edge differences are now small —
+//! but a planner-less plan, an oversized shape and glyph/image edges still
+//! come from a different rasterizer. Along a shape's boundary
 //! those produce different values *by design*, and on a high-contrast edge the
 //! difference reaches most of the channel's range — so a whole-image `max`
 //! reports 200-plus for a frame that is perfectly correct, and reports it for

@@ -26,17 +26,19 @@
 //! Node vocabulary from the graph (§4.1–4.3): say · rust · compose · fix ·
 //! receipt · carry · damage — then the fork: desktop · browser · phone.
 
-use vieww_foundation::{Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle};
+use vieww_foundation::{
+    Color, Dash, Gradient, Offset, Path, Rect, Size, Sketchbook, StrokeStyle, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{icons, Icon, Painting, PaintWith};
+use vieww_widget::{icons, Icon, PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_out_expo, mix, spring_out, BG_DEEP, CANVAS, CANVAS_W, INK, MUTED,
-    Rng, VIOLET, VIOLET_SOFT, CYAN_SOFT,
+    alpha, clamp01, ease_out_expo, mix, spring_out, Rng, BG_DEEP, CANVAS, CANVAS_W, CYAN_SOFT, INK,
+    MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// Baseline of the line's world.
 const BASE_Y: f32 = 438.0;
@@ -114,7 +116,9 @@ fn cubic(a: Offset, c1: Offset, c2: Offset, b: Offset, s: f32) -> Offset {
 
 /// Total polyline length.
 fn poly_len(pts: &[Offset]) -> f32 {
-    pts.windows(2).map(|w| (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy)).sum()
+    pts.windows(2)
+        .map(|w| (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy))
+        .sum()
 }
 
 /// Point at arc-length fraction `frac`.
@@ -125,7 +129,11 @@ fn point_at(pts: &[Offset], frac: f32) -> Offset {
     for w in pts.windows(2) {
         let seg = (w[1].dx - w[0].dx).hypot(w[1].dy - w[0].dy);
         if acc + seg >= target {
-            let s = if seg > 1e-6 { (target - acc) / seg } else { 0.0 };
+            let s = if seg > 1e-6 {
+                (target - acc) / seg
+            } else {
+                0.0
+            };
             return Offset::new(
                 w[0].dx + (w[1].dx - w[0].dx) * s,
                 w[0].dy + (w[1].dy - w[0].dy) * s,
@@ -224,10 +232,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
         // The draw head: a live spark at the front.
         let head = point_at(&poly, draw_t);
         book.layer(1.0, 8.0, None, |inner| {
-            inner.circle(head, 14.0, Gradient::radial_fill().with_stops(&[
-                (0.0, alpha(CYAN_SOFT, 0.5)),
-                (1.0, alpha(VIOLET, 0.0)),
-            ]));
+            inner.circle(
+                head,
+                14.0,
+                Gradient::radial_fill()
+                    .with_stops(&[(0.0, alpha(CYAN_SOFT, 0.5)), (1.0, alpha(VIOLET, 0.0))]),
+            );
         });
         book.circle(head, 2.6, Color::WHITE);
     }
@@ -242,9 +252,18 @@ fn scene(book: &mut Sketchbook, t: f32) {
         let px = node_px(x, y);
         // The pulse ring, expanding and fading.
         let ring_r = 6.0 + 16.0 * spring;
-        book.ring(px, ring_r, 1.6, alpha(VIOLET, (1.0 - node_t).max(0.0) * 0.55));
+        book.ring(
+            px,
+            ring_r,
+            1.6,
+            alpha(VIOLET, (1.0 - node_t).max(0.0) * 0.55),
+        );
         // The node itself.
-        book.circle(px, 4.4 + 1.2 * (spring - 1.0), mix(VIOLET_SOFT, Color::WHITE, 0.3));
+        book.circle(
+            px,
+            4.4 + 1.2 * (spring - 1.0),
+            mix(VIOLET_SOFT, Color::WHITE, 0.3),
+        );
         // The small label tick — labels themselves are widgets (crisper).
         book.line(
             Offset::new(px.dx, px.dy + 8.0),
@@ -277,7 +296,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
                 let end = node_px(BRANCH_END_X, y_off - 6.0);
                 let settle = clamp01((fork_t - bi as f32 * 0.13 - 0.6) / 0.25);
                 let spring = spring_out(settle, 12.0, 0.5);
-                book.ring(end, 5.0 + 10.0 * (1.0 - settle), 1.4, alpha(bcolor, (1.0 - settle) * 0.5));
+                book.ring(
+                    end,
+                    5.0 + 10.0 * (1.0 - settle),
+                    1.4,
+                    alpha(bcolor, (1.0 - settle) * 0.5),
+                );
                 book.circle(end, 4.2 + 1.0 * (spring - 1.0), bcolor);
             }
         }
@@ -307,10 +331,14 @@ fn scene(book: &mut Sketchbook, t: f32) {
         // The head: bright, small, deliberate.
         if rise > 0.2 {
             book.layer(1.0, 10.0, None, |inner| {
-                inner.circle(tip, 16.0, Gradient::radial_fill().with_stops(&[
-                    (0.0, alpha(Color::WHITE, 0.55)),
-                    (1.0, alpha(VIOLET_SOFT, 0.0)),
-                ]));
+                inner.circle(
+                    tip,
+                    16.0,
+                    Gradient::radial_fill().with_stops(&[
+                        (0.0, alpha(Color::WHITE, 0.55)),
+                        (1.0, alpha(VIOLET_SOFT, 0.0)),
+                    ]),
+                );
             });
             book.circle(tip, 3.2, Color::WHITE);
         }
@@ -319,10 +347,12 @@ fn scene(book: &mut Sketchbook, t: f32) {
     // The vignette.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::radial(Offset::new(0.5, 0.5), 0.8).with_dither().with_stops(&[
-            (0.6, alpha(Color::BLACK, 0.0)),
-            (1.0, alpha(Color::BLACK, 0.42)),
-        ]),
+        Gradient::radial(Offset::new(0.5, 0.5), 0.8)
+            .with_dither()
+            .with_stops(&[
+                (0.6, alpha(Color::BLACK, 0.0)),
+                (1.0, alpha(Color::BLACK, 0.42)),
+            ]),
     );
 }
 
@@ -345,7 +375,7 @@ fn node_label(text: &str, x: f32, y: f32, lit: f32) -> WidgetNode {
         .into()
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let draw_t = ease_out_expo(clamp01((t - 0.02) / 0.38));
 
     // Node labels + icons: real widgets riding the painted line.

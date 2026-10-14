@@ -1,0 +1,15 @@
+[package]
+name = "feature-video-filmstrip"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+vieww-foundation.workspace = true
+feature-harness = { path = "../harness" }
+vieww-video.workspace = true
+vieww-widget.workspace = true
+
+[lints]
+workspace = true

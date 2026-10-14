@@ -1,0 +1,17 @@
+[package]
+name = "vieww-spatial"
+description = "Native 3D scene, CPU rasterizer, physics, particles and spatial animation for ViewW."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+vieww-animation.workspace = true
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

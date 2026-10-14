@@ -37,11 +37,135 @@ pub struct VNode {
     /// element is in the document.
     #[allow(clippy::type_complexity)]
     pub canvas: Option<(String, Rc<dyn Fn(&str)>)>,
+    /// `Some` for an `<iframe>` embed: what to load (`src`) or render
+    /// (`srcdoc`), and the semantics label.
+    ///
+    /// An `href` on an `iframe` would be ambiguous with a link's, so the
+    /// embed carries its own field — see `walk`'s `WebView` case for why
+    /// the DOM turn of an embed is a leaf with no subtree.
+    pub iframe: Option<Iframe>,
     pub on_click: Option<Rc<dyn Fn()>>,
     pub children: Vec<VNode>,
 }
 
+/// An embedded web view's payload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Iframe {
+    /// The `src` to load, when the embed asked for a URL.
+    pub src: Option<String>,
+    /// The `srcdoc` to render, when the embed asked for inline HTML.
+    pub srcdoc: Option<String>,
+    /// What a screen reader is told, because an iframe is opaque to
+    /// assistive technology and its `title` attribute is the one line
+    /// of description that reaches the user.
+    pub title: String,
+}
+
+/// Whether an element with a click handler needs button semantics added:
+/// anything but a `<button>` or a link is unreachable from the keyboard
+/// otherwise — no tab stop, no Enter, and a screen reader announces it as
+/// plain text.
+pub(crate) fn needs_button_semantics(node: &VNode) -> bool {
+    node.on_click.is_some() && node.tag != "button" && !(node.tag == "a" && node.href.is_some())
+}
+
+fn escape_into(out: &mut String, text: &str, attribute: bool) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' if attribute => out.push_str("&quot;"),
+            _ => out.push(c),
+        }
+    }
+}
+
 impl VNode {
+    /// The subtree as static HTML: the same elements and attributes the live
+    /// mount creates, minus what only a live page has — click listeners and
+    /// the canvas island's application (its `<canvas>` is emitted, empty).
+    ///
+    /// What it is for: a page a crawler or a no-JavaScript reader can read
+    /// (the canvas backend's honest gap, and this backend's whole advantage),
+    /// a snapshot to diff in a test, and a page to screenshot without a wasm
+    /// toolchain.
+    #[must_use]
+    pub fn to_html(&self) -> String {
+        let mut out = String::new();
+        self.write_html(&mut out);
+        out
+    }
+
+    fn write_html(&self, out: &mut String) {
+        let attr = |out: &mut String, name: &str, value: &str| {
+            out.push(' ');
+            out.push_str(name);
+            out.push_str("=\"");
+            escape_into(out, value, true);
+            out.push('"');
+        };
+        out.push('<');
+        out.push_str(self.tag);
+        if !self.css.is_empty() {
+            attr(out, "style", &self.css);
+        }
+        if let Some(class) = &self.class {
+            attr(out, "class", class);
+        }
+        if let Some(id) = &self.id {
+            attr(out, "id", id);
+        }
+        if let Some(label) = &self.label {
+            attr(
+                out,
+                if self.tag == "img" {
+                    "alt"
+                } else {
+                    "aria-label"
+                },
+                label,
+            );
+        }
+        if let Some(href) = &self.href {
+            attr(out, if self.tag == "img" { "src" } else { "href" }, href);
+        }
+        if let Some(iframe) = &self.iframe {
+            if let Some(src) = &iframe.src {
+                attr(out, "src", src);
+            }
+            if let Some(srcdoc) = &iframe.srcdoc {
+                attr(out, "srcdoc", srcdoc);
+            }
+            attr(out, "title", &iframe.title);
+            attr(out, "loading", "lazy");
+        }
+        if let Some((id, _)) = &self.canvas {
+            if self.id.is_none() {
+                attr(out, "id", id);
+            }
+        }
+        if needs_button_semantics(self) {
+            attr(out, "tabindex", "0");
+            attr(out, "role", "button");
+        }
+        out.push('>');
+        if matches!(self.tag, "img" | "br" | "hr" | "input") {
+            return;
+        }
+        if self.children.is_empty() {
+            if let Some(text) = &self.text {
+                escape_into(out, text, false);
+            }
+        }
+        for child in &self.children {
+            child.write_html(out);
+        }
+        out.push_str("</");
+        out.push_str(self.tag);
+        out.push('>');
+    }
+
     fn div(css: String) -> Self {
         Self {
             tag: "div",
@@ -52,6 +176,7 @@ impl VNode {
             id: None,
             label: None,
             canvas: None,
+            iframe: None,
             on_click: None,
             children: Vec::new(),
         }
@@ -89,6 +214,7 @@ impl Pending {
             id: self.id,
             label: self.label,
             canvas: None,
+            iframe: None,
             on_click: self.on_click,
             children: Vec::new(),
         }
@@ -179,6 +305,28 @@ fn walk_with(tree: &ElementTree, id: ElementId, mut pending: Pending) -> Vec<VNo
         pending.id = tagged.id.clone().or(pending.id);
         pending.label = tagged.label.clone().or(pending.label);
         return descend(tree, only(), pending);
+    }
+    if let Some(embed) = widget.downcast_ref::<vieww_embed::WebView>() {
+        // The embed's DOM turn: a real `<iframe>`, sized as the widget asked
+        // (the same contract `Canvas` gets), loaded from the embed's URL or
+        // rendered from its HTML. A leaf: the browser owns the subtree, and
+        // a walk that descended into it would find nothing it can express.
+        let mut node = pending.spend("iframe");
+        node.tag = "iframe";
+        node.iframe = Some(Iframe {
+            src: embed.content().as_url().map(str::to_string),
+            srcdoc: embed.content().as_html().map(str::to_string),
+            title: format!(
+                "web content: {}",
+                embed.content().as_url().unwrap_or("inline HTML")
+            ),
+        });
+        node.css.push_str(&format!(
+            "display:block;border:none;width:{};height:{};",
+            px(embed.view_size().width),
+            px(embed.view_size().height)
+        ));
+        return vec![node];
     }
     if let Some(canvas) = widget.downcast_ref::<Canvas>() {
         let mut node = pending.spend("canvas");
@@ -525,5 +673,122 @@ fn cross_axis(alignment: CrossAxisAlignment) -> &'static str {
         CrossAxisAlignment::Center => "center",
         CrossAxisAlignment::Stretch => "stretch",
         CrossAxisAlignment::Baseline => "baseline",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vieww_embed::{WebContent, WebView};
+
+    /// Walk a widget tree to its VNodes, the way `DomApp` does.
+    fn walked(widget: impl Into<vieww_widget::WidgetNode>) -> Vec<VNode> {
+        let mut tree = ElementTree::new();
+        let root = tree.mount(widget);
+        walk(&tree, root)
+    }
+
+    #[test]
+    fn a_tappable_box_that_is_not_a_button_gets_a_tab_stop_and_a_role() {
+        let tapped = std::rc::Rc::new(std::cell::Cell::new(false));
+        let t = tapped.clone();
+        let nodes = walked(
+            vieww_widget::GestureDetector::new()
+                .on_tap(move |_| t.set(true))
+                .child(vieww_widget::ColoredBox::new(vieww_foundation::Color::RED)),
+        );
+        let node = &nodes[0];
+        assert!(needs_button_semantics(node));
+        let html = node.to_html();
+        assert!(
+            html.contains("tabindex=\"0\"") && html.contains("role=\"button\""),
+            "{html}"
+        );
+        (node.on_click.as_ref().unwrap())();
+        assert!(tapped.get());
+        // A link is already reachable; it gets neither.
+        let link = VNode {
+            tag: "a",
+            href: Some("#x".into()),
+            on_click: node.on_click.clone(),
+            ..VNode::div(String::new())
+        };
+        assert!(!needs_button_semantics(&link));
+    }
+
+    #[test]
+    fn palette_colours_become_css_variables_and_others_stay_literal() {
+        let ink = vieww_foundation::Color::rgb(0xF8, 0xF4, 0xF2);
+        crate::style::set_color_tokens(&[(ink, "ink")]);
+        assert_eq!(crate::style::css_color(ink), "var(--ink)");
+        assert_eq!(
+            crate::style::css_color(vieww_foundation::Color::rgb(1, 2, 3)),
+            "#010203"
+        );
+        crate::style::set_color_tokens(&[]);
+        assert_eq!(crate::style::css_color(ink), "#f8f4f2");
+    }
+
+    #[test]
+    fn static_html_escapes_text_and_attributes() {
+        let mut node = VNode::div("color:red".into());
+        node.label = Some("a \"quoted\" <label>".into());
+        let mut child = VNode::div(String::new());
+        child.text = Some("1 < 2 & 3".into());
+        node.children.push(child);
+        assert_eq!(
+            node.to_html(),
+            "<div style=\"color:red\" aria-label=\"a &quot;quoted&quot; &lt;label&gt;\">\
+             <div>1 &lt; 2 &amp; 3</div></div>"
+        );
+    }
+
+    #[test]
+    fn a_web_view_becomes_an_iframe() {
+        let nodes = walked(WebView::new(WebContent::url("https://example.test/embed")));
+        assert_eq!(nodes.len(), 1, "a leaf: the browser owns the subtree");
+        let node = &nodes[0];
+        assert_eq!(node.tag, "iframe");
+        let iframe = node.iframe.as_ref().expect("the embed payload");
+        assert_eq!(iframe.src.as_deref(), Some("https://example.test/embed"));
+        assert!(iframe.srcdoc.is_none());
+        assert!(
+            node.css.contains("width:320"),
+            "sized as asked: {}",
+            node.css
+        );
+        assert!(
+            node.label.is_none(),
+            "the title rides the iframe payload, not the label slot"
+        );
+    }
+
+    #[test]
+    fn inline_html_takes_the_srcdoc_spelling() {
+        let nodes = walked(WebView::new(WebContent::html("<strong>hi</strong>")));
+        let iframe = nodes[0].iframe.as_ref().expect("the embed payload");
+        assert!(iframe.src.is_none());
+        assert_eq!(iframe.srcdoc.as_deref(), Some("<strong>hi</strong>"));
+    }
+
+    #[test]
+    fn a_sized_embed_sizes_the_frame() {
+        let nodes = walked(
+            WebView::new(WebContent::url("https://example.test/"))
+                .size(vieww_foundation::Size::new(640.0, 360.0)),
+        );
+        assert!(nodes[0].css.contains("width:640"), "{}", nodes[0].css);
+        assert!(nodes[0].css.contains("height:360"), "{}", nodes[0].css);
+    }
+
+    #[test]
+    fn an_iframe_node_is_comparable_for_patch_decisions() {
+        // The patcher diffs `iframe` by equality; two embeds of one URL are
+        // equal, an embed of another URL is not.
+        let a = walked(WebView::new(WebContent::url("https://a.test/")));
+        let b = walked(WebView::new(WebContent::url("https://a.test/")));
+        let c = walked(WebView::new(WebContent::url("https://c.test/")));
+        assert_eq!(a[0].iframe, b[0].iframe);
+        assert_ne!(a[0].iframe, c[0].iframe);
     }
 }

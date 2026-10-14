@@ -23,7 +23,7 @@ use std::time::Duration;
 use vieww_animation::{Ticker, Tickers};
 use vieww_foundation::{Axis, DragDetails, Offset};
 use vieww_gestures::{ScrollPhysics, ScrollPosition};
-use vieww_widget::{Handler, ScrollExtents};
+use vieww_widget::{Handler, ListView, RowAlignment, ScrollExtents};
 
 use crate::{Runtime, Signal};
 
@@ -354,6 +354,108 @@ impl ScrollController {
             inner.publish();
         }
         moved
+    }
+
+    /// Scroll the least distance that brings row `index` of `list` fully into
+    /// view.
+    ///
+    /// "Jump to result", "restore the row the reader was on" and anything
+    /// keyboard-driven over a long list: the row's position comes from the
+    /// list's own arithmetic —
+    /// [`row_position`](vieww_widget::ListView::row_position), a
+    /// multiplication for a uniform list and a prefix walk for a variable one
+    /// — and the movement is [`reveal`](Self::reveal)'s least-distance rule
+    /// with the list's rows standing in for the generic range.
+    ///
+    /// Does nothing when the row is already on screen, which is what makes it
+    /// safe on every selection change; returns whether it moved. An index
+    /// past the list's end moves nothing and reports `false` rather than
+    /// scrolling somewhere plausible-looking.
+    ///
+    /// ```
+    /// # use vieww_element::{Runtime, ScrollController};
+    /// # use vieww_gestures::ScrollPhysics;
+    /// # use vieww_widget::ScrollExtents;
+    /// # use std::rc::Rc;
+    /// # let runtime = Runtime::new();
+    /// # let list = vieww_widget::ListView::new(1_000, 50.0, Rc::new(|i| {
+    /// #     vieww_widget::Text::new(format!("Row {i}")).into()
+    /// # }));
+    /// let scroll = ScrollController::new(&runtime, ScrollPhysics::android());
+    /// scroll.resize(ScrollExtents::new(500.0, list.content_extent()));
+    ///
+    /// // Row 700 sits at 35_000..35_050, well past the 500-px window at 0.
+    /// assert!(scroll.reveal_row(&list, 700, 0.0));
+    /// assert_eq!(scroll.peek(), 34_550.0); // its bottom, at the window's bottom
+    ///
+    /// // Already visible: no movement, no rebuild.
+    /// assert!(!scroll.reveal_row(&list, 700, 0.0));
+    /// ```
+    pub fn reveal_row(&self, list: &ListView, index: usize, margin: f32) -> bool {
+        match list.row_position(index) {
+            Some((start, extent)) => self.reveal(start, extent, margin),
+            None => false,
+        }
+    }
+
+    /// Jump so row `index` of `list` lands at `alignment` in the window,
+    /// cancelling any fling.
+    ///
+    /// The other half of programmatic scrolling: [`reveal_row`](Self::reveal_row)
+    /// moves the least that makes the row visible, this moves the list to a
+    /// *chosen* place — the search result at the top of the window, the new
+    /// message centred, the log's tail pinned to the bottom. The offset is
+    /// [`ListView::row_offset_for`](vieww_widget::ListView::row_offset_for)
+    /// evaluated against this controller's own measured viewport, then
+    /// [`jump_to`](Self::jump_to) — clamped by the same max offset the physics
+    /// already knows, so a row near the end aligned to
+    /// [`Start`](vieww_widget::RowAlignment::Start) lands the list as far down
+    /// as it goes rather than scrolling into blank space.
+    ///
+    /// An index past the list's end moves nothing; returns whether it moved at
+    /// all, so a caller driving an animation can know there was nothing to
+    /// animate.
+    ///
+    /// A jump before the first layout would otherwise clamp to a max offset of
+    /// zero — nothing has been measured yet — so the list's *declared* length
+    /// is taken as the content extent first. That number is exact: it is what
+    /// the list's own spacers make layout measure. A jump made before the
+    /// window is measured is still a request the next layout should honour,
+    /// and this is what makes it land where it asked.
+    ///
+    /// ```
+    /// # use vieww_element::{Runtime, ScrollController};
+    /// # use vieww_gestures::ScrollPhysics;
+    /// # use vieww_widget::{RowAlignment, ScrollExtents};
+    /// # use std::rc::Rc;
+    /// # let runtime = Runtime::new();
+    /// # let list = vieww_widget::ListView::new(1_000, 50.0, Rc::new(|i| {
+    /// #     vieww_widget::Text::new(format!("Row {i}")).into()
+    /// # }));
+    /// let scroll = ScrollController::new(&runtime, ScrollPhysics::android());
+    /// scroll.resize(ScrollExtents::new(500.0, list.content_extent()));
+    ///
+    /// scroll.jump_to_row(&list, 40, RowAlignment::Start);
+    /// assert_eq!(scroll.peek(), 2_000.0); // row 40's top, at the window's top
+    /// ```
+    pub fn jump_to_row(&self, list: &ListView, index: usize, alignment: RowAlignment) -> bool {
+        let viewport = self.viewport();
+        let target = list.row_offset_for(index, alignment, viewport);
+        match target {
+            Some(offset) => {
+                // The list's declared length is exact — its spacers make layout
+                // measure exactly it — so the controller's content extent is
+                // refreshed from it before the jump. Without this, a jump made
+                // before the first `on_extents` (or after rows were appended)
+                // would clamp against a stale max, which pins it at zero and
+                // silently drops the request.
+                self.resize(ScrollExtents::new(viewport, list.content_extent()));
+                let moved = self.peek() != offset;
+                self.jump_to(offset);
+                moved
+            }
+            None => false,
+        }
     }
 
     /// Move by a finger's movement, in the finger's direction.
@@ -757,5 +859,101 @@ mod near_end_tests {
         scroll.clear_near_end();
         scroll.drag(-800.0);
         assert_eq!(count.get(), 0);
+    }
+
+    // ------------------------------------------------------- scroll-to-row
+
+    /// A uniform 1_000-row list of 50-px rows, in a 500-px window, with the
+    /// controller resized to match — every number in the tests below is then
+    /// arithmetic rather than an approximation.
+    fn list_and_scroller() -> (vieww_widget::ListView, ScrollController) {
+        use std::rc::Rc;
+        let list = vieww_widget::ListView::new(
+            1_000,
+            50.0,
+            Rc::new(|index| vieww_widget::Text::new(format!("Row {index}")).into()),
+        );
+        let scroll = ScrollController::new(&Runtime::new(), ScrollPhysics::android());
+        scroll.resize(ScrollExtents::new(500.0, list.content_extent()));
+        (list, scroll)
+    }
+
+    #[test]
+    fn revealing_a_row_below_the_window_brings_its_bottom_to_the_bottom() {
+        let (list, scroll) = list_and_scroller();
+
+        // Row 700 is 35_000..35_050; the least movement shows all of it, which
+        // puts its bottom at the window's bottom: 35_050 - 500.
+        assert!(scroll.reveal_row(&list, 700, 0.0));
+        assert_eq!(scroll.peek(), 34_550.0);
+    }
+
+    #[test]
+    fn revealing_a_row_already_on_screen_moves_nothing() {
+        let (list, scroll) = list_and_scroller();
+
+        // Rows 0..10 are on screen at offset 0.
+        assert!(!scroll.reveal_row(&list, 9, 0.0));
+        assert_eq!(scroll.peek(), 0.0);
+    }
+
+    #[test]
+    fn revealing_a_row_above_the_window_brings_its_top_to_the_top() {
+        let (list, scroll) = list_and_scroller();
+        scroll.jump_to(20_000.0);
+
+        // Row 100 is 5_000..5_050, above the window at 20_000: the least
+        // movement that shows it is its top at the window's top.
+        assert!(scroll.reveal_row(&list, 100, 0.0));
+        assert_eq!(scroll.peek(), 5_000.0);
+    }
+
+    #[test]
+    fn an_index_off_the_list_reveals_nothing() {
+        let (list, scroll) = list_and_scroller();
+        scroll.jump_to(10_000.0);
+
+        assert!(!scroll.reveal_row(&list, 1_000, 0.0));
+        assert_eq!(scroll.peek(), 10_000.0);
+    }
+
+    #[test]
+    fn jumping_a_row_to_the_start_puts_its_top_at_the_windows_top() {
+        let (list, scroll) = list_and_scroller();
+
+        assert!(scroll.jump_to_row(&list, 40, vieww_widget::RowAlignment::Start));
+        assert_eq!(scroll.peek(), 2_000.0);
+        // Already there: a second jump reports no movement.
+        assert!(!scroll.jump_to_row(&list, 40, vieww_widget::RowAlignment::Start));
+    }
+
+    #[test]
+    fn jumping_a_row_near_the_end_is_clamped_by_the_physics_not_the_arithmetic() {
+        let (list, scroll) = list_and_scroller();
+
+        // Row 999 at Start wants 49_950; the list only scrolls to 49_500. The
+        // controller clamps through `jump_to`'s position, which is the same
+        // max offset a drag would stop at.
+        scroll.jump_to_row(&list, 999, vieww_widget::RowAlignment::Start);
+        assert_eq!(scroll.peek(), 49_500.0);
+        assert_eq!(scroll.max_offset(), 49_500.0);
+    }
+
+    #[test]
+    fn a_jump_before_any_layout_still_lands_on_the_row() {
+        use std::rc::Rc;
+        let list = vieww_widget::ListView::new(
+            1_000,
+            50.0,
+            Rc::new(|index| vieww_widget::Text::new(format!("Row {index}")).into()),
+        );
+        // No `resize`: the viewport is zero and so is the max offset. The jump
+        // still lands on the row, because the list's declared length is taken
+        // as the content extent first — it is what its spacers will make
+        // layout measure, so nothing is guessed.
+        let scroll = ScrollController::new(&Runtime::new(), ScrollPhysics::android());
+
+        scroll.jump_to_row(&list, 40, vieww_widget::RowAlignment::Start);
+        assert_eq!(scroll.peek(), 2_000.0);
     }
 }

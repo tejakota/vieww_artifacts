@@ -62,6 +62,59 @@ pub(crate) fn window_insets(window: &winit::window::Window) -> Option<SystemInse
     })
 }
 
+/// Give the window's `CAMetalLayer` the screen's scale before the swapchain
+/// is (re)built.
+///
+/// # Why
+///
+/// The Vulkan surface is a `CAMetalLayer` that `ash-window` (through
+/// `raw-window-metal`) adds as a sublayer of the view, and a Vulkan swapchain on
+/// MoltenVK takes its size from the layer: `currentExtent` is the layer's
+/// bounds times its `contentsScale`. The first iOS frame came out with
+/// `contents scale 1.0` on a 3x screen — rendered at a third of the screen's
+/// resolution and magnified, visibly soft. The layer was created while the
+/// window was still invisible and has not followed the screen since; setting it
+/// here, before every swapchain rebuild, makes the extent the physical size.
+pub(crate) fn match_layer_scale(window: &winit::window::Window) {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+
+    let Some(view) = ui_view(window) else {
+        return;
+    };
+    let Some(metal) = AnyClass::get("CAMetalLayer") else {
+        return;
+    };
+    let scale: f64 = window.scale_factor();
+    // SAFETY: plain Objective-C message sends with the documented signatures —
+    // `-[UIView layer]` returns a `CALayer *`, `-[CALayer sublayers]` an
+    // `NSArray *` (or nil), `-count`/`-objectAtIndex:` take and return
+    // `NSUInteger`, `-isKindOfClass:` returns `BOOL` and `-setContentsScale:`
+    // takes a `CGFloat` (`f64` on every 64-bit Apple target). Nil results are
+    // checked before use. Main thread, as for `ui_view`.
+    unsafe {
+        let layer: *mut AnyObject = msg_send![view, layer];
+        let Some(layer) = layer.as_ref() else {
+            return;
+        };
+        let sublayers: *mut AnyObject = msg_send![layer, sublayers];
+        let Some(sublayers) = sublayers.as_ref() else {
+            return;
+        };
+        let count: usize = msg_send![sublayers, count];
+        for index in 0..count {
+            let sub: *mut AnyObject = msg_send![sublayers, objectAtIndex: index];
+            let Some(sub) = sub.as_ref() else {
+                continue;
+            };
+            let is_metal: bool = msg_send![sub, isKindOfClass: metal];
+            if is_metal {
+                let _: () = msg_send![sub, setContentsScale: scale];
+            }
+        }
+    }
+}
+
 /// The `UIView` behind `window`, if there is one.
 ///
 /// Taken through `raw-window-handle` rather than `winit::platform::ios`, which

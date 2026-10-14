@@ -490,7 +490,7 @@ pub fn budget_warning() -> Option<String> {
     if count < IMAGE_BUDGET {
         return None;
     }
-    if (count - IMAGE_BUDGET) % BUDGET_INTERVAL != 0 {
+    if !(count - IMAGE_BUDGET).is_multiple_of(BUDGET_INTERVAL) {
         return None;
     }
     // **With the number, now that there is one.** The header's open question
@@ -567,16 +567,18 @@ mod budget_tests {
     /// is where this test left it.
     #[test]
     fn nothing_is_said_below_the_budget() {
-        let says =
-            |count: usize| count >= IMAGE_BUDGET && (count - IMAGE_BUDGET) % BUDGET_INTERVAL == 0;
+        let says = |count: usize| {
+            count >= IMAGE_BUDGET && (count - IMAGE_BUDGET).is_multiple_of(BUDGET_INTERVAL)
+        };
         assert!((0..IMAGE_BUDGET).all(|count| !says(count)));
     }
 
     /// And past it, it repeats rarely rather than on every render.
     #[test]
     fn the_warning_repeats_on_an_interval_not_every_time() {
-        let says =
-            |count: usize| count >= IMAGE_BUDGET && (count - IMAGE_BUDGET) % BUDGET_INTERVAL == 0;
+        let says = |count: usize| {
+            count >= IMAGE_BUDGET && (count - IMAGE_BUDGET).is_multiple_of(BUDGET_INTERVAL)
+        };
         assert!(says(IMAGE_BUDGET));
         assert!(!says(IMAGE_BUDGET + 1));
         assert!(says(IMAGE_BUDGET + BUDGET_INTERVAL));

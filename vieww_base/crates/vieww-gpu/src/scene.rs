@@ -63,7 +63,7 @@ use std::hash::{Hash, Hasher};
 use vieww_foundation::{
     BlendMode, Color, GradientGeometry, Offset, Path, PathVerb, Rect, Transform,
 };
-use vieww_paint::native::{ColorGlyphParts, GlyphAlpha, GlyphCoverage, GpuSeam};
+use vieww_paint::native::{ColorGlyphParts, GlyphAlpha, GlyphCoverage, GpuSeam, SeamShape};
 use vieww_paint::{Clip, Command, Paint, Scene};
 
 use crate::atlas::{Atlas, AtlasKey};
@@ -82,21 +82,26 @@ pub mod material {
     pub const IMAGE: f32 = 2.0;
     /// A per-fragment gradient: geometry in `params`, ramp row in `extra`.
     pub const GRADIENT: f32 = 3.0;
+    /// A flat colour × analytic rounded-rect coverage (see [`Vertex::shape`](super::Vertex::shape)).
+    pub const SHAPE_SOLID: f32 = 4.0;
+    /// A per-fragment gradient × analytic rounded-rect coverage.
+    pub const SHAPE_GRADIENT: f32 = 5.0;
 }
 
 /// One vertex.
 ///
 /// `#[repr(C)]` because it is uploaded verbatim and a backend's vertex
 /// attribute descriptions are offsets into exactly this layout. Every field is
-/// `f32` (23 of them, 92 bytes), so there is no padding to get wrong.
+/// `f32` (27 of them, 108 bytes), so there is no padding to get wrong.
 ///
-/// | field          | SOLID | GLYPH                    | IMAGE                        | GRADIENT                         |
-/// |----------------|-------|--------------------------|------------------------------|----------------------------------|
-/// | `color`        | paint | run colour               | unused (white)               | unused (white)                   |
-/// | `uv`           | —     | glyph atlas fetch offset | —                            | —                                |
-/// | `params`       | —     | —                        | lower mip patch `x, y, w, h` | geometry (see `gradient_params`) |
-/// | `local`        | —     | —                        | unit rect coordinate         | unit paint-bounds coordinate     |
-/// | `extra`        | —     | —                        | upper mip patch `x, y, w, h` | `row, dither, kind, 0`           |
+/// | field          | SOLID | GLYPH                    | IMAGE                        | GRADIENT                         | SHAPE_SOLID / SHAPE_GRADIENT      |
+/// |----------------|-------|--------------------------|------------------------------|----------------------------------|-----------------------------------|
+/// | `color`        | paint | run colour               | unused (white)               | unused (white)                   | paint / unused                    |
+/// | `uv`           | —     | glyph atlas fetch offset | —                            | —                                | `[0]` = shape radius in device px |
+/// | `params`       | —     | —                        | lower mip patch `x, y, w, h` | geometry (see `gradient_params`) | geometry for SHAPE_GRADIENT       |
+/// | `local`        | —     | —                        | unit rect coordinate         | unit paint-bounds coordinate     | unit paint-bounds coordinate      |
+/// | `extra`        | —     | —                        | upper mip patch `x, y, w, h` | `row, dither, kind, 0`           | `row, dither, kind, 0`            |
+/// | `shape`        | —     | —                        | —                            | —                                | device-space rect `l, t, r, b`    |
 /// | `mask`         | `ox, oy, enabled, _` for a shaped clip; `mask[3]` is the mip blend for IMAGE |
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
@@ -110,6 +115,10 @@ pub struct Vertex {
     pub params: [f32; 4],
     pub local: [f32; 2],
     pub extra: [f32; 4],
+    /// The analytic shape's device-space edges, for the SHAPE materials: a
+    /// rounded rectangle's `left, top, right, bottom`, with its radius in
+    /// `uv[0]`. Unused (zero) by every other material.
+    pub shape: [f32; 4],
     pub mask: [f32; 4],
 }
 
@@ -123,6 +132,7 @@ impl Vertex {
             params: [0.0; 4],
             local: [0.0; 2],
             extra: [0.0; 4],
+            shape: [0.0; 4],
             mask,
         }
     }
@@ -553,6 +563,7 @@ impl Planner {
     /// Never fails: what cannot be expressed is recorded in
     /// [`ScenePlan::unsupported`].
     pub fn plan(&mut self, scene: &Scene, width: f32, height: f32) -> ScenePlan {
+        self.atlas.begin_frame();
         self.masks.begin_frame();
         self.ramps.begin_frame();
         self.images.begin_frame();
@@ -807,10 +818,30 @@ fn plan_with(
                 if out.plan.vertices.len() > before {
                     let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
                     for v in &out.plan.vertices[before..] {
-                        x0 = x0.min(v.position[0]);
-                        y0 = y0.min(v.position[1]);
-                        x1 = x1.max(v.position[0]);
-                        y1 = y1.max(v.position[1]);
+                        // An analytic shape's quad is inflated by the one-pixel
+                        // ramp, but its *coverage* never extends past the
+                        // shape — the SDF is zero at half a pixel out. The ink
+                        // is the coverage's bounds, and using the quad's would
+                        // grow every layer's composite region by a pixel of
+                        // nothing: harmless for source-over, wrong for the
+                        // blend modes that treat a transparent source as an
+                        // instruction (Clear erases wherever it is composited,
+                        // so a ring of `blend(Clear, transparent, dst)`
+                        // erases a ring the CPU never touches).
+                        let analytic = v.texture_kind == material::SHAPE_SOLID
+                            || v.texture_kind == material::SHAPE_GRADIENT;
+                        let (px, py) = if analytic {
+                            ([v.shape[0], v.shape[2]], [v.shape[1], v.shape[3]])
+                        } else {
+                            (
+                                [v.position[0], v.position[0]],
+                                [v.position[1], v.position[1]],
+                            )
+                        };
+                        x0 = x0.min(px[0]);
+                        y0 = y0.min(py[0]);
+                        x1 = x1.max(px[1]);
+                        y1 = y1.max(py[1]);
                     }
                     let bounds = PixelRect::round_out(Rect::new(x0, y0, x1, y1));
                     let top = stack.last_mut().expect("root frame");
@@ -885,7 +916,119 @@ impl Hash for ClipMaskKey<'_> {
     }
 }
 
+/// The largest shape-coverage patch (in pixels) worth placing in the mask
+/// atlas. Above it the shape is tessellated with hard edges instead: a
+/// full-window rotated backdrop would otherwise claim most of a 4096² atlas
+/// for one draw, and its edges are a sliver of its area.
+const MAX_SHAPE_MASK_PIXELS: u64 = 1366 * 1024;
+
 impl Planner {
+    /// The CPU renderer's own coverage for a non-analytic shape over
+    /// `region`, multiplied by the clip mask the draw already carries, as one
+    /// mask in the atlas. `None` when nothing is inked, the patch is too big
+    /// to be worth it, or the atlas is full — the caller then falls back to
+    /// hard-edged tessellation, which is what every such shape had before.
+    fn shape_mask(
+        &mut self,
+        shape: SeamShape<'_>,
+        transform: Transform,
+        region: PixelRect,
+        clip: &Clip,
+        clip_mask: Option<[f32; 2]>,
+    ) -> Option<(MaskRef, PixelRect)> {
+        let key = {
+            let mut h = std::hash::DefaultHasher::new();
+            "shape".hash(&mut h);
+            match shape {
+                SeamShape::Rect(r) => {
+                    (0u8, [r.left, r.top, r.right, r.bottom].map(f32::to_bits)).hash(&mut h)
+                }
+                SeamShape::Fill(path) => {
+                    1u8.hash(&mut h);
+                    hash_path(path, &mut h);
+                }
+                SeamShape::Stroke(path, stroke) => {
+                    2u8.hash(&mut h);
+                    hash_path(path, &mut h);
+                    // `Debug` of the stroke prints every field, floats in
+                    // their shortest round-trip form — a complete key.
+                    format!("{stroke:?}").hash(&mut h);
+                }
+            }
+            [
+                transform.a,
+                transform.b,
+                transform.c,
+                transform.d,
+                transform.tx,
+                transform.ty,
+            ]
+            .map(f32::to_bits)
+            .hash(&mut h);
+            region.hash(&mut h);
+            if clip_mask.is_some() {
+                ClipMaskKey(clip, region).hash(&mut h);
+            }
+            MaskKey(h.finish())
+        };
+        let rect_of = |slot: MaskSlot| PixelRect {
+            x0: slot.device_x,
+            y0: slot.device_y,
+            x1: slot.device_x + i32::try_from(slot.width).unwrap_or(i32::MAX),
+            y1: slot.device_y + i32::try_from(slot.height).unwrap_or(i32::MAX),
+        };
+        if let Some(slot) = self.masks.get(key) {
+            return Some((MaskRef::from(slot), rect_of(slot)));
+        }
+        // On a miss, the clip's coverage over `region`, read out of the atlas
+        // before the build borrows it.
+        let clip_bytes = clip_mask.map(|offset| {
+            let side = self.masks.side() as usize;
+            let texels = self.masks.texels();
+            let (w, h) = (region.width() as usize, region.height() as usize);
+            let mut out = vec![0u8; w * h];
+            #[expect(clippy::cast_possible_truncation, reason = "integral offsets")]
+            let (ox, oy) = (offset[0] as i32, offset[1] as i32);
+            for y in 0..h {
+                for x in 0..w {
+                    let tx = usize::try_from(region.x0 + x as i32 - ox).ok();
+                    let ty = usize::try_from(region.y0 + y as i32 - oy).ok();
+                    if let (Some(tx), Some(ty)) = (tx, ty) {
+                        if tx < side {
+                            out[y * w + x] = texels.get(ty * side + tx).copied().unwrap_or(0);
+                        }
+                    }
+                }
+            }
+            out
+        });
+        let seam = &self.seam;
+        let slot = self.masks.get_or_insert(key, || {
+            let mut patch = seam.shape_coverage(shape, transform, region.to_rect())?;
+            if u64::from(patch.width) * u64::from(patch.height) > MAX_SHAPE_MASK_PIXELS {
+                return None;
+            }
+            if let Some(clip) = &clip_bytes {
+                let w = region.width() as usize;
+                for y in 0..patch.height as usize {
+                    for x in 0..patch.width as usize {
+                        // The patch lies inside `region` by construction.
+                        let rx = usize::try_from(patch.x - region.x0).unwrap_or(0) + x;
+                        let ry = usize::try_from(patch.y - region.y0).unwrap_or(0) + y;
+                        let c = clip.get(ry * w + rx).copied().unwrap_or(0);
+                        let i = y * patch.width as usize + x;
+                        let product = u16::from(patch.alpha[i]) * u16::from(c);
+                        #[expect(clippy::cast_possible_truncation, reason = "<= 255")]
+                        let byte = ((product + 127) / 255) as u8;
+                        patch.alpha[i] = byte;
+                    }
+                }
+            }
+            Some((patch.x, patch.y, patch.width, patch.height, patch.alpha))
+        })?;
+        Some((MaskRef::from(slot), rect_of(slot)))
+    }
+
     /// The mask for `clip`'s shapes over `region`. `None` only when the atlas
     /// is full; an empty region never reaches here.
     fn clip_mask(&mut self, clip: &Clip, region: PixelRect) -> Option<MaskRef> {
@@ -1016,7 +1159,7 @@ impl Planner {
 /// Emit one fill, stroke, glyph run or image.
 fn plan_primitive(
     out: &mut Builder,
-    planner: Option<&mut Planner>,
+    mut planner: Option<&mut Planner>,
     command: &Command,
     target: PixelRect,
     mask: [f32; 4],
@@ -1031,6 +1174,36 @@ fn plan_primitive(
         } => {
             if paint.is_invisible() {
                 return;
+            }
+            // A rect under an axis-aligned uniform transform is the one
+            // shape whose edges can be covered analytically, and it is also
+            // the most-drawn shape in the framework — every panel, card and
+            // button background. Under any other transform the tessellated
+            // path below is unchanged.
+            if !rect.is_empty() && is_axis_aligned_uniform(*transform) {
+                let device = device_rect(*rect, *transform);
+                if !device.is_empty() {
+                    emit_shape_painted(
+                        out, planner, device, 0.0, *paint, *rect, *transform, scissor, mask,
+                    );
+                    return;
+                }
+            }
+            if let Some(p) = planner.as_deref_mut() {
+                let shape = SeamShape::Rect(*rect);
+                if emit_covered(
+                    out,
+                    p,
+                    shape,
+                    *paint,
+                    *rect,
+                    *transform,
+                    command.clip(),
+                    target,
+                    mask,
+                ) {
+                    return;
+                }
             }
             let mesh = tessellate_fill(&rect_path(*rect, *transform), TOLERANCE);
             emit_painted(
@@ -1053,6 +1226,41 @@ fn plan_primitive(
         } => {
             if paint.is_invisible() {
                 return;
+            }
+            // A rounded-rect path under an axis-aligned uniform transform:
+            // recognised by reconstruction (see `as_rounded_rect`), covered
+            // by the SDF rather than by triangles. This is the rounded card
+            // that motivated the whole analytic path — the shape a premium
+            // interface is made of.
+            if is_axis_aligned_uniform(*transform) {
+                if let Some((rect, radius)) = as_rounded_rect(path) {
+                    if !rect.is_empty() {
+                        let device = device_rect(rect, *transform);
+                        let scale = transform.a.abs();
+                        let radius = (radius * scale).max(0.0);
+                        emit_shape_painted(
+                            out, planner, device, radius, *paint, rect, *transform, scissor, mask,
+                        );
+                        return;
+                    }
+                }
+            }
+            if let Some(p) = planner.as_deref_mut() {
+                let shape = SeamShape::Fill(path);
+                let bounds = path.bounds();
+                if emit_covered(
+                    out,
+                    p,
+                    shape,
+                    *paint,
+                    bounds,
+                    *transform,
+                    command.clip(),
+                    target,
+                    mask,
+                ) {
+                    return;
+                }
             }
             let mesh = tessellate_fill(&transformed(path, *transform), TOLERANCE);
             emit_painted(
@@ -1084,6 +1292,27 @@ fn plan_primitive(
             // CPU's; and dashes were not applied at all. Both are silent
             // wrongness, not gaps. The dash split is the CPU renderer's own
             // (`GpuSeam`'s `dashed_path`), in the same space it measures in.
+            // `NativeRenderer`'s gradient box for a stroke, so a gradient
+            // stroke maps its ramp over the same unit square.
+            let bounds = path
+                .bounds()
+                .inflate(stroke.reach().max(stroke.width * 0.5 + 1.0));
+            if let Some(p) = planner.as_deref_mut() {
+                let shape = SeamShape::Stroke(path, stroke);
+                if emit_covered(
+                    out,
+                    p,
+                    shape,
+                    *paint,
+                    bounds,
+                    *transform,
+                    command.clip(),
+                    target,
+                    mask,
+                ) {
+                    return;
+                }
+            }
             let dashed = vieww_paint::native::dashed_path(path, &stroke.style.dash);
             let local = dashed.as_ref().unwrap_or(path);
             let scale = (transform.a * transform.d - transform.b * transform.c)
@@ -1095,7 +1324,6 @@ fn plan_primitive(
                 let d = transform.apply(Offset::new(p[0], p[1]));
                 *p = [d.dx, d.dy];
             }
-            let bounds = path.bounds().inflate(stroke.reach());
             emit_painted(
                 out,
                 planner,
@@ -1125,6 +1353,51 @@ fn plan_primitive(
             unreachable!("handled by plan_with");
         }
     }
+}
+
+/// A non-analytic shape drawn as one quad over its inked pixels, with the
+/// CPU renderer's own coverage — clip included — in the mask atlas. This is
+/// what antialiases a rotated rect, an arbitrary path and every stroke the
+/// way `NativeRenderer` does: the edge *is* the CPU's edge, not a triangle
+/// rasteriser's. `false` when the mask could not be made (see
+/// [`Planner::shape_mask`]); the caller tessellates instead.
+#[allow(clippy::too_many_arguments)]
+fn emit_covered(
+    out: &mut Builder,
+    planner: &mut Planner,
+    shape: SeamShape<'_>,
+    paint: Paint,
+    local_bounds: Rect,
+    transform: Transform,
+    clip: &Clip,
+    target: PixelRect,
+    mask: [f32; 4],
+) -> bool {
+    let clip_mask = (mask[2] > 0.5).then_some([mask[0], mask[1]]);
+    let Some((coverage, inked)) = planner.shape_mask(shape, transform, target, clip, clip_mask)
+    else {
+        return false;
+    };
+    #[expect(clippy::cast_precision_loss, reason = "device pixels")]
+    let (x0, y0, x1, y1) = (
+        inked.x0 as f32,
+        inked.y0 as f32,
+        inked.x1 as f32,
+        inked.y1 as f32,
+    );
+    let quad = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    emit_painted(
+        out,
+        Some(planner),
+        &quad,
+        &[0, 1, 2, 0, 2, 3],
+        paint,
+        local_bounds,
+        transform,
+        target.to_rect(),
+        [coverage.offset[0], coverage.offset[1], 1.0, 0.0],
+    );
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1187,6 +1460,7 @@ fn emit_painted(
                     (local.dy - local_bounds.top) * inv_h,
                 ],
                 extra,
+                shape: [0.0; 4],
                 mask,
             }
         }),
@@ -1207,6 +1481,218 @@ fn gradient_params(geometry: GradientGeometry) -> ([f32; 4], f32) {
             end_angle,
         } => ([center.dx, center.dy, start_angle, end_angle], 2.0),
     }
+}
+
+// ------------------------------------------------------ analytic shape fills
+//
+// The coverage contract above says every definition comes from the CPU
+// renderer through `GpuSeam` — except this one, which is new arithmetic the
+// CPU does not have: a signed-distance coverage for rects and rounded rects,
+// so geometry edges stop being the one place the GPU is visibly worse than
+// the CPU. It replaced nothing: tessellated edges rasterised hard, on every
+// shape, everywhere, and `TRACKER.md`'s 2026-10-09 entry records the closure.
+
+/// A transform this module can turn into an analytic shape: axis-aligned, so
+/// a rect stays a rect in device space, and uniformly scaled, so a circle's
+/// corner stays circular (an anisotropic scale would make it an ellipse, and
+/// a rotation makes every edge oblique — both fall back to tessellation,
+/// which is what they always had).
+fn is_axis_aligned_uniform(transform: Transform) -> bool {
+    const EPS: f32 = 1e-9;
+    transform.b.abs() < EPS
+        && transform.c.abs() < EPS
+        && (transform.a.abs() - transform.d.abs()).abs() < EPS
+        && transform.a.abs() > EPS
+}
+
+/// The device-space rect a `rect` becomes under an axis-aligned `transform`,
+/// normalised so `left <= right` and `top <= bottom` (a flip is still a
+/// rect).
+fn device_rect(rect: Rect, transform: Transform) -> Rect {
+    let a = transform.apply(Offset::new(rect.left, rect.top));
+    let b = transform.apply(Offset::new(rect.right, rect.bottom));
+    Rect::new(
+        a.dx.min(b.dx),
+        a.dy.min(b.dy),
+        a.dx.max(b.dx),
+        a.dy.max(b.dy),
+    )
+}
+
+/// Recognise a path built by [`Path::rounded_rect`](vieww_foundation::Path::rounded_rect)
+/// — including its radius-zero case, [`Path::rect`](vieww_foundation::Path::rect)
+/// — and recover the `(rect, radius)` it was built from.
+///
+/// Reconstruction, not pattern-matching: the candidate `Path::rounded_rect`
+/// for the recovered parameters is compared verb-for-verb and
+/// point-for-point, so a path that merely looks similar (a different arc
+/// constant, one extra segment, a rounded rect rotated in its own verbs)
+/// fails rather than approximating. The reward for the strictness is that
+/// the analytic emission can be exact rather than close.
+fn as_rounded_rect(path: &Path) -> Option<(Rect, f32)> {
+    let bounds = path.bounds();
+    if bounds.is_empty() {
+        return None;
+    }
+    // The first verb is the pen at `(left + radius, top)` — the one place
+    // the radius is recorded in the geometry.
+    let PathVerb::MoveTo(start) = *path.verbs().first()? else {
+        return None;
+    };
+    let radius = (start.dx - bounds.left).max(0.0);
+    let candidate = Path::rounded_rect(bounds, radius);
+    let verbs = path.verbs();
+    let expected = candidate.verbs();
+    if verbs.len() != expected.len() {
+        return None;
+    }
+    const EPS: f32 = 1e-3;
+    let near = |a: Offset, b: Offset| (a.dx - b.dx).abs() < EPS && (a.dy - b.dy).abs() < EPS;
+    for (verb, want) in verbs.iter().zip(expected) {
+        match (verb, want) {
+            (PathVerb::MoveTo(a), PathVerb::MoveTo(b))
+            | (PathVerb::LineTo(a), PathVerb::LineTo(b)) => {
+                if !near(*a, *b) {
+                    return None;
+                }
+            }
+            (PathVerb::CubicTo(a1, a2, a3), PathVerb::CubicTo(b1, b2, b3)) => {
+                if !near(*a1, *b1) || !near(*a2, *b2) || !near(*a3, *b3) {
+                    return None;
+                }
+            }
+            (PathVerb::Close, PathVerb::Close) => {}
+            _ => return None,
+        }
+    }
+    Some((bounds, radius))
+}
+
+/// The signed distance from `p` to a rounded rectangle, in the same units as
+/// `p` — negative inside. The WGSL `shape_coverage` is this function, and
+/// this is the one that can be tested: the scene tests below assert its
+/// properties, and `vieww-hal`'s Vulkan parity suite asserts the *shader's*
+/// pixels against it, so the two cannot drift apart silently.
+#[must_use]
+pub fn shape_distance(p: Offset, rect: Rect, radius: f32) -> f32 {
+    let cx = (rect.left + rect.right) * 0.5;
+    let cy = (rect.top + rect.bottom) * 0.5;
+    let hx = ((rect.right - rect.left) * 0.5 - radius).max(0.0);
+    let hy = ((rect.bottom - rect.top) * 0.5 - radius).max(0.0);
+    let qx = (p.dx - cx).abs() - hx;
+    let qy = (p.dy - cy).abs() - hy;
+    let dx = qx.max(0.0);
+    let dy = qy.max(0.0);
+    // The corner distance plus the radius; for the straight-edge regions the
+    // `max` zeroes one axis and this is the plain perpendicular distance.
+    (dx * dx + dy * dy).sqrt() + qx.max(qy).min(0.0) - radius
+}
+
+/// Emit one analytic shape fill — a rounded rectangle whose coverage the
+/// shader computes from [`shape_distance`] instead of from triangles.
+///
+/// The quad is the rect inflated by one device pixel, which is the whole of
+/// the SDF's ramp: coverage is `clamp(0.5 - distance, 0, 1)`, so it is zero
+/// one pixel outside the shape, one inside it, and linear between — the same
+/// one-pixel band the CPU rasterizer's scanline coverage produces, which is
+/// what makes the census's edge comparison meaningful rather than
+/// best-effort.
+///
+/// Solid and gradient paints take the same path here as in
+/// [`emit_painted`]: the gradient's per-fragment parameters and ramp row are
+/// unchanged — only the coverage multiplier is new, and the shape's rect
+/// rides in [`Vertex::shape`] where the tessellated gradient never looks.
+#[allow(clippy::too_many_arguments)]
+fn emit_shape_painted(
+    out: &mut Builder,
+    planner: Option<&mut Planner>,
+    rect: Rect,
+    radius: f32,
+    paint: Paint,
+    local_bounds: Rect,
+    transform: Transform,
+    scissor: Rect,
+    mask: [f32; 4],
+) {
+    // One device pixel of ramp either side: the quad the SDF needs to have
+    // a fragment in at all.
+    let quad = rect.inflate(1.0);
+    let shape = [rect.left, rect.top, rect.right, rect.bottom];
+    let uv = [radius, 0.0];
+
+    let Some(gradient) = paint.gradient else {
+        let color = straight_rgba(paint.color);
+        let corner = |x: f32, y: f32| Vertex {
+            position: [x, y],
+            color,
+            uv,
+            texture_kind: material::SHAPE_SOLID,
+            params: [0.0; 4],
+            local: [0.0; 2],
+            extra: [0.0; 4],
+            shape,
+            mask,
+        };
+        out.quad(
+            [
+                corner(quad.left, quad.top),
+                corner(quad.right, quad.top),
+                corner(quad.right, quad.bottom),
+                corner(quad.left, quad.bottom),
+            ],
+            scissor,
+        );
+        return;
+    };
+
+    let Some(planner) = planner else {
+        out.plan.note(Unsupported::Gradient);
+        return;
+    };
+    let Some(inverse) = transform.invert() else {
+        // A degenerate transform covers no pixels.
+        return;
+    };
+    let Some(row) = planner.ramps.row(&gradient) else {
+        out.plan.note(Unsupported::Gradient);
+        return;
+    };
+    let (params, kind) = gradient_params(gradient.geometry);
+    let inv_w = 1.0 / local_bounds.width().max(1e-6);
+    let inv_h = 1.0 / local_bounds.height().max(1e-6);
+    #[expect(clippy::cast_precision_loss, reason = "ramp rows < 2^24")]
+    let extra = [
+        row as f32,
+        f32::from(u8::from(gradient.dither())),
+        kind,
+        0.0,
+    ];
+    let corner = |x: f32, y: f32| {
+        let local = inverse.apply(Offset::new(x, y));
+        Vertex {
+            position: [x, y],
+            color: [1.0; 4],
+            uv,
+            texture_kind: material::SHAPE_GRADIENT,
+            params,
+            local: [
+                (local.dx - local_bounds.left) * inv_w,
+                (local.dy - local_bounds.top) * inv_h,
+            ],
+            extra,
+            shape,
+            mask,
+        }
+    };
+    out.quad(
+        [
+            corner(quad.left, quad.top),
+            corner(quad.right, quad.top),
+            corner(quad.right, quad.bottom),
+            corner(quad.left, quad.bottom),
+        ],
+        scissor,
+    );
 }
 
 impl Planner {
@@ -1327,6 +1813,7 @@ impl Planner {
             params: [0.0; 4],
             local: [0.0; 2],
             extra: [0.0; 4],
+            shape: [0.0; 4],
             mask,
         };
         out.quad(
@@ -1429,6 +1916,7 @@ impl Planner {
                 params,
                 local,
                 extra,
+                shape: [0.0; 4],
                 mask,
             }
         };
@@ -1499,6 +1987,11 @@ mod tests {
     use vieww_foundation::{Gradient, Image, ImageFilter, Shadow};
     use vieww_paint::Stroke;
 
+    /// The 45-degree rotation the tests below use — clippy's `approx_constant`
+    /// is right that spelling the constant out is a worse `0.707…` than the
+    /// name is, so it lives here once with the name it deserves.
+    const INV_SQRT_2: f32 = std::f32::consts::FRAC_1_SQRT_2;
+
     fn solid(scene: &mut Scene, rect: Rect, color: Color, clip: Clip) {
         scene.push_command(Command::FillRect {
             rect,
@@ -1564,6 +2057,285 @@ mod tests {
                 run_count: 1
             }]
         );
+    }
+
+    // ------------------------------------------------ analytic shape emission
+
+    /// The one fill a whole interface is mostly made of: a rect, planned as
+    /// the analytic shape rather than as tessellated triangles.
+    #[test]
+    fn a_rect_fill_is_an_analytic_shape_not_a_tessellation() {
+        let mut scene = Scene::default();
+        solid(
+            &mut scene,
+            Rect::new(10.0, 20.0, 30.0, 40.0),
+            opaque(),
+            Clip::NONE,
+        );
+        let plan = plan(&scene, 100.0, 100.0);
+
+        assert_eq!(plan.triangle_count(), 2, "one quad, no tessellation");
+        assert!(plan
+            .vertices
+            .iter()
+            .all(|v| v.texture_kind == material::SHAPE_SOLID));
+        // The shape the shader measures against is the rect itself…
+        assert!(plan
+            .vertices
+            .iter()
+            .all(|v| v.shape == [10.0, 20.0, 30.0, 40.0]));
+        // …and the quad carrying it is that rect inflated by the one-pixel
+        // ramp, because outside that the SDF's coverage is identically zero
+        // and a fragment there would be wasted.
+        let xs: [f32; 4] = std::array::from_fn(|i| plan.vertices[i].position[0]);
+        let ys: [f32; 4] = std::array::from_fn(|i| plan.vertices[i].position[1]);
+        assert_eq!(xs.iter().cloned().fold(f32::MAX, f32::min), 9.0);
+        assert_eq!(xs.iter().cloned().fold(f32::MIN, f32::max), 31.0);
+        assert_eq!(ys.iter().cloned().fold(f32::MAX, f32::min), 19.0);
+        assert_eq!(ys.iter().cloned().fold(f32::MIN, f32::max), 41.0);
+        // A rect has no corners to round.
+        assert!(plan.vertices.iter().all(|v| v.uv[0] == 0.0));
+    }
+
+    /// A scale is still a shape — the rect and its (zero) radius are in
+    /// device units, and a 2× display doubles both.
+    #[test]
+    fn a_scaled_rect_scales_the_shape_not_just_the_quad() {
+        let mut scene = Scene::default();
+        scene.push_command(Command::FillRect {
+            rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+            paint: Paint::solid(opaque()),
+            transform: Transform {
+                a: 2.0,
+                b: 0.0,
+                c: 0.0,
+                d: 2.0,
+                tx: 5.0,
+                ty: 5.0,
+            },
+            clip: Clip::NONE,
+        });
+        let plan = plan(&scene, 100.0, 100.0);
+        assert!(plan
+            .vertices
+            .iter()
+            .all(|v| v.shape == [5.0, 5.0, 25.0, 25.0]));
+    }
+
+    /// The rounded card: the path `Path::rounded_rect` builds is recognised,
+    /// and its radius reaches the shader in device units.
+    #[test]
+    fn a_rounded_rect_fill_is_recognised_and_planned_as_a_shape() {
+        let mut scene = Scene::default();
+        let rect = Rect::new(10.0, 10.0, 50.0, 40.0);
+        scene.push_command(Command::FillPath {
+            path: Path::rounded_rect(rect, 6.0),
+            paint: Paint::solid(opaque()),
+            transform: Transform::IDENTITY,
+            clip: Clip::NONE,
+        });
+        let plan = plan(&scene, 100.0, 100.0);
+
+        assert_eq!(plan.triangle_count(), 2);
+        assert!(plan
+            .vertices
+            .iter()
+            .all(|v| v.texture_kind == material::SHAPE_SOLID));
+        assert!(plan
+            .vertices
+            .iter()
+            .all(|v| v.shape == [10.0, 10.0, 50.0, 40.0]));
+        assert!(plan.vertices.iter().all(|v| (v.uv[0] - 6.0).abs() < 1e-6));
+    }
+
+    /// `path` rebuilt verb-for-verb through the public builders, with the
+    /// first cubic's middle control point nudged by half a pixel — the shape
+    /// of a rounded rect with the geometry of one, and not one.
+    fn nudged_impostor(path: &Path) -> Path {
+        let mut out = Path::new();
+        let mut nudged = false;
+        for verb in path.verbs() {
+            match *verb {
+                PathVerb::MoveTo(p) => {
+                    out.move_to(p);
+                }
+                PathVerb::LineTo(p) => {
+                    out.line_to(p);
+                }
+                PathVerb::CubicTo(a, mut b, c) => {
+                    if !nudged {
+                        b.dx += 0.5;
+                        b.dy += 0.5;
+                        nudged = true;
+                    }
+                    out.cubic_to(a, b, c);
+                }
+                PathVerb::Close => {
+                    out.close();
+                }
+            }
+        }
+        out
+    }
+
+    /// Recognition is reconstruction, not vibes: a path that is *almost* a
+    /// rounded rect — one control point nudged — is not one, and takes the
+    /// tessellated path every arbitrary path always took.
+    #[test]
+    fn a_path_that_is_almost_but_not_a_rounded_rect_tessellates() {
+        let rect = Rect::new(10.0, 10.0, 50.0, 40.0);
+        let impostor = nudged_impostor(&Path::rounded_rect(rect, 6.0));
+        let mut scene = Scene::default();
+        scene.push_command(Command::FillPath {
+            path: impostor,
+            paint: Paint::solid(opaque()),
+            transform: Transform::IDENTITY,
+            clip: Clip::NONE,
+        });
+        let plan = plan(&scene, 100.0, 100.0);
+        assert!(plan
+            .vertices
+            .iter()
+            .all(|v| v.texture_kind == material::SOLID));
+    }
+
+    /// A rotation is not axis-aligned, so the shape falls back — the
+    /// tessellated material is still there and still correct for everything
+    /// the analytic path cannot express.
+    #[test]
+    fn a_rotated_rect_falls_back_to_the_tessellated_material() {
+        let mut scene = Scene::default();
+        scene.push_command(Command::FillRect {
+            rect: Rect::new(10.0, 10.0, 30.0, 20.0),
+            paint: Paint::solid(opaque()),
+            transform: Transform {
+                a: INV_SQRT_2,
+                b: INV_SQRT_2,
+                c: -INV_SQRT_2,
+                d: INV_SQRT_2,
+                tx: 0.0,
+                ty: 0.0,
+            },
+            clip: Clip::NONE,
+        });
+        let plan = plan(&scene, 100.0, 100.0);
+        assert!(plan
+            .vertices
+            .iter()
+            .all(|v| v.texture_kind == material::SOLID));
+    }
+
+    // ------------------------------------------------------------- the SDF
+
+    /// The SDF's shape contract: negative inside, positive outside, zero on
+    /// the boundary — and exactly perpendicular distance on the straight
+    /// edges, which is what makes the one-pixel coverage ramp agree with the
+    /// CPU rasterizer's analytic edge coverage there.
+    #[test]
+    fn the_signed_distance_is_signed_and_exactly_perpendicular_on_edges() {
+        let rect = Rect::new(10.0, 20.0, 50.0, 60.0);
+        let radius = 8.0;
+
+        // Deep inside: negative.
+        assert!(shape_distance(Offset::new(30.0, 40.0), rect, radius) < -1.0);
+        // Deep outside: positive.
+        assert!(shape_distance(Offset::new(0.0, 0.0), rect, radius) > 1.0);
+        // On a straight edge: exactly zero, and exactly the perpendicular
+        // distance just inside and out.
+        assert!((shape_distance(Offset::new(30.0, 20.0), rect, radius)).abs() < 1e-6);
+        assert!((shape_distance(Offset::new(30.0, 18.0), rect, radius) - 2.0).abs() < 1e-6);
+        assert!((shape_distance(Offset::new(30.0, 22.0), rect, radius) + 2.0).abs() < 1e-6);
+        // On the straight part of the left edge too.
+        assert!((shape_distance(Offset::new(10.0, 40.0), rect, radius)).abs() < 1e-6);
+    }
+
+    /// The corner arc is a true quarter circle: a point on the arc's centre
+    /// path is at distance `-radius`-ish inside, and the arc centre itself
+    /// (the point the radius pivots around) is exactly `radius` inside.
+    #[test]
+    fn the_corner_distance_is_measured_from_the_arc_centre() {
+        let rect = Rect::new(0.0, 0.0, 40.0, 30.0);
+        let radius = 5.0;
+        // The top-right arc's centre.
+        let centre = Offset::new(35.0, 5.0);
+        assert!((shape_distance(centre, rect, radius) + radius).abs() < 1e-6);
+        // A point on the arc itself: zero.
+        let on_arc = Offset::new(35.0 + radius * INV_SQRT_2, 5.0 - radius * INV_SQRT_2);
+        assert!(shape_distance(on_arc, rect, radius).abs() < 1e-5);
+    }
+
+    /// A radius larger than half the shorter side is clamped by the
+    /// constructor; the SDF never sees it. But the SDF's own degenerate
+    /// regime — a rect narrower than `2 * radius` — must still behave: the
+    /// straight-edge segments vanish and the shape becomes a capsule.
+    #[test]
+    fn a_radius_larger_than_the_shape_stays_finite_and_monotone() {
+        let rect = Rect::new(0.0, 0.0, 10.0, 40.0);
+        let radius = 20.0;
+        for x in [-5.0, 0.0, 5.0, 10.0, 15.0] {
+            for y in [-5.0, 0.0, 20.0, 40.0, 45.0] {
+                let d = shape_distance(Offset::new(x, y), rect, radius);
+                assert!(d.is_finite(), "({x}, {y})");
+            }
+        }
+        // The mid-line is the deepest inside, either side of it is shallower.
+        let mid = shape_distance(Offset::new(5.0, 20.0), rect, radius);
+        let off = shape_distance(Offset::new(5.0, 10.0), rect, radius);
+        assert!(mid < off);
+    }
+
+    // ------------------------------------------------- the rounded-rect probe
+
+    #[test]
+    fn rounded_rect_paths_are_recognised_and_impostors_are_not() {
+        let rect = Rect::new(0.0, 0.0, 40.0, 30.0);
+        assert_eq!(
+            as_rounded_rect(&Path::rounded_rect(rect, 6.0)),
+            Some((rect, 6.0))
+        );
+        // Radius zero is Path::rect, and it is recognised too.
+        assert_eq!(
+            as_rounded_rect(&Path::rect(rect)),
+            Some((Rect::new(0.0, 0.0, 40.0, 30.0), 0.0))
+        );
+        // A circle is a rounded rect taken to its limit: recognised, with
+        // the radius the constructor clamped it to.
+        assert_eq!(
+            as_rounded_rect(&Path::rounded_rect(Rect::new(0.0, 0.0, 40.0, 40.0), 100.0)),
+            Some((Rect::new(0.0, 0.0, 40.0, 40.0), 20.0))
+        );
+
+        // Not rounded rects: an open path, a triangle, an impostor.
+        let open = {
+            let source = Path::rounded_rect(rect, 6.0);
+            let mut out = Path::new();
+            for verb in source.verbs() {
+                match *verb {
+                    PathVerb::MoveTo(p) => {
+                        out.move_to(p);
+                    }
+                    PathVerb::LineTo(p) => {
+                        out.line_to(p);
+                    }
+                    PathVerb::CubicTo(a, b, c) => {
+                        out.cubic_to(a, b, c);
+                    }
+                    PathVerb::Close => {}
+                }
+            }
+            out
+        };
+        assert_eq!(as_rounded_rect(&open), None);
+
+        let mut triangle = Path::new();
+        triangle.move_to(Offset::new(0.0, 0.0));
+        triangle.line_to(Offset::new(10.0, 0.0));
+        triangle.line_to(Offset::new(5.0, 10.0));
+        triangle.close();
+        assert_eq!(as_rounded_rect(&triangle), None);
+
+        let nudged = nudged_impostor(&Path::rounded_rect(rect, 6.0));
+        assert_eq!(as_rounded_rect(&nudged), None);
     }
 
     #[test]
@@ -1863,6 +2635,48 @@ mod tests {
     }
 
     #[test]
+    fn a_clipped_rotated_shape_is_one_quad_whose_mask_already_holds_the_clip() {
+        let mut scene = Scene::default();
+        scene.push_command(Command::FillRect {
+            rect: Rect::new(0.0, 0.0, 12.0, 12.0),
+            paint: Paint::solid(Color::RED),
+            transform: Transform::rotate(0.4),
+            clip: rounded_clip(),
+        });
+        let mut planner = Planner::new();
+        let plan = planner.plan(&scene, 100.0, 100.0);
+        assert!(plan.is_complete(), "{:?}", plan.unsupported);
+        assert_eq!(plan.vertices.len(), 4);
+        // The clip's own mask and the shape's (clip multiplied in).
+        assert_eq!(planner.mask_atlas().len(), 2);
+        // A second frame of the same scene builds nothing new.
+        let version = planner.mask_atlas().version();
+        let again = planner.plan(&scene, 100.0, 100.0);
+        assert_eq!(again.vertices, plan.vertices);
+        assert_eq!(planner.mask_atlas().version(), version);
+    }
+
+    #[test]
+    fn a_shape_too_big_for_a_mask_is_tessellated_rather_than_dropped() {
+        let mut scene = Scene::default();
+        scene.push_command(Command::FillRect {
+            rect: Rect::new(-2000.0, -2000.0, 2000.0, 2000.0),
+            paint: Paint::solid(Color::RED),
+            transform: Transform::rotate(0.3),
+            clip: Clip::NONE,
+        });
+        let mut planner = Planner::new();
+        let plan = planner.plan(&scene, 3000.0, 3000.0);
+        assert!(plan.is_complete());
+        assert!(!plan.vertices.is_empty());
+        assert!(
+            plan.vertices.iter().all(|v| v.mask[2] == 0.0),
+            "tessellated, no mask"
+        );
+        assert_eq!(planner.mask_atlas().len(), 0);
+    }
+
+    #[test]
     fn a_shaped_clip_becomes_a_mask_with_a_planner_and_a_gap_without_one() {
         let mut scene = Scene::default();
         solid(
@@ -1959,16 +2773,65 @@ mod tests {
             let mut planner = Planner::new();
             let plan = planner.plan(&scene, 100.0, 100.0);
             assert!(plan.is_complete());
+            // A rect fill is the analytic shape, so its gradient is the shape
+            // material: the same per-fragment ramp maths, multiplied by the
+            // SDF coverage.
             assert!(plan
                 .vertices
                 .iter()
-                .all(|v| v.texture_kind == material::GRADIENT));
+                .all(|v| v.texture_kind == material::SHAPE_GRADIENT));
+            // The quad is the rect inflated by one device pixel, so its
+            // corners' paint coordinates sit just outside the unit square —
+            // clamped in the shader, and covered to zero by the SDF.
             let corners: Vec<[f32; 2]> = plan.vertices.iter().map(|v| v.local).collect();
             assert!(
-                corners.contains(&[0.0, 0.0]) && corners.contains(&[1.0, 1.0]),
+                corners
+                    .iter()
+                    .all(|c| c[0] < 0.0 || c[0] > 1.0 || (0.0..=1.0).contains(&c[0])),
                 "{corners:?}"
             );
+            assert!(
+                corners.iter().any(|c| c[0] < 0.0) && corners.iter().any(|c| c[0] > 1.0),
+                "the inflation reaches outside the paint bounds: {corners:?}"
+            );
             assert_eq!(planner.ramp_atlas().len(), 1);
+
+            // The same gradient on a rotated rect cannot be an analytic
+            // shape. It is one quad over its inked bounding box, coverage
+            // from the CPU rasterizer in the mask atlas, painted with the
+            // per-fragment GRADIENT material and one ramp row. The quad's
+            // corners lie outside the rotated rect, so their paint
+            // coordinates leave the unit square — coverage is zero there.
+            let mut scene = Scene::default();
+            scene.push_command(Command::FillRect {
+                rect: Rect::new(10.0, 10.0, 30.0, 20.0),
+                paint: Paint::gradient(gradient),
+                transform: Transform {
+                    a: INV_SQRT_2,
+                    b: INV_SQRT_2,
+                    c: -INV_SQRT_2,
+                    d: INV_SQRT_2,
+                    tx: 50.0,
+                    ty: 0.0,
+                },
+                clip: Clip::NONE,
+            });
+            let mut planner = Planner::new();
+            let plan = planner.plan(&scene, 100.0, 100.0);
+            assert!(plan.is_complete());
+            assert_eq!(plan.vertices.len(), 4, "one quad");
+            assert!(plan
+                .vertices
+                .iter()
+                .all(|v| v.texture_kind == material::GRADIENT && v.mask[2] > 0.5));
+            assert_eq!(planner.mask_atlas().len(), 1);
+            let locals: Vec<[f32; 2]> = plan.vertices.iter().map(|v| v.local).collect();
+            assert!(
+                locals
+                    .iter()
+                    .any(|c| !(0.0..=1.0).contains(&c[0]) || !(0.0..=1.0).contains(&c[1])),
+                "{locals:?}"
+            );
         }
     }
 
@@ -2038,14 +2901,16 @@ mod tests {
             clip: Clip::NONE,
         });
         let plan = plan(&scene, 100.0, 100.0);
+        // The analytic quad is the rect inflated by the one-pixel AA ramp,
+        // so the geometry reaches 29..41 and 39..51 under a (30, 40) move.
         assert!(plan
             .vertices
             .iter()
-            .all(|v| (30.0..=40.0).contains(&v.position[0])));
+            .all(|v| (29.0..=41.0).contains(&v.position[0])));
         assert!(plan
             .vertices
             .iter()
-            .all(|v| (40.0..=50.0).contains(&v.position[1])));
+            .all(|v| (39.0..=51.0).contains(&v.position[1])));
     }
 
     #[test]
@@ -2083,8 +2948,8 @@ mod tests {
     }
 
     #[test]
-    fn the_vertex_layout_is_twenty_three_floats() {
-        assert_eq!(std::mem::size_of::<Vertex>(), 23 * 4);
+    fn the_vertex_layout_is_twenty_seven_floats() {
+        assert_eq!(std::mem::size_of::<Vertex>(), 27 * 4);
         assert_eq!(std::mem::align_of::<Vertex>(), 4);
     }
 }

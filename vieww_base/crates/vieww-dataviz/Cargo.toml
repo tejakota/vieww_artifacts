@@ -1,0 +1,16 @@
+[package]
+name = "vieww-dataviz"
+description = "The vieww data-visualisation toolkit: D3's scales, ticks, colour interpolators, shape generators, keyed data joins, hierarchy layouts, force simulation and contours."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

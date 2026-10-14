@@ -89,6 +89,20 @@ android_env() {
     # file exists: `ci/mobile/reload-android.sh` was written without it and failed on
     # `Configure a release keystore via [package.metadata.android.signing.release]`
     # — an error that points at the manifest, where the fix cannot go.
+    #
+    # A fresh machine — every CI runner — has no `~/.android/debug.keystore`:
+    # Android Studio or a first Gradle build is what normally creates it. Make
+    # the same one they would (alias `androiddebugkey`, password `android`), so
+    # a release build signs instead of stopping at the error above.
+    if [ -z "${CARGO_APK_RELEASE_KEYSTORE:-}" ] && [ ! -f "$HOME/.android/debug.keystore" ] \
+        && command -v keytool >/dev/null 2>&1; then
+        mkdir -p "$HOME/.android"
+        keytool -genkeypair -noprompt -keystore "$HOME/.android/debug.keystore" \
+            -storepass android -keypass android -alias androiddebugkey \
+            -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 \
+            -validity 10000 >/dev/null 2>&1 \
+            && echo "$_who: created ~/.android/debug.keystore for release signing"
+    fi
     if [ -z "${CARGO_APK_RELEASE_KEYSTORE:-}" ] && [ -f "$HOME/.android/debug.keystore" ]; then
         export CARGO_APK_RELEASE_KEYSTORE="$HOME/.android/debug.keystore"
         export CARGO_APK_RELEASE_KEYSTORE_PASSWORD="${CARGO_APK_RELEASE_KEYSTORE_PASSWORD:-android}"

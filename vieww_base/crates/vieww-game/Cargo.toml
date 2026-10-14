@@ -1,0 +1,17 @@
+[package]
+name = "vieww-game"
+description = "The vieww game layer: entities and components, a transform hierarchy, behaviour lifecycles on a fixed-step loop, coroutines, signals, input actions, prefabs and JSON scenes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Offset/Transform for the 2D transform component, JSON for scenes.
+vieww-foundation.workspace = true
+
+[lints]
+workspace = true

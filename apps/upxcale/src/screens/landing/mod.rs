@@ -5,6 +5,7 @@
 
 pub mod backdrop;
 pub mod compare_sheet;
+pub mod measure;
 pub mod photo_grid;
 pub mod photo_tile;
 pub mod picker_dialog;

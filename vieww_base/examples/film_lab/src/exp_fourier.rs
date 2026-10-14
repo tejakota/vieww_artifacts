@@ -17,13 +17,14 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, ease_out_cubic, mix, smoothstep, INK, MUTED, VIOLET,
-    VIOLET_SOFT};
+use crate::film_lib::{
+    alpha, clamp01, ease_out_cubic, mix, smoothstep, INK, MUTED, VIOLET, VIOLET_SOFT,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The source: the avatar's profile line, closed. ──────────────────────────
 //
@@ -33,30 +34,30 @@ pub const SECONDS: f32 = 12.0;
 // centroid.
 
 const PROFILE: [(f32, f32); 24] = [
-    (170.0, 16.0),   // crown
+    (170.0, 16.0), // crown
     (214.0, 52.0),
-    (238.0, 108.0),  // brow ridge
+    (238.0, 108.0), // brow ridge
     (230.0, 140.0),
-    (248.0, 168.0),  // nose bridge dip
-    (296.0, 236.0),  // nose tip
-    (268.0, 258.0),  // under nose
-    (282.0, 284.0),  // upper lip
-    (266.0, 298.0),  // lip seam
-    (284.0, 316.0),  // lower lip
-    (252.0, 336.0),  // chin crease
-    (258.0, 376.0),  // chin
-    (228.0, 412.0),  // jaw
-    (170.0, 424.0),  // under chin
-    (96.0, 418.0),   // neck front
+    (248.0, 168.0), // nose bridge dip
+    (296.0, 236.0), // nose tip
+    (268.0, 258.0), // under nose
+    (282.0, 284.0), // upper lip
+    (266.0, 298.0), // lip seam
+    (284.0, 316.0), // lower lip
+    (252.0, 336.0), // chin crease
+    (258.0, 376.0), // chin
+    (228.0, 412.0), // jaw
+    (170.0, 424.0), // under chin
+    (96.0, 418.0),  // neck front
     (76.0, 386.0),
-    (70.0, 318.0),   // nape
+    (70.0, 318.0), // nape
     (52.0, 258.0),
     (40.0, 196.0),
-    (46.0, 140.0),   // back of head
+    (46.0, 140.0), // back of head
     (58.0, 96.0),
     (86.0, 54.0),
     (124.0, 26.0),
-    (170.0, 16.0),   // close at crown — one loop, no seam
+    (170.0, 16.0), // close at crown — one loop, no seam
 ];
 
 // ── The transform ──────────────────────────────────────────────────────────
@@ -95,7 +96,11 @@ fn coefs() -> Vec<Coef> {
         im /= n;
         // Frequency index: fold k > n/2 to negative (the conjugate half).
         let kk = k as i32;
-        let k = if kk * 2 > PROFILE.len() as i32 { kk - PROFILE.len() as i32 } else { kk };
+        let k = if kk * 2 > PROFILE.len() as i32 {
+            kk - PROFILE.len() as i32
+        } else {
+            kk
+        };
         out.push(Coef {
             r: (re * re + im * im).sqrt(),
             a0: im.atan2(re),
@@ -116,7 +121,10 @@ fn anchor() -> Offset {
         cy += p.1;
     }
     // Scale: the 340×420 profile box lands as ~470×580 on the canvas.
-    Offset::new(560.0 + (cx / n - 170.0) * 1.30, 382.0 + (cy / n - 210.0) * 1.30)
+    Offset::new(
+        560.0 + (cx / n - 170.0) * 1.30,
+        382.0 + (cy / n - 210.0) * 1.30,
+    )
 }
 
 /// The epicycle sum at parameter s with the first `k` coefficients.
@@ -160,16 +168,16 @@ fn recon_error(cs: &[Coef], k: usize) -> f32 {
     worst
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let cs = coefs();
     let n_coef = PROFILE.len();
 
     // The arc of the plate: line → machine → trace. The pen starts
     // moving on frame one — an empty first frame is a dead cell on the
     // sheet (the round-8 audit's first catch).
-    let draw_line = clamp01((t + 0.015) / 0.20);    // the source self-draws
-    let assemble = clamp01((t - 0.20) / 0.18);      // circles fade in
-    let trace = clamp01((t - 0.34) / 0.66);         // the choir walks the line
+    let draw_line = clamp01((t + 0.015) / 0.20); // the source self-draws
+    let assemble = clamp01((t - 0.20) / 0.18); // circles fade in
+    let trace = clamp01((t - 0.34) / 0.66); // the choir walks the line
     let k_live = (4.0 + ease_out_cubic(assemble) * (n_coef as f32 - 4.0)) as usize;
 
     // The live trace: where the sum has walked so far (sampled).
@@ -182,14 +190,18 @@ pub fn frame(t: f32) -> WidgetNode {
     }
 
     // The receipts, measured.
-    let err_full = if trace > 0.999 { recon_error(&cs, n_coef) } else { 0.0 };
+    let err_full = if trace > 0.999 {
+        recon_error(&cs, n_coef)
+    } else {
+        0.0
+    };
     let err_8 = recon_error(&cs, 8);
     let err_16 = recon_error(&cs, 16);
     let err_32 = recon_error(&cs, 32);
     let max_r = cs.first().map_or(0.0, |c| c.r) * 1.30;
 
     let cs2 = cs.clone();
-    let k2 = k_live;
+    let _k2 = k_live;
     let trace2 = trace_pts.clone();
 
     let board = Painting::sized(
@@ -201,10 +213,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 7, 11)),
-                    (1.0, Color::rgb(12, 12, 17)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(7, 7, 11)), (1.0, Color::rgb(12, 12, 17))]),
             );
 
             // A faint polar field behind the machine — the graph paper of
@@ -214,12 +225,16 @@ pub fn frame(t: f32) -> WidgetNode {
                 book.ring(a, r, 1.0, alpha(Color::rgb(30, 33, 42), 0.55));
             }
             book.line(
-                Offset::new(a.dx - 380.0, a.dy), Offset::new(a.dx + 380.0, a.dy),
-                alpha(Color::rgb(30, 33, 42), 0.4), 1.0,
+                Offset::new(a.dx - 380.0, a.dy),
+                Offset::new(a.dx + 380.0, a.dy),
+                alpha(Color::rgb(30, 33, 42), 0.4),
+                1.0,
             );
             book.line(
-                Offset::new(a.dx, a.dy - 380.0), Offset::new(a.dx, a.dy + 380.0),
-                alpha(Color::rgb(30, 33, 42), 0.4), 1.0,
+                Offset::new(a.dx, a.dy - 380.0),
+                Offset::new(a.dx, a.dy + 380.0),
+                alpha(Color::rgb(30, 33, 42), 0.4),
+                1.0,
             );
 
             // ── Phase A: the source line draws itself (the avatar's
@@ -318,7 +333,12 @@ pub fn frame(t: f32) -> WidgetNode {
             let gap = 5.0;
             let bh_max = (sy1 - sy0) * 0.82;
             book.rrect(
-                Rect::new(sx0 - 18.0, sy0 - 34.0, sx0 + bars as f32 * (bw + gap) + 18.0, sy1 + 26.0),
+                Rect::new(
+                    sx0 - 18.0,
+                    sy0 - 34.0,
+                    sx0 + bars as f32 * (bw + gap) + 18.0,
+                    sy1 + 26.0,
+                ),
                 10.0,
                 alpha(Color::rgb(15, 15, 21), 0.88),
             );
@@ -335,8 +355,12 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
-    stack.push(receipt_panel(k_live, n_coef, max_r, err_full, err_8, err_16, err_32)).into()
+    let stack = Stack::new().push(Positioned::fill().child(board));
+    stack
+        .push(receipt_panel(
+            k_live, n_coef, max_r, err_full, err_8, err_16, err_32,
+        ))
+        .into()
 }
 
 // ── The receipt ─────────────────────────────────────────────────────────────
@@ -353,7 +377,9 @@ fn receipt_panel(
     let lines = [
         "FOURIER · THE SYNTHESIS AXIS · THE CHOIR OF CIRCLES".to_string(),
         format!("coefficients {n_coef}/44 · |c0| = {max_r:.1} px · live K = {k_live}"),
-        format!("Gibbs census: K=8 → {err_8:.1} px · K=16 → {err_16:.1} px · K=32 → {err_32:.1} px"),
+        format!(
+            "Gibbs census: K=8 → {err_8:.1} px · K=16 → {err_16:.1} px · K=32 → {err_32:.1} px"
+        ),
         format!("full K reconstruction error at s=1: {err_full:.4} px (measured)"),
         "source: the round-6 avatar profile line, reprised".to_string(),
     ];
@@ -374,7 +400,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

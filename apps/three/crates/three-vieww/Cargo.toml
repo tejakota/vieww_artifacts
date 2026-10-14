@@ -5,7 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-description = "Minimal adapter boundary for rendering .3 content inside Vieww"
+description = "Depth-warp presentation layer for .3 media (no UI-framework dependency)"
 
 [dependencies]
 three-core.workspace = true
+three-format.workspace = true
+three-runtime.workspace = true

@@ -1,3 +1,4 @@
+shared-target/
 # Render scratch never enters the repository: the film ships as the master
 # and its contact sheets, and frame PNGs are 164 GB nobody has.
 /keynote/frames/

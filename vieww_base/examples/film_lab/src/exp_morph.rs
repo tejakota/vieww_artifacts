@@ -22,15 +22,15 @@
 
 use vieww_foundation::{Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Opacity, Painting, PaintWith};
+use vieww_widget::{Opacity, PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, ease_in_out, mix, smoothstep, spring_out, tint, held_24_in_60, xywh, BG_DEEP,
-    CANVAS, CANVAS_W, FAINT, INK, MUTED, Rng, VIOLET, VIOLET_SOFT, AMBER,
+    alpha, clamp01, held_24_in_60, tint, xywh, Rng, AMBER, BG_DEEP, CANVAS, CANVAS_W, FAINT, INK,
+    MUTED, VIOLET, VIOLET_SOFT,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// Left margin.
 const X: f32 = 120.0;
@@ -38,18 +38,10 @@ const X: f32 = 120.0;
 // ── The language pair — one instruction, two notations ──────────────────────
 
 /// The say-line: natural language, sentence rhythm.
-const SAY_LINES: [&str; 3] = [
-    "show the counter",
-    "in violet",
-    "and keep it live",
-];
+const SAY_LINES: [&str; 3] = ["show the counter", "in violet", "and keep it live"];
 
 /// The rust-line: the same instruction, in the machine's words.
-const RUST_LINES: [&str; 3] = [
-    "Text::new(counter)",
-    ".style(violet)",
-    ".live(true)",
-];
+const RUST_LINES: [&str; 3] = ["Text::new(counter)", ".style(violet)", ".live(true)"];
 
 /// How many code lines (both notations have the same count).
 const N_LINES: usize = 3;
@@ -145,10 +137,7 @@ fn code_panel(t: f32) -> WidgetNode {
             // The gutter — line numbers, one per code line.
             for i in 0..N_LINES {
                 let ly = 44.0 + i as f32 * LINE_H + LINE_H * 0.5;
-                book.rect(
-                    xywh(30.0, ly - 1.0, 22.0, 1.0),
-                    alpha(Color::WHITE, 0.07),
-                );
+                book.rect(xywh(30.0, ly - 1.0, 22.0, 1.0), alpha(Color::WHITE, 0.07));
             }
 
             // The scan line — a bright horizontal rule with a bloom, riding
@@ -162,13 +151,16 @@ fn code_panel(t: f32) -> WidgetNode {
                 );
                 book.rect(
                     xywh(24.0, sy - 3.0, P_W - 48.0, 8.0),
-                    Gradient::vertical().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.0)),
-                        (1.0, alpha(VIOLET, 0.10 * sa)),
-                    ]),
+                    Gradient::vertical()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.0)), (1.0, alpha(VIOLET, 0.10 * sa))]),
                 );
                 // The scan head — a diamond at the left edge.
-                book.circle(Offset::new(26.0, sy + 1.0), 4.0, alpha(tint(VIOLET, 0.5), 0.9 * sa));
+                book.circle(
+                    Offset::new(26.0, sy + 1.0),
+                    4.0,
+                    alpha(tint(VIOLET, 0.5), 0.9 * sa),
+                );
             }
         }),
     );
@@ -231,11 +223,10 @@ fn code_panel(t: f32) -> WidgetNode {
                 .width(64.0)
                 .height(18.0)
                 .child(
-                    Text::new("say").style(
-                        TextStyle::new(12.0)
-                            .monospace()
-                            .color(alpha(tint(AMBER, 0.3), 0.55 + 0.4 * (1.0 - clamp01((t - MORPH_T0) / MORPH_SPAN)))),
-                    ),
+                    Text::new("say").style(TextStyle::new(12.0).monospace().color(alpha(
+                        tint(AMBER, 0.3),
+                        0.55 + 0.4 * (1.0 - clamp01((t - MORPH_T0) / MORPH_SPAN)),
+                    ))),
                 ),
         )
         .push(
@@ -245,11 +236,10 @@ fn code_panel(t: f32) -> WidgetNode {
                 .width(64.0)
                 .height(18.0)
                 .child(
-                    Text::new("rust").style(
-                        TextStyle::new(12.0)
-                            .monospace()
-                            .color(alpha(VIOLET_SOFT, 0.55 + 0.4 * clamp01((t - MORPH_T0) / MORPH_SPAN))),
-                    ),
+                    Text::new("rust").style(TextStyle::new(12.0).monospace().color(alpha(
+                        VIOLET_SOFT,
+                        0.55 + 0.4 * clamp01((t - MORPH_T0) / MORPH_SPAN),
+                    ))),
                 ),
         );
 
@@ -261,12 +251,13 @@ fn code_panel(t: f32) -> WidgetNode {
                 .width(700.0)
                 .height(18.0)
                 .child(
-                    Text::new("THE STUDIO · LANGUAGE SWITCH · ONE INSTRUCTION, TWO NOTATIONS").style(
-                        TextStyle::new(12.0)
-                            .monospace()
-                            .letter_spacing(2.2)
-                            .color(alpha(FAINT, 0.9)),
-                    ),
+                    Text::new("THE STUDIO · LANGUAGE SWITCH · ONE INSTRUCTION, TWO NOTATIONS")
+                        .style(
+                            TextStyle::new(12.0)
+                                .monospace()
+                                .letter_spacing(2.2)
+                                .color(alpha(FAINT, 0.9)),
+                        ),
                 ),
         )
         .push(
@@ -336,30 +327,28 @@ fn state_line(t: f32) -> WidgetNode {
 
     // The chip itself — glass, violet marker, the live counter.
     let chip = Stack::new()
-        .push(Positioned::fill().child(
-            Painting::sized(
-                Size::new(250.0, 60.0),
-                PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
-                    book.rrect(
-                        Rect::new(0.0, 0.0, 250.0, 60.0),
-                        10.0,
-                        Gradient::vertical().with_dither().with_stops(&[
-                            (0.0, alpha(Color::rgb(26, 24, 38), 0.8)),
-                            (1.0, alpha(Color::rgb(16, 15, 24), 0.85)),
-                        ]),
-                    );
-                    book.stroke_rrect(
-                        Rect::new(0.5, 0.5, 249.0, 59.0),
-                        10.0,
-                        alpha(VIOLET_SOFT, 0.30),
-                        1.2,
-                    );
-                    // The marker dot — lit the entire experiment.
-                    book.circle(Offset::new(26.0, 30.0), 5.0, VIOLET);
-                    book.ring(Offset::new(26.0, 30.0), 9.0, 1.4, alpha(VIOLET, 0.4));
-                }),
-            ),
-        ))
+        .push(Positioned::fill().child(Painting::sized(
+            Size::new(250.0, 60.0),
+            PaintWith::new(move |book: &mut Sketchbook, _sz: Size| {
+                book.rrect(
+                    Rect::new(0.0, 0.0, 250.0, 60.0),
+                    10.0,
+                    Gradient::vertical().with_dither().with_stops(&[
+                        (0.0, alpha(Color::rgb(26, 24, 38), 0.8)),
+                        (1.0, alpha(Color::rgb(16, 15, 24), 0.85)),
+                    ]),
+                );
+                book.stroke_rrect(
+                    Rect::new(0.5, 0.5, 249.0, 59.0),
+                    10.0,
+                    alpha(VIOLET_SOFT, 0.30),
+                    1.2,
+                );
+                // The marker dot — lit the entire experiment.
+                book.circle(Offset::new(26.0, 30.0), 5.0, VIOLET);
+                book.ring(Offset::new(26.0, 30.0), 9.0, 1.4, alpha(VIOLET, 0.4));
+            }),
+        )))
         .push(
             Positioned::new()
                 .left(44.0)
@@ -431,7 +420,11 @@ fn state_line(t: f32) -> WidgetNode {
 fn receipt(t: f32) -> WidgetNode {
     let overall = clamp01((t - MORPH_T0) / MORPH_SPAN);
     let say_words: usize = SAY_LINES.join(" ").split_whitespace().count();
-    let rust_glyphs: usize = RUST_LINES.concat().chars().filter(|c| !c.is_whitespace()).count();
+    let rust_glyphs: usize = RUST_LINES
+        .concat()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .count();
 
     Stack::new()
         .push(
@@ -456,15 +449,8 @@ fn receipt(t: f32) -> WidgetNode {
                 .width(340.0)
                 .height(20.0)
                 .child(
-                    Text::new(format!(
-                        "{} words → {} glyphs",
-                        say_words, rust_glyphs
-                    ))
-                    .style(
-                        TextStyle::new(14.0)
-                            .monospace()
-                            .color(alpha(MUTED, 0.95)),
-                    ),
+                    Text::new(format!("{} words → {} glyphs", say_words, rust_glyphs))
+                        .style(TextStyle::new(14.0).monospace().color(alpha(MUTED, 0.95))),
                 ),
         )
         .push(
@@ -474,11 +460,7 @@ fn receipt(t: f32) -> WidgetNode {
                 .width(340.0)
                 .height(20.0)
                 .child(
-                    Text::new(format!(
-                        "morph {:.0}%",
-                        overall * 100.0
-                    ))
-                    .style(
+                    Text::new(format!("morph {:.0}%", overall * 100.0)).style(
                         TextStyle::new(14.0)
                             .monospace()
                             .color(alpha(VIOLET_SOFT, 0.8)),
@@ -490,7 +472,7 @@ fn receipt(t: f32) -> WidgetNode {
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let bg = Painting::sized(
         CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
@@ -522,30 +504,30 @@ pub fn frame(t: f32) -> WidgetNode {
                 inner.circle(
                     Offset::new(w * 0.22, h * 0.78),
                     w * 0.24,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(AMBER, 0.06)),
-                        (1.0, alpha(AMBER, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(AMBER, 0.06)), (1.0, alpha(AMBER, 0.0))]),
                 );
             });
             book.layer(1.0, 36.0, None, |inner| {
                 inner.circle(
                     Offset::new(w * 0.78, h * 0.22),
                     w * 0.24,
-                    Gradient::radial_fill().with_dither().with_stops(&[
-                        (0.0, alpha(VIOLET, 0.08)),
-                        (1.0, alpha(VIOLET, 0.0)),
-                    ]),
+                    Gradient::radial_fill()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(VIOLET, 0.08)), (1.0, alpha(VIOLET, 0.0))]),
                 );
             });
 
             // The vignette.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::radial(Offset::new(0.5, 0.5), 0.80).with_dither().with_stops(&[
-                    (0.55, alpha(Color::BLACK, 0.0)),
-                    (1.0, alpha(Color::BLACK, 0.45)),
-                ]),
+                Gradient::radial(Offset::new(0.5, 0.5), 0.80)
+                    .with_dither()
+                    .with_stops(&[
+                        (0.55, alpha(Color::BLACK, 0.0)),
+                        (1.0, alpha(Color::BLACK, 0.45)),
+                    ]),
             );
         }),
     );

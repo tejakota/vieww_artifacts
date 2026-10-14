@@ -92,7 +92,13 @@ impl RenderObject for RenderFilter {
             return;
         }
         // The object's own box. `Scene::push_filtered_layer` grows it by the
-        // blur's reach, so a blurred panel is not cut off square at its edge.
+        // blur's reach for a plain filter, so a blurred panel is not cut off
+        // square at its edge — and deliberately does **not** grow it for a
+        // backdrop filter, whose subject is the destination underneath this
+        // box: a grown region would sample the neighbours' paint and composite
+        // the blurred copy back over it, eroding an adjacent opaque widget's
+        // edge (vavlt's `Done` button beside the Glass `Restore`). The region
+        // stays the box; the blur clamps at its edges.
         let bounds = ctx.bounds();
         let filter = self.filter;
         ctx.canvas()

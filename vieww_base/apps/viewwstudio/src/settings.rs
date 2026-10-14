@@ -228,6 +228,8 @@ pub struct Settings {
     pub inline_diagnostics: bool,
     pub release_profile: bool,
     pub auto_render: bool,
+    /// Each Render's preview runs in a child process (`remote`).
+    pub isolated_preview: bool,
     pub minimap: bool,
     pub blink: bool,
     pub highlight: bool,
@@ -320,6 +322,7 @@ impl Default for Settings {
             inline_diagnostics: true,
             release_profile: false,
             auto_render: false,
+            isolated_preview: cfg!(windows),
             minimap: true,
             blink: true,
             highlight: true,
@@ -364,6 +367,7 @@ impl Settings {
             inline_diagnostics: record.bool_or("inline_diagnostics", fallback.inline_diagnostics),
             release_profile: record.bool_or("release_profile", fallback.release_profile),
             auto_render: record.bool_or("auto_render", fallback.auto_render),
+            isolated_preview: record.bool_or("isolated_preview", fallback.isolated_preview),
             minimap: record.bool_or("minimap", fallback.minimap),
             blink: record.bool_or("blink", fallback.blink),
             highlight: record.bool_or("highlight", fallback.highlight),
@@ -428,6 +432,7 @@ impl Settings {
         record.put_bool("inline_diagnostics", self.inline_diagnostics);
         record.put_bool("release_profile", self.release_profile);
         record.put_bool("auto_render", self.auto_render);
+        record.put_bool("isolated_preview", self.isolated_preview);
         record.put_bool("minimap", self.minimap);
         record.put_bool("blink", self.blink);
         record.put_bool("highlight", self.highlight);

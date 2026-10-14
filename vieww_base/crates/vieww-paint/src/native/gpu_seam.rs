@@ -46,6 +46,18 @@ pub struct CoveragePatch {
     pub alpha: Vec<u8>,
 }
 
+/// A shape whose coverage [`GpuSeam::shape_coverage`] computes — one per
+/// shape-drawing `Command`.
+#[derive(Debug, Clone, Copy)]
+pub enum SeamShape<'a> {
+    /// `Command::FillRect`'s rect.
+    Rect(Rect),
+    /// `Command::FillPath`'s path (nonzero fill, as the CPU renderer's).
+    Fill(&'a vieww_foundation::Path),
+    /// `Command::StrokePath`'s path and stroke.
+    Stroke(&'a vieww_foundation::Path, &'a crate::Stroke),
+}
+
 /// A shadow's masks, before blur. See the module doc.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowPatch {
@@ -141,6 +153,63 @@ impl GpuSeam {
                     alpha[(y * width + x) as usize] = to_byte(c);
                 }
             }
+        }
+        Some(CoveragePatch {
+            x: x0,
+            y: y0,
+            width,
+            height,
+            alpha,
+        })
+    }
+
+    /// The antialiased coverage of one filled or stroked shape, exactly as
+    /// `NativeRenderer` rasterises it for `FillRect`, `FillPath` or
+    /// `StrokePath` — the same polygon construction, the same flattening and
+    /// the same 4×4 supersampled scanline coverage — limited to `limit`
+    /// (device pixels; the CPU renderer passes its clip's bounding box).
+    ///
+    /// The patch is the shape's **inked** extent inside `limit`, which is
+    /// what lets a GPU backend draw one quad over exactly those pixels and
+    /// get the CPU's edges rather than a triangle rasteriser's. `None` when
+    /// nothing is inked.
+    ///
+    /// A stroke is taken at its recorded width: the CPU renderer's optional
+    /// hairline floor is a renderer setting, not a property of the scene.
+    #[must_use]
+    pub fn shape_coverage(
+        &self,
+        shape: SeamShape<'_>,
+        transform: Transform,
+        limit: Rect,
+    ) -> Option<CoveragePatch> {
+        let polylines = match shape {
+            SeamShape::Rect(rect) => vec![super::rounded_rect::rounded_rect_polygon_transformed(
+                rect, 0.0, transform,
+            )],
+            SeamShape::Fill(path) => super::geometry::flatten::flatten_path(path, transform),
+            SeamShape::Stroke(path, stroke) => super::geometry::stroke::stroke_to_polygons(
+                path,
+                stroke.width,
+                &stroke.style,
+                transform,
+            ),
+        };
+        let mask = super::geometry::fill::rasterize(&polylines, limit);
+        if mask.is_empty() {
+            return None;
+        }
+        let (x0, y0, width, height) = (mask.x0, mask.y0, mask.width, mask.height);
+        let mut alpha = vec![0u8; width as usize * height as usize];
+        for y in 0..height {
+            for x in 0..width {
+                #[expect(clippy::cast_possible_wrap, reason = "mask extents fit a frame")]
+                let c = mask.coverage_at(x0 + x as i32, y0 + y as i32);
+                alpha[(y * width + x) as usize] = to_byte(c);
+            }
+        }
+        if alpha.iter().all(|&a| a == 0) {
+            return None;
         }
         Some(CoveragePatch {
             x: x0,

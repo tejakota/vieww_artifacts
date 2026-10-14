@@ -23,13 +23,14 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, smoothstep, tint, AMBER, CYAN, FAINT, INK, MUTED,
-    VIOLET};
+use crate::film_lib::{
+    alpha, clamp01, mix, smoothstep, tint, AMBER, CYAN, FAINT, INK, MUTED, VIOLET,
+};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The chemistry ───────────────────────────────────────────────────────────
 
@@ -202,7 +203,7 @@ fn wavelength(field: &Field) -> Option<f32> {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let (field, steps, live, feed, kill) = replay(t);
     let lam = wavelength(&field);
     // Mean v — the census of how much pattern exists at all.
@@ -225,10 +226,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the dish's room.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 9)),
-                    (1.0, Color::rgb(11, 11, 15)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 9)), (1.0, Color::rgb(11, 11, 15))]),
             );
 
             // The dish: a petri plate rim.
@@ -397,7 +397,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

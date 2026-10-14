@@ -203,7 +203,10 @@ fn horizontal(src: &[Premul], dst: &mut [Premul], w: u32, h: u32, radius: i32) {
             // panel by exactly 1/255.
             let entering = (x + radius + 1).min(width - 1);
             let leaving = (x - radius).max(0);
-            sum = add(sum, sub(src_row[entering as usize], src_row[leaving as usize]));
+            sum = add(
+                sum,
+                sub(src_row[entering as usize], src_row[leaving as usize]),
+            );
         }
     }
 }
@@ -314,15 +317,7 @@ fn vertical(src: &[Premul], dst: &mut [Premul], w: u32, h: u32, radius: i32) {
 /// clamped at the band's edges exactly as `horizontal` and `vertical` now
 /// clamp at theirs (U-15). Cost is per pixel per tap, paid only when a
 /// caller asks for a direction.
-fn directed(
-    src: &[Premul],
-    dst: &mut [Premul],
-    w: u32,
-    h: u32,
-    radius: i32,
-    dx: f32,
-    dy: f32,
-) {
+fn directed(src: &[Premul], dst: &mut [Premul], w: u32, h: u32, radius: i32, dx: f32, dy: f32) {
     // Divided rather than multiplied by a reciprocal — see `horizontal`.
     let window = (2 * radius + 1) as f32;
     let (width, height) = (w as usize, h as usize);

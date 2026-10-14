@@ -181,6 +181,26 @@ vieww_widget::widget_node_from!(Still);
 /// the process is blocked in the platform. The trace is the cheapest tool that
 /// works, and it is left in because the next person to touch this file will
 /// need it for the same reason this one did.
+/// Pure-blue pixels on the X display, via ImageMagick's `import`; `None`
+/// when the tool is missing (the scenario then says it did not look).
+fn blue_pixels_on_screen() -> Option<usize> {
+    let out = std::process::Command::new("import")
+        .args(["-window", "root", "-depth", "8", "rgb:-"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(
+        out.stdout
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .filter(|p| p[0] < 8 && p[1] < 8 && p[2] > 247)
+            .count(),
+    )
+}
+
 fn trace(what: &str) {
     if std::env::var_os("VIEWW_WAIT_LOOP_TRACE").is_some() {
         eprintln!("wait_loop trace: {what}");
@@ -566,6 +586,106 @@ fn an_application_can_close_its_own_window_and_still_gets_its_report() {
     pass("self-close");
 }
 
+/// A GPU-planned frame presents to a real window.
+///
+/// The worklist's §2.6 ask (closed 2026-10-09; see `TRACKER.md`), made
+/// checkable: the GPU rasterizer could execute
+/// a whole frame and the swapchain could present pixels, and nothing
+/// connected them — the swapchain was presenting the CPU rasterizer's buffer
+/// whatever the GPU could do. [`App::prefer_gpu`] routes frames through
+/// `NativeRenderer::present_planned`, and this scenario asserts, from the
+/// frame log of a *running window on a real compositor*, that frames were
+/// drawn by the GPU: `gpu_frames` counts them, and it is zero for every
+/// application that never asked.
+///
+/// The assertion is `>= 1` and not "all of them", deliberately: a frame the
+/// planner cannot express falls back to the CPU per frame, and how many did
+/// is a property of the scene, not of the plumbing. The claim being tested
+/// is that the join exists and works, which one drawn frame proves and zero
+/// refutes.
+fn a_gpu_planned_frame_presents_to_a_real_window() {
+    vieww_hardware::skip_without!(display, gpu);
+    arm_deadline("a_gpu_planned_frame_presents_to_a_real_window");
+
+    let app = App::new().title("vieww wait-loop: gpu frame").prefer_gpu();
+    let windows = app.windows();
+    let waker = app.waker();
+    let elapsed = Arc::new(AtomicU32::new(0));
+
+    // As in the self-close scenario: close from off the UI thread, after the
+    // loop has settled, so the run is finite and returns its report.
+    let on_screen = Arc::new(std::sync::Mutex::new(None::<usize>));
+    std::thread::spawn({
+        let elapsed = Arc::clone(&elapsed);
+        let on_screen = Arc::clone(&on_screen);
+        move || {
+            std::thread::sleep(IDLE);
+            // What the X server is actually showing, while the window is up:
+            // the only evidence that the GPU's frame — not a readback of it —
+            // reached the screen with the right colours.
+            *on_screen.lock().unwrap() = blue_pixels_on_screen();
+            elapsed.store(1, Ordering::SeqCst);
+            trace("waking");
+            waker.wake();
+        }
+    });
+
+    let asked = Rc::new(Cell::new(false));
+    let report = app
+        .on_frame({
+            let elapsed = Arc::clone(&elapsed);
+            let asked = Rc::clone(&asked);
+            move |_log| {
+                trace("frame");
+                if elapsed.load(Ordering::SeqCst) == 1 && !asked.get() {
+                    asked.set(true);
+                    trace("closing");
+                    let _ = Windows::close(&*windows, WindowKey::PRIMARY);
+                }
+            }
+        })
+        .run(|driver| driver.set_root(Still))
+        .expect("the window opened, drew, and closed; that is not a failure");
+
+    assert!(
+        asked.get(),
+        "the close was never asked for, so nothing was tested"
+    );
+
+    assert!(
+        report.frames >= 1,
+        "a session that visibly drew reports {} frames",
+        report.frames
+    );
+    assert!(
+        report.gpu_frames >= 1,
+        "prefer_gpu was set and the GPU drew {} of {} frames — the join \
+         between SceneRenderer and the swapchain did not run, and this \
+         scenario is the only thing that checks it on a real window",
+        report.gpu_frames,
+        report.frames
+    );
+    match *on_screen.lock().unwrap() {
+        // `Still` is a window-filling blue box. A dropped frame reads black,
+        // a swapped channel order reads red; both leave no blue at all.
+        Some(blue) => assert!(
+            blue >= 10_000,
+            "the window should be showing pure blue; the screen has {blue} blue pixels"
+        ),
+        None => eprintln!("wait_loop: no `import` (ImageMagick) — screen contents not checked"),
+    }
+
+    // The background is opaque and lavapipe/SwiftShader blit RGBA16F into
+    // a UNORM swapchain, so every GPU frame here must have skipped the
+    // readback: presented straight from the GPU's own render target.
+    assert_eq!(
+        report.gpu_direct_frames, report.gpu_frames,
+        "{} of {} GPU frames went straight to the swapchain image",
+        report.gpu_direct_frames, report.gpu_frames
+    );
+    pass("gpu frame");
+}
+
 // A former scenario here, `two_windows_share_one_gpu_device`, counted
 // `vieww_paint::gpu::GpuContext`'s shared-device bookkeeping across two
 // windows. That type is gone with vello — the new Vulkan backend
@@ -573,6 +693,9 @@ fn an_application_can_close_its_own_window_and_still_gets_its_report() {
 // `vieww_hal::vulkan::VulkanDevice` with no shared-instance equivalent yet;
 // see that module's own doc comment. Re-add a scenario here once device
 // sharing exists to measure.
+
+/// How many lines of a failed scenario's trace to print.
+const TRACE_TAIL: usize = 80;
 
 /// The scenarios, by the name a child process is given.
 ///
@@ -594,6 +717,7 @@ const SCENARIOS: &[(&str, fn())] = &[
         "self_close",
         an_application_can_close_its_own_window_and_still_gets_its_report,
     ),
+    ("gpu_frame", a_gpu_planned_frame_presents_to_a_real_window),
 ];
 
 /// Parent: run each scenario in a child. Child: run the one it was named.
@@ -621,14 +745,47 @@ fn main() {
     let mut failed = Vec::new();
     for (name, _) in SCENARIOS {
         eprintln!("wait_loop: {name}");
-        let status = std::process::Command::new(&binary)
+        // **Every child runs traced; the trace is printed only if it fails.**
+        //
+        // These scenarios have failed only where nobody was watching: the
+        // idle scenario timed out inside `ci/check/checks.sh` on a GNOME/
+        // Wayland laptop, several times, and passed in every run made by hand
+        // to investigate it — traced or not. A failure that cannot be
+        // reproduced on demand has to bring its own evidence, so both traces
+        // (this file's and the event loop's `VIEWW_TRACE_FRAMES`, which logs
+        // each window event — `Occluded`, `Resized`, `RedrawRequested` — and
+        // each sleep decision) are captured on every run and the last lines
+        // are shown when a scenario fails. A passing run prints what it
+        // always printed. The event-loop trace is deduplicated by design
+        // (see `trace_line` in `src/app.rs`), so it does not change timing.
+        let output = std::process::Command::new(&binary)
             .arg(name)
-            .status()
+            .env("VIEWW_TRACE_FRAMES", "1")
+            .env("VIEWW_WAIT_LOOP_TRACE", "1")
+            .stderr(std::process::Stdio::piped())
+            .output()
             .unwrap_or_else(|error| panic!("could not re-execute {binary:?}: {error}"));
-        if status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if output.status.success() {
+            for line in stderr
+                .lines()
+                .filter(|l| l.starts_with("wait_loop: ") && !l.starts_with("wait_loop: pass"))
+            {
+                eprintln!("{line}");
+            }
             eprintln!("wait_loop: {name} ok");
         } else {
-            eprintln!("wait_loop: {name} FAILED ({status})");
+            let lines: Vec<&str> = stderr.lines().collect();
+            let tail = &lines[lines.len().saturating_sub(TRACE_TAIL)..];
+            eprintln!(
+                "wait_loop: {name} FAILED ({}) — last {} of {} trace lines:",
+                output.status,
+                tail.len(),
+                lines.len()
+            );
+            for line in tail {
+                eprintln!("    | {line}");
+            }
             failed.push(*name);
         }
     }

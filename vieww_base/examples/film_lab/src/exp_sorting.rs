@@ -18,14 +18,14 @@
 
 use std::sync::OnceLock;
 
-use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
+use vieww_foundation::{Color, Gradient, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, mix, AMBER, CYAN, INK, MUTED, VIOLET, MINT, Rng};
+use crate::film_lib::{alpha, mix, Rng, AMBER, CYAN, INK, MINT, MUTED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The machines ────────────────────────────────────────────────────────────
 
@@ -93,7 +93,13 @@ fn trace_all() -> &'static Vec<Machine> {
             }
             ops.push(Op::Done);
             states.push(a);
-            out.push(Machine { name: "BUBBLE", ops, states, cmp_n: c, wr_n: w });
+            out.push(Machine {
+                name: "BUBBLE",
+                ops,
+                states,
+                cmp_n: c,
+                wr_n: w,
+            });
         }
         // ── insertion ──
         {
@@ -120,7 +126,13 @@ fn trace_all() -> &'static Vec<Machine> {
             }
             ops.push(Op::Done);
             states.push(a);
-            out.push(Machine { name: "INSERTION", ops, states, cmp_n: c, wr_n: w });
+            out.push(Machine {
+                name: "INSERTION",
+                ops,
+                states,
+                cmp_n: c,
+                wr_n: w,
+            });
         }
         // ── selection ──
         {
@@ -147,7 +159,13 @@ fn trace_all() -> &'static Vec<Machine> {
             }
             ops.push(Op::Done);
             states.push(a);
-            out.push(Machine { name: "SELECTION", ops, states, cmp_n: c, wr_n: w });
+            out.push(Machine {
+                name: "SELECTION",
+                ops,
+                states,
+                cmp_n: c,
+                wr_n: w,
+            });
         }
         // ── shell (Ciura gaps) ──
         {
@@ -179,7 +197,13 @@ fn trace_all() -> &'static Vec<Machine> {
             }
             ops.push(Op::Done);
             states.push(a);
-            out.push(Machine { name: "SHELL", ops, states, cmp_n: c, wr_n: w });
+            out.push(Machine {
+                name: "SHELL",
+                ops,
+                states,
+                cmp_n: c,
+                wr_n: w,
+            });
         }
         // ── quick (middle pivot) ──
         {
@@ -187,8 +211,15 @@ fn trace_all() -> &'static Vec<Machine> {
             let mut ops = Vec::new();
             let mut states = vec![a];
             let (mut c, mut w) = (0usize, 0usize);
-            fn qs(a: &mut [u8; N], lo: i64, hi: i64, ops: &mut Vec<Op>,
-                  states: &mut Vec<[u8; N]>, c: &mut usize, w: &mut usize) {
+            fn qs(
+                a: &mut [u8; N],
+                lo: i64,
+                hi: i64,
+                ops: &mut Vec<Op>,
+                states: &mut Vec<[u8; N]>,
+                c: &mut usize,
+                w: &mut usize,
+            ) {
                 if lo >= hi {
                     return;
                 }
@@ -230,10 +261,24 @@ fn trace_all() -> &'static Vec<Machine> {
                 qs(a, lo, j, ops, states, c, w);
                 qs(a, i, hi, ops, states, c, w);
             }
-            qs(&mut a, 0, N as i64 - 1, &mut ops, &mut states, &mut c, &mut w);
+            qs(
+                &mut a,
+                0,
+                N as i64 - 1,
+                &mut ops,
+                &mut states,
+                &mut c,
+                &mut w,
+            );
             ops.push(Op::Done);
             states.push(a);
-            out.push(Machine { name: "QUICK", ops, states, cmp_n: c, wr_n: w });
+            out.push(Machine {
+                name: "QUICK",
+                ops,
+                states,
+                cmp_n: c,
+                wr_n: w,
+            });
         }
         // ── merge (bottom-up) ──
         {
@@ -283,7 +328,13 @@ fn trace_all() -> &'static Vec<Machine> {
             }
             ops.push(Op::Done);
             states.push(a);
-            out.push(Machine { name: "MERGE", ops, states, cmp_n: c, wr_n: w });
+            out.push(Machine {
+                name: "MERGE",
+                ops,
+                states,
+                cmp_n: c,
+                wr_n: w,
+            });
         }
         out
     })
@@ -301,7 +352,7 @@ const PANELS: [(f32, f32, f32, f32); 6] = [
     (880.0, 372.0, 368.0, 168.0),
 ];
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let machines = trace_all();
     // the shared operation clock: every machine gets the same ops per second
     let max_total = machines.iter().map(|m| m.ops.len()).max().unwrap_or(1) as f32;
@@ -327,22 +378,32 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the machine hall.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(7, 7, 10)),
-                    (1.0, Color::rgb(12, 12, 17)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(7, 7, 10)), (1.0, Color::rgb(12, 12, 17))]),
             );
 
             // the shared clock spine, under the captions
             let spine_y = 128.0;
-            book.rrect(Rect::new(64.0, spine_y, 1216.0, spine_y + 3.0), 1.5, Color::rgb(24, 24, 32));
-            book.rrect(Rect::new(64.0, spine_y, 64.0 + 1152.0 * t, spine_y + 3.0), 1.5, alpha(VIOLET, 0.9));
+            book.rrect(
+                Rect::new(64.0, spine_y, 1216.0, spine_y + 3.0),
+                1.5,
+                Color::rgb(24, 24, 32),
+            );
+            book.rrect(
+                Rect::new(64.0, spine_y, 64.0 + 1152.0 * t, spine_y + 3.0),
+                1.5,
+                alpha(VIOLET, 0.9),
+            );
             // each machine's finish mark on the spine
             for (i, m) in machines.iter().enumerate() {
                 let frac = (m.ops.len() as f32 / max_total).min(1.0);
                 let fx = 64.0 + 1152.0 * frac;
-                book.rrect(Rect::new(fx - 1.0, spine_y - 4.0, fx + 1.0, spine_y + 7.0), 1.0,
-                           alpha(if i % 2 == 0 { CYAN } else { AMBER }, 0.85));
+                book.rrect(
+                    Rect::new(fx - 1.0, spine_y - 4.0, fx + 1.0, spine_y + 7.0),
+                    1.0,
+                    alpha(if i % 2 == 0 { CYAN } else { AMBER }, 0.85),
+                );
             }
 
             for (i, &(px, py, pw, ph)) in PANELS.iter().enumerate() {
@@ -381,7 +442,12 @@ pub fn frame(t: f32) -> WidgetNode {
                         Color::rgb(52, 56, 74)
                     };
                     book.rrect(
-                        Rect::new(px + bi as f32 * bw, base - bh, px + (bi + 1) as f32 * bw - 0.8, base),
+                        Rect::new(
+                            px + bi as f32 * bw,
+                            base - bh,
+                            px + (bi + 1) as f32 * bw - 0.8,
+                            base,
+                        ),
                         1.0,
                         col,
                     );
@@ -433,7 +499,7 @@ fn receipt_panel(ops_done: usize, max_total: f32) -> WidgetNode {
     order.sort_by_key(|(len, _, _)| *len);
     let order_line: String = order
         .iter()
-        .map(|(_, _, n)| format!("{n}"))
+        .map(|(_, _, n)| n.to_string())
         .collect::<Vec<_>>()
         .join(" < ");
     let counts_line: String = machines
@@ -450,15 +516,13 @@ fn receipt_panel(ops_done: usize, max_total: f32) -> WidgetNode {
         ),
         format!("COMPLETION ORDER (from the traces): {order_line}"),
         format!("COMPARISONS: {}", {
-            let mut s: Vec<String> = order
-                .iter()
-                .map(|&(_, c, n)| format!("{n} {c}"))
-                .collect();
+            let mut s: Vec<String> = order.iter().map(|&(_, c, n)| format!("{n} {c}")).collect();
             s.sort();
             s.join(" · ")
         }),
         format!("writes: {counts_line}"),
-        "amber = compared · violet = written · mint ring + gradient = finished and holding".to_string(),
+        "amber = compared · violet = written · mint ring + gradient = finished and holding"
+            .to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -477,7 +541,10 @@ fn receipt_panel(ops_done: usize, max_total: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

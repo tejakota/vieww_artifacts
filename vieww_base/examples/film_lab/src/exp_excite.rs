@@ -45,12 +45,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, AMBER, CYAN, CYAN_SOFT, INK, MINT, MUTED, RED, VIOLET};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 13.0;
+pub(crate) const SECONDS: f32 = 13.0;
 
 // ── The medium ──────────────────────────────────────────────────────────────
 
@@ -85,6 +85,7 @@ struct Tissue {
     /// u at the probe, one sample per step.
     trace: Vec<f32>,
     /// u at the second electrode, PROBE_GAP cells further out.
+    #[allow(dead_code)]
     trace2: Vec<f32>,
     /// The spiral tip, sampled every TIP_EVERY steps — the rotor's own
     /// rotation, independent of any electrode.
@@ -312,8 +313,8 @@ fn planar_speed() -> (f32, f32) {
     const N: usize = 340;
     let mut u = vec![0.0_f32; N];
     let mut v = vec![0.0_f32; N];
-    for x in 0..6 {
-        u[x] = 1.0;
+    for u_x in u.iter_mut().take(6) {
+        *u_x = 1.0;
     }
     let (m0, m1) = (80usize, 280usize);
     let (mut t0, mut t1) = (-1.0_f32, -1.0_f32);
@@ -374,8 +375,8 @@ fn paced_speed(cycle: f32) -> (f32, usize) {
     let mut armed = false;
     for step in 0..total {
         if step % stim_every == 0 {
-            for x in 0..6 {
-                u[x] = 1.0;
+            for u_x in u.iter_mut().take(6) {
+                *u_x = 1.0;
             }
             if step == last_stim {
                 armed = true;
@@ -448,7 +449,7 @@ const FY: f32 = 178.0;
 const FW: f32 = 800.0;
 const FH: f32 = 448.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let tissue = run_to(t as f64);
     let (period, n_cross, thr) = period_from_trace(&tissue.trace);
     let core_xy = core(&tissue.u, &tissue.v);
@@ -476,6 +477,7 @@ pub fn frame(t: f32) -> WidgetNode {
     // along the same ray, frame to frame. Cheap because the state is
     // already here: we take the last 120 steps of the replay.
     // Rising-threshold crossings of a trace, in time units.
+    #[allow(dead_code)]
     fn crossings(trace: &[f32], thr: f32) -> Vec<f32> {
         let start = trace.len() / 3;
         let mut out = Vec::new();
@@ -499,7 +501,7 @@ pub fn frame(t: f32) -> WidgetNode {
     // raster, T from the electrogram, and a SECOND, wholly independent
     // measurement of T from the tip's own rotation — which shares no
     // machinery with the electrode at all.
-    let (tip_period, tip_radius, tip_n) = {
+    let (_tip_period, tip_radius, tip_n) = {
         let tips = &tissue.tip;
         if tips.len() < 40 {
             (0.0, 0.0, 0usize)
@@ -567,10 +569,9 @@ pub fn frame(t: f32) -> WidgetNode {
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {
             book.rect(
                 Rect::new(0.0, 0.0, size.width, size.height),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(5, 5, 9)),
-                    (1.0, Color::rgb(11, 10, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(5, 5, 9)), (1.0, Color::rgb(11, 10, 16))]),
             );
             book.rrect(
                 Rect::new(FX - 12.0, FY - 12.0, FX + FW + 12.0, FY + FH + 12.0),
@@ -679,8 +680,18 @@ pub fn frame(t: f32) -> WidgetNode {
             let ux = |uu: f32| px0 + (uu / 1.15).clamp(0.0, 1.0) * pw;
             let vy = |vv: f32| py0 + ph - (vv / 1.05).clamp(0.0, 1.0) * ph;
             // u-nullclines: u = 0, u = 1, and v = a·u − b
-            book.line(Offset::new(ux(0.0), vy(0.0)), Offset::new(ux(0.0), vy(1.0)), alpha(CYAN, 0.55), 1.2);
-            book.line(Offset::new(ux(1.0), vy(0.0)), Offset::new(ux(1.0), vy(1.0)), alpha(CYAN, 0.55), 1.2);
+            book.line(
+                Offset::new(ux(0.0), vy(0.0)),
+                Offset::new(ux(0.0), vy(1.0)),
+                alpha(CYAN, 0.55),
+                1.2,
+            );
+            book.line(
+                Offset::new(ux(1.0), vy(0.0)),
+                Offset::new(ux(1.0), vy(1.0)),
+                alpha(CYAN, 0.55),
+                1.2,
+            );
             book.line(
                 Offset::new(ux(0.0), vy(-B)),
                 Offset::new(ux(1.15), vy(A * 1.15 - B)),
@@ -688,13 +699,14 @@ pub fn frame(t: f32) -> WidgetNode {
                 1.2,
             );
             // v-nullcline: v = u
-            book.line(Offset::new(ux(0.0), vy(0.0)), Offset::new(ux(1.05), vy(1.05)), alpha(AMBER, 0.6), 1.2);
+            book.line(
+                Offset::new(ux(0.0), vy(0.0)),
+                Offset::new(ux(1.05), vy(1.05)),
+                alpha(AMBER, 0.6),
+                1.2,
+            );
             for i in (0..GW * GH).step_by(23) {
-                book.circle(
-                    Offset::new(ux(u[i]), vy(v[i])),
-                    0.9,
-                    alpha(INK, 0.28),
-                );
+                book.circle(Offset::new(ux(u[i]), vy(v[i])), 0.9, alpha(INK, 0.28));
             }
         }),
     );
@@ -748,9 +760,7 @@ pub fn frame(t: f32) -> WidgetNode {
         format!(
             "THE ROTOR'S BOOKS: λ/T = {c_phase:.3} — the rotor's own phase speed, {deficit:+.1}% against the rested strip. Front curvature explains D/r = {eikonal:.3} of that gap at r = {r_meas:.1}; the rest is recovery."
         ),
-        format!(
-            "— the same fact twice: tissue ahead of a rotor has not finished recovering, so it conducts slower; a strip paced that fast will not conduct at all."
-        ),
+        "— the same fact twice: tissue ahead of a rotor has not finished recovering, so it conducts slower; a strip paced that fast will not conduct at all.".to_string(),
         format!(
             "the tip, tracked every {TIP_EVERY} steps over {tip_n} samples, meanders in a circle of radius {tip_radius:.2} cells — rigid rotation, at the resolution limit of a dx = {DX} grid"
         ),
@@ -769,25 +779,46 @@ pub fn frame(t: f32) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.45) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
     }
     for (x, y, s) in [
-        (880.0_f32, 186.0_f32, "THE ELECTROGRAM — u at the probe, whole run".to_string()),
-        (880.0, 446.0, "PHASE PORTRAIT — the tissue on its own nullclines".to_string()),
-        (46.0, 152.0, "THE TISSUE — hot is excited, violet is refractory · green ring: the phase singularity".to_string()),
+        (
+            880.0_f32,
+            186.0_f32,
+            "THE ELECTROGRAM — u at the probe, whole run".to_string(),
+        ),
+        (
+            880.0,
+            446.0,
+            "PHASE PORTRAIT — the tissue on its own nullclines".to_string(),
+        ),
+        (
+            46.0,
+            152.0,
+            "THE TISSUE — hot is excited, violet is refractory · green ring: the phase singularity"
+                .to_string(),
+        ),
     ] {
         stack = stack.push(
-            Positioned::new().left(x).top(y).width(720.0).height(14.0).child(
-                Text::new(s).style(
-                    TextStyle::new(9.5)
-                        .monospace()
-                        .letter_spacing(0.9)
-                        .color(alpha(MUTED, 0.85)),
+            Positioned::new()
+                .left(x)
+                .top(y)
+                .width(720.0)
+                .height(14.0)
+                .child(
+                    Text::new(s).style(
+                        TextStyle::new(9.5)
+                            .monospace()
+                            .letter_spacing(0.9)
+                            .color(alpha(MUTED, 0.85)),
+                    ),
                 ),
-            ),
         );
     }
     stack.into()

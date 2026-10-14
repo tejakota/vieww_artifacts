@@ -179,8 +179,8 @@ fn an_empty_scene_is_the_clear_colour_exactly() {
 
     // Exactly, not approximately: nothing was drawn, so no rasterization
     // happened and there is no coverage to disagree about.
-    for pixel in pixels.chunks_exact(4) {
-        assert_eq!(pixel, [20, 30, 40, 255], "every pixel is the clear colour");
+    for pixel in pixels.as_chunks::<4>().0 {
+        assert_eq!(pixel, &[20, 30, 40, 255], "every pixel is the clear colour");
     }
 }
 
@@ -467,4 +467,373 @@ fn many_shapes_stay_one_draw_call_and_still_match_the_cpu() {
         0,
         "batching must not change the picture"
     );
+}
+
+/// The analytic edge coverage — the antialiasing the GPU path was missing
+/// until 2026-10-09 (see `TRACKER.md`) — verified three ways at once:
+///
+/// 1. **The ramp exists.** A fractional rect and a rounded card must produce
+///    pixels of *intermediate* alpha. The tessellated material this replaces
+///    could not produce one, and "the edge is no longer hard" is the whole
+///    feature.
+/// 2. **Straight edges are exact.** For an axis-aligned edge the SDF's
+///    coverage at a pixel centre is the pixel's covered area — the same
+///    arithmetic the CPU rasterizer's scanline performs — so both renderers
+///    must land on it tightly, not approximately.
+/// 3. **The shader agrees with the Rust mirror.** The expected value comes
+///    from `vieww_gpu::scene::shape_distance` itself, so a shader that
+///    drifts from the arithmetic it was written from fails here even when
+///    both are self-consistent.
+///
+/// Corner arcs get the looser check: the CPU approximates a quarter circle
+/// with four vertical subsamples per pixel row, the SDF is exact, and the
+/// two honest approximations agree to within a fraction of the band.
+#[test]
+#[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
+fn fractional_and_rounded_rects_have_antialiased_edges_like_the_cpu() {
+    let Some((_lock, _device, mut renderer)) = try_renderer() else {
+        return;
+    };
+    let base = Color::rgba(255, 255, 255, 255);
+    let mut scene = Scene::default();
+
+    // Every edge of this rect falls mid-pixel, so every edge pixel is a
+    // partial-coverage pixel.
+    let rect = Rect::new(20.4, 10.35, 70.6, 50.65);
+    fill_rect(&mut scene, rect, Color::rgba(0, 0, 0, 255));
+
+    // The rounded card — the shape a premium interface is made of.
+    let card = Rect::new(30.25, 55.3, 105.75, 84.7);
+    scene.push_command(Command::FillPath {
+        path: Path::rounded_rect(card, 9.0),
+        paint: Paint::solid(Color::rgba(0, 0, 0, 255)),
+        transform: Transform::IDENTITY,
+        clip: Clip::NONE,
+    });
+
+    let plan = plan_scene(&scene, WIDTH as f32, HEIGHT as f32);
+    assert!(plan.is_complete(), "{:?}", plan.unsupported);
+    let gpu = renderer
+        .render(&plan, WIDTH, HEIGHT, base)
+        .expect("render should succeed");
+    let cpu = on_cpu(&scene, base);
+
+    // Interiors agree exactly, as they always did.
+    assert_eq!(
+        interior_mismatches(&gpu, &cpu, 2),
+        0,
+        "interior parity must hold with analytic edges too"
+    );
+
+    // Coverage is read from the red channel, not the alpha: the shapes are
+    // opaque black on an opaque white base, so every pixel is opaque and the
+    // ramp lives in the colour — red is `255 * (1 - coverage)`.
+    let red_of = |buffer: &[u8], x: usize, y: usize| buffer[(y * WIDTH as usize + x) * 4];
+
+    // 1. The ramp exists — mid-band pixels, on both renderers, for both
+    //    shapes. A hard edge has none.
+    let mut partial = 0;
+    for y in 0..HEIGHT as usize {
+        for x in 0..WIDTH as usize {
+            let r = red_of(&gpu, x, y);
+            if (12..243).contains(&r) {
+                partial += 1;
+            }
+        }
+    }
+    assert!(
+        partial > 40,
+        "two fractional-edged shapes must produce dozens of \
+         partial-coverage pixels; found {partial}"
+    );
+
+    // 2 & 3. Straight edges: exact agreement with the SDF's area coverage,
+    //    and therefore with each other. Sampled along all four edges of the
+    //    fractional rect.
+    let edge_samples = [
+        (20, 30),
+        (21, 30),
+        (69, 30),
+        (70, 30),
+        (45, 10),
+        (45, 11),
+        (45, 50),
+        (45, 51),
+    ];
+    for &(x, y) in &edge_samples {
+        let centre = Offset::new(x as f32 + 0.5, y as f32 + 0.5);
+        let d = vieww_gpu::scene::shape_distance(centre, rect, 0.0);
+        let coverage = (0.5 - d).clamp(0.0, 1.0);
+        let expected = (255.0 * (1.0 - coverage)).round();
+        let gpu_r = f32::from(red_of(&gpu, x, y));
+        let cpu_r = f32::from(red_of(&cpu, x, y));
+        // The GPU must land on the SDF's own answer: it is the arithmetic
+        // the shader was written from, and anything looser here would let
+        // the two drift apart silently.
+        assert!(
+            (gpu_r - expected).abs() <= 3.0,
+            "gpu edge pixel ({x}, {y}): {gpu_r} vs the SDF's {expected}"
+        );
+        // The CPU's scanline coverage is exact along vertical edges and
+        // quantised to four vertical subsamples along horizontal ones — 0.125
+        // of a pixel at worst, 32 of 255 — so its agreement with the SDF is
+        // bounded, not exact. That bound is itself the claim: two different
+        // definitions of the same edge, this close.
+        assert!(
+            (cpu_r - expected).abs() <= 34.0,
+            "cpu edge pixel ({x}, {y}): {cpu_r} vs the SDF's {expected}"
+        );
+    }
+
+    // The corner arc: sampled in the neighbourhood of the arc point at 225
+    // degrees — up and left, the direction the top-left corner faces — where
+    // the SDF itself says coverage is partial. On those pixels the GPU must
+    // match the SDF exactly and the CPU approximately: the CPU approximates
+    // the arc with four subsamples per row, the SDF is exact, and both are
+    // honest definitions of the same quarter circle.
+    let arc_centre = Offset::new(card.left + 9.0, card.top + 9.0);
+    let arc_point = Offset::new(
+        arc_centre.dx - 9.0 * std::f32::consts::FRAC_1_SQRT_2,
+        arc_centre.dy - 9.0 * std::f32::consts::FRAC_1_SQRT_2,
+    );
+    let mut partial_corners = 0;
+    for dy in -2i64..=2 {
+        for dx in -2i64..=2 {
+            let x = arc_point.dx as i64 + dx;
+            let y = arc_point.dy as i64 + dy;
+            if x < 0 || y < 0 || x >= WIDTH as i64 || y >= HEIGHT as i64 {
+                continue;
+            }
+            let (x, y) = (x as usize, y as usize);
+            let centre = Offset::new(x as f32 + 0.5, y as f32 + 0.5);
+            let d = vieww_gpu::scene::shape_distance(centre, card, 9.0);
+            let coverage = (0.5 - d).clamp(0.0, 1.0);
+            if coverage <= 0.05 || coverage >= 0.95 {
+                continue;
+            }
+            partial_corners += 1;
+            let expected = (255.0 * (1.0 - coverage)).round();
+            let gpu_r = f32::from(red_of(&gpu, x, y));
+            let cpu_r = f32::from(red_of(&cpu, x, y));
+            assert!(
+                (gpu_r - expected).abs() <= 3.0,
+                "gpu corner pixel ({x}, {y}): {gpu_r} vs the SDF's {expected}"
+            );
+            assert!(
+                (cpu_r - expected).abs() <= 40.0,
+                "cpu corner pixel ({x}, {y}): {cpu_r} vs the SDF's {expected}"
+            );
+        }
+    }
+    assert!(
+        partial_corners >= 2,
+        "the arc's partial-coverage band exists and was sampled: \
+         {partial_corners} pixels"
+    );
+}
+
+/// Every non-analytic shape — a rotated rect, a star, a dashed curved stroke,
+/// a circle under a shaped clip — antialiased like the CPU, edges included.
+///
+/// These used to be tessellated and rasterised hard, which is what the
+/// "two rasterizers differ on every edge" caveat in this file was written
+/// for. Their coverage now comes from the CPU rasterizer through
+/// `GpuSeam::shape_coverage`, so the bound here is the whole picture, not the
+/// interior: one byte of quantisation, plus one for a clip multiplied in at
+/// 8 bits rather than `f32`.
+#[test]
+#[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
+fn arbitrary_paths_and_strokes_are_antialiased_like_the_cpu_everywhere() {
+    let Some((_lock, _device, mut renderer)) = try_renderer() else {
+        return;
+    };
+    let base = Color::rgba(255, 255, 255, 255);
+    let mut scene = Scene::default();
+
+    scene.push_command(Command::FillRect {
+        rect: Rect::new(-15.0, -8.0, 15.0, 8.0),
+        paint: Paint::solid(Color::rgba(20, 40, 200, 255)),
+        transform: Transform {
+            a: 0.866,
+            b: 0.5,
+            c: -0.5,
+            d: 0.866,
+            tx: 25.3,
+            ty: 22.7,
+        },
+        clip: Clip::NONE,
+    });
+
+    let mut star = Path::new();
+    for i in 0..10 {
+        let r = if i % 2 == 0 { 18.0 } else { 7.5 };
+        let a = std::f32::consts::PI * f32::from(i as u8) / 5.0 - 0.3;
+        let p = Offset::new(78.4 + r * a.cos(), 24.6 + r * a.sin());
+        if i == 0 {
+            star.move_to(p);
+        } else {
+            star.line_to(p);
+        }
+    }
+    star.close();
+    scene.push_command(Command::FillPath {
+        path: star,
+        paint: Paint::solid(Color::rgba(200, 30, 60, 230)),
+        transform: Transform::IDENTITY,
+        clip: Clip::NONE,
+    });
+
+    let mut wave = Path::new();
+    wave.move_to(Offset::new(8.0, 70.0));
+    wave.cubic_to(
+        Offset::new(25.0, 45.0),
+        Offset::new(45.0, 95.0),
+        Offset::new(62.0, 66.0),
+    );
+    let style = vieww_foundation::StrokeStyle {
+        dash: Some(vieww_foundation::Dash::new([7.0, 3.5])),
+        ..vieww_foundation::StrokeStyle::default()
+    };
+    scene.push_command(Command::StrokePath {
+        path: wave,
+        stroke: Stroke::new(3.3).styled(style),
+        paint: Paint::solid(Color::rgba(10, 120, 40, 255)),
+        transform: Transform::IDENTITY,
+        clip: Clip::NONE,
+    });
+
+    let mut clip = Clip::NONE;
+    clip.add_rect(Rect::new(70.0, 50.0, 115.0, 88.0));
+    clip.add_path(Path::rounded_rect(Rect::new(70.0, 50.0, 115.0, 88.0), 14.0));
+    scene.push_command(Command::FillPath {
+        path: Path::arc(Offset::new(100.2, 74.6), 19.3, 0.0, std::f32::consts::TAU),
+        paint: Paint::solid(Color::rgba(90, 20, 140, 255)),
+        transform: Transform::IDENTITY,
+        clip,
+    });
+
+    let mut planner = vieww_gpu::Planner::new();
+    let plan = planner.plan(&scene, WIDTH as f32, HEIGHT as f32);
+    assert!(plan.is_complete(), "{:?}", plan.unsupported);
+    let gpu = renderer
+        .render_planned(&planner, &plan, WIDTH, HEIGHT, base)
+        .expect("render should succeed");
+    let cpu = on_cpu(&scene, base);
+
+    let mut worst = 0u8;
+    let mut partial = 0;
+    for (g, c) in gpu.as_chunks::<4>().0.iter().zip(cpu.as_chunks::<4>().0) {
+        for ch in 0..4 {
+            worst = worst.max(g[ch].abs_diff(c[ch]));
+        }
+        if (12..243).contains(&c[0]) && *c != [255, 255, 255, 255] {
+            partial += 1;
+        }
+    }
+    assert!(
+        partial > 100,
+        "the scene must have antialiased edges to compare: {partial}"
+    );
+    assert!(
+        worst <= 2,
+        "worst channel difference {worst}/255 — every edge pixel should be the CPU's"
+    );
+}
+
+/// A shape that changes every frame adds a new mask every frame; the mask
+/// texture then takes only the changed rectangles (`upload_masks`) instead of
+/// the whole atlas. Held here to a renderer built fresh for every frame —
+/// whose first upload is always a full one — byte for byte, over enough
+/// frames for the atlas to compact more than once, with a frame skipped in
+/// the middle (the planner advances, the renderer does not upload).
+#[test]
+#[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
+fn partial_mask_uploads_match_full_uploads_frame_for_frame() {
+    let Some((_lock, device, mut renderer)) = try_renderer() else {
+        return;
+    };
+    const W: u32 = 160;
+    const H: u32 = 120;
+    let base = Color::rgba(250, 250, 248, 255);
+    let star = |t: f32| {
+        let mut p = Path::new();
+        for i in 0..14 {
+            let r = if i % 2 == 0 { 34.0 } else { 15.0 };
+            let a = i as f32 * std::f32::consts::PI / 7.0 + t;
+            let pt = Offset::new(50.0 + r * a.cos(), 60.0 + r * a.sin());
+            if i == 0 {
+                p.move_to(pt);
+            } else {
+                p.line_to(pt);
+            }
+        }
+        p.close();
+        p
+    };
+    let mut planner = vieww_gpu::Planner::new();
+    let (mut partial, mut full) = (0, 0);
+    let (mut sent, mut whole) = (0u64, 0u64);
+    for frame in 0..48 {
+        let t = frame as f32 * 0.13;
+        let mut scene = Scene::new();
+        scene.push_command(Command::FillPath {
+            path: star(t),
+            paint: Paint::solid(Color::rgba(200, 70, 30, 255)),
+            transform: Transform::IDENTITY,
+            clip: Clip::NONE,
+        });
+        scene.push_command(Command::FillPath {
+            path: Path::rounded_rect(Rect::new(-28.0, -18.0, 28.0, 18.0), 7.0),
+            paint: Paint::solid(Color::rgba(30, 120, 80, 220)),
+            transform: Transform::rotate(t * 0.7)
+                .then(Transform::translate(Offset::new(115.0, 60.0))),
+            clip: Clip::NONE,
+        });
+        // A steady shape: its mask must survive every partial upload.
+        scene.push_command(Command::StrokePath {
+            path: Path::arc(Offset::new(80.0, 100.0), 12.0, 0.3, 4.0),
+            stroke: Stroke::new(2.5),
+            paint: Paint::solid(Color::rgba(20, 40, 160, 255)),
+            transform: Transform::IDENTITY,
+            clip: Clip::NONE,
+        });
+        let plan = planner.plan(&scene, W as f32, H as f32);
+        assert!(plan.is_complete(), "{:?}", plan.unsupported);
+        if frame == 23 {
+            continue; // the renderer misses this frame's upload entirely
+        }
+        let got = renderer
+            .render_planned(&planner, &plan, W, H, base)
+            .expect("render should succeed");
+        let side = u64::from(planner.mask_atlas().side());
+        sent += renderer.last_mask_upload_bytes();
+        whole += side * side;
+        match renderer.last_mask_upload_bytes() {
+            0 => {}
+            b if b == side * side => full += 1,
+            _ => partial += 1,
+        }
+        let mut fresh = SceneRenderer::new(&device).expect("the pipeline should build");
+        let want = fresh
+            .render_planned(&planner, &plan, W, H, base)
+            .expect("render should succeed");
+        drop(fresh);
+        assert!(
+            got == want,
+            "frame {frame}: partial-upload pixels differ from a full upload"
+        );
+    }
+    assert!(
+        partial >= 10,
+        "partial uploads should be common: {partial} partial, {full} full"
+    );
+    assert!(
+        full >= 2,
+        "the run should cross compactions and the skipped frame: {full} full"
+    );
+    assert!(
+        sent * 2 < whole,
+        "partial uploads should send well under half the bytes of whole-texture ones: {sent} vs {whole}"
+    );
+    eprintln!("{partial} partial, {full} full; {sent} bytes sent against {whole} for whole-texture uploads");
 }

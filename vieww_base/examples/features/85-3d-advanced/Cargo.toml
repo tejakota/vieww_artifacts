@@ -1,0 +1,17 @@
+[package]
+name = "feature-3d-advanced"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+vieww = { workspace = true, features = ["native"] }
+vieww-foundation.workspace = true
+vieww-widget.workspace = true
+feature-harness = { path = "../harness" }
+vieww-3d.workspace = true
+vieww-mesh.workspace = true
+
+[lints]
+workspace = true

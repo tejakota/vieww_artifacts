@@ -18,13 +18,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, tint, AMBER, CYAN, INK, MUTED,
-    VIOLET_SOFT};
+use crate::film_lib::{alpha, clamp01, mix, tint, AMBER, CYAN, INK, MUTED, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The model ───────────────────────────────────────────────────────────────
 
@@ -57,7 +56,9 @@ fn anneal(stages_done: usize) -> (Vec<i8>, Vec<(f32, f32)>) {
     assert!(stages_done >= 1);
     // Seed: a hot scramble — deterministic coin per cell.
     let mut rng = crate::film_lib::Rng::new(0x1514);
-    let mut spin: Vec<i8> = (0..GX * GY).map(|_| if rng.f01() < 0.5 { 1 } else { -1 }).collect();
+    let mut spin: Vec<i8> = (0..GX * GY)
+        .map(|_| if rng.f01() < 0.5 { 1 } else { -1 })
+        .collect();
 
     let temp_at = |s: usize| -> f32 {
         let f = s as f32 / (STAGES - 1) as f32;
@@ -113,7 +114,7 @@ fn energy_per_spin(spin: &[i8]) -> f32 {
 /// Onsager's exact critical temperature (square lattice, kB = J = 1).
 const T_C: f32 = 2.269;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let stages_done = ((clamp01(t) * STAGES as f32).ceil() as usize).clamp(1, STAGES);
     let (spin, curve) = anneal(stages_done);
     let temp = curve.last().map(|&(t_, _)| t_).unwrap_or(T_HOT);
@@ -144,10 +145,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — the cryostat's room.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(10, 10, 14)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(10, 10, 14))]),
             );
 
             // The sample frame.
@@ -211,12 +211,25 @@ pub fn frame(t: f32) -> WidgetNode {
                 alpha(Color::rgb(12, 12, 17), 0.92),
             );
             // The tube.
-            book.rrect(Rect::new(T_X - 4.0, T_Y, T_X + 4.0, T_Y + T_H), 4.0, Color::rgb(26, 28, 36));
-            let tmap = |temp_: f32| T_Y + T_H * ((temp_ - T_COLD) / (T_HOT - T_COLD)).clamp(0.0, 1.0);
+            book.rrect(
+                Rect::new(T_X - 4.0, T_Y, T_X + 4.0, T_Y + T_H),
+                4.0,
+                Color::rgb(26, 28, 36),
+            );
+            let tmap =
+                |temp_: f32| T_Y + T_H * ((temp_ - T_COLD) / (T_HOT - T_COLD)).clamp(0.0, 1.0);
             // The mercury.
             let merc_y = tmap(temp);
-            book.rrect(Rect::new(T_X - 3.0, merc_y, T_X + 3.0, T_Y + T_H), 3.0, tint(AMBER, 0.3));
-            book.circle(Offset::new(T_X, T_Y + T_H), 9.0, alpha(tint(AMBER, 0.3), 0.95));
+            book.rrect(
+                Rect::new(T_X - 3.0, merc_y, T_X + 3.0, T_Y + T_H),
+                3.0,
+                tint(AMBER, 0.3),
+            );
+            book.circle(
+                Offset::new(T_X, T_Y + T_H),
+                9.0,
+                alpha(tint(AMBER, 0.3), 0.95),
+            );
             // Onsager's mark.
             let tc_y = tmap(T_C);
             book.line(
@@ -243,10 +256,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 10.0,
                 alpha(Color::rgb(12, 12, 17), 0.92),
             );
-            let smap = |temp_: f32, m: f32| Offset::new(
-                S_X + S_W * ((temp_ - T_COLD) / (T_HOT - T_COLD)).clamp(0.0, 1.0),
-                S_Y + S_H * (1.0 - m.clamp(0.0, 1.0)),
-            );
+            let smap = |temp_: f32, m: f32| {
+                Offset::new(
+                    S_X + S_W * ((temp_ - T_COLD) / (T_HOT - T_COLD)).clamp(0.0, 1.0),
+                    S_Y + S_H * (1.0 - m.clamp(0.0, 1.0)),
+                )
+            };
             // T_c line, vertical.
             let tc_x = S_X + S_W * ((T_C - T_COLD) / (T_HOT - T_COLD)).clamp(0.0, 1.0);
             book.line(
@@ -326,7 +341,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

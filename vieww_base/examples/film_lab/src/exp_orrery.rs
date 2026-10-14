@@ -18,12 +18,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, clamp01, mix, scaled, tint, AMBER, FAINT, INK, MUTED, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// The mechanism's centre.
 const C: (f32, f32) = (640.0, 372.0);
@@ -42,12 +42,54 @@ struct Planet {
 }
 
 const PLANETS: [Planet; 6] = [
-    Planet { name: "Mercury", r: 118.0, period: 0.241, body: Color::rgb(178, 166, 150), size: 5.0, gear: (60, 17) },
-    Planet { name: "Venus", r: 162.0, period: 0.615, body: Color::rgb(224, 190, 138), size: 8.0, gear: (60, 25) },
-    Planet { name: "Earth", r: 208.0, period: 1.0, body: Color::rgb(96, 148, 200), size: 8.5, gear: (60, 32) },
-    Planet { name: "Mars", r: 254.0, period: 1.881, body: Color::rgb(196, 110, 74), size: 6.5, gear: (60, 44) },
-    Planet { name: "Jupiter", r: 312.0, period: 11.86, body: Color::rgb(214, 176, 138), size: 15.0, gear: (60, 80) },
-    Planet { name: "Saturn", r: 372.0, period: 29.46, body: Color::rgb(222, 198, 156), size: 13.0, gear: (60, 118) },
+    Planet {
+        name: "Mercury",
+        r: 118.0,
+        period: 0.241,
+        body: Color::rgb(178, 166, 150),
+        size: 5.0,
+        gear: (60, 17),
+    },
+    Planet {
+        name: "Venus",
+        r: 162.0,
+        period: 0.615,
+        body: Color::rgb(224, 190, 138),
+        size: 8.0,
+        gear: (60, 25),
+    },
+    Planet {
+        name: "Earth",
+        r: 208.0,
+        period: 1.0,
+        body: Color::rgb(96, 148, 200),
+        size: 8.5,
+        gear: (60, 32),
+    },
+    Planet {
+        name: "Mars",
+        r: 254.0,
+        period: 1.881,
+        body: Color::rgb(196, 110, 74),
+        size: 6.5,
+        gear: (60, 44),
+    },
+    Planet {
+        name: "Jupiter",
+        r: 312.0,
+        period: 11.86,
+        body: Color::rgb(214, 176, 138),
+        size: 15.0,
+        gear: (60, 80),
+    },
+    Planet {
+        name: "Saturn",
+        r: 372.0,
+        period: 29.46,
+        body: Color::rgb(222, 198, 156),
+        size: 13.0,
+        gear: (60, 118),
+    },
 ];
 
 /// The drawn angular rate: true ratios, compressed by P^(-0.45) so Saturn
@@ -140,7 +182,12 @@ fn draw_gear(book: &mut Sketchbook, c: Offset, teeth: u32, r_out: f32, body: Col
     p.close();
     book.fill(p, alpha(scaled(body, 0.9), 0.92));
     // The hub ring.
-    book.ring(c, r_in * 0.30, r_in * 0.14, alpha(mix(body, Color::BLACK, 0.45), 0.95));
+    book.ring(
+        c,
+        r_in * 0.30,
+        r_in * 0.14,
+        alpha(mix(body, Color::BLACK, 0.45), 0.95),
+    );
     // Spokes: three arms.
     for k in 0..3 {
         let a = spin * -0.6 + k as f32 * std::f32::consts::TAU / 3.0;
@@ -155,7 +202,7 @@ fn draw_gear(book: &mut Sketchbook, c: Offset, teeth: u32, r_out: f32, body: Col
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let tick_phase = (t * SECONDS * 2.0).fract(); // 2 Hz escapement
 
     let board = Painting::sized(
@@ -253,12 +300,24 @@ pub fn frame(t: f32) -> WidgetNode {
                 // The pivot gear: small, riding the arm's end — its tooth
                 // count is the driven wheel of the arm's ratio.
                 if p.gear.1 <= 48 {
-                    draw_gear(book, Offset::new(px, py), p.gear.1, 13.0, Color::rgb(148, 120, 64), -a * 1.0);
+                    draw_gear(
+                        book,
+                        Offset::new(px, py),
+                        p.gear.1,
+                        13.0,
+                        Color::rgb(148, 120, 64),
+                        -a * 1.0,
+                    );
                 }
                 // The planet on its little post.
                 let ox = px + 10.0;
                 let oy = py - 12.0;
-                book.line(Offset::new(px, py), Offset::new(ox, oy), alpha(MUTED, 0.5), 1.4);
+                book.line(
+                    Offset::new(px, py),
+                    Offset::new(ox, oy),
+                    alpha(MUTED, 0.5),
+                    1.4,
+                );
                 book.circle(Offset::new(ox, oy), p.size, scaled(p.body, 0.95));
                 book.circle(
                     Offset::new(ox - p.size * 0.3, oy - p.size * 0.3),
@@ -287,7 +346,7 @@ pub fn frame(t: f32) -> WidgetNode {
             }
 
             // ── The comet: Kepler-integrated, tail anti-sunward. ──
-            let (pos, theta) = comet_at(t);
+            let (pos, _theta) = comet_at(t);
             let sun_dir = (
                 (pos.dx - c.dx) / ((pos.dx - c.dx).powi(2) + (pos.dy - c.dy).powi(2)).sqrt(),
                 (pos.dy - c.dy) / ((pos.dx - c.dx).powi(2) + (pos.dy - c.dy).powi(2)).sqrt(),
@@ -327,14 +386,13 @@ pub fn frame(t: f32) -> WidgetNode {
                     pos.dx - sun_dir.0 * tail_len + sun_dir.1 * 9.0,
                     pos.dy - sun_dir.1 * tail_len - sun_dir.0 * 9.0,
                 ));
-                tail.line_to(Offset::new(pos.dx + sun_dir.1 * 3.5, pos.dy - sun_dir.0 * 3.5));
+                tail.line_to(Offset::new(
+                    pos.dx + sun_dir.1 * 3.5,
+                    pos.dy - sun_dir.0 * 3.5,
+                ));
                 tail.close();
                 g.fill(tail, alpha(Color::rgb(178, 196, 240), 0.28 + 0.3 * flare));
-                g.circle(
-                    pos,
-                    4.5,
-                    alpha(Color::rgb(228, 238, 255), 0.95),
-                );
+                g.circle(pos, 4.5, alpha(Color::rgb(228, 238, 255), 0.95));
             });
 
             // ── The escapement: the tick. A small anchor above the centre,
@@ -354,7 +412,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
+    let stack = Stack::new().push(Positioned::fill().child(board));
     stack.push(receipt_panel()).into()
 }
 
@@ -377,12 +435,12 @@ fn receipt_panel() -> WidgetNode {
             "Jupiter gear {}:{} = {:.3} · P_J/P_E = {:.3} (the identity, checked)",
             jupiter.gear.0, jupiter.gear.1, gear_ratio, period_ratio
         ),
-        format!("drawn ω ∝ P^-0.45 (compression declared) · escapement 2 Hz"),
+        "drawn ω ∝ P^-0.45 (compression declared) · escapement 2 Hz".to_string(),
         format!(
             "comet Kepler: ω_peri/ω_apo = {kepler_ratio:.2} (theory {:.2}) · 2,400 substeps/frame",
             kepler_theory
         ),
-        format!("gears 36/27/18 + 4 pivots · planets 6 · moon 1 · ticks 72"),
+        "gears 36/27/18 + 4 pivots · planets 6 · moon 1 · ticks 72".to_string(),
     ];
 
     const P_X: f32 = 42.0;
@@ -401,7 +459,10 @@ fn receipt_panel() -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

@@ -6,7 +6,7 @@
 //! not change between frames: two render passes, three graphics pipelines,
 //! four texture resources and the descriptor sets that bind them. Per frame
 //! it uploads whichever atlases changed, writes the vertex and index buffers,
-//! records **one** command buffer for the plan's whole [`Step`](vieww_gpu::Step) program, and
+//! records **one** command buffer for the plan's whole [`Step`] program, and
 //! submits it once.
 //!
 //! ```text
@@ -47,7 +47,17 @@ use ash::vk;
 use vieww_foundation::{BlendMode, Color};
 use vieww_gpu::{FilterOp, MaskRef, PixelRect, Planner, ScenePlan, Step, Vertex};
 
+#[cfg(feature = "vulkan-swapchain")]
+use super::AcquiredImage;
 use super::{translate_wgsl_to_spirv, VulkanDevice, VulkanError};
+
+/// Where `execute` sends the finished frame instead of the readback buffer:
+/// a presentable image, and the semaphore the blit into it must wait on.
+#[derive(Clone, Copy)]
+struct BlitTarget {
+    image: vk::Image,
+    ready: vk::Semaphore,
+}
 
 /// Colour format of every render target.
 const TARGET_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
@@ -99,6 +109,8 @@ pub struct SceneRenderer {
 
     vertices: Buffer,
     indices: Buffer,
+    /// Bytes the last [`SceneRenderer::upload_masks`] sent.
+    mask_upload_bytes: u64,
 }
 
 /// Which image a post descriptor set binds.
@@ -186,6 +198,18 @@ impl Slot {
             Self::Ramps => 4,
         }
     }
+}
+
+/// What a blur pass reads past the edge of its region (`post.wgsl`'s
+/// `pc.args.z` for `BOX_H` / `BOX_V`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Edge {
+    /// Transparent: a shadow fades out at its own edge
+    /// (`shadow::box_blur_*`).
+    Transparent,
+    /// The nearest edge pixel, repeated: `effects::blur`'s clamped sampling,
+    /// and CSS's `duplicate` edge mode for `filter` / `backdrop-filter`.
+    Duplicate,
 }
 
 /// Push constants for `post.wgsl`: eight `vec4<f32>`, 128 bytes — the minimum
@@ -434,7 +458,10 @@ impl SceneRenderer {
                 },
                 offset: offset * f,
             };
-        // `vieww_gpu::Vertex`, field by field: 2 + 4 + 2 + 1 + 4 + 2 + 4 + 4.
+        // `vieww_gpu::Vertex`, field by field: 2 + 4 + 2 + 1 + 4 + 2 + 4 + 4 + 4.
+        // Offsets in floats: position 0, color 2, uv 6, kind 8, params 9,
+        // local 13, extra 15, shape 19, mask 23 — WGSL location 7 is `mask`
+        // (23), location 8 is `shape` (19).
         let scene_attributes = [
             attribute(0, 2, 0),
             attribute(1, 4, 2),
@@ -443,11 +470,12 @@ impl SceneRenderer {
             attribute(4, 4, 9),
             attribute(5, 2, 13),
             attribute(6, 4, 15),
-            attribute(7, 4, 19),
+            attribute(7, 4, 23),
+            attribute(8, 4, 19),
         ];
         assert_eq!(
             std::mem::size_of::<Vertex>() as u32,
-            23 * f,
+            27 * f,
             "vertex layout drifted"
         );
         let scene_binding = [vk::VertexInputBindingDescription {
@@ -549,6 +577,7 @@ impl SceneRenderer {
             readback: Buffer::EMPTY,
             vertices: Buffer::EMPTY,
             indices: Buffer::EMPTY,
+            mask_upload_bytes: 0,
         };
 
         let uniform_info = [vk::DescriptorBufferInfo {
@@ -615,15 +644,7 @@ impl SceneRenderer {
             Some(images.version()),
             false,
         )?;
-        let masks = planner.mask_atlas();
-        self.upload(
-            Slot::Masks,
-            masks.texels(),
-            masks.side(),
-            masks.side(),
-            Some(masks.version()),
-            false,
-        )?;
+        self.upload_masks(planner.mask_atlas())?;
         let ramps = planner.ramp_atlas();
         self.upload(
             Slot::Ramps,
@@ -633,6 +654,145 @@ impl SceneRenderer {
             Some(ramps.version()),
             false,
         )
+    }
+
+    /// Bring the mask texture up to `masks`, sending only the rectangles that
+    /// changed when the atlas can say which ones those are.
+    ///
+    /// # Why not just the whole-texture upload
+    ///
+    /// A non-analytic shape that changes every frame — anything rotating, a
+    /// morphing path — adds a new mask every frame, and a whole-texture upload
+    /// on every version change made each of those frames send the entire
+    /// atlas: `vieww-gpu`'s `examples/anim_paths` measured 4.2 MB a frame for
+    /// one rotating panel and 16.8 MB for three moving shapes, against masks
+    /// of a few hundred kilobytes. [`vieww_gpu::MaskAtlas::changes_since`]
+    /// answers which texels differ from the version this texture holds; the
+    /// rest of the texture is kept (the layout transition is from
+    /// `SHADER_READ_ONLY_OPTIMAL`, not `UNDEFINED`, so the driver may not
+    /// discard it). Anything it cannot vouch for is a full upload, as before.
+    ///
+    /// # Errors
+    ///
+    /// Any Vulkan call failing.
+    pub fn upload_masks(&mut self, masks: &vieww_gpu::MaskAtlas) -> Result<(), VulkanError> {
+        let held = self.texture(Slot::Masks).version;
+        let side = masks.side();
+        let same_size = {
+            let t = self.texture(Slot::Masks);
+            t.width == side && t.height == side
+        };
+        self.mask_upload_bytes = 0;
+        let rects = match masks.changes_since(held) {
+            vieww_gpu::MaskChanges::None => return Ok(()),
+            vieww_gpu::MaskChanges::Regions(rects) if same_size => rects,
+            _ => {
+                self.upload(
+                    Slot::Masks,
+                    masks.texels(),
+                    side,
+                    side,
+                    Some(masks.version()),
+                    false,
+                )?;
+                self.mask_upload_bytes = u64::from(side) * u64::from(side);
+                return Ok(());
+            }
+        };
+        let version = Some(masks.version());
+        if rects.is_empty() {
+            self.texture_mut(Slot::Masks).version = version;
+            return Ok(());
+        }
+
+        // Pack each rectangle's rows contiguously in the staging buffer, one
+        // copy region per rectangle.
+        let texels = masks.texels();
+        let mut packed = Vec::new();
+        let mut regions = Vec::with_capacity(rects.len());
+        for &[x, y, w, h] in rects {
+            regions.push(vk::BufferImageCopy {
+                buffer_offset: packed.len() as u64,
+                buffer_row_length: 0,
+                buffer_image_height: 0,
+                image_subresource: color_layers(),
+                image_offset: vk::Offset3D {
+                    x: i32::try_from(x).unwrap_or(i32::MAX),
+                    y: i32::try_from(y).unwrap_or(i32::MAX),
+                    z: 0,
+                },
+                image_extent: vk::Extent3D {
+                    width: w,
+                    height: h,
+                    depth: 1,
+                },
+            });
+            for row in y..y + h {
+                let from = (row * side + x) as usize;
+                packed.extend_from_slice(&texels[from..from + w as usize]);
+            }
+        }
+        let needed = packed.len() as u64;
+        if self.texture(Slot::Masks).staging.capacity < needed {
+            let old = std::mem::replace(&mut self.texture_mut(Slot::Masks).staging, Buffer::EMPTY);
+            unsafe { destroy_buffer(&self.device, old) };
+            let staging = allocate_buffer(
+                &self.device,
+                vk::BufferUsageFlags::TRANSFER_SRC,
+                self.host_visible_memory,
+                needed,
+            )?;
+            self.texture_mut(Slot::Masks).staging = staging;
+        }
+        write_bytes(
+            &self.device,
+            self.texture(Slot::Masks).staging.memory,
+            &packed,
+        )?;
+
+        let (image, staging) = {
+            let t = self.texture(Slot::Masks);
+            (t.image, t.staging.handle)
+        };
+        self.begin_commands()?;
+        let cmd = self.command_buffer;
+        unsafe {
+            // From the layout the last upload left it in, so the texels
+            // outside `regions` are kept.
+            transition(
+                &self.device,
+                cmd,
+                image,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+            self.device.cmd_copy_buffer_to_image(
+                cmd,
+                staging,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+            );
+            transition(
+                &self.device,
+                cmd,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
+        }
+        self.submit_and_wait(None)?;
+        self.texture_mut(Slot::Masks).version = version;
+        self.mask_upload_bytes = needed;
+        Ok(())
+    }
+
+    /// How many bytes the most recent [`Self::upload_masks`] sent — the whole
+    /// texture after a full upload, the changed rectangles otherwise, zero
+    /// when nothing changed. For tests and measurement.
+    #[must_use]
+    pub const fn last_mask_upload_bytes(&self) -> u64 {
+        self.mask_upload_bytes
     }
 
     /// [`render`](Self::render), with `planner`'s atlases uploaded first — the
@@ -703,8 +863,56 @@ impl SceneRenderer {
         let viewport = [width as f32, height as f32, 0.0, 0.0];
         write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
         self.upload_geometry(plan)?;
-        self.execute(plan, width, height, clear)?;
+        self.execute(plan, width, height, clear, None)?;
         self.read_back(width, height)
+    }
+
+    /// Execute a complete `plan` straight into an acquired swapchain image,
+    /// leaving it ready to present — no readback, no host copy, no upload.
+    /// `planner`'s atlases are uploaded first, as in
+    /// [`render_planned`](Self::render_planned).
+    ///
+    /// Only for an **opaque** frame (`clear.a == 255`): the scene targets are
+    /// premultiplied, and a translucent window's pixels would need
+    /// unpremultiplying, which a blit cannot do. The caller checks
+    /// `VulkanDevice::can_blit_scene_frames` once per swapchain.
+    ///
+    /// # Errors
+    ///
+    /// An incomplete plan, a translucent clear, an extent that does not match
+    /// `target`, or any Vulkan call failing. On error `target` is still the
+    /// caller's to present or abandon.
+    #[cfg(feature = "vulkan-swapchain")]
+    pub fn render_planned_to(
+        &mut self,
+        planner: &Planner,
+        plan: &ScenePlan,
+        clear: Color,
+        target: &AcquiredImage,
+    ) -> Result<(), VulkanError> {
+        if !plan.is_complete() {
+            return Err(VulkanError::Vulkan("incomplete plan".into()));
+        }
+        if clear.a != 255 {
+            return Err(VulkanError::Vulkan(
+                "render_planned_to needs an opaque clear; use render_planned".into(),
+            ));
+        }
+        let (width, height) = target.extent();
+        if width == 0 || height == 0 {
+            return Err(VulkanError::Vulkan("zero-sized swapchain image".into()));
+        }
+        self.upload_planner(planner)?;
+        self.ensure_targets(width, height, plan.target_depth + 1)?;
+        #[allow(clippy::cast_precision_loss)]
+        let viewport = [width as f32, height as f32, 0.0, 0.0];
+        write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
+        self.upload_geometry(plan)?;
+        let blit = BlitTarget {
+            image: target.image,
+            ready: target.ready,
+        };
+        self.execute(plan, width, height, clear, Some(blit))
     }
 
     // ── targets ────────────────────────────────────────────────────────────
@@ -783,7 +991,7 @@ impl SceneRenderer {
                 );
             }
         }
-        self.submit_and_wait()
+        self.submit_and_wait(None)
     }
 
     fn target(&self, id: TargetId) -> &Target {
@@ -952,7 +1160,7 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             );
         }
-        self.submit_and_wait()?;
+        self.submit_and_wait(None)?;
 
         if resized || force {
             let info = [vk::DescriptorImageInfo {
@@ -1023,6 +1231,7 @@ impl SceneRenderer {
         width: u32,
         height: u32,
         clear: Color,
+        out: Option<BlitTarget>,
     ) -> Result<(), VulkanError> {
         self.begin_commands()?;
         let a = f32::from(clear.a) / 255.0;
@@ -1141,7 +1350,7 @@ impl SceneRenderer {
                     seed.push.p[0] = [caster.offset[0], caster.offset[1], 1.0, 0.0];
                     self.pass(&mut rec, seed)?;
                     if let Some(radius) = box_radius {
-                        self.blur(&mut rec, work, patch, radius)?;
+                        self.blur(&mut rec, work, patch, radius, Edge::Transparent)?;
                     }
                     let mut source = TargetId::Level(work);
                     if let Some(inner) = inner {
@@ -1174,24 +1383,71 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
             );
-            self.device.cmd_copy_image_to_buffer(
-                cmd,
-                frame,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                self.readback.handle,
-                &[vk::BufferImageCopy {
-                    buffer_offset: 0,
-                    buffer_row_length: 0,
-                    buffer_image_height: 0,
-                    image_subresource: color_layers(),
-                    image_offset: vk::Offset3D::default(),
-                    image_extent: vk::Extent3D {
-                        width,
-                        height,
-                        depth: 1,
-                    },
-                }],
-            );
+        }
+        match out {
+            None => unsafe {
+                self.device.cmd_copy_image_to_buffer(
+                    cmd,
+                    frame,
+                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    self.readback.handle,
+                    &[vk::BufferImageCopy {
+                        buffer_offset: 0,
+                        buffer_row_length: 0,
+                        buffer_image_height: 0,
+                        image_subresource: color_layers(),
+                        image_offset: vk::Offset3D::default(),
+                        image_extent: vk::Extent3D {
+                            width,
+                            height,
+                            depth: 1,
+                        },
+                    }],
+                );
+            },
+            Some(target) => unsafe {
+                // The frame straight into the presentable image. The blit
+                // converts RGBA16F to the swapchain's 8-bit UNORM (and to
+                // BGRA order when that is the format) on the GPU; the frame
+                // is opaque (see `render_planned_to`), so premultiplied and
+                // straight are the same numbers and nothing is lost.
+                transition(
+                    &self.device,
+                    cmd,
+                    target.image,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                );
+                #[expect(clippy::cast_possible_wrap, reason = "frame extents")]
+                let corner = vk::Offset3D {
+                    x: width as i32,
+                    y: height as i32,
+                    z: 1,
+                };
+                self.device.cmd_blit_image(
+                    cmd,
+                    frame,
+                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    target.image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &[vk::ImageBlit {
+                        src_subresource: color_layers(),
+                        src_offsets: [vk::Offset3D::default(), corner],
+                        dst_subresource: color_layers(),
+                        dst_offsets: [vk::Offset3D::default(), corner],
+                    }],
+                    vk::Filter::NEAREST,
+                );
+                transition(
+                    &self.device,
+                    cmd,
+                    target.image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    vk::ImageLayout::PRESENT_SRC_KHR,
+                );
+            },
+        }
+        unsafe {
             transition(
                 &self.device,
                 cmd,
@@ -1200,7 +1456,7 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             );
         }
-        self.submit_and_wait()
+        self.submit_and_wait(out.map(|t| t.ready))
     }
 
     fn draw_runs(
@@ -1254,9 +1510,14 @@ impl SceneRenderer {
         level: usize,
         rect: PixelRect,
         radius: u32,
+        edge: Edge,
     ) -> Result<(), VulkanError> {
         #[allow(clippy::cast_precision_loss)]
         let r = radius as f32;
+        let edge = match edge {
+            Edge::Transparent => 0.0,
+            Edge::Duplicate => 1.0,
+        };
         for _ in 0..3 {
             let mut h = Pass::new(
                 TargetId::Scratch(level),
@@ -1265,6 +1526,7 @@ impl SceneRenderer {
                 mode::BOX_H,
             );
             h.push.args[1] = r;
+            h.push.args[2] = edge;
             self.pass(rec, h)?;
             let mut v = Pass::new(
                 TargetId::Level(level),
@@ -1273,6 +1535,7 @@ impl SceneRenderer {
                 mode::BOX_V,
             );
             v.push.args[1] = r;
+            v.push.args[2] = edge;
             self.pass(rec, v)?;
         }
         Ok(())
@@ -1287,7 +1550,9 @@ impl SceneRenderer {
         filter: FilterOp,
     ) -> Result<(), VulkanError> {
         if let Some(radius) = filter.box_radius {
-            self.blur(rec, level, rect, radius)?;
+            // Layer and backdrop filters clamp at the rect, as
+            // `effects::blur` does (CSS's `duplicate` edge mode).
+            self.blur(rec, level, rect, radius, Edge::Duplicate)?;
         }
         if let Some(m) = filter.color_matrix {
             let mut pass = Pass::new(
@@ -1359,14 +1624,22 @@ impl SceneRenderer {
         Ok(())
     }
 
-    fn submit_and_wait(&self) -> Result<(), VulkanError> {
+    fn submit_and_wait(&self, wait: Option<vk::Semaphore>) -> Result<(), VulkanError> {
         let cmd = self.command_buffer;
+        let cmds = [cmd];
+        let waits: Vec<vk::Semaphore> = wait.into_iter().collect();
+        // The whole program may run before the swapchain image is free; only
+        // the blit into it must wait.
+        let stages = vec![vk::PipelineStageFlags::TRANSFER; waits.len()];
         unsafe {
             self.device.end_command_buffer(cmd)?;
             self.device.reset_fences(&[self.fence])?;
             self.device.queue_submit(
                 self.queue,
-                &[vk::SubmitInfo::default().command_buffers(&[cmd])],
+                &[vk::SubmitInfo::default()
+                    .command_buffers(&cmds)
+                    .wait_semaphores(&waits)
+                    .wait_dst_stage_mask(&stages)],
                 self.fence,
             )?;
             self.device.wait_for_fences(&[self.fence], true, u64::MAX)?;
@@ -1392,7 +1665,12 @@ impl SceneRenderer {
         let mut out = vec![0u8; texels * 4];
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let byte = |v: f32| (v * 255.0 + 0.5) as u8;
-        for (pixel, slot) in half.chunks_exact(4).zip(out.chunks_exact_mut(4)) {
+        for (pixel, slot) in half
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(out.as_chunks_mut::<4>().0)
+        {
             let [r, g, b, a] = [pixel[0], pixel[1], pixel[2], pixel[3]].map(half_to_f32);
             let inv = if a > 0.0 { 1.0 / a } else { 0.0 };
             slot.copy_from_slice(&[byte(r * inv), byte(g * inv), byte(b * inv), byte(a)]);

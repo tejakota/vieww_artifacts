@@ -18,12 +18,12 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
-use crate::film_lib::{alpha, clamp01, mix, scaled, tint, FAINT, INK, MUTED, VIOLET_SOFT};
+use crate::film_lib::{alpha, mix, scaled, tint, FAINT, INK, MUTED, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 /// The pendulum count.
 const N: usize = 32;
@@ -65,10 +65,7 @@ fn pivot_x(i: usize) -> f32 {
 fn bob(i: usize, t: f32) -> Offset {
     let th = theta(i, t);
     let l = length(i);
-    Offset::new(
-        pivot_x(i) + l * th.sin(),
-        BAR_Y + l * th.cos(),
-    )
+    Offset::new(pivot_x(i) + l * th.sin(), BAR_Y + l * th.cos())
 }
 
 /// A violet→cyan→mint hue ladder for the balls.
@@ -76,7 +73,7 @@ fn bob(i: usize, t: f32) -> Offset {
 fn ball_color(i: usize) -> Color {
     let f = i as f32 / (N - 1) as f32;
     let hue = 0.72 - 0.42 * f; // 259° → 108°
-    let v = 0.82 + 0.16 * (f * 6.2832).sin();
+    let v = 0.82 + 0.16 * (f * std::f32::consts::TAU).sin();
     hsv(hue, 0.55, v)
 }
 
@@ -100,7 +97,7 @@ fn hsv(h: f32, s: f32, v: f32) -> Color {
     Color::rgb((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
 }
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The census, measured from the same array that draws the frame:
     // the rephase residual — the largest |θ| across all pendulums.
     let rephase = (0..N).map(|i| theta(i, 1.0).abs()).fold(0.0_f32, f32::max);
@@ -126,16 +123,24 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground — a concert-hall dark.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(8, 9, 13)),
-                    (1.0, Color::rgb(13, 14, 19)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(8, 9, 13)), (1.0, Color::rgb(13, 14, 19))]),
             );
 
             // The rig: end posts and the bar.
-            book.rect(Rect::new(150.0, BAR_Y - 6.0, 166.0, BAR_Y + 6.0), mix(MUTED, Color::BLACK, 0.5));
-            book.rect(Rect::new(1114.0, BAR_Y - 6.0, 1130.0, BAR_Y + 6.0), mix(MUTED, Color::BLACK, 0.5));
-            book.rect(Rect::new(150.0, BAR_Y - 2.5, 1130.0, BAR_Y + 2.5), mix(MUTED, Color::BLACK, 0.35));
+            book.rect(
+                Rect::new(150.0, BAR_Y - 6.0, 166.0, BAR_Y + 6.0),
+                mix(MUTED, Color::BLACK, 0.5),
+            );
+            book.rect(
+                Rect::new(1114.0, BAR_Y - 6.0, 1130.0, BAR_Y + 6.0),
+                mix(MUTED, Color::BLACK, 0.5),
+            );
+            book.rect(
+                Rect::new(150.0, BAR_Y - 2.5, 1130.0, BAR_Y + 2.5),
+                mix(MUTED, Color::BLACK, 0.35),
+            );
             book.stroke_rrect(
                 Rect::new(150.0, BAR_Y - 2.5, 1130.0, BAR_Y + 2.5),
                 2.0,
@@ -219,7 +224,7 @@ pub fn frame(t: f32) -> WidgetNode {
         }),
     );
 
-    let mut stack = Stack::new().push(Positioned::fill().child(board));
+    let stack = Stack::new().push(Positioned::fill().child(board));
     stack.push(receipt_panel(t, rephase, lobes)).into()
 }
 
@@ -258,7 +263,10 @@ fn receipt_panel(t: f32, rephase: f32, lobes: usize) -> WidgetNode {
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );
@@ -284,8 +292,18 @@ fn receipt_panel(t: f32, rephase: f32, lobes: usize) -> WidgetNode {
             );
             book.ring(c, 44.0, 1.0, alpha(FAINT, 0.4));
             book.ring(c, 26.0, 1.0, alpha(FAINT, 0.25));
-            book.line(Offset::new(16.0, 60.0), Offset::new(104.0, 60.0), alpha(FAINT, 0.3), 1.0);
-            book.line(Offset::new(60.0, 16.0), Offset::new(60.0, 104.0), alpha(FAINT, 0.3), 1.0);
+            book.line(
+                Offset::new(16.0, 60.0),
+                Offset::new(104.0, 60.0),
+                alpha(FAINT, 0.3),
+                1.0,
+            );
+            book.line(
+                Offset::new(60.0, 16.0),
+                Offset::new(60.0, 104.0),
+                alpha(FAINT, 0.3),
+                1.0,
+            );
             for i in 0..N {
                 let ph = std::f32::consts::TAU * (BASE + i as f32) * t;
                 let r = 14.0 + 30.0 * (i as f32 / (N - 1) as f32);

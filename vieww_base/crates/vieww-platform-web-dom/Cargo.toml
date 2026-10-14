@@ -10,6 +10,7 @@ rust-version.workspace = true
 vieww-foundation = { workspace = true }
 vieww-widget = { workspace = true }
 vieww-element = { workspace = true }
+vieww-embed = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
@@ -20,5 +21,5 @@ version = "0.3"
 features = [
     "Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement",
     "Node", "NodeList", "Text", "CssStyleDeclaration", "DomTokenList", "Event",
-    "EventTarget", "MouseEvent", "console",
+    "EventTarget", "MouseEvent", "KeyboardEvent", "console",
 ]

@@ -1,44 +1,64 @@
 # Device capture pipeline
 
-The intended phone pipeline is:
+The pipeline is **video, converted to depth at capture time** — on the
+device that records it, never on a server, never at view time:
 
 ```text
-RGB camera ───────────────┐
-Depth/LiDAR (optional) ───┼──> synchronized observations
-IMU (optional) ───────────┤
-AR/SLAM pose (optional) ──┘
-                           |
-                           v
-                 temporal reconstruction
-                           |
-                           v
-                    .3 representation
-                           |
-                           v
-                    Vieww / 3 player
+RGB camera ─────────────┐
+Depth (where present) ──┼──> synchronized frames  ──> .3 v1  ──> viewer
+                        │      (color + depth + intrinsics)
+Permission gate ────────┘
 ```
 
-## First real prototype
+## Android (`camera2`)
 
-Start with a constrained capture mode: the user moves the phone around a
-mostly static subject for roughly three seconds. This supplies multiple views
-and is substantially more tractable than promising complete 3D reconstruction
-from one stationary RGB frame.
+`three-capture`'s `Camera2Source` drives a Java shim
+(`java/ThreeCameraShim.java`, compiled and dexed by `build.rs`, loaded
+through `InMemoryDexClassLoader` — the vavlt picker pattern, no Gradle, no
+AGP, no Kotlin):
 
-## Moving subjects
+- **Color**: `YUV_420_888`, repacked contiguous by the shim, converted to
+  RGBA in Rust (BT.601).
+- **Depth**: `DEPTH16` where the device has it — 13-bit millimeters plus a
+  3-bit confidence field. Samples with confidence < 3 become unknown (0).
+  Most phones have no `DEPTH16` output; they report that honestly through
+  `CaptureCapabilities`, and their captures are real video that plays flat
+  (`no-depth`).
+- **Intrinsics**: `LENS_INTRINSIC_CALIBRATION` when the device publishes
+  it, scaled to the capture resolution; otherwise the centered ~60°
+  approximation.
+- **Contract**: Rust polls; Java never calls back. One static JNI call per
+  frame, newest-wins queues on a serial handler thread.
 
-Once the static-object pipeline works, add temporal correspondence and dynamic
-reconstruction. A moving person is fundamentally harder because the camera and
-subject can both change between observations.
+## iOS (AVFoundation)
 
-## Quality tiers
+`AvFoundationSource` runs an `AVCaptureSession` on the back camera with a
+`AVCaptureVideoDataOutput` (BGRA) and — on LiDAR hardware — an
+`AVCaptureDepthDataOutput` (true depth in meters, converted to filtered
+millimeters). The same poll contract; the same newest-wins buffers; the
+same honest `no-depth` on devices without a depth sensor. Authorization is
+polled: denied is an error, not-yet-determined is a wait.
 
-The capture metadata should expose whether a result was produced with:
+## The host source
 
-- RGB only;
-- RGB + depth;
-- RGB + LiDAR;
-- multiple cameras.
+`SyntheticDepthCamera` is deterministic — a moving color band over a
+gradient with a breathing depth mound — for CI, demos, and format tests.
+Its depth is labeled `test-depth` by construction.
 
-The viewer should gracefully degrade instead of refusing a lower-capability
-capture.
+## Recording vs session
+
+`CaptureSession` runs a whole capture synchronously (tests, importer).
+`Recording` is the same state machine cut into per-frame-tick steps for a
+UI: `start` on the button press, `poll` once per frame tick until the
+frame-count target is met, `finish` to assemble. Completion is the frame
+count, never the source's silence — a camera's "nothing ready this tick"
+mid-recording must not end the capture.
+
+## The development importer
+
+`three_runtime::import_mp4` shells out to **ffmpeg** (must be on `PATH`) to
+turn any real video into a `.3` on a dev machine, pairing extracted frames
+with generated depth (a dome-plus-luminance relief field). It exists so
+the format, the warp, and the viewer can be exercised with actual footage
+before any phone is involved. The capture's source is `test-depth`, and
+nothing downstream can mistake it for a measurement.

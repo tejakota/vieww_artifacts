@@ -168,6 +168,32 @@ enum Extents {
     PerRow(ExtentBuilder),
 }
 
+/// Where a row should land in the window when a list is scrolled to it.
+///
+/// This is the *programmatic* half of scrolling — what a scroll controller's
+/// `jump_to_row` asks for — and names where the row ends up rather than how
+/// far the list moves, because "how far" is an implementation detail of where
+/// the window happens to be now and "where it lands" is the thing a caller
+/// actually means. "Put the search result at the top so the eye starts there"
+/// is [`Start`](Self::Start); "centre the new message" is
+/// [`Center`](Self::Center); "show the end of a growing log" is
+/// [`End`](Self::End).
+///
+/// The fourth, movement-minimising option — scroll only if the row is not
+/// already visible — is not an alignment, because it answers a different
+/// question ("make it visible") and does nothing when it already is. That one
+/// is a scroll controller's `reveal_row`, built on
+/// [`row_position`](ListView::row_position).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowAlignment {
+    /// The row's leading edge at the window's leading edge.
+    Start,
+    /// The row centred in the window.
+    Center,
+    /// The row's trailing edge at the window's trailing edge.
+    End,
+}
+
 impl ListView {
     /// A list of `count` rows, each `item_extent` long, built on demand.
     #[must_use]
@@ -289,6 +315,102 @@ impl ListView {
                 (0..self.count).map(|index| of(index).max(0.0)).sum()
             }
         }
+    }
+
+    /// Where row `index` starts along the scroll axis, and how long it is.
+    ///
+    /// The arithmetic behind "scroll to row *n*": a uniform list answers with
+    /// one multiplication, a variable one with the same prefix walk its window
+    /// search does. Extents are clamped at zero exactly as in
+    /// [`content_extent`](Self::content_extent), so a negative row is empty
+    /// rather than making the positions after it non-monotonic.
+    ///
+    /// `None` when `index` is at or past `count` — the caller's index, not the
+    /// list, is what is out of range, and an offset for a row that does not
+    /// exist would scroll somewhere plausible-looking and wrong.
+    ///
+    /// Combine with a scroll controller — its `reveal_row` and `jump_to_row`
+    /// are exactly that: hand the pair to the controller, which knows the
+    /// window's length. The element layer owns the join because a widget
+    /// cannot hold the signal the offset is published into.
+    #[must_use]
+    pub fn row_position(&self, index: usize) -> Option<(f32, f32)> {
+        if index >= self.count {
+            return None;
+        }
+        match &self.extents {
+            Extents::Uniform(extent) => {
+                let extent = extent.max(0.0);
+                Some((index as f32 * extent, extent))
+            }
+            Extents::PerRow(of) => {
+                let of = of.as_ref();
+                let mut start = 0.0_f32;
+                for row in 0..index {
+                    start += of(row).max(0.0);
+                }
+                Some((start, of(index).max(0.0)))
+            }
+        }
+    }
+
+    /// The scroll offset that puts row `index` at `alignment` in a
+    /// `viewport`-long window, clamped to the list's scrollable range.
+    ///
+    /// Pure arithmetic, no controller and no window required: this answers the
+    /// question [`row_position`](Self::row_position) plus an alignment ask,
+    /// which is everything a scroll-to-row needs except the window's length —
+    /// and the window's length is the one thing the *caller* cannot know
+    /// before layout, which is why it is the argument rather than a field.
+    ///
+    /// Clamped to `[0, content − viewport]`, so a row near the end aligned to
+    /// [`Start`](RowAlignment::Start) lands the list as far down as it goes
+    /// rather than scrolling past its end into blank space. A viewport of zero
+    /// or less — unmeasured content, or a caller that has not looked — is
+    /// treated as unclamped at the bottom edge, which makes the alignment still
+    /// say something true about the top of the window.
+    ///
+    /// `None` exactly when [`row_position`](Self::row_position) says `None`.
+    ///
+    /// ```
+    /// # use vieww_widget::{ListView, RowAlignment};
+    /// # use std::rc::Rc;
+    /// let list = ListView::new(1_000, 50.0, Rc::new(|i| {
+    ///     vieww_widget::Text::new(format!("Row {i}")).into()
+    /// }));
+    ///
+    /// // Row 40 at the top of a 500-px window.
+    /// assert_eq!(list.row_offset_for(40, RowAlignment::Start, 500.0), Some(2_000.0));
+    /// // Centred: the row's 50 px sit in the middle, so the offset backs off
+    /// // by half the remaining window.
+    /// assert_eq!(list.row_offset_for(40, RowAlignment::Center, 500.0), Some(1_775.0));
+    /// // The last row at the *top* cannot put anything below it on screen:
+    /// // the list stops at 50_000 - 500.
+    /// assert_eq!(list.row_offset_for(999, RowAlignment::Start, 500.0), Some(49_500.0));
+    /// ```
+    #[must_use]
+    pub fn row_offset_for(
+        &self,
+        index: usize,
+        alignment: RowAlignment,
+        viewport: f32,
+    ) -> Option<f32> {
+        let (start, extent) = self.row_position(index)?;
+        let offset = match alignment {
+            RowAlignment::Start => start,
+            RowAlignment::Center => start - (viewport - extent) / 2.0,
+            RowAlignment::End => start + extent - viewport,
+        };
+        // A window of zero or less cannot clamp anything at the bottom — every
+        // offset is "the last screenful" — and clamping to `content` alone
+        // keeps that honest rather than pinning every jump at the content's
+        // end.
+        let max = if viewport > 0.0 {
+            (self.content_extent() - viewport).max(0.0)
+        } else {
+            self.content_extent()
+        };
+        Some(offset.clamp(0.0, max))
     }
 
     /// Where the window falls and what stands in for the rest of the list.
@@ -698,5 +820,90 @@ mod tests {
         let built_rows = tree.find_all("Text").len();
 
         assert_eq!(built_rows, 10);
+    }
+
+    // -------------------------------------------------------- scroll-to-row
+
+    #[test]
+    fn a_row_starts_where_the_rows_before_it_end() {
+        // Uniform: one multiplication, checkable by hand.
+        assert_eq!(rows(1_000).row_position(0), Some((0.0, ROW)));
+        assert_eq!(rows(1_000).row_position(100), Some((5_000.0, ROW)));
+
+        // Variable: rows 0..5 of the alternating list are two (40 + 80)
+        // pairs plus one 40, so row 5 starts at 280 and is 80 tall.
+        assert_eq!(alternating(10).row_position(5), Some((280.0, 80.0)));
+    }
+
+    #[test]
+    fn an_index_off_the_end_has_no_position_rather_than_a_last_one() {
+        assert_eq!(rows(10).row_position(10), None);
+        assert_eq!(rows(0).row_position(0), None);
+        // And the alignment arithmetic inherits that answer rather than
+        // clamping it into a row that does not exist.
+        assert_eq!(
+            rows(10).row_offset_for(10, RowAlignment::Start, 500.0),
+            None
+        );
+    }
+
+    #[test]
+    fn every_alignment_is_the_row_put_somewhere_specific_in_the_window() {
+        let list = rows(1_000);
+        let viewport = 500.0;
+
+        // Row 40: 2_000..2_050. Start puts its top at the window's top.
+        assert_eq!(
+            list.row_offset_for(40, RowAlignment::Start, viewport),
+            Some(2_000.0)
+        );
+        // Centre: 2_000 - (500 - 50)/2 = 1_775.
+        assert_eq!(
+            list.row_offset_for(40, RowAlignment::Center, viewport),
+            Some(1_775.0)
+        );
+        // End: the row's bottom at the window's bottom: 2_050 - 500 = 1_550.
+        assert_eq!(
+            list.row_offset_for(40, RowAlignment::End, viewport),
+            Some(1_550.0)
+        );
+    }
+
+    #[test]
+    fn a_row_near_the_end_cannot_scroll_blank_space_into_view() {
+        let list = rows(1_000);
+
+        // Row 999 at Start would want 49_950, but the list stops 500 short of
+        // its content: the last windowful is 50_000 - 500 = 49_500.
+        assert_eq!(
+            list.row_offset_for(999, RowAlignment::Start, 500.0),
+            Some(49_500.0)
+        );
+        // Aligning that same row to End wants exactly that offset anyway —
+        // both roads meet at the bottom, which is the geometry making the
+        // clamp correct rather than arbitrary.
+        assert_eq!(
+            list.row_offset_for(999, RowAlignment::End, 500.0),
+            Some(49_500.0)
+        );
+    }
+
+    #[test]
+    fn a_row_shorter_than_the_list_cannot_be_scrolled_at_all() {
+        // Ten rows of 50 in a 500-px window: everything is already visible.
+        assert_eq!(
+            rows(10).row_offset_for(7, RowAlignment::Start, 500.0),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn a_variable_row_alignment_walks_the_same_prefix_the_window_does() {
+        // Row 5 of the alternating list is 280..360; centring it in 500 px
+        // wants 280 - (500 - 80)/2 = 70.
+        assert_eq!(
+            alternating(1_000).row_offset_for(5, RowAlignment::Center, 500.0),
+            Some(70.0)
+        );
     }
 }

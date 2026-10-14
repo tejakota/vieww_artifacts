@@ -372,6 +372,7 @@ pub fn compare_route(state: &AppState) -> Route {
                     photo,
                     before: state.library.source(photo).ok(),
                     after: state.library.result(photo),
+                    baseline: state.library.baseline(photo),
                     divider: state.divider.get(),
                     on_divider: Rc::new(move |fraction| divider.set_divider(fraction)),
                     on_close: Rc::new(move || {

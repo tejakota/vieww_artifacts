@@ -248,7 +248,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn disagreement(gpu: &[u8], cpu: &[u8]) -> (usize, u8) {
     let mut over = 0;
     let mut max = 0;
-    for (g, c) in gpu.chunks_exact(4).zip(cpu.chunks_exact(4)) {
+    for (g, c) in gpu.as_chunks::<4>().0.iter().zip(cpu.as_chunks::<4>().0) {
         let d = (0..4).map(|k| g[k].abs_diff(c[k])).max().unwrap_or(0);
         max = max.max(d);
         if d > PARITY_TOLERANCE {

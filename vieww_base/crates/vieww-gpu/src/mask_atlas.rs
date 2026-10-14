@@ -91,6 +91,30 @@ pub struct MaskAtlas {
     used_texels: u64,
     frame: u64,
     version: u64,
+    /// Rectangles (`x, y, width, height`) blitted since [`Self::begin_frame`]
+    /// — what a texture already holding `dirty_base` needs to catch up. See
+    /// [`Self::changes_since`].
+    dirty: Vec<[u32; 4]>,
+    /// The version the texels had when `dirty` started recording.
+    dirty_base: u64,
+    /// Set when this frame rewrote the texture wholesale (a compaction or a
+    /// grow): `dirty` no longer describes the difference.
+    dirty_full: bool,
+}
+
+/// What a backend holding some earlier version of a [`MaskAtlas`] must upload
+/// to match it — the answer to "which texels changed", so that a mask that is
+/// new every frame costs its own bytes instead of the whole texture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaskChanges<'a> {
+    /// Nothing: the texture is current.
+    None,
+    /// Only these rectangles (`x, y, width, height`, in texels) differ from
+    /// the version the backend holds.
+    Regions(&'a [[u32; 4]]),
+    /// Upload everything — the texture was rebuilt, resized, or the backend's
+    /// copy is from before this frame began.
+    Full,
 }
 
 impl std::fmt::Debug for MaskAtlas {
@@ -125,7 +149,41 @@ impl MaskAtlas {
             shelf_height: 0,
             used_texels: 0,
             frame: 1,
-            version: crate::generation::next(),
+            version: 0,
+            dirty: Vec::new(),
+            dirty_base: 0,
+            dirty_full: true,
+        }
+        .with_fresh_version()
+    }
+
+    fn with_fresh_version(mut self) -> Self {
+        self.version = crate::generation::next();
+        self.dirty_base = self.version;
+        self
+    }
+
+    /// What a backend whose texture holds `held` (the [`Self::version`] it
+    /// last uploaded, `None` if it has never uploaded) must send to match.
+    ///
+    /// # Why this is exact
+    ///
+    /// Texels change in exactly three places: a new mask's blit, a
+    /// compaction, and a grow. `begin_frame` starts recording with the
+    /// version the texels had at that moment; every blit after it appends its
+    /// rectangle; a compaction or grow marks the frame as a full rewrite. So a
+    /// texture that holds precisely the start-of-frame version differs from
+    /// the current texels in the recorded rectangles and nowhere else.
+    /// Anything else — a backend that skipped a frame, a first upload, a
+    /// rebuilt texture — is [`MaskChanges::Full`], which is always correct.
+    #[must_use]
+    pub fn changes_since(&self, held: Option<u64>) -> MaskChanges<'_> {
+        match held {
+            Some(v) if v == self.version => MaskChanges::None,
+            Some(v) if v == self.dirty_base && !self.dirty_full => {
+                MaskChanges::Regions(&self.dirty)
+            }
+            _ => MaskChanges::Full,
         }
     }
 
@@ -156,8 +214,42 @@ impl MaskAtlas {
     pub fn begin_frame(&mut self) {
         let previous = self.frame;
         self.frame += 1;
-        let capacity = u64::from(self.side) * u64::from(self.side);
-        if self.used_texels * 2 <= capacity {
+        self.dirty.clear();
+        self.dirty_base = self.version;
+        self.dirty_full = false;
+        // **Compact when packing has advanced far *and* most of it is dead.**
+        //
+        // Shelf packing never reuses a dead mask's space, so what runs a
+        // churning atlas out of room is the packing frontier, not the texels
+        // still in use. This used to test only `used_texels * 2 > capacity`,
+        // and an animated shape — a new mask every frame — never got there:
+        // the frontier hit the bottom first, the atlas *grew* (keeping every
+        // dead mask), and kept growing to `MAX_SIDE` with a few dozen masks in
+        // it, each grow a full-texture upload. `examples/anim_paths` measured
+        // 4096^2 for three moving shapes.
+        //
+        // The frontier alone is not enough either: right after a compaction
+        // the live set can keep it past half on its own, and compacting every
+        // frame is a full upload every frame. So the second condition is that
+        // at least half of what has been packed belongs to masks the previous
+        // frame did not use — a compaction then always frees at least half.
+        //
+        // Three quarters rather than half for the frontier: a compaction is a
+        // whole-texture upload (`changes_since` reports `Full`), and waiting
+        // longer halves how often one happens. `anim_paths`, 120 frames: one
+        // rotating panel went from 39 full uploads to 20 and 1.62 MB a frame
+        // to 1.02 MB on average; three moving shapes 30 -> 21, 2.50 -> 1.91 MB.
+        let frontier = self.shelf_y + self.shelf_height;
+        if frontier * 4 <= self.side * 3 {
+            return;
+        }
+        let live: u64 = self
+            .entries
+            .values()
+            .filter(|e| e.last_used >= previous)
+            .map(|e| u64::from(e.width) * u64::from(e.height))
+            .sum();
+        if live * 2 > self.used_texels {
             return;
         }
         let keep: Vec<(MaskKey, Entry, Vec<u8>)> = self
@@ -171,6 +263,7 @@ impl MaskAtlas {
             return;
         }
         self.reset(self.side);
+        self.dirty_full = true;
         for (key, entry, bytes) in keep {
             if let Some(placed) = self.place(entry.width, entry.height, &bytes) {
                 self.entries.insert(
@@ -185,6 +278,16 @@ impl MaskAtlas {
             }
         }
         self.version = crate::generation::next();
+    }
+
+    /// The mask for `key` if it is resident, marked used this frame —
+    /// [`Self::get_or_insert`] without the build, for callers whose build
+    /// needs to read this atlas.
+    pub fn get(&mut self, key: MaskKey) -> Option<MaskSlot> {
+        let frame = self.frame;
+        let entry = self.entries.get_mut(&key)?;
+        entry.last_used = frame;
+        Some(slot(entry))
     }
 
     /// The mask for `key`, building it with `build` on a miss.
@@ -253,6 +356,7 @@ impl MaskAtlas {
             .collect();
         let side = (self.side * 2).min(Self::MAX_SIDE);
         self.reset(side);
+        self.dirty_full = true;
         // Slots handed out earlier this frame are already baked into vertices
         // as texel offsets, so a grow must not move them: every old entry is
         // copied to *its own* texel position in the larger texture, and new
@@ -323,6 +427,9 @@ impl MaskAtlas {
     }
 
     fn blit(&mut self, x: u32, y: u32, width: u32, height: u32, alpha: &[u8]) {
+        if !self.dirty_full {
+            self.dirty.push([x, y, width, height]);
+        }
         for row in 0..height {
             let from = (row * width) as usize;
             let to = ((y + row) * self.side + x) as usize;
@@ -355,6 +462,79 @@ mod tests {
 
     fn texel(atlas: &MaskAtlas, slot: MaskSlot, dx: u32, dy: u32) -> u8 {
         atlas.texels()[((slot.atlas_y + dy) * atlas.side() + slot.atlas_x + dx) as usize]
+    }
+
+    /// Replays `changes_since` onto a "texture" the way a backend would and
+    /// checks it ends up equal to the atlas — over new masks, hits, frames
+    /// that compact, a grow, and a backend that skips a frame.
+    #[test]
+    fn changes_since_brings_a_texture_exactly_up_to_date() {
+        let mut atlas = MaskAtlas::new();
+        let mut texture: Vec<u8> = Vec::new();
+        let mut held: Option<u64> = None;
+        let mut full_uploads = 0;
+        let mut region_bytes = 0u64;
+        let mut sync = |atlas: &MaskAtlas, texture: &mut Vec<u8>, held: &mut Option<u64>| {
+            match atlas.changes_since(*held) {
+                MaskChanges::None => {}
+                MaskChanges::Full => {
+                    *texture = atlas.texels().to_vec();
+                    full_uploads += 1;
+                }
+                MaskChanges::Regions(rects) => {
+                    assert_eq!(
+                        texture.len(),
+                        atlas.texels().len(),
+                        "a region upload never resizes"
+                    );
+                    for &[x, y, w, h] in rects {
+                        for row in y..y + h {
+                            let i = (row * atlas.side() + x) as usize;
+                            texture[i..i + w as usize]
+                                .copy_from_slice(&atlas.texels()[i..i + w as usize]);
+                            region_bytes += u64::from(w);
+                        }
+                    }
+                }
+            }
+            *held = Some(atlas.version());
+        };
+        let mut id = 0;
+        let mut compactions = 0;
+        let mut last_side = atlas.side();
+        for frame in 0..400u32 {
+            let before = atlas.version();
+            atlas.begin_frame();
+            if atlas.version() != before && atlas.side() == last_side {
+                compactions += 1;
+            }
+            last_side = atlas.side();
+            // A steady mask every frame, plus one or two new ones (an animated
+            // shape), sized so the atlas compacts and grows along the way.
+            insert(&mut atlas, 1_000_000, 40, 30, 200).unwrap();
+            for _ in 0..1 + frame % 2 {
+                id += 1;
+                let side = 20 + (id % 7) as u32 * 15;
+                insert(&mut atlas, id, side, side + 3, (id % 251) as u8 + 1).unwrap();
+            }
+            if frame % 37 == 5 {
+                continue; // the backend misses a frame
+            }
+            sync(&atlas, &mut texture, &mut held);
+            assert!(
+                texture == atlas.texels(),
+                "frame {frame}: texture differs from atlas"
+            );
+        }
+        assert!(
+            compactions >= 3,
+            "the test must cross compactions: {compactions}"
+        );
+        assert!(
+            full_uploads < 80,
+            "full uploads should be the exception: {full_uploads}"
+        );
+        assert!(region_bytes > 0, "region uploads should be the rule");
     }
 
     #[test]

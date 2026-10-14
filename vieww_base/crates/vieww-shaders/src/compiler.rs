@@ -14,6 +14,39 @@ use crate::pipeline_cache::PipelineCacheKey;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 pub use naga::ShaderStage;
 
+/// Where [`ParsedShader::to_msl`] puts things, so a Metal backend can bind
+/// them without reflecting the generated source.
+///
+/// Metal has three independent index spaces per stage — buffers, textures,
+/// samplers — so the WGSL binding number is used directly in whichever space
+/// the resource's type belongs to: `@group(0) @binding(3) var t: texture_2d`
+/// is `texture(3)`, `@group(0) @binding(0) var<uniform>` is `buffer(0)`.
+/// Two slots are reserved above any binding the built-in shaders use.
+pub mod msl_slots {
+    /// The buffer slot `var<immediate>` (push-constant) data is read from;
+    /// bind it with `set_vertex_bytes`/`set_fragment_bytes`.
+    pub const IMMEDIATES_BUFFER: u8 = 20;
+    /// The buffer slot vertex attributes are fetched from: the index a
+    /// pipeline's vertex descriptor layout must use for `[[stage_in]]`.
+    pub const VERTEX_BUFFER: u8 = 30;
+}
+
+/// Where [`ParsedShader::to_hlsl`] puts things, for a D3D12 root signature.
+///
+/// naga maps `@group(g) @binding(b)` to register `b` in space `g` of the
+/// register class the type implies (`b` for constant buffers, `t` for
+/// textures, `s` for samplers), and vertex inputs to the semantic
+/// [`VERTEX_SEMANTIC`](hlsl_slots::VERTEX_SEMANTIC) with the WGSL location as
+/// its index.
+pub mod hlsl_slots {
+    /// The constant-buffer register `var<immediate>` data lives in — root
+    /// constants in a D3D12 root signature.
+    pub const IMMEDIATES_REGISTER: u32 = 15;
+    /// The semantic name naga gives `@location(n)` vertex inputs (`LOC0`,
+    /// `LOC1`, ...).
+    pub const VERTEX_SEMANTIC: &str = "LOC";
+}
+
 #[derive(Debug)]
 pub enum CompileError {
     Parse(String),
@@ -153,14 +186,79 @@ impl ParsedShader {
         Ok(spirv)
     }
 
-    /// Translate one entry point to Metal Shading Language, for
-    /// `vieww-hal::metal`'s eventual pipeline port (see that module's own
-    /// docs for exactly what's blocking the rest of that port — this
-    /// function is not one of the blocked pieces; it's real and tested
-    /// here).
+    /// Translate one entry point to Metal Shading Language, with every
+    /// resource bound to a real Metal slot under [`msl_slots`]'s convention.
+    ///
+    /// **Why the binding map is not optional.** With no map, naga emits
+    /// `[[user(fake0)]]` for each resource — a placeholder that its own
+    /// tests accept and that no Metal compiler does. This used to be the
+    /// behaviour, and it was invisible for as long as nothing compiled the
+    /// output; `vieww-hal`'s Metal backend is the first thing that does.
+    ///
+    /// # Errors
+    ///
+    /// The entry point is missing, a resource sits outside group 0 (the
+    /// convention has one bind group, which is all the built-in shaders use),
+    /// or naga's MSL writer refuses the module.
     pub fn to_msl(&self, entry_point: &str, stage: ShaderStage) -> Result<String, CompileError> {
         self.find_entry_point(entry_point, stage)?;
-        let options = naga::back::msl::Options::default();
+        let mut resources = naga::back::msl::BindingMap::new();
+        for (_, var) in self.module.global_variables.iter() {
+            let Some(binding) = var.binding else { continue };
+            if binding.group != 0 {
+                return Err(CompileError::Backend {
+                    target: "msl",
+                    message: format!(
+                        "resource at group {} binding {}: the Metal slot convention has group 0 only",
+                        binding.group, binding.binding
+                    ),
+                });
+            }
+            let slot = u8::try_from(binding.binding).map_err(|_| CompileError::Backend {
+                target: "msl",
+                message: format!("binding {} does not fit a Metal slot", binding.binding),
+            })?;
+            let mut target = naga::back::msl::BindTarget::default();
+            match self.module.types[var.ty].inner {
+                naga::TypeInner::Image { .. } => target.texture = Some(slot),
+                naga::TypeInner::Sampler { .. } => {
+                    target.sampler = Some(naga::back::msl::BindSamplerTarget::Resource(slot));
+                }
+                _ => {
+                    target.buffer = Some(slot);
+                    target.mutable = matches!(
+                        var.space,
+                        naga::AddressSpace::Storage {
+                            access
+                        } if access.contains(naga::StorageAccess::STORE)
+                    );
+                }
+            }
+            resources.insert(binding, target);
+        }
+        let mut per_entry_point_map = naga::back::msl::EntryPointResourceMap::new();
+        per_entry_point_map.insert(
+            entry_point.to_string(),
+            naga::back::msl::EntryPointResources {
+                resources,
+                immediates_buffer: Some(msl_slots::IMMEDIATES_BUFFER),
+                sizes_buffer: None,
+            },
+        );
+        let options = naga::back::msl::Options {
+            lang_version: (2, 1),
+            per_entry_point_map,
+            fake_missing_bindings: false,
+            // The same policy as SPIR-V's, for the same reason: an
+            // out-of-range `textureLoad` reads transparent, as on the CPU.
+            bounds_check_policies: naga::proc::BoundsCheckPolicies {
+                index: naga::proc::BoundsCheckPolicy::Restrict,
+                buffer: naga::proc::BoundsCheckPolicy::Restrict,
+                image_load: naga::proc::BoundsCheckPolicy::ReadZeroSkipWrite,
+                binding_array: naga::proc::BoundsCheckPolicy::Restrict,
+            },
+            ..naga::back::msl::Options::default()
+        };
         let pipeline_options = naga::back::msl::PipelineOptions {
             entry_point: Some((stage, entry_point.to_string())),
             ..Default::default()
@@ -185,7 +283,7 @@ impl ParsedShader {
         let options = naga::back::hlsl::Options {
             immediates_target: Some(naga::back::hlsl::BindTarget {
                 space: 0,
-                register: 15,
+                register: hlsl_slots::IMMEDIATES_REGISTER,
                 binding_array_size: None,
                 dynamic_storage_buffer_offsets_index: None,
                 restrict_indexing: false,
@@ -209,6 +307,17 @@ impl ParsedShader {
                 message: e.to_string(),
             })?;
         Ok(buffer)
+    }
+
+    /// Every entry point in the module, with its stage, in declaration
+    /// order — what a backend iterates to translate a whole shader.
+    #[must_use]
+    pub fn entry_points(&self) -> Vec<(String, ShaderStage)> {
+        self.module
+            .entry_points
+            .iter()
+            .map(|ep| (ep.name.clone(), ep.stage))
+            .collect()
     }
 
     /// A cache key over this exact source text and requested entry
@@ -263,6 +372,39 @@ pub fn compile(
 mod tests {
     use super::*;
     use crate::library::ShaderLibrary;
+
+    /// Every entry point of every built-in shader translates to MSL that a
+    /// Metal compiler can bind: no naga placeholder bindings, and each
+    /// resource in the slot [`msl_slots`] documents.
+    #[test]
+    fn msl_carries_real_slots_for_every_built_in_shader() {
+        let library = ShaderLibrary::new();
+        for source in library.iter() {
+            let parsed = ParsedShader::parse(&source.wgsl).unwrap();
+            for ep in &parsed.module.entry_points {
+                let msl = parsed
+                    .to_msl(&ep.name, ep.stage)
+                    .unwrap_or_else(|e| panic!("{} {}: {e}", source.name, ep.name));
+                assert!(
+                    !msl.contains("user(fake"),
+                    "{} {} still has a placeholder binding:\n{msl}",
+                    source.name,
+                    ep.name
+                );
+            }
+        }
+        let scene = ParsedShader::parse(crate::library::SCENE_WGSL).unwrap();
+        let vs = scene.to_msl("vs_main", ShaderStage::Vertex).unwrap();
+        assert!(vs.contains("[[buffer(0)]]"), "{vs}");
+        let fs = scene.to_msl("fs_main", ShaderStage::Fragment).unwrap();
+        assert!(
+            fs.contains("[[texture(1)]]") && fs.contains("[[texture(4)]]"),
+            "{fs}"
+        );
+        let post = ParsedShader::parse(crate::library::POST_WGSL).unwrap();
+        let fs = post.to_msl("fs_main", ShaderStage::Fragment).unwrap();
+        assert!(fs.contains("[[buffer(20)]]"), "immediates slot:\n{fs}");
+    }
 
     #[test]
     fn every_built_in_shader_parses_and_validates() {

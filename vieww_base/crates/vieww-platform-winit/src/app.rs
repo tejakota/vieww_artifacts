@@ -21,7 +21,9 @@ use vieww_paint::FrameScheduler;
 use vieww_render::element::Runtime;
 use vieww_render::{next_action, FrameDriver, LoopAction, WindowKey};
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+use winit::dpi::LogicalSize;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 #[cfg(target_os = "android")]
@@ -282,6 +284,9 @@ pub struct App {
     refresh_hz: f32,
     /// Whether [`App::refresh_rate`] was called. Detection defers to it.
     refresh_stated: bool,
+    /// Whether each frame is planned and, when the plan is complete,
+    /// rasterised by the GPU — see [`App::prefer_gpu`].
+    prefer_gpu: bool,
     stop: Stop,
     /// Called once per frame each, in the order they were added. See
     /// [`App::on_frame`].
@@ -361,6 +366,7 @@ impl App {
             theme: None,
             refresh_hz: 60.0,
             refresh_stated: false,
+            prefer_gpu: false,
             stop: Stop::OnClose,
             on_frame: Vec::new(),
             after_frame: Vec::new(),
@@ -492,6 +498,28 @@ impl App {
         assert!(hz.is_finite() && hz > 0.0, "refresh rate must be positive");
         self.refresh_hz = hz;
         self.refresh_stated = true;
+        self
+    }
+
+    /// Plan every frame, and rasterise on the GPU when the plan is complete.
+    ///
+    /// Off by default, because the CPU rasterizer is this framework's own
+    /// and its quality is the bar; the GPU path is the one `vieww-gpu`
+    /// plans and `vieww-hal`'s `SceneRenderer` executes — one batched draw
+    /// for a whole frame, edges covered analytically. A frame the planner
+    /// cannot express falls back to the CPU rasterizer in full, per frame:
+    /// turning this on never turns the CPU path off, it only makes the GPU
+    /// available to the frames it can draw.
+    ///
+    /// What it costs today: the GPU's frame is read back into host memory
+    /// and uploaded like the CPU's would be, and there is no damage-driven
+    /// repaint — every GPU frame is a full one. See
+    /// [`NativeRenderer::present_planned`](crate::native::NativeRenderer::present_planned)
+    /// for the shape and the follow-up that makes it fast rather than
+    /// merely correct.
+    #[must_use]
+    pub const fn prefer_gpu(mut self) -> Self {
+        self.prefer_gpu = true;
         self
     }
 
@@ -1002,6 +1030,15 @@ impl Drop for Gpu {
 /// What is **not** here is in [`Shared`], and the split is exactly "does a second
 /// window need its own?".
 struct WindowState {
+    /// The monitor this window's refresh rate was last read from — so a
+    /// window dragged onto another display, or a Wayland surface that had not
+    /// entered an output when it opened, re-reads it. See
+    /// [`WindowState::display_may_have_changed`].
+    display: Option<winit::monitor::MonitorHandle>,
+    /// When [`display`](Self::display) was last compared against the window's
+    /// current monitor from the draw path — see
+    /// [`WindowState::recheck_display`].
+    display_checked: Option<Instant>,
     /// The pointer shape currently set on this window.
     ///
     /// Remembered so a mouse moving *within* one widget costs nothing — see
@@ -1055,6 +1092,9 @@ struct WindowState {
     inset_watch: InsetWatch,
     log: FrameLog,
     lifecycle: Lifecycle,
+    /// Whether this window has put a frame on screen yet. See
+    /// [`WindowState::may_draw`].
+    presented: bool,
     /// What this window clears to.
     ///
     /// Per window rather than read from the config, because [`WindowSpec`](vieww_render::window::WindowSpec) lets a
@@ -1123,7 +1163,58 @@ impl WindowState {
     ///
     /// Pacing does not come from here and never did — the swapchain blocks on
     /// vsync whatever this says. This decides only what counts as *late*.
+    /// Re-read the refresh rate if the window is now on a different monitor
+    /// than the one it was read from.
+    ///
+    /// Opening a window was the only time the rate was read, so a window
+    /// dragged from a 60Hz display onto a 144Hz one kept a 16.7ms budget and
+    /// counted every frame inside 6.9ms as on time — and on Wayland, where a
+    /// fresh surface may not have entered any output yet, `current_monitor`
+    /// is `None` at open and the budget stayed at its default until the
+    /// window was reopened. Called on `Moved`, on `ScaleFactorChanged`, and
+    /// once a second from the draw path ([`recheck_display`](Self::recheck_display),
+    /// because on Wayland the first two may never come); a move within one
+    /// monitor costs one comparison.
+    /// [`display_may_have_changed`](Self::display_may_have_changed), at most
+    /// once a second, from frames the window is drawing anyway.
+    ///
+    /// # Why the events were not enough
+    ///
+    /// On GNOME/Wayland none of them fire for the case that matters. A fresh
+    /// surface has entered no output when it opens, so `current_monitor` is
+    /// `None` and the open-time read finds nothing; Wayland never sends
+    /// `Moved`; and `ScaleFactorChanged` comes only when the scale *changes* —
+    /// two 1x monitors never send it. A real two-monitor run on a GNOME/Wayland
+    /// laptop (2026-10-14) printed no refresh-rate line at all, at open or
+    /// after dragging the window across, while the desktop suite otherwise
+    /// passed 21/21: the budget had silently stayed at its 60Hz default.
+    ///
+    /// Comparing monitor handles once a second is cheap, and it costs nothing
+    /// for a window that is not drawing — a window nobody sees has no frame
+    /// budget to get wrong.
+    fn recheck_display(&mut self, shared: &Shared) {
+        let now = Instant::now();
+        if self
+            .display_checked
+            .is_some_and(|last| now.duration_since(last) < Duration::from_secs(1))
+        {
+            return;
+        }
+        self.display_checked = Some(now);
+        self.display_may_have_changed(shared);
+    }
+
+    fn display_may_have_changed(&mut self, shared: &Shared) {
+        let Some(window) = self.gpu.as_ref().map(|gpu| Arc::clone(&gpu.window)) else {
+            return;
+        };
+        if window.current_monitor() != self.display {
+            self.follow_display(shared, &window);
+        }
+    }
+
     fn follow_display(&mut self, shared: &Shared, window: &Window) {
+        self.display = window.current_monitor();
         if shared.config.refresh_stated {
             return;
         }
@@ -1158,6 +1249,18 @@ impl WindowState {
                 })
         });
         let Some(hz) = detected else {
+            // Say so when there *is* a monitor and it will not name a rate:
+            // otherwise "no line" means either this or "never asked", and the
+            // two cost a hardware run each to tell apart.
+            if let Some(monitor) = &self.display {
+                log::info!(
+                    "vieww: {} is on {}, which reports no refresh rate; keeping the current budget",
+                    self.key,
+                    monitor
+                        .name()
+                        .unwrap_or_else(|| "an unnamed monitor".to_owned())
+                );
+            }
             return;
         };
         // A monitor reporting something absurd is a monitor to ignore, not a
@@ -1185,6 +1288,11 @@ impl WindowState {
         // The retained pixels are gone with the old size, so the next
         // present cannot trust damage — see `Gpu::needs_full_repaint`.
         gpu.needs_full_repaint = true;
+
+        // The swapchain extent on MoltenVK is the layer's bounds times its
+        // `contentsScale`; see `ios::match_layer_scale`.
+        #[cfg(target_os = "ios")]
+        crate::ios::match_layer_scale(&gpu.window);
 
         if let Err(error) = gpu.renderer.resize(&mut gpu.surface, width, height) {
             // A resize is not fatal to the application — the next present
@@ -1221,8 +1329,35 @@ impl WindowState {
         }
     }
 
+    /// Whether the loop may draw this window now: when it is visible, and —
+    /// whatever the compositor says about visibility — once, if it has never
+    /// put a frame on screen.
+    ///
+    /// # Why the first frame is drawn even when "hidden"
+    ///
+    /// On Wayland a toplevel does not exist on screen until its first buffer
+    /// is committed. GNOME's focus-stealing prevention can open a window that
+    /// has no activation token (anything started from a terminal, a test
+    /// harness included) *below* the focused one, and report it occluded
+    /// before it has drawn anything. Declining to draw a hidden window is
+    /// right; declining its *first* frame left it with no buffer, so nothing
+    /// could ever un-hide it: no `Occluded(false)`, no frame, for ever. That
+    /// is the shape of `tests/wait_loop.rs`' idle scenario hanging with zero
+    /// frames on a GNOME/Wayland laptop. One frame into a hidden surface is
+    /// harmless (presenting to it is legal — see [`Lifecycle::has_surface`]);
+    /// after it, hidden windows are left alone as before.
+    fn may_draw(&self) -> bool {
+        self.lifecycle.may_draw(self.presented)
+    }
+
     /// Produce a frame and put it on the screen.
     fn draw(&mut self, shared: &mut Shared) {
+        // Here, not in the `RedrawRequested` arm: most frames are drawn
+        // directly from `about_to_wait` (see the comment at that call), so a
+        // check placed only on `RedrawRequested` ran on the first map and
+        // almost never again — the second two-monitor run on GNOME/Wayland
+        // still printed no refresh-rate line in 18,200 frames.
+        self.recheck_display(shared);
         // Before the hooks and before the build, for the same reason
         // `notify_frame` runs there: a keyboard that came up has to be in the
         // metrics the frame about to be built reads, not the one after it.
@@ -1283,16 +1418,39 @@ impl WindowState {
         } else {
             Some(self.driver.damage())
         };
-        let presented = gpu.renderer.present_damaged(
-            &mut gpu.surface,
-            self.driver.scene(),
-            damage,
-            self.background,
-            logical_size,
-        );
+        // **Which rasterizer draws is the application's call, per config.**
+        //
+        // `prefer_gpu` routes through `present_planned`: the frame is planned
+        // first, drawn by the GPU rasterizer when the plan is complete, and
+        // drawn here by the CPU when it is not. The damage computed above is
+        // only meaningful to the CPU half — the GPU path is a whole-frame
+        // rasterizer — but it is computed unconditionally anyway so the
+        // stats below keep one shape whichever path a frame took.
+        let presented = if shared.config.prefer_gpu {
+            gpu.renderer
+                .present_planned(
+                    &mut gpu.surface,
+                    self.driver.scene(),
+                    self.background,
+                    logical_size,
+                    self.scale,
+                )
+                .map(|frame| (frame.report, frame.drawn_on_gpu, frame.presented_directly))
+        } else {
+            gpu.renderer
+                .present_damaged(
+                    &mut gpu.surface,
+                    self.driver.scene(),
+                    damage,
+                    self.background,
+                    logical_size,
+                    self.scale,
+                )
+                .map(|report| (report, false, false))
+        };
 
         match presented {
-            Ok(report) => {
+            Ok((report, drawn_on_gpu, presented_directly)) => {
                 // A wall-clock measurement around the call, unlike
                 // `vieww_paint::gpu::GpuRenderer::present_with`'s own doc
                 // warning against exactly that: that backend's
@@ -1343,7 +1501,12 @@ impl WindowState {
                         _ => surface,
                     }
                 };
-                self.log.record(stats, elapsed, pixels, Instant::now());
+                self.log
+                    .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
+                self.presented = true;
+                if presented_directly {
+                    self.log.note_direct_present();
+                }
                 let _ = report;
                 // After the frame, not before: the semantics describe what is
                 // now on screen, and a screen reader announcing a control a
@@ -1816,14 +1979,30 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
     ) -> Result<NewSurface, PlatformError> {
         let attributes = Window::default_attributes()
             .with_title(title.to_owned())
-            .with_inner_size(LogicalSize::new(
-                f64::from(size.width),
-                f64::from(size.height),
-            ))
             // AccessKit's adapter has to exist before the window is ever shown,
             // and panics if it does not. So the window is born invisible and
             // revealed by the caller, once the adapter is attached.
             .with_visible(false);
+        // **A phone decides its own window.** On iOS, winit applies a
+        // requested size to the `UIWindow` frame: the demo's 420x880 desktop
+        // preview became a 420x880 window on a 393x852 iPhone 15 Pro. The frame
+        // was drawn from the top-left and cropped at the right, while the
+        // accessibility frames came out shifted by the difference (27, 28) — so
+        // Maestro, aiming from the tree, tapped seven points above "Tap me"
+        // (first iOS simulator run with a working GPU, 2026-10-14). On a phone
+        // the requested size is ignored, as the iOS example's doc always said
+        // it was; winit's Android backend ignores it anyway.
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        let attributes = attributes.with_inner_size(LogicalSize::new(
+            f64::from(size.width),
+            f64::from(size.height),
+        ));
+        // **Startup is traced step by step.** A gate run on a GNOME/Wayland
+        // hybrid-GPU laptop hung here — `tests/wait_loop.rs`' idle scenario
+        // printed no window event at all in 20 s while its waker thread fired
+        // on time — and an untraced startup could not say whether the window,
+        // the GPU selection or the swapchain was the step that never returned.
+        trace_line(self.shared.now(), format_args!("startup: creating window"));
         let window = Arc::new(
             event_loop
                 .create_window(attributes)
@@ -1856,8 +2035,21 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // `docs/RENDERER-MIGRATION.md`). One Vulkan device per window is
         // correct, just not `docs/AIMS.md` §B's *Cheaper* win the old vello
         // path had; a follow-up, not a defect.
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: window created ({width}x{height}); opening the GPU"),
+        );
+        let opening = Instant::now();
         let (renderer, surface) = NativeRenderer::for_window(window.as_ref(), width, height)
             .map_err(PlatformError::Gpu)?;
+        trace_line(
+            self.shared.now(),
+            format_args!(
+                "startup: GPU ready in {:?}: {}",
+                opening.elapsed(),
+                renderer.adapter_name()
+            ),
+        );
 
         Ok(NewSurface {
             window,
@@ -1916,8 +2108,22 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             width,
             height,
         } = self.surface(event_loop, title, size)?;
+        // Each step from here to the first event is traced too: the trace that
+        // localised the wait_loop hang ended at `GPU ready` with nothing after
+        // it for 20 s, and every step below could be the one — AccessKit's
+        // D-Bus connection to the accessibility bus (a blocking call with a
+        // 25 s default timeout when the bus has to be activated), the system
+        // font scan on a cold disk cache, or the compositor.
         let accessibility = self.attach_accessibility(event_loop, &window);
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: accessibility attached"),
+        );
         window.set_visible(true);
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: window made visible"),
+        );
 
         let logical = scale.to_logical_size(width, height);
         let mut log = FrameLog::new(
@@ -1933,18 +2139,39 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // `open_windows` — minted from the same runtime — mark the right
         // elements pending.
         let mut driver = FrameDriver::with_runtime(logical, self.runtime.clone());
-        // Before `build`, so the first frame already has the coverage: the
-        // default store is embedded-only (Latin, Hebrew, Arabic) and a windowed
-        // application is by definition on a machine with fonts. Without this a
-        // shipped app renders Chinese, Japanese, Korean, Devanagari and Thai as
-        // blank space — see `FontStore::with_system_fallback`.
-        driver.use_system_fonts();
+        // The system font fallback: the default store is embedded-only (Latin,
+        // Hebrew, Arabic) and a windowed application is by definition on a
+        // machine with fonts — without it a shipped app renders Chinese,
+        // Japanese, Korean, Devanagari and Thai as blank space (see
+        // `FontStore::with_system_fallback`).
+        //
+        // **In the background, not before the first frame.** This was
+        // `use_system_fonts()`, a full scan of every system font on this
+        // thread before the window could draw. Its cost is the machine's disk,
+        // not vieww's: on a GNOME laptop whose font files an 11-minute build had
+        // evicted from the page cache, it ran past `tests/wait_loop.rs`' 20 s
+        // deadline — the startup trace ended at `window made visible` with
+        // `system fonts loaded` never printed — while every warm run passed.
+        // A user launching after a reboot paid the same. Now the first frames
+        // draw with the embedded faces, and the scan's thread wakes this loop
+        // when it is done so the next frame adopts the full fallback (see
+        // `FrameDriver::use_system_fonts_in_background`).
+        let proxy = self.shared.proxy.clone();
+        driver.use_system_fonts_in_background(move || {
+            // An error means the loop already stopped: nobody to show them to.
+            let _ = proxy.send_event(UserEvent::Wake);
+        });
+        trace_line(
+            self.shared.now(),
+            format_args!("startup: system font scan started"),
+        );
         // Before `build`, so the application's own `set_root` is published
         // under the theme rather than the theme having to re-mount the tree.
         if let Some(theme) = &self.shared.config.theme {
             driver.set_theme(std::rc::Rc::clone(theme));
         }
         build(&mut driver);
+        trace_line(self.shared.now(), format_args!("startup: tree built"));
 
         let mut input = PointerTranslator::new(Scale::ONE);
         input.set_scale(scale);
@@ -1966,10 +2193,14 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             inset_watch: InsetWatch::new(),
             log,
             lifecycle: Lifecycle::default(),
+            presented: false,
             background,
+            display: None,
+            display_checked: None,
         };
 
         state.follow_display(&self.shared, &window);
+        trace_line(self.shared.now(), format_args!("startup: display read"));
         state.gpu = Some(Gpu {
             window,
             renderer: ManuallyDrop::new(renderer),
@@ -1980,6 +2211,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // The window's density is a fact the tree can read, and a `SafeArea`
         // needs it before the first layout rather than after it.
         state.refresh_insets(&self.shared);
+        trace_line(self.shared.now(), format_args!("startup: window ready"));
 
         if let Some(context) = &self.shared.crash_context {
             context.set("surface", format!("{}x{}", logical.width, logical.height));
@@ -2160,6 +2392,29 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
     }
 }
 
+/// A window that could not open: record why, say why, and stop.
+///
+/// # Said, not only recorded
+///
+/// `App::run` hands the recorded error back once `run_app` returns — but on
+/// iOS **`run_app` never returns** (`UIApplicationMain` owns the process) and
+/// `exit()` is ignored, so a GPU that failed to open left a black screen and
+/// no word anywhere. That is what the first iOS simulator runs in CI showed: a
+/// startup trace ending at "opening the GPU", an empty stderr, and an app that
+/// was still "running". So the reason is printed here, on every platform, and
+/// on iOS the process ends — a failure that looks like a failure.
+fn fail_to_open(
+    failure: &mut Option<PlatformError>,
+    error: PlatformError,
+    event_loop: &ActiveEventLoop,
+) {
+    eprintln!("vieww: the window could not open: {error}");
+    *failure = Some(error);
+    event_loop.exit();
+    #[cfg(target_os = "ios")]
+    std::process::exit(1);
+}
+
 impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.windows.is_empty() {
@@ -2181,8 +2436,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                     }
                 },
             ) {
-                self.shared.failure = Some(error);
-                event_loop.exit();
+                fail_to_open(&mut self.shared.failure, error, event_loop);
                 return;
             }
         } else {
@@ -2191,8 +2445,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             for index in 0..self.windows.len() {
                 if self.windows[index].gpu.is_none() {
                     if let Err(error) = self.reopen(event_loop, index) {
-                        self.shared.failure = Some(error);
-                        event_loop.exit();
+                        fail_to_open(&mut self.shared.failure, error, event_loop);
                         return;
                     }
                 }
@@ -2360,7 +2613,13 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
     ) {
         let now = self.shared.now();
 
-        trace_line(now, format_args!("event {}", event_name(&event)));
+        // `Occluded` carries the one bit that decides whether this window may
+        // draw at all, so it is the event the trace names with its payload.
+        if let WindowEvent::Occluded(hidden) = event {
+            trace_line(now, format_args!("event Occluded({hidden})"));
+        } else {
+            trace_line(now, format_args!("event {}", event_name(&event)));
+        }
 
         let Some(index) = self.windows.iter().position(|w| w.id == window_id) else {
             // An event for a window that has already gone. Ordinary during a
@@ -2433,7 +2692,13 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                 return;
             }
             WindowEvent::Resized(size) => self.windows[index].resize(size.width, size.height),
+            WindowEvent::Moved(_) => {
+                let shared = &self.shared;
+                self.windows[index].display_may_have_changed(shared);
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                let shared = &self.shared;
+                self.windows[index].display_may_have_changed(shared);
                 let window = &mut self.windows[index];
                 window.scale = Scale::new(scale_factor);
                 window.input.set_scale(window.scale);
@@ -2501,7 +2766,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             // `collapsible_match` is denied in this workspace. A window that may
             // not draw falls through to the catch-all below and does nothing,
             // which is what the `if` did.
-            WindowEvent::RedrawRequested if self.windows[index].lifecycle.should_draw() => {
+            WindowEvent::RedrawRequested if self.windows[index].may_draw() => {
                 let (windows, shared) = (&mut self.windows, &mut self.shared);
                 windows[index].draw(shared);
             }
@@ -2696,7 +2961,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             let window = &mut self.windows[index];
             let pending = window.driver.needs_frame();
             let requested = window.scheduler.is_frame_requested();
-            let can_draw = window.lifecycle.should_draw();
+            let can_draw = window.may_draw();
             let key = window.key;
 
             let now = self.shared.now();

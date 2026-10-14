@@ -55,6 +55,7 @@ mod breadcrumbs;
 mod button;
 mod checkbox;
 mod chip;
+mod code_block;
 mod confirmation;
 mod data_table;
 mod date_picker;
@@ -95,6 +96,9 @@ pub use breadcrumbs::Breadcrumbs;
 pub use button::{Button, ButtonStyle};
 pub use checkbox::Checkbox;
 pub use chip::Chip;
+pub use code_block::{
+    diff_lines, highlight, CodeBlock, CodeMorph, CodeTheme, Language, LineOp, Token, TokenKind,
+};
 pub use confirmation::Confirmation;
 pub use data_table::{DataColumn, DataTable, SelectionMode, SortDirection};
 pub use date_picker::DatePicker;
@@ -107,7 +111,7 @@ pub use fab::{FloatingActionButton, FAB_SIZE};
 pub use file_drop_zone::FileDropZone;
 pub use grid_view::GridView;
 pub use inline_error::InlineError;
-pub use list_view::{ExtentBuilder, ItemBuilder, ListView};
+pub use list_view::{ExtentBuilder, ItemBuilder, ListView, RowAlignment};
 pub use markdown::{LinkFn, Markdown};
 pub use menu::{Menu, MenuItem, MENU_MAX_WIDTH, MENU_MIN_WIDTH};
 pub use navigator::{

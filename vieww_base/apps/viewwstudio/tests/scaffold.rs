@@ -35,6 +35,49 @@ impl Drop for Scratch {
     }
 }
 
+/// The one `--target-dir` both build tests share, and the guard that removes
+/// it once both are done — passed or failed.
+///
+/// # Why shared, under `target/`, and cleaned up on every path
+///
+/// These two tests each built the whole framework from scratch, at the same
+/// time, into two directories under `/tmp` — and removed them only after their
+/// assertions passed. On a developer laptop the second build hit `Disk quota
+/// exceeded` writing its archive, 373 s in; and a failed run left a full debug
+/// build behind in `/tmp` for every later run to add to.
+///
+/// - **Under `CARGO_TARGET_TMPDIR`** (cargo's per-package scratch directory
+///   inside `target/`), so the build lands on the disk that already holds this
+///   workspace's build rather than on `/tmp`, which is often smaller.
+/// - **Shared, and taken in turn** ([`BUILD_LOCK`]), so the second test reuses
+///   the first one's compiled dependencies instead of building them again.
+/// - **Removed by whichever test finishes last**, from a `Drop`, so a failure
+///   (a panicking assertion unwinds through it) cleans up exactly as a pass
+///   does.
+struct SharedTarget;
+
+/// How many of the build tests have finished with the shared target.
+static FINISHED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// The builds take turns on the shared target.
+static BUILD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// The tests in this file that use [`SharedTarget`].
+const SHARED_TARGET_USERS: usize = 2;
+
+impl SharedTarget {
+    fn path() -> PathBuf {
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("scaffold-build")
+    }
+}
+
+impl Drop for SharedTarget {
+    fn drop(&mut self) {
+        let done = FINISHED.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if done >= SHARED_TARGET_USERS {
+            std::fs::remove_dir_all(Self::path()).ok();
+        }
+    }
+}
+
 /// Whether `cargo` runs at all — separate from [`scaffold::checkout_root`],
 /// which only checks the two crates a template names are on disk.
 fn have_cargo() -> bool {
@@ -51,6 +94,9 @@ fn have_cargo() -> bool {
 /// write it, compiles on the first try.
 #[test]
 fn a_scaffolded_project_builds() {
+    // First, before any skip: the last of the two to finish cleans up, so
+    // both must count even when one has nothing to build.
+    let _shared = SharedTarget;
     let Some(root) = scaffold::checkout_root() else {
         eprintln!("skipping: not running from within the vieww checkout");
         return;
@@ -60,6 +106,9 @@ fn a_scaffolded_project_builds() {
         return;
     }
 
+    let _turn = BUILD_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let scratch = Scratch::new("builds");
     let dependency = Dependency::Path(root);
     scaffold::create(&scratch.0, "scaffold_build_check", &dependency)
@@ -67,7 +116,7 @@ fn a_scaffolded_project_builds() {
 
     // A dedicated `--target-dir`, out of tree, so this never shares — and
     // never corrupts — the workspace's own `target/`.
-    let target_dir = std::env::temp_dir().join("vieww-scaffold-build-check-target");
+    let target_dir = SharedTarget::path();
 
     let output = Command::new("cargo")
         .arg("build")
@@ -82,8 +131,6 @@ fn a_scaffolded_project_builds() {
         "the scaffolded project failed to build:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-
-    std::fs::remove_dir_all(&target_dir).ok();
 }
 
 /// A **Say** project builds, and the screen in the built binary is the screen
@@ -104,6 +151,9 @@ fn a_scaffolded_project_builds() {
 /// old scaffold built perfectly and shipped the wrong screen.
 #[test]
 fn a_scaffolded_say_project_builds_and_contains_its_screen() {
+    // First, before any skip: the last of the two to finish cleans up, so
+    // both must count even when one has nothing to build.
+    let _shared = SharedTarget;
     let Some(root) = scaffold::checkout_root() else {
         eprintln!("skipping: not running from within the vieww checkout");
         return;
@@ -113,6 +163,9 @@ fn a_scaffolded_say_project_builds_and_contains_its_screen() {
         return;
     }
 
+    let _turn = BUILD_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let scratch = Scratch::new("say-builds");
     let dependency = Dependency::Path(root);
     scaffold::create_for(
@@ -123,7 +176,7 @@ fn a_scaffolded_say_project_builds_and_contains_its_screen() {
     )
     .expect("scaffold::create_for should write every file it lists");
 
-    let target_dir = std::env::temp_dir().join("vieww-scaffold-say-build-target");
+    let target_dir = SharedTarget::path();
 
     // `--bin`, the same narrowing the studio's own Build uses: the cdylib and
     // the staticlib are an Android and an iOS artefact and this test wants
@@ -161,8 +214,6 @@ fn a_scaffolded_say_project_builds_and_contains_its_screen() {
         "the built binary still carries the placeholder that told the user to \
          go and press Render in the studio"
     );
-
-    std::fs::remove_dir_all(&target_dir).ok();
 }
 
 /// `haystack.contains(needle)`, for bytes.

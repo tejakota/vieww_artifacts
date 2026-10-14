@@ -22,17 +22,19 @@
 //!   shadow, tangentially smeared where the deflection is strongest;
 //! - **the infall** — a spiral of matter raining in, trailing.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
+use vieww_foundation::{
+    BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle,
+};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith};
+use vieww_widget::{PaintWith, Painting};
 
 use crate::film_lib::{
-    alpha, clamp01, mix, tint, FAINT, MUTED, Rng, VIOLET, VIOLET_DEEP, CYAN, CYAN_SOFT, AMBER,
-    RED, BG_DEEP,
+    alpha, clamp01, mix, tint, Rng, AMBER, BG_DEEP, CYAN_SOFT, FAINT, MUTED, RED, VIOLET,
+    VIOLET_DEEP,
 };
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 7.0;
+pub(crate) const SECONDS: f32 = 7.0;
 
 /// Disk particle count.
 const DISK: usize = 2400;
@@ -89,13 +91,11 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
     // Deep space.
     book.rect(
         Rect::new(0.0, 0.0, w, h),
-        Gradient::vertical()
-            .with_dither()
-            .with_stops(&[
-                (0.0, Color::rgb(5, 5, 9)),
-                (0.55, BG_DEEP),
-                (1.0, Color::rgb(4, 4, 7)),
-            ]),
+        Gradient::vertical().with_dither().with_stops(&[
+            (0.0, Color::rgb(5, 5, 9)),
+            (0.55, BG_DEEP),
+            (1.0, Color::rgb(4, 4, 7)),
+        ]),
     );
 
     // Faint nebula washes — the sky is not empty, it is dark.
@@ -109,46 +109,48 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             g.circle(
                 Offset::new(x, y),
                 r,
-                Gradient::radial_fill().with_stops(&[
-                    (0.0, alpha(col, 0.05)),
-                    (1.0, alpha(col, 0.0)),
-                ]),
+                Gradient::radial_fill()
+                    .with_stops(&[(0.0, alpha(col, 0.05)), (1.0, alpha(col, 0.0))]),
             );
         }
     });
 
     // ── The lensed star field ──────────────────────────────────────────────
-    let mut swallowed = 0usize;
-    {
-        let mut rng = Rng::new(0x57A2);
-        for i in 0..STARS {
-            let x = rng.f01() * w;
-            let y = rng.f01() * h;
-            let r0 = (x - c.dx).hypot(y - c.dy);
-            // Stars behind the shadow do not exist for us.
-            if r0 < R_SHADOW * 1.1 {
-                swallowed += 1;
-                continue;
-            }
-            let d = deflect(r0);
-            let sx = c.dx + (x - c.dx) * d;
-            let sy = c.dy + (y - c.dy) * d;
-            // Skip if lensed out of frame.
-            if sx < 0.0 || sx > w || sy < 0.0 || sy > h {
-                continue;
-            }
-            let tw = 0.5 + 0.5 * (t * 2.4 + i as f32 * 1.93).sin();
-            let base_a = 0.10 + 0.42 * rng.f01();
-            let size = 0.4 + rng.f01() * 1.2;
-            // Tangential smear where the lens is strong.
-            if r0 < R_PHOTON * 2.4 {
-                let ang = (y - c.dy).atan2(x - c.dx);
-                let arc_len = 0.10 + (R_PHOTON * 2.4 / r0 - 1.0).max(0.0) * 0.22;
-                let path = Path::arc(Offset::new(sx, sy), r0 * d, ang - arc_len, arc_len * 2.0);
-                book.stroke(path, alpha(Color::WHITE, base_a * 0.8 * (0.6 + 0.4 * tw)), 1.0);
-            } else {
-                book.circle(Offset::new(sx, sy), size, alpha(Color::WHITE, base_a * (0.6 + 0.4 * tw)));
-            }
+    let mut rng = Rng::new(0x57A2);
+    for i in 0..STARS {
+        let x = rng.f01() * w;
+        let y = rng.f01() * h;
+        let r0 = (x - c.dx).hypot(y - c.dy);
+        // Stars behind the shadow do not exist for us.
+        if r0 < R_SHADOW * 1.1 {
+            continue;
+        }
+        let d = deflect(r0);
+        let sx = c.dx + (x - c.dx) * d;
+        let sy = c.dy + (y - c.dy) * d;
+        // Skip if lensed out of frame.
+        if sx < 0.0 || sx > w || sy < 0.0 || sy > h {
+            continue;
+        }
+        let tw = 0.5 + 0.5 * (t * 2.4 + i as f32 * 1.93).sin();
+        let base_a = 0.10 + 0.42 * rng.f01();
+        let size = 0.4 + rng.f01() * 1.2;
+        // Tangential smear where the lens is strong.
+        if r0 < R_PHOTON * 2.4 {
+            let ang = (y - c.dy).atan2(x - c.dx);
+            let arc_len = 0.10 + (R_PHOTON * 2.4 / r0 - 1.0).max(0.0) * 0.22;
+            let path = Path::arc(Offset::new(sx, sy), r0 * d, ang - arc_len, arc_len * 2.0);
+            book.stroke(
+                path,
+                alpha(Color::WHITE, base_a * 0.8 * (0.6 + 0.4 * tw)),
+                1.0,
+            );
+        } else {
+            book.circle(
+                Offset::new(sx, sy),
+                size,
+                alpha(Color::WHITE, base_a * (0.6 + 0.4 * tw)),
+            );
         }
     }
 
@@ -204,7 +206,10 @@ fn scene(book: &mut Sketchbook, canvas: Size, t: f32) {
             let r2 = r * 1.045;
             g.line(
                 Offset::new(px, py),
-                Offset::new(c.dx + r2 * th2.cos(), c.dy + r2 * th2.sin() * (0.5 + 0.5 * (1.0 - u))),
+                Offset::new(
+                    c.dx + r2 * th2.cos(),
+                    c.dy + r2 * th2.sin() * (0.5 + 0.5 * (1.0 - u)),
+                ),
                 alpha(col, a * 0.4),
                 1.0,
             );
@@ -263,13 +268,17 @@ fn draw_disk_half(g: &mut Sketchbook, c: &Offset, t: f32, near: bool, gain: f32)
         // is brighter. Orbital velocity direction is (-sin, cos·incl).
         let beam = 1.0 + 0.85 * (-th.sin());
         // Temperature by radius + twinkle.
-        let tw = 0.75 + 0.25 * (t * 5.0 + h2 * 6.28).sin();
+        let tw = 0.75 + 0.25 * (t * 5.0 + h2 * std::f32::consts::TAU).sin();
         let bright = (0.34 + 0.5 * (1.0 - u)) * beam * tw * gain;
         let col = temp_color(u);
         let r = 0.9 + h3 * 1.5 + (1.0 - u) * 0.8;
         g.circle(Offset::new(px, py), r, alpha(col, bright.min(1.0)));
         if bright > 0.75 {
-            g.circle(Offset::new(px, py), r * 2.6, alpha(col, (bright - 0.75) * 0.5));
+            g.circle(
+                Offset::new(px, py),
+                r * 2.6,
+                alpha(col, (bright - 0.75) * 0.5),
+            );
         }
     }
 }
@@ -301,15 +310,19 @@ fn draw_disk_arc(g: &mut Sketchbook, c: &Offset, t: f32, gain: f32) {
         let px = c.dx + rr * ang.cos();
         let py = c.dy + rr * ang.sin();
         let beam = 1.0 + 0.85 * (-th.sin());
-        let tw = 0.75 + 0.25 * (t * 5.0 + h2 * 6.28).sin();
+        let tw = 0.75 + 0.25 * (t * 5.0 + h2 * std::f32::consts::TAU).sin();
         let bright = (0.30 + 0.42 * (1.0 - u)) * beam * tw * gain;
         let col = temp_color(u);
-        g.circle(Offset::new(px, py), 0.8 + (1.0 - u) * 1.4, alpha(col, bright.min(1.0)));
+        g.circle(
+            Offset::new(px, py),
+            0.8 + (1.0 - u) * 1.4,
+            alpha(col, bright.min(1.0)),
+        );
     }
 }
 
 /// The frame.
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     let paint = Painting::sized(
         crate::film_lib::CANVAS,
         PaintWith::new(move |book: &mut Sketchbook, size: Size| {

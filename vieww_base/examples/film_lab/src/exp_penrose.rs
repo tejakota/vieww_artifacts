@@ -23,16 +23,16 @@
 
 use vieww_foundation::{Color, Gradient, Offset, Path, Rect, Size, Sketchbook, TextStyle};
 use vieww_widget::prelude::*;
-use vieww_widget::{Painting, PaintWith, Text};
+use vieww_widget::{PaintWith, Painting, Text};
 
 use crate::film_lib::{alpha, mix, tri, AMBER, CYAN, INK, MUTED, VIOLET, VIOLET_SOFT};
 
 /// Film-time this experiment spans.
-pub const SECONDS: f32 = 12.0;
+pub(crate) const SECONDS: f32 = 12.0;
 
 // ── The grid ────────────────────────────────────────────────────────────────
 
-const PHI: f64 = 1.6180339887498948;
+const PHI: f64 = 1.618_033_988_749_895;
 
 /// The five normals — the fifth roots of unity.
 fn e_k(k: usize) -> (f64, f64) {
@@ -51,10 +51,7 @@ fn crossing(k: usize, l: usize, n: i32, m: i32) -> (f64, f64) {
     let det = ax * by - ay * bx;
     let rhs0 = n as f64 + GAMMA;
     let rhs1 = m as f64 + GAMMA;
-    (
-        (rhs0 * by - rhs1 * ay) / det,
-        (ax * rhs1 - bx * rhs0) / det,
-    )
+    ((rhs0 * by - rhs1 * ay) / det, (ax * rhs1 - bx * rhs0) / det)
 }
 fn e_l(l: usize) -> (f64, f64) {
     e_k(l)
@@ -72,7 +69,7 @@ const BX: f32 = 120.0;
 const BY: f32 = 150.0;
 const BS: f32 = 540.0;
 
-pub fn frame(t: f32) -> WidgetNode {
+pub(crate) fn frame(t: f32) -> WidgetNode {
     // The breathing scale: coarse → φ² finer → coarse. The exponent rides
     // a triangle window so the inflation and deflation are one motion.
     let s0 = 42.0_f64; // base line spacing, px
@@ -100,14 +97,18 @@ pub fn frame(t: f32) -> WidgetNode {
                     let c01 = crossing(k, l, n, m + 1);
                     // stage-space
                     let map = |p: (f64, f64)| -> (f64, f64) {
-                        (BX as f64 + BS as f64 / 2.0 + p.0 * scale,
-                         BY as f64 + BS as f64 / 2.0 + p.1 * scale)
+                        (
+                            BX as f64 + BS as f64 / 2.0 + p.0 * scale,
+                            BY as f64 + BS as f64 / 2.0 + p.1 * scale,
+                        )
                     };
                     let (a, b, c, d) = (map(c00), map(c10), map(c11), map(c01));
                     // clip: any corner in the stage rect (with margin) keeps it
                     let inside = |p: (f64, f64)| {
-                        p.0 > BX as f64 - 30.0 && p.0 < BX as f64 + BS as f64 + 30.0
-                            && p.1 > BY as f64 - 30.0 && p.1 < BY as f64 + BS as f64 + 30.0
+                        p.0 > BX as f64 - 30.0
+                            && p.0 < BX as f64 + BS as f64 + 30.0
+                            && p.1 > BY as f64 - 30.0
+                            && p.1 < BY as f64 + BS as f64 + 30.0
                     };
                     if inside(a) || inside(b) || inside(c) || inside(d) {
                         // The tonal address is ROTATION-INVARIANT, and the
@@ -175,10 +176,9 @@ pub fn frame(t: f32) -> WidgetNode {
             // The ground.
             book.rect(
                 Rect::new(0.0, 0.0, w, h),
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, Color::rgb(6, 6, 10)),
-                    (1.0, Color::rgb(11, 11, 16)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, Color::rgb(6, 6, 10)), (1.0, Color::rgb(11, 11, 16))]),
             );
             book.rrect(
                 Rect::new(BX - 22.0, BY - 22.0, BX + BS + 22.0, BY + BS + 22.0),
@@ -238,7 +238,12 @@ pub fn frame(t: f32) -> WidgetNode {
                 alpha(VIOLET, 0.9),
             );
             book.rrect(
-                Rect::new(px0, cy0 + 34.0, px0 + bw_max * n_thin as f32 / total, cy0 + 56.0),
+                Rect::new(
+                    px0,
+                    cy0 + 34.0,
+                    px0 + bw_max * n_thin as f32 / total,
+                    cy0 + 56.0,
+                ),
                 3.0,
                 alpha(CYAN, 0.9),
             );
@@ -268,7 +273,11 @@ pub fn frame(t: f32) -> WidgetNode {
                 1.0,
             );
             let pos = ((s0 / scale).ln() / (2.0 * PHI.ln())) as f32;
-            book.circle(Offset::new(px0 + 200.0 * pos.clamp(0.0, 1.0), fy), 4.2, AMBER);
+            book.circle(
+                Offset::new(px0 + 200.0 * pos.clamp(0.0, 1.0), fy),
+                4.2,
+                AMBER,
+            );
             book.line(
                 Offset::new(px0, fy - 8.0),
                 Offset::new(px0 + 200.0, fy - 8.0),
@@ -316,7 +325,7 @@ pub fn frame(t: f32) -> WidgetNode {
 /// between the ring and itself rotated +72° (a symmetry of the tiling —
 /// residual should be anti-aliasing only) vs +60° (no symmetry — the
 /// control). Every number read out of the pixels.
-pub fn probe(img: &image::RgbaImage) -> Vec<String> {
+pub(crate) fn probe(img: &image::RgbaImage) -> Vec<String> {
     // Why sectors and not single pixels: the rasterised image is C5 only up
     // to the square pixel lattice, which is not — a 72° turn does not map
     // pixel centres to pixel centres, so even a perfect sector shows a raw
@@ -325,7 +334,10 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
     // tiling's own symmetry — the profile then either matches its 72°
     // rotation or it does not.
     let (iw, ih) = img.dimensions();
-    let (cx, cy) = ((BX + BS / 2.0).min(iw as f32 - 2.0), (BY + BS / 2.0).min(ih as f32 - 2.0));
+    let (cx, cy) = (
+        (BX + BS / 2.0).min(iw as f32 - 2.0),
+        (BY + BS / 2.0).min(ih as f32 - 2.0),
+    );
     let mut out = Vec::new();
     // 6° sectors: +72° is exactly 12 sectors and +60° exactly 10 — the
     // first cut used 5° sectors, where 72° is 14.4 of them and the probe
@@ -349,14 +361,16 @@ pub fn probe(img: &image::RgbaImage) -> Vec<String> {
                     continue;
                 }
                 // stage only
-                if (x as f32) < BX || (x as f32) > BX + BS || (y as f32) < BY || (y as f32) > BY + BS {
+                if (x as f32) < BX
+                    || (x as f32) > BX + BS
+                    || (y as f32) < BY
+                    || (y as f32) > BY + BS
+                {
                     continue;
                 }
                 let p = img.get_pixel(x, y);
                 let lum = (p.0[0] as u64 + p.0[1] as u64 + p.0[2] as u64) / 3;
-                let ang = ((dy as f32).atan2(dx as f32) / std::f32::consts::TAU
-                    + 1.0)
-                    .fract();
+                let ang = ((dy as f32).atan2(dx as f32) / std::f32::consts::TAU + 1.0).fract();
                 let sector = (ang * SECTORS as f32) as usize % SECTORS;
                 sums[sector] += lum;
                 counts[sector] += 1;
@@ -411,9 +425,7 @@ fn receipt_panel(
         format!(
             "thick/thin = {ratio:.3} in this C5-centred window — the infinite tiling’s φ = 1.618 is the GLOBAL frequency"
         ),
-        format!(
-            "a window centred on the 5-fold point is thin-rich by construction — the star configurations live there"
-        ),
+        "a window centred on the 5-fold point is thin-rich by construction — the star configurations live there".to_string(),
         format!(
             "scale breathing ×φ²: line spacing {:.1} px now · the mesh inflating and relaxing",
             scale
@@ -437,7 +449,10 @@ fn receipt_panel(
                         TextStyle::new(if i == 0 { 12.0 } else { 11.0 })
                             .monospace()
                             .letter_spacing(if i == 0 { 1.8 } else { 0.0 })
-                            .color(alpha(if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) }, 0.95)),
+                            .color(alpha(
+                                if i == 0 { MUTED } else { mix(MUTED, INK, 0.4) },
+                                0.95,
+                            )),
                     ),
                 ),
         );

@@ -133,13 +133,15 @@ impl Widget for Masonry {
                 photo.clone(),
                 *score,
                 tile_h,
-                index as u64,
-                self.tick,
-                self.live,
-                // Anything past the pool is already in place rather than
-                // permanently invisible: a missing reveal value must never
-                // be the reason a photo cannot be seen.
-                self.reveal.get(index).copied().unwrap_or(1.0),
+                TileMotion {
+                    index: index as u64,
+                    tick: self.tick,
+                    live: self.live,
+                    // Anything past the pool is already in place rather than
+                    // permanently invisible: a missing reveal value must never
+                    // be the reason a photo cannot be seen.
+                    reveal: self.reveal.get(index).copied().unwrap_or(1.0),
+                },
                 &self.on_tap,
                 &theme,
             ));
@@ -172,17 +174,26 @@ impl Widget for Masonry {
     }
 }
 
-fn tile(
-    photo: Photo,
-    score: Option<f32>,
-    height: f32,
+/// What a tile needs to know about *itself* rather than about the wall: the
+/// ambient-drift inputs (grid index, the shared clock, whether motion is on,
+/// and the reveal progress), grouped so `tile` stays under the argument count
+/// a reader can hold in their head.
+struct TileMotion {
     index: u64,
     tick: u64,
     live: bool,
     reveal: f32,
+}
+
+fn tile(
+    photo: Photo,
+    score: Option<f32>,
+    height: f32,
+    motion: TileMotion,
     on_tap: &Handler<Photo>,
     theme: &Rc<ThemeData>,
 ) -> WidgetNode {
+    let TileMotion { index, tick, live, reveal } = motion;
     // Ambient drift: a slow, per-tile-offset wander in x and y, entirely
     // derived from the shared `tick` clock — no per-tile state needed.
     let drift_period = 90.0 + (index % 5) as f32 * 18.0;
@@ -200,9 +211,9 @@ fn tile(
     // generated "photo" and back — a page-turn (scale-collapse) rather than
     // a true 3D rotateY, since `Transformed` only exposes a 2D matrix.
     let cycle = 220 + (index % 7) * 40;
-    let showing_alt = live && (tick / cycle as u64 + index) % 2 == 1;
+    let showing_alt = live && (tick / cycle + index) % 2 == 1;
     let flip_target = if showing_alt { 1.0 } else { 0.0 };
-    let alt_seed = 10_000 + index * 977 + tick / cycle as u64;
+    let alt_seed = 10_000 + index * 977 + tick / cycle;
     let alt_photo = photo::photo_for_seed(alt_seed);
 
     let on_tap_photo = photo.clone();

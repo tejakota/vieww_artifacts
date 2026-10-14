@@ -42,6 +42,13 @@ vieww-widget.workspace = true
 # and `docs/RENDERER-MIGRATION.md` for the full account of the migration.
 vieww-paint = { workspace = true, features = ["native"] }
 vieww-hal = { workspace = true, features = ["vulkan-swapchain"] }
+# The scene planner behind `NativeRenderer::present_planned`: turns a
+# `vieww_paint::Scene` into the batched `ScenePlan` `vieww-hal`'s
+# `SceneRenderer` executes, so a window can ask for the GPU rasterizer per
+# frame and fall back to the CPU when the plan has gaps. Pure CPU-side
+# arithmetic — no Vulkan in it, which is why it is not behind the
+# `vulkan-swapchain` feature with its executor.
+vieww-gpu.workspace = true
 # The generic window-handle traits `vieww_hal::vulkan::VulkanDevice::for_window`
 # takes — `winit::window::Window` already implements them (winit 0.30 depends
 # on the same 0.6 generation), so this adds no new handle type, only the
@@ -61,8 +68,8 @@ winit = "0.30"
 # this names an existing dependency rather than adding one.
 sys-locale = "0.3"
 
-accesskit = "0.24"
-accesskit_winit = "0.33"
+accesskit = "0.25"
+accesskit_winit = "0.34"
 
 # A facade, and on every platform but one it is a no-op that an application can
 # switch on if it wants to. On Android it is the only way out: stderr is
@@ -97,8 +104,8 @@ log = "0.4"
 # handshake rather than a function to call.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 arboard = "3"
-tray-icon = { version = "0.19", optional = true }
-global-hotkey = { version = "0.6", optional = true }
+tray-icon = { version = "0.26", optional = true }
+global-hotkey = { version = "0.8", optional = true }
 # `muda` is deliberately **not** named here. `tray-icon` re-exports it as
 # `tray_icon::menu`, and `TrayIcon::set_menu` takes a `dyn ContextMenu` from
 # *its* copy — so a second requirement of our own is a chance for cargo to
@@ -139,7 +146,7 @@ jni = "0.22"
 # The screen reader bridge, driven directly rather than through
 # `accesskit_winit`'s Android arm.
 #
-# That arm exists in 0.33.2 and is unusable here: it finds the view by reading a
+# That arm exists in 0.34.1 and is unusable here: it finds the view by reading a
 # `mSurfaceView` field off `com.google.androidgamesdk.GameActivity`, which a
 # `NativeActivity` does not have, and unwraps the result. Enabling the
 # `accesskit_winit/accesskit_android` feature would therefore not bridge
@@ -154,7 +161,7 @@ jni = "0.22"
 # for exactly the reason that comment warns about. It is safe only because the
 # two never exchange a value: `a11y_android.rs` imports its JNI types from
 # `accesskit_android::jni` and nothing else does.
-accesskit_android = { version = "0.7.5", features = ["embedded-dex"] }
+accesskit_android = { version = "0.9.0", features = ["embedded-dex"] }
 
 # The safe area and the keyboard are `UIView` properties, and `winit` has no
 # accessor for either — so the only way to them is a message send. `objc2`
@@ -219,6 +226,22 @@ orientation = "portrait"
 # this crate implements already covers a lost surface; an activity recreated
 # behind its back would throw away the element tree instead.
 config_changes = "orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout|density"
+
+# The launcher entry, spelled out: declaring any intent filter of our own may
+# replace cargo-apk's default one, and an APK with no MAIN/LAUNCHER filter
+# installs and then cannot be opened. A duplicate of the default is harmless.
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.MAIN"]
+categories = ["android.intent.category.LAUNCHER"]
+
+# Firebase Test Lab's Game Loop launch (`examples/android.rs`'s `GameLoop`),
+# exactly as its docs specify: a dedicated filter with this action, the
+# DEFAULT category and this mime type, used for nothing else.
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["com.google.intent.action.TEST_LOOP"]
+categories = ["android.intent.category.DEFAULT"]
+[[package.metadata.android.application.activity.intent_filter.data]]
+mime_type = "application/javascript"
 
 # For `NSLog` in `examples/shared/device_tests.rs`. Already in the lockfile at
 # 0.2.2 via `objc2-ui-kit`, so this costs no new download — it only makes the

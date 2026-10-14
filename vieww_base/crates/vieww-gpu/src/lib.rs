@@ -51,7 +51,7 @@ pub use device::{
     Surface, Texture,
 };
 pub use image_atlas::{ImageAtlas, ImageKey, ImageSlot};
-pub use mask_atlas::{MaskAtlas, MaskKey, MaskSlot};
+pub use mask_atlas::{MaskAtlas, MaskChanges, MaskKey, MaskSlot};
 pub use ramp_atlas::RampAtlas;
 pub use resources::{
     texture_bytes, AllocationId, BufferUsage, Lifetime, PipelineCache, PipelineCacheKey,
