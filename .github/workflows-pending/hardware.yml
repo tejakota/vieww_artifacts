@@ -60,8 +60,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # **Runs only from main.** The AWS role trusts only main's OIDC subject
+  # (repo:tejakota/vieww_artifacts:ref:refs/heads/main), and the self-hosted
+  # machines should only run reviewed code — so a run started on any other
+  # branch stops here, with the reason, before it builds or touches anything.
+  main-only:
+    name: Only from main
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Refuse other branches
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::This workflow runs only from main (started on ${GITHUB_REF}). Pick main in the Run workflow dropdown."
+          exit 1
+
   linux:
     name: Linux hardware
+    needs: main-only
     if: inputs.linux
     runs-on: [self-hosted, Linux, X64, vieww-linux]
     timeout-minutes: 240
@@ -92,6 +107,7 @@ jobs:
 
   windows:
     name: Windows hardware
+    needs: main-only
     if: inputs.windows
     runs-on: [self-hosted, Windows, X64, vieww-windows]
     timeout-minutes: 240
@@ -129,7 +145,7 @@ jobs:
   # MB per run.
   report:
     name: Publish to ci-results/hardware-<branch>
-    if: always()
+    if: always() && github.ref == 'refs/heads/main'
     needs: [linux, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
