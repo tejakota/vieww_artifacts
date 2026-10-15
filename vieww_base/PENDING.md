@@ -376,39 +376,6 @@ mid-run). `tests/remote.rs` **passed on Windows** on 2026-10-15 (Windows 10,
 **Start.** `cargo test -p viewwstudio` on Linux, then on Windows; then add
 key/scroll forwarding to the wire in `remote.rs`.
 
-## 3.4 Windows + NVIDIA: the process crashes at teardown, after a good frame
-
-**What.** `tests/wait_loop.rs`' `self_close` and `gpu_frame` scenarios exit
-with `0xc0000005` (access violation) on Windows 10 with the NVIDIA GeForce 920MX
-(driver 32.0.15.7652) — **after** each scenario has passed and `run` has
-returned its report (2026-10-15, `receipts/2026-10-15-kabylake-i5-7200u-windows/gpu-window.log`).
-The same scenarios pass on the same laptop under Linux. Drawing works; the
-process dies tearing Vulkan down.
-
-**Fixed — confirmed on Windows 2026-10-15**: all five `wait_loop` scenarios
-pass on the 920MX without `VIEWW_KEEP_VULKAN`, and the desktop suite passes
-21/21 — its first Windows run — including opening a second window and a
-dialog and closing them while the first stays up (`closing_a_window_closes_its_dialog`),
-the multi-window case the shared device exists for. The Linux no-regression
-run below is what is left before this moves to TRACKER. With
-`VIEWW_KEEP_VULKAN=1` (which leaks the device) all five scenarios passed, so
-the fault is in teardown. The cause: `native::SHARED_DEVICE` held the shared
-device in a thread-local `Rc`, so it outlived every window and was destroyed by
-the thread-local's destructor at process exit — on Windows, inside the
-loader's process-detach phase, where NVIDIA's driver faults. It now holds a
-`Weak`, so the device dies with its last window inside the event loop; and
-`NativeRenderer` drops its GPU rasterizer before its device, an ordering the
-strong reference had been masking.
-
-**Blocks.** Any Windows app on an NVIDIA GPU exits with a crash code — crash
-reporters fire, installers and CI see a failure.
-
-**Start.** On Windows, *without* `VIEWW_KEEP_VULKAN`: `cargo test --release -p
-vieww-platform-winit --test wait_loop` must pass all five scenarios. On Linux,
-`ci/hardware/linux.sh gpu desktop` must still pass — the desktop suite opens
-and closes extra windows, the case the shared device exists for. When both
-hold, move this to TRACKER.
-
 ## 3.5 Windows start-up is ~4x Linux on the same laptop
 
 **What.** `examples/baseline.rs`, warm cache, median of 5: `main` to first
