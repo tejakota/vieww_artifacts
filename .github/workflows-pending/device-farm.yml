@@ -84,7 +84,10 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-apk
-      - name: Release APK, with the classes.dex device clouds expect
+      # `--profile dist` (vieww_base/Cargo.toml): what ships — LTO, stripped,
+      # dependencies at opt-level "s". The release profile leaves line tables
+      # and symbols in the .so; the first APK (release) was 15.6 MB.
+      - name: Shipping (dist) APK, with the classes.dex device clouds expect
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
@@ -92,11 +95,12 @@ jobs:
           android_env device-farm
           mkdir -p ../dist
           marker="$(mktemp)"
-          cargo apk build -p vieww-platform-winit --example android --release --target aarch64-linux-android
+          cargo apk build -p vieww-platform-winit --example android --profile dist --target aarch64-linux-android
           apk="$(find target -path '*/apk/*' -name '*.apk' -newer "$marker" | head -1)"
           [ -n "$apk" ] || { echo "::error::no APK was built"; exit 1; }
           ci/mobile/apk-add-code.sh "$apk" ../dist/vieww-devicefarm.apk
           ls -l ../dist
+          unzip -lv ../dist/vieww-devicefarm.apk | sort -k1 -n -r | head -8
       - uses: actions/upload-artifact@v4
         with:
           name: vieww-devicefarm-apk

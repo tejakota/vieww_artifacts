@@ -197,7 +197,9 @@ vieww-render-graph = { path = "crates/vieww-render-graph", version = "0.1.0" }
 vieww-render-planner = { path = "crates/vieww-render-planner", version = "0.1.0" }
 vieww-runtime = { path = "crates/vieww-runtime", version = "0.1.0" }
 vieww-gpu = { path = "crates/vieww-gpu", version = "0.1.0" }
-vieww-shaders = { path = "crates/vieww-shaders", version = "0.1.0" }
+# `default-features = false`: the runtime shader compiler (`compiler`, which
+# is `naga`) is opt-in per dependent — see vieww-hal's `shader-compiler`.
+vieww-shaders = { path = "crates/vieww-shaders", version = "0.1.0", default-features = false }
 vieww-image = { path = "crates/vieww-image", version = "0.1.0" }
 vieww-interaction = { path = "crates/vieww-interaction", version = "0.1.0" }
 vieww-scroll = { path = "crates/vieww-scroll", version = "0.1.0" }
@@ -265,6 +267,47 @@ lto = false
 # to per-frame CPU in layout and build, not to the GPU. Line tables are a few
 # percent of binary size; full `debug = true` is multiples of it.
 debug = "line-tables-only"
+
+# **What ships: `--profile dist`.** Release plus fat LTO, no debug info,
+# symbols stripped, third-party crates optimised for size. Measured on the
+# `baseline` window app (2026-10-15, x86-64 Linux, static std, stripped):
+#
+#     release, before shaders were baked          13.07 MB
+#     release, shaders baked (no naga at run time) 11.52 MB
+#     dist, workspace and deps at opt-level 3      10.54 MB
+#     dist as below (deps at "s")                   9.11 MB
+#
+# The fixtures gallery's total p50 was the same within the machine's noise
+# (181–183 ms over two interleaved runs of each) with deps at "s", because
+# every per-pixel loop is in a workspace crate, which `"*"` does not reach.
+#
+# LTO here does not contradict `lto = false` above: that is about
+# `-C prefer-dynamic`, which only `.cargo/config.toml`'s desktop blocks add,
+# for the studio's previews. Nothing that ships uses it — Android, iOS and
+# Windows never get the flag, and a shipped Linux/macOS app links std
+# statically. So:
+#
+#     cargo apk build --profile dist ...                       # Android
+#     cargo build --profile dist ...                           # Windows (MSVC)
+#     RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --profile dist ...
+#                                                              # Linux: RUSTFLAGS
+#                                                              # replaces the
+#                                                              # prefer-dynamic block
+#
+# On Linux/macOS *without* that RUSTFLAGS, this fails to link with "cannot
+# prefer dynamic linking when performing LTO" — loud, which is the right
+# failure. `panic` stays `unwind` for the reason at the top of this section.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+debug = false
+strip = "symbols"
+
+# Third-party code — winit, the AT-SPI stack, font parsing and shaping, zbus —
+# is start-up and event work, not per-pixel work; "s" is ~14% of the binary
+# for no measured frame cost. Workspace crates keep the release opt-level.
+[profile.dist.package."*"]
+opt-level = "s"
 
 # Debug builds are painful mostly because the per-frame pixel work is
 # unoptimised, and none of it is code anyone steps through. Optimising just

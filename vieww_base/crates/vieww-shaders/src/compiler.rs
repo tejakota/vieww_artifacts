@@ -112,6 +112,9 @@ impl ParsedShader {
     /// can't run, capabilities only gate *optional* hardware features
     /// (e.g. `PUSH_CONSTANT`) this library's shaders don't use anyway.
     pub fn parse(wgsl: &str) -> Result<Self, CompileError> {
+        // `spirv_options::parse_and_validate` is the same pair of calls; it
+        // is not used here only because this keeps parse and validation
+        // errors apart.
         let module =
             naga::front::wgsl::parse_str(wgsl).map_err(|e| CompileError::Parse(e.to_string()))?;
         let info = Validator::new(ValidationFlags::all(), Capabilities::all())
@@ -158,32 +161,14 @@ impl ParsedShader {
         stage: ShaderStage,
     ) -> Result<Vec<u32>, CompileError> {
         self.find_entry_point(entry_point, stage)?;
-        // Bounds-checked image loads: naga's default leaves an out-of-range
-        // `textureLoad` unchecked, which is undefined behaviour that software
-        // rasterisers happen to forgive and real drivers do not. Out of range
-        // reads as transparent — what the CPU compositor does.
-        let options = naga::back::spv::Options {
-            bounds_check_policies: naga::proc::BoundsCheckPolicies {
-                index: naga::proc::BoundsCheckPolicy::Restrict,
-                buffer: naga::proc::BoundsCheckPolicy::Restrict,
-                image_load: naga::proc::BoundsCheckPolicy::ReadZeroSkipWrite,
-                binding_array: naga::proc::BoundsCheckPolicy::Restrict,
-            },
-            ..naga::back::spv::Options::default()
-        };
-        let mut writer =
-            naga::back::spv::Writer::new(&options).map_err(|e| CompileError::Backend {
+        // Options live in `spirv_options.rs`, shared with `build.rs`, which
+        // bakes the built-in library with exactly these (see `crate::baked`).
+        crate::spirv_options::write_spirv(&self.module, &self.info).map_err(|message| {
+            CompileError::Backend {
                 target: "spir-v",
-                message: e.to_string(),
-            })?;
-        let mut spirv = Vec::new();
-        writer
-            .write(&self.module, &self.info, None, &None, &mut spirv)
-            .map_err(|e| CompileError::Backend {
-                target: "spir-v",
-                message: e.to_string(),
-            })?;
-        Ok(spirv)
+                message,
+            }
+        })
     }
 
     /// Translate one entry point to Metal Shading Language, with every

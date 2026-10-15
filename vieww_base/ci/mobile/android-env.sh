@@ -107,6 +107,12 @@ android_env() {
         export CARGO_APK_RELEASE_KEYSTORE="$HOME/.android/debug.keystore"
         export CARGO_APK_RELEASE_KEYSTORE_PASSWORD="${CARGO_APK_RELEASE_KEYSTORE_PASSWORD:-android}"
     fi
+    # `cargo apk` reads the keystore per profile (`CARGO_APK_<PROFILE>_KEYSTORE`),
+    # and `--profile dist` (Cargo.toml: what ships) is a profile of its own.
+    if [ -z "${CARGO_APK_DIST_KEYSTORE:-}" ] && [ -n "${CARGO_APK_RELEASE_KEYSTORE:-}" ]; then
+        export CARGO_APK_DIST_KEYSTORE="$CARGO_APK_RELEASE_KEYSTORE"
+        export CARGO_APK_DIST_KEYSTORE_PASSWORD="${CARGO_APK_DIST_KEYSTORE_PASSWORD:-${CARGO_APK_RELEASE_KEYSTORE_PASSWORD:-android}}"
+    fi
 
     _revision="$(sed -n 's/^Pkg\.Revision *= *//p' "$ANDROID_NDK_ROOT/source.properties" | head -1)"
     echo "$_who: SDK $ANDROID_HOME, NDK ${_revision:-unknown} at $ANDROID_NDK_ROOT"

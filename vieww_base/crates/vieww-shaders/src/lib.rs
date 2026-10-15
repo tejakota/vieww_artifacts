@@ -36,16 +36,40 @@
 //! documented in their own modules) — this crate hands a backend correct
 //! shader text and a description of its bindings, not a compiled pipeline.
 
+//!
+//! # Features
+//!
+//! - **`compiler`** (default): runtime translation — [`ParsedShader`],
+//!   [`compile`], reflection, pipeline cache keys, hot reload — and the
+//!   `naga` dependency that comes with it.
+//! - Always: [`library`] (the WGSL text) and [`baked`] (that library as
+//!   SPIR-V, translated by `build.rs` when this crate compiled). A Vulkan
+//!   build that only draws with built-in shaders turns `compiler` off and
+//!   ships no shader compiler at all; `vieww-hal` does exactly that unless
+//!   its `shader-compiler` feature asks otherwise.
+
+pub mod baked;
+#[cfg(feature = "compiler")]
 pub mod compiler;
+#[cfg(feature = "compiler")]
 pub mod hot_reload;
 pub mod library;
+#[cfg(feature = "compiler")]
 pub mod pipeline_cache;
+#[cfg(feature = "compiler")]
 pub mod reflection;
+#[cfg(feature = "compiler")]
+#[allow(dead_code)] // `parse_and_validate` is for build.rs
+mod spirv_options;
 
+#[cfg(feature = "compiler")]
 pub use compiler::{
     compile, hlsl_slots, msl_slots, CompileError, CompiledShader, ParsedShader, ShaderStage,
 };
+#[cfg(feature = "compiler")]
 pub use hot_reload::{ReloadHook, ReloadReport, ReloadableLibrary};
 pub use library::{ShaderLibrary, ShaderSource};
+#[cfg(feature = "compiler")]
 pub use pipeline_cache::{PipelineCache, PipelineCacheKey};
+#[cfg(feature = "compiler")]
 pub use reflection::{reflect, BindingKind, BindingReflection, Reflection, VertexAttribute};

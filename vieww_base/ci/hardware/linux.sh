@@ -19,7 +19,7 @@
 #                   the GPU path: launch-to-first-frame, RSS, idle frames / CPU /
 #                   power, animated fps, frame-stage medians, marginal energy
 #                   per animated frame (`examples/baseline.rs`)
-#   size      P0    stripped static-std release size of that windowed app, and
+#   size      P0    shipped (`--profile dist`, static std) size of that windowed app, and
 #                   the framework-core size gate (`ci/check/size-budget.sh`)
 #   stress    §1.1  the animation stress suite five times on this fixed
 #                   machine: one reproducible p95, with its spread
@@ -200,19 +200,19 @@ if want baseline; then
 fi
 
 if want size; then
-    # What ships: release, no debuginfo, symbols stripped, and **static** std —
-    # `.cargo/config.toml` links libstd dynamically on Linux for the studio's
-    # cdylib previews, which a shipped app would not. Exporting RUSTFLAGS
-    # replaces that block, so this keeps only the x86-64-v2 baseline.
+    # What ships: `--profile dist` (Cargo.toml — LTO, stripped, dependencies
+    # at opt-level "s") with **static** std. `.cargo/config.toml` links libstd
+    # dynamically on Linux for the studio's cdylib previews, which a shipped
+    # app would not (and which LTO refuses); exporting RUSTFLAGS replaces that
+    # block, so this keeps only the x86-64-v2 baseline.
     run size-build env RUSTFLAGS="-C target-cpu=x86-64-v2" \
-        CARGO_PROFILE_RELEASE_DEBUG=0 CARGO_PROFILE_RELEASE_STRIP=symbols \
-        cargo build --release -p vieww-platform-winit --example baseline --target-dir target/size
-    app="$root/target/size/release/examples/baseline"
+        cargo build --profile dist -p vieww-platform-winit --example baseline --target-dir target/size
+    app="$root/target/size/dist/examples/baseline"
     if [ -f "$app" ]; then
         bytes="$(stat -c %s "$app")"
         echo "$bytes" > "$out/size-baseline-bytes.txt"
         ldd "$app" > "$out/size-baseline-ldd.txt" 2>&1
-        note "windowed baseline app, stripped static-std release: $bytes bytes ($(numfmt --to=iec "$bytes" 2>/dev/null || echo "$bytes B"))"
+        note "windowed baseline app, dist profile, static std: $bytes bytes ($(numfmt --to=iec "$bytes" 2>/dev/null || echo "$bytes B"))"
         note "dynamic libraries it loads: $(grep -c '=>' "$out/size-baseline-ldd.txt") (see size-baseline-ldd.txt)"
     fi
     run size-budget ci/check/size-budget.sh

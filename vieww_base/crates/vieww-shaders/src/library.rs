@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 
 /// One named WGSL module: a vertex and fragment entry point (`vs_main`/
 /// `fs_main` by convention, matched exactly by every built-in below) that
-/// [`crate::compiler`] parses, validates and cross-compiles as a unit.
+/// `crate::compiler` parses, validates and cross-compiles as a unit.
 #[derive(Debug, Clone)]
 pub struct ShaderSource {
     pub name: Cow<'static, str>,

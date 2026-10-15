@@ -5,7 +5,7 @@
 //! `#[ignore]`d like the other Vulkan suites: run with
 //! `cargo test -p vieww-hal --features vulkan -- --ignored --test-threads=1`.
 
-#![cfg(feature = "vulkan")]
+#![cfg(all(feature = "vulkan", feature = "shader-compiler"))]
 
 use vieww_hal::vulkan::{ComputeBuffer, ComputeKernel, VulkanDevice};
 

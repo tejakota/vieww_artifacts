@@ -50,7 +50,7 @@ use vieww_gpu::{FilterOp, MaskRef, PixelRect, Planner, ScenePlan, Step, Vertex};
 
 #[cfg(feature = "vulkan-swapchain")]
 use super::AcquiredImage;
-use super::{translate_wgsl_to_spirv, VulkanDevice, VulkanError};
+use super::{translate_wgsl_to_spirv, Stage, VulkanDevice, VulkanError};
 
 /// Where `execute` sends the finished frame instead of the readback buffer:
 /// a presentable image, and the semaphore the blit into it must wait on.
@@ -447,24 +447,16 @@ impl SceneRenderer {
 
         // ── shaders and pipelines ───────────────────────────────────────────
         let sources = [
+            (vieww_shaders::library::SCENE_WGSL, Stage::Vertex, "vs_main"),
             (
                 vieww_shaders::library::SCENE_WGSL,
-                naga::ShaderStage::Vertex,
-                "vs_main",
-            ),
-            (
-                vieww_shaders::library::SCENE_WGSL,
-                naga::ShaderStage::Fragment,
+                Stage::Fragment,
                 "fs_main",
             ),
+            (vieww_shaders::library::POST_WGSL, Stage::Vertex, "vs_main"),
             (
                 vieww_shaders::library::POST_WGSL,
-                naga::ShaderStage::Vertex,
-                "vs_main",
-            ),
-            (
-                vieww_shaders::library::POST_WGSL,
-                naga::ShaderStage::Fragment,
+                Stage::Fragment,
                 "fs_main",
             ),
         ];

@@ -32,7 +32,7 @@
 
 use ash::vk;
 
-use super::{translate_wgsl_to_spirv, VulkanDevice, VulkanError};
+use super::{translate_wgsl_to_spirv, Stage, VulkanDevice, VulkanError};
 
 fn err(e: vk::Result) -> VulkanError {
     VulkanError::Vulkan(e.to_string())
@@ -242,7 +242,7 @@ impl ComputeKernel {
         bindings: u32,
         push_bytes: u32,
     ) -> Result<Self, VulkanError> {
-        let spirv = translate_wgsl_to_spirv(wgsl, entry, naga::ShaderStage::Compute)?;
+        let spirv = translate_wgsl_to_spirv(wgsl, entry, Stage::Compute)?;
         let device = gpu.raw_device();
         let module = unsafe {
             device.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&spirv), None)

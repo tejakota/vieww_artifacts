@@ -22,8 +22,13 @@ use super::{AdapterInfo, Device as HalDevice};
 /// `vieww_gpu::ScenePlan` per frame, rather than building and tearing down a
 /// pipeline per shape the way [`VulkanDevice::render_mesh_to_pixels`] does.
 /// See that module's own doc for the difference and why it matters at 16.7ms.
+///
+/// Needs the `shader-compiler` feature: a kernel is the caller's own WGSL,
+/// translated at run time.
+#[cfg(feature = "shader-compiler")]
 pub mod compute;
 pub mod scene;
+#[cfg(feature = "shader-compiler")]
 pub use compute::{ComputeBuffer, ComputeKernel};
 pub use scene::{GpuFrameTimings, SceneRenderer};
 
@@ -462,31 +467,55 @@ impl Drop for VulkanDevice {
     }
 }
 
-/// The one shader this backend ships in this build: a fullscreen triangle
-/// (the standard 3-vertex, no-vertex-buffer trick) whose fragment stage
-/// paints a uniform colour — spec §4.4: "All shaders are authored once in
-/// WGSL ... naga validates and translates every WGSL module into SPIR-V ...
-/// artifacts that are embedded in the binary". Translation happens at
-/// [`VulkanDevice::render_clear_to_pixels`] call time in this build rather
-/// than at compile time (spec's "runtime shader creation consumes the
-/// pre-baked artifact"); baking it into `build.rs` is tracked in
-/// `docs/RENDERER-MIGRATION.md` alongside the rest of the GPU tessellation
-/// pipeline.
+/// WGSL to SPIR-V for one entry point.
 ///
-/// The WGSL source itself now lives in `vieww-shaders` (as
-/// [`vieww_shaders::library::CLEAR_WGSL`]) rather than as a constant in
-/// this module — see that crate's top doc for why one shared shader
-/// library, rather than one copy per GPU backend, is the point of it
-/// existing at all.
-fn translate_wgsl_to_spirv(
+/// Spec §4.4: "All shaders are authored once in WGSL ... naga validates and
+/// translates every WGSL module into SPIR-V ... artifacts that are embedded in
+/// the binary". That is now literally so for every built-in shader: they are
+/// translated when `vieww-shaders` compiles ([`vieww_shaders::baked`]), and
+/// this returns the embedded words. Only WGSL that is *not* built in — a
+/// [`ComputeKernel`](compute::ComputeKernel)'s — is translated here at run
+/// time, and only with the `shader-compiler` feature; without it, such WGSL
+/// is an error that says which feature to turn on.
+pub(crate) fn translate_wgsl_to_spirv(
     source: &str,
     entry_point: &str,
-    stage: naga::ShaderStage,
-) -> Result<Vec<u32>, VulkanError> {
-    vieww_shaders::ParsedShader::parse(source)
-        .and_then(|parsed| parsed.to_spirv(entry_point, stage))
-        .map_err(|e| VulkanError::Vulkan(format!("vieww-shaders: {e}")))
+    stage: Stage,
+) -> Result<std::borrow::Cow<'static, [u32]>, VulkanError> {
+    if let Some(words) = vieww_shaders::baked::spirv(source, entry_point, stage) {
+        return Ok(std::borrow::Cow::Borrowed(words));
+    }
+    #[cfg(feature = "shader-compiler")]
+    {
+        let stage = match stage {
+            Stage::Vertex => vieww_shaders::ShaderStage::Vertex,
+            Stage::Fragment => vieww_shaders::ShaderStage::Fragment,
+            Stage::Compute => vieww_shaders::ShaderStage::Compute,
+        };
+        vieww_shaders::ParsedShader::parse(source)
+            .and_then(|parsed| parsed.to_spirv(entry_point, stage))
+            .map(std::borrow::Cow::Owned)
+            .map_err(|e| VulkanError::Vulkan(format!("vieww-shaders: {e}")))
+    }
+    #[cfg(not(feature = "shader-compiler"))]
+    {
+        Err(VulkanError::Vulkan(
+            match vieww_shaders::baked::find(source) {
+                Some(baked) => format!(
+                "vieww-shaders: built-in shader {:?} has no {stage:?} entry point {entry_point:?}",
+                baked.name
+            ),
+                None => {
+                    "vieww-shaders: this WGSL is not a built-in shader, and vieww-hal was built \
+                     without `shader-compiler` to translate it at run time"
+                        .to_string()
+                }
+            },
+        ))
+    }
 }
+
+pub(crate) use vieww_shaders::baked::Stage;
 
 impl HalDevice for VulkanDevice {
     type Error = VulkanError;
@@ -647,15 +676,12 @@ impl HalDevice for VulkanDevice {
         unsafe { device.update_descriptor_sets(&[write], &[]) };
 
         // --- shaders + pipeline -----------------------------------------------------------
-        let vs_spirv = translate_wgsl_to_spirv(
-            vieww_shaders::library::CLEAR_WGSL,
-            "vs_main",
-            naga::ShaderStage::Vertex,
-        )?;
+        let vs_spirv =
+            translate_wgsl_to_spirv(vieww_shaders::library::CLEAR_WGSL, "vs_main", Stage::Vertex)?;
         let fs_spirv = translate_wgsl_to_spirv(
             vieww_shaders::library::CLEAR_WGSL,
             "fs_main",
-            naga::ShaderStage::Fragment,
+            Stage::Fragment,
         )?;
         let vs_info = vk::ShaderModuleCreateInfo::default().code(&vs_spirv);
         let fs_info = vk::ShaderModuleCreateInfo::default().code(&fs_spirv);
@@ -1059,15 +1085,12 @@ impl VulkanDevice {
         unsafe { device.update_descriptor_sets(&[write], &[]) };
 
         // --- shaders + pipeline -----------------------------------------------------------
-        let vs_spirv = translate_wgsl_to_spirv(
-            vieww_shaders::library::SOLID_WGSL,
-            "vs_main",
-            naga::ShaderStage::Vertex,
-        )?;
+        let vs_spirv =
+            translate_wgsl_to_spirv(vieww_shaders::library::SOLID_WGSL, "vs_main", Stage::Vertex)?;
         let fs_spirv = translate_wgsl_to_spirv(
             vieww_shaders::library::SOLID_WGSL,
             "fs_main",
-            naga::ShaderStage::Fragment,
+            Stage::Fragment,
         )?;
         let vs_info = vk::ShaderModuleCreateInfo::default().code(&vs_spirv);
         let fs_info = vk::ShaderModuleCreateInfo::default().code(&fs_spirv);
@@ -1732,8 +1755,8 @@ impl VulkanDevice {
         unsafe { device.update_descriptor_sets(&writes, &[]) };
 
         // --- shaders + pipeline --------------------------------------------------
-        let vs_spirv = translate_wgsl_to_spirv(pass.wgsl, "vs_main", naga::ShaderStage::Vertex)?;
-        let fs_spirv = translate_wgsl_to_spirv(pass.wgsl, "fs_main", naga::ShaderStage::Fragment)?;
+        let vs_spirv = translate_wgsl_to_spirv(pass.wgsl, "vs_main", Stage::Vertex)?;
+        let fs_spirv = translate_wgsl_to_spirv(pass.wgsl, "fs_main", Stage::Fragment)?;
         let vs_module = unsafe {
             device
                 .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&vs_spirv), None)

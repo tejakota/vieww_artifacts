@@ -18,7 +18,7 @@
 #                   GPU path: launch-to-first-frame, working set, idle frames and
 #                   CPU, animated fps, frame-stage medians (examples/baseline.rs).
 #                   Energy is not measured on Windows and is reported as null
-#   size      P0    stripped release size of that windowed app
+#   size      P0    size of that windowed app as shipped (`--profile dist`)
 #   stress    —     the animation stress suite five times: one reproducible p95
 #   desktop   —     the on-desktop suite, through Git Bash
 #   remote    §3.3  the studio's out-of-process preview tests
@@ -241,8 +241,9 @@ if (Want 'baseline') {
 
 # ── size of what ships ──────────────────────────────────────────────────────
 if (Want 'size') {
-  if (Run-Step 'size-build' @{ CARGO_PROFILE_RELEASE_DEBUG = '0'; CARGO_PROFILE_RELEASE_STRIP = 'symbols' } 'cargo' @('build','--release','-p','vieww-platform-winit','--example','baseline','--target-dir','target\size')) {
-    $exe = Join-Path $Root 'target\size\release\examples\baseline.exe'
+  # `dist` (Cargo.toml): LTO, stripped, dependencies at opt-level "s".
+  if (Run-Step 'size-build' @{} 'cargo' @('build','--profile','dist','-p','vieww-platform-winit','--example','baseline','--target-dir','target\size')) {
+    $exe = Join-Path $Root 'target\size\dist\examples\baseline.exe'
     if (Test-Path $exe) {
       $bytes = (Get-Item $exe).Length
       Set-Content -Path (Join-Path $OutDir 'size-baseline-bytes.txt') -Value $bytes

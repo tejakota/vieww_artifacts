@@ -16,8 +16,9 @@ vieww-foundation.workspace = true
 # crate's own top doc for why it lives independently of any backend. Not
 # optional/feature-gated: this crate's `metal`/`d3d12` modules (see their
 # own docs) will need it for their eventual pipeline ports too, and it
-# depends on nothing GPU-specific itself (naga is pure-Rust codegen), so
-# there is no build cost to keeping it unconditional here.
+# depends on nothing GPU-specific itself. Without its `compiler` feature it is
+# only the WGSL text and that text baked to SPIR-V at build time, which is all
+# the Vulkan renderer needs; `shader-compiler` below turns the compiler on.
 vieww-shaders.workspace = true
 
 # The scene planner `vulkan::SceneRenderer` executes — `ScenePlan`, `Vertex`
@@ -34,12 +35,6 @@ vieww-gpu.workspace = true
 # `vieww-hardware`'s capability probe, in particular — without any GPU
 # dependency unless a backend is actually requested.
 ash = { version = "0.38", optional = true }
-
-# WGSL is the one shader source (spec §4.4); naga translates it to SPIR-V for
-# the Vulkan backend at build/first-use time. MSL and DXIL targets are wired
-# the same way behind their own platform's feature — see `src/metal.rs` and
-# `src/d3d12.rs`.
-naga = { version = "30", optional = true, features = ["wgsl-in", "spv-out"] }
 
 # The swapchain half of `vulkan`: `VK_KHR_surface` creation from a window
 # handle. `ash-window` does not link against X11/Wayland/Win32 itself — it
@@ -85,7 +80,17 @@ default = []
 # ... Vulkan 1.1 ... Timeline semaphores mandatory"). Buildable and testable on
 # Linux and Windows; Metal and D3D12 are separate, OS-gated modules (see
 # `src/metal.rs`, `src/d3d12.rs`) that this feature does not touch.
-vulkan = ["dep:ash", "dep:naga"]
+#
+# Its shaders are the built-in library, baked to SPIR-V when `vieww-shaders`
+# compiles, so this feature alone ships no shader compiler.
+vulkan = ["dep:ash"]
+# Runtime WGSL translation (`naga`, through `vieww-shaders/compiler`): needed
+# for WGSL that is not built in — `vulkan::ComputeKernel`, which takes the
+# caller's kernel — and by the Metal and D3D12 backends, which translate to
+# MSL/HLSL at run time. Costs ~1.1 MiB of machine code and a few ms at start-up
+# (`vieww_shaders::baked` has the numbers), which is why it is not implied by
+# `vulkan`.
+shader-compiler = ["vieww-shaders/compiler"]
 # The Vulkan swapchain: `VulkanDevice::for_window` and `VulkanSwapchain`,
 # presenting real pixels to a real window. Separate from `vulkan` because the
 # headless half (`VulkanDevice::new`, `render_clear_to_pixels`) has to stay
@@ -99,11 +104,11 @@ vulkan-swapchain = ["vulkan", "dep:ash-window", "dep:raw-window-handle"]
 # does not exist in that target's dependency graph at all, so cargo simply
 # has nothing to turn on), which is the standard, safe shape for
 # platform-gated optional features in a shared workspace `Cargo.toml`.
-metal = ["dep:metal"]
+metal = ["dep:metal", "shader-compiler"]
 # The D3D12 backend. Only resolvable/buildable on Windows — see the
 # `[target.'cfg(target_os = "windows")'.dependencies]` block above. Same
 # no-op-elsewhere shape as `metal`.
-d3d12 = ["dep:windows"]
+d3d12 = ["dep:windows", "shader-compiler"]
 
 [dev-dependencies]
 # `tests/vulkan_scene.rs` compares the GPU path against the CPU rasterizer,

@@ -5361,7 +5361,6 @@ dependencies = [
  "ash",
  "ash-window",
  "metal",
- "naga",
  "raw-window-handle",
  "vieww-foundation",
  "vieww-gpu",

@@ -18,7 +18,7 @@ categories.workspace = true
 # backends are pure Rust codegen with no host dependency: an HLSL string can
 # be produced on Linux with no D3D12 present, an MSL string with no macOS
 # present — that's what makes this crate fully testable in this sandbox.
-naga = { version = "30", features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"] }
+naga = { version = "30", optional = true, features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"] }
 
 # Pipeline cache keys need real collision resistance — two different shader
 # variants silently sharing one GPU pipeline cache slot is a correctness bug,
@@ -26,7 +26,18 @@ naga = { version = "30", features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"
 # FNV) is the wrong tool. blake3 is small, pure Rust, fast enough to hash a
 # shader's source text once per (re)compile without mattering, and exactly
 # what a content-addressed cache key wants.
-blake3 = { version = "1", features = ["pure"] }
+blake3 = { version = "1", optional = true, features = ["pure"] }
+
+# `build.rs` bakes `shaders/*.wgsl` to SPIR-V (`src/baked.rs`): naga runs on
+# the build host only, so a build without `compiler` ships none of it.
+[build-dependencies]
+naga = { version = "30", features = ["wgsl-in", "spv-out"] }
+
+[features]
+default = ["compiler"]
+# Runtime WGSL translation (SPIR-V/MSL/HLSL), reflection, cache keys, hot
+# reload. Off, the crate is the WGSL text plus its baked SPIR-V.
+compiler = ["dep:naga", "dep:blake3"]
 
 [lints]
 workspace = true
