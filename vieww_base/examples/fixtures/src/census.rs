@@ -1,7 +1,15 @@
 //! GPU coverage census, CPU/GPU parity and CPU/GPU timing over the whole
 //! fixture gallery.
 //!
-//! `cargo run --release -p fixtures -- <outdir> --census`
+//! `cargo run --release -p fixtures -- <outdir> [FILTER] --census [--runs N] [--receipt FILE] [--shadow FILE]`
+//!
+//! With `--receipt`, the run is recorded with the GPU's name, type and backend
+//! beside the machine and build (see `receipt.rs`) — the "desktop GPU timing on
+//! physical hardware" the audit asks for is this command, run on a machine with
+//! a real GPU, with a receipt. With `--shadow`, each fixture's frame is also
+//! planned by the hybrid planner and logged against what the live windowed path
+//! would have done with it: the GPU when the plan is complete, the CPU (with the
+//! blocking `Unsupported` kinds as the reason) when it is not.
 //!
 //! # What this answers that nothing in the workspace answers today
 //!
@@ -53,7 +61,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use vieww_gpu::{Planner, Unsupported};
@@ -62,9 +70,15 @@ use vieww_hal::Device as _;
 use vieww_paint::native::NativeRenderer;
 use vieww_render::FrameDriver;
 
+use vieww_render_planner::Executor;
+
+use crate::cli::Options;
+use crate::receipt::{self, Json};
 use crate::runner::Fixture;
+use crate::shadow::ShadowLog;
 
 const WARMUP: usize = 1;
+/// Timed runs when `--runs` is not given.
 const RUNS: usize = 5;
 
 /// How far apart two neighbouring reference pixels must be before this counts
@@ -81,6 +95,12 @@ struct Row {
     unsupported: BTreeMap<Unsupported, usize>,
     cpu: Duration,
     gpu: Option<Duration>,
+    /// Every timed CPU run, for the receipt.
+    cpu_runs: Vec<Duration>,
+    /// Every timed GPU run, for the receipt. Empty when the GPU did not run.
+    gpu_runs: Vec<Duration>,
+    width: u32,
+    height: u32,
     /// Largest single-channel difference anywhere, edges included. Context.
     worst_any: Option<u8>,
     /// Channels differing by more than one step of 1/255, edges included.
@@ -94,12 +114,24 @@ struct Row {
     beyond_band: Option<usize>,
 }
 
-pub(crate) fn run(fixtures: &[Fixture]) {
-    let out = out_dir();
+pub(crate) fn run(fixtures: &[Fixture], options: &Options) {
+    let out = options.out.clone().unwrap_or_else(|| "census-out".into());
+    let _ = std::fs::create_dir_all(&out);
+    let runs = options.runs.unwrap_or(RUNS);
+    let fixtures: Vec<&Fixture> = fixtures
+        .iter()
+        .filter(|f| {
+            options
+                .only
+                .as_ref()
+                .is_none_or(|needle| f.name.contains(needle.as_str()))
+        })
+        .collect();
     println!("\n=== vieww GPU coverage census ===\n");
 
     // Declared before the renderer so the renderer, which borrows it, is
     // dropped first.
+    let mut gpu_json = Json::Null;
     let device = match VulkanDevice::new() {
         Ok(device) => {
             let info = device.info();
@@ -107,6 +139,11 @@ pub(crate) fn run(fixtures: &[Fixture]) {
                 "device   : {} [{}] via {}",
                 info.name, info.device_type, info.backend
             );
+            gpu_json = Json::obj([
+                ("name", Json::str(info.name.to_string())),
+                ("device_type", Json::str(info.device_type.to_string())),
+                ("backend", Json::str(info.backend.to_string())),
+            ]);
             Some(device)
         }
         Err(error) => {
@@ -128,30 +165,107 @@ pub(crate) fn run(fixtures: &[Fixture]) {
     println!("fixtures : {}", fixtures.len());
     println!("diffs to : {}\n", out.display());
 
+    let mut shadow = options.shadow.as_deref().map(ShadowLog::new);
     let mut rows = Vec::with_capacity(fixtures.len());
-    for fixture in fixtures {
-        rows.push(measure(fixture, gpu.as_mut(), &out));
+    for fixture in &fixtures {
+        rows.push(measure(fixture, gpu.as_mut(), &out, runs, shadow.as_mut()));
     }
 
     print_table(&rows);
     print_coverage(&rows);
     print_parity(&rows, &out);
     print_timing(&rows);
+
+    let shadow_summary = shadow.map(ShadowLog::finish);
+    if let Some(path) = &options.receipt {
+        let mut fields = receipt::header("census", WARMUP, runs, gpu_json);
+        fields.push(("filter".to_owned(), Json::opt_str(options.only.clone())));
+        fields.extend(receipt_fields(&rows));
+        fields.push(("shadow".to_owned(), shadow_summary.unwrap_or(Json::Null)));
+        receipt::write(path, fields);
+    }
 }
 
-/// Where to write diff images: the first argument that is not a flag, matching
-/// how `main` reads its own output directory.
-fn out_dir() -> PathBuf {
-    let dir: PathBuf = std::env::args()
-        .skip(1)
-        .find(|a| !a.starts_with("--"))
-        .unwrap_or_else(|| "census-out".to_owned())
-        .into();
-    let _ = std::fs::create_dir_all(&dir);
-    dir
+/// The receipt's `fixtures` and `outcome` for a census run.
+fn receipt_fields(rows: &[Row]) -> Vec<(String, Json)> {
+    let opt_count = |v: Option<usize>| v.map_or(Json::Null, Json::count);
+    let fixtures = rows
+        .iter()
+        .map(|r| {
+            let mut kinds: Vec<(String, Json)> = r
+                .unsupported
+                .iter()
+                .map(|(k, n)| (k.name().to_owned(), Json::count(*n)))
+                .collect();
+            kinds.sort_by(|a, b| a.0.cmp(&b.0));
+            Json::obj([
+                ("name", Json::str(r.name)),
+                ("width", Json::Num(f64::from(r.width))),
+                ("height", Json::Num(f64::from(r.height))),
+                ("commands", Json::count(r.commands)),
+                ("plan_complete", Json::Bool(r.complete)),
+                ("unsupported", Json::Obj(kinds)),
+                ("triangles", Json::count(r.triangles)),
+                ("draw_calls", Json::count(r.draw_calls)),
+                ("cpu_runs_ms", Json::ms_list(&r.cpu_runs)),
+                ("cpu_best_ms", Json::ms(r.cpu)),
+                (
+                    "gpu_runs_ms",
+                    if r.gpu_runs.is_empty() {
+                        Json::Null
+                    } else {
+                        Json::ms_list(&r.gpu_runs)
+                    },
+                ),
+                ("gpu_best_ms", r.gpu.map_or(Json::Null, Json::ms)),
+                ("gpu_includes_readback", Json::Bool(true)),
+                (
+                    "parity_worst_channel",
+                    r.worst_any
+                        .map_or(Json::Null, |w| Json::count(usize::from(w))),
+                ),
+                ("parity_interior_px", opt_count(r.interior)),
+                ("parity_beyond_band_px", opt_count(r.beyond_band)),
+            ])
+        })
+        .collect();
+    let complete = rows.iter().filter(|r| r.complete).count();
+    let on_gpu = rows.iter().filter(|r| r.gpu.is_some()).count();
+    let beyond = rows
+        .iter()
+        .filter(|r| r.beyond_band.is_some_and(|c| c > 0))
+        .count();
+    vec![
+        ("fixtures".to_owned(), Json::Arr(fixtures)),
+        (
+            "outcome".to_owned(),
+            Json::obj([
+                ("fixtures", Json::count(rows.len())),
+                ("plan_complete", Json::count(complete)),
+                ("rendered_on_gpu", Json::count(on_gpu)),
+                ("fixtures_beyond_edge_band", Json::count(beyond)),
+                (
+                    "parity_verdict",
+                    Json::str(if on_gpu == 0 {
+                        "not-run"
+                    } else if beyond == 0 {
+                        "pass"
+                    } else {
+                        "fail"
+                    }),
+                ),
+            ]),
+        ),
+    ]
 }
 
-fn measure(fixture: &Fixture, gpu: Option<&mut SceneRenderer>, out: &Path) -> Row {
+fn measure(
+    fixture: &Fixture,
+    gpu: Option<&mut SceneRenderer>,
+    out: &Path,
+    runs: usize,
+    shadow: Option<&mut ShadowLog>,
+) -> Row {
     vieww_render::overflow::forget_reported();
 
     let mut driver = FrameDriver::new(fixture.size);
@@ -172,15 +286,19 @@ fn measure(fixture: &Fixture, gpu: Option<&mut SceneRenderer>, out: &Path) -> Ro
             .expect("cpu warm-up");
     }
     let mut cpu = Duration::MAX;
+    let mut cpu_runs = Vec::with_capacity(runs);
     let mut cpu_pixels = Vec::new();
-    for _ in 0..RUNS {
+    for _ in 0..runs.max(1) {
         let start = Instant::now();
         let (pixels, _report) = cpu_renderer
             .render_to_pixels(driver.scene(), width, height, fixture.background)
             .expect("cpu timed render");
-        cpu = cpu.min(start.elapsed());
+        let elapsed = start.elapsed();
+        cpu = cpu.min(elapsed);
+        cpu_runs.push(elapsed);
         cpu_pixels = pixels.data().to_vec();
     }
+    let mut gpu_runs = Vec::new();
 
     // ---- GPU, only for a plan the backend will accept.
     let mut gpu_time = None;
@@ -203,7 +321,7 @@ fn measure(fixture: &Fixture, gpu: Option<&mut SceneRenderer>, out: &Path) -> Ro
             if ok {
                 let mut best = Duration::MAX;
                 let mut last = Vec::new();
-                for _ in 0..RUNS {
+                for _ in 0..runs.max(1) {
                     let start = Instant::now();
                     match renderer.render_planned(
                         &planner,
@@ -213,7 +331,9 @@ fn measure(fixture: &Fixture, gpu: Option<&mut SceneRenderer>, out: &Path) -> Ro
                         fixture.background,
                     ) {
                         Ok(pixels) => {
-                            best = best.min(start.elapsed());
+                            let elapsed = start.elapsed();
+                            best = best.min(elapsed);
+                            gpu_runs.push(elapsed);
                             last = pixels;
                         }
                         Err(error) => {
@@ -239,9 +359,48 @@ fn measure(fixture: &Fixture, gpu: Option<&mut SceneRenderer>, out: &Path) -> Ro
         }
     }
 
+    if let Some(shadow) = shadow {
+        // Log the frame the way the live windowed path would have drawn it:
+        // `present_planned` takes the GPU for a complete plan and the CPU, in
+        // full, for anything else.
+        let median =
+            |runs: &[Duration]| receipt::percentile(runs, 50.0).map(|d| d.as_secs_f64() * 1000.0);
+        match (plan.is_complete(), median(&gpu_runs)) {
+            (true, Some(gpu_ms)) => shadow.record(
+                fixture.name,
+                driver.scene(),
+                (width, height),
+                Executor::Gpu,
+                gpu_ms,
+                Some("census: GPU time includes full readback".to_owned()),
+            ),
+            (complete, _) => {
+                let reason = if complete {
+                    "no GPU rasterizer on this machine".to_owned()
+                } else {
+                    let mut kinds: Vec<&str> = plan.unsupported.keys().map(|k| k.name()).collect();
+                    kinds.sort_unstable();
+                    format!("plan incomplete: {}", kinds.join(", "))
+                };
+                shadow.record(
+                    fixture.name,
+                    driver.scene(),
+                    (width, height),
+                    Executor::Cpu,
+                    median(&cpu_runs).unwrap_or(0.0),
+                    Some(reason),
+                );
+            }
+        }
+    }
+
     Row {
         name: fixture.name,
         commands: driver.scene().len(),
+        cpu_runs,
+        gpu_runs,
+        width,
+        height,
         complete: plan.is_complete(),
         triangles: plan.triangle_count(),
         draw_calls: plan.draw_call_count(),
