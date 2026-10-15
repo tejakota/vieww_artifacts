@@ -11,6 +11,62 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-15: receipts, per-stage frame timings, the hybrid planner in shadow
+
+Work from the roadmap's P0 ("establish the truth") and ticket 8 (`FramePlan`
+in shadow mode), done on a 2-core cloud Xeon with no GPU and no device, on
+rustc 1.97 (1.98.1 unreachable from that machine). Everything below is
+verified there; nothing below has run on a GPU or a phone yet.
+
+1. **Benchmark receipts.** `fixtures --receipt FILE` (gallery and
+   `--census`) writes `vieww.bench-receipt/1` JSON: commit, branch and dirty
+   flag; the rustc, profile, opt-level, target, `RUSTFLAGS` and compiled SIMD
+   features of *that binary* (baked in by `examples/fixtures/build.rs`);
+   OS, kernel, CPU, cores, memory, governor and runtime SIMD features; the
+   GPU as Vulkan names it; and every raw timed run per fixture with best,
+   p50 and worst. `--runs N` sets the run count. `ci/hardware/close-remaining.sh
+   gallery` and `ci/certify/certify.sh` now keep a receipt and a shadow log
+   beside each gallery and census run. Why it matters, from its first two
+   runs: the same binary on the same VM gave `00-layers-nested` a p50 of
+   14.2 ms and then 19.4 ms (best 14.0 and 13.1) — a "~20 ms" in prose
+   cannot say which of those it was.
+2. **The planner in shadow** (`vieww_render_planner::shadow`). `ShadowPlanner`
+   plans a frame, the live path renders it as before, and `observe` writes
+   one JSON line: per-pass placement and prediction, what actually drew the
+   frame, how long it took, and why. `Calibration` reports the throughput
+   the device profile would have needed. Predictions stay uncorrected so a
+   run cannot converge on the live path and report agreement it did not
+   earn. Wired into `fixtures --shadow FILE` and, for live windows, into
+   `present_planned` behind `VIEWW_PLANNER_SHADOW=<file>`.
+3. **A planner cost bug, found by its first shadow run.** Composite passes
+   were charged the area of the target they write — the whole screen for a
+   root-level layer — so `00-layers-flat` (384 small layers) was predicted at
+   727 ms for a 6 ms frame, and the CPU calibration came out 6x wrong.
+   `planner::work_pixels` charges a composite its layer. After the fix:
+   predicted 5.8 ms vs measured 5.5 ms; CPU measured/predicted 1.26x over the
+   gallery, median 1.12x. The remaining spread (strokes, curves and shadows at
+   2–2.7x) is per-pixel complexity the area model cannot see — PENDING §2.3.
+4. **Per-stage frame timings.** `vieww_hal::vulkan::SceneRenderer::last_timings`
+   splits a GPU frame into upload, record, submit, fence wait and readback;
+   `vieww_platform_winit::native::FrameStages` adds scale, plan, CPU raster,
+   acquire and present, on every frame, with no allocation. They reach
+   `PlannedFrame`, `NativeRenderer::last_stages`, `FrameLog::stage_medians`,
+   `FrameReport`'s Display, the `VIEWW_TRACE_FRAMES` trace, and the device
+   suite's new `frame_stages` observation — which is what PENDING §1.5's
+   21 ms Adreno median needs.
+5. **A double scale, found by measuring the stages.** A CPU fallback frame in
+   `present_planned` lifted an off-1x scene to device pixels for the planner,
+   then called `present_damaged`, which lifted it again. It now rasterises the
+   scene it already lifted.
+6. **The orphaned text-stack files are gone.** `vieww-text`'s `bidi`,
+   `editing`, `fonts`, `selection`, `shaping` and `wrap` had left the module
+   tree when the second stack was retired (item 5 of an earlier section below)
+   but stayed on disk: 2,146 lines and 55 tests no build compiled.
+
+Tests on that machine: `vieww-render-planner` 37, `fixtures` 7,
+`vieww-platform-winit` lib 129, `vieww-render-graph` 12, `vieww-text`
+104 + 10 + 4; clippy `-D warnings` on every touched crate.
+
 ## 2026-10-14: real hardware — two GPUs, an Android phone, the iOS simulator, a real iPhone
 
 The day the "never run on hardware" caveats came off. Evidence for each line is

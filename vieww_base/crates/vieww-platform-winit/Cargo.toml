@@ -49,6 +49,10 @@ vieww-hal = { workspace = true, features = ["vulkan-swapchain"] }
 # arithmetic — no Vulkan in it, which is why it is not behind the
 # `vulkan-swapchain` feature with its executor.
 vieww-gpu.workspace = true
+# The hybrid placement planner, run in shadow beside `present_planned` when
+# `VIEWW_PLANNER_SHADOW` is set (`src/native.rs`). Pure CPU-side arithmetic,
+# like `vieww-gpu` above, and its dependencies are already in this graph.
+vieww-render-planner.workspace = true
 # The generic window-handle traits `vieww_hal::vulkan::VulkanDevice::for_window`
 # takes — `winit::window::Window` already implements them (winit 0.30 depends
 # on the same 0.6 generation), so this adds no new handle type, only the

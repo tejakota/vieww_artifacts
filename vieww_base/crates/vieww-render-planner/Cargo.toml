@@ -13,8 +13,9 @@ categories.workspace = true
 vieww-foundation.workspace = true
 vieww-scene.workspace = true
 vieww-render-graph.workspace = true
-
-[dev-dependencies]
+# For `shadow::ShadowPlanner::plan`, which takes the same `Scene` the live
+# renderers take. Not a new edge in the graph: `vieww-scene` above already
+# depends on it.
 vieww-paint.workspace = true
 
 [lints]

@@ -1,0 +1,547 @@
+name: Build Mobile Apps
+
+# Builds the four real apps under ./apps/ — vavlt, snapsearch, upxcale, three —
+# for Android (APK) and iOS (IPA), uploads each as a downloadable artifact,
+# then scrubs the build memory so the runner stays under its disk budget.
+#
+# App packaging for each platform:
+#
+#   app        | Android APK                              | iOS IPA
+#   -----------|------------------------------------------|--------------------------
+#   vavlt      | vavlt-android cdylib crate               | vavlt-ios binary crate
+#   snapsearch | cdylib + bin, [package.metadata.android] | main.rs (iOS calls main)
+#   upxcale    | cdylib + rlib + bin, android_main in lib | main.rs works on iOS
+#   three      | cdylib + rlib + bin, android_main in lib | main.rs works on iOS
+#
+# All four apps build on both platforms. The Android APKs are signed with a
+# debug keystore generated on the runner (good enough for a device cloud or
+# `adb install`; a release keystore would need to be injected as a secret).
+# The iOS IPAs are ad-hoc signed — a device cloud re-signs them on upload.
+
+
+# Manual only (Actions → this workflow → Run workflow). It used to run on every
+# push to feature/vieww_code_base; builds now start when someone asks for one.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUST_VERSION: "1.98.1"
+  ANDROID_NDK_VERSION: "27.3.13750724"
+  ANDROID_PLATFORM: "34"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+
+jobs:
+  # ============================================================
+  # Android APKs — one per app
+  # ============================================================
+  android:
+    name: Android APK - ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # vavlt: dedicated vavlt-android cdylib crate (crates/android/) with
+          # [package.metadata.android] (dev.vavlt.app, apk_name=vavlt).
+          - app: vavlt
+            package: vavlt-android
+            workdir: apps/vavlt
+            apk_name: vavlt
+          # snapsearch: single crate with cdylib + bin, [package.metadata.android]
+          # in the root Cargo.toml (dev.snapsearch.app, apk_name=snapsearch).
+          - app: snapsearch
+            package: snapsearch
+            workdir: apps/snapsearch
+            apk_name: snapsearch
+          # upxcale: lib (cdylib + rlib) + bin. The [package.metadata.android]
+          # block and [lib] crate-type were added to Cargo.toml, and the
+          # android_main fn lives in src/entry.rs (moved out of main.rs so it
+          # is exported from the cdylib, which is what cargo-apk builds).
+          - app: upxcale
+            package: upxcale
+            workdir: apps/upxcale
+            apk_name: upxcale
+          # three: the social-app package now has a [lib] crate-type =
+          # ["cdylib", "rlib"] with android_main in src/lib.rs. cargo-apk
+          # builds the lib target of the three-social-app package.
+          - app: three
+            package: three-social-app
+            workdir: apps/three
+            apk_name: three
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # The repo pins Rust through rust-toolchain.toml (vieww_base/ and
+      # apps/three/). Install it explicitly so targets can be added in one step
+      # and so apps without a rust-toolchain.toml (upxcale, snapsearch) resolve
+      # to the same version.
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustup target add --toolchain "$RUST_VERSION" aarch64-linux-android
+          rustc --version
+          cargo --version
+
+      # The ubuntu-latest runner ships with the Android SDK preinstalled at
+      # /usr/local/lib/android/sdk, including a working sdkmanager. We skip
+      # android-actions/setup-android entirely because v3 tries to install the
+      # deprecated legacy `tools` package, which Google removed from the SDK
+      # repository — the action fails with "Failed to find package 'tools'".
+      # Installing the specific components we need directly is both faster and
+      # immune to that breakage.
+      - name: Configure Android SDK
+        run: |
+          set -e
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          # ANDROID_SDK_ROOT is deprecated (cargo-apk warns about it). Unset
+          # it so only ANDROID_HOME is used.
+          unset ANDROID_SDK_ROOT || true
+
+          # Find the sdkmanager binary — the runner may have it under
+          # cmdline-tools/latest or cmdline-tools/<version>.
+          sdkmanager=""
+          for candidate in \
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" \
+            "$ANDROID_HOME/cmdline-tools/12.0/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              sdkmanager="$candidate"
+              break
+            fi
+          done
+          if [ -z "$sdkmanager" ]; then
+            echo "::error::No sdkmanager found under $ANDROID_HOME/cmdline-tools."
+            find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null || true
+            exit 1
+          fi
+          echo "Using sdkmanager: $sdkmanager"
+
+          # Accept licenses non-interactively (yes | ... handles the prompts).
+          yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
+
+          # Install only the components this build needs. Do NOT install the
+          # legacy `tools` package — it was removed from the repository and
+          # its absence is what breaks setup-android@v3.
+          #
+          # Only android-34 is needed: all four apps now declare
+          # min_sdk_version = 24 and target_sdk_version = 34 in their
+          # [package.metadata.android.sdk], so cargo-apk no longer falls back
+          # to its default min_sdk_version = 30.
+          "$sdkmanager" \
+            "platform-tools" \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}"
+
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked
+
+      - name: Resolve Android environment and keystore
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          # vavlt ships its own ci/android-env.sh; for the other apps we
+          # replicate the essential resolution inline so the build does not
+          # depend on a script that lives in another app's tree.
+          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}"
+          export ANDROID_NDK_HOME="$ANDROID_NDK_ROOT"
+
+          if [ -f ci/android-env.sh ]; then
+            # shellcheck disable=SC1091
+            source ci/android-env.sh
+            android_env "github-actions" || true
+          fi
+
+          # cargo-apk refuses to guess a release keystore and dies with
+          # `java.io.FileNotFoundException: ` (empty path) if none is set.
+          # The ubuntu runner does not ship with a debug.keystore by default,
+          # so generate one with keytool (ships with the JDK). The debug
+          # keystore's well-known alias/password (androiddebugkey/android)
+          # is what cargo-apk and the Android build tools expect.
+          keystore="$HOME/.android/debug.keystore"
+          if [ ! -f "$keystore" ]; then
+            mkdir -p "$(dirname "$keystore")"
+            echo "Generating debug keystore at $keystore..."
+            keytool -genkey -v \
+              -keystore "$keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "Using existing debug keystore at $keystore"
+          fi
+
+          export CARGO_APK_RELEASE_KEYSTORE="$keystore"
+          export CARGO_APK_RELEASE_KEYSTORE_PASSWORD="android"
+          # cargo-apk also reads the key alias and password; the debug
+          # keystore's well-known values are androiddebugkey/android.
+          export CARGO_APK_RELEASE_KEY_ALIAS="androiddebugkey"
+          export CARGO_APK_RELEASE_KEY_PASSWORD="android"
+
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
+            echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+            echo "CARGO_APK_RELEASE_KEYSTORE=$CARGO_APK_RELEASE_KEYSTORE"
+            echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$CARGO_APK_RELEASE_KEYSTORE_PASSWORD"
+            echo "CARGO_APK_RELEASE_KEY_ALIAS=$CARGO_APK_RELEASE_KEY_ALIAS"
+            echo "CARGO_APK_RELEASE_KEY_PASSWORD=$CARGO_APK_RELEASE_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build Android APK
+        id: build_apk
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          # --lib tells cargo-apk to build only the library target (the
+          # cdylib). Without it, cargo-apk sees both the [[bin]] and [lib]
+          # targets in packages like three-social-app and upxcale, picks the
+          # bin, and panics with "Bin is not compatible with Cdylib".
+          cargo apk build -p ${{ matrix.package }} --lib --release
+
+      - name: Locate and stage APK
+        if: ${{ success() }}
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          set -e
+
+          echo "APK files produced:"
+          find target -type f -name "*.apk" -print 2>/dev/null || true
+
+          apk="$(find target -type f -name "*.apk" 2>/dev/null | head -n 1)"
+
+          if [ -z "$apk" ]; then
+            echo "::error::No APK was generated for ${{ matrix.app }}."
+            exit 1
+          fi
+
+          stage="$RUNNER_TEMP/${{ matrix.app }}-android"
+          mkdir -p "$stage"
+          cp "$apk" "$stage/${{ matrix.apk_name }}.apk"
+          (cd "$stage" && sha256sum "${{ matrix.apk_name }}.apk" > SHA256SUMS)
+          ls -lah "$stage"
+
+      - name: Upload Android APK
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-android-apk
+          path: ${{ runner.temp }}/${{ matrix.app }}-android/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ----------------------------------------------------------
+      # Cleanup — free the build memory before the runner shuts down
+      # ----------------------------------------------------------
+      - name: Cleanup Android build memory
+        if: always()
+        run: |
+          echo "Cleaning Android/Rust build data for ${{ matrix.app }}..."
+
+          # The cargo target directory is by far the largest consumer — a
+          # release APK build leaves several GB of intermediate artifacts.
+          rm -rf ${{ matrix.workdir }}/target
+
+          # Gradle caches appear even though there is no Gradle project;
+          # cargo-apk shells out to the Android build tools which use them.
+          rm -rf "$HOME/.gradle/caches" "$HOME/.gradle/wrapper"
+
+          # The staged artifact was already uploaded; remove the local copy.
+          rm -rf "$RUNNER_TEMP/${{ matrix.app }}-android"
+
+          # Cargo's own download/checkout caches grow fast across multiple
+          # workspace builds and are not worth keeping between jobs.
+          rm -rf "$HOME/.cargo/registry/cache"
+          rm -rf "$HOME/.cargo/git/checkouts"
+
+          # The Android SDK manager cache and NDK build caches can be large
+          # after a release build; the SDK itself stays for the next job
+          # because setup-android caches it, but the per-build spillover does
+          # not need to.
+          rm -rf "$HOME/.android/build-cache" 2>/dev/null || true
+
+          sync
+
+          echo "Remaining workspace:"
+          du -sh . 2>/dev/null || true
+          echo "Cleanup complete."
+
+  # ============================================================
+  # iOS IPAs — one per app
+  # ============================================================
+  ios:
+    name: iOS IPA - ${{ matrix.app }}
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # vavlt: dedicated vavlt-ios binary crate (crates/ios/).
+          - app: vavlt
+            package: vavlt-ios
+            workdir: apps/vavlt
+            bundle_id: dev.vavlt.app
+            binary: vavlt-ios
+            app_name: vavlt
+          # snapsearch: main.rs is the iOS entry point — iOS calls main directly
+          # (UIApplicationMain is started inside App::run by winit).
+          - app: snapsearch
+            package: snapsearch
+            workdir: apps/snapsearch
+            bundle_id: dev.snapsearch.app
+            binary: snapsearch
+            app_name: snapsearch
+          # upxcale: main.rs is desktop + iOS compatible (same winit App::run).
+          - app: upxcale
+            package: upxcale
+            workdir: apps/upxcale
+            bundle_id: dev.upxcale.app
+            binary: upxcale
+            app_name: upxcale
+          # three: the social-app example is the UI binary (a workspace member,
+          # not a traditional example, so -p three-social-app selects it).
+          - app: three
+            package: three-social-app
+            workdir: apps/three
+            bundle_id: dev.three.app
+            binary: three-social-app
+            app_name: three
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustup target add \
+            --toolchain "$RUST_VERSION" \
+            aarch64-apple-ios \
+            aarch64-apple-ios-sim
+          rustc --version
+          cargo --version
+
+      - name: Verify Xcode
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Build iOS binary
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          cargo build \
+            -p ${{ matrix.package }} \
+            --target aarch64-apple-ios \
+            --release
+
+      # ----------------------------------------------------------
+      # Bundle the binary into a .app, ad-hoc sign it, and zip a .ipa.
+      # This mirrors vieww_base/ci/mobile/ios-app.sh --ipa but is app-generic:
+      # the bundle id, executable name, and display name come from the matrix.
+      # An ad-hoc signature (-) carries no provisioning profile, so the .ipa
+      # will not install on a phone directly — a device cloud (BrowserStack,
+      # Firebase Test Lab, AWS Device Farm) re-signs it on upload.
+      # ----------------------------------------------------------
+      - name: Bundle and sign IPA
+        working-directory: ${{ matrix.workdir }}
+        env:
+          APP_NAME: ${{ matrix.app_name }}
+          BUNDLE_ID: ${{ matrix.bundle_id }}
+          BINARY: ${{ matrix.binary }}
+        run: |
+          set -euo pipefail
+
+          triple="aarch64-apple-ios"
+          profile="release"
+          binary="target/$triple/$profile/$BINARY"
+
+          if [ ! -f "$binary" ]; then
+            echo "::error::Expected binary at $binary and there is none."
+            echo "  Contents of target/$triple/$profile:"
+            find "target/$triple/$profile" -maxdepth 2 -type f -perm /111 2>/dev/null | head -20 || true
+            exit 1
+          fi
+
+          app_dir="target/ios/$APP_NAME.app"
+          rm -rf "$app_dir"
+          mkdir -p "$app_dir"
+
+          # The executable's name inside the bundle must match CFBundleExecutable.
+          cp "$binary" "$app_dir/$APP_NAME"
+
+          # UILaunchScreen is mandatory: without it iOS runs in a compatibility
+          # mode with black bars, which looks like a layout bug but is not.
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            "    <key>CFBundleName</key><string>$APP_NAME</string>" \
+            "    <key>CFBundleDisplayName</key><string>$APP_NAME</string>" \
+            "    <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>" \
+            "    <key>CFBundleExecutable</key><string>$APP_NAME</string>" \
+            '    <key>CFBundlePackageType</key><string>APPL</string>' \
+            '    <key>CFBundleVersion</key><string>1</string>' \
+            '    <key>CFBundleShortVersionString</key><string>0.1</string>' \
+            '    <key>LSRequiresIPhoneOS</key><true/>' \
+            '    <key>MinimumOSVersion</key><string>13.0</string>' \
+            '    <key>UILaunchScreen</key><dict/>' \
+            '    <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>' \
+            '    <key>UISupportedInterfaceOrientations</key>' \
+            '    <array><string>UIInterfaceOrientationPortrait</string></array>' \
+            '</dict>' \
+            '</plist>' \
+            > "$app_dir/Info.plist"
+
+          echo "==> bundled $app_dir"
+
+          # Ad-hoc sign: available on any Mac with Xcode, no Apple account
+          # needed. A device cloud re-signs this on upload.
+          codesign --force --sign - --timestamp=none "$app_dir"
+          echo "==> ad-hoc signed (a device cloud will re-sign this)"
+
+          # An .ipa is a zip with the bundle under Payload/.
+          payload="target/ios/Payload"
+          ipa="target/ios/$APP_NAME.ipa"
+          rm -rf "$payload" "$ipa"
+          mkdir -p "$payload"
+          cp -R "$app_dir" "$payload/"
+          (cd target/ios && zip -qry "$APP_NAME.ipa" Payload)
+          rm -rf "$payload"
+
+          echo "==> $ipa"
+
+      - name: Locate and stage IPA
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          set -e
+
+          ipa="target/ios/${{ matrix.app_name }}.ipa"
+          if [ ! -f "$ipa" ]; then
+            echo "::error::$ipa was not generated."
+            find target/ios -maxdepth 3 -print 2>/dev/null || true
+            exit 1
+          fi
+
+          stage="$RUNNER_TEMP/${{ matrix.app }}-ios"
+          mkdir -p "$stage"
+          cp "$ipa" "$stage/${{ matrix.app_name }}.ipa"
+          (cd "$stage" && shasum -a 256 "${{ matrix.app_name }}.ipa" > SHA256SUMS)
+          ls -lah "$stage"
+
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-ios-ipa
+          path: ${{ runner.temp }}/${{ matrix.app }}-ios/
+          if-no-files-found: error
+          retention-days: 30
+
+      # ----------------------------------------------------------
+      # Cleanup — free the build memory before the runner shuts down
+      # ----------------------------------------------------------
+      - name: Cleanup iOS build memory
+        if: always()
+        run: |
+          echo "Cleaning iOS/Rust build data for ${{ matrix.app }}..."
+
+          # The cargo target directory — a release iOS build of the vieww
+          # framework + app leaves several GB here.
+          rm -rf ${{ matrix.workdir }}/target
+
+          # The staged artifact was already uploaded.
+          rm -rf "$RUNNER_TEMP/${{ matrix.app }}-ios"
+
+          # Xcode's DerivedData accumulates across builds and is not needed
+          # after the .ipa is staged.
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+
+          # Cargo's download/checkout caches.
+          rm -rf "$HOME/.cargo/registry/cache"
+          rm -rf "$HOME/.cargo/git/checkouts"
+
+          # The cargo-apk and rustup component caches are not used on the iOS
+          # job but may exist from a shared runner image; safe to remove.
+          rm -rf "$HOME/.rustup/downloads" 2>/dev/null || true
+
+          sync
+
+          echo "Remaining workspace:"
+          du -sh . 2>/dev/null || true
+          echo "Cleanup complete."
+
+  # ============================================================
+  # Summary — a single index of every artifact produced by this run
+  # ============================================================
+  summary:
+    name: Build summary
+    runs-on: ubuntu-latest
+    needs: [android, ios]
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: Report
+        run: |
+          {
+            echo "## Mobile build summary"
+            echo ""
+            echo "Android job overall: ${{ needs.android.result }}"
+            echo "iOS job overall: ${{ needs.ios.result }}"
+            echo ""
+            echo "| app | Android APK artifact | iOS IPA artifact |"
+            echo "|-----|----------------------|------------------|"
+            for app in vavlt snapsearch upxcale three; do
+              echo "| $app | \`${app}-android-apk\` | \`${app}-ios-ipa\` |"
+            done
+            echo ""
+            echo "Download artifacts from the workflow run page — scroll to the bottom of the run and click an artifact to download it."
+            echo ""
+            echo "> **Android APKs** are signed with a debug keystore generated on the runner — install with \`adb install\` or upload to a device cloud. For Play Store distribution, inject a release keystore as a repository secret and set \`CARGO_APK_RELEASE_KEYSTORE\` / \`CARGO_APK_RELEASE_KEYSTORE_PASSWORD\`."
+            echo "> **iOS IPAs** are ad-hoc signed — a device cloud (BrowserStack, Firebase Test Lab) re-signs them on upload. They will not install directly on a phone."
+          } >> "$GITHUB_STEP_SUMMARY"

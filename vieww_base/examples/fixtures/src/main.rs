@@ -4,7 +4,14 @@
 //! ```console
 //! cargo run --release -p fixtures            # writes ./fixtures-out/*.png
 //! cargo run --release -p fixtures -- /tmp/x  # somewhere else
+//! cargo run --release -p fixtures -- out/ --runs 30 --receipt out/gallery.json --shadow out/shadow.jsonl
+//! cargo run --release -p fixtures -- out/ --census --receipt out/census.json
 //! ```
+//!
+//! `--receipt` writes a machine-readable record of the run (machine, build,
+//! commit, every raw timing — see `receipt.rs`); `--shadow` runs the hybrid
+//! planner beside every measured frame without changing what renders (see
+//! `shadow.rs`).
 //!
 //! # What this is for
 //!
@@ -21,11 +28,14 @@
 //! six hundred.
 
 mod census;
+mod cli;
 mod interaction;
 mod motion;
 mod primitives;
+mod receipt;
 mod runner;
 mod screens;
+mod shadow;
 mod vectors;
 
 use std::path::PathBuf;
@@ -37,13 +47,22 @@ use runner::Fixture;
 const SURFACE: Size = Size::new(840.0, 560.0);
 
 fn main() {
-    if std::env::args().any(|a| a == "--census") {
-        census::run(&catalogue());
+    let options = match cli::Options::from_env() {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("fixtures: {error}");
+            eprintln!(
+                "usage: fixtures [OUT] [FILTER] [--census] [--receipt FILE] [--shadow FILE] [--runs N]"
+            );
+            std::process::exit(2);
+        }
+    };
+    if options.census {
+        census::run(&catalogue(), &options);
         return;
     }
 
-    let mut args = std::env::args().skip(1);
-    let out: PathBuf = args.next().unwrap_or_else(|| "fixtures-out".into()).into();
+    let out: PathBuf = options.out.clone().unwrap_or_else(|| "fixtures-out".into());
     // **A filter, because a profiler needs one fixture and not twenty-three.**
     //
     // "This fixture is over budget" is the start of the question, not the end
@@ -55,7 +74,7 @@ fn main() {
     //
     // A substring, not a flag: `-- out/ editor` runs `22-editor` and
     // `23-editor-glass`, `-- out/ 23-` runs one.
-    let only: Option<String> = args.next().filter(|a| !a.starts_with("--"));
+    let only = options.only.clone();
     std::fs::create_dir_all(&out).expect("creating the output directory");
 
     let fixtures: Vec<Fixture> = catalogue()
@@ -69,11 +88,24 @@ fn main() {
         );
         std::process::exit(1);
     }
+    let runs = options.runs.unwrap_or(cli::DEFAULT_RUNS);
+    let mut shadow = options.shadow.as_deref().map(shadow::ShadowLog::new);
     let mut measured = Vec::with_capacity(fixtures.len());
     for fixture in &fixtures {
-        measured.push(runner::run(fixture, &out));
+        measured.push(runner::run(fixture, &out, runs, shadow.as_mut()));
     }
     runner::print_table(&measured);
+    let shadow_summary = shadow.map(shadow::ShadowLog::finish);
+    if let Some(path) = &options.receipt {
+        let mut fields = receipt::header("gallery", runner::WARMUP, runs, receipt::Json::Null);
+        fields.push(("filter".to_owned(), receipt::Json::opt_str(only.clone())));
+        fields.extend(runner::receipt_fields(&measured));
+        fields.push((
+            "shadow".to_owned(),
+            shadow_summary.unwrap_or(receipt::Json::Null),
+        ));
+        receipt::write(path, fields);
+    }
 
     // The motion and interaction suites are the whole-gallery run's job. A
     // filtered run is somebody looking at one still fixture under a profiler,

@@ -32,6 +32,8 @@ use std::time::{Duration, Instant};
 use vieww_paint::FrameStats;
 use vieww_render::WindowKey;
 
+use crate::native::FrameStages;
+
 /// How many recent frames the percentiles are computed over.
 ///
 /// Four seconds at 60Hz: long enough that one slow frame does not dominate,
@@ -60,6 +62,9 @@ pub struct Frame {
     pub continuous: bool,
     /// Pixels vello actually rasterised, summed over the damaged regions.
     pub pixels: u64,
+    /// Where the renderer's share of [`work`](Self::work) went — see
+    /// [`FrameStages`]. All zero until [`FrameLog::note_stages`] fills it.
+    pub stages: FrameStages,
 }
 
 /// A rolling record of presented frames.
@@ -277,13 +282,80 @@ impl FrameLog {
             interval,
             continuous,
             pixels,
+            stages: FrameStages::default(),
         });
+    }
+
+    /// Attach the renderer's stage breakdown to the frame just
+    /// [`record`](Self::record)ed — the same pattern as
+    /// [`note_direct_present`](Self::note_direct_present), so `record`'s
+    /// signature and its callers stay as they are.
+    pub fn note_stages(&mut self, stages: FrameStages) {
+        if let Some(frame) = self.recent.back_mut() {
+            frame.stages = stages;
+        }
+    }
+
+    /// The median of each stage over the recent frames that recorded stages.
+    ///
+    /// **Per stage, so the fields do not sum to a median frame.** The median
+    /// plan time and the median present time can come from different frames;
+    /// that is the right number for "which stage is typically the big one",
+    /// which is the question this answers, and the wrong one for "what does a
+    /// typical frame cost" — [`FrameReport::median_work`] answers that.
+    ///
+    /// Allocates nine short vectors; called when a report is taken, not per
+    /// frame.
+    #[must_use]
+    pub fn stage_medians(&self) -> FrameStages {
+        let staged: Vec<&FrameStages> = self
+            .recent
+            .iter()
+            .map(|frame| &frame.stages)
+            .filter(|stages| !stages.total().is_zero())
+            .collect();
+        let median = |pick: fn(&FrameStages) -> Duration| {
+            let mut values: Vec<Duration> = staged.iter().map(|s| pick(s)).collect();
+            values.sort_unstable();
+            percentile(&values, 0.50)
+        };
+        FrameStages {
+            scale: median(|s| s.scale),
+            plan: median(|s| s.plan),
+            cpu_raster: median(|s| s.cpu_raster),
+            gpu: vieww_hal::vulkan::GpuFrameTimings {
+                upload: median(|s| s.gpu.upload),
+                record: median(|s| s.gpu.record),
+                submit: median(|s| s.gpu.submit),
+                wait: median(|s| s.gpu.wait),
+                readback: median(|s| s.gpu.readback),
+            },
+            acquire: median(|s| s.acquire),
+            present: median(|s| s.present),
+        }
     }
 
     /// Frames presented.
     #[must_use]
     pub const fn frames(&self) -> u64 {
         self.frames
+    }
+
+    /// Pixels rasterised over the whole run, as [`FrameReport::rasterised`]
+    /// reports it — without building a report, which sorts the recent window
+    /// and allocates. For a per-frame hook that only wants the running total
+    /// (the `baseline` example reads it every frame to measure what an idle
+    /// screen costs).
+    #[must_use]
+    pub const fn rasterised(&self) -> u64 {
+        self.rasterised
+    }
+
+    /// Frames the GPU rasterizer drew — [`FrameReport::gpu_frames`] without a
+    /// report.
+    #[must_use]
+    pub const fn gpu_frames(&self) -> u64 {
+        self.gpu_frames
     }
 
     /// What each recent frame cost, oldest first.
@@ -351,6 +423,7 @@ impl FrameLog {
         };
 
         FrameReport {
+            median_stages: self.stage_medians(),
             frames: self.frames,
             gpu_frames: self.gpu_frames,
             gpu_direct_frames: self.gpu_direct_frames,
@@ -482,6 +555,10 @@ pub struct FrameReport {
     /// A scrolling frame repaints everything because the viewport moved
     /// everything; an idle one has no such excuse.
     pub idle_full_repaint_frames: u64,
+    /// The median of each renderer stage — see [`FrameLog::stage_medians`]
+    /// for why these do not add up to [`median_work`](Self::median_work).
+    /// All zero when no frame recorded stages.
+    pub median_stages: FrameStages,
 }
 
 impl FrameReport {
@@ -550,7 +627,27 @@ impl fmt::Display for FrameReport {
             self.full_repaints(),
             self.full_repaint_frames,
             self.idle_full_repaint_frames,
-        )
+        )?;
+        let s = &self.median_stages;
+        if !s.total().is_zero() {
+            let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+            write!(
+                f,
+                "; stage medians: scale {:.2} plan {:.2} cpu {:.2} gpu[upload {:.2} \
+                 record {:.2} submit {:.2} wait {:.2} readback {:.2}] acquire {:.2} present {:.2} ms",
+                ms(s.scale),
+                ms(s.plan),
+                ms(s.cpu_raster),
+                ms(s.gpu.upload),
+                ms(s.gpu.record),
+                ms(s.gpu.submit),
+                ms(s.gpu.wait),
+                ms(s.gpu.readback),
+                ms(s.acquire),
+                ms(s.present),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -579,6 +676,34 @@ mod tests {
             );
         }
         log
+    }
+
+    #[test]
+    fn stage_medians_are_per_stage_and_ignore_frames_without_stages() {
+        let mut log = FrameLog::new(ms(16), SURFACE);
+        let start = Instant::now();
+        // One frame without stages, then three with.
+        log.record(None, ms(5), 0, start, false);
+        for (i, (plan, present)) in [(1, 9), (2, 8), (3, 7)].into_iter().enumerate() {
+            log.record(None, ms(5), 0, start + ms(16) * (i as u32 + 1), true);
+            log.note_stages(FrameStages {
+                plan: ms(plan),
+                present: ms(present),
+                ..FrameStages::default()
+            });
+        }
+        let medians = log.stage_medians();
+        assert_eq!(medians.plan, ms(2));
+        assert_eq!(medians.present, ms(8));
+        assert_eq!(medians.cpu_raster, Duration::ZERO);
+        let report = log.report();
+        assert_eq!(report.median_stages, medians);
+        assert!(report.to_string().contains("stage medians: "));
+        // A log that never noted stages says nothing about them.
+        assert!(!log_of(3, ms(16), ms(2), 0)
+            .report()
+            .to_string()
+            .contains("stage medians"));
     }
 
     #[test]

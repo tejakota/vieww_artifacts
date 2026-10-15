@@ -68,13 +68,19 @@
 
 use std::cell::RefCell;
 use std::fmt;
+use std::io::Write as _;
+use std::path::Path;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use vieww_foundation::{Color, Rect};
 use vieww_gpu::Planner as GpuPlanner;
-use vieww_hal::vulkan::{SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain};
+use vieww_hal::vulkan::{
+    GpuFrameTimings, SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain,
+};
 use vieww_paint::native::{NativeRenderer as CpuRenderer, RendererError, SceneReport};
 use vieww_paint::{Damage, Scene};
+use vieww_render_planner::{DeviceProfile, Executor, GpuKind, ShadowPlanner};
 
 use crate::scale::{Physical, Scale};
 
@@ -208,6 +214,60 @@ struct GpuRaster {
     renderer: SceneRenderer,
 }
 
+/// Where one presented frame's time went, stage by stage.
+///
+/// # Why
+///
+/// The audit's first GPU finding was a single number — a 21 ms median frame on
+/// an Adreno 612 — and its first ask was to break that number down. A frame on
+/// this path is up to six different kinds of work, each with a different fix:
+/// lifting the scene to device resolution, planning it for the GPU,
+/// rasterising it on the CPU, the GPU's own upload/record/submit/execute/
+/// readback (see [`GpuFrameTimings`]), acquiring a swapchain image, and
+/// presenting. Every frame now records all of them, for the price of a few
+/// `Instant::now()` calls and no allocation.
+///
+/// A stage the frame did not use is zero. The stages are sequential, so
+/// [`total`](Self::total) is the frame's whole cost on this thread.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FrameStages {
+    /// `Scene::scaled`, lifting an off-1x frame to device pixels.
+    pub scale: Duration,
+    /// `vieww_gpu::Planner::plan` — only [`NativeRenderer::present_planned`]
+    /// plans.
+    pub plan: Duration,
+    /// The CPU rasterizer, on a CPU frame.
+    pub cpu_raster: Duration,
+    /// The GPU rasterizer, on a GPU frame, by stage. Its `wait` on the direct
+    /// path includes waiting for the swapchain image to become free, because
+    /// the frame's final blit waits on that semaphore.
+    pub gpu: GpuFrameTimings,
+    /// Acquiring a swapchain image to render straight into (direct path).
+    pub acquire: Duration,
+    /// Handing the frame to the swapchain: `present_pixels` (staging upload,
+    /// copy and present) for CPU and readback frames, `present_acquired` on
+    /// the direct path.
+    pub present: Duration,
+}
+
+impl FrameStages {
+    /// Every stage, summed.
+    #[must_use]
+    pub fn total(&self) -> Duration {
+        self.scale + self.plan + self.cpu_raster + self.gpu.total() + self.acquire + self.present
+    }
+}
+
+/// Shadow mode for the hybrid planner on a live window — see
+/// [`NativeRenderer::enable_planner_shadow`].
+struct PlannerShadow {
+    planner: ShadowPlanner,
+    out: std::io::BufWriter<std::fs::File>,
+    /// Set after the first failed write, so a full disk is reported once and
+    /// then shadow mode quietly stops rather than failing every frame.
+    broken: bool,
+}
+
 /// Presents [`vieww_paint::Scene`]s rasterised by `vieww-paint`'s `native`
 /// backend, through `vieww-hal`'s Vulkan swapchain. See the module docs for
 /// what this does and does not cover yet.
@@ -219,6 +279,10 @@ pub struct NativeRenderer {
     /// Set when [`GpuRaster`]'s creation failed, so the attempt is made once
     /// and never again.
     gpu_unavailable: bool,
+    /// The last presented frame's stage timings — see [`FrameStages`].
+    stages: FrameStages,
+    /// The hybrid planner in shadow mode, when enabled.
+    shadow: Option<PlannerShadow>,
 }
 
 impl fmt::Debug for NativeRenderer {
@@ -245,6 +309,8 @@ pub struct PlannedFrame {
     /// without the blit support `VulkanDevice::can_blit_scene_frames` asks
     /// for).
     pub presented_directly: bool,
+    /// Where this frame's time went. See [`FrameStages`].
+    pub stages: FrameStages,
 }
 
 /// The scene to rasterise at the swapchain's extent: the frame itself when
@@ -333,6 +399,8 @@ impl NativeRenderer {
                 cpu,
                 gpu: None,
                 gpu_unavailable: false,
+                stages: FrameStages::default(),
+                shadow: None,
             },
             NativeSurface { swapchain },
         ))
@@ -342,6 +410,92 @@ impl NativeRenderer {
     #[must_use]
     pub fn cached_fonts(&self) -> usize {
         self.cpu.cached_fonts()
+    }
+
+    /// Where the last presented frame's time went, from either present path.
+    #[must_use]
+    pub const fn last_stages(&self) -> FrameStages {
+        self.stages
+    }
+
+    /// Run the hybrid planner in **shadow mode** beside every
+    /// [`present_planned`](Self::present_planned) frame, appending one JSON
+    /// line per frame to `path`.
+    ///
+    /// Each line is a `vieww_render_planner::ShadowFrame`: the per-pass
+    /// placement the planner would have chosen, its prediction, which
+    /// rasterizer actually drew the frame, how long that took
+    /// ([`FrameStages::total`]), and why the live path took that rasterizer
+    /// when it was not a free choice. Nothing about what is drawn changes.
+    /// This is the evidence an authoritative hybrid rollout needs — see that
+    /// module's docs.
+    ///
+    /// The planner plans as this device: a discrete GPU as
+    /// `DeviceProfile::DESKTOP_DISCRETE` (an integrated one with its `gpu`
+    /// kind set to match), a mobile target as `MOBILE_TILE_BASED`, a CPU
+    /// "GPU" (lavapipe, SwiftShader) as `CPU_ONLY_FALLBACK`.
+    ///
+    /// Only `present_planned` frames are recorded: they are whole-frame
+    /// repaints, which is what the planner predicts. A
+    /// [`present_damaged`](Self::present_damaged) frame repaints a damaged
+    /// region, and comparing it to a whole-frame prediction would teach the
+    /// calibration that the CPU is ten times faster than it is.
+    ///
+    /// **Not free:** planning builds two graphs and allocates per frame, so
+    /// leave this off when measuring allocations or frame time for a budget.
+    /// Applications enable it with `VIEWW_PLANNER_SHADOW=<file>` (see
+    /// `app.rs`).
+    ///
+    /// # Errors
+    ///
+    /// The file could not be opened for appending.
+    pub fn enable_planner_shadow(&mut self, path: &Path) -> std::io::Result<()> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        self.shadow = Some(PlannerShadow {
+            planner: ShadowPlanner::new(self.planner_profile()),
+            out: std::io::BufWriter::new(file),
+            broken: false,
+        });
+        Ok(())
+    }
+
+    /// The planner's assumed profile for this window's device.
+    fn planner_profile(&self) -> DeviceProfile {
+        use vieww_hal::Device as _;
+        profile_for(&self.device.info().device_type)
+    }
+
+    /// Plan `scene` in shadow and log what actually happened to it.
+    fn record_shadow(
+        &mut self,
+        scene: &Scene,
+        extent: (u32, u32),
+        executor: Executor,
+        fallback: Option<String>,
+    ) {
+        let Some(shadow) = self.shadow.as_mut().filter(|s| !s.broken) else {
+            return;
+        };
+        let Some(plan) = shadow.planner.plan(scene, extent.0, extent.1) else {
+            return;
+        };
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a frame time in ms fits an f32"
+        )]
+        let actual_ms = (self.stages.total().as_secs_f64() * 1000.0) as f32;
+        let frame = shadow
+            .planner
+            .observe(plan, "window", extent, executor, actual_ms, fallback);
+        if let Err(error) =
+            writeln!(shadow.out, "{}", frame.to_json_line()).and_then(|()| shadow.out.flush())
+        {
+            eprintln!("vieww: planner shadow log stopped: {error}");
+            shadow.broken = true;
+        }
     }
 
     /// Rasterise `scene` on the CPU and present it to `surface`. Always a
@@ -416,6 +570,8 @@ impl NativeRenderer {
     ) -> Result<SceneReport, NativeError> {
         let (physical_width, physical_height) = surface.swapchain.extent();
         let (logical_width, logical_height) = logical_size;
+        self.stages = FrameStages::default();
+        let rasterising = Instant::now();
 
         // **Rasterise at the device's own resolution whenever the two differ.**
         //
@@ -453,6 +609,7 @@ impl NativeRenderer {
         } else {
             let factor = scale.factor();
             let scaled = scene.scaled(factor);
+            self.stages.scale = rasterising.elapsed();
             #[expect(
                 clippy::cast_precision_loss,
                 reason = "a swapchain extent is a small number of pixels"
@@ -484,11 +641,23 @@ impl NativeRenderer {
             }
         };
 
+        self.stages.cpu_raster = rasterising.elapsed() - self.stages.scale;
+        self.present_last_cpu_frame(surface, (physical_width, physical_height))?;
+        Ok(report)
+    }
+
+    /// Present the CPU rasterizer's retained output, timing it into
+    /// [`FrameStages::present`].
+    fn present_last_cpu_frame(
+        &mut self,
+        surface: &mut NativeSurface,
+        (physical_width, physical_height): (u32, u32),
+    ) -> Result<(), NativeError> {
         // In place: the renderer's retained output is read directly, rather
         // than copied into a fresh `Pixels` every frame — that copy was a
         // full-frame allocation per present, which the Vieww standard's
-        // steady-state clause counts. The rasterisation above already ran at
-        // the swapchain's own extent, so there is nothing left to resample.
+        // steady-state clause counts. The rasterisation already ran at the
+        // swapchain's own extent, so there is nothing left to resample.
         let frame = self.cpu.last_frame();
         debug_assert_eq!(
             frame.len(),
@@ -496,10 +665,12 @@ impl NativeRenderer {
             "the renderer rasterised at the swapchain's extent"
         );
 
+        let presenting = Instant::now();
         self.device
             .present_pixels(&mut surface.swapchain, frame)
             .map_err(|error| NativeError::Present(error.to_string()))?;
-        Ok(report)
+        self.stages.present = presenting.elapsed();
+        Ok(())
     }
 
     /// Match the surface to a window that changed size. Contents are gone
@@ -567,6 +738,8 @@ impl NativeRenderer {
         scale: Scale,
     ) -> Result<PlannedFrame, NativeError> {
         let (physical_width, physical_height) = surface.swapchain.extent();
+        let extent = (physical_width, physical_height);
+        self.stages = FrameStages::default();
 
         // The GPU rasterizer, once. Creation failure is remembered and this
         // becomes a CPU renderer permanently — see `gpu_unavailable`.
@@ -585,24 +758,28 @@ impl NativeRenderer {
             }
         }
 
+        // **Lifted to device pixels once, for whichever rasterizer draws.**
+        // Until 2026-10-15 a CPU fallback frame was lifted here for the
+        // planner and then lifted again inside `present_damaged` — two
+        // `Scene::scaled` calls per fallback frame on every HiDPI display.
+        // Measuring the stages is what made the second one visible.
+        let lifting = Instant::now();
+        let scene = frame_at_device_resolution(scene, logical_size, extent, scale);
+        self.stages.scale = lifting.elapsed();
+
+        // Why the CPU drew this frame, for the shadow log. Only ever built
+        // when shadow mode is on: the frame path does not allocate otherwise.
+        let mut fallback: Option<String> = None;
+
         if let Some(GpuRaster { planner, renderer }) = self.gpu.as_mut() {
-            let scene = frame_at_device_resolution(
-                scene,
-                logical_size,
-                (physical_width, physical_height),
-                scale,
-            );
             #[expect(
                 clippy::cast_precision_loss,
                 reason = "a swapchain extent is a small number of pixels"
             )]
-            let width = physical_width as f32;
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "a swapchain extent is a small number of pixels"
-            )]
-            let height = physical_height as f32;
+            let (width, height) = (physical_width as f32, physical_height as f32);
+            let planning = Instant::now();
             let plan = planner.plan(scene.as_ref(), width, height);
+            self.stages.plan = planning.elapsed();
             if plan.is_complete() {
                 // Straight into the swapchain image when the frame is opaque
                 // and the driver can blit the scene's RGBA16F into the
@@ -610,10 +787,12 @@ impl NativeRenderer {
                 // translucent window keeps the readback path, because the
                 // scene targets are premultiplied and a blit cannot divide.
                 if base.a == 255 && self.device.can_blit_scene_frames(&surface.swapchain) {
+                    let acquiring = Instant::now();
                     let acquired = self
                         .device
-                        .acquire_image(&mut surface.swapchain, (physical_width, physical_height))
+                        .acquire_image(&mut surface.swapchain, extent)
                         .map_err(|error| NativeError::Present(error.to_string()))?;
+                    self.stages.acquire = acquiring.elapsed();
                     let Some(image) = acquired else {
                         // The swapchain was rebuilt to a new size under this
                         // frame; the matching resize repaints.
@@ -621,27 +800,41 @@ impl NativeRenderer {
                             report: SceneReport::default(),
                             drawn_on_gpu: true,
                             presented_directly: true,
+                            stages: self.stages,
                         });
                     };
                     if let Err(error) = renderer.render_planned_to(planner, &plan, base, &image) {
                         let _ = self.device.abandon_acquired(&mut surface.swapchain, image);
                         return Err(NativeError::Render(error.to_string()));
                     }
+                    self.stages.gpu = renderer.last_timings();
+                    let presenting = Instant::now();
                     self.device
                         .present_acquired(&mut surface.swapchain, image)
                         .map_err(|error| NativeError::Present(error.to_string()))?;
+                    self.stages.present = presenting.elapsed();
+                    self.record_shadow(&scene, extent, Executor::Gpu, None);
                     return Ok(PlannedFrame {
                         report: SceneReport::default(),
                         drawn_on_gpu: true,
                         presented_directly: true,
+                        stages: self.stages,
                     });
                 }
                 let pixels = renderer
                     .render_planned(planner, &plan, physical_width, physical_height, base)
                     .map_err(|error| NativeError::Render(error.to_string()))?;
+                self.stages.gpu = renderer.last_timings();
+                let presenting = Instant::now();
                 self.device
                     .present_pixels(&mut surface.swapchain, &pixels)
                     .map_err(|error| NativeError::Present(error.to_string()))?;
+                self.stages.present = presenting.elapsed();
+                let reason = self
+                    .shadow
+                    .is_some()
+                    .then(|| "gpu frame read back through host memory".to_owned());
+                self.record_shadow(&scene, extent, Executor::Gpu, reason);
                 // The CPU report counts the work the CPU did; a GPU frame
                 // did none of it, and the plan's own counts — vertices, draw
                 // calls — are not those fields. Zeroes say what happened;
@@ -650,26 +843,88 @@ impl NativeRenderer {
                     report: SceneReport::default(),
                     drawn_on_gpu: true,
                     presented_directly: false,
+                    stages: self.stages,
                 });
             }
+            if self.shadow.is_some() {
+                let mut kinds: Vec<&str> = plan.unsupported.keys().map(|k| k.name()).collect();
+                kinds.sort_unstable();
+                fallback = Some(format!("plan incomplete: {}", kinds.join(", ")));
+            }
+        } else if self.shadow.is_some() {
+            fallback = Some("no GPU rasterizer".to_owned());
         }
 
         // No GPU rasterizer, or the plan had gaps the backend cannot draw.
-        // Either way the CPU rasterizes, in full — `present_damaged` with no
-        // damage is the whole-frame path a first frame and a resize want,
-        // and a fallback frame is exactly a first frame.
-        let report = self.present_damaged(surface, scene, None, base, logical_size, scale)?;
+        // Either way the CPU rasterizes, in full, the frame already lifted to
+        // device pixels above — exactly what `present_damaged` with no damage
+        // did, minus its second lift. A fallback frame is a first frame.
+        let rasterising = Instant::now();
+        let report =
+            self.cpu
+                .render_in_place(scene.as_ref(), physical_width, physical_height, base)?;
+        self.stages.cpu_raster = rasterising.elapsed();
+        self.present_last_cpu_frame(surface, extent)?;
+        self.record_shadow(&scene, extent, Executor::Cpu, fallback);
         Ok(PlannedFrame {
             report,
             drawn_on_gpu: false,
             presented_directly: false,
+            stages: self.stages,
         })
     }
+}
+
+/// The planner's assumed profile for a Vulkan device type (`AdapterInfo`'s
+/// `device_type`, the `Debug` of `VkPhysicalDeviceType`).
+fn profile_for(device_type: &str) -> DeviceProfile {
+    if device_type.contains("CPU") || device_type.contains("OTHER") {
+        return DeviceProfile::CPU_ONLY_FALLBACK;
+    }
+    if cfg!(any(target_os = "android", target_os = "ios")) {
+        return DeviceProfile::MOBILE_TILE_BASED;
+    }
+    let mut profile = DeviceProfile::DESKTOP_DISCRETE;
+    if device_type.contains("INTEGRATED") {
+        profile.gpu = GpuKind::Integrated;
+    }
+    profile
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The shadow planner plans as the device it is on: lavapipe is a CPU,
+    /// and an integrated GPU is not a discrete one.
+    #[test]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn the_shadow_profile_follows_the_vulkan_device_type() {
+        assert_eq!(profile_for("CPU"), DeviceProfile::CPU_ONLY_FALLBACK);
+        assert_eq!(profile_for("DISCRETE_GPU"), DeviceProfile::DESKTOP_DISCRETE);
+        assert_eq!(profile_for("INTEGRATED_GPU").gpu, GpuKind::Integrated);
+    }
+
+    #[test]
+    fn frame_stages_total_every_stage() {
+        let ms = Duration::from_millis;
+        let stages = FrameStages {
+            scale: ms(1),
+            plan: ms(2),
+            cpu_raster: ms(3),
+            gpu: GpuFrameTimings {
+                upload: ms(4),
+                record: ms(5),
+                submit: ms(6),
+                wait: ms(7),
+                readback: ms(8),
+            },
+            acquire: ms(9),
+            present: ms(10),
+        };
+        assert_eq!(stages.total(), ms(55));
+        assert_eq!(FrameStages::default().total(), Duration::ZERO);
+    }
 
     /// A scene is borrowed unchanged when logical and physical extents agree,
     /// and lifted through `Scene::scaled` when they do not — the same

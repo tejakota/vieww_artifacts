@@ -28,13 +28,17 @@ pub mod planner;
 pub mod policy;
 pub mod power;
 pub mod quality;
+pub mod shadow;
 
 pub use capabilities::{DeviceProfile, GpuKind};
 pub use cost::{CostModel, ExecutorEstimate, HeuristicCostModel, MeasuredCostModel};
 pub use frame_budget::FrameBudget;
 pub use hybrid::Split;
-pub use planner::{plan_frame, FramePlan};
+pub use planner::{plan_frame, work_pixels, FramePlan};
 pub use policy::Placement;
 pub use quality::{
     QualityContract, QualityObservation, QualityReport, QualityViolation, RefreshRate,
+};
+pub use shadow::{
+    Calibration, Executor, PassSummary, Recommendation, ShadowFrame, ShadowPlan, ShadowPlanner,
 };

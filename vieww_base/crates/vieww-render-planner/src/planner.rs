@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use vieww_render_graph::{ExecutionPlan, Graph, PassId};
+use vieww_render_graph::{ExecutionPlan, Graph, PassDesc, PassId, PassKind};
 
 use crate::capabilities::DeviceProfile;
 use crate::cost::CostModel;
@@ -48,6 +48,41 @@ impl FramePlan {
     }
 }
 
+/// How many pixels of work a pass does — the unit every [`CostModel`]
+/// estimate is in.
+///
+/// For most passes that is the area of what it writes. A **composite** is the
+/// exception, and the one that matters: `build_graph` gives each composite a
+/// fresh output the size of its *parent* (the whole screen, for a root-level
+/// layer), because that is what the graph's resources are — but blending a
+/// layer into its parent touches only the layer's own pixels. Charging the
+/// output instead made a screen of 384 small sibling layers (`fixtures`'
+/// `00-layers-flat`) cost 384 full-screen passes: 182 megapixels and a
+/// predicted 727 ms, for a frame the CPU draws in 6 ms. The first shadow-mode
+/// run over the gallery found it (2026-10-15); see `shadow.rs`.
+///
+/// So a composite is charged the area of the smallest resource it reads — the
+/// child layer, which `build_graph` sizes to the layer's bounds.
+#[must_use]
+pub fn work_pixels(graph: &Graph, pass: &PassDesc) -> f32 {
+    let area = |r: &vieww_render_graph::ResourceId| {
+        let desc = graph.resource(*r);
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "texture dimensions are far below f32's exact range"
+        )]
+        let a = (desc.width as f32) * (desc.height.max(1) as f32);
+        a
+    };
+    let written: f32 = pass.writes.iter().map(area).sum();
+    if pass.kind == PassKind::Composite {
+        if let Some(smallest_read) = pass.reads.iter().map(area).reduce(f32::min) {
+            return smallest_read;
+        }
+    }
+    written
+}
+
 /// Plan one frame.
 ///
 /// `graph` and `plan` must be the [`Graph`]/[`ExecutionPlan`] pair produced
@@ -65,14 +100,7 @@ pub fn plan_frame(
 
     for &pass_id in &exec_plan.order {
         let pass = graph.pass(pass_id);
-        let pixels: f32 = pass
-            .writes
-            .iter()
-            .map(|r| {
-                let desc = graph.resource(*r);
-                (desc.width as f32) * (desc.height.max(1) as f32)
-            })
-            .sum();
+        let pixels = work_pixels(graph, pass);
 
         let estimate = model.estimate(pass, pixels, device);
         let placement = policy::decide(pass, pixels, estimate, device, &budget);
@@ -132,6 +160,32 @@ mod tests {
             .placements
             .values()
             .all(|p| matches!(p, Placement::Cpu)));
+    }
+
+    #[test]
+    fn a_composite_is_charged_its_layer_not_the_screen() {
+        let mut scene = Scene::new();
+        for i in 0..8 {
+            let x = i as f32 * 20.0;
+            // `Rect::new` is left, top, right, bottom.
+            let r = Rect::new(x, 0.0, x + 10.0, 10.0);
+            scene.push_layer(r, 0.5, vieww_foundation::BlendMode::Normal);
+            scene.fill_rect(r, Paint::solid(Color::RED));
+            scene.pop_layer();
+        }
+        let scene_graph = SceneGraph::from_scene(&scene);
+        let (graph, screen) = vieww_render_graph::build_graph(&scene_graph, 1000, 1000);
+        let exec_plan = graph.compile(screen).unwrap();
+        let composites: Vec<f32> = exec_plan
+            .order
+            .iter()
+            .map(|id| graph.pass(*id))
+            .filter(|p| p.kind == PassKind::Composite)
+            .map(|p| work_pixels(&graph, p))
+            .collect();
+        assert_eq!(composites.len(), 8);
+        // Each is a 10x10 layer, not a 1000x1000 screen.
+        assert!(composites.iter().all(|px| *px <= 200.0), "{composites:?}");
     }
 
     #[test]

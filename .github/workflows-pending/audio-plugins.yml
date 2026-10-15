@@ -13,20 +13,9 @@ name: Audio plugins (CLAP / VST3)
 # Everything is driven by crates/vieww-audio-plugin/tools/check-plugins.sh,
 # which runs the same way locally.
 
+# Manual only (Actions → this workflow → Run workflow): no push or
+# pull_request trigger, by the repository owner's choice (2026-10-15).
 on:
-  push:
-    branches:
-      - feature/vieww_code_base
-      - "feature/vieww-gap-closure-*"
-    paths:
-      - "vieww_base/crates/vieww-audio/**"
-      - "vieww_base/crates/vieww-audio-plugin/**"
-      - ".github/workflows/audio-plugins.yml"
-  pull_request:
-    paths:
-      - "vieww_base/crates/vieww-audio/**"
-      - "vieww_base/crates/vieww-audio-plugin/**"
-      - ".github/workflows/audio-plugins.yml"
   workflow_dispatch:
 
 permissions:

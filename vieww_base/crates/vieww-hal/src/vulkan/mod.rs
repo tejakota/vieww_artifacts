@@ -25,7 +25,7 @@ use super::{AdapterInfo, Device as HalDevice};
 pub mod compute;
 pub mod scene;
 pub use compute::{ComputeBuffer, ComputeKernel};
-pub use scene::SceneRenderer;
+pub use scene::{GpuFrameTimings, SceneRenderer};
 
 /// [`VulkanDevice::for_window`] and [`swapchain::VulkanSwapchain`] — real
 /// windowed presentation. See that module's own docs.

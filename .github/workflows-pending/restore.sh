@@ -6,12 +6,20 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 mkdir -p ../workflows
-for f in audio-backends.yml audio-plugins.yml framework-checks.yml; do
+# With arguments, place just those (e.g. `restore.sh hardware.yml`); without,
+# every workflow waiting here.
+files=("$@")
+if [[ ${#files[@]} -eq 0 ]]; then
+    shopt -s nullglob
+    files=(*.yml)
+fi
+[[ ${#files[@]} -gt 0 ]] || { echo "nothing waiting here" >&2; exit 1; }
+for f in "${files[@]}"; do
     [[ -f "$f" ]] || { echo "missing $f" >&2; exit 1; }
     cp "$f" "../workflows/$f"
     rm "$f"
 done
 
-echo "placed 3 workflows into .github/workflows/"
-echo "next: git add .github/workflows && git commit -m 'ci: place the three workflows' && git push"
+echo "placed ${#files[@]} workflow(s) into .github/workflows/: ${files[*]}"
+echo "next: git add .github/workflows && git commit -m 'ci: place the pending workflows (manual-only)' && git push"
 echo "(the push needs a token with workflow scope, or the web UI)"

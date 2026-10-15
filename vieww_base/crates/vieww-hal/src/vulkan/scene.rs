@@ -42,6 +42,7 @@
 
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::time::{Duration, Instant};
 
 use ash::vk;
 use vieww_foundation::{BlendMode, Color};
@@ -111,6 +112,56 @@ pub struct SceneRenderer {
     indices: Buffer,
     /// Bytes the last [`SceneRenderer::upload_masks`] sent.
     mask_upload_bytes: u64,
+    /// Where the last frame's time went — see [`GpuFrameTimings`].
+    timings: GpuFrameTimings,
+}
+
+/// Where one frame's time went inside [`SceneRenderer`], on the CPU's clock.
+///
+/// # Why
+///
+/// The audit's Android finding was one number: a 21 ms median GPU frame on an
+/// Adreno 612. A median of a whole frame cannot say whether the time went to
+/// moving atlases and geometry into GPU-visible memory, to building the command
+/// buffer, to the driver's submit, to the GPU itself, or to the readback the
+/// non-direct path does — and each of those has a different fix (smaller
+/// uploads; cached command buffers; fewer submits; less GPU work; rendering
+/// straight into the swapchain image). So each is measured separately, every
+/// frame, at no cost beyond five `Instant::now()` calls.
+///
+/// # What the fields can and cannot say
+///
+/// These are host-side wall-clock durations, not GPU timestamps. `wait` is
+/// the time the CPU blocked on the frame's fence, which is the GPU executing
+/// this frame **plus** anything queued ahead of it — on a renderer that waits
+/// for every frame, as this one does today, nothing is ahead of it, so `wait`
+/// is a fair upper bound on GPU execution time. Once two frames are in flight
+/// (the roadmap's next GPU item) it stops being one, and GPU timestamp queries
+/// are the replacement.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GpuFrameTimings {
+    /// Planner atlases (glyphs, images, masks, ramps), uniforms, vertex and
+    /// index data, and any target (re)allocation — everything that has to be
+    /// in GPU-visible memory before the frame can be recorded. Staging
+    /// uploads submit and wait on their own, and that wait is counted here.
+    pub upload: Duration,
+    /// Building the frame's command buffer on the CPU.
+    pub record: Duration,
+    /// The `vkQueueSubmit` call itself (plus ending the command buffer).
+    pub submit: Duration,
+    /// Blocked on the frame's fence: GPU execution, see the type docs.
+    pub wait: Duration,
+    /// Mapping the readback buffer and converting RGBA16F to RGBA8. Zero on
+    /// the direct-to-swapchain path, which has no readback.
+    pub readback: Duration,
+}
+
+impl GpuFrameTimings {
+    /// The sum of every stage.
+    #[must_use]
+    pub fn total(&self) -> Duration {
+        self.upload + self.record + self.submit + self.wait + self.readback
+    }
 }
 
 /// Which image a post descriptor set binds.
@@ -578,6 +629,7 @@ impl SceneRenderer {
             vertices: Buffer::EMPTY,
             indices: Buffer::EMPTY,
             mask_upload_bytes: 0,
+            timings: GpuFrameTimings::default(),
         };
 
         let uniform_info = [vk::DescriptorBufferInfo {
@@ -810,8 +862,19 @@ impl SceneRenderer {
         height: u32,
         clear: Color,
     ) -> Result<Vec<u8>, VulkanError> {
+        let started = Instant::now();
         self.upload_planner(planner)?;
-        self.render(plan, width, height, clear)
+        let atlases = started.elapsed();
+        let pixels = self.render(plan, width, height, clear)?;
+        self.timings.upload += atlases;
+        Ok(pixels)
+    }
+
+    /// Where the last rendered frame's time went. Reset at the start of every
+    /// frame; see [`GpuFrameTimings`] for what each field measures.
+    #[must_use]
+    pub const fn last_timings(&self) -> GpuFrameTimings {
+        self.timings
     }
 
     /// Execute `plan` at `width` x `height` over `clear` and read the frame
@@ -858,13 +921,19 @@ impl SceneRenderer {
     ) -> Result<Vec<u8>, VulkanError> {
         let width = width.max(1);
         let height = height.max(1);
+        self.timings = GpuFrameTimings::default();
+        let started = Instant::now();
         self.ensure_targets(width, height, plan.target_depth + 1)?;
         #[allow(clippy::cast_precision_loss)]
         let viewport = [width as f32, height as f32, 0.0, 0.0];
         write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
         self.upload_geometry(plan)?;
+        self.timings.upload = started.elapsed();
         self.execute(plan, width, height, clear, None)?;
-        self.read_back(width, height)
+        let started = Instant::now();
+        let pixels = self.read_back(width, height)?;
+        self.timings.readback = started.elapsed();
+        Ok(pixels)
     }
 
     /// Execute a complete `plan` straight into an acquired swapchain image,
@@ -902,12 +971,15 @@ impl SceneRenderer {
         if width == 0 || height == 0 {
             return Err(VulkanError::Vulkan("zero-sized swapchain image".into()));
         }
+        self.timings = GpuFrameTimings::default();
+        let started = Instant::now();
         self.upload_planner(planner)?;
         self.ensure_targets(width, height, plan.target_depth + 1)?;
         #[allow(clippy::cast_precision_loss)]
         let viewport = [width as f32, height as f32, 0.0, 0.0];
         write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
         self.upload_geometry(plan)?;
+        self.timings.upload = started.elapsed();
         let blit = BlitTarget {
             image: target.image,
             ready: target.ready,
@@ -991,7 +1063,7 @@ impl SceneRenderer {
                 );
             }
         }
-        self.submit_and_wait(None)
+        self.submit_and_wait(None).map(|_| ())
     }
 
     fn target(&self, id: TargetId) -> &Target {
@@ -1233,6 +1305,7 @@ impl SceneRenderer {
         clear: Color,
         out: Option<BlitTarget>,
     ) -> Result<(), VulkanError> {
+        let recording = Instant::now();
         self.begin_commands()?;
         let a = f32::from(clear.a) / 255.0;
         let premultiplied_clear = [
@@ -1456,7 +1529,11 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             );
         }
-        self.submit_and_wait(out.map(|t| t.ready))
+        self.timings.record = recording.elapsed();
+        let (submit, wait) = self.submit_and_wait(out.map(|t| t.ready))?;
+        self.timings.submit = submit;
+        self.timings.wait = wait;
+        Ok(())
     }
 
     fn draw_runs(
@@ -1624,13 +1701,21 @@ impl SceneRenderer {
         Ok(())
     }
 
-    fn submit_and_wait(&self, wait: Option<vk::Semaphore>) -> Result<(), VulkanError> {
+    /// Submit the recorded command buffer and block until it completes.
+    /// Returns how long the submit took and how long the fence wait took, so
+    /// a frame's caller can attribute them ([`GpuFrameTimings`]); the staging
+    /// uploads that share this ignore them.
+    fn submit_and_wait(
+        &self,
+        wait: Option<vk::Semaphore>,
+    ) -> Result<(Duration, Duration), VulkanError> {
         let cmd = self.command_buffer;
         let cmds = [cmd];
         let waits: Vec<vk::Semaphore> = wait.into_iter().collect();
         // The whole program may run before the swapchain image is free; only
         // the blit into it must wait.
         let stages = vec![vk::PipelineStageFlags::TRANSFER; waits.len()];
+        let submitting = Instant::now();
         unsafe {
             self.device.end_command_buffer(cmd)?;
             self.device.reset_fences(&[self.fence])?;
@@ -1642,9 +1727,13 @@ impl SceneRenderer {
                     .wait_dst_stage_mask(&stages)],
                 self.fence,
             )?;
+        }
+        let submitted = submitting.elapsed();
+        let waiting = Instant::now();
+        unsafe {
             self.device.wait_for_fences(&[self.fence], true, u64::MAX)?;
         }
-        Ok(())
+        Ok((submitted, waiting.elapsed()))
     }
 
     /// Premultiplied RGBA16F → straight RGBA8, rounded exactly as

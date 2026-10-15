@@ -25,14 +25,18 @@ use std::time::{Duration, Instant};
 use vieww_foundation::{Color, Size};
 use vieww_paint::native::{NativeRenderer, SceneReport};
 use vieww_render::FrameDriver;
+use vieww_render_planner::Executor;
 use vieww_widget::WidgetNode;
 
-/// How many times a still fixture is rendered before the timed run, and how
-/// many timed runs are taken. Small: this is a gallery, not a benchmark
-/// suite, and the costs it exists to find differ by orders of magnitude
-/// rather than by percent.
-const WARMUP: usize = 1;
-const RUNS: usize = 3;
+use crate::receipt::{self, Json};
+use crate::shadow::ShadowLog;
+
+/// How many times a still fixture is rendered before the timed runs. The
+/// number of timed runs is `--runs` (default `cli::DEFAULT_RUNS`): small,
+/// because this is a gallery and the costs it exists to find differ by orders
+/// of magnitude rather than by percent — but a receipt meant for comparison
+/// should ask for more.
+pub(crate) const WARMUP: usize = 1;
 
 /// One entry in the gallery.
 pub(crate) struct Fixture {
@@ -51,10 +55,15 @@ pub(crate) struct Measured {
     pub name: &'static str,
     pub about: &'static str,
     pub size: Size,
-    /// Best of [`RUNS`] — the floor, which is the number a regression moves.
+    /// Best of the timed runs — the floor, which is the number a regression
+    /// moves.
     pub best: Duration,
-    /// Worst of [`RUNS`], to show when a fixture is noisy rather than slow.
+    /// Worst of the timed runs, to show when a fixture is noisy rather than
+    /// slow.
     pub worst: Duration,
+    /// Every timed run, in the order taken. A receipt carries all of them so a
+    /// reader can compute a statistic this table does not print.
+    pub runs: Vec<Duration>,
     pub report: SceneReport,
     /// Commands the widget tree produced. Cost per command is the ratio worth
     /// looking at; a scene that is slow because it is *large* is a different
@@ -90,8 +99,15 @@ impl Measured {
     }
 }
 
-/// Build, render, time and write one fixture.
-pub(crate) fn run(fixture: &Fixture, out: &Path) -> Measured {
+/// Build, render, time and write one fixture — and, with a shadow log, plan
+/// it too (see `shadow.rs`). Planning happens after the timed runs, so it can
+/// never be inside a timing.
+pub(crate) fn run(
+    fixture: &Fixture,
+    out: &Path,
+    runs: usize,
+    shadow: Option<&mut ShadowLog>,
+) -> Measured {
     // Attributed to this fixture: cleared before its tree is built, read after.
     vieww_render::overflow::forget_reported();
 
@@ -109,18 +125,30 @@ pub(crate) fn run(fixture: &Fixture, out: &Path) -> Measured {
             .expect("warm-up render");
     }
 
-    let mut best = Duration::MAX;
-    let mut worst = Duration::ZERO;
+    let mut taken = Vec::with_capacity(runs);
     let mut report = SceneReport::default();
-    for _ in 0..RUNS {
+    for _ in 0..runs.max(1) {
         let start = Instant::now();
         let (_pixels, this) = renderer
             .render_to_pixels(driver.scene(), width, height, fixture.background)
             .expect("timed render");
-        let elapsed = start.elapsed();
-        best = best.min(elapsed);
-        worst = worst.max(elapsed);
+        taken.push(start.elapsed());
         report = this;
+    }
+    let best = taken.iter().copied().min().unwrap_or_default();
+    let worst = taken.iter().copied().max().unwrap_or_default();
+
+    if let Some(shadow) = shadow {
+        // The median, not the floor: the planner predicts a typical frame.
+        let typical = receipt::percentile(&taken, 50.0).unwrap_or(best);
+        shadow.record(
+            fixture.name,
+            driver.scene(),
+            (width, height),
+            Executor::Cpu,
+            typical.as_secs_f64() * 1000.0,
+            Some("gallery: CPU rasterizer only".to_owned()),
+        );
     }
 
     let (png, _) = renderer
@@ -135,6 +163,7 @@ pub(crate) fn run(fixture: &Fixture, out: &Path) -> Measured {
         size: fixture.size,
         best,
         worst,
+        runs: taken,
         report,
         commands: driver.scene().len(),
         overflows,
@@ -237,4 +266,51 @@ pub(crate) fn print_table(measured: &[Measured]) {
 #[must_use]
 pub(crate) fn total_overflows(measured: &[Measured]) -> usize {
     measured.iter().map(|m| m.overflows).sum()
+}
+
+/// The receipt's `fixtures` and `outcome` for a gallery run.
+pub(crate) fn receipt_fields(measured: &[Measured]) -> Vec<(String, Json)> {
+    let rows = measured
+        .iter()
+        .map(|m| {
+            Json::obj([
+                ("name", Json::str(m.name)),
+                ("width", Json::Num(f64::from(m.size.width))),
+                ("height", Json::Num(f64::from(m.size.height))),
+                ("commands", Json::count(m.commands)),
+                ("cpu_runs_ms", Json::ms_list(&m.runs)),
+                ("cpu_best_ms", Json::ms(m.best)),
+                (
+                    "cpu_p50_ms",
+                    receipt::percentile(&m.runs, 50.0).map_or(Json::Null, Json::ms),
+                ),
+                ("cpu_worst_ms", Json::ms(m.worst)),
+                ("over_16_7ms", Json::Bool(m.frames_in_budget() < 1.0)),
+                ("shapes", Json::count(m.report.shapes)),
+                ("glyphs", Json::count(m.report.glyphs)),
+                ("layers", Json::count(m.report.layers)),
+                ("shadows", Json::count(m.report.shadows)),
+                ("culled_commands", Json::count(m.report.skipped_commands)),
+                ("layout_overflows", Json::count(m.overflows)),
+            ])
+        })
+        .collect();
+    let over: Vec<Json> = measured
+        .iter()
+        .filter(|m| m.frames_in_budget() < 1.0)
+        .map(|m| Json::str(m.name))
+        .collect();
+    let total: Duration = measured.iter().map(|m| m.best).sum();
+    vec![
+        ("fixtures".to_owned(), Json::Arr(rows)),
+        (
+            "outcome".to_owned(),
+            Json::obj([
+                ("fixtures", Json::count(measured.len())),
+                ("total_best_ms", Json::ms(total)),
+                ("over_budget", Json::Arr(over)),
+                ("layout_overflows", Json::count(total_overflows(measured))),
+            ]),
+        ),
+    ]
 }

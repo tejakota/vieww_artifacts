@@ -1,6 +1,26 @@
-# Remaining work (updated 2026-10-12)
+# Remaining work (updated 2026-10-15)
 
 Verified state of each item is in `PENDING.md`; this is the short list.
+
+## Done on 2026-10-15 (branch `claude/roadmap-p0-shadow-planner`)
+
+Evidence in `TRACKER.md`'s 2026-10-15 section.
+
+- **Benchmark receipts** — `fixtures --receipt`, `--runs`; kept by
+  `close-remaining.sh gallery` and `certify.sh`.
+- **The hybrid planner in shadow** — `fixtures --shadow`,
+  `VIEWW_PLANNER_SHADOW=<file>` on a window; its first run found and fixed a
+  composite-cost bug (727 ms predicted for a 6 ms frame). PENDING §2.3 is
+  what stands between shadow and authoritative.
+- **Per-stage frame timings** — GPU upload/record/submit/wait/readback and
+  scale/plan/raster/acquire/present on every frame, into the device suite's
+  `frame_stages` (PENDING §1.5's breakdown, once run on the phone).
+- **A double `Scene::scaled` on HiDPI CPU fallback frames**, removed.
+- **2,146 lines of orphaned text-stack files**, removed.
+
+**Next on hardware** (each is one command now): `ci/hardware/close-remaining.sh
+gallery` on the laptop (PENDING §1.1, §2.3); `ci/mobile/device-suite.sh --gpu`
+on the Redmi (§1.5).
 
 ## Done on 2026-10-12 (this session's commits, on top of `8fae3b4`)
 

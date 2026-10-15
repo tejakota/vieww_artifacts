@@ -26,3 +26,8 @@ crates/vieww-paint/tests/output/
 
 # Default output of ci/certify/release-check.sh and shot-suite.sh.
 /out/
+
+# ci/hardware/*: results of hardware runs, kept locally or published to
+# ci-results/hardware-<branch> by the workflow, never committed here.
+/hardware-results/
+/hardware-results-*

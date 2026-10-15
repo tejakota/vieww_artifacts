@@ -1503,6 +1503,31 @@ impl WindowState {
                 };
                 self.log
                     .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
+                self.log.note_stages(gpu.renderer.last_stages());
+                if tracing() {
+                    let st = gpu.renderer.last_stages();
+                    let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+                    trace_line(
+                        shared.now(),
+                        format_args!(
+                            "frame stages ({}): scale {:.2} plan {:.2} cpu {:.2} | gpu upload {:.2} \
+                             record {:.2} submit {:.2} wait {:.2} readback {:.2} | acquire {:.2} \
+                             present {:.2} = {:.2} ms",
+                            if drawn_on_gpu { "gpu" } else { "cpu" },
+                            ms(st.scale),
+                            ms(st.plan),
+                            ms(st.cpu_raster),
+                            ms(st.gpu.upload),
+                            ms(st.gpu.record),
+                            ms(st.gpu.submit),
+                            ms(st.gpu.wait),
+                            ms(st.gpu.readback),
+                            ms(st.acquire),
+                            ms(st.present),
+                            ms(st.total()),
+                        ),
+                    );
+                }
                 self.presented = true;
                 if presented_directly {
                     self.log.note_direct_present();
@@ -2040,8 +2065,29 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             format_args!("startup: window created ({width}x{height}); opening the GPU"),
         );
         let opening = Instant::now();
-        let (renderer, surface) = NativeRenderer::for_window(window.as_ref(), width, height)
+        let (mut renderer, surface) = NativeRenderer::for_window(window.as_ref(), width, height)
             .map_err(PlatformError::Gpu)?;
+        // **`VIEWW_PLANNER_SHADOW=<file>`: the hybrid planner, in shadow.**
+        //
+        // Every `present_planned` frame is also planned by
+        // `vieww_render_planner`'s placement planner and logged — one JSON
+        // line per frame — against what actually drew it, without changing
+        // what is drawn. See `NativeRenderer::enable_planner_shadow`. A
+        // diagnostic that cannot open its file says so and the app runs on.
+        if let Some(path) = std::env::var_os("VIEWW_PLANNER_SHADOW") {
+            let path = std::path::PathBuf::from(path);
+            match renderer.enable_planner_shadow(&path) {
+                Ok(()) => trace_line(
+                    self.shared.now(),
+                    format_args!("startup: planner shadow log -> {}", path.display()),
+                ),
+                Err(error) => eprintln!(
+                    "vieww: VIEWW_PLANNER_SHADOW={} could not be opened ({error}); \
+                     running without the planner shadow",
+                    path.display()
+                ),
+            }
+        }
         trace_line(
             self.shared.now(),
             format_args!(
