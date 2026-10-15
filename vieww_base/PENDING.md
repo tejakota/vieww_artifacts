@@ -385,18 +385,24 @@ returned its report (2026-10-15, `receipts/2026-10-15-kabylake-i5-7200u-windows/
 The same scenarios pass on the same laptop under Linux. Drawing works; the
 process dies tearing Vulkan down.
 
-**Why not closed.** Not yet reproduced with the diagnostic: `Gpu`'s `Drop` in
-`app.rs` already describes an NVIDIA driver fault on instance teardown and
-gates the destruction behind `VIEWW_KEEP_VULKAN`.
+**Diagnosed and fixed, awaiting confirmation on Windows.** With
+`VIEWW_KEEP_VULKAN=1` (which leaks the device) all five scenarios passed, so
+the fault is in teardown. The cause: `native::SHARED_DEVICE` held the shared
+device in a thread-local `Rc`, so it outlived every window and was destroyed by
+the thread-local's destructor at process exit — on Windows, inside the
+loader's process-detach phase, where NVIDIA's driver faults. It now holds a
+`Weak`, so the device dies with its last window inside the event loop; and
+`NativeRenderer` drops its GPU rasterizer before its device, an ordering the
+strong reference had been masking.
 
 **Blocks.** Any Windows app on an NVIDIA GPU exits with a crash code — crash
 reporters fire, installers and CI see a failure.
 
-**Start.** On the Windows machine: `$env:VIEWW_KEEP_VULKAN=1; cargo test
---release -p vieww-platform-winit --test wait_loop`. If it passes, the fix is
-the one that comment names: one shared `VkInstance`/`VkDevice` per process, not
-one per window (the trace also shows the capability probe creating and
-destroying an instance before the window's own).
+**Start.** On Windows, *without* `VIEWW_KEEP_VULKAN`: `cargo test --release -p
+vieww-platform-winit --test wait_loop` must pass all five scenarios. On Linux,
+`ci/hardware/linux.sh gpu desktop` must still pass — the desktop suite opens
+and closes extra windows, the case the shared device exists for. When both
+hold, move this to TRACKER.
 
 ## 3.5 Windows start-up is ~4x Linux on the same laptop
 

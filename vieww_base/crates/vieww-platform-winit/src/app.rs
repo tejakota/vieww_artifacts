@@ -1003,6 +1003,12 @@ impl Drop for Gpu {
         // one shared instance and device for every window rather than one
         // each. It leaks a device per window, so it is for one run of the
         // desktop suite and nothing else.
+        //
+        // It earned its keep a second time on 2026-10-15: Windows + NVIDIA
+        // crashed at *process exit* after a good frame, and passed with this
+        // set — which is how the cause was found. The shared device was being
+        // destroyed by a thread-local's destructor at exit; it is now held
+        // weakly and dies with its last window (see `native::SHARED_DEVICE`).
         if std::env::var_os("VIEWW_KEEP_VULKAN").is_none() {
             // SAFETY: the only place the renderer is dropped, and `Gpu` is
             // gone after this — nothing can reach the field again.
