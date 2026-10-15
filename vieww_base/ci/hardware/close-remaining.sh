@@ -4,7 +4,8 @@
 # Android phone, and collect everything into one tarball.
 #
 #   ci/hardware/close-remaining.sh            # all steps
-#   ci/hardware/close-remaining.sh gpu        # only some: gpu nvidia gallery android talkback monitors
+#   ci/hardware/close-remaining.sh android talkback   # only some: gpu nvidia gallery
+#                                                     # baseline size stress android talkback monitors
 #
 # Run from vieww_base/. Every step runs even when an earlier one failed; each
 # writes its own log, and the summary at the end says which passed. Attach the
@@ -17,6 +18,10 @@
 #   gallery   PENDING §1.1, §2.3, §4.1  the gallery (CPU) and the census (GPU +
 #                           parity) on this machine, each with a receipt and a
 #                           planner shadow log
+#   baseline  P0            the baseline window: start-up, RSS, idle, fps, stages,
+#                           energy (also: size, stress) — gpu, nvidia, gallery,
+#                           baseline, size and stress all run through
+#                           ci/hardware/linux.sh, into linux/ in the results
 #   android   PENDING §1.5  the in-app device suite on a real phone: real GPU frame
 #                           times count here, unlike on the emulator
 #   talkback  PENDING §1.5  the semantics tree with TalkBack actually bound, the
@@ -39,7 +44,7 @@ mkdir -p "$out"
 summary="$out/summary.txt"
 
 steps=("$@")
-[ ${#steps[@]} -eq 0 ] && steps=(gpu nvidia gallery android talkback monitors)
+[ ${#steps[@]} -eq 0 ] && steps=(gpu nvidia gallery baseline android talkback monitors)
 want() { local s; for s in "${steps[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 
 interactive=0
@@ -77,32 +82,21 @@ command -v lspci >/dev/null && lspci | grep -Ei 'vga|3d|display' > "$out/gpus.tx
 # The real driver, never a leftover software ICD from a CI-style shell.
 unset VK_ICD_FILENAMES VK_DRIVER_FILES
 
-if want gpu; then
-    run gpu-hal    cargo test --release -p vieww-hal --features vulkan -- --ignored --test-threads=1
-    run gpu-3d     cargo test --release -p vieww-3d  --features vulkan -- --ignored --test-threads=1
-    run gpu-window env VIEWW_REQUIRE_HARDWARE=display,gpu \
-                   cargo test --release -p vieww-platform-winit --test wait_loop
-fi
-
-if want nvidia; then
-    if command -v nvidia-smi >/dev/null 2>&1 || lspci 2>/dev/null | grep -qi nvidia; then
-        run nvidia-hal env __NV_PRIME_RENDER_OFFLOAD=1 __VK_LAYER_NV_optimus=NVIDIA_only \
-                       cargo test --release -p vieww-hal --features vulkan -- --ignored --test-threads=1
+# The desktop steps live in `ci/hardware/linux.sh` (unattended, and what the
+# self-hosted workflow runs); this script runs them there, into a subdirectory,
+# so there is one implementation of each. It adds the baseline window, size
+# and stress steps too when asked: `close-remaining.sh baseline` works.
+desktop_steps=()
+for s in gpu nvidia gallery baseline size stress; do
+    want "$s" && desktop_steps+=("$s")
+done
+if [ ${#desktop_steps[@]} -gt 0 ]; then
+    if VIEWW_HW_OUT="$out/linux" "$root/ci/hardware/linux.sh" "${desktop_steps[@]}"; then
+        echo "PASS  linux.sh ${desktop_steps[*]} (see linux/summary.txt)" | tee -a "$summary"
     else
-        echo "SKIP  nvidia (no NVIDIA GPU found)" | tee -a "$summary"
+        echo "FAIL  linux.sh ${desktop_steps[*]} (see linux/summary.txt)" | tee -a "$summary"
     fi
-fi
-
-if want gallery; then
-    # PENDING §1.1: the desktop GPU timings. The gallery is the CPU baseline;
-    # the census renders every plannable fixture on this machine's GPU too,
-    # with CPU/GPU parity. Each writes a receipt (machine, GPU, build, commit,
-    # every raw run) and a planner shadow log beside its output, so the numbers
-    # can be compared with another machine's without asking what it was.
-    run gallery cargo run --release -p fixtures -- "$out/fixtures" \
-        --runs 30 --receipt "$out/fixtures/receipt.json" --shadow "$out/fixtures/shadow.jsonl"
-    run census cargo run --release -p fixtures -- "$out/census" --census \
-        --runs 30 --receipt "$out/census/receipt.json" --shadow "$out/census/shadow.jsonl"
+    grep -E '^(PASS|FAIL|SKIP) ' "$out/linux/summary.txt" 2>/dev/null | sed 's/^/      linux: /' >> "$summary"
 fi
 
 phone=0

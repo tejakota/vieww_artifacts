@@ -341,6 +341,23 @@ impl FrameLog {
         self.frames
     }
 
+    /// Pixels rasterised over the whole run, as [`FrameReport::rasterised`]
+    /// reports it — without building a report, which sorts the recent window
+    /// and allocates. For a per-frame hook that only wants the running total
+    /// (the `baseline` example reads it every frame to measure what an idle
+    /// screen costs).
+    #[must_use]
+    pub const fn rasterised(&self) -> u64 {
+        self.rasterised
+    }
+
+    /// Frames the GPU rasterizer drew — [`FrameReport::gpu_frames`] without a
+    /// report.
+    #[must_use]
+    pub const fn gpu_frames(&self) -> u64 {
+        self.gpu_frames
+    }
+
     /// What each recent frame cost, oldest first.
     ///
     /// Feeds `vieww_widget::PerformanceOverlay`, which cannot be handed a
