@@ -1,0 +1,7 @@
+frames=72
+moving=71
+render_mean_ms=13.762
+render_p95_ms=17.007
+render_worst_ms=36.737
+frame_budget_ms=16.6
+over_budget=8

@@ -98,8 +98,11 @@ runner's GPU is paravirtual, so no number from it is a performance claim.
 `VIEWW_D3D12_ALLOW_WARP=1`), and `tests/d3d12_smoke.rs` passes on the
 `framework-checks` Windows runner on WARP. `SceneRenderer` is not ported.
 
-**Why not closed.** WARP is Microsoft's software D3D12: correctness evidence,
-never a performance number, and no real Windows GPU has run it.
+**Why not closed.** The smoke suite has now passed on a **hardware** adapter
+too (2026-10-15, `ci/hardware/windows.ps1`, the Kaby Lake laptop under
+Windows 10 — receipts in `receipts/2026-10-15-kabylake-i5-7200u-windows/`),
+so bring-up is real. There is still nothing to *time*: `SceneRenderer` is not
+ported, so no D3D12 frame exists.
 
 **Blocks.** Windows GPU rendering. Windows also has a *separate* unsolved
 problem — see 3.3.
@@ -283,8 +286,15 @@ on the CPU otherwise.
   2–2.7x a plain fill of the same area (shadow log, 2026-10-15); the heuristic
   has no per-command complexity term. Plain fills, text and the editor
   screens are within ~20%.
-- **GPU cost is uncalibrated.** No shadow log has a GPU frame in it yet
-  (§1.1, §1.5), and the dispatch overhead is a constant nobody has measured.
+- **GPU cost is 8x optimistic, now measured.** The baseline window's shadow
+  logs on the reference laptop's NVIDIA 920MX (2026-10-15, ~11,500 GPU frames
+  per OS, `receipts/2026-10-15-kabylake-*/baseline/gpu-shadow.jsonl.gz`):
+  predicted 0.22 ms, measured median 1.85 ms (Linux) / 1.83 ms (Windows) —
+  8.4x / 8.3x. The planner still chose correctly there (GPU over a 3.8 ms CPU
+  estimate), but a model 8x off cannot make close calls. The census's GPU
+  figures include a PCIe readback every frame and are not usable for this.
+  The CPU side on the same laptop: 1.67x (Linux) / 1.72x (Windows)
+  optimistic over the gallery.
 - **The 250,000-pixel hybrid threshold is a guess**, and no backend can
   execute a split pass.
 
@@ -359,11 +369,53 @@ returned, later-rebuild panic, and the studio's own Render into a child.
 
 **Not done.** Keyboard/IME, scroll and hover are not forwarded; preview state
 capture across Renders (`capture_preview_state`) has no remote counterpart;
-never run on Windows (the reason it exists); the full `viewwstudio` suite was
-not re-run after the change (the disk filled mid-run).
+the full `viewwstudio` suite was not re-run after the change (the disk filled
+mid-run). `tests/remote.rs` **passed on Windows** on 2026-10-15 (Windows 10,
+`ci/hardware/windows.ps1 remote`) — the platform it was written for.
 
 **Start.** `cargo test -p viewwstudio` on Linux, then on Windows; then add
 key/scroll forwarding to the wire in `remote.rs`.
+
+## 3.4 Windows + NVIDIA: the process crashes at teardown, after a good frame
+
+**What.** `tests/wait_loop.rs`' `self_close` and `gpu_frame` scenarios exit
+with `0xc0000005` (access violation) on Windows 10 with the NVIDIA GeForce 920MX
+(driver 32.0.15.7652) — **after** each scenario has passed and `run` has
+returned its report (2026-10-15, `receipts/2026-10-15-kabylake-i5-7200u-windows/gpu-window.log`).
+The same scenarios pass on the same laptop under Linux. Drawing works; the
+process dies tearing Vulkan down.
+
+**Diagnosed and fixed, awaiting confirmation on Windows.** With
+`VIEWW_KEEP_VULKAN=1` (which leaks the device) all five scenarios passed, so
+the fault is in teardown. The cause: `native::SHARED_DEVICE` held the shared
+device in a thread-local `Rc`, so it outlived every window and was destroyed by
+the thread-local's destructor at process exit — on Windows, inside the
+loader's process-detach phase, where NVIDIA's driver faults. It now holds a
+`Weak`, so the device dies with its last window inside the event loop; and
+`NativeRenderer` drops its GPU rasterizer before its device, an ordering the
+strong reference had been masking.
+
+**Blocks.** Any Windows app on an NVIDIA GPU exits with a crash code — crash
+reporters fire, installers and CI see a failure.
+
+**Start.** On Windows, *without* `VIEWW_KEEP_VULKAN`: `cargo test --release -p
+vieww-platform-winit --test wait_loop` must pass all five scenarios. On Linux,
+`ci/hardware/linux.sh gpu desktop` must still pass — the desktop suite opens
+and closes extra windows, the case the shared device exists for. When both
+hold, move this to TRACKER.
+
+## 3.5 Windows start-up is ~4x Linux on the same laptop
+
+**What.** `examples/baseline.rs`, warm cache, median of 5: `main` to first
+frame **840 ms on Windows vs 221 ms on Linux** (same i5-7200U, same commit).
+The window test's trace attributes the big pieces on Windows: Vulkan device
+ready after **215 ms**, the first swapchain present **197–236 ms**, and on the
+GPU path the first frame's command recording **302 ms** (pipeline creation,
+no pipeline cache).
+
+**Start.** A `VkPipelineCache` persisted to disk; create the device in parallel
+with the window; run `baseline` with `VIEWW_TRACE_FRAMES=1` to attribute the
+remainder.
 
 ---
 
@@ -400,6 +452,13 @@ reset, and — for nested — memory bandwidth on 16-byte-per-pixel layers
 rather than arithmetic (the layer row is ~19 instructions a pixel, near the
 SSE2 floor). A retained repaint of glass is now ~7.5 ms.
 
+**2026-10-15, the reference laptop itself** (i5-7200U, pinned rustc 1.98.1,
+30 runs, receipts in `receipts/2026-10-15-kabylake-i5-7200u-{linux,windows}/`):
+`00-layers-nested` best 20.2 / p50 23.8 ms on Linux, 20.8 / 22.2 on Windows;
+`23-editor-glass` 24.6 / 24.8 on Linux, 23.3 / 24.2 on Windows; the whole
+gallery 195 ms on both. Over budget by 4–8 ms on both OSes alike — this is the
+renderer, not an OS. The cloud-VM figures below were optimistic.
+
 **2026-10-15, a different machine.** A 2-core cloud Xeon (AVX-512, rustc
 1.97), `fixtures --runs 10 --receipt`: nested best 14.0 / p50 14.2 ms and
 glass 15.6 / 15.6 ms in one run; nested 13.1 / **19.4** ms and glass 15.9 /
@@ -413,6 +472,26 @@ Candidates: an SSE2 blur (the horizontal running sum and the vertical strip
 pass); half-float or 8-bit layer storage for layers that need no extended
 range (cuts nested's traffic in half or more, but changes bytes — needs a
 tolerance decision); AVX2 behind runtime detection.
+
+## 4.2 Memory and size are the farthest from the "lightest" targets
+
+Measured 2026-10-15; targets from the audit's Phase 6.
+
+| | Measured | Target |
+|---|---|---|
+| Baseline window peak RSS, laptop | 150 MB Linux / 89 MB Windows | under 40 MB |
+| Device suite RSS, phones | 285–388 MB (Galaxy S20, S26 Ultra) | — |
+| Windowed app, stripped release | 13.1 MB Linux (static std) / 7.4 MB Windows | — |
+| Android release APK | 15.6 MB | under 6 MB |
+
+Idle is already right: 0 frames and 0 pixels while nothing changes, on both
+OSes. Linux shows 3.4% idle CPU on the CPU path with no frames — something
+wakes without drawing.
+
+**Start.** A heap profile of `baseline` (`heaptrack`) and a size breakdown
+(`cargo bloat --release --example baseline -p vieww-platform-winit -n 40`);
+on the phone, `dumpsys meminfo` by category is already in the Device Farm
+artifacts.
 
 ---
 

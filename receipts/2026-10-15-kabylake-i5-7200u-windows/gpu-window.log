@@ -1,0 +1,139 @@
+﻿ Downloading crates ...
+  Downloaded accesskit_winit v0.34.1
+  Downloaded accesskit v0.25.1
+  Downloaded accesskit_consumer v0.39.1
+  Downloaded accesskit_windows v0.35.1
+   Compiling num-traits v0.2.19
+   Compiling windows-result v0.4.1
+   Compiling windows-strings v0.5.1
+   Compiling windows-implement v0.60.2
+   Compiling windows-interface v0.59.3
+   Compiling windows_x86_64_msvc v0.52.6
+   Compiling raw-window-handle v0.6.2
+   Compiling windows_x86_64_msvc v0.53.1
+   Compiling windows-core v0.62.2
+   Compiling windows-threading v0.2.1
+   Compiling pxfm v0.1.30
+   Compiling euclid v0.22.14
+   Compiling half v2.7.1
+   Compiling uuid v1.26.1
+   Compiling lyon_geom v1.0.19
+   Compiling zune-core v0.5.3
+   Compiling accesskit v0.25.1
+   Compiling lyon_path v1.0.19
+   Compiling lyon_tessellation v1.0.22
+   Compiling zune-jpeg v0.5.15
+   Compiling windows-numerics v0.3.1
+   Compiling windows-future v0.3.2
+   Compiling windows-collections v0.3.2
+   Compiling naga v30.0.1
+   Compiling windows-targets v0.52.6
+   Compiling winit v0.30.13
+   Compiling pin-project-lite v0.2.17
+   Compiling tracing-core v0.1.36
+   Compiling byteorder-lite v0.1.0
+   Compiling windows-targets v0.53.5
+   Compiling windows-sys v0.52.0
+   Compiling tracing v0.1.44
+   Compiling ash-window v0.13.0
+   Compiling windows v0.62.2
+   Compiling moxcms v0.8.1
+   Compiling image v0.25.10
+   Compiling vieww-shaders v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-shaders)
+   Compiling vieww-gpu v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-gpu)
+   Compiling accesskit_consumer v0.39.1
+   Compiling vieww-gestures v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-gestures)
+   Compiling vieww-scene v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-scene)
+   Compiling error-code v3.4.0
+   Compiling cursor-icon v1.2.0
+   Compiling dpi v0.1.2
+   Compiling smol_str v0.2.2
+   Compiling static_assertions v1.1.0
+   Compiling accesskit_windows v0.35.1
+   Compiling clipboard-win v5.4.1
+   Compiling vieww-render-graph v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-render-graph)
+   Compiling vieww-element v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-element)
+   Compiling vieww-hal v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-hal)
+   Compiling windows-sys v0.60.2
+   Compiling arboard v3.6.1
+   Compiling vieww-render v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-render)
+   Compiling vieww-render-planner v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-render-planner)
+   Compiling accesskit_winit v0.34.1
+   Compiling vieww-asset v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-asset)
+   Compiling vieww-hardware v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-hardware)
+   Compiling vieww-platform-winit v0.1.0 (C:\Users\Teja\Downloads\vieww_artifacts-main\vieww_artifacts-main\vieww_base\crates\vieww-platform-winit)
+    Finished `release` profile [optimized + debuginfo] target(s) in 5m 20s
+     Running tests\wait_loop.rs (target\release\deps\wait_loop-2065a678f51c5777.exe)
+wait_loop: idle
+wait_loop: idle ok
+wait_loop: wake
+wait_loop: wake ok
+wait_loop: accounting
+wait_loop: accounting ok
+wait_loop: self_close
+wait_loop: self_close FAILED (exit code: 0xc0000005) ΓÇö last 29 of 29 trace lines:
+    | vulkan: asking nvidia geforce 920mx (DISCRETE_GPU)
+    | vulkan: asking intel(r) hd graphics 620 (INTEGRATED_GPU)
+    |    0.000 startup: creating window
+    |    0.012 startup: window created (800x600); opening the GPU
+    | vulkan: asking nvidia geforce 920mx (DISCRETE_GPU)
+    | vulkan: asking intel(r) hd graphics 620 (INTEGRATED_GPU)
+    |    0.223 startup: GPU ready in 210.8981ms: NVIDIA GeForce 920MX
+    |    0.227 startup: accessibility attached
+    |    0.258 startup: window made visible
+    |    0.259 startup: system font scan started
+    |    0.260 startup: tree built
+    |    0.260 startup: display read
+    |    0.260 startup: window ready
+    |    0.260 event Resized
+    |    0.411 event Focused
+    |    0.411 event Resized
+    |    0.560 poll window#primary requested=true pending=false should_draw=true
+    | wait_loop trace: frame
+    |    0.560 ran=true pending=0 animating=false wants_tick=false
+    | wait_loop trace: waking
+    |    0.762 frame stages (cpu): scale 0.00 plan 0.00 cpu 4.89 | gpu upload 0.00 record 0.00 submit 0.00 wait 0.00 readback 0.00 | acquire 0.00 present 196.79 = 201.68 ms
+    |    0.762 event CursorEntered
+    |    0.763 event CursorMoved
+    |    0.763 event RedrawRequested
+    | wait_loop trace: frame
+    | wait_loop trace: closing
+    |    0.766 frame stages (cpu): scale 0.00 plan 0.00 cpu 0.00 | gpu upload 0.00 record 0.00 submit 0.00 wait 0.00 readback 0.00 | acquire 0.00 present 3.16 = 3.16 ms
+    | wait_loop trace: run returned: FrameReport { frames: 2, gpu_frames: 0, gpu_direct_frames: 0, elapsed: 4.5758ms, fps: 218.54102014948208, over_budget: 1, budget: 16.666668ms, median_interval: 4.5758ms, worst_interval: 4.5758ms, continuous_intervals: 1, median_work: 201.7223ms, worst_work: 201.7223ms, rasterised: 480000, surface_pixels: 480000, full_repaint_frames: 1, idle_full_repaint_frames: 0, median_stages: FrameStages { scale: 0ns, plan: 0ns, cpu_raster: 4.8888ms, gpu: GpuFrameTimings { upload: 0ns, record: 0ns, submit: 0ns, wait: 0ns, readback: 0ns }, acquire: 0ns, present: 196.7917ms } }
+    | wait_loop trace: pass: self-close
+wait_loop: gpu_frame
+wait_loop: gpu_frame FAILED (exit code: 0xc0000005) ΓÇö last 29 of 29 trace lines:
+    | vulkan: asking nvidia geforce 920mx (DISCRETE_GPU)
+    | vulkan: asking intel(r) hd graphics 620 (INTEGRATED_GPU)
+    |    0.000 startup: creating window
+    |    0.014 startup: window created (800x600); opening the GPU
+    | vulkan: asking nvidia geforce 920mx (DISCRETE_GPU)
+    | vulkan: asking intel(r) hd graphics 620 (INTEGRATED_GPU)
+    |    0.229 startup: GPU ready in 215.0994ms: NVIDIA GeForce 920MX
+    |    0.233 startup: accessibility attached
+    |    0.264 startup: window made visible
+    |    0.265 startup: system font scan started
+    |    0.266 startup: tree built
+    |    0.266 startup: display read
+    |    0.266 startup: window ready
+    |    0.266 event Resized
+    |    0.437 event Focused
+    |    0.437 event Resized
+    |    0.589 poll window#primary requested=true pending=false should_draw=true
+    | wait_loop trace: frame
+    |    0.589 ran=true pending=0 animating=false wants_tick=false
+    | wait_loop trace: waking
+    |    1.423 frame stages (gpu): scale 0.00 plan 0.01 cpu 0.00 | gpu upload 13.87 record 302.05 submit 0.34 wait 0.88 readback 0.00 | acquire 0.00 present 236.28 = 553.42 ms
+    |    1.424 event CursorEntered
+    |    1.424 event CursorMoved
+    |    1.424 event RedrawRequested
+    | wait_loop trace: frame
+    | wait_loop trace: closing
+    |    1.427 frame stages (gpu): scale 0.00 plan 0.01 cpu 0.00 | gpu upload 0.00 record 0.05 submit 0.07 wait 0.55 readback 0.00 | acquire 0.00 present 1.44 = 2.12 ms
+    | wait_loop: no `import` (ImageMagick) ΓÇö screen contents not checked
+    | wait_loop trace: pass: gpu frame
+System.Management.Automation.RemoteException
+thread 'main' (2216) panicked at crates\vieww-platform-winit\tests\wait_loop.rs:793:5:
+wait-loop scenarios failed: ["self_close", "gpu_frame"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `-p vieww-platform-winit --test wait_loop`

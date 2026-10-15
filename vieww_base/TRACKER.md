@@ -11,6 +11,29 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-15 (later): first hardware results — the reference laptop, both OSes, and three phones
+
+Evidence: `receipts/2026-10-15-kabylake-i5-7200u-{linux,windows}/` (the
+i5-7200U laptop with Intel HD 620 + NVIDIA 920MX, dual-booted, pinned rustc
+1.98.1) and the branch `ci-results/device-farm-main` (AWS Device Farm).
+
+1. **Laptop, both OSes:** Vulkan suites, `vieww-3d` GPU parity and the census
+   (23/23 fixtures drawn on the 920MX, parity **pass**) on real drivers; the
+   D3D12 smoke suite on a **hardware** adapter for the first time; the studio's
+   remote preview on Windows; the baseline window idle at **0 frames / 0
+   pixels**; the GPU path at 2.0 ms a frame against the CPU path's 2.6 ms
+   (Linux) / 3.7 ms (Windows).
+2. **The planner's first real calibration** — GPU 8.4x optimistic, CPU 1.7x
+   (PENDING §2.3).
+3. **Phones** (LG Stylo 5 / Galaxy S20 / Galaxy S26 Ultra): the device suite
+   passes on both paths on the mid and high phones; the low-end phone misses
+   60 Hz at ~41 ms on both paths, and the stage timings say why — on the CPU
+   path half the frame (19.8 ms) is the whole-buffer upload; on the GPU path
+   34.4 ms is the Adreno 506 itself. Cold start 65 ms (S26) to ~260 ms (LG).
+
+Open items it produced: §3.4 (Windows/NVIDIA teardown crash), §3.5 (Windows
+start-up), §4.1 confirmed on the reference machine, §4.2 (memory and size).
+
 ## 2026-10-15: receipts, per-stage frame timings, the hybrid planner in shadow
 
 Work from the roadmap's P0 ("establish the truth") and ticket 8 (`FramePlan`
