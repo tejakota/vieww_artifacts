@@ -34,7 +34,7 @@ use crate::input::{PointerTranslator, WheelDelta};
 use crate::insets::{InsetWatch, SystemInsets};
 use crate::keys::KeyTranslator;
 use crate::lifecycle::Lifecycle;
-use crate::native::{NativeError, NativeRenderer, NativeSurface};
+use crate::native::{NativeError, NativeRenderer, NativeSurface, PresentPath};
 use crate::scale::Scale;
 use crate::stats::{FrameLog, FrameReport};
 use crate::windows::{PlatformWindows, Requests};
@@ -1101,6 +1101,17 @@ struct WindowState {
     /// Whether this window has put a frame on screen yet. See
     /// [`WindowState::may_draw`].
     presented: bool,
+    /// The earliest moment this window may draw its next frame, on a CPU
+    /// present.
+    ///
+    /// A Vulkan swapchain paces the loop by blocking in `present` until vsync —
+    /// which is why `about_to_wait` answers `Poll` after drawing. A CPU present
+    /// (`crate::native::PresentPath::Cpu`) returns at once, so without this an
+    /// animating window draws as fast as the CPU allows: measured under Xvfb,
+    /// 12,700 frames a second of a band that moves a pixel per 16 ms. One frame
+    /// per refresh interval (the scheduler's budget, which follows the
+    /// monitor) is what the swapchain would have allowed.
+    cpu_paced_until: Option<Duration>,
     /// What this window clears to.
     ///
     /// Per window rather than read from the config, because [`WindowSpec`](vieww_render::window::WindowSpec) lets a
@@ -2066,12 +2077,18 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // `docs/RENDERER-MIGRATION.md`). One Vulkan device per window is
         // correct, just not `docs/AIMS.md` §B's *Cheaper* win the old vello
         // path had; a follow-up, not a defect.
+        // **Which way frames reach the screen.** A window that does not want
+        // the GPU presents its CPU frames straight to the compositor and never
+        // loads a GPU driver — see `crate::native::PresentPath`.
+        let path = PresentPath::choose(self.shared.config.prefer_gpu);
         trace_line(
             self.shared.now(),
-            format_args!("startup: window created ({width}x{height}); opening the GPU"),
+            format_args!(
+                "startup: window created ({width}x{height}); opening the {path:?} present"
+            ),
         );
         let opening = Instant::now();
-        let (mut renderer, surface) = NativeRenderer::for_window(window.as_ref(), width, height)
+        let (mut renderer, surface) = NativeRenderer::for_window_on(&window, width, height, path)
             .map_err(PlatformError::Gpu)?;
         // **`VIEWW_PLANNER_SHADOW=<file>`: the hybrid planner, in shadow.**
         //
@@ -2097,7 +2114,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         trace_line(
             self.shared.now(),
             format_args!(
-                "startup: GPU ready in {:?}: {}",
+                "startup: {:?} present ready in {:?}: {}",
+                surface.path(),
                 opening.elapsed(),
                 renderer.adapter_name()
             ),
@@ -2249,6 +2267,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             background,
             display: None,
             display_checked: None,
+            cpu_paced_until: None,
         };
 
         state.follow_display(&self.shared, &window);
@@ -2982,7 +3001,10 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
         // runtime is exactly the case `FrameDriver::owes_rebuild` was written
         // for: input arriving at one leaves the other pending with nobody
         // asking, and the answer is that every window is asked every turn.
-        let mut draw_any = false;
+        // Whether a window that drew presents through a swapchain, whose
+        // blocking present paces a `Poll` loop. A CPU-presented window does
+        // not block and is paced by `wake_at` instead.
+        let mut poll = false;
         // The soonest moment any window says it will next want a frame. Only
         // consulted when nothing wants one *now* — see `LoopAction::SleepUntil`
         // and the `ControlFlow` decision at the bottom of this function.
@@ -3017,7 +3039,17 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             let key = window.key;
 
             let now = self.shared.now();
-            let action = next_action(&mut window.scheduler, Some(&window.driver), can_draw, now);
+            let mut action =
+                next_action(&mut window.scheduler, Some(&window.driver), can_draw, now);
+            // A CPU-presented window that drew less than a refresh interval ago
+            // waits for the next one instead — see `cpu_paced_until`. The
+            // request stays pending (only drawing clears it), so the frame is
+            // deferred, never dropped.
+            if action == LoopAction::Draw {
+                if let Some(until) = window.cpu_paced_until.filter(|&until| until > now) {
+                    action = LoopAction::SleepUntil(until);
+                }
+            }
             if let LoopAction::SleepUntil(at) = action {
                 wake_at = Some(wake_at.map_or(at, |held: Duration| held.min(at)));
             }
@@ -3040,7 +3072,6 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             );
 
             if action == LoopAction::Draw {
-                draw_any = true;
                 // **Draw here, rather than asking for a `RedrawRequested` and
                 // drawing when it arrives.** The round trip through the window
                 // was a deadlock: `request_redraw` is a no-op while winit
@@ -3074,7 +3105,19 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                 // See
                 // `a_signal_written_from_layout_is_shown_by_the_frame_that_wrote_it`.
                 let (windows, shared) = (&mut self.windows, &mut self.shared);
-                windows[index].draw(shared);
+                let window = &mut windows[index];
+                window.draw(shared);
+                if window
+                    .gpu
+                    .as_ref()
+                    .is_some_and(|gpu| gpu.surface.path() == PresentPath::Cpu)
+                {
+                    let next = now + window.scheduler.budget();
+                    window.cpu_paced_until = Some(next);
+                    wake_at = Some(wake_at.map_or(next, |held: Duration| held.min(next)));
+                } else {
+                    poll = true;
+                }
             } else {
                 // And tell the log, because from inside it a long interval and a
                 // stall are the same number. This decision is the only thing
@@ -3086,7 +3129,7 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             }
         }
 
-        if draw_any {
+        if poll {
             // Poll rather than Wait: the swapchain blocks on vsync inside
             // `present`, so the loop is paced by the display rather than by a
             // timer we would have to keep in step with it.

@@ -17,6 +17,27 @@
 //! why it is correct rather than fast. **Nothing in this module, or anything
 //! it calls, touches vello, `vello_cpu`, `vello_hybrid` or `wgpu`.**
 //!
+//! # Two ways a frame reaches the screen
+//!
+//! A window presents through one of two [`PresentPath`]s, chosen when it
+//! opens:
+//!
+//! - **[`PresentPath::Cpu`]** — the default. The CPU rasterizer's pixels go to
+//!   the OS compositor through `softbuffer` (X11 SHM, `wl_shm`, GDI,
+//!   `ANativeWindow_lock`, CoreGraphics), and **no GPU driver is loaded at
+//!   all**. Only the rows a frame's damage touched are converted, on platforms
+//!   whose buffers say how old they are (see `CpuPresenter`).
+//! - **[`PresentPath::Vulkan`]** — a window that asked for the GPU
+//!   (`prefer_gpu`), or set `VIEWW_PRESENT=vulkan`, or whose CPU present could
+//!   not open. Everything below describes this path.
+//!
+//! Why the split: a window that never draws on the GPU was loading the Vulkan
+//! loader, every installed ICD and the GPU driver just to copy a CPU buffer
+//! onto the screen. On the reference laptop that was most of the window's
+//! resident memory, ~400 ms of Windows start-up (device 215 ms, first present
+//! ~200 ms), and on an LG Stylo 5 half of each CPU frame (present 19.8 ms of
+//! 41 ms) — `PENDING.md` §3.5 and §4.2 have the measurements.
+//!
 //! # What this is not, yet
 //!
 //! - **Damage-region rasterisation, whole-buffer upload.**
@@ -67,11 +88,16 @@
 //! pipeline, render-to-texture-then-readback) against `lavapipe`.
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::fmt;
 use std::io::Write as _;
+use std::num::NonZeroU32;
 use std::path::Path;
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use winit::window::Window;
 
 use vieww_foundation::{Color, Rect};
 use vieww_gpu::Planner as GpuPlanner;
@@ -136,20 +162,290 @@ impl From<VulkanError> for NativeError {
     }
 }
 
-/// A window's swapchain. See [`vieww_hal::vulkan::VulkanSwapchain`] for the
-/// Vulkan object this owns.
+/// How a window's frames reach the screen. See the module docs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PresentPath {
+    /// CPU pixels straight to the OS compositor, no GPU driver loaded.
+    Cpu,
+    /// A Vulkan swapchain, which the GPU rasterizer can draw into.
+    Vulkan,
+}
+
+impl PresentPath {
+    /// The path a window should take: Vulkan when it wants the GPU, CPU
+    /// otherwise — with `VIEWW_PRESENT=vulkan` or `=cpu` overriding either way,
+    /// for comparing the two on one machine.
+    #[must_use]
+    pub fn choose(prefer_gpu: bool) -> Self {
+        match std::env::var("VIEWW_PRESENT").ok().as_deref() {
+            Some("vulkan") => Self::Vulkan,
+            Some("cpu") => Self::Cpu,
+            _ if prefer_gpu => Self::Vulkan,
+            _ => Self::Cpu,
+        }
+    }
+}
+
+/// A window's presentable surface: a Vulkan swapchain, or a CPU buffer the OS
+/// composites. See [`PresentPath`].
 #[derive(Debug)]
 pub struct NativeSurface {
-    swapchain: VulkanSwapchain,
+    kind: SurfaceKind,
+}
+
+enum SurfaceKind {
+    /// See [`vieww_hal::vulkan::VulkanSwapchain`] for the Vulkan object this
+    /// owns.
+    Vulkan(VulkanSwapchain),
+    Cpu(CpuPresenter),
+}
+
+impl fmt::Debug for SurfaceKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Vulkan(swapchain) => f.debug_tuple("Vulkan").field(swapchain).finish(),
+            Self::Cpu(cpu) => f.debug_tuple("Cpu").field(&cpu.extent).finish(),
+        }
+    }
 }
 
 impl NativeSurface {
     /// Destroy the swapchain and its `VkSurfaceKHR` while `renderer`'s device
     /// and the window are both still alive. Must run before either is dropped;
     /// see `VulkanSwapchain::release` for the crash that ordering caused.
-    /// Idempotent. The surface cannot present afterwards.
+    /// Idempotent. The surface cannot present afterwards. A CPU surface holds
+    /// no driver objects and has nothing to release early.
     pub fn release(&mut self, renderer: &NativeRenderer) {
-        self.swapchain.release(&renderer.device);
+        if let (SurfaceKind::Vulkan(swapchain), Some(device)) = (&mut self.kind, &renderer.device) {
+            swapchain.release(device);
+        }
+    }
+
+    /// Which path this surface presents through.
+    #[must_use]
+    pub const fn path(&self) -> PresentPath {
+        match self.kind {
+            SurfaceKind::Vulkan(_) => PresentPath::Vulkan,
+            SurfaceKind::Cpu(_) => PresentPath::Cpu,
+        }
+    }
+
+    /// The surface's size in physical pixels.
+    #[must_use]
+    pub fn extent(&self) -> (u32, u32) {
+        match &self.kind {
+            SurfaceKind::Vulkan(swapchain) => swapchain.extent(),
+            SurfaceKind::Cpu(cpu) => cpu.extent,
+        }
+    }
+}
+
+/// Which pixels of the CPU rasterizer's output one frame changed, in physical
+/// pixels: integer, half-open `(left, top, right, bottom)` — exactly the
+/// bounds `render_retained_in_place` writes (it floors and ceils each damage
+/// region the same way).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Changed {
+    All,
+    Regions(Vec<(u32, u32, u32, u32)>),
+}
+
+impl Changed {
+    fn from_damage(damage: &Damage, (width, height): (u32, u32)) -> Self {
+        if damage.is_everything() {
+            return Self::All;
+        }
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a surface extent is a small number of pixels"
+        )]
+        let full = Rect::new(0.0, 0.0, width as f32, height as f32);
+        let mut regions = Vec::new();
+        for region in damage.regions() {
+            let region = region.intersect(full);
+            if region.is_empty() {
+                continue;
+            }
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "clamped to the surface above"
+            )]
+            let bounds = (
+                region.left.floor().max(0.0) as u32,
+                region.top.floor().max(0.0) as u32,
+                (region.right.ceil() as u32).min(width),
+                (region.bottom.ceil() as u32).min(height),
+            );
+            if bounds.0 < bounds.2 && bounds.1 < bounds.3 {
+                regions.push(bounds);
+            }
+        }
+        Self::Regions(regions)
+    }
+}
+
+/// A CPU frame's way to the screen without a GPU: `softbuffer`, everywhere
+/// but Android (see `native_android.rs` for that one).
+///
+/// # Converting only what changed
+///
+/// The rasterizer's output is straight-alpha RGBA8 bytes; the OS wants
+/// `0x00RRGGBB` words. Converting a whole 1080x2340 frame is ~10 MB of
+/// traffic, so the conversion follows damage — but a compositor hands back
+/// one of several buffers, each holding whatever frame it last showed.
+/// `softbuffer`'s [`age`](softbuffer::Buffer::age) says which: 1 is the
+/// previous frame, 2 the one before, 0 unknown. So this keeps the last few
+/// frames' changed regions and converts the union of the ones the buffer
+/// missed; age 0, or older than the history, converts everything. Platforms
+/// that do not track age (Android, macOS) always report 0 and always convert
+/// in full, which is still one pass with no GPU upload.
+#[cfg(not(target_os = "android"))]
+struct CpuPresenter {
+    // Field order is drop order: the surface before the context it came from.
+    surface: softbuffer::Surface<Arc<Window>, Arc<Window>>,
+    _context: softbuffer::Context<Arc<Window>>,
+    extent: (u32, u32),
+    /// Changed regions of recent presented frames, newest first.
+    history: VecDeque<Changed>,
+}
+
+/// How many frames of change history a buffer age can use. Triple buffering
+/// is the deepest swap any of `softbuffer`'s backends does.
+#[cfg(not(target_os = "android"))]
+const CPU_HISTORY: usize = 3;
+
+#[cfg(target_os = "android")]
+#[path = "native_android.rs"]
+mod android;
+#[cfg(target_os = "android")]
+use android::CpuPresenter;
+
+#[cfg(not(target_os = "android"))]
+impl CpuPresenter {
+    fn new(window: &Arc<Window>, width: u32, height: u32) -> Result<Self, NativeError> {
+        let context = softbuffer::Context::new(Arc::clone(window))
+            .map_err(|error| NativeError::Device(format!("CPU present: {error}")))?;
+        let surface = softbuffer::Surface::new(&context, Arc::clone(window))
+            .map_err(|error| NativeError::Device(format!("CPU present: {error}")))?;
+        let mut presenter = Self {
+            surface,
+            _context: context,
+            extent: (0, 0),
+            history: VecDeque::with_capacity(CPU_HISTORY),
+        };
+        presenter.resize(width, height)?;
+        Ok(presenter)
+    }
+
+    fn resize(&mut self, width: u32, height: u32) -> Result<(), NativeError> {
+        let (Some(w), Some(h)) = (NonZeroU32::new(width), NonZeroU32::new(height)) else {
+            return Ok(());
+        };
+        if self.extent == (width, height) {
+            return Ok(());
+        }
+        self.surface
+            .resize(w, h)
+            .map_err(|error| NativeError::Present(error.to_string()))?;
+        self.extent = (width, height);
+        self.history.clear();
+        Ok(())
+    }
+
+    /// Put `frame` (straight RGBA8, `extent`) on screen, converting at least
+    /// `changed` and whatever the buffer handed back is missing.
+    fn present(
+        &mut self,
+        frame: &[u8],
+        extent: (u32, u32),
+        changed: Changed,
+    ) -> Result<(), NativeError> {
+        self.resize(extent.0, extent.1)?;
+        let (width, height) = self.extent;
+        let mut buffer = self
+            .surface
+            .buffer_mut()
+            .map_err(|error| NativeError::Present(error.to_string()))?;
+        if buffer.len() != frame.len() / 4 {
+            // The surface and the frame disagree about the size (a resize the
+            // rasterizer has not caught up with). The next frame repaints.
+            return Ok(());
+        }
+        let plan = conversion_plan(usize::from(buffer.age()), &self.history, &changed);
+        match &plan {
+            None => convert_rows(frame, &mut buffer, width, (0, 0, width, height)),
+            Some(regions) => {
+                for &region in regions {
+                    convert_rows(frame, &mut buffer, width, region);
+                }
+            }
+        }
+        let full = plan.is_none();
+        let presented = match &changed {
+            Changed::Regions(regions) if !full => {
+                let rects: Vec<softbuffer::Rect> = regions
+                    .iter()
+                    .filter_map(|&(l, t, r, b)| {
+                        Some(softbuffer::Rect {
+                            x: l,
+                            y: t,
+                            width: NonZeroU32::new(r - l)?,
+                            height: NonZeroU32::new(b - t)?,
+                        })
+                    })
+                    .collect();
+                buffer.present_with_damage(&rects)
+            }
+            _ => buffer.present(),
+        };
+        presented.map_err(|error| NativeError::Present(error.to_string()))?;
+        self.history.push_front(changed);
+        self.history.truncate(CPU_HISTORY);
+        Ok(())
+    }
+}
+
+/// Which regions a CPU present must convert into a buffer that last showed
+/// the frame `age` frames ago (`softbuffer`'s convention: 1 is the previous
+/// frame, 0 unknown), given the changes of recent frames (`history`, newest
+/// first) and this frame's. `None` means everything.
+#[cfg_attr(target_os = "android", allow(dead_code))]
+fn conversion_plan(
+    age: usize,
+    history: &VecDeque<Changed>,
+    changed: &Changed,
+) -> Option<Vec<(u32, u32, u32, u32)>> {
+    // The buffer holds frame N-age; frames N-age+1 .. N-1 (the newest
+    // `age - 1` entries of the history) and this one changed it since.
+    let missed = age.checked_sub(1)?;
+    if missed > history.len() {
+        return None;
+    }
+    let mut regions = Vec::new();
+    for change in std::iter::once(changed).chain(history.iter().take(missed)) {
+        match change {
+            Changed::All => return None,
+            Changed::Regions(r) => regions.extend_from_slice(r),
+        }
+    }
+    Some(regions)
+}
+
+/// Straight RGBA8 bytes to `0x00RRGGBB` words, for the rows and columns of
+/// `region` (half-open). Alpha is dropped: the window is opaque, exactly as
+/// the Vulkan path's opaque composite ignores it.
+#[cfg_attr(target_os = "android", allow(dead_code))]
+fn convert_rows(rgba: &[u8], out: &mut [u32], width: u32, region: (u32, u32, u32, u32)) {
+    let (left, top, right, bottom) = region;
+    let width = width as usize;
+    for y in top as usize..bottom as usize {
+        let row = y * width;
+        let src = &rgba[(row + left as usize) * 4..(row + right as usize) * 4];
+        let dst = &mut out[row + left as usize..row + right as usize];
+        for (px, d) in src.as_chunks::<4>().0.iter().zip(dst) {
+            *d = (u32::from(px[0]) << 16) | (u32::from(px[1]) << 8) | u32::from(px[2]);
+        }
     }
 }
 
@@ -288,7 +584,9 @@ struct PlannerShadow {
 /// backend, through `vieww-hal`'s Vulkan swapchain. See the module docs for
 /// what this does and does not cover yet.
 pub struct NativeRenderer {
-    device: Rc<VulkanDevice>,
+    /// The Vulkan device, on [`PresentPath::Vulkan`]; `None` on the CPU path,
+    /// which loads no GPU driver.
+    device: Option<Rc<VulkanDevice>>,
     cpu: CpuRenderer,
     /// The GPU rasterizer, built on first use — see [`GpuRaster`].
     gpu: Option<GpuRaster>,
@@ -380,7 +678,10 @@ impl NativeRenderer {
     #[must_use]
     pub fn adapter_name(&self) -> String {
         use vieww_hal::Device as _;
-        self.device.info().name
+        self.device.as_ref().map_or_else(
+            || "none (CPU present: no GPU driver loaded)".to_owned(),
+            |device| device.info().name,
+        )
     }
 
     pub fn for_window(
@@ -425,16 +726,57 @@ impl NativeRenderer {
     ) -> Result<(Self, NativeSurface), NativeError> {
         let (device, swapchain) = shared_device_for(window, width, height)?;
         Ok((
-            Self {
-                device,
-                cpu,
-                gpu: None,
-                gpu_unavailable: false,
-                stages: FrameStages::default(),
-                shadow: None,
+            Self::with_device(Some(device), cpu),
+            NativeSurface {
+                kind: SurfaceKind::Vulkan(swapchain),
             },
-            NativeSurface { swapchain },
         ))
+    }
+
+    /// Open a window's renderer on `path`: [`PresentPath::Cpu`] presents
+    /// without a GPU driver, falling back to Vulkan if the platform's CPU
+    /// present cannot open (the error is returned only if both fail).
+    ///
+    /// # Errors
+    ///
+    /// As [`for_window`](Self::for_window).
+    ///
+    /// # Panics
+    ///
+    /// If `width` or `height` is zero.
+    pub fn for_window_on(
+        window: &Arc<Window>,
+        width: u32,
+        height: u32,
+        path: PresentPath,
+    ) -> Result<(Self, NativeSurface), NativeError> {
+        if path == PresentPath::Cpu {
+            match CpuPresenter::new(window, width, height) {
+                Ok(cpu) => {
+                    return Ok((
+                        Self::with_device(None, CpuRenderer::new()),
+                        NativeSurface {
+                            kind: SurfaceKind::Cpu(cpu),
+                        },
+                    ));
+                }
+                Err(error) => {
+                    eprintln!("vieww: {error}; presenting through Vulkan instead");
+                }
+            }
+        }
+        Self::for_window(window.as_ref(), width, height)
+    }
+
+    fn with_device(device: Option<Rc<VulkanDevice>>, cpu: CpuRenderer) -> Self {
+        Self {
+            device,
+            cpu,
+            gpu: None,
+            gpu_unavailable: false,
+            stages: FrameStages::default(),
+            shadow: None,
+        }
     }
 
     /// Cached glyph outlines — forwarded from the CPU rasterizer.
@@ -496,7 +838,12 @@ impl NativeRenderer {
     /// The planner's assumed profile for this window's device.
     fn planner_profile(&self) -> DeviceProfile {
         use vieww_hal::Device as _;
-        profile_for(&self.device.info().device_type)
+        // On the CPU present path no device was opened to ask; plan as this
+        // kind of machine's usual GPU, which is what the log is for.
+        self.device.as_ref().map_or_else(
+            || profile_for(""),
+            |device| profile_for(&device.info().device_type),
+        )
     }
 
     /// Plan `scene` in shadow and log what actually happened to it.
@@ -599,10 +946,16 @@ impl NativeRenderer {
         logical_size: (u32, u32),
         scale: Scale,
     ) -> Result<SceneReport, NativeError> {
-        let (physical_width, physical_height) = surface.swapchain.extent();
+        let (physical_width, physical_height) = surface.extent();
         let (logical_width, logical_height) = logical_size;
         self.stages = FrameStages::default();
         let rasterising = Instant::now();
+        // What this frame changes, for a CPU surface that converts only that.
+        // A retained render falls back to a full one when the size changed
+        // since the last frame; so does this.
+        let resized =
+            self.cpu.last_frame().len() != physical_width as usize * physical_height as usize * 4;
+        let mut changed = Changed::All;
 
         // **Rasterise at the device's own resolution whenever the two differ.**
         //
@@ -626,13 +979,18 @@ impl NativeRenderer {
         // renderer clips the sub-pixel remainder.
         let report = if (logical_width, logical_height) == (physical_width, physical_height) {
             match damage {
-                Some(damage) => self.cpu.render_retained_in_place(
-                    scene,
-                    damage,
-                    logical_width,
-                    logical_height,
-                    base,
-                )?,
+                Some(damage) => {
+                    if !resized {
+                        changed = Changed::from_damage(damage, (physical_width, physical_height));
+                    }
+                    self.cpu.render_retained_in_place(
+                        scene,
+                        damage,
+                        logical_width,
+                        logical_height,
+                        base,
+                    )?
+                }
                 None => self
                     .cpu
                     .render_in_place(scene, logical_width, logical_height, base)?,
@@ -658,6 +1016,12 @@ impl NativeRenderer {
                 // (and its antialiasing bleed) exactly as it scales the ink.
                 Some(logical) => {
                     let physical = Physical::new(scene, logical, scale, physical_surface);
+                    if !resized {
+                        changed = Changed::from_damage(
+                            physical.damage(),
+                            (physical_width, physical_height),
+                        );
+                    }
                     self.cpu.render_retained_in_place(
                         &scaled,
                         physical.damage(),
@@ -673,7 +1037,7 @@ impl NativeRenderer {
         };
 
         self.stages.cpu_raster = rasterising.elapsed() - self.stages.scale;
-        self.present_last_cpu_frame(surface, (physical_width, physical_height))?;
+        self.present_last_cpu_frame(surface, (physical_width, physical_height), changed)?;
         Ok(report)
     }
 
@@ -683,6 +1047,7 @@ impl NativeRenderer {
         &mut self,
         surface: &mut NativeSurface,
         (physical_width, physical_height): (u32, u32),
+        changed: Changed,
     ) -> Result<(), NativeError> {
         // In place: the renderer's retained output is read directly, rather
         // than copied into a fresh `Pixels` every frame — that copy was a
@@ -697,9 +1062,19 @@ impl NativeRenderer {
         );
 
         let presenting = Instant::now();
-        self.device
-            .present_pixels(&mut surface.swapchain, frame)
-            .map_err(|error| NativeError::Present(error.to_string()))?;
+        match (&mut surface.kind, &self.device) {
+            (SurfaceKind::Cpu(cpu), _) => {
+                cpu.present(frame, (physical_width, physical_height), changed)?;
+            }
+            (SurfaceKind::Vulkan(swapchain), Some(device)) => device
+                .present_pixels(swapchain, frame)
+                .map_err(|error| NativeError::Present(error.to_string()))?,
+            (SurfaceKind::Vulkan(_), None) => {
+                return Err(NativeError::Present(
+                    "a Vulkan surface on a renderer with no device".to_owned(),
+                ));
+            }
+        }
         self.stages.present = presenting.elapsed();
         Ok(())
     }
@@ -722,10 +1097,13 @@ impl NativeRenderer {
         if width == 0 || height == 0 {
             return Ok(());
         }
-        surface
-            .swapchain
-            .recreate(&self.device, width, height)
-            .map_err(|error| NativeError::Present(error.to_string()))
+        match (&mut surface.kind, &self.device) {
+            (SurfaceKind::Cpu(cpu), _) => cpu.resize(width, height),
+            (SurfaceKind::Vulkan(swapchain), Some(device)) => swapchain
+                .recreate(device, width, height)
+                .map_err(|error| NativeError::Present(error.to_string())),
+            (SurfaceKind::Vulkan(_), None) => Ok(()),
+        }
     }
 
     /// Rasterise on the GPU when the scene plans complete, on the CPU when it
@@ -768,14 +1146,20 @@ impl NativeRenderer {
         logical_size: (u32, u32),
         scale: Scale,
     ) -> Result<PlannedFrame, NativeError> {
-        let (physical_width, physical_height) = surface.swapchain.extent();
+        let (physical_width, physical_height) = surface.extent();
         let extent = (physical_width, physical_height);
         self.stages = FrameStages::default();
 
         // The GPU rasterizer, once. Creation failure is remembered and this
-        // becomes a CPU renderer permanently — see `gpu_unavailable`.
-        if self.gpu.is_none() && !self.gpu_unavailable {
-            match SceneRenderer::new(&self.device) {
+        // becomes a CPU renderer permanently — see `gpu_unavailable`. A CPU
+        // surface has no device to build one on, and draws every frame on the
+        // CPU.
+        let device = match (&surface.kind, &self.device) {
+            (SurfaceKind::Vulkan(_), Some(device)) => Some(Rc::clone(device)),
+            _ => None,
+        };
+        if let (None, false, Some(device)) = (&self.gpu, self.gpu_unavailable, &device) {
+            match SceneRenderer::new(device) {
                 Ok(renderer) => {
                     self.gpu = Some(GpuRaster {
                         planner: GpuPlanner::new(),
@@ -802,7 +1186,12 @@ impl NativeRenderer {
         // when shadow mode is on: the frame path does not allocate otherwise.
         let mut fallback: Option<String> = None;
 
-        if let Some(GpuRaster { planner, renderer }) = self.gpu.as_mut() {
+        if let (
+            Some(GpuRaster { planner, renderer }),
+            Some(device),
+            SurfaceKind::Vulkan(swapchain),
+        ) = (self.gpu.as_mut(), device.as_ref(), &mut surface.kind)
+        {
             #[expect(
                 clippy::cast_precision_loss,
                 reason = "a swapchain extent is a small number of pixels"
@@ -817,11 +1206,10 @@ impl NativeRenderer {
                 // swapchain's format: the whole frame stays on the GPU. A
                 // translucent window keeps the readback path, because the
                 // scene targets are premultiplied and a blit cannot divide.
-                if base.a == 255 && self.device.can_blit_scene_frames(&surface.swapchain) {
+                if base.a == 255 && device.can_blit_scene_frames(swapchain) {
                     let acquiring = Instant::now();
-                    let acquired = self
-                        .device
-                        .acquire_image(&mut surface.swapchain, extent)
+                    let acquired = device
+                        .acquire_image(swapchain, extent)
                         .map_err(|error| NativeError::Present(error.to_string()))?;
                     self.stages.acquire = acquiring.elapsed();
                     let Some(image) = acquired else {
@@ -835,13 +1223,13 @@ impl NativeRenderer {
                         });
                     };
                     if let Err(error) = renderer.render_planned_to(planner, &plan, base, &image) {
-                        let _ = self.device.abandon_acquired(&mut surface.swapchain, image);
+                        let _ = device.abandon_acquired(swapchain, image);
                         return Err(NativeError::Render(error.to_string()));
                     }
                     self.stages.gpu = renderer.last_timings();
                     let presenting = Instant::now();
-                    self.device
-                        .present_acquired(&mut surface.swapchain, image)
+                    device
+                        .present_acquired(swapchain, image)
                         .map_err(|error| NativeError::Present(error.to_string()))?;
                     self.stages.present = presenting.elapsed();
                     self.record_shadow(&scene, extent, Executor::Gpu, None);
@@ -857,8 +1245,8 @@ impl NativeRenderer {
                     .map_err(|error| NativeError::Render(error.to_string()))?;
                 self.stages.gpu = renderer.last_timings();
                 let presenting = Instant::now();
-                self.device
-                    .present_pixels(&mut surface.swapchain, &pixels)
+                device
+                    .present_pixels(swapchain, &pixels)
                     .map_err(|error| NativeError::Present(error.to_string()))?;
                 self.stages.present = presenting.elapsed();
                 let reason = self
@@ -895,7 +1283,7 @@ impl NativeRenderer {
             self.cpu
                 .render_in_place(scene.as_ref(), physical_width, physical_height, base)?;
         self.stages.cpu_raster = rasterising.elapsed();
-        self.present_last_cpu_frame(surface, extent)?;
+        self.present_last_cpu_frame(surface, extent, Changed::All)?;
         self.record_shadow(&scene, extent, Executor::Cpu, fallback);
         Ok(PlannedFrame {
             report,
@@ -934,6 +1322,90 @@ mod tests {
         assert_eq!(profile_for("CPU"), DeviceProfile::CPU_ONLY_FALLBACK);
         assert_eq!(profile_for("DISCRETE_GPU"), DeviceProfile::DESKTOP_DISCRETE);
         assert_eq!(profile_for("INTEGRATED_GPU").gpu, GpuKind::Integrated);
+    }
+
+    fn regions(r: &[(u32, u32, u32, u32)]) -> Changed {
+        Changed::Regions(r.to_vec())
+    }
+
+    /// The CPU present converts what the handed-back buffer is missing: this
+    /// frame's change, plus every frame since that buffer was last shown.
+    #[test]
+    fn a_cpu_present_converts_what_the_buffer_missed() {
+        let a = (0, 0, 10, 10);
+        let b = (20, 20, 30, 30);
+        let c = (40, 40, 50, 50);
+        let history: VecDeque<Changed> = [regions(&[b]), regions(&[c])].into();
+
+        // Unknown contents: everything.
+        assert_eq!(conversion_plan(0, &history, &regions(&[a])), None);
+        // The previous frame: only this frame's change.
+        assert_eq!(conversion_plan(1, &history, &regions(&[a])), Some(vec![a]));
+        // Two frames ago: this frame's and the previous frame's.
+        assert_eq!(
+            conversion_plan(2, &history, &regions(&[a])),
+            Some(vec![a, b])
+        );
+        assert_eq!(
+            conversion_plan(3, &history, &regions(&[a])),
+            Some(vec![a, b, c])
+        );
+        // Older than the history remembers: everything.
+        assert_eq!(conversion_plan(4, &history, &regions(&[a])), None);
+        // A full repaint anywhere in what was missed: everything.
+        let after_full: VecDeque<Changed> = [regions(&[b]), Changed::All].into();
+        assert_eq!(
+            conversion_plan(2, &after_full, &regions(&[a])),
+            Some(vec![a, b])
+        );
+        assert_eq!(conversion_plan(3, &after_full, &regions(&[a])), None);
+        assert_eq!(conversion_plan(1, &history, &Changed::All), None);
+        // Nothing changed and the buffer is current: nothing to convert.
+        assert_eq!(conversion_plan(1, &history, &regions(&[])), Some(vec![]));
+    }
+
+    /// Damage rounds out to whole pixels, clamps to the surface, and drops
+    /// what lies outside it — the same bounds the retained render writes.
+    #[test]
+    fn damage_becomes_the_pixels_the_retained_render_writes() {
+        let surface = Rect::new(0.0, 0.0, 100.0, 50.0);
+        let mut damage = Damage::new(surface);
+        damage.add(Rect::new(10.2, 5.7, 20.1, 9.0));
+        damage.add(Rect::new(90.0, 40.0, 130.0, 70.0));
+        damage.add(Rect::new(200.0, 200.0, 210.0, 210.0));
+        let Changed::Regions(mut got) = Changed::from_damage(&damage, (100, 50)) else {
+            panic!("partial damage is regions");
+        };
+        got.sort_unstable();
+        // `Damage::add` widens each rect by a pixel of antialiasing bleed
+        // before this sees it; the rounding out is this function's.
+        assert_eq!(got, vec![(9, 4, 22, 10), (89, 39, 100, 50)]);
+        assert_eq!(
+            Changed::from_damage(&Damage::everything(surface), (100, 50)),
+            Changed::All
+        );
+    }
+
+    #[test]
+    fn conversion_is_rgba_to_0rgb_inside_the_region_only() {
+        // 3x2: red, green, blue / white, black, 50%-alpha grey.
+        let rgba = [
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, //
+            255, 255, 255, 255, 0, 0, 0, 255, 128, 128, 128, 128,
+        ];
+        let mut out = [0xDEAD_BEEF_u32; 6];
+        convert_rows(&rgba, &mut out, 3, (1, 0, 3, 2));
+        assert_eq!(
+            out,
+            [
+                0xDEAD_BEEF,
+                0x00_00FF00,
+                0x00_0000FF,
+                0xDEAD_BEEF,
+                0x00_000000,
+                0x00_808080
+            ]
+        );
     }
 
     #[test]

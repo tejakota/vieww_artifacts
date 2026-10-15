@@ -83,6 +83,19 @@ accesskit_winit = "0.34"
 # exist on every target or an application's setup code needs a `cfg` around it.
 log = "0.4"
 
+[target.'cfg(not(target_os = "android"))'.dependencies]
+# **CPU frames reach the screen without a GPU driver.** The CPU rasterizer's
+# pixels used to be presented through a Vulkan swapchain, so even a window that
+# never drew on the GPU loaded the Vulkan loader, every installed ICD and the
+# GPU driver — most of a window's resident memory, and on Windows + NVIDIA
+# ~400 ms of start-up (2026-10-15, `PENDING.md` §3.5, §4.2). softbuffer hands a
+# CPU buffer to the OS compositor directly: X11 SHM, `wl_shm`, GDI,
+# CoreGraphics, UIKit. Used unless the window asked for the GPU
+# (`native::PresentPath`). `kms` (DRM) is not a window target, so it is off.
+# Android does its own (`src/native_android.rs`, through `ndk`), so softbuffer
+# is not built there — see that file for why.
+softbuffer = { version = "0.4", default-features = false, features = ["x11", "x11-dlopen", "wayland", "wayland-dlopen"] }
+
 # The desktop pasteboard. Named per-target rather than unconditionally because
 # it pulls X11 and Wayland clients on Linux, none of which exists on a phone —
 # and the mobile targets have their own pasteboard APIs anyway, so an
@@ -135,6 +148,9 @@ gtk = { version = "0.18", optional = true }
 # is the one that needs no Java of our own.
 [target.'cfg(target_os = "android")'.dependencies]
 winit = { version = "0.30", features = ["android-native-activity"] }
+# `ANativeWindow` for the CPU present (`src/native_android.rs`). The same 0.9
+# winit's Android backend already links.
+ndk = "0.9"
 
 # Android discards stdout and stderr. Without a logger a panic is an app that
 # vanishes leaving an empty logcat, which is the single most expensive way to
