@@ -57,17 +57,21 @@ speed on a desktop.
 (`Placement::Gpu` where `ScenePlan::is_complete` allows), beside its CPU
 numbers (185.3 ms for the gallery on the Kaby Lake laptop).
 
-**Why not.** The gallery renders only on the CPU; it has no switch to plan its
-scenes onto the GPU.
+**Why not.** Only for want of the machine. (The previous wording here said the
+gallery had no GPU mode; it has had one all along — `fixtures --census` renders
+every plannable fixture through `vulkan::SceneRenderer`, with CPU/GPU parity —
+and since 2026-10-15 it writes a receipt naming the GPU, driver type, build and
+commit beside every raw run, plus a planner shadow log.)
 
-**Blocks.** A desktop answer to §6.1. (The phone already has one: 1.7x.)
+**Blocks.** A desktop answer to §6.1 (the phone already has one: 1.7x), and
+the GPU half of the planner's calibration (§2.3).
 
-**Start.** Add a GPU mode to `examples/fixtures` that renders each fixture
-through `vulkan::SceneRenderer` and reports per-fixture time and whether the
-plan was complete; then `ci/hardware/close-remaining.sh gallery`. When the
-numbers exist, update the "unmeasured for speed" wording in
-`docs/guide/README.md`, `crates/vieww-hal/src/lib.rs` and
-`docs/GPU-RENDERER-STATUS.md`.
+**Start.** `ci/hardware/close-remaining.sh gallery` on the Kaby Lake laptop:
+it now runs the gallery and the census with `--runs 30 --receipt --shadow`.
+Read `census/receipt.json`'s `gpu` block first — if it says `CPU`, the run
+picked lavapipe and the numbers are not a GPU's. Then update the "unmeasured
+for speed" wording in `docs/guide/README.md`, `crates/vieww-hal/src/lib.rs`
+and `docs/GPU-RENDERER-STATUS.md`.
 
 ## 1.2 macOS — the Metal backend runs; its scene renderer is not ported
 
@@ -142,8 +146,11 @@ the planned GPU path correct and 1.7x faster than the CPU rasterizer.
   `classes.dex`); `ci/mobile/apk-add-code.sh` now adds one, and the CI APK
   build runs it. Test Lab shuts down on 30 September 2027.
 
-**Start.** A per-frame breakdown in the device suite (plan / submit / present)
-on the phone (`ci/mobile/device-suite.sh --gpu`); then decide the default.
+**Start.** `ci/mobile/device-suite.sh --gpu` on the phone and read the new
+`frame_stages` observation (added 2026-10-15): median scale, plan, CPU raster,
+GPU upload / record / submit / fence wait / readback, acquire and present, per
+frame. The fence wait is an upper bound on the GPU's own work while one frame
+is in flight. Then decide the default.
 For more phones: the `GCP_SA_KEY`/`FTL_PROJECT` secrets and the workflow with
 `test_lab_android` ticked, or upload `vieww-arm64.apk` from the `vieww-apk`
 artifact to Test Lab's console as a **Game Loop** test.
@@ -262,6 +269,35 @@ implements. The GPU blur now takes an `Edge` — `Transparent` for shadows,
 Metal/D3D12 do not run `post.wgsl` yet; their `SceneRenderer` ports must pass
 the same flag.
 
+## 2.3 The hybrid planner runs in shadow; it is not authoritative
+
+**What.** `vieww_render_planner::plan_frame` places each pass on the CPU, the
+GPU or both, and since 2026-10-15 it runs beside real frames in shadow
+(`fixtures --shadow`, `VIEWW_PLANNER_SHADOW` on a window) and logs what it
+would have done. Nothing yet *acts* on its placement: `present_planned` still
+draws a whole frame on the GPU when `ScenePlan::is_complete` and a whole frame
+on the CPU otherwise.
+
+**Why not.** Its inputs are not yet trustworthy enough to put in charge:
+- **CPU cost is area-only.** On the gallery, strokes, curves and shadows cost
+  2–2.7x a plain fill of the same area (shadow log, 2026-10-15); the heuristic
+  has no per-command complexity term. Plain fills, text and the editor
+  screens are within ~20%.
+- **GPU cost is uncalibrated.** No shadow log has a GPU frame in it yet
+  (§1.1, §1.5), and the dispatch overhead is a constant nobody has measured.
+- **The 250,000-pixel hybrid threshold is a guess**, and no backend can
+  execute a split pass.
+
+**Blocks.** Roadmap P2 — the hybrid engine making the live decision.
+
+**Start.** Collect shadow logs from the laptop (`close-remaining.sh gallery`)
+and the phone (`VIEWW_PLANNER_SHADOW`, or the device suite) and read
+`Calibration::calibrated` for each. Add a per-command complexity weight to
+`HeuristicCostModel` from the gallery's error ratios (`00-strokes`,
+`00-curves`, `00-shadows` are the outliers). Only then put an
+authoritative mode behind a feature flag, keeping `is_complete` as the
+per-frame fallback gate.
+
 ---
 
 # 3. Platform and product gaps
@@ -363,6 +399,13 @@ callgrind, whole fixture run (warm-up + 3 frames + PNG encode): glass
 reset, and — for nested — memory bandwidth on 16-byte-per-pixel layers
 rather than arithmetic (the layer row is ~19 instructions a pixel, near the
 SSE2 floor). A retained repaint of glass is now ~7.5 ms.
+
+**2026-10-15, a different machine.** A 2-core cloud Xeon (AVX-512, rustc
+1.97), `fixtures --runs 10 --receipt`: nested best 14.0 / p50 14.2 ms and
+glass 15.6 / 15.6 ms in one run; nested 13.1 / **19.4** ms and glass 15.9 /
+**16.7** ms in the next, same binary. Under budget at best-of, not reliably at
+the median, on a machine that is not the reference laptop — so this stays
+open, and the reference number should come from a receipt on that laptop.
 
 **Start.** Measure first, both ways (callgrind counts `rep stosb` per byte,
 so `memset` looks ~20x worse than it is; time anything that moves memory).

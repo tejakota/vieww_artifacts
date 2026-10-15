@@ -14,7 +14,9 @@
 #   gpu       PENDING §1.1  Vulkan suites + a GPU frame in a real window, on the
 #                           laptop's own driver (not lavapipe, not SwiftShader)
 #   nvidia    PENDING §1.1  the same suites on the discrete NVIDIA GPU (PRIME offload)
-#   gallery   PENDING §4.1  the fixture gallery's timings on this machine
+#   gallery   PENDING §1.1, §2.3, §4.1  the gallery (CPU) and the census (GPU +
+#                           parity) on this machine, each with a receipt and a
+#                           planner shadow log
 #   android   PENDING §1.5  the in-app device suite on a real phone: real GPU frame
 #                           times count here, unlike on the emulator
 #   talkback  PENDING §1.5  the semantics tree with TalkBack actually bound, the
@@ -92,7 +94,15 @@ if want nvidia; then
 fi
 
 if want gallery; then
-    run gallery cargo run --release -p fixtures -- "$out/fixtures"
+    # PENDING §1.1: the desktop GPU timings. The gallery is the CPU baseline;
+    # the census renders every plannable fixture on this machine's GPU too,
+    # with CPU/GPU parity. Each writes a receipt (machine, GPU, build, commit,
+    # every raw run) and a planner shadow log beside its output, so the numbers
+    # can be compared with another machine's without asking what it was.
+    run gallery cargo run --release -p fixtures -- "$out/fixtures" \
+        --runs 30 --receipt "$out/fixtures/receipt.json" --shadow "$out/fixtures/shadow.jsonl"
+    run census cargo run --release -p fixtures -- "$out/census" --census \
+        --runs 30 --receipt "$out/census/receipt.json" --shadow "$out/census/shadow.jsonl"
 fi
 
 phone=0

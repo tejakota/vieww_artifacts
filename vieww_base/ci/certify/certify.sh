@@ -258,7 +258,8 @@ elif have_vulkan; then
 		fi
 	fi
 	run gpu/workload cargo run --release -p test-gpu-work -- "$OUT/gpu/workload"
-	run gpu/census cargo run --release -p fixtures -- "$OUT/gpu/census-out" --census
+	run gpu/census cargo run --release -p fixtures -- "$OUT/gpu/census-out" --census \
+		--receipt "$OUT/gpu/census-out/receipt.json" --shadow "$OUT/gpu/census-out/shadow.jsonl"
 else
 	for stage in gpu/device-class gpu/adapter gpu/vulkan-suite gpu/workload gpu/census; do
 		skip "$stage" "no Vulkan loader/ICD$([[ "$PLATFORM" == macos ]] && echo ' (install the Vulkan SDK / MoltenVK)')"
@@ -268,7 +269,8 @@ fi
 if [[ "$ONLY" != gpu ]]; then
 # ── visual (CPU renderer) ────────────────────────────────────────────────────
 run visual/premium cargo run --release -p test-premium-ui -- "$OUT/visual/premium"
-run visual/fixtures cargo run --release -p fixtures -- "$OUT/visual/fixtures"
+run visual/fixtures cargo run --release -p fixtures -- "$OUT/visual/fixtures" \
+	--receipt "$OUT/visual/fixtures/receipt.json" --shadow "$OUT/visual/fixtures/shadow.jsonl"
 
 # ── the stress and fidelity suites ───────────────────────────────────────────
 STAGES=(
