@@ -41,11 +41,17 @@ kv manufacturer "$(sh_ getprop ro.product.manufacturer)"
 kv model "$(sh_ getprop ro.product.model)"
 kv android "$(sh_ getprop ro.build.version.release)"
 kv sdk "$(sh_ getprop ro.build.version.sdk)"
-kv soc "$(sh_ getprop ro.soc.model)$(sh_ getprop ro.board.platform | sed 's/^/ \//')"
+soc_model="$(sh_ getprop ro.soc.model)"; platform="$(sh_ getprop ro.board.platform)"
+kv soc "${soc_model:-$platform}${soc_model:+ ($platform)}"
 kv abi "$(sh_ getprop ro.product.cpu.abi)"
 kv cpu_cores "$(sh_ 'grep -c ^processor /proc/cpuinfo')"
 kv mem_total_kb "$(sh_ 'grep MemTotal /proc/meminfo' | awk '{print $2}')"
-kv gpu "$(sh_ dumpsys SurfaceFlinger | grep -m1 GLES | sed 's/^GLES: //')"
+# `GLES: vendor, renderer, version`. Android 13+ also prints a
+# "------------RE GLES------------" banner first, so match the field, not
+# the word; fall back to the Vulkan/EGL hardware names.
+gpu_line="$(sh_ dumpsys SurfaceFlinger | grep -m1 -E '^[[:space:]]*GLES: ' | sed 's/^[[:space:]]*GLES: //')"
+[ -n "$gpu_line" ] || gpu_line="vulkan:$(sh_ getprop ro.hardware.vulkan) egl:$(sh_ getprop ro.hardware.egl)"
+kv gpu "$gpu_line"
 kv display "$(sh_ wm size | awk -F': ' '/Physical/ {print $2}')"
 kv density "$(sh_ wm density | awk -F': ' '/Physical/ {print $2}')"
 if [ -n "${DEVICEFARM_APP_PATH:-}" ] && [ -f "$DEVICEFARM_APP_PATH" ]; then
@@ -90,9 +96,13 @@ for mode in cpu gpu; do
     sleep 1
     adb logcat -c 2>/dev/null
     sh_ am start -n "$component" >/dev/null
-    flag=(); [ "$mode" = gpu ] && flag=(--gpu)
+    # Not an array: Device Farm's host runs bash 4.2, where "${empty[@]}"
+    # under `set -u` is an unbound variable — which is exactly how the first
+    # real run (2026-10-15) died here on all three phones, before any suite.
+    gpu_flag=""; [ "$mode" = gpu ] && gpu_flag="--gpu"
+    # shellcheck disable=SC2086 # $gpu_flag is empty or one word, on purpose
     if VIEWW_SCREENSHOT="$out/$mode-screen.png" \
-        bash "$root/ci/mobile/device-suite.sh" --no-build "${flag[@]}" > "$out/$mode-suite.log" 2>&1; then
+        bash "$root/ci/mobile/device-suite.sh" --no-build $gpu_flag > "$out/$mode-suite.log" 2>&1; then
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
