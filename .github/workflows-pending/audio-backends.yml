@@ -14,18 +14,9 @@ name: Audio backends
 #   * Every backend also type-checks and lints on Linux via
 #     --cfg vieww_check_all.
 
+# Manual only (Actions → this workflow → Run workflow): no push or
+# pull_request trigger, by the repository owner's choice (2026-10-15).
 on:
-  push:
-    branches:
-      - feature/vieww_code_base
-      - "feature/vieww-gap-closure-*"
-    paths:
-      - "vieww_base/crates/vieww-audio/**"
-      - ".github/workflows/audio-backends.yml"
-  pull_request:
-    paths:
-      - "vieww_base/crates/vieww-audio/**"
-      - ".github/workflows/audio-backends.yml"
   workflow_dispatch:
 
 permissions:
@@ -81,7 +72,7 @@ jobs:
       - name: Backend tests against the running servers
         env:
           VIEWW_EXPECT_BACKENDS: jack,pulse,pipewire
-        run: cargo test -p vieww-audio --lib backend::
+        run: "cargo test -p vieww-audio --lib backend::"
       - name: Whole crate
         run: |
           cargo test -p vieww-audio

@@ -11,13 +11,22 @@ Results of every Framework checks run are published to the branch
 failed job's log under `logs/`) — readable with a plain `git fetch`, for sessions
 that can reach git but not the GitHub API.
 
-# Waiting: `hardware.yml` (2026-10-15)
+# Waiting (2026-10-15): every workflow, manual-only
 
-The self-hosted hardware workflow (Linux and Windows machines; see
-`vieww_base/ci/hardware/README.md`) is here for the same reason as before: the
-push token lacked `workflow` scope. Place it with
+All five files here wait for a push with `workflow` scope, and **every one is
+triggered only by hand** (`workflow_dispatch`) — no push or pull-request
+triggers anywhere, by the repository owner's choice:
 
-    .github/workflows-pending/restore.sh hardware.yml
+| File | What it does |
+|---|---|
+| `ci.yml` | **replaces** the live `.github/workflows/ci.yml` ("Build Mobile Apps"), whose only change is dropping its push trigger |
+| `hardware.yml` | your Linux and Windows machines as self-hosted runners (`vieww_base/ci/hardware/README.md`) |
+| `device-farm.yml` | the device suite on AWS Device Farm phones, low / mid / high end (`vieww_base/ci/mobile/device_farm.py`) |
+| `audio-backends.yml`, `audio-plugins.yml` | as before, now manual-only; `audio-backends.yml` also had a YAML error (an unquoted `backend::` at the end of a `run:` line) that would have stopped GitHub loading it |
 
-then commit and push with a token that has `workflow` scope (or move the file
-in GitHub's web editor).
+Place them all with
+
+    .github/workflows-pending/restore.sh
+
+then commit and push with a token that has `workflow` scope, or move the
+files in GitHub's web editor.

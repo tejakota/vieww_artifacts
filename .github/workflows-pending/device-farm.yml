@@ -1,0 +1,183 @@
+name: Device Farm (Android phones)
+
+# vieww's on-device suite on real Android phones in AWS Device Farm: low-end,
+# mid-range and high-end by default, each running the CPU path and the planned
+# GPU path. Everything it runs is in vieww_base/ci/mobile/ (device_farm.py,
+# device-farm/), so a failure reproduces with the same commands locally.
+#
+# **Manual only.** No push or pull_request trigger: every run spends Device
+# Farm device minutes. Start it from Actions → "Device Farm (Android phones)" →
+# Run workflow.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   DEVICE_FARM_PROJECT_ARN   arn:aws:devicefarm:us-west-2:<account>:project:<id>
+#   and EITHER
+#   AWS_ROLE_ARN              an IAM role trusting GitHub's OIDC provider (preferred)
+#   OR
+#   AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY  an IAM user's keys
+# The identity needs devicefarm:* on the project (or AWSDeviceFarmFullAccess).
+on:
+  workflow_dispatch:
+    inputs:
+      devices:
+        description: "Phones by name, comma-separated (e.g. 'Pixel 8, Galaxy A14'). Empty = pick low / mid / high automatically"
+        type: string
+        default: ""
+      count:
+        description: "How many phones when picking automatically (spread from cheapest to most capable)"
+        type: string
+        default: "3"
+      video:
+        description: "Record video of each phone (larger artifacts)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: device-farm-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Must equal vieww_base/rust-toolchain.toml.
+  RUST_VERSION: "1.98.1"
+  # Device Farm's only region.
+  AWS_REGION: us-west-2
+
+defaults:
+  run:
+    shell: bash
+    working-directory: vieww_base
+
+jobs:
+  apk:
+    name: Build the arm64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
+      - name: Toolchain, target and cargo-apk
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup target add --toolchain "$RUST_VERSION" aarch64-linux-android
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-apk
+      - name: Release APK, with the classes.dex device clouds expect
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: |
+          . ci/mobile/android-env.sh
+          android_env device-farm
+          mkdir -p ../dist
+          marker="$(mktemp)"
+          cargo apk build -p vieww-platform-winit --example android --release --target aarch64-linux-android
+          apk="$(find target -path '*/apk/*' -name '*.apk' -newer "$marker" | head -1)"
+          [ -n "$apk" ] || { echo "::error::no APK was built"; exit 1; }
+          ci/mobile/apk-add-code.sh "$apk" ../dist/vieww-devicefarm.apk
+          ls -l ../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vieww-devicefarm-apk
+          path: dist/vieww-devicefarm.apk
+
+  phones:
+    name: Device suite on Device Farm phones
+    needs: apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      id-token: write   # only used when AWS_ROLE_ARN is set (OIDC)
+    env:
+      DEVICE_FARM_PROJECT_ARN: ${{ secrets.DEVICE_FARM_PROJECT_ARN }}
+      HAS_ROLE: ${{ secrets.AWS_ROLE_ARN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vieww-devicefarm-apk
+          path: dist
+      - name: Check the secrets are there
+        run: |
+          [ -n "$DEVICE_FARM_PROJECT_ARN" ] || { echo "::error::secret DEVICE_FARM_PROJECT_ARN is not set"; exit 1; }
+      - name: AWS credentials (OIDC role)
+        if: env.HAS_ROLE == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: AWS credentials (access keys)
+        if: env.HAS_ROLE != 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Run on phones
+        env:
+          DEVICES: ${{ inputs.devices }}
+          COUNT: ${{ inputs.count }}
+          VIDEO: ${{ inputs.video }}
+          OUT: ${{ runner.temp }}/device-farm
+        run: |
+          video=(); [ "$VIDEO" = true ] && video=(--video)
+          set +e
+          python3 ci/mobile/device_farm.py --apk ../dist/vieww-devicefarm.apk --out "$OUT" \
+            --devices "$DEVICES" --count "$COUNT" "${video[@]}"
+          status=$?
+          [ -f "$OUT/SUMMARY.md" ] && cat "$OUT/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+      - name: Upload everything
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-farm-results
+          path: ${{ runner.temp }}/device-farm
+          if-no-files-found: warn
+
+  # Results where a session without API access can read them, as the other
+  # workflows do: `git fetch origin ci-results/device-farm-<branch>`. Text only;
+  # screenshots, videos and the test package stay in the run's artifacts.
+  report:
+    name: Publish to ci-results/device-farm-<branch>
+    if: always()
+    needs: [apk, phones]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: device-farm-results
+          path: out
+      - name: Push to ci-results/device-farm-<branch>
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p out
+          find out -type f \( -name '*.png' -o -name '*.mp4' -o -name '*.zip' \) -delete
+          {
+            echo "apk: ${{ needs.apk.result }} · phones: ${{ needs.phones.result }}"
+            echo "run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID} @ ${GITHUB_SHA}"
+          } > out/RUN.txt
+          branch="ci-results/device-farm-${GITHUB_REF_NAME//\//-}"
+          cd out
+          git init -q
+          git checkout -q -b "$branch"
+          git config user.name "vieww-ci"
+          git config user.email "vieww-ci@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Device Farm results for ${GITHUB_SHA} (${GITHUB_REF_NAME})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$branch"
