@@ -1,0 +1,179 @@
+name: Hardware (self-hosted Linux and Windows)
+
+# The two machines that are actually yours, as self-hosted runners, running
+# `vieww_base/ci/hardware/linux.sh` and `vieww_base/ci/hardware/windows.ps1` —
+# the same scripts a person runs by hand, so a red step reproduces locally with
+# the command in its log. Setup (labels, prerequisites, why the runner must run
+# inside a desktop session, and the security rule below) is in
+# `vieww_base/ci/hardware/README.md`.
+#
+#   job      | runner labels                       | proves
+#   ---------|-------------------------------------|-------------------------------
+#   linux    | self-hosted, Linux, X64, vieww-linux | real-driver Vulkan suites, GPU
+#            |                                      | census with receipts, baseline
+#            |                                      | window (start-up, RSS, idle,
+#            |                                      | fps, stages, RAPL energy),
+#            |                                      | size, stress p95 x5, desktop
+#   windows  | self-hosted, Windows, X64,           | the same, plus D3D12 on a
+#            |   vieww-windows                      | hardware adapter and the
+#            |                                      | studio's remote preview
+#   report   | ubuntu (hosted)                      | publishes every summary,
+#            |                                      | receipt and baseline report to
+#            |                                      | ci-results/hardware-<branch>
+#
+# **Manual only, and it must stay that way.** A self-hosted runner executes
+# whatever a workflow tells it to on your machine. This workflow has no
+# `push` or `pull_request` trigger, so nothing a contributor pushes can start
+# it; keep it so, and see the README for the repository settings that matter
+# if the repository is ever public.
+on:
+  workflow_dispatch:
+    inputs:
+      linux:
+        description: "Run on the Linux machine (runner label vieww-linux)"
+        type: boolean
+        default: true
+      windows:
+        description: "Run on the Windows machine (runner label vieww-windows)"
+        type: boolean
+        default: true
+      linux_steps:
+        description: "Linux steps (space-separated): env gpu nvidia gallery baseline size stress desktop"
+        type: string
+        default: "env gpu nvidia gallery baseline size stress desktop"
+      windows_steps:
+        description: "Windows steps (comma-separated): env,gpu,d3d12,gallery,baseline,size,stress,desktop,remote"
+        type: string
+        default: "env,gpu,d3d12,gallery,baseline,size,stress,desktop,remote"
+      launches:
+        description: "Baseline launches per path (CPU and GPU)"
+        type: string
+        default: "5"
+
+permissions:
+  contents: read
+
+# Never cancel a hardware run part-way: a half-finished run leaves a window
+# open on somebody's desktop and measurements that look complete.
+concurrency:
+  group: hardware-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux:
+    name: Linux hardware
+    if: inputs.linux
+    runs-on: [self-hosted, Linux, X64, vieww-linux]
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+        working-directory: vieww_base
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `clean: true` is `git clean -ffdx`, which deletes target/ — every
+          # run would rebuild the workspace from nothing.
+          clean: false
+      - name: Hardware run
+        env:
+          STEPS: ${{ inputs.linux_steps }}
+          VIEWW_HW_LAUNCHES: ${{ inputs.launches }}
+          VIEWW_HW_OUT: ${{ runner.temp }}/hardware-linux
+        # Word-splitting $STEPS is the point: one argument per step.
+        run: ci/hardware/linux.sh $STEPS
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardware-linux
+          path: ${{ runner.temp }}/hardware-linux
+          if-no-files-found: warn
+
+  windows:
+    name: Windows hardware
+    if: inputs.windows
+    runs-on: [self-hosted, Windows, X64, vieww-windows]
+    timeout-minutes: 240
+    defaults:
+      run:
+        # Windows PowerShell 5.1 ships with every Windows; the script runs
+        # under it and under PowerShell 7 alike.
+        shell: powershell
+        working-directory: vieww_base
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+      - name: Hardware run
+        env:
+          STEPS: ${{ inputs.windows_steps }}
+          LAUNCHES: ${{ inputs.launches }}
+          OUT: ${{ runner.temp }}\hardware-windows
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File ci\hardware\windows.ps1 -Steps "$env:STEPS" -Launches ([int]$env:LAUNCHES) -OutDir "$env:OUT"
+          exit $LASTEXITCODE
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardware-windows
+          path: ${{ runner.temp }}\hardware-windows
+          if-no-files-found: warn
+
+  # **Results where a session without API access can read them**, as
+  # framework-checks.yml's report job does: `git fetch origin
+  # ci-results/hardware-<branch>` is all a reader needs. Summaries, receipts,
+  # baseline reports and shadow logs are committed; PNGs, GIFs and PPM diff
+  # triptychs stay in the run's artifacts (90 days), because they are tens of
+  # MB per run.
+  report:
+    name: Publish to ci-results/hardware-<branch>
+    if: always()
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          path: out
+      - name: Keep the text, drop the pictures
+        run: |
+          find out -type f \( -name '*.png' -o -name '*.gif' -o -name '*.ppm' \) -delete
+          {
+            echo "# Hardware run · ${GITHUB_REF_NAME} @ ${GITHUB_SHA}"
+            echo
+            echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo "- linux: ${{ needs.linux.result }}"
+            echo "- windows: ${{ needs.windows.result }}"
+            for machine in linux windows; do
+              f="out/hardware-$machine/summary.txt"
+              if [ -f "$f" ]; then
+                echo
+                echo "## $machine"
+                echo
+                echo '```'
+                cat "$f"
+                echo '```'
+              fi
+            done
+          } > out/SUMMARY.md
+          cat out/SUMMARY.md
+      - name: Push to ci-results/hardware-<branch>
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          branch="ci-results/hardware-${GITHUB_REF_NAME//\//-}"
+          cd out
+          git init -q
+          git checkout -q -b "$branch"
+          git config user.name "vieww-ci"
+          git config user.email "vieww-ci@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Hardware results for ${GITHUB_SHA} (${GITHUB_REF_NAME})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$branch"

@@ -1,8 +1,9 @@
 # Hardware runs
 
 Three scripts, one per kind of machine, each runnable by hand or by the
-`Hardware (self-hosted Linux and Windows)` workflow (`.github/workflows/hardware.yml`
-at the repository root):
+`Hardware (self-hosted Linux and Windows)` workflow — `.github/workflows/hardware.yml`
+at the repository root once placed; until a token with `workflow` scope
+pushes it, it waits in `.github/workflows-pending/` (`restore.sh hardware.yml`):
 
 | Script | Machine | Attended? | Closes |
 |---|---|---|---|
