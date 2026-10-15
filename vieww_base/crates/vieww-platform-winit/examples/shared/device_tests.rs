@@ -744,6 +744,32 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
         ),
     );
 
+    // Where that time went, per renderer stage (`FrameStages`): the breakdown
+    // PENDING §1.5 asks for behind the Adreno 612's 21 ms GPU median. Observed,
+    // not checked, for the reason `frame_time` above is: a stage's time is a
+    // fact about the handset.
+    let stages = log.stage_medians();
+    if !stages.total().is_zero() {
+        let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+        results.observe(
+            "frame_stages",
+            format!(
+                "medians ms: scale {:.2} plan {:.2} cpu {:.2} gpu_upload {:.2} gpu_record {:.2} \
+                 gpu_submit {:.2} gpu_wait {:.2} gpu_readback {:.2} acquire {:.2} present {:.2}",
+                ms(stages.scale),
+                ms(stages.plan),
+                ms(stages.cpu_raster),
+                ms(stages.gpu.upload),
+                ms(stages.gpu.record),
+                ms(stages.gpu.submit),
+                ms(stages.gpu.wait),
+                ms(stages.gpu.readback),
+                ms(stages.acquire),
+                ms(stages.present),
+            ),
+        );
+    }
+
     // The one performance claim that *can* be gated on a single run, and the
     // reason is that it is not a time.
     //

@@ -1503,6 +1503,7 @@ impl WindowState {
                 };
                 self.log
                     .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
+                self.log.note_stages(gpu.renderer.last_stages());
                 if tracing() {
                     let st = gpu.renderer.last_stages();
                     let ms = |d: Duration| d.as_secs_f64() * 1000.0;
