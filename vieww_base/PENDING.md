@@ -385,7 +385,9 @@ returned its report (2026-10-15, `receipts/2026-10-15-kabylake-i5-7200u-windows/
 The same scenarios pass on the same laptop under Linux. Drawing works; the
 process dies tearing Vulkan down.
 
-**Diagnosed and fixed, awaiting confirmation on Windows.** With
+**Fixed — confirmed on Windows 2026-10-15** (all five `wait_loop` scenarios
+pass on the 920MX without `VIEWW_KEEP_VULKAN`); the Linux no-regression run
+below is what is left before this moves to TRACKER. With
 `VIEWW_KEEP_VULKAN=1` (which leaks the device) all five scenarios passed, so
 the fault is in teardown. The cause: `native::SHARED_DEVICE` held the shared
 device in a thread-local `Rc`, so it outlived every window and was destroyed by
