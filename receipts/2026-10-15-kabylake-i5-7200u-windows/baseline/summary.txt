@@ -1,0 +1,34 @@
+CPU path, 5 launches (medians):
+  launch to first frame                896.41 ms
+  main() to first frame                839.56 ms
+  RSS at first frame                   55.1 MB
+  peak RSS                             90.2 MB   [MISSES: baseline RSS under 40 MB]
+  idle: frames presented               0   [meets: 0 frames presented while nothing changes]
+  idle: pixels rasterised              0   [meets: 0 pixels rasterised while nothing changes]
+  idle: CPU                            0.0%
+  idle: package power                  n/a
+  animate: fps                         263.571
+  animate: GPU-drawn frames            0
+  animate: frame work median           3.68 ms
+  animate: frame work p95              7.03 ms
+  animate: CPU                         50.6%
+  animate: marginal energy / frame     n/a
+  frame stages (median ms): cpu_raster 1.03, present 2.56
+  energy: not measured on this machine (see the env step)
+GPU path, 5 launches (medians):
+  launch to first frame                884.84 ms
+  main() to first frame                841.00 ms
+  RSS at first frame                   55.2 MB
+  peak RSS                             88.3 MB   [MISSES: baseline RSS under 40 MB]
+  idle: frames presented               0   [meets: 0 frames presented while nothing changes]
+  idle: pixels rasterised              0   [meets: 0 pixels rasterised while nothing changes]
+  idle: CPU                            0.0%
+  idle: package power                  n/a
+  animate: fps                         467.703
+  animate: GPU-drawn frames            2339
+  animate: frame work median           2.06 ms
+  animate: frame work p95              3.04 ms
+  animate: CPU                         59.4%
+  animate: marginal energy / frame     n/a
+  frame stages (median ms): plan 0.12, gpu_upload 0.01, gpu_record 0.06, gpu_submit 0.06, gpu_wait 0.70, acquire 0.00, present 0.93
+  energy: not measured on this machine (see the env step)

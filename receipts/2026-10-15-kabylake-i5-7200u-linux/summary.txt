@@ -1,0 +1,72 @@
+vieww Linux hardware run 20261015-155304
+commit: unknown (dirty)
+host: teja-Lenovo-ideapad-320-15IKB · kernel 7.0.0-38-generic
+cpu: Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz
+session: wayland ubuntu:GNOME
+rustc: rustc 1.98.1 (48a229cea 2026-09-01) (pinned: 1.98.1)
+
+governor: powersave
+power: on mains
+rapl: present but root-only — energy will be null. To enable for this boot:
+      sudo chmod o+r /sys/class/powercap/intel-rapl:*/energy_uj
+vulkan: 	deviceName         = Intel(R) HD Graphics 620 (KBL GT2)
+vulkan: 	driverName         = Intel open-source Mesa driver
+vulkan: 	deviceName         = NVIDIA GeForce 920MX
+PASS  gpu-hal
+PASS  gpu-3d
+PASS  gpu-window
+PASS  nvidia-hal
+PASS  nvidia-census
+PASS  gallery
+PASS  census
+      census: gpu=NVIDIA GeForce 920MX [DISCRETE_GPU] rendered_on_gpu=23/23 parity=pass
+      census: over GPU-drawn fixtures cpu 189.7 ms vs gpu 1091.2 ms (gpu includes readback) = 0.17x
+PASS  baseline-build
+      baseline start-up is warm-cache
+PASS  baseline-cpu (5 launches)
+PASS  baseline-gpu (5 launches)
+      CPU path, 5 launches (medians):
+        launch to first frame                240.42 ms
+        main() to first frame                220.70 ms
+        RSS at first frame                   134.2 MB
+        peak RSS                             151.7 MB   [MISSES: baseline RSS under 40 MB]
+        idle: frames presented               0   [meets: 0 frames presented while nothing changes]
+        idle: pixels rasterised              0   [meets: 0 pixels rasterised while nothing changes]
+        idle: CPU                            3.4%
+        idle: package power                  n/a
+        animate: fps                         360.956
+        animate: GPU-drawn frames            0
+        animate: frame work median           2.55 ms
+        animate: frame work p95              3.06 ms
+        animate: CPU                         46.2%
+        animate: marginal energy / frame     n/a
+        frame stages (median ms): cpu_raster 0.59, present 1.97
+        energy: not measured on this machine (see the env step)
+      GPU path, 5 launches (medians):
+        launch to first frame                270.75 ms
+        main() to first frame                250.69 ms
+        RSS at first frame                   134.4 MB
+        peak RSS                             150.6 MB   [MISSES: baseline RSS under 40 MB]
+        idle: frames presented               0   [meets: 0 frames presented while nothing changes]
+        idle: pixels rasterised              0   [meets: 0 pixels rasterised while nothing changes]
+        idle: CPU                            0.8%
+        idle: package power                  n/a
+        animate: fps                         462.951
+        animate: GPU-drawn frames            2315
+        animate: frame work median           2.04 ms
+        animate: frame work p95              2.34 ms
+        animate: CPU                         45.8%
+        animate: marginal energy / frame     n/a
+        frame stages (median ms): plan 0.19, gpu_upload 0.01, gpu_record 0.07, gpu_submit 0.08, gpu_wait 1.27, acquire 0.08, present 0.20
+        energy: not measured on this machine (see the env step)
+PASS  size-build
+      windowed baseline app, stripped static-std release: 13113888 bytes (13M)
+      dynamic libraries it loads: 3 (see size-baseline-ldd.txt)
+PASS  size-budget
+FAIL  stress-1 (see stress-1.log)
+PASS  stress-2
+FAIL  stress-3 (see stress-3.log)
+FAIL  stress-4 (see stress-4.log)
+FAIL  stress-5 (see stress-5.log)
+      animation stress p95 over 5 runs (ms): 14.370 16.787 17.007 17.412 17.640 
+PASS  desktop

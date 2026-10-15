@@ -77,7 +77,13 @@ function Run-Step([string]$Name, [hashtable]$Env, [string]$Exe, [string[]]$ArgLi
     # To the host, not the pipeline: anything left on the pipeline becomes
     # part of this function's return value, and `if (Run-Step ...)` would then
     # be true for any step that printed a line.
-    & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $log | Out-Host
+    # Not Tee-Object: in Windows PowerShell 5.1 it writes UTF-16, which grep
+    # and every reader on the other side of the first real run (2026-10-15)
+    # saw as a binary file. Out-File -Encoding utf8 behaves the same in 5.1
+    # and 7.
+    & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } |
+      ForEach-Object { Write-Host $_; $_ } |
+      Out-File -FilePath $log -Encoding utf8
     $rc = $LASTEXITCODE
   } finally {
     foreach ($key in $saved.Keys) {
@@ -93,8 +99,14 @@ function Run-Step([string]$Name, [hashtable]$Env, [string]$Exe, [string[]]$ArgLi
 function Skip-Step([string]$Name, [string]$Reason) { Say "SKIP  $Name ($Reason)" }
 
 # ── header ──────────────────────────────────────────────────────────────────
-$commit = (git rev-parse HEAD 2>$null)
-$dirty = (git status --porcelain --untracked-files=no 2>$null)
+$commit = $null; $dirty = $null
+if (Get-Command git -ErrorAction SilentlyContinue) {
+  $commit = (git rev-parse HEAD 2>$null)
+  $dirty = (git status --porcelain --untracked-files=no 2>$null)
+}
+# The first real run printed an empty commit line: git was not on this
+# shell's PATH (Git for Windows installs it on the PATH only if asked).
+if (-not $commit) { $commit = 'unknown (git not on PATH, or not a git checkout)' }
 $pinned = ((Get-Content rust-toolchain.toml | Select-String '^channel').Line -split '"')[1]
 $rustc = (rustc -V 2>$null)
 if (-not $rustc) { $rustc = 'NOT RESOLVED - rustup could not provide the pinned toolchain' }

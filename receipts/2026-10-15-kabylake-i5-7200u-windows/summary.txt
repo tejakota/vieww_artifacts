@@ -1,0 +1,69 @@
+vieww Windows hardware run 20261015-115349
+commit: 
+host: TEJA22 - Microsoft Windows NT 10.0.19045.0
+cpu: Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz
+rustc: rustc 1.98.1 (48a229cea 2026-09-01) (pinned: 1.98.1)
+
+gpu: Intel(R) HD Graphics 620 (driver 26.20.100.6859)
+gpu: NVIDIA GeForce 920MX (driver 32.0.15.7652)
+power: on mains
+power plan: Balanced
+vulkan: NVIDIA GeForce 920MX
+vulkan: Intel(R) HD Graphics 620
+      energy: not measured on Windows (no package energy counter without a driver); reported as null
+PASS  gpu-hal
+PASS  gpu-3d
+FAIL  gpu-window (exit 101; see gpu-window.log)
+PASS  d3d12-hardware
+      d3d12: bring-up and smoke suite only - the backend does not execute a ScenePlan yet (PENDING 1.3)
+PASS  gallery
+PASS  census
+      census: gpu=NVIDIA GeForce 920MX [DISCRETE_GPU] rendered_on_gpu=23/23 parity=pass
+PASS  baseline-build
+      baseline start-up is warm-cache, and launch-to-first-frame includes PowerShell's process creation (main-to-first-frame does not)
+PASS  baseline-cpu (5 launches)
+PASS  baseline-gpu (5 launches)
+      CPU path, 5 launches (medians):
+        launch to first frame                896.41 ms
+        main() to first frame                839.56 ms
+        RSS at first frame                   55.1 MB
+        peak RSS                             90.2 MB   [MISSES: baseline RSS under 40 MB]
+        idle: frames presented               0   [meets: 0 frames presented while nothing changes]
+        idle: pixels rasterised              0   [meets: 0 pixels rasterised while nothing changes]
+        idle: CPU                            0.0%
+        idle: package power                  n/a
+        animate: fps                         263.571
+        animate: GPU-drawn frames            0
+        animate: frame work median           3.68 ms
+        animate: frame work p95              7.03 ms
+        animate: CPU                         50.6%
+        animate: marginal energy / frame     n/a
+        frame stages (median ms): cpu_raster 1.03, present 2.56
+        energy: not measured on this machine (see the env step)
+      GPU path, 5 launches (medians):
+        launch to first frame                884.84 ms
+        main() to first frame                841.00 ms
+        RSS at first frame                   55.2 MB
+        peak RSS                             88.3 MB   [MISSES: baseline RSS under 40 MB]
+        idle: frames presented               0   [meets: 0 frames presented while nothing changes]
+        idle: pixels rasterised              0   [meets: 0 pixels rasterised while nothing changes]
+        idle: CPU                            0.0%
+        idle: package power                  n/a
+        animate: fps                         467.703
+        animate: GPU-drawn frames            2339
+        animate: frame work median           2.06 ms
+        animate: frame work p95              3.04 ms
+        animate: CPU                         59.4%
+        animate: marginal energy / frame     n/a
+        frame stages (median ms): plan 0.12, gpu_upload 0.01, gpu_record 0.06, gpu_submit 0.06, gpu_wait 0.70, acquire 0.00, present 0.93
+        energy: not measured on this machine (see the env step)
+PASS  size-build
+      windowed baseline app, stripped release: 7789568 bytes (7.4 MB)
+FAIL  stress-1 (exit 1; see stress-1.log)
+FAIL  stress-2 (exit 1; see stress-2.log)
+FAIL  stress-3 (exit 1; see stress-3.log)
+FAIL  stress-4 (exit 1; see stress-4.log)
+FAIL  stress-5 (exit 1; see stress-5.log)
+      animation stress p95 over 5 runs (ms): 16.788 16.974 17.156 17.178 18.438
+SKIP  desktop (bash (Git for Windows) not on PATH)
+PASS  remote
