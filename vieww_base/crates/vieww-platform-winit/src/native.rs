@@ -70,7 +70,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::io::Write as _;
 use std::path::Path;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::time::{Duration, Instant};
 
 use vieww_foundation::{Color, Rect};
@@ -155,8 +155,24 @@ impl NativeSurface {
 
 thread_local! {
     /// The one `VkInstance`/`VkDevice` this process opens, kept alive for as
-    /// long as any window holds it.
-    static SHARED_DEVICE: RefCell<Option<Rc<VulkanDevice>>> = const { RefCell::new(None) };
+    /// long as any window holds it — and **only** that long.
+    ///
+    /// # Why `Weak`
+    ///
+    /// This was an `Rc`, which kept the device alive for as long as the
+    /// *thread* lived rather than as long as a window held it. Every window's
+    /// renderer let go when it closed, and the device was finally destroyed
+    /// by this thread-local's destructor — at process exit. On Windows that
+    /// runs during the loader's process-detach phase, and NVIDIA's driver
+    /// faults there: `tests/wait_loop.rs`' `self_close` and `gpu_frame` exited
+    /// with `0xc0000005` *after* passing, on a GeForce 920MX (driver
+    /// 32.0.15.7652, 2026-10-15), on the CPU path as well as the GPU one, and
+    /// passed with `VIEWW_KEEP_VULKAN=1` — which leaks the device, so nothing
+    /// was ever destroyed at exit. A `Weak` here destroys the device when the
+    /// last window that uses it closes, inside the event loop, where the
+    /// driver is fully alive. Sharing between windows is unchanged: while any
+    /// window holds the device, this upgrades to it.
+    static SHARED_DEVICE: RefCell<Weak<VulkanDevice>> = const { RefCell::new(Weak::new()) };
 }
 
 /// The shared device, and a swapchain for this window on it.
@@ -181,7 +197,7 @@ fn shared_device_for(
     width: u32,
     height: u32,
 ) -> Result<(Rc<VulkanDevice>, VulkanSwapchain), NativeError> {
-    let existing = SHARED_DEVICE.with(|cell| cell.borrow().clone());
+    let existing = SHARED_DEVICE.with(|cell| cell.borrow().upgrade());
     if let Some(device) = existing {
         match device.swapchain_for_window(window, width, height) {
             Ok(swapchain) => return Ok((device, swapchain)),
@@ -195,7 +211,7 @@ fn shared_device_for(
 
     let (device, swapchain) = VulkanDevice::for_window(window, width, height)?;
     let device = Rc::new(device);
-    SHARED_DEVICE.with(|cell| *cell.borrow_mut() = Some(Rc::clone(&device)));
+    SHARED_DEVICE.with(|cell| *cell.borrow_mut() = Rc::downgrade(&device));
     Ok((device, swapchain))
 }
 
@@ -283,6 +299,21 @@ pub struct NativeRenderer {
     stages: FrameStages,
     /// The hybrid planner in shadow mode, when enabled.
     shadow: Option<PlannerShadow>,
+}
+
+/// The GPU rasterizer goes before the device it was built on.
+///
+/// Fields drop in declaration order, and `device` is first — so without this,
+/// the last window to close would destroy the `VkDevice` and *then* run
+/// `SceneRenderer`'s `Drop`, which waits on and destroys its targets through
+/// that device. While `SHARED_DEVICE` held a strong reference the device always
+/// outlived every renderer and the order never mattered; since it holds a
+/// `Weak`, a renderer can hold the last reference, and the order is the
+/// difference between a clean teardown and a use-after-destroy.
+impl Drop for NativeRenderer {
+    fn drop(&mut self) {
+        self.gpu = None;
+    }
 }
 
 impl fmt::Debug for NativeRenderer {
