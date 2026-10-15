@@ -5496,6 +5496,7 @@ dependencies = [
  "vieww-hardware",
  "vieww-paint",
  "vieww-render",
+ "vieww-render-planner",
  "vieww-widget",
  "winit",
 ]
