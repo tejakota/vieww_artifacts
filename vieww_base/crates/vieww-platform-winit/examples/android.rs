@@ -758,6 +758,17 @@ mod demo {
             .output()
             .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
             .unwrap_or_default();
+        // `debug.vieww.keepalive=1`: a little GPU work per CPU-presented frame
+        // (`vieww_hal::vulkan::keepalive`), to test whether an idle GPU is
+        // what slows the CPU raster on the window-present path.
+        let keepalive = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.keepalive")
+            .output()
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1");
+        if keepalive {
+            std::env::set_var("VIEWW_GPU_KEEPALIVE", "1");
+            suite.observe("keepalive", "debug.vieww.keepalive=1");
+        }
         if present == "vulkan" || present == "cpu" {
             // Before the event loop and every worker the app starts, so no
             // other thread is reading the environment yet.

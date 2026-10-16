@@ -92,3 +92,21 @@ fn vulkan_device_survives_three_consecutive_frames() {
         assert_eq!(pixels.len(), 32 * 32 * 4);
     }
 }
+
+/// The keep-alive submits, skips while busy, never blocks, and tears down.
+#[test]
+#[ignore = "needs a Vulkan loader and ICD"]
+fn the_gpu_keepalive_ticks_without_blocking() {
+    let gpu = vieww_hal::vulkan::VulkanDevice::new().expect("device");
+    let mut keepalive = vieww_hal::vulkan::GpuKeepAlive::new(&gpu, 4 << 20).expect("keepalive");
+    let started = std::time::Instant::now();
+    for _ in 0..100 {
+        keepalive.tick(&gpu).expect("tick");
+    }
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "100 ticks took {:?}",
+        started.elapsed()
+    );
+    keepalive.destroy(&gpu);
+}

@@ -239,6 +239,11 @@ def summarize(rows, out, run):
                 lines.append(f"- frame stages (CPU path): {r['cpu_frame_stages']}")
             if stages:
                 lines.append(f"- frame stages (GPU path): {stages}")
+            if r.get("cpuka_frame_time"):
+                lines.append(
+                    f"- CPU path with a GPU keep-alive (diagnostic): {r['cpuka_frame_time']}; "
+                    f"{r.get('cpuka_frame_stages', '')}"
+                )
             if r.get("cpuvk_frame_time"):
                 lines.append(
                     f"- CPU path presented through Vulkan (diagnostic): {r['cpuvk_frame_time']}; "

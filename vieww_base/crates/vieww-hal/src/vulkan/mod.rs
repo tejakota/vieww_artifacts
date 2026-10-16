@@ -28,6 +28,10 @@ use super::{AdapterInfo, Device as HalDevice};
 #[cfg(feature = "shader-compiler")]
 pub mod compute;
 pub mod scene;
+/// [`keepalive::GpuKeepAlive`] — a little GPU work per frame, as an experiment
+/// on CPU-presented frames. See that module.
+pub mod keepalive;
+pub use keepalive::GpuKeepAlive;
 #[cfg(feature = "shader-compiler")]
 pub use compute::{ComputeBuffer, ComputeKernel};
 pub use scene::{GpuFrameTimings, SceneRenderer};

@@ -79,11 +79,18 @@ status=0
 # Vulkan swapchain (`debug.vieww.present=vulkan`) instead of ANativeWindow_lock,
 # so the two present paths are compared on the same phone in the same run. Its
 # verdict is recorded but does not fail the job.
-for mode in cpu gpu cpuvk; do
+#
+# `cpuka` is the fourth: the CPU path presented to the window as normal, plus
+# a little GPU work per frame (`debug.vieww.keepalive=1`) — the test of whether
+# an idle GPU is what makes the window-present path's raster slower than
+# `cpuvk`'s on the same phone. Also diagnostic only.
+for mode in cpu gpu cpuvk cpuka; do
     gpu=0; [ "$mode" = gpu ] && gpu=1
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
+    keepalive=0; [ "$mode" = cpuka ] && keepalive=1
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
+    sh_ setprop debug.vieww.keepalive "$keepalive" >/dev/null
 
     # 1. Cold start, three times. TotalTime is the platform's own measure of
     # launch to first frame drawn; WaitTime adds the system's share.
@@ -112,7 +119,7 @@ for mode in cpu gpu cpuvk; do
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        [ "$mode" = cpuvk ] || status=1
+        case "$mode" in cpuvk|cpuka) ;; *) status=1 ;; esac
     fi
     for key in frame_time frame_stages gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
@@ -134,6 +141,7 @@ done
 
 sh_ setprop debug.vieww.gpu 0 >/dev/null
 sh_ setprop debug.vieww.present '""' >/dev/null
+sh_ setprop debug.vieww.keepalive 0 >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
 kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"

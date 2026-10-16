@@ -102,7 +102,7 @@ use winit::window::Window;
 use vieww_foundation::{Color, Rect};
 use vieww_gpu::Planner as GpuPlanner;
 use vieww_hal::vulkan::{
-    GpuFrameTimings, SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain,
+    GpuFrameTimings, GpuKeepAlive, SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain,
 };
 use vieww_paint::native::{NativeRenderer as CpuRenderer, RendererError, SceneReport};
 use vieww_paint::{Damage, Scene};
@@ -674,6 +674,10 @@ pub struct NativeRenderer {
     stages: FrameStages,
     /// The hybrid planner in shadow mode, when enabled.
     shadow: Option<PlannerShadow>,
+    /// `VIEWW_GPU_KEEPALIVE=1` on a CPU-presented window: a little GPU work
+    /// per frame, to test whether an idle GPU is what slows the CPU raster
+    /// there. See `vieww_hal::vulkan::keepalive`. Its own headless device.
+    keepalive: Option<(VulkanDevice, GpuKeepAlive)>,
 }
 
 /// The GPU rasterizer goes before the device it was built on.
@@ -688,6 +692,9 @@ pub struct NativeRenderer {
 impl Drop for NativeRenderer {
     fn drop(&mut self) {
         self.gpu = None;
+        if let Some((device, keepalive)) = self.keepalive.take() {
+            keepalive.destroy(&device);
+        }
     }
 }
 
@@ -830,8 +837,19 @@ impl NativeRenderer {
         if path == PresentPath::Cpu {
             match CpuPresenter::new(window, width, height) {
                 Ok(cpu) => {
+                    let mut renderer = Self::with_device(None, CpuRenderer::new());
+                    if std::env::var("VIEWW_GPU_KEEPALIVE").is_ok_and(|v| v == "1") {
+                        // 4 MB filled per frame: real memory traffic, a few
+                        // hundred microseconds of GPU time on a phone.
+                        match VulkanDevice::new().and_then(|device| {
+                            GpuKeepAlive::new(&device, 4 << 20).map(|k| (device, k))
+                        }) {
+                            Ok(pair) => renderer.keepalive = Some(pair),
+                            Err(error) => eprintln!("vieww: GPU keep-alive unavailable: {error}"),
+                        }
+                    }
                     return Ok((
-                        Self::with_device(None, CpuRenderer::new()),
+                        renderer,
                         NativeSurface {
                             kind: SurfaceKind::Cpu(cpu),
                         },
@@ -853,6 +871,7 @@ impl NativeRenderer {
             gpu_unavailable: false,
             stages: FrameStages::default(),
             shadow: None,
+            keepalive: None,
         }
     }
 
@@ -1149,6 +1168,15 @@ impl NativeRenderer {
         match (&mut surface.kind, &self.device) {
             (SurfaceKind::Cpu(cpu), _) => {
                 acquired = cpu.present(frame, (physical_width, physical_height), changed)?;
+                if let Some((device, keepalive)) = self.keepalive.as_mut() {
+                    // A failure here only ends the experiment, never the frame.
+                    if let Err(error) = keepalive.tick(device) {
+                        eprintln!("vieww: GPU keep-alive stopped: {error}");
+                        if let Some((device, keepalive)) = self.keepalive.take() {
+                            keepalive.destroy(&device);
+                        }
+                    }
+                }
             }
             (SurfaceKind::Vulkan(swapchain), Some(device)) => device
                 .present_pixels(swapchain, frame)
