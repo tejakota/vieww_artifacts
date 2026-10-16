@@ -332,6 +332,21 @@ jobs:
         run: |
           mkdir -p out
           find out -type f \( -name '*.png' -o -name '*.mp4' -o -name '*.zip' \) -delete
+          # **Device logs are cut down to our own lines.** An iPhone's whole
+          # syslog was 70-100 MB per phone on the first iOS run (2026-10-16),
+          # past GitHub's 100 MB file limit, and the push was refused. Any
+          # file over 5 MB keeps only the lines that mention vieww (the
+          # app's own log and the suite's sentinels), capped at 20,000; the
+          # full files stay in the run's artifacts.
+          find out -type f -size +5M | while read -r big; do
+            kept="$(grep -a -i 'vieww' "$big" | head -20000 || true)"
+            {
+              echo "# cut by the report job: $(stat -c %s "$big") bytes in full, lines mentioning vieww only (first 20000)."
+              echo "# The whole file is in this run's artifacts."
+              printf '%s\n' "$kept"
+            } > "$big.vieww.txt"
+            rm -f "$big"
+          done
           {
             echo "profile: ${{ inputs.profile }}"
             echo "apk: ${{ needs.apk.result }} · phones: ${{ needs.phones.result }} · ipa: ${{ needs.ipa.result }} · iphones: ${{ needs.iphones.result }}"
