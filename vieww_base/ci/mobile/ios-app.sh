@@ -192,6 +192,15 @@ if [ "$bundle_only" = 1 ] && [ "$target_kind" != "ipa" ]; then
     exit 0
 fi
 
+# One key of a plist, any type, or a non-zero exit if it is absent.
+# PlistBuddy rather than `plutil -extract … json`: JSON output refuses a
+# top-level string, so that form reported every *string* key as missing — the
+# check below failed the 2026-10-16 build on a CFBundleIdentifier that was
+# there all along.
+plist_get() {
+    /usr/libexec/PlistBuddy -c "Print :$2" "$1" 2> /dev/null
+}
+
 if [ "$target_kind" = "ipa" ]; then
     # **Nested bundles say their platform too.** A second Device Farm run
     # (2026-10-16) still answered IOS_APP_PLATFORM_VALUE_MISSING. The .app's
@@ -202,8 +211,9 @@ if [ "$target_kind" = "ipa" ]; then
     # .app's own plist first.
     if [ -d "$app/Frameworks" ]; then
         find "$app/Frameworks" -name Info.plist | while read -r nested; do
-            if ! plutil -extract CFBundleSupportedPlatforms json -o - "$nested" > /dev/null 2>&1; then
-                plutil -insert CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$nested"
+            if ! plist_get "$nested" CFBundleSupportedPlatforms > /dev/null; then
+                /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" \
+                    -c "Add :CFBundleSupportedPlatforms:0 string iPhoneOS" "$nested"
                 echo "==> added CFBundleSupportedPlatforms to ${nested#"$app"/}"
             fi
         done
@@ -238,12 +248,12 @@ if [ "$target_kind" = "ipa" ]; then
     # so a missing one fails this build, not an upload twenty minutes later.
     for key in CFBundleIdentifier CFBundleExecutable CFBundleSupportedPlatforms \
         UIDeviceFamily UIRequiredDeviceCapabilities; do
-        if ! plutil -extract "$key" json -o - "$app/Info.plist" > /dev/null 2>&1; then
+        if ! plist_get "$app/Info.plist" "$key" > /dev/null; then
             echo "ios-app: Info.plist has no $key, which device clouds require." >&2
             exit 7
         fi
     done
-    if plutil -extract CFBundleSupportedPlatforms json -o - "$app/Info.plist" | grep -qi simulator; then
+    if plist_get "$app/Info.plist" CFBundleSupportedPlatforms | grep -qi simulator; then
         echo "ios-app: an .ipa must not name a simulator platform." >&2
         exit 7
     fi
@@ -272,7 +282,7 @@ if [ "$target_kind" = "ipa" ]; then
     unzip -p "$ipa" "Payload/$app_name.app/Info.plist" > "$shipped"
     for key in CFBundleIdentifier CFBundleExecutable CFBundleSupportedPlatforms \
         UIDeviceFamily UIRequiredDeviceCapabilities MinimumOSVersion; do
-        value="$(plutil -extract "$key" json -o - "$shipped" 2> /dev/null)" || {
+        value="$(plist_get "$shipped" "$key" | tr -s ' \n' ' ')" || {
             echo "ios-app: the .ipa's Info.plist has no $key." >&2
             exit 7
         }
