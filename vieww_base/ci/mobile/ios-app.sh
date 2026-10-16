@@ -287,7 +287,8 @@ if [ "$target_kind" = "ipa" ]; then
     shipped="$(mktemp)"
     unzip -p "$ipa" "Payload/$app_name.app/Info.plist" > "$shipped"
     for key in CFBundleIdentifier CFBundleExecutable CFBundleSupportedPlatforms \
-        UIDeviceFamily UIRequiredDeviceCapabilities MinimumOSVersion; do
+        UIDeviceFamily UIRequiredDeviceCapabilities MinimumOSVersion \
+        CADisableMinimumFrameDurationOnPhone; do
         value="$(plist_get "$shipped" "$key" | tr -s ' \n' ' ')" || {
             echo "ios-app: the .ipa's Info.plist has no $key." >&2
             exit 7

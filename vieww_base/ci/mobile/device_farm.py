@@ -152,6 +152,10 @@ def parse_result(path):
 
 
 def median_of(text):
+    # Only a list of numbers is a measurement: "n/a (no console below iOS 17)"
+    # once summarised as a 17 ms start-up.
+    if not re.fullmatch(r"[\d.\s]+", (text or "").strip() or "x"):
+        return None
     numbers = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", text or "")]
     return statistics.median(numbers) if numbers else None
 
