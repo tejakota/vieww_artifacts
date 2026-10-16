@@ -193,6 +193,22 @@ if [ "$bundle_only" = 1 ] && [ "$target_kind" != "ipa" ]; then
 fi
 
 if [ "$target_kind" = "ipa" ]; then
+    # **Nested bundles say their platform too.** A second Device Farm run
+    # (2026-10-16) still answered IOS_APP_PLATFORM_VALUE_MISSING. The .app's
+    # own Info.plist was not the only one in the package: MoltenVK.framework
+    # carries its own, and a validator that takes the first `Info.plist` it
+    # meets under the .app reads that one. So every nested Info.plist gets the
+    # key too (before signing, which covers it), and the zip below puts the
+    # .app's own plist first.
+    if [ -d "$app/Frameworks" ]; then
+        find "$app/Frameworks" -name Info.plist | while read -r nested; do
+            if ! plutil -extract CFBundleSupportedPlatforms json -o - "$nested" > /dev/null 2>&1; then
+                plutil -insert CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$nested"
+                echo "==> added CFBundleSupportedPlatforms to ${nested#"$app"/}"
+            fi
+        done
+    fi
+
     # **Two signatures, for two kinds of device cloud.**
     #
     # With VIEWW_IOS_IDENTITY (and VIEWW_IOS_PROFILE): a real development
@@ -241,8 +257,27 @@ if [ "$target_kind" = "ipa" ]; then
     cp -R "$app" "$payload/"
     # `-y` preserves the symlinks a framework bundle would have. There are none
     # here today, and there will be the moment anything links dynamically.
-    (cd target/ios && zip -qry "$app_name.ipa" Payload)
+    # The .app's own Info.plist first, then everything else (see the nested-
+    # bundle note above): zip keeps entries in the order they were added.
+    (cd target/ios && zip -qy "$app_name.ipa" Payload/ "Payload/$app_name.app/" "Payload/$app_name.app/Info.plist" \
+        && zip -qry "$app_name.ipa" Payload)
     rm -rf "$payload"
+
+    # What a device cloud will read, read back out of the .ipa itself — so the
+    # build log shows the shipped values, not the ones this script meant to
+    # write.
+    echo "==> first entries in $ipa:"
+    unzip -l "$ipa" | sed -n '4,8p'
+    shipped="$(mktemp)"
+    unzip -p "$ipa" "Payload/$app_name.app/Info.plist" > "$shipped"
+    for key in CFBundleIdentifier CFBundleExecutable CFBundleSupportedPlatforms \
+        UIDeviceFamily UIRequiredDeviceCapabilities MinimumOSVersion; do
+        value="$(plutil -extract "$key" json -o - "$shipped" 2> /dev/null)" || {
+            echo "ios-app: the .ipa's Info.plist has no $key." >&2
+            exit 7
+        }
+        echo "    $key = $value"
+    done
 
     echo "==> $ipa"
     echo
