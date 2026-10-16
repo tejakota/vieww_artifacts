@@ -511,6 +511,19 @@ buffer and writes only what each buffer is missing (`BufferAges`). The CPU
 present halves memory on every phone, so it stays the default while this is
 measured.
 
+**After the no-copy-back present** (2026-10-16 evening, reconciled main):
+
+| phone | CPU present: raster + acquire + present = frame | Vulkan present | GPU path |
+|---|---|---|---|
+| LG Stylo 5 | 30.6 + 0.4 + 3.8 = 36.0 ms | 17.7 + 20.0 = 39.0 ms | 40.1 ms (GPU 32.5) |
+| Galaxy S20 | 9.1 + 0.6 + 1.4 = **11.5 ms** (was 15.4) | 7.4 + 3.1 = 10.9 ms | 7.2 ms |
+| Galaxy S26 Ultra | 4.9 + 0.8 + 0.2 = 6.0 ms | 3.3 + 1.1 = 4.5 ms | 2.2 ms |
+
+The present itself is now cheap everywhere (S20: 7.1 -> 1.4 ms, with 0.6 ms
+of waiting for a buffer). What remains is the raster running slower on the
+CPU present path on every phone (LG 30.6 vs 17.7 ms) — still open, and now
+the largest single item on the low-end phone.
+
 Idle is already right: 0 frames and 0 pixels while nothing changes, on both
 OSes. Linux shows 3.4% idle CPU on the CPU path with no frames — something
 wakes without drawing.
