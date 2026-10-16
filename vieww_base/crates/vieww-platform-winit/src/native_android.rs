@@ -14,6 +14,7 @@
 //! button copies the button's rows, and the platform keeps the rest.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use ndk::hardware_buffer_format::HardwareBufferFormat;
 use ndk::native_window::{NativeWindow, Rect as ARect};
@@ -75,18 +76,21 @@ impl CpuPresenter {
         Ok(())
     }
 
+    /// Put `frame` (straight RGBA8, `extent`) on screen, converting at least
+    /// `changed` and whatever the buffer handed back is missing. Returns how
+    /// long getting a buffer took (`FrameStages::acquire`).
     pub(super) fn present(
         &mut self,
         frame: &[u8],
         extent: (u32, u32),
         changed: Changed,
-    ) -> Result<(), NativeError> {
+    ) -> Result<Duration, NativeError> {
         self.resize(extent.0, extent.1)?;
         let (width, height) = (self.extent.0 as usize, self.extent.1 as usize);
         if frame.len() != width * height * 4 {
             // The rasterizer has not caught up with a resize; the next frame
             // repaints in full.
-            return Ok(());
+            return Ok(Duration::ZERO);
         }
         #[expect(
             clippy::cast_possible_wrap,
@@ -101,7 +105,7 @@ impl CpuPresenter {
                 bottom: height as i32,
             },
             // Nothing changed: the window already shows this frame.
-            Changed::Regions(regions) if regions.is_empty() => return Ok(()),
+            Changed::Regions(regions) if regions.is_empty() => return Ok(Duration::ZERO),
             Changed::Regions(regions) => {
                 let (mut l, mut t, mut r, mut b) = (u32::MAX, u32::MAX, 0, 0);
                 for &(rl, rt, rr, rb) in regions {
@@ -118,7 +122,12 @@ impl CpuPresenter {
                 }
             }
         };
+        // Timed: this is where the frame can wait on the window's buffer
+        // queue (the compositor's pacing) — what `acquire` records apart
+        // from the copy and the post.
+        let locking = Instant::now();
         let mut buffer = self.native.lock(Some(&mut dirty)).map_err(present_error)?;
+        let acquired = locking.elapsed();
         // What the platform asked to have filled, clamped to what both the
         // buffer and the frame hold (a buffer from before a resize can be
         // the other size for one frame).
@@ -148,6 +157,6 @@ impl CpuPresenter {
         }
         // Dropping the guard unlocks and posts.
         drop(buffer);
-        Ok(())
+        Ok(acquired)
     }
 }

@@ -354,23 +354,26 @@ impl CpuPresenter {
     }
 
     /// Put `frame` (straight RGBA8, `extent`) on screen, converting at least
-    /// `changed` and whatever the buffer handed back is missing.
+    /// `changed` and whatever the buffer handed back is missing. Returns how
+    /// long getting a buffer took (`FrameStages::acquire`).
     fn present(
         &mut self,
         frame: &[u8],
         extent: (u32, u32),
         changed: Changed,
-    ) -> Result<(), NativeError> {
+    ) -> Result<Duration, NativeError> {
         self.resize(extent.0, extent.1)?;
         let (width, height) = self.extent;
+        let acquiring = Instant::now();
         let mut buffer = self
             .surface
             .buffer_mut()
             .map_err(|error| NativeError::Present(error.to_string()))?;
+        let acquired = acquiring.elapsed();
         if buffer.len() != frame.len() / 4 {
             // The surface and the frame disagree about the size (a resize the
             // rasterizer has not caught up with). The next frame repaints.
-            return Ok(());
+            return Ok(acquired);
         }
         let plan = conversion_plan(usize::from(buffer.age()), &self.history, &changed);
         match &plan {
@@ -402,7 +405,7 @@ impl CpuPresenter {
         presented.map_err(|error| NativeError::Present(error.to_string()))?;
         self.history.push_front(changed);
         self.history.truncate(CPU_HISTORY);
-        Ok(())
+        Ok(acquired)
     }
 }
 
@@ -1062,9 +1065,16 @@ impl NativeRenderer {
         );
 
         let presenting = Instant::now();
+        // On a CPU surface, getting a buffer from the OS is timed apart from
+        // filling and posting it, into `acquire` — the same split the Vulkan
+        // path's direct GPU frames have. Waiting for a free buffer (the
+        // compositor's pacing) and copying pixels are different problems,
+        // and one `present` number could not tell them apart (Galaxy S20,
+        // 2026-10-16: 7.1 ms of "present").
+        let mut acquired = Duration::ZERO;
         match (&mut surface.kind, &self.device) {
             (SurfaceKind::Cpu(cpu), _) => {
-                cpu.present(frame, (physical_width, physical_height), changed)?;
+                acquired = cpu.present(frame, (physical_width, physical_height), changed)?;
             }
             (SurfaceKind::Vulkan(swapchain), Some(device)) => device
                 .present_pixels(swapchain, frame)
@@ -1075,7 +1085,8 @@ impl NativeRenderer {
                 ));
             }
         }
-        self.stages.present = presenting.elapsed();
+        self.stages.acquire = acquired;
+        self.stages.present = presenting.elapsed().saturating_sub(acquired);
         Ok(())
     }
 

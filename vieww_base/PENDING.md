@@ -111,6 +111,16 @@ problem — see 3.3.
 
 ## 1.4 iOS — runs on a real iPhone; its numbers are not recorded
 
+**2026-10-16: the first automated real-iPhone run** (AWS Device Farm,
+`ci/mobile/device-farm/run-ios.sh`, ad-hoc .ipa re-signed by Device Farm).
+iPhone 15 Plus, iOS 17.4: device suite **PASS on both paths**, 13/13 checks,
+taps through XCUITest landing. CPU path median 5.9 ms (raster 3.1, present
+2.5); GPU path (MoltenVK) median 16.3 ms — `gpu_submit` 6.9 + `gpu_wait` 8.0,
+so on this phone the CPU path is the faster one by ~3x. First frame from
+`main` ~377 ms (CPU) / ~400 ms (GPU), well over the 120 ms target. The iPhone
+13 (iOS 16) and iPhone 18 Pro Max (iOS 27) did not run — fixed in the scripts,
+not yet re-run.
+
 Closed 2026-10-14 (TRACKER): the simulator (device suite 12/12, 6.8 ms
 median) and a real **iPhone 13 Pro on iOS 15** through LambdaTest's
 real-device cloud, driven by hand: rendering, taps, the system keyboard,
