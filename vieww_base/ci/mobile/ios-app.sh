@@ -90,6 +90,14 @@ esac
 
 bundle_id="dev.vieww.demo"
 app_name="vieww"
+# The platform the bundle is for, as `CFBundleSupportedPlatforms` names it.
+# AWS Device Farm refuses an .ipa without it (IOS_APP_PLATFORM_VALUE_MISSING,
+# 2026-10-16) and refuses one naming a simulator; Xcode writes it into every
+# bundle it builds, which is why nothing here had needed it before.
+case "$target_kind" in
+    sim) platform="iPhoneSimulator" ;;
+    *) platform="iPhoneOS" ;;
+esac
 
 echo "==> building $triple ($profile)"
 if [ "$profile" = "release" ]; then
@@ -130,6 +138,8 @@ cat > "$app/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key><string>0.1</string>
     <key>LSRequiresIPhoneOS</key><true/>
     <key>MinimumOSVersion</key><string>13.0</string>
+    <key>CFBundleSupportedPlatforms</key><array><string>$platform</string></array>
+    <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
     <key>UILaunchScreen</key><dict/>
     <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
     <key>UISupportedInterfaceOrientations</key>
@@ -205,6 +215,21 @@ if [ "$target_kind" = "ipa" ]; then
         sign_nested -
         codesign --force --sign - --timestamp=none "$app"
         echo "==> ad-hoc signed (a device cloud will re-sign this; Firebase Test Lab will not accept it)"
+    fi
+
+    # **The keys device clouds validate before accepting an upload** — AWS
+    # Device Farm's list (troubleshooting-ios-applications.html): checked here
+    # so a missing one fails this build, not an upload twenty minutes later.
+    for key in CFBundleIdentifier CFBundleExecutable CFBundleSupportedPlatforms \
+        UIDeviceFamily UIRequiredDeviceCapabilities; do
+        if ! plutil -extract "$key" json -o - "$app/Info.plist" > /dev/null 2>&1; then
+            echo "ios-app: Info.plist has no $key, which device clouds require." >&2
+            exit 7
+        fi
+    done
+    if plutil -extract CFBundleSupportedPlatforms json -o - "$app/Info.plist" | grep -qi simulator; then
+        echo "ios-app: an .ipa must not name a simulator platform." >&2
+        exit 7
     fi
 
     # An .ipa is a zip with the bundle under `Payload/`. That layout is the whole
