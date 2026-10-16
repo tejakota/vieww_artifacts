@@ -38,7 +38,8 @@ use std::os::raw::c_void;
 /// appended after the existing ones). See [`AbiVersion::is_compatible_with`]
 /// for exactly what a version mismatch does.
 pub const MAJOR: u32 = 1;
-pub const MINOR: u32 = 0;
+/// 1: [`STATUS_PANICKED`] (additive — a 1.0 host reads it as a failure).
+pub const MINOR: u32 = 1;
 
 /// The one thing checked before any other call crosses the boundary.
 #[repr(C)]
@@ -147,6 +148,24 @@ pub const STATUS_ERROR: i32 = -1;
 /// [`PluginVTable::invoke`] was asked for a command id this plugin does not
 /// have.
 pub const STATUS_UNKNOWN_COMMAND: i32 = -2;
+/// The plugin's own code panicked, and the trampoline caught it before it
+/// could cross the `extern "C"` boundary (ABI 1.1).
+///
+/// # The panic contract at this boundary
+///
+/// A panic may never unwind out of an `extern "C"` function: Rust aborts the
+/// process when one tries. So every trampoline runs the plugin's code under
+/// `catch_unwind` **when the plugin was built with `panic = "unwind"`**,
+/// reports the message through the host's [`HostVTable::log`] at
+/// [`LogLevel::Error`], and returns this code — the host sees a
+/// [`PluginError`](crate::PluginError) it can act on, not a dead process.
+///
+/// A plugin built with `panic = "abort"` (vieww's release default) cannot be
+/// caught in-process at all: the panic ends the process, after the host's
+/// crash reporter has recorded it. In-process isolation is best-effort by
+/// nature; for code the host does not trust, the honest answer is a separate
+/// process.
+pub const STATUS_PANICKED: i32 = -3;
 
 pub type LogFn = extern "C" fn(level: LogLevel, message: AbiStr);
 
@@ -282,6 +301,40 @@ pub trait Plugin: 'static {
 struct PluginBox<P: Plugin> {
     plugin: P,
     commands: Vec<PluginCommand>,
+    /// The host's logger, kept from `init` so a panic in any later call can
+    /// be reported, not just one during `init`.
+    log: Option<LogFn>,
+}
+
+/// Run plugin code so that a panic cannot cross the `extern "C"` boundary.
+///
+/// Under `panic = "unwind"` the panic is caught, reported through `log`, and
+/// `fallback` is returned; under `panic = "abort"` there is nothing to catch
+/// and the process ends — see [`STATUS_PANICKED`].
+fn guarded<R>(log: Option<LogFn>, call: &str, fallback: R, work: impl FnOnce() -> R) -> R {
+    #[cfg(panic = "unwind")]
+    {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)) {
+            Ok(value) => value,
+            Err(payload) => {
+                let message = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| (*s).to_owned())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<non-string panic payload>".to_owned());
+                if let Some(log) = log {
+                    let line = format!("plugin panicked in {call}: {message}");
+                    log(LogLevel::Error, AbiStr::borrowed(&line));
+                }
+                fallback
+            }
+        }
+    }
+    #[cfg(not(panic = "unwind"))]
+    {
+        let _ = (log, call, fallback);
+        work()
+    }
 }
 
 /// Build a [`PluginVTable`] for `plugin`, leaking both the boxed instance and
@@ -308,6 +361,7 @@ pub fn leak_vtable<P: Plugin>(plugin: P) -> *mut PluginVTable {
     let boxed = Box::new(PluginBox {
         plugin,
         commands: Vec::new(),
+        log: None,
     });
     let instance = Box::into_raw(boxed).cast::<c_void>();
 
@@ -345,32 +399,40 @@ unsafe fn instance_mut<'a, P: Plugin>(instance: *mut c_void) -> &'a mut PluginBo
 
 extern "C" fn trampoline_name<P: Plugin>(instance: *mut c_void) -> AbiStr {
     let boxed = unsafe { instance_ref::<P>(instance) };
-    AbiStr::borrowed(boxed.plugin.name())
+    guarded(boxed.log, "name", AbiStr::EMPTY, || {
+        AbiStr::borrowed(boxed.plugin.name())
+    })
 }
 
 extern "C" fn trampoline_version<P: Plugin>(instance: *mut c_void) -> AbiStr {
     let boxed = unsafe { instance_ref::<P>(instance) };
-    AbiStr::borrowed(boxed.plugin.version())
+    guarded(boxed.log, "version", AbiStr::EMPTY, || {
+        AbiStr::borrowed(boxed.plugin.version())
+    })
 }
 
 extern "C" fn trampoline_init<P: Plugin>(instance: *mut c_void, host: *const HostVTable) -> i32 {
     let boxed = unsafe { instance_mut::<P>(instance) };
     let host_ref = unsafe { &*host };
-    match boxed.plugin.init(host_ref) {
-        Ok(()) => {
-            // The one-shot commands snapshot — see `PluginVTable`'s doc for
-            // exactly why this is read here and not on every
-            // `command_count`/`command_at` call.
-            boxed.commands = boxed.plugin.commands();
-            STATUS_OK
+    boxed.log = Some(host_ref.log);
+    guarded(boxed.log, "init", STATUS_PANICKED, || {
+        match boxed.plugin.init(host_ref) {
+            Ok(()) => {
+                // The one-shot commands snapshot — see `PluginVTable`'s doc for
+                // exactly why this is read here and not on every
+                // `command_count`/`command_at` call.
+                boxed.commands = boxed.plugin.commands();
+                STATUS_OK
+            }
+            Err(_) => STATUS_ERROR,
         }
-        Err(_) => STATUS_ERROR,
-    }
+    })
 }
 
 extern "C" fn trampoline_shutdown<P: Plugin>(instance: *mut c_void) {
     let boxed = unsafe { instance_mut::<P>(instance) };
-    boxed.plugin.shutdown();
+    let log = boxed.log;
+    guarded(log, "shutdown", (), || boxed.plugin.shutdown());
 }
 
 extern "C" fn trampoline_command_count<P: Plugin>(instance: *mut c_void) -> usize {
@@ -398,17 +460,20 @@ extern "C" fn trampoline_invoke<P: Plugin>(instance: *mut c_void, id: AbiStr) ->
     if !boxed.commands.iter().any(|command| command.id == id) {
         return STATUS_UNKNOWN_COMMAND;
     }
-    match boxed.plugin.invoke(id) {
+    let log = boxed.log;
+    guarded(log, "invoke", STATUS_PANICKED, || match boxed.plugin.invoke(id) {
         Ok(()) => STATUS_OK,
         Err(_) => STATUS_ERROR,
-    }
+    })
 }
 
 extern "C" fn trampoline_drop<P: Plugin>(instance: *mut c_void) {
     // Reclaims and drops the box `leak_vtable` created — the one part of a
     // plugin load that is not permanently leaked. See `leak_vtable`'s own
     // doc for exactly what still is.
-    drop(unsafe { Box::from_raw(instance.cast::<PluginBox<P>>()) });
+    let boxed = unsafe { Box::from_raw(instance.cast::<PluginBox<P>>()) };
+    let log = boxed.log;
+    guarded(log, "drop", (), || drop(boxed));
 }
 
 #[cfg(test)]
@@ -474,6 +539,65 @@ mod tests {
 
     fn plugin(calls: std::rc::Rc<RefCell<Vec<Call>>>, fail_init: bool) -> TestPlugin {
         TestPlugin { calls, fail_init }
+    }
+
+    /// A panic in plugin code stops at the trampoline: the host gets
+    /// `STATUS_PANICKED` and the message through its logger, and the plugin
+    /// can still be shut down and dropped. Only meaningful when this test
+    /// binary unwinds — which a test always does.
+    #[test]
+    #[cfg(panic = "unwind")]
+    fn a_plugin_panic_is_a_status_and_a_log_line_not_a_dead_process() {
+        struct Panicky;
+        impl Plugin for Panicky {
+            fn name(&self) -> &str {
+                "Panicky"
+            }
+            fn version(&self) -> &str {
+                "1"
+            }
+            fn init(&mut self, _host: &HostVTable) -> Result<(), String> {
+                Ok(())
+            }
+            fn shutdown(&mut self) {}
+            fn commands(&self) -> Vec<PluginCommand> {
+                vec![PluginCommand::new("boom", "Panic")]
+            }
+            fn invoke(&mut self, _id: &str) -> Result<(), String> {
+                panic!("the plugin's own bug");
+            }
+        }
+
+        thread_local! {
+            static LOGGED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+        }
+        extern "C" fn record(level: LogLevel, message: AbiStr) {
+            let text = unsafe { message.as_str() }.to_owned();
+            assert_eq!(level, LogLevel::Error);
+            LOGGED.with_borrow_mut(|lines| lines.push(text));
+        }
+
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let vtable = leak_vtable(Panicky);
+        let host = HostVTable {
+            abi_version: AbiVersion::CURRENT,
+            log: record,
+        };
+        let status = unsafe {
+            assert_eq!(((*vtable).init)((*vtable).instance, &host), STATUS_OK);
+            ((*vtable).invoke)((*vtable).instance, AbiStr::borrowed("boom"))
+        };
+        std::panic::set_hook(previous);
+        assert_eq!(status, STATUS_PANICKED);
+        LOGGED.with_borrow(|lines| {
+            assert_eq!(lines.len(), 1);
+            assert!(lines[0].contains("invoke") && lines[0].contains("the plugin's own bug"), "{lines:?}");
+        });
+        unsafe {
+            ((*vtable).shutdown)((*vtable).instance);
+            ((*vtable).drop)((*vtable).instance);
+        }
     }
 
     #[test]

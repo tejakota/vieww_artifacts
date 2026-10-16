@@ -2717,7 +2717,7 @@ impl Studio {
             candidate: Rc::new(std::cell::Cell::new(0)),
             preview_screen: runtime.signal(None),
             preview_remote: runtime.signal(None),
-            isolated_preview: runtime.signal(cfg!(windows)),
+            isolated_preview: runtime.signal(cfg!(windows) || cfg!(panic = "abort")),
             output: runtime.signal(Rc::new(Vec::new())),
             timings: runtime.signal(Rc::new(Vec::new())),
             rendered_at: runtime.signal(None),
@@ -3247,7 +3247,10 @@ impl Studio {
         // In this process, or in a child that a guest crash cannot take the
         // studio down with — see `remote`, and `PENDING.md` §3.3 for why
         // Windows has no other safe option.
-        let outcome = if self.isolated_preview.peek() {
+        // A studio built to abort on panic cannot survive a guest panic in its
+        // own process, so it always previews out of process — see the
+        // `panic` note in Cargo.toml's `[profile.release]`.
+        let outcome = if self.isolated_preview.peek() || cfg!(panic = "abort") {
             match crate::remote::RemotePreview::sibling_binary() {
                 Some(binary) => {
                     let sysroot = self

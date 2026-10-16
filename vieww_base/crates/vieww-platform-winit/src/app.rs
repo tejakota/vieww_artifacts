@@ -886,7 +886,23 @@ impl App {
         // The handle has to come out before `install` consumes the reporter,
         // and the platform's own breadcrumbs go in at the same moment — the
         // target is known now and never changes.
-        let crash_context = self.crashes.take().map(|crashes| {
+        // **No panic is invisible, even when the application installed no
+        // reporter.** Release builds abort on panic (Cargo.toml's
+        // `[profile.release]`), and an abort on a phone is an app that vanishes:
+        // Android discards stderr, and an iPhone has no console. So without an
+        // application's own `Crashes`, a default one with `LogSink` goes in —
+        // the message and location reach logcat / the unified log before the
+        // process ends. Once per process: a second `App` in the same process
+        // (tests open many) must not stack a second hook.
+        let crashes = self.crashes.take().or_else(|| {
+            static DEFAULT_REPORTER: std::sync::Once = std::sync::Once::new();
+            let mut fresh = None;
+            DEFAULT_REPORTER.call_once(|| {
+                fresh = Some(Crashes::new().with_sink(crate::crash::LogSink));
+            });
+            fresh
+        });
+        let crash_context = crashes.map(|crashes| {
             let context = crashes.context_handle();
             context.set("target", std::env::consts::OS);
             crashes.install();

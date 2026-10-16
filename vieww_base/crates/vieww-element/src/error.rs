@@ -16,6 +16,12 @@ use crate::ElementId;
 ///
 /// An application that disagrees can say so with
 /// [`ElementTree::set_error_policy`](crate::ElementTree::set_error_policy).
+///
+/// **Catching needs unwinding.** vieww's release profile aborts on panic
+/// (Cargo.toml, `[profile.release]`), so under it `Placeholder` and `Custom`
+/// cannot catch anything: the panic ends the process after the crash reporter
+/// has logged it, exactly as `Propagate` would. A release host that wants the
+/// placeholder builds with `--profile release-unwind`.
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorPolicy {
     /// Catch the panic, mount an

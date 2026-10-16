@@ -322,7 +322,7 @@ impl Default for Settings {
             inline_diagnostics: true,
             release_profile: false,
             auto_render: false,
-            isolated_preview: cfg!(windows),
+            isolated_preview: cfg!(windows) || cfg!(panic = "abort"),
             minimap: true,
             blink: true,
             highlight: true,

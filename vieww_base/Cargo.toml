@@ -229,12 +229,30 @@ vieww-cli = { path = "crates/vieww-cli", version = "0.1.0" }
 # first thing to rule out when a phone reports lag, and it is worth roughly an
 # order of magnitude.
 #
-# `panic` is deliberately left at the default `unwind`. **Do not set
-# `panic = "abort"` here.** `ElementTree::build` wraps every `widget.build` in
-# `catch_unwind` — that is the error boundary, and `deep_links.rs` notes its own
-# `catch_unwind` as load-bearing. Aborting turns a contained widget failure into
-# a killed process, which on a phone is a crash report instead of a red box.
+# **`panic = "abort"` in release (and so in `dist`), `unwind` as an opt-in
+# profile.** Decided 2026-10-16, reversing the earlier "never abort" rule:
+#
+# - It is what shipping Rust binaries do: no unwind tables or landing pads, a
+#   smaller binary, and no unwinder on targets that lack one.
+# - Release already crashed on a widget panic: `ErrorPolicy`'s release default
+#   is `Propagate`. The red box (`Placeholder`) is a development affordance, and
+#   development builds (`dev`, and every test) still unwind — cargo ignores
+#   `panic` for test targets.
+# - The C-ABI plugin boundary (`vieww-plugin`) never could rely on unwinding:
+#   a panic may not cross `extern "C"`. Its trampolines catch where they can
+#   (`cfg(panic = "unwind")`) and report `STATUS_PANICKED`; under abort, process
+#   isolation is the honest answer for untrusted code.
+# - No panic is invisible: `App::run` installs the crash reporter by default
+#   (`vieww_foundation::crash`, chained before the abort), so the message and
+#   location reach the platform log — logcat, the unified log, stderr — and any
+#   `FileSink` survives to the next launch.
+#
+# **Opting back in:** `--profile release-unwind` / `--profile dist-unwind`, for
+# a host that needs `catch_unwind` at the widget or frame boundary — the studio
+# is one (`packaging/package.sh` builds it that way). Costs binary size; not
+# available on targets without an unwinder.
 [profile.release]
+panic = "abort"
 # One codegen unit per crate rather than sixteen. The cost is compile time on a
 # cold build, paid once by CI and by whoever ships; the win lands on the device,
 # where the frame budget is 16.6ms.
@@ -296,7 +314,8 @@ debug = "line-tables-only"
 #
 # On Linux/macOS *without* that RUSTFLAGS, this fails to link with "cannot
 # prefer dynamic linking when performing LTO" — loud, which is the right
-# failure. `panic` stays `unwind` for the reason at the top of this section.
+# failure. `panic = "abort"`, inherited from release — see the top of this
+# section, and `dist-unwind` below for the opt-in.
 [profile.dist]
 inherits = "release"
 lto = "fat"
@@ -308,6 +327,16 @@ strip = "symbols"
 # for no measured frame cost. Workspace crates keep the release opt-level.
 [profile.dist.package."*"]
 opt-level = "s"
+
+# The opt-in to unwinding, for hosts that catch panics at the widget/frame
+# boundary (the studio). Same code generation otherwise.
+[profile.release-unwind]
+inherits = "release"
+panic = "unwind"
+
+[profile.dist-unwind]
+inherits = "dist"
+panic = "unwind"
 
 # Debug builds are painful mostly because the per-frame pixel work is
 # unoptimised, and none of it is code anyone steps through. Optimising just
@@ -367,7 +396,8 @@ opt-level = 2
 # exceptions". See `apps/viewwstudio/src/loaded.rs`'s panic section for the
 # full history.
 #
-# `panic = "unwind"` (preserved below) and `catch_unwind` in
+# `panic = "unwind"` (the `release-unwind` profile the studio is built with —
+# release itself aborts, see `[profile.release]`) and `catch_unwind` in
 # `ElementTree::build` are the host-side boundary; with both sides built
 # `prefer-dynamic`, both link against `libstd-*.so` from the same toolchain,
 # and the existing catch works for guest widgets too.

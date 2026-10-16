@@ -141,6 +141,11 @@ impl std::fmt::Display for FrameError {
 
 /// Run `work`, turning a panic into a [`FrameError`] rather than an unwind.
 ///
+/// Only where panics unwind: a `panic = "abort"` build (vieww's release
+/// profile) has nothing to catch, and a layout or paint panic ends the process
+/// after the crash reporter `App::run` installs has logged it. See
+/// Cargo.toml's `[profile.release]`.
+///
 /// `AssertUnwindSafe` because the render tree is `&mut` across the boundary and
 /// cannot be otherwise. The assertion it makes is real and is the price of the
 /// guard: a tree whose layout panicked partway may hold objects in an

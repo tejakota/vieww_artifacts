@@ -60,6 +60,12 @@ pub enum PluginError {
     /// ABI version does not carry error text back across the boundary — see
     /// [`crate::abi::Plugin::invoke`]'s own doc for why.
     InvokeFailed(String),
+    /// The plugin's code panicked during the named call (`"init"`,
+    /// `"invoke(<id>)"`), and its trampoline caught the panic before it
+    /// reached the boundary ([`abi::STATUS_PANICKED`]). The message went to
+    /// the host's logger. Only possible for a plugin built to unwind; one
+    /// built to abort ends the process instead.
+    Panicked(String),
 }
 
 impl fmt::Display for PluginError {
@@ -80,6 +86,7 @@ impl fmt::Display for PluginError {
             Self::InitFailed => write!(f, "plugin's init() returned an error"),
             Self::UnknownCommand(id) => write!(f, "plugin has no command {id:?}"),
             Self::InvokeFailed(id) => write!(f, "plugin's invoke({id:?}) returned an error"),
+            Self::Panicked(call) => write!(f, "plugin panicked in {call} (the message was logged)"),
         }
     }
 }
@@ -171,6 +178,7 @@ impl LoadedPlugin {
         match status {
             STATUS_OK => Ok(()),
             STATUS_UNKNOWN_COMMAND => Err(PluginError::UnknownCommand(id.to_owned())),
+            abi::STATUS_PANICKED => Err(PluginError::Panicked(format!("invoke({id:?})"))),
             _ => Err(PluginError::InvokeFailed(id.to_owned())),
         }
     }
@@ -281,7 +289,11 @@ impl PluginRegistry {
                 ((*vtable).drop)((*vtable).instance);
             }
             drop(library);
-            return Err(PluginError::InitFailed);
+            return Err(if init_status == abi::STATUS_PANICKED {
+                PluginError::Panicked("init".to_owned())
+            } else {
+                PluginError::InitFailed
+            });
         }
 
         // SAFETY: `init` succeeded, so the commands snapshot behind

@@ -182,6 +182,7 @@ impl ProjectLib {
         let mut directories = vec![studio_deps.to_path_buf()];
         directories.push(root.join("target").join("debug").join("deps"));
         directories.push(root.join("target").join("release").join("deps"));
+        directories.push(root.join("target").join("release-unwind").join("deps"));
 
         for deps in directories {
             let Ok(entries) = std::fs::read_dir(&deps) else {
@@ -1270,6 +1271,16 @@ fn run_rustc(
     if cfg!(unix) {
         args.push("-C".into());
         args.push("rpath".into());
+    }
+    // **The guest's panic strategy is the studio's.** A studio built with a
+    // `panic = "abort"` profile (plain `release` — see Cargo.toml) has abort-
+    // compiled rlibs in its dependency directory, and rustc refuses to link an
+    // unwinding cdylib against them. Such a studio also cannot catch a guest
+    // panic in-process, which is why it previews out of process
+    // (`state.rs`, `isolated_preview`).
+    if cfg!(panic = "abort") {
+        args.push("-C".into());
+        args.push("panic=abort".into());
     }
     if let Some(project) = project {
         // The project's own rlib and its dependency directory, so a screen
