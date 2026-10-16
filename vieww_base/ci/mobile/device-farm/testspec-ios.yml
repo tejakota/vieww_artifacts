@@ -1,0 +1,28 @@
+# AWS Device Farm custom test spec for vieww's device suite on iPhones.
+# Uploaded by `ci/mobile/device_farm.py --platform ios`; the test package
+# (package.sh) is unpacked into $DEVICEFARM_TEST_PACKAGE_PATH. The run is
+# `xcrun devicectl` launching the app with its console attached, and Appium's
+# XCUITest driver sending the taps (run-ios.sh).
+version: 0.1
+
+ios_test_host: macos_sequoia
+
+phases:
+  install:
+    commands:
+      - devicefarm-cli use appium 2 || true
+      - devicefarm-cli use python 3.12 || true
+      - xcodebuild -version
+      - appium driver list --installed 2>&1 | head -20 || true
+  pre_test:
+    commands:
+      - xcrun devicectl list devices || true
+  test:
+    commands:
+      - bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-ios.sh
+  post_test:
+    commands:
+      - ls -la $DEVICEFARM_LOG_DIR/vieww || true
+
+artifacts:
+  - $DEVICEFARM_LOG_DIR

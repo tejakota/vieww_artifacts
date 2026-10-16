@@ -107,7 +107,15 @@ fn main() {
         }
     });
 
-    let result = App::new()
+    // **`VIEWW_GPU=1` takes the planned GPU path**, as `debug.vieww.gpu=1`
+    // does on Android. iOS has no system properties a script can set, but a
+    // launcher can pass environment variables
+    // (`xcrun devicectl device process launch --environment-variables`), which
+    // is how `ci/mobile/device-farm/run-ios.sh` runs the suite on both paths.
+    let prefer_gpu = std::env::var("VIEWW_GPU").is_ok_and(|v| v == "1");
+    let app = App::new();
+    let app = if prefer_gpu { app.prefer_gpu() } else { app };
+    let result = app
         .title("vieww")
         .size(PREVIEW)
         .on_frame(perf.hook())

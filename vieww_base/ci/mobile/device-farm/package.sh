@@ -8,7 +8,7 @@
 # Device Farm validates the shape before it accepts the upload: requirements.txt
 # at the top, a wheelhouse/ with one pure-Python wheel per requirement line, and
 # a tests/ directory pytest can collect. None of it runs — the spec calls
-# run-android.sh directly — but an upload that fails validation never reaches
+# run-android.sh or run-ios.sh directly — but an upload that fails validation never reaches
 # a device.
 
 set -euo pipefail
@@ -19,7 +19,8 @@ trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/tests" "$work/wheelhouse" "$work/ci/mobile/device-farm"
 cp "$root/ci/mobile/device-suite.sh" "$root/ci/mobile/android-env.sh" "$work/ci/mobile/"
-cp "$root/ci/mobile/device-farm/run-android.sh" "$work/ci/mobile/device-farm/"
+cp "$root/ci/mobile/device-farm/run-android.sh" "$root/ci/mobile/device-farm/run-ios.sh" \
+    "$root/ci/mobile/device-farm/tap_ios.py" "$work/ci/mobile/device-farm/"
 
 cat > "$work/tests/test_vieww_package.py" <<'PY'
 """Device Farm requires a collectable pytest file in an Appium Python

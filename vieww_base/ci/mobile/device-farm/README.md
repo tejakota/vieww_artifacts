@@ -30,8 +30,25 @@ python3 ci/mobile/device_farm.py --apk vieww-devicefarm.apk --out df-out --devic
 The APK must carry a `classes.dex` (`ci/mobile/apk-add-code.sh`), as for any
 device cloud; the workflow's `apk` job builds it that way.
 
+## iPhones
+
+```console
+python3 ci/mobile/device_farm.py --platform ios --ipa dist/vieww.ipa --out df-ios
+```
+
+`testspec-ios.yml` runs `run-ios.sh` on Device Farm's macOS host: the app is
+launched with `xcrun devicectl … --console` (CPU path, then `VIEWW_GPU=1`), its
+tap targets are read from `__VIEWW_TAPS_PT__` and tapped through Appium's
+XCUITest driver by `tap_ios.py` (stdlib only), and the suite's verdict and
+frame report are read from the console — with the copy the app writes into its
+own `Documents/` as a second channel. Start-up is the app's own trace: the
+first presented frame, from `main`. **Not yet run on a real Device Farm
+iPhone**; the first run is what verifies these scripts.
+
+The .ipa is built by the workflow's `ipa` job (`ci/mobile/ios-app.sh --ipa`,
+MoltenVK bundled), signed with your identity when the `IOS_*` secrets exist.
+
 ## What it does not cover
 
-iOS (needs Apple signing and a way to read the device log on the Mac host —
-not yet built), energy (Device Farm exposes no power data), and TalkBack by
-ear (done by hand on the Redmi).
+Energy (Device Farm exposes no power data) and TalkBack/VoiceOver by ear (done
+by hand on the Redmi).

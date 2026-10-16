@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Run vieww's Android device suite on real phones in AWS Device Farm.
+"""Run vieww's device suite on real phones in AWS Device Farm.
 
     python3 ci/mobile/device_farm.py --apk dist/vieww-devicefarm.apk --out df-out
+    python3 ci/mobile/device_farm.py --platform ios --ipa dist/vieww.ipa --out df-out
         [--project-arn ARN]          default: $DEVICE_FARM_PROJECT_ARN
         [--devices "Pixel 8,Galaxy A14"]  name substrings; default: picked by tier
         [--count 3]                  phones when picking by tier (low ... high)
@@ -65,9 +66,10 @@ def version_tuple(text):
     return tuple(int(p) for p in re.findall(r"\d+", text or "0")[:3]) or (0,)
 
 
-def pick_devices(aws, names, count):
+def pick_devices(aws, names, count, platform="ANDROID"):
+    min_os = (7,) if platform == "ANDROID" else (16,)
     filters = [
-        {"attribute": "PLATFORM", "operator": "EQUALS", "values": ["ANDROID"]},
+        {"attribute": "PLATFORM", "operator": "EQUALS", "values": [platform]},
         {"attribute": "FORM_FACTOR", "operator": "EQUALS", "values": ["PHONE"]},
     ]
     devices = []
@@ -83,6 +85,8 @@ def pick_devices(aws, names, count):
             break
 
     def arm64(d):
+        if platform == "IOS":
+            return True  # every iPhone Device Farm still offers is arm64
         arch = (d.get("cpu") or {}).get("architecture", "")
         return "arm64" in arch or "aarch64" in arch
 
@@ -91,7 +95,7 @@ def pick_devices(aws, names, count):
         for wanted in names:
             matches = [d for d in devices if wanted.lower() in d["name"].lower()]
             if not matches:
-                raise SystemExit(f"device_farm: no Android phone matches {wanted!r}")
+                raise SystemExit(f"device_farm: no {platform} phone matches {wanted!r}")
             # The newest OS of that name, and a highly available one if any.
             matches.sort(key=lambda d: (d.get("availability") == "HIGHLY_AVAILABLE", version_tuple(d.get("os"))))
             chosen.append(dict(matches[-1], tier="named"))
@@ -100,10 +104,10 @@ def pick_devices(aws, names, count):
     usable = [
         d
         for d in devices
-        if d.get("availability") == "HIGHLY_AVAILABLE" and arm64(d) and version_tuple(d.get("os")) >= (7,)
+        if d.get("availability") == "HIGHLY_AVAILABLE" and arm64(d) and version_tuple(d.get("os")) >= min_os
     ]
     if not usable:
-        raise SystemExit("device_farm: no highly available arm64 Android 7+ phone in the device list")
+        raise SystemExit(f"device_farm: no highly available {platform} phone (OS {min_os[0]}+) in the device list")
     usable.sort(key=lambda d: (d.get("memory") or 0, (d.get("cpu") or {}).get("clock") or 0, version_tuple(d.get("os"))))
     count = max(1, min(count, len(usable)))
     if count == 1:
@@ -192,15 +196,24 @@ def summarize(rows, out, run):
             for m in ("cpu", "gpu")
         )
         mem = r.get("mem_total_kb")
+        if not r.get("cpu_cold_start_ms") and r.get("cpu_first_frame_ms"):
+            # iOS reports the app's own first-frame time instead of `am start -W`.
+            cold = " / ".join(
+                f"{median_of(r.get(f'{m}_first_frame_ms')):.0f}" if median_of(r.get(f"{m}_first_frame_ms")) else "–"
+                for m in ("cpu", "gpu")
+            )
         lines.append(
             "| {phone} | {tier} | {android} | {soc}<br>{gpu} | {ram} | {apk} | {cold} | {ftc} | {ftg} | {gf} | {pss} | {suite} |".format(
                 phone=row["device"],
                 tier=row["tier"],
-                android=r.get("android", row.get("os", "?")),
+                android=r.get("android") or r.get("ios") or row.get("os", "?"),
                 soc=r.get("soc", "?"),
                 gpu=(r.get("gpu") or "?")[:60],
                 ram=f"{int(mem) / 1048576:.1f} GB" if mem and mem.isdigit() else "?",
-                apk=f"{int(r['apk_bytes']) / 1048576:.1f} MB" if r.get("apk_bytes", "").isdigit() else "–",
+                apk=next(
+                    (f"{int(r[k]) / 1048576:.1f} MB" for k in ("apk_bytes", "ipa_bytes") if r.get(k, "").isdigit()),
+                    "–",
+                ),
                 cold=cold,
                 ftc=r.get("cpu_frame_time", "–"),
                 ftg=r.get("gpu_frame_time", "–"),
@@ -237,7 +250,9 @@ def summarize(rows, out, run):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--apk", required=True)
+    parser.add_argument("--platform", choices=["android", "ios"], default="android")
+    parser.add_argument("--apk", help="the Android app (--platform android)")
+    parser.add_argument("--ipa", help="the iOS app (--platform ios)")
     parser.add_argument("--out", required=True)
     parser.add_argument("--project-arn", default=os.environ.get("DEVICE_FARM_PROJECT_ARN"))
     parser.add_argument("--devices", default="")
@@ -254,17 +269,25 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     aws = Aws(args.region)
 
+    ios = args.platform == "ios"
+    app_path = args.ipa if ios else args.apk
+    if not app_path:
+        print(f"device_farm: --{'ipa' if ios else 'apk'} is required for --platform {args.platform}", file=sys.stderr)
+        return 2
     names = [n.strip() for n in args.devices.split(",") if n.strip()]
-    devices = pick_devices(aws, names, args.count)
+    devices = pick_devices(aws, names, args.count, "IOS" if ios else "ANDROID")
     for d in devices:
-        say(f"phone: {d['name']} (Android {d.get('os')}, {(d.get('memory') or 0) / 2**30:.1f} GB, {d['tier']})")
+        say(f"phone: {d['name']} ({'iOS' if ios else 'Android'} {d.get('os')}, {(d.get('memory') or 0) / 2**30:.1f} GB, {d['tier']})")
 
     package = out / "vieww-device-farm-tests.zip"
     subprocess.run(["bash", str(HERE / "device-farm" / "package.sh"), str(package)], check=True)
-    app_arn = upload(aws, args.project_arn, args.apk, "ANDROID_APP")
+    app_arn = upload(aws, args.project_arn, app_path, "IOS_APP" if ios else "ANDROID_APP")
     package_arn = upload(aws, args.project_arn, package, "APPIUM_PYTHON_TEST_PACKAGE")
     spec_arn = upload(
-        aws, args.project_arn, HERE / "device-farm" / "testspec-android.yml", "APPIUM_PYTHON_TEST_SPEC"
+        aws,
+        args.project_arn,
+        HERE / "device-farm" / ("testspec-ios.yml" if ios else "testspec-android.yml"),
+        "APPIUM_PYTHON_TEST_SPEC",
     )
 
     run = aws(

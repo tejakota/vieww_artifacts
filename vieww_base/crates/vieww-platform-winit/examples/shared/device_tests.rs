@@ -189,6 +189,11 @@ fn emit(line: &str) {
     let format = NSString::from_str("%@");
     let message = NSString::from_str(line);
     unsafe { NSLog(&*format as *const NSString, &*message as *const NSString) }
+    // And stderr: `xcrun devicectl device process launch --console` forwards
+    // the process's own stdio, which is how AWS Device Farm's macOS host reads
+    // the suite (`ci/mobile/device-farm/run-ios.sh`). The unified log stays the
+    // channel for every other device cloud.
+    eprintln!("{line}");
 }
 
 /// The on-device suite: a probe that lives in the tree, and a per-frame hook.
@@ -500,6 +505,19 @@ impl DeviceSuite {
                 None => String::new(),
             };
             report!("__VIEWW_TAPS__ button={bx},{by} field={fx},{fy}{menu}");
+            // The same targets in **logical points**, which is what iOS input
+            // speaks (XCUITest/WebDriverAgent taps through Appium, in
+            // `ci/mobile/device-farm/run-ios.sh`). A separate line so the
+            // Android parser of the one above is untouched.
+            let point = |(x, y): (i32, i32)| {
+                let (x, y) = (x as f32 / scale, y as f32 / scale);
+                format!("{},{}", x.round() as i32, y.round() as i32)
+            };
+            report!(
+                "__VIEWW_TAPS_PT__ scale={scale} button={} field={}",
+                point((bx, by)),
+                point((fx, fy))
+            );
         }
     }
 

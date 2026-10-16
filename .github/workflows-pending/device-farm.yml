@@ -1,4 +1,4 @@
-name: Device Farm (Android phones)
+name: Device Farm (Android and iOS phones)
 
 # vieww's on-device suite on real Android phones in AWS Device Farm: low-end,
 # mid-range and high-end by default, each running the CPU path and the planned
@@ -20,6 +20,11 @@ name: Device Farm (Android phones)
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Which phones"
+        type: choice
+        options: [android, ios, both]
+        default: android
       devices:
         description: "Phones by name, comma-separated (e.g. 'Pixel 8, Galaxy A14'). Empty = pick low / mid / high automatically"
         type: string
@@ -70,6 +75,7 @@ jobs:
   apk:
     name: Build the arm64 APK
     needs: main-only
+    if: inputs.platform != 'ios'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -109,6 +115,7 @@ jobs:
   phones:
     name: Device suite on Device Farm phones
     needs: apk
+    if: inputs.platform != 'ios'
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     permissions:
@@ -178,13 +185,123 @@ jobs:
           path: ${{ runner.temp }}/device-farm
           if-no-files-found: warn
 
+  # The iPhone .ipa: device slice, MoltenVK bundled, signed with your Apple
+  # identity when the IOS_* secrets exist (ad-hoc otherwise — Device Farm
+  # re-signs uploads). Same steps as framework-checks' build-ipa job.
+  ipa:
+    name: Build the iOS .ipa
+    needs: main-only
+    if: inputs.platform != 'android'
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      HAS_CERT: ${{ secrets.IOS_CERT_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vieww_base -> target
+      - name: Toolchain and the iOS device target
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup target add --toolchain "$RUST_VERSION" aarch64-apple-ios
+      - name: MoltenVK (device slice)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
+            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-all.tar
+          mkdir -p "$RUNNER_TEMP/mvk" && tar -xf "$RUNNER_TEMP/mvk.tar" -C "$RUNNER_TEMP/mvk"
+          dev=$(find "$RUNNER_TEMP/mvk" -path '*dynamic/MoltenVK.xcframework/ios-arm64/MoltenVK.framework' -type d | head -1)
+          [ -n "$dev" ] || { echo "::error::MoltenVK device slice not found"; exit 1; }
+          echo "MVK_DEVICE=$dev" >> "$GITHUB_ENV"
+      - name: Signing identity into a temporary keychain (when the secrets exist)
+        if: env.HAS_CERT == 'true'
+        env:
+          IOS_CERT_P12: ${{ secrets.IOS_CERT_P12 }}
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+          IOS_IDENTITY: ${{ secrets.IOS_IDENTITY }}
+        run: |
+          keychain="$RUNNER_TEMP/vieww.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          echo "$IOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$IOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          echo "$IOS_PROFILE" | base64 --decode > "$RUNNER_TEMP/vieww.mobileprovision"
+          echo "VIEWW_IOS_PROFILE=$RUNNER_TEMP/vieww.mobileprovision" >> "$GITHUB_ENV"
+          echo "VIEWW_IOS_IDENTITY=$IOS_IDENTITY" >> "$GITHUB_ENV"
+      - name: Device .ipa
+        run: |
+          VIEWW_MOLTENVK="$MVK_DEVICE" ci/mobile/ios-app.sh --ipa
+          mkdir -p ../dist && cp target/ios/vieww.ipa ../dist/vieww.ipa
+          ls -l ../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vieww-devicefarm-ipa
+          path: dist/vieww.ipa
+
+  iphones:
+    name: Device suite on Device Farm iPhones
+    needs: ipa
+    if: inputs.platform != 'android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEVICE_FARM_PROJECT_ARN: ${{ secrets.DEVICE_FARM_PROJECT_ARN }}
+      HAS_ROLE: ${{ secrets.AWS_ROLE_ARN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vieww-devicefarm-ipa
+          path: dist
+      - name: AWS credentials (OIDC role)
+        if: env.HAS_ROLE == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: AWS credentials (access keys)
+        if: env.HAS_ROLE != 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Run on iPhones
+        env:
+          DEVICES: ${{ inputs.devices }}
+          COUNT: ${{ inputs.count }}
+          VIDEO: ${{ inputs.video }}
+          OUT: ${{ runner.temp }}/device-farm-ios
+        run: |
+          video=""; [ "$VIDEO" = true ] && video="--video"
+          set +e
+          python3 ci/mobile/device_farm.py --platform ios --ipa ../dist/vieww.ipa --out "$OUT" \
+            --devices "$DEVICES" --count "$COUNT" $video
+          status=$?
+          [ -f "$OUT/SUMMARY.md" ] && cat "$OUT/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+      - name: Upload everything
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-farm-ios-results
+          path: ${{ runner.temp }}/device-farm-ios
+          if-no-files-found: warn
+
   # Results where a session without API access can read them, as the other
   # workflows do: `git fetch origin ci-results/device-farm-<branch>`. Text only;
   # screenshots, videos and the test package stay in the run's artifacts.
   report:
     name: Publish to ci-results/device-farm-<branch>
     if: always() && github.ref == 'refs/heads/main'
-    needs: [apk, phones]
+    needs: [apk, phones, ipa, iphones]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -197,7 +314,12 @@ jobs:
         continue-on-error: true
         with:
           name: device-farm-results
-          path: out
+          path: out/android
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: device-farm-ios-results
+          path: out/ios
       - name: Push to ci-results/device-farm-<branch>
         env:
           TOKEN: ${{ github.token }}
@@ -206,7 +328,7 @@ jobs:
           mkdir -p out
           find out -type f \( -name '*.png' -o -name '*.mp4' -o -name '*.zip' \) -delete
           {
-            echo "apk: ${{ needs.apk.result }} · phones: ${{ needs.phones.result }}"
+            echo "apk: ${{ needs.apk.result }} · phones: ${{ needs.phones.result }} · ipa: ${{ needs.ipa.result }} · iphones: ${{ needs.iphones.result }}"
             echo "run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID} @ ${GITHUB_SHA}"
           } > out/RUN.txt
           branch="ci-results/device-farm-${GITHUB_REF_NAME//\//-}"
