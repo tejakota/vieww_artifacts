@@ -191,22 +191,50 @@ fn horizontal(src: &[Premul], dst: &mut [Premul], w: u32, h: u32, radius: i32) {
                 sum = add(sum, src_row[(width - 1) as usize]);
             }
         }
-        for x in 0..width {
-            dst_row[x as usize] = divide(sum, window);
-            // `sum += entering - leaving`, as one expression per channel
-            // rather than an add followed by a subtract. Floating-point
-            // addition is not associative, so the two spellings can differ in
-            // the last bit — and this renderer is the oracle every other
-            // backend is diffed against, so "the same picture, one bit
-            // different" is a worse answer than it sounds. Measured on the
-            // fixture gallery: splitting them moved 446 pixels of a blurred
-            // panel by exactly 1/255.
+        // `sum += entering - leaving`, as one expression per channel rather
+        // than an add followed by a subtract. Floating-point addition is not
+        // associative, so the two spellings can differ in the last bit — and
+        // this renderer is the oracle every other backend is diffed against,
+        // so "the same picture, one bit different" is a worse answer than it
+        // sounds. Measured on the fixture gallery: splitting them moved 446
+        // pixels of a blurred panel by exactly 1/255.
+        //
+        // **Three spans, one arithmetic.** Only the first `radius` columns
+        // clamp the leaving sample and only the last `radius + 1` clamp the
+        // entering one; in between both are plain offsets. The middle span is
+        // walked as three zipped slices, so it carries no clamps and no
+        // bounds checks — those were most of this loop's instructions (a
+        // callgrind profile of `blur_bench`: ~25 per pixel per pass) — while
+        // every pixel still gets exactly the same divide, subtract and add in
+        // the same order. The output is unchanged to the bit.
+        let step = |sum: &mut Premul, dst: &mut Premul, x: i32| {
+            *dst = divide(*sum, window);
             let entering = (x + radius + 1).min(width - 1);
             let leaving = (x - radius).max(0);
-            sum = add(
-                sum,
+            *sum = add(
+                *sum,
                 sub(src_row[entering as usize], src_row[leaving as usize]),
             );
+        };
+        // Middle: x - radius >= 0 and x + radius + 1 <= width - 1.
+        let mid_start = radius.min(width);
+        let mid_end = (width - radius - 1).max(mid_start);
+        for x in 0..mid_start {
+            step(&mut sum, &mut dst_row[x as usize], x);
+        }
+        let (r, ms, me) = (radius as usize, mid_start as usize, mid_end as usize);
+        if ms < me {
+            for ((out, entering), leaving) in dst_row[ms..me]
+                .iter_mut()
+                .zip(&src_row[ms + r + 1..me + r + 1])
+                .zip(&src_row[ms - r..me - r])
+            {
+                *out = divide(sum, window);
+                sum = add(sum, sub(*entering, *leaving));
+            }
+        }
+        for x in mid_end..width {
+            step(&mut sum, &mut dst_row[x as usize], x);
         }
     }
 }
@@ -288,20 +316,20 @@ fn vertical(src: &[Premul], dst: &mut [Premul], w: u32, h: u32, radius: i32) {
 
         for y in 0..height {
             let out_row = y as usize * width + x0;
-            for (i, sum) in sums.iter_mut().take(strip).enumerate() {
-                dst[out_row + i] = divide(*sum, window);
-            }
             // One expression per column, for the reason `horizontal` gives.
-            let entering = (y + radius + 1).min(height - 1);
-            let leaving = (y - radius).max(0);
-            for (i, sum) in sums.iter_mut().take(strip).enumerate() {
-                *sum = add(
-                    *sum,
-                    sub(
-                        src[entering as usize * width + x0 + i],
-                        src[leaving as usize * width + x0 + i],
-                    ),
-                );
+            let entering = (y + radius + 1).min(height - 1) as usize * width + x0;
+            let leaving = (y - radius).max(0) as usize * width + x0;
+            // Zipped slices rather than `src[row + i]` per column: the same
+            // operations in the same order, without a bounds check per
+            // sample (see `horizontal`).
+            for (((sum, out), entering), leaving) in sums[..strip]
+                .iter_mut()
+                .zip(&mut dst[out_row..out_row + strip])
+                .zip(&src[entering..entering + strip])
+                .zip(&src[leaving..leaving + strip])
+            {
+                *out = divide(*sum, window);
+                *sum = add(*sum, sub(*entering, *leaving));
             }
         }
         x0 += strip;
