@@ -7,25 +7,31 @@
 //! rasterizer's output is already RGBA8, which is the window's own
 //! `R8G8B8X8` layout byte for byte, so this copies rows and nothing else.
 //!
-//! **Only what changed.** `ANativeWindow_lock` takes the region about to be
-//! drawn, copies the rest of the previous frame into the new buffer itself
-//! when it can, and answers with the region the caller must actually fill —
-//! the whole buffer when it could not copy back. So a frame whose damage is a
-//! button copies the button's rows, and the platform keeps the rest.
+//! **Only what each buffer is missing — and never Android's copy-back.** The
+//! first version passed the frame's damage to `ANativeWindow_lock`, which then
+//! copies the rest of the previous frame into the new buffer itself. Measured
+//! on Device Farm (2026-10-16, same build, same phone, presented this way and
+//! through Vulkan): present 7.1 ms here against 3.2 ms through Vulkan on a
+//! 1440x3200 Galaxy S20. A window buffer is typically uncached memory, and
+//! copy-back *reads* nearly all of it every frame. Now the whole buffer is
+//! locked (no copy-back), each buffer is recognised by its address
+//! (`BufferAges`), and only the regions changed since that buffer last held a
+//! frame are written — writes only, which is what uncached memory is good at.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ndk::hardware_buffer_format::HardwareBufferFormat;
-use ndk::native_window::{NativeWindow, Rect as ARect};
+use ndk::native_window::NativeWindow;
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 use winit::window::Window;
 
-use super::{Changed, NativeError};
+use super::{BufferAges, Changed, NativeError};
 
 pub(super) struct CpuPresenter {
     native: NativeWindow,
     pub(super) extent: (u32, u32),
+    ages: BufferAges,
 }
 
 fn device_error(message: impl std::fmt::Display) -> NativeError {
@@ -49,6 +55,7 @@ impl CpuPresenter {
         let mut presenter = Self {
             native,
             extent: (0, 0),
+            ages: BufferAges::default(),
         };
         presenter.resize(width, height)?;
         // The copy below is byte for byte, so anything but a 4-byte RGBA
@@ -73,12 +80,10 @@ impl CpuPresenter {
             .set_buffers_geometry(w, h, Some(HardwareBufferFormat::R8G8B8X8_UNORM))
             .map_err(present_error)?;
         self.extent = (width, height);
+        self.ages.reset();
         Ok(())
     }
 
-    /// Put `frame` (straight RGBA8, `extent`) on screen, converting at least
-    /// `changed` and whatever the buffer handed back is missing. Returns how
-    /// long getting a buffer took (`FrameStages::acquire`).
     pub(super) fn present(
         &mut self,
         frame: &[u8],
@@ -92,53 +97,34 @@ impl CpuPresenter {
             // repaints in full.
             return Ok(Duration::ZERO);
         }
-        #[expect(
-            clippy::cast_possible_wrap,
-            clippy::cast_possible_truncation,
-            reason = "a window extent fits an i32 (checked in resize)"
-        )]
-        let mut dirty = match &changed {
-            Changed::All => ARect {
-                left: 0,
-                top: 0,
-                right: width as i32,
-                bottom: height as i32,
-            },
-            // Nothing changed: the window already shows this frame.
-            Changed::Regions(regions) if regions.is_empty() => return Ok(Duration::ZERO),
-            Changed::Regions(regions) => {
-                let (mut l, mut t, mut r, mut b) = (u32::MAX, u32::MAX, 0, 0);
-                for &(rl, rt, rr, rb) in regions {
-                    l = l.min(rl);
-                    t = t.min(rt);
-                    r = r.max(rr);
-                    b = b.max(rb);
-                }
-                ARect {
-                    left: l as i32,
-                    top: t as i32,
-                    right: r as i32,
-                    bottom: b as i32,
-                }
-            }
-        };
-        // Timed: this is where the frame can wait on the window's buffer
-        // queue (the compositor's pacing) — what `acquire` records apart
-        // from the copy and the post.
+        // Nothing changed: every buffer already shows this frame's pixels
+        // where it matters, and posting nothing keeps the queue as it is.
+        if matches!(&changed, Changed::Regions(regions) if regions.is_empty()) {
+            return Ok(Duration::ZERO);
+        }
+        // The whole buffer: no copy-back (see the module docs). Timed: this
+        // is where a full buffer queue makes the frame wait.
         let locking = Instant::now();
-        let mut buffer = self.native.lock(Some(&mut dirty)).map_err(present_error)?;
+        let mut buffer = self.native.lock(None).map_err(present_error)?;
         let acquired = locking.elapsed();
-        // What the platform asked to have filled, clamped to what both the
-        // buffer and the frame hold (a buffer from before a resize can be
-        // the other size for one frame).
         let cols = width.min(buffer.width());
         let rows = height.min(buffer.height());
-        let clamp = |v: i32, max: usize| usize::try_from(v.max(0)).unwrap_or(0).min(max);
-        let (left, right) = (clamp(dirty.left, cols), clamp(dirty.right, cols));
-        let (top, bottom) = (clamp(dirty.top, rows), clamp(dirty.bottom, rows));
         let stride = buffer.stride();
         let bits = buffer.bits().cast::<u8>();
-        if left < right {
+        if cols != width || rows != height {
+            // A buffer from before a resize: unknown contents, and this frame
+            // fills what overlaps.
+            self.ages.reset();
+        }
+        let plan = self.ages.plan(bits as usize, changed);
+        let full = [(0, 0, cols as u32, rows as u32)];
+        let regions: &[(u32, u32, u32, u32)] = plan.as_deref().unwrap_or(&full);
+        for &(l, t, r, b) in regions {
+            let (left, right) = ((l as usize).min(cols), (r as usize).min(cols));
+            let (top, bottom) = ((t as usize).min(rows), (b as usize).min(rows));
+            if left >= right {
+                continue;
+            }
             for y in top..bottom {
                 let src = &frame[(y * width + left) * 4..(y * width + right) * 4];
                 // SAFETY: `bits` is `stride * height * 4` bytes (a 4-byte

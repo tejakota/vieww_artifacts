@@ -31,3 +31,7 @@ crates/vieww-paint/tests/output/
 # ci-results/hardware-<branch> by the workflow, never committed here.
 /hardware-results/
 /hardware-results-*
+
+# Python bytecode from running the CI scripts locally
+__pycache__/
+*.pyc

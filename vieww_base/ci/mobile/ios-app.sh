@@ -90,6 +90,11 @@ esac
 
 bundle_id="dev.vieww.demo"
 app_name="vieww"
+# `CADisableMinimumFrameDurationOnPhone` (in the plist below): without it an
+# iPhone app is held to 60 Hz even on a 120 Hz ProMotion screen. The iPhone 18
+# Pro Max on Device Farm (2026-10-16) reported 120 Hz to vieww, which then
+# budgeted 8.3 ms a frame, while the GPU path was paced at 60 — a 16.3 ms
+# median that failed a budget the phone was never letting it meet.
 # The platform the bundle is for, as `CFBundleSupportedPlatforms` names it.
 # AWS Device Farm refuses an .ipa without it (IOS_APP_PLATFORM_VALUE_MISSING,
 # 2026-10-16) and refuses one naming a simulator; Xcode writes it into every
@@ -140,6 +145,7 @@ cat > "$app/Info.plist" <<PLIST
     <key>MinimumOSVersion</key><string>13.0</string>
     <key>CFBundleSupportedPlatforms</key><array><string>$platform</string></array>
     <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+    <key>CADisableMinimumFrameDurationOnPhone</key><true/>
     <key>UILaunchScreen</key><dict/>
     <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
     <key>UISupportedInterfaceOrientations</key>

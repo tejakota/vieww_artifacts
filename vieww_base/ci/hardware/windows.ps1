@@ -270,10 +270,38 @@ if (Want 'stress') {
 }
 
 # ── the on-desktop suite ────────────────────────────────────────────────────
+# Git Bash, found the way Git for Windows actually installs it: only
+# `git.exe` (from Git\cmd) goes on PATH by default, while bash.exe is in
+# Git\bin — so "git is installed" and "bash is not on PATH" are both true on
+# a normal machine, which is what the first real run hit. Never
+# System32\bash.exe: that is WSL's, and it would run the suite in Linux.
+function Find-GitBash {
+  $candidates = @()
+  $git = Get-Command git -ErrorAction SilentlyContinue
+  if ($git) {
+    $dir = Split-Path -Parent $git.Source           # ...\Git\cmd or ...\Git\mingw64\bin
+    $candidates += (Join-Path $dir '..\bin\bash.exe')
+    $candidates += (Join-Path $dir '..\..\bin\bash.exe')
+  }
+  $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)})
+  if ($env:LOCALAPPDATA) { $roots += (Join-Path $env:LOCALAPPDATA 'Programs') }
+  foreach ($root in $roots) {
+    if ($root) { $candidates += (Join-Path $root 'Git\bin\bash.exe') }
+  }
+  $onPath = Get-Command bash -ErrorAction SilentlyContinue
+  if ($onPath -and $onPath.Source -notmatch '[\\/]System32[\\/]') { $candidates += $onPath.Source }
+  foreach ($c in $candidates) {
+    if ($c -and (Test-Path $c)) { return (Resolve-Path $c).Path }
+  }
+  return $null
+}
+
 if (Want 'desktop') {
-  if (Get-Command bash -ErrorAction SilentlyContinue) {
-    Run-Step 'desktop' @{} 'bash' @('ci/certify/desktop-suite.sh','--log',(Join-Path $OutDir 'desktop-app.log')) | Out-Null
-  } else { Skip-Step 'desktop' 'bash (Git for Windows) not on PATH' }
+  $bash = Find-GitBash
+  if ($bash) {
+    Say "      desktop: using $bash"
+    Run-Step 'desktop' @{} $bash @('ci/certify/desktop-suite.sh','--log',(Join-Path $OutDir 'desktop-app.log')) | Out-Null
+  } else { Skip-Step 'desktop' 'Git Bash not found (looked next to git.exe and in Program Files\Git\bin)' }
 }
 
 # ── the studio's out-of-process preview ─────────────────────────────────────

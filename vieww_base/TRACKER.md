@@ -11,6 +11,36 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-15 (evening): the Windows + NVIDIA exit crash, found and fixed
+
+**Symptom.** On Windows 10 with an NVIDIA GeForce 920MX (driver
+32.0.15.7652), `tests/wait_loop.rs`' `self_close` and `gpu_frame` exited with
+`0xc0000005` *after* passing — on the CPU path too. The same scenarios passed
+on the same laptop under Linux.
+
+**Diagnosis.** With `VIEWW_KEEP_VULKAN=1`, which leaks the Vulkan device, all
+five scenarios passed: the fault was teardown. `native::SHARED_DEVICE` held the
+process's one `VkInstance`/`VkDevice` in a thread-local `Rc`, so it outlived
+every window and was destroyed by the thread-local's destructor at process
+exit — on Windows, in the loader's process-detach phase, where NVIDIA's driver
+faults. Its doc comment said "kept alive for as long as any window holds it";
+the `Rc` made that "for as long as the thread lives".
+
+**Fix.** `SHARED_DEVICE` is a `Weak`: shared while any window holds the device,
+destroyed when the last one closes, inside the event loop. `NativeRenderer`
+drops its GPU rasterizer before its device — `device` is its first field, so a
+renderer holding the last reference would otherwise have run
+`SceneRenderer`'s `Drop` against a destroyed `VkDevice`, an ordering the
+strong reference had been masking.
+
+**Verified on the reference laptop.** Windows: `wait_loop` 5/5 without the
+diagnostic; the desktop suite 21/21 (its first Windows run), including a second
+window and a dialog closed while the first stays up. Linux: `linux.sh gpu
+desktop` — `gpu-hal`, `gpu-3d`, `gpu-window`, `desktop` all pass, so the
+multi-window case the shared device exists for is unchanged. (Both runs were
+from a downloaded ZIP of `main`, so their summaries carry no commit; the fix
+is what made Windows pass.)
+
 ## 2026-10-15 (later): first hardware results — the reference laptop, both OSes, and three phones
 
 Evidence: `receipts/2026-10-15-kabylake-i5-7200u-{linux,windows}/` (the

@@ -55,6 +55,10 @@ targets these labels.
 
 ## Prerequisites
 
+**Both: a `git clone`, not GitHub's "Download ZIP".** A ZIP has no `.git`, so
+every receipt and summary says `commit: unknown` and a result cannot be tied to
+the code that produced it.
+
 **Both:** the pinned toolchain from `rust-toolchain.toml` (rustup installs it
 on the first `cargo` call — check `rustc -V` says the pinned version, or every
 number is for a different compiler), Python 3 (baseline summaries).
@@ -73,7 +77,9 @@ warm-cache.
 
 **Windows:** Visual Studio Build Tools (MSVC), the GPU vendor's current driver
 (it installs the Vulkan driver), optionally the LunarG Vulkan SDK for
-`vulkaninfo`, Git for Windows (its `bash` runs the desktop suite). Energy is
+`vulkaninfo`, Git for Windows (its `bash` runs the desktop suite; the script
+finds it beside `git.exe` even though Git's installer leaves `bash` off PATH,
+and never uses WSL's `System32\bash.exe`). Energy is
 not measured on Windows and is reported as `null` rather than estimated.
 
 **Both, for steady numbers:** on mains power, a performance power plan /

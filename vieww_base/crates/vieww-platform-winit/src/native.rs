@@ -409,6 +409,80 @@ impl CpuPresenter {
     }
 }
 
+/// Which window buffer holds which frame, for a platform that hands buffers
+/// back without saying how old they are (Android's `ANativeWindow_lock`).
+///
+/// A buffer is known by its address. Each present records which frame it
+/// now holds; when the same address comes round again, the regions changed
+/// in every frame since are what it is missing. An address not seen before,
+/// a history too short to cover the gap, or a full repaint in it, means
+/// "copy everything" — so if a platform maps a buffer at a new address each
+/// time, this degrades to a full copy per frame and is never wrong.
+#[derive(Debug, Default)]
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+struct BufferAges {
+    /// The number of the frame being presented now.
+    frame: u64,
+    /// Buffer address -> the frame it last showed.
+    holds: Vec<(usize, u64)>,
+    /// Changes of recent frames, newest first: (frame number, change).
+    history: VecDeque<(u64, Changed)>,
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+impl BufferAges {
+    /// Frames of history kept: more than any buffer queue rotates through.
+    const DEPTH: usize = 6;
+
+    /// Forget everything — after a resize, when every buffer is new.
+    fn reset(&mut self) {
+        self.holds.clear();
+        self.history.clear();
+    }
+
+    /// What buffer `address` must have copied into it for this frame, whose
+    /// own change is `changed`; `None` means everything. Records the answer:
+    /// after this call the buffer holds this frame.
+    fn plan(&mut self, address: usize, changed: Changed) -> Option<Vec<(u32, u32, u32, u32)>> {
+        self.frame += 1;
+        let now = self.frame;
+        let held = self
+            .holds
+            .iter()
+            .find(|(a, _)| *a == address)
+            .map(|&(_, f)| f);
+        let mut plan = Some(Vec::new());
+        match held {
+            Some(last) if now - last - 1 <= self.history.len() as u64 => {
+                for change in std::iter::once((now, &changed))
+                    .chain(self.history.iter().map(|(f, c)| (*f, c)))
+                    .take_while(|(f, _)| *f > last)
+                    .map(|(_, c)| c)
+                {
+                    match (change, plan.as_mut()) {
+                        (Changed::All, _) => plan = None,
+                        (Changed::Regions(r), Some(p)) => p.extend_from_slice(r),
+                        (Changed::Regions(_), None) => {}
+                    }
+                }
+            }
+            _ => plan = None,
+        }
+        match self.holds.iter_mut().find(|(a, _)| *a == address) {
+            Some(slot) => slot.1 = now,
+            None => {
+                self.holds.push((address, now));
+                if self.holds.len() > Self::DEPTH {
+                    self.holds.remove(0);
+                }
+            }
+        }
+        self.history.push_front((now, changed));
+        self.history.truncate(Self::DEPTH);
+        plan
+    }
+}
+
 /// Which regions a CPU present must convert into a buffer that last showed
 /// the frame `age` frames ago (`softbuffer`'s convention: 1 is the previous
 /// frame, 0 unknown), given the changes of recent frames (`history`, newest
@@ -1373,6 +1447,50 @@ mod tests {
         assert_eq!(conversion_plan(1, &history, &Changed::All), None);
         // Nothing changed and the buffer is current: nothing to convert.
         assert_eq!(conversion_plan(1, &history, &regions(&[])), Some(vec![]));
+    }
+
+    /// Android hands buffers back by address with no age: a buffer seen two
+    /// frames ago needs this frame's change and the previous one's; a new
+    /// address, a gap longer than the history, or a full repaint in between
+    /// means a full copy.
+    #[test]
+    fn buffer_ages_copy_what_each_buffer_missed() {
+        let a = (0, 0, 10, 10);
+        let b = (20, 20, 30, 30);
+        let c = (40, 40, 50, 50);
+        let mut ages = BufferAges::default();
+        // Frame 1 into buffer X, frame 2 into Y: both new, so full copies.
+        assert_eq!(ages.plan(0x1000, regions(&[a])), None);
+        assert_eq!(ages.plan(0x2000, regions(&[b])), None);
+        // Frame 3 back into X (which holds frame 1): frames 2 and 3 changed.
+        let mut got = ages.plan(0x1000, regions(&[c])).expect("X is known");
+        got.sort_unstable();
+        assert_eq!(got, vec![b, c]);
+        // Frame 4 into Y (holds frame 2): frames 3 and 4.
+        let mut got = ages.plan(0x2000, regions(&[a])).expect("Y is known");
+        got.sort_unstable();
+        assert_eq!(got, vec![a, c]);
+        // A full repaint in frame 5 (X); frame 6 into Y must copy everything.
+        assert_eq!(ages.plan(0x1000, Changed::All), None);
+        assert_eq!(ages.plan(0x2000, regions(&[a])), None);
+        // Then steady again: frame 7 into X (holds 5): frames 6 and 7 only.
+        assert_eq!(ages.plan(0x1000, regions(&[b])), Some(vec![b, a]));
+        // A buffer at a new address is unknown, whatever came before.
+        assert_eq!(ages.plan(0x3000, regions(&[a])), None);
+        // After a reset, nothing is known.
+        ages.reset();
+        assert_eq!(ages.plan(0x1000, regions(&[a])), None);
+    }
+
+    /// One buffer, presented every frame (age 1 each time): only the frame's
+    /// own change, and nothing at all when nothing changed.
+    #[test]
+    fn buffer_ages_single_buffer_copies_only_this_frame() {
+        let a = (0, 0, 10, 10);
+        let mut ages = BufferAges::default();
+        assert_eq!(ages.plan(0x1000, regions(&[a])), None);
+        assert_eq!(ages.plan(0x1000, regions(&[a])), Some(vec![a]));
+        assert_eq!(ages.plan(0x1000, regions(&[])), Some(vec![]));
     }
 
     /// Damage rounds out to whole pixels, clamps to the surface, and drops

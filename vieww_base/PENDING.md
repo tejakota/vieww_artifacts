@@ -121,6 +121,23 @@ so on this phone the CPU path is the faster one by ~3x. First frame from
 13 (iOS 16) and iPhone 18 Pro Max (iOS 27) did not run — fixed in the scripts,
 not yet re-run.
 
+**Second run, same day — three iPhones, three routes:**
+
+| iPhone | iOS | route | CPU path | GPU path (MoltenVK) | first frame CPU / GPU |
+|---|---|---|---|---|---|
+| 13 | 16.0 | Appium only | 7.8 ms PASS | 16.2 ms PASS | n/a (no console below 17) |
+| 14 | 17.6 | devicectl | 8.0 ms PASS | 16.2 ms PASS | 352 / ~390 ms |
+| 18 Pro Max | 27.0 | devicectl | 2.8 ms PASS (120 Hz budget) | 16.3 ms **FAIL** (8.3 ms budget) | 280 / ~290 ms |
+
+The GPU path's ~16.2 ms is the same on every iPhone, from a 2021 A15 to a 2026
+part, with `gpu_submit` 7-14 ms of it: that is vsync, not work. MoltenVK
+acquires the Metal drawable lazily inside the submit, so waiting for the next
+display refresh lands in `gpu_submit`, and the app was held to 60 Hz on the
+120 Hz phone because the bundle lacked `CADisableMinimumFrameDurationOnPhone`
+(now set). Separating drawable wait from GPU work on MoltenVK is open; until
+then the iOS GPU path's frame time is a pacing figure, and the CPU path —
+which is under budget on all three — is the honest work number.
+
 Closed 2026-10-14 (TRACKER): the simulator (device suite 12/12, 6.8 ms
 median) and a real **iPhone 13 Pro on iOS 15** through LambdaTest's
 real-device cloud, driven by hand: rendering, taps, the system keyboard,
@@ -386,34 +403,6 @@ mid-run). `tests/remote.rs` **passed on Windows** on 2026-10-15 (Windows 10,
 **Start.** `cargo test -p viewwstudio` on Linux, then on Windows; then add
 key/scroll forwarding to the wire in `remote.rs`.
 
-## 3.4 Windows + NVIDIA: the process crashes at teardown, after a good frame
-
-**What.** `tests/wait_loop.rs`' `self_close` and `gpu_frame` scenarios exit
-with `0xc0000005` (access violation) on Windows 10 with the NVIDIA GeForce 920MX
-(driver 32.0.15.7652) — **after** each scenario has passed and `run` has
-returned its report (2026-10-15, `receipts/2026-10-15-kabylake-i5-7200u-windows/gpu-window.log`).
-The same scenarios pass on the same laptop under Linux. Drawing works; the
-process dies tearing Vulkan down.
-
-**Diagnosed and fixed, awaiting confirmation on Windows.** With
-`VIEWW_KEEP_VULKAN=1` (which leaks the device) all five scenarios passed, so
-the fault is in teardown. The cause: `native::SHARED_DEVICE` held the shared
-device in a thread-local `Rc`, so it outlived every window and was destroyed by
-the thread-local's destructor at process exit — on Windows, inside the
-loader's process-detach phase, where NVIDIA's driver faults. It now holds a
-`Weak`, so the device dies with its last window inside the event loop; and
-`NativeRenderer` drops its GPU rasterizer before its device, an ordering the
-strong reference had been masking.
-
-**Blocks.** Any Windows app on an NVIDIA GPU exits with a crash code — crash
-reporters fire, installers and CI see a failure.
-
-**Start.** On Windows, *without* `VIEWW_KEEP_VULKAN`: `cargo test --release -p
-vieww-platform-winit --test wait_loop` must pass all five scenarios. On Linux,
-`ci/hardware/linux.sh gpu desktop` must still pass — the desktop suite opens
-and closes extra windows, the case the shared device exists for. When both
-hold, move this to TRACKER.
-
 ## 3.5 Windows start-up is ~4x Linux on the same laptop
 
 **What.** `examples/baseline.rs`, warm cache, median of 5: `main` to first
@@ -502,6 +491,25 @@ On the LG the CPU path's present fell from 19.8 ms to 5.1 ms, but its
 rasterisation rose from 20.1 to 29.8 ms in the same run — an A/B of the
 `dist` and `release` profiles on that phone (`device-farm.yml`'s `profile`
 input) is what tells a build regression from a different device instance.
+
+**Same build, same phone, both present paths** (run 38876153617, `dist`; the
+`cpuvk` pass presents CPU frames through Vulkan):
+
+| phone | CPU present: raster + present = frame | Vulkan present: raster + present = frame | PSS CPU / Vulkan present |
+|---|---|---|---|
+| LG Stylo 5 | 30.6 + 5.0 = 36.3 ms | 20.9 + 19.6 = 42.0 ms | 76 / 133 MB |
+| Galaxy S20 (1440x3200) | 8.1 + 7.1 = 15.4 ms | 7.7 + 3.2 = 11.4 ms | 133 / 267 MB |
+| Galaxy S26 Ultra | 4.7 + 0.7 = 5.6 ms | 3.3 + 1.1 = 4.5 ms | 78 / 168 MB |
+
+So the build is not what slowed the LG's raster — the present path is: the
+same code rasterises ~45% slower (LG, S26) when frames go through
+`ANativeWindow_lock`. Not understood yet; the leading suspect is memory-bus
+frequency scaling (the raster is bandwidth-bound, and with no GPU work the
+bus may clock down). The present itself was paying Android's copy-back,
+which reads the uncached window buffer every frame; it now locks the whole
+buffer and writes only what each buffer is missing (`BufferAges`). The CPU
+present halves memory on every phone, so it stays the default while this is
+measured.
 
 Idle is already right: 0 frames and 0 pixels while nothing changes, on both
 OSes. Linux shows 3.4% idle CPU on the CPU path with no frames — something
