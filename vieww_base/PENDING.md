@@ -482,7 +482,16 @@ Measured 2026-10-15; targets from the audit's Phase 6.
 | Baseline window peak RSS, laptop | 150 MB Linux / 89 MB Windows | under 40 MB |
 | Device suite RSS, phones | 285–388 MB (Galaxy S20, S26 Ultra) | — |
 | Windowed app, stripped release | 13.1 MB Linux (static std) / 7.4 MB Windows | — |
-| Android release APK | 15.6 MB | under 6 MB |
+| Android release APK | 15.6 MB → **2.6 MB** (`dist` profile, 2026-10-16 Device Farm run) | under 6 MB — **met** |
+
+**2026-10-16, after the CPU present path and the `dist` profile** (Device
+Farm run 393108fd, three phones): device-suite PSS on the CPU path 80 / 86 /
+86 MB (LG Stylo 5 / Galaxy A36 / S26 Ultra), GPU path 137 / 104 / 176 MB.
+Desktop under Xvfb: ~31 MB steady RSS on the CPU path (no GPU driver loaded).
+On the LG the CPU path's present fell from 19.8 ms to 5.1 ms, but its
+rasterisation rose from 20.1 to 29.8 ms in the same run — an A/B of the
+`dist` and `release` profiles on that phone (`device-farm.yml`'s `profile`
+input) is what tells a build regression from a different device instance.
 
 Idle is already right: 0 frames and 0 pixels while nothing changes, on both
 OSes. Linux shows 3.4% idle CPU on the CPU path with no frames — something

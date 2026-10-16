@@ -114,6 +114,15 @@ pub(crate) fn window_insets(
     if scale <= 0.0 {
         return None;
     }
+    // **A device below the API level stays below it.** Answered once, then
+    // never asked again: an LG Stylo 5 (API 28) on Device Farm (2026-10-16)
+    // attached the thread, read `SDK_INT` and logged "below API 30" on every
+    // frame of every settling window — a JNI round trip and a logcat write per
+    // frame on the slowest phone in the run, for an answer that cannot change.
+    static BELOW_API: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if BELOW_API.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
 
     // Both pointers belong to the activity that is currently running, and
     // neither is kept past this call.
@@ -278,7 +287,10 @@ pub(crate) fn window_insets(
             Some(insets)
         }
         Ok(None) => {
-            log::info!("window insets: device is below API {INSETS_API}, reporting none");
+            BELOW_API.store(true, std::sync::atomic::Ordering::Relaxed);
+            log::info!(
+                "window insets: device is below API {INSETS_API}, reporting none (asked once)"
+            );
             None
         }
         Err(error) => {

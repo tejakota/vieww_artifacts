@@ -25,6 +25,11 @@ on:
         type: choice
         options: [android, ios, both]
         default: android
+      profile:
+        description: "Cargo profile of the APK: dist (what ships: LTO, deps at opt-level s) or release (no LTO, deps at 3) — for A/B runs"
+        type: choice
+        options: [dist, release]
+        default: dist
       devices:
         description: "Phones by name, comma-separated (e.g. 'Pixel 8, Galaxy A14'). Empty = pick low / mid / high automatically"
         type: string
@@ -101,7 +106,7 @@ jobs:
           android_env device-farm
           mkdir -p ../dist
           marker="$(mktemp)"
-          cargo apk build -p vieww-platform-winit --example android --profile dist --target aarch64-linux-android
+          cargo apk build -p vieww-platform-winit --example android --profile "${{ inputs.profile }}" --target aarch64-linux-android
           apk="$(find target -path '*/apk/*' -name '*.apk' -newer "$marker" | head -1)"
           [ -n "$apk" ] || { echo "::error::no APK was built"; exit 1; }
           ci/mobile/apk-add-code.sh "$apk" ../dist/vieww-devicefarm.apk
@@ -328,6 +333,7 @@ jobs:
           mkdir -p out
           find out -type f \( -name '*.png' -o -name '*.mp4' -o -name '*.zip' \) -delete
           {
+            echo "profile: ${{ inputs.profile }}"
             echo "apk: ${{ needs.apk.result }} · phones: ${{ needs.phones.result }} · ipa: ${{ needs.ipa.result }} · iphones: ${{ needs.iphones.result }}"
             echo "run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID} @ ${GITHUB_SHA}"
           } > out/RUN.txt
