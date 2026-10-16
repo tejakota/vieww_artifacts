@@ -1,342 +1,421 @@
-name: Device Farm (Android and iOS phones)
+From 4cd3ee05481643387a398be96a23b77184fd162b Mon Sep 17 00:00:00 2001
+From: tejakota <krishnatejakota@gmail.com>
+Date: Fri, 16 Oct 2026 05:01:19 +0000
+Subject: [PATCH 1/4] ios-app.sh: CFBundleSupportedPlatforms and
+ UIDeviceFamily, checked before zipping
 
-# vieww's on-device suite on real Android phones in AWS Device Farm: low-end,
-# mid-range and high-end by default, each running the CPU path and the planned
-# GPU path. Everything it runs is in vieww_base/ci/mobile/ (device_farm.py,
-# device-farm/), so a failure reproduces with the same commands locally.
-#
-# **Manual only.** No push or pull_request trigger: every run spends Device
-# Farm device minutes. Start it from Actions → "Device Farm (Android phones)" →
-# Run workflow.
-#
-# Secrets (Settings → Secrets and variables → Actions):
-#   DEVICE_FARM_PROJECT_ARN   arn:aws:devicefarm:us-west-2:<account>:project:<id>
-#   and EITHER
-#   AWS_ROLE_ARN              an IAM role trusting GitHub's OIDC provider for
-#                             repo:tejakota/vieww_artifacts:ref:refs/heads/main (preferred)
-#   OR
-#   AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY  an IAM user's keys
-# The identity needs devicefarm:* on the project (or AWSDeviceFarmFullAccess).
-on:
-  workflow_dispatch:
-    inputs:
-      platform:
-        description: "Which phones"
-        type: choice
-        options: [android, ios, both]
-        default: android
-      devices:
-        description: "Phones by name, comma-separated (e.g. 'Pixel 8, Galaxy A14'). Empty = pick low / mid / high automatically"
-        type: string
-        default: ""
-      count:
-        description: "How many phones when picking automatically (spread from cheapest to most capable)"
-        type: string
-        default: "3"
-      video:
-        description: "Record video of each phone (larger artifacts)"
-        type: boolean
-        default: false
+AWS Device Farm rejected the first .ipa with IOS_APP_PLATFORM_VALUE_MISSING:
+the hand-written Info.plist lacked CFBundleSupportedPlatforms, which Xcode
+always writes. Added it (iPhoneOS for a device build, iPhoneSimulator for
+--sim) and UIDeviceFamily (iPhone, iPad), the other key on Device Farm's
+validation list that was missing. --ipa now checks every key on that list
+and fails the build if one is absent or names a simulator.
 
-permissions:
-  contents: read
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KBjHNevoUfA3C1G93fnJfP
+---
+ vieww_base/ci/mobile/ios-app.sh | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
 
-concurrency:
-  group: device-farm-${{ github.ref }}
-  cancel-in-progress: false
+diff --git a/vieww_base/ci/mobile/ios-app.sh b/vieww_base/ci/mobile/ios-app.sh
+index f01e6a18691f1287a467e17c53ad69aa6e0641fb..f1c2fcd57bb902c5d1cbdce3a26d3eba0f335483 100755
+--- a/vieww_base/ci/mobile/ios-app.sh
++++ b/vieww_base/ci/mobile/ios-app.sh
+@@ -90,6 +90,14 @@ esac
+ 
+ bundle_id="dev.vieww.demo"
+ app_name="vieww"
++# The platform the bundle is for, as `CFBundleSupportedPlatforms` names it.
++# AWS Device Farm refuses an .ipa without it (IOS_APP_PLATFORM_VALUE_MISSING,
++# 2026-10-16) and refuses one naming a simulator; Xcode writes it into every
++# bundle it builds, which is why nothing here had needed it before.
++case "$target_kind" in
++    sim) platform="iPhoneSimulator" ;;
++    *) platform="iPhoneOS" ;;
++esac
+ 
+ echo "==> building $triple ($profile)"
+ if [ "$profile" = "release" ]; then
+@@ -130,6 +138,8 @@ cat > "$app/Info.plist" <<PLIST
+     <key>CFBundleShortVersionString</key><string>0.1</string>
+     <key>LSRequiresIPhoneOS</key><true/>
+     <key>MinimumOSVersion</key><string>13.0</string>
++    <key>CFBundleSupportedPlatforms</key><array><string>$platform</string></array>
++    <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+     <key>UILaunchScreen</key><dict/>
+     <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
+     <key>UISupportedInterfaceOrientations</key>
+@@ -207,6 +217,21 @@ if [ "$target_kind" = "ipa" ]; then
+         echo "==> ad-hoc signed (a device cloud will re-sign this; Firebase Test Lab will not accept it)"
+     fi
+ 
++    # **The keys device clouds validate before accepting an upload** — AWS
++    # Device Farm's list (troubleshooting-ios-applications.html): checked here
++    # so a missing one fails this build, not an upload twenty minutes later.
++    for key in CFBundleIdentifier CFBundleExecutable CFBundleSupportedPlatforms \
++        UIDeviceFamily UIRequiredDeviceCapabilities; do
++        if ! plutil -extract "$key" json -o - "$app/Info.plist" > /dev/null 2>&1; then
++            echo "ios-app: Info.plist has no $key, which device clouds require." >&2
++            exit 7
++        fi
++    done
++    if plutil -extract CFBundleSupportedPlatforms json -o - "$app/Info.plist" | grep -qi simulator; then
++        echo "ios-app: an .ipa must not name a simulator platform." >&2
++        exit 7
++    fi
++
+     # An .ipa is a zip with the bundle under `Payload/`. That layout is the whole
+     # format — there is no manifest to get wrong.
+     payload="target/ios/Payload"
+-- 
+2.43.0
 
-env:
-  CARGO_TERM_COLOR: always
-  # Must equal vieww_base/rust-toolchain.toml.
-  RUST_VERSION: "1.98.1"
-  # Device Farm's only region.
-  AWS_REGION: us-west-2
 
-defaults:
-  run:
-    shell: bash
-    working-directory: vieww_base
+From b6e9e2911e9be5a129e9bbb21f973231284858ae Mon Sep 17 00:00:00 2001
+From: tejakota <krishnatejakota@gmail.com>
+Date: Fri, 16 Oct 2026 05:29:40 +0000
+Subject: [PATCH 2/4] Device Farm 2026-10-16: insets asked once below API 30;
+ profile A/B input
 
-jobs:
-  # **Runs only from main.** The AWS role trusts only main's OIDC subject
-  # (repo:tejakota/vieww_artifacts:ref:refs/heads/main), and the self-hosted
-  # machines should only run reviewed code — so a run started on any other
-  # branch stops here, with the reason, before it builds or touches anything.
-  main-only:
-    name: Only from main
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Refuse other branches
-        if: github.ref != 'refs/heads/main'
-        run: |
-          echo "::error::This workflow runs only from main (started on ${GITHUB_REF}). Pick main in the Run workflow dropdown."
-          exit 1
+From the first run with the CPU present path and the dist APK (LG Stylo 5,
+Galaxy A36, Galaxy S26 Ultra):
+- APK 15.6 MB -> 2.6 MB (dist): the under-6-MB target is met.
+- LG CPU path: present 19.8 -> 5.1 ms, raster 20.1 -> 29.8 ms. To tell a
+  build regression from device variance, device-farm.yml gains a profile
+  input (dist | release) for an A/B on the same phone model.
+- The LG's logcat showed the insets query running and logging
+  "below API 30" on every frame of every settling window: a JNI round trip
+  per frame on the slowest phone. Now answered once and cached.
 
-  apk:
-    name: Build the arm64 APK
-    needs: main-only
-    if: inputs.platform != 'ios'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: vieww_base -> target
-      - name: Toolchain, target and cargo-apk
-        run: |
-          rustup toolchain install "$RUST_VERSION" --profile minimal
-          rustup target add --toolchain "$RUST_VERSION" aarch64-linux-android
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-apk
-      # `--profile dist` (vieww_base/Cargo.toml): what ships — LTO, stripped,
-      # dependencies at opt-level "s". The release profile leaves line tables
-      # and symbols in the .so; the first APK (release) was 15.6 MB.
-      - name: Shipping (dist) APK, with the classes.dex device clouds expect
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
-        run: |
-          . ci/mobile/android-env.sh
-          android_env device-farm
-          mkdir -p ../dist
-          marker="$(mktemp)"
-          cargo apk build -p vieww-platform-winit --example android --profile dist --target aarch64-linux-android
-          apk="$(find target -path '*/apk/*' -name '*.apk' -newer "$marker" | head -1)"
-          [ -n "$apk" ] || { echo "::error::no APK was built"; exit 1; }
-          ci/mobile/apk-add-code.sh "$apk" ../dist/vieww-devicefarm.apk
-          ls -l ../dist
-          unzip -lv ../dist/vieww-devicefarm.apk | sort -k1 -n -r | head -8
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vieww-devicefarm-apk
-          path: dist/vieww-devicefarm.apk
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KBjHNevoUfA3C1G93fnJfP
+---
+ .github/workflows-pending/device-farm.yml          |  8 +++++++-
+ vieww_base/PENDING.md                              | 11 ++++++++++-
+ .../crates/vieww-platform-winit/src/insets.rs      | 14 +++++++++++++-
+ 3 files changed, 30 insertions(+), 3 deletions(-)
 
-  phones:
-    name: Device suite on Device Farm phones
-    needs: apk
-    if: inputs.platform != 'ios'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 150
-    permissions:
-      contents: read
-      id-token: write   # only used when AWS_ROLE_ARN is set (OIDC)
-    env:
-      DEVICE_FARM_PROJECT_ARN: ${{ secrets.DEVICE_FARM_PROJECT_ARN }}
-      HAS_ROLE: ${{ secrets.AWS_ROLE_ARN != '' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: vieww-devicefarm-apk
-          path: dist
-      - name: Check the secrets are there
-        run: |
-          [ -n "$DEVICE_FARM_PROJECT_ARN" ] || { echo "::error::secret DEVICE_FARM_PROJECT_ARN is not set"; exit 1; }
-      # What AWS's trust policy is matched against, printed so a refusal can be
-      # fixed exactly: the token's claims only — never the token, which is the
-      # secret part. Compare `sub` and `aud` with the role's trust policy.
-      - name: Show the OIDC claims AWS will check
-        if: env.HAS_ROLE == 'true'
-        run: |
-          curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" |
-          python3 -c "
-          import base64, json, sys
-          part = json.load(sys.stdin)['value'].split('.')[1]
-          claims = json.loads(base64.urlsafe_b64decode(part + '=' * (-len(part) % 4)))
-          for k in ('sub', 'aud', 'iss', 'repository', 'ref', 'repository_owner', 'job_workflow_ref', 'environment'):
-              if k in claims:
-                  print(f'{k:>17}: {claims[k]}')
-          "
-          echo "The role's trust policy must allow exactly the sub and aud above."
-      - name: AWS credentials (OIDC role)
-        if: env.HAS_ROLE == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: AWS credentials (access keys)
-        if: env.HAS_ROLE != 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Run on phones
-        env:
-          DEVICES: ${{ inputs.devices }}
-          COUNT: ${{ inputs.count }}
-          VIDEO: ${{ inputs.video }}
-          OUT: ${{ runner.temp }}/device-farm
-        run: |
-          video=(); [ "$VIDEO" = true ] && video=(--video)
-          set +e
-          python3 ci/mobile/device_farm.py --apk ../dist/vieww-devicefarm.apk --out "$OUT" \
-            --devices "$DEVICES" --count "$COUNT" "${video[@]}"
-          status=$?
-          [ -f "$OUT/SUMMARY.md" ] && cat "$OUT/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
-          exit $status
-      - name: Upload everything
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: device-farm-results
-          path: ${{ runner.temp }}/device-farm
-          if-no-files-found: warn
+diff --git a/.github/workflows-pending/device-farm.yml b/.github/workflows-pending/device-farm.yml
+index a3ddc4c16fcec6bce6f3cf217c5efaf4b83da735..df575ab1b4f5a9da20d0d914250f622343b3271a 100644
+--- a/.github/workflows-pending/device-farm.yml
++++ b/.github/workflows-pending/device-farm.yml
+@@ -25,6 +25,11 @@ on:
+         type: choice
+         options: [android, ios, both]
+         default: android
++      profile:
++        description: "Cargo profile of the APK: dist (what ships: LTO, deps at opt-level s) or release (no LTO, deps at 3) — for A/B runs"
++        type: choice
++        options: [dist, release]
++        default: dist
+       devices:
+         description: "Phones by name, comma-separated (e.g. 'Pixel 8, Galaxy A14'). Empty = pick low / mid / high automatically"
+         type: string
+@@ -101,7 +106,7 @@ jobs:
+           android_env device-farm
+           mkdir -p ../dist
+           marker="$(mktemp)"
+-          cargo apk build -p vieww-platform-winit --example android --profile dist --target aarch64-linux-android
++          cargo apk build -p vieww-platform-winit --example android --profile "${{ inputs.profile }}" --target aarch64-linux-android
+           apk="$(find target -path '*/apk/*' -name '*.apk' -newer "$marker" | head -1)"
+           [ -n "$apk" ] || { echo "::error::no APK was built"; exit 1; }
+           ci/mobile/apk-add-code.sh "$apk" ../dist/vieww-devicefarm.apk
+@@ -328,6 +333,7 @@ jobs:
+           mkdir -p out
+           find out -type f \( -name '*.png' -o -name '*.mp4' -o -name '*.zip' \) -delete
+           {
++            echo "profile: ${{ inputs.profile }}"
+             echo "apk: ${{ needs.apk.result }} · phones: ${{ needs.phones.result }} · ipa: ${{ needs.ipa.result }} · iphones: ${{ needs.iphones.result }}"
+             echo "run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID} @ ${GITHUB_SHA}"
+           } > out/RUN.txt
+diff --git a/vieww_base/PENDING.md b/vieww_base/PENDING.md
+index 3c6e6d034fd0a5d38919ec67ba055ba093dfd2af..f915918fbced2cbdcbf9e32a0ae85aabe05deec5 100644
+--- a/vieww_base/PENDING.md
++++ b/vieww_base/PENDING.md
+@@ -454,7 +454,16 @@ Measured 2026-10-15; targets from the audit's Phase 6.
+ | Baseline window peak RSS, laptop | 150 MB Linux / 89 MB Windows | under 40 MB |
+ | Device suite RSS, phones | 285–388 MB (Galaxy S20, S26 Ultra) | — |
+ | Windowed app, stripped release | 13.1 MB Linux (static std) / 7.4 MB Windows | — |
+-| Android release APK | 15.6 MB | under 6 MB |
++| Android release APK | 15.6 MB → **2.6 MB** (`dist` profile, 2026-10-16 Device Farm run) | under 6 MB — **met** |
++
++**2026-10-16, after the CPU present path and the `dist` profile** (Device
++Farm run 393108fd, three phones): device-suite PSS on the CPU path 80 / 86 /
++86 MB (LG Stylo 5 / Galaxy A36 / S26 Ultra), GPU path 137 / 104 / 176 MB.
++Desktop under Xvfb: ~31 MB steady RSS on the CPU path (no GPU driver loaded).
++On the LG the CPU path's present fell from 19.8 ms to 5.1 ms, but its
++rasterisation rose from 20.1 to 29.8 ms in the same run — an A/B of the
++`dist` and `release` profiles on that phone (`device-farm.yml`'s `profile`
++input) is what tells a build regression from a different device instance.
+ 
+ Idle is already right: 0 frames and 0 pixels while nothing changes, on both
+ OSes. Linux shows 3.4% idle CPU on the CPU path with no frames — something
+diff --git a/vieww_base/crates/vieww-platform-winit/src/insets.rs b/vieww_base/crates/vieww-platform-winit/src/insets.rs
+index a4fb27d4013865be178266534a9ec9389a132542..2031faa94107352bf9fd20b87713a59ee466374f 100644
+--- a/vieww_base/crates/vieww-platform-winit/src/insets.rs
++++ b/vieww_base/crates/vieww-platform-winit/src/insets.rs
+@@ -114,6 +114,15 @@ pub(crate) fn window_insets(
+     if scale <= 0.0 {
+         return None;
+     }
++    // **A device below the API level stays below it.** Answered once, then
++    // never asked again: an LG Stylo 5 (API 28) on Device Farm (2026-10-16)
++    // attached the thread, read `SDK_INT` and logged "below API 30" on every
++    // frame of every settling window — a JNI round trip and a logcat write per
++    // frame on the slowest phone in the run, for an answer that cannot change.
++    static BELOW_API: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++    if BELOW_API.load(std::sync::atomic::Ordering::Relaxed) {
++        return None;
++    }
+ 
+     // Both pointers belong to the activity that is currently running, and
+     // neither is kept past this call.
+@@ -278,7 +287,10 @@ pub(crate) fn window_insets(
+             Some(insets)
+         }
+         Ok(None) => {
+-            log::info!("window insets: device is below API {INSETS_API}, reporting none");
++            BELOW_API.store(true, std::sync::atomic::Ordering::Relaxed);
++            log::info!(
++                "window insets: device is below API {INSETS_API}, reporting none (asked once)"
++            );
+             None
+         }
+         Err(error) => {
+-- 
+2.43.0
 
-  # The iPhone .ipa: device slice, MoltenVK bundled, signed with your Apple
-  # identity when the IOS_* secrets exist (ad-hoc otherwise — Device Farm
-  # re-signs uploads). Same steps as framework-checks' build-ipa job.
-  ipa:
-    name: Build the iOS .ipa
-    needs: main-only
-    if: inputs.platform != 'android'
-    runs-on: macos-14
-    timeout-minutes: 90
-    env:
-      HAS_CERT: ${{ secrets.IOS_CERT_P12 != '' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: vieww_base -> target
-      - name: Toolchain and the iOS device target
-        run: |
-          rustup toolchain install "$RUST_VERSION" --profile minimal
-          rustup target add --toolchain "$RUST_VERSION" aarch64-apple-ios
-      - name: MoltenVK (device slice)
-        run: |
-          curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
-            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-all.tar
-          mkdir -p "$RUNNER_TEMP/mvk" && tar -xf "$RUNNER_TEMP/mvk.tar" -C "$RUNNER_TEMP/mvk"
-          dev=$(find "$RUNNER_TEMP/mvk" -path '*dynamic/MoltenVK.xcframework/ios-arm64/MoltenVK.framework' -type d | head -1)
-          [ -n "$dev" ] || { echo "::error::MoltenVK device slice not found"; exit 1; }
-          echo "MVK_DEVICE=$dev" >> "$GITHUB_ENV"
-      - name: Signing identity into a temporary keychain (when the secrets exist)
-        if: env.HAS_CERT == 'true'
-        env:
-          IOS_CERT_P12: ${{ secrets.IOS_CERT_P12 }}
-          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
-          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
-          IOS_IDENTITY: ${{ secrets.IOS_IDENTITY }}
-        run: |
-          keychain="$RUNNER_TEMP/vieww.keychain-db"
-          security create-keychain -p ci "$keychain"
-          security set-keychain-settings -lut 3600 "$keychain"
-          security unlock-keychain -p ci "$keychain"
-          echo "$IOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$IOS_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain"
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          echo "$IOS_PROFILE" | base64 --decode > "$RUNNER_TEMP/vieww.mobileprovision"
-          echo "VIEWW_IOS_PROFILE=$RUNNER_TEMP/vieww.mobileprovision" >> "$GITHUB_ENV"
-          echo "VIEWW_IOS_IDENTITY=$IOS_IDENTITY" >> "$GITHUB_ENV"
-      - name: Device .ipa
-        run: |
-          VIEWW_MOLTENVK="$MVK_DEVICE" ci/mobile/ios-app.sh --ipa
-          mkdir -p ../dist && cp target/ios/vieww.ipa ../dist/vieww.ipa
-          ls -l ../dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vieww-devicefarm-ipa
-          path: dist/vieww.ipa
 
-  iphones:
-    name: Device suite on Device Farm iPhones
-    needs: ipa
-    if: inputs.platform != 'android'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 150
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      DEVICE_FARM_PROJECT_ARN: ${{ secrets.DEVICE_FARM_PROJECT_ARN }}
-      HAS_ROLE: ${{ secrets.AWS_ROLE_ARN != '' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: vieww-devicefarm-ipa
-          path: dist
-      - name: AWS credentials (OIDC role)
-        if: env.HAS_ROLE == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: AWS credentials (access keys)
-        if: env.HAS_ROLE != 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Run on iPhones
-        env:
-          DEVICES: ${{ inputs.devices }}
-          COUNT: ${{ inputs.count }}
-          VIDEO: ${{ inputs.video }}
-          OUT: ${{ runner.temp }}/device-farm-ios
-        run: |
-          video=""; [ "$VIDEO" = true ] && video="--video"
-          set +e
-          python3 ci/mobile/device_farm.py --platform ios --ipa ../dist/vieww.ipa --out "$OUT" \
-            --devices "$DEVICES" --count "$COUNT" $video
-          status=$?
-          [ -f "$OUT/SUMMARY.md" ] && cat "$OUT/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
-          exit $status
-      - name: Upload everything
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: device-farm-ios-results
-          path: ${{ runner.temp }}/device-farm-ios
-          if-no-files-found: warn
+From 509243f40a37cec53a3cc7a7f12e83c6c24a6714 Mon Sep 17 00:00:00 2001
+From: tejakota <krishnatejakota@gmail.com>
+Date: Fri, 16 Oct 2026 07:50:23 +0000
+Subject: [PATCH 3/4] ios-app.sh: platform key in nested plists, app plist
+ first in the .ipa, shipped keys printed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
-  # Results where a session without API access can read them, as the other
-  # workflows do: `git fetch origin ci-results/device-farm-<branch>`. Text only;
-  # screenshots, videos and the test package stay in the run's artifacts.
-  report:
-    name: Publish to ci-results/device-farm-<branch>
-    if: always() && github.ref == 'refs/heads/main'
-    needs: [apk, phones, ipa, iphones]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: device-farm-results
-          path: out/android
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: device-farm-ios-results
-          path: out/ios
-      - name: Push to ci-results/device-farm-<branch>
-        env:
-          TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          mkdir -p out
-          find out -type f \( -name '*.png' -o -name '*.mp4' -o -name '*.zip' \) -delete
-          {
-            echo "apk: ${{ needs.apk.result }} · phones: ${{ needs.phones.result }} · ipa: ${{ needs.ipa.result }} · iphones: ${{ needs.iphones.result }}"
-            echo "run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID} @ ${GITHUB_SHA}"
-          } > out/RUN.txt
-          branch="ci-results/device-farm-${GITHUB_REF_NAME//\//-}"
-          cd out
-          git init -q
-          git checkout -q -b "$branch"
-          git config user.name "vieww-ci"
-          git config user.email "vieww-ci@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Device Farm results for ${GITHUB_SHA} (${GITHUB_REF_NAME})"
-          git push -q -f "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$branch"
+Device Farm still answered IOS_APP_PLATFORM_VALUE_MISSING on 2026-10-16.
+MoltenVK.framework's own Info.plist sits inside the .app too; a validator
+taking the first Info.plist under the .app may read that one. Nested
+Info.plists now get CFBundleSupportedPlatforms (before signing), the .app's
+own plist is the first file in the zip, and the build reads the required
+keys back out of the finished .ipa and prints them, failing if one is
+missing — so the next log shows what was actually shipped.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KBjHNevoUfA3C1G93fnJfP
+---
+ vieww_base/ci/mobile/ios-app.sh | 37 ++++++++++++++++++++++++++++++++-
+ 1 file changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/vieww_base/ci/mobile/ios-app.sh b/vieww_base/ci/mobile/ios-app.sh
+index f1c2fcd57bb902c5d1cbdce3a26d3eba0f335483..e7dc37a75ff152a02b63079895bf14611882b387 100755
+--- a/vieww_base/ci/mobile/ios-app.sh
++++ b/vieww_base/ci/mobile/ios-app.sh
+@@ -193,6 +193,22 @@ if [ "$bundle_only" = 1 ] && [ "$target_kind" != "ipa" ]; then
+ fi
+ 
+ if [ "$target_kind" = "ipa" ]; then
++    # **Nested bundles say their platform too.** A second Device Farm run
++    # (2026-10-16) still answered IOS_APP_PLATFORM_VALUE_MISSING. The .app's
++    # own Info.plist was not the only one in the package: MoltenVK.framework
++    # carries its own, and a validator that takes the first `Info.plist` it
++    # meets under the .app reads that one. So every nested Info.plist gets the
++    # key too (before signing, which covers it), and the zip below puts the
++    # .app's own plist first.
++    if [ -d "$app/Frameworks" ]; then
++        find "$app/Frameworks" -name Info.plist | while read -r nested; do
++            if ! plutil -extract CFBundleSupportedPlatforms json -o - "$nested" > /dev/null 2>&1; then
++                plutil -insert CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$nested"
++                echo "==> added CFBundleSupportedPlatforms to ${nested#"$app"/}"
++            fi
++        done
++    fi
++
+     # **Two signatures, for two kinds of device cloud.**
+     #
+     # With VIEWW_IOS_IDENTITY (and VIEWW_IOS_PROFILE): a real development
+@@ -241,9 +257,28 @@ if [ "$target_kind" = "ipa" ]; then
+     cp -R "$app" "$payload/"
+     # `-y` preserves the symlinks a framework bundle would have. There are none
+     # here today, and there will be the moment anything links dynamically.
+-    (cd target/ios && zip -qry "$app_name.ipa" Payload)
++    # The .app's own Info.plist first, then everything else (see the nested-
++    # bundle note above): zip keeps entries in the order they were added.
++    (cd target/ios && zip -qy "$app_name.ipa" Payload/ "Payload/$app_name.app/" "Payload/$app_name.app/Info.plist" \
++        && zip -qry "$app_name.ipa" Payload)
+     rm -rf "$payload"
+ 
++    # What a device cloud will read, read back out of the .ipa itself — so the
++    # build log shows the shipped values, not the ones this script meant to
++    # write.
++    echo "==> first entries in $ipa:"
++    unzip -l "$ipa" | sed -n '4,8p'
++    shipped="$(mktemp)"
++    unzip -p "$ipa" "Payload/$app_name.app/Info.plist" > "$shipped"
++    for key in CFBundleIdentifier CFBundleExecutable CFBundleSupportedPlatforms \
++        UIDeviceFamily UIRequiredDeviceCapabilities MinimumOSVersion; do
++        value="$(plutil -extract "$key" json -o - "$shipped" 2> /dev/null)" || {
++            echo "ios-app: the .ipa's Info.plist has no $key." >&2
++            exit 7
++        }
++        echo "    $key = $value"
++    done
++
+     echo "==> $ipa"
+     echo
+     echo "  Upload it to a device cloud, which will re-sign it. It will NOT"
+-- 
+2.43.0
+
+
+From d3c50a81e25c9cb7239d410069b4b89cf446b1ec Mon Sep 17 00:00:00 2001
+From: tejakota <krishnatejakota@gmail.com>
+Date: Fri, 16 Oct 2026 07:55:13 +0000
+Subject: [PATCH 4/4] Device Farm: a CPU-raster/Vulkan-present diagnostic pass
+ on every phone
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The 2026-10-16 runs put the LG Stylo 5's CPU raster stage at ~30 ms on two
+different units, against ~20 ms before the CPU present path and the dist
+profile landed — so device variance is the less likely cause. To separate
+the present path from the build, the Android example now reads
+debug.vieww.present (vulkan|cpu -> VIEWW_PRESENT), and run-android.sh runs a
+third pass, cpuvk: CPU raster presented through the Vulkan swapchain, on the
+same phone in the same run. Its verdict is recorded but does not fail the
+job; SUMMARY.md prints its frame time and stages beside the CPU path's.
+With the profile input (dist | release), one run of each answers both
+questions.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KBjHNevoUfA3C1G93fnJfP
+---
+ .../__pycache__/device_farm.cpython-313.pyc   | Bin 25241 -> 25699 bytes
+ .../ci/mobile/device-farm/run-android.sh      |  11 ++++++++--
+ vieww_base/ci/mobile/device_farm.py           |   7 +++++++
+ .../vieww-platform-winit/examples/android.rs  |  19 ++++++++++++++++++
+ 4 files changed, 35 insertions(+), 2 deletions(-)
+
+diff --git a/vieww_base/ci/mobile/__pycache__/device_farm.cpython-313.pyc b/vieww_base/ci/mobile/__pycache__/device_farm.cpython-313.pyc
+index 0400d9391d9f584983928574e7c52c969d62a094..f8f7055504948871710f6a8874adaaf10a3b4fd1 100644
+GIT binary patch
+delta 825
+zcmZ{gT}V@57{||hHs{AScO30Q^VFe?Hc2=4>De@s8CsdCuk$N%9d&MIPTfb45K#mn
+z1R_shU4$eAT`GsbyXZoYF6^uX4<q`#>ds2K3wr08*hSC9%lo|l|MPnv{*Twu*9}zq
+zQ>!hZNMSjBt;fGwT4AH3MPjwBU#V?HZC5EOrVJ`^VF9Gg265S`K#GSH1szrsymXbr
+z7rO~=xr#NGEP|9^%86P>j~d$x$V(~Zq+!!#W1PX_?A?v_j1&i-?Ph~3-|hpda{#BC
+z09-i$_VlQ`|BmH`b0_v<+D+%~1g!+6+lK1F<#rUdqKhLGrG{pAg^thv!BIhkeelU`
+zrm-KM@&;Csm$1KvaPr-rv4I$Q)Cd)xz=_kfG;YFYcry2|?{ay5p&StwJsfHl*F1Ew
+zI?x&9riEnG>f_*f6FZb)My69YCPHIzVKN*_j!%YX9W`9u#ZAY<iEu0#9_5nJ_*5zq
+z<$6=sCxjSh866iQv8hCIe1xE8X+M|IA0#D`LL{6J*PC9Tk}49@Dp@J<TfEnNibn5Y
+zHE{p7tYhX=b1BJia$9Ff>nt*3Skx?Nq@%vII;rte+TSVpx+J!Hi@_gsh6Ac+%_6aZ
+zEvDr^1licOQ6^oul0G*iwS}aRAe+pKsfCop)~z_+nLLuwyQ4r(1HY?Kl<9vJQH*h)
+zZeKC36iF<<#rR}R*?jw4`y>6frt<r7iaE4X1vguk3f@=`ciKeu>?<v@!pH7vWED&B
+z7>#ORCiof|p`ka7Ot9Sh4fVl;zFjl`clvjb2jT+}#6o7ki>g3BcvpRdq!NEiVu_!J
+zr9r1EN_rZJ@?gD6g|k{07=>e~A9$gbK%#<Il?^f;g=c~VO~Iz{MAd;%<&R;Q8MgcZ
+DoIBwk
+
+delta 452
+zcmaESf^p_iM!wIyyj%=Gz_sLJ)&t9pd{X*MUF@5+^dnffJw7oo<gtXZ1hcbFz9=EO
+zd5JMIBje=B4yKZm51L3$HZfIYHwxwCV=!i#{J>P7(Ri|enGw717X}7y28GFvrV{)n
+zri>t?85k58LK%ZiC+{<pU<x*yENCe*d4U<Xu$eAU3Pp)IP>Cg@#pEAm&Z?GrOu<&c
+z)|NmWsOq96!Da#pxLI72>&(R&Z8lFcXX4~`4+vE#NG!?Fv{KkC=eU)TO9|+TjX>qa
+zJ)7@3=`b<gp3LRiE_IJz^oD@wbe@Sk7v!yWnC;NGAnSZZzy&BgS;kG4>l%;DM^Od=
+zkq=^%o!#cMp0$$pXW0DQ?I16s`s9@%T8!$OuY{yAF=|h?4nM^xGMOzRl~HtZPQ**b
+zfXQKzUl@ZXdq;g>G?{D@oz5sdc}cW6qtfI%(M{YkK(`cK0y?J1V{&GUF<Tmt|C?d+
+zq8JM{wm^`a|KtZrN{nHXnUnPx!zUXho3nwOUz9dEKUsq@ck+znxoqx?j541>CR?Xy
+F003tZd9DBe
+
+diff --git a/vieww_base/ci/mobile/device-farm/run-android.sh b/vieww_base/ci/mobile/device-farm/run-android.sh
+index 6dfffa7130bb6f1950ee5d4d51330c496f896de8..037e89d5196071194651a4eed5eb07689b5bcb5a 100755
+--- a/vieww_base/ci/mobile/device-farm/run-android.sh
++++ b/vieww_base/ci/mobile/device-farm/run-android.sh
+@@ -75,9 +75,15 @@ case "$component" in */*) ;; *) component="$package/android.app.NativeActivity"
+ kv component "$component"
+ 
+ status=0
+-for mode in cpu gpu; do
++# `cpuvk` is a diagnostic third pass: the CPU rasterizer presented through the
++# Vulkan swapchain (`debug.vieww.present=vulkan`) instead of ANativeWindow_lock,
++# so the two present paths are compared on the same phone in the same run. Its
++# verdict is recorded but does not fail the job.
++for mode in cpu gpu cpuvk; do
+     gpu=0; [ "$mode" = gpu ] && gpu=1
++    present=""; [ "$mode" = cpuvk ] && present="vulkan"
+     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
++    sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
+ 
+     # 1. Cold start, three times. TotalTime is the platform's own measure of
+     # launch to first frame drawn; WaitTime adds the system's share.
+@@ -106,7 +112,7 @@ for mode in cpu gpu; do
+         kv "${mode}_suite" PASS
+     else
+         kv "${mode}_suite" FAIL
+-        status=1
++        [ "$mode" = cpuvk ] || status=1
+     fi
+     for key in frame_time frame_stages gpu_frames; do
+         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
+@@ -127,6 +133,7 @@ for mode in cpu gpu; do
+ done
+ 
+ sh_ setprop debug.vieww.gpu 0 >/dev/null
++sh_ setprop debug.vieww.present '""' >/dev/null
+ sh_ am force-stop "$package" >/dev/null
+ sh_ svc power stayon false >/dev/null
+ kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"
+diff --git a/vieww_base/ci/mobile/device_farm.py b/vieww_base/ci/mobile/device_farm.py
+index 33ab32c898df0ac71e38ceae0ccfc342c1f65447..23d5114a9a605362c80d34355a85ba2d613321bd 100644
+--- a/vieww_base/ci/mobile/device_farm.py
++++ b/vieww_base/ci/mobile/device_farm.py
+@@ -231,8 +231,15 @@ def summarize(rows, out, run):
+         stages = r.get("gpu_frame_stages") or r.get("cpu_frame_stages")
+         if failed or stages:
+             lines.append(f"**{row['device']}**")
++            if r.get("cpu_frame_stages"):
++                lines.append(f"- frame stages (CPU path): {r['cpu_frame_stages']}")
+             if stages:
+                 lines.append(f"- frame stages (GPU path): {stages}")
++            if r.get("cpuvk_frame_time"):
++                lines.append(
++                    f"- CPU path presented through Vulkan (diagnostic): {r['cpuvk_frame_time']}; "
++                    f"{r.get('cpuvk_frame_stages', '')}"
++                )
+             if failed:
+                 lines.append(f"- failed checks: {failed}")
+             lines.append("")
+diff --git a/vieww_base/crates/vieww-platform-winit/examples/android.rs b/vieww_base/crates/vieww-platform-winit/examples/android.rs
+index 0d37648b13f01a73a30dd58b015c0ff2a3568804..f5b88bd14269847cad5d48d1ef549b7c4dd52a30 100644
+--- a/vieww_base/crates/vieww-platform-winit/examples/android.rs
++++ b/vieww_base/crates/vieww-platform-winit/examples/android.rs
+@@ -745,6 +745,25 @@ mod demo {
+                 .output()
+                 .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1"),
+         };
++        // **And which present, the same way:** `debug.vieww.present=vulkan`
++        // presents CPU frames through the Vulkan swapchain instead of
++        // `ANativeWindow_lock` (`native::PresentPath`). For A/B runs on one
++        // phone: on 2026-10-16 the LG Stylo 5's CPU raster stage read ~30 ms
++        // after the CPU present path landed against ~20 ms before it, on two
++        // different units, and this is how the two paths are compared on one.
++        // `PresentPath::choose` reads `VIEWW_PRESENT`; set before any thread
++        // that could read the environment exists.
++        let present = std::process::Command::new("/system/bin/getprop")
++            .arg("debug.vieww.present")
++            .output()
++            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
++            .unwrap_or_default();
++        if present == "vulkan" || present == "cpu" {
++            // Before the event loop and every worker the app starts, so no
++            // other thread is reading the environment yet.
++            std::env::set_var("VIEWW_PRESENT", &present);
++            suite.observe("present", &format!("debug.vieww.present={present}"));
++        }
+         suite.observe(
+             "rasterizer",
+             if prefer_gpu {
+-- 
+2.43.0
