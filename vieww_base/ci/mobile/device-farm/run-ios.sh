@@ -51,9 +51,18 @@ if [ -n "$app" ] && [ -f "$app" ]; then
 fi
 kv bundle_id "$bundle_id"
 
+# **Below iOS 17, devicectl cannot see the phone** (CoreDevice is iOS 17+):
+# Device Farm's iPhone 13 at iOS 16.0.2 answered "the specified device was not
+# found" to every devicectl call (2026-10-16). Those phones run the suite
+# through Appium alone — `tap_ios.py suite` — further down.
+ios_major="${DEVICEFARM_DEVICE_OS_VERSION%%.*}"
+legacy=0
+case "$ios_major" in ''|*[!0-9]*) ;; *) [ "$ios_major" -lt 17 ] && legacy=1 ;; esac
+kv route "$([ "$legacy" = 1 ] && echo appium-only || echo devicectl)"
+
 # Device Farm installs the app before the test phase; make sure, without
 # failing when it already is.
-if [ -n "$app" ] && [ -f "$app" ]; then
+if [ "$legacy" = 0 ] && [ -n "$app" ] && [ -f "$app" ]; then
     if ! xcrun devicectl device info apps --device "$udid" 2>/dev/null | grep -q "$bundle_id"; then
         log "installing $app"
         xcrun devicectl device install app --device "$udid" "$app" > "$out/install.log" 2>&1 || true
@@ -75,6 +84,33 @@ if command -v appium > /dev/null 2>&1; then
         curl -fs http://127.0.0.1:4723/status > /dev/null 2>&1 && break
         sleep 1
     done
+fi
+
+if [ "$legacy" = 1 ]; then
+    status=0
+    for mode in cpu gpu; do
+        gpu=0; [ "$mode" = gpu ] && gpu=1
+        log="$out/$mode-suite.log"
+        verdict="$(python3 "$here/tap_ios.py" suite --udid "$udid" --wda "$wda" \
+            --bundle "$bundle_id" --gpu "$gpu" --out "$log" 2>> "$out/$mode-appium.err" | tr -d '\r' | tail -1)"
+        [ -n "$verdict" ] || verdict="ERROR"
+        [ "$verdict" = PASS ] || status=1
+        kv "${mode}_suite" "$verdict"
+        kv "${mode}_first_frame_ms" "n/a (no console below iOS 17)"
+        for key in frame_time frame_stages gpu_frames; do
+            value="$(grep -m1 -o "$key: .*" "$log" | sed "s/^$key: //" | tr -d '\r')"
+            [ -n "$value" ] && kv "${mode}_${key}" "$value"
+        done
+        kv "${mode}_failed_checks" "$(grep -o '__VIEWW_SUITE__ FAIL [a-z_0-9]*' "$log" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
+        sleep 2
+    done
+    [ -n "$appium_pid" ] && kill "$appium_pid" > /dev/null 2>&1
+    kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"
+    cat "$result"
+    exit "$status"
+fi
+
+if [ -n "$appium_pid" ]; then
     session="$(python3 "$here/tap_ios.py" open --udid "$udid" --wda "$wda" 2> "$out/appium-session.err")"
     [ -n "$session" ] && log "appium session $session" || log "no appium session (see appium-session.err); taps will not be sent"
 else
@@ -123,7 +159,7 @@ for mode in cpu gpu; do
     pid="$(launch "{\"VIEWW_GPU\":\"$gpu\"}" "$log")"
     if wait_for "$log" 60 "__VIEWW_TAPS_PT__"; then
         line="$(grep -m1 "__VIEWW_TAPS_PT__" "$log")"
-        kv "${mode}_tap_targets" "${line#*__VIEWW_TAPS_PT__ }"
+        kv "${mode}_tap_targets" "$(printf '%s' "${line#*__VIEWW_TAPS_PT__ }" | tr -d '\r')"
         if [ -n "$session" ]; then
             # Several times, blind, as device-suite.sh does: the app latches
             # the first tap it feels and reports once, at the end.
@@ -137,14 +173,17 @@ for mode in cpu gpu; do
         log "$mode: the app never reported its tap targets"
     fi
     if wait_for "$log" 120 "__VIEWW_SUITE__ result"; then
-        verdict="$(grep -m1 "__VIEWW_SUITE__ result" "$log" | awk '{print $NF}')"
+        # `tr -d '\r'`: the console forwards CRLF, and a verdict of
+        # "PASS\r" is not "PASS" — which is how the first iPhone 15 Plus run
+        # (2026-10-16) passed both suites and still reported status=FAIL.
+        verdict="$(grep -m1 "__VIEWW_SUITE__ result" "$log" | tr -d '\r' | awk '{print $NF}')"
     else
         verdict="TIMEOUT"
     fi
     [ "$verdict" = PASS ] || status=1
     kv "${mode}_suite" "$verdict"
     for key in frame_time frame_stages gpu_frames; do
-        value="$(grep -m1 -o "$key: .*" "$log" | sed "s/^$key: //")"
+        value="$(grep -m1 -o "$key: .*" "$log" | sed "s/^$key: //" | tr -d '\r')"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
     kv "${mode}_failed_checks" "$(grep -o '__VIEWW_SUITE__ FAIL [a-z_0-9]*' "$log" | awk '{print $NF}' | sort -u | tr '\n' ' ')"

@@ -5,7 +5,10 @@
 # XCUITest driver sending the taps (run-ios.sh).
 version: 0.1
 
-ios_test_host: macos_sequoia
+# `default`: Device Farm picks macos_tahoe for iOS 17-27 and macos_sequoia for
+# iOS 15-16. Pinning macos_sequoia (iOS 15-26 only) silently dropped the
+# iPhone 18 Pro Max (iOS 27) from the first iOS run, 2026-10-16.
+ios_test_host: default
 
 phases:
   install:
@@ -16,7 +19,11 @@ phases:
       - appium driver list --installed 2>&1 | head -20 || true
   pre_test:
     commands:
+      # What can see the phone, for diagnosing a run where nothing could:
+      # devicectl (iOS 17+), xctrace (any), and the env Device Farm set.
       - xcrun devicectl list devices || true
+      - xcrun xctrace list devices 2>&1 | head -20 || true
+      - echo "udid=$DEVICEFARM_DEVICE_UDID os=$DEVICEFARM_DEVICE_OS_VERSION" || true
   test:
     commands:
       - bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-ios.sh
