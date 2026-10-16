@@ -75,9 +75,15 @@ case "$component" in */*) ;; *) component="$package/android.app.NativeActivity" 
 kv component "$component"
 
 status=0
-for mode in cpu gpu; do
+# `cpuvk` is a diagnostic third pass: the CPU rasterizer presented through the
+# Vulkan swapchain (`debug.vieww.present=vulkan`) instead of ANativeWindow_lock,
+# so the two present paths are compared on the same phone in the same run. Its
+# verdict is recorded but does not fail the job.
+for mode in cpu gpu cpuvk; do
     gpu=0; [ "$mode" = gpu ] && gpu=1
+    present=""; [ "$mode" = cpuvk ] && present="vulkan"
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
+    sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
 
     # 1. Cold start, three times. TotalTime is the platform's own measure of
     # launch to first frame drawn; WaitTime adds the system's share.
@@ -106,7 +112,7 @@ for mode in cpu gpu; do
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        status=1
+        [ "$mode" = cpuvk ] || status=1
     fi
     for key in frame_time frame_stages gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
@@ -127,6 +133,7 @@ for mode in cpu gpu; do
 done
 
 sh_ setprop debug.vieww.gpu 0 >/dev/null
+sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
 kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"

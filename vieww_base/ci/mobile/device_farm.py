@@ -231,8 +231,15 @@ def summarize(rows, out, run):
         stages = r.get("gpu_frame_stages") or r.get("cpu_frame_stages")
         if failed or stages:
             lines.append(f"**{row['device']}**")
+            if r.get("cpu_frame_stages"):
+                lines.append(f"- frame stages (CPU path): {r['cpu_frame_stages']}")
             if stages:
                 lines.append(f"- frame stages (GPU path): {stages}")
+            if r.get("cpuvk_frame_time"):
+                lines.append(
+                    f"- CPU path presented through Vulkan (diagnostic): {r['cpuvk_frame_time']}; "
+                    f"{r.get('cpuvk_frame_stages', '')}"
+                )
             if failed:
                 lines.append(f"- failed checks: {failed}")
             lines.append("")

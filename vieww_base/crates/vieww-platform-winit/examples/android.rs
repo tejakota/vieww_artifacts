@@ -745,6 +745,25 @@ mod demo {
                 .output()
                 .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1"),
         };
+        // **And which present, the same way:** `debug.vieww.present=vulkan`
+        // presents CPU frames through the Vulkan swapchain instead of
+        // `ANativeWindow_lock` (`native::PresentPath`). For A/B runs on one
+        // phone: on 2026-10-16 the LG Stylo 5's CPU raster stage read ~30 ms
+        // after the CPU present path landed against ~20 ms before it, on two
+        // different units, and this is how the two paths are compared on one.
+        // `PresentPath::choose` reads `VIEWW_PRESENT`; set before any thread
+        // that could read the environment exists.
+        let present = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.present")
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_default();
+        if present == "vulkan" || present == "cpu" {
+            // Before the event loop and every worker the app starts, so no
+            // other thread is reading the environment yet.
+            std::env::set_var("VIEWW_PRESENT", &present);
+            suite.observe("present", &format!("debug.vieww.present={present}"));
+        }
         suite.observe(
             "rasterizer",
             if prefer_gpu {
