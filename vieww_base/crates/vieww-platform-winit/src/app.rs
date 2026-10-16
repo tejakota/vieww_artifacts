@@ -887,8 +887,8 @@ impl App {
         // and the platform's own breadcrumbs go in at the same moment — the
         // target is known now and never changes.
         // **No panic is invisible, even when the application installed no
-        // reporter.** Release builds abort on panic (Cargo.toml's
-        // `[profile.release]`), and an abort on a phone is an app that vanishes:
+        // reporter.** Shipped builds abort on panic (Cargo.toml's
+        // `dist` profile), and an abort on a phone is an app that vanishes:
         // Android discards stderr, and an iPhone has no console. So without an
         // application's own `Crashes`, a default one with `LogSink` goes in —
         // the message and location reach logcat / the unified log before the

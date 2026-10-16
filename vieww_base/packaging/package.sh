@@ -88,11 +88,11 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 cd "$root"
 
-# `release-unwind`, not `release`: the studio catches panics from the screens
-# it previews (`ElementTree::build`'s boundary, in-process previews), and
-# release itself aborts — see `[profile.release]` in Cargo.toml.
-profile="release-unwind"
-cargo_profile=(--profile release-unwind)
+# `release`, which unwinds: the studio catches panics from the screens it
+# previews (`ElementTree::build`'s boundary, in-process previews). Only the
+# `dist` profile aborts — see `[profile.release]` in Cargo.toml.
+profile="release"
+cargo_profile=(--release)
 make_dmg=""
 make_deb=""
 make_appimage=""

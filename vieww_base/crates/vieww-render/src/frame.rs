@@ -141,7 +141,7 @@ impl std::fmt::Display for FrameError {
 
 /// Run `work`, turning a panic into a [`FrameError`] rather than an unwind.
 ///
-/// Only where panics unwind: a `panic = "abort"` build (vieww's release
+/// Only where panics unwind: a `panic = "abort"` build (vieww's `dist`
 /// profile) has nothing to catch, and a layout or paint panic ends the process
 /// after the crash reporter `App::run` installs has logged it. See
 /// Cargo.toml's `[profile.release]`.

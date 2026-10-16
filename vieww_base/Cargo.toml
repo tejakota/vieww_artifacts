@@ -229,15 +229,13 @@ vieww-cli = { path = "crates/vieww-cli", version = "0.1.0" }
 # first thing to rule out when a phone reports lag, and it is worth roughly an
 # order of magnitude.
 #
-# **`panic = "abort"` in release (and so in `dist`), `unwind` as an opt-in
-# profile.** Decided 2026-10-16, reversing the earlier "never abort" rule:
+# **`panic = "abort"` in what ships (`dist`), `unwind` as an opt-in.**
+# Decided 2026-10-16, reversing the earlier "never abort" rule:
 #
 # - It is what shipping Rust binaries do: no unwind tables or landing pads, a
 #   smaller binary, and no unwinder on targets that lack one.
 # - Release already crashed on a widget panic: `ErrorPolicy`'s release default
-#   is `Propagate`. The red box (`Placeholder`) is a development affordance, and
-#   development builds (`dev`, and every test) still unwind — cargo ignores
-#   `panic` for test targets.
+#   is `Propagate`. The red box (`Placeholder`) is a development affordance.
 # - The C-ABI plugin boundary (`vieww-plugin`) never could rely on unwinding:
 #   a panic may not cross `extern "C"`. Its trampolines catch where they can
 #   (`cfg(panic = "unwind")`) and report `STATUS_PANICKED`; under abort, process
@@ -247,12 +245,20 @@ vieww-cli = { path = "crates/vieww-cli", version = "0.1.0" }
 #   location reach the platform log — logcat, the unified log, stderr — and any
 #   `FileSink` survives to the next launch.
 #
-# **Opting back in:** `--profile release-unwind` / `--profile dist-unwind`, for
-# a host that needs `catch_unwind` at the widget or frame boundary — the studio
-# is one (`packaging/package.sh` builds it that way). Costs binary size; not
-# available on targets without an unwinder.
+# **Why `dist` and not `release`.** It was `release` for a day, and every
+# desktop release build on Linux stopped linking: `.cargo/config.toml` builds
+# desktop targets `-C prefer-dynamic` (for the studio), the shared `libstd` is
+# compiled to unwind, and rustc refuses "the linked panic runtime
+# `panic_unwind` is not compiled with this crate's panic strategy `abort`".
+# `dist` already has to drop `prefer-dynamic` (its LTO refuses it too — see
+# below), so abort lives there: Android, iOS, Windows and static-std Linux
+# builds of what ships. `release` stays the unwinding profile benchmarks,
+# hardware runs and the studio use.
+#
+# **Opting back in for a shipped build:** `--profile dist-unwind`, for a host
+# that needs `catch_unwind` at the widget or frame boundary. Costs binary size;
+# not available on targets without an unwinder.
 [profile.release]
-panic = "abort"
 # One codegen unit per crate rather than sixteen. The cost is compile time on a
 # cold build, paid once by CI and by whoever ships; the win lands on the device,
 # where the frame budget is 16.6ms.
@@ -314,10 +320,11 @@ debug = "line-tables-only"
 #
 # On Linux/macOS *without* that RUSTFLAGS, this fails to link with "cannot
 # prefer dynamic linking when performing LTO" — loud, which is the right
-# failure. `panic = "abort"`, inherited from release — see the top of this
-# section, and `dist-unwind` below for the opt-in.
+# failure. `panic = "abort"` — see the top of this section, and `dist-unwind`
+# below for the opt-in.
 [profile.dist]
 inherits = "release"
+panic = "abort"
 lto = "fat"
 debug = false
 strip = "symbols"
@@ -328,12 +335,8 @@ strip = "symbols"
 [profile.dist.package."*"]
 opt-level = "s"
 
-# The opt-in to unwinding, for hosts that catch panics at the widget/frame
-# boundary (the studio). Same code generation otherwise.
-[profile.release-unwind]
-inherits = "release"
-panic = "unwind"
-
+# The opt-in to unwinding for a shipped build, for hosts that catch panics at
+# the widget/frame boundary. Same code generation otherwise.
 [profile.dist-unwind]
 inherits = "dist"
 panic = "unwind"
@@ -396,8 +399,8 @@ opt-level = 2
 # exceptions". See `apps/viewwstudio/src/loaded.rs`'s panic section for the
 # full history.
 #
-# `panic = "unwind"` (the `release-unwind` profile the studio is built with —
-# release itself aborts, see `[profile.release]`) and `catch_unwind` in
+# `panic = "unwind"` (release's — only `dist` aborts, see `[profile.release]`)
+# and `catch_unwind` in
 # `ElementTree::build` are the host-side boundary; with both sides built
 # `prefer-dynamic`, both link against `libstd-*.so` from the same toolchain,
 # and the existing catch works for guest widgets too.

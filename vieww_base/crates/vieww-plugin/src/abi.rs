@@ -160,7 +160,7 @@ pub const STATUS_UNKNOWN_COMMAND: i32 = -2;
 /// [`LogLevel::Error`], and returns this code — the host sees a
 /// [`PluginError`](crate::PluginError) it can act on, not a dead process.
 ///
-/// A plugin built with `panic = "abort"` (vieww's release default) cannot be
+/// A plugin built with `panic = "abort"` (vieww's `dist` profile) cannot be
 /// caught in-process at all: the panic ends the process, after the host's
 /// crash reporter has recorded it. In-process isolation is best-effort by
 /// nature; for code the host does not trust, the honest answer is a separate

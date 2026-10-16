@@ -193,7 +193,7 @@ impl Pool {
                     // See this type's doc. `AssertUnwindSafe` is sound because
                     // nothing here is observed after the catch: the closure is
                     // consumed either way, and whatever it captured is the
-                    // task's own business. Under `panic = "abort"` (the release
+                    // task's own business. Under `panic = "abort"` (the `dist`
                     // profile) there is nothing to catch and a panicking task
                     // ends the process, after the crash reporter has logged it.
                     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work));
