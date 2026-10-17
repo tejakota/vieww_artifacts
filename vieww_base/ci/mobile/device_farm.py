@@ -237,7 +237,6 @@ def summarize(rows, out, run):
             ("gpu", "GPU path"),
             ("auto", "chosen by measurement (auto)"),
             ("cpuvk", "CPU path presented through Vulkan (diagnostic)"),
-            ("cpuka", "CPU path with a GPU keep-alive (diagnostic)"),
         ]
         detail = []
         for mode, label in passes:

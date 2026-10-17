@@ -80,11 +80,6 @@ status=0
 # so the two present paths are compared on the same phone in the same run. Its
 # verdict is recorded but does not fail the job.
 #
-# `cpuka` is the fourth: the CPU path presented to the window as normal, plus
-# a little GPU work per frame (`debug.vieww.keepalive=1`) — the test of whether
-# an idle GPU is what makes the window-present path's raster slower than
-# `cpuvk`'s on the same phone. Also diagnostic only.
-#
 # `auto` is `App::auto_rasterizer` (`debug.vieww.gpu=auto`): the app measures
 # the rasterizers itself and keeps the faster. Its three cold starts double as
 # the calibration — the first forgets any earlier answer
@@ -92,13 +87,11 @@ status=0
 # the GPU path if the CPU was not comfortable, the third uses the answer — and
 # the suite then runs on whatever was chosen (`renderer_choice`). Diagnostic
 # for this round: it reports, it does not fail the job.
-for mode in cpu gpu auto cpuvk cpuka; do
+for mode in cpu gpu auto cpuvk; do
     gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
-    keepalive=0; [ "$mode" = cpuka ] && keepalive=1
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
-    sh_ setprop debug.vieww.keepalive "$keepalive" >/dev/null
 
     # 1. Cold start, three times. TotalTime is the platform's own measure of
     # launch to first frame drawn; WaitTime adds the system's share.
@@ -137,7 +130,7 @@ for mode in cpu gpu auto cpuvk cpuka; do
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        case "$mode" in cpuvk|cpuka|auto) ;; *) status=1 ;; esac
+        case "$mode" in cpuvk|auto) ;; *) status=1 ;; esac
     fi
     for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
@@ -159,7 +152,6 @@ done
 
 sh_ setprop debug.vieww.gpu 0 >/dev/null
 sh_ setprop debug.vieww.present '""' >/dev/null
-sh_ setprop debug.vieww.keepalive 0 >/dev/null
 sh_ setprop debug.vieww.recalibrate 0 >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
