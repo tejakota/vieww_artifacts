@@ -83,6 +83,12 @@ accesskit_winit = "0.34"
 # exist on every target or an application's setup code needs a `cfg` around it.
 log = "0.4"
 
+# The boot clock and the process's own start time, for the start-up report's
+# "before run" (`src/startup.rs`); and, on Android, the core a frame ran on.
+# Already in the graph through winit, softbuffer and ash.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(not(target_os = "android"))'.dependencies]
 # **CPU frames reach the screen without a GPU driver.** The CPU rasterizer's
 # pixels used to be presented through a Vulkan swapchain, so even a window that

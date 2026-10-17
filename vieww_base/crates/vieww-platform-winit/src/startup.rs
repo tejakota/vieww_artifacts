@@ -18,9 +18,10 @@
 //! instant as the app's frame epoch. What happened **before** `App::run` (the
 //! process being created, the dynamic linker loading the library, `main`'s own
 //! setup) is measured separately where the OS can say when the process
-//! started: on Linux and Android from `/proc/self/stat`, at the kernel's
-//! 10 ms clock-tick resolution. Elsewhere it is reported as unknown rather
-//! than guessed.
+//! started: on Linux and Android from `/proc/self/stat` against the boot
+//! clock, at the kernel's 10 ms clock-tick resolution; on iOS and macOS from
+//! `proc_pidinfo`. Elsewhere (Windows) it is reported as unknown rather than
+//! guessed.
 
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -117,29 +118,84 @@ fn format_steps(before_run: Option<Duration>, steps: &[Mark]) -> String {
 }
 
 /// How long ago this process started, where the OS says.
+///
+/// **Not `/proc/uptime`.** The first version read it, and on Device Farm
+/// (2026-10-17) every Android phone reported "before run unknown": an app's
+/// SELinux domain may not read it. The boot clock is a system call away
+/// instead, and `/proc/self/stat` is always the process's own to read.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn process_age() -> Option<Duration> {
-    // Field 22 of /proc/self/stat is the start time in clock ticks since boot;
-    // /proc/uptime is seconds since boot. Both count from the same boot clock.
+    // Field 22 of /proc/self/stat is the start time in clock ticks since boot.
     // The second field (the command) may contain spaces, so fields are counted
     // after its closing parenthesis.
     let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
     let after = stat.rsplit_once(')')?.1;
     // `after` starts at field 3, so field 22 is index 19.
     let ticks: f64 = after.split_whitespace().nth(19)?.parse().ok()?;
-    let uptime: f64 = std::fs::read_to_string("/proc/uptime")
-        .ok()?
-        .split_whitespace()
-        .next()?
-        .parse()
-        .ok()?;
-    // USER_HZ is 100 on every Linux and Android ABI; it is part of the
-    // userspace ABI and does not follow the kernel's internal HZ.
-    let age = uptime - ticks / 100.0;
+    // SAFETY: `sysconf` takes no pointers; `clock_gettime` writes one
+    // `timespec`, which lives on this stack frame for the call.
+    let (hz, now) = unsafe {
+        let hz = libc::sysconf(libc::_SC_CLK_TCK);
+        let mut now = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        if hz <= 0 || libc::clock_gettime(libc::CLOCK_BOOTTIME, &mut now) != 0 {
+            return None;
+        }
+        (hz, now)
+    };
+    #[expect(clippy::cast_precision_loss, reason = "seconds since boot")]
+    let boot = now.tv_sec as f64 + now.tv_nsec as f64 / 1e9;
+    #[expect(clippy::cast_precision_loss, reason = "clock ticks per second")]
+    let age = boot - ticks / hz as f64;
     (0.0..3600.0).contains(&age).then(|| Duration::from_secs_f64(age))
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+/// How long ago this process started, from the kernel's own record of it
+/// (`proc_pidinfo`, which a sandboxed iOS app may ask about itself), against
+/// the wall clock — microsecond resolution.
+// `allow`, not `expect`: this is built only for Apple targets, where clippy
+// is not run here, and an unfulfilled expectation would fail the build.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+fn process_age() -> Option<Duration> {
+    // SAFETY: `proc_pidinfo` writes at most `size` bytes into `info`, a
+    // zeroed plain-data struct on this stack frame; `gettimeofday` writes one
+    // `timeval` the same way.
+    let (info, now) = unsafe {
+        let mut info: libc::proc_bsdinfo = std::mem::zeroed();
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)] // a small struct
+        let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
+        let written = libc::proc_pidinfo(
+            libc::getpid(),
+            libc::PROC_PIDTBSDINFO,
+            0,
+            std::ptr::addr_of_mut!(info).cast(),
+            size,
+        );
+        let mut now = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        };
+        if written != size || libc::gettimeofday(&mut now, std::ptr::null_mut()) != 0 {
+            return None;
+        }
+        (info, now)
+    };
+    #[allow(clippy::cast_precision_loss)] // seconds since the epoch
+    let start = info.pbi_start_tvsec as f64 + info.pbi_start_tvusec as f64 / 1e6;
+    #[allow(clippy::cast_precision_loss)] // seconds since the epoch
+    let now = now.tv_sec as f64 + f64::from(now.tv_usec) / 1e6;
+    let age = now - start;
+    (0.0..3600.0).contains(&age).then(|| Duration::from_secs_f64(age))
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "ios",
+    target_os = "macos"
+)))]
 const fn process_age() -> Option<Duration> {
     None
 }

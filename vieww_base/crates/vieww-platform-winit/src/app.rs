@@ -965,6 +965,11 @@ impl App {
             runtime,
         };
 
+        // Start-up is split at the platform's own hand-off: everything up to
+        // here is ours; from `run_app` to `StartCause::Init` is the OS starting
+        // the loop (on iOS, `UIApplicationMain` up to `didFinishLaunching`);
+        // from there to `resumed` is the OS deciding the app may draw.
+        crate::startup::mark("app setup");
         event_loop
             .run_app(&mut runner)
             .map_err(|error| PlatformError::EventLoop(error.to_string()))?;
@@ -2643,9 +2648,15 @@ fn fail_to_open(
 }
 
 impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
+        if matches!(cause, winit::event::StartCause::Init) {
+            crate::startup::mark("event loop started");
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.windows.is_empty() {
-            crate::startup::mark("event loop");
+            crate::startup::mark("resumed");
             let build = self.build.take();
             let (title, size, background) = (
                 self.shared.config.title.clone(),
