@@ -87,9 +87,16 @@ status=0
 # the GPU path if the CPU was not comfortable, the third uses the answer — and
 # the suite then runs on whatever was chosen (`renderer_choice`). Diagnostic
 # for this round: it reports, it does not fail the job.
-for mode in cpu gpu auto cpuvk; do
+#
+# `cpuhint` is the CPU path with an Android performance-hint session over the
+# UI thread (`debug.vieww.hint=1`, Android 13+; the LG Stylo 5 reports it
+# unavailable): whether the window-present path's slower raster is the
+# scheduler's choice of core and clock. Diagnostic only.
+for mode in cpu gpu auto cpuvk cpuhint; do
     gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
+    hint=0; [ "$mode" = cpuhint ] && hint=1
+    sh_ setprop debug.vieww.hint "$hint" >/dev/null
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
 
@@ -130,9 +137,9 @@ for mode in cpu gpu auto cpuvk; do
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        case "$mode" in cpuvk|auto) ;; *) status=1 ;; esac
+        case "$mode" in cpuvk|cpuhint|auto) ;; *) status=1 ;; esac
     fi
-    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
+    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
@@ -153,6 +160,7 @@ done
 sh_ setprop debug.vieww.gpu 0 >/dev/null
 sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ setprop debug.vieww.recalibrate 0 >/dev/null
+sh_ setprop debug.vieww.hint 0 >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
 kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"

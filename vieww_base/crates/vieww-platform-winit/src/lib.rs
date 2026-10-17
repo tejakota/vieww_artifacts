@@ -111,6 +111,7 @@ pub mod desktop;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 mod raster;
+mod perf_hint;
 pub mod rasterizer_choice;
 mod startup;
 mod stats;
@@ -126,6 +127,7 @@ pub use keys::{ime, KeyTranslator};
 pub use latency::{InputLatencyLog, InputLatencyReport};
 pub use lifecycle::Lifecycle;
 pub use scale::{Physical, Scale};
+pub use perf_hint::perf_hint_status;
 pub use rasterizer_choice::rasterizer_choice;
 pub use startup::report as startup_report;
 pub use stats::{Frame, FrameLog, FrameReport};

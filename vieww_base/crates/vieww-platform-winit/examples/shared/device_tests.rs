@@ -707,6 +707,33 @@ impl DeviceSuite {
     }
 }
 
+/// Each core's current and maximum clock, from sysfs: `cpu0 1.10/1.80 GHz | …`.
+/// `None` where there is no such file (not Linux or Android, or a phone that
+/// hides it).
+fn cpu_clocks() -> Option<String> {
+    let read = |core: usize, file: &str| {
+        std::fs::read_to_string(format!("/sys/devices/system/cpu/cpu{core}/cpufreq/{file}"))
+            .ok()
+            .and_then(|text| text.trim().parse::<f64>().ok())
+    };
+    let mut parts = Vec::new();
+    for core in 0..16 {
+        let max = read(core, "cpuinfo_max_freq");
+        let current = read(core, "scaling_cur_freq");
+        match (current, max) {
+            (Some(current), Some(max)) => parts.push(format!(
+                "cpu{core} {:.2}/{:.2} GHz",
+                current / 1e6,
+                max / 1e6
+            )),
+            // An offline core keeps its directory but not its clock.
+            (None, Some(max)) => parts.push(format!("cpu{core} off/{:.2} GHz", max / 1e6)),
+            _ => {}
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join(" | "))
+}
+
 /// What the frame log says after [`FRAMES`] frames.
 fn frame_checks(results: &mut Results, log: &FrameLog) {
     let samples = log.work_samples();
@@ -811,15 +838,41 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
         // What the stages leave out of the frame's work is time spent outside
         // the renderer — build, layout, or the thread not running at all.
         let outside = work.saturating_sub(stages.total());
+        let core = stages
+            .cpu_core
+            .map_or_else(String::new, |core| format!(", on cpu{core}"));
         results.observe(
             "worst_frame",
             format!(
-                "work {:.2} ms, outside the renderer {:.2} ms; stages ms: {}",
+                "work {:.2} ms, outside the renderer {:.2} ms{core}; stages ms: {}",
                 ms(work),
                 ms(outside),
                 line(&stages)
             ),
         );
+    }
+
+    // Which core the CPU raster ran on, and how long it took there — the
+    // question behind the LG Stylo 5 drawing the same frame in 31 ms to the
+    // window and 21 ms through Vulkan (2026-10-17). With the clocks each core
+    // was at when the report was taken, and the most it can reach, so a
+    // little core and a big one at a low clock can be told apart.
+    let cores = log.raster_by_core();
+    if !cores.is_empty() {
+        results.observe(
+            "raster_by_core",
+            cores
+                .iter()
+                .map(|(core, frames, median)| format!("cpu{core} {frames} frames {:.2} ms", ms(*median)))
+                .collect::<Vec<_>>()
+                .join(" | "),
+        );
+    }
+    if let Some(clocks) = cpu_clocks() {
+        results.observe("cpu_clocks", clocks);
+    }
+    if let Some(hint) = vieww_platform_winit::perf_hint_status() {
+        results.observe("perf_hint", hint);
     }
 
     // The one performance claim that *can* be gated on a single run, and the

@@ -773,6 +773,18 @@ mod demo {
             .output()
             .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
             .unwrap_or_default();
+        // `debug.vieww.hint=1`: an Android performance-hint session over the
+        // UI thread (`VIEWW_PERF_HINT`, `vieww_platform_winit::perf_hint`) —
+        // the test of whether the CPU path's slow raster is the scheduler's
+        // choice of core and clock.
+        let hint = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.hint")
+            .output()
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1");
+        if hint {
+            // Before the event loop and every worker the app starts, as below.
+            std::env::set_var("VIEWW_PERF_HINT", "1");
+        }
         if present == "vulkan" || present == "cpu" {
             // Before the event loop and every worker the app starts, so no
             // other thread is reading the environment yet.

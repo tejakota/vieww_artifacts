@@ -35,6 +35,7 @@ use crate::insets::{InsetWatch, SystemInsets};
 use crate::keys::KeyTranslator;
 use crate::lifecycle::Lifecycle;
 use crate::native::{NativeError, NativeRenderer, NativeSurface, PresentPath};
+use crate::perf_hint::PerfHint;
 use crate::rasterizer_choice::{Calibration, Launch, Measuring, Rasterizer};
 use crate::scale::Scale;
 use crate::stats::{FrameLog, FrameReport};
@@ -1032,6 +1033,11 @@ struct Gpu {
     planned: bool,
     /// This launch's rasterizer measurement, until it finishes.
     measuring: Option<Measuring>,
+    /// The Android performance-hint session over the UI thread, under
+    /// `VIEWW_PERF_HINT=1` — see `crate::perf_hint`. Started on the first
+    /// presented frame, once the budget is known.
+    hint: Option<PerfHint>,
+    hint_tried: bool,
 }
 
 /// Teardown order is not field order.
@@ -1585,11 +1591,18 @@ impl WindowState {
                 self.log
                     .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
                 // The same work the frame log judges against the budget.
+                let work = stats.map_or(elapsed, |stats| stats.total + elapsed);
                 if let Some(measuring) = &mut gpu.measuring {
-                    let work = stats.map_or(elapsed, |stats| stats.total + elapsed);
                     if measuring.observe(work, drawn_on_gpu, self.log.budget()) {
                         gpu.measuring = None;
                     }
+                }
+                if !gpu.hint_tried {
+                    gpu.hint_tried = true;
+                    gpu.hint = crate::perf_hint::start(self.log.budget());
+                }
+                if let Some(hint) = &mut gpu.hint {
+                    hint.frame(work, self.log.budget());
                 }
                 self.log.note_stages(gpu.renderer.last_stages());
                 if tracing() {
@@ -2433,6 +2446,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             needs_full_repaint: true,
             planned,
             measuring,
+            hint: None,
+            hint_tried: false,
         });
         state.scheduler.request_frame();
         // The window's density is a fact the tree can read, and a `SafeArea`
@@ -2492,6 +2507,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 needs_full_repaint: true,
                 planned,
                 measuring,
+                hint: None,
+                hint_tried: false,
             });
             state.scheduler.request_frame();
         }

@@ -347,7 +347,35 @@ impl FrameLog {
             },
             acquire: at(|s| s.acquire),
             present: at(|s| s.present),
+            cpu_core: None,
         }
+    }
+
+    /// The CPU raster stage per core it ended on: `(core, frames, median)`,
+    /// most frames first. Empty off Linux and Android, and for GPU frames.
+    ///
+    /// The question it answers is the LG Stylo 5's: the same CPU frame drew in
+    /// 31 ms presented to the window and 21 ms presented through Vulkan, and a
+    /// thread kept on a slow core — or a fast one at a low clock — would look
+    /// exactly like that. Two medians that differ by core say so.
+    #[must_use]
+    pub fn raster_by_core(&self) -> Vec<(u16, usize, Duration)> {
+        let mut by_core: std::collections::BTreeMap<u16, Vec<Duration>> =
+            std::collections::BTreeMap::new();
+        for frame in &self.recent {
+            if let Some(core) = frame.stages.cpu_core {
+                by_core.entry(core).or_default().push(frame.stages.cpu_raster);
+            }
+        }
+        let mut rows: Vec<(u16, usize, Duration)> = by_core
+            .into_iter()
+            .map(|(core, mut values)| {
+                values.sort_unstable();
+                (core, values.len(), percentile(&values, 0.50))
+            })
+            .collect();
+        rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        rows
     }
 
     /// The most expensive recent frame (by [`Frame::work`]) that recorded
@@ -760,6 +788,24 @@ mod tests {
         assert_eq!(stages.present, ms(55));
         // A log that never noted stages has no worst staged frame.
         assert!(FrameLog::new(ms(16), 100).worst_frame_stages().is_none());
+    }
+
+    #[test]
+    fn the_raster_is_reported_per_core_it_ran_on() {
+        let mut log = FrameLog::new(ms(16), 100);
+        let start = Instant::now();
+        for (i, (core, raster)) in [(7, 20), (7, 22), (2, 35), (7, 21), (2, 31)].iter().enumerate() {
+            log.record(None, ms(*raster), 100, start + ms(16 * i as u64), false);
+            log.note_stages(FrameStages {
+                cpu_raster: ms(*raster),
+                cpu_core: Some(*core),
+                ..FrameStages::default()
+            });
+        }
+        // A GPU frame has no core and is left out.
+        log.record(None, ms(5), 100, start + ms(200), true);
+        log.note_stages(FrameStages { present: ms(5), ..FrameStages::default() });
+        assert_eq!(log.raster_by_core(), vec![(7, 3, ms(21)), (2, 2, ms(35))]);
     }
 
     #[test]

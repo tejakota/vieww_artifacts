@@ -162,6 +162,19 @@ impl From<VulkanError> for NativeError {
     }
 }
 
+/// The core this thread is running on, where the OS can say.
+fn current_core() -> Option<u16> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        // SAFETY: takes no arguments; a negative return is an error.
+        u16::try_from(unsafe { libc::sched_getcpu() }).ok()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        None
+    }
+}
+
 /// How a window's frames reach the screen. See the module docs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PresentPath {
@@ -637,6 +650,13 @@ pub struct FrameStages {
     /// copy and present) for CPU and readback frames, `present_acquired` on
     /// the direct path.
     pub present: Duration,
+    /// The CPU core the thread was on when a CPU raster finished
+    /// (`sched_getcpu`, Linux and Android only), `None` on a GPU frame or
+    /// elsewhere. Not a stage: it is here so the frame log can say which
+    /// core a slow raster ran on — the LG Stylo 5 drew the same frame in
+    /// 31 ms presented to the window and 21 ms through Vulkan (2026-10-17),
+    /// and a core or its clock is the remaining suspect.
+    pub cpu_core: Option<u16>,
 }
 
 impl FrameStages {
@@ -1114,6 +1134,7 @@ impl NativeRenderer {
         };
 
         self.stages.cpu_raster = rasterising.elapsed() - self.stages.scale;
+        self.stages.cpu_core = current_core();
         self.present_last_cpu_frame(surface, (physical_width, physical_height), changed)?;
         Ok(report)
     }
@@ -1368,6 +1389,7 @@ impl NativeRenderer {
             self.cpu
                 .render_in_place(scene.as_ref(), physical_width, physical_height, base)?;
         self.stages.cpu_raster = rasterising.elapsed();
+        self.stages.cpu_core = current_core();
         self.present_last_cpu_frame(surface, extent, Changed::All)?;
         self.record_shadow(&scene, extent, Executor::Cpu, fallback);
         Ok(PlannedFrame {
@@ -1553,6 +1575,7 @@ mod tests {
             },
             acquire: ms(9),
             present: ms(10),
+            cpu_core: Some(3),
         };
         assert_eq!(stages.total(), ms(55));
         assert_eq!(FrameStages::default().total(), Duration::ZERO);

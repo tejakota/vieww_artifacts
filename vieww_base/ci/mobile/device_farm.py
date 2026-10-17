@@ -237,6 +237,7 @@ def summarize(rows, out, run):
             ("gpu", "GPU path"),
             ("auto", "chosen by measurement (auto)"),
             ("cpuvk", "CPU path presented through Vulkan (diagnostic)"),
+            ("cpuhint", "CPU path with an Android performance hint (diagnostic)"),
         ]
         detail = []
         for mode, label in passes:
@@ -250,6 +251,9 @@ def summarize(rows, out, run):
                 ("frame_stages", "stages"),
                 ("frame_stages_p95", "stages"),
                 ("worst_frame", "worst frame"),
+                ("raster_by_core", "raster by core"),
+                ("cpu_clocks", "clocks at report"),
+                ("perf_hint", "performance hint"),
             ):
                 if r.get(f"{mode}_{key}"):
                     detail.append(f"  - {name}: {r[f'{mode}_{key}']}")
