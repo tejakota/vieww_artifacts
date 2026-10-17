@@ -185,15 +185,13 @@ impl VulkanDevice {
         let (device, queue) =
             Self::create_device(&instance, physical_device, queue_family, &swapchain_ext)?;
 
-        let device_bundle = Self {
+        let device_bundle = Self::assemble(
             entry,
             instance,
             physical_device,
-            device,
-            queue,
-            queue_family,
+            (device, queue, queue_family),
             info,
-        };
+        );
 
         let swapchain =
             VulkanSwapchain::create(&device_bundle, surface_loader, surface, width, height)?;

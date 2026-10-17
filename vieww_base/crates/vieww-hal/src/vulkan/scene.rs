@@ -528,7 +528,7 @@ impl SceneRenderer {
         }];
 
         let scene_pipeline = create_pipeline(
-            &handle,
+            (&handle, device.pipeline_cache()),
             rp_load,
             scene_layout,
             (shaders[0], shaders[1]),
@@ -537,7 +537,7 @@ impl SceneRenderer {
             true,
         )?;
         let post_replace = create_pipeline(
-            &handle,
+            (&handle, device.pipeline_cache()),
             rp_load,
             post_layout,
             (shaders[2], shaders[3]),
@@ -546,7 +546,7 @@ impl SceneRenderer {
             false,
         )?;
         let post_over = create_pipeline(
-            &handle,
+            (&handle, device.pipeline_cache()),
             rp_load,
             post_layout,
             (shaders[2], shaders[3]),
@@ -1971,7 +1971,7 @@ fn create_post_pool(device: &ash::Device) -> Result<vk::DescriptorPool, VulkanEr
 }
 
 fn create_pipeline(
-    device: &ash::Device,
+    (device, cache): (&ash::Device, vk::PipelineCache),
     render_pass: vk::RenderPass,
     layout: vk::PipelineLayout,
     (vs, fs): (vk::ShaderModule, vk::ShaderModule),
@@ -2031,7 +2031,7 @@ fn create_pipeline(
         .render_pass(render_pass)
         .subpass(0);
     let pipelines =
-        unsafe { device.create_graphics_pipelines(vk::PipelineCache::null(), &[info], None) }
+        unsafe { device.create_graphics_pipelines(cache, &[info], None) }
             .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
     Ok(pipelines[0])
 }

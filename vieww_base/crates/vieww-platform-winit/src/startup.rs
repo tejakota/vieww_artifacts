@@ -75,6 +75,31 @@ pub(crate) fn first_frame() {
     }
 }
 
+static PIPELINE_CACHE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Record what the GPU pipeline cache started from and what the first GPU
+/// frame saved — the GPU path's first frame was 82–1463 ms on every launch
+/// before the cache existed (Device Farm, 2026-10-17).
+pub(crate) fn note_pipeline_cache(seed: usize, saved: Option<std::io::Result<usize>>) {
+    let saved = match saved {
+        Some(Ok(bytes)) => format!("saved {bytes} bytes after the first GPU frame"),
+        Some(Err(error)) => format!("could not be saved ({error})"),
+        None => "no GPU device".to_string(),
+    };
+    let text = format!("started from {seed} bytes; {saved}");
+    log::info!("vieww: pipeline cache {text}");
+    if let Ok(mut status) = PIPELINE_CACHE.lock() {
+        *status = Some(text);
+    }
+}
+
+/// What the GPU pipeline cache did this launch — `None` until a GPU frame
+/// has been drawn.
+#[must_use]
+pub fn pipeline_cache_status() -> Option<String> {
+    PIPELINE_CACHE.lock().ok()?.clone()
+}
+
 /// The start-up, as one line: the time before `App::run`, then each step as
 /// the time it took since the previous one, then the total from process start
 /// (or from `App::run` when the process start is unknown).

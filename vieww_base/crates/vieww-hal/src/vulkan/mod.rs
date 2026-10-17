@@ -27,9 +27,11 @@ use super::{AdapterInfo, Device as HalDevice};
 /// translated at run time.
 #[cfg(feature = "shader-compiler")]
 pub mod compute;
+pub mod pipeline_cache;
 pub mod scene;
 #[cfg(feature = "shader-compiler")]
 pub use compute::{ComputeBuffer, ComputeKernel};
+pub use pipeline_cache::set_pipeline_cache_file;
 pub use scene::{GpuFrameTimings, SceneRenderer};
 
 /// [`VulkanDevice::for_window`] and [`swapchain::VulkanSwapchain`] — real
@@ -72,6 +74,14 @@ pub struct VulkanDevice {
     queue: vk::Queue,
     queue_family: u32,
     info: AdapterInfo,
+    /// Every pipeline this device's renderers create goes through this — see
+    /// [`pipeline_cache`](self::pipeline_cache).
+    pipeline_cache: vk::PipelineCache,
+    /// Where it is kept between launches, if anywhere.
+    pipeline_cache_file: Option<std::path::PathBuf>,
+    /// How many bytes it started with: zero on a first launch, or when the
+    /// file was another GPU's or another driver's.
+    pipeline_cache_seed: usize,
 }
 
 impl std::fmt::Debug for VulkanDevice {
@@ -209,7 +219,29 @@ impl VulkanDevice {
         let info = Self::adapter_info(&instance, physical_device);
         let (device, queue) = Self::create_device(&instance, physical_device, queue_family, &[])?;
 
-        Ok(Self {
+        Ok(Self::assemble(
+            entry,
+            instance,
+            physical_device,
+            (device, queue, queue_family),
+            info,
+        ))
+    }
+
+    /// The last step of every constructor: the parts, plus the pipeline cache
+    /// (seeded from [`set_pipeline_cache_file`]'s file when it fits).
+    pub(crate) fn assemble(
+        entry: ash::Entry,
+        instance: ash::Instance,
+        physical_device: vk::PhysicalDevice,
+        (device, queue, queue_family): (ash::Device, vk::Queue, u32),
+        info: AdapterInfo,
+    ) -> Self {
+        let file = pipeline_cache::configured_file();
+        let props = unsafe { instance.get_physical_device_properties(physical_device) };
+        let (pipeline_cache, pipeline_cache_seed) =
+            pipeline_cache::create(&device, &props, file.as_deref());
+        Self {
             entry,
             instance,
             physical_device,
@@ -217,7 +249,38 @@ impl VulkanDevice {
             queue,
             queue_family,
             info,
-        })
+            pipeline_cache,
+            pipeline_cache_file: file,
+            pipeline_cache_seed,
+        }
+    }
+
+    /// The cache every pipeline on this device is created through.
+    pub(crate) const fn pipeline_cache(&self) -> vk::PipelineCache {
+        self.pipeline_cache
+    }
+
+    /// How many bytes of an earlier launch's pipeline cache this device
+    /// started with — zero on a first launch, or after a driver update.
+    #[must_use]
+    pub const fn pipeline_cache_seed(&self) -> usize {
+        self.pipeline_cache_seed
+    }
+
+    /// Write the pipeline cache to its file, if it has one. Returns the bytes
+    /// written. Call it once the pipelines that matter exist: a phone app is
+    /// killed rather than dropped, so `Drop`'s own save is a second chance,
+    /// not the plan.
+    ///
+    /// # Errors
+    ///
+    /// The file could not be written, or the driver would not hand the data
+    /// over. Either costs the next launch its head start and nothing else.
+    pub fn save_pipeline_cache(&self) -> std::io::Result<usize> {
+        match &self.pipeline_cache_file {
+            Some(file) => pipeline_cache::save(&self.device, self.pipeline_cache, file),
+            None => Ok(0),
+        }
     }
 
     /// The instance every constructor shares: application/engine identity and
@@ -459,7 +522,11 @@ impl VulkanDevice {
 
 impl Drop for VulkanDevice {
     fn drop(&mut self) {
+        let _ = self.save_pipeline_cache();
         unsafe {
+            if self.pipeline_cache != vk::PipelineCache::null() {
+                self.device.destroy_pipeline_cache(self.pipeline_cache, None);
+            }
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
         }

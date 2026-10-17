@@ -129,7 +129,7 @@ pub use lifecycle::Lifecycle;
 pub use scale::{Physical, Scale};
 pub use perf_hint::perf_hint_status;
 pub use rasterizer_choice::rasterizer_choice;
-pub use startup::report as startup_report;
+pub use startup::{pipeline_cache_status, report as startup_report};
 pub use stats::{Frame, FrameLog, FrameReport};
 pub use storage::{data_dir, FileStorage};
 /// The activity handle `android_main` is handed, re-exported so an application

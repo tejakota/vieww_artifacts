@@ -1038,6 +1038,9 @@ struct Gpu {
     /// presented frame, once the budget is known.
     hint: Option<PerfHint>,
     hint_tried: bool,
+    /// Whether the GPU pipeline cache has been written after this surface's
+    /// first GPU frame.
+    pipelines_saved: bool,
 }
 
 /// Teardown order is not field order.
@@ -1603,6 +1606,15 @@ impl WindowState {
                 }
                 if let Some(hint) = &mut gpu.hint {
                     hint.frame(work, self.log.budget());
+                }
+                // The pipelines exist once a GPU frame has drawn, and a phone
+                // app is killed rather than dropped: now is when the next
+                // launch's head start gets written.
+                if drawn_on_gpu && !gpu.pipelines_saved {
+                    gpu.pipelines_saved = true;
+                    let seed = gpu.renderer.pipeline_cache_seed().unwrap_or(0);
+                    let saved = gpu.renderer.save_pipeline_cache();
+                    crate::startup::note_pipeline_cache(seed, saved);
                 }
                 self.log.note_stages(gpu.renderer.last_stages());
                 if tracing() {
@@ -2197,6 +2209,10 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             ),
         );
         let opening = Instant::now();
+        // Before any GPU device exists, so the device this window opens starts
+        // from the pipelines an earlier launch compiled
+        // (`vieww_hal::vulkan::pipeline_cache`).
+        vieww_hal::vulkan::set_pipeline_cache_file(self.pipeline_cache_file());
         let opened = NativeRenderer::for_window_on(&window, width, height, path);
         // A device whose GPU cannot be opened has answered the question: under
         // `auto_rasterizer` that is the CPU path, kept, rather than an app that
@@ -2281,17 +2297,44 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         let file = if let Some(file) = std::env::var_os("VIEWW_RENDERER_CACHE") {
             std::path::PathBuf::from(file)
         } else {
-            #[cfg(target_os = "android")]
-            let dir = self
-                .shared
-                .android
-                .as_ref()
-                .and_then(AndroidApp::internal_data_path)?;
-            #[cfg(not(target_os = "android"))]
-            let dir = crate::storage::data_dir();
-            crate::rasterizer_choice::file_in(&dir)
+            crate::rasterizer_choice::file_in(&self.data_dir()?)
         };
         Some(Calibration::new(file, width, height))
+    }
+
+    /// The application's own data directory: the activity's internal data
+    /// path on Android, `storage::data_dir` elsewhere.
+    fn data_dir(&self) -> Option<std::path::PathBuf> {
+        #[cfg(target_os = "android")]
+        {
+            self.shared
+                .android
+                .as_ref()
+                .and_then(AndroidApp::internal_data_path)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Some(crate::storage::data_dir())
+        }
+    }
+
+    /// Where the GPU's pipeline cache is kept between launches —
+    /// `VIEWW_PIPELINE_CACHE=<file>`, `=off` for none, else a file in the data
+    /// directory named after the executable, as the rasterizer calibration is.
+    fn pipeline_cache_file(&self) -> Option<std::path::PathBuf> {
+        match std::env::var_os("VIEWW_PIPELINE_CACHE") {
+            Some(value) if value == "off" => None,
+            Some(file) => Some(std::path::PathBuf::from(file)),
+            None => {
+                let calibration = crate::rasterizer_choice::file_in(&self.data_dir()?);
+                let name = calibration
+                    .file_name()?
+                    .to_string_lossy()
+                    .replacen("rasterizer-", "pipelines-", 1)
+                    .replace(".txt", ".bin");
+                Some(calibration.with_file_name(name))
+            }
+        }
     }
 
     /// Attach the accessibility adapter for a window that has just been made.
@@ -2448,6 +2491,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             measuring,
             hint: None,
             hint_tried: false,
+            pipelines_saved: false,
         });
         state.scheduler.request_frame();
         // The window's density is a fact the tree can read, and a `SafeArea`
@@ -2509,6 +2553,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 measuring,
                 hint: None,
                 hint_tried: false,
+                pipelines_saved: false,
             });
             state.scheduler.request_frame();
         }

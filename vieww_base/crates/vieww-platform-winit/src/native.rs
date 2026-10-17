@@ -759,6 +759,19 @@ fn frame_at_device_resolution<'a>(
 }
 
 impl NativeRenderer {
+    /// Bytes of an earlier launch's pipeline cache the GPU device started
+    /// with (`None` on the CPU present, which has no device).
+    #[must_use]
+    pub fn pipeline_cache_seed(&self) -> Option<usize> {
+        self.device.as_ref().map(|device| device.pipeline_cache_seed())
+    }
+
+    /// Write the GPU device's pipeline cache to disk — see
+    /// `vieww_hal::vulkan::pipeline_cache`. `None` on the CPU present.
+    pub fn save_pipeline_cache(&self) -> Option<std::io::Result<usize>> {
+        self.device.as_ref().map(|device| device.save_pipeline_cache())
+    }
+
     /// Open a window and a renderer to present into it.
     ///
     /// # Errors

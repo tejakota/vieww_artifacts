@@ -254,6 +254,7 @@ def summarize(rows, out, run):
                 ("raster_by_core", "raster by core"),
                 ("cpu_clocks", "clocks at report"),
                 ("perf_hint", "performance hint"),
+                ("pipeline_cache", "pipeline cache"),
             ):
                 if r.get(f"{mode}_{key}"):
                     detail.append(f"  - {name}: {r[f'{mode}_{key}']}")

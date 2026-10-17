@@ -871,6 +871,9 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     if let Some(clocks) = cpu_clocks() {
         results.observe("cpu_clocks", clocks);
     }
+    if let Some(cache) = vieww_platform_winit::pipeline_cache_status() {
+        results.observe("pipeline_cache", cache);
+    }
     if let Some(hint) = vieww_platform_winit::perf_hint_status() {
         results.observe("perf_hint", hint);
     }
