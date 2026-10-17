@@ -1,0 +1,21 @@
+Starting: Intent { cmp=dev.vieww.demo/android.app.NativeActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.vieww.demo/android.app.NativeActivity
+TotalTime: 150
+WaitTime: 152
+Complete
+Starting: Intent { cmp=dev.vieww.demo/android.app.NativeActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.vieww.demo/android.app.NativeActivity
+TotalTime: 140
+WaitTime: 145
+Complete
+Starting: Intent { cmp=dev.vieww.demo/android.app.NativeActivity }
+Status: ok
+LaunchState: COLD
+Activity: dev.vieww.demo/android.app.NativeActivity
+TotalTime: 163
+WaitTime: 168
+Complete

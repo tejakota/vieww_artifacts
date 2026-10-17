@@ -1,0 +1,62 @@
+Running devicectl with elevated privileges via sudo is unlikely to work properly. Please do not do this.
+2026-10-17 11:10:45.580 vieww[729:61359] __VIEWW_TAPS__ button=197,676 field=260,957 menu=286,2426
+__VIEWW_TAPS__ button=197,676 field=260,957 menu=286,2426
+2026-10-17 11:10:45.580 vieww[729:61359] __VIEWW_TAPS_PT__ scale=3 button=66,225 field=87,319
+__VIEWW_TAPS_PT__ scale=3 button=66,225 field=87,319
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ begin
+__VIEWW_SUITE__ begin
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   view_metrics_reached_the_tree: 430x932 logical
+__VIEWW_SUITE__ ok   view_metrics_reached_the_tree: 430x932 logical
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   the_display_density_is_plausible: 3x
+__VIEWW_SUITE__ ok   the_display_density_is_plausible: 3x
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   the_safe_area_fits_inside_the_surface: l0 t61 r0 b34
+__VIEWW_SUITE__ ok   the_safe_area_fits_inside_the_surface: l0 t61 r0 b34
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ --   safe_area: l0 t61 r0 b34 on a 430x932 surface at 3x
+__VIEWW_SUITE__ --   safe_area: l0 t61 r0 b34 on a 430x932 surface at 3x
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 34.0 } on a 932-tall surface
+__VIEWW_SUITE__ ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 34.0 } on a 932-tall surface
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 34.0 } at the moment of the report
+__VIEWW_SUITE__ --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 34.0 } at the moment of the report
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   the_keyboard_inset_appears_when_the_keyboard_does: 34 logical pixels
+__VIEWW_SUITE__ ok   the_keyboard_inset_appears_when_the_keyboard_does: 34 logical pixels
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+__VIEWW_SUITE__ ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   a_tap_reached_a_handler: 1 tap
+__VIEWW_SUITE__ ok   a_tap_reached_a_handler: 1 tap
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   frames_were_presented: 600 frames
+__VIEWW_SUITE__ ok   frames_were_presented: 600 frames
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   the_typical_frame_is_inside_its_budget: median 3.023751ms against a budget of 8.333334ms
+__VIEWW_SUITE__ ok   the_typical_frame_is_inside_its_budget: median 3.023751ms against a budget of 8.333334ms
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ ok   no_frame_stalled: worst 11.040375ms, 4 of 240 over budget
+__VIEWW_SUITE__ ok   no_frame_stalled: worst 11.040375ms, 4 of 240 over budget
+2026-10-17 11:10:51.030 vieww[729:61359] __VIEWW_SUITE__ --   frame_time: median 3.023751ms, worst 11.040375ms, budget 8.333334ms (240 samples)
+__VIEWW_SUITE__ --   frame_time: median 3.023751ms, worst 11.040375ms, budget 8.333334ms (240 samples)
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   startup_stages: before run 9 ms | app setup 2.0 | event loop started 89.9 | resumed 170.2 | window created 4.2 | present ready 0.2 | accessibility and show 0.1 | tree built 0.8 | window ready 2.3 | until first draw 0.9 | app before-frame hooks 0.0 | first build and layout 0.6 | first raster and present 9.4 = 289.5 ms from process start
+__VIEWW_SUITE__ --   startup_stages: before run 9 ms | app setup 2.0 | event loop started 89.9 | resumed 170.2 | window created 4.2 | present ready 0.2 | accessibility and show 0.1 | tree built 0.8 | window ready 2.3 | until first draw 0.9 | app before-frame hooks 0.0 | first build and layout 0.6 | first raster and present 9.4 = 289.5 ms from process start
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   renderer_choice: cpu (calibrated earlier: cpu 2.58 ms)
+__VIEWW_SUITE__ --   renderer_choice: cpu (calibrated earlier: cpu 2.58 ms)
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   frame_stages: medians ms: scale 0.01 plan 0.00 cpu 1.61 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.06 present 1.29
+__VIEWW_SUITE__ --   frame_stages: medians ms: scale 0.01 plan 0.00 cpu 1.61 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.06 present 1.29
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   frame_stages_p95: p95 ms: scale 0.02 plan 0.00 cpu 3.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.14 present 3.23
+__VIEWW_SUITE__ --   frame_stages_p95: p95 ms: scale 0.02 plan 0.00 cpu 3.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.14 present 3.23
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   worst_frame: work 11.04 ms, outside the renderer 0.17 ms; stages ms: scale 0.02 plan 0.00 cpu 4.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.25 present 5.83
+__VIEWW_SUITE__ --   worst_frame: work 11.04 ms, outside the renderer 0.17 ms; stages ms: scale 0.02 plan 0.00 cpu 4.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.25 present 5.83
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ ok   damage_tracking_costs_a_fraction_of_a_full_repaint: 0.072 full repaints per frame over 600 frames, against a 3606840px surface
+__VIEWW_SUITE__ ok   damage_tracking_costs_a_fraction_of_a_full_repaint: 0.072 full repaints per frame over 600 frames, against a 3606840px surface
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   full_repaints: 3 of 600 frames cost a whole surface, 0 of those after the loop slept
+__VIEWW_SUITE__ --   full_repaints: 3 of 600 frames cost a whole surface, 0 of those after the loop slept
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+__VIEWW_SUITE__ ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ ok   the_full_repaint_counter_saw_the_first_frame: 3 full repaint(s) over 600 frames against a 3606840px surface
+__VIEWW_SUITE__ ok   the_full_repaint_counter_saw_the_first_frame: 3 full repaint(s) over 600 frames against a 3606840px surface
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   frame_report: 600 frames in 5.44s — 110.0fps (median 6.91ms, worst 17.94ms over 6 continuous); work median 3.02ms, worst 11.04ms; 18 over a 8.33ms budget; rasterised 43.01 full repaints (3 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.01 plan 0.00 cpu 1.61 gpu[upload 0.00 record 0.00 submit 0.00 wait 0.00 readback 0.00] acquire 0.06 present 1.29 ms
+__VIEWW_SUITE__ --   frame_report: 600 frames in 5.44s — 110.0fps (median 6.91ms, worst 17.94ms over 6 continuous); work median 3.02ms, worst 11.04ms; 18 over a 8.33ms budget; rasterised 43.01 full repaints (3 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.01 plan 0.00 cpu 1.61 gpu[upload 0.00 record 0.00 submit 0.00 wait 0.00 readback 0.00] acquire 0.06 present 1.29 ms
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ --   gpu_frames: 0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+__VIEWW_SUITE__ --   gpu_frames: 0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ end 13 checks, 0 failed
+__VIEWW_SUITE__ end 13 checks, 0 failed
+2026-10-17 11:10:51.031 vieww[729:61359] __VIEWW_SUITE__ result PASS
+__VIEWW_SUITE__ result PASS
+Launched application with dev.vieww.demo bundle identifier.
+Waiting for the application to terminate...
+App terminated due to signal 15.

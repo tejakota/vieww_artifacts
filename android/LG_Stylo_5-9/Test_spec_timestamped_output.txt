@@ -1,0 +1,142 @@
+[2026-10-17 18:05:14.172640] [DEVICEFARM] ########### Start executing testspec ###########
+[2026-10-17 18:05:14.172695]  
+[2026-10-17 18:05:14.187920]  
+[2026-10-17 18:05:14.187984] [DEVICEFARM] ########### Entering phase install ###########
+[2026-10-17 18:05:14.188027]  
+[2026-10-17 18:05:14.188052] [DeviceFarm] adb version
+[2026-10-17 18:05:14.211883] Android Debug Bridge version 1.0.39
+[2026-10-17 18:05:14.211908] Version 0.0.1-4500957
+[2026-10-17 18:05:14.211921] Installed as /tmp/devicefarm-workspace/execution-1e5cftd0/shared-z5msamxa/android-home-sigcwe10/platform-tools/adb_binary
+[2026-10-17 18:05:14.213443]  
+[2026-10-17 18:05:14.213468] [DEVICEFARM] ########### Entering phase pre_test ###########
+[2026-10-17 18:05:14.213480]  
+[2026-10-17 18:05:14.213491] [DeviceFarm] adb devices -l
+[2026-10-17 18:05:14.269399] List of devices attached
+[2026-10-17 18:05:14.269433] LMQ7201bff072f         device usb:1-1.2 product:cv7as model:LM_Q720 device:cv7as transport_id:2
+[2026-10-17 18:05:14.269449] 
+[2026-10-17 18:05:14.271325]  
+[2026-10-17 18:05:14.271354] [DEVICEFARM] ########### Entering phase test ###########
+[2026-10-17 18:05:14.271366]  
+[2026-10-17 18:05:14.271376] [DeviceFarm] bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-android.sh
+[2026-10-17 18:09:25.296790] device_name=LMQ7201bff072f
+[2026-10-17 18:09:25.296836] manufacturer=LGE
+[2026-10-17 18:09:25.296857] model=LM-Q720
+[2026-10-17 18:09:25.296873] android=9
+[2026-10-17 18:09:25.296888] sdk=28
+[2026-10-17 18:09:25.296901] soc=msm8953
+[2026-10-17 18:09:25.296914] abi=arm64-v8a
+[2026-10-17 18:09:25.296926] cpu_cores=8
+[2026-10-17 18:09:25.296938] mem_total_kb=2878756
+[2026-10-17 18:09:25.296950] gpu=Qualcomm, Adreno (TM) 506, OpenGL ES 3.2 V@331.0 (GIT@50f1b2d, I1b05bd271c) (Date:03/26/19)
+[2026-10-17 18:09:25.296964] display=1080x2160
+[2026-10-17 18:09:25.296976] density=420
+[2026-10-17 18:09:25.296988] apk_bytes=2744736
+[2026-10-17 18:09:25.297001] component=dev.vieww.demo/android.app.NativeActivity
+[2026-10-17 18:09:25.297017] cpu_cold_start_ms=367 360 334 
+[2026-10-17 18:09:25.297028] cpu_suite=FAIL
+[2026-10-17 18:09:25.297037] cpu_frame_time=median 36.110729ms, worst 67.395677ms, budget 16.666668ms (240 samples)
+[2026-10-17 18:09:25.297046] cpu_frame_stages=medians ms: scale 0.07 plan 0.00 cpu 30.71 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.36 present 3.80
+[2026-10-17 18:09:25.297054] cpu_frame_stages_p95=p95 ms: scale 0.10 plan 0.00 cpu 39.35 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.47 present 5.33
+[2026-10-17 18:09:25.297062] cpu_worst_frame=work 67.40 ms, outside the renderer 1.66 ms, on cpu2; stages ms: scale 0.07 plan 0.00 cpu 60.20 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.37 present 5.09
+[2026-10-17 18:09:25.297072] cpu_startup_stages=before run 261 ms | app setup 0.1 | event loop started 0.0 | resumed 43.0 | window created 0.1 | present ready 0.6 | accessibility and show 0.0 | tree built 5.3 | window ready 0.6 | until first draw 0.6 | app before-frame hooks 0.0 | first build and layout 12.9 | first raster and present 156.3 = 480.4 ms from process start
+[2026-10-17 18:09:25.297082] cpu_raster_by_core=cpu2 88 frames 30.43 ms | cpu0 67 frames 31.02 ms | cpu5 37 frames 30.48 ms | cpu1 31 frames 30.45 ms | cpu4 10 frames 33.02 ms | cpu6 5 frames 29.35 ms | cpu3 1 frames 38.81 ms | cpu7 1 frames 40.81 ms
+[2026-10-17 18:09:25.297091] cpu_cpu_clocks=cpu0 1.80/1.80 GHz | cpu1 1.80/1.80 GHz | cpu2 1.80/1.80 GHz | cpu3 1.80/1.80 GHz | cpu4 1.80/1.80 GHz | cpu5 1.80/1.80 GHz | cpu6 1.80/1.80 GHz | cpu7 1.80/1.80 GHz
+[2026-10-17 18:09:25.297099] cpu_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+[2026-10-17 18:09:25.297107] cpu_failed_checks=no_frame_stalled the_typical_frame_is_inside_its_budget 
+[2026-10-17 18:09:25.297115] cpu_total_pss_kb=80017
+[2026-10-17 18:09:25.297123] cpu_total_rss_kb=
+[2026-10-17 18:09:25.297130] gpu_cold_start_ms=326 358 317 
+[2026-10-17 18:09:25.297138] gpu_suite=FAIL
+[2026-10-17 18:09:25.297152] gpu_frame_time=median 40.848594ms, worst 47.520834ms, budget 16.666668ms (240 samples)
+[2026-10-17 18:09:25.297160] gpu_frame_stages=medians ms: scale 0.20 plan 1.53 cpu 0.00 gpu_upload 1.26 gpu_record 0.81 gpu_submit 0.35 gpu_wait 34.25 gpu_readback 0.00 acquire 0.45 present 0.55
+[2026-10-17 18:09:25.297169] gpu_frame_stages_p95=p95 ms: scale 0.37 plan 2.80 cpu 0.00 gpu_upload 2.48 gpu_record 1.18 gpu_submit 0.54 gpu_wait 34.74 gpu_readback 0.00 acquire 1.14 present 0.73
+[2026-10-17 18:09:25.297176] gpu_worst_frame=work 47.52 ms, outside the renderer 1.84 ms; stages ms: scale 0.14 plan 2.52 cpu 0.00 gpu_upload 2.48 gpu_record 0.76 gpu_submit 4.47 gpu_wait 34.32 gpu_readback 0.00 acquire 0.44 present 0.56
+[2026-10-17 18:09:25.297185] gpu_startup_stages=before run 262 ms | app setup 0.3 | event loop started 0.0 | resumed 41.0 | window created 0.1 | present ready 120.7 | accessibility and show 0.0 | tree built 6.1 | window ready 0.5 | until first draw 0.1 | app before-frame hooks 0.0 | first build and layout 8.9 | first raster and present 106.0 = 545.7 ms from process start
+[2026-10-17 18:09:25.297193] gpu_cpu_clocks=cpu0 1.80/1.80 GHz | cpu1 1.80/1.80 GHz | cpu2 1.80/1.80 GHz | cpu3 1.80/1.80 GHz | cpu4 1.80/1.80 GHz | cpu5 1.80/1.80 GHz | cpu6 1.80/1.80 GHz | cpu7 1.80/1.80 GHz
+[2026-10-17 18:09:25.297201] gpu_pipeline_cache=started from 39458 bytes; saved 39458 bytes after the first GPU frame
+[2026-10-17 18:09:25.297212] gpu_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+[2026-10-17 18:09:25.297220] gpu_failed_checks=the_typical_frame_is_inside_its_budget 
+[2026-10-17 18:09:25.297229] gpu_total_pss_kb=131752
+[2026-10-17 18:09:25.297236] gpu_total_rss_kb=
+[2026-10-17 18:09:25.297245] auto_calibration=launch 1: 10-17 18:06:53.601 18719 18736 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu, measuring (first launch with this build here) 10-17 18:06:55.347 18719 18736 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu for now; the gpu is measured next launch (measured: cpu 22.63 ms; budget 16.67 ms) launch 2: 10-17 18:07:02.834 18785 18802 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu, measuring (the cpu path measured 22.63 ms last launch) 10-17 18:07:05.301 18785 18802 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (measured: cpu 22.63 ms, gpu 39.64 ms; budget 16.67 ms) launch 3: 10-17 18:07:11.867 18849 18866 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (calibrated earlier: cpu 22.63 ms, gpu 39.64 ms) 
+[2026-10-17 18:09:25.297254] auto_cold_start_ms=371 377 380 
+[2026-10-17 18:09:25.297262] auto_suite=FAIL
+[2026-10-17 18:09:25.297269] auto_frame_time=median 36.182292ms, worst 68.955832ms, budget 16.666668ms (240 samples)
+[2026-10-17 18:09:25.297277] auto_frame_stages=medians ms: scale 0.07 plan 0.00 cpu 30.94 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.35 present 3.75
+[2026-10-17 18:09:25.297285] auto_frame_stages_p95=p95 ms: scale 0.09 plan 0.00 cpu 38.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.49 present 4.96
+[2026-10-17 18:09:25.297293] auto_worst_frame=work 68.96 ms, outside the renderer 1.98 ms, on cpu5; stages ms: scale 0.14 plan 0.00 cpu 60.64 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.30 present 5.90
+[2026-10-17 18:09:25.297301] auto_startup_stages=before run 263 ms | app setup 0.3 | event loop started 0.0 | resumed 31.3 | window created 0.1 | present ready 0.5 | accessibility and show 0.0 | tree built 5.5 | window ready 0.6 | until first draw 0.1 | app before-frame hooks 0.0 | first build and layout 7.9 | first raster and present 151.1 = 460.9 ms from process start
+[2026-10-17 18:09:25.297309] auto_raster_by_core=cpu3 132 frames 30.60 ms | cpu1 57 frames 29.95 ms | cpu7 21 frames 33.15 ms | cpu5 12 frames 34.94 ms | cpu6 10 frames 34.93 ms | cpu2 6 frames 36.23 ms | cpu4 2 frames 37.00 ms
+[2026-10-17 18:09:25.297320] auto_cpu_clocks=cpu0 1.80/1.80 GHz | cpu1 1.80/1.80 GHz | cpu2 1.80/1.80 GHz | cpu3 1.80/1.80 GHz | cpu4 1.80/1.80 GHz | cpu5 1.80/1.80 GHz | cpu6 1.80/1.80 GHz | cpu7 1.80/1.80 GHz
+[2026-10-17 18:09:25.297328] auto_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+[2026-10-17 18:09:25.297336] auto_failed_checks=no_frame_stalled the_typical_frame_is_inside_its_budget 
+[2026-10-17 18:09:25.297343] auto_total_pss_kb=79253
+[2026-10-17 18:09:25.297351] auto_total_rss_kb=
+[2026-10-17 18:09:25.297359] cpuvk_cold_start_ms=343 322 330 
+[2026-10-17 18:09:25.297367] cpuvk_suite=FAIL
+[2026-10-17 18:09:25.297375] cpuvk_frame_time=median 42.960781ms, worst 80.336146ms, budget 16.666668ms (240 samples)
+[2026-10-17 18:09:25.297383] cpuvk_frame_stages=medians ms: scale 0.08 plan 0.00 cpu 20.32 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 19.50
+[2026-10-17 18:09:25.297391] cpuvk_frame_stages_p95=p95 ms: scale 0.17 plan 0.00 cpu 32.03 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 24.60
+[2026-10-17 18:09:25.297398] cpuvk_worst_frame=work 80.34 ms, outside the renderer 2.35 ms, on cpu2; stages ms: scale 0.18 plan 0.00 cpu 53.07 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 24.74
+[2026-10-17 18:09:25.297406] cpuvk_startup_stages=before run 273 ms | app setup 0.1 | event loop started 0.0 | resumed 43.7 | window created 0.1 | present ready 100.0 | accessibility and show 0.0 | tree built 4.8 | window ready 0.5 | until first draw 0.1 | app before-frame hooks 0.0 | first build and layout 7.7 | first raster and present 148.7 = 578.5 ms from process start
+[2026-10-17 18:09:25.297415] cpuvk_raster_by_core=cpu5 79 frames 20.16 ms | cpu4 63 frames 19.68 ms | cpu6 36 frames 20.66 ms | cpu7 36 frames 21.63 ms | cpu0 20 frames 21.84 ms | cpu1 4 frames 31.85 ms | cpu2 1 frames 53.07 ms | cpu3 1 frames 20.73 ms
+[2026-10-17 18:09:25.297423] cpuvk_cpu_clocks=cpu0 1.69/1.80 GHz | cpu1 1.69/1.80 GHz | cpu2 1.69/1.80 GHz | cpu3 1.69/1.80 GHz | cpu4 1.69/1.80 GHz | cpu5 1.69/1.80 GHz | cpu6 1.69/1.80 GHz | cpu7 1.69/1.80 GHz
+[2026-10-17 18:09:25.297433] cpuvk_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+[2026-10-17 18:09:25.297441] cpuvk_failed_checks=no_frame_stalled the_typical_frame_is_inside_its_budget 
+[2026-10-17 18:09:25.297448] cpuvk_total_pss_kb=131075
+[2026-10-17 18:09:25.297456] cpuvk_total_rss_kb=
+[2026-10-17 18:09:25.297464] cpuhint_cold_start_ms=337 337 329 
+[2026-10-17 18:09:25.297471] cpuhint_suite=FAIL
+[2026-10-17 18:09:25.297479] cpuhint_frame_time=median 36.792188ms, worst 58.045624ms, budget 16.666668ms (240 samples)
+[2026-10-17 18:09:25.297487] cpuhint_frame_stages=medians ms: scale 0.07 plan 0.00 cpu 31.53 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.37 present 3.73
+[2026-10-17 18:09:25.297495] cpuhint_frame_stages_p95=p95 ms: scale 0.10 plan 0.00 cpu 38.96 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.57 present 5.03
+[2026-10-17 18:09:25.297513] cpuhint_worst_frame=work 58.05 ms, outside the renderer 1.49 ms, on cpu5; stages ms: scale 0.08 plan 0.00 cpu 51.46 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.34 present 4.67
+[2026-10-17 18:09:25.297522] cpuhint_startup_stages=before run 282 ms | app setup 0.4 | event loop started 0.0 | resumed 35.4 | window created 0.0 | present ready 0.7 | accessibility and show 0.0 | tree built 8.2 | window ready 0.5 | until first draw 0.1 | app before-frame hooks 0.0 | first build and layout 8.9 | first raster and present 156.1 = 492.9 ms from process start
+[2026-10-17 18:09:25.297531] cpuhint_raster_by_core=cpu2 96 frames 30.88 ms | cpu5 71 frames 31.40 ms | cpu7 23 frames 31.62 ms | cpu0 18 frames 36.36 ms | cpu4 14 frames 32.74 ms | cpu6 13 frames 32.27 ms | cpu3 5 frames 32.61 ms
+[2026-10-17 18:09:25.297544] cpuhint_cpu_clocks=cpu0 1.80/1.80 GHz | cpu1 1.80/1.80 GHz | cpu2 1.80/1.80 GHz | cpu3 1.80/1.80 GHz | cpu4 1.80/1.80 GHz | cpu5 1.80/1.80 GHz | cpu6 1.80/1.80 GHz | cpu7 1.80/1.80 GHz
+[2026-10-17 18:09:25.297553] cpuhint_perf_hint=unavailable (Android 12 or older: no APerformanceHint)
+[2026-10-17 18:09:25.297561] cpuhint_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+[2026-10-17 18:09:25.297569] cpuhint_failed_checks=the_typical_frame_is_inside_its_budget 
+[2026-10-17 18:09:25.297577] cpuhint_total_pss_kb=79925
+[2026-10-17 18:09:25.297584] cpuhint_total_rss_kb=
+[2026-10-17 18:09:25.297592] status=FAIL
+[2026-10-17 18:09:25.297601]  
+[2026-10-17 18:09:25.297609] [DEVICEFARM] ########### Entering phase post_test ###########
+[2026-10-17 18:09:25.297617]  
+[2026-10-17 18:09:25.297625] [DeviceFarm] ls -la $DEVICEFARM_LOG_DIR/vieww || true
+[2026-10-17 18:09:25.301528] total 972
+[2026-10-17 18:09:25.301554] drwxr-xr-x 2 device-farm root   4096 Oct 17 18:09 .
+[2026-10-17 18:09:25.301567] drwxrwxrwx 3         995 1001     19 Oct 17 18:05 ..
+[2026-10-17 18:09:25.301578] -rw-r--r-- 1 device-farm root    546 Oct 17 18:07 auto-am-start.txt
+[2026-10-17 18:09:25.301589] -rw-r--r-- 1 device-farm root    851 Oct 17 18:07 auto-calibration.txt
+[2026-10-17 18:09:25.301599] -rw-r--r-- 1 device-farm root  10687 Oct 17 18:07 auto-logcat.txt
+[2026-10-17 18:09:25.301609] -rw-r--r-- 1 device-farm root   2227 Oct 17 18:07 auto-meminfo.txt
+[2026-10-17 18:09:25.301619] -rw-r--r-- 1 device-farm root 163329 Oct 17 18:07 auto-screen.png
+[2026-10-17 18:09:25.301628] -rw-r--r-- 1 device-farm root   4771 Oct 17 18:07 auto-suite.log
+[2026-10-17 18:09:25.301638] -rw-r--r-- 1 device-farm root    546 Oct 17 18:05 cpu-am-start.txt
+[2026-10-17 18:09:25.301647] -rw-r--r-- 1 device-farm root  10712 Oct 17 18:06 cpu-logcat.txt
+[2026-10-17 18:09:25.301657] -rw-r--r-- 1 device-farm root   2227 Oct 17 18:06 cpu-meminfo.txt
+[2026-10-17 18:09:25.301666] -rw-r--r-- 1 device-farm root 163583 Oct 17 18:06 cpu-screen.png
+[2026-10-17 18:09:25.301676] -rw-r--r-- 1 device-farm root   4795 Oct 17 18:06 cpu-suite.log
+[2026-10-17 18:09:25.301685] -rw-r--r-- 1 device-farm root    546 Oct 17 18:08 cpuhint-am-start.txt
+[2026-10-17 18:09:25.301696] -rw-r--r-- 1 device-farm root  10995 Oct 17 18:09 cpuhint-logcat.txt
+[2026-10-17 18:09:25.301705] -rw-r--r-- 1 device-farm root   2227 Oct 17 18:09 cpuhint-meminfo.txt
+[2026-10-17 18:09:25.301715] -rw-r--r-- 1 device-farm root 163829 Oct 17 18:09 cpuhint-screen.png
+[2026-10-17 18:09:25.301724] -rw-r--r-- 1 device-farm root   4830 Oct 17 18:09 cpuhint-suite.log
+[2026-10-17 18:09:25.301733] -rw-r--r-- 1 device-farm root    546 Oct 17 18:08 cpuvk-am-start.txt
+[2026-10-17 18:09:25.301742] -rw-r--r-- 1 device-farm root  13006 Oct 17 18:08 cpuvk-logcat.txt
+[2026-10-17 18:09:25.301752] -rw-r--r-- 1 device-farm root   2458 Oct 17 18:08 cpuvk-meminfo.txt
+[2026-10-17 18:09:25.301761] -rw-r--r-- 1 device-farm root 162753 Oct 17 18:08 cpuvk-screen.png
+[2026-10-17 18:09:25.301771] -rw-r--r-- 1 device-farm root   4845 Oct 17 18:08 cpuvk-suite.log
+[2026-10-17 18:09:25.301780] -rw-r--r-- 1 device-farm root    546 Oct 17 18:06 gpu-am-start.txt
+[2026-10-17 18:09:25.301789] -rw-r--r-- 1 device-farm root  12898 Oct 17 18:06 gpu-logcat.txt
+[2026-10-17 18:09:25.301798] -rw-r--r-- 1 device-farm root   2458 Oct 17 18:06 gpu-meminfo.txt
+[2026-10-17 18:09:25.301808] -rw-r--r-- 1 device-farm root 165006 Oct 17 18:06 gpu-screen.png
+[2026-10-17 18:09:25.301817] -rw-r--r-- 1 device-farm root   4767 Oct 17 18:06 gpu-suite.log
+[2026-10-17 18:09:25.301826] -rw-r--r-- 1 device-farm root   9310 Oct 17 18:09 result.txt
+[2026-10-17 18:09:25.337224]  
+[2026-10-17 18:09:25.337268] [DEVICEFARM] ########### Finish executing testspec ###########
+[2026-10-17 18:09:25.337285]  
+[2026-10-17 18:09:25.340720] [DEVICEFARM] ########### Setting upload permissions ###########
+[2026-10-17 18:09:25.340745]  
+[2026-10-17 18:09:25.342126]  

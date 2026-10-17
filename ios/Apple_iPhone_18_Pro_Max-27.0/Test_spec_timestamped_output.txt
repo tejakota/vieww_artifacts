@@ -1,0 +1,126 @@
+[2026-10-17 18:09:19.903291] [DEVICEFARM] ########### Start executing testspec ###########
+[2026-10-17 18:09:19.903385]  
+[2026-10-17 18:09:19.906424]  
+[2026-10-17 18:09:19.906448] [DEVICEFARM] ########### Entering phase install ###########
+[2026-10-17 18:09:19.906461]  
+[2026-10-17 18:09:19.906475] [DeviceFarm] devicefarm-cli use appium 2 || true
+[2026-10-17 18:09:20.720588] [DeviceFarm] devicefarm-cli use python 3.12 || true
+[2026-10-17 18:09:20.815849] [DeviceFarm] xcodebuild -version
+[2026-10-17 18:09:20.963038] Xcode 27.0
+[2026-10-17 18:09:20.963127] Build version 27A266a
+[2026-10-17 18:09:20.965092] [DeviceFarm] appium driver list --installed 2>&1 | head -20 || true
+[2026-10-17 18:09:21.310209] - Listing installed drivers
+[2026-10-17 18:09:21.310323] ✔ Listing installed drivers
+[2026-10-17 18:09:21.310427] - [33mxcuitest[39m@[33m9.10.5[39m [32m[installed (npm)][39m
+[2026-10-17 18:09:21.310616]  
+[2026-10-17 18:09:21.310892] [DEVICEFARM] ########### Entering phase pre_test ###########
+[2026-10-17 18:09:21.311011]  
+[2026-10-17 18:09:21.311097] [DeviceFarm] xcrun devicectl list devices || true
+[2026-10-17 18:09:21.451148] Running devicectl with elevated privileges via sudo is unlikely to work properly. Please do not do this.
+[2026-10-17 18:09:21.525144] Name         Hostname   Identifier                         State       Model                            Reality 
+[2026-10-17 18:09:21.525269] ----------   --------   --------------------------------   ---------   ------------------------------   --------
+[2026-10-17 18:09:21.525294] J37KRFVQ69              00008160-0019308611600036 (UDID)   connected   iPhone 18 Pro Max (iPhone19,3)   physical
+[2026-10-17 18:09:21.525841] [DeviceFarm] xcrun xctrace list devices 2>&1 | head -20 || true
+[2026-10-17 18:09:23.828591] == Devices ==
+[2026-10-17 18:09:23.828775] 7c982912bf20 (0D307ED5-3FFC-5AB5-9FE1-1CE5679DECE3)
+[2026-10-17 18:09:23.828850] J37KRFVQ69 (27.0) (00008160-0019308611600036)
+[2026-10-17 18:09:23.828981] 
+[2026-10-17 18:09:23.829032] == Simulators ==
+[2026-10-17 18:09:23.829062] iPad (A16) Simulator (26.5) (9CCF2A96-9BC4-4782-82E9-4D5C2779BE9D)
+[2026-10-17 18:09:23.829087] iPad (A16) Simulator (27.0) (17822BBA-CCB5-495E-B046-800D48C749B9)
+[2026-10-17 18:09:23.829209] iPad Air 11-inch (M4) Simulator (26.5) (04D1278A-AFF4-481C-A8EC-C86977CF1888)
+[2026-10-17 18:09:23.829233] iPad Air 11-inch (M4) Simulator (27.0) (4CA13D6A-D0AB-4A72-B354-414B341CD696)
+[2026-10-17 18:09:23.829258] iPad Air 13-inch (M4) Simulator (26.5) (CFC06CC9-542E-43B7-AC73-4745C19F3253)
+[2026-10-17 18:09:23.829336] iPad Air 13-inch (M4) Simulator (27.0) (D13D5BC9-036F-4F47-A018-A13C92F57699)
+[2026-10-17 18:09:23.829356] iPad Pro 11-inch (M5) Simulator (26.5) (2D3A60B5-B230-447D-9633-5037416A5BE1)
+[2026-10-17 18:09:23.829372] iPad Pro 11-inch (M5) Simulator (27.0) (26F33173-5FCD-4C16-948B-1D2F3CA864A2)
+[2026-10-17 18:09:23.829386] iPad Pro 13-inch (M5) Simulator (26.5) (34D95E30-8BC9-46D4-847C-874E8CC187BA)
+[2026-10-17 18:09:23.829423] iPad Pro 13-inch (M5) Simulator (27.0) (777BA635-CFC9-4609-B39D-30AF869B5A99)
+[2026-10-17 18:09:23.829437] iPad mini (A17 Pro) Simulator (26.5) (150E874E-CD15-4B03-91BF-6EC9B3D7F039)
+[2026-10-17 18:09:23.829450] iPad mini (A17 Pro) Simulator (27.0) (60E643FE-50D5-4EA1-BE07-C41712BF67BE)
+[2026-10-17 18:09:23.829468] iPhone 17 Simulator (26.5) (FA0AF611-C22E-4139-BAA8-0C8BF385C3F8)
+[2026-10-17 18:09:23.829476] iPhone 17 Simulator (27.0) (F2A0D9D8-61D4-493C-97E8-D2A8D631DF23)
+[2026-10-17 18:09:23.829485] iPhone 17 Pro Simulator (26.5) (14F0250A-1FA1-4113-A348-57BC406EA4EF)
+[2026-10-17 18:09:23.833162] [DeviceFarm] echo "udid=$DEVICEFARM_DEVICE_UDID os=$DEVICEFARM_DEVICE_OS_VERSION" || true
+[2026-10-17 18:09:23.833195] udid=00008160-0019308611600036 os=27.0
+[2026-10-17 18:09:23.833208]  
+[2026-10-17 18:09:23.833259] [DEVICEFARM] ########### Entering phase test ###########
+[2026-10-17 18:09:23.833280]  
+[2026-10-17 18:09:23.833292] [DeviceFarm] bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-ios.sh
+[2026-10-17 18:09:33.873040] run-ios: appium session 094c5548-e93e-4a27-ae71-e814bdf4ef3a
+[2026-10-17 18:10:55.993566] device_name=00008160-0019308611600036
+[2026-10-17 18:10:55.993627] ios=27.0
+[2026-10-17 18:10:55.993642] model=
+[2026-10-17 18:10:55.993654] ipa_bytes=4779612
+[2026-10-17 18:10:55.993665] bundle_id=dev.vieww.demo
+[2026-10-17 18:10:55.993675] route=devicectl
+[2026-10-17 18:10:55.993684] appium_session=094c5548-e93e-4a27-ae71-e814bdf4ef3a
+[2026-10-17 18:10:55.993694] cpu_first_frame_ms=256.0 275.0 278.0
+[2026-10-17 18:10:55.993703] cpu_tap_targets=scale=3 button=66,225 field=87,319
+[2026-10-17 18:10:55.993713] cpu_suite=PASS
+[2026-10-17 18:10:55.993722] cpu_frame_time=median 5.227166ms, worst 10.545542ms, budget 8.333334ms (240 samples)
+[2026-10-17 18:10:55.993732] cpu_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 3.62 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.12 present 1.27
+[2026-10-17 18:10:55.993741] cpu_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 4.69 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.16 present 3.33
+[2026-10-17 18:10:55.993750] cpu_worst_frame=work 10.55 ms, outside the renderer 0.38 ms; stages ms: scale 0.02 plan 0.00 cpu 7.56 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.21 present 2.37
+[2026-10-17 18:10:55.993761] cpu_startup_stages=before run 8 ms | app setup 2.0 | event loop started 82.1 | resumed 166.7 | window created 5.5 | present ready 0.1 | accessibility and show 0.1 | tree built 1.1 | window ready 2.7 | until first draw 0.7 | app before-frame hooks 0.0 | first build and layout 0.7 | first raster and present 10.9 = 280.4 ms from process start
+[2026-10-17 18:10:55.993770] cpu_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+[2026-10-17 18:10:55.993778] cpu_failed_checks=
+[2026-10-17 18:10:55.993798] gpu_first_frame_ms=946.0 291.0 292.0
+[2026-10-17 18:10:55.993806] gpu_tap_targets=scale=3 button=66,225 field=87,319
+[2026-10-17 18:10:55.993816] gpu_suite=PASS
+[2026-10-17 18:10:55.993823] gpu_frame_time=median 8.120667ms, worst 19.048041ms, budget 8.333334ms (240 samples)
+[2026-10-17 18:10:55.993831] gpu_frame_stages=medians ms: scale 0.03 plan 0.18 cpu 0.00 gpu_upload 0.01 gpu_record 0.01 gpu_submit 5.51 gpu_wait 1.80 gpu_readback 0.00 acquire 0.03 present 0.03
+[2026-10-17 18:10:55.993839] gpu_frame_stages_p95=p95 ms: scale 0.05 plan 0.26 cpu 0.00 gpu_upload 0.03 gpu_record 0.02 gpu_submit 14.01 gpu_wait 3.97 gpu_readback 0.00 acquire 0.04 present 0.06
+[2026-10-17 18:10:55.993846] gpu_worst_frame=work 19.05 ms, outside the renderer 0.17 ms; stages ms: scale 0.02 plan 0.09 cpu 0.00 gpu_upload 0.01 gpu_record 0.00 gpu_submit 16.85 gpu_wait 1.86 gpu_readback 0.00 acquire 0.01 present 0.04
+[2026-10-17 18:10:55.993854] gpu_startup_stages=before run 8 ms | app setup 2.0 | event loop started 76.0 | resumed 176.9 | window created 5.8 | present ready 7.2 | accessibility and show 0.1 | tree built 1.0 | window ready 2.8 | until first draw 1.4 | app before-frame hooks 0.0 | first build and layout 0.7 | first raster and present 14.0 = 296.1 ms from process start
+[2026-10-17 18:10:55.993862] gpu_pipeline_cache=started from 41701 bytes; saved 41701 bytes after the first GPU frame
+[2026-10-17 18:10:55.993870] gpu_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+[2026-10-17 18:10:55.993878] gpu_failed_checks=
+[2026-10-17 18:10:55.993885] auto_first_frame_ms=282.0 274.0 282.0
+[2026-10-17 18:10:55.993893] auto_tap_targets=scale=3 button=66,225 field=87,319
+[2026-10-17 18:10:55.993900] auto_suite=PASS
+[2026-10-17 18:10:55.993908] auto_frame_time=median 3.023751ms, worst 11.040375ms, budget 8.333334ms (240 samples)
+[2026-10-17 18:10:55.993915] auto_frame_stages=medians ms: scale 0.01 plan 0.00 cpu 1.61 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.06 present 1.29
+[2026-10-17 18:10:55.993923] auto_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 3.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.14 present 3.23
+[2026-10-17 18:10:55.993934] auto_worst_frame=work 11.04 ms, outside the renderer 0.17 ms; stages ms: scale 0.02 plan 0.00 cpu 4.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.25 present 5.83
+[2026-10-17 18:10:55.993941] auto_startup_stages=before run 9 ms | app setup 2.0 | event loop started 89.9 | resumed 170.2 | window created 4.2 | present ready 0.2 | accessibility and show 0.1 | tree built 0.8 | window ready 2.3 | until first draw 0.9 | app before-frame hooks 0.0 | first build and layout 0.6 | first raster and present 9.4 = 289.5 ms from process start
+[2026-10-17 18:10:55.993948] auto_renderer_choice=cpu (calibrated earlier: cpu 2.58 ms)
+[2026-10-17 18:10:55.993955] auto_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+[2026-10-17 18:10:55.993962] auto_failed_checks=
+[2026-10-17 18:10:55.993969] status=PASS
+[2026-10-17 18:10:55.993984]  
+[2026-10-17 18:10:55.993992] [DEVICEFARM] ########### Entering phase post_test ###########
+[2026-10-17 18:10:55.993998]  
+[2026-10-17 18:10:55.994005] [DeviceFarm] ls -la $DEVICEFARM_LOG_DIR/vieww || true
+[2026-10-17 18:10:55.997985] total 2096
+[2026-10-17 18:10:55.998025] drwxr-xr-x  25 device-farm  wheel     800 Oct 17 18:10 .
+[2026-10-17 18:10:55.998040] drwxrwxrwx   3 rwx          wheel      96 Oct 17 18:09 ..
+[2026-10-17 18:10:55.998050] -rw-r--r--   1 device-farm  wheel       0 Oct 17 18:09 appium-session.err
+[2026-10-17 18:10:55.998059] -rw-r--r--   1 device-farm  wheel   64377 Oct 17 18:10 appium.log
+[2026-10-17 18:10:55.998066] -rw-r--r--   1 device-farm  wheel  225219 Oct 17 18:10 auto-start-1.txt
+[2026-10-17 18:10:55.998074] -rw-r--r--   1 device-farm  wheel  240493 Oct 17 18:10 auto-start-2.txt
+[2026-10-17 18:10:55.998081] -rw-r--r--   1 device-farm  wheel  234179 Oct 17 18:10 auto-start-3.txt
+[2026-10-17 18:10:55.998088] -rw-r--r--@  1 device-farm  wheel    3328 Oct 17 18:10 auto-suite-report.txt
+[2026-10-17 18:10:55.998095] -rw-r--r--   1 device-farm  wheel    8367 Oct 17 18:10 auto-suite.log
+[2026-10-17 18:10:55.998103] -rw-r--r--   1 device-farm  wheel     195 Oct 17 18:10 auto-taps.log
+[2026-10-17 18:10:55.998110] -rw-r--r--   1 device-farm  wheel   19569 Oct 17 18:09 cpu-start-1.txt
+[2026-10-17 18:10:55.998116] -rw-r--r--   1 device-farm  wheel   17049 Oct 17 18:09 cpu-start-2.txt
+[2026-10-17 18:10:55.998123] -rw-r--r--   1 device-farm  wheel    9753 Oct 17 18:09 cpu-start-3.txt
+[2026-10-17 18:10:55.998130] -rw-r--r--@  1 device-farm  wheel    3265 Oct 17 18:09 cpu-suite-report.txt
+[2026-10-17 18:10:55.998137] -rw-r--r--   1 device-farm  wheel    8198 Oct 17 18:09 cpu-suite.log
+[2026-10-17 18:10:55.998144] -rw-r--r--   1 device-farm  wheel     195 Oct 17 18:09 cpu-taps.log
+[2026-10-17 18:10:55.998151] -rw-r--r--   1 device-farm  wheel    6435 Oct 17 18:09 device-info.txt
+[2026-10-17 18:10:55.998158] -rw-r--r--   1 device-farm  wheel   25042 Oct 17 18:09 gpu-start-1.txt
+[2026-10-17 18:10:55.998164] -rw-r--r--   1 device-farm  wheel   25983 Oct 17 18:10 gpu-start-2.txt
+[2026-10-17 18:10:55.998171] -rw-r--r--   1 device-farm  wheel   13057 Oct 17 18:10 gpu-start-3.txt
+[2026-10-17 18:10:55.998189] -rw-r--r--@  1 device-farm  wheel    3380 Oct 17 18:10 gpu-suite-report.txt
+[2026-10-17 18:10:55.998201] -rw-r--r--   1 device-farm  wheel   15201 Oct 17 18:10 gpu-suite.log
+[2026-10-17 18:10:55.998211] -rw-r--r--   1 device-farm  wheel     130 Oct 17 18:10 gpu-taps.log
+[2026-10-17 18:10:55.998221] -rw-r--r--   1 device-farm  wheel    3853 Oct 17 18:10 result.txt
+[2026-10-17 18:10:55.998230] -rw-r--r--   1 device-farm  wheel      33 Oct 17 18:09 xcode.txt
+[2026-10-17 18:10:56.005333]  
+[2026-10-17 18:10:56.005363] [DEVICEFARM] ########### Finish executing testspec ###########
+[2026-10-17 18:10:56.005373]  
+[2026-10-17 18:10:56.012031] [DEVICEFARM] ########### Setting upload permissions ###########
+[2026-10-17 18:10:56.012054]  
+[2026-10-17 18:10:56.028698]  

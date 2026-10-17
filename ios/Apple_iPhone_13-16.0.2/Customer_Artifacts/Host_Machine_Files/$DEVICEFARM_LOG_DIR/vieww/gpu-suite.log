@@ -1,0 +1,952 @@
+tap_ios: session d363201e-dcb3-4566-9729-e5131f942a6c, app launched after 3.0s
+        "dev.vieww.demo"
+Oct 17 11:09:05 PDX640610152 testmanagerd[1266] <Notice>: Terminating dev.vieww.demo
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Received termination request from [anon<testmanagerd>:1266] on <RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">> with context <RBSTerminateContext| explanation:Terminating for automation testing. reportType:None maxTerminationResistance:Absolute>
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Executing termination request for: <RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">>
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1270] Workspace connection invalidated.
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1270] Terminating with context: <RBSTerminateContext| explanation:Terminating for automation testing. reportType:None maxTerminationResistance:Absolute>
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1270] Now flagged as pending exit for reason: workspace client connection invalidated
+Oct 17 11:09:05 PDX640610152 backboardd(IOKit)[64] <Notice>: Connection removed: IOHIDEventSystemConnection uuid:0FE5210A-FA78-4609-B72D-FACAC21E9AFC pid:1270 process:vieww type:Passive entitlements:0x0 caller:BackBoardServices: <redacted> + 280 attributes:{
+    bundleID = "dev.vieww.demo";
+Oct 17 11:09:05 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: Removing client connection <BKHIDClientConnection: 0x104b411f0; IOHIDEventSystemConnectionRef: 0x104b46860; vpid: 1270(vD80); taskPort: 0x48603; bundleID: dev.vieww.demo> for client: IOHIDEventSystemConnection uuid:0FE5210A-FA78-4609-B72D-FACAC21E9AFC pid:1270 process:vieww type:Passive entitlements:0x0 caller:BackBoardServices: <redacted> + 280 attributes:{
+    bundleID = "dev.vieww.demo";
+Oct 17 11:09:05 PDX640610152 SpringBoard(KeyboardArbiter)[32] <Error>: Advisor: No handle found for currently focused PID: 1270; sceneIdentity: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1270] terminate_with_reason() success
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: XPC connection invalidated: [application<dev.vieww.demo>:1270]
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1789 (target:[application<dev.vieww.demo>:1270](UIHostedWindow:d3d34f41)) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:05 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: new resolutions for pid:1270 (<keyboardFocus; pid: 1270; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>)
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: XPC connection invalidated: [application<dev.vieww.demo>:1270]
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1270] termination reported by launchd (15, 0, 9)
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removing process: [application<dev.vieww.demo>:1270]
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Error>: RBSStateCapture remove item called for untracked item <RBConnectionClient| 1270 name:application<dev.vieww.demo> entitlements:<RBEntitlements| [
+	<RBSInheritance| environment:UIScene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default name:com.apple.frontboard.visibility origID:31-32-1753 payload>,
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removing launch job for: [application<dev.vieww.demo>:1270]
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removed job for [application<dev.vieww.demo>:1270]
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removing assertions for terminated process: [application<dev.vieww.demo>:1270]
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removed last relative-start-date-defining assertion for process application<dev.vieww.demo>
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: none (role: None)
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: none (role: None)
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1270] Process exited: <RBSProcessExitContext| specific, status:<RBSProcessExitStatus| domain:runningboard(15) code:0>>.
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1270] Setting process task state to: Not Running
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1270] Setting process visibility to: Unknown
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1270] Invalidating workspace.
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Removing source registration for processHandle: [application<dev.vieww.demo>:1270]
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c378e0:(FBSceneManager):sceneID:dev.vieww.demo-default] Invalidated for workspace: 0x283006050.
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Removing: <FBApplicationProcess: 0x100c3da90; application<dev.vieww.demo>:1270(vD80)>
+Oct 17 11:09:05 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Process exited: <FBApplicationProcess: 0x100c3da90; application<dev.vieww.demo>:1270(vD80)> -> <RBSProcessExitContext| specific, status:<RBSProcessExitStatus| domain:runningboard(15) code:0>>
+Oct 17 11:09:05 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Application process state changed for dev.vieww.demo: (null)
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from {(tn    t"sceneID:dev.vieww.demo-defaultt"tn)} to {(tn)}",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from {(tn    t"dev.vieww.demot"tn)} to {(tn)}"
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from nil to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from nil to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from nil to dev.vieww.demo",
+Oct 17 11:09:05 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: didRemoveExternalForegroundApplicationSceneHandle pid:1270 scene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default now:<empty>
+Oct 17 11:09:05 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: target changed from:<pid=1270 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> to (null)
+Oct 17 11:09:05 PDX640610152 locationd[69] <Notice>: {"msg":"#CLIUA Marking change", "clientKey":"dev.vieww.demo", "reason":"Process state from RunningBoard", "assertionLevel":5, "coming":0}
+Oct 17 11:09:05 PDX640610152 locationd[69] <Notice>: {"msg":"computing freshAuthorizationContext", "ClientKey":"dev.vieww.demo", "BigSwitch":1, "InUseLevel":{"type":"decode failure","raw value":0,"expected type":"Generic"}}
+Oct 17 11:09:05 PDX640610152 mediaserverd(CMCapture)[35] <Notice>: <<<< FigCaptureDisplayLayoutMonitor >>>> -[FigCaptureDisplayLayoutMonitor _parseDisplayLayout:]: <FigCaptureDisplayLayoutMonitor: 0x109747e20 Main Display> <FBSDisplayLayout: 0x102347b70; displayIdentity: Main> {    bounds = {{0, 0}, {390, 844}};    interfaceOrientation = "portrait (1)";    backlightLevel = 100;    elements = {        <SBSDisplayLayoutElement: 0x1023e3020; com.apple.springboard.home-screen; frame: {{0, 0}, {390, 844}}; level: 0; role: primary>;        <SBSDisplayLayoutElement: 0x1023de000; sceneID:dev.vieww.demo-default; bundleID: dev.vieww.demo; frame: {{0, 0}, {390, 844}}; level: 1; role: primary>;    }    timestamp = October 17, 2026 at 11:09:05 AM PDT;}
+Oct 17 11:09:05 PDX640610152 mediaserverd(CMCapture)[35] <Notice>: <<<< FigCaptureDisplayLayoutMonitor >>>> -[FigCaptureDisplayLayoutMonitor _updateObserversWithLayout:]: <FigCaptureDisplayLayoutMonitor: 0x109747e20 Main Display> <FigCaptureDisplayLayout: 0x102742f20 10-17-2026 11:09:05, Main Display, foreground:[dev.vieww.demo]>
+Oct 17 11:09:05 PDX640610152 SpringBoard(UIKitCore)[32] <Notice>: No longer tracking: <FBScene: 0x28321dc80; FBSceneManager:sceneID:dev.vieww.demo-default>
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Created: <FBSceneSnapshotAction: 0x282817c00; sceneID:dev.vieww.demo-default>
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [sceneID:dev.vieww.demo-default] scene content state changed: notReady
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting 1270 from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "FBSceneSnapshotAction:sceneID:dev.vieww.demo-default" ID:31-32-1794 target:1270 attributes:[
+Oct 17 11:09:05 PDX640610152 backboardd[64] <Notice>: new scene host settings: contextID:DAB0D75C <sceneID:dev.vieww.demo-default> unspecified -> inactive
+Oct 17 11:09:05 PDX640610152 backboardd[64] <Notice>: new scene host settings: contextID:2310DC09 <sceneID:dev.vieww.demo-default> unspecified -> inactive
+Oct 17 11:09:05 PDX640610152 backboardd[64] <Notice>: new scene host settings: contextID:0 <sceneID:dev.vieww.demo-default> unspecified -> inactive
+Oct 17 11:09:05 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] dev.vieww.demo application state changed to Terminated
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Client provider invalidated: <FBWorkspace: 0x283006050; application<dev.vieww.demo>>
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Invalidating scene: sceneID:dev.vieww.demo-default
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Invalidating: <FBSceneSnapshotAction: 0x282817c00; sceneID:dev.vieww.demo-default>
+Oct 17 11:09:05 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] Ignore becoming background for application without push registration
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [sceneID:dev.vieww.demo-default][1] Scene invalidated.
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Got response for <FBSceneSnapshotAction: 0x282817c00; sceneID:dev.vieww.demo-default>: <NSError: 0x28081fc00; domain: BSActionErrorDomain; code: 6 (anulled)>
+Oct 17 11:09:05 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: keyboardFocus environment target removed from scene: sceneID:dev.vieww.demo-default
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Error>: Ignoring update for invalidated scene: sceneID:dev.vieww.demo-default
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Error>: Scene FBSceneManager/sceneID:dev.vieww.demo-default update failed: <NSError: 0x280b00660; domain: FBSceneErrorDomain; code: 1 (operation-failed); reason: "Scene update failed."> {
+Oct 17 11:09:05 PDX640610152 SpringBoard(FrontBoard)[32] <Error>: Scene FBSceneManager/sceneID:dev.vieww.demo-default update failed: <NSError: 0x2808418f0; domain: FBSceneErrorDomain; code: 1 (operation-failed); reason: "Scene update failed."> {
+Oct 17 11:09:05 PDX640610152 testmanagerd[1266] <Notice>: Process monitor update handler invoked for dev.vieww.demo
+Oct 17 11:09:05 PDX640610152 testmanagerd[1266] <Notice>: Computed display ID dev.vieww.demo from embeddedApplicationIdentifier: dev.vieww.demo, xpcServiceIdentifier: (null), bundleID: dev.vieww.demo
+Oct 17 11:09:05 PDX640610152 testmanagerd[1266] <Notice>: <XCTDProcessMonitor: 0x1076051e0> passing update dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1270 state: not running to <XCTDProcessManagementServicesProvider: 0x107604fd0>
+Oct 17 11:09:05 PDX640610152 testmanagerd[1266] <Notice>: <XCTestSession: 0x107604c20> pid 1267 dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1270 state: not running
+Oct 17 11:09:05 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: -[WiFiUserInteractionMonitor setApplicationRunningState:foregroundState:andNetworkingState:forBundleId:]: dev.vieww.demo exited
+Oct 17 11:09:05 PDX640610152 bluetoothd(CoreUtils)[91] <Notice>: SystemUI unknown identifier: 'sceneID:dev.vieww.demo-default' / 'dev.vieww.demo'
+Oct 17 11:09:05 PDX640610152 symptomsd(SymptomEvaluator)[142] <Notice>: dev.vieww.demo: Foreground: false
+Oct 17 11:09:05 PDX640610152 symptomsd(SymptomEvaluator)[142] <Error>: COSMCtrl _foregroundAppActivity incoming bundle dev.vieww.demo has nil supplied UUID, finds existing 3BC5F689-500E-3484-8C80-14F1922F420B
+Oct 17 11:09:05 PDX640610152 symptomsd(SymptomEvaluator)[142] <Notice>: Failed to find process for dev.vieww.demo
+Oct 17 11:09:05 PDX640610152 runningboardd(RunningBoard)[31] <Error>: RBSStateCapture remove item called for untracked item 31-32-1789 (target:[application<dev.vieww.demo>:1270](UIHostedWindow:d3d34f41))
+Oct 17 11:09:06 PDX640610152 testmanagerd[1266] <Notice>: Launching dev.vieww.demo
+    "VIEWW_GPU" = 1;
+Oct 17 11:09:06 PDX640610152 testmanagerd(FrontBoardServices)[1266] <Notice>: [FBSSystemService][0x3ede] Sending request to open "dev.vieww.demo"
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [FBSystemService][0x3ede] Received request to open "dev.vieww.demo" from testmanagerd:1266.
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Received trusted open application request for "dev.vieww.demo" from <FBProcess: 0x1009d56a0; anon<testmanagerd>:1266(vD76)>.
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Executing request: <SBMainWorkspaceTransitionRequest: 0x283568510; eventLabel: OpenApplication(sceneID:dev.vieww.demo-default)ForRequester(testmanagerd.1266); display: Main; source: FBSystemService>
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [FBWorkspaceEvent] Executing: <FBWorkspaceEvent: 0x28019b860; OpenApplication(sceneID:dev.vieww.demo-default)ForRequester(testmanagerd.1266)>
+    "sceneID:dev.vieww.demo-default" = 1;
+<SBMainWorkspaceTransitionRequest: 0x283568510; eventLabel: OpenApplication(sceneID:dev.vieww.demo-default)ForRequester(testmanagerd.1266); display: Main; source: FBSystemService> {
+        SBLayoutRolePrimary = <SBDeviceApplicationSceneEntity: 0x2812cd080; ID: sceneID:dev.vieww.demo-default; layoutRole: primary>;
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Asked to bootstrap a new process with identity: application<dev.vieww.demo>
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Creating process (sync=true) with identity: application<dev.vieww.demo>
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Created <FBWorkspace: 0x283005ef0; application<dev.vieww.demo>>
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Bootstrapping application<dev.vieww.demo> with intent foreground-interactive
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting application<dev.vieww.demo> from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "FBApplicationProcess" ID:31-32-1796 target:application<dev.vieww.demo> attributes:[
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1796 (target:application<dev.vieww.demo>) will be created as active
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Executing launch request for application<dev.vieww.demo> (FBApplicationProcess)
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Creating and launching job for: application<dev.vieww.demo>
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: _mutateContextIfNeeded called for dev.vieww.demo
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: application<dev.vieww.demo>: -[RBPersonaManager personaForIdentity:context:personaUID:personaUniqueString:] required 0.004053 ms; 0.000000 ms in UserManagement (wallclock not cpu times); resolved to {1000, D994BD43-BD7C-4E45-9FEB-9F2C59D99DD5}
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: 'application<dev.vieww.demo>' Skipping container path lookup because containerization was prevented (<RBSLaunchContext: 0x129f651f0>)
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: 'application<dev.vieww.demo>' Constructed job description (context <RBSLaunchContext: 0x129f651f0>):
+	"CFBundleIdentifier" => <string: 0x129f6aa90> { length = 14, contents = "dev.vieww.demo" }
+	"_ResourceCoalition" => <string: 0x129f6aa20> { length = 27, contents = "application<dev.vieww.demo>" }
+		"VIEWW_GPU" => <string: 0x129f493b0> { length = 1, contents = "1" }
+				"EAI" => <string: 0x129e68620> { length = 14, contents = "dev.vieww.demo" }
+	"Label" => <string: 0x129e0f810> { length = 48, contents = "UIKitApplication:dev.vieww.demo[1997][rb-legacy]" }
+		0: <string: 0x129f3d2c0> { length = 87, contents = "/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app/vieww" }
+	"Program" => <string: 0x129f5c970> { length = 87, contents = "/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app/vieww" }
+Oct 17 11:09:06 PDX640610152 kernel(Sandbox)[0] <Notice>: /private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app/vieww[1272] ==> container
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from {(tn)} to {(tn    t"sceneID:dev.vieww.demo-defaultt"tn)}",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from {(tn)} to {(tn    t"dev.vieww.demot"tn)}"
+Oct 17 11:09:06 PDX640610152 kernel(Sandbox)[0] <Error>: 1 duplicate report for Sandbox: vieww(1270) deny(2) file-test-existence /private/etc/fonts
+Oct 17 11:09:06 PDX640610152 kernel(Sandbox)[0] <Error>: Sandbox: vieww(1272) deny(1) sysctl-read kern.bootargs
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] Memory Limits: active 2098 inactive 2098
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] This process will be managed.
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Now tracking process: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from sceneID:dev.vieww.demo-default to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from dev.vieww.demo to nil",
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from sceneID:dev.vieww.demo-default to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from dev.vieww.demo to nil",
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from sceneID:dev.vieww.demo-default to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from dev.vieww.demo to nil",
+    "associatedSceneIdentifiersToSuppressInSystemAperture: {(tn    t"sceneID:dev.vieww.demo-defaultt"tn)}",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: {(tn    t"dev.vieww.demot"tn)}"
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from sceneID:dev.vieww.demo-default to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: dev.vieww.demo",
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from sceneID:dev.vieww.demo-default to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: dev.vieww.demo",
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from sceneID:dev.vieww.demo-default to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: dev.vieww.demo",
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Using default underlying assertion for app: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "RB Underlying Assertion" ID:31-31-1797 target:1272 attributes:[
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-31-1797 (target:[application<dev.vieww.demo>:1272]) will be created as active
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Successfully acquired underlying assertion for [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 kernel[0] <Notice>: memorystatus: set assertion priority(100) target vieww:1272
+Oct 17 11:09:06 PDX640610152 powerd[45] <Notice>: Process runningboardd.31 Created SystemIsActive "application<dev.vieww.demo>31-32-1796:FBApplicationProcess" age:00:00:00  id:51539641076 [System: PrevIdle SysAct]
+<SBSceneReadySwitcherModifierEvent: 0x28074bb00; type: SceneReady; appLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main> {
+        sceneID:dev.vieww.demo-default = <SBDisplayItemLayoutAttributes: 0x282cfc540; contentOrientation: "portrait (1)"; lastInteractionTime: 139047; sizingPolicy: maximized; size: unspecified; center: unspecified; occlusionState: unknown; userConfiguredSizeBeforeOverlapping: unspecified; fullyOccludedPeekingCenter: unspecified>;
+    continuousExposeIdentifier = dev.vieww.demo;
+            bundleIdentifier = dev.vieww.demo;
+            uniqueIdentifier = sceneID:dev.vieww.demo-default;
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] Set jetsam priority to 100 [0] flag[1]
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Asked to bootstrap a new process with identity: application<dev.vieww.demo>
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] Resuming task.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: A pending process already exists with this identity: <FBApplicationProcess: 0x100d380a0; application<dev.vieww.demo>:1272(vD85)>
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] Set darwin role to: UserInteractiveFocal
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Bootstrap success!
+Oct 17 11:09:06 PDX640610152 SpringBoard(RunningBoardServices)[32] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Setting process task state to: Running
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Inactive (2098)
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Setting process visibility to: Foreground
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] reported to RB as running
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:06 PDX640610152 SpringBoard(RunningBoardServices)[32] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Registering event dispatcher at connect
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Initial launch assertion state: ForegroundFocal.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Adding: <FBApplicationProcess: 0x100d380a0; application<dev.vieww.demo>:1272(vD85)>
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Did not create create a new process with application<dev.vieww.demo>: A pending process already exists with this identity.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c63670:(FBSceneManager):sceneID:dev.vieww.demo-default] Initialized with workspace: 0x283005ef0.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Registered new scene: <FBUIApplicationWorkspaceScene: 0x283c63670; (FBSceneManager):sceneID:dev.vieww.demo-default> (fromRemnant = 0)
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [sceneID:dev.vieww.demo-default][1] Scene activated.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Workspace interruption policy did change: reconnect
+Oct 17 11:09:06 PDX640610152 SpringBoard(UIKitCore)[32] <Notice>: Now tracking: <FBScene: 0x2832133c0; FBSceneManager:sceneID:dev.vieww.demo-default>
+Oct 17 11:09:06 PDX640610152 SpringBoard(UIKitCore)[32] <Notice>: [sceneID:dev.vieww.demo-default] Setting deactivation reasons to: 'systemAnimation' for reason: scene settings update - settings are eligible for deactivation reasons.
+Oct 17 11:09:06 PDX640610152 testmanagerd(FrontBoardServices)[1266] <Notice>: [FBSSystemService][0x3ede] Request successful: <BSProcessHandle: 0x105825cf0; vieww:1272; valid: YES>
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.frontboard.after-life.interrupted" ID:31-32-1798 target:1272 attributes:[
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1798 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as originator process has not exited
+Oct 17 11:09:06 PDX640610152 mediaserverd(CMCapture)[35] <Notice>: <<<< FigCaptureDisplayLayoutMonitor >>>> -[FigCaptureDisplayLayoutMonitor _parseDisplayLayout:]: <FigCaptureDisplayLayoutMonitor: 0x109747e20 Main Display> <FBSDisplayLayout: 0x1041a54d0; displayIdentity: Main> {    bounds = {{0, 0}, {390, 844}};    interfaceOrientation = "portrait (1)";    backlightLevel = 100;    elements = {        <SBSDisplayLayoutElement: 0x1041a5560; sceneID:dev.vieww.demo-default; bundleID: dev.vieww.demo; frame: {{0, 0}, {390, 844}}; level: 1; role: primary>;    }    timestamp = October 17, 2026 at 11:09:06 AM PDT;}
+Oct 17 11:09:06 PDX640610152 mediaserverd(CMCapture)[35] <Notice>: <<<< FigCaptureDisplayLayoutMonitor >>>> -[FigCaptureDisplayLayoutMonitor _updateObserversWithLayout:]: <FigCaptureDisplayLayoutMonitor: 0x109747e20 Main Display> <FigCaptureDisplayLayout: 0x10414d7d0 10-17-2026 11:09:06, Main Display, foreground:[dev.vieww.demo]>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: didAddExternalForegroundApplicationSceneHandle pid:1272 scene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default now:<recentPIDs: [1272]; recentSceneIdentityTokensByPID: {1272: [com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default]}>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: MRU target:<pid=1272 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: now generation: 494; keyboardFocusTarget: <token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default; pid: 1272>; recentlyUsedScenes: <recentPIDs: [1272]; recentSceneIdentityTokensByPID: {1272: [com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default]}>; selectionPolicy: KeyboardArbiter; shouldSuppressRemoteDeferring: 0
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [sceneID:dev.vieww.demo-default] scene content state changed: preparing
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c63670:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene lifecycle state did change: Foreground
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c63670:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene assertion state did change: ForegroundFocal.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Launch assertion supersedes update of workspace assertion to ForegroundFocal.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Workspace assertion state did change: ForegroundFocal (acquireAssertion = NO).
+<SBTransitionSwitcherModifierEvent: 0x100a07620; type: MainTransition; transitionID: 7528948D-163D-48C4-ABFF-D6EB6D4BD957; phase: Prepare; animated: YES; fromAppLayout: 0x0; toAppLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>; fromEnvironmentMode: home-screen; toEnvironmentMode: application; pendingTermination: {(
+	    <SBIconOverlayVisibilitySwitcherEventResponse: 0x281ddb280; visible: YES; appLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>>;
+	    <SBIconViewVisibilitySwitcherEventResponse: 0x282756490; visible: NO; animationSettings: 0x0; appLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>>;
+Oct 17 11:09:06 PDX640610152 testmanagerd(RunningBoardServices)[1266] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: MRU target:<pid=1272 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: target changed from:(null) to <pid=1272 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: defer (com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard) -> <pid=1272 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+    <environment: keyboardFocus; token: com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard> -> <pid: 1272; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> reason: "299-defer: S
+Oct 17 11:09:06 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: new resolutions for pid:1272 (<keyboardFocus; pid: 1272; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>)
+Oct 17 11:09:06 PDX640610152 vieww(libMobileGestalt.dylib)[1272] <Notice>: Cache loaded with 5220 pre-cached in CacheData and 56 items in CacheExtra.
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Initializing connection
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Removing all cached process handles
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Creating new assertion because there is no existing background assertion.
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Creating new background assertion
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Sending handshake request attempt #1 to server
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Created new background assertion <BKSProcessAssertion: 0x2808543c0>
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Creating connection to com.apple.runningboard
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason added: 10; deactivation reasons: 0 -> 1024; animating application lifecycle event: 0
+Oct 17 11:09:06 PDX640610152 vieww(BoardServices)[1272] <Notice>: activating monitor for service com.apple.frontboard.open
+Oct 17 11:09:06 PDX640610152 vieww(BoardServices)[1272] <Notice>: activating monitor for service com.apple.frontboard.workspace-service
+Oct 17 11:09:06 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: FBSWorkspace connecting to endpoint : <private>
+Oct 17 11:09:06 PDX640610152 backboardd(IOKit)[64] <Notice>: Connection added: IOHIDEventSystemConnection uuid:16BF0CD3-00D6-4F6F-997C-1835FCCCAAAC pid:1272 process:vieww type:Passive entitlements:0x0 caller:BackBoardServices: <redacted> + 280 attributes:{
+    bundleID = "dev.vieww.demo";
+Oct 17 11:09:06 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: Adding client connection: <BKHIDClientConnection: 0x104e905c0; IOHIDEventSystemConnectionRef: 0x104e8cd80; vpid: 1272(vD85); taskPort: 0x46573; bundleID: dev.vieww.demo> for client: IOHIDEventSystemConnection uuid:16BF0CD3-00D6-4F6F-997C-1835FCCCAAAC pid:1272 process:vieww type:Passive entitlements:0x0 caller:BackBoardServices: <redacted> + 280 attributes:{
+    bundleID = "dev.vieww.demo";
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Setting client for [application<dev.vieww.demo>:1272] as ready
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "Shared Background Assertion 0 for dev.vieww.demo" ID:31-1272-1799 target:1272 attributes:[
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1799 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+<SBTransitionSwitcherModifierEvent: 0x11422d060; type: MainTransition; transitionID: 7528948D-163D-48C4-ABFF-D6EB6D4BD957; phase: Animate; animated: YES; fromAppLayout: 0x0; toAppLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>; fromEnvironmentMode: home-screen; toEnvironmentMode: application; pendingTermination: {(
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Connection established.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Connection to remote process established!
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c63670:(FBSceneManager):sceneID:dev.vieww.demo-default] Sending scene action [Logical Activate][0x423c] to process 0x100d380a0 (watchdog: 19.98s)
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c63670:(FBSceneManager):sceneID:dev.vieww.demo-default] Sending scene create.
+Oct 17 11:09:06 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: FBSWorkspace registering source: <private>
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Handshake succeeded
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Identity resolved as application<dev.vieww.demo>
+Oct 17 11:09:06 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: FBSWorkspace connected to endpoint : <private>
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Incrementing reference count for background assertion <private>
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Added observer for process assertions expiration warning: <_RBSExpirationWarningClient: 0x282b55f00>
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Created background task <private>.
+Oct 17 11:09:06 PDX640610152 testmanagerd[1266] <Notice>: Process monitor update handler invoked for dev.vieww.demo
+Oct 17 11:09:06 PDX640610152 testmanagerd[1266] <Notice>: Computed display ID dev.vieww.demo from embeddedApplicationIdentifier: dev.vieww.demo, xpcServiceIdentifier: (null), bundleID: dev.vieww.demo
+Oct 17 11:09:06 PDX640610152 UserEventAgent(RunningBoardServices)[29] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 vieww(libAccessibility.dylib)[1272] <Notice>: Read CategoryName: per-app = 1, category name = (null)
+Oct 17 11:09:06 PDX640610152 testmanagerd[1266] <Notice>: <XCTDProcessMonitor: 0x1076051e0> passing update dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1272 state: running foreground to <XCTDProcessManagementServicesProvider: 0x107604fd0>
+Oct 17 11:09:06 PDX640610152 vieww(libAccessibility.dylib)[1272] <Notice>: Read CategoryName: per-app = 0, category name = UICTContentSizeCategoryL
+Oct 17 11:09:06 PDX640610152 testmanagerd[1266] <Notice>: <XCTestSession: 0x107604c20> pid 1267 dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1272 state: running foreground
+Oct 17 11:09:06 PDX640610152 dasd(RunningBoardServices)[75] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Application process state changed for dev.vieww.demo: <SBApplicationProcessState: 0x280180260; pid: 1272; taskState: Running; visibility: Foreground>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: keyboardFocus environment target added to scene: sceneID:dev.vieww.demo-default
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Application process state changed for dev.vieww.demo: <SBApplicationProcessState: 0x280183720; pid: 1272; taskState: Running; visibility: Foreground>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoardFoundation)[32] <Notice>: SceneWorkspace[0x281279e40-com.apple.SpringBoard.SceneWorkspace.OverlayUI] client did connect with handshake: <FBSceneClientHandshake:0x280181180; [application<dev.vieww.demo>:1272] remnants=0>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoardFoundation)[32] <Notice>: SceneWorkspace[0x28127a180-com.apple.SpringBoard.SceneWorkspace.DruidUI] client did connect with handshake: <FBSceneClientHandshake:0x280181180; [application<dev.vieww.demo>:1272] remnants=0>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoardFoundation)[32] <Notice>: SceneWorkspace[0x28127adc0-com.apple.SpringBoard.SceneWorkspace.FullKeyboardAccessUI] client did connect with handshake: <FBSceneClientHandshake:0x280181180; [application<dev.vieww.demo>:1272] remnants=0>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoardFoundation)[32] <Notice>: SceneWorkspace[0x28127b080-com.apple.SpringBoard.SceneWorkspace.VoiceControlUI] client did connect with handshake: <FBSceneClientHandshake:0x280181180; [application<dev.vieww.demo>:1272] remnants=0>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoardFoundation)[32] <Notice>: SceneWorkspace[0x28127b5c0-com.apple.SpringBoard.SceneWorkspace.AccessibilityUIServerUI] client did connect with handshake: <FBSceneClientHandshake:0x280181180; [application<dev.vieww.demo>:1272] remnants=0>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoardFoundation)[32] <Notice>: SceneWorkspace[0x28127b340-com.apple.SpringBoard.SceneWorkspace.AssistiveTouchUI] client did connect with handshake: <FBSceneClientHandshake:0x280181180; [application<dev.vieww.demo>:1272] remnants=0>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoardFoundation)[32] <Notice>: SceneWorkspace[0x28127aac0-com.apple.SpringBoard.SceneWorkspace.LiveTranscriptionUI] client did connect with handshake: <FBSceneClientHandshake:0x280181180; [application<dev.vieww.demo>:1272] remnants=0>
+Oct 17 11:09:06 PDX640610152 mediaserverd(RunningBoardServices)[35] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] Foreground app will not request ephemeral notifications isAppClip: NO wantsEphemeral notifications: NO
+Oct 17 11:09:06 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] dev.vieww.demo application state changed to ForegroundRunning
+Oct 17 11:09:06 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] Ignore becoming foreground for application without push registration
+Oct 17 11:09:06 PDX640610152 kbd(RunningBoardServices)[394] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 watchdogd(RunningBoardServices)[58] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 symptomsd(RunningBoardServices)[142] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 backboardd(RunningBoardServices)[64] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 wifid(RunningBoardServices)[49] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 aggregated(RunningBoardServices)[81] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 itunesstored(RunningBoardServices)[197] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 chronod(ChronoCore)[130] <Notice>: Reloading descriptors for 0 extensions in container dev.vieww.demo with reason: reload descriptors requested by client
+Oct 17 11:09:06 PDX640610152 useractivityd(RunningBoardServices)[231] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 contextstored(RunningBoardServices)[63] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 locationd(RunningBoardServices)[69] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 locationd[69] <Notice>: {"msg":"#CLIUA Marking change", "clientKey":"dev.vieww.demo", "reason":"Process state from RunningBoard", "assertionLevel":5, "coming":1}
+Oct 17 11:09:06 PDX640610152 locationd[69] <Notice>: {"msg":"computing freshAuthorizationContext", "ClientKey":"dev.vieww.demo", "BigSwitch":1, "InUseLevel":{"type":"decode failure","raw value":5,"expected type":"Generic"}}
+Oct 17 11:09:06 PDX640610152 WirelessRadioManagerd(RunningBoardServices)[47] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 bluetoothd(CoreUtils)[91] <Notice>: SystemUI unknown identifier: 'sceneID:dev.vieww.demo-default' / 'dev.vieww.demo'
+Oct 17 11:09:06 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: -[WiFiUserInteractionMonitor setApplicationRunningState:foregroundState:andNetworkingState:forBundleId:]: dev.vieww.demo entered foreground
+Oct 17 11:09:06 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: WifiDeviceManagerCatsWhitelistedApp: CATS en0:  deviceManager:0x10182b600 FgApp:dev.vieww.demo stateChange:1 whitelisted=1
+Oct 17 11:09:06 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: WiFiDeviceManagerCatsSetLowLatencyApp: CATSUpdate en0: fgApp:dev.vieww.demo b=0x0 rc=0
+Oct 17 11:09:06 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: WiFiDeviceManagerCatsSetForegroundApp: CATSUpdate en0: fgApp:dev.vieww.demo hs=0 t=1 wl=1 rc=1
+Oct 17 11:09:06 PDX640610152 symptomsd(SymptomEvaluator)[142] <Notice>: dev.vieww.demo: Foreground: true
+Oct 17 11:09:06 PDX640610152 symptomsd(SymptomEvaluator)[142] <Notice>: Failed to find process for dev.vieww.demo
+Oct 17 11:09:06 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: [FBSDisplaySource 1-1] silently connecting raw configuration: (null)
+Oct 17 11:09:06 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: [FBSDisplaySource 1-1] silently connecting raw configuration: <FBSDisplayConfiguration: 0x2814480f0; Main; mode: "390x844@3x 60Hz p3 SDR">
+Oct 17 11:09:06 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: [FBSDisplaySource 1-1] initialized <FBSDisplayConfiguration: 0x2814480f0; Main; mode: "390x844@3x 60Hz p3 SDR">
+Oct 17 11:09:06 PDX640610152 vieww(AXMediaUtilities)[1272] <Notice>: Display settings after update from FB configuration: AXMDisplay<0x28004ce70>: Backing:FrontBoardServices (dynamic) Name:LCD scale:3 size:[1170.00 2532.00] orientation:0 (AXMPhysicalDisplayOrientationPortrait) refBounds:[0.00 0.00 390.00 844.00] deepColor:1
+Oct 17 11:09:06 PDX640610152 vieww(AXMediaUtilities)[1272] <Notice>: Display settings after update from CADisplay.mainDisplay: AXMDisplay<0x28004d110>: Backing:CoreAnimation Name:LCD scale:3 size:[1170.00 2532.00] orientation:0 (AXMPhysicalDisplayOrientationPortrait) refBounds:[0.00 0.00 390.00 844.00] deepColor:0
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: Registering for test daemon availability notify post.
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: notify_get_state check indicated test daemon not ready.
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: Test daemon availability confirmed via notify_get_state.
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: notify_get_state check indicated test daemon not ready.
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: Received request for endpoint.
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: Attempting to load <private>.
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Selected display: name=LCD (primary), id=1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason added: 5; deactivation reasons: 1024 -> 1056; animating application lifecycle event: 1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: [0x280042920] Initialized with scene: <UIWindowScene: 0x157e05730>; behavior: <_UIEventDeferringBehavior_Default: 0x282b70660>
+Oct 17 11:09:06 PDX640610152 vieww(BacklightServices)[1272] <Notice>: 0x2825c09c0 setDelegate:<0x282b70340 _UIBacklightEnvironment> hasDelegate:YES for environment:sceneID:dev.vieww.demo-default
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Ignoring already applied deactivation reason: 5; deactivation reasons: 1056
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason added: 11; deactivation reasons: 1056 -> 3104; animating application lifecycle event: 1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason removed: 10; deactivation reasons: 3104 -> 2080; animating application lifecycle event: 1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason added: 12; deactivation reasons: 2080 -> 6176; animating application lifecycle event: 1
+Oct 17 11:09:06 PDX640610152 SpringBoard(RunningBoardServices)[32] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M32-9 qos:25 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.apple.springboard">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.apple.WallpaperKit.CollectionsPoster">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0>
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason removed: 11; deactivation reasons: 6176 -> 4128; animating application lifecycle event: 1
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c63670:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene action [Logical Activate][0x423c] completed with success: 1
+Oct 17 11:09:06 PDX640610152 vieww(AggregateDictionary)[1272] <Notice>: AggregateDictionary is deprecated and has been removed. Please migrate to Core Analytics.
+Oct 17 11:09:06 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [sceneID:dev.vieww.demo-default] scene content state changed: ready
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Ending background task with UIBackgroundTaskIdentifier: 1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Ending task with identifier 1 and description: <private>, _expireHandler: (null)
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Decrementing reference count for assertion <private> (used by background task with identifier 1: <private>)
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <private>: Will invalidate assertion: <BKSProcessAssertion: 0x2808543c0> for task identifier: 1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+<SBSceneReadySwitcherModifierEvent: 0x280197160; type: SceneReady; appLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main> {
+        sceneID:dev.vieww.demo-default = <SBDisplayItemLayoutAttributes: 0x282cfc540; contentOrientation: "portrait (1)"; lastInteractionTime: 139047; sizingPolicy: maximized; size: unspecified; center: unspecified; occlusionState: unknown; userConfiguredSizeBeforeOverlapping: unspecified; fullyOccludedPeekingCenter: unspecified>;
+    continuousExposeIdentifier = dev.vieww.demo;
+            bundleIdentifier = dev.vieww.demo;
+            uniqueIdentifier = sceneID:dev.vieww.demo-default;
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1799 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272](UIScene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default) from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "injecting inherited from "UIScene:com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard" to 1272<UIScene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>" ID:31-32-1800 target:1272<UIScene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> attributes:[
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1800 (target:[application<dev.vieww.demo>:1272](UIScene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default)) will be created as active
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: [0x280042920] Scene target of event deferring environments did update: scene: 0x157e05730; current systemShellManagesKeyboardFocus: 1; systemShellManagesKeyboardFocusForScene: 1; eligibleForRecordRemoval: 1;
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Scene became target of keyboard event deferring environment: UIWindowScene: 0x157e05730; scene identity: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Key window needs update: 0; currentKeyWindowScene: 0x0; evaluatedKeyWindowScene: 0x157e05730; currentApplicationKeyWindow: 0x0; evaluatedApplicationKeyWindow: 0x0; reason: UIWindowScene: 0x157e05730: Window scene became target of keyboard environment
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:09:06 PDX640610152 vieww(AutomationMode)[1272] <Notice>: XAM shared observer connecting to com.apple.dt.automationmode.reader
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: Sending anonymous endpoint.
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: Setting up target listener.
+Oct 17 11:09:06 PDX640610152 vieww(XCTTargetBootstrap)[1272] <Notice>: Received client to target connection.
+Oct 17 11:09:06 PDX640610152 vieww(AutomationMode)[1272] <Notice>: Returning 1 for enabled state
+Oct 17 11:09:06 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to exchange capabilities, remote interface capabilities are: <private>
+Oct 17 11:09:06 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 10s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:06 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:06 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:06 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:06 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:06 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:06 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+Oct 17 11:09:06 PDX640610152 SpringBoard(UIKitCore)[32] <Notice>: [sceneID:dev.vieww.demo-default] Setting deactivation reasons to: '(none)' for reason: updateAllScenesForBand - Assertion removed.
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason removed: 12; deactivation reasons: 4128 -> 32; animating application lifecycle event: 1
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Deactivation reason removed: 5; deactivation reasons: 32 -> 0; animating application lifecycle event: 0
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Creating side-channel connection to com.apple.runningboard
+Oct 17 11:09:06 PDX640610152 vieww(RunningBoardServices)[1272] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1801 target:1272 attributes:[
+Oct 17 11:09:06 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1801 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <UIWindowScene: 0x157e05730> (A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1) Scene updated orientation preferences: none -> ( Pu )
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Key window API is scene-level: YES
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: UIWindowScene: 0x157e05730: Window became key in scene: WinitUIWindow: 0x155d06c00; contextId: 0xF08939FA: reason: UIWindowScene: 0x157e05730: Window requested to become key in scene: 0x155d06c00
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Key window needs update: 1; currentKeyWindowScene: 0x0; evaluatedKeyWindowScene: 0x157e05730; currentApplicationKeyWindow: 0x0; evaluatedApplicationKeyWindow: 0x155d06c00; reason: UIWindowScene: 0x157e05730: Window requested to become key in scene: 0x155d06c00
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Window did become application key: WinitUIWindow: 0x155d06c00; contextId: 0xF08939FA; scene identity: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:09:06 PDX640610152 vieww(UIKitCore)[1272] <Notice>: [0x280042920] Begin local event deferring requested for token: 0x28085a670; environments: 1; reason: UIWindowScene: 0x157e05730: Begin event deferring in keyboardFocus for window: 0x155d06c00
+Oct 17 11:09:06 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: new deferring rules for pid:1272: [<environment: keyboardFocus; display: builtin; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> -> <pid: 1272; token: 0xF08939FA> reason: "1-defer: UIWindowScene: 0x157e05730: Begin event deferring in keyboardFocus for window: 0x155d06c00"]
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: advisor: gen:494 arbiter spec pid 1272 / com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: advisor: target (from arbiter advice): <pid=1272 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: input target:<pid=1272 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:09:06 PDX640610152 vieww(libCoreFSCache.dylib)[1272] <Error>: fopen failed for data file: errno = 2 (No such file or directory)
+Oct 17 11:09:06 PDX640610152 vieww(libCoreFSCache.dylib)[1272] <Error>: Errors found! Invalidating cache...
+Oct 17 11:09:06 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Verify background audio activity for dev.vieww.demo, Recording: 0
+Oct 17 11:09:07 PDX640610152 vieww(Metal)[1272] <Error>: Warning: <private>
+Oct 17 11:09:07 PDX640610152 kernel(Sandbox)[0] <Error>: Sandbox: vieww(1272) deny(2) file-test-existence /private/etc/fonts
+Oct 17 11:09:07 PDX640610152 vieww(CoreAnalytics)[1272] <Notice>: Received configuration update from daemon (initial)
+Oct 17 11:09:07 PDX640610152 vieww(HangTracer)[1272] <Notice>: Hang detected: 0.29s (always-on hang reporting)
+Oct 17 11:09:07 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Target list changed: <CADisplay:LCD primary>
+Oct 17 11:09:07 PDX640610152 vieww(Metal)[1272] <Error>: Warning: <private>
+<SBTransitionSwitcherModifierEvent: 0x100b046c0; type: MainTransition; transitionID: 7528948D-163D-48C4-ABFF-D6EB6D4BD957; phase: Complete; animated: YES; fromAppLayout: 0x0; toAppLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>; fromEnvironmentMode: home-screen; toEnvironmentMode: application; pendingTermination: {(
+		    <SBIconOverlayVisibilitySwitcherEventResponse: 0x281dc42c0; visible: NO; appLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>>;
+		    <SBIconViewVisibilitySwitcherEventResponse: 0x282746210; visible: YES; animationSettings: 0x0; appLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>>;
+		    <SBMatchMoveToIconViewSwitcherEventResponse: 0x281dc41c0; active: NO; appLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>>;
+Oct 17 11:09:07 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Front display did change: <SBApplication: 0x283e29180; dev.vieww.demo>
+Oct 17 11:09:07 PDX640610152 vieww(Metal)[1272] <Error>: Warning: <private>
+Oct 17 11:09:07 PDX640610152 vieww(libCoreFSCache.dylib)[1272] <Error>: fopen failed for data file: errno = 2 (No such file or directory)
+Oct 17 11:09:07 PDX640610152 vieww(libCoreFSCache.dylib)[1272] <Error>: Errors found! Invalidating cache...
+Oct 17 11:09:07 PDX640610152 mediaserverd(CMCapture)[35] <Notice>: <<<< FigCaptureDisplayLayoutMonitor >>>> -[FigCaptureDisplayLayoutMonitor _parseDisplayLayout:]: <FigCaptureDisplayLayoutMonitor: 0x109747e20 Main Display> <FBSDisplayLayout: 0x1041a2f90; displayIdentity: Main> {    bounds = {{0, 0}, {390, 844}};    interfaceOrientation = "portrait (1)";    backlightLevel = 100;    elements = {        <SBSDisplayLayoutElement: 0x1041f9f10; sceneID:dev.vieww.demo-default; bundleID: dev.vieww.demo; frame: {{0, 0}, {390, 844}}; level: 1; role: primary>;    }    timestamp = October 17, 2026 at 11:09:07 AM PDT;}
+Oct 17 11:09:07 PDX640610152 mediaserverd(CMCapture)[35] <Notice>: <<<< FigCaptureDisplayLayoutMonitor >>>> -[FigCaptureDisplayLayoutMonitor _updateObserversWithLayout:]: <FigCaptureDisplayLayoutMonitor: 0x109747e20 Main Display> <FigCaptureDisplayLayout: 0x10270c400 10-17-2026 11:09:07, Main Display, foreground:[dev.vieww.demo]>
+Oct 17 11:09:07 PDX640610152 bluetoothd(CoreUtils)[91] <Notice>: SystemUI unknown identifier: 'sceneID:dev.vieww.demo-default' / 'dev.vieww.demo'
+Oct 17 11:09:07 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: __WiFiLQAMgrLogStats(5F0164E671:Stationary): Rssi: -54 {-54 0} Channel: 161 Bandwidth: 20Mhz Snr: 27 Cca: 22 (S:0 O:0 I:0) TxPer: 0.0% (3) BcnPer: 0.0% (1, 52.9%) RxFrms: 6 RxRetryFrames: 0 TxRate: 200000 RxRate: 200000 FBRate: 120000 TxFwFrms: 9 TxFwFail: 0 TxReTrans: 0 time: 23728.7secs fgApp: dev.vieww.demo
+Oct 17 11:09:07 PDX640610152 vieww[1272] <Notice>: __VIEWW_TAPS__ button=197,634 field=260,915 menu=286,2292
+Oct 17 11:09:07 PDX640610152 vieww[1272] <Notice>: __VIEWW_TAPS_PT__ scale=3 button=66,211 field=87,305
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1801 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:07 PDX640610152 vieww(HangTracer)[1272] <Notice>: Hang detected: 0.33s (always-on hang reporting)
+Oct 17 11:09:07 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: [FBSDisplaySource 1-5] silently connecting raw configuration: (null)
+Oct 17 11:09:07 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: [FBSDisplaySource 1-5] silently connecting raw configuration: <FBSDisplayConfiguration: 0x28144d1d0; Main; mode: "390x844@3x 60Hz p3 SDR">
+Oct 17 11:09:07 PDX640610152 vieww(FrontBoardServices)[1272] <Notice>: [FBSDisplaySource 1-5] initialized <FBSDisplayConfiguration: 0x28144d1d0; Main; mode: "390x844@3x 60Hz p3 SDR">
+Oct 17 11:09:07 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Now acquiring workspace assertion with state: ForegroundFocal.
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "FBWorkspace (ForegroundFocal)" ID:31-32-1804 target:1272 attributes:[
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1804 (target:[application<dev.vieww.demo>:1272]) will be created as active
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:07 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1272] Dropping launch assertion.
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1796 (target:application<dev.vieww.demo>) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:07 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:07 PDX640610152 powerd[45] <Notice>: Process runningboardd.31 Released SystemIsActive "application<dev.vieww.demo>31-32-1796:FBApplicationProcess" age:00:00:01  id:51539641076 [System: PrevIdle SysAct]
+tap_ios: tap round 1 sent
+Oct 17 11:09:07 PDX640610152 vieww(AccessibilityUtilities)[1272] <Notice>: Setting client identifier com.apple.accessibility.AXSytemReplyServer-1272-0
+Oct 17 11:09:07 PDX640610152 vieww(libsystem_containermanager.dylib)[1272] <Notice>: Requesting container lookup; class = 13, identifier = <private>, group_identifier = <private>, create = 1, temp = 0, euid = 501, uid = 501
+Oct 17 11:09:07 PDX640610152 vieww(libsystem_containermanager.dylib)[1272] <Notice>: Query; euid = 501, uid = 501, query = <private>
+Oct 17 11:09:07 PDX640610152 vieww(libsystem_containermanager.dylib)[1272] <Notice>: container_query_get_single_result: success
+Oct 17 11:09:07 PDX640610152 vieww(libsystem_containermanager.dylib)[1272] <Notice>: container_system_group_path_for_identifier: success
+Oct 17 11:09:07 PDX640610152 vieww(ManagedConfiguration)[1272] <Notice>: Got system group container path from MCM for systemgroup.com.apple.configurationprofiles: /private/var/containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles
+Oct 17 11:09:07 PDX640610152 pasted(RunningBoardServices)[344] <Notice>: Hit the server for a process handle fe41ea000004f8 that resolved to: [application<dev.vieww.demo>:1272]
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:07 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:07 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:07 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:07 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:07 PDX640610152 vieww(CallKit)[1272] <Notice>: Call host has no calls
+Oct 17 11:09:07 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:07 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:07 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:08 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Reloading input views for: <AccessKitSubclassOfWinitUIView: 0x155d05620> force: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Updating mode. Haptics: supported. Haptics: disabled. Ringer: on. Sound: enabled. Mode: audio only
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: [Interface Orientation] was:Interface Unknown now:UIInterfaceOrientationPortrait reason:Using key window scene
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: (null)
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: (null)
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a441e0>; (empty)>
+Oct 17 11:09:08 PDX640610152 vieww(PrototypeTools)[1272] <Notice>: Not observing PTDefaults on customer install.
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a4aa80>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1805 target:1272 attributes:[
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1805 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1806 target:1272 attributes:[
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1806 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272](UIHostedWindow:23c677b9) from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "injecting inherited from "UIScene:com.apple.frontboard.systemappservices::FBSceneManager:com.apple.UIKit.remote-keyboard" to 1272<UIHostedWindow:23c677b9>" ID:31-32-1807 target:1272<UIHostedWindow:23c677b9> attributes:[
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a4aa80>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1807 (target:[application<dev.vieww.demo>:1272](UIHostedWindow:23c677b9)) will be created as active
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: -[_UIKBFeedbackGenerator activateWithCompletionBlock:]
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Preheating System Sounds.
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:08 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1272(vieww), flag 1, ssid 1104
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a4aa80>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a4ab20>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a4ab20>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: -[_UIRemoteKeyboardPlaceholderView refreshPlaceholder]  refreshPlaceholder: size={390, 233}
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a4ab20>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting start notifications: UIKeyboardWillShowNotification {
+Oct 17 11:09:08 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1806 (target:[application<dev.vieww.demo>:1272]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:08 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1805 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:08 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:08 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:09 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Remote touch surface type has been initialized to: Unknown
+Oct 17 11:09:09 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Remote microphone capability has been initialized to: NO
+Oct 17 11:09:09 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting end notifications: UIKeyboardDidShowNotification {
+Oct 17 11:09:09 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+tap_ios: tap round 2 sent
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Reloading input views for: <(null): 0x0> force: 0
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a50820>; (empty)>
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a51d60>; (empty)>
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting start notifications: UIKeyboardWillHideNotification {
+Oct 17 11:09:10 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1809 target:1272 attributes:[
+Oct 17 11:09:10 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1809 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:10 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1810 target:1272 attributes:[
+Oct 17 11:09:10 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1810 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:10 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1810 (target:[application<dev.vieww.demo>:1272]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:10 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1272(vieww), flag 0, ssid 1104
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Cooling System Sounds.
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:10 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1809 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:10 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:10 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:10 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1807 (target:[application<dev.vieww.demo>:1272](UIHostedWindow:23c677b9)) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a51d60>; (empty)>
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting end notifications: UIKeyboardDidHideNotification {
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a50820>; (empty)>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Reloading input views for: <AccessKitSubclassOfWinitUIView: 0x155d05620> force: 0
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: (null)
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a50dc0>; (empty)>
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1811 target:1272 attributes:[
+Oct 17 11:09:11 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1272(vieww), flag 1, ssid 1104
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1811 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1812 target:1272 attributes:[
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1812 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272](UIHostedWindow:32829e73) from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "injecting inherited from "UIScene:com.apple.frontboard.systemappservices::FBSceneManager:com.apple.UIKit.remote-keyboard" to 1272<UIHostedWindow:32829e73>" ID:31-32-1813 target:1272<UIHostedWindow:32829e73> attributes:[
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1813 (target:[application<dev.vieww.demo>:1272](UIHostedWindow:32829e73)) will be created as active
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a50a00>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a50a00>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: -[_UIKBFeedbackGenerator activateWithCompletionBlock:]
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Preheating System Sounds.
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1812 (target:[application<dev.vieww.demo>:1272]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a50f00>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a50f00>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: -[_UIRemoteKeyboardPlaceholderView refreshPlaceholder]  refreshPlaceholder: size={390, 233}
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting start notifications: UIKeyboardWillShowNotification {
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:11 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1811 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:11 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:11 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting end notifications: UIKeyboardDidShowNotification {
+Oct 17 11:09:11 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+Oct 17 11:09:12 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: __WiFiLQAMgrLogStats(5F0164E671:Stationary): Rssi: -54 {-54 0} Channel: 161 Bandwidth: 20Mhz Snr: 27 Cca: 22 (S:0 O:0 I:0) TxPer: 0.0% (6) BcnPer: 0.0% (49, 52.9%) RxFrms: 6 RxRetryFrames: 0 TxRate: 200000 RxRate: 200000 FBRate: 120000 TxFwFrms: 13 TxFwFail: 1 TxReTrans: 0 time: 23733.7secs fgApp: dev.vieww.demo
+tap_ios: tap round 3 sent
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Reloading input views for: <(null): 0x0> force: 0
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5a580>; (empty)>
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1815 target:1272 attributes:[
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1815 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5a4e0>; (empty)>
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1816 target:1272 attributes:[
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1816 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting start notifications: UIKeyboardWillHideNotification {
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1816 (target:[application<dev.vieww.demo>:1272]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Cooling System Sounds.
+Oct 17 11:09:13 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1272(vieww), flag 0, ssid 1104
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1815 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:13 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1813 (target:[application<dev.vieww.demo>:1272](UIHostedWindow:32829e73)) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5a4e0>; (empty)>
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting end notifications: UIKeyboardDidHideNotification {
+Oct 17 11:09:13 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5a580>; (empty)>
+Oct 17 11:09:13 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:13 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Reloading input views for: <AccessKitSubclassOfWinitUIView: 0x155d05620> force: 0
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: (null)
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a563a0>; (empty)>
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5af80>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1817 target:1272 attributes:[
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1817 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272](UIHostedWindow:834401c0) from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "injecting inherited from "UIScene:com.apple.frontboard.systemappservices::FBSceneManager:com.apple.UIKit.remote-keyboard" to 1272<UIHostedWindow:834401c0>" ID:31-32-1818 target:1272<UIHostedWindow:834401c0> attributes:[
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1818 (target:[application<dev.vieww.demo>:1272](UIHostedWindow:834401c0)) will be created as active
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1819 target:1272 attributes:[
+Oct 17 11:09:14 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1272(vieww), flag 1, ssid 1104
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1819 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5af80>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: -[_UIKBFeedbackGenerator activateWithCompletionBlock:]
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Preheating System Sounds.
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5a9e0>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5a9e0>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: -[_UIRemoteKeyboardPlaceholderView refreshPlaceholder]  refreshPlaceholder: size={390, 233}
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting start notifications: UIKeyboardWillShowNotification {
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1819 (target:[application<dev.vieww.demo>:1272]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:14 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1817 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:14 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:14 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting end notifications: UIKeyboardDidShowNotification {
+Oct 17 11:09:14 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+tap_ios: tap round 4 sent
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:15 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Reloading input views for: <(null): 0x0> force: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5f2a0>; (empty)>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5f200>; (empty)>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting start notifications: UIKeyboardWillHideNotification {
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1821 target:1272 attributes:[
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1821 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1822 target:1272 attributes:[
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1822 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1822 (target:[application<dev.vieww.demo>:1272]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1821 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Cooling System Sounds.
+Oct 17 11:09:16 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1272(vieww), flag 0, ssid 1104
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:16 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1818 (target:[application<dev.vieww.demo>:1272](UIHostedWindow:834401c0)) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5f200>; (empty)>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting end notifications: UIKeyboardDidHideNotification {
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5f2a0>; (empty)>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:16 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Reaping invalid snapshot <XBApplicationSnapshot: 0x114190610; …1DC76732F6F7> [dev.vieww.demo]
+Oct 17 11:09:16 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x114190610; …1DC76732F6F7> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received attributes request for element: <private>. Attributes: <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: about to CFRunLoopPerform
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting with 30.00s responsiveness timeout
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: inside CFRunLoopPerform
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[MT]: MT responded in time (won the race to the busy flag)
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: XCTPerformOnMainRunLoop[not MT]: waiting 60.00s for work to complete
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Fetching AX attributes <private> for <private>
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Got attributes, transferring to dictionary for return.
+Oct 17 11:09:16 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Replying with attribute values: <private>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Reloading input views for: <AccessKitSubclassOfWinitUIView: 0x155d05620> force: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: (null)
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5f7a0>; (empty)>
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [application<dev.vieww.demo>:1272] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1272-1823 target:1272 attributes:[
+Oct 17 11:09:16 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1272(vieww), flag 1, ssid 1104
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1272-1823 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1824 target:1272 attributes:[
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1824 (target:[application<dev.vieww.demo>:1272]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1272](UIHostedWindow:aeaa159c) from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "injecting inherited from "UIScene:com.apple.frontboard.systemappservices::FBSceneManager:com.apple.UIKit.remote-keyboard" to 1272<UIHostedWindow:aeaa159c>" ID:31-32-1825 target:1272<UIHostedWindow:aeaa159c> attributes:[
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1825 (target:[application<dev.vieww.demo>:1272](UIHostedWindow:aeaa159c)) will be created as active
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5b020>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5b020>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: -[_UIKBFeedbackGenerator activateWithCompletionBlock:]
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1272] set Memory Limits to Hard Active (2098)
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1824 (target:[application<dev.vieww.demo>:1272]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:09:16 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1272-1823 (target:[application<dev.vieww.demo>:1272]) from originator [application<dev.vieww.demo>:1272]
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: <_UIKBFeedbackGenerator: 0x280f5db60>: Preheating System Sounds.
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Setting input views: <<UIInputViewSet: 0x281a5a8a0>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOnScreen>
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Change to input view set: <<UIInputViewSet: 0x281a5a8a0>; keyboard = <UIKeyboardAutomatic: 0x155f0c7d0; frame = (0 0; 390 233); opaque = NO; layer = <CALayer: 0x282b287a0>>%; usesKeyClicks = NO;  >
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: -[_UIRemoteKeyboardPlaceholderView refreshPlaceholder]  refreshPlaceholder: size={390, 233}
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting start notifications: UIKeyboardWillShowNotification {
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to windows: 1
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Sending UIEvent type: 0; subtype: 0; to window: <WinitUIWindow: 0x155d06c00>; contextId: 0xF08939FA
+Oct 17 11:09:16 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Evaluating dispatch of UIEvent: 0x2810580d0; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+        vieww.1272 contextID F08939FA: {
+Oct 17 11:09:17 PDX640610152 WebDriverAgentRunner-Runner(WebDriverAgentLib)[1267] <Notice>: Waiting up to 2s until dev.vieww.demo is in idle state (including animations)
+Oct 17 11:09:17 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when the main run loop is idle
+Oct 17 11:09:17 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier finished setting up run loop observer
+Oct 17 11:09:17 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Received request to notify when animations are idle
+Oct 17 11:09:17 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Idle notifier run loop observer fired
+Oct 17 11:09:17 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending main run loop idle reply
+Oct 17 11:09:17 PDX640610152 vieww(UIKitCore)[1272] <Notice>: Posting end notifications: UIKeyboardDidShowNotification {
+Oct 17 11:09:17 PDX640610152 vieww(XCTAutomationSupport)[1272] <Notice>: Sending animations idle reply with error: (null)
+Oct 17 11:09:17 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: __WiFiLQAMgrLogStats(5F0164E671:Stationary): Rssi: -54 {-54 0} Channel: 161 Bandwidth: 20Mhz Snr: 29 Cca: 22 (S:0 O:0 I:0) TxPer: 0.0% (2) BcnPer: 0.0% (49, 52.9%) RxFrms: 2 RxRetryFrames: 0 TxRate: 200000 RxRate: 200000 FBRate: 120000 TxFwFrms: 4 TxFwFail: 0 TxReTrans: 0 time: 23738.7secs fgApp: dev.vieww.demo
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ begin
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   view_metrics_reached_the_tree: 390x844 logical
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   the_display_density_is_plausible: 3x
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   the_safe_area_fits_inside_the_surface: l0 t47 r0 b34
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   safe_area: l0 t47 r0 b34 on a 390x844 surface at 3x
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } on a 844-tall surface
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } at the moment of the report
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   a_tap_reached_a_handler: 1 tap
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   frames_were_presented: 600 frames
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   the_typical_frame_is_inside_its_budget: median 16.170792ms against a budget of 16.666668ms
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   no_frame_stalled: worst 27.140417ms, 21 of 240 over budget
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   frame_time: median 16.170792ms, worst 27.140417ms, budget 16.666668ms (240 samples)
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   startup_stages: before run 12 ms | app setup 0.3 | event loop started 66.4 | resumed 247.1 | window created 20.7 | present ready 263.9 | accessibility and show 0.2 | tree built 1.6 | window ready 0.1 | until first draw 3.4 | app before-frame hooks 0.0 | first build and layout 1.1 | first raster and present 330.0 = 946.7 ms from process start
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   frame_stages: medians ms: scale 0.10 plan 0.48 cpu 0.00 gpu_upload 0.02 gpu_record 0.01 gpu_submit 6.91 gpu_wait 7.62 gpu_readback 0.00 acquire 0.05 present 0.08
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   frame_stages_p95: p95 ms: scale 0.11 plan 0.52 cpu 0.00 gpu_upload 0.03 gpu_record 0.02 gpu_submit 8.53 gpu_wait 8.53 gpu_readback 0.00 acquire 0.07 present 0.10
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   worst_frame: work 27.14 ms, outside the renderer 0.16 ms; stages ms: scale 0.01 plan 0.06 cpu 0.00 gpu_upload 0.01 gpu_record 0.00 gpu_submit 19.12 gpu_wait 7.72 gpu_readback 0.00 acquire 0.01 present 0.04
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   pipeline_cache: started from 0 bytes; saved 41701 bytes after the first GPU frame
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   damage_tracking_costs_a_fraction_of_a_full_repaint: 0.065 full repaints per frame over 600 frames, against a 2962440px surface
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   full_repaints: 3 of 600 frames cost a whole surface, 0 of those after the loop slept
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ ok   the_full_repaint_counter_saw_the_first_frame: 3 full repaint(s) over 600 frames against a 2962440px surface
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   frame_report: 600 frames in 10.21s — 58.7fps (median 16.67ms, worst 35.90ms over 240 continuous); work median 16.17ms, worst 27.14ms; 71 over a 16.67ms budget; rasterised 38.80 full repaints (3 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.10 plan 0.48 cpu 0.00 gpu[upload 0.02 record 0.01 submit 6.91 wait 7.62 readback 0.00] acquire 0.05 present 0.08 ms
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ --   gpu_frames: 600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ end 12 checks, 0 failed
+Oct 17 11:09:17 PDX640610152 vieww[1272] <Notice>: __VIEWW_SUITE__ result PASS
+tap_ios: result PASS

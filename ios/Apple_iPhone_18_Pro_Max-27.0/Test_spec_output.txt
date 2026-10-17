@@ -1,0 +1,128 @@
+[DEVICEFARM] Setting up your device. This usually takes 2-3 minutes.
+[DEVICEFARM] ########### Start executing testspec ###########
+ 
+ 
+[DEVICEFARM] ########### Entering phase install ###########
+ 
+[DeviceFarm] devicefarm-cli use appium 2 || true
+[DeviceFarm] devicefarm-cli use python 3.12 || true
+[DeviceFarm] xcodebuild -version
+Xcode 27.0
+Build version 27A266a
+[DeviceFarm] appium driver list --installed 2>&1 | head -20 || true
+- Listing installed drivers
+✔ Listing installed drivers
+- [33mxcuitest[39m@[33m9.10.5[39m [32m[installed (npm)][39m
+ 
+[DEVICEFARM] ########### Entering phase pre_test ###########
+ 
+[DeviceFarm] xcrun devicectl list devices || true
+Running devicectl with elevated privileges via sudo is unlikely to work properly. Please do not do this.
+Name         Hostname   Identifier                         State       Model                            Reality 
+----------   --------   --------------------------------   ---------   ------------------------------   --------
+J37KRFVQ69              00008160-0019308611600036 (UDID)   connected   iPhone 18 Pro Max (iPhone19,3)   physical
+[DeviceFarm] xcrun xctrace list devices 2>&1 | head -20 || true
+== Devices ==
+7c982912bf20 (0D307ED5-3FFC-5AB5-9FE1-1CE5679DECE3)
+J37KRFVQ69 (27.0) (00008160-0019308611600036)
+
+== Simulators ==
+iPad (A16) Simulator (26.5) (9CCF2A96-9BC4-4782-82E9-4D5C2779BE9D)
+iPad (A16) Simulator (27.0) (17822BBA-CCB5-495E-B046-800D48C749B9)
+iPad Air 11-inch (M4) Simulator (26.5) (04D1278A-AFF4-481C-A8EC-C86977CF1888)
+iPad Air 11-inch (M4) Simulator (27.0) (4CA13D6A-D0AB-4A72-B354-414B341CD696)
+iPad Air 13-inch (M4) Simulator (26.5) (CFC06CC9-542E-43B7-AC73-4745C19F3253)
+iPad Air 13-inch (M4) Simulator (27.0) (D13D5BC9-036F-4F47-A018-A13C92F57699)
+iPad Pro 11-inch (M5) Simulator (26.5) (2D3A60B5-B230-447D-9633-5037416A5BE1)
+iPad Pro 11-inch (M5) Simulator (27.0) (26F33173-5FCD-4C16-948B-1D2F3CA864A2)
+iPad Pro 13-inch (M5) Simulator (26.5) (34D95E30-8BC9-46D4-847C-874E8CC187BA)
+iPad Pro 13-inch (M5) Simulator (27.0) (777BA635-CFC9-4609-B39D-30AF869B5A99)
+iPad mini (A17 Pro) Simulator (26.5) (150E874E-CD15-4B03-91BF-6EC9B3D7F039)
+iPad mini (A17 Pro) Simulator (27.0) (60E643FE-50D5-4EA1-BE07-C41712BF67BE)
+iPhone 17 Simulator (26.5) (FA0AF611-C22E-4139-BAA8-0C8BF385C3F8)
+iPhone 17 Simulator (27.0) (F2A0D9D8-61D4-493C-97E8-D2A8D631DF23)
+iPhone 17 Pro Simulator (26.5) (14F0250A-1FA1-4113-A348-57BC406EA4EF)
+[DeviceFarm] echo "udid=$DEVICEFARM_DEVICE_UDID os=$DEVICEFARM_DEVICE_OS_VERSION" || true
+udid=00008160-0019308611600036 os=27.0
+ 
+[DEVICEFARM] ########### Entering phase test ###########
+ 
+[DeviceFarm] bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-ios.sh
+run-ios: appium session 094c5548-e93e-4a27-ae71-e814bdf4ef3a
+device_name=00008160-0019308611600036
+ios=27.0
+model=
+ipa_bytes=4779612
+bundle_id=dev.vieww.demo
+route=devicectl
+appium_session=094c5548-e93e-4a27-ae71-e814bdf4ef3a
+cpu_first_frame_ms=256.0 275.0 278.0
+cpu_tap_targets=scale=3 button=66,225 field=87,319
+cpu_suite=PASS
+cpu_frame_time=median 5.227166ms, worst 10.545542ms, budget 8.333334ms (240 samples)
+cpu_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 3.62 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.12 present 1.27
+cpu_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 4.69 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.16 present 3.33
+cpu_worst_frame=work 10.55 ms, outside the renderer 0.38 ms; stages ms: scale 0.02 plan 0.00 cpu 7.56 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.21 present 2.37
+cpu_startup_stages=before run 8 ms | app setup 2.0 | event loop started 82.1 | resumed 166.7 | window created 5.5 | present ready 0.1 | accessibility and show 0.1 | tree built 1.1 | window ready 2.7 | until first draw 0.7 | app before-frame hooks 0.0 | first build and layout 0.7 | first raster and present 10.9 = 280.4 ms from process start
+cpu_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpu_failed_checks=
+gpu_first_frame_ms=946.0 291.0 292.0
+gpu_tap_targets=scale=3 button=66,225 field=87,319
+gpu_suite=PASS
+gpu_frame_time=median 8.120667ms, worst 19.048041ms, budget 8.333334ms (240 samples)
+gpu_frame_stages=medians ms: scale 0.03 plan 0.18 cpu 0.00 gpu_upload 0.01 gpu_record 0.01 gpu_submit 5.51 gpu_wait 1.80 gpu_readback 0.00 acquire 0.03 present 0.03
+gpu_frame_stages_p95=p95 ms: scale 0.05 plan 0.26 cpu 0.00 gpu_upload 0.03 gpu_record 0.02 gpu_submit 14.01 gpu_wait 3.97 gpu_readback 0.00 acquire 0.04 present 0.06
+gpu_worst_frame=work 19.05 ms, outside the renderer 0.17 ms; stages ms: scale 0.02 plan 0.09 cpu 0.00 gpu_upload 0.01 gpu_record 0.00 gpu_submit 16.85 gpu_wait 1.86 gpu_readback 0.00 acquire 0.01 present 0.04
+gpu_startup_stages=before run 8 ms | app setup 2.0 | event loop started 76.0 | resumed 176.9 | window created 5.8 | present ready 7.2 | accessibility and show 0.1 | tree built 1.0 | window ready 2.8 | until first draw 1.4 | app before-frame hooks 0.0 | first build and layout 0.7 | first raster and present 14.0 = 296.1 ms from process start
+gpu_pipeline_cache=started from 41701 bytes; saved 41701 bytes after the first GPU frame
+gpu_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpu_failed_checks=
+auto_first_frame_ms=282.0 274.0 282.0
+auto_tap_targets=scale=3 button=66,225 field=87,319
+auto_suite=PASS
+auto_frame_time=median 3.023751ms, worst 11.040375ms, budget 8.333334ms (240 samples)
+auto_frame_stages=medians ms: scale 0.01 plan 0.00 cpu 1.61 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.06 present 1.29
+auto_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 3.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.14 present 3.23
+auto_worst_frame=work 11.04 ms, outside the renderer 0.17 ms; stages ms: scale 0.02 plan 0.00 cpu 4.76 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.25 present 5.83
+auto_startup_stages=before run 9 ms | app setup 2.0 | event loop started 89.9 | resumed 170.2 | window created 4.2 | present ready 0.2 | accessibility and show 0.1 | tree built 0.8 | window ready 2.3 | until first draw 0.9 | app before-frame hooks 0.0 | first build and layout 0.6 | first raster and present 9.4 = 289.5 ms from process start
+auto_renderer_choice=cpu (calibrated earlier: cpu 2.58 ms)
+auto_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+auto_failed_checks=
+status=PASS
+ 
+[DEVICEFARM] ########### Entering phase post_test ###########
+ 
+[DeviceFarm] ls -la $DEVICEFARM_LOG_DIR/vieww || true
+total 2096
+drwxr-xr-x  25 device-farm  wheel     800 Oct 17 18:10 .
+drwxrwxrwx   3 rwx          wheel      96 Oct 17 18:09 ..
+-rw-r--r--   1 device-farm  wheel       0 Oct 17 18:09 appium-session.err
+-rw-r--r--   1 device-farm  wheel   64377 Oct 17 18:10 appium.log
+-rw-r--r--   1 device-farm  wheel  225219 Oct 17 18:10 auto-start-1.txt
+-rw-r--r--   1 device-farm  wheel  240493 Oct 17 18:10 auto-start-2.txt
+-rw-r--r--   1 device-farm  wheel  234179 Oct 17 18:10 auto-start-3.txt
+-rw-r--r--@  1 device-farm  wheel    3328 Oct 17 18:10 auto-suite-report.txt
+-rw-r--r--   1 device-farm  wheel    8367 Oct 17 18:10 auto-suite.log
+-rw-r--r--   1 device-farm  wheel     195 Oct 17 18:10 auto-taps.log
+-rw-r--r--   1 device-farm  wheel   19569 Oct 17 18:09 cpu-start-1.txt
+-rw-r--r--   1 device-farm  wheel   17049 Oct 17 18:09 cpu-start-2.txt
+-rw-r--r--   1 device-farm  wheel    9753 Oct 17 18:09 cpu-start-3.txt
+-rw-r--r--@  1 device-farm  wheel    3265 Oct 17 18:09 cpu-suite-report.txt
+-rw-r--r--   1 device-farm  wheel    8198 Oct 17 18:09 cpu-suite.log
+-rw-r--r--   1 device-farm  wheel     195 Oct 17 18:09 cpu-taps.log
+-rw-r--r--   1 device-farm  wheel    6435 Oct 17 18:09 device-info.txt
+-rw-r--r--   1 device-farm  wheel   25042 Oct 17 18:09 gpu-start-1.txt
+-rw-r--r--   1 device-farm  wheel   25983 Oct 17 18:10 gpu-start-2.txt
+-rw-r--r--   1 device-farm  wheel   13057 Oct 17 18:10 gpu-start-3.txt
+-rw-r--r--@  1 device-farm  wheel    3380 Oct 17 18:10 gpu-suite-report.txt
+-rw-r--r--   1 device-farm  wheel   15201 Oct 17 18:10 gpu-suite.log
+-rw-r--r--   1 device-farm  wheel     130 Oct 17 18:10 gpu-taps.log
+-rw-r--r--   1 device-farm  wheel    3853 Oct 17 18:10 result.txt
+-rw-r--r--   1 device-farm  wheel      33 Oct 17 18:09 xcode.txt
+ 
+[DEVICEFARM] ########### Finish executing testspec ###########
+ 
+[DEVICEFARM] ########### Setting upload permissions ###########
+ 
+ 
+[DEVICEFARM] Tearing down your device. Your tests report will come shortly.

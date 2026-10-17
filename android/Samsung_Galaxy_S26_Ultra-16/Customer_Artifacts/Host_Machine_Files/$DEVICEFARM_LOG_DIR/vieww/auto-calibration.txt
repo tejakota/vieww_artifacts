@@ -1,0 +1,8 @@
+launch 1:
+10-17 18:05:59.645 24889 24907 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu, measuring (first launch with this build here)
+10-17 18:06:00.167 24889 24907 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu for now; the gpu is measured next launch (measured: cpu 5.46 ms; budget 8.33 ms)
+launch 2:
+10-17 18:06:08.112 25163 25180 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu, measuring (the cpu path measured 5.46 ms last launch)
+10-17 18:06:08.292 25163 25180 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu (measured: cpu 5.46 ms, gpu 1.56 ms; budget 8.33 ms)
+launch 3:
+10-17 18:06:16.713 25370 25387 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu (calibrated earlier: cpu 5.46 ms, gpu 1.56 ms)

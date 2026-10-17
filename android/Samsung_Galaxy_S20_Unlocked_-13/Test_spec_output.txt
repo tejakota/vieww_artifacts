@@ -1,0 +1,146 @@
+[DEVICEFARM] Setting up your device. This usually takes 2-3 minutes.
+[DEVICEFARM] ########### Start executing testspec ###########
+ 
+ 
+[DEVICEFARM] ########### Entering phase install ###########
+ 
+[DeviceFarm] adb version
+Android Debug Bridge version 1.0.39
+Version 0.0.1-4500957
+Installed as /tmp/devicefarm-workspace/execution-4c2tywyg/shared-mp7m19we/android-home-s_t4ikzb/platform-tools/adb_binary
+ 
+[DEVICEFARM] ########### Entering phase pre_test ###########
+ 
+[DeviceFarm] adb devices -l
+List of devices attached
+RFCN20R4YRB            device usb:1-1.1 product:x1quex model:SM_G981U1 device:x1q transport_id:4
+
+ 
+[DEVICEFARM] ########### Entering phase test ###########
+ 
+[DeviceFarm] bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-android.sh
+device_name=RFCN20R4YRB
+manufacturer=samsung
+model=SM-G981U1
+android=13
+sdk=33
+soc=SM8250 (kona)
+abi=arm64-v8a
+cpu_cores=8
+mem_total_kb=10856364
+gpu=Qualcomm, Adreno (TM) 650, OpenGL ES 3.2 V@0502.0 (GIT@193b2ee, I593c16c433, 1633593732) (Date:10/07/21)
+display=1440x3200
+density=480
+apk_bytes=2744736
+component=dev.vieww.demo/android.app.NativeActivity
+cpu_cold_start_ms=177 161 152 
+cpu_suite=PASS
+cpu_frame_time=median 11.889845ms, worst 18.615156ms, budget 16.666666ms (240 samples)
+cpu_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 8.68 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.08 present 1.67
+cpu_frame_stages_p95=p95 ms: scale 0.03 plan 0.00 cpu 10.23 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.59 present 2.34
+cpu_worst_frame=work 18.62 ms, outside the renderer 0.77 ms, on cpu6; stages ms: scale 0.02 plan 0.00 cpu 14.91 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.08 present 1.83
+cpu_startup_stages=before run 113 ms | app setup 0.1 | event loop started 0.0 | resumed 15.2 | window created 0.0 | present ready 0.1 | accessibility and show 0.0 | tree built 1.3 | window ready 4.0 | until first draw 0.0 | app before-frame hooks 0.3 | first build and layout 1.4 | first raster and present 37.3 = 173.1 ms from process start
+cpu_raster_by_core=cpu4 93 frames 8.78 ms | cpu5 74 frames 8.57 ms | cpu6 50 frames 8.68 ms | cpu7 23 frames 8.88 ms
+cpu_cpu_clocks=cpu0 1.08/1.80 GHz | cpu1 1.08/1.80 GHz | cpu2 1.08/1.80 GHz | cpu3 1.08/1.80 GHz | cpu4 2.42/2.42 GHz | cpu5 2.42/2.42 GHz | cpu6 2.42/2.42 GHz | cpu7 0.84/2.84 GHz
+cpu_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpu_failed_checks=
+cpu_total_pss_kb=133276
+cpu_total_rss_kb=247316
+gpu_cold_start_ms=144 157 139 
+gpu_suite=PASS
+gpu_frame_time=median 7.225468ms, worst 13.83276ms, budget 16.666666ms (240 samples)
+gpu_frame_stages=medians ms: scale 0.08 plan 0.70 cpu 0.00 gpu_upload 0.49 gpu_record 0.15 gpu_submit 0.15 gpu_wait 4.01 gpu_readback 0.00 acquire 0.05 present 0.11
+gpu_frame_stages_p95=p95 ms: scale 0.21 plan 1.76 cpu 0.00 gpu_upload 1.02 gpu_record 0.36 gpu_submit 0.31 gpu_wait 5.17 gpu_readback 0.00 acquire 0.11 present 0.24
+gpu_worst_frame=work 13.83 ms, outside the renderer 5.59 ms; stages ms: scale 0.08 plan 0.67 cpu 0.00 gpu_upload 0.51 gpu_record 0.17 gpu_submit 0.15 gpu_wait 6.46 gpu_readback 0.00 acquire 0.07 present 0.13
+gpu_startup_stages=before run 106 ms | app setup 0.1 | event loop started 0.0 | resumed 16.5 | window created 0.0 | present ready 28.8 | accessibility and show 0.0 | tree built 1.1 | window ready 0.7 | until first draw 0.0 | app before-frame hooks 0.3 | first build and layout 1.5 | first raster and present 21.0 = 175.8 ms from process start
+gpu_cpu_clocks=cpu0 1.17/1.80 GHz | cpu1 1.17/1.80 GHz | cpu2 1.17/1.80 GHz | cpu3 1.17/1.80 GHz | cpu4 2.42/2.42 GHz | cpu5 2.42/2.42 GHz | cpu6 2.42/2.42 GHz | cpu7 2.65/2.84 GHz
+gpu_pipeline_cache=started from 38020 bytes; saved 38020 bytes after the first GPU frame
+gpu_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpu_failed_checks=
+gpu_total_pss_kb=152786
+gpu_total_rss_kb=267868
+auto_calibration=launch 1: 10-17 18:06:19.067  5242  5259 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu, measuring (first launch with this build here) 10-17 18:06:20.159  5242  5259 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (measured: cpu 8.81 ms; budget 16.67 ms) launch 2: 10-17 18:06:27.846  5333  5354 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (calibrated earlier: cpu 8.80 ms) launch 3: 10-17 18:06:36.578  5445  5462 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (calibrated earlier: cpu 8.80 ms) 
+auto_cold_start_ms=153 161 163 
+auto_suite=PASS
+auto_frame_time=median 12.051302ms, worst 20.467761ms, budget 16.666666ms (240 samples)
+auto_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 8.82 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.04 present 1.66
+auto_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 10.17 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.63 present 2.34
+auto_worst_frame=work 20.47 ms, outside the renderer 0.75 ms, on cpu5; stages ms: scale 0.02 plan 0.00 cpu 15.78 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.30 present 2.63
+auto_startup_stages=before run 127 ms | app setup 0.1 | event loop started 0.0 | resumed 16.1 | window created 0.0 | present ready 0.2 | accessibility and show 0.0 | tree built 1.2 | window ready 3.8 | until first draw 0.0 | app before-frame hooks 1.3 | first build and layout 2.3 | first raster and present 49.7 = 201.3 ms from process start
+auto_renderer_choice=cpu (calibrated earlier: cpu 8.80 ms)
+auto_raster_by_core=cpu4 99 frames 8.94 ms | cpu6 66 frames 8.79 ms | cpu5 65 frames 8.53 ms | cpu7 10 frames 8.52 ms
+auto_cpu_clocks=cpu0 1.08/1.80 GHz | cpu1 1.08/1.80 GHz | cpu2 1.08/1.80 GHz | cpu3 1.08/1.80 GHz | cpu4 2.42/2.42 GHz | cpu5 2.42/2.42 GHz | cpu6 2.42/2.42 GHz | cpu7 0.84/2.84 GHz
+auto_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+auto_failed_checks=
+auto_total_pss_kb=132607
+auto_total_rss_kb=246660
+cpuvk_cold_start_ms=150 140 163 
+cpuvk_suite=PASS
+cpuvk_frame_time=median 11.492552ms, worst 20.71677ms, budget 16.666666ms (240 samples)
+cpuvk_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 7.92 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 3.23
+cpuvk_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 9.36 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 4.53
+cpuvk_worst_frame=work 20.72 ms, outside the renderer 0.93 ms, on cpu4; stages ms: scale 0.08 plan 0.00 cpu 16.58 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 3.12
+cpuvk_startup_stages=before run 101 ms | app setup 0.1 | event loop started 0.0 | resumed 16.6 | window created 0.0 | present ready 23.6 | accessibility and show 0.0 | tree built 1.1 | window ready 0.6 | until first draw 0.0 | app before-frame hooks 0.2 | first build and layout 1.4 | first raster and present 36.0 = 181.0 ms from process start
+cpuvk_raster_by_core=cpu7 151 frames 7.73 ms | cpu5 32 frames 8.12 ms | cpu4 30 frames 8.16 ms | cpu6 27 frames 8.38 ms
+cpuvk_cpu_clocks=cpu0 1.08/1.80 GHz | cpu1 1.08/1.80 GHz | cpu2 1.08/1.80 GHz | cpu3 1.08/1.80 GHz | cpu4 0.71/2.42 GHz | cpu5 0.71/2.42 GHz | cpu6 0.71/2.42 GHz | cpu7 2.84/2.84 GHz
+cpuvk_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpuvk_failed_checks=
+cpuvk_total_pss_kb=266167
+cpuvk_total_rss_kb=380648
+cpuhint_cold_start_ms=159 151 146 
+cpuhint_suite=PASS
+cpuhint_frame_time=median 11.312917ms, worst 18.286198ms, budget 16.666666ms (240 samples)
+cpuhint_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 8.79 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.64 present 1.41
+cpuhint_frame_stages_p95=p95 ms: scale 0.03 plan 0.00 cpu 10.12 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.18 present 2.09
+cpuhint_worst_frame=work 18.29 ms, outside the renderer 0.97 ms, on cpu4; stages ms: scale 0.02 plan 0.00 cpu 15.10 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.63 present 1.56
+cpuhint_startup_stages=before run 97 ms | app setup 0.1 | event loop started 0.0 | resumed 15.2 | window created 0.0 | present ready 0.1 | accessibility and show 0.0 | tree built 1.2 | window ready 0.6 | until first draw 0.0 | app before-frame hooks 0.3 | first build and layout 1.5 | first raster and present 41.0 = 157.2 ms from process start
+cpuhint_raster_by_core=cpu6 114 frames 8.90 ms | cpu5 59 frames 8.55 ms | cpu4 56 frames 8.72 ms | cpu7 11 frames 9.04 ms
+cpuhint_cpu_clocks=cpu0 1.25/1.80 GHz | cpu1 1.25/1.80 GHz | cpu2 1.25/1.80 GHz | cpu3 1.25/1.80 GHz | cpu4 2.42/2.42 GHz | cpu5 2.42/2.42 GHz | cpu6 2.42/2.42 GHz | cpu7 0.84/2.84 GHz
+cpuhint_perf_hint=unavailable (the system declined a session)
+cpuhint_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpuhint_failed_checks=
+cpuhint_total_pss_kb=132989
+cpuhint_total_rss_kb=247020
+status=PASS
+ 
+[DEVICEFARM] ########### Entering phase post_test ###########
+ 
+[DeviceFarm] ls -la $DEVICEFARM_LOG_DIR/vieww || true
+total 1468
+drwxr-xr-x 2 device-farm root   4096 Oct 17 18:07 .
+drwxrwxrwx 3         995 1001     19 Oct 17 18:05 ..
+-rw-r--r-- 1 device-farm root    558 Oct 17 18:06 auto-am-start.txt
+-rw-r--r-- 1 device-farm root    610 Oct 17 18:06 auto-calibration.txt
+-rw-r--r-- 1 device-farm root  63469 Oct 17 18:06 auto-logcat.txt
+-rw-r--r-- 1 device-farm root   2940 Oct 17 18:06 auto-meminfo.txt
+-rw-r--r-- 1 device-farm root 215939 Oct 17 18:06 auto-screen.png
+-rw-r--r-- 1 device-farm root   4732 Oct 17 18:06 auto-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 17 18:05 cpu-am-start.txt
+-rw-r--r-- 1 device-farm root  63197 Oct 17 18:05 cpu-logcat.txt
+-rw-r--r-- 1 device-farm root   2940 Oct 17 18:05 cpu-meminfo.txt
+-rw-r--r-- 1 device-farm root 217239 Oct 17 18:05 cpu-screen.png
+-rw-r--r-- 1 device-farm root   4679 Oct 17 18:05 cpu-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 17 18:07 cpuhint-am-start.txt
+-rw-r--r-- 1 device-farm root  63555 Oct 17 18:07 cpuhint-logcat.txt
+-rw-r--r-- 1 device-farm root   2940 Oct 17 18:07 cpuhint-meminfo.txt
+-rw-r--r-- 1 device-farm root 215294 Oct 17 18:07 cpuhint-screen.png
+-rw-r--r-- 1 device-farm root   4745 Oct 17 18:07 cpuhint-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 17 18:07 cpuvk-am-start.txt
+-rw-r--r-- 1 device-farm root  56692 Oct 17 18:07 cpuvk-logcat.txt
+-rw-r--r-- 1 device-farm root   3026 Oct 17 18:07 cpuvk-meminfo.txt
+-rw-r--r-- 1 device-farm root 214812 Oct 17 18:07 cpuvk-screen.png
+-rw-r--r-- 1 device-farm root   4724 Oct 17 18:07 cpuvk-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 17 18:06 gpu-am-start.txt
+-rw-r--r-- 1 device-farm root  45776 Oct 17 18:06 gpu-logcat.txt
+-rw-r--r-- 1 device-farm root   3026 Oct 17 18:06 gpu-meminfo.txt
+-rw-r--r-- 1 device-farm root 217376 Oct 17 18:06 gpu-screen.png
+-rw-r--r-- 1 device-farm root   4766 Oct 17 18:06 gpu-suite.log
+-rw-r--r-- 1 device-farm root      8 Oct 17 18:05 install.log
+-rw-r--r-- 1 device-farm root   8535 Oct 17 18:07 result.txt
+ 
+[DEVICEFARM] ########### Finish executing testspec ###########
+ 
+[DEVICEFARM] ########### Setting upload permissions ###########
+ 
+ 
+[DEVICEFARM] Tearing down your device. Your tests report will come shortly.

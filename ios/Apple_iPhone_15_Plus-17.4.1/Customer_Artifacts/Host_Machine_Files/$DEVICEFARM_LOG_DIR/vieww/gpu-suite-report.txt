@@ -1,0 +1,27 @@
+__VIEWW_SUITE__ begin
+__VIEWW_SUITE__ ok   view_metrics_reached_the_tree: 430x932 logical
+__VIEWW_SUITE__ ok   the_display_density_is_plausible: 3x
+__VIEWW_SUITE__ ok   the_safe_area_fits_inside_the_surface: l0 t59 r0 b34
+__VIEWW_SUITE__ --   safe_area: l0 t59 r0 b34 on a 430x932 surface at 3x
+__VIEWW_SUITE__ ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 301.0 } on a 932-tall surface
+__VIEWW_SUITE__ --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 301.0 } at the moment of the report
+__VIEWW_SUITE__ ok   the_keyboard_inset_appears_when_the_keyboard_does: 34 logical pixels
+__VIEWW_SUITE__ ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+__VIEWW_SUITE__ ok   a_tap_reached_a_handler: 1 tap
+__VIEWW_SUITE__ ok   frames_were_presented: 600 frames
+__VIEWW_SUITE__ ok   the_typical_frame_is_inside_its_budget: median 16.272917ms against a budget of 16.666668ms
+__VIEWW_SUITE__ ok   no_frame_stalled: worst 32.812584ms, 45 of 240 over budget
+__VIEWW_SUITE__ --   frame_time: median 16.272917ms, worst 32.812584ms, budget 16.666668ms (240 samples)
+__VIEWW_SUITE__ --   startup_stages: before run 11 ms | app setup 2.6 | event loop started 85.9 | resumed 223.5 | window created 15.1 | present ready 12.7 | accessibility and show 0.1 | tree built 1.4 | window ready 3.2 | until first draw 1.0 | app before-frame hooks 0.0 | first build and layout 0.9 | first raster and present 21.9 = 378.9 ms from process start
+__VIEWW_SUITE__ --   frame_stages: medians ms: scale 0.07 plan 0.43 cpu 0.00 gpu_upload 0.02 gpu_record 0.01 gpu_submit 6.91 gpu_wait 8.04 gpu_readback 0.00 acquire 0.03 present 0.05
+__VIEWW_SUITE__ --   frame_stages_p95: p95 ms: scale 0.07 plan 0.49 cpu 0.00 gpu_upload 0.03 gpu_record 0.02 gpu_submit 8.33 gpu_wait 10.38 gpu_readback 0.00 acquire 0.05 present 0.08
+__VIEWW_SUITE__ --   worst_frame: work 32.81 ms, outside the renderer 0.35 ms; stages ms: scale 0.03 plan 0.22 cpu 0.00 gpu_upload 0.01 gpu_record 0.01 gpu_submit 21.52 gpu_wait 10.59 gpu_readback 0.00 acquire 0.02 present 0.06
+__VIEWW_SUITE__ --   pipeline_cache: started from 41701 bytes; saved 41701 bytes after the first GPU frame
+__VIEWW_SUITE__ ok   damage_tracking_costs_a_fraction_of_a_full_repaint: 0.078 full repaints per frame over 600 frames, against a 3606840px surface
+__VIEWW_SUITE__ --   full_repaints: 3 of 600 frames cost a whole surface, 0 of those after the loop slept
+__VIEWW_SUITE__ ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+__VIEWW_SUITE__ ok   the_full_repaint_counter_saw_the_first_frame: 3 full repaint(s) over 600 frames against a 3606840px surface
+__VIEWW_SUITE__ --   frame_report: 600 frames in 10.15s — 59.0fps (median 16.66ms, worst 33.04ms over 240 continuous); work median 16.27ms, worst 32.81ms; 113 over a 16.67ms budget; rasterised 46.95 full repaints (3 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.07 plan 0.43 cpu 0.00 gpu[upload 0.02 record 0.01 submit 6.91 wait 8.04 readback 0.00] acquire 0.03 present 0.05 ms
+__VIEWW_SUITE__ --   gpu_frames: 600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+__VIEWW_SUITE__ end 13 checks, 0 failed
+__VIEWW_SUITE__ result PASS

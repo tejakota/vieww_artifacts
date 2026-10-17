@@ -1,0 +1,963 @@
+# cut by the report job: 76051229 bytes in full, lines mentioning vieww only (first 20000).
+# The whole file is in this run's artifacts.
+Oct 17 11:09:52 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: __WiFiLQAMgrLogStats(5F0164E671:Stationary): Rssi: -53 {-52 0} Channel: 161 Bandwidth: 20Mhz Snr: 27 Cca: 51 (S:0 O:0 I:0) TxPer: 0.0% (6) BcnPer: 0.0% (49, 52.9%) RxFrms: 6 RxRetryFrames: 1 TxRate: 200000 RxRate: 200000 FBRate: 57778 TxFwFrms: 12 TxFwFail: 0 TxReTrans: 1 time: 23773.8secs fgApp: dev.vieww.demo
+Oct 17 11:09:57 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: __WiFiLQAMgrLogStats(5F0164E671:Stationary): Rssi: -53 {-53 0} Channel: 161 Bandwidth: 20Mhz Snr: 28 Cca: 26 (S:0 O:5 I:20) TxPer: 0.0% (4) BcnPer: 0.0% (50, 52.9%) RxFrms: 4 RxRetryFrames: 1 TxRate: 200000 RxRate: 200000 FBRate: 120000 TxFwFrms: 8 TxFwFail: 0 TxReTrans: 0 time: 23778.8secs fgApp: dev.vieww.demo
+Oct 17 11:10:00 PDX640610152 nesessionmanager(libsystem_networkextension.dylib)[211] <Notice>: UUID cache miss for dev.vieww.demo
+Oct 17 11:10:01 PDX640610152 nesessionmanager(libsystem_networkextension.dylib)[211] <Notice>: UUID cache miss for dev.vieww.demo
+    "sceneID:dev.vieww.demo-default" = 1;
+Oct 17 11:10:02 PDX640610152 kernel(Sandbox)[0] <Error>: 1 duplicate report for Sandbox: vieww(1276) deny(2) file-test-existence /private/etc/fonts
+Oct 17 11:10:02 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: __WiFiLQAMgrLogStats(5F0164E671:Stationary): Rssi: -53 {0 0} Channel: 161 Bandwidth: 20Mhz Snr: 0 Cca: 26 (S:0 O:5 I:20) TxPer: 0.0% (0) BcnPer: 0.0% (0, 52.9%) RxFrms: 0 RxRetryFrames: 0 TxRate: 0 RxRate: 0 FBRate: 0 TxFwFrms: 0 TxFwFail: 0 TxReTrans: 0 time: 23783.9secs fgApp: dev.vieww.demo
+Oct 17 11:10:03 PDX640610152 SpringBoard(UIKitCore)[32] <Notice>: [sceneID:dev.vieww.demo-default] Setting deactivation reasons to: 'systemAnimation' for reason: updateAllScenesForBand - Assertion added.
+Oct 17 11:10:03 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: new resolutions for pid:1276 (<keyboardFocus; pid: 1276; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Deactivation reason added: 5; deactivation reasons: 0 -> 32; animating application lifecycle event: 1
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Deactivation reason added: 12; deactivation reasons: 32 -> 4128; animating application lifecycle event: 1
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: [0x2834917a0] Removing all event deferring rules for deallocating window: 0x106106db0; contextId: 0x8463BB17
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Reloading input views for: <(null): 0x0> force: 0
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Setting input views: <<UIInputViewSet: 0x282e81400>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1276] from originator [application<dev.vieww.demo>:1276] with description <RBSAssertionDescriptor| "systemAnimationFence" ID:31-1276-1886 target:1276 attributes:[
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1276-1886 (target:[application<dev.vieww.demo>:1276]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1276] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1887 target:1276 attributes:[
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1887 (target:[application<dev.vieww.demo>:1276]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Setting input views: <<UIInputViewSet: 0x282e81c20>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Moving from placement: <UIInputViewSetPlacementOnScreen> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Posting start notifications: UIKeyboardWillHideNotification {
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: UIWindowScene: 0x106605250: Window became key in scene: (nil): 0x0; contextId: 0x0: reason: UIWindowScene: 0x106605250: Key window changed visibility: 0x106106db0
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Key window needs update: 1; currentKeyWindowScene: 0x106605250; evaluatedKeyWindowScene: 0x106605250; currentApplicationKeyWindow: 0x106106db0; evaluatedApplicationKeyWindow: 0x0; reason: UIWindowScene: 0x106605250: Key window changed visibility: 0x106106db0
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Window did become application key: (nil): 0x0; contextId: 0x0; scene identity: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Window resigning application key: WinitUIWindow: 0x106106db0; contextId: 0x8463BB17; scene identity: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1887 (target:[application<dev.vieww.demo>:1276]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <_UIKBFeedbackGenerator: 0x283b8dfe0>: Cooling System Sounds.
+Oct 17 11:10:03 PDX640610152 mediaserverd(AudioToolbox)[35] <Notice>:           SSServerImp.cpp:1547  clientPID 1276(vieww), flag 0, ssid 1104
+    "associatedSceneIdentifiersToSuppressInSystemAperture: from {(\134n    \134"sceneID:dev.vieww.demo-default\134"\134n)} to {(\134n    \134"sceneID:com.apple.Preferences-default\134"\134n)}",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from {(\134n    \134"dev.vieww.demo\134"\134n)} to {(\134n    \134"com.apple.Preferences\134"\134n)}"
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from com.apple.Preferences to dev.vieww.demo",
+    "associatedBundleIdentifiersToSuppressInSystemAperture: from com.apple.Preferences to dev.vieww.demo",
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: didRemoveExternalForegroundApplicationSceneHandle pid:1276 scene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default now:<empty>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: target changed from:<pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> to (null)
+<SBTransitionSwitcherModifierEvent: 0x100afa0c0; type: MainTransition; transitionID: A9A46F57-E030-4F47-953C-1B1317EA7F06; phase: Prepare; animated: YES; fromAppLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>; toAppLayout: <SBAppLayout: 0x28296ee00; primary: com.apple.Preferences:default; environment: main>; toAppLayoutWantsExclusiveForeground: YES; pendingTermination: {(
+<SBTransitionSwitcherModifierEvent: 0x10098e750; type: MainTransition; transitionID: A9A46F57-E030-4F47-953C-1B1317EA7F06; phase: Animate; animated: YES; fromAppLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>; toAppLayout: <SBAppLayout: 0x28296ee00; primary: com.apple.Preferences:default; environment: main>; toAppLayoutWantsExclusiveForeground: YES; pendingTermination: {(
+Oct 17 11:10:03 PDX640610152 backboardd[64] <Notice>: new scene host settings: contextID:8463BB17 <sceneID:dev.vieww.demo-default> unspecified -> inactive
+Oct 17 11:10:03 PDX640610152 backboardd[64] <Notice>: new scene host settings: contextID:2F770405 <sceneID:dev.vieww.demo-default> unspecified -> inactive
+Oct 17 11:10:03 PDX640610152 backboardd[64] <Notice>: new scene host settings: contextID:0 <sceneID:dev.vieww.demo-default> unspecified -> inactive
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: keyboardFocus environment target removed from scene: sceneID:dev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1276-1886 (target:[application<dev.vieww.demo>:1276]) from originator [application<dev.vieww.demo>:1276]
+Oct 17 11:10:03 PDX640610152 SpringBoard(RunningBoardServices)[32] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M32-9 qos:25 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.apple.springboard">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.apple.WallpaperKit.CollectionsPoster">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.apple.Preferences">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0>
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1276] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "com.apple.UIKit.KeyboardManagement.message" ID:31-32-1893 target:1276 attributes:[
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1893 (target:[application<dev.vieww.demo>:1276]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1893 (target:[application<dev.vieww.demo>:1276]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:03 PDX640610152 SpringBoard(RunningBoardServices)[32] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M32-9 qos:25 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.apple.springboard">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.apple.WallpaperKit.CollectionsPoster">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: advisor: gen:503 arbiter spec pid 1276 / com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: advisor: MRU promote miss for scene focus request for token com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: advisor: target (from arbiter advice): <pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: advisor: MRU promote miss for <pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: input target:<pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: now generation: 505; keyboardFocusTarget: <token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default; pid: 1276>; recentlyUsedScenes: <recentPIDs: [351]; recentSceneIdentityTokensByPID: {351: [com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Acom.apple.Preferences-default]}>; selectionPolicy: KeyboardArbiter; shouldSuppressRemoteDeferring: 0
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: target changed from:<pid=351 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Acom.apple.Preferences-default> to <pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: defer (com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard) -> <pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+    <environment: keyboardFocus; token: com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard> -> <pid: 1276; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> reason: "304-defer: S
+Oct 17 11:10:03 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: new resolutions for pid:1276 (<keyboardFocus; pid: 1276; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>)
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: keyboardFocus environment target added to scene: sceneID:dev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: [0x2834917a0] Scene target of event deferring environments did update: scene: 0x106605250; current systemShellManagesKeyboardFocus: 1; systemShellManagesKeyboardFocusForScene: 0; eligibleForRecordRemoval: 1;
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Scene became target of keyboard event deferring environment: UIWindowScene: 0x106605250; scene identity: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: input target:<pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: now generation: 506; keyboardFocusTarget: <token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default; pid: 1276>; recentlyUsedScenes: <empty>; selectionPolicy: KeyboardArbiter; shouldSuppressRemoteDeferring: 0
+Oct 17 11:10:03 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: WifiDeviceManagerCatsWhitelistedApp: CATS en0:  deviceManager:0x10182b600 FgApp:dev.vieww.demo stateChange:0 whitelisted=1
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Change to input view set: <<UIInputViewSet: 0x282e81c20>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Change to input view set: <<UIInputViewSet: 0x282e81400>; (empty)>
+<SBTransitionSwitcherModifierEvent: 0x100b0fa60; type: MainTransition; transitionID: A9A46F57-E030-4F47-953C-1B1317EA7F06; phase: Complete; animated: YES; fromAppLayout: <SBAppLayout: 0x282965300; primary: dev.vieww.demo:default; environment: main>; toAppLayout: <SBAppLayout: 0x28296ee00; primary: com.apple.Preferences:default; environment: main>; toAppLayoutWantsExclusiveForeground: YES; pendingTermination: {(
+Oct 17 11:10:03 PDX640610152 SpringBoard(UIKitCore)[32] <Notice>: [sceneID:dev.vieww.demo-default] Setting deactivation reasons to: '(none)' for reason: scene settings update - settings are NOT eligible for deactivation reasons.
+Oct 17 11:10:03 PDX640610152 SpringBoard(UIKitCore)[32] <Notice>: No longer tracking: <FBScene: 0x28322fe40; FBSceneManager:sceneID:dev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Created: <FBSceneSnapshotAction: 0x282998f80; sceneID:dev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1276] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "FBSceneSnapshotAction:sceneID:dev.vieww.demo-default" ID:31-32-1894 target:1276 attributes:[
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [sceneID:dev.vieww.demo-default] scene content state changed: notReady
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1894 (target:[application<dev.vieww.demo>:1276]) will be created as active
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] set Memory Limits to Hard Active (2098)
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1276] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "FBWorkspace (ForegroundNonFocal)" ID:31-32-1895 target:1276 attributes:[
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene lifecycle state did change: Background
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1895 (target:[application<dev.vieww.demo>:1276]) will be created as active
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] set Memory Limits to Hard Active (2098)
+Oct 17 11:10:03 PDX640610152 powerd[45] <Notice>: Process runningboardd.31 Created SystemIsActive "application<dev.vieww.demo>31-32-1894:FBSceneSnapshotAction:sceneID:dev.vieww.demo-default" age:00:00:00  id:51539641089 [System: SysAct]
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1836 (target:[application<dev.vieww.demo>:1276](UIScene:com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default)) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene activity mode did change: support (transient).
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene assertion state did change: ForegroundNonFocal.
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Workspace assertion state did change: ForegroundNonFocal (acquireAssertion = YES).
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveFocal)
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1840 (target:[application<dev.vieww.demo>:1276]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Setting process visibility to: Background
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Sending scene action [Logical Deactivate][0x328c] to process 0x1141ff900 (watchdog: 10.00s)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Deactivation reason added: 11; deactivation reasons: 4128 -> 6176; animating application lifecycle event: 0
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Will add backgroundTask with taskName: <private>, expirationHandler: (null)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Creating new assertion because there is no existing background assertion.
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Creating new background assertion
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Created new background assertion <BKSProcessAssertion: 0x283c98140>
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1276] from originator [application<dev.vieww.demo>:1276] with description <RBSAssertionDescriptor| "Shared Background Assertion 1 for dev.vieww.demo" ID:31-1276-1897 target:1276 attributes:[
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-1276-1897 (target:[application<dev.vieww.demo>:1276]) will be created as inactive as start-time-defining assertions exist
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Incrementing reference count for background assertion <private>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Created background task <private>.
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Will add backgroundTask with taskName: <private>, expirationHandler: <__NSMallocBlock__: 0x2811326d0>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Reusing background assertion <BKSProcessAssertion: 0x283c98140>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Incrementing reference count for background assertion <private>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Created background task <private>.
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending background task with UIBackgroundTaskIdentifier: 4
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending task with identifier 4 and description: <private>, _expireHandler: <__NSMallocBlock__: 0x2811326d0>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Decrementing reference count for assertion <private> (used by background task with identifier 4: <private>)
+Oct 17 11:10:03 PDX640610152 SpringBoard(KeyboardArbiter)[32] <Error>: Advisor: No handle found for currently focused PID: 1276; sceneIdentity: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Will add backgroundTask with taskName: <private>, expirationHandler: <__NSMallocBlock__: 0x281132a00>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Reusing background assertion <BKSProcessAssertion: 0x283c98140>
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1867 (target:[application<dev.vieww.demo>:1276](UIHostedWindow:68c866e1)) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Incrementing reference count for background assertion <private>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Created background task <private>.
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending background task with UIBackgroundTaskIdentifier: 5
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending task with identifier 5 and description: <private>, _expireHandler: <__NSMallocBlock__: 0x2811893e0>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Decrementing reference count for assertion <private> (used by background task with identifier 5: <private>)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Will add backgroundTask with taskName: <private>, expirationHandler: <__NSMallocBlock__: 0x2811893e0>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Reusing background assertion <BKSProcessAssertion: 0x283c98140>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Incrementing reference count for background assertion <private>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Created background task <private>.
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending background task with UIBackgroundTaskIdentifier: 6
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending task with identifier 6 and description: <private>, _expireHandler: <__NSMallocBlock__: 0x2811b5da0>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Decrementing reference count for assertion <private> (used by background task with identifier 6: <private>)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Will add backgroundTask with taskName: <private>, expirationHandler: <__NSMallocBlock__: 0x2811b5da0>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Reusing background assertion <BKSProcessAssertion: 0x283c98140>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Incrementing reference count for background assertion <private>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Created background task <private>.
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending background task with UIBackgroundTaskIdentifier: 7
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending task with identifier 7 and description: <private>, _expireHandler: <__NSMallocBlock__: 0x2811b5da0>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Decrementing reference count for assertion <private> (used by background task with identifier 7: <private>)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Deactivation reason removed: 5; deactivation reasons: 6176 -> 6144; animating application lifecycle event: 0
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Error>: Snapshotting a view (0x10a020e00, UIKeyboardImpl) that is not in a visible window requires afterScreenUpdates:YES.
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Application process state changed for dev.vieww.demo: <SBApplicationProcessState: 0x2801b0ba0; pid: 1276; taskState: Running; visibility: Background>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Will add backgroundTask with taskName: <private>, expirationHandler: <__NSMallocBlock__: 0x2811b5050>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Reusing background assertion <BKSProcessAssertion: 0x283c98140>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Incrementing reference count for background assertion <private>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Created background task <private>.
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Setting input views: <<UIInputViewSet: 0x282e908c0>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Change to input view set: <<UIInputViewSet: 0x282e908c0>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <_UIKBFeedbackGenerator: 0x283b915c0>: Updating mode. Haptics: supported. Haptics: disabled. Ringer: on. Sound: enabled. Mode: audio only
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Setting input views: <<UIInputViewSet: 0x282e90c80>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Change to input view set: <<UIInputViewSet: 0x282e90c80>; (empty)>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:03 PDX640610152 vieww(FrontBoardServices)[1276] <Notice>: Performing snapshot request 0x2811b4390 (type 1)
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: policy: input target:<pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: defer (com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard) -> <pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default>
+    <environment: keyboardFocus; token: com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard> -> <pid: 1276; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> reason: "304-defer: SpringBoard: outbound",
+    <environment: keyboardFocus; token: com.apple.frontboard.systemappservices::FBSceneManager:com.apple.springboard> -> <pid: 1276; token: com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> reason: "306-defer:
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: advisor: MRU promote miss for scene focus request for token com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: rules: target changed from:<pid=1276 token=com.apple.frontboard.systemappservices::FBSceneManager:sceneID%3Adev.vieww.demo-default> to (null)
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: keyboardFocus environment target removed from scene: sceneID:dev.vieww.demo-default
+Oct 17 11:10:03 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Snapshot data for <XBApplicationSnapshot: 0x11428f470; \M-b\M^@\M-&D65B11A20326> [dev.vieww.demo] written to file: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/B5C47458-AFE1-45F8-A8DA-D65B11A20326@3x.ktx
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] START liquidating the old, as snapshot generation succeeded
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] deleting old snapshots: (
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] deleting old suspend snapshots using predicate: <XBApplicationSnapshotPredicate: 0x280547cf0> {
+Oct 17 11:10:03 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x100b2d970; \M-b\M^@\M-&B1663191ED94> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] STOP liquidating the old
+Oct 17 11:10:03 PDX640610152 vieww(FrontBoardServices)[1276] <Notice>: Snapshot request 0x2811b4390 complete
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Setting input views: <<UIInputViewSet: 0x282e95860>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Change to input view set: <<UIInputViewSet: 0x282e95860>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(FrontBoardServices)[1276] <Notice>: Performing snapshot request 0x2811898f0 (type 1)
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveNonFocal)
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] Set darwin role to: UserInteractiveNonFocal
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] set Memory Limits to Hard Active (2098)
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] START liquidating the old, as snapshot generation succeeded
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] deleting old snapshots: (
+Oct 17 11:10:03 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Snapshot data for <XBApplicationSnapshot: 0x1009d3eb0; \M-b\M^@\M-&583C06D03DC1> [dev.vieww.demo] written to file: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/downscaled/DD7A634A-E8A7-470D-AFD2-583C06D03DC1@3x.ktx
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] deleting old suspend snapshots using predicate: <XBApplicationSnapshotPredicate: 0x280547fc0> {
+Oct 17 11:10:03 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Snapshot data for <XBApplicationSnapshot: 0x11429db90; \M-b\M^@\M-&138D4EA96187> [dev.vieww.demo] written to file: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/5E6F9492-2BA5-4BEA-A590-138D4EA96187@3x.ktx
+Oct 17 11:10:03 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: [dev.vieww.demo] STOP liquidating the old
+Oct 17 11:10:03 PDX640610152 vieww(FrontBoardServices)[1276] <Notice>: Snapshot request 0x2811898f0 complete
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Setting input views: <<UIInputViewSet: 0x282e908c0>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Moving from placement: <UIInputViewSetPlacementOffScreenDown> to placement: <UIInputViewSetPlacementOffScreenDown>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: Change to input view set: <<UIInputViewSet: 0x282e908c0>; (empty)>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending background task with UIBackgroundTaskIdentifier: 8
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending task with identifier 8 and description: <private>, _expireHandler: <__NSMallocBlock__: 0x2811b5050>
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Decrementing reference count for assertion <private> (used by background task with identifier 8: <private>)
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1894 (target:[application<dev.vieww.demo>:1276]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Got response for <FBSceneSnapshotAction: 0x282998f80; sceneID:dev.vieww.demo-default>: success
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <_UIKBFeedbackGenerator: 0x283b8dfe0>: Stopping engine: dealloc
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending background task with UIBackgroundTaskIdentifier: 3
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Ending task with identifier 3 and description: <private>, _expireHandler: (null)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Decrementing reference count for assertion <private> (used by background task with identifier 3: <private>)
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: <private>: Will invalidate assertion: <BKSProcessAssertion: 0x283c98140> for task identifier: 3
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene action [Logical Deactivate][0x328c] completed with success: 1
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene assertion state did change: BackgroundActive.
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Workspace assertion state did change: BackgroundActive (acquireAssertion = YES).
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-1276-1897 (target:[application<dev.vieww.demo>:1276]) from originator [application<dev.vieww.demo>:1276]
+Oct 17 11:10:03 PDX640610152 vieww(UIKitCore)[1276] <Notice>: sceneOfRecord: sceneID: sceneID:dev.vieww.demo-default  persistentID: A42FABE4-855B-472E-8D2D-6EDDA8FCC5C1
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting [application<dev.vieww.demo>:1276] from originator [osservice<com.apple.SpringBoard>:32] with description <RBSAssertionDescriptor| "FBWorkspace (BackgroundActive)" ID:31-32-1902 target:1276 attributes:[
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Assertion 31-32-1902 (target:[application<dev.vieww.demo>:1276]) will be created as active
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1895 (target:[application<dev.vieww.demo>:1276]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-active (role: UserInteractiveNonFocal)
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] set Memory Limits to Hard Active (2098)
+Oct 17 11:10:03 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Snapshot data for <XBApplicationSnapshot: 0x10092b690; \M-b\M^@\M-&B6056F2C56F7> [dev.vieww.demo] written to file: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/downscaled/6DB8D525-B2A1-4BEF-AA0C-B6056F2C56F7@3x.ktx
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene activity mode did change: suspended.
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Scene assertion state did change: None.
+Oct 17 11:10:03 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Workspace assertion state did change: None (acquireAssertion = NO).
+Oct 17 11:10:03 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Invalidating assertion 31-32-1902 (target:[application<dev.vieww.demo>:1276]) from originator [osservice<com.apple.SpringBoard>:32]
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removed last relative-start-date-defining assertion for process application<dev.vieww.demo>
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: running-suspended (role: None)
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] Set jetsam priority to 0 [0] flag[1]
+Oct 17 11:10:04 PDX640610152 kernel[0] <Notice>: memorystatus: set assertion priority(0) target vieww:1276
+Oct 17 11:10:04 PDX640610152 powerd[45] <Notice>: Process runningboardd.31 Released SystemIsActive "application<dev.vieww.demo>31-32-1894:FBSceneSnapshotAction:sceneID:dev.vieww.demo-default" age:00:00:00  id:51539641089 [System: SysAct]
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] Suspending task.
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] Shutdown sockets (SVC)
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] Set darwin role to: None
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] set Memory Limits to Hard Inactive (2098)
+Oct 17 11:10:04 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] check if suspended process is holding locks
+Oct 17 11:10:04 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Setting process task state to: Suspended
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Application process state changed for dev.vieww.demo: <SBApplicationProcessState: 0x280187600; pid: 1276; taskState: Suspended; visibility: Background>
+Oct 17 11:10:04 PDX640610152 testmanagerd[1266] <Notice>: Process monitor update handler invoked for dev.vieww.demo
+Oct 17 11:10:04 PDX640610152 testmanagerd[1266] <Notice>: Computed display ID dev.vieww.demo from embeddedApplicationIdentifier: dev.vieww.demo, xpcServiceIdentifier: (null), bundleID: dev.vieww.demo
+Oct 17 11:10:04 PDX640610152 testmanagerd[1266] <Notice>: <XCTDProcessMonitor: 0x1076051e0> passing update dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1276 state: background suspended to <XCTDProcessManagementServicesProvider: 0x107604fd0>
+Oct 17 11:10:04 PDX640610152 testmanagerd[1266] <Notice>: <XCTestSession: 0x107604c20> pid 1267 dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1276 state: background suspended
+Oct 17 11:10:04 PDX640610152 locationd[69] <Notice>: {"msg":"#CLIUA Marking change", "clientKey":"dev.vieww.demo", "reason":"Decaying in-use status from process state", "assertionLevel":4, "coming":1}
+Oct 17 11:10:04 PDX640610152 locationd[69] <Notice>: {"msg":"#CLIUA Marking change", "clientKey":"dev.vieww.demo", "reason":"Process state from RunningBoard", "assertionLevel":5, "coming":0}
+Oct 17 11:10:04 PDX640610152 locationd[69] <Notice>: {"msg":"computing freshAuthorizationContext", "ClientKey":"dev.vieww.demo", "BigSwitch":1, "InUseLevel":{"type":"decode failure","raw value":4,"expected type":"Generic"}}
+Oct 17 11:10:04 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] dev.vieww.demo application state changed to BackgroundTaskSuspended
+Oct 17 11:10:04 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] Ignore becoming background for application without push registration
+Oct 17 11:10:04 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: -[WiFiUserInteractionMonitor setApplicationRunningState:foregroundState:andNetworkingState:forBundleId:]: dev.vieww.demo entered background
+Oct 17 11:10:04 PDX640610152 symptomsd(SymptomEvaluator)[142] <Notice>: dev.vieww.demo: Foreground: false
+Oct 17 11:10:04 PDX640610152 symptomsd(SymptomEvaluator)[142] <Notice>: Failed to find process for dev.vieww.demo
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Verify background audio activity for dev.vieww.demo, Recording: 0
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:09 PDX640610152 kernel[0] <Notice>: memorystatus: freezing (general) pid 1276 [vieww] done, memorystatus_freeze_budget_pages_remaining 130161 froze 405 pages
+Oct 17 11:10:09 PDX640610152 gamecontrollerd(RunningBoardServices)[693] <Notice>: Hit the server for a process handle e89b61f000004fc that resolved to: [application<dev.vieww.demo>:1276]
+Oct 17 11:10:10 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:10 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:10 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:10 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:10 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:10 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:14 PDX640610152 locationd[69] <Notice>: {"msg":"#CLIUA Marking change", "clientKey":"dev.vieww.demo", "reason":"Decaying in-use status from process state", "assertionLevel":4, "coming":0}
+Oct 17 11:10:14 PDX640610152 locationd[69] <Notice>: {"msg":"computing freshAuthorizationContext", "ClientKey":"dev.vieww.demo", "BigSwitch":1, "InUseLevel":{"type":"decode failure","raw value":0,"expected type":"Generic"}}
+Oct 17 11:10:22 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:22 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:22 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:22 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:22 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:22 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:24 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:24 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:24 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:24 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:24 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:24 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:53 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:53 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:53 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:53 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:53 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:53 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:55 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:55 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:10:55 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:55 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:10:55 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:10:55 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:10:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:10:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:10:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:10:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:10:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:08 PDX640610152 Preferences(StorageData)[1295] <Notice>: Listing app : dev.vieww.demo
+Oct 17 11:11:09 PDX640610152 Preferences(CacheDelete)[1295] <Notice>: enumerateUserManagedAssets ENTRY, id: dev.vieww.demo, filter: (null)
+Oct 17 11:11:09 PDX640610152 Preferences(CacheDelete)[1295] <Error>: enumerateUserManagedAssets failed to find UserManagedAssets directory for dev.vieww.demo, nonContainer: (null), container: (null)
+Oct 17 11:11:09 PDX640610152 Preferences(StorageData)[1295] <Notice>: Zero KB: PurgeableAssets: dev.vieww.demo
+Oct 17 11:11:09 PDX640610152 Preferences(StorageData)[1295] <Notice>: Skipping empty directory at /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/Caches/dev.vieww.demo/com.apple.gpuarchiver
+Oct 17 11:11:09 PDX640610152 Preferences(StorageData)[1295] <Notice>: Listing app : dev.vieww.demo
+Oct 17 11:11:09 PDX640610152 Preferences(CacheDelete)[1295] <Notice>: enumerateUserManagedAssets ENTRY, id: dev.vieww.demo, filter: (null)
+Oct 17 11:11:09 PDX640610152 Preferences(CacheDelete)[1295] <Error>: enumerateUserManagedAssets failed to find UserManagedAssets directory for dev.vieww.demo, nonContainer: (null), container: (null)
+Oct 17 11:11:09 PDX640610152 Preferences(StorageData)[1295] <Notice>: Zero KB: PurgeableAssets: dev.vieww.demo
+Oct 17 11:11:09 PDX640610152 Preferences(StorageData)[1295] <Notice>: Listing app : dev.vieww.demo
+Oct 17 11:11:09 PDX640610152 Preferences(CacheDelete)[1295] <Notice>: enumerateUserManagedAssets ENTRY, id: dev.vieww.demo, filter: (null)
+Oct 17 11:11:09 PDX640610152 Preferences(CacheDelete)[1295] <Error>: enumerateUserManagedAssets failed to find UserManagedAssets directory for dev.vieww.demo, nonContainer: (null), container: (null)
+Oct 17 11:11:09 PDX640610152 Preferences(StorageData)[1295] <Notice>: Zero KB: PurgeableAssets: dev.vieww.demo
+Oct 17 11:11:13 PDX640610152 Preferences(StorageData)[1295] <Notice>: Listing app : dev.vieww.demo
+Oct 17 11:11:13 PDX640610152 Preferences(CacheDelete)[1295] <Notice>: enumerateUserManagedAssets ENTRY, id: dev.vieww.demo, filter: (null)
+Oct 17 11:11:13 PDX640610152 Preferences(CacheDelete)[1295] <Error>: enumerateUserManagedAssets failed to find UserManagedAssets directory for dev.vieww.demo, nonContainer: (null), container: (null)
+Oct 17 11:11:13 PDX640610152 Preferences(StorageData)[1295] <Notice>: Zero KB: PurgeableAssets: dev.vieww.demo
+Oct 17 11:11:14 PDX640610152 Preferences(StorageData)[1295] <Notice>: Listing app : dev.vieww.demo
+Oct 17 11:11:14 PDX640610152 Preferences(CacheDelete)[1295] <Notice>: enumerateUserManagedAssets ENTRY, id: dev.vieww.demo, filter: (null)
+Oct 17 11:11:14 PDX640610152 Preferences(CacheDelete)[1295] <Error>: enumerateUserManagedAssets failed to find UserManagedAssets directory for dev.vieww.demo, nonContainer: (null), container: (null)
+Oct 17 11:11:14 PDX640610152 Preferences(StorageData)[1295] <Notice>: Zero KB: PurgeableAssets: dev.vieww.demo
+Oct 17 11:11:15 PDX640610152 Preferences(StorageData)[1295] <Notice>: Listing app : dev.vieww.demo
+Oct 17 11:11:15 PDX640610152 Preferences(CacheDelete)[1295] <Notice>: enumerateUserManagedAssets ENTRY, id: dev.vieww.demo, filter: (null)
+Oct 17 11:11:15 PDX640610152 Preferences(CacheDelete)[1295] <Error>: enumerateUserManagedAssets failed to find UserManagedAssets directory for dev.vieww.demo, nonContainer: (null), container: (null)
+Oct 17 11:11:15 PDX640610152 Preferences(StorageData)[1295] <Notice>: Zero KB: PurgeableAssets: dev.vieww.demo
+Oct 17 11:11:17 PDX640610152 installcoordinationd[119] <Notice>: -[IXSClientConnection _remote_removabilityForAppWithIdentity:completion:]: Returning removability PossibleAndAllowed for dev.vieww.demo to client Preferences (pid 1295)
+Oct 17 11:11:17 PDX640610152 Preferences(CacheDelete)[1295] <Notice>: enumerateUserManagedAssets ENTRY, id: dev.vieww.demo, filter: (null)
+Oct 17 11:11:17 PDX640610152 Preferences(CacheDelete)[1295] <Error>: enumerateUserManagedAssets failed to find UserManagedAssets directory for dev.vieww.demo, nonContainer: (null), container: (null)
+Oct 17 11:11:17 PDX640610152 installcoordinationd[119] <Notice>: -[IXSClientConnection _remote_removabilityForAppWithIdentity:completion:]: Returning removability PossibleAndAllowed for dev.vieww.demo to client Preferences (pid 1295)
+    navigationItemTitle = vieww;
+    navigationItemTitle = vieww;
+    navigationItemTitle = vieww;
+    navigationItemTitle = vieww;
+Oct 17 11:11:19 PDX640610152 Preferences(StorageData)[1295] <Notice>: StorageLogInvestigation - 13.2 MB: dev.vieww.demo (dev.vieww.demo) APP:13.1 MB DAT:360 KB PRG:274 KB
+Oct 17 11:11:20 PDX640610152 appstored[179] <Notice>: Received app may be uninstalled notification for bundleID: dev.vieww.demo
+Oct 17 11:11:20 PDX640610152 appstored[179] <Notice>: [MetricsCoordinator] [dev.vieww.demo] May be uninstalled
+Oct 17 11:11:20 PDX640610152 appstored[179] <Error>: [Crossfire] Could not find app metadata for: dev.vieww.demo
+Oct 17 11:11:20 PDX640610152 appstored[179] <Error>: [Crossfire] Could not find app metadata for: dev.vieww.demo
+Oct 17 11:11:20 PDX640610152 appstored[179] <Error>: [Crossfire] Could not find app metadata for: dev.vieww.demo
+Oct 17 11:11:20 PDX640610152 appstored[179] <Error>: [ArcadeSummary] Could not find app metadata for: dev.vieww.demo
+Oct 17 11:11:20 PDX640610152 appstored[179] <Error>: [ArcadeSummary] Could not find app metadata for: dev.vieww.demo
+Oct 17 11:11:20 PDX640610152 appstored[179] <Error>: [ArcadeSummary] Could not find app metadata for: dev.vieww.demo
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+Oct 17 11:11:22 PDX640610152 Preferences(StorageData)[1295] <Notice>: Demoting app: vieww
+Oct 17 11:11:22 PDX640610152 installcoordinationd[119] <Notice>: -[IXSClientConnection _remote_cancelCoordinatorForAppWithIdentity:reason:client:completion:]: Cancellation for [dev.vieww.demo/P] (client Identifier Applied For) requested by Preferences (pid 1295) for reason Error Domain=com.apple.settings.storage Code=0 "Canceling existing install coord because user has requested delete" UserInfo={NSLocalizedDescription=Canceling existing install coord because user has requested delete}
+Oct 17 11:11:22 PDX640610152 installcoordinationd[119] <Error>: -[IXSClientConnection _remote_cancelCoordinatorForAppWithIdentity:reason:client:completion:]: Coordinator did not exist for bundle ID [dev.vieww.demo/P] : (null)
+Oct 17 11:11:22 PDX640610152 installcoordinationd[119] <Notice>: -[IXSClientConnection _remote_uninstallAppWithIdentity:options:completion:]: Uninstall of [dev.vieww.demo/P] requested by client Preferences (pid 1295) requesting user confirmation: N
+Oct 17 11:11:22 PDX640610152 installcoordinationd[119] <Notice>: -[IXSAppUninstaller _uninstallAppWithRecord:identity:clientName:flags:completion:]: Posting IXAppMayUninstallNotificationName for dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 installcoordinationd[119] <Notice>: -[IXSClientConnection _remote_removabilityForAppWithIdentity:completion:]: Returning removability PossibleAndAllowed for dev.vieww.demo to client Preferences (pid 1295)
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoardServices)[32] <Notice>: -[FBSApplicationLibrary applicationsWillUninstall:] dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 installd(MobileSystemServices)[302] <Notice>: 0x16d41b000 -[MIClientConnection _uninstallIdentities:withOptions:completion:]: Uninstall requested by installcoordinationd (pid 119 (501/501)) for identity [dev.vieww.demo/PersonalPersonaPlaceholderString] with options: {
+Oct 17 11:11:22 PDX640610152 installd(MobileSystemServices)[302] <Notice>: 0x16d41b000 -[MIUninstaller performUninstallationByRevokingTemporaryReference:error:]: Failed to get children for dev.vieww.demo : (null); ignoring
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: Received app may be uninstalled notification for bundleID: dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: [MetricsCoordinator] [dev.vieww.demo] May be uninstalled
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    controllerTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+    navigationItemTitle = "Deleting \134U201cvieww\134U201d will also delete all of its documents and data. This action can\134U2019t be undone.";
+Oct 17 11:11:22 PDX640610152 installd(MobileSystemServices)[302] <Notice>: 0x16d41b000 -[MIUninstaller performUninstallationByRevokingTemporaryReference:error:]: Failed to get parent of dev.vieww.demo : (null); ignoring
+    "dev.vieww.demo"
+Oct 17 11:11:22 PDX640610152 installd(RunningBoardServices)[302] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M302-18 qos:17 predicates:[<RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">>] descriptor:<RBSProcessStateDescriptor| values:5> events:0x0>
+Oct 17 11:11:22 PDX640610152 installd(RunningBoardServices)[302] <Notice>: Hit the server for a process handle e89b61f000004fc that resolved to: [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Received termination request from [osservice<com.apple.mobile.installd>:302] on <RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">> with context <RBSTerminateContext| explanation:installd terminating bundleID:dev.vieww.demo reportType:None maxTerminationResistance:Interactive attrs:[
+	<RBSPreventLaunchLimitation| <RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">>>
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Acquiring assertion targeting system from originator [osservice<com.apple.mobile.installd>:302] with description <RBSAssertionDescriptor| "installd terminating bundleID:dev.vieww.demo" ID:31-302-2036 target:system attributes:[
+	<RBSPreventLaunchLimitation| <RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">>>
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Executing termination request for: <RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">>
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] Terminating with context: <RBSTerminateContext| explanation:installd terminating bundleID:dev.vieww.demo reportType:None maxTerminationResistance:Interactive attrs:[
+	<RBSPreventLaunchLimitation| <RBSProcessPredicate <RBSProcessBundleIdentifierPredicate "dev.vieww.demo">>>
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] terminate_with_reason() success
+Oct 17 11:11:22 PDX640610152 backboardd(IOKit)[64] <Notice>: Connection removed: IOHIDEventSystemConnection uuid:006BE121-EC9E-4554-8F53-566C138810FA pid:1276 process:vieww type:Passive entitlements:0x0 caller:BackBoardServices: <redacted> + 280 attributes:{
+    bundleID = "dev.vieww.demo";
+Oct 17 11:11:22 PDX640610152 backboardd(BackBoardHIDEventFoundation)[64] <Notice>: Removing client connection <BKHIDClientConnection: 0x10805c020; IOHIDEventSystemConnectionRef: 0x10803b7d0; vpid: 1276(vD90); taskPort: 0x36F8B; bundleID: dev.vieww.demo> for client: IOHIDEventSystemConnection uuid:006BE121-EC9E-4554-8F53-566C138810FA pid:1276 process:vieww type:Passive entitlements:0x0 caller:BackBoardServices: <redacted> + 280 attributes:{
+    bundleID = "dev.vieww.demo";
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: termination assertion acquired for dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Workspace connection invalidated.
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Now flagged as pending exit for reason: workspace client connection invalidated
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: [application<dev.vieww.demo>:1276] termination reported by launchd (15, 0, 9)
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removing process: [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removing launch job for: [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removed job for [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Removing assertions for terminated process: [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: none (role: None)
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: XPC connection invalidated: [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: Calculated state for application<dev.vieww.demo>: none (role: None)
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Notice>: XPC connection invalidated: [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Process exited: <RBSProcessExitContext| specific, status:<RBSProcessExitStatus| domain:runningboard(15) code:0>>.
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Setting process task state to: Not Running
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Setting process visibility to: Unknown
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [application<dev.vieww.demo>:1276] Invalidating workspace.
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Removing source registration for processHandle: [application<dev.vieww.demo>:1276]
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [0x283c42d80:(FBSceneManager):sceneID:dev.vieww.demo-default] Invalidated for workspace: 0x283021e40.
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Removing: <FBApplicationProcess: 0x1141ff900; application<dev.vieww.demo>:1276(vD90)>
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Process exited: <FBApplicationProcess: 0x1141ff900; application<dev.vieww.demo>:1276(vD90)> -> <RBSProcessExitContext| specific, status:<RBSProcessExitStatus| domain:runningboard(15) code:0>>
+Oct 17 11:11:22 PDX640610152 installd(MobileInstallation)[302] <Notice>: dev.vieww.demo/PersonalPersonaPlaceholderString:7:11:1:1:Start : Uninstall (Application)
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: Application process state changed for dev.vieww.demo: (null)
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Client provider invalidated: <FBWorkspace: 0x283021e40; application<dev.vieww.demo>>
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: Invalidating scene: sceneID:dev.vieww.demo-default
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [sceneID:dev.vieww.demo-default][1] Scene invalidated.
+Oct 17 11:11:22 PDX640610152 installd(MobileSystemServices)[302] <Notice>: 0x16d41b000 -[MIUninstaller _uninstallBundleWithIdentity:linkedToChildren:waitForDeletion:uninstallReason:temporaryReference:wasLastReference:error:]: Uninstalling identifier dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 installd(MobileSystemServices)[302] <Notice>: 0x16d41b000 -[MIUninstaller _uninstallBundleWithIdentity:linkedToChildren:waitForDeletion:uninstallReason:temporaryReference:wasLastReference:error:]: Destroying container dev.vieww.demo with persona (null) at /private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5
+Oct 17 11:11:22 PDX640610152 installd(MobileSystemServices)[302] <Notice>: 0x16d41b000 -[MIUninstaller _uninstallBundleWithIdentity:linkedToChildren:waitForDeletion:uninstallReason:temporaryReference:wasLastReference:error:]: Destroying container dev.vieww.demo with persona D994BD43-BD7C-4E45-9FEB-9F2C59D99DD5 at /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123
+Oct 17 11:11:22 PDX640610152 installd(MobileInstallation)[302] <Notice>: dev.vieww.demo/PersonalPersonaPlaceholderString:7:11:2:1:Success (End) : Uninstall (Application)
+Oct 17 11:11:22 PDX640610152 lsd(MobileInstallation)[107] <Notice>: dev.vieww.demo/(null):5:6:1:1:Unregister bundles via unregistrant - Start
+Oct 17 11:11:22 PDX640610152 lsd(MobileInstallation)[107] <Notice>: dev.vieww.demo/(null):5:6:1:1:Beginning _LSUnregisterAppWithBundleID (app only)
+Oct 17 11:11:22 PDX640610152 lsd(MobileInstallation)[107] <Notice>: dev.vieww.demo/(null):5:6:2:1:Finished _LSUnregisterAppWithBundleID
+Oct 17 11:11:22 PDX640610152 lsd(MobileInstallation)[107] <Notice>: dev.vieww.demo/(null):5:6:2:1:Unregister bundles - End
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: termination assertion released for dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 runningboardd(RunningBoard)[31] <Error>: RBSStateCapture remove item called for untracked item <RBConnectionClient| 1276 name:application<dev.vieww.demo> entitlements:<RBEntitlements| [
+Oct 17 11:11:22 PDX640610152 installcoordinationd[119] <Notice>: -[IXSAppUninstaller _performUninstallOfAppWithIdentity:clientName:withFlags:record:completion:]_block_invoke: Uninstall succeeded with disposition:UninstallDispositionUninstalled for bundleID:dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoardServices)[32] <Notice>: -[FBSApplicationLibrary applicationsDidUninstall:] dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 SpringBoard(MobileInstallation)[32] <Notice>: dev.vieww.demo/(null):10:12:3:1:Application removed for reason: Removed from the system.
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: SBWorkspaceTerminateApplication: dev.vieww.demo: "uninstalling app"
+Oct 17 11:11:22 PDX640610152 SpringBoard(FrontBoard)[32] <Notice>: [FBWorkspaceEvent] Executing: <FBWorkspaceEvent: 0x2807568c0; TerminateApp: dev.vieww.demo (uninstalling app)>
+Oct 17 11:11:22 PDX640610152 bluetoothd[91] <Notice>: dev.vieww.demo (null) <private>
+Oct 17 11:11:22 PDX640610152 bluetoothd[91] <Notice>: Unable To Uninstall dev.vieww.demo, AppInfo Not Found
+Oct 17 11:11:22 PDX640610152 CommCenter[94] <Notice>: #I Apps uninstalled from the device: dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: dev.vieww.demo: Updating app shortcut store...
+    "dev.vieww.demo"
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: dev.vieww.demo: Saving...
+    "dev.vieww.demo"
+Oct 17 11:11:22 PDX640610152 SpringBoard(SpringBoard)[32] <Notice>: dev.vieww.demo: SBApplicationShortcutStore doesn't need truncation (truncation reason: <private>); there are 0 application shortcut items.
+Oct 17 11:11:22 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshots: (
+Oct 17 11:11:22 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x100d2e240; \M-b\M^@\M-&0EC09E43D2F6> [dev.vieww.demo] for reason: _contentType: GeneratedDefault(1)
+Oct 17 11:11:22 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x1141ad7d0; \M-b\M^@\M-&879AD520EF22> [dev.vieww.demo] for reason: _contentType: GeneratedDefault(1)
+Oct 17 11:11:22 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting paths: <private>
+Oct 17 11:11:22 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] Application uninstalled using default data provider
+Oct 17 11:11:22 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] Remove data provider
+Oct 17 11:11:22 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Error>: [dev.vieww.demo] Push registration with a nil environment was encountered, will not invalidate token
+Oct 17 11:11:22 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] Remove all pending notification dictionaries
+Oct 17 11:11:22 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: Removing library mapping for dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 Preferences(InstallCoordination)[1295] <Notice>: +[IXAppInstallCoordinator uninstallAppWithIdentity:options:completion:]_block_invoke: Received disposition UninstallDispositionUninstalled from installcoordinationd for [dev.vieww.demo/P]
+Oct 17 11:11:22 PDX640610152 Preferences(InstallCoordination)[1295] <Notice>: +[IXAppInstallCoordinator uninstallAppWithIdentity:options:completion:]_block_invoke: Resyncing local LS database to ensure it knows about uninstall of [dev.vieww.demo/P]
+Oct 17 11:11:22 PDX640610152 Preferences(InstallCoordination)[1295] <Notice>: +[IXAppInstallCoordinator uninstallAppWithIdentity:options:completion:]_block_invoke: Resync of local LS database complete after uninstall of [dev.vieww.demo/P]
+Oct 17 11:11:22 PDX640610152 wifid(WiFiPolicy)[49] <Notice>: -[WiFiUserInteractionMonitor setApplicationRunningState:foregroundState:andNetworkingState:forBundleId:]: dev.vieww.demo exited
+        "dev.vieww.demo"
+Oct 17 11:11:22 PDX640610152 locationd[69] <Notice>: {"msg":"removing client entry", "client":"dev.vieww.demo"}
+Oct 17 11:11:22 PDX640610152 CommCenter[94] <Notice>: #I Updating bundle entry: dev.vieww.demo with notification state set to: 0x00000010
+Oct 17 11:11:22 PDX640610152 tccd[44] <Notice>: Deleted entries for dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 CommCenter[94] <Notice>: #I Setting user notification state for bundle id: dev.vieww.demo to kNeedsFirstUse
+Oct 17 11:11:22 PDX640610152 CommCenter[94] <Notice>: #I Updating bundle entry: dev.vieww.demo with notification state set to: 0x00000020
+Oct 17 11:11:22 PDX640610152 locationd[69] <Notice>: {"msg":"#pla mark service inactive and try stop zone-monitoring", "Client":"dev.vieww.demo", "SpecifiedService":{"type":"decode failure","raw value":1,"expected type":"Generic"}, "ClientEntry":"{\134n}"}
+Oct 17 11:11:22 PDX640610152 locationd[69] <Notice>: {"msg":"iB: Removed all fences for bundle", "bundle":"dev.vieww.demo"}
+Oct 17 11:11:22 PDX640610152 CommCenter[94] <Notice>: #I Setting user notification state for bundle id: dev.vieww.demo to kNeedsFirstUse
+Oct 17 11:11:22 PDX640610152 CommCenter[94] <Notice>: #I Removing rules for apps: dev.vieww.demo
+    "dev.vieww.demo"
+    "dev.vieww.demo"
+			0: <string: 0x104007a40> { length = 14, contents = "dev.vieww.demo" }
+Oct 17 11:11:22 PDX640610152 driverkitd[74] <Notice>: distnoted app uninstallation event, processing bundle: dev.vieww.demo
+    "dev.vieww.demo"
+Oct 17 11:11:22 PDX640610152 CommCenter[94] <Notice>: #I Successfully deleted rules for app: dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0>
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: Handling application un-installation: {bundleID = dev.vieww.demo; version = (null); shortVersion = (null); variantID = (null)}
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: [9CBCBAC0] Cleaning up following removal of apps: [dev.vieww.demo]
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: Canceling progress for bundleID: dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 testmanagerd[1266] <Notice>: Process monitor update handler invoked for dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 testmanagerd[1266] <Notice>: Computed display ID dev.vieww.demo from embeddedApplicationIdentifier: dev.vieww.demo, xpcServiceIdentifier: (null), bundleID: dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 testmanagerd[1266] <Notice>: <XCTDProcessMonitor: 0x1076051e0> passing update dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1276 state: not running to <XCTDProcessManagementServicesProvider: 0x107604fd0>
+Oct 17 11:11:22 PDX640610152 testmanagerd[1266] <Notice>: <XCTestSession: 0x107604c20> pid 1267 dev.vieww.demo@/private/var/containers/Bundle/Application/BF59BC2D-076C-4515-88CC-37A66CEA40F5/vieww.app pid: 1276 state: not running
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: Cancelled download requests for: dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: Received request to cancel download requests for dev.vieww.demo - (null)
+Oct 17 11:11:22 PDX640610152 SpringBoard(UserNotificationsServer)[32] <Notice>: [dev.vieww.demo] dev.vieww.demo application state changed to Terminated
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: [Crossfire] Apps deleted: [dev.vieww.demo]
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: [MetricsCoordinator] [ODP] Recording deleted apps: [dev.vieww.demo]
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: [ODP/02E9843C] App delete metadata not found for: dev.vieww.demo
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: [02E9843C/dev.vieww.demo] Removed metadata following deletion
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: Removed manifest for dev.vieww.demo: YES
+Oct 17 11:11:22 PDX640610152 appstored[179] <Notice>: [Crossfire] Not creating app event for non-candidate bundleID: dev.vieww.demo with type: Uninstall hasMetadata: YES
+Oct 17 11:11:22 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0>
+Oct 17 11:11:23 PDX640610152 chronod(ChronoCore)[130] <Notice>: [appAuth:dev.vieww.demo] healthkit authorization changed
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Reaping invalid snapshot <XBApplicationSnapshot: 0x11428f470; \M-b\M^@\M-&D65B11A20326> [dev.vieww.demo]
+ invalidReason: no cached image. no generation context. no image generator. no file at path: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/B5C47458-AFE1-45F8-A8DA-D65B11A20326@3x.ktx
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Reaping invalid snapshot <XBApplicationSnapshot: 0x1009d3eb0; \M-b\M^@\M-&583C06D03DC1> [dev.vieww.demo]
+ invalidReason: no cached image. no generation context. no image generator. no file at path: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/downscaled/DD7A634A-E8A7-470D-AFD2-583C06D03DC1@3x.ktx
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Reaping invalid snapshot <XBApplicationSnapshot: 0x11429db90; \M-b\M^@\M-&138D4EA96187> [dev.vieww.demo]
+ invalidReason: no cached image. no generation context. no image generator. no file at path: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/5E6F9492-2BA5-4BEA-A590-138D4EA96187@3x.ktx
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Reaping invalid snapshot <XBApplicationSnapshot: 0x10092b690; \M-b\M^@\M-&B6056F2C56F7> [dev.vieww.demo]
+ invalidReason: no cached image. no generation context. no image generator. no file at path: /private/var/mobile/Containers/Data/Application/563639C8-3AFD-4D91-97F5-0BC5E6B7D123/Library/SplashBoard/Snapshots/sceneID:dev.vieww.demo-default/downscaled/6DB8D525-B2A1-4BEF-AA0C-B6056F2C56F7@3x.ktx
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x11428f470; \M-b\M^@\M-&D65B11A20326> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x1009d3eb0; \M-b\M^@\M-&583C06D03DC1> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x1009d3eb0; \M-b\M^@\M-&583C06D03DC1> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x11429db90; \M-b\M^@\M-&138D4EA96187> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x10092b690; \M-b\M^@\M-&B6056F2C56F7> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting snapshot <XBApplicationSnapshot: 0x10092b690; \M-b\M^@\M-&B6056F2C56F7> [dev.vieww.demo] for reason: _contentType: SceneContent(0)
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] Deleting paths: <private>
+Oct 17 11:11:23 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] We don't have any snapshots, so we're clearing our manifest data.
+    navigationItemTitle = vieww;
+    navigationItemTitle = vieww;
+    navigationItemTitle = vieww;
+    navigationItemTitle = vieww;
+Oct 17 11:11:24 PDX640610152 SpringBoard(SplashBoard)[32] <Notice>: <XBApplicationSnapshotManifestImpl: 0x282821280> [dev.vieww.demo] We don't have any snapshots, so we're clearing our manifest data.
+Oct 17 11:11:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:27 PDX640610152 MobilePhone[352] <Notice>: Observing foreground notifications via PhoneRootViewController viewWillAppear
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:27 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:28 PDX640610152 MobilePhone[1309] <Notice>: Observing foreground notifications via PhoneRootViewController viewWillAppear
+Oct 17 11:11:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:36 PDX640610152 MobilePhone[1314] <Notice>: Observing foreground notifications via PhoneRootViewController viewWillAppear
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:39 PDX640610152 MobilePhone[1315] <Notice>: Observing foreground notifications via PhoneRootViewController viewWillAppear
+Oct 17 11:11:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:43 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:43 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:43 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:43 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:43 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:43 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:45 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:54 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:56 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:11:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:01 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:01 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:01 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:01 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:01 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:01 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:08 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:08 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:08 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:08 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:08 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:08 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:17 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:17 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:17 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:17 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:17 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:17 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:19 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:19 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:19 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:19 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:19 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:19 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:29 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:29 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:29 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:29 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:29 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:29 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101037600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101201400> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:12:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:12:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:12:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:12:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:12:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:12:47 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:13:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:13:03 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:13:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:13:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:05 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:05 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:13:05 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:05 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:05 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:13:05 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:13:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:13:11 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:13:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:20 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:20 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:13:20 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:20 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:20 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:13:20 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:13:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:13:31 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:13:33 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:13:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:13:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:13:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:13:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:13:35 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:12 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:12 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:12 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:12 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:12 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:12 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:13 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:23 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:25 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:28 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:37 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:38 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:38 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:38 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:38 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:38 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:38 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:39 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:40 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:40 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:40 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:40 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:41 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:48 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:48 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:48 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:48 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:48 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:48 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:50 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:51 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:51 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:51 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:51 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:51 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:51 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:52 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:14:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:14:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:14:57 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:14:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:14:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:14:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:14:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:14:59 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:15:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:15:04 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:06 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:06 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:15:06 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:06 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:06 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:15:06 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:15:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:15:07 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:15:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:15:09 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:14 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:14 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:15:14 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:14 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:14 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:15:14 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:15:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:15:15 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:16 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:16 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:15:16 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:16 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:16 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:15:16 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillDisappear
+Oct 17 11:15:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillDisappear:]
+Oct 17 11:15:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillDisappear
+Oct 17 11:15:18 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillDisappear:0 SBHWidgetStackViewController
+Oct 17 11:15:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101321a00> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.weather.widget -- viewWillAppear
+Oct 17 11:15:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: <SBHWidgetStackViewController:0x101ae3600> -[SBHWidgetStackViewController viewWillAppear:]
+Oct 17 11:15:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: SBHWidgetContainerViewController com.apple.mobilecal.CalendarWidgetExtension -- viewWillAppear
+Oct 17 11:15:26 PDX640610152 SpringBoard(SpringBoardHome)[32] <Notice>: viewWillAppear:SBHWidgetStackViewController
+Oct 17 11:15:29 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.bytearc.SafariLauncher">]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0>
+Oct 17 11:15:29 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.bytearc.SafariLauncher">]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0>
+Oct 17 11:15:30 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.bytearc.SafariLauncher">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.aws.mobile.devicefarm.SafariCleanerUITests.xctrunner">]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0<\M-b\M^@\M-&>
+Oct 17 11:15:30 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.bytearc.SafariLauncher">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.aws.mobile.devicefarm.SafariCleanerUITests.xctrunner">]>>] descriptor:<RBSProcessStateDescriptor| values:9 namespaces:[com.apple.frontboard.visibility]> events:0x0<\M-b\M^@\M-&>
+Oct 17 11:15:31 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.aws.mobile.devicefarm.SafariCleanerUITests.xctrunner">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.bytearc.SafariLauncher">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>,<\M-b\M^@\M-&>
+Oct 17 11:15:31 PDX640610152 callservicesd(RunningBoardServices)[114] <Notice>: Updating configuration of monitor <RBSProcessMonitorConfiguration| id:M114-6 qos:17 predicates:[<RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "com.amazon.RootTester">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.aws.mobile.devicefarm.SafariCleanerUITests.xctrunner">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>, <RBSProcessBundleIdentifierPredicate "com.bytearc.SafariLauncher">]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSProcessBundleIdentifierPredicate "dev.vieww.demo">, <RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>, <RBSProcessEUIDPredicate 501>]>]>>, <RBSProcessPredicate <RBSCompoundAllPredicate [<RBSCompoundAllPredicate [<RBSProcessBKSLegacyPredicate>,<\M-b\M^@\M-&>

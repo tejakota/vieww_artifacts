@@ -1,0 +1,45 @@
+device-suite: dev.vieww.demo is running as pid 4358
+device-suite: display is 1440x3200
+device-suite: waiting for the app to report its tap targets…
+device-suite: the app reports button 197,603 and field 260,890 (physical)
+device-suite: sent 4 tap(s) each at 197,603 and 260,890
+device-suite: screenshot in /tmp/devicefarm-workspace/execution-4c2tywyg/logs-lr9b6e03/vieww/cpu-screen.png
+
+  begin
+  --   crash_reports_recovered_from_the_last_run: 0
+  ok   crash_reports_have_somewhere_to_go: wrote and read one back in /data/user/0/dev.vieww.demo/files/crashes
+  ok   the_platform_registered_a_clipboard: 4 service(s) registered
+  --   dlopen_from_a_writable_path: PERMITTED (the linker read the file and rejected its contents); dlopen said: dlopen failed: "/data/data/dev.vieww.demo/files/libvieww_probe.so" is too small to be an ELF executable: only found 28 bytes
+  --   dlopen_a_real_guest_library: not staged — found nothing at /storage/emulated/0/Android/data/dev.vieww.demo/files/libreload_guest.so or /data/local/tmp/libreload_guest.so. Run ci/mobile/reload-guest-android.sh to build and stage one; this is not a failure, only an unanswered question.
+  --   rasterizer: CPU rasterizer (set debug.vieww.gpu=1 for the GPU path)
+  ok   view_metrics_reached_the_tree: 480x1066.6666 logical
+  ok   the_display_density_is_plausible: 3x
+  ok   the_safe_area_fits_inside_the_surface: l0 t34.666668 r0 b48
+  --   safe_area: l0 t34.666668 r0 b48 on a 480x1066.6666 surface at 3x
+  ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 425.33334 } on a 1066.6666-tall surface
+  --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 425.33334 } at the moment of the report
+  ok   the_platform_clipboard_round_trips: wrote and read back 33 bytes; restored what was there
+  ok   a_semantic_click_activates_the_button: handled=true, taps 0 -> 1
+  ok   a_tap_reached_a_handler: 1 tap
+  ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+  ok   the_keyboard_inset_appears_when_the_keyboard_does: 425.33334 logical pixels
+  ok   frames_were_presented: 600 frames
+  ok   the_typical_frame_is_inside_its_budget: median 11.889845ms against a budget of 16.666666ms
+  ok   no_frame_stalled: worst 18.615156ms, 3 of 240 over budget
+  --   frame_time: median 11.889845ms, worst 18.615156ms, budget 16.666666ms (240 samples)
+  --   startup_stages: before run 113 ms | app setup 0.1 | event loop started 0.0 | resumed 15.2 | window created 0.0 | present ready 0.1 | accessibility and show 0.0 | tree built 1.3 | window ready 4.0 | until first draw 0.0 | app before-frame hooks 0.3 | first build and layout 1.4 | first raster and present 37.3 = 173.1 ms from process start
+  --   frame_stages: medians ms: scale 0.02 plan 0.00 cpu 8.68 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.08 present 1.67
+  --   frame_stages_p95: p95 ms: scale 0.03 plan 0.00 cpu 10.23 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.59 present 2.34
+  --   worst_frame: work 18.62 ms, outside the renderer 0.77 ms, on cpu6; stages ms: scale 0.02 plan 0.00 cpu 14.91 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.08 present 1.83
+  --   raster_by_core: cpu4 93 frames 8.78 ms | cpu5 74 frames 8.57 ms | cpu6 50 frames 8.68 ms | cpu7 23 frames 8.88 ms
+  --   cpu_clocks: cpu0 1.08/1.80 GHz | cpu1 1.08/1.80 GHz | cpu2 1.08/1.80 GHz | cpu3 1.08/1.80 GHz | cpu4 2.42/2.42 GHz | cpu5 2.42/2.42 GHz | cpu6 2.42/2.42 GHz | cpu7 0.84/2.84 GHz
+  ok   damage_tracking_costs_a_fraction_of_a_full_repaint: 0.054 full repaints per frame over 600 frames, against a 4608000px surface
+  --   full_repaints: 1 of 600 frames cost a whole surface, 0 of those after the loop slept
+  ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+  ok   the_full_repaint_counter_saw_the_first_frame: 1 full repaint(s) over 600 frames against a 4608000px surface
+  --   frame_report: 600 frames in 10.06s — 59.6fps (median 16.38ms, worst 19.95ms over 24 continuous); work median 11.89ms, worst 18.62ms; 7 over a 16.67ms budget; rasterised 32.46 full repaints (1 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.02 plan 0.00 cpu 8.68 gpu[upload 0.00 record 0.00 submit 0.00 wait 0.00 readback 0.00] acquire 1.08 present 1.67 ms
+  --   gpu_frames: 0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+  end 17 checks, 0 failed
+  result PASS
+
+device-suite: PASS

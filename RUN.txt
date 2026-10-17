@@ -1,0 +1,3 @@
+profile: dist
+apk: success · phones: failure · ipa: success · iphones: success
+run: https://github.com/tejakota/vieww_artifacts/actions/runs/39056312917 @ 4d3b37779912cece80710d219f52cdc168de18a1

@@ -1,0 +1,7 @@
+launch 1:
+10-17 18:06:19.067  5242  5259 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu, measuring (first launch with this build here)
+10-17 18:06:20.159  5242  5259 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (measured: cpu 8.81 ms; budget 16.67 ms)
+launch 2:
+10-17 18:06:27.846  5333  5354 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (calibrated earlier: cpu 8.80 ms)
+launch 3:
+10-17 18:06:36.578  5445  5462 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu (calibrated earlier: cpu 8.80 ms)

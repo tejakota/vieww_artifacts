@@ -1,0 +1,40 @@
+device_name=00008120-0010445E0AF3C01E
+ios=17.4
+model=iPhone 15 Plus
+ipa_bytes=4779605
+bundle_id=dev.vieww.demo
+route=devicectl
+appium_session=ffe11c22-39a2-4e48-b912-bdd543562d01
+cpu_first_frame_ms=356.0 357.0 373.0
+cpu_tap_targets=scale=3 button=66,223 field=87,317
+cpu_suite=PASS
+cpu_frame_time=median 5.740667ms, worst 11.0575ms, budget 16.666668ms (240 samples)
+cpu_frame_stages=medians ms: scale 0.01 plan 0.00 cpu 2.99 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.10 present 2.40
+cpu_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 5.65 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.17 present 4.21
+cpu_worst_frame=work 11.06 ms, outside the renderer 0.26 ms; stages ms: scale 0.02 plan 0.00 cpu 6.39 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.16 present 4.23
+cpu_startup_stages=before run 10 ms | app setup 2.7 | event loop started 84.0 | resumed 227.5 | window created 17.9 | present ready 0.3 | accessibility and show 0.4 | tree built 2.2 | window ready 3.1 | until first draw 0.2 | app before-frame hooks 0.0 | first build and layout 1.0 | first raster and present 18.3 = 367.9 ms from process start
+cpu_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpu_failed_checks=
+gpu_first_frame_ms=1069.0 374.0 353.0
+gpu_tap_targets=scale=3 button=66,223 field=87,317
+gpu_suite=PASS
+gpu_frame_time=median 16.272917ms, worst 32.812584ms, budget 16.666668ms (240 samples)
+gpu_frame_stages=medians ms: scale 0.07 plan 0.43 cpu 0.00 gpu_upload 0.02 gpu_record 0.01 gpu_submit 6.91 gpu_wait 8.04 gpu_readback 0.00 acquire 0.03 present 0.05
+gpu_frame_stages_p95=p95 ms: scale 0.07 plan 0.49 cpu 0.00 gpu_upload 0.03 gpu_record 0.02 gpu_submit 8.33 gpu_wait 10.38 gpu_readback 0.00 acquire 0.05 present 0.08
+gpu_worst_frame=work 32.81 ms, outside the renderer 0.35 ms; stages ms: scale 0.03 plan 0.22 cpu 0.00 gpu_upload 0.01 gpu_record 0.01 gpu_submit 21.52 gpu_wait 10.59 gpu_readback 0.00 acquire 0.02 present 0.06
+gpu_startup_stages=before run 11 ms | app setup 2.6 | event loop started 85.9 | resumed 223.5 | window created 15.1 | present ready 12.7 | accessibility and show 0.1 | tree built 1.4 | window ready 3.2 | until first draw 1.0 | app before-frame hooks 0.0 | first build and layout 0.9 | first raster and present 21.9 = 378.9 ms from process start
+gpu_pipeline_cache=started from 41701 bytes; saved 41701 bytes after the first GPU frame
+gpu_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpu_failed_checks=
+auto_first_frame_ms=360.0 353.0 346.0
+auto_tap_targets=scale=3 button=66,223 field=87,317
+auto_suite=PASS
+auto_frame_time=median 5.913542ms, worst 11.259542ms, budget 16.666668ms (240 samples)
+auto_frame_stages=medians ms: scale 0.01 plan 0.00 cpu 3.01 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.10 present 2.62
+auto_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 5.46 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.16 present 4.15
+auto_worst_frame=work 11.26 ms, outside the renderer 0.30 ms; stages ms: scale 0.03 plan 0.00 cpu 6.59 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.16 present 4.18
+auto_startup_stages=before run 11 ms | app setup 2.6 | event loop started 82.2 | resumed 234.0 | window created 19.3 | present ready 0.7 | accessibility and show 0.2 | tree built 2.4 | window ready 3.6 | until first draw 0.2 | app before-frame hooks 0.0 | first build and layout 0.9 | first raster and present 16.9 = 373.7 ms from process start
+auto_renderer_choice=cpu (calibrated earlier: cpu 5.31 ms)
+auto_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+auto_failed_checks=
+status=PASS
