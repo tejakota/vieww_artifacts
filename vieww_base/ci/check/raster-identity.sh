@@ -17,8 +17,10 @@
 # reports the differences without failing, so the trailer, not the script,
 # carries the decision.
 #
-# BASE is built in a temporary git worktree, sharing the target directory so
-# dependencies compile once; the workspace's own crates build twice.
+# BASE is built in a temporary git worktree with a target directory of its
+# own, deleted afterwards. Sharing one is faster and wrong: cargo reuses a
+# build script compiled for one checkout in the other, with whatever paths it
+# baked in.
 
 set -euo pipefail
 
@@ -56,7 +58,7 @@ render() { # $1 = workspace dir, $2 = target dir, $3 = output dir
 echo "raster-identity: rendering the gallery at $base"
 git -C "$repo" worktree add -q --detach "$work/base" "$base" > /dev/null 2>&1
 target="${CARGO_TARGET_DIR:-$root/target}"
-render "$work/base/$inside" "$target" "$work/out-base"
+render "$work/base/$inside" "$work/target-base" "$work/out-base"
 
 echo "raster-identity: rendering the gallery at the working tree"
 render "$root" "$target" "$work/out-head"

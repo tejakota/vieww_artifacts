@@ -13,7 +13,13 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 fn main() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("shaders");
+    // Read when the script *runs*, not baked in when it is compiled
+    // (`env!`): cargo reuses one build-script binary for two checkouts of the
+    // same workspace sharing a target directory, and the baked-in path then
+    // pointed the second checkout at the first one's `shaders/` — a
+    // directory `ci/check/raster-identity.sh` had already deleted.
+    let manifest = std::env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+    let dir = Path::new(&manifest).join("shaders");
     println!("cargo::rerun-if-changed=shaders");
     println!("cargo::rerun-if-changed=src/spirv_options.rs");
 
