@@ -773,6 +773,11 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     if let Some(startup) = vieww_platform_winit::startup_report() {
         results.observe("startup_stages", startup);
     }
+    // What `App::auto_rasterizer` chose on this device, and from which
+    // numbers — absent when the app fixed its rasterizer in advance.
+    if let Some(choice) = vieww_platform_winit::rasterizer_choice() {
+        results.observe("renderer_choice", choice);
+    }
 
     // The same breakdown at the median, at p95, and for the single worst
     // frame: the A36's 13.9 ms median and 68.6 ms worst (Device Farm,

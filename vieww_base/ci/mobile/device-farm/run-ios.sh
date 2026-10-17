@@ -88,13 +88,15 @@ fi
 
 if [ "$legacy" = 1 ]; then
     status=0
-    for mode in cpu gpu; do
-        gpu=0; [ "$mode" = gpu ] && gpu=1
+    # `auto` (`VIEWW_GPU=auto`, `App::auto_rasterizer`) gets one launch here,
+    # so it measures the CPU path and settles only if that is comfortable.
+    for mode in cpu gpu auto; do
+        gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
         log="$out/$mode-suite.log"
         verdict="$(python3 "$here/tap_ios.py" suite --udid "$udid" --wda "$wda" \
             --bundle "$bundle_id" --gpu "$gpu" --out "$log" 2>> "$out/$mode-appium.err" | tr -d '\r' | tail -1)"
         [ -n "$verdict" ] || verdict="ERROR"
-        [ "$verdict" = PASS ] || status=1
+        [ "$verdict" = PASS ] || [ "$mode" = auto ] || status=1
         kv "${mode}_suite" "$verdict"
         kv "${mode}_first_frame_ms" "n/a (no console below iOS 17)"
         for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
@@ -137,16 +139,24 @@ wait_for() {
 }
 
 status=0
-for mode in cpu gpu; do
-    gpu=0; [ "$mode" = gpu ] && gpu=1
+# `auto` is `App::auto_rasterizer` (`VIEWW_GPU=auto`): the app measures the
+# rasterizers itself. Its three start-ups double as the calibration — the
+# first forgets any earlier answer (`VIEWW_RENDERER_RECALIBRATE=1`) and
+# measures the CPU path, the second the GPU path if the CPU was not
+# comfortable — and each runs six seconds past its first frame so the
+# measurement finishes. Diagnostic for this round: it does not fail the job.
+for mode in cpu gpu auto; do
+    gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
 
     # 1. Start-up, three times. The trace's first `frame stages` line is the
     # first presented frame, timestamped from the app's own epoch.
     starts=""
     for i in 1 2 3; do
         f="$out/$mode-start-$i.txt"
-        pid="$(launch "{\"VIEWW_GPU\":\"$gpu\",\"VIEWW_TRACE_FRAMES\":\"1\"}" "$f")"
+        extra=""; [ "$mode" = auto ] && [ "$i" = 1 ] && extra=",\"VIEWW_RENDERER_RECALIBRATE\":\"1\""
+        pid="$(launch "{\"VIEWW_GPU\":\"$gpu\",\"VIEWW_TRACE_FRAMES\":\"1\"$extra}" "$f")"
         wait_for "$f" 20 "frame stages" || true
+        [ "$mode" = auto ] && sleep 6
         kill "$pid" > /dev/null 2>&1 || true
         t="$(grep -m1 "frame stages" "$f" | awk '{print $1}')"
         [ -n "$t" ] && starts="$starts $(python3 -c "print(round(float('$t')*1000, 1))")"
@@ -180,7 +190,7 @@ for mode in cpu gpu; do
     else
         verdict="TIMEOUT"
     fi
-    [ "$verdict" = PASS ] || status=1
+    [ "$verdict" = PASS ] || [ "$mode" = auto ] || status=1
     kv "${mode}_suite" "$verdict"
     for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$log" | sed "s/^$key: //" | tr -d '\r')"

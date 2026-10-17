@@ -738,13 +738,28 @@ mod demo {
         // is taken against it.
         // A Test Lab game loop says which with its scenario (2 = GPU), since a
         // device cloud cannot `setprop`; otherwise the property decides.
+        let gpu_prop = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.gpu")
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_default();
         let prefer_gpu = match game_loop_scenario {
             Some(scenario) => scenario == 2,
-            None => std::process::Command::new("/system/bin/getprop")
-                .arg("debug.vieww.gpu")
-                .output()
-                .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1"),
+            None => gpu_prop == "1",
         };
+        // `debug.vieww.gpu=auto`: measure both rasterizers on this phone and
+        // keep the faster (`App::auto_rasterizer`), and
+        // `debug.vieww.recalibrate=1` forgets an earlier answer first.
+        let auto = game_loop_scenario.is_none() && gpu_prop == "auto";
+        if auto
+            && std::process::Command::new("/system/bin/getprop")
+                .arg("debug.vieww.recalibrate")
+                .output()
+                .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1")
+        {
+            // Before the event loop and every worker the app starts, as below.
+            std::env::set_var("VIEWW_RENDERER_RECALIBRATE", "1");
+        }
         // **And which present, the same way:** `debug.vieww.present=vulkan`
         // presents CPU frames through the Vulkan swapchain instead of
         // `ANativeWindow_lock` (`native::PresentPath`). For A/B runs on one
@@ -777,7 +792,9 @@ mod demo {
         }
         suite.observe(
             "rasterizer",
-            if prefer_gpu {
+            if auto {
+                "measured on this phone (debug.vieww.gpu=auto)"
+            } else if prefer_gpu {
                 "planned GPU path requested (debug.vieww.gpu=1)"
             } else {
                 "CPU rasterizer (set debug.vieww.gpu=1 for the GPU path)"
@@ -806,6 +823,7 @@ mod demo {
             // geometry does not exist until the frame has been laid out.
             .after_frame(suite.tap_targets());
         let app = if prefer_gpu { app.prefer_gpu() } else { app };
+        let app = if auto { app.auto_rasterizer() } else { app };
         let result = app.run_android(android, |driver| {
             // `FrameDriver::set_root`, *not* `driver.elements().set_root`.
             // The driver keeps the root so it can re-publish it under an

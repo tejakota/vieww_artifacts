@@ -115,6 +115,14 @@ fn main() {
     let prefer_gpu = std::env::var("VIEWW_GPU").is_ok_and(|v| v == "1");
     let app = App::new();
     let app = if prefer_gpu { app.prefer_gpu() } else { app };
+    // `VIEWW_GPU=auto` measures both rasterizers on this iPhone and keeps the
+    // faster (`App::auto_rasterizer`); `VIEWW_RENDERER_RECALIBRATE=1` beside
+    // it forgets an earlier answer first.
+    let app = if std::env::var("VIEWW_GPU").is_ok_and(|v| v == "auto") {
+        app.auto_rasterizer()
+    } else {
+        app
+    };
     let result = app
         .title("vieww")
         .size(PREVIEW)

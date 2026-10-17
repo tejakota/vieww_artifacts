@@ -35,6 +35,7 @@ use crate::insets::{InsetWatch, SystemInsets};
 use crate::keys::KeyTranslator;
 use crate::lifecycle::Lifecycle;
 use crate::native::{NativeError, NativeRenderer, NativeSurface, PresentPath};
+use crate::rasterizer_choice::{Calibration, Launch, Measuring, Rasterizer};
 use crate::scale::Scale;
 use crate::stats::{FrameLog, FrameReport};
 use crate::windows::{PlatformWindows, Requests};
@@ -287,6 +288,9 @@ pub struct App {
     /// Whether each frame is planned and, when the plan is complete,
     /// rasterised by the GPU — see [`App::prefer_gpu`].
     prefer_gpu: bool,
+    /// Measure both rasterizers on this device and keep the faster — see
+    /// [`App::auto_rasterizer`]. Overrides `prefer_gpu` when set.
+    auto_rasterizer: bool,
     stop: Stop,
     /// Called once per frame each, in the order they were added. See
     /// [`App::on_frame`].
@@ -367,6 +371,7 @@ impl App {
             refresh_hz: 60.0,
             refresh_stated: false,
             prefer_gpu: false,
+            auto_rasterizer: false,
             stop: Stop::OnClose,
             on_frame: Vec::new(),
             after_frame: Vec::new(),
@@ -520,6 +525,23 @@ impl App {
     #[must_use]
     pub const fn prefer_gpu(mut self) -> Self {
         self.prefer_gpu = true;
+        self
+    }
+
+    /// Choose the CPU or the GPU rasterizer by measuring them on this device,
+    /// instead of deciding in advance with [`prefer_gpu`](Self::prefer_gpu).
+    ///
+    /// The first launch runs the CPU path and measures it; if it fits
+    /// comfortably in the frame budget it is kept and no GPU driver is ever
+    /// loaded. Otherwise the next launch measures the GPU path, and the GPU is
+    /// kept only if it is clearly faster. The answer is kept in a small file in
+    /// the application's data directory and reused until the build, the OS or
+    /// the window size changes. See [`crate::rasterizer_choice`] for the rules
+    /// and the Device Farm numbers they were checked against, and
+    /// [`rasterizer_choice`](crate::rasterizer_choice()) for what was chosen.
+    #[must_use]
+    pub const fn auto_rasterizer(mut self) -> Self {
+        self.auto_rasterizer = true;
         self
     }
 
@@ -935,6 +957,7 @@ impl App {
                 android_a11y_declined: false,
             },
             has_opened: false,
+            auto_planned: None,
             last_report: None,
             build: Some(build),
             windows: Vec::new(),
@@ -998,6 +1021,12 @@ struct Gpu {
     /// leaves the window showing a stale or half-drawn picture that no
     /// further frame repairs, because nothing after it is damaged either.
     needs_full_repaint: bool,
+    /// Whether this window's frames go through `present_planned` — the GPU
+    /// rasterizer — rather than the CPU's `present_damaged`: `App::prefer_gpu`,
+    /// or this device's answer under `App::auto_rasterizer`.
+    planned: bool,
+    /// This launch's rasterizer measurement, until it finishes.
+    measuring: Option<Measuring>,
 }
 
 /// Teardown order is not field order.
@@ -1473,7 +1502,7 @@ impl WindowState {
         // only meaningful to the CPU half — the GPU path is a whole-frame
         // rasterizer — but it is computed unconditionally anyway so the
         // stats below keep one shape whichever path a frame took.
-        let presented = if shared.config.prefer_gpu {
+        let presented = if gpu.planned {
             gpu.renderer
                 .present_planned(
                     &mut gpu.surface,
@@ -1550,6 +1579,13 @@ impl WindowState {
                 };
                 self.log
                     .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
+                // The same work the frame log judges against the budget.
+                if let Some(measuring) = &mut gpu.measuring {
+                    let work = stats.map_or(elapsed, |stats| stats.total + elapsed);
+                    if measuring.observe(work, drawn_on_gpu, self.log.budget()) {
+                        gpu.measuring = None;
+                    }
+                }
                 self.log.note_stages(gpu.renderer.last_stages());
                 if tracing() {
                     let st = gpu.renderer.last_stages();
@@ -1967,6 +2003,10 @@ struct NewSurface {
     window: Arc<Window>,
     renderer: NativeRenderer,
     surface: NativeSurface,
+    /// Whether frames go through `present_planned` (the GPU rasterizer).
+    planned: bool,
+    /// This launch's rasterizer measurement, under `App::auto_rasterizer`.
+    measuring: Option<Measuring>,
     scale: Scale,
     width: u32,
     height: u32,
@@ -2011,6 +2051,11 @@ struct Runner<F> {
     /// than at startup, which is the whole reason that platform can take a
     /// surface away and give it back.
     has_opened: bool,
+    /// Under `App::auto_rasterizer`, what the first window chose. Every later
+    /// surface — a second window, an Android surface rebuilt after a suspend —
+    /// draws the same way rather than calibrating again: a dialog's size is
+    /// not the device's, and its measurement would overwrite the primary's.
+    auto_planned: Option<bool>,
 }
 
 impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
@@ -2114,7 +2159,19 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // **Which way frames reach the screen.** A window that does not want
         // the GPU presents its CPU frames straight to the compositor and never
         // loads a GPU driver — see `crate::native::PresentPath`.
-        let path = PresentPath::choose(self.shared.config.prefer_gpu);
+        //
+        // Under `auto_rasterizer` the choice is this device's calibration —
+        // see `crate::rasterizer_choice`.
+        let calibration = (self.shared.config.auto_rasterizer && self.auto_planned.is_none())
+            .then(|| self.calibration(width, height))
+            .flatten();
+        let launch = calibration.as_ref().map(Calibration::launch);
+        let planned = match (launch, self.auto_planned) {
+            (Some(launch), _) => launch.rasterizer() == Rasterizer::Gpu,
+            (None, Some(planned)) => planned,
+            (None, None) => self.shared.config.prefer_gpu && !self.shared.config.auto_rasterizer,
+        };
+        let path = PresentPath::choose(planned);
         trace_line(
             self.shared.now(),
             format_args!(
@@ -2122,8 +2179,37 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             ),
         );
         let opening = Instant::now();
-        let (mut renderer, surface) = NativeRenderer::for_window_on(&window, width, height, path)
-            .map_err(PlatformError::Gpu)?;
+        let opened = NativeRenderer::for_window_on(&window, width, height, path);
+        // A device whose GPU cannot be opened has answered the question: under
+        // `auto_rasterizer` that is the CPU path, kept, rather than an app that
+        // will not start.
+        let (opened, planned, launch, settled) = match (opened, &calibration) {
+            (Err(error), Some(calibration)) if path == PresentPath::Vulkan => {
+                log::warn!("vieww: the GPU path could not be opened ({error}); keeping the CPU path");
+                calibration.settle(Rasterizer::Cpu);
+                (
+                    NativeRenderer::for_window_on(&window, width, height, PresentPath::Cpu),
+                    false,
+                    Some(Launch::Use(Rasterizer::Cpu)),
+                    true,
+                )
+            }
+            (opened, _) => (opened, planned, launch, false),
+        };
+        let (mut renderer, surface) = opened.map_err(PlatformError::Gpu)?;
+        if self.shared.config.auto_rasterizer {
+            self.auto_planned = Some(planned);
+        }
+        let measuring = match (calibration, launch) {
+            (Some(calibration), Some(launch)) => {
+                // `settle` has already said why.
+                if !settled {
+                    crate::rasterizer_choice::announce_launch(&calibration, launch);
+                }
+                Measuring::start(calibration, launch)
+            }
+            _ => None,
+        };
         // **`VIEWW_PLANNER_SHADOW=<file>`: the hybrid planner, in shadow.**
         //
         // Every `present_planned` frame is also planned by
@@ -2160,10 +2246,34 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             window,
             renderer,
             surface,
+            planned,
+            measuring,
             scale,
             width,
             height,
         })
+    }
+
+    /// This device's rasterizer calibration file for a `width`×`height`
+    /// window — `VIEWW_RENDERER_CACHE` if set, else the application's data
+    /// directory. `None` where there is nowhere to keep it (an Android
+    /// activity with no internal data path), and the window then takes the CPU
+    /// path, as if `auto_rasterizer` had not been asked for.
+    fn calibration(&self, width: u32, height: u32) -> Option<Calibration> {
+        let file = if let Some(file) = std::env::var_os("VIEWW_RENDERER_CACHE") {
+            std::path::PathBuf::from(file)
+        } else {
+            #[cfg(target_os = "android")]
+            let dir = self
+                .shared
+                .android
+                .as_ref()
+                .and_then(AndroidApp::internal_data_path)?;
+            #[cfg(not(target_os = "android"))]
+            let dir = crate::storage::data_dir();
+            crate::rasterizer_choice::file_in(&dir)
+        };
+        Some(Calibration::new(file, width, height))
     }
 
     /// Attach the accessibility adapter for a window that has just been made.
@@ -2209,6 +2319,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             window,
             renderer,
             surface,
+            planned,
+            measuring,
             scale,
             width,
             height,
@@ -2314,6 +2426,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             renderer: ManuallyDrop::new(renderer),
             surface,
             needs_full_repaint: true,
+            planned,
+            measuring,
         });
         state.scheduler.request_frame();
         // The window's density is a fact the tree can read, and a `SafeArea`
@@ -2345,6 +2459,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             window,
             renderer,
             surface,
+            planned,
+            measuring,
             scale,
             width,
             height,
@@ -2369,6 +2485,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 renderer: ManuallyDrop::new(renderer),
                 surface,
                 needs_full_repaint: true,
+                planned,
+                measuring,
             });
             state.scheduler.request_frame();
         }

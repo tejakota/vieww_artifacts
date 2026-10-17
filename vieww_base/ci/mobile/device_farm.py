@@ -246,6 +246,7 @@ def summarize(rows, out, run):
             detail.append(f"- {label}: {r.get(f'{mode}_frame_time', '–')}")
             for key, name in (
                 ("renderer_choice", "renderer"),
+                ("calibration", "calibration launches"),
                 ("startup_stages", "start-up"),
                 ("frame_stages", "stages"),
                 ("frame_stages_p95", "stages"),

@@ -139,6 +139,13 @@ fn main() {
     desktop.environment();
 
     let app = App::new().title("vieww — desktop suite").size(WINDOW);
+    // `VIEWW_GPU=1` for the planned GPU path, `=auto` to measure both on this
+    // machine (`App::auto_rasterizer`), as the phone entry points take them.
+    let app = match std::env::var("VIEWW_GPU").as_deref() {
+        Ok("1") => app.prefer_gpu(),
+        Ok("auto") => app.auto_rasterizer(),
+        _ => app,
+    };
     // Taken before `run`, per `PlatformWindows`' own docs: the handle has to
     // exist before there is a loop to back it.
     let windows = app.windows();

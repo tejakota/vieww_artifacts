@@ -84,8 +84,16 @@ status=0
 # a little GPU work per frame (`debug.vieww.keepalive=1`) — the test of whether
 # an idle GPU is what makes the window-present path's raster slower than
 # `cpuvk`'s on the same phone. Also diagnostic only.
-for mode in cpu gpu cpuvk cpuka; do
-    gpu=0; [ "$mode" = gpu ] && gpu=1
+#
+# `auto` is `App::auto_rasterizer` (`debug.vieww.gpu=auto`): the app measures
+# the rasterizers itself and keeps the faster. Its three cold starts double as
+# the calibration — the first forgets any earlier answer
+# (`debug.vieww.recalibrate=1`) and measures the CPU path, the second measures
+# the GPU path if the CPU was not comfortable, the third uses the answer — and
+# the suite then runs on whatever was chosen (`renderer_choice`). Diagnostic
+# for this round: it reports, it does not fail the job.
+for mode in cpu gpu auto cpuvk cpuka; do
+    gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
     keepalive=0; [ "$mode" = cpuka ] && keepalive=1
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
@@ -97,11 +105,21 @@ for mode in cpu gpu cpuvk cpuka; do
     starts=()
     for i in 1 2 3; do
         sh_ am force-stop "$package" >/dev/null
+        recalibrate=0; [ "$mode" = auto ] && [ "$i" = 1 ] && recalibrate=1
+        sh_ setprop debug.vieww.recalibrate "$recalibrate" >/dev/null
         sleep 2
+        [ "$mode" = auto ] && adb logcat -c 2>/dev/null
         line="$(sh_ am start -W -n "$component" | tee -a "$out/$mode-am-start.txt" | grep -m1 '^TotalTime' | awk '{print $2}')"
         [ -n "$line" ] && starts+=("$line")
-        sleep 3
+        # Long enough for `auto` to measure 60 frames on a 30 fps phone.
+        if [ "$mode" = auto ]; then sleep 6; else sleep 3; fi
+        if [ "$mode" = auto ]; then
+            echo "launch $i:" >> "$out/auto-calibration.txt"
+            adb logcat -d 2>/dev/null | tr -d '\r' | grep 'vieww: rasterizer' >> "$out/auto-calibration.txt"
+        fi
     done
+    sh_ setprop debug.vieww.recalibrate 0 >/dev/null
+    [ "$mode" = auto ] && kv auto_calibration "$(tr '\n' ' ' < "$out/auto-calibration.txt" 2>/dev/null)"
     kv "${mode}_cold_start_ms" "$(printf '%s ' "${starts[@]:-}")"
 
     # 2. The suite, against a fresh launch.
@@ -119,7 +137,7 @@ for mode in cpu gpu cpuvk cpuka; do
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        case "$mode" in cpuvk|cpuka) ;; *) status=1 ;; esac
+        case "$mode" in cpuvk|cpuka|auto) ;; *) status=1 ;; esac
     fi
     for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
@@ -142,6 +160,7 @@ done
 sh_ setprop debug.vieww.gpu 0 >/dev/null
 sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ setprop debug.vieww.keepalive 0 >/dev/null
+sh_ setprop debug.vieww.recalibrate 0 >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
 kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"
