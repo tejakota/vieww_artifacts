@@ -801,6 +801,7 @@ impl App {
     where
         F: FnOnce(&mut FrameDriver),
     {
+        crate::startup::begin();
         // A user-event loop rather than a plain one, because that is how
         // AccessKit delivers a screen reader's requests: they arrive on
         // whatever thread the platform's accessibility service uses, and the
@@ -839,6 +840,7 @@ impl App {
     {
         use winit::platform::android::EventLoopBuilderExtAndroid;
 
+        crate::startup::begin();
         // A debug build on a phone is roughly an order of magnitude slower than
         // a release one, and it does not announce itself — it presents as "the
         // framework is slow", which is a report nobody can act on and which has
@@ -1390,6 +1392,9 @@ impl WindowState {
         // check placed only on `RedrawRequested` ran on the first map and
         // almost never again — the second two-monitor run on GNOME/Wayland
         // still printed no refresh-rate line in 18,200 frames.
+        if !self.presented {
+            crate::startup::mark("until first draw");
+        }
         self.recheck_display(shared);
         // Before the hooks and before the build, for the same reason
         // `notify_frame` runs there: a keyboard that came up has to be in the
@@ -1407,6 +1412,12 @@ impl WindowState {
         for hook in &mut shared.config.before_frame {
             hook(&mut self.driver);
         }
+        // The application's own hooks, apart from the framework's steps: on the
+        // desktop example the clipboard hook's first X11 round trip was 100 ms
+        // of a 150 ms start-up, which is the application's to spend.
+        if !self.presented {
+            crate::startup::mark("app before-frame hooks");
+        }
 
         let Some(gpu) = &mut self.gpu else {
             return;
@@ -1417,6 +1428,9 @@ impl WindowState {
         let stats = self
             .driver
             .drive(&mut self.scheduler, now, || epoch.elapsed());
+        if !self.presented && stats.is_some() {
+            crate::startup::mark("first build and layout");
+        }
 
         // Nothing ran, so there is nothing new to put on screen. An
         // un-occlusion just requests a frame (see the `Occluded` handler
@@ -1560,6 +1574,9 @@ impl WindowState {
                             ms(st.total()),
                         ),
                     );
+                }
+                if !self.presented {
+                    crate::startup::first_frame();
                 }
                 self.presented = true;
                 if presented_directly {
@@ -2066,6 +2083,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 .create_window(attributes)
                 .map_err(|error| PlatformError::Window(error.to_string()))?,
         );
+        crate::startup::mark("window created");
 
         let scale = Scale::new(window.scale_factor());
 
@@ -2127,6 +2145,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 ),
             }
         }
+        crate::startup::mark("present ready");
         trace_line(
             self.shared.now(),
             format_args!(
@@ -2210,6 +2229,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             self.shared.now(),
             format_args!("startup: window made visible"),
         );
+        crate::startup::mark("accessibility and show");
 
         let logical = scale.to_logical_size(width, height);
         let mut log = FrameLog::new(
@@ -2257,6 +2277,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             driver.set_theme(std::rc::Rc::clone(theme));
         }
         build(&mut driver);
+        crate::startup::mark("tree built");
         trace_line(self.shared.now(), format_args!("startup: tree built"));
 
         let mut input = PointerTranslator::new(Scale::ONE);
@@ -2298,6 +2319,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // The window's density is a fact the tree can read, and a `SafeArea`
         // needs it before the first layout rather than after it.
         state.refresh_insets(&self.shared);
+        crate::startup::mark("window ready");
         trace_line(self.shared.now(), format_args!("startup: window ready"));
 
         if let Some(context) = &self.shared.crash_context {
@@ -2505,6 +2527,7 @@ fn fail_to_open(
 impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.windows.is_empty() {
+            crate::startup::mark("event loop");
             let build = self.build.take();
             let (title, size, background) = (
                 self.shared.config.title.clone(),

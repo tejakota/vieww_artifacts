@@ -766,6 +766,14 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     // PENDING §1.5 asks for behind the Adreno 612's 21 ms GPU median. Observed,
     // not checked, for the reason `frame_time` above is: a stage's time is a
     // fact about the handset.
+    // Where this launch's start-up went, step by step (`vieww_platform_winit::
+    // startup_report`). Observed, not checked: the audit's 120 ms is a target
+    // for a mid-tier phone, and a check that fails on every low-end one would
+    // be muted rather than read.
+    if let Some(startup) = vieww_platform_winit::startup_report() {
+        results.observe("startup_stages", startup);
+    }
+
     // The same breakdown at the median, at p95, and for the single worst
     // frame: the A36's 13.9 ms median and 68.6 ms worst (Device Farm,
     // 2026-10-17) needed the last two to say which stage the stall was in.

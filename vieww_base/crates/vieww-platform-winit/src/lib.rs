@@ -111,6 +111,7 @@ pub mod desktop;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 mod raster;
+mod startup;
 mod stats;
 pub mod storage;
 mod windows;
@@ -124,6 +125,7 @@ pub use keys::{ime, KeyTranslator};
 pub use latency::{InputLatencyLog, InputLatencyReport};
 pub use lifecycle::Lifecycle;
 pub use scale::{Physical, Scale};
+pub use startup::report as startup_report;
 pub use stats::{Frame, FrameLog, FrameReport};
 pub use storage::{data_dir, FileStorage};
 /// The activity handle `android_main` is handed, re-exported so an application
