@@ -766,24 +766,45 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     // PENDING §1.5 asks for behind the Adreno 612's 21 ms GPU median. Observed,
     // not checked, for the reason `frame_time` above is: a stage's time is a
     // fact about the handset.
+    // The same breakdown at the median, at p95, and for the single worst
+    // frame: the A36's 13.9 ms median and 68.6 ms worst (Device Farm,
+    // 2026-10-17) needed the last two to say which stage the stall was in.
+    let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+    let line = |stages: &vieww_platform_winit::native::FrameStages| {
+        format!(
+            "scale {:.2} plan {:.2} cpu {:.2} gpu_upload {:.2} gpu_record {:.2} \
+             gpu_submit {:.2} gpu_wait {:.2} gpu_readback {:.2} acquire {:.2} present {:.2}",
+            ms(stages.scale),
+            ms(stages.plan),
+            ms(stages.cpu_raster),
+            ms(stages.gpu.upload),
+            ms(stages.gpu.record),
+            ms(stages.gpu.submit),
+            ms(stages.gpu.wait),
+            ms(stages.gpu.readback),
+            ms(stages.acquire),
+            ms(stages.present),
+        )
+    };
     let stages = log.stage_medians();
     if !stages.total().is_zero() {
-        let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+        results.observe("frame_stages", format!("medians ms: {}", line(&stages)));
         results.observe(
-            "frame_stages",
+            "frame_stages_p95",
+            format!("p95 ms: {}", line(&log.stage_percentile(0.95))),
+        );
+    }
+    if let Some((work, stages)) = log.worst_frame_stages() {
+        // What the stages leave out of the frame's work is time spent outside
+        // the renderer — build, layout, or the thread not running at all.
+        let outside = work.saturating_sub(stages.total());
+        results.observe(
+            "worst_frame",
             format!(
-                "medians ms: scale {:.2} plan {:.2} cpu {:.2} gpu_upload {:.2} gpu_record {:.2} \
-                 gpu_submit {:.2} gpu_wait {:.2} gpu_readback {:.2} acquire {:.2} present {:.2}",
-                ms(stages.scale),
-                ms(stages.plan),
-                ms(stages.cpu_raster),
-                ms(stages.gpu.upload),
-                ms(stages.gpu.record),
-                ms(stages.gpu.submit),
-                ms(stages.gpu.wait),
-                ms(stages.gpu.readback),
-                ms(stages.acquire),
-                ms(stages.present),
+                "work {:.2} ms, outside the renderer {:.2} ms; stages ms: {}",
+                ms(work),
+                ms(outside),
+                line(&stages)
             ),
         );
     }

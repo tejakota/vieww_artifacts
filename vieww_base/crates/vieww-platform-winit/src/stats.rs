@@ -308,31 +308,63 @@ impl FrameLog {
     /// frame.
     #[must_use]
     pub fn stage_medians(&self) -> FrameStages {
+        self.stage_percentile(0.50)
+    }
+
+    /// The `p`th percentile of each stage, over the recent frames that
+    /// recorded stages — [`stage_medians`](Self::stage_medians) at any `p`.
+    ///
+    /// **Why the tail needs its own number.** Device Farm's Galaxy A36 drew its
+    /// median CPU frame in 13.9 ms and its worst in 68.6 ms (2026-10-17), and a
+    /// median per stage cannot say which stage the 68 came from. The p95 per
+    /// stage says which stage *usually* grows in a slow frame; the stages of
+    /// the single worst frame ([`worst_frame_stages`](Self::worst_frame_stages))
+    /// say where that one frame went. Same per-stage caveat as the median: the
+    /// fields need not come from one frame and need not sum to a frame.
+    #[must_use]
+    pub fn stage_percentile(&self, p: f64) -> FrameStages {
         let staged: Vec<&FrameStages> = self
             .recent
             .iter()
             .map(|frame| &frame.stages)
             .filter(|stages| !stages.total().is_zero())
             .collect();
-        let median = |pick: fn(&FrameStages) -> Duration| {
+        let at = |pick: fn(&FrameStages) -> Duration| {
             let mut values: Vec<Duration> = staged.iter().map(|s| pick(s)).collect();
             values.sort_unstable();
-            percentile(&values, 0.50)
+            percentile(&values, p)
         };
         FrameStages {
-            scale: median(|s| s.scale),
-            plan: median(|s| s.plan),
-            cpu_raster: median(|s| s.cpu_raster),
+            scale: at(|s| s.scale),
+            plan: at(|s| s.plan),
+            cpu_raster: at(|s| s.cpu_raster),
             gpu: vieww_hal::vulkan::GpuFrameTimings {
-                upload: median(|s| s.gpu.upload),
-                record: median(|s| s.gpu.record),
-                submit: median(|s| s.gpu.submit),
-                wait: median(|s| s.gpu.wait),
-                readback: median(|s| s.gpu.readback),
+                upload: at(|s| s.gpu.upload),
+                record: at(|s| s.gpu.record),
+                submit: at(|s| s.gpu.submit),
+                wait: at(|s| s.gpu.wait),
+                readback: at(|s| s.gpu.readback),
             },
-            acquire: median(|s| s.acquire),
-            present: median(|s| s.present),
+            acquire: at(|s| s.acquire),
+            present: at(|s| s.present),
         }
+    }
+
+    /// The most expensive recent frame (by [`Frame::work`]) that recorded
+    /// stages: its work and where it went.
+    ///
+    /// Unlike the percentiles these fields *do* come from one frame, so they
+    /// answer "what happened in the stall" rather than "which stage has a
+    /// tail". When the stages sum to much less than the work, the time went
+    /// outside the renderer — the build, layout, or the thread not being
+    /// scheduled — which is itself the answer.
+    #[must_use]
+    pub fn worst_frame_stages(&self) -> Option<(Duration, FrameStages)> {
+        self.recent
+            .iter()
+            .filter(|frame| !frame.stages.total().is_zero())
+            .max_by_key(|frame| frame.work)
+            .map(|frame| (frame.work, frame.stages))
     }
 
     /// Frames presented.
@@ -704,6 +736,30 @@ mod tests {
             .report()
             .to_string()
             .contains("stage medians"));
+    }
+
+    #[test]
+    fn the_tail_of_each_stage_and_the_worst_frame_are_reported_apart() {
+        let mut log = FrameLog::new(ms(16), 100);
+        let start = Instant::now();
+        // Nine ordinary frames, then one whose present stalled.
+        for i in 0..10u64 {
+            let stalled = i == 9;
+            log.record(None, ms(if stalled { 60 } else { 5 }), 100, start + ms(16 * i), false);
+            log.note_stages(FrameStages {
+                cpu_raster: ms(4),
+                present: ms(if stalled { 55 } else { 1 }),
+                ..FrameStages::default()
+            });
+        }
+        assert_eq!(log.stage_medians().present, ms(1));
+        assert_eq!(log.stage_percentile(1.0).present, ms(55));
+        assert_eq!(log.stage_percentile(1.0).cpu_raster, ms(4));
+        let (work, stages) = log.worst_frame_stages().expect("frames recorded stages");
+        assert_eq!(work, ms(60));
+        assert_eq!(stages.present, ms(55));
+        // A log that never noted stages has no worst staged frame.
+        assert!(FrameLog::new(ms(16), 100).worst_frame_stages().is_none());
     }
 
     #[test]

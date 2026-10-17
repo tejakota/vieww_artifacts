@@ -232,23 +232,30 @@ def summarize(rows, out, run):
     for row in rows:
         r = row["result"] or {}
         failed = " ".join(filter(None, [r.get("cpu_failed_checks"), r.get("gpu_failed_checks")])).strip()
-        stages = r.get("gpu_frame_stages") or r.get("cpu_frame_stages")
-        if failed or stages:
+        passes = [
+            ("cpu", "CPU path"),
+            ("gpu", "GPU path"),
+            ("auto", "chosen by measurement (auto)"),
+            ("cpuvk", "CPU path presented through Vulkan (diagnostic)"),
+            ("cpuka", "CPU path with a GPU keep-alive (diagnostic)"),
+        ]
+        detail = []
+        for mode, label in passes:
+            if not any(r.get(f"{mode}_{k}") for k in ("frame_time", "frame_stages", "startup_stages")):
+                continue
+            detail.append(f"- {label}: {r.get(f'{mode}_frame_time', '–')}")
+            for key, name in (
+                ("renderer_choice", "renderer"),
+                ("startup_stages", "start-up"),
+                ("frame_stages", "stages"),
+                ("frame_stages_p95", "stages"),
+                ("worst_frame", "worst frame"),
+            ):
+                if r.get(f"{mode}_{key}"):
+                    detail.append(f"  - {name}: {r[f'{mode}_{key}']}")
+        if failed or detail:
             lines.append(f"**{row['device']}**")
-            if r.get("cpu_frame_stages"):
-                lines.append(f"- frame stages (CPU path): {r['cpu_frame_stages']}")
-            if stages:
-                lines.append(f"- frame stages (GPU path): {stages}")
-            if r.get("cpuka_frame_time"):
-                lines.append(
-                    f"- CPU path with a GPU keep-alive (diagnostic): {r['cpuka_frame_time']}; "
-                    f"{r.get('cpuka_frame_stages', '')}"
-                )
-            if r.get("cpuvk_frame_time"):
-                lines.append(
-                    f"- CPU path presented through Vulkan (diagnostic): {r['cpuvk_frame_time']}; "
-                    f"{r.get('cpuvk_frame_stages', '')}"
-                )
+            lines.extend(detail)
             if failed:
                 lines.append(f"- failed checks: {failed}")
             lines.append("")

@@ -121,7 +121,7 @@ for mode in cpu gpu cpuvk cpuka; do
         kv "${mode}_suite" FAIL
         case "$mode" in cpuvk|cpuka) ;; *) status=1 ;; esac
     fi
-    for key in frame_time frame_stages gpu_frames; do
+    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done

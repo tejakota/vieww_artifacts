@@ -97,7 +97,7 @@ if [ "$legacy" = 1 ]; then
         [ "$verdict" = PASS ] || status=1
         kv "${mode}_suite" "$verdict"
         kv "${mode}_first_frame_ms" "n/a (no console below iOS 17)"
-        for key in frame_time frame_stages gpu_frames; do
+        for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
             value="$(grep -m1 -o "$key: .*" "$log" | sed "s/^$key: //" | tr -d '\r')"
             [ -n "$value" ] && kv "${mode}_${key}" "$value"
         done
@@ -182,7 +182,7 @@ for mode in cpu gpu; do
     fi
     [ "$verdict" = PASS ] || status=1
     kv "${mode}_suite" "$verdict"
-    for key in frame_time frame_stages gpu_frames; do
+    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice gpu_frames; do
         value="$(grep -m1 -o "$key: .*" "$log" | sed "s/^$key: //" | tr -d '\r')"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
