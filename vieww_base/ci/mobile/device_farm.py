@@ -185,7 +185,7 @@ def summarize(rows, out, run):
         f"run: `{run.get('arn', '?')}` — {run.get('result', '?')}",
         "",
         "| phone | tier | Android | SoC / GPU | RAM | APK | cold start cpu / gpu (ms, median of 3) "
-        "| frame time cpu | frame time gpu | GPU frames | PSS cpu / gpu (MB) | suite cpu / gpu |",
+        "| frame time cpu | frame time gpu | frames drawn by the GPU, cpu pass / gpu pass | PSS cpu / gpu (MB) | suite cpu / gpu |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
@@ -221,7 +221,7 @@ def summarize(rows, out, run):
                 cold=cold,
                 ftc=r.get("cpu_frame_time", "–"),
                 ftg=r.get("gpu_frame_time", "–"),
-                gf=r.get("gpu_gpu_frames", "–"),
+                gf=" / ".join((r.get(f"{m}_gpu_frames") or "–").split(" drawn")[0] for m in ("cpu", "gpu")),
                 pss=f"{mb('cpu_total_pss_kb')} / {mb('gpu_total_pss_kb')}",
                 suite=f"{r.get('cpu_suite', '–')} / {r.get('gpu_suite', '–')}"
                 if row["result"]
