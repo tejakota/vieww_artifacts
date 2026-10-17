@@ -191,3 +191,122 @@ fn keyboard_inset(view: &UIView) -> EdgeInsets {
     let covered = (view_bottom - keyboard.origin.y).clamp(0.0, bounds.size.height);
     EdgeInsets::only(0.0, 0.0, 0.0, covered as f32)
 }
+
+/// A `CADisplayLink` that asks for the screen's full refresh rate while the
+/// app is drawing, and is paused while it is idle.
+///
+/// # Why
+///
+/// The iPhone 18 Pro Max's GPU path measured 16.3 ms on every Device Farm run
+/// (2026-10-16/17) against an 8.3 ms budget, and its slowest frames were two
+/// missed vsyncs inside the GPU submit — a 60 Hz cadence on a 120 Hz screen.
+/// `CADisableMinimumFrameDurationOnPhone` in the Info.plist only *permits*
+/// more than 60 Hz on an iPhone; ProMotion stays at 60 until something running
+/// asks for more, and a Vulkan swapchain (MoltenVK's `CAMetalLayer`) does not.
+/// A display link with a preferred frame-rate range is the request UIKit
+/// listens to.
+///
+/// Its callback is `-hash` on a plain `NSObject`: nothing has to happen per
+/// vsync, the link only has to exist and be unpaused. Paused when the loop
+/// sleeps, so an idle app lets the display drop back to its slowest rate.
+///
+/// Not run on an iPhone yet — the next Device Farm run is its first.
+/// `VIEWW_IOS_DISPLAY_LINK=0` turns it off.
+pub(crate) fn display_link_active(active: bool) {
+    use std::cell::Cell;
+    thread_local! {
+        /// The link once made — never freed: the run loop retains it, and it
+        /// lives as long as the app. Null until a screen above 60 Hz needs it,
+        /// or forever when none does.
+        static LINK: Cell<*mut objc2::runtime::AnyObject> = const { Cell::new(std::ptr::null_mut()) };
+        static TRIED: Cell<bool> = const { Cell::new(false) };
+        static PAUSED: Cell<Option<bool>> = const { Cell::new(None) };
+    }
+    if !TRIED.get() {
+        TRIED.set(true);
+        LINK.set(make_display_link().unwrap_or(std::ptr::null_mut()));
+    }
+    let link = LINK.get();
+    if link.is_null() || PAUSED.get() == Some(!active) {
+        return;
+    }
+    PAUSED.set(Some(!active));
+    // SAFETY: `link` is the live `CADisplayLink` made below; `-setPaused:`
+    // takes a `BOOL`. Main thread: called from the event loop.
+    unsafe {
+        let _: () = objc2::msg_send![link, setPaused: !active];
+    }
+}
+
+/// `CAFrameRateRange` (iOS 15): three `float`s.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct FrameRateRange {
+    minimum: f32,
+    maximum: f32,
+    preferred: f32,
+}
+
+// SAFETY: the layout above is `CAFrameRateRange`'s, three C `float`s.
+unsafe impl objc2::Encode for FrameRateRange {
+    const ENCODING: objc2::Encoding = objc2::Encoding::Struct(
+        "CAFrameRateRange",
+        &[objc2::Encoding::Float, objc2::Encoding::Float, objc2::Encoding::Float],
+    );
+}
+
+fn make_display_link() -> Option<*mut objc2::runtime::AnyObject> {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+
+    if std::env::var_os("VIEWW_IOS_DISPLAY_LINK").is_some_and(|v| v == "0") {
+        return None;
+    }
+    let screen_class = AnyClass::get("UIScreen")?;
+    let link_class = AnyClass::get("CADisplayLink")?;
+    let object_class = AnyClass::get("NSObject")?;
+    let run_loop_class = AnyClass::get("NSRunLoop")?;
+    // SAFETY: documented signatures — `+[UIScreen mainScreen]` returns a
+    // `UIScreen *`, `-maximumFramesPerSecond` an `NSInteger`; `+[NSObject new]`
+    // a retained object (kept for the life of the app, as the link's target);
+    // `+[CADisplayLink displayLinkWithTarget:selector:]` a `CADisplayLink *`;
+    // `-setPreferredFrameRateRange:` takes a `CAFrameRateRange` and
+    // `-setPreferredFramesPerSecond:` an `NSInteger`; `+[NSRunLoop
+    // mainRunLoop]` returns the main run loop and `-addToRunLoop:forMode:`
+    // takes it and an `NSString *`. Nil results are checked. Main thread.
+    unsafe {
+        let screen: *mut AnyObject = msg_send![screen_class, mainScreen];
+        let screen = screen.as_ref()?;
+        let max: isize = msg_send![screen, maximumFramesPerSecond];
+        if max <= 60 {
+            return None;
+        }
+        let target: *mut AnyObject = msg_send![object_class, new];
+        let target = target.as_ref()?;
+        let link: *mut AnyObject =
+            msg_send![link_class, displayLinkWithTarget: target, selector: objc2::sel!(hash)];
+        let link_ref = link.as_ref()?;
+        #[allow(clippy::cast_precision_loss)] // a refresh rate
+        let rate = max as f32;
+        let responds: bool = msg_send![
+            link_ref,
+            respondsToSelector: objc2::sel!(setPreferredFrameRateRange:)
+        ];
+        if responds {
+            let range = FrameRateRange {
+                minimum: 80.0_f32.min(rate),
+                maximum: rate,
+                preferred: rate,
+            };
+            let _: () = msg_send![link_ref, setPreferredFrameRateRange: range];
+        } else {
+            let _: () = msg_send![link_ref, setPreferredFramesPerSecond: max];
+        }
+        let main: *mut AnyObject = msg_send![run_loop_class, mainRunLoop];
+        let main = main.as_ref()?;
+        let mode = objc2_foundation::NSString::from_str("kCFRunLoopCommonModes");
+        let _: () = msg_send![link_ref, addToRunLoop: main, forMode: &*mode];
+        log::info!("vieww: asked for {max} Hz with a display link");
+        Some(link)
+    }
+}

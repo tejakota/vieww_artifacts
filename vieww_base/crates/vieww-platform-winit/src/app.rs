@@ -3359,6 +3359,12 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             }
         }
 
+        // A 120 Hz iPhone draws at 60 unless something asks for more while it
+        // runs; the display link asks while frames are being drawn and stops
+        // asking when the loop goes idle (`crate::ios::display_link_active`).
+        #[cfg(target_os = "ios")]
+        crate::ios::display_link_active(poll || wake_at.is_some());
+
         if poll {
             // Poll rather than Wait: the swapchain blocks on vsync inside
             // `present`, so the loop is paced by the display rather than by a
