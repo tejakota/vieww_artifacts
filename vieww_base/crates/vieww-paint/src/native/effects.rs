@@ -65,6 +65,10 @@ use super::target::Target;
 /// deinterleave, one scratch buffer, and the vertical pass moving one whole
 /// pixel at a time instead of one channel. The arithmetic is unchanged, so
 /// the picture is too.
+/// (Kept compiled for non-test builds through the `allow` below because
+/// `blur_cached` is the only production caller now, and this is the
+/// oracle those tests diff against — the uncached kernel itself.)
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn blur(target: &mut Target, sigma: f32, angle: Option<f32>) {
     match band_plan(target, sigma) {
         BandPlan::Skip => {}

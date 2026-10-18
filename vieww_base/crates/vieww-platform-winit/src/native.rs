@@ -675,6 +675,18 @@ struct PlannerShadow {
     /// Set after the first failed write, so a full disk is reported once and
     /// then shadow mode quietly stops rather than failing every frame.
     broken: bool,
+    /// `VIEWW_PLANNER_AUTHORITATIVE=1`: the mode machine inside
+    /// [`ShadowPlanner`] may promote past shadow and, once its gate
+    /// clears, hand whole-frame executor decisions back. The shadow log
+    /// stays the observation record either way — the gate is fed by the
+    /// same frames it.
+    authoritative: bool,
+    /// The plan computed before this frame drew (`plan_for_frame`), so
+    /// [`Self::record_shadow`] observes the prediction the decision was
+    /// actually made on instead of planning the frame a second time.
+    /// `None` in plain shadow mode, where the plan is computed at record
+    /// time exactly as it always was.
+    pending: Option<(Option<Executor>, vieww_render_planner::ShadowPlan)>,
 }
 
 /// Presents [`vieww_paint::Scene`]s rasterised by `vieww-paint`'s `native`
@@ -941,7 +953,43 @@ impl NativeRenderer {
             planner: ShadowPlanner::new(self.planner_profile()),
             out: std::io::BufWriter::new(file),
             broken: false,
+            authoritative: false,
+            pending: None,
         });
+        Ok(())
+    }
+
+    /// Let the hybrid planner's mode machine run to completion: shadow,
+    /// then shadow on the calibrated profile, then — if its gate (the
+    /// advisory's "RMSE < 5% over 1000+ frames") clears — whole-frame
+    /// executor decisions on frames the planner recommends the CPU for.
+    /// The GPU side needs no actuation: the live path already prefers the
+    /// GPU whenever `ScenePlan::is_complete` passes, and a `Mixed`
+    /// recommendation stays unactionable until a backend can execute a
+    /// split frame.
+    ///
+    /// Requires [`Self::enable_planner_shadow`] first — the gate is fed by
+    /// the shadow log's own observations, and an authoritative planner
+    /// with no observation loop would be a decision with no evidence
+    /// behind it.
+    ///
+    /// # Errors
+    ///
+    /// Shadow mode was never enabled, with the reason as the message.
+    pub fn enable_planner_authoritative(&mut self) -> Result<(), String> {
+        if self.shadow.is_none() {
+            return Err(
+                "planner shadow is not enabled; set VIEWW_PLANNER_SHADOW to a log path \
+                 so the authoritative gate has something to read"
+                    .to_owned(),
+            );
+        }
+        // The profile is read before the mutable borrow of the shadow
+        // state, which `planner_profile`'s `&self` would collide with.
+        let profile = self.planner_profile();
+        let shadow = self.shadow.as_mut().expect("checked above");
+        shadow.authoritative = true;
+        shadow.planner = ShadowPlanner::with_authoritative(profile);
         Ok(())
     }
 
@@ -967,8 +1015,16 @@ impl NativeRenderer {
         let Some(shadow) = self.shadow.as_mut().filter(|s| !s.broken) else {
             return;
         };
-        let Some(plan) = shadow.planner.plan(scene, extent.0, extent.1) else {
-            return;
+        // A pending plan (authoritative mode planned this frame *before*
+        // it drew, to decide who drew it) is the prediction to record —
+        // replanning would measure the model against a different answer
+        // than the one it acted on.
+        let plan = match shadow.pending.take() {
+            Some((_, plan)) => plan,
+            None => match shadow.planner.plan(scene, extent.0, extent.1) {
+                Some(plan) => plan,
+                None => return,
+            },
         };
         #[expect(
             clippy::cast_possible_truncation,
@@ -1342,7 +1398,37 @@ impl NativeRenderer {
         // when shadow mode is on: the frame path does not allocate otherwise.
         let mut fallback: Option<String> = None;
 
-        if let (
+        // **`VIEWW_PLANNER_AUTHORITATIVE`: the hybrid planner, promoted,
+        // deciding whole-frame placement.** The one place a planner opinion
+        // can change what draws: planned *before* the GPU attempt, and a
+        // CPU recommendation (only ever CPU — see `plan_for_frame`) skips
+        // the GPU rasterizer entirely. Deliberately not on a
+        // resolution-scaled frame: the plan would describe the scaled
+        // extent while a CPU fallback draws full size, and feeding the
+        // gate a prediction for a picture nobody drew is how a gate rots.
+        // The plan is stashed so `record_shadow` records the prediction
+        // the decision was made on, not a second one.
+        let mut planner_cpu = false;
+        if render_scale == 1.0 {
+            if let Some(shadow) = self.shadow.as_mut().filter(|s| !s.broken && s.authoritative)
+            {
+                let (act, plan) = shadow.planner.plan_for_frame(scene.as_ref(), extent.0, extent.1);
+                if let Some(plan) = plan {
+                    planner_cpu = act == Some(Executor::Cpu);
+                    shadow.pending = Some((act, plan));
+                }
+            }
+        }
+
+        if planner_cpu {
+            // The planner's decision, not a plan with gaps: the GPU
+            // rasterizer is healthy, it was simply told this frame is not
+            // worth its overhead. The fallback string says which, so a
+            // log analysis can tell a decision from a limitation.
+            if self.shadow.is_some() {
+                fallback = Some("planner authoritative: cpu".to_owned());
+            }
+        } else if let (
             Some(GpuRaster { planner, renderer }),
             Some(device),
             SurfaceKind::Vulkan(swapchain),

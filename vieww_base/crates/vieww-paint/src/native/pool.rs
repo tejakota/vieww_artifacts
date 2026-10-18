@@ -198,6 +198,10 @@ impl TargetPool {
 
     /// Bytes currently sitting idle — the number the budget bounds, and the
     /// one memory figure this pool can state without a profiler attached.
+    /// (Test-only callers today; the budget itself does not need it, but
+    /// the budget's tests do, and the figure belongs on the type that
+    /// owns the accounting.)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn idle_bytes(&self) -> usize {
         self.idle_bytes
     }

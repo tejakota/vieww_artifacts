@@ -2265,6 +2265,20 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 ),
             }
         }
+        // **`VIEWW_PLANNER_AUTHORITATIVE=1`: let the planner's mode machine
+        // run to completion.** It still changes nothing until its own gate
+        // clears — `ShadowPlanner`'s doc has the machine and the numbers —
+        // and requires the shadow log above, because the gate is fed by
+        // that log's observations.
+        if std::env::var("VIEWW_PLANNER_AUTHORITATIVE").as_deref() == Ok("1") {
+            match renderer.enable_planner_authoritative() {
+                Ok(()) => trace_line(
+                    self.shared.now(),
+                    format_args!("startup: planner authoritative enabled (gate-fed by the shadow log)"),
+                ),
+                Err(reason) => eprintln!("vieww: VIEWW_PLANNER_AUTHORITATIVE ignored: {reason}"),
+            }
+        }
         crate::startup::mark("present ready");
         trace_line(
             self.shared.now(),

@@ -32,5 +32,8 @@ mod build;
 mod cost;
 mod node;
 
-pub use cost::{Affinity, Cacheability, CostHint, Dynamicity};
+pub use cost::{
+    Affinity, Cacheability, CostHint, Dynamicity, CURVE_COMPLEXITY, PLAIN_FILL_COMPLEXITY,
+    SHADOW_COMPLEXITY, STROKE_COMPLEXITY, TEXT_COMPLEXITY,
+};
 pub use node::{DrawNode, LayerNode, Primitive, SceneGraph, SceneNode};

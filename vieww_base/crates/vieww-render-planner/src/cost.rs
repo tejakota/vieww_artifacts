@@ -49,7 +49,18 @@ pub struct HeuristicCostModel;
 impl CostModel for HeuristicCostModel {
     fn estimate(&self, pass: &PassDesc, pixels: f32, device: &DeviceProfile) -> ExecutorEstimate {
         let mpix = (pixels / 1_000_000.0).max(0.000_1);
-        let cpu_ms = 1000.0 * mpix / device.cpu_fill_mpix_per_sec.max(0.001);
+        // The pass's own hint carries `cpu_complexity` (×100, see
+        // `vieww_scene::CostHint`): strokes, curves and shadows cost the
+        // scanline rasterizer 2–2.7× a plain fill of the same area —
+        // measured on the gallery's shadow log, 2026-10-15 — and an
+        // area-only model priced them identically, which is why every
+        // close CPU/GPU call on a strokes-heavy scene was wrong. The GPU
+        // side gets no per-command term: its dominant error (8.4× on the
+        // reference laptop, per `Calibration`) is a per-device constant
+        // the calibration corrects, not a shape effect, and inventing a
+        // shape term here would double-count a guess.
+        let complexity = f32::from(pass.cost.cpu_complexity.max(100)) / 100.0;
+        let cpu_ms = 1000.0 * mpix / device.cpu_fill_mpix_per_sec.max(0.001) * complexity;
 
         let gpu_ms = if device.has_gpu() {
             let raw = 1000.0 * mpix / device.gpu_fill_mpix_per_sec.max(0.001);
@@ -191,6 +202,30 @@ mod tests {
 
     fn pass() -> PassDesc {
         PassDesc::new("p", PassKind::Raster, CostHint::CONSERVATIVE)
+    }
+
+    #[test]
+    fn a_strokes_heavy_pass_costs_more_than_a_fill_of_the_same_area() {
+        // The per-command complexity weight: same pixels, same device, the
+        // only difference is what the pass is made of. Without the weight
+        // the two estimates were identical, and every CPU/GPU close call
+        // on a strokes-heavy scene was priced by area alone.
+        let stroke_pass = PassDesc::new(
+            "strokes",
+            PassKind::Raster,
+            CostHint {
+                gpu_affinity: Affinity::Balanced,
+                cpu_complexity: vieww_scene::STROKE_COMPLEXITY,
+                ..CostHint::CONSERVATIVE
+            },
+        );
+        let fill_pass = PassDesc::new("fills", PassKind::Raster, CostHint::CONSERVATIVE);
+        let device = DeviceProfile::CPU_ONLY_FALLBACK;
+        let stroke = HeuristicCostModel.estimate(&stroke_pass, 1_000_000.0, &device);
+        let fill = HeuristicCostModel.estimate(&fill_pass, 1_000_000.0, &device);
+        assert!((stroke.cpu_ms / fill.cpu_ms - 2.7).abs() < 0.01, "{stroke:?} vs {fill:?}");
+        // The GPU side is deliberately untouched by the shape term.
+        assert_eq!(stroke.gpu_ms, fill.gpu_ms);
     }
 
     #[test]

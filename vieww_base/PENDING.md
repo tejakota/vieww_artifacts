@@ -326,37 +326,53 @@ the same flag.
 **What.** `vieww_render_planner::plan_frame` places each pass on the CPU, the
 GPU or both, and since 2026-10-15 it runs beside real frames in shadow
 (`fixtures --shadow`, `VIEWW_PLANNER_SHADOW` on a window) and logs what it
-would have done. Nothing yet *acts* on its placement: `present_planned` still
-draws a whole frame on the GPU when `ScenePlan::is_complete` and a whole frame
-on the CPU otherwise.
+would have done. Since 2026-10-18 it also has the machinery to be trusted
+and then obeyed, both behind data:
 
-**Why not.** Its inputs are not yet trustworthy enough to put in charge:
-- **CPU cost is area-only.** On the gallery, strokes, curves and shadows cost
-  2–2.7x a plain fill of the same area (shadow log, 2026-10-15); the heuristic
-  has no per-command complexity term. Plain fills, text and the editor
-  screens are within ~20%.
-- **GPU cost is 8x optimistic, now measured.** The baseline window's shadow
-  logs on the reference laptop's NVIDIA 920MX (2026-10-15, ~11,500 GPU frames
-  per OS, `receipts/2026-10-15-kabylake-*/baseline/gpu-shadow.jsonl.gz`):
-  predicted 0.22 ms, measured median 1.85 ms (Linux) / 1.83 ms (Windows) —
-  8.4x / 8.3x. The planner still chose correctly there (GPU over a 3.8 ms CPU
-  estimate), but a model 8x off cannot make close calls. The census's GPU
-  figures include a PCIe readback every frame and are not usable for this.
-  The CPU side on the same laptop: 1.67x (Linux) / 1.72x (Windows)
-  optimistic over the gallery.
-- **The 250,000-pixel hybrid threshold is a guess**, and no backend can
-  execute a split pass.
+- **Per-command complexity.** `CostHint::cpu_complexity` prices strokes,
+  curves and shadows at 2–2.7x a plain fill of the same area (the gallery
+  shadow log's measured band; the within-band attribution — strokes worst,
+  shadows least — is stated as an assumption in `vieww-scene`'s
+  `cost.rs`), and `HeuristicCostModel` multiplies its CPU estimate by it.
+  An area-only model priced a strokes-heavy pass identically to a plain
+  fill, which is what made every close CPU/GPU call on such a scene wrong.
+- **A calibration the planner applies itself.** `Calibration` tracks both
+  the ratio of sums (what `Calibration::calibrated` corrects the profile
+  with) and the per-frame ratio RMSE (how *consistent* the error is). The
+  raw model's 8.4x GPU optimism on the reference laptop is exactly a
+  steady-multiplicative error, which is the kind a calibration removes.
+- **A mode machine.** `ShadowPlanner` goes `Shadow` → `ShadowCalibrated`
+  (after 1,000 observed frames it plans with the calibrated profile and
+  starts a fresh gate) → `Authoritative` (the gate cleared), only when the
+  application opts in with `VIEWW_PLANNER_AUTHORITATIVE=1` beside
+  `VIEWW_PLANNER_SHADOW`. Actuation is deliberately narrow: whole-frame
+  CPU recommendations only, only while the gate is `ready` at that moment
+  (RMSE ≤ 5% over 1,000+ frames), `Mixed` never (no backend can execute a
+  split pass), GPU never (the live path already prefers the GPU when
+  `ScenePlan::is_complete` passes). `is_complete` remains the per-frame
+  fallback gate; a resolution-scaled frame is never planned for a decision
+  (the plan would describe a picture nobody drew).
+
+**Why not closed.** The gate has never been fed real frames. The checked-in
+receipts are raw-model runs (`receipts/2026-10-15-kabylake-*/baseline/`,
+11.5k GPU frames per OS, every one labeled `window`, every one on the GPU) —
+enough to *derive* a calibration, not enough to *test* one. No CPU-side
+shadow log from the gallery or the phone exists yet, so the CPU gate — the
+one actuation actually needs — has zero real samples. The per-command
+weights' within-band attribution is still an assumption for the same
+reason: the per-fixture gallery log was never checked in.
 
 **Blocks.** Roadmap P2 — the hybrid engine making the live decision.
 
-**Start.** Collect shadow logs from the laptop (`close-remaining.sh gallery`)
-and the phone (`VIEWW_PLANNER_SHADOW`, or the device suite) and read
-`Calibration::calibrated` for each. Add a per-command complexity weight to
-`HeuristicCostModel` from the gallery's error ratios (`00-strokes`,
-`00-curves`, `00-shadows` are the outliers). Only then put an
-authoritative mode behind a feature flag, keeping `is_complete` as the
-per-frame fallback gate.
-
+**Start.** On the reference laptop: `close-remaining.sh gallery` with both
+`VIEWW_PLANNER_SHADOW=<log>` and `VIEWW_PLANNER_AUTHORITATIVE=1` set. The
+machine promotes itself when its windows fill; the log's frames carry the
+mode in the predictions' provenance. When an authoritative CPU decision
+fires, compare that frame's time against the `is_complete` path's on the
+same content — that comparison, not a benchmark, is the number that says
+the planner belongs in charge. Land the per-fixture gallery shadow log in
+`receipts/` and re-attribute the complexity band if the data disagrees
+with the stated assumption.
 ---
 
 # 3. Platform and product gaps

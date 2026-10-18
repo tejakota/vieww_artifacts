@@ -86,6 +86,21 @@ pub struct CostHint {
     /// (rounded up, never exact) since it drives admission decisions, not
     /// billing.
     pub estimated_bytes: u64,
+    /// How many times more expensive a pixel of this node is to rasterize
+    /// on the CPU than a pixel of a plain fill, times 100 — an integer
+    /// because `CostHint` is `Eq`, and a plain fill is the definition of
+    /// 100. The measured band (gallery shadow log, 2026-10-15, recorded in
+    /// PENDING §2.3): strokes, curves and shadows cost 2–2.7× a plain fill
+    /// of the same area, while plain fills, text and the editor screens
+    /// sit within ~20% of 1. The within-band attribution below (strokes
+    /// worst, shadows least) is physics, not measurement — stroke
+    /// expansion pays caps, joins and dashes per segment; a shadow's box
+    /// blur is band-limited to its ink — and is stated as an assumption
+    /// rather than smuggled in as one. The planner multiplies its CPU
+    /// estimate by this; the GPU side is unaffected (its 8.4× optimism is
+    /// a per-device calibration, see `vieww-render-planner`'s
+    /// `Calibration`, not a per-command shape).
+    pub cpu_complexity: u16,
 }
 
 impl CostHint {
@@ -97,6 +112,7 @@ impl CostHint {
         cacheability: Cacheability::Low,
         gpu_affinity: Affinity::Balanced,
         estimated_bytes: 0,
+        cpu_complexity: PLAIN_FILL_COMPLEXITY,
     };
 
     /// Classify a single draw [`Command`] by its static shape.
@@ -114,9 +130,20 @@ impl CostHint {
                 cacheability: Cacheability::High,
                 gpu_affinity: Affinity::Balanced,
                 estimated_bytes: area_bytes(rect.width(), rect.height()),
+                cpu_complexity: PLAIN_FILL_COMPLEXITY,
             },
             Command::FillPath { path, .. } | Command::StrokePath { path, .. } => {
                 let verbs = path.verbs().len() as u64;
+                // Strokes pay more than fills of the same outline: the
+                // outline has to be *expanded* first — caps, joins,
+                // miter limits, dash phases — before the scanline fill
+                // sees it. The two share a classify arm because their
+                // cache and affinity story is the same; their complexity
+                // is not, and this is where the difference is stated.
+                let complexity = match command {
+                    Command::StrokePath { .. } => STROKE_COMPLEXITY,
+                    _ => CURVE_COMPLEXITY,
+                };
                 Self {
                     dynamicity: Dynamicity::Occasional,
                     // A path with many verbs re-tessellates expensively on
@@ -133,6 +160,7 @@ impl CostHint {
                         Affinity::Cpu
                     },
                     estimated_bytes: verbs * 32,
+                    cpu_complexity: complexity,
                 }
             }
             Command::DrawShadow { rect, radius, .. } => Self {
@@ -150,6 +178,7 @@ impl CostHint {
                     rect.width() + radius * 4.0,
                     rect.height() + radius * 4.0,
                 ),
+                cpu_complexity: SHADOW_COMPLEXITY,
             },
             Command::DrawGlyphs { run, .. } => Self {
                 // Text content itself rarely changes frame to frame even
@@ -160,12 +189,14 @@ impl CostHint {
                 cacheability: Cacheability::VeryHigh,
                 gpu_affinity: Affinity::Gpu,
                 estimated_bytes: run.glyphs.len() as u64 * 48,
+                cpu_complexity: TEXT_COMPLEXITY,
             },
             Command::DrawImage { rect, .. } => Self {
                 dynamicity: Dynamicity::Static,
                 cacheability: Cacheability::VeryHigh,
                 gpu_affinity: Affinity::Gpu,
                 estimated_bytes: area_bytes(rect.width(), rect.height()) * 4,
+                cpu_complexity: PLAIN_FILL_COMPLEXITY,
             },
             Command::PushLayer { filter, .. } => Self {
                 dynamicity: Dynamicity::Frequent,
@@ -179,6 +210,7 @@ impl CostHint {
                     Affinity::GpuOnly
                 },
                 estimated_bytes: 0,
+                cpu_complexity: PLAIN_FILL_COMPLEXITY,
             },
             Command::PopLayer => Self::CONSERVATIVE,
         }
@@ -190,7 +222,11 @@ impl CostHint {
     /// Dynamicity and affinity take the "more demanding" side (a subtree
     /// with one continuously-updating child is a continuously-updating
     /// subtree); cacheability takes the weaker side (one uncacheable child
-    /// makes caching the whole group pointless); bytes add.
+    /// makes caching the whole group pointless); bytes add. Complexity
+    /// takes the max: a pixel run through the worst command in the group
+    /// is what the planner must be ready to pay for — the estimate is an
+    /// upper bound the placement decision can be trusted against, not an
+    /// average that surprises it.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
         Self {
@@ -198,6 +234,7 @@ impl CostHint {
             cacheability: self.cacheability.min(other.cacheability),
             gpu_affinity: self.gpu_affinity.max(other.gpu_affinity),
             estimated_bytes: self.estimated_bytes.saturating_add(other.estimated_bytes),
+            cpu_complexity: self.cpu_complexity.max(other.cpu_complexity),
         }
     }
 }
@@ -205,6 +242,17 @@ impl CostHint {
 fn area_bytes(w: f32, h: f32) -> u64 {
     (w.max(0.0) * h.max(0.0)) as u64
 }
+
+/// The CPU complexity weights, in hundredths. The band 200..=270 is the
+/// measured one (gallery shadow log, 2026-10-15 — see the
+/// `cpu_complexity` field doc); where each class sits inside it is the
+/// stated assumption. Text gets 112: "within ~20%" of a plain fill is the
+/// measured statement, and 12% is the inside of that statement.
+pub const PLAIN_FILL_COMPLEXITY: u16 = 100;
+pub const TEXT_COMPLEXITY: u16 = 112;
+pub const SHADOW_COMPLEXITY: u16 = 200;
+pub const CURVE_COMPLEXITY: u16 = 235;
+pub const STROKE_COMPLEXITY: u16 = 270;
 
 #[cfg(test)]
 mod tests {
@@ -250,12 +298,14 @@ mod tests {
             cacheability: Cacheability::VeryHigh,
             gpu_affinity: Affinity::Cpu,
             estimated_bytes: 10,
+            cpu_complexity: PLAIN_FILL_COMPLEXITY,
         };
         let expensive = CostHint {
             dynamicity: Dynamicity::Continuous,
             cacheability: Cacheability::None,
             gpu_affinity: Affinity::GpuOnly,
             estimated_bytes: 90,
+            cpu_complexity: STROKE_COMPLEXITY,
         };
         let combined = cheap.combine(expensive);
         assert_eq!(combined.dynamicity, Dynamicity::Continuous);

@@ -40,5 +40,6 @@ pub use quality::{
     QualityContract, QualityObservation, QualityReport, QualityViolation, RefreshRate,
 };
 pub use shadow::{
-    Calibration, Executor, PassSummary, Recommendation, ShadowFrame, ShadowPlan, ShadowPlanner,
+    Calibration, Executor, PassSummary, PlannerMode, Recommendation, ShadowFrame, ShadowPlan,
+    ShadowPlanner, AUTHORITATIVE_MAX_RMSE, AUTHORITATIVE_MIN_FRAMES,
 };

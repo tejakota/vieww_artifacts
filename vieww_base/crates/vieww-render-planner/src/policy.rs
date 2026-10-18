@@ -156,6 +156,7 @@ mod tests {
                 cacheability: Cacheability::High,
                 gpu_affinity: affinity,
                 estimated_bytes: 0,
+                cpu_complexity: vieww_scene::PLAIN_FILL_COMPLEXITY,
             },
         )
     }
