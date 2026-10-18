@@ -90,6 +90,8 @@ mod input;
 mod insets;
 #[cfg(target_os = "ios")]
 mod ios;
+#[cfg(target_os = "ios")]
+mod ios_accessibility;
 mod keys;
 mod latency;
 mod lifecycle;

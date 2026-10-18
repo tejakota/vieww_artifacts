@@ -236,6 +236,75 @@ impl std::fmt::Display for DragError {
 
 impl std::error::Error for DragError {}
 
+/// The bytes of a `CF_HDROP` `HGLOBAL` payload: the `DROPFILES` header
+/// followed by the paths, each null-terminated UTF-16, the whole thing
+/// double-null-terminated — the exact layout Explorer and every Windows
+/// drop target reads.
+///
+/// Pure data, no Windows call in sight, so the layout is unit-tested on
+/// every machine (it is also the one part of the Windows bridge where a
+/// mistake produces silent garbage on the receiving end: an off-by-one in
+/// the double terminator reads as an empty file list, and a wrong `pFiles`
+/// offset reads as paths starting inside the header).
+///
+/// `pFiles` is the offset of the first path — 20, the size of the header
+/// on every target this ships to (pointer-aligned; `DROPFILES` is two
+/// `POINT`s short of 20 bytes and `POINT` is 8) — and `fWide` is 1 for
+/// UTF-16. Paths are absolute by contract ([`DragContent::Files`]'s own
+/// doc), and are taken as given: relative paths in a `CF_HDROP` mean
+/// something different to every consumer, which is a bug this bridge
+/// refuses to be able to carry.
+#[must_use]
+pub fn hdrop_bytes(paths: &[std::path::PathBuf]) -> Vec<u8> {
+    // 20-byte header, written field by field below, then the wide paths.
+    let mut out = Vec::with_capacity(20 + paths.iter().map(|p| 2 * (p.as_os_str().len() + 2)).sum::<usize>());
+    // DROPFILES { pFiles: DWORD = 20, pt: POINT {0, 0}, fNC: BOOL(0), fWide: BOOL(1) }
+    out.extend_from_slice(&20u32.to_le_bytes());
+    out.extend_from_slice(&0i32.to_le_bytes()); // pt.x
+    out.extend_from_slice(&0i32.to_le_bytes()); // pt.y
+    out.extend_from_slice(&0u32.to_le_bytes()); // fNC: not a non-client drop
+    out.extend_from_slice(&1u32.to_le_bytes()); // fWide: UTF-16 paths
+    for path in paths {
+        let wide: Vec<u16> = path
+            .as_os_str()
+            .to_string_lossy()
+            .encode_utf16()
+            .collect();
+        for unit in wide {
+            out.extend_from_slice(&unit.to_le_bytes());
+        }
+        out.extend_from_slice(&0u16.to_le_bytes()); // path terminator
+    }
+    out.extend_from_slice(&0u16.to_le_bytes()); // the extra terminator: end of list
+    out
+}
+
+/// A `DROPEFFECT` bitmask as the [`DropEffect`] it means — the mapping the
+/// Windows bridge applies to `DoDragDrop`'s out-parameter. Bitmask, not
+/// enum: a target may report several bits and the source picks — copy
+/// first, then move, then link, the preference order Explorer itself uses,
+/// because a target offering "copy or link" that the source reads as "link"
+/// would move a desktop shortcut's meaning without anyone choosing it.
+#[must_use]
+pub fn effect_from_flags(flags: u32) -> Option<DropEffect> {
+    /// DROPEFFECT_COPY (1), DROPEFFECT_MOVE (2), DROPEFFECT_LINK (4) — the
+    /// shell's own values, kept here as literals with their names so the
+    /// mapping reads against the platform's documentation rather than
+    /// requiring a windows-crate import to understand.
+    const COPY: u32 = 1;
+    const MOVE: u32 = 2;
+    const LINK: u32 = 4;
+    if flags & COPY != 0 {
+        Some(DropEffect::Copy)
+    } else if flags & MOVE != 0 {
+        Some(DropEffect::Move)
+    } else if flags & LINK != 0 {
+        Some(DropEffect::Link)
+    } else {
+        None // DROPEFFECT_NONE: dropped nowhere that accepted it, or cancelled
+    }
+}
+
 /// The one platform-specific operation an outbound drag needs: actually
 /// telling the OS to start tracking the pointer as a drag of `drag`'s
 /// content.
@@ -382,5 +451,45 @@ mod tests {
             allowed_effects: vec![DropEffect::Copy],
         };
         assert_eq!(drag.forms.len(), 2);
+    }
+
+    #[test]
+    fn hdrop_bytes_carries_the_exact_cf_hdrop_layout() {
+        let bytes = hdrop_bytes(&[std::path::PathBuf::from("C:\\tmp\\a.txt")]);
+        // Header: pFiles=20, pt={0,0}, fNC=0, fWide=1.
+        assert_eq!(&bytes[0..4], &20u32.to_le_bytes());
+        assert_eq!(&bytes[4..8], &0u32.to_le_bytes());
+        assert_eq!(&bytes[8..12], &0u32.to_le_bytes());
+        assert_eq!(&bytes[12..16], &0u32.to_le_bytes());
+        assert_eq!(&bytes[16..20], &1u32.to_le_bytes());
+        // "C:\tmp\a.txt" in UTF-16LE, then two zero terminators.
+        let wide: Vec<u8> = "C:\\tmp\\a.txt"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert_eq!(&bytes[20..20 + wide.len()], &wide[..]);
+        assert_eq!(&bytes[bytes.len() - 4..], &[0, 0, 0, 0], "path NUL + list NUL");
+        assert_eq!(bytes.len(), 20 + wide.len() + 4);
+    }
+
+    #[test]
+    fn hdrop_bytes_with_no_paths_is_header_plus_an_empty_list() {
+        let bytes = hdrop_bytes(&[]);
+        assert_eq!(bytes.len(), 20 + 2, "header plus the list terminator alone");
+        assert_eq!(&bytes[20..22], &[0, 0]);
+    }
+
+    #[test]
+    fn effect_flags_map_in_the_source_preference_order() {
+        assert_eq!(effect_from_flags(1), Some(DropEffect::Copy));
+        assert_eq!(effect_from_flags(2), Some(DropEffect::Move));
+        assert_eq!(effect_from_flags(4), Some(DropEffect::Link));
+        assert_eq!(effect_from_flags(0), None, "DROPEFFECT_NONE is not an effect");
+        // Copy-or-link reads as copy: the preference order is the mapping.
+        assert_eq!(effect_from_flags(1 | 4), Some(DropEffect::Copy));
+        assert_eq!(effect_from_flags(2 | 4), Some(DropEffect::Move));
+        assert_eq!(effect_from_flags(7), Some(DropEffect::Copy));
+        // Unset bits (scroll, 0x8000_0000) do not disturb the reading.
+        assert_eq!(effect_from_flags(1 | 0x8000_0000), Some(DropEffect::Copy));
     }
 }

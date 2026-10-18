@@ -121,7 +121,7 @@ pub(crate) fn match_layer_scale(window: &winit::window::Window) {
 /// has no accessor for it — and the handle is the portable seam every GPU
 /// backend already goes through, so it is a route that is exercised whether or
 /// not this function is.
-fn ui_view(window: &winit::window::Window) -> Option<&UIView> {
+pub(crate) fn ui_view(window: &winit::window::Window) -> Option<&UIView> {
     let handle = window.window_handle().ok()?;
     let RawWindowHandle::UiKit(uikit) = handle.as_raw() else {
         return None;

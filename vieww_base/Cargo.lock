@@ -5460,6 +5460,8 @@ name = "vieww-interaction"
 version = "0.1.0"
 dependencies = [
  "vieww-foundation",
+ "windows 0.58.0",
+ "windows-core 0.58.0",
 ]
 
 [[package]]

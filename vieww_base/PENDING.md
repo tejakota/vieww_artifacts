@@ -382,13 +382,32 @@ with the stated assumption.
 **What.** `vieww-interaction`'s `NullDragStarter`. Dragging a file *out* of a
 vieww window to another application does nothing.
 
-**Why not.** No portable API in `winit` 0.30 — tracked upstream as winit issue
-#1550. The stub is honest and documented rather than faking a success path.
+**Where it moved, 2026-10-18.** Windows is no longer a stub in the way this
+entry described: `drag_out_windows.rs` implements
+`PlatformDragStarter` through OLE `DoDragDrop` — the shell's own data
+object carrying a `CF_HDROP` built by `drag_out::hdrop_bytes` (a pure
+function, unit-tested on every machine: the exact `DROPFILES` byte layout),
+a two-decision drop source, and the effect mapping back to `DropEffect`.
+It type-checks against the fetched `windows` 0.58 crate on the
+`x86_64-pc-windows-msvc` target and has **never run** — the
+[session-verifies] list in that file's module doc (shell data object
+accepts `SetData`; `OleInitialize` on the calling thread; blocking the
+event loop for the drag's duration) is what a first Windows session
+confirms. The remaining platforms are untouched, and the adapter that
+would construct the starter does not exist yet.
+
+**Why not closed.** No portable API in `winit` 0.30 — tracked upstream as
+winit issue #1550 — so every platform is below winit, and nothing here can
+be proven without sessions this container does not have.
 
 **Blocks.** File-manager-shaped applications.
 
-**Start.** Per-platform, below winit: `NSDraggingSession` on macOS,
-`DoDragDrop` on Windows, XDND / the `wlr-data-control` protocol on Linux.
+**Start.** On Windows: wire `WindowsDragStarter` into the adapter, run
+`ci/check/checks.sh`'s build, then drag a file from the demo into Explorer
+and confirm the path arrives — that one observation closes items 1–3 of
+the [session-verifies] list. Text formats (`CF_UNICODETEXT`/
+`CFSTR_INETURLW`) after that, macOS `NSDraggingSession` and Linux
+XDND / `wlr-data-control` after that.
 
 ## 3.2 A monitor change re-reads the refresh rate — untested with two monitors
 
@@ -482,20 +501,33 @@ half: no VoiceOver run is recorded, no XCUITest asserts that a vieww button
 is *heard* — label, traits, focus — the way the Android suite does, and no
 `UIAccessibility` notification is ever posted from vieww's semantics.
 
-**Why not.** The iPhone device-suite runs (1.4) check rendering and taps,
-not accessibility; the semantics layer documents the announcement path
-(`crates/vieww-render/src/semantics.rs` names `UIAccessibility.post`) but
-nothing implements the iOS side of it.
+**Where it moved, 2026-10-18.** The iOS side now exists as code:
+`vieww-platform-winit`'s `ios_accessibility.rs` builds
+`UIAccessibilityElement`s from the same semantics tree `a11y.rs` feeds
+AccessKit — label, button/static-text/`NotEnabled` traits, screen-point
+frame, the packed render id as identifier — sets the host view up as a
+container, and posts `screenChanged` with the focused node's element,
+VoiceOver-gated so a device without a screen reader pays nothing. It
+type-checks on `aarch64-apple-ios` (selectors verified against the fetched
+`objc2-ui-kit` 0.2.2 source) and has **never run** — same standing as
+`ios.rs`, whose doc explains why that is still progress. The assertion set
+(`ci/mobile/xcuitest/ViewwA11yTests.swift`) and the runner
+(`ci/mobile/a11y-ios.sh`) are checked in and equally unrun; the XCUITest
+half is blocked on an Xcode project, which `ios-app.sh`'s doc explains the
+repository deliberately does not carry.
+
+**Why not closed.** Nothing has been *heard*. The code publishes; a
+simulator or device run — and the manual session beside the TalkBack
+record — is the part that no container without Apple hardware can do.
 
 **Blocks.** The claim that vieww's accessibility is platform-parity rather
 than Android-parity.
 
-**Start.** Post `UIAccessibility.Notification.screenChanged` with the
-focused node's accessibility element from the iOS semantics bridge, add an
-XCUITest that asserts `app.buttons["<label>"]` exists, is labelled and
-enabled — the mirror of the TalkBack harness — run it through
-`ci/mobile/device-farm/run-ios.sh`, and record the session beside the
-TalkBack record in the tracker.
+**Start.** On macOS: `cargo check --target aarch64-apple-ios` still, then
+`ci/mobile/ios-app.sh --sim`, `ci/mobile/a11y-ios.sh --sim`, and the
+XCUITest set once a project exists; record what VoiceOver says beside the
+TalkBack record. On this container, the honest check is the type-check
+and the module docs.
 
 ---
 

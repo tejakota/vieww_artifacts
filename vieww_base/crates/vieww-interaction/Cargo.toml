@@ -14,3 +14,30 @@ vieww-foundation.workspace = true
 
 [lints]
 workspace = true
+
+# The Windows `DoDragDrop` bridge (`src/drag_out_windows.rs`). Feature
+# names verified against the fetched `windows` 0.58 source — the same
+# diligence `vieww-hal`'s d3d12 feature list documents, and for the same
+# reason: an omitted one is an unresolved import on the only target that
+# compiles this module, which is a target this container is not.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_SystemServices",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_Input_KeyboardAndMouse",
+    # `STGMEDIUM` and `ReleaseStgMedium` are cfg'd behind these two
+    # features the `windows` crate's own cfgs demand (verified against the
+    # fetched 0.58 source — the transitive-feature hunt is exactly what
+    # `vieww-hal`'s d3d12 feature list documents).
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com_StructuredStorage",
+    # The `#[implement(IDropSource)]` macro and the generated
+    # `IDropSource_Impl` trait live behind this feature.
+    "implement",
+] }
+windows-core = "0.58"

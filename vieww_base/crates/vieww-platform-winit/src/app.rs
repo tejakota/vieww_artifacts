@@ -1991,6 +1991,30 @@ impl WindowState {
         self.try_android_accessibility(shared);
         let _ = &shared;
 
+        // **iOS**: AccessKit ships no iOS adapter (see `a11y.rs`'s module
+        // doc), so the tree reaches VoiceOver through `ios_accessibility.rs`
+        // instead — gated on VoiceOver itself running, for the same
+        // no-screen-reader-no-cost reason the closure below is lazy. Before
+        // the adapter early-return, for the same reason the Android hook is
+        // there; and only with a live surface, because the bridge needs the
+        // view the elements are parented to.
+        #[cfg(target_os = "ios")]
+        {
+            let scale = self.scale;
+            let surface = self.gpu.as_ref().map(|gpu| std::sync::Arc::clone(&gpu.window));
+            if let Some(window) = surface {
+                let semantics = self.driver.semantics();
+                let published =
+                    crate::ios_accessibility::publish_semantics(&window, &semantics, scale);
+                if let Some(count) = published {
+                    trace_line(
+                        shared.now(),
+                        format_args!("a11y: published {count} element(s) to VoiceOver"),
+                    );
+                }
+            }
+        }
+
         let Some(adapter) = &mut self.accessibility else {
             return;
         };

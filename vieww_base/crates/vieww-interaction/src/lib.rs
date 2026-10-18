@@ -24,6 +24,8 @@
 
 pub mod command;
 pub mod drag_out;
+#[cfg(target_os = "windows")]
+pub mod drag_out_windows;
 pub mod shortcut;
 
 pub use command::{CommandError, CommandId, CommandRegistry};
