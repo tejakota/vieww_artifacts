@@ -670,37 +670,6 @@ the point.
 case the place is `ci/check/coverage.sh`'s `FLOOR=70` and the reasons in its
 header comment, not this file.
 
-## 5.2 The framework comparison is a survey and a source cross-check, not a conformance matrix
-
-**What.** `What are the best UI frameworks.md` (repository root) compares
-vieww against Motion Canvas, GSAP, Manim and Rive — animation tools, not UI
-frameworks — and `docs/FRAMEWORK-CAPABILITY-PARITY.md` cross-checks that
-survey's claims against the source, crate by crate, in honest
-source-present / API-slice / needs-verification terms. Neither is the
-answer to the question a UI-framework comparison exists for: on the
-dimensions that define one — screen-reader support per platform, IME, bidi,
-RTL layout, runtime locale switch, hot reload, devtools, golden and widget
-tests, native backends, measured performance, shipped apps — how does vieww
-stand against Flutter, React Native and Qt, cell by cell, every cell
-checkable?
-
-**Why not.** Populating the other frameworks' columns honestly is research
-— each cell needs a version and a citation, not an impression — and a
-matrix nobody enforces rots into the survey it replaced, so the gate is
-part of the work, and gates get argued about before they get written.
-
-**Blocks.** The honest "does vieww handle everything every other framework
-does" answer. Every fix elsewhere in this file moves cells that nothing is
-counting yet.
-
-**Start.** Write `docs/conformance/matrix.md`: vieww's own row filled
-strictly from this file and TRACKER (`desktop_gpu_measured` is now true —
-the Kaby Lake receipts — but `sr_ios` is false, see 3.6), the other
-frameworks' rows from their published documentation with versions named,
-and `docs/conformance/why-not.md` giving the plan for every false cell. A
-check that diffs vieww's row against the last committed one keeps a
-regression visible instead of silent.
-
 ---
 
 # 6. Known-unknowns

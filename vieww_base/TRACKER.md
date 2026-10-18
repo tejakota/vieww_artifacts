@@ -11,6 +11,107 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-18: the nine-fix advisory's buildable half — a byte-budgeted pool, a blur cache, a planner that earns its decisions, a conformance matrix with a gate, and two platform bridges
+
+**Context.** A second external advisory named nine fixes (P0: native Metal
+and D3D12 scene renderers, desktop GPU frame timing, memory under 40 MB, an
+authoritative hybrid planner; P1: embedded native views and drag-out FFI;
+P2: iOS VoiceOver and a framework conformance matrix). The re-audit against
+main found one partial and eight open (commit a21d267's scoreboard). This
+entry records the four commits that closed or advanced every item this
+container could honestly close — and, just as much, what they do not claim.
+
+**What was built, and how each claim is checked.**
+
+- **The layer pool answers to bytes** (commit 2b03351). `TargetPool`'s
+  idle set is capped at 32 MiB by default (`VIEWW_POOL_IDLE_MB`), evicting
+  least-recently-released first, admitting the newcomer always, keeping an
+  oversized one-off per `residency.rs`'s softness rule; `PoolStats.evicted`
+  replaced `dropped` (json_export follows). Nine pool tests, including the
+  LRU order, the softness case and the env parser.
+- **An identical blur runs once** (same commit). `effects::blur_cached`
+  keys the six-pass kernel's finished band on the input band's exact bits
+  (FNV-1a over `f32::to_bits`, plus w/band_h/radius/direction — radius,
+  not sigma: the kernel never sees the sigma) in the same budgeted LRU the
+  glyph outlines use (8 MiB default, `VIEWW_BLUR_CACHE_MB`, 0 disables).
+  `blur()` itself is unchanged and remains the oracle. Nine cache tests,
+  including byte-identity against the uncached kernel for both the
+  separable and directed paths. **Rendered evidence:** the `00-blurs` and
+  `23-editor-glass` fixtures produce byte-identical PNGs with the cache on
+  and `VIEWW_BLUR_CACHE_MB=0` — both blur call sites (plain pop-time and
+  push-time backdrop) exercised.
+- **The planner earns the right to decide, and then decides** (a6b2980).
+  `CostHint::cpu_complexity` prices strokes 2.7x / curves 2.35x / shadows
+  2.0x a plain fill — the gallery shadow log's measured band, with the
+  within-band attribution written down as an assumption; `Calibration`
+  grew the per-frame RMSE beside the ratio-of-sums; and `ShadowPlanner`
+  runs a mode machine — Shadow → ShadowCalibrated (plan on the calibrated
+  profile, fresh gate) → Authoritative — gated at RMSE ≤ 5% over 1,000+
+  frames (the advisory's numbers), opt-in via
+  `VIEWW_PLANNER_AUTHORITATIVE=1` beside `VIEWW_PLANNER_SHADOW`,
+  actuating whole-frame CPU recommendations only, `is_complete` staying
+  the per-frame fallback, `Mixed` unactionable, resolution-scaled frames
+  never planned for a decision. Five new planner tests (42 total).
+  **Not claimed:** any real frame through the gate — PENDING 2.3 records
+  the exact run that would.
+- **The framework comparison becomes a matrix with a gate** (a0eab3e,
+  77a55ad). `docs/conformance/matrix.md`: fourteen dimensions against
+  Flutter 3.47.7, React Native 0.87 and Qt 6.12 LTS, every vieww cell
+  cited to its PENDING/TRACKER section, every other cell versioned and
+  sourced; `why-not.md` carries a plan for each of the eight false/partial
+  cells. `ci/check/conformance-matrix.sh` diffs vieww's machine-readable
+  row against the merge base (a `Matrix-Changed:` trailer, the fidelity
+  gate's own protocol, covers deliberate flips) and demands a plan per
+  non-true cell; wired into `checks.sh` before the slow stages. All three
+  gate paths exercised against the real base: unchanged passes, silent
+  flip fails with the exact cell diff, trailer reports without failing.
+  vieww's row: 4 true / 2 partial / 8 false — and the file says what that
+  reading is.
+- **Two platform bridges, both written-not-run and labelled so**
+  (4f4f77e). iOS: `ios_accessibility.rs` publishes the semantics tree as
+  `UIAccessibilityElement`s (label, traits, frame, packed id, container
+  setup, `screenChanged` with the focused element, VoiceOver-gated) —
+  the arrow AccessKit does not draw; type-checks on `aarch64-apple-ios`,
+  selectors verified against the fetched `objc2-ui-kit` 0.2.2 source;
+  the XCUITest set and `a11y-ios.sh` are checked in and equally unrun.
+  Windows: `drag_out_windows.rs` implements `PlatformDragStarter` over
+  OLE `DoDragDrop` (shell data object, a `CF_HDROP` built by the pure
+  `hdrop_bytes` — byte-layout unit-tested on every machine — a
+  two-decision drop source, the effect mapping); type-checks on
+  `x86_64-pc-windows-msvc`, and its `[session-verifies]` list names
+  exactly what a first Windows run confirms. PENDING 3.1 and 3.6 record
+  both, their evidence, and the next real observation each needs.
+
+**Full-suite evidence for this entry:** `vieww-paint --features native`
+258 lib tests, `vieww-render-planner` 42, `vieww-scene` 7,
+`vieww-render-graph` 12, `vieww-platform-winit` 146, `vieww-devtools` 62,
+`vieww-interaction` 31; all thirteen reverse-dependency crates of the
+touched ones compile clean (`cargo check --all-targets`); the two
+fixtures' byte-identity diff above. The workspace-wide test stage did not
+run to completion in this container — disk exhaustion during example
+linking — so the crates-not-listed evidence is the compile check, and
+saying so is the point of this paragraph.
+
+**What this does not claim, per the advisory's nine fixes:**
+
+- **Fix 1/2 (Metal/D3D12 `SceneRenderer`)** — not started, and the size
+  is now written down rather than gestured at: `vulkan/scene.rs` is 2,433
+  lines with nine public entry points, and the Metal/D3D12 smoke halves
+  (`metal.rs` 467, `d3d12.rs` 885 lines) have no scene-shaped code to
+  extend. PENDING 1.2/1.3 remain the owners; the port is a multi-session
+  effort that needs macOS/Windows sessions to verify against.
+- **Fix 3 (desktop GPU timing)** — the Kaby Lake receipts stand
+  (GPU 2.0 ms vs CPU 2.6/3.7 ms); the remaining gaps are the native
+  timings behind Fix 1/2 and per-plate GPU p95, both needing hardware.
+- **Fix 4's headline (<40 MB)** — the two buildable pieces landed; the
+  number itself stays measurement-gated (heaptrack, PENDING 4.2).
+- **Fix 5's actuation** — machinery landed, gate unfed; PENDING 2.3.
+- **Fix 6 (native views)** — deliberately untouched: a second consumer is
+  the design input PENDING 6.2 waits for, and this container cannot be it.
+- **Fix 7/8** — bridges exist, sessions pending (above).
+- **Fix 9** — closed as far as a repository can close it: the matrix, the
+  gate and the plans exist; the cells move when the work moves.
+
 ## 2026-10-18: device tiers, quality profiles, a resolution scale, and the decision procedure rather than the decision
 
 **Context.** The Device Farm's 2026-10-17 runs put the same build on phones
