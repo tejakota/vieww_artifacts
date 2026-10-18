@@ -23,10 +23,17 @@
 # the base predates the matrix (its introduction is not a change to gate).
 
 set -u
-cd "$(dirname "$0")/../.." || exit 1
+# Resolve from the script's own location, then re-root at the repository
+# root: `git show base:path` takes paths relative to the root, and this
+# file lives one directory below it (`vieww_base/`), so the matrix's
+# root-relative path is the checkout prefix plus the in-checkout path.
+here="$(cd "$(dirname "$0")" && pwd)"
+prefix="$(git -C "$here/../.." rev-parse --show-prefix)"
+root="$(git -C "$here/../.." rev-parse --show-toplevel)"
+cd "$root" || exit 1
 
-matrix="docs/conformance/matrix.md"
-why_not="docs/conformance/why-not.md"
+matrix="${prefix}docs/conformance/matrix.md"
+why_not="${prefix}docs/conformance/why-not.md"
 rc=0
 
 row() {
