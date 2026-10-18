@@ -353,6 +353,19 @@ else
 	check bash ci/check/raster-identity.sh "${rid_args[@]}"
 fi
 
+# **The conformance matrix's row, watched** (docs/conformance/matrix.md).
+#
+# vieww's row in the framework matrix is data about this repository, and
+# repo data nobody watches is how the survey this matrix replaced got
+# written. The gate diffs vieww's row against the merge base with
+# origin/main and demands a `Matrix-Changed:` trailer on a deliberate flip
+# (the raster-identity gate's own protocol), and checks that every
+# false/partial cell still has its plan in docs/conformance/why-not.md.
+# Pure git and grep, so it runs before the slow stages: a row that moved
+# without a decision gets heard first.
+stage "conformance matrix (vieww's row matches the merge base; every false cell planned)"
+check bash ci/check/conformance-matrix.sh
+
 # **The `#[ignore]`d suites, which is the whole reason this file is not just a
 # README paragraph.** They are ignored because they run cargo inside a test and
 # take minutes; they are run here because what they check — a real `cdylib`
