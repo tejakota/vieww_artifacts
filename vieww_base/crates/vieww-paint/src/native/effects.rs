@@ -9,6 +9,36 @@
 //! desaturating already-blurred ones give the same answer for a linear
 //! matrix", so the order is a convention rather than a constraint, and this
 //! follows the one the doc states).
+//!
+//! # Why the blur results themselves are cached
+//!
+//! Blurred layers are the framework's most expensive per-pixel work — the
+//! vertical pass alone was worth a 26% frame on a full-window blur before
+//! its strip optimisation ([`vertical`]'s doc has the measurement) — and
+//! they are disproportionately *repeated* work: a frosted panel over a
+//! static background re-blurs byte-identical backdrop rows every frame,
+//! because the backdrop snapshot (`reference.rs`'s `PushLayer` handling)
+//! copies the same parent pixels into a fresh pooled buffer each time. The
+//! six passes are pure: same input bytes, same `radius`, same direction →
+//! same output bytes, bit for bit. That determinism is exactly what the
+//! raster-identity gate's whole premise rests on, so a cache keyed on the
+//! input *bits* — not on a scene identity that could alias — returns what
+//! the un-cached kernel would have written, and `blur_cached`'s tests
+//! assert that equality directly.
+//!
+//! The key hashes the band's pixel values (four `f32` bit patterns per
+//! pixel, FNV-1a), plus the three kernel parameters the output actually
+//! depends on: width, band height and `radius`. Note what is *not* in the
+//! key: `sigma` itself. Two sigmas that round to the same `radius` produce
+//! identical output by construction — the kernel never sees the difference —
+//! so they are one entry, not two. A 64-bit hash collision would return one
+//! band's blur for another's; at roughly 2^-64 per pair against an LRU
+//! bounded at a few entries, that is far below the rate at which the
+//! hardware this runs on flips a bit unasked, and the budgeted LRU
+//! (`native/residency.rs`) bounds the memory the cache may hold — default
+//! 8 MB, `VIEWW_BLUR_CACHE_MB` to move it, zero to turn the cache into a
+//! pass-through. The blurred-shadow-patch cache (`native/shadow.rs`) is the
+//! precedent this follows; layer blurs were the uncached sibling.
 
 use vieww_foundation::filter::ColorMatrix;
 
@@ -36,15 +66,60 @@ use super::target::Target;
 /// pixel at a time instead of one channel. The arithmetic is unchanged, so
 /// the picture is too.
 pub(crate) fn blur(target: &mut Target, sigma: f32, angle: Option<f32>) {
+    match band_plan(target, sigma) {
+        BandPlan::Skip => {}
+        BandPlan::GrowOnly(reach) => target.grow_ink(reach),
+        BandPlan::Blur { radius, top, bottom } => {
+            let w = target.width;
+            let band_h = bottom - top;
+            let start = top as usize * w as usize;
+            let rows = &mut target.pixels[start..start + band_h as usize * w as usize];
+            blur_rows(rows, w, band_h, radius, angle);
+            // **A blur moves ink outwards, and the composite has to know how
+            // far.** Three box passes of half-width `radius` each reach
+            // `3 * radius` in every direction; nothing beyond that can have
+            // become non-transparent, because every sample feeding it was
+            // transparent. Declaring exactly that keeps `Target::ink` an
+            // honest upper bound on what a blurred layer contains —
+            // under-reporting it here would clip the soft edge off every glow
+            // and every shadow in the framework, which is the one way this
+            // optimisation could be visible in a picture.
+            target.grow_ink(3 * radius);
+        }
+    }
+}
+
+/// Where — and whether — a blur's six passes will run, decided before
+/// anything is written.
+///
+/// Both [`blur`] and [`blur_cached`] must agree on this exactly: the
+/// cache key's band is the band the passes would have run over, so a plan
+/// computed one row wider or narrower would hand back a cached blur of a
+/// region that was never asked about. One function, both callers — the
+/// same single-source-of-truth discipline the kernels themselves follow.
+enum BandPlan {
+    /// Nothing to do at all (`sigma <= 0`, or a zero-sized buffer): the
+    /// historical early-outs that did not even grow ink.
+    Skip,
+    /// No passable band — nothing was drawn, or the reach-grown band is
+    /// empty — so the only work is declaring the blur's reach on the ink,
+    /// exactly as those early-outs always did.
+    GrowOnly(i32),
+    /// The band of rows `[top, bottom)` the passes run over, at kernel
+    /// radius `radius`.
+    Blur { radius: i32, top: u32, bottom: u32 },
+}
+
+fn band_plan(target: &Target, sigma: f32) -> BandPlan {
     if sigma <= 0.0 {
-        return;
+        return BandPlan::Skip;
     }
     // See `shadow::box_blur_3`'s doc comment for why this is not `3 * sigma`.
     let diameter = (4.0 * sigma * sigma + 1.0).sqrt();
     let radius = (((diameter - 1.0) / 2.0).round() as i32).max(1);
     let (w, h) = (target.width, target.height);
     if w == 0 || h == 0 {
-        return;
+        return BandPlan::Skip;
     }
 
     // **Blur the band the layer actually inked, not the whole buffer.**
@@ -63,28 +138,27 @@ pub(crate) fn blur(target: &mut Target, sigma: f32, angle: Option<f32>) {
     // happen. Rows are the axis where the saving is, because the buffer is
     // row-major and a band of rows is a contiguous slice.
     let reach = 3 * radius;
-    let (top, bottom) = match target.ink() {
-        Some((_, iy0, _, iy1)) => (
-            (iy0 - reach).max(0) as u32,
-            (iy1 + reach).min(h as i32).max(0) as u32,
-        ),
+    match target.ink() {
+        Some((_, iy0, _, iy1)) => {
+            let top = (iy0 - reach).max(0) as u32;
+            let bottom = (iy1 + reach).min(h as i32).max(0) as u32;
+            if bottom <= top {
+                BandPlan::GrowOnly(reach)
+            } else {
+                BandPlan::Blur { radius, top, bottom }
+            }
+        }
         // Nothing was drawn: there is nothing to blur, and the whole buffer is
         // already transparent.
-        None => {
-            target.grow_ink(reach);
-            return;
-        }
-    };
-    if bottom <= top {
-        target.grow_ink(reach);
-        return;
+        None => BandPlan::GrowOnly(reach),
     }
-    let band = (bottom - top) as usize * w as usize;
-    let start = top as usize * w as usize;
-    let band_h = bottom - top;
+}
 
-    let rows = &mut target.pixels[start..start + band];
-
+/// The six separable passes themselves, over exactly the band
+/// [`band_plan`] chose — the whole of what a blur writes, and the unit
+/// [`blur_cached`] caches. The caller owns the ink accounting
+/// (`blur`'s `grow_ink`); this only transforms rows.
+fn blur_rows(rows: &mut [Premul], w: u32, band_h: u32, radius: i32, angle: Option<f32>) {
     // **The blur runs at full resolution, and a reduced-resolution version was
     // tried and removed.**
     //
@@ -111,8 +185,9 @@ pub(crate) fn blur(target: &mut Target, sigma: f32, angle: Option<f32>) {
     // strength of an argument that is correct about everything except where the
     // time was going. Recorded because it is the obvious idea and someone will
     // have it again; the honest next step for blur-heavy frames is the
-    // compositing loop, or a GPU.
-    let mut scratch = vec![Premul::TRANSPARENT; band];
+    // compositing loop, or a GPU. (And, since this cache exists, the frame
+    // after this one.)
+    let mut scratch = vec![Premul::TRANSPARENT; rows.len()];
     match angle {
         None => {
             for _ in 0..3 {
@@ -138,16 +213,141 @@ pub(crate) fn blur(target: &mut Target, sigma: f32, angle: Option<f32>) {
             }
         }
     }
-    // **A blur moves ink outwards, and the composite has to know how far.**
-    //
-    // Three box passes of half-width `radius` each reach `3 * radius` in every
-    // direction; nothing beyond that can have become non-transparent, because
-    // every sample feeding it was transparent. Declaring exactly that keeps
-    // `Target::ink` an honest upper bound on what a blurred layer contains —
-    // under-reporting it here would clip the soft edge off every glow and
-    // every shadow in the framework, which is the one way this optimisation
-    // could be visible in a picture.
-    target.grow_ink(3 * radius);
+}
+
+/// The default memory the blur-result cache may hold — one full-window
+/// 1366x679 band would not fit in it (14.8 MB), which is the point: the
+/// cache is for the *repeated* bands of cards, panels and badges, and a
+/// single band that size re-derives in about the time the frame spends
+/// compositing anyway (the 7.5% figure in `blur_rows`' comment). The
+/// memory targets this serves are in PENDING §4.2; `VIEWW_BLUR_CACHE_MB`
+/// moves the number, `=0` disables the cache outright.
+pub(crate) const DEFAULT_BLUR_CACHE_BUDGET_BYTES: usize = 8 * 1024 * 1024;
+
+/// What one cached blur depends on, exactly.
+///
+/// The output of the six passes is a pure function of the input band's
+/// bits, `w`, `band_h`, `radius` and the direction — so the key carries
+/// those five and nothing else. Two fields deserve their "why":
+///
+/// * **The hash, not a `&[Premul]` compare.** The band is tens of
+///   thousands of pixels; comparing it entry-by-entry would cost what the
+///   cache exists to save. FNV-1a over the four `f32` bit patterns per
+///   pixel is one sequential pass (cheaper than *one* box pass, let alone
+///   six) and exact: the rasterizer is deterministic — the raster-identity
+///   gate's own premise — so identical frames produce identical bits, and
+///   `to_bits()` keeps that promise through the hash where `PartialEq`
+///   on floats would not (-0.0 and 0.0 are "equal" but blur differently
+///   through `add`/`sub` only in the last bit; hashing bits treats them
+///   as the different inputs they are).
+/// * **`radius`, not `sigma`.** Two sigmas rounding to the same radius
+///   produce identical output — the kernel is never told the sigma — so
+///   `5.0` and `5.2` are one entry. Keying on sigma bits would cache
+///   duplicates the kernel cannot distinguish.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct BlurKey {
+    width: u32,
+    band_h: u32,
+    radius: i32,
+    /// `angle.to_bits()` — `None` for the isotropic blur, which keys
+    /// separately from any directed one even at identical content.
+    angle: Option<u32>,
+    hash: u64,
+}
+
+/// The blurred-band cache's type: budgeted, LRU-evicting, stats-carrying —
+/// the same `ResidencyCache` the glyph outlines and the shadow patches use,
+/// because the reasoning there (a derived, deterministic, read-only value
+/// re-derivable at any time) applies to a blur word for word.
+pub(crate) type BlurCache = super::residency::ResidencyCache<BlurKey, Vec<Premul>>;
+
+/// A blur cache at the default budget, or the `VIEWW_BLUR_CACHE_MB` one
+/// when that is set and parses — read here rather than at the call sites
+/// so every renderer in the process gets the same trade without each of
+/// them knowing the env var exists.
+pub(crate) fn default_blur_cache() -> BlurCache {
+    let budget = std::env::var("VIEWW_BLUR_CACHE_MB")
+        .ok()
+        .as_deref()
+        .and_then(super::pool::mb_env_bytes)
+        .unwrap_or(DEFAULT_BLUR_CACHE_BUDGET_BYTES);
+    super::residency::ResidencyCache::new(budget)
+}
+
+/// FNV-1a 64, byte-wise over each channel's IEEE bit pattern. Byte-wise
+/// rather than word-wise so a change in any of the 32 bits spreads; the
+/// constants are the standard ones, and the loop is over `Premul`s the
+/// band walk already has in cache.
+fn hash_band(rows: &[Premul]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for pixel in rows {
+        for channel in [pixel.r, pixel.g, pixel.b, pixel.a] {
+            for byte in channel.to_bits().to_le_bytes() {
+                hash ^= byte as u64;
+                hash = hash.wrapping_mul(0x100_0000_01b3);
+            }
+        }
+    }
+    hash
+}
+
+/// [`blur`], with its result remembered: a layer whose band matches one
+/// already blurred at the same radius and direction gets the finished
+/// band copied back instead of six passes recomputing it.
+///
+/// The contract is strict because the renderer's output is: **the cached
+/// path writes the same bytes the uncached path would have.** On a miss
+/// the passes run exactly as [`blur`] runs them ([`blur_rows`], fed by
+/// the same [`band_plan`]) and the finished band is stored; on a hit the
+/// stored band is copied over the input. Both paths end with the same
+/// `grow_ink`, so the ink accounting — the part a cached blur could most
+/// plausibly get wrong, and the one way a wrong cache would become
+/// visible — is identical by construction. The tests in this module run
+/// both paths over the same content and diff them.
+pub(crate) fn blur_cached(
+    target: &mut Target,
+    sigma: f32,
+    angle: Option<f32>,
+    cache: &mut BlurCache,
+) {
+    if sigma <= 0.0 {
+        return;
+    }
+    match band_plan(target, sigma) {
+        BandPlan::Skip => {}
+        BandPlan::GrowOnly(reach) => target.grow_ink(reach),
+        BandPlan::Blur { radius, top, bottom } => {
+            let w = target.width;
+            let band_h = bottom - top;
+            let start = top as usize * w as usize;
+            let rows = &mut target.pixels[start..start + band_h as usize * w as usize];
+            // Key on the *input* bits: the value stored under it is the
+            // band after the passes, so identical input can only have
+            // identical output (the kernel is pure), and a collision would
+            // need two 2^-64-class events in the same process to matter.
+            let key = BlurKey {
+                width: w,
+                band_h,
+                radius,
+                angle: angle.map(f32::to_bits),
+                hash: hash_band(rows),
+            };
+            match cache.lookup(&key) {
+                Some(cached) => rows.copy_from_slice(cached),
+                None => {
+                    blur_rows(rows, w, band_h, radius, angle);
+                    let band = rows.to_vec();
+                    cache.insert(key, band, |band| {
+                        band.len() * std::mem::size_of::<Premul>()
+                    });
+                }
+            }
+            // The ink accounting, shared with [`blur`] — the reach a
+            // composite must respect does not depend on where the pixels
+            // came from.
+            target.grow_ink(3 * radius);
+        }
+    }
 }
 
 /// A running-sum box blur along each row.
@@ -419,5 +619,156 @@ pub(crate) fn color_matrix(target: &mut Target, matrix: &ColorMatrix) {
             b: nb * na,
             a: na,
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::residency::ResidencyCache;
+
+    /// Deterministic test content: a hard diagonal ramp with two solid
+    /// blocks, so every row differs from every other and any off-by-one or
+    /// re-ordering in the key's hashing shows up as a false hit or a wrong
+    /// copy rather than as a pass. The ink stops short of the buffer's
+    /// edges, so the band logic (rows outside the ink) is exercised too.
+    fn inked_target(w: u32, h: u32) -> Target {
+        let mut target = Target::new(w, h);
+        for y in 2..h as i32 - 2 {
+            for x in 2..w as i32 - 2 {
+                let v = ((x * 7 + y * 13) % 255) as f32 / 255.0;
+                target.set(x, y, Premul { r: v, g: v * 0.5, b: 0.25, a: v });
+            }
+        }
+        target
+    }
+
+    fn fresh_cache() -> BlurCache {
+        ResidencyCache::new(usize::MAX)
+    }
+
+    #[test]
+    fn the_cached_and_uncached_paths_write_the_same_bytes() {
+        let mut plain = inked_target(24, 20);
+        let mut cached = inked_target(24, 20);
+        let mut cache = fresh_cache();
+        blur(&mut plain, 2.5, None);
+        blur_cached(&mut cached, 2.5, None, &mut cache);
+        assert_eq!(plain.pixels, cached.pixels, "pixels, bit for bit");
+        assert_eq!(plain.ink(), cached.ink(), "the ink accounting too");
+        assert_eq!(cache.stats().misses, 1);
+        assert_eq!(cache.stats().hits, 0);
+    }
+
+    #[test]
+    fn a_hit_returns_the_derived_band_without_rederiving() {
+        let mut cache = fresh_cache();
+        let mut first = inked_target(24, 20);
+        blur_cached(&mut first, 2.5, None, &mut cache);
+        let reference = first.pixels.clone();
+        let mut second = inked_target(24, 20);
+        blur_cached(&mut second, 2.5, None, &mut cache);
+        assert_eq!(second.pixels, reference);
+        assert_eq!(cache.stats().hits, 1, "one derive, one reuse");
+        assert_eq!(cache.stats().misses, 1);
+    }
+
+    #[test]
+    fn a_single_changed_pixel_is_a_different_key() {
+        let mut cache = fresh_cache();
+        let mut a = inked_target(24, 20);
+        blur_cached(&mut a, 2.5, None, &mut cache);
+        let mut b = inked_target(24, 20);
+        b.set(10, 10, Premul { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+        blur_cached(&mut b, 2.5, None, &mut cache);
+        assert_eq!(cache.stats().hits, 0, "changed content must not hit");
+        assert_eq!(cache.stats().misses, 2);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn sigmas_that_round_to_the_same_radius_share_an_entry() {
+        // radius = round((sqrt(4*sigma^2 + 1) - 1) / 2): 5.0 gives 5, and so
+        // does 5.2. The kernel never sees the sigma, only the radius, so the
+        // two are the same blur and the key must say so.
+        let mut cache = fresh_cache();
+        let mut a = inked_target(24, 20);
+        blur_cached(&mut a, 5.0, None, &mut cache);
+        let mut b = inked_target(24, 20);
+        blur_cached(&mut b, 5.2, None, &mut cache);
+        assert_eq!(cache.len(), 1, "same radius, same content, one entry");
+        assert_eq!(cache.stats().hits, 1);
+        assert_eq!(a.pixels, b.pixels);
+    }
+
+    #[test]
+    fn a_directed_blur_keys_separately_from_the_isotropic_one() {
+        let mut cache = fresh_cache();
+        let mut a = inked_target(24, 20);
+        blur_cached(&mut a, 2.5, None, &mut cache);
+        let mut b = inked_target(24, 20);
+        blur_cached(&mut b, 2.5, Some(0.7), &mut cache);
+        assert_eq!(cache.len(), 2, "same content, different kernel direction");
+        assert_eq!(cache.stats().hits, 0);
+    }
+
+    #[test]
+    fn an_inkless_layer_grows_ink_without_touching_the_cache() {
+        // `band_plan`'s GrowOnly path: nothing was drawn, the whole buffer
+        // is transparent, and there is nothing to cache — the historical
+        // early-out must stay out of the key space entirely.
+        let mut cache = fresh_cache();
+        let mut target = Target::new(16, 16);
+        blur_cached(&mut target, 2.5, None, &mut cache);
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.stats().misses, 0);
+        assert_eq!(cache.stats().hits, 0);
+    }
+
+    #[test]
+    fn a_budgeted_cache_keeps_the_most_recent_band_working() {
+        // One band of this content is 24*20 pixels; a budget of exactly
+        // that band evicts the first entry when the second derives, and the
+        // third identical render re-derives (miss) and still produces the
+        // same bytes — eviction may cost time, never correctness.
+        let band_bytes = 24 * 20 * std::mem::size_of::<Premul>();
+        let mut cache = ResidencyCache::new(band_bytes);
+        let mut a = inked_target(24, 20);
+        blur_cached(&mut a, 2.5, None, &mut cache);
+        let mut b = inked_target(24, 20);
+        b.set(5, 5, Premul { r: 0.0, g: 0.0, b: 0.0, a: 1.0 });
+        blur_cached(&mut b, 2.5, None, &mut cache);
+        assert_eq!(cache.stats().evictions, 1);
+        assert_eq!(cache.len(), 1);
+        let mut again = inked_target(24, 20);
+        blur_cached(&mut again, 2.5, None, &mut cache);
+        assert_eq!(
+            again.pixels,
+            a.pixels,
+            "an evicted entry re-derives to the same bytes"
+        );
+    }
+
+    #[test]
+    fn the_cached_directed_blur_matches_the_uncached_kernel_too() {
+        // The directed kernel shares `band_plan` but not the separable
+        // pair; cache it through its own keying and diff against `blur`.
+        let mut plain = inked_target(20, 24);
+        let mut cached = inked_target(20, 24);
+        let mut cache = fresh_cache();
+        blur(&mut plain, 3.0, Some(0.9));
+        blur_cached(&mut cached, 3.0, Some(0.9), &mut cache);
+        assert_eq!(plain.pixels, cached.pixels);
+    }
+
+    #[test]
+    fn a_negative_sigma_is_a_no_op_on_both_paths() {
+        let mut cache = fresh_cache();
+        let mut a = inked_target(24, 20);
+        let reference = a.pixels.clone();
+        blur(&mut a, -1.0, None);
+        blur_cached(&mut a, 0.0, None, &mut cache);
+        assert_eq!(a.pixels, reference);
+        assert_eq!(cache.len(), 0);
     }
 }

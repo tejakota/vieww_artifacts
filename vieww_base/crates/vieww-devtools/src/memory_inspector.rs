@@ -68,6 +68,12 @@ pub struct MemoryReport {
     pub glyph_outline_cache: GlyphResidencyStats,
     /// Decoded-image residency cache hit/miss/eviction counts.
     pub image_cache: ImageResidencyStats,
+    /// Blurred-layer-band cache hit/miss/eviction counts — the same
+    /// stats shape as the glyph and image caches (see
+    /// `NativeRenderer::blur_cache_stats`). No byte size — the cache
+    /// bounds itself by budget, and this report counts, it does not
+    /// guess.
+    pub blur_cache: GlyphResidencyStats,
     /// The decoded-image residency cache's exact current byte count
     /// ([`ImageResidencyCache::current_bytes`](vieww_image::residency::ImageResidencyCache::current_bytes)).
     pub image_cache_bytes: u64,
@@ -84,12 +90,14 @@ impl MemoryReport {
         glyph_outline_cache: GlyphResidencyStats,
         image_cache: ImageResidencyStats,
         image_cache_bytes: u64,
+        blur_cache: GlyphResidencyStats,
     ) -> Self {
         Self {
             target_pool,
             glyph_outline_cache,
             image_cache,
             image_cache_bytes,
+            blur_cache,
         }
     }
 
@@ -124,6 +132,16 @@ impl MemoryReport {
         let total = self.image_cache.hits + self.image_cache.misses;
         (total > 0).then(|| self.image_cache.hits as f64 / total as f64)
     }
+
+    /// The blurred-layer-band cache's hit rate, in `0.0..=1.0`. `None` if
+    /// no blurred layer was ever drawn — which is the normal case for a
+    /// scene with no filters, and a different fact from a 0% rate on one
+    /// that has them.
+    #[must_use]
+    pub fn blur_cache_hit_rate(&self) -> Option<f64> {
+        let total = self.blur_cache.hits + self.blur_cache.misses;
+        (total > 0).then(|| self.blur_cache.hits as f64 / total as f64)
+    }
 }
 
 #[cfg(test)]
@@ -137,7 +155,7 @@ mod tests {
                 reused: 10,
                 allocated: 2,
                 kept: 5,
-                dropped: 1,
+                evicted: 1,
             },
             GlyphResidencyStats {
                 hits: 100,
@@ -150,6 +168,11 @@ mod tests {
                 evictions: 0,
             },
             65_536,
+            GlyphResidencyStats {
+                hits: 0,
+                misses: 2,
+                evictions: 0,
+            },
         );
         assert_eq!(
             report.total_estimated_bytes(),
@@ -165,11 +188,12 @@ mod tests {
                 reused: 30,
                 allocated: 10,
                 kept: 0,
-                dropped: 0,
+                evicted: 0,
             },
             GlyphResidencyStats::default(),
             ImageResidencyStats::default(),
             0,
+            GlyphResidencyStats::default(),
         );
         // 30 / (30 + 10) = 0.75
         assert_eq!(report.target_pool_reuse_rate(), Some(0.75));
@@ -182,6 +206,7 @@ mod tests {
             GlyphResidencyStats::default(),
             ImageResidencyStats::default(),
             0,
+            GlyphResidencyStats::default(),
         );
         assert_eq!(
             report.target_pool_reuse_rate(),
@@ -201,6 +226,7 @@ mod tests {
             },
             ImageResidencyStats::default(),
             0,
+            GlyphResidencyStats::default(),
         );
         assert_eq!(report.glyph_outline_hit_rate(), Some(0.9));
     }
@@ -216,6 +242,7 @@ mod tests {
                 evictions: 0,
             },
             0,
+            GlyphResidencyStats::default(),
         );
         assert_eq!(report.image_cache_hit_rate(), Some(0.75));
     }
@@ -227,5 +254,24 @@ mod tests {
         assert_eq!(report.target_pool_reuse_rate(), None);
         assert_eq!(report.glyph_outline_hit_rate(), None);
         assert_eq!(report.image_cache_hit_rate(), None);
+        assert_eq!(report.blur_cache_hit_rate(), None);
+    }
+
+    #[test]
+    fn blur_cache_hit_rate_is_the_hand_computed_fraction() {
+        let report = MemoryReport::build(
+            PoolStats::default(),
+            GlyphResidencyStats::default(),
+            ImageResidencyStats::default(),
+            0,
+            GlyphResidencyStats {
+                hits: 33,
+                misses: 11,
+                evictions: 0,
+            },
+        );
+        // 33 / (33 + 11) = 0.75 — a frosted panel over a static background
+        // lands somewhere near this once it is past its first frame.
+        assert_eq!(report.blur_cache_hit_rate(), Some(0.75));
     }
 }

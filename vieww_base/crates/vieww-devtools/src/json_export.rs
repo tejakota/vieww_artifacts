@@ -515,7 +515,7 @@ impl ToJson for MemoryReport {
             .field("reused", &self.target_pool.reused)
             .field("allocated", &self.target_pool.allocated)
             .field("kept", &self.target_pool.kept)
-            .field("dropped", &self.target_pool.dropped)
+            .field("evicted", &self.target_pool.evicted)
             .build();
         let glyphs = JsonObject::new()
             .field("hits", &self.glyph_outline_cache.hits)
@@ -527,11 +527,17 @@ impl ToJson for MemoryReport {
             .field("misses", &self.image_cache.misses)
             .field("evictions", &self.image_cache.evictions)
             .build();
+        let blur = JsonObject::new()
+            .field("hits", &self.blur_cache.hits)
+            .field("misses", &self.blur_cache.misses)
+            .field("evictions", &self.blur_cache.evictions)
+            .build();
 
         JsonObject::new()
             .raw_field("target_pool", pool)
             .raw_field("glyph_outline_cache", glyphs)
             .raw_field("image_cache", images)
+            .raw_field("blur_cache", blur)
             .field("image_cache_bytes", &self.image_cache_bytes)
             .field("total_estimated_bytes", &self.total_estimated_bytes())
             .build()

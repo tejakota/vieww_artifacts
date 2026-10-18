@@ -181,6 +181,12 @@ pub struct NativeRenderer {
     /// Reused `PushLayer`/`PopLayer` offscreen buffers — see `native/pool.rs`'s
     /// module docs for why this is safe and what it does and does not save.
     targets: TargetPool,
+    /// Finished blur bands, keyed by the input band's bits — see
+    /// `native/effects.rs`'s cache section for why the key is exact and
+    /// `native/residency.rs` for the budget that bounds it. A frosted
+    /// panel over a static background re-blurs byte-identical rows every
+    /// frame; this is where that repetition stops.
+    blur_cache: effects::BlurCache,
     /// Rasterised glyph coverage, kept between frames — see
     /// `native/glyph_raster.rs`, which is where the reason a text-heavy window
     /// needs this at all is written down.
@@ -254,7 +260,8 @@ impl NativeRenderer {
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
             output: Vec::new(),
-            targets: TargetPool::new(),
+            targets: TargetPool::from_env(),
+            blur_cache: effects::default_blur_cache(),
             glyph_rasters: GlyphRasterCache::default(),
             pipeline: ColorPipeline::GammaSpace,
             aa: AaMode::Gray,
@@ -282,7 +289,8 @@ impl NativeRenderer {
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
             output: Vec::new(),
-            targets: TargetPool::new(),
+            targets: TargetPool::from_env(),
+            blur_cache: effects::default_blur_cache(),
             glyph_rasters: GlyphRasterCache::default(),
             pipeline: ColorPipeline::GammaSpace,
             aa: AaMode::Gray,
@@ -307,7 +315,8 @@ impl NativeRenderer {
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
             output: Vec::new(),
-            targets: TargetPool::new(),
+            targets: TargetPool::from_env(),
+            blur_cache: effects::default_blur_cache(),
             glyph_rasters: GlyphRasterCache::default(),
             pipeline,
             aa: AaMode::Gray,
@@ -332,7 +341,8 @@ impl NativeRenderer {
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
             output: Vec::new(),
-            targets: TargetPool::new(),
+            targets: TargetPool::from_env(),
+            blur_cache: effects::default_blur_cache(),
             glyph_rasters: GlyphRasterCache::default(),
             pipeline: ColorPipeline::GammaSpace,
             aa: mode,
@@ -431,6 +441,17 @@ impl NativeRenderer {
     #[must_use]
     pub fn pool_stats(&self) -> PoolStats {
         self.targets.stats()
+    }
+
+    /// Hits, misses and evictions on the blurred-layer-band cache over this
+    /// renderer's whole lifetime — see `native/effects.rs`'s cache section
+    /// for what is cached and what it costs. A frosted panel over a static
+    /// background shows this as near-total hits; a scene whose blurred
+    /// layers change every frame shows misses, and the cache is then pure
+    /// hashing overhead bounded by its budget (`VIEWW_BLUR_CACHE_MB`).
+    #[must_use]
+    pub fn blur_cache_stats(&self) -> super::ResidencyStats {
+        self.blur_cache.stats()
     }
 
     /// Hits, misses and evictions across every font's glyph-outline
@@ -1388,7 +1409,12 @@ impl NativeRenderer {
                     let (parent, parent_origin) = current!();
                     target.snapshot_from(parent, parent_origin, (x0, y0));
                     if filter.blur_sigma > 0.0 {
-                        effects::blur(&mut target, filter.blur_sigma, filter.blur_angle);
+                        effects::blur_cached(
+                            &mut target,
+                            filter.blur_sigma,
+                            filter.blur_angle,
+                            &mut self.blur_cache,
+                        );
                     }
                     if let Some(matrix) = &filter.color_matrix {
                         effects::color_matrix(&mut target, matrix);
@@ -1419,10 +1445,11 @@ impl NativeRenderer {
                 // bug a real backdrop filter must not have.
                 if !frame.filter.is_noop() && !frame.filter.backdrop {
                     if frame.filter.blur_sigma > 0.0 {
-                        effects::blur(
+                        effects::blur_cached(
                             &mut frame.target,
                             frame.filter.blur_sigma,
                             frame.filter.blur_angle,
+                            &mut self.blur_cache,
                         );
                     }
                     if let Some(matrix) = &frame.filter.color_matrix {

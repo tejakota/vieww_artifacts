@@ -94,6 +94,41 @@ impl<K: Eq + Hash + Clone, V> ResidencyCache<K, V> {
         self.entries.get(&key).expect("just touched or inserted")
     }
 
+    /// The resident value for `key`, if any — the *hit* half of
+    /// [`Self::get_or_insert_with`] split out for callers whose miss path
+    /// cannot be expressed as `derive()` because the value is produced as a
+    /// side effect of writing somewhere else. `native/effects.rs`'s blur
+    /// cache is that caller: a cache miss *is* "run the six blur passes
+    /// into the layer's own band", which writes through a `&mut Target`
+    /// borrow the cache must not hold.
+    ///
+    /// A hit touches the recency order and counts; `None` counts nothing —
+    /// the matching miss is counted by [`Self::insert`], so a
+    /// `lookup`-then-`insert` pair accounts exactly like the fused
+    /// `get_or_insert_with` does.
+    pub(crate) fn lookup(&mut self, key: &K) -> Option<&V> {
+        if self.entries.contains_key(key) {
+            self.touch(key);
+            self.stats.hits += 1;
+            self.entries.get(key)
+        } else {
+            None
+        }
+    }
+
+    /// The *miss* half of [`Self::get_or_insert_with`]: admit an
+    /// already-derived value at `cost_of`'s figure, possibly evicting
+    /// other entries to stay under budget. Pairs with [`Self::lookup`].
+    pub(crate) fn insert(&mut self, key: K, value: V, cost_of: impl FnOnce(&V) -> usize) {
+        let cost = cost_of(&value);
+        self.entries.insert(key.clone(), value);
+        self.cost.insert(key.clone(), cost);
+        self.total_cost += cost;
+        self.order.push(key);
+        self.stats.misses += 1;
+        self.evict_to_budget();
+    }
+
     /// Move `key` to the most-recently-used end of the eviction order.
     fn touch(&mut self, key: &K) {
         if let Some(index) = self.order.iter().position(|k| k == key) {
