@@ -11,6 +11,84 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-18: device tiers, quality profiles, a resolution scale, and the decision procedure rather than the decision
+
+**Context.** The Device Farm's 2026-10-17 runs put the same build on phones
+whose right answers are opposite — the LG Stylo 5 misses 60 Hz on both paths
+(CPU 36.2 ms, GPU 40.1 ms, budget 16.7) while the S26 Ultra's GPU path runs
+at 2.2 ms — and `App::auto_rasterizer` measured that one choice per device
+while every other quality-shaped decision had no device-shaped input at all.
+Six commits give the input, the lever, the measurement, the report, the
+decision rule and the gate; none of them changes a default pixel anywhere.
+
+**What was built.**
+
+- **`device_tier`** (6a95365) — RAM, core count, SoC and API level, read from
+  system properties at process start without loading a Vulkan driver; three
+  tiers (3/7 GB RAM boundaries plus a cores≤4 catch for big-RAM, few-core
+  parts), `VIEWW_DEVICE_TIER` overriding for tests and for arguing with the
+  policy.
+- **`quality.rs` and the hal's scale** (1e6063b) — `QualityProfile::for_tier`
+  maps a tier to render decisions, one field today: `resolution_scale` (Low
+  0.5, Medium 0.75, High 1.0), because one field is what the render path can
+  read without guessing at effects the planner cannot yet skip.
+  `VIEWW_GPU_SCALE` and `debug.vieww.scale=auto` drive it: planned GPU scenes
+  render into targets at the scaled extent and the final blit enlarges
+  (linear filtering required, and checked before it is assumed); the CPU
+  path never scales — its bytes are the fidelity reference — and a frame
+  that falls back to the CPU mid-flight re-lifts to full resolution.
+- **The farm's gpuscale pass** (3920c78) — `run-android.sh`'s sixth pass runs
+  the GPU path with `debug.vieww.scale=auto`; `examples/android.rs` forwards
+  the system property as the environment the tier probe reads;
+  `device_farm.py` collects `device` and `gpuscale_frame_time` beside the
+  other passes' keys.
+- **The quality overlay** (9b556fd) — `vieww-devtools`' `quality_overlay`
+  reports the tier policy and the frame clock (average/p95/max/over-budget,
+  read from the `FrameTimeline` the caller already keeps) as one summary
+  line and three HUD lines, observed by the device suite beside the other
+  keys and copied into the farm summary. A report, not a widget: there is no
+  egui in this tree, and overlay pixels drawn into the app's scene would be
+  CPU-path pixels FIDELITY.md does not own. `vieww-platform-winit` gains
+  `vieww-devtools` as a dev-dependency — nothing that ships reads a
+  devtools report.
+- **The verdict** (f8316d7) — `ci/mobile/gpuscale_verdict.py` is
+  `quality.rs`'s opt-in deal applied rather than read: a device is a
+  candidate only when the best of its CPU and GPU medians misses the pass's
+  own budget; the scale earns the promotion only when it engaged below 1.0
+  (1.0 is off by another name) and landed at or under that budget; a tier is
+  promoted only when every device of it in the run was a candidate and
+  passed; anything else is keep-opt-in or an honestly-incomplete run. It
+  emits `gpuscale-verdict.json` and the SUMMARY.md memo;
+  `device_farm.py` appends the memo when the pass produced data. Its
+  self-test fixtures are labelled SYNTHETIC.
+- **The fidelity gate, wired** (this commit) — `ci/check/checks.sh` now runs
+  `ci/check/raster-identity.sh` as the first slow stage: against the merge
+  base with `origin/main` (not the tip, which would report somebody else's
+  commits as your pixel changes), honouring the `Pixels-Changed:` trailer
+  rather than failing on a documented decision, and skipping loudly on a
+  shallow clone that cannot name a BASE. The gate script itself is
+  unchanged; FIDELITY.md's first rule now has a runner.
+
+**Verified.** `cargo check` with the vulkan features, the winit examples, and
+`aarch64-linux-android` (the property reads compile for the phone);
+`vieww-platform-winit`'s lib suite 146/146 (3 new) and `vieww-devtools`
+62/62 (7 new); clippy clean under `-D warnings`; `py_compile` and the
+verdict tool's self-test green; `bash -n` on both scripts. Per-commit
+standalone compiles for bisectability. For the checks.sh wiring: syntax,
+BASE resolution, the trailer grep against real and synthetic history, and
+the gate script's `--help` — the stage's full double release build exceeds
+the disk of the container that wrote it, and says so rather than pretending
+a run happened. Default pixels: unchanged everywhere — the CPU path never
+scales, and the GPU path scales only behind the opt-in environment variable
+or property; `raster-identity.sh` is the gate that keeps that claim
+checkable.
+
+**What this does not claim.** The 0.5×/0.75× tier defaults are not promoted:
+`quality.rs`'s own deal is that a farm run on the real phones decides, the
+verdict tool is that rule applied, and no run with the gpuscale pass has
+happened yet. The first-frame gain the pipeline cache (1c589d4) should show
+on a real driver is likewise still the farm's to publish.
+
 ## 2026-10-15 (evening): the Windows + NVIDIA exit crash, found and fixed
 
 **Symptom.** On Windows 10 with an NVIDIA GeForce 920MX (driver

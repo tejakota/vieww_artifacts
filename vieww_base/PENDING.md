@@ -176,6 +176,28 @@ the planned GPU path correct and 1.7x faster than the CPU rasterizer.
   `classes.dex`); `ci/mobile/apk-add-code.sh` now adds one, and the CI APK
   build runs it. Test Lab shuts down on 30 September 2027.
 
+**2026-10-18: the default decision has an input, a lever and a procedure; what
+it does not have yet is the data.** The device-shaped input every quality
+decision below the rasterizer choice was missing now exists:
+`vieww-platform-winit`'s `device_tier` (RAM, core count, SoC and API level,
+read from system properties without loading a driver; Low/Medium/High;
+`VIEWW_DEVICE_TIER` overrides). It feeds a `QualityProfile` whose one field is
+the GPU path's resolution scale: `debug.vieww.scale=auto` renders the planned
+scene at the tier's resolution (Low 0.5×) and blits up; the CPU path never
+scales, because its bytes are the fidelity reference (FIDELITY.md). The
+Device Farm's sixth pass runs exactly that, the farm summary carries
+`quality_overlay` — the tier policy and the frame clock on one line, a report
+out of `vieww-devtools` rather than a widget (no egui in this tree, and
+overlay pixels drawn into the scene would be CPU-path pixels the fidelity
+rule does not own) — and `ci/mobile/gpuscale_verdict.py` applies the
+promotion rule `quality.rs` documents: a device needs the tier default only
+if the best of its CPU and GPU medians misses the pass's own budget; the
+scale earns it only if it engaged below 1.0 and landed at or under that
+budget; a tier is promoted only when every device of it passes. The tool
+writes `gpuscale-verdict.json` and the SUMMARY.md memo. What remains is the
+farm run itself — until then the scale stays opt-in, and the flip in
+`quality.rs` is the one line a promoted verdict licenses.
+
 **Start.** `ci/mobile/device-suite.sh --gpu` on the phone and read the new
 `frame_stages` observation (added 2026-10-15): median scale, plan, CPU raster,
 GPU upload / record / submit / fence wait / readback, acquire and present, per
@@ -412,9 +434,24 @@ ready after **215 ms**, the first swapchain present **197–236 ms**, and on the
 GPU path the first frame's command recording **302 ms** (pipeline creation,
 no pipeline cache).
 
-**Start.** A `VkPipelineCache` persisted to disk; create the device in parallel
-with the window; run `baseline` with `VIEWW_TRACE_FRAMES=1` to attribute the
-remainder.
+**2026-10-18: the first of these is done.** `vieww_hal::vulkan::pipeline_cache`
+(1c589d4) opens one `VkPipelineCache` per device, seeded from the file
+`set_pipeline_cache_file` names when its 32-byte header names this GPU
+(vendor, device) and driver (cache UUID) — anything else is dropped before
+the driver sees it, because old mobile drivers have crashed on foreign data —
+and saved atomically on Drop. The platform layer points devices at
+`pipelines-<exe>.bin` beside the rasterizer calibration
+(`VIEWW_PIPELINE_CACHE=<file>` or `=off` override), saves after the first GPU
+frame (a phone app is killed, not exited), and the device suite observes
+`pipeline_cache`. The 302 ms of first-frame pipeline creation measured above
+on Windows, and the 1463 ms first frame the Device Farm timed on the LG
+Stylo 5 on every launch, are the numbers that motivated it; what the cache
+actually removes on a real driver is still Device Farm's run to show
+(lavapipe keeps no compiled code, so the local test only proves the header
+round-trip).
+
+**Start.** Create the device in parallel with the window; run `baseline` with
+`VIEWW_TRACE_FRAMES=1` to attribute the remainder.
 
 ---
 

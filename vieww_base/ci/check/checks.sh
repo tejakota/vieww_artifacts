@@ -20,7 +20,7 @@
 #
 # Usage:
 #   ci/check/checks.sh              # everything below
-#   ci/check/checks.sh --quick      # skip the slow end-to-end suites
+#   ci/check/checks.sh --quick      # skip the slow suites (end-to-end, raster identity)
 #
 # Exits non-zero on the first failure, and says which stage failed.
 
@@ -309,9 +309,48 @@ summary() {
 
 if [ -n "$quick" ]; then
 	summary
-	printf '\nall quick checks passed. The end-to-end suites were skipped:\n'
+	printf '\nall quick checks passed. The slow stages were skipped:\n'
 	printf '  cargo test -p vieww-reload --test end_to_end -- --ignored --test-threads=1\n'
+	printf '  ci/check/raster-identity.sh (renders the gallery at the merge base with origin/main)\n'
 	exit 0
+fi
+
+# **The fidelity gate, in the gate file.** `docs/FIDELITY.md`'s first rule is
+# that the CPU rasterizer is byte-identical across changes by default, and
+# `ci/check/raster-identity.sh` is the script that checks it — but nothing
+# automated ran it, so the rule held for whoever remembered to invoke it. It
+# runs here, as the first of the slow stages: it is a full release build of
+# BASE in a worktree of its own (the most expensive thing this file does), and
+# a pixel change wants to be caught before the five-minute suite, not after.
+#
+# BASE is the merge base with `origin/main`, not `origin/main` itself. On a
+# branch whose fork point has moved on, diffing against the tip reports
+# somebody else's commits as your pixel changes; the merge base is the last
+# commit the two sides share, which is the change actually being gated. A
+# shallow clone cannot name one, so the stage says so and skips — like the
+# MSRV stage above, a skipped gate announces itself rather than passing in
+# silence.
+#
+# The `Pixels-Changed:` protocol (FIDELITY.md) is honoured, not bypassed: when
+# the commits being gated carry the trailer, the stage passes `--allow-changed`
+# and the script reports what moved without failing — the trailer is the
+# decision the script exists to surface, and a gate that fails on a documented
+# decision trains people to skip the gate.
+rid_base=""
+if origin="$(git rev-parse -q --verify origin/main)"; then
+	rid_base="$(git merge-base HEAD "$origin")"
+fi
+if [ -z "$rid_base" ]; then
+	stage "raster identity — skipped, origin/main resolves to no commit in this checkout"
+	echo "  a shallow clone cannot name a BASE to be identical to; fetch it: git fetch origin main"
+else
+	rid_args=("$rid_base")
+	if git log --format=%B "$rid_base..HEAD" | grep -q '^Pixels-Changed:'; then
+		rid_args+=("--allow-changed")
+		echo 'raster identity: a Pixels-Changed: trailer covers these commits — differences will be reported, not failed (docs/FIDELITY.md)'
+	fi
+	stage "raster identity (every fixture byte-identical to the merge base with origin/main; builds BASE in its own worktree — slow)"
+	check bash ci/check/raster-identity.sh "${rid_args[@]}"
 fi
 
 # **The `#[ignore]`d suites, which is the whole reason this file is not just a
