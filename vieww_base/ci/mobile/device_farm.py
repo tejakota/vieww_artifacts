@@ -24,7 +24,11 @@ What happens:
    device's `result.txt` is parsed, and OUT/SUMMARY.md and OUT/summary.json
    say, per phone: tier, SoC, GPU, memory, cold start (median of three) per
    path, frame time, frame-stage medians, GPU-drawn frames, PSS, the suite
-   verdicts and any failed checks.
+   verdicts and any failed checks. When the `gpuscale` pass ran, the
+   promotion decision it exists for is computed too (see
+   `ci/mobile/gpuscale_verdict.py`): which tiers' quality profiles earned
+   their default, which did not, and which devices were missing the data
+   to decide.
 
 Exit status: 0 when every phone passed both suites, 1 otherwise (2 for a setup
 error). Uses the `aws` CLI and `curl`, both on GitHub's hosted runners, so the
@@ -258,6 +262,7 @@ def summarize(rows, out, run):
                 ("pipeline_cache", "pipeline cache"),
                 ("device", "device profile"),
                 ("gpu_scale", "gpu resolution"),
+                ("quality_overlay", "quality overlay"),
             ):
                 if r.get(f"{mode}_{key}"):
                     detail.append(f"  - {name}: {r[f'{mode}_{key}']}")
@@ -366,6 +371,23 @@ def main():
         )
     rows.sort(key=lambda r: ["low", "mid", "high", "named", "?"].index(r["tier"]))
     summarize(rows, out, run)
+
+    # The decision the gpuscale pass exists for, computed while the numbers
+    # are fresh: which tiers' quality profiles earned their default. Non-
+    # failing either way — a run without the pass, or with data the rule
+    # calls incomplete, still says so in the verdict file and the memo.
+    if any((r["result"] or {}).get("gpuscale_frame_time") for r in rows):
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "gpuscale_verdict.py"), "--summary", str(out / "summary.json"), "--out", str(out)],
+            capture_output=True, text=True,
+        )
+        if proc.stdout.strip():
+            print(proc.stdout.strip())
+            with open(out / "SUMMARY.md", "a") as summary:
+                summary.write("\n## gpuscale promotion verdict\n\n```\n" + proc.stdout.strip() + "\n```\n")
+        if proc.returncode not in (0, 1):
+            say(f"gpuscale_verdict could not run: {proc.stderr.strip()}")
+
     ok = rows and all(r["result"] and r["result"].get("status") == "PASS" for r in rows)
     return 0 if ok else 1
 
