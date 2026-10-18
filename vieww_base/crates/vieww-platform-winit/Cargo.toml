@@ -302,6 +302,12 @@ vieww-animation.workspace = true
 # use the real scrolling path rather than clamping an offset by hand, which is
 # not what an application should copy out of an example.
 vieww-gestures.workspace = true
+# For the on-device suite's `quality_overlay` observation: the tier, the
+# engaged GPU scale, and the frame clock on one line the farm summary
+# prints (`vieww-devtools`'s quality_overlay, over the samples the suite
+# already measured). A dev-dependency for the same reason the others are:
+# nothing that ships reads a devtools report.
+vieww-devtools.workspace = true
 
 [lints]
 workspace = true

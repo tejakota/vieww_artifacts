@@ -59,6 +59,12 @@
 //!   on real hardware can produce — VRAM as the driver itself reports it,
 //!   GPU-side timestamp-query timing, a real pipeline cache's hit rate.
 //!   Nothing here is a guess dressed as a measurement.
+//! - [`quality_overlay`] — the device-tier policy and the frame clock on
+//!   one line: tier, engaged GPU scale, and a [`FrameTimeline`] window's
+//!   average/p95/worst against the budget its frames were recorded
+//!   against. A report, not a widget — this crate draws no pixels, and an
+//!   overlay baked into the app's own scene would put pixels on the CPU
+//!   path the fidelity reference does not have.
 //! - [`json_export`] — a small hand-rolled JSON writer (this workspace has
 //!   no `serde` dependency anywhere, and does not gain one here) providing
 //!   [`json_export::ToJson`] for [`inspector::InspectorNode`] and every report type
@@ -71,6 +77,7 @@ pub mod gpu_inspector;
 pub mod inspector;
 pub mod json_export;
 pub mod png_compare;
+pub mod quality_overlay;
 pub mod render_graph_inspector;
 pub mod semantics_inspector;
 
@@ -93,6 +100,7 @@ pub use frame_timeline::FrameTimeline;
 pub use gpu_inspector::{DriverStats, GpuReport};
 pub use inspector::Inspector;
 pub use json_export::ToJson;
+pub use quality_overlay::QualityOverlay;
 #[cfg(feature = "snapshots")]
 pub use memory_inspector::MemoryReport;
 pub use render_graph_inspector::{PassReport, RenderGraphReport};

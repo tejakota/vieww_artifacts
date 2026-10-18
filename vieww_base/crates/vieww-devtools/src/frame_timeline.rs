@@ -172,6 +172,25 @@ impl FrameTimeline {
         Some(window[index])
     }
 
+    /// The per-frame budget of the most recently recorded sample.
+    ///
+    /// Every sample in one session carries the same budget —
+    /// `FrameLog::set_budget` changes it at most once, when the surface's
+    /// refresh rate is learned — so the newest sample's budget is the
+    /// window's. `None` while nothing has been recorded, because a budget
+    /// reported without a frame behind it would be a configuration read,
+    /// not a measurement.
+    #[must_use]
+    pub fn latest_budget(&self) -> Option<Duration> {
+        // `next` points at where the *next* record writes, so the newest
+        // held sample is one behind it — which is `len - 1` before the
+        // buffer has wrapped and `capacity - 1` after. One expression
+        // covers both.
+        self.samples
+            .get((self.next + self.capacity - 1) % self.capacity)
+            .map(|sample| sample.budget)
+    }
+
     /// A histogram of total frame times over the last `n` frames, bucketed
     /// against `budget`.
     ///
@@ -362,5 +381,20 @@ mod tests {
     fn capacity_is_never_less_than_one() {
         let timeline = FrameTimeline::new(0);
         assert_eq!(timeline.capacity, 1);
+    }
+
+    #[test]
+    fn latest_budget_reads_the_newest_sample_before_and_after_wraparound() {
+        let mut timeline = FrameTimeline::new(3);
+        assert_eq!(timeline.latest_budget(), None, "no frame, no budget");
+        for millis in 1..=5u64 {
+            // Budget grows with the sample number so the test can tell
+            // which sample `latest_budget` actually read.
+            timeline.record(sample(millis, millis, millis * 10));
+        }
+        // Capacity 3, five recorded: the newest survivor is frame 5,
+        // budget 50ms — frame 1's (10ms) would mean the index wrapped the
+        // wrong way.
+        assert_eq!(timeline.latest_budget(), Some(Duration::from_millis(50)));
     }
 }

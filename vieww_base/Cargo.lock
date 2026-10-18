@@ -5561,6 +5561,7 @@ dependencies = [
  "tray-icon",
  "vieww-animation",
  "vieww-asset",
+ "vieww-devtools",
  "vieww-element",
  "vieww-foundation",
  "vieww-gestures",

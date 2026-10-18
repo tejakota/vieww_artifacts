@@ -479,6 +479,33 @@ impl ToJson for GpuReport {
     }
 }
 
+// -------------------------------------------------------------- QualityOverlay
+
+impl ToJson for crate::quality_overlay::QualityOverlay {
+    fn to_json(&self) -> String {
+        let frame = JsonObject::new()
+            .field("samples", &self.frame.samples)
+            .field("average", &self.frame.average)
+            .field("p95", &self.frame.p95)
+            .field("max", &self.frame.max)
+            .field("over_budget", &self.frame.over_budget);
+        // An absent scale is a fact (`full resolution`), not a null to
+        // branch on in a browser — the same wording the summary line uses.
+        let scale = self
+            .gpu_scale
+            .as_deref()
+            .unwrap_or("full resolution")
+            .to_owned();
+        JsonObject::new()
+            .field("tier", &self.tier)
+            .field("device", &self.device)
+            .field("gpu_scale", &scale)
+            .field("budget", &self.budget)
+            .raw_field("frame", frame.build())
+            .build()
+    }
+}
+
 // ----------------------------------------------------------------- MemoryReport
 
 #[cfg(feature = "snapshots")]

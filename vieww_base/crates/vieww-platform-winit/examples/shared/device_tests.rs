@@ -890,6 +890,36 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     if let Some(scale) = vieww_platform_winit::gpu_scale_status() {
         results.observe("gpu_scale", scale);
     }
+    // The same facts and the frame clock, on the one line the farm summary
+    // prints beside each pass (`vieww-devtools`'s quality overlay). The
+    // timeline is fed from the samples already measured above — the overlay
+    // times nothing and sorts nothing itself — and its window is the whole
+    // session, the same window `frame_time`'s median is taken over.
+    let mut timeline = vieww_devtools::FrameTimeline::new(samples.len());
+    for (index, work) in samples.iter().enumerate() {
+        timeline.record(vieww_paint::FrameStats {
+            number: index as u64,
+            timestamp: Duration::ZERO,
+            animate: Duration::ZERO,
+            build: Duration::ZERO,
+            layout: Duration::ZERO,
+            paint: Duration::ZERO,
+            composite: Duration::ZERO,
+            total: *work,
+            budget,
+            damage_area: 0.0,
+            damage_regions: 0,
+        });
+    }
+    let overlay = vieww_devtools::QualityOverlay::build(
+        vieww_platform_winit::device_facts().tier.name(),
+        &vieww_platform_winit::device_facts_status()
+            .unwrap_or_else(|| "probes said nothing".to_owned()),
+        vieww_platform_winit::gpu_scale_status().as_deref(),
+        &timeline,
+        samples.len(),
+    );
+    results.observe("quality_overlay", overlay.summary_line());
 
     // The one performance claim that *can* be gated on a single run, and the
     // reason is that it is not a time.
