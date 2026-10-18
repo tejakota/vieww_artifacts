@@ -453,6 +453,34 @@ round-trip).
 **Start.** Create the device in parallel with the window; run `baseline` with
 `VIEWW_TRACE_FRAMES=1` to attribute the remainder.
 
+## 3.6 iOS — VoiceOver has never been heard on vieww
+
+**What.** The screen-reader contract is half-proven. The static half is
+machine-checked: `vieww-accessibility`'s `audit.rs` walks a `SemanticsTree`
+and names every interactive node with no label, every button missing the
+button trait, every interactive node that is not focusable — exactly the
+bugs that otherwise only surface in a manual session. The Android half is
+real: TalkBack has been heard speaking (1.5, 2026-10-14) and
+`ci/mobile/a11y-android.sh` runs the suite. What does not exist is the iOS
+half: no VoiceOver run is recorded, no XCUITest asserts that a vieww button
+is *heard* — label, traits, focus — the way the Android suite does, and no
+`UIAccessibility` notification is ever posted from vieww's semantics.
+
+**Why not.** The iPhone device-suite runs (1.4) check rendering and taps,
+not accessibility; the semantics layer documents the announcement path
+(`crates/vieww-render/src/semantics.rs` names `UIAccessibility.post`) but
+nothing implements the iOS side of it.
+
+**Blocks.** The claim that vieww's accessibility is platform-parity rather
+than Android-parity.
+
+**Start.** Post `UIAccessibility.Notification.screenChanged` with the
+focused node's accessibility element from the iOS semantics bridge, add an
+XCUITest that asserts `app.buttons["<label>"]` exists, is labelled and
+enabled — the mirror of the TalkBack harness — run it through
+`ci/mobile/device-farm/run-ios.sh`, and record the session beside the
+TalkBack record in the tracker.
+
 ---
 
 # 4. CPU rasterizer performance
@@ -593,6 +621,37 @@ the point.
 **Start.** Nothing — unless the floor itself needs arguing about, in which
 case the place is `ci/check/coverage.sh`'s `FLOOR=70` and the reasons in its
 header comment, not this file.
+
+## 5.2 The framework comparison is a survey and a source cross-check, not a conformance matrix
+
+**What.** `What are the best UI frameworks.md` (repository root) compares
+vieww against Motion Canvas, GSAP, Manim and Rive — animation tools, not UI
+frameworks — and `docs/FRAMEWORK-CAPABILITY-PARITY.md` cross-checks that
+survey's claims against the source, crate by crate, in honest
+source-present / API-slice / needs-verification terms. Neither is the
+answer to the question a UI-framework comparison exists for: on the
+dimensions that define one — screen-reader support per platform, IME, bidi,
+RTL layout, runtime locale switch, hot reload, devtools, golden and widget
+tests, native backends, measured performance, shipped apps — how does vieww
+stand against Flutter, React Native and Qt, cell by cell, every cell
+checkable?
+
+**Why not.** Populating the other frameworks' columns honestly is research
+— each cell needs a version and a citation, not an impression — and a
+matrix nobody enforces rots into the survey it replaced, so the gate is
+part of the work, and gates get argued about before they get written.
+
+**Blocks.** The honest "does vieww handle everything every other framework
+does" answer. Every fix elsewhere in this file moves cells that nothing is
+counting yet.
+
+**Start.** Write `docs/conformance/matrix.md`: vieww's own row filled
+strictly from this file and TRACKER (`desktop_gpu_measured` is now true —
+the Kaby Lake receipts — but `sr_ios` is false, see 3.6), the other
+frameworks' rows from their published documentation with versions named,
+and `docs/conformance/why-not.md` giving the plan for every false cell. A
+check that diffs vieww's row against the last committed one keeps a
+regression visible instead of silent.
 
 ---
 
