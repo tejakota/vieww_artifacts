@@ -785,6 +785,23 @@ mod demo {
             // Before the event loop and every worker the app starts, as below.
             std::env::set_var("VIEWW_PERF_HINT", "1");
         }
+        // `debug.vieww.scale=<auto|0.25..1.0>`: the GPU path renders the plan
+        // into targets a fraction of the swapchain's size and the final blit
+        // enlarges (`VIEWW_GPU_SCALE`, `vieww_platform_winit::quality`) — the
+        // test of whether a fill-rate cut is what lets the GPU path pass
+        // where it currently loses (the LG Stylo 5: CPU 36.2 ms, GPU 40.1 ms,
+        // Device Farm 2026-10-17). `auto` takes the probed device tier's
+        // profile (`device_tier`); a number between 0.25 and 1.0 is that
+        // scale; unset or `off` is full resolution.
+        let scale = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.scale")
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_default();
+        if !scale.is_empty() && scale != "off" {
+            // Before the event loop and every worker the app starts, as below.
+            std::env::set_var("VIEWW_GPU_SCALE", &scale);
+        }
         if present == "vulkan" || present == "cpu" {
             // Before the event loop and every worker the app starts, so no
             // other thread is reading the environment yet.

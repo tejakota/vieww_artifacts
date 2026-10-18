@@ -92,13 +92,23 @@ status=0
 # UI thread (`debug.vieww.hint=1`, Android 13+; the LG Stylo 5 reports it
 # unavailable): whether the window-present path's slower raster is the
 # scheduler's choice of core and clock. Diagnostic only.
-for mode in cpu gpu auto cpuvk cpuhint; do
+#
+# `gpuscale` is the GPU path at the probed device tier's resolution
+# (`debug.vieww.scale=auto`, `VIEWW_GPU_SCALE`): the plan renders into targets
+# a fraction of the swapchain's size and the final blit enlarges. The test of
+# whether a fill-rate cut is what lets the GPU path pass where it currently
+# loses (LG Stylo 5: CPU 36.2 ms, GPU 40.1 ms, 2026-10-17) — the `device`
+# observation says which tier was resolved, `gpu_scale` which fraction ran.
+# Diagnostic only.
+for mode in cpu gpu auto cpuvk cpuhint gpuscale; do
     gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
     hint=0; [ "$mode" = cpuhint ] && hint=1
+    scale=""; [ "$mode" = gpuscale ] && scale=auto
     sh_ setprop debug.vieww.hint "$hint" >/dev/null
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
+    sh_ setprop debug.vieww.scale "$scale" >/dev/null
 
     # 1. Cold start, three times. TotalTime is the platform's own measure of
     # launch to first frame drawn; WaitTime adds the system's share.
@@ -130,16 +140,16 @@ for mode in cpu gpu auto cpuvk cpuhint; do
     # Not an array: Device Farm's host runs bash 4.2, where "${empty[@]}"
     # under `set -u` is an unbound variable — which is exactly how the first
     # real run (2026-10-15) died here on all three phones, before any suite.
-    gpu_flag=""; [ "$mode" = gpu ] && gpu_flag="--gpu"
+    gpu_flag=""; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ]; } && gpu_flag="--gpu"
     # shellcheck disable=SC2086 # $gpu_flag is empty or one word, on purpose
     if VIEWW_SCREENSHOT="$out/$mode-screen.png" \
         bash "$root/ci/mobile/device-suite.sh" --no-build $gpu_flag > "$out/$mode-suite.log" 2>&1; then
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        case "$mode" in cpuvk|cpuhint|auto) ;; *) status=1 ;; esac
+        case "$mode" in cpuvk|cpuhint|gpuscale|auto) ;; *) status=1 ;; esac
     fi
-    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames; do
+    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
@@ -161,6 +171,7 @@ sh_ setprop debug.vieww.gpu 0 >/dev/null
 sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ setprop debug.vieww.recalibrate 0 >/dev/null
 sh_ setprop debug.vieww.hint 0 >/dev/null
+sh_ setprop debug.vieww.scale "" >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
 kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"
