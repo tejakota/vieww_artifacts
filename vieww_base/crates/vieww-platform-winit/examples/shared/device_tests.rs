@@ -885,6 +885,11 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     if let Some(device) = vieww_platform_winit::device_facts_status() {
         results.observe("device", device);
     }
+    // The GPU path's resolution scale, when one is engaged
+    // (`VIEWW_GPU_SCALE`, `crate::quality`); quiet at full resolution.
+    if let Some(scale) = vieww_platform_winit::gpu_scale_status() {
+        results.observe("gpu_scale", scale);
+    }
 
     // The one performance claim that *can* be gated on a single run, and the
     // reason is that it is not a time.

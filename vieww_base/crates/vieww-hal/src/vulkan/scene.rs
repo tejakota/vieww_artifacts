@@ -58,6 +58,15 @@ use super::{translate_wgsl_to_spirv, Stage, VulkanDevice, VulkanError};
 struct BlitTarget {
     image: vk::Image,
     ready: vk::Semaphore,
+    /// Where the scene frame ends in its own coordinates: the render
+    /// extent, which is the target's unless a resolution scale says
+    /// otherwise (then the blit enlarges). `[0, 0]` corners, so one corner
+    /// says it all.
+    src_extent: [u32; 2],
+    /// The filter the blit runs with: `NEAREST` at 1:1, `LINEAR` when the
+    /// source is a different size — nearest-neighbour upscaling doubles
+    /// pixels instead of blending them.
+    filter: vk::Filter,
 }
 
 /// Colour format of every render target.
@@ -938,11 +947,16 @@ impl SceneRenderer {
     /// unpremultiplying, which a blit cannot do. The caller checks
     /// `VulkanDevice::can_blit_scene_frames` once per swapchain.
     ///
+    /// `scale` renders the plan into targets `scale` times the target image's
+    /// extent and lets the final blit enlarge it (`LINEAR`); the caller checks
+    /// `VulkanDevice::can_scale_scene_frames` before passing anything below
+    /// 1.0. Full resolution — the default — is byte-for-byte the same command
+    /// stream a 1:1 blit ever was.
+    ///
     /// # Errors
     ///
-    /// An incomplete plan, a translucent clear, an extent that does not match
-    /// `target`, or any Vulkan call failing. On error `target` is still the
-    /// caller's to present or abandon.
+    /// An incomplete plan, a translucent clear, or any Vulkan call failing.
+    /// On error `target` is still the caller's to present or abandon.
     #[cfg(feature = "vulkan-swapchain")]
     pub fn render_planned_to(
         &mut self,
@@ -950,6 +964,7 @@ impl SceneRenderer {
         plan: &ScenePlan,
         clear: Color,
         target: &AcquiredImage,
+        scale: f32,
     ) -> Result<(), VulkanError> {
         if !plan.is_complete() {
             return Err(VulkanError::Vulkan("incomplete plan".into()));
@@ -963,20 +978,38 @@ impl SceneRenderer {
         if width == 0 || height == 0 {
             return Err(VulkanError::Vulkan("zero-sized swapchain image".into()));
         }
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a swapchain extent is a small number of pixels"
+        )]
+        let (render_width, render_height) = if scale < 1.0 {
+            (
+                ((width as f32 * scale).round() as u32).max(1),
+                ((height as f32 * scale).round() as u32).max(1),
+            )
+        } else {
+            (width, height)
+        };
         self.timings = GpuFrameTimings::default();
         let started = Instant::now();
         self.upload_planner(planner)?;
-        self.ensure_targets(width, height, plan.target_depth + 1)?;
-        #[allow(clippy::cast_precision_loss)]
-        let viewport = [width as f32, height as f32, 0.0, 0.0];
+        self.ensure_targets(render_width, render_height, plan.target_depth + 1)?;
+        #[expect(clippy::cast_precision_loss, reason = "frame extents")]
+        let viewport = [render_width as f32, render_height as f32, 0.0, 0.0];
         write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
         self.upload_geometry(plan)?;
         self.timings.upload = started.elapsed();
         let blit = BlitTarget {
             image: target.image,
             ready: target.ready,
+            src_extent: [render_width, render_height],
+            filter: if render_width == width && render_height == height {
+                vk::Filter::NEAREST
+            } else {
+                vk::Filter::LINEAR
+            },
         };
-        self.execute(plan, width, height, clear, Some(blit))
+        self.execute(plan, render_width, render_height, clear, Some(blit))
     }
 
     // ── targets ────────────────────────────────────────────────────────────
@@ -1475,7 +1508,10 @@ impl SceneRenderer {
                 // converts RGBA16F to the swapchain's 8-bit UNORM (and to
                 // BGRA order when that is the format) on the GPU; the frame
                 // is opaque (see `render_planned_to`), so premultiplied and
-                // straight are the same numbers and nothing is lost.
+                // straight are the same numbers and nothing is lost. The
+                // source corner is the render extent, the destination the
+                // swapchain image's — the same numbers at full resolution,
+                // an enlargement when a resolution scale is on.
                 transition(
                     &self.device,
                     cmd,
@@ -1484,9 +1520,9 @@ impl SceneRenderer {
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 );
                 #[expect(clippy::cast_possible_wrap, reason = "frame extents")]
-                let corner = vk::Offset3D {
-                    x: width as i32,
-                    y: height as i32,
+                let corner = |extent: [u32; 2]| vk::Offset3D {
+                    x: extent[0] as i32,
+                    y: extent[1] as i32,
                     z: 1,
                 };
                 self.device.cmd_blit_image(
@@ -1497,11 +1533,11 @@ impl SceneRenderer {
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                     &[vk::ImageBlit {
                         src_subresource: color_layers(),
-                        src_offsets: [vk::Offset3D::default(), corner],
+                        src_offsets: [vk::Offset3D::default(), corner(target.src_extent)],
                         dst_subresource: color_layers(),
-                        dst_offsets: [vk::Offset3D::default(), corner],
+                        dst_offsets: [vk::Offset3D::default(), corner([width, height])],
                     }],
-                    vk::Filter::NEAREST,
+                    target.filter,
                 );
                 transition(
                     &self.device,

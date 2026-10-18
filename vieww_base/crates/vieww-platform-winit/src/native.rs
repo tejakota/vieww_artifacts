@@ -1297,8 +1297,45 @@ impl NativeRenderer {
         // planner and then lifted again inside `present_damaged` — two
         // `Scene::scaled` calls per fallback frame on every HiDPI display.
         // Measuring the stages is what made the second one visible.
+        //
+        // The resolution scale (`VIEWW_GPU_SCALE`, `crate::quality`) applies
+        // only to the direct GPU route: it renders the plan into targets a
+        // fraction of the swapchain's size and the final blit enlarges, which
+        // needs an opaque frame and a format that filters linearly. The lift
+        // goes to the *scaled* extent — the plan's geometry lives in the space
+        // the targets render — and the scale multiplies the display's own, so
+        // text rasters at the reduced density too. That reduced density is
+        // the point; the CPU fallback below re-lifts to full size if the plan
+        // comes back with gaps.
+        let direct_route = match (&surface.kind, &self.device) {
+            (SurfaceKind::Vulkan(swapchain), Some(device)) => {
+                base.a == 255 && device.can_scale_scene_frames(swapchain)
+            }
+            _ => false,
+        };
+        let render_scale = if direct_route {
+            crate::quality::gpu_scale().unwrap_or(1.0)
+        } else {
+            1.0
+        };
+        let full_scene = scene;
         let lifting = Instant::now();
-        let scene = frame_at_device_resolution(scene, logical_size, extent, scale);
+        let (lifted_extent, lifted_scale) = if render_scale < 1.0 {
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "frame extents are a small number of pixels"
+            )]
+            let scaled = (
+                (physical_width as f32 * render_scale).round().max(1.0) as u32,
+                (physical_height as f32 * render_scale).round().max(1.0) as u32,
+            );
+            let factor = scale.factor() * render_scale;
+            (scaled, Scale::new(factor as f64))
+        } else {
+            (extent, scale)
+        };
+        let mut scene =
+            frame_at_device_resolution(full_scene, logical_size, lifted_extent, lifted_scale);
         self.stages.scale = lifting.elapsed();
 
         // Why the CPU drew this frame, for the shadow log. Only ever built
@@ -1315,7 +1352,7 @@ impl NativeRenderer {
                 clippy::cast_precision_loss,
                 reason = "a swapchain extent is a small number of pixels"
             )]
-            let (width, height) = (physical_width as f32, physical_height as f32);
+            let (width, height) = (lifted_extent.0 as f32, lifted_extent.1 as f32);
             let planning = Instant::now();
             let plan = planner.plan(scene.as_ref(), width, height);
             self.stages.plan = planning.elapsed();
@@ -1325,6 +1362,8 @@ impl NativeRenderer {
                 // swapchain's format: the whole frame stays on the GPU. A
                 // translucent window keeps the readback path, because the
                 // scene targets are premultiplied and a blit cannot divide.
+                // (`direct_route` above checked both, plus the linear filter
+                // the resolution scale's enlarging blit needs.)
                 if base.a == 255 && device.can_blit_scene_frames(swapchain) {
                     let acquiring = Instant::now();
                     let acquired = device
@@ -1341,7 +1380,9 @@ impl NativeRenderer {
                             stages: self.stages,
                         });
                     };
-                    if let Err(error) = renderer.render_planned_to(planner, &plan, base, &image) {
+                    if let Err(error) =
+                        renderer.render_planned_to(planner, &plan, base, &image, render_scale)
+                    {
                         let _ = device.abandon_acquired(swapchain, image);
                         return Err(NativeError::Render(error.to_string()));
                     }
@@ -1397,6 +1438,15 @@ impl NativeRenderer {
         // Either way the CPU rasterizes, in full, the frame already lifted to
         // device pixels above — exactly what `present_damaged` with no damage
         // did, minus its second lift. A fallback frame is a first frame.
+        // A resolution-scaled lift only made sense for the GPU route, so it is
+        // undone here: the CPU renders at the surface's full extent. The
+        // extra lift is the scale's own fallback cost, paid on frames the
+        // planner could not draw anyway.
+        if render_scale < 1.0 {
+            let lifting = Instant::now();
+            scene = frame_at_device_resolution(full_scene, logical_size, extent, scale);
+            self.stages.scale += lifting.elapsed();
+        }
         let rasterising = Instant::now();
         let report =
             self.cpu

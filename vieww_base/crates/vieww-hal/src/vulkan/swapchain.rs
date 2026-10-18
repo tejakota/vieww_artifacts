@@ -578,6 +578,27 @@ impl VulkanDevice {
                 .contains(vk::FormatFeatureFlags::BLIT_DST)
     }
 
+    /// Whether a scene frame can be blitted into `swapchain`'s images at a
+    /// *different* size than its own — the resolution-scaled frame's final
+    /// blit enlarges a smaller render into the full image, and a `LINEAR`
+    /// filter needs the scene format to say it filters linearly, which
+    /// `BLIT_SRC` alone does not imply. Unscaled blits never call this.
+    #[must_use]
+    pub fn can_scale_scene_frames(&self, swapchain: &VulkanSwapchain) -> bool {
+        if !self.can_blit_scene_frames(swapchain) {
+            return false;
+        }
+        // SAFETY: a query on a live physical device.
+        let src = unsafe {
+            self.instance.get_physical_device_format_properties(
+                self.physical_device,
+                vk::Format::R16G16B16A16_SFLOAT,
+            )
+        };
+        src.optimal_tiling_features
+            .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR)
+    }
+
     /// Acquire the next swapchain image for direct rendering, rebuilding the
     /// swapchain once if it is out of date. `Ok(None)` when the rebuild
     /// changed the extent from `expected` — the caller rendered for a size
