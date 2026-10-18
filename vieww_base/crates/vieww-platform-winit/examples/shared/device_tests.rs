@@ -877,6 +877,14 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     if let Some(hint) = vieww_platform_winit::perf_hint_status() {
         results.observe("perf_hint", hint);
     }
+    // What this device is, and what that implies for quality: the tier the
+    // policy resolved (`VIEWW_DEVICE_TIER` can override), the RAM and cores
+    // it was resolved from, and the SoC as the device names itself. Observed
+    // beside the shell's own `mem_total_kb`/`cpu_cores` so the two probes
+    // can be cross-checked against each other.
+    if let Some(device) = vieww_platform_winit::device_facts_status() {
+        results.observe("device", device);
+    }
 
     // The one performance claim that *can* be gated on a single run, and the
     // reason is that it is not a time.

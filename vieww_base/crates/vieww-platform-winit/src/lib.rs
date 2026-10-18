@@ -111,6 +111,7 @@ pub mod desktop;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 mod raster;
+mod device_tier;
 mod perf_hint;
 pub mod rasterizer_choice;
 mod startup;
@@ -128,6 +129,7 @@ pub use latency::{InputLatencyLog, InputLatencyReport};
 pub use lifecycle::Lifecycle;
 pub use scale::{Physical, Scale};
 pub use perf_hint::perf_hint_status;
+pub use device_tier::{device_facts, device_facts_status, resolve_tier, DeviceFacts, DeviceTier};
 pub use rasterizer_choice::rasterizer_choice;
 pub use startup::{pipeline_cache_status, report as startup_report};
 pub use stats::{Frame, FrameLog, FrameReport};
