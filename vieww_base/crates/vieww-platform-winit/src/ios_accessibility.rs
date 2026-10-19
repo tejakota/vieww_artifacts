@@ -79,16 +79,19 @@ use vieww_render::{RenderId, Role, SemanticsTree};
 
 use crate::scale::Scale;
 
-/// The published elements of the last [`publish_semantics`], keyed by the
-/// packed render id — the lookup [`announce_focus`] needs when the tree's
-/// focused node changes. A thread-local rather than app state because the
-/// elements are already reachable from the view that holds them, and this
-/// map only exists to hand the focused one back; it dies with the thread
-/// that published them, which is the main thread, which is the only thread
-/// UIKit accessibility exists on — `objc2` 0.5 has no `MainThreadMarker`
-/// to enforce it, so the safety notes below carry the requirement in
-/// words instead.
+// The doc sits on the `static` inside the macro: rustdoc does not carry a
+// doc comment placed on the `thread_local!` call (`unused_doc_comments`,
+// the iOS cross-check leg of Framework checks run 39261580464).
 thread_local! {
+    /// The published elements of the last [`publish_semantics`], keyed by the
+    /// packed render id — the lookup [`announce_focus`] needs when the tree's
+    /// focused node changes. A thread-local rather than app state because the
+    /// elements are already reachable from the view that holds them, and this
+    /// map only exists to hand the focused one back; it dies with the thread
+    /// that published them, which is the main thread, which is the only thread
+    /// UIKit accessibility exists on — `objc2` 0.5 has no `MainThreadMarker`
+    /// to enforce it, so the safety notes below carry the requirement in
+    /// words instead.
     static PUBLISHED: RefCell<Vec<(u64, Retained<UIAccessibilityElement>)>> =
         const { RefCell::new(Vec::new()) };
 }
@@ -227,6 +230,14 @@ unsafe fn publish_on_view(
 /// the id is not in the last published set, which is the honest answer: an
 /// element that was never announced as present should not be announced as
 /// focused either.
+///
+/// No caller yet, and deliberately kept: every [`publish_semantics`] already
+/// posts `screenChanged` with the focused element, so a focus change that
+/// republishes is announced today. This is the path for a focus move *without*
+/// a republish, which nothing produces until the app layer tracks focus
+/// separately from the tree — the iOS cross-check flagged it as dead
+/// (run 39261580464), and it stays for that caller rather than being rewritten.
+#[allow(dead_code)]
 pub(crate) fn announce_focus(id: RenderId) {
     let key = packed(id);
     PUBLISHED.with(|slot| {
