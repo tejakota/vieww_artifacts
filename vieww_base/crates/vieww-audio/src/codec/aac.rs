@@ -521,6 +521,17 @@ fn ms_and_intensity(l: &mut Channel, r: &mut Channel, ms: &[Vec<bool>], rate_idx
     let bands = swb(rate_idx, short);
     let mut win0 = 0usize;
     for (g, &glen) in l.info.groups.iter().enumerate() {
+        // The spec requires both channels of a pair to share one window
+        // sequence, but the bitstream grammar lets a hostile file say
+        // otherwise when `common_window` is false — and the right channel's
+        // codebook and scalefactor rows exist only for the group count it
+        // declared. Indexing them with the left's group count is the panic;
+        // stopping at the first group the right channel does not have
+        // degrades the rest of the element to independent stereo, which is
+        // what the element claimed to be anyway.
+        if r.cb.get(g).is_none() || r.sf.get(g).is_none() {
+            break;
+        }
         for b in 0..l.info.max_sfb.min(r.info.max_sfb) {
             let (lo, hi) = (usize::from(bands[b]), usize::from(bands[b + 1]));
             let rb = r.cb[g][b];
@@ -1040,5 +1051,48 @@ mod tests {
         eprintln!("aac m4a stereo: {snr:.1} dB at lag {lag}");
         assert_eq!(lag, 0);
         assert!(snr > 60.0, "SNR {snr} dB");
+    }
+
+    #[test]
+    fn a_channel_pair_with_mismatched_window_shapes_degrades_not_panics() {
+        // The spec requires both channels of a pair to share one window
+        // sequence, but the bitstream grammar lets a hostile file disagree
+        // when `common_window` is false. Left declares eight short-window
+        // groups; right declares a single long one — indexing the right
+        // channel's per-group rows with the left's group count used to
+        // panic at the first missing group. The element now degrades to
+        // independent stereo from the first shape mismatch onward.
+        let l = Channel {
+            info: IcsInfo {
+                seq: Seq::EightShort,
+                kbd: false,
+                max_sfb: 2,
+                groups: vec![1, 1, 1, 1, 1, 1, 1, 1],
+            },
+            spec: vec![0.0; 1024],
+            cb: vec![vec![0u8; 2]; 8],
+            sf: vec![vec![0i32; 2]; 8],
+            tns: Tns::default(),
+        };
+        let r = Channel {
+            info: IcsInfo {
+                seq: Seq::OnlyLong,
+                kbd: false,
+                max_sfb: 2,
+                groups: vec![1],
+            },
+            spec: vec![0.0; 1024],
+            cb: vec![vec![0u8; 2]],
+            sf: vec![vec![0i32; 2]],
+            tns: Tns::default(),
+        };
+        let mut l = l;
+        let mut r = r;
+        ms_and_intensity(&mut l, &mut r, &[], 0);
+        // Group 0 (the shapes' common prefix) still went through M/S with
+        // an all-false matrix, so both channels stay zeroed here; the
+        // assertion is that the call returned at all.
+        assert!(l.spec.iter().all(|&s| s == 0.0));
+        assert!(r.spec.iter().all(|&s| s == 0.0));
     }
 }

@@ -125,7 +125,16 @@ pub fn decode_ints(bytes: &[u8]) -> Result<(StreamInfo, Vec<i32>), CodecError> {
     }
     let info = info.ok_or(CodecError::Malformed("no STREAMINFO"))?;
     let ch = usize::from(info.channels);
-    let mut out = Vec::with_capacity(usize::try_from(info.total).unwrap_or(0) * ch);
+    // STREAMINFO's total-samples field is 36 raw bits from an 80-byte
+    // header: a reservation is a courtesy to files that told the truth,
+    // not a promise to files that did not, so it is capped and the Vec
+    // simply grows past it for streams longer than the cap. Sixteen
+    // million samples is six minutes at 44.1 kHz; beyond that the doublings
+    // of `push` are the cost of honesty, and a hostile header gets a
+    // bounded allocation instead of terabytes.
+    const MAX_PREALLOC: usize = 1 << 24;
+    let want = usize::try_from(info.total).unwrap_or(0).saturating_mul(ch);
+    let mut out = Vec::with_capacity(want.min(MAX_PREALLOC));
     let mut md5 = Md5::default();
     let bps_bytes = usize::from(info.bits).div_ceil(8);
     while at + 2 <= bytes.len() {
@@ -269,7 +278,13 @@ fn subframe(r: &mut MsbReader<'_>, block: usize, bits: u32) -> Result<Vec<i32>, 
     } else {
         0
     };
-    let bits = bits - wasted;
+    // The format requires the wasted-bits count to stay below the sample
+    // width; a stream that says otherwise has nothing left to read a
+    // sample with, and `bits - wasted` underflowing a u32 is a debug-build
+    // panic and a release-build nonsense width.
+    let bits = bits.checked_sub(wasted).ok_or(CodecError::Malformed(
+        "flac wasted bits exceed sample width",
+    ))?;
     let mut s = match kind {
         0 => {
             let v = r.read_signed(bits).ok_or(CodecError::Truncated)?;
@@ -937,5 +952,23 @@ mod tests {
             .collect();
         assert_eq!(got, want, "ffmpeg decodes our FLAC bit-exactly");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn wasted_bits_beyond_the_sample_width_are_rejected_not_underflowed() {
+        // `bits - wasted` with a unary count that outruns the sample width
+        // underflowed a u32: a debug-build panic and a release-build
+        // nonsense width. The format requires wasted < bits, and the
+        // decoder now enforces exactly that.
+        // Bits: 0 (reserved) | 000000 (CONSTANT) | 1 (wasted flag) |
+        // 0000 1 (unary: four zeros, then the terminator).
+        let mut r = MsbReader::new(&[0x01, 0x08]);
+        let err = subframe(&mut r, 1, 4).err();
+        assert_eq!(
+            err,
+            Some(CodecError::Malformed(
+                "flac wasted bits exceed sample width"
+            ))
+        );
     }
 }

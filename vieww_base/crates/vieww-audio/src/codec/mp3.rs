@@ -896,11 +896,17 @@ fn xing(frame: &[u8], h: &Header) -> Option<Gapless> {
     if !(b.starts_with(b"Xing") || b.starts_with(b"Info")) {
         return None;
     }
-    let flags = u32::from_be_bytes([b[4], b[5], b[6], b[7]]);
-    let mut at = 8;
+    // A tag name alone is not a header: the frame can end (or the file with
+    // it) anywhere after `Xing`, and every field below is optional — so
+    // every read goes through `get`, and a short buffer is simply a tag
+    // without the fields it would have carried.
+    let f = b.get(4..8)?;
+    let flags = u32::from_be_bytes([f[0], f[1], f[2], f[3]]);
+    let mut at = 8usize;
     let mut g = Gapless::default();
     if flags & 1 != 0 {
-        g.frames = Some(u32::from_be_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]));
+        let f = b.get(at..at + 4)?;
+        g.frames = Some(u32::from_be_bytes([f[0], f[1], f[2], f[3]]));
         at += 4;
     }
     if flags & 2 != 0 {
@@ -1162,5 +1168,20 @@ mod tests {
             decode(b"definitely not audio").err(),
             Some(CodecError::NotThisFormat)
         );
+    }
+
+    #[test]
+    fn a_truncated_xing_tag_is_ignored_not_a_panic() {
+        // A first frame that ends the moment the `Xing` magic does: a tag
+        // with a name and none of its fields. The first-frame scan accepts
+        // a frame truncated by EOF by design, so this slice reaches `xing`
+        // four bytes long — which used to be indexed at [4..8] for the
+        // flags before the bounds check, and panicked.
+        let mut file = vec![0xFF, 0xFB, 0x90, 0x64]; // MPEG-1 L3, joint stereo, 128 kbps @ 44.1 kHz
+        file.extend_from_slice(&[0u8; 32]); // the side-info region
+        file.extend_from_slice(b"Xing"); // and nothing after the magic
+                                         // Whatever the decoder makes of the frame — error or empty — it
+                                         // must make it without unwinding. That is the whole test.
+        let _ = decode(&file);
     }
 }

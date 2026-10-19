@@ -172,7 +172,26 @@ pub fn audio_track(file: &[u8]) -> Result<AudioTrack, CodecError> {
         // Sizes.
         let sizes: Vec<usize> = if let Some(s) = child(stbl, b"stsz") {
             let fixed = be32(s, 4).unwrap_or(0) as usize;
-            let n = be32(s, 8).unwrap_or(0) as usize;
+            let n = be32(s, 8).ok_or(CodecError::Truncated)? as usize;
+            // A count field is 32 raw bits in a box whose length is right
+            // there beside it. With a fixed sample size the table itself is
+            // absent but the media it describes is not: `vec![fixed; n]`
+            // from a claim of four billion is a multi-gigabyte allocation
+            // from a hundred-byte file, so the claim is bounded both by the
+            // box (variable sizes) and by the file times a compression
+            // allowance no real encoder approaches (fixed sizes).
+            if fixed != 0 {
+                // `as u128` from usize: widening, and `u128::from(usize)` is
+                // not a conversion std provides.
+                let claimed = fixed as u128 * n as u128;
+                if claimed > file.len() as u128 * 32 {
+                    return Err(CodecError::Malformed(
+                        "stsz claims more media than the file holds",
+                    ));
+                }
+            } else if n as u128 * 4 > s.len().saturating_sub(12) as u128 {
+                return Err(CodecError::Malformed("stsz count exceeds its box"));
+            }
             if fixed != 0 {
                 vec![fixed; n]
             } else {
@@ -184,19 +203,29 @@ pub fn audio_track(file: &[u8]) -> Result<AudioTrack, CodecError> {
             return Err(CodecError::Unsupported("stz2 sample sizes"));
         };
         let offsets: Vec<u64> = if let Some(c) = child(stbl, b"stco") {
-            let n = be32(c, 4).unwrap_or(0) as usize;
+            let n = be32(c, 4).ok_or(CodecError::Truncated)? as usize;
+            if n as u128 * 4 > c.len().saturating_sub(8) as u128 {
+                return Err(CodecError::Malformed("stco count exceeds its box"));
+            }
             (0..n)
                 .map(|i| u64::from(be32(c, 8 + 4 * i).unwrap_or(0)))
                 .collect()
         } else if let Some(c) = child(stbl, b"co64") {
-            let n = be32(c, 4).unwrap_or(0) as usize;
+            let n = be32(c, 4).ok_or(CodecError::Truncated)? as usize;
+            if n as u128 * 8 > c.len().saturating_sub(8) as u128 {
+                return Err(CodecError::Malformed("co64 count exceeds its box"));
+            }
             (0..n).map(|i| be64(c, 8 + 8 * i).unwrap_or(0)).collect()
         } else {
             return Err(CodecError::Malformed("no chunk offsets"));
         };
         let stsc: Vec<(u32, u32)> = child(stbl, b"stsc").map_or_else(Vec::new, |s| {
-            let n = be32(s, 4).unwrap_or(0) as usize;
-            (0..n)
+            // Entries are 12 bytes from offset 8; a count that exceeds its
+            // own box is truncated to what the box actually holds, which
+            // serves a real file cut short better than trusting the count
+            // would serve a hostile one.
+            let fits = (be32(s, 4).unwrap_or(0) as usize).min(s.len().saturating_sub(8) / 12);
+            (0..fits)
                 .map(|i| {
                     (
                         be32(s, 8 + 12 * i).unwrap_or(1),
@@ -290,6 +319,55 @@ mod tests {
         assert_eq!(
             audio_track(b"RIFF....WAVE").err(),
             Some(CodecError::NotThisFormat)
+        );
+    }
+
+    #[test]
+    fn a_lying_stsz_count_is_rejected_not_allocated() {
+        // `vec![fixed; n]` trusted a 32-bit count in a box whose own length
+        // said otherwise: a hundred-byte file claiming four billion
+        // four-byte samples asked for sixteen gigabytes before the first
+        // byte of audio was read. The claim is now bounded by the file
+        // times a compression allowance no real encoder approaches.
+        fn box_of(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {
+            let mut b = Vec::with_capacity(8 + body.len());
+            b.extend_from_slice(&u32::try_from(8 + body.len()).unwrap_or(0).to_be_bytes());
+            b.extend_from_slice(kind);
+            b.extend_from_slice(body);
+            b
+        }
+        let stsz = {
+            let mut body = Vec::new();
+            body.extend_from_slice(&[0; 4]); // version/flags
+            body.extend_from_slice(&4u32.to_be_bytes()); // fixed sample size
+            body.extend_from_slice(&0xFFFF_FFF0u32.to_be_bytes()); // the lie
+            box_of(b"stsz", &body)
+        };
+        let stco = {
+            let mut body = Vec::new();
+            body.extend_from_slice(&[0; 4]);
+            body.extend_from_slice(&1u32.to_be_bytes()); // one chunk
+            body.extend_from_slice(&0u32.to_be_bytes());
+            box_of(b"stco", &body)
+        };
+        let stsd = box_of(b"stsd", &[0; 8]); // version/flags + entry count 0
+        let hdlr = {
+            let mut body = vec![0; 8];
+            body.extend_from_slice(b"soun"); // handler type at body offset 8
+            box_of(b"hdlr", &body)
+        };
+        let stbl = box_of(b"stbl", &[stsd, stsz, stco].concat());
+        let minf = box_of(b"minf", &stbl);
+        let mdia = box_of(b"mdia", &[hdlr, minf].concat());
+        let trak = box_of(b"trak", &mdia);
+        let moov = box_of(b"moov", &trak);
+        let mut file = box_of(b"ftyp", b"isom\0\0\0\0mp42");
+        file.extend_from_slice(&moov);
+        assert_eq!(
+            audio_track(&file).err(),
+            Some(CodecError::Malformed(
+                "stsz claims more media than the file holds"
+            ))
         );
     }
 }

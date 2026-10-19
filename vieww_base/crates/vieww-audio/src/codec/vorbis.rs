@@ -316,6 +316,13 @@ impl Codebook {
         }
         let dims = rd(r, 16)? as usize;
         let entries = rd(r, 24)? as usize;
+        if dims == 0 {
+            // A VQ vector with zero dimensions produces no values and
+            // consumes no bits, so every loop that fills from such a book
+            // (floor 0's coefficient loop among them) would spin forever.
+            // Zero is not a dimension count any stream can use.
+            return Err(CodecError::Malformed("codebook dimensions are zero"));
+        }
         let ordered = rd(r, 1)? == 1;
         let mut lens = vec![0u8; entries];
         if ordered {
@@ -344,6 +351,22 @@ impl Codebook {
         let vq = match lookup {
             0 => None,
             1 | 2 => {
+                // The lookup table is `entries × dims` floats. Lookup type 1
+                // can reach a four-tibibyte reservation from a header a few
+                // dozen bytes long (a large `dims` collapses `nvals` to one
+                // while `entries` stays at its 24-bit maximum), so the
+                // product is capped rather than trusted: real books are
+                // orders of magnitude below this, and a hostile one is not
+                // a decode.
+                const MAX_LOOKUP_VALUES: usize = 1 << 22;
+                if entries
+                    .checked_mul(dims)
+                    .is_none_or(|v| v > MAX_LOOKUP_VALUES)
+                {
+                    return Err(CodecError::Malformed(
+                        "codebook lookup table is unreasonably large",
+                    ));
+                }
                 let min = float32(rd(r, 32)?);
                 let delta = float32(rd(r, 32)?);
                 let bits = rd(r, 4)? + 1;
@@ -606,6 +629,18 @@ fn parse_setup(id: &[u8], setup: &[u8]) -> Result<Setup, CodecError> {
                     for _ in 0..class_dims[c] {
                         xs.push(rd(&mut r, rangebits)?);
                     }
+                }
+                // Floor 1's line renderer divides by the span between
+                // adjacent X coordinates *after sorting them*, and the
+                // values arrive in partition order — so uniqueness, not
+                // parse order, is the constraint. A duplicated X anywhere
+                // (including a header value equal to the fixed endpoints
+                // 0 or 2^rangebits) makes that span zero and the division
+                // a panic; stb_vorbis guards the same condition.
+                let mut sorted = xs.clone();
+                sorted.sort_unstable();
+                if sorted.windows(2).any(|w| w[0] == w[1]) {
+                    return Err(CodecError::Malformed("floor 1 X values must be unique"));
                 }
                 floors.push(Floor::One {
                     partition_class,
@@ -1397,5 +1432,120 @@ mod tests {
         eprintln!("vorbis: {snr:.1} dB at lag {lag}");
         assert_eq!(lag, 0);
         assert!(snr > 60.0, "SNR {snr} dB against ffmpeg's decode");
+    }
+
+    /// LSB-first bit packer for hand-built headers.
+    struct Lsb(Vec<u8>, u32);
+
+    impl Lsb {
+        fn new() -> Self {
+            Self(Vec::new(), 0)
+        }
+
+        /// Write the low `n` bits of `v`, least significant first.
+        fn put(&mut self, v: u32, n: u32) {
+            for i in 0..n {
+                if (v >> i) & 1 == 1 {
+                    while self.0.len() <= self.1 as usize / 8 {
+                        self.0.push(0);
+                    }
+                    self.0[self.1 as usize / 8] |= 1 << (self.1 % 8);
+                }
+                self.1 += 1;
+            }
+        }
+
+        /// The bytes written, zero-padded to a whole byte: a reader counts
+        /// what remains by the byte, so trailing zero bits must exist.
+        fn bytes(&mut self) -> Vec<u8> {
+            let need = self.1.div_ceil(8) as usize;
+            while self.0.len() < need {
+                self.0.push(0);
+            }
+            std::mem::take(&mut self.0)
+        }
+    }
+
+    /// A minimal one-entry, no-lookup codebook, then whatever follows.
+    fn book_prefix(b: &mut Lsb, dims: u32, entries: u32) {
+        b.put(0x56_4342, 24); // sync
+        b.put(dims, 16);
+        b.put(entries, 24);
+        b.put(1, 1); // ordered lengths
+        b.put(0, 5); // one range at length 1…
+        b.put(entries, ilog(entries)); // …covering every entry
+    }
+
+    #[test]
+    fn a_zero_dimension_codebook_is_rejected_not_a_hang() {
+        // `dims == 0` makes `(n+1)^dims == 1 ≤ entries` for every n, so the
+        // lookup-1 `nvals` search used to spin forever — and floor 0's
+        // coefficient loop with it, since a zero-dimension vector consumes
+        // no bits. The book is now refused at parse.
+        let mut b = Lsb::new();
+        book_prefix(&mut b, 0, 4);
+        b.put(0, 4); // lookup type 0 — refused before it is reached
+        let bytes = b.bytes();
+        let mut r = LsbReader::new(&bytes);
+        assert_eq!(
+            Codebook::parse(&mut r).err(),
+            Some(CodecError::Malformed("codebook dimensions are zero"))
+        );
+    }
+
+    #[test]
+    fn an_absurd_codebook_lookup_table_is_rejected_not_allocated() {
+        // Lookup type 1 with a large `dims` collapses `nvals` to one, so
+        // the mults payload is a handful of bits while `entries × dims`
+        // demanded a lookup table of terabytes. The product is now capped
+        // before the allocation.
+        let mut b = Lsb::new();
+        book_prefix(&mut b, 65_535, 65); // 65 × 65 535 > 2^22 values
+        b.put(1, 4); // lookup type 1
+        let bytes = b.bytes();
+        let mut r = LsbReader::new(&bytes);
+        assert_eq!(
+            Codebook::parse(&mut r).err(),
+            Some(CodecError::Malformed(
+                "codebook lookup table is unreasonably large"
+            ))
+        );
+    }
+
+    #[test]
+    fn a_duplicate_floor_x_is_rejected_not_a_division_by_zero() {
+        // Floor 1's line renderer divides by the span between adjacent X
+        // coordinates after sorting; an X equal to the fixed endpoint 0
+        // makes that span zero and the division a panic. The values arrive
+        // in partition order, so the check is on uniqueness, not order.
+        let mut b = Lsb::new();
+        b.put(0, 8); // one codebook follows
+        book_prefix(&mut b, 1, 1); // one entry, no lookup
+        b.put(0, 4); // …lookup type 0
+        b.put(0, 6); // one time-domain transform (must read as zero)
+        b.put(0, 16); // the zero it must read as
+        b.put(0, 6); // one floor
+        b.put(1, 16); // floor type 1
+        b.put(1, 5); // one partition — a raw count, not count-minus-one
+        b.put(0, 4); // partition class 0
+        b.put(0, 3); // class 0: one value per point
+        b.put(0, 2); // no subclasses…
+        b.put(0, 8); // …but the one sub-book slot every class carries
+        b.put(0, 2); // multiplier 1
+        b.put(8, 4); // rangebits 8 → endpoints 0 and 256
+        b.put(0, 8); // the one X value: 0 — a duplicate of the endpoint
+        let mut setup = vec![5];
+        setup.extend_from_slice(b"vorbis");
+        setup.extend_from_slice(&b.bytes());
+        let mut id = [0u8; 30];
+        id[0] = 1;
+        id[1..7].copy_from_slice(b"vorbis");
+        id[11] = 1; // channels
+        id[12..16].copy_from_slice(&44_100u32.to_le_bytes());
+        id[28] = 0x66; // block sizes 64 / 64
+        assert_eq!(
+            parse_setup(&id, &setup).err(),
+            Some(CodecError::Malformed("floor 1 X values must be unique"))
+        );
     }
 }
