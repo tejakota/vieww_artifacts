@@ -1,0 +1,97 @@
+# Fuzzing the decoders: hostile bytes into `codec::decode` and each
+# format's reader directly.
+#
+# Run (needs clang for the sanitizer runtime):
+#
+#     cargo install cargo-fuzz
+#     cd vieww_base/crates/vieww-audio/fuzz
+#     cargo fuzz run decode        -s none -- -max_total_time=120
+#     cargo fuzz run decode_mp3    -s none -- -max_total_time=120
+#     ... or all of them:
+#     for t in decode decode_wav decode_flac decode_mp3 decode_vorbis \
+#              decode_aac_adts decode_aac_mp4 decode_aiff; do \
+#         cargo fuzz run $t -s none -- -max_total_time=120 || break; \
+#     done
+#
+# `-s none` builds without sanitizers (libFuzzer's own mutations still
+# apply); drop it where clang's asan is available. Seeds: copy
+# ../tests/fixtures/* into corpus/<target>/ for a running start. Crashes
+# land in artifacts/<target>/; minimise with `cargo fuzz fmt` /
+# `cargo fuzz minimize`.
+#
+# The oracle (fuzz_targets/common) is what the targets assert: a decode
+# that returns Ok must have a sane shape and be finite everywhere. It is
+# itself tested against every known-good fixture by `cargo test` here.
+
+[package]
+name = "vieww-audio-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vieww-audio = { path = ".." }
+
+# Prevent this from being pulled into the vieww workspace: the fuzzer
+# builds with sanitizers and a pinned-nightly profile of its own.
+[workspace]
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_wav"
+path = "fuzz_targets/decode_wav.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_flac"
+path = "fuzz_targets/decode_flac.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_mp3"
+path = "fuzz_targets/decode_mp3.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_vorbis"
+path = "fuzz_targets/decode_vorbis.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_aac_adts"
+path = "fuzz_targets/decode_aac_adts.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_aac_mp4"
+path = "fuzz_targets/decode_aac_mp4.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_aiff"
+path = "fuzz_targets/decode_aiff.rs"
+test = false
+doc = false
+bench = false

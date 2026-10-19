@@ -81,6 +81,10 @@ members = [
     "apps/viewwsite"
 ]
 
+# The fuzz harness builds with sanitizers and its own pinned profile;
+# it carries its own workspace table instead.
+exclude = ["crates/vieww-audio/fuzz"]
+
 [workspace.package]
 # 0.1.0, up from 0.0.1, and the difference is a claim rather than a counter.
 #
