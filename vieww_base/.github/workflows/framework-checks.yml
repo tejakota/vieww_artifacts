@@ -169,8 +169,12 @@ jobs:
       - name: Mesa Vulkan, Xvfb
         run: |
           sudo apt-get update -q
+          # libxkbcommon-x11-0: winit's X11 backend dlopens
+          # libxkbcommon-x11.so at runtime, and libxkbcommon-dev does not pull
+          # it in. Without it every wait_loop scenario panicked before its
+          # window opened (run 39243920376, xkbcommon-dl x11.rs:59).
           sudo apt-get install -y -q mesa-vulkan-drivers vulkan-tools libvulkan-dev xvfb \
-            libx11-dev libxkbcommon-dev libwayland-dev
+            libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev
           echo "VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)" >> "$GITHUB_ENV"
       - name: Adapter
         run: vulkaninfo --summary
@@ -379,6 +383,14 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          # A taller screen than the default AVD's 320x640. The demo is one
+          # fixed column with "Open the menu" at its foot, below the gallery;
+          # at 640 logical px it sits off-screen, so Maestro's `tapOn: "Open
+          # the menu"` could never find it (run 39243920376). 480x960 at the
+          # default density keeps the pixel count — and the CPU path's frame
+          # cost the device suite judges — within ~2.3x of the old screen.
+          # The rest are the action's own defaults, which this line replaces.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -skin 480x960
           working-directory: vieww_base
           # One line: the action runs each line of `script` in its own shell,
           # so the environment android-env.sh sets would not reach the next.
@@ -428,10 +440,34 @@ jobs:
             echo
             jq -r '.jobs[] | select(.name | startswith("Publish") | not) | "- \(.conclusion // .status): \(.name)"' out/jobs.json
           } > out/SUMMARY.md
+          # Each failed job's log, the last 400 lines. Through curl, not
+          # `gh api`: the endpoint answers with a redirect to log storage,
+          # and curl drops the Authorization header when the redirect leaves
+          # api.github.com, which that storage requires. Retried, because a
+          # job that finished seconds before this one may not be archived
+          # yet. **Never empty and silent:** run 39229823591 (2026-10-19)
+          # published four 0-byte logs because the old fetch discarded its
+          # own error, so a failure here writes the HTTP status instead.
           jq -r '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"' out/jobs.json |
           while IFS=$'\t' read -r id name; do
             safe=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_')
-            gh api "repos/$REPO/actions/jobs/$id/logs" 2>/dev/null | tail -n 400 > "out/logs/$safe.log" || true
+            code=000
+            for attempt in 1 2 3 4; do
+              code=$(curl -sSL -o "out/logs/$safe.full" -w '%{http_code}' \
+                -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$REPO/actions/jobs/$id/logs" 2>"out/logs/$safe.err") || code=000
+              if [ "$code" = 200 ] && [ -s "out/logs/$safe.full" ]; then break; fi
+              sleep 15
+            done
+            if [ "$code" = 200 ] && [ -s "out/logs/$safe.full" ]; then
+              tail -n 400 "out/logs/$safe.full" > "out/logs/$safe.log"
+            else
+              {
+                echo "log fetch failed for job $id after 4 attempts: HTTP $code"
+                cat "out/logs/$safe.err" "out/logs/$safe.full" 2>/dev/null | head -c 2000
+              } > "out/logs/$safe.log"
+            fi
+            rm -f "out/logs/$safe.full" "out/logs/$safe.err"
           done
           cat out/SUMMARY.md
       - name: Push to ci-results/<branch>
