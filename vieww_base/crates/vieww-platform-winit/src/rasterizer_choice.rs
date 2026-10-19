@@ -35,8 +35,9 @@
 //!    [`COMFORTABLE`] of the budget, that is the answer — the GPU is never
 //!    loaded on this device, which is the lightest outcome there is.
 //! 2. Otherwise **the next launch** runs the GPU path and measures it. The GPU
-//!    is kept only if it is clearly faster ([`CLEARLY_FASTER`]); a tie goes to
-//!    the CPU, which costs less memory.
+//!    is kept if it is clearly faster ([`CLEARLY_FASTER`]), or if it is the
+//!    only one of the two inside the budget; otherwise a tie goes to the CPU,
+//!    which costs less memory.
 //! 3. Every launch after that uses the answer without measuring.
 //!
 //! The file is keyed by the app's version, an optional build id
@@ -129,11 +130,30 @@ pub(crate) fn after_cpu(cpu: Duration, budget: Duration) -> Next {
     }
 }
 
-/// After the GPU path's median, given the CPU's and the share of measured
-/// frames the GPU actually drew (a frame the GPU plan cannot express falls
-/// back to the CPU, and a GPU that draws few of the frames is not an option).
-pub(crate) fn after_gpu(cpu: Duration, gpu: Duration, gpu_share: f64) -> Rasterizer {
-    if gpu_share >= 0.9 && gpu.as_secs_f64() < cpu.as_secs_f64() * CLEARLY_FASTER {
+/// After the GPU path's median, given the CPU's, the frame budget and the
+/// share of measured frames the GPU actually drew (a frame the GPU plan
+/// cannot express falls back to the CPU, and a GPU that draws few of the
+/// frames is not an option).
+///
+/// Two ways the GPU wins. It is [`CLEARLY_FASTER`]; or **only it fits the
+/// budget** — the CPU misses and the GPU does not. The second rule exists
+/// because the margin alone chose wrong on the iPhone 15 Pro in Device Farm
+/// run f91d07c (2026-10-19): CPU 8.77 ms, GPU 8.19 ms, budget 8.33 ms. The
+/// GPU was only 7% faster, so the margin kept the CPU — the one path that
+/// misses a 120 Hz frame — and the `auto` pass then failed at 11.1 ms. The
+/// margin is there so launch-to-launch noise does not load a GPU driver for
+/// nothing; it is not a reason to prefer a path that misses the deadline.
+pub(crate) fn after_gpu(
+    cpu: Duration,
+    gpu: Duration,
+    gpu_share: f64,
+    budget: Duration,
+) -> Rasterizer {
+    if gpu_share < 0.9 {
+        return Rasterizer::Cpu;
+    }
+    let only_gpu_fits = gpu <= budget && cpu > budget;
+    if only_gpu_fits || gpu.as_secs_f64() < cpu.as_secs_f64() * CLEARLY_FASTER {
         Rasterizer::Gpu
     } else {
         Rasterizer::Cpu
@@ -259,7 +279,7 @@ impl Measuring {
                 #[expect(clippy::cast_precision_loss, reason = "forty samples")]
                 let share = self.gpu_drawn as f64 / self.samples.len() as f64;
                 Record {
-                    launch: Launch::Use(after_gpu(cpu, median, share)),
+                    launch: Launch::Use(after_gpu(cpu, median, share, budget)),
                     cpu: Some(cpu),
                     gpu: Some(median),
                 }
@@ -435,11 +455,29 @@ mod tests {
             ("iPhone 13", 7.5, 16.2, HZ60, Rasterizer::Cpu),
             ("iPhone 15 Plus", 5.8, 16.3, HZ60, Rasterizer::Cpu),
             ("iPhone 17 Pro Max", 4.1, 16.2, HZ120, Rasterizer::Cpu),
+            // Run f91d07c, 2026-10-19: the calibration's own numbers.
+            (
+                "iPhone 15 Pro (f91d07c)",
+                8.77,
+                8.19,
+                HZ120,
+                Rasterizer::Gpu,
+            ),
+            ("iPhone 17 (f91d07c)", 5.41, 8.09, HZ120, Rasterizer::Cpu),
+            ("Pixel 5a (f91d07c)", 36.12, 8.44, HZ60, Rasterizer::Gpu),
+            ("LG Stylo 5 (f91d07c)", 37.20, 40.91, HZ60, Rasterizer::Cpu),
+            (
+                "Galaxy S26 Ultra (f91d07c)",
+                5.98,
+                1.70,
+                HZ120,
+                Rasterizer::Gpu,
+            ),
         ];
         for (phone, cpu, gpu, budget, expected) in phones {
             let chosen = match after_cpu(ms(cpu), ms(budget)) {
                 Next::Final(rasterizer) => rasterizer,
-                Next::TryGpu => after_gpu(ms(cpu), ms(gpu), 1.0),
+                Next::TryGpu => after_gpu(ms(cpu), ms(gpu), 1.0, ms(budget)),
             };
             assert_eq!(chosen, expected, "{phone}");
         }
@@ -447,12 +485,31 @@ mod tests {
 
     #[test]
     fn a_gpu_that_cannot_draw_most_frames_is_not_chosen() {
-        assert_eq!(after_gpu(ms(20.0), ms(5.0), 0.5), Rasterizer::Cpu);
+        assert_eq!(after_gpu(ms(20.0), ms(5.0), 0.5, ms(4.0)), Rasterizer::Cpu);
+        // Not even when it is the only one inside the budget.
+        assert_eq!(after_gpu(ms(20.0), ms(5.0), 0.5, ms(HZ60)), Rasterizer::Cpu);
     }
 
     #[test]
     fn a_near_tie_goes_to_the_lighter_cpu_path() {
-        assert_eq!(after_gpu(ms(20.0), ms(18.0), 1.0), Rasterizer::Cpu);
+        // Both miss the budget: the margin decides, and a tie stays on the CPU.
+        assert_eq!(
+            after_gpu(ms(20.0), ms(18.0), 1.0, ms(HZ60)),
+            Rasterizer::Cpu
+        );
+        // Both fit: same.
+        assert_eq!(after_gpu(ms(10.0), ms(9.0), 1.0, ms(HZ60)), Rasterizer::Cpu);
+    }
+
+    #[test]
+    fn a_near_tie_goes_to_the_gpu_when_only_the_gpu_fits_the_budget() {
+        assert_eq!(
+            after_gpu(ms(8.77), ms(8.19), 1.0, ms(HZ120)),
+            Rasterizer::Gpu
+        );
+        // And never the other way round: a GPU that misses is not preferred
+        // to a CPU that fits.
+        assert_eq!(after_gpu(ms(8.0), ms(8.5), 1.0, ms(HZ120)), Rasterizer::Cpu);
     }
 
     #[test]

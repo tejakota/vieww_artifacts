@@ -155,6 +155,12 @@ def decide_device(row):
 
     cpu, gpu, scaled = median_of("cpu_frame_time"), median_of("gpu_frame_time"), median_of("gpuscale_frame_time")
     scale_engaged = parse_scale(row.get("gpuscale_gpu_scale", ""))
+    # The scale only "engaged" if the GPU drew the frames: a pass the CPU
+    # drew under the scale label (run f91d07c, Pixel 5a and S26 Ultra) is no
+    # evidence about the scaled GPU path, whatever its frame time says.
+    m = re.match(r"\s*(\d+) of \d+", row.get("gpuscale_gpu_frames") or "")
+    if m and int(m.group(1)) == 0:
+        scale_engaged = None
 
     detail = {"device": device, "tier": tier, "budget_ms": budget,
               "cpu_median_ms": cpu, "gpu_median_ms": gpu, "gpuscale_median_ms": scaled,
@@ -271,6 +277,16 @@ FIXTURES = {
          "gpu_frame_time": "median 40.1ms, worst 71.0ms, budget 16.666667ms (600 samples)",
          "gpuscale_gpu_scale": ""},
     ],
+    # The f91d07c shape: a scaled pass that passes the budget, but the CPU
+    # drew every frame. It must not promote anything.
+    "cpu_drew_it": [
+        {"device_name": "LG Stylo 5 (SYNTHETIC)", "mem_total_kb": "1900000", "cpu_cores": "8",
+         "cpu_frame_time": "median 36.2ms, worst 68.6ms, budget 16.666667ms (600 samples)",
+         "gpu_frame_time": "median 40.1ms, worst 71.0ms, budget 16.666667ms (600 samples)",
+         "gpuscale_frame_time": "median 14.2ms, worst 30.0ms, budget 16.666667ms (600 samples)",
+         "gpuscale_gpu_scale": "GPU path renders at 0.50x resolution (VIEWW_GPU_SCALE=auto: tier low)",
+         "gpuscale_gpu_frames": "0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)"},
+    ],
     "unneeded": [
         {"device_name": "Galaxy S26 Ultra (SYNTHETIC)", "mem_total_kb": "12000000", "cpu_cores": "8",
          "cpu_frame_time": "median 5.6ms, worst 12.0ms, budget 8.333333ms (600 samples)",
@@ -287,6 +303,7 @@ def self_test():
         "promote": ("promote", ["low"]),
         "keep": ("keep-opt-in", []),
         "incomplete": ("incomplete", []),
+        "cpu_drew_it": ("incomplete", []),
         "unneeded": ("keep-opt-in", []),
     }
     failures = []

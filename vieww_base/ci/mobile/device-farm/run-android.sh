@@ -100,11 +100,25 @@ status=0
 # loses (LG Stylo 5: CPU 36.2 ms, GPU 40.1 ms, 2026-10-17) — the `device`
 # observation says which tier was resolved, `gpu_scale` which fraction ran.
 # Diagnostic only.
-for mode in cpu gpu auto cpuvk cpuhint gpuscale; do
-    gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
+#
+# `cpubare` is the CPU path with the 2026-10-18/19 raster additions off
+# (`debug.vieww.bare=1`: no row-parallel walk, no path-fill cache, no blur
+# cache) — the same-unit A/B against `cpu` that says whether those commits
+# moved frame time or PSS, which run f91d07c could only compare across
+# units. Diagnostic only.
+for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare; do
+    # `gpuscale` is a GPU pass: the property must say so *before* the launch
+    # below. Until 2026-10-19 it was left at 0 here and only device-suite.sh's
+    # `--gpu` set it — after the app was already up, which `--no-build` does
+    # not relaunch — so the Pixel 5a and S26 Ultra rows of run f91d07c drew
+    # all 600 frames on the CPU under a "GPU at 0.75x" label (the LG Stylo 5
+    # happened to read the property late enough to get the GPU).
+    gpu=0; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ]; } && gpu=1; [ "$mode" = auto ] && gpu=auto
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
     hint=0; [ "$mode" = cpuhint ] && hint=1
     scale=""; [ "$mode" = gpuscale ] && scale=auto
+    bare=0; [ "$mode" = cpubare ] && bare=1
+    sh_ setprop debug.vieww.bare "$bare" >/dev/null
     sh_ setprop debug.vieww.hint "$hint" >/dev/null
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
@@ -147,9 +161,9 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale; do
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        case "$mode" in cpuvk|cpuhint|gpuscale|auto) ;; *) status=1 ;; esac
+        case "$mode" in cpuvk|cpuhint|gpuscale|cpubare|auto) ;; *) status=1 ;; esac
     fi
-    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale quality_overlay; do
+    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
@@ -172,6 +186,7 @@ sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ setprop debug.vieww.recalibrate 0 >/dev/null
 sh_ setprop debug.vieww.hint 0 >/dev/null
 sh_ setprop debug.vieww.scale "" >/dev/null
+sh_ setprop debug.vieww.bare 0 >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
 kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"

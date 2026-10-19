@@ -802,6 +802,29 @@ mod demo {
             // Before the event loop and every worker the app starts, as below.
             std::env::set_var("VIEWW_GPU_SCALE", &scale);
         }
+        // `debug.vieww.bare=1`: the CPU rasterizer with the 2026-10-18/19
+        // additions switched off — the row-parallel scanline walk
+        // (`VIEWW_RASTER_THREADS=0`), the path-fill cache
+        // (`VIEWW_PATH_CACHE_MB=0`) and the blur-band cache
+        // (`VIEWW_BLUR_CACHE_MB=0`). Device Farm run f91d07c read the CPU
+        // raster stage flat-to-slower (LG 30.6 → 34.8 ms, S26 4.7 → 6.6 ms)
+        // and CPU-path PSS up 10–16 MB after they landed, against earlier
+        // runs on other units; this is the same-unit, same-run A/B that says
+        // which of those is theirs.
+        let bare = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.bare")
+            .output()
+            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1");
+        if bare {
+            // Before the event loop and every worker the app starts, as below.
+            std::env::set_var("VIEWW_RASTER_THREADS", "0");
+            std::env::set_var("VIEWW_PATH_CACHE_MB", "0");
+            std::env::set_var("VIEWW_BLUR_CACHE_MB", "0");
+            suite.observe(
+                "bare",
+                "raster threads, path-fill cache and blur cache off (debug.vieww.bare=1)",
+            );
+        }
         if present == "vulkan" || present == "cpu" {
             // Before the event loop and every worker the app starts, so no
             // other thread is reading the environment yet.

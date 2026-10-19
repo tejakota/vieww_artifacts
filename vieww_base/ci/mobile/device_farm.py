@@ -155,6 +155,13 @@ def parse_result(path):
     return values
 
 
+def gpu_frames_drawn(text):
+    """`"600 of 600 drawn by the GPU rasterizer (…)"` → 600; None when the
+    pass did not report it."""
+    m = re.match(r"\s*(\d+) of \d+", text or "")
+    return int(m.group(1)) if m else None
+
+
 def median_of(text):
     # Only a list of numbers is a measurement: "n/a (no console below iOS 17)"
     # once summarised as a 17 ms start-up.
@@ -243,12 +250,20 @@ def summarize(rows, out, run):
             ("cpuvk", "CPU path presented through Vulkan (diagnostic)"),
             ("cpuhint", "CPU path with an Android performance hint (diagnostic)"),
             ("gpuscale", "GPU path at the device tier's resolution (diagnostic)"),
+            ("cpubare", "CPU path without raster threads, fill cache or blur cache (diagnostic A/B)"),
         ]
         detail = []
         for mode, label in passes:
             if not any(r.get(f"{mode}_{k}") for k in ("frame_time", "frame_stages", "startup_stages")):
                 continue
             detail.append(f"- {label}: {r.get(f'{mode}_frame_time', '–')}")
+            # A pass labelled GPU whose frames the CPU drew is a mislabelled
+            # number, not a slow GPU — run f91d07c printed two of those.
+            if mode in ("gpu", "gpuscale") and gpu_frames_drawn(r.get(f"{mode}_gpu_frames")) == 0:
+                detail.append("  - **not a GPU measurement**: 0 frames were drawn by the GPU rasterizer in this pass")
+            pss = r.get(f"{mode}_total_pss_kb")
+            if pss and pss.isdigit():
+                detail.append(f"  - memory: PSS {int(pss) / 1024:.0f} MB")
             for key, name in (
                 ("renderer_choice", "renderer"),
                 ("calibration", "calibration launches"),
@@ -262,6 +277,7 @@ def summarize(rows, out, run):
                 ("pipeline_cache", "pipeline cache"),
                 ("device", "device profile"),
                 ("gpu_scale", "gpu resolution"),
+                ("cache_budgets", "cache budgets"),
                 ("quality_overlay", "quality overlay"),
             ):
                 if r.get(f"{mode}_{key}"):
