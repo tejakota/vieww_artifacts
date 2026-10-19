@@ -43,6 +43,19 @@ name: Framework checks
 # `ci-results/feature-vieww_code_base2` (2026-10-14, every leg green), from
 # when a copy was at the root of that branch. Run it from Actions → Framework
 # checks → Run workflow.
+#
+# **Where this file lives, and the copy beside the framework.** GitHub reads
+# workflows from the repository root only, so *this* file is the one Actions
+# can see and run. The framework's CI home is `vieww_base/` — its scripts,
+# its toolchain pin — and the copy of this workflow the framework's own
+# sessions edit sits at `vieww_base/.github/workflows/framework-checks.yml`,
+# because a session without the `workflow` scope can push there while GitHub
+# refuses the root path to it. GitHub also cannot call a workflow stored in a
+# subdirectory — reusable workflows must live in the root `.github/workflows/`
+# — so delegation is not an option and the two files are instead kept
+# **byte-identical**, with the `wire` job below holding them together: it
+# fails the run the moment they drift, and the fix is to mirror the changed
+# side into the other and push again.
 on:
   workflow_dispatch:
     inputs:
@@ -71,6 +84,32 @@ defaults:
     working-directory: vieww_base
 
 jobs:
+  # The wire between this file and the copy under `vieww_base/` (see the
+  # comment above): a two-file diff, a few seconds. Red means one side was
+  # edited without the other — mirror it, push, and the workflow is itself
+  # again.
+  wire:
+    name: Wire check (root ↔ vieww_base)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The workflow-level default points steps at `vieww_base/`; this job
+    # compares two files at the repository root, so it works from there.
+    defaults:
+      run:
+        shell: bash
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - name: The root file and the vieww_base copy are byte-identical
+        run: |
+          if ! diff -u vieww_base/.github/workflows/framework-checks.yml \
+                        .github/workflows/framework-checks.yml; then
+            echo
+            echo "::error::framework-checks.yml drifted between the repository root and vieww_base/.github/workflows/. GitHub runs the root file; the copy under vieww_base/ is the one sessions without the workflow scope can edit. Mirror the changed side into the other and push again."
+            exit 1
+          fi
+          echo "root and vieww_base copies are byte-identical"
+
   gate:
     name: checks.sh (Linux)
     runs-on: ubuntu-24.04
@@ -360,7 +399,7 @@ jobs:
   report:
     name: Publish results to ci-results/<branch>
     if: always()
-    needs: [gate, coverage, cross, gpu-lavapipe, macos, windows, android, web, ios-simulator, android-emulator]
+    needs: [wire, gate, coverage, cross, gpu-lavapipe, macos, windows, android, web, ios-simulator, android-emulator]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
