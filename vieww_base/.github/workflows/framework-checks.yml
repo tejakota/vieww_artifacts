@@ -33,19 +33,17 @@ name: Framework checks
 # those legs are correctness evidence, never performance evidence. A skipped
 # self-hosted leg is "not run", never "passed".
 
+# **Manual only, like every other workflow at this repository's root**
+# (ci.yml, device-farm.yml, hardware.yml). Until 2026-10-19 this file lived at
+# `vieww_base/.github/workflows/`, where GitHub never looks — GitHub reads
+# workflows from the repository root only — so on `main` none of these legs
+# could run, and the referees PENDING names for the NEON compositing loops,
+# the iOS accessibility bridge and the Windows drag-out (§4.3, §3.6, §3.1)
+# were waiting on a job that did not exist. The last run anyone can read is
+# `ci-results/feature-vieww_code_base2` (2026-10-14, every leg green), from
+# when a copy was at the root of that branch. Run it from Actions → Framework
+# checks → Run workflow.
 on:
-  push:
-    branches:
-      - feature/vieww_code_base
-      - feature/vieww_code_base2
-      - "feature/vieww-gap-closure-*"
-    paths:
-      - "vieww_base/**"
-      - ".github/workflows/framework-checks.yml"
-  pull_request:
-    paths:
-      - "vieww_base/**"
-      - ".github/workflows/framework-checks.yml"
   workflow_dispatch:
     inputs:
       device:
@@ -160,6 +158,14 @@ jobs:
         run: ci/check/platform-check.sh macos
       - name: platform-check ios
         run: ci/check/platform-check.sh ios
+      # The runner is Apple silicon, so this is aarch64: the compositing
+      # loops dispatch to `native/simd/neon.rs` here, and this one test is
+      # their bit-for-bit verdict against the scalar loops (PENDING §4.3,
+      # "the NEON half's Start"). No other leg runs vieww-paint on ARM.
+      - name: NEON compositing loops, bit for bit (aarch64)
+        run: |
+          test "$(uname -m)" = arm64
+          cargo test -p vieww-paint --features native --lib simd -- --nocapture
       - name: Metal suite on the runner's GPU
         env:
           VIEWW_REQUIRE_HARDWARE: gpu
