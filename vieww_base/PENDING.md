@@ -585,6 +585,23 @@ pass); half-float or 8-bit layer storage for layers that need no extended
 range (cuts nested's traffic in half or more, but changes bytes — needs a
 tolerance decision); AVX2 behind runtime detection.
 
+**2026-10-18, the walk goes row-parallel and the general fill is
+memoised** (commits f004294, 0502ae0; no machine receipt yet — this
+container cannot produce one honestly, which is why this paragraph names
+the measurement that would). Two of the "spread out" leftovers took their
+hit: the gray scanline walk now splits a mask's rows across up to eight
+`std::thread::scope` workers (size-gated at 128 rows/columns,
+`VIEWW_RASTER_THREADS=0` the off switch) with the serial path kept as the
+shared row function; and `paint_shape`'s general fill — icons, rounded
+outlines, arbitrary vector shapes — is memoised in a content-addressed
+`ResidencyCache` (`native/fill_cache.rs`, 8 MiB default,
+`VIEWW_PATH_CACHE_MB`), the last uncached hot `rasterize` site. Identity
+is not a claim here: `raster-identity.sh` reports all 30 gallery files
+byte-identical, and the walk's serial-vs-parallel bit equality is tested
+over a seeded polygon soup. What would credit the speed: a `fixtures
+--runs 10 --receipt` pair with `VIEWW_RASTER_THREADS=0` and unset on the
+reference laptop, and a callgrind count for glass with a warm fill cache.
+
 ## 4.2 Memory and size are the farthest from the "lightest" targets
 
 Measured 2026-10-15; targets from the audit's Phase 6.
@@ -646,7 +663,98 @@ wakes without drawing.
 on the phone, `dumpsys meminfo` by category is already in the Device Farm
 artifacts.
 
----
+## 4.3 The sixteen-fix "same pixels, faster" advisory, mapped to what actually exists
+
+**What.** A third external advisory proposed sixteen performance fixes
+under one hard constraint — *same pixels, faster; frame time is the only
+quantity allowed to move* — against crates (`vieww-render`, `vieww-raster`,
+`vieww-text`, `vieww-assets`) and mechanisms (SSAA-2×, a scanline-lerp
+inner loop, 256×256 tile rasterisation) that mostly do not exist here.
+This entry is the honest re-mapping onto the real codebase, so the next
+session starts from the map instead of re-deriving it. Re-audited against
+main at 0502ae0, 2026-10-18.
+
+**Already closed before the advisory arrived** (each in TRACKER.md):
+the blur-band cache keyed on the input band's bits (advisory Fix 6 —
+landed as `effects::blur_cached` a month of advisories early); the
+authoritative hybrid planner behind its RMSE gate (Fix 16 — machinery,
+PENDING 2.3 owns the actuation); the pipeline cache across launches
+(roughly half of Fix 15 — `pipeline_cache.rs`); background font-store
+loading (`vieww-text`'s `system_fallback_in_background` — the loading
+half of Fix 12).
+
+**Landed by the re-mapping itself** (f004294, 0502ae0):
+- Fix 10 (parallel rasterisation) → the honest form here is **row**-
+  parallel, not tile-parallel: the scanline walk is row-wise, rows are
+  independent, and row chunks keep byte identity structural. §4.1's
+  dated paragraph.
+- Fix 7 (tessellation cache) → the shadow/clip/glyph/shape caches already
+  covered the named cases; the remainder was `paint_shape`'s general fill,
+  now `fill_cache.rs`.
+- Fix 9 (NEON scanline) → the doc's premise (a scalar lerp inner loop)
+  does not match this rasterizer, but its target audience does: the aarch64
+  gap was real, and it was in the compositing loops, not the scanline.
+  `native/simd/neon.rs` is the NEON half, written and cross-type-checked,
+  **not yet run on ARM** — its Start is below.
+
+**Rejected under the advisory's own hard constraint** (each would move
+pixels by design, and "perceptually identical" is not "byte-identical"):
+Fix 3 (MSAA-4× instead of supersampling — also moot: there is no SSAA-2×
+here to replace; the quality lever is `QualityProfile`'s resolution
+scale), Fix 4 (narrowing the scene target's `R16G16B16A16_SFLOAT` or the
+shadow/blur intermediates), Fix 5 (ASTC — also needs an encoder and an
+Adreno-506 support check). If the pixel-equality policy ever changes,
+these re-open with device diffs as the referee; until then they are not
+gaps, they are decisions.
+
+**Open, and why — with a Start each:**
+- **Fix 1/2 (load/store ops and the subpass chain).** The audit: the three
+  `vulkan/mod.rs` render passes are already correct (CLEAR on first use,
+  STORE only where the content is consumed, depth CLEAR + DONT_CARE, all
+  initial UNDEFINED); `scene.rs` builds LOAD and CLEAR pass variants and
+  its all-STORE color attachment is the conservative choice for targets
+  some pass later samples. Proving which intermediate targets nobody
+  reads — the prerequisite for DONT_CARE and for folding shadow→blur into
+  subpasses with input attachments — needs the render-graph's target
+  lifecycle written down and then a real GPU run to validate the fold.
+  Start: annotate each `scene.rs` target with its consumers (read or
+  never-read), then `ci/check/`-style reasoning on paper before any device
+  run; `vulkan/scene.rs`'s 2,433 lines are the reason this is not a
+  one-session change.
+- **Fix 8 (temporal tile reuse via `copy_texture_to_texture`).** The hal
+  has image→buffer copies but no image→image copy, and the CPU side's
+  equivalent already exists (`damage.rs` + `TargetPool`). GPU tile reuse
+  is a `scene.rs` change with no in-container referee. Start: same
+  target-consumer annotation as Fix 1/2; the reuse key is the fill
+  cache's (`FillKey`) discipline carried to tiles.
+- **Fix 12's remainder (async glyph rasterisation), Fix 13 (async image
+  decode).** `vieww-foundation`'s `Pool` is the worker infrastructure;
+  the gap is that paint's glyph raster is synchronous inside the frame.
+  A placeholder-first design changes visible pixels mid-load — it needs
+  the fidelity policy's answer to "a frame with placeholders" written
+  down before code. Start: `crates/vieww-image/src/codec/` decode
+  off-thread first (decode is deterministic, so bytes are safe) with
+  `Pool`, measuring an A36-like workload before the glyph half.
+- **Fix 14 (FrameBudgetGuard).** Buildable, deferred deliberately: the
+  scheduler has budget accounting (`FrameReport::over_budget`) but no
+  census of what work is "non-critical" — the type is easy, the deferral
+  policy without callers is a stub. Start: list the frame's deferrable
+  work (image decode, mip building, shadow re-render) with their phases
+  in `scheduler.rs`, then the guard is a small type over that list.
+- **Fix 15's remainder (splash-time full warm-up).** Pipelines are
+  created at `SceneRenderer::new` through the persistent pipeline cache;
+  what "warm every shader variant" adds is enumerating variants the
+  first frames would compile lazily — a GPU-side claim needing a device
+  to verify the cold-start delta. Start: instrument first-frame pipeline
+  compiles on Device Farm (`Claude-Session` receipts already carry
+  start-up stages), then decide whether the enumeration is worth its
+  splash time.
+
+**The NEON half's Start.** Run `framework-checks.yml`'s Android-emulator
+or iOS-simulator leg with the current main: `simd_rows_match_scalar_bit_
+for_bit` dispatches through the NEON module there and is its bit-for-bit
+verdict; a Device Farm frame-time A/B (scalar fallback vs NEON dispatch)
+on the LG Stylo 5 is the number the advisory wanted.
 
 # 5. Process and infrastructure
 

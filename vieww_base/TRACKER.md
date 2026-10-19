@@ -11,6 +11,91 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-18: the sixteen-fix performance advisory, re-mapped — a row-parallel scanline walk, a fill cache for the last uncached hot rasterize site, and the compositing loops' NEON half (written, type-checked, labelled not-yet-run)
+
+**Context.** A third advisory proposed sixteen fixes under one hard
+constraint — *same pixels, faster; frame time is the only quantity
+allowed to move* — written against crates and mechanisms this workspace
+does not have (`vieww-raster`, SSAA-2×, a scalar-lerp scanline inner
+loop, 256×256 tile rasterisation). Before landing anything, every item
+was mapped onto the code that actually exists; the map, with each fix's
+verdict (already closed / landed / hardware-gated / rejected under the
+byte-identity constraint) is **PENDING §4.3**, and it is the entry to
+read first. This record covers the three commits the mapping turned into.
+
+**What was built, and how each claim is checked.**
+
+- **The scanline walk takes rows apart** (f004294). Rows of a coverage
+  mask are independent, so `rasterize_general` splits them across up to
+  eight `std::thread::scope` workers — one contiguous row block each
+  (`split_at_mut` making the disjointness provable), per-worker scratch,
+  no shared mutable state. A chunk inherits the admitted-edge prefix the
+  serial walk would have built by its first row (`partition_point` over
+  the ymin-sorted order), so the `active` sequence — and through the
+  stable sort, the crossings order — is identical to the serial walk's;
+  the serial path *is* the shared `rasterize_row_range`, not a second
+  implementation. A size gate refuses the spawn below 128 rows or 128
+  columns and caps at eight workers (`VIEWW_RASTER_THREADS=0` is the
+  serial off switch; unparseable fails safe to serial), because threading
+  a glyph-sized mask measures the spawn, not the raster. The LCD walk
+  stays serial on the same reasoning, written where it is decided.
+  **Identity, structural then tested:** serial-vs-parallel bit equality
+  over a seeded polygon soup at 2/4/7/64 requested workers, a
+  chunk-spanning edge case, and the entry point against the serial walk
+  on whatever machine runs it.
+- **The general path fill runs once** (same commit). Clip masks, shadow
+  patches, glyph outlines, blur bands and shaping each grew a cache when
+  a measurement named them; `paint_shape`'s `rasterize` — every
+  non-rectangular fill, every repaint — was the one hot site left.
+  `native/fill_cache.rs` keys a `ResidencyCache` on an FNV-1a over every
+  point bit, the closed flags, the count and the clip's four words: a hit
+  is by construction the bytes the walk would have produced — the oracle
+  is memoised, never reimplemented. Default 8 MiB,
+  `VIEWW_PATH_CACHE_MB` to move it, `0` a true bypass that skips even the
+  hash. The rectangle fast path still runs first, so a four-point panel
+  never pays the hash. Stats sit beside the blur cache's
+  (`NativeRenderer::fill_cache_stats`); six tests cover hit/miss,
+  geometry-bit and clip sensitivity, eviction, bypass and the empty case.
+- **The compositing loops speak NEON** (0502ae0). The SSE2 half's two
+  loops (`composite_flat`'s and `composite_layer`'s normal-blend rows)
+  now have an aarch64 mirror, `native/simd/neon.rs`: lane for lane the
+  same arithmetic, never fused; compares that answer false on `NaN` where
+  the scalar ones do; `vbslq_f32` as the select, which is literally the
+  SSE2 `select`'s definition. Dispatch is by `target_arch` — NEON is the
+  aarch64 baseline the way SSE2 is the x86-64 one. **Written and
+  type-checked, not yet run:** it type-checks for
+  `aarch64-unknown-linux-gnu` (lib and tests) on the pinned 1.98.1, the
+  cross-check gate's `aarch64-apple-ios` / `aarch64-linux-android` legs
+  keep it compiling, and `simd_rows_match_scalar_bit_for_bit` — which
+  dispatches through the same entry points — is the ARM referee the first
+  emulator or simulator run will supply. The module says all of this
+  about itself.
+
+**Full-suite evidence.** 269 lib tests with `--features native` (11 new);
+clippy `-D warnings` clean on the pinned 1.98.1; `cargo fmt` clean on
+every file this entry touches (pre-existing drift elsewhere is not this
+entry's to churn); reverse dependencies (`vieww-devtools`,
+`vieww-element`, `vieww-render`, `vieww-widget`, `vieww-runtime`,
+`vieww-gpu`) compile `--all-targets`; and — the gate this entry exists to
+cite — **`ci/check/raster-identity.sh` reports all 30 gallery files
+byte-identical to origin/main**, run at each of the two commits' trees.
+What is *not* claimed: any frame-time number. This container cannot
+produce a receipt honestly; PENDING §4.1's dated paragraph names the
+`fixtures --receipt` pair that would credit the parallelism and the
+cache.
+
+**What the advisory's other fixes got, and where they live.** Not
+silently dropped: PENDING §4.3 records the four already closed (blur
+cache, planner machinery, pipeline cache, background font loading), the
+three rejected under the advisory's own hard constraint (MSAA, narrower
+intermediates, ASTC — "perceptually identical" is not "byte-identical",
+and the pixel-equality policy is a decision, not an oversight), and the
+open ones with a Start each — the load/store / subpass fold (needs a
+target-consumer audit and a GPU), GPU tile reuse (same prerequisite),
+async decode and glyph raster (needs the fidelity policy's answer to
+placeholder frames first), the budget guard (needs a deferrable-work
+census), and the splash warm-up's remainder (needs a device).
+
 ## 2026-10-18: the nine-fix advisory's buildable half — a byte-budgeted pool, a blur cache, a planner that earns its decisions, a conformance matrix with a gate, and two platform bridges
 
 **Context.** A second external advisory named nine fixes (P0: native Metal
