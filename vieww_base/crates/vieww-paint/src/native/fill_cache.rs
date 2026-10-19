@@ -128,7 +128,9 @@ impl FillCache {
                 enabled: true,
             },
             None => Self {
-                inner: ResidencyCache::new(DEFAULT_FILL_CACHE_BUDGET_BYTES),
+                inner: ResidencyCache::new(
+                    super::cache_budgets::process_cache_budgets().fill_bytes,
+                ),
                 enabled: true,
             },
         }

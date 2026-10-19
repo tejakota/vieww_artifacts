@@ -142,3 +142,71 @@ mod tests {
         }
     }
 }
+
+/// The derived-value cache budgets a tier gets (`vieww_paint::native`'s
+/// blur-band and path-fill caches). Pixels cannot move — both caches memoise
+/// a deterministic function — so unlike [`QualityProfile::resolution_scale`]
+/// this needs no opt-in: a smaller budget changes only how often the CPU
+/// path re-derives a blur or a fill, never what it draws. The High tier keeps
+/// the budgets the caches shipped with; `VIEWW_BLUR_CACHE_MB` /
+/// `VIEWW_PATH_CACHE_MB` still override any tier.
+#[must_use]
+pub const fn cache_budgets_for(tier: DeviceTier) -> vieww_paint::native::CacheBudgets {
+    match tier {
+        DeviceTier::Low => vieww_paint::native::CacheBudgets::LOW_MEMORY,
+        DeviceTier::Medium => vieww_paint::native::CacheBudgets::MID_MEMORY,
+        DeviceTier::High => vieww_paint::native::CacheBudgets::DEFAULT,
+    }
+}
+
+/// Applies the probed tier's cache budgets to the process, once, before the
+/// first renderer is built (the caches read the setting at construction).
+pub(crate) fn apply_cache_budgets() {
+    static APPLIED: OnceLock<()> = OnceLock::new();
+    APPLIED.get_or_init(|| {
+        vieww_paint::native::set_process_cache_budgets(cache_budgets_for(device_facts().tier));
+    });
+}
+
+/// The cache-budget line the on-device suite observes as `cache_budgets`.
+#[must_use]
+pub fn cache_budgets_status() -> String {
+    let budgets = vieww_paint::native::process_cache_budgets();
+    let mb = |bytes: usize| bytes / (1024 * 1024);
+    let overridden = |var: &str| std::env::var(var).is_ok_and(|v| !v.trim().is_empty());
+    format!(
+        "blur {} MiB{}, fill {} MiB{} (tier {})",
+        mb(budgets.blur_bytes),
+        if overridden("VIEWW_BLUR_CACHE_MB") {
+            " [VIEWW_BLUR_CACHE_MB overrides]"
+        } else {
+            ""
+        },
+        mb(budgets.fill_bytes),
+        if overridden("VIEWW_PATH_CACHE_MB") {
+            " [VIEWW_PATH_CACHE_MB overrides]"
+        } else {
+            ""
+        },
+        device_facts().tier.name(),
+    )
+}
+
+#[cfg(test)]
+mod cache_budget_tests {
+    use super::*;
+
+    #[test]
+    fn every_tier_maps_to_a_budget_no_larger_than_the_default() {
+        let default = vieww_paint::native::CacheBudgets::DEFAULT;
+        for tier in [DeviceTier::Low, DeviceTier::Medium, DeviceTier::High] {
+            let b = cache_budgets_for(tier);
+            assert!(b.blur_bytes <= default.blur_bytes && b.fill_bytes <= default.fill_bytes);
+        }
+        assert_eq!(cache_budgets_for(DeviceTier::High), default);
+        assert!(
+            cache_budgets_for(DeviceTier::Low).blur_bytes
+                < cache_budgets_for(DeviceTier::Medium).blur_bytes
+        );
+    }
+}

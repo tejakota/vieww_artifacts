@@ -1038,9 +1038,31 @@ struct Gpu {
     /// presented frame, once the budget is known.
     hint: Option<PerfHint>,
     hint_tried: bool,
-    /// Whether the GPU pipeline cache has been written after this surface's
-    /// first GPU frame.
+    /// Whether the GPU pipeline cache save has been queued after this
+    /// surface's first GPU frame.
     pipelines_saved: bool,
+    /// The UI thread's non-drawing chores, run after a frame with slack
+    /// (`crate::frame_budget`). Drained in `Drop` before the renderer goes.
+    chores: crate::frame_budget::FrameBudgetGuard<Chore>,
+}
+
+/// A deferred chore of one [`Gpu`] — see `crate::frame_budget`'s census.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Chore {
+    /// Write the pipeline cache the first GPU frame filled.
+    SavePipelineCache,
+}
+
+impl Gpu {
+    fn run_chore(&self, chore: Chore) {
+        match chore {
+            Chore::SavePipelineCache => {
+                let seed = self.renderer.pipeline_cache_seed().unwrap_or(0);
+                let saved = self.renderer.save_pipeline_cache();
+                crate::startup::note_pipeline_cache(seed, saved);
+            }
+        }
+    }
 }
 
 /// Teardown order is not field order.
@@ -1052,6 +1074,12 @@ struct Gpu {
 /// swapchain goes first, while both of its owners exist.
 impl Drop for Gpu {
     fn drop(&mut self) {
+        // Chores first, while the renderer they need still exists: a suspend
+        // or a closing window has no next frame to wait for.
+        let pending: Vec<Chore> = self.chores.drain().collect();
+        for chore in pending {
+            self.run_chore(chore);
+        }
         self.surface.release(&self.renderer);
         // **`VIEWW_KEEP_VULKAN=1` keeps the device and instance alive.** A
         // diagnostic, not a setting: every window opens a `VkInstance` and a
@@ -1608,13 +1636,19 @@ impl WindowState {
                     hint.frame(work, self.log.budget());
                 }
                 // The pipelines exist once a GPU frame has drawn, and a phone
-                // app is killed rather than dropped: now is when the next
-                // launch's head start gets written.
+                // app is killed rather than dropped, so the next launch's head
+                // start is written soon — but in a frame with slack, or at the
+                // guard's deadline (`crate::frame_budget::MAX_WAIT`), never on
+                // top of a frame that is already over budget.
                 if drawn_on_gpu && !gpu.pipelines_saved {
                     gpu.pipelines_saved = true;
-                    let seed = gpu.renderer.pipeline_cache_seed().unwrap_or(0);
-                    let saved = gpu.renderer.save_pipeline_cache();
-                    crate::startup::note_pipeline_cache(seed, saved);
+                    gpu.chores.defer(Chore::SavePipelineCache, shared.now());
+                }
+                if let Some(chore) = gpu
+                    .chores
+                    .after_frame(shared.now(), work, self.log.budget())
+                {
+                    gpu.run_chore(chore);
                 }
                 self.log.note_stages(gpu.renderer.last_stages());
                 if tracing() {
@@ -2237,6 +2271,9 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // from the pipelines an earlier launch compiled
         // (`vieww_hal::vulkan::pipeline_cache`).
         vieww_hal::vulkan::set_pipeline_cache_file(self.pipeline_cache_file());
+        // And before the first renderer, so its blur and fill caches start at
+        // this device tier's budgets (`quality::cache_budgets_for`).
+        crate::quality::apply_cache_budgets();
         let opened = NativeRenderer::for_window_on(&window, width, height, path);
         // A device whose GPU cannot be opened has answered the question: under
         // `auto_rasterizer` that is the CPU path, kept, rather than an app that
@@ -2530,6 +2567,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             hint: None,
             hint_tried: false,
             pipelines_saved: false,
+            chores: crate::frame_budget::FrameBudgetGuard::default(),
         });
         state.scheduler.request_frame();
         // The window's density is a fact the tree can read, and a `SafeArea`
@@ -2592,6 +2630,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 hint: None,
                 hint_tried: false,
                 pipelines_saved: false,
+                chores: crate::frame_budget::FrameBudgetGuard::default(),
             });
             state.scheduler.request_frame();
         }

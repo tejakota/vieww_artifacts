@@ -62,6 +62,7 @@
 /// v2" pillar F. Test-only: see this module's own docs.
 #[cfg(test)]
 mod blend_oracle;
+mod cache_budgets;
 mod clip;
 mod color;
 /// COLRv0 layered glyphs and CBDT/sbix bitmap emoji — the colour answer the
@@ -97,6 +98,7 @@ mod shadow;
 mod simd;
 mod target;
 
+pub use cache_budgets::{process_cache_budgets, set_process_cache_budgets, CacheBudgets};
 pub use glyph::{outline_glyph, units_per_em};
 pub use glyph_coverage::{GlyphAlpha, GlyphCoverage, InkedGlyph};
 pub use gpu_seam::{

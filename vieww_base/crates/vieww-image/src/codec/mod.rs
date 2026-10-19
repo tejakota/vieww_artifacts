@@ -107,6 +107,48 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, CodecError> {
     }
 }
 
+/// [`decode`], on a worker: the UI thread gets a [`Task`](vieww_foundation::task::Task)
+/// it polls each frame and never waits on a decode.
+///
+/// # Why this exists (advisory Fix 13, 2026-10-19)
+///
+/// The framework itself never decodes inside a frame: images reach the
+/// renderer as decoded [`Image`]s, and the one in-tree decoder call
+/// (`vieww-lottie`'s embedded assets) runs at parse time. The stall risk is
+/// in *applications*: the obvious way to show a PNG is to call [`decode`] in
+/// the code that builds the screen, and a multi-megabyte photo decoded there
+/// costs a frame its whole budget on a mid-range phone. This is the one-line
+/// alternative, in the shape `AsyncBuilder` already consumes:
+///
+/// ```
+/// use std::sync::Arc;
+/// use vieww_foundation::task::{AsyncValue, NoWaker, Pool};
+///
+/// let png = vieww_image::codec::png::encode(1, 1, &[255, 0, 0, 255]);
+/// let pool = Pool::with_threads(1);
+/// let mut task = vieww_image::codec::decode_async(&pool, Arc::new(NoWaker), png);
+/// while !task.poll() {
+///     std::thread::yield_now();
+/// }
+/// assert!(matches!(task.value(), AsyncValue::Ready(image) if image.width() == 1));
+/// ```
+///
+/// **Same bytes:** the worker runs [`decode`] itself on the bytes it was
+/// given, not a second decoder, so the image a frame eventually draws is
+/// bit-for-bit the one a synchronous call would have produced. Only *when*
+/// it appears moves; what the application shows until then is its own
+/// `AsyncValue::Pending` arm, an explicit choice rather than a placeholder
+/// the framework invents.
+pub fn decode_async(
+    spawner: &dyn vieww_foundation::task::Spawn,
+    waker: std::sync::Arc<dyn vieww_foundation::task::FrameWaker>,
+    bytes: Vec<u8>,
+) -> vieww_foundation::task::Task<Image, CodecError> {
+    vieww_foundation::task::Task::spawn(spawner, waker, move || {
+        decode(&bytes).map(Decoded::into_image)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,5 +169,67 @@ mod tests {
             assert_eq!((d.width, d.height), (16, 16));
         }
         assert!(decode(b"RIFF....").is_err());
+    }
+
+    #[test]
+    fn the_async_decode_is_the_sync_decode_bit_for_bit() {
+        use std::sync::Arc;
+        use vieww_foundation::task::{AsyncValue, NoWaker, Pool};
+
+        let px: Vec<u8> = (0..32 * 24)
+            .flat_map(|i: u32| {
+                [
+                    (i * 7 % 256) as u8,
+                    (i % 256) as u8,
+                    200,
+                    (i * 3 % 256) as u8,
+                ]
+            })
+            .collect();
+        let pool = Pool::with_threads(2);
+        for bytes in [
+            png::encode(32, 24, &px),
+            jpeg::encode(32, 24, &px, 85),
+            bmp::encode(32, 24, &px),
+        ] {
+            let sync = decode(&bytes).unwrap().into_image();
+            let mut task = decode_async(&pool, Arc::new(NoWaker), bytes);
+            while !task.poll() {
+                std::thread::yield_now();
+            }
+            match task.value() {
+                // By content: `Image`'s own `==` is allocation identity
+                // (damage tracking's choice), and two decodes never share one.
+                AsyncValue::Ready(image) => {
+                    assert_eq!(
+                        (image.width(), image.height()),
+                        (sync.width(), sync.height())
+                    );
+                    assert!(
+                        image.pixels() == sync.pixels(),
+                        "async decode differs from sync"
+                    );
+                }
+                other => panic!(
+                    "expected Ready, got {}",
+                    match other {
+                        AsyncValue::Pending => "Pending",
+                        AsyncValue::Failed(_) => "Failed",
+                        AsyncValue::Lost => "Lost",
+                        AsyncValue::Ready(_) => unreachable!(),
+                    }
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn an_undecodable_file_fails_the_task_rather_than_losing_it() {
+        use std::sync::Arc;
+        use vieww_foundation::task::{AsyncValue, Inline, NoWaker};
+
+        let mut task = decode_async(&Inline, Arc::new(NoWaker), b"RIFF....".to_vec());
+        assert!(task.poll());
+        assert!(matches!(task.value(), AsyncValue::Failed(_)));
     }
 }

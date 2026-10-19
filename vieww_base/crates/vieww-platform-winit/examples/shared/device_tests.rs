@@ -890,6 +890,13 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     if let Some(scale) = vieww_platform_winit::gpu_scale_status() {
         results.observe("gpu_scale", scale);
     }
+    // The blur/fill cache budgets this process runs with — the tier's
+    // (`quality::cache_budgets_for`) unless an env override says otherwise,
+    // so a PSS number can be read against the caches it was measured with.
+    results.observe(
+        "cache_budgets",
+        vieww_platform_winit::cache_budgets_status(),
+    );
     // The same facts and the frame clock, on the one line the farm summary
     // prints beside each pass (`vieww-devtools`'s quality overlay). The
     // timeline is fed from the samples already measured above — the overlay

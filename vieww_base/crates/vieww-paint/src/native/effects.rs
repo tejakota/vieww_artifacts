@@ -274,7 +274,7 @@ pub(crate) fn default_blur_cache() -> BlurCache {
         .ok()
         .as_deref()
         .and_then(super::pool::mb_env_bytes)
-        .unwrap_or(DEFAULT_BLUR_CACHE_BUDGET_BYTES);
+        .unwrap_or_else(|| super::cache_budgets::process_cache_budgets().blur_bytes);
     super::residency::ResidencyCache::new(budget)
 }
 

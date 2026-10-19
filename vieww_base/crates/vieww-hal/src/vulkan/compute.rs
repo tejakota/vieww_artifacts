@@ -283,7 +283,10 @@ impl ComputeKernel {
             .stage(stage)
             .layout(layout);
         let pipeline =
-            unsafe { device.create_compute_pipelines(vk::PipelineCache::null(), &[info], None) }
+            // Through the device's persistent cache, like the scene pipelines
+            // (`pipeline_cache.rs`): a second launch reuses the compiled
+            // shader instead of compiling it again. Same pipeline either way.
+            unsafe { device.create_compute_pipelines(gpu.pipeline_cache(), &[info], None) }
                 .map_err(|(_, e)| err(e))?[0];
         Ok(Self {
             set_layout,

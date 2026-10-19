@@ -817,7 +817,7 @@ impl HalDevice for VulkanDevice {
             .render_pass(render_pass)
             .subpass(0);
         let pipelines = unsafe {
-            device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+            device.create_graphics_pipelines(self.pipeline_cache(), &[pipeline_info], None)
         }
         .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
         let pipeline = pipelines[0];
@@ -1250,7 +1250,7 @@ impl VulkanDevice {
             .render_pass(render_pass)
             .subpass(0);
         let pipelines = unsafe {
-            device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+            device.create_graphics_pipelines(self.pipeline_cache(), &[pipeline_info], None)
         }
         .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
         let pipeline = pipelines[0];
@@ -1926,7 +1926,7 @@ impl VulkanDevice {
             .render_pass(render_pass)
             .subpass(0);
         let pipelines = unsafe {
-            device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+            device.create_graphics_pipelines(self.pipeline_cache(), &[pipeline_info], None)
         }
         .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
         let pipeline = pipelines[0];

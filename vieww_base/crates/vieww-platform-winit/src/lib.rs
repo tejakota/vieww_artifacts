@@ -114,6 +114,7 @@ pub mod desktop;
 ))]
 mod raster;
 mod device_tier;
+mod frame_budget;
 mod perf_hint;
 mod quality;
 pub mod rasterizer_choice;
@@ -133,7 +134,7 @@ pub use lifecycle::Lifecycle;
 pub use scale::{Physical, Scale};
 pub use perf_hint::perf_hint_status;
 pub use device_tier::{device_facts, device_facts_status, resolve_tier, DeviceFacts, DeviceTier};
-pub use quality::{gpu_scale_status, QualityProfile};
+pub use quality::{cache_budgets_for, cache_budgets_status, gpu_scale_status, QualityProfile};
 pub use rasterizer_choice::rasterizer_choice;
 pub use startup::{pipeline_cache_status, report as startup_report};
 pub use stats::{Frame, FrameLog, FrameReport};
