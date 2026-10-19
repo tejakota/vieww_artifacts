@@ -139,10 +139,20 @@ impl Oscillator {
                 }
             }
             Shape::Pulse(w) => {
-                if t < f64::from(w.clamp(0.01, 0.99)) {
-                    1.0
+                // A naive ±1 pulse at width `w` carries a DC of `2w − 1`,
+                // and the zero-area BLEP corrections cannot remove it — in
+                // a polyphonic stack that DC sums and eats headroom. The
+                // centered spelling subtracts it and renormalises so the
+                // louder level is ±1: at `w = 0.5` it is exactly the old
+                // ±1 square, and at any other width the levels are
+                // `(1−w)/max(w, 1−w)` and `−w/max(w, 1−w)` — DC-free by
+                // construction and in range by the same max.
+                let w = f64::from(w.clamp(0.01, 0.99));
+                let m = w.max(1.0 - w);
+                if t < w {
+                    (1.0 - w) / m
                 } else {
-                    -1.0
+                    -w / m
                 }
             }
             Shape::Triangle => 4.0 * (t - 0.5).abs() - 1.0,
@@ -261,18 +271,42 @@ impl Sync {
             match self.mode {
                 SyncMode::Hard => {
                     let slave_inc = self.slave.inc;
-                    let before_phase = (self.slave.phase + slave_inc * (1.0 - d)).rem_euclid(1.0);
+                    // The slave's phase at this moment is where it *would*
+                    // be one sample past the reset instant (the one-sample
+                    // output delay advances it through the wrap), so the
+                    // pre-jump value is extrapolated *back* the `d` samples
+                    // to the instant the master reset it — forward
+                    // extrapolation measured the jump a full slave sample
+                    // wide, and every sync edge carried the error.
+                    let before_phase = (self.slave.phase - slave_inc * d).rem_euclid(1.0);
                     let before = self.slave.naive(before_phase);
                     let after = self.slave.naive(0.0);
                     let jump = after - before;
                     self.slave.phase = (slave_inc * d).rem_euclid(1.0);
-                    current = self.slave.value();
-                    // PolyBLEP split across the two samples around the jump.
+                    // Naive, not `value()`: the phase was just reset mid-
+                    // cycle, and `value()` would add the slave's own
+                    // natural-wrap BLEP on top of the sync-jump correction
+                    // below — two corrections for one discontinuity, with
+                    // the spurious one reaching full scale as `d` nears
+                    // zero. The manual correction is the only one that
+                    // belongs here.
+                    current = self.slave.naive(self.slave.phase);
+                    // PolyBLEP split across the two samples around the jump:
+                    // the pre-jump sample sits `(1 - d)` before it, the
+                    // post-jump sample `d` after, and the two-point split
+                    // `d² / (1-d)²` is the same shape `blep` itself uses.
                     correction_prev = jump / 2.0 * d * d;
                     current -= jump / 2.0 * (1.0 - d) * (1.0 - d);
                     self.slave.phase = (self.slave.phase + slave_inc).rem_euclid(1.0);
                 }
                 SyncMode::Soft => {
+                    // The direction reversal is a slope discontinuity of
+                    // its own, and it is *not* corrected here: a BLAMP for
+                    // a kink at a fractional offset needs its own two-point
+                    // split, and an unverified correction is worse than a
+                    // documented one. Soft sync on a symmetric shape
+                    // (triangle) is near-seamless; on a saw it tears —
+                    // bounded, finite, and honest about it.
                     self.slave.direction = -self.slave.direction;
                     current = self.slave.value();
                     self.slave.advance();
@@ -467,6 +501,27 @@ mod tests {
     }
 
     #[test]
+    fn pulses_of_any_width_carry_no_dc() {
+        // The centered spelling this fixed: the naive ±1 pulse carried a
+        // DC of 2w−1 — a quarter-width pulse sat at −0.5, and a polyphonic
+        // stack of them eats real headroom. The mean over whole periods
+        // must be a rounding error at every width (93.75 Hz divides the
+        // 16,384-sample window exactly, 512 periods, so every phase is
+        // counted once and the residual really is zero).
+        for w in [0.01_f32, 0.25, 0.5, 0.75, 0.99] {
+            let f = 93.75;
+            let mut o = Oscillator::new(Shape::Pulse(w), f, RATE);
+            let x = render(&mut || o.tick(), 16_384);
+            let mean = f64::from(x.iter().sum::<f32>()) / 16_384.0;
+            assert!(mean.abs() < 5e-3, "w={w}: mean {mean}");
+            // And the level scaling keeps the louder side at ±1 — the
+            // renormalisation the centering divides by.
+            let peak = x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+            assert!(peak > 0.99, "w={w}: peak {peak}");
+        }
+    }
+
+    #[test]
     fn frequency_changes_keep_phase() {
         let mut o = Oscillator::new(Shape::Sine, 440.0, RATE);
         for _ in 0..100 {
@@ -476,5 +531,144 @@ mod tests {
         o.set_frequency(880.0);
         assert!((o.phase() - p).abs() < 1e-12);
         assert!((o.frequency() - 880.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn hard_sync_matches_an_oversampled_reference() {
+        // The waveform, not just the spectrum: a naive hard sync rendered
+        // 16x finer and *properly low-passed* before decimation is an
+        // independent reference, and the band-limited sync must sit within
+        // a few percent of its RMS. (A plain box average is not properly
+        // low-passed — it passes up to 64% of the 24-48 kHz band, and the
+        // aliased harmonics of the oversampled naive saw swamp the
+        // comparison.) The old edge math — the pre-jump value extrapolated
+        // a full slave sample the wrong way, plus the slave's own wrap-BLEP
+        // stacked on the sync correction — carried visible error here at
+        // every reset point; the periodicity and alias-ratio tests above
+        // cannot see that, because the error lands on the master's own
+        // harmonic grid. This one can: it compares the samples.
+        let (f_m, f_s) = (1_000.0_f32, 2_600.0_f32);
+        const OS: usize = 16;
+        const N: usize = 8_192;
+        let slave = Oscillator::new(Shape::Saw, f_s, RATE);
+        let mut s = Sync::new(slave, f_m, SyncMode::Hard);
+        let got = render(&mut || s.tick(), N + 4);
+        // The reference: same reset schedule, phase advancing OS times
+        // finer, filtered and decimated. The filter is a Hann-windowed
+        // sinc at 21 kHz (129 fine taps): a passband the PolyBLEP saw
+        // fills honestly, a stopband that keeps the decimation clean.
+        let fine_rate = f64::from(RATE) * OS as f64;
+        #[expect(clippy::cast_precision_loss, reason = "test")]
+        let mi = f64::from(f_m / RATE) / OS as f64;
+        #[expect(clippy::cast_precision_loss, reason = "test")]
+        let si = f64::from(f_s / RATE) / OS as f64;
+        let mut mp = 0.0f64;
+        let mut sp = 0.0f64;
+        let fine: Vec<f64> = (0..N * OS)
+            .map(|_| {
+                let v = 1.0 - 2.0 * sp;
+                mp += mi;
+                sp = (sp + si).rem_euclid(1.0);
+                if mp >= 1.0 {
+                    mp -= 1.0;
+                    sp = 0.0;
+                }
+                v
+            })
+            .collect();
+        const TAPS: usize = 129;
+        let half = TAPS / 2;
+        let fc = 2.0 * 21_000.0 / fine_rate; // cycles per fine sample
+        let sinc = |x: f64| {
+            if x.abs() < 1e-12 {
+                1.0
+            } else {
+                let px = std::f64::consts::PI * x;
+                px.sin() / px
+            }
+        };
+        let mut kernel: Vec<f64> = (0..TAPS)
+            .map(|n| {
+                let hann =
+                    0.5 - 0.5 * (2.0 * std::f64::consts::PI * n as f64 / (TAPS - 1) as f64).cos();
+                fc * sinc(fc * (n as f64 - half as f64)) * hann
+            })
+            .collect();
+        // Normalise the DC gain to exactly one, so the reference keeps the
+        // signal's scale and the comparison measures shape, not volume.
+        let dc: f64 = kernel.iter().sum();
+        if dc.abs() > 1e-12 {
+            for h in &mut kernel {
+                *h /= dc;
+            }
+        }
+        // Reference samples the filter's edge effects do not reach.
+        // Filter the oversampled reference down to the output rate.
+        let skip = 4; // output samples the filter's edge effects reach
+        let mut want: Vec<f32> = Vec::with_capacity(N - skip);
+        for n in skip..N {
+            let c = n * OS;
+            let mut acc = 0.0f64;
+            for (j, h) in kernel.iter().enumerate() {
+                let idx = c + j;
+                if idx < fine.len() {
+                    acc += h * fine[idx];
+                }
+            }
+            #[expect(clippy::cast_possible_truncation, reason = "test")]
+            want.push(acc as f32);
+        }
+        // Filter the *output* with the same shape at the output rate, so
+        // both sides of the comparison carry the same band: without this,
+        // the reference's 21 kHz corner measures the sync's honest
+        // 21-24 kHz content as if it were error.
+        let fc1 = 2.0 * 21_000.0 / f64::from(RATE);
+        let mut kernel1: Vec<f64> = (0..TAPS)
+            .map(|n| {
+                let hann =
+                    0.5 - 0.5 * (2.0 * std::f64::consts::PI * n as f64 / (TAPS - 1) as f64).cos();
+                fc1 * sinc(fc1 * (n as f64 - half as f64)) * hann
+            })
+            .collect();
+        let dc1: f64 = kernel1.iter().sum();
+        if dc1.abs() > 1e-12 {
+            for h in &mut kernel1 {
+                *h /= dc1;
+            }
+        }
+        let mut got_f: Vec<f32> = Vec::with_capacity(got.len());
+        for n in 0..got.len() {
+            let mut acc = 0.0f64;
+            for (j, h) in kernel1.iter().enumerate() {
+                let idx = n + j;
+                if idx < got.len() {
+                    acc += h * f64::from(got[idx]);
+                }
+            }
+            #[expect(clippy::cast_possible_truncation, reason = "test")]
+            got_f.push(acc as f32);
+        }
+        // Alignment: the output's filter delays it 64 samples, the
+        // reference's 8 (4 of group delay at 16x plus the 4 skipped) —
+        // the reference therefore *leads* by 56, and the search wiggles
+        // around that.
+        let signal = rms(&want);
+        let best = (52..=60)
+            .map(|lead| {
+                let n = want.len() - lead;
+                let e: f64 = (0..n)
+                    .map(|i| {
+                        let g = f64::from(got_f[i]);
+                        let w = f64::from(want[i + lead]);
+                        (g - w) * (g - w)
+                    })
+                    .sum::<f64>()
+                    / n as f64;
+                e.sqrt() / signal
+            })
+            .fold(f64::INFINITY, f64::min);
+        let rel = best;
+        eprintln!("hard sync vs oversampled reference: {rel:.3} RMS error");
+        assert!(rel < 0.15, "sync waveform error {rel:.3} of signal RMS");
     }
 }

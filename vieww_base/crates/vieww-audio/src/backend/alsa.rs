@@ -56,7 +56,7 @@ impl Backend for Alsa {
     fn open_output(
         &self,
         config: StreamConfig,
-        mut render: RenderFn,
+        render: RenderFn,
     ) -> Result<DeviceStream, BackendError> {
         let ch = config.channels.clamp(1, 32);
         // The device period brackets the requested block, so the pacing the
@@ -127,7 +127,7 @@ impl Backend for Alsa {
     fn open_input(
         &self,
         config: StreamConfig,
-        mut capture: CaptureFn,
+        capture: CaptureFn,
     ) -> Result<DeviceStream, BackendError> {
         let ch = config.channels.clamp(1, 32);
         let mut input = AlsaInput::open_with_period(

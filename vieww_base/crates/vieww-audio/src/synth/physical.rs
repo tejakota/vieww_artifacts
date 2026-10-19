@@ -86,6 +86,13 @@ impl KarplusStrong {
 
     /// Pluck at `hz` with `velocity`.
     pub fn pluck(&mut self, hz: f32, velocity: f32) {
+        // The old window's length — where the ringing string's continuation
+        // sits in the line — before the retune moves it.
+        let old_len = self.len;
+        // Below ~−60 dB there is nothing worth continuing from, and fading
+        // the excitation's head in from zero (a silent string's
+        // "continuation") would only smear the pluck-position comb below.
+        let was_ringing = self.energy > 1e-3;
         self.retune(hz);
         let n = self.len;
         let mut exc = vec![0.0f32; n];
@@ -108,8 +115,36 @@ impl KarplusStrong {
         let off = ((self.position.clamp(0.01, 0.99) * n as f32).round() as usize).clamp(1, n - 1);
         let shaped: Vec<f32> = (0..n).map(|i| exc[i] - exc[(i + n - off) % n]).collect();
         let peak = shaped.iter().fold(1e-6f32, |m, v| m.max(v.abs()));
-        for v in shaped {
-            self.line.push(v / peak * velocity);
+        // A retrigger replaces the string's whole read window at once, and
+        // the switch from the old string to the new excitation is a step of
+        // whatever the old string was still sounding — the click on every
+        // steal. Instead, the excitation's head crossfades out of the old
+        // string's own continuation — the samples it was about to output,
+        // read straight out of the line before this loop's pushes overwrite
+        // them — so a retriggered string starts exactly where the old one
+        // was. The continuation is read per-sample (not held at its first
+        // value) so the crossfade path follows the old waveform's slope.
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "fade length in samples"
+        )]
+        let fade_n = (0.002 * self.rate) as usize;
+        let fade_n = if was_ringing {
+            fade_n.min(old_len / 2).max(1)
+        } else {
+            0
+        };
+        let old: Vec<f32> = (0..fade_n).map(|i| self.line.tap(old_len - i)).collect();
+        for (i, v) in shaped.iter().enumerate() {
+            let mut s = v / peak * velocity;
+            if i < fade_n {
+                #[expect(clippy::cast_precision_loss, reason = "index ratio")]
+                let mix = i as f32 / fade_n as f32;
+                let was = old[i];
+                s = was + (s - was) * mix;
+            }
+            self.line.push(s);
         }
         self.energy = 1.0;
         self.damped = false;
@@ -153,10 +188,13 @@ impl Voice for KarplusStrong {
         self.energy
     }
     fn kill(&mut self) {
-        self.energy = 0.0;
-        for _ in 0..self.line.capacity() {
-            self.line.push(0.0);
-        }
+        // Palm-mute rather than flush: draining the delay line to zeros
+        // ends the string at whatever amplitude it had — a step, which is
+        // the click stealing exists to avoid. Damping instead runs the
+        // loop down over a few tens of milliseconds (the muted loss is
+        // the release loss to the fortieth power per pass), which is also
+        // simply what a hand laid on a string does.
+        self.damped = true;
     }
 }
 
@@ -400,9 +438,21 @@ pub struct Modal {
     strike_pos: usize,
     hz: f32,
     level: f32,
+    /// Output fade from [`Voice::kill`]: the per-sample multiplier while
+    /// fading, `f32::MAX` when not.
+    fade_k: f32,
+    /// Samples of fade left before the state is cleared outright: twelve
+    /// time constants, by which point the output is past −100 dB of
+    /// whatever it was when killed.
+    fade_left: u32,
 }
 
 impl Modal {
+    /// Kill-fade time constant, seconds — the same few-millisecond fade
+    /// the `Voice::kill` contract asks engines for, matching the
+    /// subtractive voice's own steal fade.
+    const KILL_FADE: f32 = 0.003;
+
     /// A modal object from its modes.
     #[must_use]
     pub fn new(modes: Vec<Mode>, rate: f32) -> Self {
@@ -416,6 +466,8 @@ impl Modal {
             strike_pos: 0,
             hz: 440.0,
             level: 0.0,
+            fade_k: f32::MAX,
+            fade_left: 0,
         }
     }
 
@@ -533,6 +585,10 @@ impl Modal {
             .collect();
         self.strike_pos = 0;
         self.level = velocity;
+        // A struck note rings from its full level: a pending kill fade
+        // (this object was stolen and retriggered) is absorbed here.
+        self.fade_k = f32::MAX;
+        self.fade_left = 0;
     }
 
     /// The next sample.
@@ -549,6 +605,23 @@ impl Modal {
             r.y2 = r.y1;
             r.y1 = y;
             sum += y;
+        }
+        // The kill fade rides on the summed output — the resonators keep
+        // ringing into it, all partials decaying together — and retires the
+        // bank once it has taken them past silence.
+        if self.fade_k != f32::MAX {
+            sum *= self.fade_k;
+            self.fade_left = self.fade_left.saturating_sub(1);
+            if self.fade_left == 0 {
+                for r in &mut self.res {
+                    r.y1 = 0.0;
+                    r.y2 = 0.0;
+                }
+                self.strike.clear();
+                self.strike_pos = 0;
+                self.fade_k = f32::MAX;
+                self.level = 0.0;
+            }
         }
         self.level = self.level * 0.9995 + sum.abs() * 0.0005;
         sum
@@ -571,12 +644,26 @@ impl Voice for Modal {
         self.level
     }
     fn kill(&mut self) {
-        for r in &mut self.res {
-            r.y1 = 0.0;
-            r.y2 = 0.0;
+        // A fade, not an amputation: zeroing the resonators — what this
+        // replaced — cut every partial at whatever amplitude it had, which
+        // is the click voice stealing exists to avoid, and the trait's own
+        // doc asks engines to fade over a few milliseconds instead. The
+        // pending strike is dropped (a stolen voice takes no further
+        // excitation) and the bank is cleared once the fade has taken it
+        // past silence.
+        if !self.is_active() {
+            return; // already silent: nothing to fade
         }
-        self.level = 0.0;
         self.strike.clear();
+        self.strike_pos = 0;
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "fade length"
+        )]
+        let fade_n = (Modal::KILL_FADE * 12.0 * self.rate) as u32;
+        self.fade_k = (-1.0 / (Modal::KILL_FADE * self.rate)).exp();
+        self.fade_left = fade_n.max(1);
     }
 }
 
@@ -838,5 +925,112 @@ mod tests {
         let x = p.render(9_600);
         assert!(x.iter().any(|v| v.abs() > 0.05));
         assert_eq!(p.active(), 4);
+    }
+
+    #[test]
+    fn karplus_strong_kill_mutes_instead_of_flushing() {
+        let mut s = KarplusStrong::new(RATE, 7);
+        s.decay = 8.0;
+        s.pluck(220.0, 0.8);
+        let pre: Vec<f32> = (0..9_600).map(|_| s.tick()).collect(); // 200 ms
+        let peak = pre.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak > 0.2, "string sounding: {peak}");
+        s.kill();
+        let post: Vec<f32> = (0..24_000).map(|_| s.tick()).collect(); // 500 ms
+                                                                      // The flush this replaced dropped the output to exact zero on the
+                                                                      // very next tick — a step of the string's full amplitude. Damping
+                                                                      // instead keeps the waveform continuous and runs it down. The
+                                                                      // comparison is against the string's amplitude at the kill (its
+                                                                      // highs died long ago; the pluck's initial burst is no reference).
+        let peak_now = pre[pre.len() - 480..]
+            .iter()
+            .fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(
+            post.iter().take(480).any(|v| v.abs() > peak_now * 0.3),
+            "output continues from where the string was: {peak_now}"
+        );
+        // And the muted string is spent, and its voice reclaimable.
+        assert!(crate::synth::testing::rms(&post[22_000..]) < 1e-3);
+        assert!(!s.is_active(), "voice reclaimable");
+    }
+
+    #[test]
+    fn replucking_a_ringing_string_crossfades_instead_of_stepping() {
+        let mut s = KarplusStrong::new(RATE, 8);
+        s.decay = 8.0;
+        s.pluck(220.0, 0.8);
+        let pre: Vec<f32> = (0..9_600).map(|_| s.tick()).collect();
+        let peak = pre.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak > 0.2, "string sounding: {peak}");
+        // What the ringing string is about to output next; a same-pitch
+        // repluck keeps the read window put, so this is exactly what
+        // `pluck` blends its excitation out of.
+        let expected = s.line.tap(s.len);
+        s.pluck(220.0, 0.8);
+        let post: Vec<f32> = (0..96).map(|_| s.tick()).collect();
+        // The repluck's first sample continues the old string exactly —
+        // the wholesale window replacement this fixed jumped straight to a
+        // fresh noise sample at full excitation amplitude.
+        assert_eq!(post[0], expected);
+        // And the crossfade lands in the new pluck: two periods later the
+        // new string is at its own full amplitude.
+        let peak2 = (0..480)
+            .map(|_| s.tick())
+            .fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak2 > 0.3, "the new pluck rings: {peak2}");
+    }
+
+    #[test]
+    fn modal_kill_fades_instead_of_amputating() {
+        let mut m = Modal::marimba(RATE);
+        m.strike(220.0, 1.0);
+        let pre: Vec<f32> = (0..4_800).map(|_| m.tick()).collect(); // 100 ms
+        let peak = pre.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak > 0.02, "bar ringing: {peak}");
+        m.kill();
+        let post: Vec<f32> = (0..48_000).map(|_| m.tick()).collect(); // 1 s
+                                                                      // The amputation this replaced zeroed the resonators: exact zeros
+                                                                      // from the first post-kill sample. A fade keeps the partials
+                                                                      // decaying together from wherever they were.
+        assert!(
+            post.iter().take(16).any(|v| v.abs() > peak * 0.3),
+            "continues from the struck level"
+        );
+        // The fade is over and the bank retired within a few dozen
+        // milliseconds (twelve 3 ms time constants), and the voice is
+        // reclaimable.
+        assert!(
+            crate::synth::testing::rms(&post[2_400..]) < 1e-5,
+            "retired: {}",
+            crate::synth::testing::rms(&post[2_400..])
+        );
+        assert!(!m.is_active(), "voice reclaimable");
+    }
+
+    #[test]
+    fn modal_retrigger_rings_after_a_steal() {
+        let mut m = Modal::marimba(RATE);
+        m.strike(220.0, 1.0);
+        for _ in 0..480 {
+            let _ = m.tick();
+        }
+        m.kill(); // stolen mid-ring
+        for _ in 0..100 {
+            let _ = m.tick(); // part-way into the fade
+        }
+        // Retriggered into the fading object: the new strike must ring at
+        // its full level and keep ringing — the pending fade is absorbed
+        // by the retrigger, not left running underneath the new note (in
+        // which case the bar would thud away to nothing in ~35 ms).
+        m.strike(330.0, 1.0);
+        let x: Vec<f32> = (0..16_384).map(|_| m.tick()).collect();
+        let (s, bin) = crate::synth::testing::spectrum(&x, RATE);
+        let f = crate::synth::testing::level_near(&s, bin, 330.0, 2);
+        assert!(f > 0.0, "the new note rings: {f}");
+        assert!(
+            crate::synth::testing::rms(&x[8_000..]) > 0.01,
+            "rings past 170 ms: {}",
+            crate::synth::testing::rms(&x[8_000..])
+        );
     }
 }

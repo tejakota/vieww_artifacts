@@ -257,6 +257,9 @@ pub struct EnvelopeGen {
     level: f32,
     level_scale: f32,
     attack_scale: f32,
+    /// An exponential fade to zero from [`EnvelopeGen::kill`]: the
+    /// per-sample multiplier while fading, `f32::MAX` when not.
+    fade_k: f32,
 }
 
 impl EnvelopeGen {
@@ -274,6 +277,7 @@ impl EnvelopeGen {
             level: 0.0,
             level_scale: 1.0,
             attack_scale: 1.0,
+            fade_k: f32::MAX,
         }
     }
 
@@ -291,6 +295,9 @@ impl EnvelopeGen {
         self.level_scale = 1.0 - vel.to_level.clamp(0.0, 1.0) * (1.0 - v);
         self.attack_scale = (1.0 - 0.9 * vel.to_attack.clamp(0.0, 1.0) * v).max(0.05);
         self.gated = true;
+        // A retrigger attacks from wherever the level is — including
+        // mid-kill-fade — so the fade is absorbed, not truncated.
+        self.fade_k = f32::MAX;
         self.enter(0);
     }
 
@@ -315,6 +322,26 @@ impl EnvelopeGen {
         self.phase = Phase::Idle;
         self.level = 0.0;
         self.gated = false;
+        self.fade_k = f32::MAX;
+    }
+
+    /// Stop over roughly `secs`: an exponential fade to zero from the
+    /// current level, on a clock of its own — faster than the patch's
+    /// release, softer than a reset. A stolen voice's hard cut is a click
+    /// at whatever amplitude it had; its own release can be hundreds of
+    /// milliseconds; this is the few-millisecond fade between them. A
+    /// later retrigger still attacks from wherever the fade had got to,
+    /// so stealing into a new note crossfades instead of stepping.
+    pub fn kill(&mut self, secs: f32) {
+        if self.phase == Phase::Idle {
+            return; // already silent: nothing to fade
+        }
+        self.gated = false;
+        self.fade_k = if secs > 0.0 {
+            (-1.0 / (secs.max(1e-4) * self.rate)).exp()
+        } else {
+            0.0
+        };
     }
 
     /// Whether the envelope is still producing (not idle).
@@ -387,6 +414,16 @@ impl EnvelopeGen {
             if self.pos >= self.len {
                 self.level = target;
                 self.finish(i);
+            }
+        }
+        // The kill fade rides on top of whatever the stages produce, and
+        // retires the envelope when it has taken the level to silence.
+        if self.fade_k != f32::MAX {
+            self.level *= self.fade_k;
+            if self.level < 1e-5 {
+                self.level = 0.0;
+                self.fade_k = f32::MAX;
+                self.phase = Phase::Idle;
             }
         }
         // Idle and sustaining envelopes hold wherever the last stage left
@@ -535,5 +572,43 @@ mod tests {
         let mut e = EnvelopeGen::new(desc, R);
         e.gate_on();
         assert!(e.next_level().is_finite());
+    }
+
+    #[test]
+    fn kill_fades_on_its_own_clock_and_is_absorbed_by_a_retrigger() {
+        // Sustaining at 0.5 with a 0.05 s release — five times slower than
+        // the kill's own fade, so this measures the kill, not the release.
+        let mut e = EnvelopeGen::new(Adsr::new(0.01, 0.02, 0.5, 0.05).stages(), R);
+        let _ = e.render(1.0, 100, 100);
+        assert!((e.level() - 0.5).abs() < 1e-3, "sustaining: {}", e.level());
+        e.kill(0.01);
+        assert!(e.is_active(), "still sounding");
+        // An exponential at the kill's time constant (e^-0.1 per sample at
+        // 1 kHz): no step at the kill itself, and a constant ratio after.
+        let k = (-0.1f32).exp();
+        let a = e.next_level();
+        assert!((a - 0.5 * k).abs() < 1e-3, "no step at the kill: {a}");
+        let b = e.next_level();
+        assert!((b - a * k).abs() < 1e-3, "exponential fade: {a} -> {b}");
+        // A retrigger mid-fade climbs from wherever the fade had got to —
+        // the fade is absorbed, not left running underneath the new note.
+        let mid = e.level();
+        e.gate_on();
+        let c = e.next_level();
+        assert!(
+            c > mid,
+            "retrigger climbs from the faded level: {mid} -> {c}"
+        );
+        // A fade left alone retires the envelope to idle in bounded time
+        // (a dozen time constants; the level threshold is 1e-5).
+        e.kill(0.01);
+        for _ in 0..200 {
+            let _ = e.next_level();
+        }
+        assert!(!e.is_active(), "retired");
+        assert_eq!(e.level(), 0.0);
+        // Killing an idle envelope is a no-op, not a resurrection.
+        e.kill(0.01);
+        assert_eq!(e.next_level(), 0.0);
     }
 }

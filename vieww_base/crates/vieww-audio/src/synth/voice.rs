@@ -571,8 +571,15 @@ impl Voice for SubtractiveVoice {
     }
 
     fn kill(&mut self) {
-        self.amp.reset();
-        self.fenv.reset();
+        // A three-millisecond fade, not a reset: the reset this replaced
+        // snapped both envelopes to zero at whatever amplitude the voice
+        // had — the click voice stealing exists to avoid — and the trait's
+        // own doc says engines "should fade over a few milliseconds
+        // instead". The retrigger that follows a steal attacks from the
+        // current level, so the fade crossfades into the new note rather
+        // than being cut off by it.
+        self.amp.kill(0.003);
+        self.fenv.kill(0.003);
     }
 
     fn next(&mut self) -> f32 {
@@ -700,6 +707,45 @@ mod tests {
         p.note_on(0, 70, 1.0);
         p.note_on(0, 60, 1.0);
         assert_eq!(p.held_keys(), vec![70]);
+    }
+
+    #[test]
+    fn stealing_fades_the_voice_out_instead_of_cutting_it() {
+        let rms = |x: &[f32]| crate::synth::testing::rms(x);
+        let mut v = SubtractiveVoice::new(48_000.0);
+        v.note_on(69.0, 1.0);
+        let pre: Vec<f32> = (0..48_000).map(|_| v.next()).collect(); // 1 s
+        let loud = rms(&pre[24_000..]);
+        assert!(loud > 0.05, "sustaining: {loud}");
+        v.kill();
+        let post: Vec<f32> = (0..9_600).map(|_| v.next()).collect(); // 200 ms
+                                                                     // The reset this replaced cut the voice dead at the kill — the
+                                                                     // first 10 ms after it would be pure silence. A fade still sounds,
+                                                                     // decaying on the kill's own 3 ms clock.
+        let ten = |a: usize| rms(&post[a..a + 480]);
+        assert!(
+            ten(0) > loud * 0.25,
+            "fading, not cut: {} vs {}",
+            ten(0),
+            loud
+        );
+        assert!(
+            ten(480) < ten(0) * 0.2,
+            "exponential-ish decay: {} -> {}",
+            ten(0),
+            ten(480)
+        );
+        assert!(rms(&post[4_800..]) < 1e-4, "silent by 100 ms");
+        assert!(!v.is_active(), "voice reclaimable");
+        // A retrigger into the faded voice attacks from the faded level and
+        // reaches full voice — the fade is absorbed by the new note, not
+        // left running underneath it (which would mute the retrigger).
+        v.note_on(71.0, 1.0);
+        let after: Vec<f32> = (0..48_000).map(|_| v.next()).collect();
+        assert!(
+            rms(&after[24_000..]) > loud * 0.5,
+            "the new note rings at full voice"
+        );
     }
 
     #[test]
