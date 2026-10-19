@@ -91,6 +91,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::Write as _;
+// Only the softbuffer present (not Android, which locks the ANativeWindow) uses it.
+#[cfg(not(target_os = "android"))]
 use std::num::NonZeroU32;
 use std::path::Path;
 use std::rc::{Rc, Weak};

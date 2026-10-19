@@ -537,7 +537,7 @@ impl App {
     /// loaded. Otherwise the next launch measures the GPU path, and the GPU is
     /// kept only if it is clearly faster. The answer is kept in a small file in
     /// the application's data directory and reused until the build, the OS or
-    /// the window size changes. See [`crate::rasterizer_choice`] for the rules
+    /// the window size changes. See [`crate::rasterizer_choice`](mod@crate::rasterizer_choice) for the rules
     /// and the Device Farm numbers they were checked against, and
     /// [`rasterizer_choice`](crate::rasterizer_choice()) for what was chosen.
     #[must_use]

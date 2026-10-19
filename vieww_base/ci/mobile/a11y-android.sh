@@ -133,6 +133,13 @@ fi
 # TalkBack has to be running *before* the tree is asked for, or the adapter is
 # still holding its placeholder when the dump lands.
 if adb shell pm list packages | grep -q "com.google.android.marvin.talkback"; then
+    # Android 13+ asks TalkBack for permission to post notifications the
+    # moment it is enabled, and that dialog takes the foreground from the app
+    # under test (Framework checks run 39243920376, API 34 emulator: "front:
+    # ...permissioncontroller/...GrantPermissionsActivity"). Granting it first
+    # means the dialog never opens; on older Android the permission does not
+    # exist and the grant is a harmless no-op.
+    adb shell pm grant com.google.android.marvin.talkback android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
     adb shell settings put secure enabled_accessibility_services "$talkback" >/dev/null
     adb shell settings put secure accessibility_enabled 1 >/dev/null
     echo "a11y-android: TalkBack enabled."
@@ -155,6 +162,19 @@ sleep 3
 # empty — an hour lost to reading the wrong window.
 top="$(adb shell dumpsys accessibility 2>/dev/null | grep -A1 'Top Focused Window Id' | tr -d '\r' || true)"
 front="$(adb shell dumpsys activity activities 2>/dev/null | grep 'topResumedActivity' | tr -d '\r' || true)"
+# Something else on top — a permission prompt, TalkBack's tutorial — is
+# answered with Back and the app is brought to the front again, up to three
+# times, before this gives up with the message below.
+for attempt in 1 2 3; do
+    case "$front" in *"$package"*) break ;; esac
+    echo "a11y-android: something else is in front (attempt $attempt): ${front##*ActivityRecord}" >&2
+    adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+    sleep 1
+    adb shell am start --user "$user" -n "$package/$activity" >/dev/null
+    sleep 3
+    front="$(adb shell dumpsys activity activities 2>/dev/null | grep 'topResumedActivity' | tr -d '\r' || true)"
+done
+top="$(adb shell dumpsys accessibility 2>/dev/null | grep -A1 'Top Focused Window Id' | tr -d '\r' || true)"
 case "$front" in
     *"$package"*) ;;
     *)

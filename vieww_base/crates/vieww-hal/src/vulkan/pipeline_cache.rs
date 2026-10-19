@@ -13,7 +13,7 @@
 //! So a [`VulkanDevice`](super::VulkanDevice) opens one pipeline cache, seeded
 //! from the file named by [`set_pipeline_cache_file`] if it exists and was
 //! written by this same GPU and driver, and every pipeline the scene renderer
-//! creates goes through it. [`VulkanDevice::save_pipeline_cache`] writes it
+//! creates goes through it. [`VulkanDevice::save_pipeline_cache`](super::VulkanDevice::save_pipeline_cache) writes it
 //! back; the platform layer calls it after the first GPU frame (a phone app is
 //! killed, not dropped) and the device's `Drop` does it again.
 //!

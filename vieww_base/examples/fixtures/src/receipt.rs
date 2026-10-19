@@ -260,6 +260,11 @@ fn source() -> Json {
     ])
 }
 
+// Each push below is behind its own `target_feature`, which a `vec![]` literal
+// cannot express; clippy only sees the pushes that are on for the target it
+// is checking. `allow`, not `expect`: on a target with none of them on, the
+// lint does not fire, and an unfulfilled `expect` is an error of its own.
+#[allow(clippy::vec_init_then_push)]
 fn build() -> Json {
     let mut compiled: Vec<Json> = Vec::new();
     #[cfg(target_feature = "sse2")]
