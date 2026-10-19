@@ -69,6 +69,10 @@ mod color;
 /// flavours and the cache-shape.
 mod color_glyphs;
 mod effects;
+/// The general path fill's coverage cache — the one hot `rasterize` site the
+/// measurement-driven cache run missed (clip, shadow, glyph, blur all have
+/// theirs; `paint_shape` did not). See the module doc.
+mod fill_cache;
 mod geometry;
 mod glyph;
 /// The seam a GPU backend builds its glyph atlas through — see the module doc

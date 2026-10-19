@@ -32,7 +32,8 @@ use vieww_foundation::{Color, MemoryPressure, Rect, Transform, Trim};
 use super::clip::{clip_bounds, resolve_clip_cached, ClipCache};
 use super::color::Premul;
 use super::color_glyphs::{ColorGlyph, ColorGlyphCache};
-use super::geometry::{fill::rasterize, flatten::flatten_path, stroke::stroke_to_polygons};
+use super::fill_cache::FillCache;
+use super::geometry::{flatten::flatten_path, stroke::stroke_to_polygons};
 use super::glyph::GlyphCache;
 use super::glyph_raster::GlyphRasterCache;
 use super::gradient;
@@ -164,6 +165,11 @@ pub struct NativeRenderer {
     /// Blurred shadow patches, kept between frames — see `native/shadow.rs`'s
     /// `ShadowCache`.
     shadows: ShadowCache,
+    /// General path fills' coverage masks, keyed on the exact geometry bits —
+    /// see `native/fill_cache.rs`. The clip, shadow, glyph and blur caches
+    /// each own one repeat-shaped cost; this owns the last uncached one,
+    /// `paint_shape`'s per-repaint scanline walk over static vector shapes.
+    fills: FillCache,
     /// Colour-glyph tables and decoded bitmap strikes — see
     /// `native/color_glyphs.rs`.
     color_glyphs: ColorGlyphCache,
@@ -256,6 +262,7 @@ impl NativeRenderer {
             glyphs: GlyphCache::new(),
             clips: ClipCache::new(),
             shadows: ShadowCache::new(),
+            fills: FillCache::from_env(),
             color_glyphs: ColorGlyphCache::default(),
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
@@ -285,6 +292,7 @@ impl NativeRenderer {
             glyphs: GlyphCache::with_glyph_outline_budget_bytes(budget_bytes),
             clips: ClipCache::new(),
             shadows: ShadowCache::new(),
+            fills: FillCache::from_env(),
             color_glyphs: ColorGlyphCache::default(),
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
@@ -311,6 +319,7 @@ impl NativeRenderer {
             glyphs: GlyphCache::new(),
             clips: ClipCache::new(),
             shadows: ShadowCache::new(),
+            fills: FillCache::from_env(),
             color_glyphs: ColorGlyphCache::default(),
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
@@ -337,6 +346,7 @@ impl NativeRenderer {
             glyphs: GlyphCache::new(),
             clips: ClipCache::new(),
             shadows: ShadowCache::new(),
+            fills: FillCache::from_env(),
             color_glyphs: ColorGlyphCache::default(),
             image_mips: MipCache::default(),
             root: Target::new(0, 0),
@@ -452,6 +462,13 @@ impl NativeRenderer {
     #[must_use]
     pub fn blur_cache_stats(&self) -> super::ResidencyStats {
         self.blur_cache.stats()
+    }
+
+    /// Hits, misses and evictions on the general path-fill cache — see
+    /// [`NativeRenderer::blur_cache_stats`] and `native/fill_cache.rs`.
+    #[must_use]
+    pub fn fill_cache_stats(&self) -> super::ResidencyStats {
+        self.fills.stats()
     }
 
     /// Hits, misses and evictions across every font's glyph-outline
@@ -1627,7 +1644,13 @@ impl NativeRenderer {
         // Rasterise the shape against the clip's bounding box first: that is
         // what decides which of its pixels can exist. Only then resolve the
         // clip's mask, and only over the region the shape actually inked.
-        let mask = rasterize(polylines, clip_bounds(clip, surface));
+        //
+        // The walk goes through the fill cache: keyed on the exact geometry
+        // bits and the clip, so a hit is the same bytes the walk would have
+        // produced — see `native/fill_cache.rs`. The rectangle fast path
+        // inside `rasterize` still runs first for axis-aligned panels; this
+        // is the irregular-shape cost being memoised.
+        let mask = self.fills.coverage(polylines, clip_bounds(clip, surface));
         if mask.is_empty() {
             return;
         }

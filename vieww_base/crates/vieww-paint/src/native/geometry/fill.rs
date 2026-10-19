@@ -406,6 +406,37 @@ pub(crate) fn rasterize(polylines: &[Polyline], clip_bounds: Rect) -> CoverageMa
     if let Some(rect) = axis_aligned_rect(polylines) {
         return rect_mask(rect, clip_bounds);
     }
+    rasterize_general(
+        polylines,
+        clip_bounds,
+        raster_thread_request(
+            std::env::var("VIEWW_RASTER_THREADS").ok().as_deref(),
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1),
+        ),
+    )
+}
+
+/// The scanline pass, without the rectangle fast path: every non-rectangular
+/// fill ends here, and it is also the form the row-parallel walk and the
+/// serial one are held to in tests (the fast path is thread-independent, so
+/// routing the equivalence tests through [`rasterize`] would prove nothing —
+/// they would both hit `rect_mask` and compare it to itself).
+///
+/// `threads_request` is what the caller wants; the size gate below decides
+/// what the mask actually gets (see [`thread_workers_for`]). The answer the
+/// gate gives cannot change the output: each row is a pure function of the
+/// edges that span it, the scratch buffers are per-worker, and no arithmetic
+/// is reordered or reassociated — a row computed on worker 4 is the same f32
+/// sequence it was computed with on the calling thread. `bit-for-bit` in the
+/// tests below is a property of the code's structure first and of the test
+/// second.
+pub(crate) fn rasterize_general(
+    polylines: &[Polyline],
+    clip_bounds: Rect,
+    threads_request: usize,
+) -> CoverageMask {
     let edges = edges_from(polylines);
     if edges.is_empty() || clip_bounds.is_empty() {
         return CoverageMask::empty();
@@ -433,35 +464,162 @@ pub(crate) fn rasterize(polylines: &[Polyline], clip_bounds: Rect) -> CoverageMa
     let height = (by1 - by0) as u32;
     let mut data = vec![0.0f32; (width as usize) * (height as usize)];
 
-    let mut crossings: Vec<(f32, i32)> = Vec::new();
-    let mut row = vec![0.0f32; width as usize];
-
-    // **The active edge table.** Without it this loop asked every edge in the
-    // shape whether it crossed every subsample of every scanline — `rows × 4 ×
-    // edges` tests, of which all but a handful answer "no". That is invisible
-    // on a rectangle (four edges) and dominant on the shapes a real interface
-    // is actually made of: a flattened curve, a glyph outline, a stroke
-    // expanded into a polygon. A 400-row portrait path with 500 edges paid
-    // 800,000 rejections per fill to find perhaps 2,000 real crossings.
-    //
-    // Edges are visited in order of where they *start*, admitted to `active`
-    // when the scanline reaches them and retired when it passes them, so each
-    // row tests only the edges that genuinely span it. The inner
-    // `sy < ymin || sy >= ymax` guard stays: an edge is admitted for the whole
-    // pixel row and may still miss an individual subsample inside it.
+    // Edges are visited in order of where they *start* — the active edge
+    // table's admission order — so every chunk (and the serial walk) sees
+    // the same `active` sequence and, through its stable sort by `x`, the
+    // same crossings order even when two edges land on the same sample.
     let mut order: Vec<usize> = (0..edges.len()).collect();
     order.sort_unstable_by(|&a, &b| edges[a].ymin.total_cmp(&edges[b].ymin));
-    let mut pending = 0usize;
-    let mut active: Vec<usize> = Vec::new();
 
-    for py in by0..by1 {
+    let workers = thread_workers_for(threads_request, width, height);
+    let table = EdgeTable {
+        edges: &edges,
+        order: &order,
+    };
+    let geometry = RowGeometry { bx0, width };
+    if workers <= 1 {
+        let mut scratch = RowScratch::new(width);
+        rasterize_row_range(by0..by1, &table, 0, &geometry, &mut data, &mut scratch);
+    } else {
+        // Rows are independent, so the mask's data splits into contiguous
+        // row spans and each worker takes one, with its own scratch — no
+        // shared mutable state, no ordering hazard, no reassociation. A
+        // chunk inherits the admitted-edge prefix the serial walk would
+        // have built by its first row and continues exactly as the serial
+        // walk continues.
+        let chunk_rows = (height as usize).div_ceil(workers);
+        let mut spans: Vec<(i32, i32)> = Vec::with_capacity(workers);
+        let mut start = by0;
+        while start < by1 {
+            let end = (start + chunk_rows as i32).min(by1);
+            spans.push((start, end));
+            start = end;
+        }
+        std::thread::scope(|scope| {
+            // Copy-able reborrowing: a `move` closure must capture the
+            // reference bundle, not the `Vec`s behind it, or the second
+            // spawn would find its edges already moved away.
+            let table = &table;
+            let geometry = &geometry;
+            // The spans carve `data` into disjoint row blocks, and
+            // `split_at_mut` is what makes that provable to the borrow
+            // checker: each spawn moves one block, the walk continues on
+            // the untouched tail.
+            let mut rest: &mut [f32] = &mut data;
+            for (start, end) in spans {
+                let block = (end - start) as usize * width as usize;
+                let (slice, tail) = rest.split_at_mut(block);
+                rest = tail;
+                let pending_start = table
+                    .order
+                    .partition_point(|&index| table.edges[index].ymin < start as f32 + 1.0);
+                scope.spawn(move || {
+                    let mut scratch = RowScratch::new(width);
+                    rasterize_row_range(
+                        start..end,
+                        table,
+                        pending_start,
+                        geometry,
+                        slice,
+                        &mut scratch,
+                    );
+                });
+            }
+        });
+    }
+
+    CoverageMask {
+        x0: bx0,
+        y0: by0,
+        width,
+        height,
+        data,
+    }
+}
+
+/// Per-worker scratch for [`rasterize_row_range`]: the admitted-edge list,
+/// the accumulating row, and the crossing buffer. One per worker — that is
+/// the whole reason the parallel walk is free of synchronisation.
+struct RowScratch {
+    active: Vec<usize>,
+    row: Vec<f32>,
+    crossings: Vec<(f32, i32)>,
+}
+
+impl RowScratch {
+    fn new(width: u32) -> Self {
+        Self {
+            active: Vec::new(),
+            row: vec![0.0f32; width as usize],
+            crossings: Vec::new(),
+        }
+    }
+}
+
+/// Shape-level facts every row walk shares: the edges in admission order
+/// and the clip/width that translate a row into pixel columns. One bundle
+/// because every walk takes exactly this — and so no walk takes nine
+/// arguments.
+struct EdgeTable<'a> {
+    edges: &'a [Edge],
+    order: &'a [usize],
+}
+
+/// The pixel-space translation a row walk needs: the left edge of the mask
+/// in device coordinates and the mask's width in pixels.
+struct RowGeometry {
+    bx0: i32,
+    width: u32,
+}
+
+/// Walk the rows `rows` into `data` (which covers exactly those rows),
+/// admitting edges as the serial walk would.
+///
+/// `pending` is how far along the ymin-sorted admission order the walk
+/// already is — 0 for the serial walk, the prefix boundary for a chunk. A
+/// chunk's first row inherits every edge that admission prefix holds: by
+/// the time the serial walk reached this row it had pushed exactly the
+/// edges with `ymin < row_bottom`, and the `retain` below retires from
+/// that set the ones that have ended — the same membership, in the same
+/// order.
+///
+/// **The active edge table.** Without it this loop asked every edge in the
+/// shape whether it crossed every subsample of every scanline — `rows × 4 ×
+/// edges` tests, of which all but a handful answer "no". That is invisible
+/// on a rectangle (four edges) and dominant on the shapes a real interface
+/// is actually made of: a flattened curve, a glyph outline, a stroke
+/// expanded into a polygon. A 400-row portrait path with 500 edges paid
+/// 800,000 rejections per fill to find perhaps 2,000 real crossings.
+///
+/// Edges are admitted when the scanline reaches them and retired when it
+/// passes them, so each row tests only the edges that genuinely span it.
+/// The inner `sy < ymin || sy >= ymax` guard stays: an edge is admitted for
+/// the whole pixel row and may still miss an individual subsample inside it.
+fn rasterize_row_range(
+    rows: std::ops::Range<i32>,
+    table: &EdgeTable<'_>,
+    mut pending: usize,
+    geometry: &RowGeometry,
+    data: &mut [f32],
+    scratch: &mut RowScratch,
+) {
+    let RowScratch {
+        active,
+        row,
+        crossings,
+    } = scratch;
+    active.extend_from_slice(&table.order[..pending]);
+    let bx0 = geometry.bx0;
+    let width = geometry.width;
+
+    for py in rows.start..rows.end {
         let row_top = py as f32;
         let row_bottom = row_top + 1.0;
-        while pending < order.len() && edges[order[pending]].ymin < row_bottom {
-            active.push(order[pending]);
+        while pending < table.order.len() && table.edges[table.order[pending]].ymin < row_bottom {
+            active.push(table.order[pending]);
             pending += 1;
         }
-        active.retain(|&index| edges[index].ymax > row_top);
+        active.retain(|&index| table.edges[index].ymax > row_top);
         if active.is_empty() {
             continue;
         }
@@ -470,8 +628,8 @@ pub(crate) fn rasterize(polylines: &[Polyline], clip_bounds: Rect) -> CoverageMa
         for &sub in &SUBSAMPLE_OFFSETS {
             let sy = py as f32 + sub;
             crossings.clear();
-            for &index in &active {
-                let edge = &edges[index];
+            for &index in active.iter() {
+                let edge = &table.edges[index];
                 if sy < edge.ymin || sy >= edge.ymax {
                     continue;
                 }
@@ -486,7 +644,7 @@ pub(crate) fn rasterize(polylines: &[Polyline], clip_bounds: Rect) -> CoverageMa
 
             let mut winding_number = 0i32;
             let mut span_start: Option<f32> = None;
-            for &(x, w) in &crossings {
+            for &(x, w) in crossings.iter() {
                 let was_inside = winding_number != 0;
                 winding_number += w;
                 let is_inside = winding_number != 0;
@@ -494,28 +652,62 @@ pub(crate) fn rasterize(polylines: &[Polyline], clip_bounds: Rect) -> CoverageMa
                     span_start = Some(x);
                 } else if was_inside && !is_inside {
                     if let Some(start) = span_start.take() {
-                        accumulate_span(&mut row, bx0, width, start, x);
+                        accumulate_span(row, bx0, width, start, x);
                     }
                 }
             }
         }
-        let dest_row = &mut data[(py - by0) as usize * width as usize..][..width as usize];
+        let dest_row = &mut data[(py - rows.start) as usize * width as usize..][..width as usize];
         for (d, s) in dest_row.iter_mut().zip(row.iter()) {
             *d = (*s * SUBSAMPLE_WEIGHT).clamp(0.0, 1.0);
         }
     }
+}
 
-    CoverageMask {
-        x0: bx0,
-        y0: by0,
-        width,
-        height,
-        data,
+/// How many rows a chunk must keep for the spawn to pay for itself: below
+/// this, per-worker scratch allocation and thread start-up cost more than
+/// the rows they divide.
+const RASTER_MIN_CHUNK_ROWS: u32 = 32;
+/// A mask smaller than this on either axis is one the serial walk finishes
+/// in well under a millisecond — threading it would measure the spawn, not
+/// the raster.
+const RASTER_MIN_PARALLEL_DIM: u32 = 128;
+/// The hard ceiling. Scaling past it buys nothing on the shapes that matter
+/// (their row spans saturate a handful of cores) and costs a spawn apiece.
+const RASTER_MAX_THREADS: usize = 8;
+
+/// The worker count for one mask: `request`, but never more than the rows
+/// can divide usefully or the ceiling, and never any at all for a mask too
+/// small to amortise the spawn.
+fn thread_workers_for(request: usize, width: u32, height: u32) -> usize {
+    if request <= 1 {
+        return 1;
+    }
+    if width < RASTER_MIN_PARALLEL_DIM || height < RASTER_MIN_PARALLEL_DIM {
+        return 1;
+    }
+    let by_rows = (height / RASTER_MIN_CHUNK_ROWS).max(1) as usize;
+    request.min(by_rows).clamp(1, RASTER_MAX_THREADS)
+}
+
+/// What the caller asked for: `VIEWW_RASTER_THREADS` when it parses — `0`
+/// and `1` both mean the serial walk, and an unparseable value fails safe
+/// to serial — or the machine's core count when unset.
+fn raster_thread_request(env: Option<&str>, available: usize) -> usize {
+    match env {
+        Some(raw) => raw.trim().parse::<usize>().unwrap_or(1).max(1),
+        None => available.max(1),
     }
 }
 
 /// [`rasterize`], at three times the horizontal resolution: an
 /// [`LcdMask`] instead of a [`CoverageMask`].
+///
+/// Deliberately **serial** even when the gray walk goes parallel: this is
+/// the glyph path, and a glyph mask is rows-tens by columns-tens — far
+/// below [`RASTER_MIN_PARALLEL_DIM`] on both axes, so the size gate would
+/// refuse the spawn anyway. The gate is the policy; this note is why it is
+/// right to inherit it here.
 ///
 /// Deliberately **without** `rasterize`'s axis-aligned-rectangle fast path.
 /// Glyph outlines — the only thing this is for — are never a four-point
@@ -1093,6 +1285,145 @@ mod tests {
         assert!(
             (g - b).abs() < 1e-5,
             "vertical fraction must not split channels: {g} vs {b}"
+        );
+    }
+
+    // --- the row-parallel walk ----------------------------------------------
+
+    /// A deterministic pseudo-random polygon soup: irregular, sometimes
+    /// self-intersecting, spread across every row of the clip — the kind of
+    /// input whose active-edge table carries edges across many rows, which
+    /// is exactly what a chunk boundary has to reproduce. An LCG, not
+    /// `rand`: no new dependency, and a fixed seed is part of the test.
+    fn soup(count: usize, seed: u64) -> Vec<Polyline> {
+        fn lcg(state: &mut u64) -> f32 {
+            *state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((*state >> 33) as f64 / ((u64::MAX >> 33) as f64) * 200.0) as f32
+        }
+        let mut state = seed;
+        let mut polylines = Vec::new();
+        for _ in 0..count {
+            let sides = 3 + (lcg(&mut state) as usize) % 5;
+            let cx = lcg(&mut state) + 20.0;
+            let cy = lcg(&mut state) + 20.0;
+            let r = 2.0 + lcg(&mut state) * 24.0;
+            let rot = lcg(&mut state) * std::f32::consts::TAU;
+            let mut points = Vec::with_capacity(sides);
+            for i in 0..sides {
+                let a = rot + (i as f32 / sides as f32) * std::f32::consts::TAU;
+                points.push((cx + r * a.cos(), cy + r * a.sin()));
+            }
+            polylines.push(Polyline {
+                points,
+                closed: true,
+            });
+        }
+        polylines
+    }
+
+    fn assert_same_mask(a: &CoverageMask, b: &CoverageMask) {
+        assert_eq!(a.x0, b.x0, "origin x");
+        assert_eq!(a.y0, b.y0, "origin y");
+        assert_eq!(a.width, b.width, "width");
+        assert_eq!(a.height, b.height, "height");
+        assert_eq!(a.data.len(), b.data.len(), "data length");
+        for (index, (x, y)) in a.data.iter().zip(b.data.iter()).enumerate() {
+            assert_eq!(
+                x.to_bits(),
+                y.to_bits(),
+                "pixel {index} differs as bits: {:?} vs {:?}",
+                x,
+                y
+            );
+        }
+    }
+
+    #[test]
+    fn parallel_rows_match_the_serial_walk_bit_for_bit() {
+        let clip = Rect::new(0.0, 0.0, 160.0, 160.0);
+        for seed in [1u64, 7, 42] {
+            let polylines = soup(40, seed);
+            let serial = rasterize_general(&polylines, clip, 1);
+            for request in [2usize, 4, 7, 64] {
+                let parallel = rasterize_general(&polylines, clip, request);
+                assert_same_mask(&serial, &parallel);
+            }
+        }
+    }
+
+    #[test]
+    fn an_edge_spanning_every_chunk_is_carried_into_each_chunk() {
+        // A tall triangle whose edges cross chunk boundaries over and over:
+        // each chunk must inherit the active edges the serial walk would
+        // have built by its first row, or the interior comes out zero.
+        let tall = Polyline {
+            points: vec![(10.0, 0.0), (150.0, 40.0), (80.0, 300.0)],
+            closed: true,
+        };
+        let clip = Rect::new(0.0, 0.0, 160.0, 320.0);
+        let serial = rasterize_general(std::slice::from_ref(&tall), clip, 1);
+        let parallel = rasterize_general(std::slice::from_ref(&tall), clip, 4);
+        assert_same_mask(&serial, &parallel);
+        // And the interior is not vacuously zero on both sides — the test
+        // would pass against an empty mask without this.
+        assert!(serial.coverage_at(80, 150) > 0.5);
+    }
+
+    #[test]
+    fn the_entry_point_agrees_with_the_serial_walk_whatever_the_machine() {
+        // `rasterize` reads the environment and the core count, so the
+        // worker count it picks is machine-dependent — that is the point of
+        // this assertion: on every machine, including a one-core one, the
+        // bytes are the serial walk's bytes.
+        let polylines = soup(20, 9);
+        let clip = Rect::new(0.0, 0.0, 160.0, 160.0);
+        let entry = rasterize(&polylines, clip);
+        let serial = rasterize_general(&polylines, clip, 1);
+        assert_same_mask(&entry, &serial);
+    }
+
+    #[test]
+    fn the_thread_decision_gates_on_size_and_ceiling() {
+        // Small on either axis: serial, whatever was asked.
+        assert_eq!(thread_workers_for(4, 64, 300), 1);
+        assert_eq!(thread_workers_for(4, 300, 64), 1);
+        assert_eq!(thread_workers_for(4, 127, 4096), 1);
+        // A serial request stays serial on any mask.
+        assert_eq!(thread_workers_for(1, 800, 600), 1);
+        // A big mask gets the request, capped by the rows' granularity
+        // (600 rows / 32) and then by the hard ceiling.
+        assert_eq!(thread_workers_for(3, 800, 600), 3);
+        assert_eq!(thread_workers_for(18, 800, 600), 8);
+        assert_eq!(thread_workers_for(64, 800, 600), 8);
+        // Both axes must clear the floor — a wide-but-short mask stays
+        // serial, predictably, because the gate is a conjunction.
+        assert_eq!(thread_workers_for(4, 4096, 100), 1);
+        // Just over the floor on both axes: the granularity cap (130/32
+        // = 4) admits the request.
+        assert_eq!(thread_workers_for(4, 800, 130), 4);
+    }
+
+    #[test]
+    fn the_env_request_fails_safe() {
+        assert_eq!(
+            raster_thread_request(Some("0"), 8),
+            1,
+            "0 is the off switch"
+        );
+        assert_eq!(raster_thread_request(Some("1"), 8), 1);
+        assert_eq!(raster_thread_request(Some(" 4 "), 8), 4, "trimmed");
+        assert_eq!(
+            raster_thread_request(Some("nonsense"), 8),
+            1,
+            "unparseable is serial"
+        );
+        assert_eq!(raster_thread_request(None, 8), 8, "unset is the core count");
+        assert_eq!(
+            raster_thread_request(None, 0),
+            1,
+            "no cores reported is serial"
         );
     }
 }
