@@ -1,6 +1,9 @@
 //! The two compositing inner loops that dominate a full repaint, as explicit
-//! SSE2 on x86-64 — **byte-identical** to the scalar loops they replace,
-//! which stay here as the reference and the fallback.
+//! SIMD — **byte-identical** to the scalar loops they replace, which stay
+//! here as the reference and the fallback. x86-64 gets SSE2 (the `sse2`
+//! module); aarch64 gets NEON (the `neon` module, the same two loops lane
+//! for lane — written and cross-type-checked, and labelled there as not yet
+//! run on ARM).
 //!
 //! # Why these two
 //!
@@ -55,7 +58,12 @@ pub(crate) fn over_layer_row(dst: &mut [Premul], src: &[Premul], alpha: f32, opa
         // SAFETY: SSE2 is part of the x86-64 baseline; see `sse2`'s doc.
         unsafe { sse2::over_layer_row(dst, src, alpha, opaque_copy) }
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: NEON is part of the aarch64 baseline; see `neon`'s doc.
+        unsafe { neon::over_layer_row(dst, src, alpha, opaque_copy) }
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     over_layer_row_scalar(dst, src, alpha, opaque_copy);
 }
 
@@ -74,7 +82,12 @@ pub(crate) fn over_layer_row_take(
         // SAFETY: SSE2 is part of the x86-64 baseline; see `sse2`'s doc.
         unsafe { sse2::over_layer_row_take(dst, src, alpha, opaque_copy) }
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: NEON is part of the aarch64 baseline; see `neon`'s doc.
+        unsafe { neon::over_layer_row_take(dst, src, alpha, opaque_copy) }
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
         over_layer_row_scalar(dst, src, alpha, opaque_copy);
         src.fill(Premul::TRANSPARENT);
@@ -90,12 +103,17 @@ pub(crate) fn over_flat_row(dst: &mut [Premul], mask: &[f32], color: Premul, rep
         // SAFETY: SSE2 is part of the x86-64 baseline; see `sse2`'s doc.
         unsafe { sse2::over_flat_row(dst, mask, color, replaces) }
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: NEON is part of the aarch64 baseline; see `neon`'s doc.
+        unsafe { neon::over_flat_row(dst, mask, color, replaces) }
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     over_flat_row_scalar(dst, mask, color, replaces);
 }
 
 /// The scalar loop `composite_layer` ran for the normal blend, verbatim.
-#[cfg_attr(target_arch = "x86_64", allow(dead_code))]
+#[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), allow(dead_code))]
 pub(crate) fn over_layer_row_scalar(
     dst: &mut [Premul],
     src: &[Premul],
@@ -116,7 +134,7 @@ pub(crate) fn over_layer_row_scalar(
 }
 
 /// The scalar loop `composite_flat` ran for the normal blend, verbatim.
-#[cfg_attr(target_arch = "x86_64", allow(dead_code))]
+#[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), allow(dead_code))]
 pub(crate) fn over_flat_row_scalar(
     dst: &mut [Premul],
     mask: &[f32],
@@ -139,6 +157,11 @@ pub(crate) fn over_flat_row_scalar(
         *px = over(src, *px);
     }
 }
+
+/// The aarch64 sibling of the module below — see `neon`'s own doc for its
+/// written-not-run status.
+#[cfg(target_arch = "aarch64")]
+mod neon;
 
 /// # Why no runtime detection
 ///
