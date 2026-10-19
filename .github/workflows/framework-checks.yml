@@ -169,8 +169,12 @@ jobs:
       - name: Mesa Vulkan, Xvfb
         run: |
           sudo apt-get update -q
+          # libxkbcommon-x11-0: winit's X11 backend dlopens
+          # libxkbcommon-x11.so at runtime, and libxkbcommon-dev does not pull
+          # it in. Without it every wait_loop scenario panicked before its
+          # window opened (run 39243920376, xkbcommon-dl x11.rs:59).
           sudo apt-get install -y -q mesa-vulkan-drivers vulkan-tools libvulkan-dev xvfb \
-            libx11-dev libxkbcommon-dev libwayland-dev
+            libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev
           echo "VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)" >> "$GITHUB_ENV"
       - name: Adapter
         run: vulkaninfo --summary
@@ -379,6 +383,14 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          # A taller screen than the default AVD's 320x640. The demo is one
+          # fixed column with "Open the menu" at its foot, below the gallery;
+          # at 640 logical px it sits off-screen, so Maestro's `tapOn: "Open
+          # the menu"` could never find it (run 39243920376). 480x960 at the
+          # default density keeps the pixel count — and the CPU path's frame
+          # cost the device suite judges — within ~2.3x of the old screen.
+          # The rest are the action's own defaults, which this line replaces.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -skin 480x960
           working-directory: vieww_base
           # One line: the action runs each line of `script` in its own shell,
           # so the environment android-env.sh sets would not reach the next.
