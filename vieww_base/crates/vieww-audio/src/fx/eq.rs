@@ -79,6 +79,25 @@ impl Band {
         }
     }
 
+    /// How many biquad sections this band contributes — the length of
+    /// [`Band::sections`] without building them, for splicing one band's
+    /// replacement into the flat section list without touching the rest.
+    fn section_count(&self) -> usize {
+        if !self.enabled {
+            return 0;
+        }
+        match self.kind {
+            BandKind::Peak
+            | BandKind::LowShelf
+            | BandKind::HighShelf
+            | BandKind::Notch
+            | BandKind::BandPass => 1,
+            BandKind::LowCut(s) | BandKind::HighCut(s) => {
+                usize::from((s / 6).clamp(2, 8) / 2 * 2) / 2
+            }
+        }
+    }
+
     fn sections(&self, rate: f32) -> Vec<Biquad> {
         if !self.enabled {
             return Vec::new();
@@ -153,12 +172,34 @@ impl ParametricEq {
         &self.bands
     }
 
-    /// Replace a band (state of other bands is kept by rebuilding fresh —
-    /// automate slowly, or use [`DynamicBand`] for fast movement).
+    /// Replace a band. Other bands' filter state is kept — their sections
+    /// are spliced around, not rebuilt — and if the replacement keeps the
+    /// band's shape (same kind and slope), its own sections are retuned in
+    /// place with their state intact, so a band moving under automation
+    /// rings on through the change instead of restarting from silence.
+    /// The full rebuild this replaced zeroed every section's delayed
+    /// samples, and each zeroing is a step at the current signal level:
+    /// the click and zipper automation shows up as. ([`DynamicBand`]
+    /// remains the tool for per-sample gain movement.)
     pub fn set_band(&mut self, i: usize, band: Band) {
-        if let Some(b) = self.bands.get_mut(i) {
-            *b = band;
-            self.rebuild();
+        let old = match self.bands.get_mut(i) {
+            Some(b) => std::mem::replace(b, band),
+            None => return,
+        };
+        let start: usize = self.bands[..i].iter().map(|b| b.section_count()).sum();
+        let old_n = old.section_count();
+        let fresh = self.bands[i].sections(self.rate);
+        if old.kind == self.bands[i].kind && old.enabled == self.bands[i].enabled {
+            // Same shape: the section list lines up with the old one, and
+            // each section takes the new coefficients but keeps its state.
+            for (s, f) in self.sections[start..start + old_n].iter_mut().zip(fresh) {
+                s.retune(f);
+            }
+        } else {
+            // Shape changed (or the band switched off): splice the new
+            // sections in; the other bands' sections — and their state —
+            // shift around untouched.
+            self.sections.splice(start..start + old_n, fresh);
         }
     }
 
@@ -481,5 +522,44 @@ mod tests {
             assert!((got - want).abs() < 0.3, "{hz}: {got} vs {want}");
         }
         assert_eq!(lp.latency(), 2047 + 256);
+    }
+
+    #[test]
+    fn set_band_keeps_the_filter_state_under_automation() {
+        // A loud tone ringing through a resonant band while another band's
+        // centre is automated every block. The full rebuild `set_band` used
+        // to do zeroes every section's state — each zeroing is a step at
+        // the current signal level, the zipper automation shows up as —
+        // while the splice this replaced it with touches only the band
+        // that moved (and retunes it in place, state intact).
+        let mut eq = ParametricEq::new(
+            vec![
+                Band::peak(1_000.0, 0.0, 8.0), // automated; 0 dB = identity
+                Band::peak(2_000.0, 6.0, 6.0), // resonant, rings on the tone
+            ],
+            RATE,
+        );
+        let tone: Vec<f32> = (0..96_000)
+            .map(|i| (2.0 * std::f32::consts::PI * 2_000.0 * i as f32 / RATE).sin() * 0.8)
+            .collect();
+        let mut y = Vec::with_capacity(tone.len());
+        for block in 0..tone.len() / 64 {
+            eq.set_band(0, Band::peak(1_000.0 + block as f32 * 7.0, 0.0, 8.0));
+            for v in &tone[block * 64..block * 64 + 64] {
+                y.push(eq.process(*v));
+            }
+        }
+        // After the first blocks the output is a steady ringing sine; a
+        // state reset every 64 samples would put a step in it at every
+        // block boundary. The tone's own per-sample slope is ~0.21 at
+        // this amplitude; a reset steps by the ringing amplitude itself.
+        let steady = &y[4_000..];
+        let step = steady
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0f32, f32::max);
+        assert!(step < 0.5, "zipper: max step {step}");
+        // And the band that moved still ended up where it was told.
+        assert!((eq.response(1_000.0 + 1_499.0 * 7.0) - 1.0).abs() < 1e-3);
     }
 }

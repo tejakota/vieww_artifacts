@@ -57,10 +57,42 @@ pub struct Biquad {
     z2: f32,
 }
 
+/// `10^(db/40)` with the gain defended: clamped to the range the RBJ
+/// formulas stay well-conditioned in (±120 dB is far past any musical
+/// use), and a non-finite gain mapped to unity rather than to NaN — one
+/// NaN gain otherwise NaNs every coefficient of the filter.
+fn db_amp(db: f32) -> f32 {
+    let db = if db.is_finite() { db } else { 0.0 }.clamp(-120.0, 120.0);
+    10f32.powf(db / 40.0)
+}
+
 impl Biquad {
     /// Design a filter at `freq` Hz, quality `q`, for `rate` Hz audio.
+    ///
+    /// The design point is defended: `freq` is clamped inside the useful
+    /// range (at or above Nyquist the RBJ formulas degenerate — `alpha`
+    /// shrinks towards zero or flips sign, and the poles close in on the
+    /// unit circle), and a non-finite `freq`, `q` or `rate` — an
+    /// automation glitch, a hostile config — falls back to a working
+    /// filter instead of poisoning every coefficient with NaN, which one
+    /// bad biquad otherwise does to the whole channel, permanently.
     #[must_use]
     pub fn new(kind: FilterKind, freq: f32, q: f32, rate: f32) -> Self {
+        let rate = if rate.is_finite() && rate >= 1.0 {
+            rate
+        } else {
+            48_000.0
+        };
+        let freq = if freq.is_finite() {
+            freq.clamp(rate * 1e-4, rate * 0.499_9)
+        } else {
+            rate * 0.25
+        };
+        let q = if q.is_finite() {
+            q.clamp(1e-4, 1e6)
+        } else {
+            std::f32::consts::FRAC_1_SQRT_2
+        };
         let w = 2.0 * PI * freq / rate;
         let (s, c) = w.sin_cos();
         let alpha = s / (2.0 * q.max(1e-4));
@@ -92,7 +124,7 @@ impl Biquad {
                 1.0 - alpha,
             ),
             FilterKind::Peaking(db) => {
-                let a = 10f32.powf(db / 40.0);
+                let a = db_amp(db);
                 (
                     1.0 + alpha * a,
                     -2.0 * c,
@@ -103,7 +135,7 @@ impl Biquad {
                 )
             }
             FilterKind::LowShelf(db) => {
-                let a = 10f32.powf(db / 40.0);
+                let a = db_amp(db);
                 let k = 2.0 * a.sqrt() * alpha;
                 (
                     a * ((a + 1.0) - (a - 1.0) * c + k),
@@ -115,7 +147,7 @@ impl Biquad {
                 )
             }
             FilterKind::HighShelf(db) => {
-                let a = 10f32.powf(db / 40.0);
+                let a = db_amp(db);
                 let k = 2.0 * a.sqrt() * alpha;
                 (
                     a * ((a + 1.0) + (a - 1.0) * c + k),
@@ -136,6 +168,19 @@ impl Biquad {
             z1: 0.0,
             z2: 0.0,
         }
+    }
+
+    /// Adopt `other`'s coefficients, keeping this filter's delayed
+    /// samples. A band redesigned under automation rings on through the
+    /// change; a replaced filter starts from silence, and the difference
+    /// is a step at the current signal level — the click and zipper
+    /// automation shows up as.
+    pub fn retune(&mut self, other: Self) {
+        self.b0 = other.b0;
+        self.b1 = other.b1;
+        self.b2 = other.b2;
+        self.a1 = other.a1;
+        self.a2 = other.a2;
     }
 
     /// Magnitude response at `freq` (linear gain).
@@ -555,5 +600,86 @@ mod tests {
             Chain::new().then(Delay::new(0.001, 1000.0, 0.0, 1.0))
         });
         assert_eq!(out.data, vec![0.0, 0.0, 1.0, -1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn biquads_survive_pathological_design_points() {
+        // A filter designed at NaN, infinity, DC, below DC, three times
+        // Nyquist, with an infinite gain or a NaN quality — automation
+        // glitches and hostile config alike — must still come out a
+        // working filter: finite coefficients and poles inside the unit
+        // circle. The unguarded RBJ formulas produced NaN that stayed in
+        // the pipeline forever (and gains past ±120 dB overflowed it).
+        let pole_radius = |b: &Biquad| -> f32 {
+            let d = b.a1 * b.a1 - 4.0 * b.a2;
+            if d < 0.0 {
+                // Complex-conjugate pair: the product of the roots is a2.
+                b.a2.max(0.0).sqrt()
+            } else {
+                let s = d.sqrt();
+                ((-b.a1 + s) / 2.0).abs().max(((-b.a1 - s) / 2.0).abs())
+            }
+        };
+        let cases = [
+            (FilterKind::LowPass, f32::NAN, 0.707),
+            (FilterKind::LowPass, f32::INFINITY, 0.707),
+            (FilterKind::LowPass, 0.0, 0.707),
+            (FilterKind::LowPass, -1000.0, 0.707),
+            (FilterKind::HighPass, 150_000.0, 0.707), // rate is 48 kHz
+            (FilterKind::BandPass, 24_000.0, 0.707),  // at Nyquist
+            (FilterKind::Peaking(f32::NAN), 1_000.0, 0.707),
+            (FilterKind::Peaking(1e6), 1_000.0, 0.707),
+            (FilterKind::LowShelf(f32::INFINITY), 100.0, f32::NAN),
+            (FilterKind::Notch, 1_000.0, -5.0),
+        ];
+        for (kind, f, q) in cases {
+            for rate in [48_000.0, f32::NAN, 0.0] {
+                let b = Biquad::new(kind, f, q, rate);
+                let r = pole_radius(&b);
+                assert!(
+                    r.is_finite() && r < 1.0,
+                    "{kind:?} at {f}/{q}/{rate}: poles at {r}"
+                );
+                assert!(
+                    b.magnitude(1_000.0, 48_000.0).is_finite(),
+                    "{kind:?} at {f}/{q}/{rate}: response"
+                );
+            }
+        }
+        // And a driven filter stays finite (a NaN coefficient would
+        // poison the output immediately).
+        let mut b = Biquad::new(FilterKind::LowPass, f32::NAN, f32::NAN, f32::NAN);
+        let x = sine(1_000.0, 48_000.0, 100);
+        for v in &x {
+            assert!(b.process(*v).is_finite());
+        }
+    }
+
+    #[test]
+    fn retuning_keeps_the_filter_ringing() {
+        // A resonant band-pass rung up to steady state, then retuned: the
+        // output carries on from where it was. A replaced filter starts
+        // from silence, and the difference is a step to (near) zero — the
+        // click automation shows up as. (997 Hz: an integer-aligned tone
+        // puts every 48th sample at the same phase, and the single sample
+        // this measures would land on a zero crossing.)
+        let mut b = Biquad::new(FilterKind::BandPass, 997.0, 20.0, 48_000.0);
+        let x = sine(997.0, 48_000.0, 48_000);
+        for v in &x[..24_000] {
+            let _ = b.process(*v);
+        }
+        let steady = x[23_520..24_000]
+            .iter()
+            .map(|v| b.process(*v).abs())
+            .fold(0.0f32, f32::max);
+        assert!(steady > 0.1, "rung up: {steady}");
+        b.retune(Biquad::new(FilterKind::BandPass, 1_097.0, 20.0, 48_000.0));
+        let after: Vec<f32> = x[24_000..24_060].iter().map(|v| b.process(*v)).collect();
+        // The state was kept: the output steps on smoothly at the same
+        // order of magnitude, not from silence.
+        assert!(
+            after.iter().any(|v| v.abs() > steady * 0.5),
+            "kept ringing: {after:?} after {steady}"
+        );
     }
 }

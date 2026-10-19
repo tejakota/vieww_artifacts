@@ -64,8 +64,8 @@ pub enum Dest {
 pub enum Key {
     /// A track's raw input.
     Input(usize),
-    /// A bus's signal after its inserts (keys a bus only; the keying bus
-    /// is processed first).
+    /// A bus's signal after its inserts (keys a bus or the master; the
+    /// keying bus is processed first).
     Bus(usize),
 }
 
@@ -206,6 +206,11 @@ struct Slot {
     key: Option<Key>,
     bypass: bool,
     bypass_delay: Comp,
+    /// This insert's own sidechain buffer, filled from its key's signal
+    /// before the node's inserts run. One shared buffer — what this
+    /// replaced — served a channel's second keyed insert the first one's
+    /// key, whatever its own said.
+    key_buf: Vec<f32>,
 }
 
 impl std::fmt::Debug for Slot {
@@ -281,6 +286,39 @@ fn db(x: f32) -> f32 {
     }
 }
 
+/// Fill a solo summary — the shared body of the per-block refresh and the
+/// per-query `audible`: whether any solo is down at all, which tracks
+/// reach a soloed bus (`track`), and which buses a soloed track or soloed
+/// bus reaches (`bus`). Quadratic in channel count; the render path pays
+/// it once per block, the UI per query — not per channel per block, as
+/// the old per-channel rescan did.
+fn solo_into(
+    tracks: &[Node],
+    buses: &[Node],
+    feeds: &[bool],
+    track: &mut Vec<bool>,
+    bus: &mut Vec<bool>,
+) -> bool {
+    let (nt, nb) = (tracks.len(), buses.len());
+    let any = tracks.iter().any(|n| n.params.solo) || buses.iter().any(|n| n.params.solo);
+    track.clear();
+    track.resize(nt, false);
+    bus.clear();
+    bus.resize(nb, false);
+    if any {
+        for t in 0..nt {
+            track[t] = (0..nb).any(|b| buses[b].params.solo && feeds[t * nb + b]);
+        }
+        for b in 0..nb {
+            bus[b] = (0..nt).any(|t| tracks[t].params.solo && feeds[t * nb + b])
+                || (0..nb).any(|s| {
+                    buses[s].params.solo && (feeds[(nt + s) * nb + b] || feeds[(nt + b) * nb + s])
+                });
+        }
+    }
+    any
+}
+
 /// The mixer.
 #[derive(Debug)]
 pub struct Mixer {
@@ -292,7 +330,17 @@ pub struct Mixer {
     bus_order: Vec<usize>,
     bus_in: Vec<Vec<f32>>,
     master_in: Vec<f32>,
-    key_buf: Vec<f32>,
+    /// Each track's input format, refreshed once per block so an insert's
+    /// input key can read any track's input without re-borrowing the
+    /// track being processed.
+    track_mono: Vec<bool>,
+    /// Solo reachability for the block in flight: whether any solo is
+    /// down, which tracks reach a soloed bus, and which buses are reached
+    /// by a soloed track or soloed bus. Refreshed once per block — the
+    /// per-channel rescan this replaced made every block O(channels²).
+    solo_any: bool,
+    solo_track: Vec<bool>,
+    solo_bus: Vec<bool>,
     /// `feeds[node * n_bus + b]`: node (tracks then buses) reaches bus b.
     feeds: Vec<bool>,
     loudness: LoudnessMeter,
@@ -313,7 +361,10 @@ impl Mixer {
             bus_order: Vec::new(),
             bus_in: Vec::new(),
             master_in: vec![0.0; MAX_BLOCK * 2],
-            key_buf: vec![0.0; MAX_BLOCK * 2],
+            track_mono: Vec::new(),
+            solo_any: false,
+            solo_track: Vec::new(),
+            solo_bus: Vec::new(),
             feeds: Vec::new(),
             loudness: LoudnessMeter::new(crate::channels::Layout::Stereo, rate),
         }
@@ -526,6 +577,7 @@ impl Mixer {
             key,
             bypass: false,
             bypass_delay: Comp::default(),
+            key_buf: vec![0.0; MAX_BLOCK * 2],
         });
         let idx = n.inserts.len() - 1;
         self.rebuild().map(|()| idx).inspect_err(|_| {
@@ -723,39 +775,47 @@ impl Mixer {
         self.master.latency
     }
 
-    /// Whether a channel is heard, given mutes and solos.
+    /// Whether a channel is heard, given mutes and solos. A UI query:
+    /// answers for the state right now, building this call's own solo
+    /// summary — allocating, which is fine off the render path. The render
+    /// path cannot afford the quadratic rescan per channel per block, so
+    /// `block` refreshes its own summary once and answers in constant
+    /// time.
     #[must_use]
     pub fn audible(&self, ch: Channel) -> bool {
-        let nt = self.tracks.len();
-        let nb = self.buses.len();
+        let mut track = Vec::with_capacity(self.tracks.len());
+        let mut bus = Vec::with_capacity(self.buses.len());
+        let any = self.solo_into(&mut track, &mut bus);
+        self.audible_with(ch, any, &track, &bus)
+    }
+
+    /// Whether a channel is heard, answered against a solo summary.
+    fn audible_with(&self, ch: Channel, any: bool, track: &[bool], bus: &[bool]) -> bool {
         let Ok(node) = self.node(ch) else {
             return false;
         };
         if node.params.mute {
             return false;
         }
-        let soloed_tracks = || {
-            self.tracks
-                .iter()
-                .enumerate()
-                .filter(|(_, n)| n.params.solo)
-        };
-        let soloed_buses = || self.buses.iter().enumerate().filter(|(_, n)| n.params.solo);
-        let any = soloed_tracks().next().is_some() || soloed_buses().next().is_some();
         if !any || node.params.solo || node.params.solo_safe {
             return true;
         }
         match ch {
             Channel::Master => true,
-            Channel::Track(t) => soloed_buses().any(|(b, _)| self.feeds[t * nb + b]),
-            Channel::Bus(b) => {
-                // Downstream of a soloed channel, or upstream of a soloed bus.
-                soloed_tracks().any(|(t, _)| self.feeds[t * nb + b])
-                    || soloed_buses().any(|(s, _)| {
-                        self.feeds[(nt + s) * nb + b] || self.feeds[(nt + b) * nb + s]
-                    })
-            }
+            Channel::Track(t) => track[t],
+            // Downstream of a soloed channel, or upstream of a soloed bus.
+            Channel::Bus(b) => bus[b],
         }
+    }
+
+    /// Answer the solo questions `audible` asks, once for every channel:
+    /// whether any solo is down at all, which tracks reach a soloed bus,
+    /// and which buses a soloed track or soloed bus reaches. Filling is
+    /// quadratic in channel count — once per block (or per UI query) that
+    /// is nothing; per channel per block, as the old `audible` rescan was,
+    /// it dominated the whole render on channel-count-heavy mixes.
+    fn solo_into(&self, track: &mut Vec<bool>, bus: &mut Vec<bool>) -> bool {
+        solo_into(&self.tracks, &self.buses, &self.feeds, track, bus)
     }
 
     /// A channel's post-fader peak meter, `(left dB, right dB)`.
@@ -805,15 +865,30 @@ impl Mixer {
             b[..n * 2].fill(0.0);
         }
         self.master_in[..n * 2].fill(0.0);
+        // Answered once for the block: every track's input format, and
+        // the solo summary the per-channel `audible` rescan used to
+        // recompute per channel — quadratically.
+        self.track_mono.clear();
+        self.track_mono
+            .extend(self.tracks.iter().map(|t| t.params.mono_input));
+        self.solo_any = solo_into(
+            &self.tracks,
+            &self.buses,
+            &self.feeds,
+            &mut self.solo_track,
+            &mut self.solo_bus,
+        );
 
         // Tracks.
         for t in 0..self.tracks.len() {
-            let on = self.audible(Channel::Track(t));
+            let on = self.audible_with(
+                Channel::Track(t),
+                self.solo_any,
+                &self.solo_track,
+                &self.solo_bus,
+            );
             let vca = self.vca_db(&self.tracks[t].params);
-            let (before, rest) = self.tracks.split_at_mut(t);
-            let Some((node, after)) = rest.split_first_mut() else {
-                continue;
-            };
+            let node = &mut self.tracks[t];
             let mono = node.params.mono_input;
             let src = inputs.get(t).copied().unwrap_or(&[]);
             for f in 0..n {
@@ -821,23 +896,7 @@ impl Mixer {
                 node.pre[f * 2] = l;
                 node.pre[f * 2 + 1] = r;
             }
-            let key_mono = |k: usize| {
-                if k < t {
-                    before[k].params.mono_input
-                } else {
-                    after.get(k - t - 1).is_some_and(|n| n.params.mono_input)
-                }
-            };
-            run_inserts(node, n, |key, f| match key {
-                // A key is read in its own track's format.
-                Key::Input(k) if k == t => read_input(src, mono, offset + f),
-                Key::Input(k) => read_input(
-                    inputs.get(k).copied().unwrap_or(&[]),
-                    key_mono(k),
-                    offset + f,
-                ),
-                Key::Bus(_) => (0.0, 0.0),
-            });
+            run_inserts(node, n, offset, inputs, &self.track_mono);
             finish_node(node, n, on, vca, mono);
             distribute(node, n, &mut self.bus_in, &mut self.master_in);
         }
@@ -845,38 +904,59 @@ impl Mixer {
         // Buses, in dependency order.
         for oi in 0..self.bus_order.len() {
             let b = self.bus_order[oi];
-            let on = self.audible(Channel::Bus(b));
+            let on = self.audible_with(
+                Channel::Bus(b),
+                self.solo_any,
+                &self.solo_track,
+                &self.solo_bus,
+            );
             let vca = self.vca_db(&self.buses[b].params);
-            // Keys from other buses: copy before borrowing this one.
-            let key_bus = self.buses[b].inserts.iter().find_map(|s| match s.key {
-                Some(Key::Bus(k)) => Some(k),
-                _ => None,
-            });
-            if let Some(k) = key_bus {
-                let (src, dst) = (&self.buses[k].pre, &mut self.key_buf);
-                dst[..n * 2].copy_from_slice(&src[..n * 2]);
-            }
-            let node = &mut self.buses[b];
+            // Each keyed insert's own buffer is filled from its key bus's
+            // `pre` — the keying bus is earlier in the order, so that is
+            // this block's signal — before this bus is borrowed for
+            // processing. The single shared buffer this replaced served
+            // every keyed insert on the bus the first one's key, whatever
+            // the others asked for.
+            let (before, rest) = self.buses.split_at_mut(b);
+            let Some((node, after)) = rest.split_first_mut() else {
+                continue; // bus indices are validated by rebuild
+            };
             node.pre[..n * 2].copy_from_slice(&self.bus_in[b][..n * 2]);
-            let key_buf = &self.key_buf;
-            let tracks = &self.tracks;
-            run_inserts(node, n, |key, f| match key {
-                Key::Input(k) => read_input(
-                    inputs.get(k).copied().unwrap_or(&[]),
-                    tracks.get(k).is_some_and(|t| t.params.mono_input),
-                    offset + f,
-                ),
-                Key::Bus(_) => (key_buf[f * 2], key_buf[f * 2 + 1]),
-            });
+            for s in node.inserts.iter_mut() {
+                if let Some(Key::Bus(k)) = s.key {
+                    if k == b {
+                        continue; // self-keys are refused at add_insert
+                    }
+                    let src = if k < b {
+                        &before[k].pre
+                    } else {
+                        &after[k - b - 1].pre
+                    };
+                    s.key_buf[..n * 2].copy_from_slice(&src[..n * 2]);
+                }
+            }
+            run_inserts(node, n, offset, inputs, &self.track_mono);
             finish_node(node, n, on, vca, false);
             distribute(node, n, &mut self.bus_in, &mut self.master_in);
         }
 
-        // Master.
+        // Master. Its keyed inserts were silently dead before — every key
+        // read zeros; they key off buses (all processed, this block) and
+        // raw track inputs, like a bus's.
         let vca = self.vca_db(&self.master.params);
         let m = &mut self.master;
         m.pre[..n * 2].copy_from_slice(&self.master_in[..n * 2]);
-        run_inserts(m, n, |_, _| (0.0, 0.0));
+        {
+            let buses = &self.buses;
+            for s in m.inserts.iter_mut() {
+                if let Some(Key::Bus(k)) = s.key {
+                    if let Some(src) = buses.get(k) {
+                        s.key_buf[..n * 2].copy_from_slice(&src.pre[..n * 2]);
+                    }
+                }
+            }
+        }
+        run_inserts(m, n, offset, inputs, &self.track_mono);
         let on = !m.params.mute;
         finish_node(m, n, on, vca, false);
         out[..n * 2].copy_from_slice(&m.post[..n * 2]);
@@ -901,8 +981,11 @@ fn read_input(src: &[f32], mono: bool, i: usize) -> (f32, f32) {
     }
 }
 
-/// Run a node's inserts over `pre` in place.
-fn run_inserts(node: &mut Node, n: usize, key: impl Fn(Key, usize) -> (f32, f32)) {
+/// Run a node's inserts over `pre` in place. An input key reads the keying
+/// track's raw input, in that track's own format (`mono`); a bus key reads
+/// the insert's own `key_buf`, filled from the keying bus's `pre` before
+/// this node was borrowed.
+fn run_inserts(node: &mut Node, n: usize, offset: usize, inputs: &[&[f32]], mono: &[bool]) {
     for f in 0..n {
         let (mut l, mut r) = (node.pre[f * 2], node.pre[f * 2 + 1]);
         if node.params.invert[0] {
@@ -915,7 +998,19 @@ fn run_inserts(node: &mut Node, n: usize, key: impl Fn(Key, usize) -> (f32, f32)
             (l, r) = if s.bypass {
                 s.bypass_delay.tick(l, r)
             } else if let Some(k) = s.key {
-                s.fx.process_stereo_with_key(l, r, key(k, f))
+                let key = match k {
+                    // A key is read in its own track's format.
+                    Key::Input(i) => read_input(
+                        inputs.get(i).copied().unwrap_or(&[]),
+                        mono.get(i).copied().unwrap_or(false),
+                        offset + f,
+                    ),
+                    // Tracks refuse bus keys at `add_insert`, so this arm
+                    // runs for buses and the master, whose key buffers
+                    // `block` fills.
+                    Key::Bus(_) => (s.key_buf[f * 2], s.key_buf[f * 2 + 1]),
+                };
+                s.fx.process_stereo_with_key(l, r, key)
             } else {
                 s.fx.process_stereo(l, r)
             };
@@ -1249,6 +1344,110 @@ mod tests {
                 Some(Key::Bus(0))
             ),
             Err(MixerError::KeyFromBusOnTrack)
+        );
+    }
+
+    #[test]
+    fn each_keyed_insert_on_a_bus_gets_its_own_key() {
+        // Two keyed compressors on one bus, keyed by different buses. The
+        // single shared key buffer this fixed served both the first
+        // insert's key — so with the first key silent and the second loud,
+        // neither ducked; each insert now reads its own.
+        let mut m = Mixer::new(48_000);
+        let music = m.add_track("music");
+        let kick_a = m.add_track("kick a");
+        let kick_b = m.add_track("kick b");
+        let bed = m.add_bus("bed"); // bus 0: the keyed inserts
+        let ka = m.add_bus("ka"); // bus 1: first insert's key
+        let kb = m.add_bus("kb"); // bus 2: second insert's key
+        let sink = m.add_bus("sink"); // bus 3: muted — the keys go nowhere
+        m.route(music, Dest::Bus(0)).unwrap();
+        m.route(kick_a, Dest::Bus(1)).unwrap();
+        m.route(kick_b, Dest::Bus(2)).unwrap();
+        m.route(ka, Dest::Bus(3)).unwrap();
+        m.route(kb, Dest::Bus(3)).unwrap();
+        m.params_mut(sink).unwrap().mute = true;
+        let comp = || Dynamics::compressor(-30.0, 20.0, 0.001, 0.05, 48_000.0);
+        m.add_insert(bed, Box::new(comp()), Some(Key::Bus(1)))
+            .unwrap();
+        m.add_insert(bed, Box::new(comp()), Some(Key::Bus(2)))
+            .unwrap();
+        let p = sine(200.0, 9_600, 0.3);
+        let quiet = vec![0.0f32; 9_600 * 2];
+        let kick = sine(60.0, 9_600, 0.9);
+        let rms = |v: &[f32]| (v.iter().map(|x| x * x).sum::<f32>() / v.len() as f32).sqrt();
+        let free = run(&mut m, &[&p, &quiet, &quiet]);
+        // The second insert's key is loud, the first's silent: the bed
+        // ducks through the second compressor.
+        let ducked_by_b = run(&mut m, &[&p, &quiet, &kick]);
+        assert!(
+            rms(&ducked_by_b[4_800..]) < rms(&free[4_800..]) * 0.3,
+            "second insert's own key: {} vs {}",
+            rms(&ducked_by_b[4_800..]),
+            rms(&free[4_800..])
+        );
+        // And symmetrically, the first's key loud and the second's silent.
+        let ducked_by_a = run(&mut m, &[&p, &kick, &quiet]);
+        assert!(
+            rms(&ducked_by_a[4_800..]) < rms(&free[4_800..]) * 0.3,
+            "first insert's own key: {} vs {}",
+            rms(&ducked_by_a[4_800..]),
+            rms(&free[4_800..])
+        );
+    }
+
+    #[test]
+    fn master_inserts_take_keys() {
+        // A keyed insert on the master — a broadcast ducker. Every key
+        // used to read exact zeros here, whatever it asked for.
+        let mut m = Mixer::new(48_000);
+        m.add_track("pad");
+        let dj = m.add_track("dj"); // muted: keys the master, is not summed
+        m.params_mut(dj).unwrap().mute = true;
+        let comp = Dynamics::compressor(-30.0, 20.0, 0.001, 0.05, 48_000.0);
+        m.add_insert(Channel::Master, Box::new(comp), Some(Key::Input(1)))
+            .unwrap();
+        let p = sine(200.0, 9_600, 0.3);
+        let quiet = vec![0.0f32; 9_600 * 2];
+        let speech = sine(400.0, 9_600, 0.9);
+        let free = run(&mut m, &[&p, &quiet]);
+        let ducked = run(&mut m, &[&p, &speech]);
+        let rms = |v: &[f32]| (v.iter().map(|x| x * x).sum::<f32>() / v.len() as f32).sqrt();
+        assert!(
+            rms(&ducked[4_800..]) < rms(&free[4_800..]) * 0.3,
+            "the master ducks on its key: {} vs {}",
+            rms(&ducked[4_800..]),
+            rms(&free[4_800..])
+        );
+    }
+
+    #[test]
+    fn master_inserts_key_off_buses_too() {
+        // Same, keyed by a bus's signal instead of a raw input: the voice
+        // bus feeds a muted sink (so the master sums none of it), and its
+        // pre keys the ducker.
+        let mut m = Mixer::new(48_000);
+        m.add_track("pad");
+        let dj = m.add_track("dj");
+        let voice = m.add_bus("voice"); // bus 0: the key
+        let sink = m.add_bus("sink"); // bus 1: muted, voice goes nowhere
+        m.route(dj, Dest::Bus(0)).unwrap();
+        m.route(voice, Dest::Bus(1)).unwrap();
+        m.params_mut(sink).unwrap().mute = true;
+        let comp = Dynamics::compressor(-30.0, 20.0, 0.001, 0.05, 48_000.0);
+        m.add_insert(Channel::Master, Box::new(comp), Some(Key::Bus(0)))
+            .unwrap();
+        let p = sine(200.0, 9_600, 0.3);
+        let quiet = vec![0.0f32; 9_600 * 2];
+        let speech = sine(400.0, 9_600, 0.9);
+        let free = run(&mut m, &[&p, &quiet]);
+        let ducked = run(&mut m, &[&p, &speech]);
+        let rms = |v: &[f32]| (v.iter().map(|x| x * x).sum::<f32>() / v.len() as f32).sqrt();
+        assert!(
+            rms(&ducked[4_800..]) < rms(&free[4_800..]) * 0.3,
+            "the master ducks on the bus key: {} vs {}",
+            rms(&ducked[4_800..]),
+            rms(&free[4_800..])
         );
     }
 

@@ -79,6 +79,14 @@ pub struct Spatializer {
     /// Head radius in metres (Woodworth).
     pub head_radius: f32,
     pub speed_of_sound: f32,
+    /// The cues at the end of the last [`Spatializer::render`], carried so
+    /// the next buffer can ramp from them — a source moved between
+    /// buffers otherwise steps every cue at the boundary, and the gain
+    /// step is a click at whatever the last sample was.
+    smooth: Option<CueSmooth>,
+    /// The head-shadow one-pole's state, carried across renders so the
+    /// shadowed ear's low-pass does not restart from silence each buffer.
+    shadow_state: (f32, f32),
 }
 
 fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
@@ -113,6 +121,8 @@ impl Default for Spatializer {
             },
             head_radius: 0.0875,
             speed_of_sound: 343.0,
+            smooth: None,
+            shadow_state: (0.0, 0.0),
         }
     }
 }
@@ -131,6 +141,28 @@ pub struct Cues {
     pub shadow: (f32, f32),
     /// Pitch ratio from Doppler.
     pub doppler: f32,
+}
+
+impl Cues {
+    /// The parameters that render per-sample, for ramping across a
+    /// buffer from the previous buffer's values.
+    fn smoothed(&self) -> CueSmooth {
+        CueSmooth {
+            gain: self.gain,
+            shadow: self.shadow,
+            doppler: self.doppler,
+            itd: self.itd,
+        }
+    }
+}
+
+/// The per-sample render parameters, rampable between buffers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CueSmooth {
+    gain: (f32, f32),
+    shadow: (f32, f32),
+    doppler: f32,
+    itd: f32,
 }
 
 impl Spatializer {
@@ -178,9 +210,14 @@ impl Spatializer {
     }
 
     /// Position a mono buffer: gains, ITD delay, head shadow and Doppler.
-    #[must_use]
-    pub fn render(&self, mono: &Samples) -> Samples {
+    /// The per-sample parameters ramp across the buffer from wherever the
+    /// previous buffer left off, so a source moved between buffers glides
+    /// instead of stepping — the gain step is a click at whatever the last
+    /// sample was. (First render: no ramp, nothing to come from.)
+    pub fn render(&mut self, mono: &Samples) -> Samples {
         let c = self.cues();
+        let to = c.smoothed();
+        let from = self.smooth.replace(to).unwrap_or(to);
         let rate = mono.rate;
         let src: Vec<f32> = if mono.channels == 2 {
             mono.data
@@ -190,13 +227,15 @@ impl Spatializer {
         } else {
             mono.data.clone()
         };
-        // Doppler: resample by the pitch ratio.
+        // Doppler: resample by the pitch ratio. The length follows the
+        // buffer's target ratio; the read position accumulates the ramped
+        // one.
         #[allow(
             clippy::cast_precision_loss,
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss
         )]
-        let n = (src.len() as f32 / c.doppler).round() as usize;
+        let n = (src.len() as f32 / to.doppler).round() as usize;
         let at = |pos: f32| -> f32 {
             if pos < 0.0 {
                 return 0.0;
@@ -209,26 +248,39 @@ impl Spatializer {
             let b = src.get(i + 1).copied().unwrap_or(0.0);
             a + (b - a) * f
         };
+        // The ITD delay per ear, at the buffer's ends for ramping.
         #[allow(clippy::cast_precision_loss)]
-        let delay = c.itd * rate as f32;
-        let (dl, dr) = if delay > 0.0 {
-            (delay, 0.0)
-        } else {
-            (0.0, -delay)
+        let split = |itd: f32| -> (f32, f32) {
+            let delay = itd * rate as f32;
+            if delay > 0.0 {
+                (delay, 0.0)
+            } else {
+                (0.0, -delay)
+            }
         };
+        let (dl0, dr0) = split(from.itd);
+        let (dl1, dr1) = split(to.itd);
+        let (mut lp_l, mut lp_r) = self.shadow_state;
         let mut out = Vec::with_capacity(n * 2);
-        let (mut lp_l, mut lp_r) = (0.0f32, 0.0f32);
+        let mut p = 0.0f32;
         for i in 0..n {
             #[allow(clippy::cast_precision_loss)]
-            let p = i as f32 * c.doppler;
-            let (mut l, mut r) = (at(p - dl * c.doppler), at(p - dr * c.doppler));
-            lp_l += (1.0 - c.shadow.0) * (l - lp_l);
-            lp_r += (1.0 - c.shadow.1) * (r - lp_r);
-            l = lp_l * c.gain.0;
-            r = lp_r * c.gain.1;
+            let t = (i + 1) as f32 / n.max(1) as f32;
+            let ratio = from.doppler + (to.doppler - from.doppler) * t;
+            let dl = dl0 + (dl1 - dl0) * t;
+            let dr = dr0 + (dr1 - dr0) * t;
+            let (mut l, mut r) = (at(p - dl * ratio), at(p - dr * ratio));
+            let sh_l = from.shadow.0 + (to.shadow.0 - from.shadow.0) * t;
+            let sh_r = from.shadow.1 + (to.shadow.1 - from.shadow.1) * t;
+            lp_l += (1.0 - sh_l) * (l - lp_l);
+            lp_r += (1.0 - sh_r) * (r - lp_r);
+            l = lp_l * (from.gain.0 + (to.gain.0 - from.gain.0) * t);
+            r = lp_r * (from.gain.1 + (to.gain.1 - from.gain.1) * t);
             out.push(l);
             out.push(r);
+            p += ratio;
         }
+        self.shadow_state = (lp_l, lp_r);
         Samples::stereo(out, rate)
     }
 }
@@ -270,7 +322,7 @@ mod tests {
 
     #[test]
     fn a_source_on_the_right_is_louder_and_earlier_on_the_right() {
-        let s = Spatializer {
+        let mut s = Spatializer {
             source: [2.0, 0.0, 0.0],
             ..Spatializer::default()
         };
@@ -295,7 +347,7 @@ mod tests {
         assert!(e(1) > e(0) * 4.0);
         // The right ear leads: its first non-zero sample comes first (a
         // source at 45° so the far ear is not silent).
-        let s45 = Spatializer {
+        let mut s45 = Spatializer {
             source: [1.0, 0.0, -1.0],
             ..Spatializer::default()
         };
@@ -330,5 +382,41 @@ mod tests {
             ..facing_away
         };
         assert!(facing.cues().gain.0 > facing_away.cues().gain.0 * 5.0);
+    }
+
+    #[test]
+    fn a_source_moving_between_buffers_glides_instead_of_clicking() {
+        // One tone split across two buffers, with the source teleported
+        // from 1 m to 10 m between them (inverse distance: gain 1.0 →
+        // 0.1). The per-buffer cues this fixed applied the far gain from
+        // the first sample of the new buffer — a step of ~0.9 × the
+        // signal at the boundary, a click on every move. The carried cues
+        // ramp across the buffer instead: the head of the new buffer
+        // still sounds at (nearly) the old gain, and its tail at the new.
+        let mut s = Spatializer {
+            source: [0.0, 0.0, -1.0],
+            ..Spatializer::default()
+        };
+        let tone: Vec<f32> = (0..4_800)
+            .map(|i| (i as f32 * 0.05).sin() * 0.8) // ≈382 Hz: slope ≈ 0.04
+            .collect();
+        let (a, b) = tone.split_at(2_400);
+        let buf1 = s.render(&Samples::mono(a.to_vec(), 48_000));
+        s.source = [0.0, 0.0, -10.0];
+        let buf2 = s.render(&Samples::mono(b.to_vec(), 48_000));
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        // Azimuth 0: both ears carry the same gain, so the interleaved
+        // channels average out to the same answer.
+        let near = rms(&buf1.data[..960]); // first 10 ms at 1 m
+        let head = rms(&buf2.data[..960]); // the moved buffer's first 10 ms
+        let tail = rms(&buf2.data[buf2.data.len() - 960..]); // and its last
+                                                             // The new buffer opens at (nearly) the old gain — 10 ms in, the
+                                                             // ramp is only ~1% of the way down — not at the far one (0.1×).
+        assert!(head > near * 0.7, "boundary glide: {head} vs {near}");
+        // And by the end of the buffer it has arrived at the far gain
+        // (0.1 × the tone's amplitude there).
+        let want = rms(&b[b.len() - 480..]) * 0.1;
+        assert!(tail < 2.0 * want, "arrives far: {tail} vs {want}");
+        assert!(tail < near * 0.35, "quiet at the far end: {tail} vs {near}");
     }
 }

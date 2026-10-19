@@ -144,6 +144,11 @@ pub struct Convolver {
     output: Vec<f64>,
     out_pos: usize,
     acc: Vec<Complex>,
+    /// Scratch for the input FFT, allocated once — `run_block` used to
+    /// collect a fresh `Vec` every block and drop the one it displaced
+    /// from the frequency-delay line: an allocate-and-free per block in
+    /// the audio path.
+    fft_in: Vec<Complex>,
 }
 
 impl Convolver {
@@ -180,6 +185,7 @@ impl Convolver {
             output: vec![0.0; block],
             out_pos: 0,
             acc: vec![Complex::ZERO; n],
+            fft_in: vec![Complex::ZERO; n],
         }
     }
 
@@ -191,16 +197,18 @@ impl Convolver {
 
     fn run_block(&mut self) {
         let n = self.block * 2;
-        let mut buf: Vec<Complex> = self
-            .prev
-            .iter()
-            .chain(&self.input)
-            .map(|v| Complex::new(*v, 0.0))
-            .collect();
-        self.plan.forward(&mut buf);
+        // The previous block's tail then this block's, into the scratch
+        // that was allocated once — not a fresh Vec per block.
+        for (d, s) in self.fft_in.iter_mut().zip(&self.prev) {
+            *d = Complex::new(*s, 0.0);
+        }
+        for (d, s) in self.fft_in[self.block..].iter_mut().zip(&self.input) {
+            *d = Complex::new(*s, 0.0);
+        }
+        self.plan.forward(&mut self.fft_in);
         let p = self.fdl.len();
         self.fdl_head = (self.fdl_head + p - 1) % p;
-        self.fdl[self.fdl_head] = buf;
+        self.fdl[self.fdl_head].copy_from_slice(&self.fft_in);
         self.acc.fill(Complex::ZERO);
         for (k, h) in self.parts.iter().enumerate() {
             let x = &self.fdl[(self.fdl_head + k) % p];

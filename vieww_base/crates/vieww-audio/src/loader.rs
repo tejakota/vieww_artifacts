@@ -208,6 +208,12 @@ fn run(job: &Job, cache: &Cache, inflight: &Inflight) {
     })();
     if let (Some(k), Ok(d)) = (&key, &result) {
         if let Ok(mut c) = cache.lock() {
+            // The insert is also the cheap moment to sweep: loads are rare
+            // and IO-bound, and every entry whose last holder dropped in
+            // the meantime goes out with this one's arrival. Without a
+            // sweep the map only ever grows — one dead key per file ever
+            // loaded, held for the loader's lifetime.
+            c.retain(|_, w| w.strong_count() > 0);
             c.insert(k.clone(), Arc::downgrade(d));
         }
     }
@@ -314,14 +320,18 @@ impl Loader {
         self.submit(Source::Bytes(bytes), opts)
     }
 
-    /// A cached decode of `path`, if someone still holds it.
+    /// A cached decode of `path`, if someone still holds it. A dead entry
+    /// is removed on sight rather than left to accumulate.
     #[must_use]
     pub fn cached(&self, path: impl AsRef<Path>) -> Option<Arc<Decoded>> {
-        self.cache
-            .lock()
-            .ok()?
-            .get(path.as_ref())
-            .and_then(Weak::upgrade)
+        let mut c = self.cache.lock().ok()?;
+        let d = c.get(path.as_ref()).and_then(Weak::upgrade);
+        if d.is_none() {
+            // Absent or dead — the remove is a no-op in the first case, a
+            // prune in the second.
+            c.remove(path.as_ref());
+        }
+        d
     }
 
     /// Forget the cache (buffers in use stay alive with their users).
@@ -329,6 +339,13 @@ impl Loader {
         if let Ok(mut c) = self.cache.lock() {
             c.clear();
         }
+    }
+
+    /// How many entries the cache holds, dead or alive — the growth the
+    /// pruning keeps in check.
+    #[cfg(test)]
+    fn cache_entries(&self) -> usize {
+        self.cache.lock().map(|c| c.len()).unwrap_or(0)
     }
 }
 
@@ -672,6 +689,48 @@ mod tests {
             std::thread::sleep(Duration::from_millis(1));
         }
         assert!(loader.cached(fixture("src.ogg")).is_none());
+    }
+
+    #[test]
+    fn dead_cache_entries_are_pruned_not_accumulated() {
+        // The cache is weak, but a dead entry used to stay in the map
+        // forever — one stale key per file ever loaded, held for the
+        // loader's lifetime. Now a lookup removes what it cannot upgrade,
+        // and every completed load sweeps the rest.
+        let loader = Loader::new(1);
+        let (p1, _) = temp_wav("prune1", 100, 1, SampleFormat::F32);
+        let (p2, _) = temp_wav("prune2", 100, 1, SampleFormat::F32);
+        let a = loader.load(&p1, LoadOptions::default());
+        let d1 = a.wait(Duration::from_secs(30)).unwrap().unwrap();
+        assert_eq!(loader.cache_entries(), 1, "held: in the cache");
+        drop((a, d1));
+        let t0 = std::time::Instant::now();
+        while loader.cached(&p1).is_some() && t0.elapsed().as_secs() < 5 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        // The lookup pruned the dead entry on sight.
+        assert_eq!(loader.cache_entries(), 0, "pruned by the lookup");
+        // And a completed load sweeps entries nobody looked up: hold p1
+        // again, drop it without a lookup, then load p2 — the sweep at
+        // p2's insert retires p1's dead entry with it.
+        let a = loader.load(&p1, LoadOptions::default());
+        let d1 = a.wait(Duration::from_secs(30)).unwrap().unwrap();
+        drop((a, d1));
+        let t0 = std::time::Instant::now();
+        while loader.cache_entries() == 0 && t0.elapsed().as_secs() < 5 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(loader.cache_entries(), 1, "dead but still listed");
+        let b = loader.load(&p2, LoadOptions::default());
+        let d2 = b.wait(Duration::from_secs(30)).unwrap().unwrap();
+        assert_eq!(
+            loader.cache_entries(),
+            1,
+            "the load swept the dead entry: only p2 remains"
+        );
+        assert!(loader.cached(&p2).is_some());
+        assert!(loader.cached(&p1).is_none());
+        drop((b, d2));
     }
 
     #[test]
