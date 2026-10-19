@@ -77,7 +77,9 @@ mod imp {
     }
 
     fn nanos(duration: Duration) -> i64 {
-        i64::try_from(duration.as_nanos()).unwrap_or(i64::MAX).max(1)
+        i64::try_from(duration.as_nanos())
+            .unwrap_or(i64::MAX)
+            .max(1)
     }
 
     /// Look a function up in `libandroid.so`.
@@ -198,7 +200,10 @@ pub(crate) fn start(target: Duration) -> Option<PerfHint> {
     }
     match PerfHint::new(target) {
         Ok(hint) => {
-            set_status(format!("on (target {:.2} ms)", target.as_secs_f64() * 1000.0));
+            set_status(format!(
+                "on (target {:.2} ms)",
+                target.as_secs_f64() * 1000.0
+            ));
             Some(hint)
         }
         Err(why) => {

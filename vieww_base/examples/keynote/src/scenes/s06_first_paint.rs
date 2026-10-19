@@ -23,8 +23,8 @@ use vieww_widget::prelude::*;
 use crate::film::Ctx;
 use crate::kit::{
     alpha, bump, caption, clamp01, dust, ease_out_cubic, ease_out_expo, grain, ground, horizon,
-    painter, seg, smoothstep, spring, vignette, xywh, Type, CYAN, CYAN_SOFT, H, INK, INK_SOFT,
-    MINT, MUTED, VIOLET, VIOLET_SOFT, W,
+    painter, seg, smoothstep, spring, vignette, xywh, Type, CYAN, CYAN_SOFT, INK, INK_SOFT, MINT,
+    MUTED, VIOLET, VIOLET_SOFT, W,
 };
 use crate::scenes::buffer;
 use crate::studio::{
@@ -40,7 +40,7 @@ const ALIVE_T: f32 = 5.35;
 /// The tap.
 const TAP_T: f32 = 14.88;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -55,7 +55,8 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     let tap = seg(sec, TAP_T, TAP_T + 0.7);
     // The statement's own scrim strength — one value, so the scrim and the
     // sentence can never disagree about when they are on screen.
-    let third = smoothstep(seg(sec, ALIVE_T + 0.45, ALIVE_T + 1.3)) * (1.0 - smoothstep(seg(sec, 13.2, 14.2)));
+    let third = smoothstep(seg(sec, ALIVE_T + 0.45, ALIVE_T + 1.3))
+        * (1.0 - smoothstep(seg(sec, 13.2, 14.2)));
     let press = (sec > TAP_T && sec < TAP_T + 0.7).then_some(tap);
 
     // The app: the counter, at whatever the session's witness count is. The
@@ -87,13 +88,25 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         status: status_line(
             "desktop · native",
             "60 fps",
-            &[if alive > 0.5 { ("preview live", MINT) } else { ("preview idle", MUTED) }],
+            &[if alive > 0.5 {
+                ("preview live", MINT)
+            } else {
+                ("preview idle", MUTED)
+            }],
         ),
         preview_label: "preview · desktop".into(),
-        preview_chip: if alive > 0.5 { "live".into() } else { "waiting".into() },
+        preview_chip: if alive > 0.5 {
+            "live".into()
+        } else {
+            "waiting".into()
+        },
         witness: (ctx.spine.witness > 0).then_some(ctx.spine.witness),
         elapsed: Some(crate::kit::clock_mmss(ctx.spine.elapsed)),
-        focus: Some(if sec > TAP_T - 1.2 { FocusOn::Preview } else { FocusOn::Code }),
+        focus: Some(if sec > TAP_T - 1.2 {
+            FocusOn::Preview
+        } else {
+            FocusOn::Code
+        }),
         panel: crate::studio::Panel {
             lines: crate::studio::output_lines(),
             ..crate::studio::Panel::default()
@@ -125,7 +138,16 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         // rather than a picture pasted over one.
         book.rrect(card, 10.0, alpha(Color::rgb(14, 15, 21), 0.9));
         book.stroke_rrect(card, 10.0, alpha(Color::rgb(40, 44, 58), 0.9), 1.0);
-        studio::app(book, Rect::new(card.left + 1.0, card.top + 1.0, card.right - 1.0, card.bottom - 1.0), &app_paint);
+        studio::app(
+            book,
+            Rect::new(
+                card.left + 1.0,
+                card.top + 1.0,
+                card.right - 1.0,
+                card.bottom - 1.0,
+            ),
+            &app_paint,
+        );
 
         // The paint-in itself: a wipe of light crossing the card once, on
         // the frame the program comes alive. The preview does not fade up —
@@ -136,12 +158,14 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             book.blended_layer(1.0, 18.0, BlendMode::Plus, None, |g| {
                 g.rect(
                     xywh(x - 70.0, card.top, 70.0, card.height()),
-                    Gradient::horizontal().with_dither().with_stops(&[
-                        (0.0, alpha(CYAN, 0.0)),
-                        (1.0, alpha(CYAN_SOFT, 0.55)),
-                    ]),
+                    Gradient::horizontal()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(CYAN, 0.0)), (1.0, alpha(CYAN_SOFT, 0.55))]),
                 );
-                g.rect(xywh(x, card.top, 2.5, card.height()), alpha(Color::WHITE, 0.75));
+                g.rect(
+                    xywh(x, card.top, 2.5, card.height()),
+                    alpha(Color::WHITE, 0.75),
+                );
             });
         }
 
@@ -174,7 +198,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
     let mut nodes: Vec<WidgetNode> = studio::text(&l, &sh);
     nodes.extend(studio::app_text(
-        Rect::new(card.left + 1.0, card.top + 1.0, card.right - 1.0, card.bottom - 1.0),
+        Rect::new(
+            card.left + 1.0,
+            card.top + 1.0,
+            card.right - 1.0,
+            card.bottom - 1.0,
+        ),
         &app,
     ));
 

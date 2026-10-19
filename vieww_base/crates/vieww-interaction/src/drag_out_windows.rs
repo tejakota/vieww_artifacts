@@ -49,16 +49,18 @@
 use std::path::PathBuf;
 
 use windows::core::implement;
-use windows::Win32::Foundation::{BOOL, DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, GlobalFree, HGLOBAL, S_OK};
+use windows::Win32::Foundation::{
+    GlobalFree, BOOL, DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, HGLOBAL, S_OK,
+};
 use windows::Win32::System::Com::{
-    DVASPECT_CONTENT, FORMATETC, IDataObject, STGMEDIUM, TYMED_HGLOBAL,
+    IDataObject, DVASPECT_CONTENT, FORMATETC, STGMEDIUM, TYMED_HGLOBAL,
 };
 use windows::Win32::System::Memory::{
     GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE, GMEM_ZEROINIT,
 };
 use windows::Win32::System::Ole::{
-    DoDragDrop, ReleaseStgMedium, CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_LINK,
-    DROPEFFECT_MOVE, DROPEFFECT_NONE, IDropSource, IDropSource_Impl,
+    DoDragDrop, IDropSource, IDropSource_Impl, ReleaseStgMedium, CF_HDROP, DROPEFFECT,
+    DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE, DROPEFFECT_NONE,
 };
 use windows::Win32::UI::Shell::SHCreateDataObject;
 
@@ -84,7 +86,9 @@ pub struct WindowsDragStarter {
 impl WindowsDragStarter {
     #[must_use]
     pub const fn new() -> Self {
-        Self { last_effect: std::sync::Mutex::new(None) }
+        Self {
+            last_effect: std::sync::Mutex::new(None),
+        }
     }
 
     /// What the last drag this starter ran ended with — `None` before any
@@ -129,8 +133,9 @@ impl super::drag_out::PlatformDragStarter for WindowsDragStarter {
 
         // SAFETY: `SHCreateDataObject` with no pidls creates the standard
         // empty data object; no resources are borrowed past the call.
-        let data_object: IDataObject = unsafe { SHCreateDataObject::<_, IDataObject>(None, None, None) }
-            .map_err(|_| DragError::NotSupportedByPlatform)?;
+        let data_object: IDataObject =
+            unsafe { SHCreateDataObject::<_, IDataObject>(None, None, None) }
+                .map_err(|_| DragError::NotSupportedByPlatform)?;
 
         let bytes = hdrop_bytes(&paths);
         // SAFETY (whole block): `GMEM_MOVEABLE | GMEM_ZEROINIT` allocation,
@@ -199,10 +204,7 @@ impl super::drag_out::PlatformDragStarter for WindowsDragStarter {
         // the trait before any platform implementation existed, and a
         // `&mut self` there would ripple through every existing caller for
         // one field.
-        *self
-            .last_effect
-            .lock()
-            .expect("effect lock poisoned") = effect_from_flags(effect.0);
+        *self.last_effect.lock().expect("effect lock poisoned") = effect_from_flags(effect.0);
         Ok(())
     }
 }

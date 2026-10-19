@@ -29,8 +29,8 @@ use crate::kit::{
 };
 use crate::scenes::buffer;
 use crate::studio::{
-    self, compose, project_tree, status_line, witness_chip, App, FileKind, FocusOn, Layout, Palette,
-    Shell,
+    self, compose, project_tree, status_line, witness_chip, App, FileKind, FocusOn, Layout,
+    Palette, Shell,
 };
 
 /// The palette opens, the command is chosen, the walk runs.
@@ -50,7 +50,7 @@ const ROWS: [(&str, &str); 4] = [
     ("build: run all targets", "⌘B"),
 ];
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -65,18 +65,27 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     let is_rust = walk >= 1.0;
 
     // The palette.
-    let pal_open = smoothstep(seg(sec, PAL_T0, PAL_T0 + 0.35)) * (1.0 - smoothstep(seg(sec, PAL_T1, PAL_T1 + 0.3)));
+    let pal_open = smoothstep(seg(sec, PAL_T0, PAL_T0 + 0.35))
+        * (1.0 - smoothstep(seg(sec, PAL_T1, PAL_T1 + 0.3)));
     let palette = (pal_open > 0.01).then(|| Palette {
         query: format!(
             "> {}",
-            crate::kit::typed("say: transliterate", seg(sec, PAL_T0 + 0.2, PAL_PICK - 0.25))
+            crate::kit::typed(
+                "say: transliterate",
+                seg(sec, PAL_T0 + 0.2, PAL_PICK - 0.25)
+            )
         ),
-        rows: ROWS.iter().map(|(a, b)| ((*a).to_string(), (*b).to_string())).collect(),
+        rows: ROWS
+            .iter()
+            .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
+            .collect(),
         selected: 0,
         open: pal_open,
     });
 
-    let press = (TAP4_T..TAP4_T + 0.7).contains(&sec).then(|| seg(sec, TAP4_T, TAP4_T + 0.7));
+    let press = (TAP4_T..TAP4_T + 0.7)
+        .contains(&sec)
+        .then(|| seg(sec, TAP4_T, TAP4_T + 0.7));
     let app = App {
         value: ctx.spine.witness,
         alive: 1.0,
@@ -89,7 +98,8 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         ..App::default()
     };
 
-    let claim_a = smoothstep(seg(sec, WALK_T1 + 0.4, WALK_T1 + 1.3)) * (1.0 - smoothstep(seg(sec, 18.4, 19.4)));
+    let claim_a = smoothstep(seg(sec, WALK_T1 + 0.4, WALK_T1 + 1.3))
+        * (1.0 - smoothstep(seg(sec, 18.4, 19.4)));
     let third = claim_a;
 
     let l = Layout::new(64.0, 0.36, true);
@@ -106,14 +116,22 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         status: status_line(
             "desktop · native",
             "60 fps",
-            &[if is_rust { ("rust · state held", MINT) } else { ("transliterating", AMBER) }],
+            &[if is_rust {
+                ("rust · state held", MINT)
+            } else {
+                ("transliterating", AMBER)
+            }],
         ),
         preview_label: "preview · desktop".into(),
         preview_chip: "live".into(),
         palette,
         witness: Some(ctx.spine.witness),
         elapsed: Some(crate::kit::clock_mmss(ctx.spine.elapsed)),
-        focus: Some(if press.is_some() { FocusOn::Preview } else { FocusOn::Code }),
+        focus: Some(if press.is_some() {
+            FocusOn::Preview
+        } else {
+            FocusOn::Code
+        }),
         panel: crate::studio::Panel {
             lines: crate::studio::output_lines(),
             ..crate::studio::Panel::default()
@@ -123,8 +141,18 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
     let shell_paint = sh.clone();
     let body = l.preview_body;
-    let card = Rect::new(body.left + 44.0, body.top + 40.0, body.right - 44.0, body.bottom - 52.0);
-    let inner = Rect::new(card.left + 1.0, card.top + 1.0, card.right - 1.0, card.bottom - 1.0);
+    let card = Rect::new(
+        body.left + 44.0,
+        body.top + 40.0,
+        body.right - 44.0,
+        body.bottom - 52.0,
+    );
+    let inner = Rect::new(
+        card.left + 1.0,
+        card.top + 1.0,
+        card.right - 1.0,
+        card.bottom - 1.0,
+    );
     let app_paint = App { ..app };
 
     let bg = painter(move |book: &mut Sketchbook, size: Size| {
@@ -146,12 +174,22 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             let y = l.line_y(converted) - 5.0;
             if y > l.code.top && y < l.code.bottom {
                 book.rect(
-                    xywh(l.gutter.left, y, l.gutter.width() + l.code.width(), studio::CODE_LEAD),
+                    xywh(
+                        l.gutter.left,
+                        y,
+                        l.gutter.width() + l.code.width(),
+                        studio::CODE_LEAD,
+                    ),
                     alpha(AMBER, 0.07),
                 );
                 book.blended_layer(1.0, 14.0, BlendMode::Plus, None, |g| {
                     g.rect(
-                        xywh(l.gutter.left, y + studio::CODE_LEAD - 2.0, l.gutter.width() + l.code.width(), 2.0),
+                        xywh(
+                            l.gutter.left,
+                            y + studio::CODE_LEAD - 2.0,
+                            l.gutter.width() + l.code.width(),
+                            2.0,
+                        ),
                         Gradient::horizontal().with_dither().with_stops(&[
                             (0.0, alpha(AMBER, 0.55)),
                             (0.7, alpha(CYAN_SOFT, 0.35)),
@@ -213,7 +251,8 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
     // The palette's own sentence, while it is open: the command is named,
     // so the mechanism is never mysterious.
-    let pal_a = smoothstep(seg(sec, PAL_T0 + 0.5, PAL_T0 + 1.1)) * (1.0 - smoothstep(seg(sec, PAL_T1, PAL_T1 + 0.3)));
+    let pal_a = smoothstep(seg(sec, PAL_T0 + 0.5, PAL_T0 + 1.1))
+        * (1.0 - smoothstep(seg(sec, PAL_T1, PAL_T1 + 0.3)));
     if pal_a > 0.004 {
         nodes.push(
             Type::new("the studio's own command palette · no hidden step")
@@ -228,7 +267,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     }
 
     nodes.push(caption(
-        if is_rust { "same buffer · main.rs · state held" } else { "say → rust, line by line" },
+        if is_rust {
+            "same buffer · main.rs · state held"
+        } else {
+            "say → rust, line by line"
+        },
         smoothstep(seg(sec, 0.4, 1.2)) * (1.0 - smoothstep(seg(sec, 19.0, 20.0))),
     ));
     let _ = (clamp01, INK_SOFT, W);

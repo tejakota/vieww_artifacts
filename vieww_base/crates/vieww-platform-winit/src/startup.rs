@@ -126,7 +126,10 @@ fn format_steps(before_run: Option<Duration>, steps: &[Mark]) -> String {
     };
     let mut previous = Duration::ZERO;
     for (label, at) in steps {
-        line.push_str(&format!(" | {label} {:.1}", ms(at.saturating_sub(previous))));
+        line.push_str(&format!(
+            " | {label} {:.1}",
+            ms(at.saturating_sub(previous))
+        ));
         previous = *at;
     }
     let total = previous + before_run.unwrap_or_default();
@@ -174,7 +177,9 @@ fn process_age() -> Option<Duration> {
     let boot = now.tv_sec as f64 + now.tv_nsec as f64 / 1e9;
     #[expect(clippy::cast_precision_loss, reason = "clock ticks per second")]
     let age = boot - ticks / hz as f64;
-    (0.0..3600.0).contains(&age).then(|| Duration::from_secs_f64(age))
+    (0.0..3600.0)
+        .contains(&age)
+        .then(|| Duration::from_secs_f64(age))
 }
 
 /// How long ago this process started, from the kernel's own record of it
@@ -212,7 +217,9 @@ fn process_age() -> Option<Duration> {
     #[allow(clippy::cast_precision_loss)] // seconds since the epoch
     let now = now.tv_sec as f64 + f64::from(now.tv_usec) / 1e6;
     let age = now - start;
-    (0.0..3600.0).contains(&age).then(|| Duration::from_secs_f64(age))
+    (0.0..3600.0)
+        .contains(&age)
+        .then(|| Duration::from_secs_f64(age))
 }
 
 #[cfg(not(any(
@@ -234,7 +241,11 @@ mod tests {
         let ms = Duration::from_millis;
         let line = format_steps(
             Some(ms(40)),
-            &[("window created", ms(12)), ("present ready", ms(47)), ("first frame", ms(100))],
+            &[
+                ("window created", ms(12)),
+                ("present ready", ms(47)),
+                ("first frame", ms(100)),
+            ],
         );
         assert_eq!(
             line,

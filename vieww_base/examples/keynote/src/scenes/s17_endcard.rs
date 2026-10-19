@@ -16,15 +16,15 @@
 //! number. That is rule 5 of the ledger arriving at the film's last frame
 //! with its jacket still on.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook};
+use vieww_foundation::{BlendMode, Color, Gradient, Rect, Size, Sketchbook};
 use vieww_widget::prelude::*;
 use vieww_widget::{Filtered, Opacity};
 
 use crate::film::Ctx;
 use crate::kit::{
-    alpha, bump, caption, clamp01, dust, ease_out_cubic, ease_out_expo, grain, ground, horizon, mix,
-    painter, seg, smoothstep, spring, sting, thousands, tint, typed, vignette, xywh, Type, CYAN,
-    CYAN_SOFT, FAINT, H, INK, INK_SOFT, MINT, MUTED, VIOLET, VIOLET_SOFT, W,
+    alpha, bump, caption, clamp01, dust, ease_out_cubic, ease_out_expo, grain, ground, horizon,
+    mix, painter, seg, smoothstep, spring, sting, thousands, tint, typed, vignette, xywh, Type,
+    CYAN, CYAN_SOFT, FAINT, H, INK, INK_SOFT, MINT, MUTED, VIOLET, VIOLET_SOFT, W,
 };
 use crate::studio::compose;
 
@@ -42,7 +42,7 @@ const TYPE_T: f32 = 2.20;
 const BARS_T: f32 = 5.40;
 const STING_T: f32 = 15.60;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -92,7 +92,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             );
             if st > 0.01 {
                 book.blended_layer(1.0, 24.0, BlendMode::Plus, None, |g| {
-                    g.rrect(xywh(rx, ry - 3.0, rw, 9.0), 4.5, alpha(VIOLET_SOFT, 0.35 * st));
+                    g.rrect(
+                        xywh(rx, ry - 3.0, rw, 9.0),
+                        4.5,
+                        alpha(VIOLET_SOFT, 0.35 * st),
+                    );
                 });
             }
         }
@@ -108,7 +112,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             let r = xywh(x, y, w, 56.0);
             book.rrect(r, 8.0, alpha(Color::rgb(0x18, 0x15, 0x13), 0.94 * a));
             book.stroke_rrect(r, 8.0, alpha(crate::studio::LINE, a), 1.0);
-            book.rrect(xywh(r.left, r.top, 3.0, r.height()), 1.5, alpha(if i == 0 { VIOLET } else { CYAN }, 0.9 * a));
+            book.rrect(
+                xywh(r.left, r.top, 3.0, r.height()),
+                1.5,
+                alpha(if i == 0 { VIOLET } else { CYAN }, 0.9 * a),
+            );
         }
 
         // The manifest's bars.
@@ -117,8 +125,16 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             let bw = 860.0;
             for (i, (_label, v)) in rows.into_iter().enumerate() {
                 let y = H * 0.545 + i as f32 * 52.0;
-                let grow = ease_out_cubic(seg(sec, BARS_T + 0.25 + i as f32 * 0.14, BARS_T + 1.35 + i as f32 * 0.14));
-                book.rrect(xywh(bx, y, bw, 12.0), 6.0, alpha(Color::rgb(0x22, 0x20, 0x1E), bars));
+                let grow = ease_out_cubic(seg(
+                    sec,
+                    BARS_T + 0.25 + i as f32 * 0.14,
+                    BARS_T + 1.35 + i as f32 * 0.14,
+                ));
+                book.rrect(
+                    xywh(bx, y, bw, 12.0),
+                    6.0,
+                    alpha(Color::rgb(0x22, 0x20, 0x1E), bars),
+                );
                 if measured {
                     let frac = (v as f64 / peak as f64) as f32;
                     book.rrect(
@@ -135,7 +151,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
         // The sting: one lift of the whole frame, once, at the end.
         if st > 0.01 {
-            book.rect(Rect::new(0.0, 0.0, size.width, size.height), alpha(tint(VIOLET, 0.5), 0.045 * st));
+            book.rect(
+                Rect::new(0.0, 0.0, size.width, size.height),
+                alpha(tint(VIOLET, 0.5), 0.045 * st),
+            );
         }
 
         grain(book, size, frame_i, 0.012, 320);
@@ -184,7 +203,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     .top(MARK_Y)
                     .width(W)
                     .height(MARK_SIZE * 1.4)
-                    .child(mark_node(0.99 * mark_a, mix(INK, tint(VIOLET_SOFT, 0.3), 0.08 + 0.2 * st))),
+                    .child(mark_node(
+                        0.99 * mark_a,
+                        mix(INK, tint(VIOLET_SOFT, 0.3), 0.08 + 0.2 * st),
+                    )),
             )
             .into(),
     );
@@ -200,12 +222,9 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     );
 
     // The install lines, typed on.
-    for (i, (line, a, from)) in [
-        (INSTALL_SH, sh_a, TYPE_T),
-        (INSTALL_PS, ps_a, TYPE_T + 1.5),
-    ]
-    .into_iter()
-    .enumerate()
+    for (i, (line, a, from)) in [(INSTALL_SH, sh_a, TYPE_T), (INSTALL_PS, ps_a, TYPE_T + 1.5)]
+        .into_iter()
+        .enumerate()
     {
         if a <= 0.02 {
             continue;
@@ -215,7 +234,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         let y = MARK_Y + MARK_SIZE * 1.58;
         let prog = seg(sec, from + 0.15, from + 1.15);
         let shown = typed(line, prog);
-        let caret = if prog < 1.0 && crate::kit::caret_on(ctx.abs, true) { "▌" } else { "" };
+        let caret = if prog < 1.0 && crate::kit::caret_on(ctx.abs, true) {
+            "▌"
+        } else {
+            ""
+        };
         nodes.push(
             Type::new(format!("{shown}{caret}"))
                 .mono()
@@ -243,14 +266,20 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         let bx = W * 0.5 - 430.0;
         nodes.push(
             Type::new(if measured {
-                format!("this film, counted by the renderer that drew it · {} frames", thousands(p.frames))
+                format!(
+                    "this film, counted by the renderer that drew it · {} frames",
+                    thousands(p.frames)
+                )
             } else {
                 "the census has not run — this card prints nothing it did not measure".to_string()
             })
             .mono()
             .size(13.0)
             .track(2.0)
-            .color(alpha(if measured { MUTED } else { crate::kit::AMBER }, 0.9 * bars))
+            .color(alpha(
+                if measured { MUTED } else { crate::kit::AMBER },
+                0.9 * bars,
+            ))
             .center()
             .banner(H * 0.492)
             .into(),
@@ -268,14 +297,18 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     .into(),
             );
             nodes.push(
-                Type::new(if measured { thousands(v) } else { "—".to_string() })
-                    .mono()
-                    .size(17.0)
-                    .color(alpha(INK, 0.96 * bars))
-                    .right()
-                    .at(bx + 860.0 - 320.0, y - 26.0)
-                    .width(320.0)
-                    .into(),
+                Type::new(if measured {
+                    thousands(v)
+                } else {
+                    "—".to_string()
+                })
+                .mono()
+                .size(17.0)
+                .color(alpha(INK, 0.96 * bars))
+                .right()
+                .at(bx + 860.0 - 320.0, y - 26.0)
+                .width(320.0)
+                .into(),
             );
         }
     }
@@ -296,7 +329,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         Type::new(if p.bench.is_empty() {
             "bench not recorded".to_string()
         } else {
-            format!("{} · median frame {:.2} ms at 1920×1080", p.bench, p.frame_ms)
+            format!(
+                "{} · median frame {:.2} ms at 1920×1080",
+                p.bench, p.frame_ms
+            )
         })
         .mono()
         .size(11.5)

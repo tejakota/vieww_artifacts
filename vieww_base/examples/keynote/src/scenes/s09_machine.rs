@@ -119,13 +119,14 @@ fn flock(area: Rect, t: f32) -> Vec<Boid> {
                         let o = snapshot[j];
                         let d = Offset::new(o.p.dx - snapshot[i].p.dx, o.p.dy - snapshot[i].p.dy);
                         let dist2 = d.dx * d.dx + d.dy * d.dy;
-                        if dist2 > VIS * VIS || dist2 < 1e-4 {
+                        if !(1e-4..=VIS * VIS).contains(&dist2) {
                             continue;
                         }
                         let dist = dist2.sqrt();
                         // Separation falls off with distance; the other two
                         // are plain averages. Reynolds, unchanged since 1986.
-                        sep = Offset::new(sep.dx - d.dx / dist2 * 40.0, sep.dy - d.dy / dist2 * 40.0);
+                        sep =
+                            Offset::new(sep.dx - d.dx / dist2 * 40.0, sep.dy - d.dy / dist2 * 40.0);
                         ali = Offset::new(ali.dx + o.v.dx, ali.dy + o.v.dy);
                         coh = Offset::new(coh.dx + d.dx / dist, coh.dy + d.dy / dist);
                         n += 1.0;
@@ -178,7 +179,7 @@ fn term(k: usize) -> (f32, f32, f32) {
     // (radius, frequency, phase). Odd harmonics only, alternating direction:
     // the classic square wave in the plane.
     let n = (k * 2 + 1) as f32;
-    let dir = if k % 2 == 0 { 1.0 } else { -1.0 };
+    let dir = if k.is_multiple_of(2) { 1.0 } else { -1.0 };
     (1.0 / n, dir * n, k as f32 * 0.21)
 }
 
@@ -196,7 +197,7 @@ fn pen(u: f32, terms: usize, scale: f32) -> Offset {
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -213,9 +214,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         mix_f(l.preview_body.bottom, l.window.bottom - 14.0, zen),
     );
 
-    let swarm_a = smoothstep(seg(sec, SWARM_T, SWARM_T + 1.1)) * (1.0 - smoothstep(seg(sec, CHOIR_T - 0.6, CHOIR_T + 0.5)));
-    let choir_a = smoothstep(seg(sec, CHOIR_T, CHOIR_T + 0.9)) * (1.0 - smoothstep(seg(sec, CEIL_T - 0.6, CEIL_T + 0.4)));
-    let ceil_a = smoothstep(seg(sec, CEIL_T, CEIL_T + 0.9)) * (1.0 - smoothstep(seg(sec, BACK_T, BACK_T + 0.8)));
+    let swarm_a = smoothstep(seg(sec, SWARM_T, SWARM_T + 1.1))
+        * (1.0 - smoothstep(seg(sec, CHOIR_T - 0.6, CHOIR_T + 0.5)));
+    let choir_a = smoothstep(seg(sec, CHOIR_T, CHOIR_T + 0.9))
+        * (1.0 - smoothstep(seg(sec, CEIL_T - 0.6, CEIL_T + 0.4)));
+    let ceil_a = smoothstep(seg(sec, CEIL_T, CEIL_T + 0.9))
+        * (1.0 - smoothstep(seg(sec, BACK_T, BACK_T + 0.8)));
 
     let sh = Shell {
         files: project_tree("main.rs"),
@@ -232,9 +236,18 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         preview_chip: "fit".into(),
         panel: studio::Panel {
             lines: vec![
-                (format!("  swarm     {BOIDS} boids · grid neighbourhood · 30 Hz step"), MUTED),
-                (format!("  fourier   {TERMS} epicycles · closed curve"), MUTED),
-                ("  renderer  native · 4× supersampling · 28 blend modes".to_string(), MUTED),
+                (
+                    format!("  swarm     {BOIDS} boids · grid neighbourhood · 30 Hz step"),
+                    MUTED,
+                ),
+                (
+                    format!("  fourier   {TERMS} epicycles · closed curve"),
+                    MUTED,
+                ),
+                (
+                    "  renderer  native · 4× supersampling · 28 blend modes".to_string(),
+                    MUTED,
+                ),
             ],
             ..studio::Panel::default()
         },
@@ -264,45 +277,66 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
         // The counter app, still running underneath while the stage grows.
         if app_paint.alive > 0.02 {
-            book.rrect(body_card, 8.0, alpha(Color::rgb(0x16, 0x16, 0x18), app_paint.alive));
+            book.rrect(
+                body_card,
+                8.0,
+                alpha(Color::rgb(0x16, 0x16, 0x18), app_paint.alive),
+            );
             studio::app(book, body_card, &app_paint);
         }
 
         // ── The stage ───────────────────────────────────────────────────
         book.rrect(stage, 10.0, Color::rgb(0x0A, 0x0A, 0x0C));
         book.stroke_rrect(stage, 10.0, alpha(studio::LINE, 1.0), 1.0);
-        let inner = Rect::new(stage.left + 1.0, stage.top + 1.0, stage.right - 1.0, stage.bottom - 1.0);
+        let inner = Rect::new(
+            stage.left + 1.0,
+            stage.top + 1.0,
+            stage.right - 1.0,
+            stage.bottom - 1.0,
+        );
 
         // 1 — the swarm.
         if swarm_a > 0.01 {
             let birds = flock(inner, (sec - SWARM_T).max(0.0));
             // One additive group for the whole flock: 2,400 triangles, one
             // offscreen. Blur is priced per layer, and this is the lesson.
-            book.blended_layer(swarm_a, 0.0, BlendMode::Plus, Some(Path::rounded_rect(inner, 9.0)), |g| {
-                for b in &birds {
-                    let sp = (b.v.dx * b.v.dx + b.v.dy * b.v.dy).sqrt().max(1e-3);
-                    let (ux, uy) = (b.v.dx / sp, b.v.dy / sp);
-                    let (px, py) = (-uy, ux);
-                    let len = 7.0;
-                    let wid = 2.6;
-                    let mut path = Path::new();
-                    path.move_to(Offset::new(b.p.dx + ux * len, b.p.dy + uy * len));
-                    path.line_to(Offset::new(b.p.dx - ux * len * 0.6 + px * wid, b.p.dy - uy * len * 0.6 + py * wid));
-                    path.line_to(Offset::new(b.p.dx - ux * len * 0.6 - px * wid, b.p.dy - uy * len * 0.6 - py * wid));
-                    path.close();
-                    // Hue by heading: the flock's structure becomes visible
-                    // as colour where it would be invisible as position.
-                    let h = (uy.atan2(ux) + std::f32::consts::PI) / std::f32::consts::TAU;
-                    let c = if h < 0.34 {
-                        mix(VIOLET, CYAN, h / 0.34)
-                    } else if h < 0.67 {
-                        mix(CYAN, MINT, (h - 0.34) / 0.33)
-                    } else {
-                        mix(MINT, VIOLET, (h - 0.67) / 0.33)
-                    };
-                    g.fill(path, alpha(c, 0.62));
-                }
-            });
+            book.blended_layer(
+                swarm_a,
+                0.0,
+                BlendMode::Plus,
+                Some(Path::rounded_rect(inner, 9.0)),
+                |g| {
+                    for b in &birds {
+                        let sp = (b.v.dx * b.v.dx + b.v.dy * b.v.dy).sqrt().max(1e-3);
+                        let (ux, uy) = (b.v.dx / sp, b.v.dy / sp);
+                        let (px, py) = (-uy, ux);
+                        let len = 7.0;
+                        let wid = 2.6;
+                        let mut path = Path::new();
+                        path.move_to(Offset::new(b.p.dx + ux * len, b.p.dy + uy * len));
+                        path.line_to(Offset::new(
+                            b.p.dx - ux * len * 0.6 + px * wid,
+                            b.p.dy - uy * len * 0.6 + py * wid,
+                        ));
+                        path.line_to(Offset::new(
+                            b.p.dx - ux * len * 0.6 - px * wid,
+                            b.p.dy - uy * len * 0.6 - py * wid,
+                        ));
+                        path.close();
+                        // Hue by heading: the flock's structure becomes visible
+                        // as colour where it would be invisible as position.
+                        let h = (uy.atan2(ux) + std::f32::consts::PI) / std::f32::consts::TAU;
+                        let c = if h < 0.34 {
+                            mix(VIOLET, CYAN, h / 0.34)
+                        } else if h < 0.67 {
+                            mix(CYAN, MINT, (h - 0.34) / 0.33)
+                        } else {
+                            mix(MINT, VIOLET, (h - 0.67) / 0.33)
+                        };
+                        g.fill(path, alpha(c, 0.62));
+                    }
+                },
+            );
         }
 
         // 2 — the choir.
@@ -341,11 +375,21 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                 let a = u * f * std::f32::consts::TAU + ph;
                 let rr = r * scale;
                 if rr > 0.6 {
-                    book.ring(Offset::new(x, y), rr, 1.0, alpha(VIOLET_SOFT, 0.20 * choir_a));
+                    book.ring(
+                        Offset::new(x, y),
+                        rr,
+                        1.0,
+                        alpha(VIOLET_SOFT, 0.20 * choir_a),
+                    );
                 }
                 let nx = x + rr * a.cos();
                 let ny = y + rr * a.sin();
-                book.line(Offset::new(x, y), Offset::new(nx, ny), alpha(INK_SOFT, 0.24 * choir_a), 1.0);
+                book.line(
+                    Offset::new(x, y),
+                    Offset::new(nx, ny),
+                    alpha(INK_SOFT, 0.24 * choir_a),
+                    1.0,
+                );
                 x = nx;
                 y = ny;
             }
@@ -365,8 +409,16 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             let bx = inner.left + inner.width() * 0.22;
             for (i, (_label, frac, c)) in rows.into_iter().enumerate() {
                 let y = inner.top + inner.height() * 0.30 + i as f32 * 62.0;
-                let grow = ease_out_cubic(seg(sec, CEIL_T + 0.4 + i as f32 * 0.16, CEIL_T + 1.5 + i as f32 * 0.16));
-                book.rrect(xywh(bx, y, bw, 12.0), 6.0, alpha(Color::rgb(0x22, 0x22, 0x26), ceil_a));
+                let grow = ease_out_cubic(seg(
+                    sec,
+                    CEIL_T + 0.4 + i as f32 * 0.16,
+                    CEIL_T + 1.5 + i as f32 * 0.16,
+                ));
+                book.rrect(
+                    xywh(bx, y, bw, 12.0),
+                    6.0,
+                    alpha(Color::rgb(0x22, 0x22, 0x26), ceil_a),
+                );
                 book.rrect(
                     xywh(bx, y, bw * frac * grow, 12.0),
                     6.0,
@@ -405,7 +457,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             SWARM_T + 0.6,
             CHOIR_T - 0.4,
             "the swarm",
-            format!("{} boids · separation · alignment · cohesion", thousands(BOIDS as u64)),
+            format!(
+                "{} boids · separation · alignment · cohesion",
+                thousands(BOIDS as u64)
+            ),
             CYAN,
         ),
         (
@@ -467,7 +522,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             ("layers", per(p.layers)),
             ("blurred layers", per(p.filtered)),
         ];
-        let inner = Rect::new(stage.left + 1.0, stage.top + 1.0, stage.right - 1.0, stage.bottom - 1.0);
+        let inner = Rect::new(
+            stage.left + 1.0,
+            stage.top + 1.0,
+            stage.right - 1.0,
+            stage.bottom - 1.0,
+        );
         let bx = inner.left + inner.width() * 0.22;
         for (i, (label, value)) in rows.into_iter().enumerate() {
             let y = inner.top + inner.height() * 0.30 + i as f32 * 62.0;

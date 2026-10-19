@@ -2066,9 +2066,8 @@ fn create_pipeline(
         .layout(layout)
         .render_pass(render_pass)
         .subpass(0);
-    let pipelines =
-        unsafe { device.create_graphics_pipelines(cache, &[info], None) }
-            .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
+    let pipelines = unsafe { device.create_graphics_pipelines(cache, &[info], None) }
+        .map_err(|(_, e)| VulkanError::Vulkan(e.to_string()))?;
     Ok(pipelines[0])
 }
 

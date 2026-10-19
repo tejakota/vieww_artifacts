@@ -461,9 +461,11 @@ extern "C" fn trampoline_invoke<P: Plugin>(instance: *mut c_void, id: AbiStr) ->
         return STATUS_UNKNOWN_COMMAND;
     }
     let log = boxed.log;
-    guarded(log, "invoke", STATUS_PANICKED, || match boxed.plugin.invoke(id) {
-        Ok(()) => STATUS_OK,
-        Err(_) => STATUS_ERROR,
+    guarded(log, "invoke", STATUS_PANICKED, || {
+        match boxed.plugin.invoke(id) {
+            Ok(()) => STATUS_OK,
+            Err(_) => STATUS_ERROR,
+        }
     })
 }
 
@@ -592,7 +594,10 @@ mod tests {
         assert_eq!(status, STATUS_PANICKED);
         LOGGED.with_borrow(|lines| {
             assert_eq!(lines.len(), 1);
-            assert!(lines[0].contains("invoke") && lines[0].contains("the plugin's own bug"), "{lines:?}");
+            assert!(
+                lines[0].contains("invoke") && lines[0].contains("the plugin's own bug"),
+                "{lines:?}"
+            );
         });
         unsafe {
             ((*vtable).shutdown)((*vtable).instance);

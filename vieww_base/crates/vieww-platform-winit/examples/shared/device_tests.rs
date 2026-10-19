@@ -863,7 +863,9 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
             "raster_by_core",
             cores
                 .iter()
-                .map(|(core, frames, median)| format!("cpu{core} {frames} frames {:.2} ms", ms(*median)))
+                .map(|(core, frames, median)| {
+                    format!("cpu{core} {frames} frames {:.2} ms", ms(*median))
+                })
                 .collect::<Vec<_>>()
                 .join(" | "),
         );

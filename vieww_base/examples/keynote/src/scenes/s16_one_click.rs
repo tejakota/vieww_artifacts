@@ -36,12 +36,12 @@ const TARGETS: &[(&str, &str, f32, bool)] = &[
 const START_T: f32 = 1.40;
 const DONE_T: f32 = 11.40;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
     let press = (0.70..1.40).contains(&sec).then(|| seg(sec, 0.70, 1.40));
-    let elapsed = (sec - START_T).max(0.0).min(DONE_T - START_T);
+    let elapsed = (sec - START_T).clamp(0.0, DONE_T - START_T);
     let all_done = sec >= DONE_T;
     let done_pop = spring(seg(sec, DONE_T, DONE_T + 1.2), 12.0, 0.4).clamp(0.0, 1.0);
     let out = smoothstep(seg(ctx.t, 0.94, 1.0));
@@ -58,7 +58,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         // once, on camera.
         let btn = xywh(cx - 150.0, H * 0.175, 300.0, 56.0);
         let pressed = press.is_some_and(|p| p < 0.4);
-        let b = Rect::new(btn.left, btn.top + if pressed { 2.0 } else { 0.0 }, btn.right, btn.bottom + if pressed { 2.0 } else { 0.0 });
+        let b = Rect::new(
+            btn.left,
+            btn.top + if pressed { 2.0 } else { 0.0 },
+            btn.right,
+            btn.bottom + if pressed { 2.0 } else { 0.0 },
+        );
         book.shadow(b, 28.0, crate::studio::elevation(2));
         book.rrect(
             b,
@@ -70,9 +75,18 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         );
         if let Some(p) = press {
             let rr = b.height() * 0.5 + b.width() * 0.7 * ease_out_cubic(p);
-            book.layer(1.0 - p, 0.0, Some(Path::rounded_rect(b, b.height() * 0.5)), |g| {
-                g.circle(Offset::new(b.left + b.width() * 0.5, b.top + b.height() * 0.5), rr, alpha(Color::WHITE, 0.25));
-            });
+            book.layer(
+                1.0 - p,
+                0.0,
+                Some(Path::rounded_rect(b, b.height() * 0.5)),
+                |g| {
+                    g.circle(
+                        Offset::new(b.left + b.width() * 0.5, b.top + b.height() * 0.5),
+                        rr,
+                        alpha(Color::WHITE, 0.25),
+                    );
+                },
+            );
         }
 
         // The three rings.
@@ -83,7 +97,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             let x = cx - 420.0 + i as f32 * 420.0;
             let r = 86.0;
             let p = clamp01((sec - START_T) / (at - START_T).max(0.1));
-            book.ring(Offset::new(x, base_y), r, 9.0, alpha(Color::rgb(0x26, 0x24, 0x22), 1.0));
+            book.ring(
+                Offset::new(x, base_y),
+                r,
+                9.0,
+                alpha(Color::rgb(0x26, 0x24, 0x22), 1.0),
+            );
             if p > 0.001 {
                 crate::kit::arc_sweep(
                     book,
@@ -105,7 +124,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             if sec >= *at {
                 let fin = bump(seg(sec, *at, at + 1.0), 0.0, 1.0);
                 book.blended_layer(1.0, 34.0, BlendMode::Plus, None, |g| {
-                    g.circle(Offset::new(x, base_y), r * 1.3, alpha(MINT, 0.20 + 0.25 * fin));
+                    g.circle(
+                        Offset::new(x, base_y),
+                        r * 1.3,
+                        alpha(MINT, 0.20 + 0.25 * fin),
+                    );
                 });
                 let k = spring(seg(sec, *at, at + 0.7), 14.0, 0.42).clamp(0.0, 1.0);
                 let mut check = Path::new();
@@ -132,7 +155,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         grain(book, size, frame_i, 0.012, 300);
         vignette(book, size, 0.95);
         if out > 0.004 {
-            book.rect(Rect::new(0.0, 0.0, size.width, size.height), alpha(Color::BLACK, out));
+            book.rect(
+                Rect::new(0.0, 0.0, size.width, size.height),
+                alpha(Color::BLACK, out),
+            );
         }
     });
 
@@ -185,15 +211,19 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         if *real {
             let done = sec >= *at;
             nodes.push(
-                Type::new(if done { "done".to_string() } else { format!("{:.1}s", (sec - START_T).max(0.0)) })
-                    .mono()
-                    .size(14.0)
-                    .track(1.6)
-                    .color(alpha(if done { MINT } else { CYAN_SOFT }, 0.95 * a))
-                    .center()
-                    .at(x - 120.0, base_y - 8.0)
-                    .width(240.0)
-                    .into(),
+                Type::new(if done {
+                    "done".to_string()
+                } else {
+                    format!("{:.1}s", (sec - START_T).max(0.0))
+                })
+                .mono()
+                .size(14.0)
+                .track(1.6)
+                .color(alpha(if done { MINT } else { CYAN_SOFT }, 0.95 * a))
+                .center()
+                .at(x - 120.0, base_y - 8.0)
+                .width(240.0)
+                .into(),
             );
         }
     }

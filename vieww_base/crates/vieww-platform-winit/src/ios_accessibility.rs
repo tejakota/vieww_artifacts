@@ -67,9 +67,7 @@ use std::cell::RefCell;
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_foundation::{
-    MainThreadMarker, NSMutableArray, NSString, CGPoint, CGRect, CGSize,
-};
+use objc2_foundation::{CGPoint, CGRect, CGSize, MainThreadMarker, NSMutableArray, NSString};
 use objc2_ui_kit::{
     UIAccessibilityElement, UIAccessibilityIdentification, UIAccessibilityIsVoiceOverRunning,
     UIAccessibilityPostNotification, UIAccessibilityScreenChangedNotification,
@@ -142,7 +140,11 @@ pub(crate) fn publish_semantics(
 ///
 /// Must run on the main thread — every UIKit call here requires it, and
 /// `objc2` 0.5 has no `MainThreadMarker` type to make it a check.
-unsafe fn publish_on_view(view: &UIView, semantics: &SemanticsTree, mtm: MainThreadMarker) -> usize {
+unsafe fn publish_on_view(
+    view: &UIView,
+    semantics: &SemanticsTree,
+    mtm: MainThreadMarker,
+) -> usize {
     let mut published: Vec<(u64, Retained<UIAccessibilityElement>)> = Vec::new();
     let mut focused_element: Option<Retained<UIAccessibilityElement>> = None;
 
@@ -154,8 +156,8 @@ unsafe fn publish_on_view(view: &UIView, semantics: &SemanticsTree, mtm: MainThr
         // the same rule `crate::a11y`'s conversion applies, and the reason
         // both bridges skip it rather than publishing a container the user
         // has to swipe through to reach its children.
-        let speakable =
-            node.label.is_some() || matches!(node.role, Role::Button | Role::Label | Role::TextField);
+        let speakable = node.label.is_some()
+            || matches!(node.role, Role::Button | Role::Label | Role::TextField);
         if !speakable {
             continue;
         }
@@ -278,7 +280,12 @@ fn traits_for(node: &vieww_render::SemanticsNode) -> UIAccessibilityTraits {
 /// (`crate::ios`'s insets doc has the full argument, and the same absence
 /// of a `/ scale` here is the same correctness, not the same oversight).
 fn frame_for(node: &vieww_render::SemanticsNode) -> CGRect {
-    let Rect { left, top, right, bottom } = node.bounds;
+    let Rect {
+        left,
+        top,
+        right,
+        bottom,
+    } = node.bounds;
     CGRect::new(
         CGPoint::new(left as f64, top as f64),
         CGSize::new(

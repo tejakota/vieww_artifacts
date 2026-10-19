@@ -62,55 +62,55 @@ use crate::kit::{clamp01, ease_out_cubic, meter, smoothstep, tint, xywh, Type, H
 // its editor in the brand's marketing colours, and neither does the film.
 
 /// `#0E0E0E` — the ground every region floats on.
-pub const WINDOW: Color = Color::rgb(0x0E, 0x0E, 0x0E);
+pub(crate) const WINDOW: Color = Color::rgb(0x0E, 0x0E, 0x0E);
 /// `#181818` — activity bar and status bar: the frame around everything.
-pub const CHROME_0: Color = Color::rgb(0x18, 0x18, 0x18);
+pub(crate) const CHROME_0: Color = Color::rgb(0x18, 0x18, 0x18);
 /// `#1A1A1A` — sidebar, preview pane and bottom panel.
-pub const CHROME_1: Color = Color::rgb(0x1A, 0x1A, 0x1A);
+pub(crate) const CHROME_1: Color = Color::rgb(0x1A, 0x1A, 0x1A);
 /// `#1F1F1F` — the editor surface.
-pub const CHROME_2: Color = Color::rgb(0x1F, 0x1F, 0x1F);
+pub(crate) const CHROME_2: Color = Color::rgb(0x1F, 0x1F, 0x1F);
 /// `#262626` — raised: the active tab, a popover, the command palette.
-pub const CHROME_3: Color = Color::rgb(0x26, 0x26, 0x26);
+pub(crate) const CHROME_3: Color = Color::rgb(0x26, 0x26, 0x26);
 /// `#2F2F2F` — hover.
-pub const CHROME_4: Color = Color::rgb(0x2F, 0x2F, 0x2F);
+pub(crate) const CHROME_4: Color = Color::rgb(0x2F, 0x2F, 0x2F);
 /// `#2B2B2B` — the hairline around every card.
-pub const LINE: Color = Color::rgb(0x2B, 0x2B, 0x2B);
+pub(crate) const LINE: Color = Color::rgb(0x2B, 0x2B, 0x2B);
 /// `#82898F` — line numbers at rest. Lifted one step off GitHub's muted grey
 /// so a line number clears 4.5:1, because a line number is *read*.
-pub const GUTTER: Color = Color::rgb(0x82, 0x89, 0x8F);
+pub(crate) const GUTTER: Color = Color::rgb(0x82, 0x89, 0x8F);
 /// `#CCCCCC` — the caret line's number.
-pub const GUTTER_ACTIVE: Color = Color::rgb(0xCC, 0xCC, 0xCC);
+pub(crate) const GUTTER_ACTIVE: Color = Color::rgb(0xCC, 0xCC, 0xCC);
 /// `#CCA700` — the warning.
-pub const WARNING: Color = Color::rgb(0xCC, 0xA7, 0x00);
+pub(crate) const WARNING: Color = Color::rgb(0xCC, 0xA7, 0x00);
 /// `#FFB4AB` — the error, from the dark `ColorScheme`.
-pub const ERROR: Color = Color::rgb(0xFF, 0xB4, 0xAB);
+pub(crate) const ERROR: Color = Color::rgb(0xFF, 0xB4, 0xAB);
 /// `#E4E1E6` — body text on a chrome surface.
-pub const ON_SURFACE: Color = Color::rgb(0xE4, 0xE1, 0xE6);
+pub(crate) const ON_SURFACE: Color = Color::rgb(0xE4, 0xE1, 0xE6);
 
 /// `#7E5CE8` — the accent's near stop. White text sits on this.
-pub const ACCENT: Color = Color::rgb(0x7E, 0x5C, 0xE8);
+pub(crate) const ACCENT: Color = Color::rgb(0x7E, 0x5C, 0xE8);
 /// `#B491FF` — the accent's far stop, and most of what the eye sees.
-pub const ACCENT_SOFT: Color = Color::rgb(0xB4, 0x91, 0xFF);
+pub(crate) const ACCENT_SOFT: Color = Color::rgb(0xB4, 0x91, 0xFF);
 /// The wash behind a selected thing: the near stop at `0x3E`.
-pub const ACCENT_WASH: Color = Color::rgba(0x7E, 0x5C, 0xE8, 0x3E);
+pub(crate) const ACCENT_WASH: Color = Color::rgba(0x7E, 0x5C, 0xE8, 0x3E);
 
 /// One colour per token class the highlighter emits — `theme::Syntax`.
-pub mod syn {
+pub(crate) mod syn {
     use vieww_foundation::Color;
-    pub const KEYWORD: Color = Color::rgb(0x56, 0x9C, 0xD6);
-    pub const FUNCTION: Color = Color::rgb(0xDC, 0xDC, 0xAA);
-    pub const TYPE_NAME: Color = Color::rgb(0x4E, 0xC9, 0xB0);
-    pub const STRING: Color = Color::rgb(0xCE, 0x91, 0x78);
-    pub const NUMBER: Color = Color::rgb(0xB5, 0xCE, 0xA8);
-    pub const COMMENT: Color = Color::rgb(0x6A, 0x99, 0x55);
-    pub const MACRO_NAME: Color = Color::rgb(0xC5, 0x86, 0xC0);
-    pub const PUNCTUATION: Color = Color::rgb(0xD4, 0xD4, 0xD4);
-    pub const ATTRIBUTE: Color = Color::rgb(0x9C, 0xDC, 0xFE);
+    pub(crate) const KEYWORD: Color = Color::rgb(0x56, 0x9C, 0xD6);
+    pub(crate) const FUNCTION: Color = Color::rgb(0xDC, 0xDC, 0xAA);
+    pub(crate) const TYPE_NAME: Color = Color::rgb(0x4E, 0xC9, 0xB0);
+    pub(crate) const STRING: Color = Color::rgb(0xCE, 0x91, 0x78);
+    pub(crate) const NUMBER: Color = Color::rgb(0xB5, 0xCE, 0xA8);
+    pub(crate) const COMMENT: Color = Color::rgb(0x6A, 0x99, 0x55);
+    pub(crate) const MACRO_NAME: Color = Color::rgb(0xC5, 0x86, 0xC0);
+    pub(crate) const PUNCTUATION: Color = Color::rgb(0xD4, 0xD4, 0xD4);
+    pub(crate) const ATTRIBUTE: Color = Color::rgb(0x9C, 0xDC, 0xFE);
 }
 
 /// `c` at `a` of its own alpha.
 #[must_use]
-pub fn alpha(c: Color, a: f32) -> Color {
+pub(crate) fn alpha(c: Color, a: f32) -> Color {
     Color::rgba(c.r, c.g, c.b, (a * 255.0).clamp(0.0, 255.0) as u8)
 }
 
@@ -118,7 +118,7 @@ pub fn alpha(c: Color, a: f32) -> Color {
 /// a third of the way down. Nine of 255 — anything legible as a ramp on a
 /// flat panel reads as a mistake.
 #[must_use]
-pub fn sheen(base: Color) -> Gradient {
+pub(crate) fn sheen(base: Color) -> Gradient {
     Gradient::vertical().with_dither().with_stops(&[
         (0.0, Color::rgba(255, 255, 255, 9).over(base)),
         (0.34, base),
@@ -129,7 +129,7 @@ pub fn sheen(base: Color) -> Gradient {
 /// The deep sheen: lit from the top *and* shaded at the bottom, for the tall
 /// regions where a sheen alone runs out of ramp.
 #[must_use]
-pub fn deep_sheen(base: Color) -> Gradient {
+pub(crate) fn deep_sheen(base: Color) -> Gradient {
     Gradient::vertical().with_dither().with_stops(&[
         (0.0, Color::rgba(255, 255, 255, 14).over(base)),
         (0.28, base),
@@ -139,13 +139,13 @@ pub fn deep_sheen(base: Color) -> Gradient {
 
 /// The rim: one pixel of caught light along a raised surface's top edge.
 #[must_use]
-pub fn rim(base: Color) -> Color {
+pub(crate) fn rim(base: Color) -> Color {
     Color::rgba(255, 255, 255, 20).over(base)
 }
 
 /// The elevation shadow, by level — the product's own curve.
 #[must_use]
-pub fn elevation(level: u8) -> Shadow {
+pub(crate) fn elevation(level: u8) -> Shadow {
     let level = f32::from(level.clamp(1, 4));
     let a = (46.0 + level * 30.0).min(190.0);
     Shadow::new(
@@ -158,42 +158,42 @@ pub fn elevation(level: u8) -> Shadow {
 // ── Geometry ────────────────────────────────────────────────────────────────
 
 /// The radius every region of the shell is cut to — `chrome::CARD_CORNER`.
-pub const CARD_CORNER: f32 = 8.0;
+pub(crate) const CARD_CORNER: f32 = 8.0;
 /// The gutter between two regions, and the window's own inset —
 /// `chrome::CARD_GAP`. It is also the width of a divider, on purpose: the
 /// drag handle *is* the gutter, so a split costs no pixels of its own.
-pub const CARD_GAP: f32 = 6.0;
+pub(crate) const CARD_GAP: f32 = 6.0;
 
-pub const TITLEBAR_H: f32 = 36.0;
-pub const RAIL_W: f32 = 48.0;
-pub const STATUS_H: f32 = 24.0;
-pub const SIDEBAR_W: f32 = 268.0;
-pub const SIDEBAR_HEADER: f32 = 34.0;
-pub const SIDEBAR_ROW: f32 = 22.0;
-pub const TAB_STRIP: f32 = 35.0;
-pub const BREADCRUMB: f32 = 26.0;
-pub const MINIMAP_W: f32 = 64.0;
-pub const PANEL_H: f32 = 176.0;
-pub const PANEL_TABS: f32 = 32.0;
+pub(crate) const TITLEBAR_H: f32 = 36.0;
+pub(crate) const RAIL_W: f32 = 48.0;
+pub(crate) const STATUS_H: f32 = 24.0;
+pub(crate) const SIDEBAR_W: f32 = 268.0;
+pub(crate) const SIDEBAR_HEADER: f32 = 34.0;
+pub(crate) const SIDEBAR_ROW: f32 = 22.0;
+pub(crate) const TAB_STRIP: f32 = 35.0;
+pub(crate) const BREADCRUMB: f32 = 26.0;
+pub(crate) const MINIMAP_W: f32 = 64.0;
+pub(crate) const PANEL_H: f32 = 176.0;
+pub(crate) const PANEL_TABS: f32 = 32.0;
 /// The gutter column's width. The product sizes it to the digit count; the
 /// film's buffers are two digits, and this is that width.
-pub const GUTTER_W: f32 = 52.0;
+pub(crate) const GUTTER_W: f32 = 52.0;
 
 /// The band below the window that belongs to the film, not the product.
-pub const CAPTION_BAND: f32 = 126.0;
+pub(crate) const CAPTION_BAND: f32 = 126.0;
 
 /// Code metrics. `CODE_LINE_RATIO` is the product's `20.0 / 13.0`, so the
 /// leading follows the size the way the editor's does.
-pub const CODE_SIZE: f32 = 19.0;
-pub const CODE_LINE_RATIO: f32 = 20.0 / 13.0;
-pub const CODE_LEAD: f32 = CODE_SIZE * CODE_LINE_RATIO;
-pub const CODE_PAD_X: f32 = 16.0;
-pub const CODE_PAD_Y: f32 = 10.0;
+pub(crate) const CODE_SIZE: f32 = 19.0;
+pub(crate) const CODE_LINE_RATIO: f32 = 20.0 / 13.0;
+pub(crate) const CODE_LEAD: f32 = CODE_SIZE * CODE_LINE_RATIO;
+pub(crate) const CODE_PAD_X: f32 = 16.0;
+pub(crate) const CODE_PAD_Y: f32 = 10.0;
 
 /// Every rectangle of the studio, derived from the window. Nothing in a scene
 /// positions a region by hand.
 #[derive(Clone, Copy)]
-pub struct Layout {
+pub(crate) struct Layout {
     /// The whole application surface — `chrome.window`, padded by the gutter.
     pub window: Rect,
     pub titlebar: Rect,
@@ -222,7 +222,7 @@ impl Layout {
     /// The studio filling the frame at `inset`, with the preview taking
     /// `preview_frac` of the main column and the bottom panel open or shut.
     #[must_use]
-    pub fn new(inset: f32, preview_frac: f32, panel_open: bool) -> Self {
+    pub(crate) fn new(inset: f32, preview_frac: f32, panel_open: bool) -> Self {
         Self::within(
             Rect::new(inset, 40.0, W - inset, H - CAPTION_BAND),
             preview_frac,
@@ -233,7 +233,7 @@ impl Layout {
     /// The studio inside an arbitrary rectangle — how S11 shows the IDE
     /// inside its own preview.
     #[must_use]
-    pub fn within(window: Rect, preview_frac: f32, panel_open: bool) -> Self {
+    pub(crate) fn within(window: Rect, preview_frac: f32, panel_open: bool) -> Self {
         let g = CARD_GAP;
         let inner = Rect::new(
             window.left + g,
@@ -242,16 +242,30 @@ impl Layout {
             window.bottom - g,
         );
         let titlebar = Rect::new(inner.left, inner.top, inner.right, inner.top + TITLEBAR_H);
-        let status = Rect::new(inner.left, inner.bottom - STATUS_H, inner.right, inner.bottom);
+        let status = Rect::new(
+            inner.left,
+            inner.bottom - STATUS_H,
+            inner.right,
+            inner.bottom,
+        );
         let work_top = titlebar.bottom + g;
         let work_bottom = status.top - g;
 
         let rail = Rect::new(inner.left, work_top, inner.left + RAIL_W, work_bottom);
-        let sidebar = Rect::new(rail.right + g, work_top, rail.right + g + SIDEBAR_W, work_bottom);
+        let sidebar = Rect::new(
+            rail.right + g,
+            work_top,
+            rail.right + g + SIDEBAR_W,
+            work_bottom,
+        );
         let main_l = sidebar.right + g;
 
         // The main column: panes over the bottom panel.
-        let panel_top = if panel_open { work_bottom - PANEL_H } else { work_bottom - PANEL_TABS };
+        let panel_top = if panel_open {
+            work_bottom - PANEL_H
+        } else {
+            work_bottom - PANEL_TABS
+        };
         let panel = Rect::new(main_l, panel_top, inner.right, work_bottom);
         let panel_tabs = Rect::new(panel.left, panel.top, panel.right, panel.top + PANEL_TABS);
         let panel_body = Rect::new(panel.left, panel_tabs.bottom, panel.right, panel.bottom);
@@ -261,14 +275,44 @@ impl Layout {
         let preview = Rect::new(inner.right - preview_w, work_top, inner.right, panes_bottom);
         let editor = Rect::new(main_l, work_top, preview.left - g, panes_bottom);
 
-        let tabs = Rect::new(editor.left, editor.top, editor.right, editor.top + TAB_STRIP);
-        let breadcrumb = Rect::new(editor.left, tabs.bottom, editor.right, tabs.bottom + BREADCRUMB);
-        let gutter = Rect::new(editor.left, breadcrumb.bottom, editor.left + GUTTER_W, editor.bottom);
-        let minimap = Rect::new(editor.right - MINIMAP_W, breadcrumb.bottom, editor.right, editor.bottom);
+        let tabs = Rect::new(
+            editor.left,
+            editor.top,
+            editor.right,
+            editor.top + TAB_STRIP,
+        );
+        let breadcrumb = Rect::new(
+            editor.left,
+            tabs.bottom,
+            editor.right,
+            tabs.bottom + BREADCRUMB,
+        );
+        let gutter = Rect::new(
+            editor.left,
+            breadcrumb.bottom,
+            editor.left + GUTTER_W,
+            editor.bottom,
+        );
+        let minimap = Rect::new(
+            editor.right - MINIMAP_W,
+            breadcrumb.bottom,
+            editor.right,
+            editor.bottom,
+        );
         let code = Rect::new(gutter.right, breadcrumb.bottom, minimap.left, editor.bottom);
 
-        let preview_bar = Rect::new(preview.left, preview.top, preview.right, preview.top + TAB_STRIP);
-        let preview_body = Rect::new(preview.left, preview_bar.bottom, preview.right, preview.bottom);
+        let preview_bar = Rect::new(
+            preview.left,
+            preview.top,
+            preview.right,
+            preview.top + TAB_STRIP,
+        );
+        let preview_body = Rect::new(
+            preview.left,
+            preview_bar.bottom,
+            preview.right,
+            preview.bottom,
+        );
 
         Self {
             window,
@@ -294,28 +338,39 @@ impl Layout {
 
     /// The top of code line `i` (0-based).
     #[must_use]
-    pub fn line_y(&self, i: usize) -> f32 {
+    pub(crate) fn line_y(&self, i: usize) -> f32 {
         self.code.top + CODE_PAD_Y + i as f32 * CODE_LEAD
     }
 
     /// How many code lines fit.
     #[must_use]
-    pub fn visible_lines(&self) -> usize {
-        ((self.code.height() - CODE_PAD_Y * 2.0) / CODE_LEAD).floor().max(1.0) as usize
+    pub(crate) fn visible_lines(&self) -> usize {
+        ((self.code.height() - CODE_PAD_Y * 2.0) / CODE_LEAD)
+            .floor()
+            .max(1.0) as usize
     }
 }
 
 /// Draw one region the way `chrome::card` does: elevation, sheen over the
 /// base, a hairline, and one pixel of rim along the top edge.
-pub fn card(book: &mut Sketchbook, r: Rect, base: Color, deep: bool, a: f32) {
+pub(crate) fn card(book: &mut Sketchbook, r: Rect, base: Color, deep: bool, a: f32) {
     if a <= 0.01 || r.width() <= 1.0 || r.height() <= 1.0 {
         return;
     }
     book.shadow(r, CARD_CORNER, elevation(2));
-    book.rrect(r, CARD_CORNER, if deep { deep_sheen(base) } else { sheen(base) });
+    book.rrect(
+        r,
+        CARD_CORNER,
+        if deep { deep_sheen(base) } else { sheen(base) },
+    );
     book.stroke_rrect(r, CARD_CORNER, alpha(LINE, a), 1.0);
     book.rrect(
-        xywh(r.left + CARD_CORNER, r.top + 1.0, (r.width() - CARD_CORNER * 2.0).max(0.0), 1.0),
+        xywh(
+            r.left + CARD_CORNER,
+            r.top + 1.0,
+            (r.width() - CARD_CORNER * 2.0).max(0.0),
+            1.0,
+        ),
         0.5,
         alpha(rim(base), a),
     );
@@ -325,7 +380,7 @@ pub fn card(book: &mut Sketchbook, r: Rect, base: Color, deep: bool, a: f32) {
 
 /// A token class, one per role in the product's `Syntax` struct.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Tok {
+pub(crate) enum Tok {
     Kw,
     Fun,
     Ty,
@@ -340,7 +395,7 @@ pub enum Tok {
 
 impl Tok {
     #[must_use]
-    pub const fn color(self) -> Color {
+    pub(crate) const fn color(self) -> Color {
         match self {
             Self::Kw => syn::KEYWORD,
             Self::Fun => syn::FUNCTION,
@@ -357,29 +412,31 @@ impl Tok {
 
 /// One source line: a list of coloured pieces.
 #[derive(Clone, Default)]
-pub struct Line {
+pub(crate) struct Line {
     pub parts: Vec<(String, Tok)>,
 }
 
 impl Line {
     #[must_use]
-    pub fn plain(text: &str, tok: Tok) -> Self {
-        Self { parts: vec![(text.to_string(), tok)] }
+    pub(crate) fn plain(text: &str, tok: Tok) -> Self {
+        Self {
+            parts: vec![(text.to_string(), tok)],
+        }
     }
 
     #[must_use]
-    pub fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         self.parts.iter().map(|(s, _)| s.as_str()).collect()
     }
 
     #[must_use]
-    pub fn chars(&self) -> usize {
+    pub(crate) fn chars(&self) -> usize {
         self.parts.iter().map(|(s, _)| s.chars().count()).sum()
     }
 
     /// The line truncated to `n` characters — how a line types itself on.
     #[must_use]
-    pub fn truncated(&self, n: usize) -> Self {
+    pub(crate) fn truncated(&self, n: usize) -> Self {
         let mut left = n;
         let mut parts = Vec::new();
         for (s, t) in &self.parts {
@@ -402,7 +459,7 @@ impl Line {
 /// The highlighter. Two languages: `say`, the studio's fast loop, and Rust,
 /// what it becomes. One pass, and the classes are the product's own.
 #[must_use]
-pub fn lex(src: &str, rust: bool) -> Line {
+pub(crate) fn lex(src: &str, rust: bool) -> Line {
     const SAY_KW: &[&str] = &[
         "view", "state", "when", "else", "for", "in", "let", "text", "column", "row", "stack",
         "button", "on", "tap", "show", "hide", "each", "if", "canvas", "spring", "animate", "dial",
@@ -509,14 +566,14 @@ pub fn lex(src: &str, rust: bool) -> Line {
 
 /// Lex a whole buffer.
 #[must_use]
-pub fn lex_all(src: &[&str], rust: bool) -> Vec<Line> {
+pub(crate) fn lex_all(src: &[&str], rust: bool) -> Vec<Line> {
     src.iter().map(|l| lex(l, rust)).collect()
 }
 
 // ── The shell's state ───────────────────────────────────────────────────────
 
 #[derive(Clone)]
-pub struct FileRow {
+pub(crate) struct FileRow {
     pub name: String,
     pub depth: usize,
     pub kind: FileKind,
@@ -524,7 +581,7 @@ pub struct FileRow {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum FileKind {
+pub(crate) enum FileKind {
     Folder,
     FolderOpen,
     Say,
@@ -535,7 +592,7 @@ pub enum FileKind {
 
 impl FileKind {
     #[must_use]
-    pub const fn color(self) -> Color {
+    pub(crate) const fn color(self) -> Color {
         match self {
             Self::Folder | Self::FolderOpen => GUTTER,
             Self::Say => ACCENT_SOFT,
@@ -545,7 +602,7 @@ impl FileKind {
         }
     }
     #[must_use]
-    pub const fn glyph(self) -> &'static str {
+    pub(crate) const fn glyph(self) -> &'static str {
         match self {
             Self::Folder => "▸",
             Self::FolderOpen => "▾",
@@ -559,7 +616,7 @@ impl FileKind {
 
 /// A diagnostic pinned to a code line.
 #[derive(Clone)]
-pub struct Diag {
+pub(crate) struct Diag {
     pub line: usize,
     pub message: String,
     pub severity: Sev,
@@ -568,14 +625,14 @@ pub struct Diag {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Sev {
+pub(crate) enum Sev {
     Error,
     Warn,
 }
 
 impl Sev {
     #[must_use]
-    pub const fn color(self) -> Color {
+    pub(crate) const fn color(self) -> Color {
         match self {
             Self::Error => ERROR,
             Self::Warn => WARNING,
@@ -585,7 +642,7 @@ impl Sev {
 
 /// The command palette, mid-invocation.
 #[derive(Clone)]
-pub struct Palette {
+pub(crate) struct Palette {
     pub query: String,
     pub rows: Vec<(String, String)>,
     pub selected: usize,
@@ -594,7 +651,7 @@ pub struct Palette {
 
 /// The inspector — the studio's own devtools view.
 #[derive(Clone)]
-pub struct Inspector {
+pub(crate) struct Inspector {
     pub open: f32,
     pub tree: Vec<(usize, String, bool)>,
     pub facts: Vec<(String, String)>,
@@ -606,7 +663,7 @@ pub struct Inspector {
 
 /// The bottom panel's content: which tab, and what it is printing.
 #[derive(Clone)]
-pub struct Panel {
+pub(crate) struct Panel {
     /// Tab labels, and which is active.
     pub tabs: Vec<String>,
     pub active: usize,
@@ -616,7 +673,12 @@ pub struct Panel {
 impl Default for Panel {
     fn default() -> Self {
         Self {
-            tabs: vec!["Problems".into(), "Output".into(), "Terminal".into(), "Builds".into()],
+            tabs: vec![
+                "Problems".into(),
+                "Output".into(),
+                "Terminal".into(),
+                "Builds".into(),
+            ],
             active: 1,
             lines: Vec::new(),
         }
@@ -625,7 +687,7 @@ impl Default for Panel {
 
 /// The whole IDE at one instant.
 #[derive(Clone)]
-pub struct Shell {
+pub(crate) struct Shell {
     pub title: String,
     pub subtitle: String,
     pub files: Vec<FileRow>,
@@ -654,7 +716,7 @@ pub struct Shell {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum FocusOn {
+pub(crate) enum FocusOn {
     Code,
     Preview,
     Sidebar,
@@ -692,7 +754,7 @@ impl Default for Shell {
 
 /// The project tree the film's session works in.
 #[must_use]
-pub fn project_tree(active: &str) -> Vec<FileRow> {
+pub(crate) fn project_tree(active: &str) -> Vec<FileRow> {
     let rows: &[(&str, usize, FileKind)] = &[
         ("counter", 0, FileKind::FolderOpen),
         ("src", 1, FileKind::FolderOpen),
@@ -719,7 +781,11 @@ pub fn project_tree(active: &str) -> Vec<FileRow> {
 
 /// The status bar the session carries.
 #[must_use]
-pub fn status_line(target: &str, fps: &str, extra: &[(&str, Color)]) -> Vec<(String, Color)> {
+pub(crate) fn status_line(
+    target: &str,
+    fps: &str,
+    extra: &[(&str, Color)],
+) -> Vec<(String, Color)> {
     let mut v = vec![
         ("viewwstudio".to_string(), ACCENT_SOFT),
         (format!("target {target}"), GUTTER),
@@ -733,10 +799,16 @@ pub fn status_line(target: &str, fps: &str, extra: &[(&str, Color)]) -> Vec<(Str
 
 /// The build log the bottom panel usually shows.
 #[must_use]
-pub fn output_lines() -> Vec<(String, Color)> {
+pub(crate) fn output_lines() -> Vec<(String, Color)> {
     vec![
-        ("  preview   say → tree in 0.9 ms · no codegen".to_string(), GUTTER),
-        ("  reload    counter.say · 1 view rebuilt".to_string(), syn::STRING),
+        (
+            "  preview   say → tree in 0.9 ms · no codegen".to_string(),
+            GUTTER,
+        ),
+        (
+            "  reload    counter.say · 1 view rebuilt".to_string(),
+            syn::STRING,
+        ),
         ("  renderer  native · 4× supersampling".to_string(), GUTTER),
     ]
 }
@@ -744,7 +816,7 @@ pub fn output_lines() -> Vec<(String, Color)> {
 // ── The draw: back ──────────────────────────────────────────────────────────
 
 /// Everything behind the preview's content.
-pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
+pub(crate) fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     let a = clamp01(sh.assembly);
     if a <= 0.01 {
         return;
@@ -765,7 +837,10 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     .enumerate()
     {
         book.circle(
-            Offset::new(l.titlebar.left + 20.0 + i as f32 * 16.0, l.titlebar.top + TITLEBAR_H * 0.5),
+            Offset::new(
+                l.titlebar.left + 20.0 + i as f32 * 16.0,
+                l.titlebar.top + TITLEBAR_H * 0.5,
+            ),
             5.0,
             alpha(c, 0.9),
         );
@@ -773,8 +848,17 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     // The brand mark: the studio's own glyph, a preview panel inside a frame.
     let bx = l.titlebar.left + 84.0;
     let by = l.titlebar.top + TITLEBAR_H * 0.5;
-    book.stroke_rrect(xywh(bx, by - 8.0, 22.0, 16.0), 3.0, alpha(ACCENT_SOFT, 0.8), 1.4);
-    book.rrect(xywh(bx + 12.0, by - 5.0, 7.0, 10.0), 1.5, alpha(ACCENT, 0.9));
+    book.stroke_rrect(
+        xywh(bx, by - 8.0, 22.0, 16.0),
+        3.0,
+        alpha(ACCENT_SOFT, 0.8),
+        1.4,
+    );
+    book.rrect(
+        xywh(bx + 12.0, by - 5.0, 7.0, 10.0),
+        1.5,
+        alpha(ACCENT, 0.9),
+    );
 
     // ── The activity bar ────────────────────────────────────────────────
     card(book, l.rail, CHROME_0, true, a);
@@ -790,9 +874,17 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
                 5.0,
                 ACCENT_WASH,
             );
-            book.rrect(xywh(l.rail.left + 1.0, y - 11.0, 2.5, 22.0), 1.2, ACCENT_SOFT);
+            book.rrect(
+                xywh(l.rail.left + 1.0, y - 11.0, 2.5, 22.0),
+                1.2,
+                ACCENT_SOFT,
+            );
         }
-        let c = if on { alpha(ACCENT_SOFT, 0.95) } else { alpha(GUTTER, 0.62) };
+        let c = if on {
+            alpha(ACCENT_SOFT, 0.95)
+        } else {
+            alpha(GUTTER, 0.62)
+        };
         let cx = l.rail.left + RAIL_W * 0.5;
         view_icon(book, i, Offset::new(cx, y), c);
     }
@@ -800,7 +892,12 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     // ── The sidebar ─────────────────────────────────────────────────────
     card(book, l.sidebar, CHROME_1, true, a);
     book.rrect(
-        xywh(l.sidebar.left + 1.0, l.sidebar.top + 1.0, l.sidebar.width() - 2.0, SIDEBAR_HEADER),
+        xywh(
+            l.sidebar.left + 1.0,
+            l.sidebar.top + 1.0,
+            l.sidebar.width() - 2.0,
+            SIDEBAR_HEADER,
+        ),
         CARD_CORNER - 1.0,
         alpha(Color::rgba(255, 255, 255, 6).over(CHROME_1), a),
     );
@@ -811,7 +908,12 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
         }
         if f.active {
             book.rrect(
-                xywh(l.sidebar.left + 4.0, y, l.sidebar.width() - 8.0, SIDEBAR_ROW),
+                xywh(
+                    l.sidebar.left + 4.0,
+                    y,
+                    l.sidebar.width() - 8.0,
+                    SIDEBAR_ROW,
+                ),
                 4.0,
                 ACCENT_WASH,
             );
@@ -825,21 +927,46 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     for (name, _k, active, dirty) in &sh.tabs {
         let w = 12.0 * 2.0 + 13.0 + 7.0 * 2.0 + 17.0 + name.chars().count() as f32 * 6.9;
         if *active {
-            book.rrect(xywh(x, l.tabs.top + 3.0, w, TAB_STRIP - 3.0), 6.0, alpha(CHROME_3, a));
-            book.rrect(xywh(x + 1.0, l.tabs.top + 3.0, w - 2.0, 1.0), 0.5, alpha(rim(CHROME_3), a));
-            book.rrect(xywh(x + 8.0, l.tabs.bottom - 2.0, w - 16.0, 2.0), 1.0, alpha(ACCENT_SOFT, 0.9));
+            book.rrect(
+                xywh(x, l.tabs.top + 3.0, w, TAB_STRIP - 3.0),
+                6.0,
+                alpha(CHROME_3, a),
+            );
+            book.rrect(
+                xywh(x + 1.0, l.tabs.top + 3.0, w - 2.0, 1.0),
+                0.5,
+                alpha(rim(CHROME_3), a),
+            );
+            book.rrect(
+                xywh(x + 8.0, l.tabs.bottom - 2.0, w - 16.0, 2.0),
+                1.0,
+                alpha(ACCENT_SOFT, 0.9),
+            );
         }
         let _ = dirty;
         x += w + 2.0;
     }
-    book.rect(xywh(l.tabs.left + 1.0, l.tabs.bottom, l.tabs.width() - 2.0, 1.0), alpha(LINE, a));
+    book.rect(
+        xywh(l.tabs.left + 1.0, l.tabs.bottom, l.tabs.width() - 2.0, 1.0),
+        alpha(LINE, a),
+    );
     // The breadcrumb strip.
     book.rect(
-        xywh(l.breadcrumb.left + 1.0, l.breadcrumb.top, l.breadcrumb.width() - 2.0, l.breadcrumb.height()),
+        xywh(
+            l.breadcrumb.left + 1.0,
+            l.breadcrumb.top,
+            l.breadcrumb.width() - 2.0,
+            l.breadcrumb.height(),
+        ),
         alpha(CHROME_2, a),
     );
     book.rect(
-        xywh(l.breadcrumb.left + 1.0, l.breadcrumb.bottom, l.breadcrumb.width() - 2.0, 1.0),
+        xywh(
+            l.breadcrumb.left + 1.0,
+            l.breadcrumb.bottom,
+            l.breadcrumb.width() - 2.0,
+            1.0,
+        ),
         alpha(LINE, 0.7 * a),
     );
 
@@ -876,9 +1003,19 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
         if n < 1.0 {
             continue;
         }
-        let indent = line.text().chars().take_while(|c| *c == ' ').count().min(16) as f32;
+        let indent = line
+            .text()
+            .chars()
+            .take_while(|c| *c == ' ')
+            .count()
+            .min(16) as f32;
         book.rect(
-            xywh(l.minimap.left + 8.0 + indent * 0.7, y, (n - indent).max(1.0) * 0.7, 2.0),
+            xywh(
+                l.minimap.left + 8.0 + indent * 0.7,
+                y,
+                (n - indent).max(1.0) * 0.7,
+                2.0,
+            ),
             alpha(ON_SURFACE, 0.26),
         );
     }
@@ -896,7 +1033,12 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     // ── The preview card ────────────────────────────────────────────────
     card(book, l.preview, CHROME_1, true, a);
     book.rect(
-        xywh(l.preview_bar.left + 1.0, l.preview_bar.bottom, l.preview_bar.width() - 2.0, 1.0),
+        xywh(
+            l.preview_bar.left + 1.0,
+            l.preview_bar.bottom,
+            l.preview_bar.width() - 2.0,
+            1.0,
+        ),
         alpha(LINE, a),
     );
     // The device toolbar: three form-factor chips and a live dot.
@@ -904,7 +1046,11 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     for i in 0..3 {
         let x = bx + i as f32 * 30.0;
         let cy = l.preview_bar.top + TAB_STRIP * 0.5;
-        let c = if i == 0 { alpha(ACCENT_SOFT, 0.95) } else { alpha(GUTTER, 0.55) };
+        let c = if i == 0 {
+            alpha(ACCENT_SOFT, 0.95)
+        } else {
+            alpha(GUTTER, 0.55)
+        };
         match i {
             0 => {
                 book.stroke_rrect(xywh(x, cy - 7.0, 20.0, 14.0), 2.0, c, 1.4);
@@ -919,7 +1065,10 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
         }
     }
     book.circle(
-        Offset::new(l.preview_bar.right - 24.0, l.preview_bar.top + TAB_STRIP * 0.5),
+        Offset::new(
+            l.preview_bar.right - 24.0,
+            l.preview_bar.top + TAB_STRIP * 0.5,
+        ),
         4.5,
         alpha(syn::STRING, 0.9),
     );
@@ -939,7 +1088,12 @@ pub fn back(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
         px += w + 6.0;
     }
     book.rect(
-        xywh(l.panel_tabs.left + 1.0, l.panel_tabs.bottom, l.panel_tabs.width() - 2.0, 1.0),
+        xywh(
+            l.panel_tabs.left + 1.0,
+            l.panel_tabs.bottom,
+            l.panel_tabs.width() - 2.0,
+            1.0,
+        ),
         alpha(LINE, 0.8 * a),
     );
 
@@ -961,7 +1115,12 @@ fn view_icon(book: &mut Sketchbook, i: usize, at: Offset, c: Color) {
         // search
         1 => {
             book.ring(Offset::new(x - 1.0, y - 2.0), 6.0, 1.4, c);
-            book.line(Offset::new(x + 3.5, y + 2.5), Offset::new(x + 8.0, y + 7.5), c, 1.6);
+            book.line(
+                Offset::new(x + 3.5, y + 2.5),
+                Offset::new(x + 8.0, y + 7.5),
+                c,
+                1.6,
+            );
         }
         // code / snippets
         2 => {
@@ -1015,8 +1174,18 @@ fn view_icon(book: &mut Sketchbook, i: usize, at: Offset, c: Color) {
             book.circle(Offset::new(x - 5.0, y - 6.0), 2.8, c);
             book.circle(Offset::new(x + 6.0, y + 1.0), 2.8, c);
             book.circle(Offset::new(x - 5.0, y + 8.0), 2.8, c);
-            book.line(Offset::new(x - 5.0, y - 6.0), Offset::new(x - 5.0, y + 8.0), c, 1.3);
-            book.line(Offset::new(x - 5.0, y + 1.0), Offset::new(x + 6.0, y + 1.0), c, 1.3);
+            book.line(
+                Offset::new(x - 5.0, y - 6.0),
+                Offset::new(x - 5.0, y + 8.0),
+                c,
+                1.3,
+            );
+            book.line(
+                Offset::new(x - 5.0, y + 1.0),
+                Offset::new(x + 6.0, y + 1.0),
+                c,
+                1.3,
+            );
         }
         // export
         9 => {
@@ -1057,7 +1226,7 @@ fn view_icon(book: &mut Sketchbook, i: usize, at: Offset, c: Color) {
 // ── The draw: front ─────────────────────────────────────────────────────────
 
 /// Everything over the preview's content.
-pub fn front(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
+pub(crate) fn front(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     let a = clamp01(sh.assembly);
     if a <= 0.01 {
         return;
@@ -1099,10 +1268,18 @@ pub fn front(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
                 l.preview_body.right - 1.0,
                 l.preview_body.bottom - 1.0,
             );
-            book.rect(xywh(r.left, r.top, r.width(), r.height()), alpha(CHROME_0, 0.98));
+            book.rect(
+                xywh(r.left, r.top, r.width(), r.height()),
+                alpha(CHROME_0, 0.98),
+            );
             book.rect(xywh(r.left, r.top, r.width(), 1.0), alpha(ACCENT, 0.55));
             book.rect(
-                xywh(r.left + r.width() * 0.52, r.top + 30.0, 1.0, (r.height() - 38.0).max(0.0)),
+                xywh(
+                    r.left + r.width() * 0.52,
+                    r.top + 30.0,
+                    1.0,
+                    (r.height() - 38.0).max(0.0),
+                ),
                 alpha(LINE, 0.9),
             );
             for (i, (_d, _n, sel)) in ins.tree.iter().enumerate() {
@@ -1163,15 +1340,32 @@ pub fn front(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
             book.rrect(r, CARD_CORNER, sheen(CHROME_3));
             book.stroke_rrect(r, CARD_CORNER, alpha(LINE, 1.0), 1.0);
             book.rect(
-                xywh(r.left + CARD_CORNER, r.top + 1.0, r.width() - CARD_CORNER * 2.0, 1.0),
+                xywh(
+                    r.left + CARD_CORNER,
+                    r.top + 1.0,
+                    r.width() - CARD_CORNER * 2.0,
+                    1.0,
+                ),
                 rim(CHROME_3),
             );
-            book.rect(xywh(r.left + 1.0, r.top + 48.0, r.width() - 2.0, 1.0), alpha(LINE, 1.0));
-            book.rrect(xywh(r.left + 14.0, r.top + 14.0, 2.5, 20.0), 1.2, ACCENT_SOFT);
+            book.rect(
+                xywh(r.left + 1.0, r.top + 48.0, r.width() - 2.0, 1.0),
+                alpha(LINE, 1.0),
+            );
+            book.rrect(
+                xywh(r.left + 14.0, r.top + 14.0, 2.5, 20.0),
+                1.2,
+                ACCENT_SOFT,
+            );
             for i in 0..p.rows.len() {
                 if i == p.selected {
                     book.rrect(
-                        xywh(r.left + 6.0, r.top + 54.0 + i as f32 * 40.0, r.width() - 12.0, 36.0),
+                        xywh(
+                            r.left + 6.0,
+                            r.top + 54.0 + i as f32 * 40.0,
+                            r.width() - 12.0,
+                            36.0,
+                        ),
                         5.0,
                         ACCENT_WASH,
                     );
@@ -1181,13 +1375,17 @@ pub fn front(book: &mut Sketchbook, l: &Layout, sh: &Shell) {
     }
 
     if sh.dim > 0.004 {
-        book.rrect(l.window, CARD_CORNER + 4.0, alpha(Color::BLACK, 0.72 * sh.dim));
+        book.rrect(
+            l.window,
+            CARD_CORNER + 4.0,
+            alpha(Color::BLACK, 0.72 * sh.dim),
+        );
     }
 }
 
 /// Map a `0..=1` rect onto a real one.
 #[must_use]
-pub fn unit_to(u: Rect, into: Rect) -> Rect {
+pub(crate) fn unit_to(u: Rect, into: Rect) -> Rect {
     Rect::new(
         into.left + u.left * into.width(),
         into.top + u.top * into.height(),
@@ -1200,7 +1398,7 @@ pub fn unit_to(u: Rect, into: Rect) -> Rect {
 
 /// Every glyph the studio shows.
 #[must_use]
-pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
+pub(crate) fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
     let mut out: Vec<WidgetNode> = Vec::new();
     let a = clamp01(sh.assembly);
     if a <= 0.02 {
@@ -1267,7 +1465,11 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
         out.push(
             Type::new(&f.name)
                 .size(13.0)
-                .color(if f.active { Color::WHITE } else { alpha(ON_SURFACE, 0.78) })
+                .color(if f.active {
+                    Color::WHITE
+                } else {
+                    alpha(ON_SURFACE, 0.78)
+                })
                 .at(x + 16.0, y + 2.0)
                 .width(l.sidebar.right - x - 24.0)
                 .into(),
@@ -1289,7 +1491,11 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
         out.push(
             Type::new(name)
                 .size(13.0)
-                .color(if *active { Color::WHITE } else { alpha(ON_SURFACE, 0.62) })
+                .color(if *active {
+                    Color::WHITE
+                } else {
+                    alpha(ON_SURFACE, 0.62)
+                })
                 .at(x + 26.0, l.tabs.top + 10.0)
                 .width((w - 44.0).max(20.0))
                 .into(),
@@ -1319,7 +1525,10 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
     );
 
     // The gutter's numbers and the code itself.
-    let code_style = TextStyle::new(CODE_SIZE).monospace().line_height(1.0).color(ON_SURFACE);
+    let code_style = TextStyle::new(CODE_SIZE)
+        .monospace()
+        .line_height(1.0)
+        .color(ON_SURFACE);
     for (i, line) in sh.code.iter().enumerate() {
         let y = l.line_y(i);
         if y + CODE_LEAD > l.code.bottom {
@@ -1330,7 +1539,11 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
             Type::new(format!("{}", i + 1))
                 .mono()
                 .size(13.0)
-                .color(if on_caret { GUTTER_ACTIVE } else { alpha(GUTTER, 0.9) })
+                .color(if on_caret {
+                    GUTTER_ACTIVE
+                } else {
+                    alpha(GUTTER, 0.9)
+                })
                 .right()
                 .at(l.gutter.left + 6.0, y + 3.0)
                 .width(l.gutter.width() - 20.0)
@@ -1357,7 +1570,11 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
                         .top(y)
                         .width(l.code.width() - CODE_PAD_X * 1.4)
                         .height(CODE_LEAD)
-                        .child(RichText::new(spans).style(code_style).align(TextAlign::Start)),
+                        .child(
+                            RichText::new(spans)
+                                .style(code_style)
+                                .align(TextAlign::Start),
+                        ),
                 )
                 .into(),
         );
@@ -1372,7 +1589,10 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
                 Type::new(&d.message)
                     .mono()
                     .size(12.0)
-                    .color(alpha(d.severity.color(), 0.92 * clamp01((d.reveal - 0.35) / 0.3)))
+                    .color(alpha(
+                        d.severity.color(),
+                        0.92 * clamp01((d.reveal - 0.35) / 0.3),
+                    ))
                     .right()
                     .at(l.code.left + l.code.width() * 0.46, l.line_y(d.line) + 3.0)
                     .width(l.code.width() * 0.50)
@@ -1498,7 +1718,11 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
                     Type::new(name)
                         .mono()
                         .size(12.5)
-                        .color(if *sel { syn::ATTRIBUTE } else { alpha(ON_SURFACE, 0.7) })
+                        .color(if *sel {
+                            syn::ATTRIBUTE
+                        } else {
+                            alpha(ON_SURFACE, 0.7)
+                        })
                         .opacity(o)
                         .at(r.left + 18.0 + *depth as f32 * 16.0, y)
                         .width(r.width() * 0.52 - 28.0)
@@ -1557,7 +1781,11 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
                 out.push(
                     Type::new(name)
                         .size(14.5)
-                        .color(if i == p.selected { Color::WHITE } else { alpha(ON_SURFACE, 0.72) })
+                        .color(if i == p.selected {
+                            Color::WHITE
+                        } else {
+                            alpha(ON_SURFACE, 0.72)
+                        })
                         .opacity(o)
                         .at(px + 22.0, y + 10.0)
                         .width(pw * 0.62)
@@ -1589,13 +1817,17 @@ pub fn text(l: &Layout, sh: &Shell) -> Vec<WidgetNode> {
 /// own instrument, drawn in the film's accent, sitting in the product's
 /// preview because that is where the session is.
 #[must_use]
-pub fn witness_chip(body: Rect, n: u32, a: f32) -> WidgetNode {
+pub(crate) fn witness_chip(body: Rect, n: u32, a: f32) -> WidgetNode {
     let x = body.right - 104.0;
     let y = body.bottom - 96.0;
     let plate = Painting::sized(
         Size::new(86.0, 80.0),
         PaintWith::new(move |book: &mut Sketchbook, _s: Size| {
-            book.rrect(xywh(0.0, 0.0, 86.0, 80.0), 10.0, alpha(crate::kit::WASH, 0.94));
+            book.rrect(
+                xywh(0.0, 0.0, 86.0, 80.0),
+                10.0,
+                alpha(crate::kit::WASH, 0.94),
+            );
             book.stroke_rrect(xywh(0.0, 0.0, 86.0, 80.0), 10.0, alpha(ACCENT, 0.55), 1.0);
             book.blended_layer(1.0, 15.0, BlendMode::Plus, None, |g| {
                 g.circle(Offset::new(43.0, 36.0), 30.0, alpha(ACCENT, 0.16));
@@ -1641,7 +1873,7 @@ pub fn witness_chip(body: Rect, n: u32, a: f32) -> WidgetNode {
 /// into any rectangle, so the same app appears in the studio's preview, in a
 /// browser and on a phone — which is what makes S12's tour a tour of one
 /// program rather than three pictures.
-pub struct App {
+pub(crate) struct App {
     /// The counter's value — the witness number itself.
     pub value: u32,
     /// `0..=1` — the app's own paint-in.
@@ -1687,7 +1919,7 @@ fn app_metrics(r: Rect) -> (f32, f32, f32, Rect, Rect) {
 }
 
 /// Paint the counter app into `r`.
-pub fn app(book: &mut Sketchbook, r: Rect, s: &App) {
+pub(crate) fn app(book: &mut Sketchbook, r: Rect, s: &App) {
     let a = clamp01(s.alive);
     if a <= 0.01 {
         return;
@@ -1710,7 +1942,12 @@ pub fn app(book: &mut Sketchbook, r: Rect, s: &App) {
         // whose value could not be resolved. Everything around it is painted
         // by the same frame, which is the entire point of the scene.
         let bw = dial_r0 * 2.5;
-        let cardr = Rect::new(cx - bw * 0.5, cy - dial_r0 * 1.2, cx + bw * 0.5, cy + dial_r0 * 1.2);
+        let cardr = Rect::new(
+            cx - bw * 0.5,
+            cy - dial_r0 * 1.2,
+            cx + bw * 0.5,
+            cy + dial_r0 * 1.2,
+        );
         book.rrect(cardr, 8.0, alpha(Color::rgb(0x3A, 0x1B, 0x1C), 0.97));
         book.stroke_rrect(cardr, 8.0, alpha(ERROR, 0.75), 1.5);
         book.rrect(xywh(cardr.left, cardr.top, cardr.width(), 2.5), 1.2, ERROR);
@@ -1726,7 +1963,12 @@ pub fn app(book: &mut Sketchbook, r: Rect, s: &App) {
             }
         });
     } else {
-        book.ring(Offset::new(cx, cy), dial_r, 8.0, alpha(Color::rgb(0x2C, 0x2C, 0x30), a));
+        book.ring(
+            Offset::new(cx, cy),
+            dial_r,
+            8.0,
+            alpha(Color::rgb(0x2C, 0x2C, 0x30), a),
+        );
         let p = clamp01(s.value as f32 / 7.0);
         if p > 0.001 {
             crate::kit::arc_sweep(
@@ -1756,10 +1998,9 @@ pub fn app(book: &mut Sketchbook, r: Rect, s: &App) {
             bar,
             s.spring,
             alpha(Color::rgb(0x28, 0x28, 0x2C), a),
-            Gradient::horizontal().with_dither().with_stops(&[
-                (0.0, alpha(ACCENT, a)),
-                (1.0, alpha(s.accent, a)),
-            ]),
+            Gradient::horizontal()
+                .with_dither()
+                .with_stops(&[(0.0, alpha(ACCENT, a)), (1.0, alpha(s.accent, a))]),
         );
     }
 
@@ -1784,20 +2025,25 @@ pub fn app(book: &mut Sketchbook, r: Rect, s: &App) {
         );
         if let Some(pr) = s.press {
             let rr = b.height() * 0.5 + (b.width() * 0.6) * ease_out_cubic(pr);
-            book.layer(1.0 - pr, 0.0, Some(Path::rounded_rect(b, b.height() * 0.5)), |g| {
-                g.circle(
-                    Offset::new(b.left + b.width() * 0.5, b.top + b.height() * 0.5),
-                    rr,
-                    alpha(Color::WHITE, 0.22),
-                );
-            });
+            book.layer(
+                1.0 - pr,
+                0.0,
+                Some(Path::rounded_rect(b, b.height() * 0.5)),
+                |g| {
+                    g.circle(
+                        Offset::new(b.left + b.width() * 0.5, b.top + b.height() * 0.5),
+                        rr,
+                        alpha(Color::WHITE, 0.22),
+                    );
+                },
+            );
         }
     }
 }
 
 /// The app's own glyphs — returned separately so the shaper places them.
 #[must_use]
-pub fn app_text(r: Rect, s: &App) -> Vec<WidgetNode> {
+pub(crate) fn app_text(r: Rect, s: &App) -> Vec<WidgetNode> {
     let a = clamp01(s.alive);
     if a <= 0.02 {
         return Vec::new();
@@ -1811,7 +2057,12 @@ pub fn app_text(r: Rect, s: &App) -> Vec<WidgetNode> {
 
     if s.broken {
         let cw = dial_r * 2.5;
-        let cardr = Rect::new(cx - cw * 0.5, cy - dial_r * 1.2, cx + cw * 0.5, cy + dial_r * 1.2);
+        let cardr = Rect::new(
+            cx - cw * 0.5,
+            cy - dial_r * 1.2,
+            cx + cw * 0.5,
+            cy + dial_r * 1.2,
+        );
         out.push(
             Type::new("dial")
                 .mono()
@@ -1889,7 +2140,7 @@ pub fn app_text(r: Rect, s: &App) -> Vec<WidgetNode> {
 // ── Device shells — the world tour's frames ─────────────────────────────────
 
 /// A desktop window frame — the native surface.
-pub fn shell_desktop(book: &mut Sketchbook, r: Rect, accent: Color, a: f32) -> Rect {
+pub(crate) fn shell_desktop(book: &mut Sketchbook, r: Rect, accent: Color, a: f32) -> Rect {
     book.shadow(r, 10.0, elevation(3));
     book.rrect(r, 10.0, sheen(CHROME_0));
     book.stroke_rrect(r, 10.0, alpha(LINE, a), 1.0);
@@ -1902,56 +2153,106 @@ pub fn shell_desktop(book: &mut Sketchbook, r: Rect, accent: Color, a: f32) -> R
     .into_iter()
     .enumerate()
     {
-        book.circle(Offset::new(r.left + 16.0 + i as f32 * 14.0, r.top + 14.0), 4.0, alpha(c, 0.85 * a));
+        book.circle(
+            Offset::new(r.left + 16.0 + i as f32 * 14.0, r.top + 14.0),
+            4.0,
+            alpha(c, 0.85 * a),
+        );
     }
-    book.rrect(xywh(r.left + r.width() * 0.5 - 36.0, r.top + 11.0, 72.0, 6.0), 3.0, alpha(accent, 0.35 * a));
-    book.rect(xywh(bar.left + 1.0, bar.bottom, bar.width() - 2.0, 1.0), alpha(LINE, a));
+    book.rrect(
+        xywh(r.left + r.width() * 0.5 - 36.0, r.top + 11.0, 72.0, 6.0),
+        3.0,
+        alpha(accent, 0.35 * a),
+    );
+    book.rect(
+        xywh(bar.left + 1.0, bar.bottom, bar.width() - 2.0, 1.0),
+        alpha(LINE, a),
+    );
     Rect::new(r.left + 1.0, bar.bottom, r.right - 1.0, r.bottom - 1.0)
 }
 
 /// A browser frame — the real-DOM surface.
-pub fn shell_browser(book: &mut Sketchbook, r: Rect, a: f32) -> Rect {
+pub(crate) fn shell_browser(book: &mut Sketchbook, r: Rect, a: f32) -> Rect {
     book.shadow(r, 10.0, elevation(3));
     book.rrect(r, 10.0, sheen(CHROME_0));
     book.stroke_rrect(r, 10.0, alpha(LINE, a), 1.0);
     let bar = Rect::new(r.left, r.top, r.right, r.top + 50.0);
     for i in 0..3 {
-        book.circle(Offset::new(r.left + 16.0 + i as f32 * 14.0, r.top + 13.0), 4.0, alpha(GUTTER, 0.5 * a));
+        book.circle(
+            Offset::new(r.left + 16.0 + i as f32 * 14.0, r.top + 13.0),
+            4.0,
+            alpha(GUTTER, 0.5 * a),
+        );
     }
-    book.rrect(xywh(r.left + 64.0, r.top + 3.0, 164.0, 21.0), 6.0, alpha(CHROME_3, a));
-    book.rrect(xywh(r.left + 14.0, r.top + 30.0, r.width() - 28.0, 15.0), 7.5, alpha(WINDOW, a));
-    book.rect(xywh(bar.left + 1.0, bar.bottom, bar.width() - 2.0, 1.0), alpha(LINE, a));
+    book.rrect(
+        xywh(r.left + 64.0, r.top + 3.0, 164.0, 21.0),
+        6.0,
+        alpha(CHROME_3, a),
+    );
+    book.rrect(
+        xywh(r.left + 14.0, r.top + 30.0, r.width() - 28.0, 15.0),
+        7.5,
+        alpha(WINDOW, a),
+    );
+    book.rect(
+        xywh(bar.left + 1.0, bar.bottom, bar.width() - 2.0, 1.0),
+        alpha(LINE, a),
+    );
     Rect::new(r.left + 1.0, bar.bottom, r.right - 1.0, r.bottom - 1.0)
 }
 
 /// A phone shell with a notch — the 2019 Android the receipts came from.
-pub fn shell_phone(book: &mut Sketchbook, r: Rect, a: f32) -> Rect {
+pub(crate) fn shell_phone(book: &mut Sketchbook, r: Rect, a: f32) -> Rect {
     book.shadow(r, 24.0, elevation(4));
     book.rrect(r, 24.0, alpha(Color::rgb(0x16, 0x16, 0x16), a));
     book.stroke_rrect(r, 24.0, alpha(Color::rgb(0x3A, 0x3A, 0x3A), 0.95 * a), 2.0);
     let screen = Rect::new(r.left + 7.0, r.top + 7.0, r.right - 7.0, r.bottom - 7.0);
     book.rrect(screen, 18.0, alpha(Color::rgb(0x0C, 0x0C, 0x0D), a));
     book.rrect(
-        xywh(screen.left + screen.width() * 0.5 - 32.0, screen.top + 5.0, 64.0, 11.0),
+        xywh(
+            screen.left + screen.width() * 0.5 - 32.0,
+            screen.top + 5.0,
+            64.0,
+            11.0,
+        ),
         5.5,
         alpha(Color::BLACK, 0.92 * a),
     );
     book.rrect(
-        xywh(screen.left + screen.width() * 0.5 - 38.0, screen.bottom - 11.0, 76.0, 4.0),
+        xywh(
+            screen.left + screen.width() * 0.5 - 38.0,
+            screen.bottom - 11.0,
+            76.0,
+            4.0,
+        ),
         2.0,
         alpha(Color::WHITE, 0.25 * a),
     );
-    Rect::new(screen.left, screen.top + 20.0, screen.right, screen.bottom - 18.0)
+    Rect::new(
+        screen.left,
+        screen.top + 20.0,
+        screen.right,
+        screen.bottom - 18.0,
+    )
 }
 
 /// A finger: the tap that lands on the phone and is felt on the desktop.
-pub fn touch(book: &mut Sketchbook, at: Offset, p: f32, accent: Color) {
+pub(crate) fn touch(book: &mut Sketchbook, at: Offset, p: f32, accent: Color) {
     if p <= 0.0 || p >= 1.0 {
         return;
     }
     let e = ease_out_cubic(p);
-    book.ring(at, 12.0 + 54.0 * e, 2.5 * (1.0 - e) + 0.6, alpha(accent, 0.8 * (1.0 - e)));
-    book.circle(at, 14.0 * (1.0 - e * 0.5), alpha(Color::WHITE, 0.5 * (1.0 - e)));
+    book.ring(
+        at,
+        12.0 + 54.0 * e,
+        2.5 * (1.0 - e) + 0.6,
+        alpha(accent, 0.8 * (1.0 - e)),
+    );
+    book.circle(
+        at,
+        14.0 * (1.0 - e * 0.5),
+        alpha(Color::WHITE, 0.5 * (1.0 - e)),
+    );
     book.blended_layer(1.0, 18.0, BlendMode::Plus, None, |g| {
         g.circle(at, 36.0, alpha(accent, 0.30 * (1.0 - e)));
     });
@@ -1959,7 +2260,7 @@ pub fn touch(book: &mut Sketchbook, at: Offset, p: f32, accent: Color) {
 
 /// The lineage badge: **viewwstudio** over **built on vieww**.
 #[must_use]
-pub fn lineage_badge(x: f32, y: f32, scale: f32, a: f32) -> Vec<WidgetNode> {
+pub(crate) fn lineage_badge(x: f32, y: f32, scale: f32, a: f32) -> Vec<WidgetNode> {
     vec![
         Type::new("viewwstudio")
             .size(34.0 * scale)
@@ -1982,7 +2283,7 @@ pub fn lineage_badge(x: f32, y: f32, scale: f32, a: f32) -> Vec<WidgetNode> {
 
 /// Compose a scene's frame: one background painter, then layers on top.
 #[must_use]
-pub fn compose(bg: WidgetNode, nodes: Vec<WidgetNode>) -> WidgetNode {
+pub(crate) fn compose(bg: WidgetNode, nodes: Vec<WidgetNode>) -> WidgetNode {
     let mut s = Stack::new().push(Positioned::fill().child(bg));
     for n in nodes {
         s = s.push(Positioned::fill().child(n));

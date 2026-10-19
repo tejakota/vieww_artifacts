@@ -203,9 +203,8 @@ fn property(name: &str) -> Option<String> {
     // a NUL into a buffer of exactly that size, on this stack frame.
     let name = CString::new(name).ok()?;
     let mut value = [0u8; 92];
-    let written = unsafe {
-        libc::__system_property_get(name.as_ptr(), value.as_mut_ptr().cast::<c_char>())
-    };
+    let written =
+        unsafe { libc::__system_property_get(name.as_ptr(), value.as_mut_ptr().cast::<c_char>()) };
     if written <= 0 {
         return None;
     }

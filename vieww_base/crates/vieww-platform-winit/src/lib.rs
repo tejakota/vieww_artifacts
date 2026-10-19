@@ -108,15 +108,15 @@ pub mod services;
     not(any(target_os = "android", target_os = "ios"))
 ))]
 pub mod desktop;
+mod device_tier;
+mod frame_budget;
+mod perf_hint;
+mod quality;
 #[cfg(all(
     feature = "desktop-services",
     not(any(target_os = "android", target_os = "ios"))
 ))]
 mod raster;
-mod device_tier;
-mod frame_budget;
-mod perf_hint;
-mod quality;
 pub mod rasterizer_choice;
 mod startup;
 mod stats;
@@ -127,15 +127,15 @@ pub use app::{App, CloseRequest, Closing, PlatformError, Waker};
 pub use deep_links::PlatformDeepLinks;
 pub use windows::PlatformWindows;
 
+pub use device_tier::{device_facts, device_facts_status, resolve_tier, DeviceFacts, DeviceTier};
 pub use input::{PointerTranslator, TouchPhase};
 pub use keys::{ime, KeyTranslator};
 pub use latency::{InputLatencyLog, InputLatencyReport};
 pub use lifecycle::Lifecycle;
-pub use scale::{Physical, Scale};
 pub use perf_hint::perf_hint_status;
-pub use device_tier::{device_facts, device_facts_status, resolve_tier, DeviceFacts, DeviceTier};
 pub use quality::{cache_budgets_for, cache_budgets_status, gpu_scale_status, QualityProfile};
 pub use rasterizer_choice::rasterizer_choice;
+pub use scale::{Physical, Scale};
 pub use startup::{pipeline_cache_status, report as startup_report};
 pub use stats::{Frame, FrameLog, FrameReport};
 pub use storage::{data_dir, FileStorage};

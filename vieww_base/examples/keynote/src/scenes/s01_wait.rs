@@ -32,12 +32,28 @@ use crate::studio::compose;
 /// The crates the build is chewing through. A generic graph — the names are
 /// the vocabulary of any large Rust build, and none of them is vieww's.
 const GRAPH: &[(&str, u32)] = &[
-    ("proc-macro2", 41), ("quote", 12), ("syn", 289), ("serde_derive", 176),
-    ("serde", 118), ("libc", 402), ("hashbrown", 96), ("indexmap", 44),
-    ("regex-syntax", 331), ("regex-automata", 508), ("regex", 212),
-    ("tokio-macros", 18), ("tokio", 674), ("tracing-core", 88),
-    ("futures-util", 396), ("bytes", 71), ("http", 133), ("hyper", 418),
-    ("rustls", 552), ("ring", 981), ("app-core", 1204), ("app", 1471),
+    ("proc-macro2", 41),
+    ("quote", 12),
+    ("syn", 289),
+    ("serde_derive", 176),
+    ("serde", 118),
+    ("libc", 402),
+    ("hashbrown", 96),
+    ("indexmap", 44),
+    ("regex-syntax", 331),
+    ("regex-automata", 508),
+    ("regex", 212),
+    ("tokio-macros", 18),
+    ("tokio", 674),
+    ("tracing-core", 88),
+    ("futures-util", 396),
+    ("bytes", 71),
+    ("http", 133),
+    ("hyper", 418),
+    ("rustls", 552),
+    ("ring", 981),
+    ("app-core", 1204),
+    ("app", 1471),
 ];
 
 /// Where the drained world sits on the desaturation axis.
@@ -47,7 +63,7 @@ fn dimmed(c: Color) -> Color {
     drained(c, DRAIN)
 }
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     // The judder: every animated quantity in this scene reads *held* time.
     let held = held_24(ctx.sec);
     let t = ctx.t;
@@ -109,7 +125,13 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             ]),
         );
         book.stroke_rrect(term, 0.0, alpha(dimmed(FAINT), 0.30 * vis), 1.0);
-        rule_h(book, term.left, term.top + 30.0, term.width(), alpha(dimmed(FAINT), 0.22 * vis));
+        rule_h(
+            book,
+            term.left,
+            term.top + 30.0,
+            term.width(),
+            alpha(dimmed(FAINT), 0.22 * vis),
+        );
 
         // The dependency graph, drawn as it is consumed: a column of nodes
         // with edges, each one going from pending grey to done grey. Nothing
@@ -148,7 +170,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
         // The progress bar. Its ground is wide, its fill is grey, and it
         // goes backwards twice.
-        let bar = xywh(term.left + 34.0, term.bottom - 92.0, term.width() - 68.0, 10.0);
+        let bar = xywh(
+            term.left + 34.0,
+            term.bottom - 92.0,
+            term.width() - 68.0,
+            10.0,
+        );
         meter(
             book,
             bar,
@@ -163,7 +190,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         if revise1 > 0.02 || revise2 > 0.02 {
             let ghost = (raw * 0.92).min(0.86);
             book.rect(
-                xywh(bar.left + bar.width() * progress, bar.top - 3.0, bar.width() * (ghost - progress).max(0.0), 16.0),
+                xywh(
+                    bar.left + bar.width() * progress,
+                    bar.top - 3.0,
+                    bar.width() * (ghost - progress).max(0.0),
+                    16.0,
+                ),
                 alpha(dimmed(RED), 0.10 * vis * (revise1 + revise2).min(1.0)),
             );
         }
@@ -172,7 +204,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         // time passing. Its second hand steps in the same 24 Hz hold.
         let cx = term.right - 110.0;
         let cy = term.top + 130.0;
-        book.ring(Offset::new(cx, cy), 46.0, 1.5, alpha(dimmed(FAINT), 0.35 * vis));
+        book.ring(
+            Offset::new(cx, cy),
+            46.0,
+            1.5,
+            alpha(dimmed(FAINT), 0.35 * vis),
+        );
         for i in 0..12 {
             let a = i as f32 / 12.0 * std::f32::consts::TAU;
             let (s, c) = a.sin_cos();
@@ -213,8 +250,17 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         );
         rule_h(book, 0.0, desk, w, alpha(dimmed(FAINT), 0.18));
         let mug_x = w * 0.19;
-        book.rrect(xywh(mug_x, desk - 44.0, 46.0, 44.0), 4.0, alpha(Color::rgb(22, 23, 27), 0.95));
-        book.ring(Offset::new(mug_x + 56.0, desk - 26.0), 12.0, 3.0, alpha(Color::rgb(22, 23, 27), 0.95));
+        book.rrect(
+            xywh(mug_x, desk - 44.0, 46.0, 44.0),
+            4.0,
+            alpha(Color::rgb(22, 23, 27), 0.95),
+        );
+        book.ring(
+            Offset::new(mug_x + 56.0, desk - 26.0),
+            12.0,
+            3.0,
+            alpha(Color::rgb(22, 23, 27), 0.95),
+        );
         // Steam that gave up: a thin drifting thread, fading.
         let steam = 1.0 - clamp01(held / 8.0);
         if steam > 0.02 {
@@ -228,12 +274,24 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                         desk - 48.0 - u * 60.0,
                     ));
                 }
-                crate::kit::polyline(book, &pts, alpha(Color::rgb(120, 126, 136), 0.05 * steam * vis), 2.0);
+                crate::kit::polyline(
+                    book,
+                    &pts,
+                    alpha(Color::rgb(120, 126, 136), 0.05 * steam * vis),
+                    2.0,
+                );
             }
         }
 
         // The degradation grammar, last: the world's own texture.
-        dust(book, size, held * 0.4, 40, Color::rgb(150, 160, 175), 0.5 * vis);
+        dust(
+            book,
+            size,
+            held * 0.4,
+            40,
+            Color::rgb(150, 160, 175),
+            0.5 * vis,
+        );
         scanlines(book, size, held, 0.9 * vis);
         grain(book, size, frame_i, 0.055 * vis, 900);
         vignette(book, size, 1.15);
@@ -296,14 +354,18 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     // The three numbers that make the scene: elapsed, estimate, and the
     // download. The estimate is larger than it was thirty frames ago.
     nodes.push(
-        Type::new(format!("{:02}:{:02} elapsed", (elapsed / 60.0) as u32, (elapsed % 60.0) as u32))
-            .mono()
-            .size(15.0)
-            .track(1.4)
-            .color(alpha(dimmed(INK_SOFT), 0.8 * vis))
-            .at(term_l + 34.0, term_b - 62.0)
-            .width(300.0)
-            .into(),
+        Type::new(format!(
+            "{:02}:{:02} elapsed",
+            (elapsed / 60.0) as u32,
+            (elapsed % 60.0) as u32
+        ))
+        .mono()
+        .size(15.0)
+        .track(1.4)
+        .color(alpha(dimmed(INK_SOFT), 0.8 * vis))
+        .at(term_l + 34.0, term_b - 62.0)
+        .width(300.0)
+        .into(),
     );
     nodes.push(
         Type::new(format!("{:.1} MB fetched", mb))
@@ -320,15 +382,22 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         + revise2 * (1.0 - smoothstep(seg(held, 10.7, 12.0))))
     .min(1.0);
     nodes.push(
-        Type::new(format!("~{:02}:{:02} remaining", (eta / 60.0) as u32, (eta % 60.0) as u32))
-            .mono()
-            .size(15.0)
-            .track(1.4)
-            .color(alpha(mix(dimmed(MUTED), dimmed(RED), eta_flash), (0.75 + 0.25 * eta_flash) * vis))
-            .right()
-            .at(term_r - 334.0, term_b - 62.0)
-            .width(300.0)
-            .into(),
+        Type::new(format!(
+            "~{:02}:{:02} remaining",
+            (eta / 60.0) as u32,
+            (eta % 60.0) as u32
+        ))
+        .mono()
+        .size(15.0)
+        .track(1.4)
+        .color(alpha(
+            mix(dimmed(MUTED), dimmed(RED), eta_flash),
+            (0.75 + 0.25 * eta_flash) * vis,
+        ))
+        .right()
+        .at(term_r - 334.0, term_b - 62.0)
+        .width(300.0)
+        .into(),
     );
 
     // The title, one line, no product: the film's thesis stated as a fact
@@ -345,7 +414,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             .into(),
     );
 
-    nodes.push(caption("act i · the wait · 24 frames sampled in 60", ease_out_cubic(seg(t, 0.12, 0.26)) * vis * 0.9));
+    nodes.push(caption(
+        "act i · the wait · 24 frames sampled in 60",
+        ease_out_cubic(seg(t, 0.12, 0.26)) * vis * 0.9,
+    ));
     let _ = (panel, ctx.spine.witness);
     compose(bg, nodes)
 }

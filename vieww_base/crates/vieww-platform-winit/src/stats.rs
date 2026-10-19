@@ -364,7 +364,10 @@ impl FrameLog {
             std::collections::BTreeMap::new();
         for frame in &self.recent {
             if let Some(core) = frame.stages.cpu_core {
-                by_core.entry(core).or_default().push(frame.stages.cpu_raster);
+                by_core
+                    .entry(core)
+                    .or_default()
+                    .push(frame.stages.cpu_raster);
             }
         }
         let mut rows: Vec<(u16, usize, Duration)> = by_core
@@ -773,7 +776,13 @@ mod tests {
         // Nine ordinary frames, then one whose present stalled.
         for i in 0..10u64 {
             let stalled = i == 9;
-            log.record(None, ms(if stalled { 60 } else { 5 }), 100, start + ms(16 * i), false);
+            log.record(
+                None,
+                ms(if stalled { 60 } else { 5 }),
+                100,
+                start + ms(16 * i),
+                false,
+            );
             log.note_stages(FrameStages {
                 cpu_raster: ms(4),
                 present: ms(if stalled { 55 } else { 1 }),
@@ -794,7 +803,10 @@ mod tests {
     fn the_raster_is_reported_per_core_it_ran_on() {
         let mut log = FrameLog::new(ms(16), 100);
         let start = Instant::now();
-        for (i, (core, raster)) in [(7, 20), (7, 22), (2, 35), (7, 21), (2, 31)].iter().enumerate() {
+        for (i, (core, raster)) in [(7, 20), (7, 22), (2, 35), (7, 21), (2, 31)]
+            .iter()
+            .enumerate()
+        {
             log.record(None, ms(*raster), 100, start + ms(16 * i as u64), false);
             log.note_stages(FrameStages {
                 cpu_raster: ms(*raster),
@@ -804,7 +816,10 @@ mod tests {
         }
         // A GPU frame has no core and is left out.
         log.record(None, ms(5), 100, start + ms(200), true);
-        log.note_stages(FrameStages { present: ms(5), ..FrameStages::default() });
+        log.note_stages(FrameStages {
+            present: ms(5),
+            ..FrameStages::default()
+        });
         assert_eq!(log.raster_by_core(), vec![(7, 3, ms(21)), (2, 2, ms(35))]);
     }
 

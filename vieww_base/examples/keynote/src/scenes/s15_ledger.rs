@@ -22,7 +22,7 @@ use crate::film::Ctx;
 use crate::kit::{
     act_card, alpha, caption, clamp01, dust, ease_out_cubic, grain, ground, horizon, mix, painter,
     seg, smoothstep, thousands, vignette, xywh, Rng, Type, AMBER, CYAN, H, INK, INK_SOFT, MINT,
-    MUTED, RED, VIOLET, VIOLET_SOFT, W,
+    MUTED, RED, VIOLET, VIOLET_SOFT,
 };
 use crate::studio::compose;
 
@@ -36,7 +36,10 @@ const OPEN_REGRESSIONS: u32 = 0;
 /// weight as the green — that is the whole design of this scene.
 const NOT_CLAIMED: &[(&str, &str)] = &[
     ("ios", "disputed by the codebase's own docs · excluded"),
-    ("59.3 fps · 4.09 ms", "quoted from CI artifacts · not measured by this render"),
+    (
+        "59.3 fps · 4.09 ms",
+        "quoted from CI artifacts · not measured by this render",
+    ),
     ("sound", "deferred · the cut works muted by construction"),
     ("byte-identical", "per bench · this render names its own"),
 ];
@@ -46,7 +49,7 @@ const FILL_SPAN: f32 = 5.20;
 const COUNT_T: f32 = 6.60;
 const HONEST_T: f32 = 10.60;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -95,7 +98,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         for i in (shown as usize)..(total as usize) {
             let x = wall.left + (i % cols) as f32 * cw;
             let y = wall.top + (i / cols) as f32 * 15.0;
-            book.rrect(xywh(x, y, cw - 3.0, 10.0), 2.0, alpha(Color::rgb(0x24, 0x22, 0x20), 0.9));
+            book.rrect(
+                xywh(x, y, cw - 3.0, 10.0),
+                2.0,
+                alpha(Color::rgb(0x24, 0x22, 0x20), 0.9),
+            );
         }
 
         // The green glow under a finished wall — one group, once.
@@ -119,7 +126,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         grain(book, size, frame_i, 0.012, 300);
         vignette(book, size, 0.95);
         if out > 0.004 {
-            book.rect(Rect::new(0.0, 0.0, size.width, size.height), alpha(Color::BLACK, out));
+            book.rect(
+                Rect::new(0.0, 0.0, size.width, size.height),
+                alpha(Color::BLACK, out),
+            );
         }
     });
 
@@ -192,7 +202,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             Type::new(format!("{OPEN_REGRESSIONS}"))
                 .size(44.0)
                 .medium()
-                .color(alpha(if OPEN_REGRESSIONS == 0 { MINT } else { RED }, 0.97 * a))
+                .color(alpha(
+                    if OPEN_REGRESSIONS == 0 { MINT } else { RED },
+                    0.97 * a,
+                ))
                 .at(x + 200.0, y)
                 .width(220.0)
                 .into(),
@@ -224,7 +237,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         );
         for (i, (what, why)) in NOT_CLAIMED.iter().enumerate() {
             let y = 262.0 + i as f32 * 96.0;
-            let row = smoothstep(seg(sec, HONEST_T + 0.3 + i as f32 * 0.35, HONEST_T + 1.1 + i as f32 * 0.35));
+            let row = smoothstep(seg(
+                sec,
+                HONEST_T + 0.3 + i as f32 * 0.35,
+                HONEST_T + 1.1 + i as f32 * 0.35,
+            ));
             nodes.push(
                 Type::new(*what)
                     .size(22.0)
@@ -266,7 +283,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         );
     }
 
-    nodes.push(act_card("ACT IV", "THE LEDGER", "結", smoothstep(seg(sec, 0.4, 1.4)) * (1.0 - smoothstep(seg(sec, 6.0, 7.0)))));
+    nodes.push(act_card(
+        "ACT IV",
+        "THE LEDGER",
+        "結",
+        smoothstep(seg(sec, 0.4, 1.4)) * (1.0 - smoothstep(seg(sec, 6.0, 7.0))),
+    ));
     nodes.push(caption(
         "quoted from this repository's own artifacts",
         smoothstep(seg(sec, 2.4, 3.4)) * (1.0 - smoothstep(seg(ctx.t, 0.90, 0.98))),

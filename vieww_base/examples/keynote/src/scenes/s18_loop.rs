@@ -28,14 +28,15 @@ const COLLAPSE_T: f32 = 0.60;
 const HOLD_T: f32 = 3.20;
 const FOLD_T: f32 = 6.40;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
     // The collapse: the end card's width narrows to a seam.
     let collapse = ease_out_cubic(seg(sec, COLLAPSE_T, COLLAPSE_T + 1.6));
     // The counter, held.
-    let hold = smoothstep(seg(sec, HOLD_T, HOLD_T + 0.7)) * (1.0 - smoothstep(seg(sec, FOLD_T, FOLD_T + 0.9)));
+    let hold = smoothstep(seg(sec, HOLD_T, HOLD_T + 0.7))
+        * (1.0 - smoothstep(seg(sec, FOLD_T, FOLD_T + 0.9)));
     // The fold: the seam becomes the terminal's own rectangle of light, the
     // shape S01 opens on.
     let fold = ease_in_cubic(seg(sec, FOLD_T, FOLD_T + 2.4));
@@ -58,7 +59,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     (seam_h + 6.0) * 0.5,
                     Gradient::horizontal().with_dither().with_stops(&[
                         (0.0, alpha(VIOLET, 0.0)),
-                        (0.5, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.45), 0.55 * (1.0 - black))),
+                        (
+                            0.5,
+                            alpha(mix(VIOLET_SOFT, Color::WHITE, 0.45), 0.55 * (1.0 - black)),
+                        ),
                         (1.0, alpha(CYAN, 0.0)),
                     ]),
                 );
@@ -89,11 +93,21 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     (1.0, alpha(Color::rgb(9, 9, 11), 0.92 * e * (1.0 - black))),
                 ]),
             );
-            book.stroke_rrect(r, 0.0, alpha(Color::rgb(46, 44, 42), 0.35 * e * (1.0 - black)), 1.0);
+            book.stroke_rrect(
+                r,
+                0.0,
+                alpha(Color::rgb(46, 44, 42), 0.35 * e * (1.0 - black)),
+                1.0,
+            );
             // Three faint lines of a log that has not started yet.
             for i in 0..3 {
                 book.rect(
-                    xywh(r.left + 24.0, r.top + 32.0 + i as f32 * 20.0, (r.width() - 48.0) * (0.7 - i as f32 * 0.18), 4.0),
+                    xywh(
+                        r.left + 24.0,
+                        r.top + 32.0 + i as f32 * 20.0,
+                        (r.width() - 48.0) * (0.7 - i as f32 * 0.18),
+                        4.0,
+                    ),
                     alpha(Color::rgb(60, 58, 56), 0.5 * e * (1.0 - black)),
                 );
             }
@@ -149,6 +163,13 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         "the last frame is the first",
         smoothstep(seg(sec, 1.2, 2.0)) * (1.0 - smoothstep(seg(sec, 7.2, 8.0))) * 0.8,
     ));
-    let _ = (INK_SOFT, clamp01, W, Size::new(0.0, 0.0), Offset::ZERO, Rect::ZERO);
+    let _ = (
+        INK_SOFT,
+        clamp01,
+        W,
+        Size::new(0.0, 0.0),
+        Offset::ZERO,
+        Rect::ZERO,
+    );
     compose(bg, nodes)
 }

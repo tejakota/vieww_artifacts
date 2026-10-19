@@ -21,7 +21,7 @@
 //! The witness counter, at 7, rides on the signal. The film's own continuity
 //! and the framework's own architecture turn out to be the same picture.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Path, Rect, Size, Sketchbook};
+use vieww_foundation::{BlendMode, Color, Offset, Path, Rect, Size, Sketchbook};
 use vieww_widget::prelude::*;
 
 use crate::film::Ctx;
@@ -46,11 +46,46 @@ struct Node {
 }
 
 const NODES: &[Node] = &[
-    Node { depth: 0, slot: 0.0,  widget: "Column",  element: "ColumnElement", render: "RenderFlex",  reads: false },
-    Node { depth: 1, slot: -1.5, widget: "Dial",    element: "DialElement",   render: "RenderArc",   reads: true },
-    Node { depth: 1, slot: -0.5, widget: "Text",    element: "TextElement",   render: "RenderText",  reads: true },
-    Node { depth: 1, slot: 0.5,  widget: "Text",    element: "TextElement",   render: "RenderText",  reads: false },
-    Node { depth: 1, slot: 1.5,  widget: "Button",  element: "ButtonElement", render: "RenderBox",   reads: false },
+    Node {
+        depth: 0,
+        slot: 0.0,
+        widget: "Column",
+        element: "ColumnElement",
+        render: "RenderFlex",
+        reads: false,
+    },
+    Node {
+        depth: 1,
+        slot: -1.5,
+        widget: "Dial",
+        element: "DialElement",
+        render: "RenderArc",
+        reads: true,
+    },
+    Node {
+        depth: 1,
+        slot: -0.5,
+        widget: "Text",
+        element: "TextElement",
+        render: "RenderText",
+        reads: true,
+    },
+    Node {
+        depth: 1,
+        slot: 0.5,
+        widget: "Text",
+        element: "TextElement",
+        render: "RenderText",
+        reads: false,
+    },
+    Node {
+        depth: 1,
+        slot: 1.5,
+        widget: "Button",
+        element: "ButtonElement",
+        render: "RenderBox",
+        reads: false,
+    },
 ];
 
 /// The beats, in scene-seconds.
@@ -65,7 +100,7 @@ const Z_WIDGET: f32 = -1.7;
 const Z_ELEMENT: f32 = 0.0;
 const Z_RENDER: f32 = 1.7;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -74,7 +109,8 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     // The signal lifts out to the side.
     let lift = spring(seg(sec, SIGNAL_T, SIGNAL_T + 1.6), 10.0, 0.44).clamp(0.0, 1.2);
     let labels = smoothstep(seg(sec, LABEL_T, LABEL_T + 0.9));
-    let claim = smoothstep(seg(sec, CLAIM_T, CLAIM_T + 1.0)) * (1.0 - smoothstep(seg(sec, 16.6, 17.6)));
+    let claim =
+        smoothstep(seg(sec, CLAIM_T, CLAIM_T + 1.0)) * (1.0 - smoothstep(seg(sec, 16.6, 17.6)));
 
     // **An orbit, not a pan.** Yawing a camera that sits on the axis swings
     // the whole scene sideways, and the further a plane is the further it
@@ -97,7 +133,7 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         v3(n.slot * 1.58, 1.30 - n.depth as f32 * 1.75, z * split)
     };
     // The signal's own place, off to the side and slightly forward.
-    let sig = v3(4.1 + 0.7 * (1.0 - lift.min(1.0)), 0.55, -1.0 * split);
+    let sig = v3(4.1 + 0.7 * (1.0 - lift.min(1.0)), 0.55, -split);
 
     let bg = painter(move |book: &mut Sketchbook, size: Size| {
         ground(book, size, sec, 1.0);
@@ -115,7 +151,8 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             }
             // The plane's own card: a faint rectangle in space, so each tree
             // is visibly *on* something.
-            let sheet = crate::solid::slab(v3(0.0, -0.20, z * split), 6.6, 4.0, 1, 1, alpha(c, 0.04));
+            let sheet =
+                crate::solid::slab(v3(0.0, -0.20, z * split), 6.6, 4.0, 1, 1, alpha(c, 0.04));
             crate::solid::draw(
                 book,
                 &sheet,

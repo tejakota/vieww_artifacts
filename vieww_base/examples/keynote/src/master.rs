@@ -41,9 +41,11 @@ use crate::kit::{clock_mmss, thousands, BG, FPS, H, W};
 /// repository: frames are scratch, and the repo takes only the master, the
 /// sheets and the source.
 #[must_use]
-pub fn work_root() -> PathBuf {
-    std::env::var("KEYNOTE_OUT")
-        .map_or_else(|_| PathBuf::from("/home/claude/render/keynote"), PathBuf::from)
+pub(crate) fn work_root() -> PathBuf {
+    std::env::var("KEYNOTE_OUT").map_or_else(
+        |_| PathBuf::from("/home/claude/render/keynote"),
+        PathBuf::from,
+    )
 }
 
 fn manifest_path() -> PathBuf {
@@ -51,7 +53,7 @@ fn manifest_path() -> PathBuf {
 }
 
 /// Entry point — dispatch on the CLI word.
-pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         "census" => census(),
         "master" => master(),
@@ -67,7 +69,12 @@ pub fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// Print the act table — the chapter list, derived from the score.
 fn chapters() {
     let all = scenes();
-    println!("keynote · {} scenes · {} · {} frames", all.len(), clock_mmss(total_seconds()), total_frames());
+    println!(
+        "keynote · {} scenes · {} · {} frames",
+        all.len(),
+        clock_mmss(total_seconds()),
+        total_frames()
+    );
     let mut acc = 0.0f32;
     let mut act = None;
     for s in &all {
@@ -175,7 +182,7 @@ fn scene_starts(all: &[SceneDef]) -> Vec<f32> {
 
 // ── Pass 1 — the census ─────────────────────────────────────────────────────
 
-pub fn census() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
     std::fs::create_dir_all(&root)?;
 
@@ -268,14 +275,17 @@ pub fn census() -> Result<(), Box<dyn std::error::Error>> {
         thousands(probe.strokes),
         thousands(probe.shadows),
     );
-    println!("  alive N = {:.3} s · crates {} · bench: {}", probe.alive_seconds, probe.crates, probe.bench);
+    println!(
+        "  alive N = {:.3} s · crates {} · bench: {}",
+        probe.alive_seconds, probe.crates, probe.bench
+    );
     println!("  manifest → {}", manifest_path().display());
     Ok(())
 }
 
 // ── Pass 2 — the master ─────────────────────────────────────────────────────
 
-pub fn master() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
     std::fs::create_dir_all(root.join("sheets"))?;
     std::fs::create_dir_all(root.join("segments"))?;
@@ -311,7 +321,9 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
 
     for (si, s) in all.iter().enumerate() {
         let n = s.frames();
-        let seg = root.join("segments").join(format!("{:02}_{}.mp4", si + 1, s.name));
+        let seg = root
+            .join("segments")
+            .join(format!("{:02}_{}.mp4", si + 1, s.name));
         let sheet = root.join("sheets").join(format!("{}_{}.png", s.id, s.name));
 
         if seg.exists() && sheet.exists() {
@@ -319,7 +331,9 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        let scene_dir = root.join("frames").join(format!("{:02}_{}", si + 1, s.name));
+        let scene_dir = root
+            .join("frames")
+            .join(format!("{:02}_{}", si + 1, s.name));
         std::fs::remove_dir_all(&scene_dir).ok();
         std::fs::create_dir_all(&scene_dir)?;
         let stride = (n / 16).max(1);
@@ -327,12 +341,27 @@ pub fn master() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut ffmpeg = ProcCommand::new("ffmpeg")
             .args([
-                "-y", "-loglevel", "error",
-                "-f", "rawvideo", "-pix_fmt", "rgba",
-                "-s", "1920x1080", "-framerate", "60",
-                "-i", "-",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-                "-pix_fmt", "yuv420p",
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgba",
+                "-s",
+                "1920x1080",
+                "-framerate",
+                "60",
+                "-i",
+                "-",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "18",
+                "-pix_fmt",
+                "yuv420p",
             ])
             .arg(&seg)
             .stdin(Stdio::piped())
@@ -464,7 +493,10 @@ fn preview_scene(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(16);
-    println!("preview {} {} · {count} frames at {}×{}", s.id, s.name, W as u32, H as u32);
+    println!(
+        "preview {} {} · {count} frames at {}×{}",
+        s.id, s.name, W as u32, H as u32
+    );
     let n = s.frames();
     for k in 0..count {
         let i = ((k as f32 / (count.max(2) - 1) as f32) * (n - 1) as f32).round() as usize;
@@ -496,7 +528,7 @@ fn preview_scene(name: &str) -> Result<(), Box<dyn std::error::Error>> {
 
 /// Copy the shippable artifacts into the repository: the master and the
 /// sheets, never the frames.
-pub fn publish(dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn publish(dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let root = work_root();
     std::fs::create_dir_all(dest.join("sheets"))?;
     std::fs::copy(root.join("keynote.mp4"), dest.join("keynote.mp4"))?;
@@ -507,6 +539,9 @@ pub fn publish(dest: &Path) -> Result<(), Box<dyn std::error::Error>> {
         std::fs::copy(e.path(), dest.join("sheets").join(e.file_name()))?;
         n += 1;
     }
-    println!("published → {} · mp4 + manifest + {n} sheets", dest.display());
+    println!(
+        "published → {} · mp4 + manifest + {n} sheets",
+        dest.display()
+    );
     Ok(())
 }

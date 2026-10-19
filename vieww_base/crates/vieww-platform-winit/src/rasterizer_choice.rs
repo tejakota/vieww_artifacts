@@ -521,7 +521,9 @@ mod tests {
         };
         let text = render("k1", record);
         let back = parse(&text, "k1").expect("parses");
-        assert!(matches!(back.launch, Launch::MeasureGpu { cpu } if (cpu.as_secs_f64() - 0.0139).abs() < 1e-6));
+        assert!(
+            matches!(back.launch, Launch::MeasureGpu { cpu } if (cpu.as_secs_f64() - 0.0139).abs() < 1e-6)
+        );
         assert_eq!(parse(&text, "k2"), None);
         assert_eq!(parse("garbage", "k1"), None);
     }
@@ -559,7 +561,10 @@ mod tests {
         let calibration = Calibration::new(file.clone(), 1080, 2340);
         assert_eq!(calibration.launch(), Launch::Use(Rasterizer::Gpu));
         // Another screen size measures again.
-        assert_eq!(Calibration::new(file.clone(), 720, 1600).launch(), Launch::MeasureCpu);
+        assert_eq!(
+            Calibration::new(file.clone(), 720, 1600).launch(),
+            Launch::MeasureCpu
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

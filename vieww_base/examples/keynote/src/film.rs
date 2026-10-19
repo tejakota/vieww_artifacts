@@ -22,7 +22,7 @@ use crate::scenes;
 
 // ── The scene definition ────────────────────────────────────────────────────
 
-pub struct SceneDef {
+pub(crate) struct SceneDef {
     /// The scene's stable id — `S07`. Sheets and previews are named by it.
     pub id: &'static str,
     /// The scene's short name, used in file names and the chapter list.
@@ -38,13 +38,13 @@ pub struct SceneDef {
 impl SceneDef {
     /// Frames this scene contributes — computed from its duration.
     #[must_use]
-    pub fn frames(&self) -> usize {
+    pub(crate) fn frames(&self) -> usize {
         (self.seconds * FPS).round() as usize
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Act {
+pub(crate) enum Act {
     /// 起 — the wait: the world the film argues against.
     Ki,
     /// 承 — the studio: one session, the hero at work.
@@ -57,7 +57,7 @@ pub enum Act {
 
 impl Act {
     #[must_use]
-    pub const fn roman(self) -> &'static str {
+    pub(crate) const fn roman(self) -> &'static str {
         match self {
             Self::Ki => "ACT I",
             Self::Sho => "ACT II",
@@ -66,7 +66,7 @@ impl Act {
         }
     }
     #[must_use]
-    pub const fn name(self) -> &'static str {
+    pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::Ki => "THE WAIT",
             Self::Sho => "THE STUDIO",
@@ -75,7 +75,7 @@ impl Act {
         }
     }
     #[must_use]
-    pub const fn kanji(self) -> &'static str {
+    pub(crate) const fn kanji(self) -> &'static str {
         match self {
             Self::Ki => "起",
             Self::Sho => "承",
@@ -87,7 +87,7 @@ impl Act {
 
 // ── The context handed to every frame ───────────────────────────────────────
 
-pub struct Ctx<'a> {
+pub(crate) struct Ctx<'a> {
     /// Progress through the scene, `0..=1`.
     pub t: f32,
     /// Seconds since the cut into this scene.
@@ -108,7 +108,7 @@ impl Ctx<'_> {
     /// Progress across a window given in *scene seconds* — the spelling
     /// scene code uses, so a beat can be moved without recomputing `t`.
     #[must_use]
-    pub fn beat(&self, from: f32, to: f32) -> f32 {
+    pub(crate) fn beat(&self, from: f32, to: f32) -> f32 {
         crate::kit::seg(self.sec, from, to)
     }
 }
@@ -117,7 +117,7 @@ impl Ctx<'_> {
 
 /// The continuity that outlives every cut.
 #[derive(Clone, Copy, Default)]
-pub struct Spine {
+pub(crate) struct Spine {
     /// The witness counter — one increment per human touch, 0..=7, never
     /// reset. The film's proof that the session never restarted.
     pub witness: u32,
@@ -130,7 +130,7 @@ pub struct Spine {
 
 /// Where the session starts, in absolute film-time: the cut into S05.
 #[must_use]
-pub fn session_start() -> f32 {
+pub(crate) fn session_start() -> f32 {
     let all = scenes();
     all.iter()
         .take_while(|s| s.id != "S05")
@@ -140,7 +140,7 @@ pub fn session_start() -> f32 {
 
 /// Where the session's last touch lands: the end of S12's world tour.
 #[must_use]
-pub fn session_end() -> f32 {
+pub(crate) fn session_end() -> f32 {
     let all = scenes();
     let mut acc = 0.0;
     for s in &all {
@@ -156,7 +156,7 @@ pub fn session_end() -> f32 {
 /// scene's position in the table — move a scene and the ladder moves with
 /// it. Nothing here is a wall-clock constant.
 #[must_use]
-pub fn touches() -> Vec<(u32, f32, &'static str)> {
+pub(crate) fn touches() -> Vec<(u32, f32, &'static str)> {
     let at = |id: &str, frac: f32| -> f32 {
         let all = scenes();
         let mut acc = 0.0;
@@ -181,7 +181,7 @@ pub fn touches() -> Vec<(u32, f32, &'static str)> {
 
 /// The spine at an absolute film-time.
 #[must_use]
-pub fn ladder_at(abs: f32) -> Spine {
+pub(crate) fn ladder_at(abs: f32) -> Spine {
     let t = touches();
     let witness = t.iter().filter(|(_, when, _)| abs >= *when).count() as u32;
     let start = session_start();
@@ -195,7 +195,7 @@ pub fn ladder_at(abs: f32) -> Spine {
 
 /// The label of the most recent touch — the counter's caption.
 #[must_use]
-pub fn touch_label(witness: u32) -> &'static str {
+pub(crate) fn touch_label(witness: u32) -> &'static str {
     touches()
         .iter()
         .find(|(n, _, _)| *n == witness)
@@ -207,49 +207,157 @@ pub fn touch_label(witness: u32) -> &'static str {
 /// **The film.** Sixteen scenes, four movements. Durations are the score;
 /// everything else is computed from them.
 #[must_use]
-pub fn scenes() -> Vec<SceneDef> {
+pub(crate) fn scenes() -> Vec<SceneDef> {
     use Act::{Ketsu, Ki, Sho, Ten};
     vec![
         // 起 · the wait — 60s
-        SceneDef { id: "S01", name: "wait",      act: Ki,    seconds: 15.0, build: scenes::s01_wait::frame },
-        SceneDef { id: "S02", name: "cost",      act: Ki,    seconds: 15.0, build: scenes::s02_cost::frame },
-        SceneDef { id: "S03", name: "question",  act: Ki,    seconds: 12.0, build: scenes::s03_question::frame },
-        SceneDef { id: "S04", name: "mark",      act: Ki,    seconds: 18.0, build: scenes::s04_mark::frame },
+        SceneDef {
+            id: "S01",
+            name: "wait",
+            act: Ki,
+            seconds: 15.0,
+            build: scenes::s01_wait::frame,
+        },
+        SceneDef {
+            id: "S02",
+            name: "cost",
+            act: Ki,
+            seconds: 15.0,
+            build: scenes::s02_cost::frame,
+        },
+        SceneDef {
+            id: "S03",
+            name: "question",
+            act: Ki,
+            seconds: 12.0,
+            build: scenes::s03_question::frame,
+        },
+        SceneDef {
+            id: "S04",
+            name: "mark",
+            act: Ki,
+            seconds: 18.0,
+            build: scenes::s04_mark::frame,
+        },
         // 承 · the studio — 120s
-        SceneDef { id: "S05", name: "opens",     act: Sho,   seconds: 18.0, build: scenes::s05_opens::frame },
-        SceneDef { id: "S06", name: "firstpaint",act: Sho,   seconds: 24.0, build: scenes::s06_first_paint::frame },
-        SceneDef { id: "S07", name: "compose",   act: Sho,   seconds: 24.0, build: scenes::s07_compose::frame },
-        SceneDef { id: "S08", name: "descent",   act: Sho,   seconds: 20.0, build: scenes::s08_descent::frame },
-        SceneDef { id: "S09", name: "machine",   act: Sho,   seconds: 24.0, build: scenes::s09_machine::frame },
-        SceneDef { id: "S10", name: "damage",    act: Sho,   seconds: 10.0, build: scenes::s10_damage::frame },
+        SceneDef {
+            id: "S05",
+            name: "opens",
+            act: Sho,
+            seconds: 18.0,
+            build: scenes::s05_opens::frame,
+        },
+        SceneDef {
+            id: "S06",
+            name: "firstpaint",
+            act: Sho,
+            seconds: 24.0,
+            build: scenes::s06_first_paint::frame,
+        },
+        SceneDef {
+            id: "S07",
+            name: "compose",
+            act: Sho,
+            seconds: 24.0,
+            build: scenes::s07_compose::frame,
+        },
+        SceneDef {
+            id: "S08",
+            name: "descent",
+            act: Sho,
+            seconds: 20.0,
+            build: scenes::s08_descent::frame,
+        },
+        SceneDef {
+            id: "S09",
+            name: "machine",
+            act: Sho,
+            seconds: 24.0,
+            build: scenes::s09_machine::frame,
+        },
+        SceneDef {
+            id: "S10",
+            name: "damage",
+            act: Sho,
+            seconds: 10.0,
+            build: scenes::s10_damage::frame,
+        },
         // 転 · the twists — 80s
-        SceneDef { id: "S11", name: "mirror",    act: Ten,   seconds: 16.0, build: scenes::s11_mirror::frame },
-        SceneDef { id: "S12", name: "worldtour", act: Ten,   seconds: 24.0, build: scenes::s12_world_tour::frame },
-        SceneDef { id: "S13", name: "foundation",act: Ten,   seconds: 22.0, build: scenes::s13_foundation::frame },
-        SceneDef { id: "S14", name: "unfold",    act: Ten,   seconds: 18.0, build: scenes::s14_unfold::frame },
+        SceneDef {
+            id: "S11",
+            name: "mirror",
+            act: Ten,
+            seconds: 16.0,
+            build: scenes::s11_mirror::frame,
+        },
+        SceneDef {
+            id: "S12",
+            name: "worldtour",
+            act: Ten,
+            seconds: 24.0,
+            build: scenes::s12_world_tour::frame,
+        },
+        SceneDef {
+            id: "S13",
+            name: "foundation",
+            act: Ten,
+            seconds: 22.0,
+            build: scenes::s13_foundation::frame,
+        },
+        SceneDef {
+            id: "S14",
+            name: "unfold",
+            act: Ten,
+            seconds: 18.0,
+            build: scenes::s14_unfold::frame,
+        },
         // 結 · the ledger — 70s
-        SceneDef { id: "S15", name: "ledger",    act: Ketsu, seconds: 20.0, build: scenes::s15_ledger::frame },
-        SceneDef { id: "S16", name: "oneclick",  act: Ketsu, seconds: 16.0, build: scenes::s16_one_click::frame },
-        SceneDef { id: "S17", name: "endcard",   act: Ketsu, seconds: 24.0, build: scenes::s17_endcard::frame },
-        SceneDef { id: "S18", name: "loop",      act: Ketsu, seconds: 10.0, build: scenes::s18_loop::frame },
+        SceneDef {
+            id: "S15",
+            name: "ledger",
+            act: Ketsu,
+            seconds: 20.0,
+            build: scenes::s15_ledger::frame,
+        },
+        SceneDef {
+            id: "S16",
+            name: "oneclick",
+            act: Ketsu,
+            seconds: 16.0,
+            build: scenes::s16_one_click::frame,
+        },
+        SceneDef {
+            id: "S17",
+            name: "endcard",
+            act: Ketsu,
+            seconds: 24.0,
+            build: scenes::s17_endcard::frame,
+        },
+        SceneDef {
+            id: "S18",
+            name: "loop",
+            act: Ketsu,
+            seconds: 10.0,
+            build: scenes::s18_loop::frame,
+        },
     ]
 }
 
 /// Total frames — derived, never typed.
 #[must_use]
-pub fn total_frames() -> usize {
+pub(crate) fn total_frames() -> usize {
     scenes().iter().map(SceneDef::frames).sum()
 }
 
 /// Total runtime in seconds — derived.
 #[must_use]
-pub fn total_seconds() -> f32 {
+pub(crate) fn total_seconds() -> f32 {
     scenes().iter().map(|s| s.seconds).sum()
 }
 
 /// Seconds an act spans — derived.
 #[must_use]
-pub fn act_seconds(act: Act) -> f32 {
+pub(crate) fn act_seconds(act: Act) -> f32 {
     scenes()
         .iter()
         .filter(|s| s.act == act)
@@ -259,7 +367,7 @@ pub fn act_seconds(act: Act) -> f32 {
 
 /// Where a scene starts, in absolute film-seconds.
 #[must_use]
-pub fn scene_start(id: &str) -> f32 {
+pub(crate) fn scene_start(id: &str) -> f32 {
     let mut acc = 0.0;
     for s in scenes() {
         if s.id == id {
@@ -277,7 +385,7 @@ pub fn scene_start(id: &str) -> f32 {
 /// missing manifest is a hard failure of the master render, because the
 /// alternative is a number somebody typed.
 #[derive(Clone, Debug, Default)]
-pub struct Probe {
+pub(crate) struct Probe {
     pub frames: u64,
     pub shapes: u64,
     pub glyph_runs: u64,
@@ -306,13 +414,13 @@ impl Probe {
     /// The bench line. Glyph determinism follows the host's fonts, so the
     /// font count is part of the identity.
     #[must_use]
-    pub fn bench_identity(fonts: u32) -> String {
+    pub(crate) fn bench_identity(fonts: u32) -> String {
         let arch = std::env::consts::ARCH;
         let os = std::env::consts::OS;
         format!("{os} · {arch} · rustc {} · {fonts} fonts", rustc_line())
     }
 
-    pub fn save(&self, path: &FsPath) -> std::io::Result<()> {
+    pub(crate) fn save(&self, path: &FsPath) -> std::io::Result<()> {
         let body = format!(
             "frames={}\nshapes={}\nglyph_runs={}\nglyphs={}\nlayers={}\nfiltered_layers={}\nstrokes={}\nshadows={}\nimages={}\nalive_seconds={:.4}\nframe_ms={:.2}\nworst_ms={:.2}\ncrates={}\nbench={}\n",
             self.frames,
@@ -334,7 +442,7 @@ impl Probe {
     }
 
     #[must_use]
-    pub fn load(path: &FsPath) -> Option<Self> {
+    pub(crate) fn load(path: &FsPath) -> Option<Self> {
         let body = std::fs::read_to_string(path).ok()?;
         let mut p = Self::default();
         for line in body.lines() {
@@ -363,13 +471,13 @@ impl Probe {
     /// Has the census actually run? A zeroed probe must never reach a
     /// caption — rule 5 of the ledger, enforced at the one place it can be.
     #[must_use]
-    pub const fn is_measured(&self) -> bool {
+    pub(crate) const fn is_measured(&self) -> bool {
         self.frames > 0 && self.shapes > 0
     }
 
     /// `alive in N seconds`, formatted the way S06 prints it.
     #[must_use]
-    pub fn alive_text(&self) -> String {
+    pub(crate) fn alive_text(&self) -> String {
         if self.alive_seconds <= 0.0 {
             return "alive in — s".to_string();
         }
@@ -380,14 +488,13 @@ impl Probe {
 /// The compiler that built this binary, read from the environment the build
 /// script sees — no shelling out at render time.
 fn rustc_line() -> String {
-    option_env!("CARGO_PKG_RUST_VERSION")
-        .map_or_else(|| "unknown".to_string(), |v| format!("≥{v}"))
+    option_env!("CARGO_PKG_RUST_VERSION").map_or_else(|| "unknown".to_string(), |v| format!("≥{v}"))
 }
 
 /// Count the workspace's crates by reading its manifest — the end card's
 /// "36 crates" is counted by the code that draws it.
 #[must_use]
-pub fn count_crates() -> u32 {
+pub(crate) fn count_crates() -> u32 {
     let roots = [
         PathBuf::from("Cargo.toml"),
         PathBuf::from("../Cargo.toml"),
@@ -416,12 +523,17 @@ pub fn count_crates() -> u32 {
 
 /// The gates the ledger asks for, run as a command. Failure prints the
 /// finding; the film is not allowed to render around it.
-pub fn verify() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn verify() -> Result<(), Box<dyn std::error::Error>> {
     let all = scenes();
     let mut findings: Vec<String> = Vec::new();
 
     println!("keynote · verify");
-    println!("  {} scenes · {} frames · {:.0}s runtime (all derived)", all.len(), total_frames(), total_seconds());
+    println!(
+        "  {} scenes · {} frames · {:.0}s runtime (all derived)",
+        all.len(),
+        total_frames(),
+        total_seconds()
+    );
 
     // 1 — the act sums close against the runtime.
     let sums: Vec<(Act, f32)> = [Act::Ki, Act::Sho, Act::Ten, Act::Ketsu]
@@ -439,7 +551,11 @@ pub fn verify() -> Result<(), Box<dyn std::error::Error>> {
     // 2 — frames are consistent with the runtime at the master's rate.
     let expect = (total_seconds() * FPS).round() as usize;
     if total_frames() != expect {
-        findings.push(format!("frames {} ≠ {:.0}s × {FPS}", total_frames(), total_seconds()));
+        findings.push(format!(
+            "frames {} ≠ {:.0}s × {FPS}",
+            total_frames(),
+            total_seconds()
+        ));
     }
 
     // 3 — the mount-frame rule, stated once so it cannot surprise anyone:
@@ -449,7 +565,10 @@ pub fn verify() -> Result<(), Box<dyn std::error::Error>> {
     for s in &all {
         let start = scene_start(s.id);
         if (start - acc).abs() > 1e-3 {
-            findings.push(format!("{} starts at {start} but the table tiles to {acc}", s.id));
+            findings.push(format!(
+                "{} starts at {start} but the table tiles to {acc}",
+                s.id
+            ));
         }
         acc += s.seconds;
     }
@@ -488,7 +607,8 @@ pub fn verify() -> Result<(), Box<dyn std::error::Error>> {
     // a number nobody measured.
     let crates = count_crates();
     if crates == 0 {
-        findings.push("the workspace crate count could not be read — run from vieww_base".to_string());
+        findings
+            .push("the workspace crate count could not be read — run from vieww_base".to_string());
     } else {
         println!("    workspace crates counted: {crates}");
     }

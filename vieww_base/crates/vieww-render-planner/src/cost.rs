@@ -223,7 +223,10 @@ mod tests {
         let device = DeviceProfile::CPU_ONLY_FALLBACK;
         let stroke = HeuristicCostModel.estimate(&stroke_pass, 1_000_000.0, &device);
         let fill = HeuristicCostModel.estimate(&fill_pass, 1_000_000.0, &device);
-        assert!((stroke.cpu_ms / fill.cpu_ms - 2.7).abs() < 0.01, "{stroke:?} vs {fill:?}");
+        assert!(
+            (stroke.cpu_ms / fill.cpu_ms - 2.7).abs() < 0.01,
+            "{stroke:?} vs {fill:?}"
+        );
         // The GPU side is deliberately untouched by the shape term.
         assert_eq!(stroke.gpu_ms, fill.gpu_ms);
     }

@@ -46,7 +46,7 @@ const TAP6_T: f32 = 9.60;
 const TAP7_T: f32 = 17.76;
 const BENCH_T: f32 = 12.40;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -54,14 +54,19 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     let b_in = spring(seg(sec, BROWSER_T, BROWSER_T + 1.2), 13.0, 0.5);
     let p_in = spring(seg(sec, PHONE_T, PHONE_T + 1.2), 13.0, 0.5);
 
-    let tap6 = (TAP6_T..TAP6_T + 0.7).contains(&sec).then(|| seg(sec, TAP6_T, TAP6_T + 0.7));
-    let tap7 = (TAP7_T..TAP7_T + 0.8).contains(&sec).then(|| seg(sec, TAP7_T, TAP7_T + 0.8));
+    let tap6 = (TAP6_T..TAP6_T + 0.7)
+        .contains(&sec)
+        .then(|| seg(sec, TAP6_T, TAP6_T + 0.7));
+    let tap7 = (TAP7_T..TAP7_T + 0.8)
+        .contains(&sec)
+        .then(|| seg(sec, TAP7_T, TAP7_T + 0.8));
     // The wave: the tap on the phone reaching the other two surfaces. It is
     // drawn as a travelling pulse along the link lines, so the propagation is
     // a thing you watch rather than a thing you are told.
     let wave = seg(sec, TAP7_T + 0.06, TAP7_T + 0.80);
 
-    let bench = smoothstep(seg(sec, BENCH_T, BENCH_T + 0.9)) * (1.0 - smoothstep(seg(sec, 22.4, 23.2)));
+    let bench =
+        smoothstep(seg(sec, BENCH_T, BENCH_T + 0.9)) * (1.0 - smoothstep(seg(sec, 22.4, 23.2)));
 
     // The three stages. The desktop is the widest, the phone the tallest —
     // the shapes are the devices' own proportions, not three equal boxes.
@@ -177,9 +182,17 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         if bench > 0.01 {
             let card = xywh(brow.left + 30.0, brow.bottom + 104.0, 360.0, 132.0);
             book.shadow(card, 10.0, studio::elevation(2));
-            book.rrect(card, 10.0, alpha(Color::rgb(0x18, 0x16, 0x14), 0.96 * bench));
+            book.rrect(
+                card,
+                10.0,
+                alpha(Color::rgb(0x18, 0x16, 0x14), 0.96 * bench),
+            );
             book.stroke_rrect(card, 10.0, alpha(AMBER, 0.45 * bench), 1.0);
-            book.rrect(xywh(card.left, card.top, 3.0, card.height()), 1.5, alpha(AMBER, 0.9 * bench));
+            book.rrect(
+                xywh(card.left, card.top, 3.0, card.height()),
+                1.5,
+                alpha(AMBER, 0.9 * bench),
+            );
         }
 
         grain(book, size, frame_i, 0.012, 320);
@@ -190,21 +203,54 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
     // Each surface's own glyphs, and its label.
     let labels: [(Rect, f32, &str, &str, f32); 3] = [
-        (desk, d_in, "native window", "vieww-platform-winit · Vulkan swapchain", 28.0),
-        (brow, b_in, "the browser", "vieww-platform-web-dom · real DOM", 50.0),
-        (phone, p_in, "android", "the same program · the same signal", 27.0),
+        (
+            desk,
+            d_in,
+            "native window",
+            "vieww-platform-winit · Vulkan swapchain",
+            28.0,
+        ),
+        (
+            brow,
+            b_in,
+            "the browser",
+            "vieww-platform-web-dom · real DOM",
+            50.0,
+        ),
+        (
+            phone,
+            p_in,
+            "android",
+            "the same program · the same signal",
+            27.0,
+        ),
     ];
     for (r, t, name, sub, bar) in labels {
         if t <= 0.02 {
             continue;
         }
         let lifted = lift(r, t);
-        let body = Rect::new(lifted.left + 1.0, lifted.top + bar, lifted.right - 1.0, lifted.bottom - 1.0);
-        let body = if std::ptr::eq(&r, &phone) { body } else { body };
+        let body = Rect::new(
+            lifted.left + 1.0,
+            lifted.top + bar,
+            lifted.right - 1.0,
+            lifted.bottom - 1.0,
+        );
         let app = if bar > 40.0 {
-            App { value, alive: 1.0, spring: 0.5, ..App::default() }
+            App {
+                value,
+                alive: 1.0,
+                spring: 0.5,
+                ..App::default()
+            }
         } else {
-            App { value, alive: 1.0, spring: 0.5, compact: bar < 28.0, ..App::default() }
+            App {
+                value,
+                alive: 1.0,
+                spring: 0.5,
+                compact: bar < 28.0,
+                ..App::default()
+            }
         };
         nodes.extend(studio::app_text(body, &app));
         nodes.push(
@@ -287,14 +333,17 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             .into(),
     );
     nodes.push(
-        Type::new(format!("witness · {}", crate::film::touch_label(ctx.spine.witness)))
-            .mono()
-            .size(13.0)
-            .track(2.6)
-            .color(alpha(VIOLET_SOFT, 0.9 * chip_a))
-            .at(114.0, 188.0)
-            .width(420.0)
-            .into(),
+        Type::new(format!(
+            "witness · {}",
+            crate::film::touch_label(ctx.spine.witness)
+        ))
+        .mono()
+        .size(13.0)
+        .track(2.6)
+        .color(alpha(VIOLET_SOFT, 0.9 * chip_a))
+        .at(114.0, 188.0)
+        .width(420.0)
+        .into(),
     );
     nodes.push(
         Type::new("one session · three renderers · never restarted")
@@ -308,7 +357,8 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     );
 
     // The seventh's sentence.
-    let seven_a = smoothstep(seg(sec, TAP7_T + 0.5, TAP7_T + 1.3)) * (1.0 - smoothstep(seg(sec, 23.0, 23.9)));
+    let seven_a =
+        smoothstep(seg(sec, TAP7_T + 0.5, TAP7_T + 1.3)) * (1.0 - smoothstep(seg(sec, 23.0, 23.9)));
     if seven_a > 0.004 {
         nodes.push(
             Type::new("the phone was tapped · the desktop felt it")

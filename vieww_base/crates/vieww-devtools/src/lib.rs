@@ -100,9 +100,9 @@ pub use frame_timeline::FrameTimeline;
 pub use gpu_inspector::{DriverStats, GpuReport};
 pub use inspector::Inspector;
 pub use json_export::ToJson;
-pub use quality_overlay::QualityOverlay;
 #[cfg(feature = "snapshots")]
 pub use memory_inspector::MemoryReport;
+pub use quality_overlay::QualityOverlay;
 pub use render_graph_inspector::{PassReport, RenderGraphReport};
 pub use semantics_inspector::{is_interactive, SemanticsReport};
 #[cfg(feature = "snapshots")]

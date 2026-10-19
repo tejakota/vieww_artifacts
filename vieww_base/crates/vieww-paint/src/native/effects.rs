@@ -73,7 +73,11 @@ pub(crate) fn blur(target: &mut Target, sigma: f32, angle: Option<f32>) {
     match band_plan(target, sigma) {
         BandPlan::Skip => {}
         BandPlan::GrowOnly(reach) => target.grow_ink(reach),
-        BandPlan::Blur { radius, top, bottom } => {
+        BandPlan::Blur {
+            radius,
+            top,
+            bottom,
+        } => {
             let w = target.width;
             let band_h = bottom - top;
             let start = top as usize * w as usize;
@@ -149,7 +153,11 @@ fn band_plan(target: &Target, sigma: f32) -> BandPlan {
             if bottom <= top {
                 BandPlan::GrowOnly(reach)
             } else {
-                BandPlan::Blur { radius, top, bottom }
+                BandPlan::Blur {
+                    radius,
+                    top,
+                    bottom,
+                }
             }
         }
         // Nothing was drawn: there is nothing to blur, and the whole buffer is
@@ -320,7 +328,11 @@ pub(crate) fn blur_cached(
     match band_plan(target, sigma) {
         BandPlan::Skip => {}
         BandPlan::GrowOnly(reach) => target.grow_ink(reach),
-        BandPlan::Blur { radius, top, bottom } => {
+        BandPlan::Blur {
+            radius,
+            top,
+            bottom,
+        } => {
             let w = target.width;
             let band_h = bottom - top;
             let start = top as usize * w as usize;
@@ -341,9 +353,7 @@ pub(crate) fn blur_cached(
                 None => {
                     blur_rows(rows, w, band_h, radius, angle);
                     let band = rows.to_vec();
-                    cache.insert(key, band, |band| {
-                        band.len() * std::mem::size_of::<Premul>()
-                    });
+                    cache.insert(key, band, |band| band.len() * std::mem::size_of::<Premul>());
                 }
             }
             // The ink accounting, shared with [`blur`] — the reach a
@@ -628,8 +638,8 @@ pub(crate) fn color_matrix(target: &mut Target, matrix: &ColorMatrix) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::residency::ResidencyCache;
+    use super::*;
 
     /// Deterministic test content: a hard diagonal ramp with two solid
     /// blocks, so every row differs from every other and any off-by-one or
@@ -641,7 +651,16 @@ mod tests {
         for y in 2..h as i32 - 2 {
             for x in 2..w as i32 - 2 {
                 let v = ((x * 7 + y * 13) % 255) as f32 / 255.0;
-                target.set(x, y, Premul { r: v, g: v * 0.5, b: 0.25, a: v });
+                target.set(
+                    x,
+                    y,
+                    Premul {
+                        r: v,
+                        g: v * 0.5,
+                        b: 0.25,
+                        a: v,
+                    },
+                );
             }
         }
         target
@@ -683,7 +702,16 @@ mod tests {
         let mut a = inked_target(24, 20);
         blur_cached(&mut a, 2.5, None, &mut cache);
         let mut b = inked_target(24, 20);
-        b.set(10, 10, Premul { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+        b.set(
+            10,
+            10,
+            Premul {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+                a: 1.0,
+            },
+        );
         blur_cached(&mut b, 2.5, None, &mut cache);
         assert_eq!(cache.stats().hits, 0, "changed content must not hit");
         assert_eq!(cache.stats().misses, 2);
@@ -740,15 +768,23 @@ mod tests {
         let mut a = inked_target(24, 20);
         blur_cached(&mut a, 2.5, None, &mut cache);
         let mut b = inked_target(24, 20);
-        b.set(5, 5, Premul { r: 0.0, g: 0.0, b: 0.0, a: 1.0 });
+        b.set(
+            5,
+            5,
+            Premul {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+        );
         blur_cached(&mut b, 2.5, None, &mut cache);
         assert_eq!(cache.stats().evictions, 1);
         assert_eq!(cache.len(), 1);
         let mut again = inked_target(24, 20);
         blur_cached(&mut again, 2.5, None, &mut cache);
         assert_eq!(
-            again.pixels,
-            a.pixels,
+            again.pixels, a.pixels,
             "an evicted entry re-derives to the same bytes"
         );
     }

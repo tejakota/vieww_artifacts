@@ -777,13 +777,17 @@ impl NativeRenderer {
     /// with (`None` on the CPU present, which has no device).
     #[must_use]
     pub fn pipeline_cache_seed(&self) -> Option<usize> {
-        self.device.as_ref().map(|device| device.pipeline_cache_seed())
+        self.device
+            .as_ref()
+            .map(|device| device.pipeline_cache_seed())
     }
 
     /// Write the GPU device's pipeline cache to disk — see
     /// `vieww_hal::vulkan::pipeline_cache`. `None` on the CPU present.
     pub fn save_pipeline_cache(&self) -> Option<std::io::Result<usize>> {
-        self.device.as_ref().map(|device| device.save_pipeline_cache())
+        self.device
+            .as_ref()
+            .map(|device| device.save_pipeline_cache())
     }
 
     /// Open a window and a renderer to present into it.
@@ -1412,9 +1416,14 @@ impl NativeRenderer {
         // the decision was made on, not a second one.
         let mut planner_cpu = false;
         if render_scale == 1.0 {
-            if let Some(shadow) = self.shadow.as_mut().filter(|s| !s.broken && s.authoritative)
+            if let Some(shadow) = self
+                .shadow
+                .as_mut()
+                .filter(|s| !s.broken && s.authoritative)
             {
-                let (act, plan) = shadow.planner.plan_for_frame(scene.as_ref(), extent.0, extent.1);
+                let (act, plan) = shadow
+                    .planner
+                    .plan_for_frame(scene.as_ref(), extent.0, extent.1);
                 if let Some(plan) = plan {
                     planner_cpu = act == Some(Executor::Cpu);
                     shadow.pending = Some((act, plan));

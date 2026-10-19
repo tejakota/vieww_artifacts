@@ -23,7 +23,7 @@ use vieww_widget::prelude::*;
 use crate::film::Ctx;
 use crate::kit::{
     alpha, bump, caption, clamp01, dust, ease_out_cubic, grain, ground, horizon, mix, painter, seg,
-    smoothstep, spring, vignette, xywh, Type, CYAN, H, INK, INK_SOFT, MINT, MUTED, RED, VIOLET,
+    smoothstep, spring, vignette, xywh, Type, CYAN, INK, INK_SOFT, MINT, MUTED, RED, VIOLET,
     VIOLET_SOFT, W,
 };
 use crate::scenes::buffer;
@@ -43,7 +43,7 @@ const FIX_T: f32 = 15.60;
 const TAP2_T: f32 = 8.16;
 const TAP3_T: f32 = 20.64;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -55,20 +55,26 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     let last_chars = {
         let frac = lines_f - lines_f.floor();
         let n = buffer::SAY[lines - 1].chars().count();
-        if lines_f >= buffer::SAY.len() as f32 { n } else { (n as f32 * frac).round() as usize }
+        if lines_f >= buffer::SAY.len() as f32 {
+            n
+        } else {
+            (n as f32 * frac).round() as usize
+        }
     };
 
-    let broken = sec >= BREAK_T && sec < FIX_T;
+    let broken = (BREAK_T..FIX_T).contains(&sec);
     let code = buffer::say_buffer(lines, Some(last_chars), broken);
 
     // The caret sits on the line being written; during the break it is on
     // the offending line, because that is where the person is looking.
-    let caret_line = if broken || (sec >= FIX_T && sec < FIX_T + 1.6) {
+    let caret_line = if broken || (FIX_T..FIX_T + 1.6).contains(&sec) {
         buffer::BROKEN_LINE
     } else {
         lines - 1
     };
-    let typing = sec < GROW_T1 || (sec >= BREAK_T - 0.4 && sec < BREAK_T + 0.3) || (sec >= FIX_T - 0.3 && sec < FIX_T + 0.4);
+    let typing = sec < GROW_T1
+        || (BREAK_T - 0.4..BREAK_T + 0.3).contains(&sec)
+        || (FIX_T - 0.3..FIX_T + 0.4).contains(&sec);
 
     let diag = broken.then(|| Diag {
         line: buffer::BROKEN_LINE,
@@ -105,7 +111,9 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         (FIX_T + 0.6, 22.6),
     ]
     .into_iter()
-    .map(|(from, to)| smoothstep(seg(sec, from, from + 0.7)) * (1.0 - smoothstep(seg(sec, to - 0.6, to))))
+    .map(|(from, to)| {
+        smoothstep(seg(sec, from, from + 0.7)) * (1.0 - smoothstep(seg(sec, to - 0.6, to)))
+    })
     .fold(0.0f32, f32::max);
 
     let l = Layout::new(64.0, 0.36, true);
@@ -130,10 +138,18 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             }],
         ),
         preview_label: "preview · desktop".into(),
-        preview_chip: if broken { "boundary".into() } else { "live".into() },
+        preview_chip: if broken {
+            "boundary".into()
+        } else {
+            "live".into()
+        },
         witness: Some(ctx.spine.witness),
         elapsed: Some(crate::kit::clock_mmss(ctx.spine.elapsed)),
-        focus: Some(if press.is_some() { FocusOn::Preview } else { FocusOn::Code }),
+        focus: Some(if press.is_some() {
+            FocusOn::Preview
+        } else {
+            FocusOn::Code
+        }),
         panel: crate::studio::Panel {
             lines: crate::studio::output_lines(),
             ..crate::studio::Panel::default()
@@ -143,9 +159,19 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
     let shell_paint = sh.clone();
     let body = l.preview_body;
-    let card = Rect::new(body.left + 44.0, body.top + 40.0, body.right - 44.0, body.bottom - 52.0);
+    let card = Rect::new(
+        body.left + 44.0,
+        body.top + 40.0,
+        body.right - 44.0,
+        body.bottom - 52.0,
+    );
     let app_paint = App { ..app };
-    let inner = Rect::new(card.left + 1.0, card.top + 1.0, card.right - 1.0, card.bottom - 1.0);
+    let inner = Rect::new(
+        card.left + 1.0,
+        card.top + 1.0,
+        card.right - 1.0,
+        card.bottom - 1.0,
+    );
 
     let bg = painter(move |book: &mut Sketchbook, size: Size| {
         ground(book, size, sec, 0.85);
@@ -158,7 +184,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         book.stroke_rrect(
             card,
             10.0,
-            alpha(if broken { RED } else { Color::rgb(40, 44, 58) }, if broken { 0.55 } else { 0.9 }),
+            alpha(
+                if broken { RED } else { Color::rgb(40, 44, 58) },
+                if broken { 0.55 } else { 0.9 },
+            ),
             1.0,
         );
         studio::app(book, inner, &app_paint);
@@ -186,11 +215,15 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             book.rrect(l.window, 16.0, alpha(MINT, 0.05 * fix));
             book.blended_layer(1.0, 22.0, BlendMode::Plus, None, |g| {
                 g.rect(
-                    xywh(card.left, card.top, card.width() * ease_out_cubic(seg(sec, FIX_T, FIX_T + 0.6)), card.height()),
-                    Gradient::horizontal().with_dither().with_stops(&[
-                        (0.0, alpha(MINT, 0.0)),
-                        (1.0, alpha(MINT, 0.18 * fix)),
-                    ]),
+                    xywh(
+                        card.left,
+                        card.top,
+                        card.width() * ease_out_cubic(seg(sec, FIX_T, FIX_T + 0.6)),
+                        card.height(),
+                    ),
+                    Gradient::horizontal()
+                        .with_dither()
+                        .with_stops(&[(0.0, alpha(MINT, 0.0)), (1.0, alpha(MINT, 0.18 * fix))]),
                 );
             });
         }
@@ -220,8 +253,18 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     // stating a mechanism rather than a benefit.
     let beats: [(f32, f32, &str, Color); 3] = [
         (2.2, 8.4, "every keystroke lands — no save, no reload", INK),
-        (BREAK_T + 0.7, FIX_T - 0.4, "the error renders inside the product · the rest of the tree kept painting", RED),
-        (FIX_T + 0.6, 22.6, "one character · the state survived the failure", MINT),
+        (
+            BREAK_T + 0.7,
+            FIX_T - 0.4,
+            "the error renders inside the product · the rest of the tree kept painting",
+            RED,
+        ),
+        (
+            FIX_T + 0.6,
+            22.6,
+            "one character · the state survived the failure",
+            MINT,
+        ),
     ];
     for (from, to, text, c) in beats {
         let a = smoothstep(seg(sec, from, from + 0.7)) * (1.0 - smoothstep(seg(sec, to - 0.6, to)));
@@ -240,7 +283,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     }
 
     nodes.push(caption(
-        if broken { "a boundary, not a crash" } else { "live compose · say" },
+        if broken {
+            "a boundary, not a crash"
+        } else {
+            "live compose · say"
+        },
         smoothstep(seg(sec, 0.6, 1.4)) * (1.0 - smoothstep(seg(sec, 23.0, 24.0))),
     ));
     let _ = (clamp01, INK_SOFT, MUTED, W);

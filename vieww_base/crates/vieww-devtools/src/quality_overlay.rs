@@ -301,7 +301,10 @@ mod tests {
             timeline.record(sample(millis, millis * 10, 8));
         }
         let overlay = QualityOverlay::build("low", "d", None, &timeline, 8);
-        assert_eq!(overlay.frame.over_budget, 4, "1..=4ms under 16, 50..=80 over 8");
+        assert_eq!(
+            overlay.frame.over_budget, 4,
+            "1..=4ms under 16, 50..=80 over 8"
+        );
         assert_eq!(
             overlay.budget,
             Some(Duration::from_millis(8)),

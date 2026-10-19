@@ -257,7 +257,12 @@ impl std::error::Error for DragError {}
 #[must_use]
 pub fn hdrop_bytes(paths: &[std::path::PathBuf]) -> Vec<u8> {
     // 20-byte header, written field by field below, then the wide paths.
-    let mut out = Vec::with_capacity(20 + paths.iter().map(|p| 2 * (p.as_os_str().len() + 2)).sum::<usize>());
+    let mut out = Vec::with_capacity(
+        20 + paths
+            .iter()
+            .map(|p| 2 * (p.as_os_str().len() + 2))
+            .sum::<usize>(),
+    );
     // DROPFILES { pFiles: DWORD = 20, pt: POINT {0, 0}, fNC: BOOL(0), fWide: BOOL(1) }
     out.extend_from_slice(&20u32.to_le_bytes());
     out.extend_from_slice(&0i32.to_le_bytes()); // pt.x
@@ -265,11 +270,7 @@ pub fn hdrop_bytes(paths: &[std::path::PathBuf]) -> Vec<u8> {
     out.extend_from_slice(&0u32.to_le_bytes()); // fNC: not a non-client drop
     out.extend_from_slice(&1u32.to_le_bytes()); // fWide: UTF-16 paths
     for path in paths {
-        let wide: Vec<u16> = path
-            .as_os_str()
-            .to_string_lossy()
-            .encode_utf16()
-            .collect();
+        let wide: Vec<u16> = path.as_os_str().to_string_lossy().encode_utf16().collect();
         for unit in wide {
             out.extend_from_slice(&unit.to_le_bytes());
         }
@@ -468,7 +469,11 @@ mod tests {
             .flat_map(u16::to_le_bytes)
             .collect();
         assert_eq!(&bytes[20..20 + wide.len()], &wide[..]);
-        assert_eq!(&bytes[bytes.len() - 4..], &[0, 0, 0, 0], "path NUL + list NUL");
+        assert_eq!(
+            &bytes[bytes.len() - 4..],
+            &[0, 0, 0, 0],
+            "path NUL + list NUL"
+        );
         assert_eq!(bytes.len(), 20 + wide.len() + 4);
     }
 
@@ -484,7 +489,11 @@ mod tests {
         assert_eq!(effect_from_flags(1), Some(DropEffect::Copy));
         assert_eq!(effect_from_flags(2), Some(DropEffect::Move));
         assert_eq!(effect_from_flags(4), Some(DropEffect::Link));
-        assert_eq!(effect_from_flags(0), None, "DROPEFFECT_NONE is not an effect");
+        assert_eq!(
+            effect_from_flags(0),
+            None,
+            "DROPEFFECT_NONE is not an effect"
+        );
         // Copy-or-link reads as copy: the preference order is the mapping.
         assert_eq!(effect_from_flags(1 | 4), Some(DropEffect::Copy));
         assert_eq!(effect_from_flags(2 | 4), Some(DropEffect::Move));

@@ -17,16 +17,16 @@
 //! a partnership, not a plugin: one workspace, one renderer, and the IDE is
 //! its first and hardest customer.
 
-use vieww_foundation::{BlendMode, Color, Gradient, Offset, Rect, Size, Sketchbook};
+use vieww_foundation::{BlendMode, Color, Gradient, Size, Sketchbook};
 use vieww_widget::prelude::*;
 
 use crate::film::Ctx;
 use crate::kit::{
     alpha, caption, clamp01, dust, ease_out_cubic, grain, ground, horizon, mix, painter, seg,
-    smoothstep, spring, vignette, xywh, Type, CYAN, CYAN_SOFT, H, INK, INK_SOFT, MINT, MUTED,
-    VIOLET, VIOLET_DEEP, VIOLET_SOFT, W,
+    smoothstep, spring, vignette, Type, CYAN, CYAN_SOFT, H, INK, INK_SOFT, MINT, MUTED, VIOLET,
+    VIOLET_DEEP, VIOLET_SOFT, W,
 };
-use crate::solid::{v3, Cam, V3};
+use crate::solid::{v3, Cam};
 use crate::studio::{self, compose};
 
 /// The layers, top to bottom, exactly as the workspace's own crate list
@@ -34,13 +34,65 @@ use crate::studio::{self, compose};
 /// the manifest at render time, so the two can be checked against each other.
 const LAYERS: &[(&str, &[&str])] = &[
     ("the language", &["vieww-say-codegen"]),
-    ("the three trees", &["vieww-widget", "vieww-element", "vieww-render", "vieww-widget-macros"]),
-    ("composition", &["vieww-scene", "vieww-render-graph", "vieww-render-planner"]),
-    ("the rasterizer", &["vieww-paint", "vieww-shaders", "vieww-effects", "vieww-text", "vieww-image"]),
+    (
+        "the three trees",
+        &[
+            "vieww-widget",
+            "vieww-element",
+            "vieww-render",
+            "vieww-widget-macros",
+        ],
+    ),
+    (
+        "composition",
+        &["vieww-scene", "vieww-render-graph", "vieww-render-planner"],
+    ),
+    (
+        "the rasterizer",
+        &[
+            "vieww-paint",
+            "vieww-shaders",
+            "vieww-effects",
+            "vieww-text",
+            "vieww-image",
+        ],
+    ),
     ("the machine", &["vieww-gpu", "vieww-hal", "vieww-hardware"]),
-    ("the loop", &["vieww-runtime", "vieww-animation", "vieww-gestures", "vieww-scroll", "vieww-interaction"]),
-    ("the platforms", &["vieww-platform", "vieww-platform-winit", "vieww-platform-web", "vieww-platform-web-dom"]),
-    ("the workbench", &["vieww-cli", "vieww-build", "vieww-reload", "vieww-devtools", "vieww-test-harness", "vieww-plugin", "vieww-plugin-macros", "vieww-accessibility", "vieww-asset", "vieww-foundation", "vieww"]),
+    (
+        "the loop",
+        &[
+            "vieww-runtime",
+            "vieww-animation",
+            "vieww-gestures",
+            "vieww-scroll",
+            "vieww-interaction",
+        ],
+    ),
+    (
+        "the platforms",
+        &[
+            "vieww-platform",
+            "vieww-platform-winit",
+            "vieww-platform-web",
+            "vieww-platform-web-dom",
+        ],
+    ),
+    (
+        "the workbench",
+        &[
+            "vieww-cli",
+            "vieww-build",
+            "vieww-reload",
+            "vieww-devtools",
+            "vieww-test-harness",
+            "vieww-plugin",
+            "vieww-plugin-macros",
+            "vieww-accessibility",
+            "vieww-asset",
+            "vieww-foundation",
+            "vieww",
+        ],
+    ),
 ];
 
 /// The beats, in scene-seconds.
@@ -49,7 +101,7 @@ const RISE_SPAN: f32 = 6.40;
 const CLAIM_T: f32 = 10.20;
 const COUNT_T: f32 = 13.80;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let frame_i = ctx.frame;
 
@@ -66,8 +118,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     };
     let canvas = Size::new(W, H);
 
-    let claim = smoothstep(seg(sec, CLAIM_T, CLAIM_T + 1.0)) * (1.0 - smoothstep(seg(sec, 20.6, 21.6)));
-    let count_a = smoothstep(seg(sec, COUNT_T, COUNT_T + 0.9)) * (1.0 - smoothstep(seg(sec, 20.6, 21.6)));
+    let claim =
+        smoothstep(seg(sec, CLAIM_T, CLAIM_T + 1.0)) * (1.0 - smoothstep(seg(sec, 20.6, 21.6)));
+    let count_a =
+        smoothstep(seg(sec, COUNT_T, COUNT_T + 0.9)) * (1.0 - smoothstep(seg(sec, 20.6, 21.6)));
 
     // The crate count, read from the workspace's own manifest by the census.
     let crates = ctx.probe.crates;
@@ -99,7 +153,8 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             // The plate.
             let hue = order as f32 / (layer_count - 1) as f32;
             let base = mix(CYAN, VIOLET, hue);
-            let plate = crate::solid::slab(v3(0.0, y - drop, 0.0), 7.6, 0.10, 1, 1, alpha(base, 0.20));
+            let plate =
+                crate::solid::slab(v3(0.0, y - drop, 0.0), 7.6, 0.10, 1, 1, alpha(base, 0.20));
             crate::solid::draw(
                 book,
                 &plate,
@@ -144,7 +199,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         // The studio, settling on top as the last layer. It is drawn as a
         // slab with the window's own colours, so the IDE reads as one more
         // crate rather than as a picture pasted on the stack.
-        let top_rise = spring(seg(sec, RISE_T0 + RISE_SPAN + 0.2, RISE_T0 + RISE_SPAN + 1.8), 10.0, 0.42);
+        let top_rise = spring(
+            seg(sec, RISE_T0 + RISE_SPAN + 0.2, RISE_T0 + RISE_SPAN + 1.8),
+            10.0,
+            0.42,
+        );
         if top_rise > 0.005 {
             let y = -2.5 + layer_count as f32 * 0.62 + 0.46;
             let drop = (1.0 - top_rise) * 4.0;
@@ -264,7 +323,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     }
 
     // The studio's label on its own slab.
-    let top_rise = spring(seg(sec, RISE_T0 + RISE_SPAN + 0.2, RISE_T0 + RISE_SPAN + 1.8), 10.0, 0.42).clamp(0.0, 1.0);
+    let top_rise = spring(
+        seg(sec, RISE_T0 + RISE_SPAN + 0.2, RISE_T0 + RISE_SPAN + 1.8),
+        10.0,
+        0.42,
+    )
+    .clamp(0.0, 1.0);
     if top_rise > 0.05 {
         let y = -2.5 + layer_count as f32 * 0.62 + 0.46;
         let drop = (1.0 - top_rise) * 4.0;

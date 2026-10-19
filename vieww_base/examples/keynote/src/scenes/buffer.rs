@@ -15,14 +15,10 @@
 use crate::studio::{lex, Line};
 
 /// The three lines that bring the preview alive — S06's whole content.
-pub const FIRST_PAINT: &[&str] = &[
-    "view counter {",
-    "    text \"0\"",
-    "}",
-];
+pub(crate) const FIRST_PAINT: &[&str] = &["view counter {", "    text \"0\"", "}"];
 
 /// The component as S07 finishes it: a signal, a dial, a button, a spring.
-pub const SAY: &[&str] = &[
+pub(crate) const SAY: &[&str] = &[
     "view counter {",
     "    state taps = 0",
     "",
@@ -41,14 +37,15 @@ pub const SAY: &[&str] = &[
 /// The mistake S07 makes on purpose — `tap` where `taps` was meant. A name
 /// that is not in scope is the smallest honest error: it is caught, it is
 /// named, and the rest of the tree keeps painting.
-pub const BROKEN_LINE: usize = 4;
-pub const BROKEN_TEXT: &str = "        dial value: tap, of: 7";
-pub const FIXED_TEXT: &str = "        dial value: taps, of: 7";
-pub const DIAGNOSTIC: &str = "cannot find `tap` in this scope — did you mean `taps`?";
+pub(crate) const BROKEN_LINE: usize = 4;
+pub(crate) const BROKEN_TEXT: &str = "        dial value: tap, of: 7";
+#[allow(dead_code)] // the fixed buffer text, kept beside the scene that will show it
+pub(crate) const FIXED_TEXT: &str = "        dial value: taps, of: 7";
+pub(crate) const DIAGNOSTIC: &str = "cannot find `tap` in this scope — did you mean `taps`?";
 
 /// The same program, one altitude down. S08 walks the buffer from the list
 /// above to this one, line by line, with the preview never restarting.
-pub const RUST: &[&str] = &[
+pub(crate) const RUST: &[&str] = &[
     "pub fn counter() -> impl Widget {",
     "    let taps = runtime().signal(0u32);",
     "",
@@ -67,13 +64,17 @@ pub const RUST: &[&str] = &[
 /// The lexed `say` buffer, with an optional broken line and an optional
 /// character limit for the type-on.
 #[must_use]
-pub fn say_buffer(lines: usize, chars_on_last: Option<usize>, broken: bool) -> Vec<Line> {
+pub(crate) fn say_buffer(lines: usize, chars_on_last: Option<usize>, broken: bool) -> Vec<Line> {
     let mut out = Vec::new();
     for (i, raw) in SAY.iter().enumerate() {
         if i >= lines {
             break;
         }
-        let text = if broken && i == BROKEN_LINE { BROKEN_TEXT } else { *raw };
+        let text = if broken && i == BROKEN_LINE {
+            BROKEN_TEXT
+        } else {
+            *raw
+        };
         let line = lex(text, false);
         if i + 1 == lines {
             if let Some(n) = chars_on_last {
@@ -89,7 +90,7 @@ pub fn say_buffer(lines: usize, chars_on_last: Option<usize>, broken: bool) -> V
 /// The three-line buffer, typed on by total character count across the
 /// whole thing — which is how a person types, and how S06 shows it.
 #[must_use]
-pub fn first_paint_buffer(chars: usize) -> Vec<Line> {
+pub(crate) fn first_paint_buffer(chars: usize) -> Vec<Line> {
     let mut left = chars;
     let mut out = Vec::new();
     for raw in FIRST_PAINT {
@@ -113,7 +114,7 @@ pub fn first_paint_buffer(chars: usize) -> Vec<Line> {
 
 /// Total characters in the three-line buffer, newlines included.
 #[must_use]
-pub fn first_paint_len() -> usize {
+pub(crate) fn first_paint_len() -> usize {
     FIRST_PAINT.iter().map(|l| l.chars().count() + 1).sum()
 }
 
@@ -121,7 +122,7 @@ pub fn first_paint_len() -> usize {
 /// rest still in `say`. The two lists are aligned by index, so the walk is
 /// one cursor moving down the file.
 #[must_use]
-pub fn descent_buffer(converted: usize, mid: Option<(usize, f32)>) -> Vec<Line> {
+pub(crate) fn descent_buffer(converted: usize, mid: Option<(usize, f32)>) -> Vec<Line> {
     let n = SAY.len().max(RUST.len());
     let mut out = Vec::new();
     for i in 0..n {
@@ -135,7 +136,11 @@ pub fn descent_buffer(converted: usize, mid: Option<(usize, f32)>) -> Vec<Line> 
                 // the new one arriving, as one truncation each. The eye
                 // reads it as a single line changing, which is what it is.
                 let src = if p < 0.5 { say } else { rust };
-                let frac = if p < 0.5 { 1.0 - p * 2.0 } else { (p - 0.5) * 2.0 };
+                let frac = if p < 0.5 {
+                    1.0 - p * 2.0
+                } else {
+                    (p - 0.5) * 2.0
+                };
                 let keep = (src.chars().count() as f32 * frac).round() as usize;
                 out.push(lex(src, p >= 0.5).truncated(keep));
             } else {

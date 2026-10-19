@@ -251,7 +251,11 @@ struct FrameRateRange {
 unsafe impl objc2::Encode for FrameRateRange {
     const ENCODING: objc2::Encoding = objc2::Encoding::Struct(
         "CAFrameRateRange",
-        &[objc2::Encoding::Float, objc2::Encoding::Float, objc2::Encoding::Float],
+        &[
+            objc2::Encoding::Float,
+            objc2::Encoding::Float,
+            objc2::Encoding::Float,
+        ],
     );
 }
 

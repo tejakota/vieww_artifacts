@@ -23,36 +23,36 @@ use crate::kit::{alpha, mix, scaled};
 // ── Vectors ─────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct V3 {
+pub(crate) struct V3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
 #[must_use]
-pub const fn v3(x: f32, y: f32, z: f32) -> V3 {
+pub(crate) const fn v3(x: f32, y: f32, z: f32) -> V3 {
     V3 { x, y, z }
 }
 
 impl V3 {
     #[must_use]
-    pub fn add(self, o: Self) -> Self {
+    pub(crate) fn add(self, o: Self) -> Self {
         v3(self.x + o.x, self.y + o.y, self.z + o.z)
     }
     #[must_use]
-    pub fn sub(self, o: Self) -> Self {
+    pub(crate) fn sub(self, o: Self) -> Self {
         v3(self.x - o.x, self.y - o.y, self.z - o.z)
     }
     #[must_use]
-    pub fn mul(self, k: f32) -> Self {
+    pub(crate) fn mul(self, k: f32) -> Self {
         v3(self.x * k, self.y * k, self.z * k)
     }
     #[must_use]
-    pub fn dot(self, o: Self) -> f32 {
+    pub(crate) fn dot(self, o: Self) -> f32 {
         self.x * o.x + self.y * o.y + self.z * o.z
     }
     #[must_use]
-    pub fn cross(self, o: Self) -> Self {
+    pub(crate) fn cross(self, o: Self) -> Self {
         v3(
             self.y * o.z - self.z * o.y,
             self.z * o.x - self.x * o.z,
@@ -60,30 +60,34 @@ impl V3 {
         )
     }
     #[must_use]
-    pub fn len(self) -> f32 {
+    pub(crate) fn len(self) -> f32 {
         self.dot(self).sqrt()
     }
     #[must_use]
-    pub fn norm(self) -> Self {
+    pub(crate) fn norm(self) -> Self {
         let l = self.len();
-        if l < 1e-6 { v3(0.0, 0.0, 0.0) } else { self.mul(1.0 / l) }
+        if l < 1e-6 {
+            v3(0.0, 0.0, 0.0)
+        } else {
+            self.mul(1.0 / l)
+        }
     }
     #[must_use]
-    pub fn lerp(self, o: Self, t: f32) -> Self {
+    pub(crate) fn lerp(self, o: Self, t: f32) -> Self {
         self.add(o.sub(self).mul(t))
     }
     #[must_use]
-    pub fn rot_y(self, a: f32) -> Self {
+    pub(crate) fn rot_y(self, a: f32) -> Self {
         let (s, c) = a.sin_cos();
         v3(self.x * c + self.z * s, self.y, -self.x * s + self.z * c)
     }
     #[must_use]
-    pub fn rot_x(self, a: f32) -> Self {
+    pub(crate) fn rot_x(self, a: f32) -> Self {
         let (s, c) = a.sin_cos();
         v3(self.x, self.y * c - self.z * s, self.y * s + self.z * c)
     }
     #[must_use]
-    pub fn rot_z(self, a: f32) -> Self {
+    pub(crate) fn rot_z(self, a: f32) -> Self {
         let (s, c) = a.sin_cos();
         v3(self.x * c - self.y * s, self.x * s + self.y * c, self.z)
     }
@@ -92,7 +96,7 @@ impl V3 {
 // ── The camera ──────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy)]
-pub struct Cam {
+pub(crate) struct Cam {
     pub eye: V3,
     pub yaw: f32,
     pub pitch: f32,
@@ -116,7 +120,7 @@ impl Cam {
     /// point, the camera-space depth, and the perspective scale — the last is
     /// what makes a dot's radius and a stroke's width honest.
     #[must_use]
-    pub fn project(&self, p: V3, canvas: Size) -> Option<(Offset, f32, f32)> {
+    pub(crate) fn project(&self, p: V3, canvas: Size) -> Option<(Offset, f32, f32)> {
         let q = p.sub(self.eye).rot_y(-self.yaw).rot_x(-self.pitch);
         if q.z <= 0.12 {
             return None;
@@ -138,13 +142,13 @@ impl Cam {
     /// arithmetic, written once, normalised so `1.0` is "the size you would
     /// have written for a flat 2D scene at the film's usual depth".
     #[must_use]
-    pub fn px(&self, k: f32) -> f32 {
+    pub(crate) fn px(&self, k: f32) -> f32 {
         k * self.focal / 100.0
     }
 
     /// Depth only — the sort key, without the projection's cost.
     #[must_use]
-    pub fn depth(&self, p: V3) -> f32 {
+    pub(crate) fn depth(&self, p: V3) -> f32 {
         p.sub(self.eye).rot_y(-self.yaw).rot_x(-self.pitch).z
     }
 }
@@ -152,34 +156,34 @@ impl Cam {
 // ── Meshes ──────────────────────────────────────────────────────────────────
 
 #[derive(Default)]
-pub struct Mesh {
+pub(crate) struct Mesh {
     pub pts: Vec<V3>,
     pub quads: Vec<([usize; 4], Color)>,
 }
 
 impl Mesh {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn point(&mut self, p: V3) -> usize {
+    pub(crate) fn point(&mut self, p: V3) -> usize {
         self.pts.push(p);
         self.pts.len() - 1
     }
 
-    pub fn quad(&mut self, a: usize, b: usize, c: usize, d: usize, color: Color) {
+    pub(crate) fn quad(&mut self, a: usize, b: usize, c: usize, d: usize, color: Color) {
         self.quads.push(([a, b, c, d], color));
     }
 
     #[must_use]
-    pub fn normal(&self, q: &[usize; 4]) -> V3 {
+    pub(crate) fn normal(&self, q: &[usize; 4]) -> V3 {
         let (a, b, c) = (self.pts[q[0]], self.pts[q[1]], self.pts[q[2]]);
         b.sub(a).cross(c.sub(a)).norm()
     }
 
     #[must_use]
-    pub fn center(&self, q: &[usize; 4]) -> V3 {
+    pub(crate) fn center(&self, q: &[usize; 4]) -> V3 {
         q.iter()
             .fold(v3(0.0, 0.0, 0.0), |acc, i| acc.add(self.pts[*i]))
             .mul(0.25)
@@ -187,7 +191,7 @@ impl Mesh {
 
     /// Move every point through a map — how the unfold animates: one mesh,
     /// re-posed per frame, never rebuilt from scratch mid-draw.
-    pub fn warp(&mut self, f: impl Fn(V3) -> V3) {
+    pub(crate) fn warp(&mut self, f: impl Fn(V3) -> V3) {
         for p in &mut self.pts {
             *p = f(*p);
         }
@@ -197,7 +201,7 @@ impl Mesh {
 /// An axis-aligned box centred at `c` with half-extents `h`, six faces, each
 /// tinted from `color` so the volume reads without a light.
 #[must_use]
-pub fn box_mesh(c: V3, h: V3, color: Color) -> Mesh {
+pub(crate) fn box_mesh(c: V3, h: V3, color: Color) -> Mesh {
     let mut m = Mesh::new();
     let s = [-1.0f32, 1.0];
     let mut idx = [[0usize; 2]; 4];
@@ -225,7 +229,7 @@ pub fn box_mesh(c: V3, h: V3, color: Color) -> Mesh {
 /// A flat slab in the x/y plane, subdivided — the "panel floating in space"
 /// the crate wall and the device tour are both made of.
 #[must_use]
-pub fn slab(c: V3, w: f32, h: f32, cols: usize, rows: usize, color: Color) -> Mesh {
+pub(crate) fn slab(c: V3, w: f32, h: f32, cols: usize, rows: usize, color: Color) -> Mesh {
     let mut m = Mesh::new();
     let mut grid = Vec::with_capacity((cols + 1) * (rows + 1));
     for r in 0..=rows {
@@ -238,7 +242,13 @@ pub fn slab(c: V3, w: f32, h: f32, cols: usize, rows: usize, color: Color) -> Me
     let at = |col: usize, r: usize| grid[r * (cols + 1) + col];
     for r in 0..rows {
         for col in 0..cols {
-            m.quad(at(col, r), at(col + 1, r), at(col + 1, r + 1), at(col, r + 1), color);
+            m.quad(
+                at(col, r),
+                at(col + 1, r),
+                at(col + 1, r + 1),
+                at(col, r + 1),
+                color,
+            );
         }
     }
     m
@@ -246,7 +256,7 @@ pub fn slab(c: V3, w: f32, h: f32, cols: usize, rows: usize, color: Color) -> Me
 
 // ── Style and draw ──────────────────────────────────────────────────────────
 
-pub struct Style {
+pub(crate) struct Style {
     /// Direction *toward* the light.
     pub light: V3,
     pub ambient: f32,
@@ -284,7 +294,7 @@ impl Default for Style {
 
 /// Draw a mesh, back to front. One pass, no layers — the caller groups if it
 /// wants glow.
-pub fn draw(book: &mut Sketchbook, m: &Mesh, cam: &Cam, canvas: Size, st: &Style) {
+pub(crate) fn draw(book: &mut Sketchbook, m: &Mesh, cam: &Cam, canvas: Size, st: &Style) {
     let mut order: Vec<(f32, usize)> = m
         .quads
         .iter()
@@ -310,7 +320,11 @@ pub fn draw(book: &mut Sketchbook, m: &Mesh, cam: &Cam, canvas: Size, st: &Style
             c = mix(c, rim, (1.0 - facing.abs()).powi(3) * k);
         }
         if let Some((fog, near, far)) = st.fog {
-            c = mix(c, fog, crate::kit::clamp01((depth - near) / (far - near).max(1e-3)));
+            c = mix(
+                c,
+                fog,
+                crate::kit::clamp01((depth - near) / (far - near).max(1e-3)),
+            );
         }
 
         // The bleed: push each corner away from the quad's centre.
@@ -348,7 +362,7 @@ pub fn draw(book: &mut Sketchbook, m: &Mesh, cam: &Cam, canvas: Size, st: &Style
 }
 
 /// A polyline in space, as one stroked path with per-segment culling.
-pub fn line3(
+pub(crate) fn line3(
     book: &mut Sketchbook,
     pts: &[V3],
     cam: &Cam,
@@ -377,7 +391,7 @@ pub fn line3(
 }
 
 /// A dot in space whose radius respects perspective.
-pub fn dot3(book: &mut Sketchbook, p: V3, cam: &Cam, canvas: Size, r: f32, color: Color) {
+pub(crate) fn dot3(book: &mut Sketchbook, p: V3, cam: &Cam, canvas: Size, r: f32, color: Color) {
     if let Some((s, _, k)) = cam.project(p, canvas) {
         book.circle(s, (r * k).max(0.35), color);
     }
@@ -385,7 +399,7 @@ pub fn dot3(book: &mut Sketchbook, p: V3, cam: &Cam, canvas: Size, r: f32, color
 
 /// A glowing dot field, one additive group for the lot — the cheap way to
 /// make a constellation without buying N offscreens.
-pub fn spark_field(
+pub(crate) fn spark_field(
     book: &mut Sketchbook,
     pts: &[(V3, Color, f32)],
     cam: &Cam,
@@ -401,7 +415,7 @@ pub fn spark_field(
 
 /// The world's floor: a receding grid, drawn with distance fade. Gives every
 /// 3D set-piece a ground so the volumes are not floating in nothing.
-pub fn floor(
+pub(crate) fn floor(
     book: &mut Sketchbook,
     cam: &Cam,
     canvas: Size,

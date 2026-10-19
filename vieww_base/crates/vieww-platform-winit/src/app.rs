@@ -2035,7 +2035,10 @@ impl WindowState {
         #[cfg(target_os = "ios")]
         {
             let scale = self.scale;
-            let surface = self.gpu.as_ref().map(|gpu| std::sync::Arc::clone(&gpu.window));
+            let surface = self
+                .gpu
+                .as_ref()
+                .map(|gpu| std::sync::Arc::clone(&gpu.window));
             if let Some(window) = surface {
                 let semantics = self.driver.semantics();
                 let published =
@@ -2280,7 +2283,9 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // will not start.
         let (opened, planned, launch, settled) = match (opened, &calibration) {
             (Err(error), Some(calibration)) if path == PresentPath::Vulkan => {
-                log::warn!("vieww: the GPU path could not be opened ({error}); keeping the CPU path");
+                log::warn!(
+                    "vieww: the GPU path could not be opened ({error}); keeping the CPU path"
+                );
                 calibration.settle(Rasterizer::Cpu);
                 (
                     NativeRenderer::for_window_on(&window, width, height, PresentPath::Cpu),
@@ -2335,7 +2340,9 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             match renderer.enable_planner_authoritative() {
                 Ok(()) => trace_line(
                     self.shared.now(),
-                    format_args!("startup: planner authoritative enabled (gate-fed by the shadow log)"),
+                    format_args!(
+                        "startup: planner authoritative enabled (gate-fed by the shadow log)"
+                    ),
                 ),
                 Err(reason) => eprintln!("vieww: VIEWW_PLANNER_AUTHORITATIVE ignored: {reason}"),
             }

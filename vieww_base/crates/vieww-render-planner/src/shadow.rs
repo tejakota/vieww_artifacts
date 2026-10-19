@@ -693,7 +693,12 @@ impl ShadowPlanner {
     /// so the caller's `observe` can record this exact prediction instead
     /// of planning the frame a second time.
     #[must_use]
-    pub fn plan_for_frame(&self, scene: &Scene, width: u32, height: u32) -> (Option<Executor>, Option<ShadowPlan>) {
+    pub fn plan_for_frame(
+        &self,
+        scene: &Scene,
+        width: u32,
+        height: u32,
+    ) -> (Option<Executor>, Option<ShadowPlan>) {
         let Some(plan) = self.plan(scene, width, height) else {
             return (None, None);
         };
@@ -920,7 +925,10 @@ mod tests {
         }
         let wild_ratio = wild.calibration().cpu_error_ratio().unwrap();
         let wild_rmse = wild.calibration().rmse_of_ratio(Executor::Cpu).unwrap();
-        assert!((wild_ratio - 3.0).abs() < 1e-4, "same total error: {wild_ratio}");
+        assert!(
+            (wild_ratio - 3.0).abs() < 1e-4,
+            "same total error: {wild_ratio}"
+        );
         assert!(
             wild_rmse > steady_rmse + 0.5,
             "the swinging error must read worse: {wild_rmse} against {steady_rmse}"
@@ -1009,7 +1017,10 @@ mod tests {
             }
         }
         assert_eq!(shadow.mode(), PlannerMode::Authoritative);
-        assert!(acted > 0, "an Authoritative planner with a ready CPU gate acts");
+        assert!(
+            acted > 0,
+            "an Authoritative planner with a ready CPU gate acts"
+        );
     }
 
     #[test]

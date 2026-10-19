@@ -29,15 +29,15 @@ use crate::studio::{self, compose, project_tree, status_line, FileKind, FocusOn,
 /// The panels, and the beat each one lands on (scene-seconds).
 const PANELS: [(f32, f32, f32); 6] = [
     // (arrive, from-x, from-y) — the edge each panel comes in from.
-    (1.10, -340.0, 0.0),  // rail
-    (1.32, -340.0, 0.0),  // sidebar
-    (1.54, 0.0, -160.0),  // tabs
-    (1.74, 0.0, 120.0),   // editor
-    (1.96, 420.0, 0.0),   // preview
-    (2.20, 0.0, 120.0),   // status
+    (1.10, -340.0, 0.0), // rail
+    (1.32, -340.0, 0.0), // sidebar
+    (1.54, 0.0, -160.0), // tabs
+    (1.74, 0.0, 120.0),  // editor
+    (1.96, 420.0, 0.0),  // preview
+    (2.20, 0.0, 120.0),  // status
 ];
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let t = ctx.t;
     let frame_i = ctx.frame;
@@ -134,7 +134,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     if done > 0.02 && done < 0.98 {
                         let seam = if fx.abs() > 1.0 {
                             xywh(
-                                if fx < 0.0 { r.left + r.width() * done } else { r.right - r.width() * done },
+                                if fx < 0.0 {
+                                    r.left + r.width() * done
+                                } else {
+                                    r.right - r.width() * done
+                                },
                                 r.top,
                                 2.0,
                                 r.height(),
@@ -142,7 +146,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                         } else {
                             xywh(
                                 r.left,
-                                if fy < 0.0 { r.top + r.height() * done } else { r.bottom - r.height() * done },
+                                if fy < 0.0 {
+                                    r.top + r.height() * done
+                                } else {
+                                    r.bottom - r.height() * done
+                                },
                                 r.width(),
                                 2.0,
                             )
@@ -161,12 +169,16 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         // slide.
         book.blended_layer(1.0, 70.0, BlendMode::Plus, None, |g| {
             g.rrect(
-                xywh(l.window.left + 60.0, l.window.bottom - 40.0, l.window.width() - 120.0, 120.0),
+                xywh(
+                    l.window.left + 60.0,
+                    l.window.bottom - 40.0,
+                    l.window.width() - 120.0,
+                    120.0,
+                ),
                 60.0,
-                Gradient::vertical().with_dither().with_stops(&[
-                    (0.0, alpha(VIOLET, 0.10 * win)),
-                    (1.0, alpha(VIOLET, 0.0)),
-                ]),
+                Gradient::vertical()
+                    .with_dither()
+                    .with_stops(&[(0.0, alpha(VIOLET, 0.10 * win)), (1.0, alpha(VIOLET, 0.0))]),
             );
         });
 
@@ -209,7 +221,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             .track(2.4)
             .color(alpha(MUTED, 0.7 * wait_a))
             .center()
-            .at(l.preview_body.left, l.preview_body.top + l.preview_body.height() * 0.5 - 10.0)
+            .at(
+                l.preview_body.left,
+                l.preview_body.top + l.preview_body.height() * 0.5 - 10.0,
+            )
             .width(l.preview_body.width())
             .into(),
     );
@@ -242,14 +257,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         // not over the frame — the studio dims, the room does not.
         nodes.push(
             Stack::new()
-                .push(
-                    Positioned::fill().child(
-                        crate::kit::painter(move |book: &mut Sketchbook, size: Size| {
-                            let _ = size;
-                            book.rrect(l.window, 16.0, alpha(Color::rgb(6, 6, 10), 0.72 * name_a));
-                        }),
-                    ),
-                )
+                .push(Positioned::fill().child(crate::kit::painter(
+                    move |book: &mut Sketchbook, size: Size| {
+                        let _ = size;
+                        book.rrect(l.window, 16.0, alpha(Color::rgb(6, 6, 10), 0.72 * name_a));
+                    },
+                )))
                 .into(),
         );
         // Re-issue the name above its own scrim.
@@ -275,7 +288,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         );
     }
 
-    nodes.push(act_card("ACT II", "THE STUDIO", "承", smoothstep(seg(sec, 0.6, 1.6)) * (1.0 - smoothstep(seg(sec, 6.0, 7.2)))));
+    nodes.push(act_card(
+        "ACT II",
+        "THE STUDIO",
+        "承",
+        smoothstep(seg(sec, 0.6, 1.6)) * (1.0 - smoothstep(seg(sec, 6.0, 7.2))),
+    ));
     nodes.push(caption(
         "one session starts here · it does not restart again",
         smoothstep(seg(sec, 12.0, 13.0)) * (1.0 - smoothstep(seg(t, 0.94, 1.0))),

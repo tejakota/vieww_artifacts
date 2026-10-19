@@ -19,9 +19,9 @@ use vieww_widget::prelude::*;
 
 use crate::film::Ctx;
 use crate::kit::{
-    alpha, bump, caption, clamp01, dust, ease_out_cubic, ease_out_expo, grain, mix, noise1, painter,
-    seg, smootherstep, smoothstep, vignette, xywh, Type, CYAN, H, INK, INK_SOFT, MUTED, VIOLET,
-    VIOLET_SOFT, VOID, W,
+    alpha, bump, caption, dust, ease_out_cubic, ease_out_expo, grain, mix, noise1, painter, seg,
+    smootherstep, smoothstep, vignette, xywh, Type, CYAN, H, INK, MUTED, VIOLET, VIOLET_SOFT, VOID,
+    W,
 };
 use crate::studio::compose;
 
@@ -43,7 +43,7 @@ const WORDS: &[(&str, f32)] = &[
 /// Which word lifts. Index into `WORDS` — *see*.
 const HERO: usize = 6;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let t = ctx.t;
     let frame_i = ctx.frame;
@@ -100,7 +100,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                 ]),
             );
             book.blended_layer(1.0, 22.0, BlendMode::Plus, None, |g| {
-                g.rrect(xywh(rx, ry - 2.0, rw, 7.0), 3.5, alpha(VIOLET, 0.22 * rule * (1.0 - close)));
+                g.rrect(
+                    xywh(rx, ry - 2.0, rw, 7.0),
+                    3.5,
+                    alpha(VIOLET, 0.22 * rule * (1.0 - close)),
+                );
             });
         }
 
@@ -116,7 +120,13 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     1.5,
                     Gradient::horizontal().with_dither().with_stops(&[
                         (0.0, alpha(VIOLET, 0.0)),
-                        (0.5, alpha(mix(VIOLET_SOFT, Color::WHITE, 0.5), 0.85 * bright + 0.3 * close)),
+                        (
+                            0.5,
+                            alpha(
+                                mix(VIOLET_SOFT, Color::WHITE, 0.5),
+                                0.85 * bright + 0.3 * close,
+                            ),
+                        ),
                         (1.0, alpha(CYAN, 0.0)),
                     ]),
                 );
@@ -139,7 +149,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
     // centred, so each word is positioned by its cumulative share of the
     // string's own characters. The type is centred per-word, which keeps the
     // rhythm even if the face's advance differs from the bench's.
-    let total_chars: f32 = WORDS.iter().map(|(w, _)| w.chars().count() as f32 + 1.0).sum();
+    let total_chars: f32 = WORDS
+        .iter()
+        .map(|(w, _)| w.chars().count() as f32 + 1.0)
+        .sum();
     let line_w = 1180.0;
     let mut cursor = 0.0f32;
     let size_base = 52.0;
@@ -188,7 +201,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                         .size(s)
                         .weight(vieww_foundation::FontWeight::Medium)
                         .track(2.0 * lift)
-                        .color(alpha(mix(INK, VIOLET_SOFT, 0.22 * lift), 0.98 * lift * (1.0 - close)))
+                        .color(alpha(
+                            mix(INK, VIOLET_SOFT, 0.22 * lift),
+                            0.98 * lift * (1.0 - close),
+                        ))
                         .center()
                         .banner(H * 0.5 - s * 0.62)
                         .into(),

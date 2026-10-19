@@ -27,7 +27,10 @@ fn a_second_device_starts_from_the_first_ones_pipelines() {
     // At least the header. Lavapipe stops there — it keeps no compiled code
     // between devices — so a real driver's volume is Device Farm's to show;
     // what this checks is that a real driver's own header is accepted back.
-    assert!(written >= 32, "the cache holds at least its header: {written} bytes");
+    assert!(
+        written >= 32,
+        "the cache holds at least its header: {written} bytes"
+    );
     drop(renderer);
     drop(first);
 
@@ -41,7 +44,11 @@ fn a_second_device_starts_from_the_first_ones_pipelines() {
     // Data from another GPU or driver is not handed to the driver at all.
     std::fs::write(&file, vec![0u8; 64]).expect("overwrite");
     let third = VulkanDevice::new().expect("a third device");
-    assert_eq!(third.pipeline_cache_seed(), 0, "a foreign header is dropped");
+    assert_eq!(
+        third.pipeline_cache_seed(),
+        0,
+        "a foreign header is dropped"
+    );
 
     drop(second);
     drop(third);

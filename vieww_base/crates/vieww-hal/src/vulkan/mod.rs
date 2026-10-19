@@ -525,7 +525,8 @@ impl Drop for VulkanDevice {
         let _ = self.save_pipeline_cache();
         unsafe {
             if self.pipeline_cache != vk::PipelineCache::null() {
-                self.device.destroy_pipeline_cache(self.pipeline_cache, None);
+                self.device
+                    .destroy_pipeline_cache(self.pipeline_cache, None);
             }
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);

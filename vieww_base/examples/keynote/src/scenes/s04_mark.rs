@@ -22,15 +22,17 @@
 //! The twist (K1): the last beat states plainly that the wait the film just
 //! spent a minute on is not a law of nature. Then the studio opens.
 
-use vieww_foundation::{BlendMode, Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, Transform};
+use vieww_foundation::{
+    BlendMode, Color, FontWeight, Gradient, Offset, Rect, Size, Sketchbook, Transform,
+};
 use vieww_widget::prelude::*;
 use vieww_widget::{Filtered, Opacity, Transformed};
 
 use crate::film::Ctx;
 use crate::kit::{
-    alpha, bump, caption, clamp01, dust, ease_out_cubic, ease_out_expo, grain, ground, horizon, mix,
-    painter, seg, smoothstep, spring, sting, tint, vignette, xywh, Rng, Type, CYAN, CYAN_SOFT, H,
-    INK, INK_SOFT, MUTED, VIOLET, VIOLET_SOFT, W,
+    alpha, bump, caption, clamp01, dust, ease_out_cubic, ease_out_expo, grain, ground, horizon,
+    mix, painter, seg, smoothstep, spring, sting, tint, vignette, xywh, Rng, Type, CYAN, CYAN_SOFT,
+    H, INK, INK_SOFT, MUTED, VIOLET, VIOLET_SOFT, W,
 };
 use crate::studio::compose;
 
@@ -49,7 +51,7 @@ const RULE_T: f32 = 1.75;
 const SPEC_T: f32 = 3.05;
 const TWIST_T: f32 = 8.10;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let t = ctx.t;
     let frame_i = ctx.frame;
@@ -70,7 +72,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
 
     let bg = painter(move |book: &mut Sketchbook, size: Size| {
         let (w, h) = (size.width, size.height);
-        ground(book, size, sec, 0.55 + 0.45 * smoothstep(seg(sec, 0.0, 3.0)));
+        ground(
+            book,
+            size,
+            sec,
+            0.55 + 0.45 * smoothstep(seg(sec, 0.0, 3.0)),
+        );
 
         // The floor the mark stands on — a wide, low violet horizon that
         // brightens as the name settles.
@@ -83,7 +90,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         if impact > 0.01 {
             book.blended_layer(1.0, 30.0, BlendMode::Plus, None, |g| {
                 g.rrect(
-                    xywh(w * 0.5 - 560.0 * impact, MARK_Y + MARK_SIZE * 1.20, 1120.0 * impact, 4.0),
+                    xywh(
+                        w * 0.5 - 560.0 * impact,
+                        MARK_Y + MARK_SIZE * 1.20,
+                        1120.0 * impact,
+                        4.0,
+                    ),
                     2.0,
                     Gradient::horizontal().with_dither().with_stops(&[
                         (0.0, alpha(VIOLET, 0.0)),
@@ -123,7 +135,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     band,
                     Gradient::horizontal().with_dither().with_stops(&[
                         (0.0, alpha(Color::WHITE, 0.0)),
-                        (0.5, alpha(Color::WHITE, 0.17 * (1.0 - (spec - 0.5).abs() * 1.4))),
+                        (
+                            0.5,
+                            alpha(Color::WHITE, 0.17 * (1.0 - (spec - 0.5).abs() * 1.4)),
+                        ),
                         (1.0, alpha(Color::WHITE, 0.0)),
                     ]),
                 );
@@ -148,7 +163,14 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     g.circle(
                         Offset::new(cx, cy),
                         0.8 + 1.6 * (1.0 - e),
-                        alpha(if rng.f01() > 0.7 { CYAN_SOFT } else { VIOLET_SOFT }, 0.5 * fade),
+                        alpha(
+                            if rng.f01() > 0.7 {
+                                CYAN_SOFT
+                            } else {
+                                VIOLET_SOFT
+                            },
+                            0.5 * fade,
+                        ),
                     );
                 }
             });
@@ -170,7 +192,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         // once — the film's first genuinely bright moment.
         let st = sting(sec - TWIST_T, 1.5);
         if st > 0.01 {
-            book.rect(Rect::new(0.0, 0.0, w, h), alpha(tint(VIOLET, 0.55), 0.05 * st));
+            book.rect(
+                Rect::new(0.0, 0.0, w, h),
+                alpha(tint(VIOLET, 0.55), 0.05 * st),
+            );
         }
 
         dust(book, size, sec, 44, VIOLET_SOFT, 0.7);
@@ -212,10 +237,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                         .child(
                             Opacity::new(0.42 * mark_a * (1.0 - out))
                                 .blend(BlendMode::Plus)
-                                .child(
-                                    Filtered::blur(16.0)
-                                        .child(mark_node(1.0, VIOLET_SOFT, MARK_SIZE, 1.0)),
-                                ),
+                                .child(Filtered::blur(16.0).child(mark_node(
+                                    1.0,
+                                    VIOLET_SOFT,
+                                    MARK_SIZE,
+                                    1.0,
+                                ))),
                         ),
                 )
                 .into(),
@@ -233,13 +260,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                         .top(MARK_Y + (MARK_SIZE + 8.0) * 2.0 + 26.0)
                         .width(W)
                         .height(MARK_SIZE * 1.6)
-                        .child(
-                            Opacity::new(refl_a).child(
-                                Transformed::new(Transform::scale(1.0, -1.0)).child(
-                                    Filtered::blur(4.6).child(mark_node(1.0, INK_SOFT, MARK_SIZE, 1.0)),
-                                ),
+                        .child(Opacity::new(refl_a).child(
+                            Transformed::new(Transform::scale(1.0, -1.0)).child(
+                                Filtered::blur(4.6).child(mark_node(1.0, INK_SOFT, MARK_SIZE, 1.0)),
                             ),
-                        ),
+                        )),
                 )
                 .into(),
         );
@@ -256,7 +281,11 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     .height(MARK_SIZE * 1.6)
                     .child(mark_node(
                         0.99 * mark_a * (1.0 - out),
-                        mix(INK, tint(VIOLET_SOFT, 0.3), 0.10 + 0.18 * bump(spec, 0.0, 1.0)),
+                        mix(
+                            INK,
+                            tint(VIOLET_SOFT, 0.3),
+                            0.10 + 0.18 * bump(spec, 0.0, 1.0),
+                        ),
                         MARK_SIZE,
                         1.0,
                     )),
@@ -293,7 +322,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             .mono()
             .size(16.0)
             .track(3.4)
-            .color(alpha(VIOLET_SOFT, 0.85 * smoothstep(seg(sec, TWIST_T + 0.9, TWIST_T + 2.0)) * (1.0 - out)))
+            .color(alpha(
+                VIOLET_SOFT,
+                0.85 * smoothstep(seg(sec, TWIST_T + 0.9, TWIST_T + 2.0)) * (1.0 - out),
+            ))
             .center()
             .banner(H * 0.808)
             .into(),

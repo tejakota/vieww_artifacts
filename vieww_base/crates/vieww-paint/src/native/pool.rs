@@ -136,14 +136,23 @@ impl TargetPool {
     /// read where the pool is constructed so every renderer in the process
     /// sees the same trade without each call site knowing about it.
     pub(crate) fn from_env() -> Self {
-        match std::env::var("VIEWW_POOL_IDLE_MB").ok().as_deref().and_then(mb_env_bytes) {
+        match std::env::var("VIEWW_POOL_IDLE_MB")
+            .ok()
+            .as_deref()
+            .and_then(mb_env_bytes)
+        {
             Some(bytes) => Self::with_budget(bytes),
             None => Self::new(),
         }
     }
 
     pub(crate) fn with_budget(budget: usize) -> Self {
-        Self { idle: Vec::new(), idle_bytes: 0, budget, stats: PoolStats::default() }
+        Self {
+            idle: Vec::new(),
+            idle_bytes: 0,
+            budget,
+            stats: PoolStats::default(),
+        }
     }
 
     /// A `width x height` buffer, cleared to fully transparent — either an
@@ -183,9 +192,7 @@ impl TargetPool {
         self.idle_bytes += buffer_bytes(&target);
         self.idle.push(target);
         self.stats.kept += 1;
-        while self.idle.len() > 1
-            && (self.idle.len() > MAX_IDLE || self.idle_bytes > self.budget)
-        {
+        while self.idle.len() > 1 && (self.idle.len() > MAX_IDLE || self.idle_bytes > self.budget) {
             let victim = self.idle.remove(0);
             self.idle_bytes -= buffer_bytes(&victim);
             self.stats.evicted += 1;
@@ -226,7 +233,12 @@ mod tests {
         let _b = pool.acquire(10, 10);
         assert_eq!(
             pool.stats(),
-            PoolStats { reused: 1, allocated: 1, kept: 1, evicted: 0 }
+            PoolStats {
+                reused: 1,
+                allocated: 1,
+                kept: 1,
+                evicted: 0
+            }
         );
     }
 
@@ -238,7 +250,12 @@ mod tests {
         let _b = pool.acquire(20, 20);
         assert_eq!(
             pool.stats(),
-            PoolStats { reused: 0, allocated: 2, kept: 1, evicted: 0 }
+            PoolStats {
+                reused: 0,
+                allocated: 2,
+                kept: 1,
+                evicted: 0
+            }
         );
     }
 
@@ -300,7 +317,12 @@ mod tests {
         pool.release(second);
         assert_eq!(
             pool.stats(),
-            PoolStats { reused: 1, allocated: 1, kept: 2, evicted: 0 }
+            PoolStats {
+                reused: 1,
+                allocated: 1,
+                kept: 2,
+                evicted: 0
+            }
         );
     }
 

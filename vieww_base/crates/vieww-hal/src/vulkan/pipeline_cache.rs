@@ -95,7 +95,11 @@ pub(crate) fn create(
 }
 
 /// Write `cache` to `file`, atomically. Returns the bytes written.
-pub(crate) fn save(device: &ash::Device, cache: vk::PipelineCache, file: &Path) -> std::io::Result<usize> {
+pub(crate) fn save(
+    device: &ash::Device,
+    cache: vk::PipelineCache,
+    file: &Path,
+) -> std::io::Result<usize> {
     if cache == vk::PipelineCache::null() {
         return Ok(0);
     }
@@ -143,8 +147,14 @@ mod tests {
         // Another GPU.
         assert!(!header_matches(&header(0x10de, 0x0602, [7; 16]), &props()));
         // Truncated, empty, garbage.
-        assert!(!header_matches(&header(0x5143, 0x0602, [7; 16])[..20], &props()));
+        assert!(!header_matches(
+            &header(0x5143, 0x0602, [7; 16])[..20],
+            &props()
+        ));
         assert!(!header_matches(&[], &props()));
-        assert!(!header_matches(b"not a pipeline cache at all, no", &props()));
+        assert!(!header_matches(
+            b"not a pipeline cache at all, no",
+            &props()
+        ));
     }
 }

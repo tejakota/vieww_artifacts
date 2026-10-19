@@ -6,22 +6,22 @@
 //! comes before or after it — continuity arrives through `ctx.spine`, and
 //! every printed number through `ctx.probe`.
 
-pub mod buffer;
-pub mod s01_wait;
-pub mod s02_cost;
-pub mod s03_question;
-pub mod s04_mark;
-pub mod s05_opens;
-pub mod s06_first_paint;
-pub mod s07_compose;
-pub mod s08_descent;
-pub mod s09_machine;
-pub mod s10_damage;
-pub mod s11_mirror;
-pub mod s12_world_tour;
-pub mod s13_foundation;
-pub mod s14_unfold;
-pub mod s15_ledger;
-pub mod s16_one_click;
-pub mod s17_endcard;
-pub mod s18_loop;
+pub(crate) mod buffer;
+pub(crate) mod s01_wait;
+pub(crate) mod s02_cost;
+pub(crate) mod s03_question;
+pub(crate) mod s04_mark;
+pub(crate) mod s05_opens;
+pub(crate) mod s06_first_paint;
+pub(crate) mod s07_compose;
+pub(crate) mod s08_descent;
+pub(crate) mod s09_machine;
+pub(crate) mod s10_damage;
+pub(crate) mod s11_mirror;
+pub(crate) mod s12_world_tour;
+pub(crate) mod s13_foundation;
+pub(crate) mod s14_unfold;
+pub(crate) mod s15_ledger;
+pub(crate) mod s16_one_click;
+pub(crate) mod s17_endcard;
+pub(crate) mod s18_loop;

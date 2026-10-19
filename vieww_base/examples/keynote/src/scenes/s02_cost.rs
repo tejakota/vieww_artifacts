@@ -40,7 +40,7 @@ fn dim(c: Color) -> Color {
 const COLS: usize = 46;
 const ROWS: usize = 5;
 
-pub fn frame(ctx: &Ctx) -> WidgetNode {
+pub(crate) fn frame(ctx: &Ctx) -> WidgetNode {
     let held = held_24(ctx.sec);
     let t = ctx.t;
     let frame_i = ctx.frame;
@@ -103,7 +103,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
                     let arrive = clamp01((age - 0.94) / 0.06);
                     book.rect(
                         xywh(x, y, 1.6, hgt),
-                        alpha(mix(c, dim(INK), arrive * 0.6), (1.0 - drain) * vis * f32::from(c.a) / 255.0),
+                        alpha(
+                            mix(c, dim(INK), arrive * 0.6),
+                            (1.0 - drain) * vis * f32::from(c.a) / 255.0,
+                        ),
                     );
                 }
             }
@@ -132,7 +135,12 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         for (i, (p, c)) in dials.into_iter().enumerate() {
             let cx = W * 0.30 + i as f32 * W * 0.20;
             let r = 54.0;
-            book.ring(Offset::new(cx, dy), r, 5.0, alpha(dim(Color::rgb(28, 30, 36)), 0.9 * vis));
+            book.ring(
+                Offset::new(cx, dy),
+                r,
+                5.0,
+                alpha(dim(Color::rgb(28, 30, 36)), 0.9 * vis),
+            );
             crate::kit::arc_sweep(
                 book,
                 Offset::new(cx, dy),
@@ -164,7 +172,10 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
         grain(book, size, frame_i, 0.05 * vis, 800);
         vignette(book, size, 1.1);
         if drain > 0.6 {
-            book.rect(Rect::new(0.0, 0.0, w, h), alpha(Color::BLACK, smoothstep(seg(drain, 0.6, 1.0)) * 0.55));
+            book.rect(
+                Rect::new(0.0, 0.0, w, h),
+                alpha(Color::BLACK, smoothstep(seg(drain, 0.6, 1.0)) * 0.55),
+            );
         }
     });
 
@@ -215,6 +226,9 @@ pub fn frame(ctx: &Ctx) -> WidgetNode {
             .into(),
     );
 
-    nodes.push(caption("one mark per rebuild · the arithmetic is on screen", (1.0 - drain) * vis * 0.85));
+    nodes.push(caption(
+        "one mark per rebuild · the arithmetic is on screen",
+        (1.0 - drain) * vis * 0.85,
+    ));
     compose(bg, nodes)
 }

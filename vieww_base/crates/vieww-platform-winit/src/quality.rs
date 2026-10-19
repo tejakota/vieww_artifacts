@@ -115,7 +115,9 @@ pub fn gpu_scale_status() -> Option<String> {
             }
         })
         .unwrap_or_else(|_| "set".to_owned());
-    Some(format!("GPU path renders at {scale:.2}x resolution (VIEWW_GPU_SCALE={source})"))
+    Some(format!(
+        "GPU path renders at {scale:.2}x resolution (VIEWW_GPU_SCALE={source})"
+    ))
 }
 
 #[cfg(test)]
@@ -125,12 +127,18 @@ mod tests {
 
     #[test]
     fn the_profiles_match_the_tiers() {
-        assert_eq!(QualityProfile::for_tier(DeviceTier::Low), QualityProfile::LOW);
+        assert_eq!(
+            QualityProfile::for_tier(DeviceTier::Low),
+            QualityProfile::LOW
+        );
         assert_eq!(
             QualityProfile::for_tier(DeviceTier::Medium),
             QualityProfile::MEDIUM
         );
-        assert_eq!(QualityProfile::for_tier(DeviceTier::High), QualityProfile::HIGH);
+        assert_eq!(
+            QualityProfile::for_tier(DeviceTier::High),
+            QualityProfile::HIGH
+        );
     }
 
     #[test]
