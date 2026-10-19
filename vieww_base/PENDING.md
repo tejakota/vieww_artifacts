@@ -728,20 +728,20 @@ gaps, they are decisions.
   target-consumer annotation as Fix 1/2; the reuse key is the fill
   cache's (`FillKey`) discipline carried to tiles.
 - **Fix 12's remainder (async glyph rasterisation), Fix 13 (async image
-  decode).** `vieww-foundation`'s `Pool` is the worker infrastructure;
+  decode).** *Fix 13 done, Fix 12 closed by measurement, 2026-10-19 (§4.4).* `vieww-foundation`'s `Pool` is the worker infrastructure;
   the gap is that paint's glyph raster is synchronous inside the frame.
   A placeholder-first design changes visible pixels mid-load — it needs
   the fidelity policy's answer to "a frame with placeholders" written
   down before code. Start: `crates/vieww-image/src/codec/` decode
   off-thread first (decode is deterministic, so bytes are safe) with
   `Pool`, measuring an A36-like workload before the glyph half.
-- **Fix 14 (FrameBudgetGuard).** Buildable, deferred deliberately: the
+- **Fix 14 (FrameBudgetGuard).** *Done 2026-10-19 (§4.4): the census and the guard.* Was: buildable, deferred deliberately: the
   scheduler has budget accounting (`FrameReport::over_budget`) but no
   census of what work is "non-critical" — the type is easy, the deferral
   policy without callers is a stub. Start: list the frame's deferrable
   work (image decode, mip building, shadow re-render) with their phases
   in `scheduler.rs`, then the guard is a small type over that list.
-- **Fix 15's remainder (splash-time full warm-up).** Pipelines are
+- **Fix 15's remainder (splash-time full warm-up).** *Closed by audit 2026-10-19 (§4.4): nothing in the UI path is created lazily.* Pipelines are
   created at `SceneRenderer::new` through the persistent pipeline cache;
   what "warm every shader variant" adds is enumerating variants the
   first frames would compile lazily — a GPU-side claim needing a device
@@ -750,11 +750,80 @@ gaps, they are decisions.
   start-up stages), then decide whether the enumeration is worth its
   splash time.
 
-**The NEON half's Start.** Run `framework-checks.yml`'s Android-emulator
-or iOS-simulator leg with the current main: `simd_rows_match_scalar_bit_
-for_bit` dispatches through the NEON module there and is its bit-for-bit
-verdict; a Device Farm frame-time A/B (scalar fallback vs NEON dispatch)
-on the LG Stylo 5 is the number the advisory wanted.
+**The NEON half's Start.** ~~Run `framework-checks.yml`'s Android-emulator
+or iOS-simulator leg~~ — neither runs vieww-paint on ARM (the emulator is
+x86_64; the simulator leg tests vieww-foundation and vieww-text only), and
+until 2026-10-19 the workflow could not run at all (§4.4). Now: Actions →
+Framework checks → Run workflow; the macOS leg's "NEON compositing loops,
+bit for bit (aarch64)" step is the verdict. A Device Farm frame-time A/B
+(scalar fallback vs NEON dispatch) on the LG Stylo 5 is still the number
+the advisory wanted.
+
+## 4.4 After Device Farm f91d07c: what the first run on the new code said, and what was done about it
+
+**What the run said** (2026-10-19, main at d3bf2f6, three Android phones
+and three iPhones; `ci-results/device-farm-main`):
+
+- The CPU raster stage did not get faster after the row-parallel walk,
+  the fill cache and NEON landed — LG Stylo 5 30.6 → 34.8 ms, S26 Ultra
+  4.7–4.9 → 6.6 ms — and CPU-path PSS rose 10–16 MB (LG 76 → 92, S26
+  78 → 88 MB). Different units of each phone than the earlier runs, so a
+  reading, not a proof.
+- The `gpuscale` pass on the Pixel 5a and S26 Ultra drew 0 of 600 frames
+  on the GPU under a "GPU at 0.75x" label.
+- `auto` kept the CPU on the iPhone 15 Pro (CPU 8.77, GPU 8.19, budget
+  8.33 ms) and then failed the budget at 11.1 ms.
+- The LG's GPU path is fill-bound, not bandwidth-bound as the sixteen-fix
+  advisory assumed: at 0.5x, `gpu_wait` falls 34.6 → 12.4 ms.
+- On iPhone, the GPU path's cost is `gpu_submit` (MoltenVK translation:
+  iPhone 13 p95 24.7 ms submit vs 8.5 ms wait) — the strongest evidence
+  yet for a native Metal `SceneRenderer` (§1.2).
+
+**Done** (2026-10-19, this entry's patch; TRACKER has the evidence):
+
+- `run-android.sh` sets `debug.vieww.gpu=1` *before* the `gpuscale`
+  launch; `device_farm.py` flags any GPU-labelled pass the CPU drew, and
+  `gpuscale_verdict.py` no longer counts one as the scale engaging
+  (self-test fixture `cpu_drew_it`).
+- `rasterizer_choice::after_gpu` takes the budget: the GPU also wins when
+  it is the only one of the two inside it. The f91d07c phones are fixtures.
+- A `cpubare` Device Farm pass (`debug.vieww.bare=1`: raster threads,
+  fill cache and blur cache off) is the same-unit A/B for both the speed
+  and the PSS readings above; every pass now prints its PSS.
+- The blur and fill cache budgets follow the device tier
+  (`quality::cache_budgets_for`: Low 2+2 MiB, Medium 4+4, High 8+8 as
+  shipped); the env overrides still win. Pixels cannot move — both caches
+  memoise a deterministic function.
+- Fix 13: `vieww_image::codec::decode_async` — the audit found no decode
+  inside a frame anywhere in the framework, so this is the app-facing
+  half: same bytes as `decode`, on a `Spawn`.
+- Fix 14: `frame_budget::FrameBudgetGuard` over a written census of the
+  UI thread's non-drawing chores; the pipeline-cache save runs in a frame
+  with slack or at a 500 ms deadline, and is flushed on surface drop.
+- Fix 15: closed by audit — all three UI scene pipelines are built eagerly
+  in `SceneRenderer::new` through the persistent cache (seeded ~39 KB on
+  every phone in f91d07c); nothing lazy exists to warm. The four pipelines
+  outside the UI path (clear, mesh, 3D, compute) now use the same cache.
+- **`framework-checks.yml` moved to the repository root.** It had lived
+  at `vieww_base/.github/workflows/`, which GitHub never reads, so on
+  `main` none of its legs could run — including every "referee" this file
+  names for written-not-run code. Manual trigger, like the root's other
+  workflows; its macOS leg now runs the NEON bit-for-bit test on arm64.
+
+**Still open, and why.** The next Device Farm run is the verdict on the
+first four bullets (`cpubare` vs `cpu` per phone; `cache budgets` and PSS
+per pass; the `gpuscale` rows drawing on the GPU; the iPhone 15 Pro's
+`auto` choice). Fix 12's pre-warm: see §4.3's open list and this patch's
+TRACKER entry for the measurement that decided it: closed by
+measurement — outlining every printable ASCII glyph of the embedded face
+from cold takes 0.11 ms in total (release, x86-64, 2026-10-19), so a
+pre-warm would move ~2 ms once even on the LG; the per-size coverage
+raster that remains is this frame's pixels and cannot be deferred without
+a placeholder the fidelity policy forbids. The platform ports
+(§1.2, §1.3, §3.1's iOS/Android halves, §3.6, §6.2) were not attempted:
+the session had no cross targets (rustup could not download them), so
+the code could not even be type-checked — below this repository's
+"written, type-checked, labelled" bar.
 
 # 5. Process and infrastructure
 

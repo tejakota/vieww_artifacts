@@ -11,6 +11,86 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-19: Device Farm f91d07c, read and answered — two measurement bugs, a chooser that ignored the budget, tier-sized caches, Fixes 13/14/15 closed, and a CI workflow GitHub could not see
+
+**Context.** The first Device Farm run on main after the sixteen-fix batch
+(f91d07c, three Android phones and three iPhones) and a re-audit of both
+advisories against it. PENDING §4.4 has what the run said; this entry has
+what was built and how each claim is checked. Built with rustc 1.97.0 —
+the pinned 1.98.1 could not be downloaded in this session — so the
+pinned-toolchain clippy gate is for the next machine that has it.
+
+**What was built, and how each claim is checked.**
+
+- **The `gpuscale` pass draws on the GPU.** `run-android.sh` set
+  `debug.vieww.gpu=0` for it and relied on `device-suite.sh --gpu`, which
+  sets the property after the app is already up (`--no-build` does not
+  relaunch). Now set before the launch. `device_farm.py` prints "not a GPU
+  measurement" beside any GPU-labelled pass with 0 GPU frames — replayed
+  against f91d07c's own `summary.json`, it flags exactly the Pixel 5a and
+  S26 rows and not the LG's — and `gpuscale_verdict.py` treats such a pass
+  as not engaged (new self-test fixture `cpu_drew_it`; all five pass; the
+  real run's verdict is unchanged, KEEP-OPT-IN).
+- **The chooser respects the budget.** `after_gpu` now also picks the GPU
+  when it is the only path inside the frame budget. The 15% margin
+  remains for every other case. The five f91d07c calibrations are test
+  fixtures (iPhone 15 Pro now GPU; iPhone 17, LG stay CPU; Pixel, S26
+  GPU), plus the converse: a GPU that misses never beats a CPU that fits.
+- **A same-unit A/B for the CPU raster commits.** `debug.vieww.bare=1` →
+  `VIEWW_RASTER_THREADS=0`, `VIEWW_PATH_CACHE_MB=0`, `VIEWW_BLUR_CACHE_MB=0`,
+  set before any thread; a `cpubare` pass in `run-android.sh` and the
+  summary; every pass now reports its PSS.
+- **Tier-sized cache budgets.** `vieww_paint::native::CacheBudgets` and a
+  process default the platform sets once before the first renderer
+  (`quality::apply_cache_budgets`): Low 2+2 MiB, Medium 4+4, High 8+8
+  (unchanged). Env overrides still win; the suite observes the budgets as
+  `cache_budgets`. Pixels cannot move: both caches memoise a deterministic
+  function — and the High/desktop default is byte-for-byte the old trade.
+- **Fix 13 — `codec::decode_async`.** The audit: no decode runs inside a
+  frame anywhere in the framework (images reach paint decoded; Lottie
+  decodes at parse). The helper is the app-facing half. Tested bit-identical
+  to `decode` for PNG, JPEG and BMP through a two-worker `Pool`, and an
+  undecodable file comes back `Failed`, not `Lost`.
+- **Fix 14 — `frame_budget::FrameBudgetGuard<T>`** over a written census
+  of the UI thread's non-drawing chores. The pipeline-cache save is the one
+  guarded: it runs after a frame that used ≤ 50% of the budget or at a
+  500 ms deadline (the LG has no such frame — 240/240 over — so the
+  deadline is what saves it), and `Gpu::drop` flushes it before the
+  renderer goes. Five tests, including the no-slack device.
+- **Fix 15 — closed by audit.** `SceneRenderer::new` builds all three
+  scene pipelines eagerly through the persistent cache; f91d07c shows the
+  cache seeded on every phone. The four pipelines outside the UI path
+  (clear, mesh, 3D, compute) were created with a null cache; they now use
+  the device's (internally synchronised — created without the externally-
+  synchronised flag).
+- **Fix 12 — closed by measurement.** Cold outlining of all 95 printable
+  ASCII glyphs in the embedded face: 0.11 ms total (release, x86-64; the
+  three rounds read 110, 97, 87 µs). Not worth a cross-crate pre-warm.
+- **`framework-checks.yml` can run.** It sat at
+  `vieww_base/.github/workflows/`, which GitHub never reads (`ci/README.md`
+  itself says the file belongs at the repository root). Moved there,
+  manual-only like the root's other workflows; its macOS leg (arm64) now
+  runs `cargo test -p vieww-paint --features native --lib simd`, the NEON
+  loops' first bit-for-bit verdict on ARM.
+
+**Full-suite evidence:** `vieww-paint --features native` 271 lib
+tests (2 new), `vieww-platform-winit` 153 (7 new), `vieww-image` 68 + the
+`decode_async` doctest (2 new); clippy `-D warnings` clean on vieww-paint,
+vieww-image, vieww-platform-winit and vieww-hal (`--features vulkan`);
+the platform examples compile (the Android example's
+`debug.vieww.bare` included); `gpuscale_verdict.py --self-test` passes
+all five fixtures; and **`ci/check/raster-identity.sh` reports all 30
+gallery files byte-identical to origin/main** at this tree. rustfmt
+applied to the lines this entry wrote only; the touched files' older
+drift is left alone, as before.
+
+**What this does not claim.** Any frame-time or PSS change: those are the
+next Device Farm run's to say (`cpubare` vs `cpu`, `cache budgets` beside
+PSS, the `gpuscale` rows, the iPhone 15 Pro's `auto`). Any platform port:
+no cross target could be installed in this session, so Metal, D3D12,
+iOS/Android drag-out, native views and VoiceOver were not touched rather
+than written un-type-checked.
+
 ## 2026-10-18: the sixteen-fix performance advisory, re-mapped — a row-parallel scanline walk, a fill cache for the last uncached hot rasterize site, and the compositing loops' NEON half (written, type-checked, labelled not-yet-run)
 
 **Context.** A third advisory proposed sixteen fixes under one hard
