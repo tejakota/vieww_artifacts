@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use super::dl::Library;
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 const PORT_IS_INPUT: u64 = 0x1;
@@ -260,6 +260,13 @@ impl Jack {
         let (rate, period) =
             unsafe { ((api.get_sample_rate)(client), (api.get_buffer_size)(client)) };
         let counters = Arc::new(Counters::default());
+        // The callback crosses an `extern "C"` boundary on JACK's process
+        // thread: isolate it before it is stored, so a panicking closure
+        // ends the stream instead of the process.
+        let callback = match callback {
+            Callback::Render(r) => Callback::Render(isolate_render(r, &counters)),
+            Callback::Capture(c) => Callback::Capture(isolate_capture(c, &counters)),
+        };
         let shared = Box::into_raw(Box::new(Shared {
             api: api.clone(),
             ports: ports.clone(),

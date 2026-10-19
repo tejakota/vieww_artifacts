@@ -16,8 +16,8 @@ use std::thread::JoinHandle;
 
 use super::dl::Library;
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 const PA_STREAM_PLAYBACK: c_int = 1;
@@ -168,6 +168,14 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
         return Err(BackendError::Unavailable(api.error(err)));
     }
     let counters = Arc::new(Counters::default());
+    // Pulse paces a plain thread here, but the callback contract stays the
+    // one every backend keeps: a panicking closure is caught once, then the
+    // stream is silence and `ended` — not a dead thread that `stop` waits
+    // on forever.
+    let callback = match callback {
+        Callback::Render(r) => Callback::Render(isolate_render(r, &counters)),
+        Callback::Capture(c) => Callback::Capture(isolate_capture(c, &counters)),
+    };
     let stop = Arc::new(AtomicBool::new(false));
     let (c2, s2, a2, handle) = (counters.clone(), stop.clone(), api.clone(), Handle(s));
     let frames = config.block.max(16) as usize;

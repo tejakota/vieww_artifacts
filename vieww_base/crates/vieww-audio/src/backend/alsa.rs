@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 use crate::device::{AlsaInput, AlsaOutput};
 
@@ -59,9 +59,22 @@ impl Backend for Alsa {
         mut render: RenderFn,
     ) -> Result<DeviceStream, BackendError> {
         let ch = config.channels.clamp(1, 32);
-        let mut out = AlsaOutput::open_channels(self.card, self.device, config.rate, u32::from(ch))
-            .map_err(unavailable_or_refused)?;
+        // The device period brackets the requested block, so the pacing the
+        // stream asked for is the pacing the hardware tries to give — a
+        // 64-frame block is no longer silently paced by 512-frame periods.
+        let mut out = AlsaOutput::open_with_period(
+            self.card,
+            self.device,
+            config.rate,
+            u32::from(ch),
+            config.block.max(64),
+        )
+        .map_err(unavailable_or_refused)?;
         let counters = Arc::new(Counters::default());
+        // A panicking render closure must not kill the pacing thread —
+        // isolate it so the failure is one message, then silence and
+        // `ended`, like every other backend.
+        let mut render = isolate_render(render, &counters);
         let stop = Arc::new(AtomicBool::new(false));
         let (c2, s2) = (counters.clone(), stop.clone());
         let frames = config.block.max(64) as usize;
@@ -117,9 +130,18 @@ impl Backend for Alsa {
         mut capture: CaptureFn,
     ) -> Result<DeviceStream, BackendError> {
         let ch = config.channels.clamp(1, 32);
-        let mut input = AlsaInput::open(self.card, self.device, config.rate, u32::from(ch))
-            .map_err(unavailable_or_refused)?;
+        let mut input = AlsaInput::open_with_period(
+            self.card,
+            self.device,
+            config.rate,
+            u32::from(ch),
+            config.block.max(64),
+        )
+        .map_err(unavailable_or_refused)?;
         let counters = Arc::new(Counters::default());
+        // As in `open_output`: a panicking capture is caught, not a dead
+        // pacing thread.
+        let mut capture = isolate_capture(capture, &counters);
         let stop = Arc::new(AtomicBool::new(false));
         let (c2, s2) = (counters.clone(), stop.clone());
         let frames = config.block.max(64) as usize;

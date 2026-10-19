@@ -86,7 +86,15 @@ impl Library {
         if p.is_null() {
             return Err(format!("missing symbol {}", name.to_string_lossy()));
         }
-        debug_assert_eq!(size_of::<T>(), size_of::<*mut c_void>());
+        // The transmute below reinterprets a pointer-sized word as `T`; a
+        // `T` wider than a pointer is instant memory corruption, and this
+        // was a `debug_assert` — compiled out of the very builds that ship.
+        // It runs once per symbol at load, not on any hot path.
+        assert_eq!(
+            size_of::<T>(),
+            size_of::<*mut c_void>(),
+            "symbol types must be pointer-sized"
+        );
         // SAFETY: the caller guarantees `T` is the symbol's pointer type.
         Ok(unsafe { std::mem::transmute_copy::<*mut c_void, T>(&p) })
     }

@@ -161,16 +161,20 @@ mod alsa {
             rate: u32,
             channels: u32,
         ) -> Result<Self, String> {
-            Self::open_dir(card, device, rate, channels, false)
+            Self::open_dir(card, device, rate, channels, false, 512)
         }
 
         /// Open for playback, or (`capture`) for recording.
+        ///
+        /// `period` is the frame count the caller wants the device to pace
+        /// itself by; the range offered to the hardware brackets it.
         pub(super) fn open_dir(
             card: u32,
             device: u32,
             rate: u32,
             channels: u32,
             capture: bool,
+            period: u32,
         ) -> Result<Self, String> {
             let path = format!(
                 "/dev/snd/pcmC{card}D{device}{}",
@@ -221,9 +225,20 @@ mod alsa {
             p.intervals[I_FRAME_BITS] = exact(16 * channels);
             p.intervals[I_CHANNELS] = exact(channels);
             p.intervals[I_RATE] = exact(rate);
+            // The period bracket follows the request rather than ignoring
+            // it: a 64-frame low-latency stream used to be paced by
+            // 512-frame device periods no matter what it asked for,
+            // because these bounds were hardcoded. The kernel fixates a
+            // value inside the bracket — the request itself down and four
+            // times the request up is slack enough for most hardware while
+            // keeping the granted period near what was asked for. The
+            // buffer follows from period × periods, so it brackets the
+            // bracket instead of disagreeing with it.
+            let pmin = period.max(32);
+            let pmax = period.saturating_mul(4).clamp(pmin, 16_384);
             p.intervals[I_PERIOD_SIZE] = Interval {
-                min: 512,
-                max: 2048,
+                min: pmin,
+                max: pmax,
                 flags: 0b100,
             };
             p.intervals[I_PERIODS] = Interval {
@@ -232,8 +247,8 @@ mod alsa {
                 flags: 0b100,
             };
             p.intervals[I_BUFFER_SIZE] = Interval {
-                min: 2048,
-                max: 16_384,
+                min: pmin.saturating_mul(2),
+                max: pmax.saturating_mul(8),
                 flags: 0b100,
             };
             let fd = file.as_raw_fd();
@@ -356,6 +371,30 @@ impl AlsaOutput {
         }
     }
 
+    /// Open card/device for `rate` Hz, `channels` channels, paced by device
+    /// periods near `period` frames — the spelling the streaming backend
+    /// uses, where the period is the block the render loop runs at.
+    ///
+    /// # Errors
+    /// As [`open`](Self::open).
+    pub fn open_with_period(
+        card: u32,
+        device: u32,
+        rate: u32,
+        channels: u32,
+        period: u32,
+    ) -> Result<Self, String> {
+        #[cfg(target_os = "linux")]
+        {
+            alsa::Pcm::open_dir(card, device, rate, channels, false, period).map(|pcm| Self { pcm })
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (card, device, rate, channels, period);
+            Err("ALSA exists only on Linux".into())
+        }
+    }
+
     /// Open card/device for `rate` Hz, `channels` channels, `S16_LE`.
     ///
     /// # Errors
@@ -426,13 +465,27 @@ impl AlsaInput {
     /// # Errors
     /// No such device or refused parameters; on non-Linux targets, always.
     pub fn open(card: u32, device: u32, rate: u32, channels: u32) -> Result<Self, String> {
+        Self::open_with_period(card, device, rate, channels, 512)
+    }
+
+    /// Open for capture, with device periods near `period` frames.
+    ///
+    /// # Errors
+    /// No such device or refused parameters; on non-Linux targets, always.
+    pub fn open_with_period(
+        card: u32,
+        device: u32,
+        rate: u32,
+        channels: u32,
+        period: u32,
+    ) -> Result<Self, String> {
         #[cfg(target_os = "linux")]
         {
-            alsa::Pcm::open_dir(card, device, rate, channels, true).map(|pcm| Self { pcm })
+            alsa::Pcm::open_dir(card, device, rate, channels, true, period).map(|pcm| Self { pcm })
         }
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = (card, device, rate, channels);
+            let _ = (card, device, rate, channels, period);
             Err("ALSA exists only on Linux".into())
         }
     }

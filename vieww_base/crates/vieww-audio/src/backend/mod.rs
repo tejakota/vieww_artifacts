@@ -151,6 +151,62 @@ impl Counters {
     }
 }
 
+/// Wrap a render callback in panic isolation for the boundary it crosses.
+///
+/// A panic unwinding out of an `extern "C"` audio callback is a process
+/// abort — the audio system owns that thread, and Rust refuses to let an
+/// unwind cross the boundary it was called through. The closure behind a
+/// [`RenderFn`] is user code doing user things on a thread the user does
+/// not control, so every backend wraps its callback here before the first
+/// call. A panicking block is caught and rendered as silence, and the
+/// stream is flagged ended so [`DeviceStream::wait_for`] releases and
+/// `stop` runs; the slot poisons itself, so later blocks cost one atomic
+/// load instead of a re-panicked closure per block until teardown.
+pub(crate) fn isolate_render(render: RenderFn, counters: &Arc<Counters>) -> RenderFn {
+    let counters = Arc::clone(counters);
+    let dead = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&dead);
+    let mut render = render;
+    Box::new(move |out, info| {
+        if flag.load(Ordering::Acquire) {
+            out.fill(0.0);
+            return;
+        }
+        let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| render(out, info)));
+        match ok {
+            Ok(()) => {}
+            Err(_) => {
+                flag.store(true, Ordering::Release);
+                out.fill(0.0);
+                counters.ended.store(true, Ordering::Release);
+            }
+        }
+    })
+}
+
+/// Wrap a capture callback in panic isolation — the read-side twin of
+/// [`isolate_render`]: a panicking capture is caught and the stream
+/// flagged ended; later blocks return without invoking the closure.
+pub(crate) fn isolate_capture(capture: CaptureFn, counters: &Arc<Counters>) -> CaptureFn {
+    let counters = Arc::clone(counters);
+    let dead = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&dead);
+    let mut capture = capture;
+    Box::new(move |data, info| {
+        if flag.load(Ordering::Acquire) {
+            return;
+        }
+        let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| capture(data, info)));
+        match ok {
+            Ok(()) => {}
+            Err(_) => {
+                flag.store(true, Ordering::Release);
+                counters.ended.store(true, Ordering::Release);
+            }
+        }
+    })
+}
+
 /// What a backend's stream implementation provides.
 pub trait StreamImpl: Send {
     /// Stop (idempotent).
@@ -374,5 +430,81 @@ mod tests {
                 assert!(errors.iter().all(|(_, e)| !e.to_string().is_empty()));
             }
         }
+    }
+
+    #[test]
+    fn an_isolated_render_callback_panics_once_then_goes_silent() {
+        // The contract every backend now wraps its callback in: a panic is
+        // caught (not an abort out of `extern "C"`), the block is zeroed,
+        // the stream is flagged ended, and the poisoned slot never invokes
+        // the closure again — one message on stderr, not one per block.
+        use std::sync::atomic::AtomicU64;
+        let counters = Arc::new(Counters::default());
+        let calls = Arc::new(AtomicU64::new(0));
+        let seen = Arc::clone(&calls);
+        let mut render = isolate_render(
+            Box::new(move |_out: &mut [f32], _info: &BlockInfo| {
+                seen.fetch_add(1, Ordering::Relaxed);
+                panic!("user code misbehaved on the audio thread");
+            }),
+            &counters,
+        );
+        // Keep the expected-panic message out of the test log.
+        let prev = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let mut out = [0.5f32; 8];
+        let info = BlockInfo {
+            frames: 4,
+            channels: 2,
+            rate: 48_000,
+            time: 0.0,
+        };
+        render(&mut out, &info);
+        std::panic::set_hook(prev);
+        assert_eq!(calls.load(Ordering::Relaxed), 1, "the closure ran once");
+        assert!(out.iter().all(|&s| s == 0.0), "the block was zeroed");
+        assert!(
+            counters.ended.load(Ordering::Acquire),
+            "the stream is flagged ended"
+        );
+        render(&mut out, &info);
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            1,
+            "a poisoned slot never re-invokes the closure"
+        );
+        assert!(
+            out.iter().all(|&s| s == 0.0),
+            "a poisoned slot renders silence"
+        );
+    }
+
+    #[test]
+    fn an_isolated_capture_callback_ends_the_stream() {
+        use std::sync::atomic::AtomicU64;
+        let counters = Arc::new(Counters::default());
+        let calls = Arc::new(AtomicU64::new(0));
+        let seen = Arc::clone(&calls);
+        let mut capture = isolate_capture(
+            Box::new(move |_data: &[f32], _info: &BlockInfo| {
+                seen.fetch_add(1, Ordering::Relaxed);
+                panic!("capture misbehaved");
+            }),
+            &counters,
+        );
+        let prev = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let data = [0.0f32; 4];
+        let info = BlockInfo {
+            frames: 2,
+            channels: 2,
+            rate: 48_000,
+            time: 0.0,
+        };
+        capture(&data, &info);
+        std::panic::set_hook(prev);
+        capture(&data, &info);
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        assert!(counters.ended.load(Ordering::Acquire));
     }
 }

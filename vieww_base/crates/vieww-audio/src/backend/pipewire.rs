@@ -24,8 +24,8 @@ use std::time::{Duration, Instant};
 
 use super::dl::Library;
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 // SPA constants (spa/utils/type.h, spa/param/*.h), printed from the headers.
@@ -264,6 +264,11 @@ unsafe extern "C" fn on_process(data: *mut c_void) {
     // SAFETY: a live stream, from its process callback.
     let b = unsafe { (s.api.stream_dequeue_buffer)(s.stream) };
     if b.is_null() {
+        // No buffer to trade is the data thread arriving too late for the
+        // driver's deadline — the one underrun signal this API offers, and
+        // until now the one this backend silently swallowed. Every other
+        // backend counts its misses; this one now does too.
+        s.counters.xruns.fetch_add(1, Ordering::Relaxed);
         return;
     }
     // SAFETY: a dequeued buffer is valid until queued again.
@@ -406,6 +411,13 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
     let latency =
         CString::new(format!("{}/{}", config.block.max(16), config.rate)).unwrap_or_default();
     let counters = Arc::new(Counters::default());
+    // The callback crosses into SPA's `on_process` on PipeWire's realtime
+    // data thread: isolate it before it is stored, so a panicking closure
+    // ends the stream instead of the process.
+    let callback = match callback {
+        Callback::Render(r) => Callback::Render(isolate_render(r, &counters)),
+        Callback::Capture(c) => Callback::Capture(isolate_capture(c, &counters)),
+    };
     let shared = Box::into_raw(Box::new(Shared {
         api: api.clone(),
         stream: null_mut(),

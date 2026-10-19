@@ -18,8 +18,8 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 #[cfg_attr(target_arch = "wasm32", link(wasm_import_module = "vieww_audio"))]
@@ -157,6 +157,14 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
     let capture = matches!(callback, Callback::Capture(_));
     let ch = config.channels.clamp(1, 32);
     let counters = Arc::new(Counters::default());
+    // The callback runs from the shim's exported functions — an FFI
+    // boundary for a panic, even though the thread is the page's own.
+    // Isolating it here keeps the failure mode the same as every other
+    // backend: one caught panic, then silence and `ended`.
+    let callback = match callback {
+        Callback::Render(r) => Callback::Render(isolate_render(r, &counters)),
+        Callback::Capture(c) => Callback::Capture(isolate_capture(c, &counters)),
+    };
     let (handle, scratch) = STREAMS.with_borrow_mut(|s| {
         let i = s.iter().position(Option::is_none).unwrap_or_else(|| {
             s.push(None);

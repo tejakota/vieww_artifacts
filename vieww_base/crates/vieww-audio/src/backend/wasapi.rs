@@ -20,8 +20,8 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 #[repr(C)]
@@ -376,6 +376,15 @@ unsafe fn session(config: StreamConfig, capture: bool) -> Result<Session, String
 fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, BackendError> {
     let capture = matches!(callback, Callback::Capture(_));
     let counters = Arc::new(Counters::default());
+    // The render loop lives on a plain thread here rather than an FFI
+    // callback, but a panicking closure still kills that thread silently —
+    // the stream stalls with `ended` never set and `wait_for` spins to its
+    // timeout. Isolating the callback gives it the same contract as every
+    // other backend: one caught panic, then silence and `ended`.
+    let callback = match callback {
+        Callback::Render(r) => Callback::Render(isolate_render(r, &counters)),
+        Callback::Capture(c) => Callback::Capture(isolate_capture(c, &counters)),
+    };
     let stop = Arc::new(AtomicBool::new(false));
     let (tx, rx) = mpsc::channel::<Result<u32, String>>();
     let (c2, s2) = (counters.clone(), stop.clone());
@@ -417,10 +426,14 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                         c2.xruns.fetch_add(1, Ordering::Relaxed);
                         continue;
                     }
-                    #[expect(clippy::cast_precision_loss, reason = "stream time")]
-                    let time = done as f64 / f64::from(rate);
+                    // `time` is derived from the running frame count, so it
+                    // is computed per callback — one wakeup can drain many
+                    // capture packets, and stamping them all with the first
+                    // packet's time froze timestamps in chunks.
                     match &mut callback {
                         Callback::Render(r) => {
+                            #[expect(clippy::cast_precision_loss, reason = "stream time")]
+                            let time = done as f64 / f64::from(rate);
                             let mut pad = 0u32;
                             if (vt!(c, AudioClientVtbl).get_current_padding)(c, &raw mut pad) < 0 {
                                 c2.ended.store(true, Ordering::Release);
@@ -455,6 +468,8 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                             c2.block(n);
                         }
                         Callback::Capture(cap) => loop {
+                            #[expect(clippy::cast_precision_loss, reason = "stream time")]
+                            let time = done as f64 / f64::from(rate);
                             let mut packet = 0u32;
                             if (vt!(svc, CaptureClientVtbl).get_next_packet_size)(
                                 svc,

@@ -75,7 +75,17 @@ impl<J: Render> Shared<J> {
             let (job, buf) = unsafe { (&mut *self.jobs[i].get(), &mut *self.bufs[i].get()) };
             let out = &mut buf[..frames * 2];
             out.fill(0.0);
-            job.render(out);
+            // A panicking job must still mark itself done: `block` waits for
+            // every claimed index, and a panic between the render and the
+            // count used to leave the audio thread spinning forever — worse
+            // than the panic it failed to survive. The buffer is zeroed
+            // (the job's contribution to the block is silence), the panic
+            // itself has already been printed by the default hook, and the
+            // determinism of every non-panicking block is untouched.
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.render(out)));
+            if r.is_err() {
+                out.fill(0.0);
+            }
             self.done.fetch_add(1, Ordering::AcqRel);
         }
     }

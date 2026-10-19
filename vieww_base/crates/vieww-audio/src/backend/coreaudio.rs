@@ -22,8 +22,8 @@ use std::ptr::null_mut;
 use std::sync::Arc;
 
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 type OsStatus = i32;
@@ -196,7 +196,16 @@ unsafe extern "C" fn render(
     let b = unsafe { &mut (*data).buffers[0] };
     let n = frames as usize;
     let want = n * s.channels;
-    if b.data.is_null() || (b.data_byte_size as usize) < want * 4 {
+    let bytes = b.data_byte_size as usize; // a byte count; widening on every target here
+    if b.data.is_null() {
+        return 0;
+    }
+    if bytes < want * 4 {
+        // An undersized buffer cannot be rendered into, but returning
+        // without touching it hands the speaker whatever was in it — a
+        // garbage burst. Zero what there is room for and return cleanly.
+        // SAFETY: `data` is non-null and owns `data_byte_size` bytes.
+        unsafe { std::ptr::write_bytes(b.data.cast::<u8>(), 0, bytes) };
         return 0;
     }
     // SAFETY: as above.
@@ -393,6 +402,13 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
         )
         .map_err(BackendError::Unavailable)?;
         let counters = Arc::new(Counters::default());
+        // The callback crosses an `extern "C"` boundary on Core Audio's
+        // realtime I/O thread: isolate it before it is stored, so a
+        // panicking closure ends the stream instead of the process.
+        let callback = match callback {
+            Callback::Render(r) => Callback::Render(isolate_render(r, &counters)),
+            Callback::Capture(c) => Callback::Capture(isolate_capture(c, &counters)),
+        };
         let shared = Box::into_raw(Box::new(Shared {
             callback,
             unit,
@@ -471,6 +487,19 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                     0,
                     &fmt,
                     "StreamFormat",
+                )?;
+                // The output path sizes its scratch and its callback
+                // contract off MAX_SLICE too, so the unit must be told the
+                // same ceiling it tells the capture path — without this a
+                // device that hands the render callback more frames than
+                // the default exercises the undersized-buffer path above.
+                set(
+                    unit,
+                    K_AUDIO_UNIT_PROPERTY_MAXIMUM_FRAMES_PER_SLICE,
+                    K_AUDIO_UNIT_SCOPE_GLOBAL,
+                    0,
+                    &MAX_SLICE,
+                    "MaximumFramesPerSlice",
                 )?;
                 let cb = AuRenderCallbackStruct {
                     input_proc: render,

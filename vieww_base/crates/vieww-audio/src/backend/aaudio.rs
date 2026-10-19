@@ -10,13 +10,13 @@
 
 use std::ffi::{c_char, c_void, CStr};
 use std::ptr::null_mut;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use super::dl::Library;
 use super::{
-    Backend, BackendError, BlockInfo, CaptureFn, Counters, DeviceStream, RenderFn, StreamConfig,
-    StreamImpl,
+    isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
+    DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 type Result_ = i32;
@@ -104,8 +104,14 @@ enum Callback {
 
 struct Shared {
     callback: Callback,
-    channels: usize,
-    rate: u32,
+    /// Granted values, written by `open` after the stream exists. They are
+    /// atomic because the data callback — registered before those values
+    /// are known, the builder API allows nothing else — reads them; a
+    /// plain store would make the safety of the read depend on AAudio
+    /// never invoking the callback before `requestStart`, which is true of
+    /// the API's ordering but true of nothing else.
+    channels: AtomicUsize,
+    rate: AtomicU32,
     counters: Arc<Counters>,
     frames_done: u64,
 }
@@ -120,13 +126,15 @@ unsafe extern "C" fn on_data(
     // AAudio calls one data callback at a time.
     let s = unsafe { &mut *user.cast::<Shared>() };
     let n = usize::try_from(frames.max(0)).unwrap_or(0);
-    let len = n * s.channels;
+    let ch = s.channels.load(Ordering::Acquire);
+    let rate = s.rate.load(Ordering::Acquire);
+    let len = n * ch;
     #[expect(clippy::cast_precision_loss, reason = "stream time")]
     let info = BlockInfo {
         frames: n,
-        channels: s.channels,
-        rate: s.rate,
-        time: s.frames_done as f64 / f64::from(s.rate),
+        channels: ch,
+        rate,
+        time: s.frames_done as f64 / f64::from(rate),
     };
     match &mut s.callback {
         Callback::Render(r) => {
@@ -181,10 +189,17 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
     let capture = matches!(callback, Callback::Capture(_));
     let ch = config.channels.clamp(1, 8);
     let counters = Arc::new(Counters::default());
+    // The callback crosses an `extern "C"` boundary on AAudio's data
+    // thread: isolate it before it is stored, so a panicking closure ends
+    // the stream instead of the process.
+    let callback = match callback {
+        Callback::Render(r) => Callback::Render(isolate_render(r, &counters)),
+        Callback::Capture(c) => Callback::Capture(isolate_capture(c, &counters)),
+    };
     let shared = Box::into_raw(Box::new(Shared {
         callback,
-        channels: usize::from(ch),
-        rate: config.rate,
+        channels: AtomicUsize::new(usize::from(ch)),
+        rate: AtomicU32::new(config.rate),
         counters: counters.clone(),
         frames_done: 0,
     }));
@@ -222,8 +237,10 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
         // The device may grant another rate or channel count.
         let rate = u32::try_from((api.get_sample_rate)(stream)).unwrap_or(config.rate);
         let channels = u16::try_from((api.get_channel_count)(stream)).unwrap_or(ch);
-        (*shared).rate = rate;
-        (*shared).channels = usize::from(channels);
+        (*shared).rate.store(rate, Ordering::Release);
+        (*shared)
+            .channels
+            .store(usize::from(channels), Ordering::Release);
         let burst = u32::try_from((api.get_frames_per_burst)(stream)).unwrap_or(config.block);
         let r = (api.request_start)(stream);
         if r != AAUDIO_OK {
