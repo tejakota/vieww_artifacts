@@ -931,6 +931,9 @@ unsafe extern "system" fn process<P: Plugin>(this: *mut c_void, data: *mut Proce
     if data.is_null() {
         return kInvalidArgument;
     }
+    // As in the CLAP wrapper: subnormals flushed for the call, the host
+    // thread's mode restored on return (`vieww_audio::denormal`).
+    let _ftz = vieww_audio::denormal::FlushDenormals::enable();
     let o = base!(P, this, i_processor);
     // SAFETY: a valid process data block for this call.
     let d = unsafe { &mut *data };
