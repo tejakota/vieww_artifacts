@@ -406,16 +406,37 @@ pub(crate) fn rasterize(polylines: &[Polyline], clip_bounds: Rect) -> CoverageMa
     if let Some(rect) = axis_aligned_rect(polylines) {
         return rect_mask(rect, clip_bounds);
     }
-    rasterize_general(
-        polylines,
-        clip_bounds,
+    rasterize_general(polylines, clip_bounds, process_raster_thread_request())
+}
+
+/// [`raster_thread_request`] for this process, worked out once.
+///
+/// It used to be computed on every non-rectangular fill — an environment
+/// read plus `available_parallelism`, which on Linux and Android opens and
+/// reads the process's cgroup files to find a CPU quota: 3 `openat`, 8
+/// `read` and 4 `statx` per call, ~15 µs on an x86-64 desktop (measured
+/// 2026-10-20) and several times that on a Cortex-A53, paid per shape per
+/// frame, and more of it the more often the fill cache misses. The answer
+/// cannot change while the process runs — the platform layer sets
+/// `VIEWW_RASTER_THREADS` before the first frame — so it is read once.
+pub(crate) fn process_raster_thread_request() -> usize {
+    static REQUEST: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *REQUEST.get_or_init(|| {
         raster_thread_request(
             std::env::var("VIEWW_RASTER_THREADS").ok().as_deref(),
             std::thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(1),
-        ),
-    )
+        )
+    })
+}
+
+/// The most workers one mask can be split across in this process: `1`
+/// when the walk is serial (`VIEWW_RASTER_THREADS` 0 or 1, or a one-core
+/// machine), else the request capped at the hard ceiling. For status lines.
+#[must_use]
+pub fn raster_worker_limit() -> usize {
+    process_raster_thread_request().clamp(1, RASTER_MAX_THREADS)
 }
 
 /// The scanline pass, without the rectangle fast path: every non-rectangular

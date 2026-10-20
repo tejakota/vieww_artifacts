@@ -99,6 +99,7 @@ mod simd;
 mod target;
 
 pub use cache_budgets::{process_cache_budgets, set_process_cache_budgets, CacheBudgets};
+pub use geometry::fill::raster_worker_limit;
 pub use glyph::{outline_glyph, units_per_em};
 pub use glyph_coverage::{GlyphAlpha, GlyphCoverage, InkedGlyph};
 pub use gpu_seam::{
