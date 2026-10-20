@@ -851,20 +851,16 @@ Ultra). It FAILED on the two gating passes: Stylo 5 CPU and GPU, A73 CPU.
 **Still open — decisions, not code** (none of these is implemented; each
 needs a choice or a phone):
 
-- *The budget follows the panel's maximum refresh* (RC4). The A73 and S26
-  report 120 Hz, so the budget is 8.33 ms, though nothing asks for a
-  120 Hz cadence. Options: `Surface.setFrameRate()` (API 30+) to present at
-  60 Hz where 120 cannot be held; a tier-derived target (Low/Medium 60 Hz,
-  High panel); or gate on the shipping `auto` pass and demote the raw `cpu`
-  pass to diagnostic on phones where calibration chose the GPU. Which one
-  is a product decision; the first two change what users see.
-- *The LG Stylo 5 cannot meet 16.7 ms on any path* (RC5): CPU bare 35.9,
-  CPU 38.3, GPU 40.4 (`gpu_wait` 32.5), GPU at 0.5× 18.0 ms. Options:
-  extend the resolution scale to the tier-Low CPU *presentation* path
-  (keeping the unscaled CPU path as the byte-identical reference the
-  fidelity policy requires); accept a 30 fps target for tier Low; or move
-  the Stylo 5 to observe-only. Keep CPU present there either way (`cpuvk`:
-  Vulkan present 19.1 ms vs 2.4).
+- *The budget follows the panel's maximum refresh* (RC4). **Decided and
+  implemented in §4.6**: the rate adapts (panel or a steady 60 Hz), and
+  the farm gates on `auto`.
+- *The LG Stylo 5 does not meet 16.7 ms on any path today* (RC5): CPU bare
+  35.9, CPU 38.3, GPU 40.4 (`gpu_wait` 32.5), GPU at 0.5× 18.0 ms. This
+  entry first called it a hardware limit; **it is not shown to be one** —
+  see §4.6: the GPU path was repainting every pixel while 8.6% changed.
+  Decided: 60 Hz at full resolution stays the target; no 30 fps tier, no
+  observe-only. Keep CPU present there either way (`cpuvk`: Vulkan present
+  19.1 ms vs 2.4).
 - *Cold-core stalls* (RC6, engine half). The worst frames land on cores
   that drew 1–3 frames (A73 cpu5 125.6 ms, cpu4 108 ms). Pinning the raster
   thread's affinity, or a bounded spin to keep the big core warm, needs a
@@ -873,6 +869,67 @@ needs a choice or a phone):
 - *A fill cache that could earn its keep*: shared masks instead of clones,
   a size cap, admission only for keys seen twice. Only worth building
   against a workload that repeats geometry; the farm demo does not.
+
+## 4.6 After Device Farm 39402544760: redraw what changed, hold a rate you can
+
+**What the run said** (2026-10-20, main at 1495c40, the §4.5 patch). Every
+§4.5 fix showed: the A73's `auto` calibrated to the GPU and ran a 7.76 ms
+median; it reported tier Medium; CPU PSS fell to 77/84/76 MB; the A73's
+CPU median fell ~23 → 16.6 ms. Two findings changed the picture:
+
+- **The GPU path repainted the whole screen every frame.** The Stylo 5's
+  frame log: 0.086 full repaints per frame — 8.6% of the screen changing —
+  while `present_planned` ignored damage. Its GPU is fill-bound (0.5× cut
+  `gpu_wait` 32 → 12 ms), so it was paying for ~11× the pixels that
+  changed. RC5 is a design gap first, not a hardware limit.
+- **A median inside budget is not smooth.** The A73's shipping path:
+  median 7.7 ms, 52 of 240 frames over 8.33 ms — visible stutter at 120 Hz.
+
+Also: the CPU path redraws only damage, yet the Stylo's raster stage is
+30 ms for 8.6% of the screen — ~10× what a full repaint at that rate would
+predict; most of that cost does not scale with what changed. And
+calibration underestimates the CPU's steady cost by 34–38% (Stylo 22.1 vs
+35.7 ms, A73 11.0 vs 16.6); it changed no choice this run.
+
+**Done** (this entry's patch; byte-exact and end-to-end evidence in the
+commit messages):
+
+- *GPU damage.* `SceneRenderer` keeps `L[0]` and redraws only a frame's
+  damage: writes into the frame target are clipped; layers, blurs and
+  shadow work run in full and are skipped when their composite misses the
+  damage; a backdrop filter reaching outside the damage, a new size or
+  clear colour, or any non-GPU frame in between redraws in full.
+  `vulkan_damage` (lavapipe) holds damaged frames byte-identical to full
+  ones; `wait_loop`'s `gpu_damage` measures 0.05 repaints per frame on a
+  blinking square (1.00 with damage disabled).
+- *Adaptive rate* (`vieww_platform_winit` `cadence`). Panel rate while ≤5%
+  of frames miss it; a steady 60 Hz otherwise (`ANativeWindow_setFrameRate`
+  on Android 11+, the display link on iOS, a fixed pacing grid everywhere);
+  back up after three clean windows with 25% headroom; the first second
+  (start-up) is not evidence. Resolution is never
+  traded for rate. `VIEWW_CADENCE=panel` / `debug.vieww.cadence=panel`.
+- *Gating.* `auto` and `cpu` gate (the CPU judged at its adapted rate — the
+  fallback's bar), `gpu` where `auto` chose it. The suite adds
+  `frames_inside_their_budget` (≤ 1 in 20). `known-failures.txt` names the
+  Stylo 5 (RC5) and the A73's CPU fallback with their reasons; anything
+  else fails the run, and a listed entry that passes is flagged stale.
+- *Row-parallel walk.* Serial by default on Medium and High phones; kept on
+  Low phones (it won on the Stylo in both runs) and on desktops
+  (`quality::raster_threads_for` has the numbers).
+
+**Still open:**
+
+- The next Device Farm run is the verdict on the GPU damage path (Stylo 5
+  `gpu`/`gpuscale` `gpu_wait`, and whether `auto` now picks the GPU there)
+  and on the adapted rate (each pass's `frame rate:` line; whether the
+  compositor honoured 60 Hz — `adb shell dumpsys display` shows the mode).
+- The CPU path's cost per damaged pixel (above): needs a profile of a
+  Stylo 5 frame, not a guess.
+- Calibration's CPU underestimate: measure which frames the calibration
+  launch times against the steady state.
+- Rendering the GPU frame straight into the swapchain image, without the
+  host round trip (the module docs' follow-up).
+- Cold-core stalls (RC6) and the ideas in §4.5's list, unchanged.
 
 # 5. Process and infrastructure
 

@@ -121,6 +121,11 @@ declare -A failed=()
 # tiers they lost on (`CacheBudgets`). There `cpunofill` and `cpunoblur` run
 # what `cpu` runs — kept as a check that the default stayed off (their
 # `cache_budgets` line says which), not as an A/B any more.
+# Run 39402544760 did the same for the row-parallel walk: it helped the Low
+# phone (Stylo 5, both runs) and cost the Medium and High ones raster time
+# and worst frames, so phones above Low now walk serially by default
+# (`quality::raster_threads_for`) and their `cpunothreads` runs what `cpu`
+# runs; on a Low phone it is still the A/B.
 for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill cpunoblur; do
     # `gpuscale` is a GPU pass: the property must say so *before* the launch
     # below. Until 2026-10-19 it was left at 0 here and only device-suite.sh's

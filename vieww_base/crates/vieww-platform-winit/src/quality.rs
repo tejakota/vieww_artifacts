@@ -169,12 +169,43 @@ pub const fn cache_budgets_for(tier: DeviceTier) -> vieww_paint::native::CacheBu
     }
 }
 
-/// Applies the probed tier's cache budgets to the process, once, before the
-/// first renderer is built (the caches read the setting at construction).
+/// The row-parallel scanline walk's worker request a tier gets, or `None`
+/// for the machine's core count. `mobile` is whether this is a phone or
+/// tablet (Android, iOS).
+///
+/// **Serial on Medium and High phones, parallel on Low ones and desktops.**
+/// Device Farm run 39402544760's same-unit A/B (`cpunothreads` against
+/// `cpu`), raster stage medians: LG Stylo 5 (Low) 31.03 ms serial against
+/// 30.35 with threads — and 2.7 ms better with threads in run 39382602099,
+/// so twice in its favour; Galaxy A73 (Medium) 13.61 against 14.36, worst
+/// frame 78.5 ms against 90.6; Galaxy S26 Ultra (High) 5.00 against 5.26,
+/// worst 16.9 against 21.1. Where a frame's raster is long the workers have
+/// something to split; where it is a few milliseconds, waking cores costs
+/// more than it saves, and the worst frames — the cold-core stalls of
+/// `PENDING.md` §4.5 — get worse. Desktops keep the core count: a large
+/// window's full repaint is exactly the long raster the walk was built for,
+/// and no desktop measurement says otherwise. Pixels cannot move either way.
+/// `VIEWW_RASTER_THREADS` still overrides.
+#[must_use]
+pub(crate) const fn raster_threads_for(tier: DeviceTier, mobile: bool) -> Option<usize> {
+    match (mobile, tier) {
+        (true, DeviceTier::Medium | DeviceTier::High) => Some(1),
+        _ => None,
+    }
+}
+
+/// Applies the probed tier's cache budgets and raster-thread default to the
+/// process, once, before the first renderer is built (the caches read the
+/// setting at construction, the scanline walk at its first fill).
 pub(crate) fn apply_cache_budgets() {
     static APPLIED: OnceLock<()> = OnceLock::new();
     APPLIED.get_or_init(|| {
-        vieww_paint::native::set_process_cache_budgets(cache_budgets_for(device_facts().tier));
+        let tier = device_facts().tier;
+        vieww_paint::native::set_process_cache_budgets(cache_budgets_for(tier));
+        let mobile = cfg!(any(target_os = "android", target_os = "ios"));
+        if let Some(request) = raster_threads_for(tier, mobile) {
+            vieww_paint::native::set_process_raster_threads(request);
+        }
     });
 }
 
@@ -208,6 +239,9 @@ pub fn cache_budgets_status() -> String {
     let threads = if workers <= 1 {
         match std::env::var("VIEWW_RASTER_THREADS") {
             Ok(v) => format!("serial (VIEWW_RASTER_THREADS={})", v.trim()),
+            Err(_) if vieww_paint::native::raster_threads_set_by_platform() => {
+                format!("serial (tier {tier})")
+            }
             Err(_) => "serial (one core)".to_string(),
         }
     } else {
@@ -219,6 +253,21 @@ pub fn cache_budgets_status() -> String {
         effective("VIEWW_PATH_CACHE_MB", budgets.fill_bytes),
         threads,
     )
+}
+
+#[cfg(test)]
+mod raster_thread_tests {
+    use super::*;
+
+    #[test]
+    fn phones_above_low_walk_serially_and_everything_else_in_parallel() {
+        assert_eq!(raster_threads_for(DeviceTier::Low, true), None);
+        assert_eq!(raster_threads_for(DeviceTier::Medium, true), Some(1));
+        assert_eq!(raster_threads_for(DeviceTier::High, true), Some(1));
+        for tier in [DeviceTier::Low, DeviceTier::Medium, DeviceTier::High] {
+            assert_eq!(raster_threads_for(tier, false), None, "{tier:?} desktop");
+        }
+    }
 }
 
 #[cfg(test)]

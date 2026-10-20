@@ -422,13 +422,40 @@ pub(crate) fn rasterize(polylines: &[Polyline], clip_bounds: Rect) -> CoverageMa
 pub(crate) fn process_raster_thread_request() -> usize {
     static REQUEST: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
     *REQUEST.get_or_init(|| {
+        let platform = PLATFORM_RASTER_THREADS.load(std::sync::atomic::Ordering::Relaxed);
         raster_thread_request(
             std::env::var("VIEWW_RASTER_THREADS").ok().as_deref(),
-            std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1),
+            if platform > 0 {
+                platform
+            } else {
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1)
+            },
         )
     })
+}
+
+/// The platform layer's default worker request, `0` for none (the core
+/// count) — see [`set_process_raster_threads`].
+static PLATFORM_RASTER_THREADS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// The worker request this process's fills use when `VIEWW_RASTER_THREADS`
+/// is unset — `1` for the serial walk — in place of the core count. The
+/// platform layer calls it once, from the device tier, before the first
+/// frame; the request is read once ([`process_raster_thread_request`]), so a
+/// call after the first non-rectangular fill has no effect. Pixels cannot
+/// move: every row is the same function of the outline either way.
+pub fn set_process_raster_threads(request: usize) {
+    PLATFORM_RASTER_THREADS.store(request, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether the platform layer set this process's worker request
+/// ([`set_process_raster_threads`]), for status lines.
+#[must_use]
+pub fn raster_threads_set_by_platform() -> bool {
+    PLATFORM_RASTER_THREADS.load(std::sync::atomic::Ordering::Relaxed) > 0
 }
 
 /// The most workers one mask can be split across in this process: `1`
