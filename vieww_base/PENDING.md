@@ -825,6 +825,55 @@ the session had no cross targets (rustup could not download them), so
 the code could not even be type-checked — below this repository's
 "written, type-checked, labelled" bar.
 
+## 4.5 After Device Farm 39382602099: the A/B answered, and what is left is policy
+
+**What the run said** (2026-10-20, main at 1c30b7a; Stylo 5, A73 5G, S26
+Ultra). It FAILED on the two gating passes: Stylo 5 CPU and GPU, A73 CPU.
+
+**Done** (this entry's patch):
+
+- *Harness race.* The A73 and Stylo 5 `auto` passes drew 600/600 frames on
+  the CPU: `device-suite.sh --no-build` reset `debug.vieww.gpu` to 0 while
+  the app was starting. It now leaves the property to the launcher; the app
+  reads it first thing; `run-android.sh` fails the run when a pass's
+  `rasterizer:` observation does not match its mode.
+- *Caches.* The same-unit A/B: the path-fill cache cost frame time on all
+  three phones (−1.89 / −6.62 / −0.73 ms median with it off) and 13–15 MB
+  PSS; the blur cache cost on Low/Medium, paid on High. Fill cache off by
+  default everywhere, blur cache on High/desktop only, a zero budget a real
+  bypass. The row-parallel walk stays (+2.68 ms without it on the Stylo 5).
+- *Tier line.* `MEDIUM_MAX_KB` 7 → 8 GiB: the A73 (7,477,188 kB) was High.
+  The S20 (8 GB) moves to Medium with it.
+- *Stall check.* `no_frame_stalled` judges against max(4 × budget,
+  3 × median), so a slow phone's normal spread is not a second failure; the
+  A73's 5.7-median stall still fails.
+
+**Still open — decisions, not code** (none of these is implemented; each
+needs a choice or a phone):
+
+- *The budget follows the panel's maximum refresh* (RC4). The A73 and S26
+  report 120 Hz, so the budget is 8.33 ms, though nothing asks for a
+  120 Hz cadence. Options: `Surface.setFrameRate()` (API 30+) to present at
+  60 Hz where 120 cannot be held; a tier-derived target (Low/Medium 60 Hz,
+  High panel); or gate on the shipping `auto` pass and demote the raw `cpu`
+  pass to diagnostic on phones where calibration chose the GPU. Which one
+  is a product decision; the first two change what users see.
+- *The LG Stylo 5 cannot meet 16.7 ms on any path* (RC5): CPU bare 35.9,
+  CPU 38.3, GPU 40.4 (`gpu_wait` 32.5), GPU at 0.5× 18.0 ms. Options:
+  extend the resolution scale to the tier-Low CPU *presentation* path
+  (keeping the unscaled CPU path as the byte-identical reference the
+  fidelity policy requires); accept a 30 fps target for tier Low; or move
+  the Stylo 5 to observe-only. Keep CPU present there either way (`cpuvk`:
+  Vulkan present 19.1 ms vs 2.4).
+- *Cold-core stalls* (RC6, engine half). The worst frames land on cores
+  that drew 1–3 frames (A73 cpu5 125.6 ms, cpu4 108 ms). Pinning the raster
+  thread's affinity, or a bounded spin to keep the big core warm, needs a
+  phone to show it helps and does not cost battery; APerformanceHint is
+  absent on API 28 and was declined on the A73. Not attempted blind.
+- *A fill cache that could earn its keep*: shared masks instead of clones,
+  a size cap, admission only for keys seen twice. Only worth building
+  against a workload that repeats geometry; the farm demo does not.
+
 # 5. Process and infrastructure
 
 ## 5.1 The coverage number is produced, not watched
