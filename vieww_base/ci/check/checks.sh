@@ -60,11 +60,27 @@ stage() {
 	current_stage="$1"
 	printf '\n==> %s\n' "$1"
 }
+# Each check's output is also kept, so a failed stage's diagnostics can be
+# repeated in the summary. CI keeps the last 400 lines of this job's log, and
+# run 39437093907's clippy stage failed with every one of its errors scrolled
+# out of them: the run said *that* clippy failed and nothing about *why*.
+check_log="$(mktemp)"
+failure_details="$(mktemp)"
+trap 'rm -f "$check_log" "$failure_details"' EXIT
 check() {
-	"$@"
-	local rc=$?
+	"$@" 2>&1 | tee "$check_log"
+	local rc=${PIPESTATUS[0]}
 	if [ "$rc" -ne 0 ]; then
 		failures+=("$current_stage (exit $rc)")
+		{
+			printf '\n--- %s: its diagnostics ---\n' "$current_stage"
+			# Compiler and lint diagnostics with the location under each;
+			# failing tests' names and panics. Capped: the point is the first
+			# screenful, not a second copy of the log.
+			sed 's/\x1b\[[0-9;]*m//g' "$check_log" |
+				grep -E '^(error|warning)(\[|:)|^ *--> |^test .* FAILED$|panicked at|^---- ' |
+				head -n 60
+		} >>"$failure_details"
 		printf '    FAILED: %s (exit %s)\n' "$current_stage" "$rc" >&2
 		if [ "${VIEWW_CHECKS_FAIL_FAST:-0}" = 1 ]; then
 			exit "$rc"
@@ -301,6 +317,7 @@ check bash -c 'cargo run --release -p fixtures -- "$(mktemp -d)" >/dev/null'
 
 summary() {
 	if [ "${#failures[@]}" -gt 0 ]; then
+		cat "$failure_details" >&2
 		printf '\n%s stage(s) failed:\n' "${#failures[@]}" >&2
 		printf '  - %s\n' "${failures[@]}" >&2
 		exit 1
