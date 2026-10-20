@@ -20,7 +20,8 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/tests" "$work/wheelhouse" "$work/ci/mobile/device-farm"
 cp "$root/ci/mobile/device-suite.sh" "$root/ci/mobile/android-env.sh" "$work/ci/mobile/"
 cp "$root/ci/mobile/device-farm/run-android.sh" "$root/ci/mobile/device-farm/run-ios.sh" \
-    "$root/ci/mobile/device-farm/tap_ios.py" "$work/ci/mobile/device-farm/"
+    "$root/ci/mobile/device-farm/tap_ios.py" "$root/ci/mobile/device-farm/known-failures.txt" \
+    "$work/ci/mobile/device-farm/"
 
 cat > "$work/tests/test_vieww_package.py" <<'PY'
 """Device Farm requires a collectable pytest file in an Appium Python

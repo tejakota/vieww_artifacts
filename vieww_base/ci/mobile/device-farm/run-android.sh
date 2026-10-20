@@ -251,6 +251,14 @@ kv gating_passes "$gating (auto chose: ${choice:-not reported})"
 # A gating pass that failed only checks listed for this phone in
 # `known-failures.txt` is reported and does not fail the run; see that file.
 known_file="$root/ci/mobile/device-farm/known-failures.txt"
+# Missing is an error, not "nothing listed": run 39437190809 failed on listed
+# checks because package.sh never shipped this file, and the lookup below
+# read its absence as an empty list.
+if [ ! -f "$known_file" ]; then
+    kv known_failures_file "missing from the test package: $known_file"
+    echo "::error::run-android: $known_file is not in the test package (package.sh)" >&2
+    status=1
+fi
 # Matched on the model: `DEVICEFARM_DEVICE_NAME` is the phone's hostname here.
 device="$(sh_ getprop ro.product.model | tr -d '\r')"
 known_checks() { # pass -> the checks listed for this phone and pass
