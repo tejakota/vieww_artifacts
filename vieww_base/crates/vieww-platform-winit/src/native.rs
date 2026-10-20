@@ -104,7 +104,7 @@ use winit::window::Window;
 use vieww_foundation::{Color, Rect};
 use vieww_gpu::{PixelRect, Planner as GpuPlanner};
 use vieww_hal::vulkan::{
-    GpuFrameTimings, SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain,
+    GpuFrameTimings, Redrawn, SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain,
 };
 use vieww_paint::native::{NativeRenderer as CpuRenderer, RendererError, SceneReport};
 use vieww_paint::{Damage, Scene};
@@ -708,12 +708,13 @@ pub struct NativeRenderer {
     stages: FrameStages,
     /// The hybrid planner in shadow mode, when enabled.
     shadow: Option<PlannerShadow>,
-    /// Whether what is on screen is the GPU rasterizer's last frame, drawn at
-    /// full resolution — the condition for the next GPU frame redrawing only
-    /// its damage. Any CPU frame, resolution-scaled frame or failure clears
-    /// it: the GPU's kept frame no longer matches what the damage is
-    /// measured against.
-    gpu_frame_current: bool,
+    /// The resolution scale of the GPU rasterizer's last frame, when that
+    /// frame is what is on screen — the condition for the next GPU frame at
+    /// the same scale redrawing only its damage. Any CPU frame or failure
+    /// clears it: the GPU's kept frame no longer matches what the damage is
+    /// measured against. (A change of scale is a new target size, which the
+    /// renderer would refuse to keep anyway.)
+    gpu_frame_current: Option<f32>,
 }
 
 /// The GPU rasterizer goes before the device it was built on.
@@ -914,7 +915,7 @@ impl NativeRenderer {
             gpu_unavailable: false,
             stages: FrameStages::default(),
             shadow: None,
-            gpu_frame_current: false,
+            gpu_frame_current: None,
         }
     }
 
@@ -1132,7 +1133,7 @@ impl NativeRenderer {
         let (physical_width, physical_height) = surface.extent();
         let (logical_width, logical_height) = logical_size;
         self.stages = FrameStages::default();
-        self.gpu_frame_current = false;
+        self.gpu_frame_current = None;
         let rasterising = Instant::now();
         // What this frame changes, for a CPU surface that converts only that.
         // A retained render falls back to a full one when the size changed
@@ -1348,7 +1349,7 @@ impl NativeRenderer {
         // Whether the GPU may redraw only this frame's damage is decided
         // from the state *before* this frame; whatever happens below, the
         // frame it leaves on screen sets it again.
-        let previous_was_gpu = std::mem::replace(&mut self.gpu_frame_current, false);
+        let previous_gpu_scale = self.gpu_frame_current.take();
 
         // The GPU rasterizer, once. Creation failure is remembered and this
         // becomes a CPU renderer permanently — see `gpu_unavailable`. A CPU
@@ -1404,11 +1405,14 @@ impl NativeRenderer {
         // `SceneRenderer`'s module docs. In device pixels, rounded out, then
         // grown by `GPU_DAMAGE_MARGIN`: the damage is measured against the
         // CPU rasterizer's antialiasing, and the GPU's edge coverage is a
-        // different computation that may reach a little further. Only at full
-        // resolution, and only when the screen shows the GPU's own last
-        // frame; anything else redraws everything, as before.
+        // different computation that may reach a little further. At a reduced
+        // resolution the rectangles shrink with it, rounded outwards. Only
+        // when the screen shows the GPU's own last frame at this same scale;
+        // anything else redraws everything, as before.
         let gpu_damage: Option<Vec<PixelRect>> = match damage {
-            Some(logical) if previous_was_gpu && render_scale >= 1.0 => {
+            Some(logical)
+                if previous_gpu_scale.map(f32::to_bits) == Some(render_scale.to_bits()) =>
+            {
                 #[expect(
                     clippy::cast_precision_loss,
                     reason = "a swapchain extent is a small number of pixels"
@@ -1418,9 +1422,12 @@ impl NativeRenderer {
                 let physical = Physical::new(full_scene, logical, scale, surface_rect);
                 match Changed::from_damage(physical.damage(), extent) {
                     Changed::All => None,
-                    Changed::Regions(regions) => {
-                        Some(regions.into_iter().map(grown_for_gpu).collect())
-                    }
+                    Changed::Regions(regions) => Some(
+                        regions
+                            .into_iter()
+                            .map(|region| grown_for_gpu(scaled_for_gpu(region, render_scale)))
+                            .collect(),
+                    ),
                 }
             }
             _ => None,
@@ -1543,13 +1550,18 @@ impl NativeRenderer {
                         .map_err(|error| NativeError::Present(error.to_string()))?;
                     self.stages.present = presenting.elapsed();
                     self.record_shadow(&scene, extent, Executor::Gpu, None);
-                    self.gpu_frame_current = render_scale >= 1.0;
+                    self.gpu_frame_current = Some(render_scale);
                     return Ok(PlannedFrame {
                         report: SceneReport::default(),
                         drawn_on_gpu: true,
                         presented_directly: true,
                         stages: self.stages,
-                        gpu_redrawn: Some(redrawn.pixels(lifted_extent.0, lifted_extent.1)),
+                        gpu_redrawn: Some(surface_pixels(
+                            redrawn,
+                            lifted_extent,
+                            extent,
+                            render_scale,
+                        )),
                     });
                 }
                 let (pixels, redrawn) = renderer
@@ -1577,7 +1589,7 @@ impl NativeRenderer {
                 // did none of it, and the plan's own counts — vertices, draw
                 // calls — are not those fields. Zeroes say what happened;
                 // `drawn_on_gpu` says why.
-                self.gpu_frame_current = true;
+                self.gpu_frame_current = Some(1.0);
                 return Ok(PlannedFrame {
                     report: SceneReport::default(),
                     drawn_on_gpu: true,
@@ -1645,6 +1657,47 @@ const fn grown_for_gpu((left, top, right, bottom): (u32, u32, u32, u32)) -> Pixe
     }
 }
 
+/// A damaged region in surface pixels, as pixels of a frame drawn at
+/// `scale` of the surface: shrunk with it and rounded outwards, so a
+/// changed surface pixel is never left out of the smaller frame.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "surface coordinates: small, non-negative, and rounded on purpose"
+)]
+fn scaled_for_gpu(region: (u32, u32, u32, u32), scale: f32) -> (u32, u32, u32, u32) {
+    if scale >= 1.0 {
+        return region;
+    }
+    let (left, top, right, bottom) = region;
+    let down = |v: u32| (v as f32 * scale).floor() as u32;
+    let up = |v: u32| (v as f32 * scale).ceil() as u32;
+    (down(left), down(top), up(right), up(bottom))
+}
+
+/// What a GPU frame redrew, in pixels *of the surface*: the frame log's
+/// repaint figure is a fraction of the surface, so a frame drawn at a
+/// reduced resolution counts its redraw at the share of the surface it
+/// covers — a full redraw of a smaller frame is still a full repaint.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "a pixel count, rounded"
+)]
+fn surface_pixels(redrawn: Redrawn, frame: (u32, u32), surface: (u32, u32), scale: f32) -> u64 {
+    match redrawn {
+        Redrawn::Full => u64::from(surface.0) * u64::from(surface.1),
+        Redrawn::Damage { pixels } if scale < 1.0 && frame != surface => {
+            let surface_area = u64::from(surface.0) * u64::from(surface.1);
+            let frame_area = (u64::from(frame.0) * u64::from(frame.1)).max(1);
+            ((pixels as f64) * (surface_area as f64) / (frame_area as f64)).round() as u64
+        }
+        Redrawn::Damage { pixels } => pixels,
+    }
+}
+
 /// The planner's assumed profile for a Vulkan device type (`AdapterInfo`'s
 /// `device_type`, the `Debug` of `VkPhysicalDeviceType`).
 fn profile_for(device_type: &str) -> DeviceProfile {
@@ -1664,6 +1717,36 @@ fn profile_for(device_type: &str) -> DeviceProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scaled_damage_rounds_outwards_and_full_scale_is_untouched() {
+        assert_eq!(scaled_for_gpu((10, 10, 21, 33), 1.0), (10, 10, 21, 33));
+        // 0.75: 7.5 -> 7, 15.75 -> 16; a changed pixel is never dropped.
+        assert_eq!(scaled_for_gpu((10, 10, 21, 33), 0.75), (7, 7, 16, 25));
+        assert_eq!(scaled_for_gpu((0, 0, 1, 1), 0.5), (0, 0, 1, 1));
+    }
+
+    #[test]
+    fn a_scaled_frame_counts_its_redraw_as_a_share_of_the_surface() {
+        let surface = (1080, 2400);
+        let frame = (810, 1800); // 0.75
+                                 // A full redraw of the smaller frame is a full repaint.
+        assert_eq!(
+            surface_pixels(Redrawn::Full, frame, surface, 0.75),
+            1080 * 2400
+        );
+        // A tenth of the frame is a tenth of the surface.
+        let tenth = 810 * 1800 / 10;
+        assert_eq!(
+            surface_pixels(Redrawn::Damage { pixels: tenth }, frame, surface, 0.75),
+            1080 * 2400 / 10
+        );
+        // At full resolution, pixels are pixels.
+        assert_eq!(
+            surface_pixels(Redrawn::Damage { pixels: 500 }, surface, surface, 1.0),
+            500
+        );
+    }
 
     /// The shadow planner plans as the device it is on: lavapipe is a CPU,
     /// and an integrated GPU is not a discrete one.
