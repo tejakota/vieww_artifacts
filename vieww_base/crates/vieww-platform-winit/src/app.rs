@@ -1540,20 +1540,24 @@ impl WindowState {
         //
         // `prefer_gpu` routes through `present_planned`: the frame is planned
         // first, drawn by the GPU rasterizer when the plan is complete, and
-        // drawn here by the CPU when it is not. The damage computed above is
-        // only meaningful to the CPU half — the GPU path is a whole-frame
-        // rasterizer — but it is computed unconditionally anyway so the
-        // stats below keep one shape whichever path a frame took.
+        // drawn here by the CPU when it is not. Both halves redraw only the
+        // damage computed above when they can keep their previous frame (the
+        // GPU's conditions are `present_planned`'s to check).
+        let mut gpu_redrawn = None;
         let presented = if gpu.planned {
             gpu.renderer
                 .present_planned(
                     &mut gpu.surface,
                     self.driver.scene(),
+                    damage,
                     self.background,
                     logical_size,
                     self.scale,
                 )
-                .map(|frame| (frame.report, frame.drawn_on_gpu, frame.presented_directly))
+                .map(|frame| {
+                    gpu_redrawn = frame.gpu_redrawn;
+                    (frame.report, frame.drawn_on_gpu, frame.presented_directly)
+                })
         } else {
             gpu.renderer
                 .present_damaged(
@@ -1612,8 +1616,11 @@ impl WindowState {
                 let pixels = {
                     let surface = ((f64::from(logical_size.0) * factor) as u64)
                         * ((f64::from(logical_size.1) * factor) as u64);
-                    match (damage, stats) {
-                        (Some(_), Some(stats)) => {
+                    match (gpu_redrawn, damage, stats) {
+                        // A GPU frame says what it redrew: its damage, or
+                        // everything when it could not keep its last frame.
+                        (Some(redrawn), _, _) => redrawn,
+                        (None, Some(_), Some(stats)) => {
                             (f64::from(stats.damage_area) * factor * factor) as u64
                         }
                         _ => surface,

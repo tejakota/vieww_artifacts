@@ -32,7 +32,7 @@ pub mod scene;
 #[cfg(feature = "shader-compiler")]
 pub use compute::{ComputeBuffer, ComputeKernel};
 pub use pipeline_cache::set_pipeline_cache_file;
-pub use scene::{GpuFrameTimings, SceneRenderer};
+pub use scene::{GpuFrameTimings, Redrawn, SceneRenderer};
 
 /// [`VulkanDevice::for_window`] and [`swapchain::VulkanSwapchain`] — real
 /// windowed presentation. See that module's own docs.

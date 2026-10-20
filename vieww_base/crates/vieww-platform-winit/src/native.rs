@@ -102,7 +102,7 @@ use std::time::{Duration, Instant};
 use winit::window::Window;
 
 use vieww_foundation::{Color, Rect};
-use vieww_gpu::Planner as GpuPlanner;
+use vieww_gpu::{PixelRect, Planner as GpuPlanner};
 use vieww_hal::vulkan::{
     GpuFrameTimings, SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain,
 };
@@ -708,6 +708,12 @@ pub struct NativeRenderer {
     stages: FrameStages,
     /// The hybrid planner in shadow mode, when enabled.
     shadow: Option<PlannerShadow>,
+    /// Whether what is on screen is the GPU rasterizer's last frame, drawn at
+    /// full resolution — the condition for the next GPU frame redrawing only
+    /// its damage. Any CPU frame, resolution-scaled frame or failure clears
+    /// it: the GPU's kept frame no longer matches what the damage is
+    /// measured against.
+    gpu_frame_current: bool,
 }
 
 /// The GPU rasterizer goes before the device it was built on.
@@ -751,6 +757,10 @@ pub struct PlannedFrame {
     pub presented_directly: bool,
     /// Where this frame's time went. See [`FrameStages`].
     pub stages: FrameStages,
+    /// Device pixels the GPU redrew: the frame's damage when it could keep
+    /// the rest of its previous frame, the whole render extent when it could
+    /// not. `None` for a CPU frame.
+    pub gpu_redrawn: Option<u64>,
 }
 
 /// The scene to rasterise at the swapchain's extent: the frame itself when
@@ -904,6 +914,7 @@ impl NativeRenderer {
             gpu_unavailable: false,
             stages: FrameStages::default(),
             shadow: None,
+            gpu_frame_current: false,
         }
     }
 
@@ -1121,6 +1132,7 @@ impl NativeRenderer {
         let (physical_width, physical_height) = surface.extent();
         let (logical_width, logical_height) = logical_size;
         self.stages = FrameStages::default();
+        self.gpu_frame_current = false;
         let rasterising = Instant::now();
         // What this frame changes, for a CPU surface that converts only that.
         // A retained render falls back to a full one when the size changed
@@ -1302,9 +1314,11 @@ impl NativeRenderer {
     /// the fallback are the same agreement [`vieww_gpu::ScenePlan::is_complete`] and
     /// `present_damaged` have always had.
     ///
-    /// The GPU path is a whole-frame rasterizer: it has no damage regions to
-    /// honour and no retained content to reuse, so every frame it takes is a
-    /// full repaint. The read-back into host memory it does per frame is a
+    /// The GPU path redraws only `damage` when the screen holds its own
+    /// previous frame at full resolution — the frame target is kept between
+    /// frames (see `SceneRenderer`'s module docs, and `gpu_frame_current`);
+    /// otherwise, and for a first frame, a resize or `None`, it repaints in
+    /// full. The read-back into host memory it does per frame is a
     /// parity-harness cost a real present would not pay — see
     /// `SceneRenderer::render_planned`'s own docs; the follow-up is rendering
     /// straight into the swapchain image, which needs the scene pipeline to
@@ -1323,6 +1337,7 @@ impl NativeRenderer {
         &mut self,
         surface: &mut NativeSurface,
         scene: &Scene,
+        damage: Option<&Damage>,
         base: Color,
         logical_size: (u32, u32),
         scale: Scale,
@@ -1330,6 +1345,10 @@ impl NativeRenderer {
         let (physical_width, physical_height) = surface.extent();
         let extent = (physical_width, physical_height);
         self.stages = FrameStages::default();
+        // Whether the GPU may redraw only this frame's damage is decided
+        // from the state *before* this frame; whatever happens below, the
+        // frame it leaves on screen sets it again.
+        let previous_was_gpu = std::mem::replace(&mut self.gpu_frame_current, false);
 
         // The GPU rasterizer, once. Creation failure is remembered and this
         // becomes a CPU renderer permanently — see `gpu_unavailable`. A CPU
@@ -1381,6 +1400,31 @@ impl NativeRenderer {
             1.0
         };
         let full_scene = scene;
+        // **The damage, for a GPU frame that redraws only it** — see
+        // `SceneRenderer`'s module docs. In device pixels, rounded out, then
+        // grown by `GPU_DAMAGE_MARGIN`: the damage is measured against the
+        // CPU rasterizer's antialiasing, and the GPU's edge coverage is a
+        // different computation that may reach a little further. Only at full
+        // resolution, and only when the screen shows the GPU's own last
+        // frame; anything else redraws everything, as before.
+        let gpu_damage: Option<Vec<PixelRect>> = match damage {
+            Some(logical) if previous_was_gpu && render_scale >= 1.0 => {
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "a swapchain extent is a small number of pixels"
+                )]
+                let surface_rect =
+                    Rect::new(0.0, 0.0, physical_width as f32, physical_height as f32);
+                let physical = Physical::new(full_scene, logical, scale, surface_rect);
+                match Changed::from_damage(physical.damage(), extent) {
+                    Changed::All => None,
+                    Changed::Regions(regions) => {
+                        Some(regions.into_iter().map(grown_for_gpu).collect())
+                    }
+                }
+            }
+            _ => None,
+        };
         let lifting = Instant::now();
         let (lifted_extent, lifted_scale) = if render_scale < 1.0 {
             #[expect(
@@ -1475,14 +1519,23 @@ impl NativeRenderer {
                             drawn_on_gpu: true,
                             presented_directly: true,
                             stages: self.stages,
+                            gpu_redrawn: None,
                         });
                     };
-                    if let Err(error) =
-                        renderer.render_planned_to(planner, &plan, base, &image, render_scale)
-                    {
-                        let _ = device.abandon_acquired(swapchain, image);
-                        return Err(NativeError::Render(error.to_string()));
-                    }
+                    let redrawn = match renderer.render_planned_to(
+                        planner,
+                        &plan,
+                        base,
+                        &image,
+                        render_scale,
+                        gpu_damage.as_deref(),
+                    ) {
+                        Ok(redrawn) => redrawn,
+                        Err(error) => {
+                            let _ = device.abandon_acquired(swapchain, image);
+                            return Err(NativeError::Render(error.to_string()));
+                        }
+                    };
                     self.stages.gpu = renderer.last_timings();
                     let presenting = Instant::now();
                     device
@@ -1490,15 +1543,24 @@ impl NativeRenderer {
                         .map_err(|error| NativeError::Present(error.to_string()))?;
                     self.stages.present = presenting.elapsed();
                     self.record_shadow(&scene, extent, Executor::Gpu, None);
+                    self.gpu_frame_current = render_scale >= 1.0;
                     return Ok(PlannedFrame {
                         report: SceneReport::default(),
                         drawn_on_gpu: true,
                         presented_directly: true,
                         stages: self.stages,
+                        gpu_redrawn: Some(redrawn.pixels(lifted_extent.0, lifted_extent.1)),
                     });
                 }
-                let pixels = renderer
-                    .render_planned(planner, &plan, physical_width, physical_height, base)
+                let (pixels, redrawn) = renderer
+                    .render_planned_damaged(
+                        planner,
+                        &plan,
+                        physical_width,
+                        physical_height,
+                        base,
+                        gpu_damage.as_deref(),
+                    )
                     .map_err(|error| NativeError::Render(error.to_string()))?;
                 self.stages.gpu = renderer.last_timings();
                 let presenting = Instant::now();
@@ -1515,11 +1577,13 @@ impl NativeRenderer {
                 // did none of it, and the plan's own counts — vertices, draw
                 // calls — are not those fields. Zeroes say what happened;
                 // `drawn_on_gpu` says why.
+                self.gpu_frame_current = true;
                 return Ok(PlannedFrame {
                     report: SceneReport::default(),
                     drawn_on_gpu: true,
                     presented_directly: false,
                     stages: self.stages,
+                    gpu_redrawn: Some(redrawn.pixels(physical_width, physical_height)),
                 });
             }
             if self.shadow.is_some() {
@@ -1557,7 +1621,27 @@ impl NativeRenderer {
             drawn_on_gpu: false,
             presented_directly: false,
             stages: self.stages,
+            gpu_redrawn: None,
         })
+    }
+}
+
+/// Device pixels a GPU frame's damage is grown by on every side — see
+/// `present_planned`. Two, not one: a rounded-out rectangle already covers
+/// the CPU's half-pixel antialiasing bleed, and the margin is for the GPU's
+/// coverage reaching a pixel past it. Redrawing a pixel that did not change
+/// is always correct; missing one that did leaves a stale edge.
+const GPU_DAMAGE_MARGIN: i32 = 2;
+
+/// A damaged region from [`Changed::from_damage`], grown by
+/// [`GPU_DAMAGE_MARGIN`]; the renderer clamps it to its frame.
+#[expect(clippy::cast_possible_wrap, reason = "surface coordinates")]
+const fn grown_for_gpu((left, top, right, bottom): (u32, u32, u32, u32)) -> PixelRect {
+    PixelRect {
+        x0: left as i32 - GPU_DAMAGE_MARGIN,
+        y0: top as i32 - GPU_DAMAGE_MARGIN,
+        x1: right as i32 + GPU_DAMAGE_MARGIN,
+        y1: bottom as i32 + GPU_DAMAGE_MARGIN,
     }
 }
 

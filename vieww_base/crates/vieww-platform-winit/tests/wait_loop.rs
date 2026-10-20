@@ -686,6 +686,160 @@ fn a_gpu_planned_frame_presents_to_a_real_window() {
     pass("gpu frame");
 }
 
+/// A window that is all blue but for a small square in its corner, which
+/// alternates red and green with `phase`.
+#[derive(Debug)]
+struct Blinker {
+    phase: vieww_element::Signal<u32>,
+}
+
+impl Widget for Blinker {
+    fn debug_name(&self) -> &'static str {
+        "Blinker"
+    }
+
+    fn kind(&self) -> WidgetKind<'_> {
+        WidgetKind::Composed
+    }
+
+    fn build(&self, _ctx: &BuildContext) -> WidgetNode {
+        let square = if self.phase.get().is_multiple_of(2) {
+            Color::RED
+        } else {
+            Color::GREEN
+        };
+        ColoredBox::new(Color::BLUE)
+            .child(
+                Align::new(Alignment::TOP_LEFT)
+                    .child(SizedBox::square(24.0).child(ColoredBox::new(square))),
+            )
+            .into()
+    }
+}
+
+vieww_widget::widget_node_from!(Blinker);
+
+/// How many frames the blinking square is changed for.
+const BLINKS: u32 = 40;
+
+/// A GPU frame redraws only what changed — in a running window, through the
+/// whole loop: driver damage, `present_planned`, `SceneRenderer`.
+///
+/// Until 2026-10-20 the GPU path repainted every pixel of every frame,
+/// whatever the damage said (Device Farm run 39402544760: the LG Stylo 5's
+/// GPU frame was 32 ms of fill for 8.6% of the screen changing). The frame
+/// log counts the pixels each frame actually rasterised, and a GPU frame now
+/// reports what it redrew; here a 24-pixel square changes forty times on an
+/// otherwise still window, so all but the first frame should be a sliver of
+/// the surface. `vieww-hal`'s `vulkan_damage` suite is the proof that what
+/// was redrawn is the right picture; this is the proof that the app uses it.
+fn a_gpu_frame_redraws_only_what_changed() {
+    vieww_hardware::skip_without!(display, gpu);
+    arm_deadline("a_gpu_frame_redraws_only_what_changed");
+
+    let app = App::new().title("vieww wait-loop: gpu damage").prefer_gpu();
+    let windows = app.windows();
+    let waker = Arc::new(app.waker());
+    let phase: Rc<std::cell::RefCell<Option<vieww_element::Signal<u32>>>> = Rc::default();
+    let blinks = Rc::new(Cell::new(0u32));
+    let done = Rc::new(Cell::new(false));
+    let on_screen = Rc::new(Cell::new(None::<usize>));
+
+    let report = app
+        .before_frame({
+            let phase = Rc::clone(&phase);
+            let blinks = Rc::clone(&blinks);
+            move |_driver| {
+                if let Some(phase) = &*phase.borrow() {
+                    if blinks.get() < BLINKS {
+                        blinks.set(blinks.get() + 1);
+                        phase.set(blinks.get());
+                    }
+                }
+            }
+        })
+        .after_frame({
+            // Keep frames coming until the closing frame has run: a still
+            // tree would otherwise put the loop to sleep with the close
+            // never asked for.
+            let waker = Arc::clone(&waker);
+            let done = Rc::clone(&done);
+            move |_driver| {
+                if !done.get() {
+                    waker.wake();
+                }
+            }
+        })
+        .on_frame({
+            let blinks = Rc::clone(&blinks);
+            let done = Rc::clone(&done);
+            let on_screen = Rc::clone(&on_screen);
+            let waker = Arc::clone(&waker);
+            move |_log| {
+                trace("frame");
+                if blinks.get() >= BLINKS && !done.get() {
+                    done.set(true);
+                    on_screen.set(blue_pixels_on_screen());
+                    trace("closing");
+                    let _ = Windows::close(&*windows, WindowKey::PRIMARY);
+                    waker.wake();
+                }
+            }
+        })
+        .run({
+            let phase = Rc::clone(&phase);
+            move |driver| {
+                let signal = driver.elements().runtime().signal(0_u32);
+                *phase.borrow_mut() = Some(signal.clone());
+                driver.set_root(Blinker { phase: signal });
+            }
+        })
+        .expect("the window opened, blinked, and closed; that is not a failure");
+
+    assert!(
+        done.get(),
+        "the square never finished blinking, so nothing was tested"
+    );
+    assert!(
+        report.gpu_frames >= u64::from(BLINKS) / 2,
+        "prefer_gpu was set and the GPU drew {} of {} frames",
+        report.gpu_frames,
+        report.frames
+    );
+    #[expect(clippy::cast_precision_loss, reason = "pixel counts, for a ratio")]
+    let repaints_per_frame =
+        report.rasterised as f64 / (report.surface_pixels as f64 * report.frames as f64);
+    trace(&format!(
+        "{} frames ({} on the GPU), {:.4} full repaints per frame, {} frame(s) a whole surface",
+        report.frames, report.gpu_frames, repaints_per_frame, report.full_repaint_frames
+    ));
+    // The first frame, and the resize a new window gets, are whole; the
+    // blinking frames must not be.
+    assert!(
+        report.full_repaint_frames <= 3,
+        "{} of {} frames repainted the whole surface while only a square changed",
+        report.full_repaint_frames,
+        report.frames
+    );
+    assert!(
+        repaints_per_frame < 0.25,
+        "a 24-pixel square changed and each frame redrew {repaints_per_frame:.3} of the \
+         surface: the GPU is still repainting whole frames ({} of {} frames on the GPU)",
+        report.gpu_frames,
+        report.frames
+    );
+    match on_screen.get() {
+        // Everything but the square is blue: a frame that redrew only its
+        // damage over a target holding nothing reads black around it.
+        Some(blue) => assert!(
+            blue >= 10_000,
+            "the window should be blue around the square; the screen has {blue} blue pixels"
+        ),
+        None => eprintln!("wait_loop: no `import` (ImageMagick) — screen contents not checked"),
+    }
+    pass("gpu damage");
+}
+
 // A former scenario here, `two_windows_share_one_gpu_device`, counted
 // `vieww_paint::gpu::GpuContext`'s shared-device bookkeeping across two
 // windows. That type is gone with vello — the new Vulkan backend
@@ -718,6 +872,7 @@ const SCENARIOS: &[(&str, fn())] = &[
         an_application_can_close_its_own_window_and_still_gets_its_report,
     ),
     ("gpu_frame", a_gpu_planned_frame_presents_to_a_real_window),
+    ("gpu_damage", a_gpu_frame_redraws_only_what_changed),
 ];
 
 /// Parent: run each scenario in a child. Child: run the one it was named.

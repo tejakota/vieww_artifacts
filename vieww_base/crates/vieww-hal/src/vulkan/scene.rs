@@ -32,6 +32,27 @@
 //! The frame is quantised to 8 bits once, on readback, with the same rounding
 //! `NativeRenderer` uses.
 //!
+//! # Damage: redrawing only what changed
+//!
+//! `L[0]` is kept between frames, so a frame that names its damage
+//! ([`SceneRenderer::render_planned_to`], [`SceneRenderer::render_planned_damaged`])
+//! redraws only those rectangles of it and leaves the rest as the previous
+//! frame finished it. What is clipped is narrow on purpose: **only writes
+//! into `L[0]` (and its scratch `S[0]`)**. Layers, blurs and shadow work run
+//! over their full extent as before — a blur reads pixels around the ones
+//! it writes, so clipping its input would bleed last frame into this one —
+//! and are skipped outright when what they composite misses the damage.
+//!
+//! Two things make the kept pixels unusable, and the renderer checks both
+//! itself rather than trusting a caller ([`Retained`]): a frame of a
+//! different size or clear colour, and a backdrop filter at the top level
+//! whose rectangle reaches outside the damage — it samples `L[0]` as drawn
+//! *so far this frame*, which outside the damage is last frame's finished
+//! picture. Either one redraws the frame in full. What it cannot check is
+//! whether something else reached the screen since its last frame (a CPU
+//! fallback frame, say); a caller that presented anything else passes no
+//! damage.
+//!
 //! # Refusal
 //!
 //! [`SceneRenderer::render`] refuses a plan that is not
@@ -123,7 +144,52 @@ pub struct SceneRenderer {
     mask_upload_bytes: u64,
     /// Where the last frame's time went — see [`GpuFrameTimings`].
     timings: GpuFrameTimings,
+    /// What `L[0]` holds between frames — see [`Retained`].
+    retained: Option<Retained>,
+    /// The rectangles of `L[0]` the frame being recorded redraws; `None`
+    /// redraws all of it. Set by `execute` for the length of one frame.
+    frame_clip: Option<Vec<PixelRect>>,
 }
+
+/// What the frame target `L[0]` holds after a frame: that frame's finished
+/// pixels, at `size`, drawn over `clear`. A damaged frame keeps them only when
+/// both still describe the frame being drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Retained {
+    size: (u32, u32),
+    clear: Color,
+}
+
+/// How much of the frame target a frame redrew.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Redrawn {
+    /// Every pixel: no damage was given, or what the target held could not
+    /// be kept (a new size or clear colour, a backdrop filter reaching
+    /// outside the damage — see the module docs).
+    Full,
+    /// Only the damage: this many pixels (each rectangle's area, summed).
+    Damage {
+        /// Pixels redrawn.
+        pixels: u64,
+    },
+}
+
+impl Redrawn {
+    /// Pixels redrawn, given the frame's own size for [`Redrawn::Full`].
+    #[must_use]
+    pub const fn pixels(self, width: u32, height: u32) -> u64 {
+        match self {
+            Self::Full => width as u64 * height as u64,
+            Self::Damage { pixels } => pixels,
+        }
+    }
+}
+
+/// More rectangles than this and the damage is redrawn as its bounding box:
+/// every rectangle repeats each top-level draw call under its own scissor,
+/// and past a handful the repeated vertex work costs more than the pixels
+/// it saves.
+const MAX_CLIP_RECTS: usize = 8;
 
 /// Where one frame's time went inside [`SceneRenderer`], on the CPU's clock.
 ///
@@ -631,6 +697,8 @@ impl SceneRenderer {
             indices: Buffer::EMPTY,
             mask_upload_bytes: 0,
             timings: GpuFrameTimings::default(),
+            retained: None,
+            frame_clip: None,
         };
 
         let uniform_info = [vk::DescriptorBufferInfo {
@@ -871,6 +939,38 @@ impl SceneRenderer {
         Ok(pixels)
     }
 
+    /// [`render_planned`](Self::render_planned), redrawing only `damage` of
+    /// the previous frame this renderer drew — see the module docs for what
+    /// is kept and when it cannot be. `None` redraws everything, exactly as
+    /// `render_planned` does. Returns the frame and how much was redrawn.
+    ///
+    /// `damage` is in this frame's device pixels; it must cover everything
+    /// that differs from the previous frame, as the CPU rasterizer's retained
+    /// path also requires.
+    ///
+    /// # Errors
+    ///
+    /// As [`render_planned`](Self::render_planned).
+    pub fn render_planned_damaged(
+        &mut self,
+        planner: &Planner,
+        plan: &ScenePlan,
+        width: u32,
+        height: u32,
+        clear: Color,
+        damage: Option<&[PixelRect]>,
+    ) -> Result<(Vec<u8>, Redrawn), VulkanError> {
+        if !plan.is_complete() {
+            return Err(VulkanError::Vulkan("incomplete plan".into()));
+        }
+        let started = Instant::now();
+        self.upload_planner(planner)?;
+        let atlases = started.elapsed();
+        let result = self.render_with(plan, width, height, clear, damage)?;
+        self.timings.upload += atlases;
+        Ok(result)
+    }
+
     /// Where the last rendered frame's time went. Reset at the start of every
     /// frame; see [`GpuFrameTimings`] for what each field measures.
     #[must_use]
@@ -920,6 +1020,18 @@ impl SceneRenderer {
         height: u32,
         clear: Color,
     ) -> Result<Vec<u8>, VulkanError> {
+        self.render_with(plan, width, height, clear, None)
+            .map(|(pixels, _)| pixels)
+    }
+
+    fn render_with(
+        &mut self,
+        plan: &ScenePlan,
+        width: u32,
+        height: u32,
+        clear: Color,
+        damage: Option<&[PixelRect]>,
+    ) -> Result<(Vec<u8>, Redrawn), VulkanError> {
         let width = width.max(1);
         let height = height.max(1);
         self.timings = GpuFrameTimings::default();
@@ -930,11 +1042,11 @@ impl SceneRenderer {
         write_bytes(&self.device, self.uniform.memory, as_bytes(&viewport))?;
         self.upload_geometry(plan)?;
         self.timings.upload = started.elapsed();
-        self.execute(plan, width, height, clear, None)?;
+        let redrawn = self.execute(plan, width, height, clear, None, damage)?;
         let started = Instant::now();
         let pixels = self.read_back(width, height)?;
         self.timings.readback = started.elapsed();
-        Ok(pixels)
+        Ok((pixels, redrawn))
     }
 
     /// Execute a complete `plan` straight into an acquired swapchain image,
@@ -953,6 +1065,11 @@ impl SceneRenderer {
     /// 1.0. Full resolution — the default — is byte-for-byte the same command
     /// stream a 1:1 blit ever was.
     ///
+    /// `damage`, in the *render* extent's pixels, redraws only those
+    /// rectangles of the previous frame this renderer drew (see the module
+    /// docs); the whole frame is still blitted, because each swapchain image
+    /// is a different one. `None` redraws everything.
+    ///
     /// # Errors
     ///
     /// An incomplete plan, a translucent clear, or any Vulkan call failing.
@@ -965,7 +1082,8 @@ impl SceneRenderer {
         clear: Color,
         target: &AcquiredImage,
         scale: f32,
-    ) -> Result<(), VulkanError> {
+        damage: Option<&[PixelRect]>,
+    ) -> Result<Redrawn, VulkanError> {
         if !plan.is_complete() {
             return Err(VulkanError::Vulkan("incomplete plan".into()));
         }
@@ -1009,7 +1127,7 @@ impl SceneRenderer {
                 vk::Filter::LINEAR
             },
         };
-        self.execute(plan, render_width, render_height, clear, Some(blit))
+        self.execute(plan, render_width, render_height, clear, Some(blit), damage)
     }
 
     // ── targets ────────────────────────────────────────────────────────────
@@ -1030,6 +1148,8 @@ impl SceneRenderer {
             )?;
             self.reset_post_sets()?;
             self.size = (width, height);
+            // New targets hold nothing of any earlier frame.
+            self.retained = None;
         }
         let mut fresh = Vec::new();
         while self.levels.len() < depth {
@@ -1321,6 +1441,91 @@ impl SceneRenderer {
         Ok(())
     }
 
+    /// The damage a frame may actually redraw: `damage` clamped to the frame,
+    /// or `None` (redraw everything) when `L[0]` does not hold the previous
+    /// frame at this size and clear, or a top-level backdrop filter reaches
+    /// outside it. See the module docs.
+    fn usable_clip(
+        &self,
+        plan: &ScenePlan,
+        damage: &[PixelRect],
+        width: u32,
+        height: u32,
+        clear: Color,
+    ) -> Option<Vec<PixelRect>> {
+        let wanted = Retained {
+            size: (width, height),
+            clear,
+        };
+        if self.retained != Some(wanted) {
+            return None;
+        }
+        #[expect(clippy::cast_possible_wrap, reason = "frame extents")]
+        let frame = PixelRect {
+            x0: 0,
+            y0: 0,
+            x1: width as i32,
+            y1: height as i32,
+        };
+        // Disjoint, because every rectangle repeats each top-level draw under
+        // its own scissor: where two overlapped, a translucent draw — a group
+        // opacity, a shadow's tint, a blend — would be applied twice.
+        let mut clip = disjoint(
+            damage
+                .iter()
+                .map(|rect| rect.intersect(frame))
+                .filter(|rect| !rect.is_empty()),
+        );
+        if clip.len() > MAX_CLIP_RECTS {
+            let bounds = clip.iter().fold(clip[0], |a, b| PixelRect {
+                x0: a.x0.min(b.x0),
+                y0: a.y0.min(b.y0),
+                x1: a.x1.max(b.x1),
+                y1: a.y1.max(b.y1),
+            });
+            clip = vec![bounds];
+        }
+        let mut depth = 0usize;
+        for step in &plan.steps {
+            match *step {
+                Step::PushLayer { rect, backdrop } => {
+                    if depth == 0
+                        && backdrop.is_some()
+                        && touches(&clip, rect)
+                        && !clip.iter().any(|c| contains(*c, rect))
+                    {
+                        return None;
+                    }
+                    depth += 1;
+                }
+                Step::PopLayer { .. } => depth = depth.saturating_sub(1),
+                Step::Draw { .. } | Step::Shadow { .. } => {}
+            }
+        }
+        Some(clip)
+    }
+
+    /// For each top-level `PushLayer` whose composite misses `clip`, the
+    /// index of its `PopLayer`: a damaged frame skips the whole layer.
+    fn skippable_layers(plan: &ScenePlan, clip: &[PixelRect]) -> HashMap<usize, usize> {
+        let mut skip = HashMap::new();
+        let mut open: Vec<usize> = Vec::new();
+        for (index, step) in plan.steps.iter().enumerate() {
+            match *step {
+                Step::PushLayer { .. } => open.push(index),
+                Step::PopLayer { composite, .. } => {
+                    if let Some(push) = open.pop() {
+                        if open.is_empty() && !composite.is_some_and(|c| touches(clip, c)) {
+                            skip.insert(push, index);
+                        }
+                    }
+                }
+                Step::Draw { .. } | Step::Shadow { .. } => {}
+            }
+        }
+        skip
+    }
+
     #[allow(clippy::too_many_lines)]
     fn execute(
         &mut self,
@@ -1329,8 +1534,24 @@ impl SceneRenderer {
         height: u32,
         clear: Color,
         out: Option<BlitTarget>,
-    ) -> Result<(), VulkanError> {
+        damage: Option<&[PixelRect]>,
+    ) -> Result<Redrawn, VulkanError> {
         let recording = Instant::now();
+        let clip = damage.and_then(|d| self.usable_clip(plan, d, width, height, clear));
+        // Until this frame finishes, `L[0]` is half-drawn: no later frame may
+        // keep it.
+        self.retained = None;
+        let skip = clip
+            .as_deref()
+            .map(|c| Self::skippable_layers(plan, c))
+            .unwrap_or_default();
+        let redrawn = clip.as_ref().map_or(Redrawn::Full, |c| Redrawn::Damage {
+            pixels: c
+                .iter()
+                .map(|r| u64::from(r.width()) * u64::from(r.height()))
+                .sum(),
+        });
+        self.frame_clip = clip;
         self.begin_commands()?;
         let a = f32::from(clear.a) / 255.0;
         let premultiplied_clear = [
@@ -1344,18 +1565,63 @@ impl SceneRenderer {
             width,
             height,
         };
-        rec.begin(self, TargetId::Level(0), Some(premultiplied_clear));
+        match &self.frame_clip {
+            None => rec.begin(self, TargetId::Level(0), Some(premultiplied_clear)),
+            Some(clip) => {
+                // Keep the previous frame; clear only what this one redraws.
+                rec.begin(self, TargetId::Level(0), None);
+                let rects: Vec<vk::ClearRect> = clip
+                    .iter()
+                    .map(|r| vk::ClearRect {
+                        rect: pixel_scissor(*r),
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    })
+                    .collect();
+                if !rects.is_empty() {
+                    unsafe {
+                        self.device.cmd_clear_attachments(
+                            self.command_buffer,
+                            &[vk::ClearAttachment {
+                                aspect_mask: vk::ImageAspectFlags::COLOR,
+                                color_attachment: 0,
+                                clear_value: vk::ClearValue {
+                                    color: vk::ClearColorValue {
+                                        float32: premultiplied_clear,
+                                    },
+                                },
+                            }],
+                            &rects,
+                        );
+                    }
+                }
+            }
+        }
 
         // The level the innermost open layer draws into.
         let mut depth = 0usize;
-        for step in &plan.steps {
-            match *step {
+        let mut index = 0usize;
+        while index < plan.steps.len() {
+            let step = plan.steps[index];
+            if let Some(&pop) = skip.get(&index) {
+                // A top-level layer whose composite misses the damage: none
+                // of it can change a pixel this frame redraws.
+                index = pop + 1;
+                continue;
+            }
+            index += 1;
+            match step {
                 Step::Draw {
                     first_run,
                     run_count,
                 } => {
                     rec.ensure_open(self, TargetId::Level(depth));
-                    self.draw_runs(plan, first_run, run_count, width, height);
+                    let clip = if depth == 0 {
+                        self.frame_clip.as_deref()
+                    } else {
+                        None
+                    };
+                    self.draw_runs(plan, first_run, run_count, width, height, clip);
                 }
                 Step::PushLayer { rect, backdrop } => {
                     let parent = depth;
@@ -1440,6 +1706,13 @@ impl SceneRenderer {
                 } => {
                     if patch.is_empty() || scissor.is_empty() {
                         continue;
+                    }
+                    if depth == 0 {
+                        if let Some(clip) = &self.frame_clip {
+                            if !touches(clip, scissor) {
+                                continue;
+                            }
+                        }
                     }
                     let work = depth + 1;
                     rec.begin(self, TargetId::Level(work), Some([0.0; 4]));
@@ -1558,12 +1831,20 @@ impl SceneRenderer {
             );
         }
         self.timings.record = recording.elapsed();
+        self.frame_clip = None;
         let (submit, wait) = self.submit_and_wait(out.map(|t| t.ready))?;
         self.timings.submit = submit;
         self.timings.wait = wait;
-        Ok(())
+        self.retained = Some(Retained {
+            size: (width, height),
+            clear,
+        });
+        Ok(redrawn)
     }
 
+    /// Draw `plan.runs[first_run..][..run_count]`, each under its own
+    /// scissor — and, when `clip` is given, once per clip rectangle under the
+    /// intersection of the two.
     fn draw_runs(
         &self,
         plan: &ScenePlan,
@@ -1571,6 +1852,7 @@ impl SceneRenderer {
         run_count: usize,
         width: u32,
         height: u32,
+        clip: Option<&[PixelRect]>,
     ) {
         if plan.vertices.is_empty() || plan.indices.is_empty() {
             return;
@@ -1597,12 +1879,11 @@ impl SceneRenderer {
                 .cmd_bind_index_buffer(cmd, self.indices.handle, 0, vk::IndexType::UINT32);
             for run in &plan.runs[first_run..first_run + run_count] {
                 let scissor = run.scissor.map_or(full, |r| to_scissor(r, width, height));
-                if scissor.extent.width == 0 || scissor.extent.height == 0 {
-                    continue;
+                for scissor in clipped(scissor, clip) {
+                    self.device.cmd_set_scissor(cmd, 0, &[scissor]);
+                    self.device
+                        .cmd_draw_indexed(cmd, run.index_count, 1, run.first_index, 0, 0);
                 }
-                self.device.cmd_set_scissor(cmd, 0, &[scissor]);
-                self.device
-                    .cmd_draw_indexed(cmd, run.index_count, 1, run.first_index, 0, 0);
             }
         }
     }
@@ -1687,7 +1968,16 @@ impl SceneRenderer {
 
     fn pass(&mut self, rec: &mut Recorder, mut pass: Pass) -> Result<(), VulkanError> {
         let scissor = to_scissor(pass.scissor.to_rect(), rec.width, rec.height);
-        if scissor.extent.width == 0 || scissor.extent.height == 0 {
+        // A damaged frame redraws only its clip of the frame target and the
+        // frame's own scratch (which a top-level blend snapshots the frame
+        // into, and reads back pixel for pixel).
+        let clip = if matches!(pass.into, TargetId::Level(0) | TargetId::Scratch(0)) {
+            self.frame_clip.clone()
+        } else {
+            None
+        };
+        let scissors = clipped(scissor, clip.as_deref());
+        if scissors.is_empty() {
             return Ok(());
         }
         debug_assert!(
@@ -1723,8 +2013,10 @@ impl SceneRenderer {
                 0,
                 as_bytes(std::slice::from_ref(&pass.push)),
             );
-            self.device.cmd_set_scissor(cmd, 0, &[scissor]);
-            self.device.cmd_draw(cmd, 3, 1, 0, 0);
+            for scissor in scissors {
+                self.device.cmd_set_scissor(cmd, 0, &[scissor]);
+                self.device.cmd_draw(cmd, 3, 1, 0, 0);
+            }
         }
         Ok(())
     }
@@ -2275,6 +2567,103 @@ const fn full_rect(width: u32, height: u32) -> vk::Rect2D {
     }
 }
 
+/// `rect` (already inside the frame) as a scissor.
+const fn pixel_scissor(rect: PixelRect) -> vk::Rect2D {
+    vk::Rect2D {
+        offset: vk::Offset2D {
+            x: rect.x0,
+            y: rect.y0,
+        },
+        extent: vk::Extent2D {
+            width: rect.width(),
+            height: rect.height(),
+        },
+    }
+}
+
+/// `scissor` itself, or its intersection with each of `clip`'s rectangles;
+/// empty results dropped either way.
+#[expect(clippy::cast_possible_wrap, reason = "frame extents")]
+fn clipped(scissor: vk::Rect2D, clip: Option<&[PixelRect]>) -> Vec<vk::Rect2D> {
+    let empty = |s: &vk::Rect2D| s.extent.width == 0 || s.extent.height == 0;
+    let Some(clip) = clip else {
+        return if empty(&scissor) {
+            Vec::new()
+        } else {
+            vec![scissor]
+        };
+    };
+    let own = PixelRect {
+        x0: scissor.offset.x,
+        y0: scissor.offset.y,
+        x1: scissor.offset.x + scissor.extent.width as i32,
+        y1: scissor.offset.y + scissor.extent.height as i32,
+    };
+    clip.iter()
+        .map(|c| pixel_scissor(own.intersect(*c)))
+        .filter(|s| !empty(s))
+        .collect()
+}
+
+/// `rects`' union as rectangles that do not overlap: each one minus every
+/// rectangle already taken, as up to four bands around the overlap.
+fn disjoint(rects: impl IntoIterator<Item = PixelRect>) -> Vec<PixelRect> {
+    let mut out: Vec<PixelRect> = Vec::new();
+    for rect in rects {
+        let mut pieces = vec![rect];
+        for taken in &out {
+            pieces = pieces
+                .into_iter()
+                .flat_map(|piece| subtract(piece, *taken))
+                .collect();
+        }
+        out.extend(pieces);
+    }
+    out
+}
+
+/// `a` minus `b`: what is left of `a` as up to four non-overlapping bands
+/// (above, below, then left and right of the overlap).
+fn subtract(a: PixelRect, b: PixelRect) -> Vec<PixelRect> {
+    let overlap = a.intersect(b);
+    if overlap.is_empty() {
+        return vec![a];
+    }
+    let bands = [
+        PixelRect {
+            y1: overlap.y0,
+            ..a
+        },
+        PixelRect {
+            y0: overlap.y1,
+            ..a
+        },
+        PixelRect {
+            y0: overlap.y0,
+            y1: overlap.y1,
+            x1: overlap.x0,
+            ..a
+        },
+        PixelRect {
+            y0: overlap.y0,
+            y1: overlap.y1,
+            x0: overlap.x1,
+            ..a
+        },
+    ];
+    bands.into_iter().filter(|band| !band.is_empty()).collect()
+}
+
+/// Whether `rect` overlaps any of `clip`'s rectangles.
+fn touches(clip: &[PixelRect], rect: PixelRect) -> bool {
+    clip.iter().any(|c| !c.intersect(rect).is_empty())
+}
+
+/// Whether `outer` contains all of `inner`.
+const fn contains(outer: PixelRect, inner: PixelRect) -> bool {
+    outer.x0 <= inner.x0 && outer.y0 <= inner.y0 && outer.x1 >= inner.x1 && outer.y1 >= inner.y1
+}
+
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -2418,6 +2807,42 @@ fn half_to_f32(h: u16) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::half_to_f32;
+
+    #[test]
+    fn damage_becomes_disjoint_and_keeps_its_union() {
+        use super::{disjoint, PixelRect};
+        let r = |x0, y0, x1, y1| PixelRect { x0, y0, x1, y1 };
+        let rects = [
+            r(0, 0, 10, 10),
+            r(5, 5, 15, 15),
+            r(2, 2, 8, 8),
+            r(20, 0, 30, 4),
+        ];
+        let out = disjoint(rects);
+        let area: i64 = out
+            .iter()
+            .map(|p| i64::from(p.width()) * i64::from(p.height()))
+            .sum();
+        // 100 + 100 - 25 overlap; the third is inside the first; the fourth apart.
+        assert_eq!(area, 100 + 100 - 25 + 40);
+        for (i, a) in out.iter().enumerate() {
+            for b in &out[i + 1..] {
+                assert!(a.intersect(*b).is_empty(), "{a:?} overlaps {b:?}");
+            }
+        }
+        // Every input pixel is still covered.
+        for rect in rects {
+            for y in rect.y0..rect.y1 {
+                for x in rect.x0..rect.x1 {
+                    assert!(
+                        out.iter()
+                            .any(|p| (p.x0..p.x1).contains(&x) && (p.y0..p.y1).contains(&y)),
+                        "({x}, {y}) lost"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn half_floats_decode() {
