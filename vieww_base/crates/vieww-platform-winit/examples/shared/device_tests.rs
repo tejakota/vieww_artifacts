@@ -765,8 +765,15 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     // hundred is a suite that gets muted. What it will not tolerate is a
     // *median* over budget, which is what "this app is slow" actually looks
     // like, or a single frame so late it drops several vsyncs.
+    //
+    // A stall is measured against the larger of four budgets and three medians.
+    // Four budgets alone failed a phone twice for one slowness: the LG Stylo 5's
+    // CPU pass (run 39382602099) had a 38 ms median — already a failure of the
+    // check above — and a 98 ms worst frame, 2.6 medians, which is its normal
+    // spread, not a stall. The A73's 131 ms worst over a 23 ms median (5.7
+    // medians, and over four budgets) is a real one and still fails.
     let over = sorted.iter().filter(|work| **work > budget).count();
-    let stall = budget * 4;
+    let stall = (budget * 4).max(median * 3);
     results.check(
         "the_typical_frame_is_inside_its_budget",
         median <= budget,
@@ -775,7 +782,10 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     results.check(
         "no_frame_stalled",
         worst <= stall,
-        format!("worst {worst:?}, {over} of {} over budget", sorted.len()),
+        format!(
+            "worst {worst:?} against a stall line of {stall:?} (max of 4x budget, 3x median), {over} of {} over budget",
+            sorted.len()
+        ),
     );
 
     // Deliberately not a check: how much headroom a device has is a fact about
