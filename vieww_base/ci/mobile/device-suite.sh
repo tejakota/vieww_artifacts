@@ -43,9 +43,16 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 
 # The app reads this at launch (examples/android.rs), so it is set before the
-# build-and-launch below, and set either way: a 1 left over from a GPU run
-# would otherwise make the next CPU run measure the GPU.
-adb shell setprop debug.vieww.gpu "$gpu" >/dev/null 2>&1 || true
+# build-and-launch below. It is set when this script launches the app (a build)
+# — a 1 left over from a GPU run would otherwise make the next CPU run measure
+# the GPU — or when --gpu asks for it. With --no-build and no --gpu the app is
+# already running under whatever its launcher set (ci/mobile/run-android.sh sets
+# debug.vieww.gpu itself before every `am start`), and writing a 0 here raced
+# that launch: on a phone that cold-starts slower than this script reaches this
+# line, the app read the 0 and an `auto` pass silently measured the CPU path.
+if [ "$build" = 1 ] || [ "$gpu" = 1 ]; then
+    adb shell setprop debug.vieww.gpu "$gpu" >/dev/null 2>&1 || true
+fi
 if [ "$gpu" = 1 ]; then
     echo "device-suite: the planned GPU rasterizer (debug.vieww.gpu=1)"
     [ "$build" = 0 ] && echo "device-suite: --gpu with --no-build only applies if the app is relaunched" >&2

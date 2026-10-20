@@ -609,6 +609,17 @@ mod demo {
                 .with_tag("vieww"),
         );
         log::info!("vieww starting");
+        // Which rasterizer was asked for (`debug.vieww.gpu`, used below), read
+        // before anything else the launch does. A launcher sets it just before
+        // `am start`; the later it is read, the wider the window for something
+        // else to change it under the app — which is how the 2026-10-20 Device
+        // Farm run's `auto` pass measured the CPU on the two slower-starting
+        // phones (`ci/mobile/device-suite.sh` reset it to 0 mid-launch).
+        let gpu_prop = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.gpu")
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_default();
 
         // The frame graph's numbers come from the platform layer's `FrameLog`,
         // which only exists once the loop is running — so the hook is installed
@@ -738,11 +749,7 @@ mod demo {
         // is taken against it.
         // A Test Lab game loop says which with its scenario (2 = GPU), since a
         // device cloud cannot `setprop`; otherwise the property decides.
-        let gpu_prop = std::process::Command::new("/system/bin/getprop")
-            .arg("debug.vieww.gpu")
-            .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
-            .unwrap_or_default();
+        // `gpu_prop` was read first thing in `main`, above.
         let prefer_gpu = match game_loop_scenario {
             Some(scenario) => scenario == 2,
             None => gpu_prop == "1",

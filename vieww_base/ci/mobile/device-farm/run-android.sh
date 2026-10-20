@@ -181,6 +181,30 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
     done
     kv "${mode}_failed_checks" "$(grep -o '__VIEWW_SUITE__ FAIL [a-z_0-9]*\|  FAIL [a-z_0-9]*' "$out/$mode-suite.log" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
 
+    # Whether the app ran the rasterizer this pass asked for. Its own
+    # `rasterizer:` observation names what it read from debug.vieww.gpu at
+    # launch; a pass that measured something else is not a measurement of its
+    # label, so a pass that reports the wrong one fails the run — any pass,
+    # diagnostic or not, since a mislabelled pass is a harness fault. Run
+    # 39382602099 (2026-10-20) is why: device-suite.sh reset the property to 0
+    # while the app was still starting, and the A73 and Stylo 5 `auto` passes
+    # drew all 600 frames on the CPU and failed, silently, under `auto`.
+    case "$mode" in
+        gpu|gpuscale) want="planned GPU path requested" ;;
+        auto) want="measured on this phone" ;;
+        *) want="CPU rasterizer" ;;
+    esac
+    ran="$(grep -m1 -o 'rasterizer: .*' "$out/$mode-suite.log" | sed 's/^rasterizer: //')"
+    if [ -z "$ran" ]; then
+        # The app never got as far as reporting (a crash or a hang): the suite
+        # result above already says so, and gates or not by its own rule.
+        kv "${mode}_rasterizer" "not reported (wanted: $want)"
+    elif [ "${ran#"$want"}" = "$ran" ]; then
+        kv "${mode}_rasterizer_mismatch" "wanted '$want', the app reported '$ran'"
+        echo "run-android: $mode pass ran the wrong rasterizer: wanted '$want', the app reported '$ran'" >&2
+        status=1
+    fi
+
     # 3. Memory while the app is still up, then its log.
     sh_ dumpsys meminfo "$package" > "$out/$mode-meminfo.txt"
     kv "${mode}_total_pss_kb" "$(grep -m1 -E 'TOTAL PSS:|^ *TOTAL ' "$out/$mode-meminfo.txt" | grep -oE '[0-9]+' | head -1)"

@@ -347,6 +347,10 @@ def summarize(rows, out, run):
             # number, not a slow GPU — run f91d07c printed two of those.
             if mode in ("gpu", "gpuscale") and gpu_frames_drawn(r.get(f"{mode}_gpu_frames")) == 0:
                 detail.append("  - **not a GPU measurement**: 0 frames were drawn by the GPU rasterizer in this pass")
+            # run-android.sh compares the app's own `rasterizer:` observation
+            # with what the pass asked for, and fails the run on a mismatch.
+            if r.get(f"{mode}_rasterizer_mismatch"):
+                detail.append(f"  - **wrong rasterizer, run failed**: {r[f'{mode}_rasterizer_mismatch']}")
             pss = r.get(f"{mode}_total_pss_kb")
             if pss and pss.isdigit():
                 detail.append(f"  - memory: PSS {int(pss) / 1024:.0f} MB")
