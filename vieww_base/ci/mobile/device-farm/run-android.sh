@@ -251,7 +251,8 @@ kv gating_passes "$gating (auto chose: ${choice:-not reported})"
 # A gating pass that failed only checks listed for this phone in
 # `known-failures.txt` is reported and does not fail the run; see that file.
 known_file="$root/ci/mobile/device-farm/known-failures.txt"
-device="${DEVICEFARM_DEVICE_NAME:-unknown}"
+# Matched on the model: `DEVICEFARM_DEVICE_NAME` is the phone's hostname here.
+device="$(sh_ getprop ro.product.model | tr -d '\r')"
 known_checks() { # pass -> the checks listed for this phone and pass
     [ -f "$known_file" ] || return 0
     grep -v '^[[:space:]]*#' "$known_file" | grep '|' | while IFS='|' read -r name pass checks _; do

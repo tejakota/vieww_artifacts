@@ -10,11 +10,19 @@
 # an entry is a debt with a label, not a mute button.
 #
 # Format, one per line, `|`-separated:
-#   device name (DEVICEFARM_DEVICE_NAME) | pass (cpu, gpu, auto, or *) | checks (space-separated) | reason
+#   model (ro.product.model) | pass (cpu, gpu, auto, or *) | checks (space-separated) | reason
+#
+# The model, not Device Farm's name for the phone: on the test host
+# `DEVICEFARM_DEVICE_NAME` is the phone's own hostname (`LMQ72034176a83` for
+# the Stylo 5), which matched nothing — so the first run with this file
+# (39417211158) failed the run on exactly the checks listed here. The model
+# is the `model=` line of the phone's result.txt.
 #
 # Gating passes (run-android.sh): `auto` (what ships), `cpu` (the fallback;
 # judged at the rate the app adapted to — 60 Hz on a 120 Hz panel it cannot
 # hold), and `gpu` where `auto` chose the GPU.
 
-LG Stylo 5 | * | the_typical_frame_is_inside_its_budget frames_inside_their_budget | RC5, PENDING.md §4.5: 36 ms CPU and 40 ms GPU frames on an msm8953 against 16.7 ms. The GPU path redrawing only damage (8.6% of the screen per frame here) is the fix under test; the CPU path's cost per damaged pixel is the next. 60 Hz at full resolution stays the target.
-Samsung Galaxy A73 5G | cpu | the_typical_frame_is_inside_its_budget frames_inside_their_budget no_frame_stalled | PENDING.md §4.5: the CPU fallback does not yet hold 60 Hz here (16.6 ms median, run 39402544760), and its worst frames land on cold cores (RC6, 78-93 ms). The shipping path is the GPU; this pass is the fallback's bar.
+# LG Stylo 5
+LM-Q720 | * | the_typical_frame_is_inside_its_budget frames_inside_their_budget | RC5, PENDING.md §4.5: on an msm8953 against 16.7 ms, the CPU path's median is 36 ms and the GPU path's 17.9 ms (run 39417211158; 40 ms before it redrew only damage), 11.9 ms of it waiting on the GPU. The CPU path's cost per damaged pixel is next. 60 Hz at full resolution stays the target.
+# Samsung Galaxy A73 5G
+SM-A736B | cpu | the_typical_frame_is_inside_its_budget frames_inside_their_budget no_frame_stalled | PENDING.md §4.5: the CPU fallback does not yet hold 60 Hz here (16.6 ms median, run 39402544760), and its worst frames land on cold cores (RC6, 78-93 ms). The shipping path is the GPU; this pass is the fallback's bar.
