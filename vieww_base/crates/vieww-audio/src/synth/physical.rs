@@ -688,13 +688,37 @@ impl MassSpring {
         #[expect(clippy::cast_precision_loss, reason = "small")]
         let s = (std::f64::consts::PI / (2.0 * (n as f64 + 1.0))).sin();
         let omega = std::f64::consts::TAU * hz;
+        let rate = if rate.is_finite() && rate > 0.0 {
+            rate
+        } else {
+            48_000.0
+        };
+        let dt = 1.0 / rate;
+        // Symplectic Euler on this chain is stable while the highest mode
+        // obeys dt·ω_max < 2, and ω_max approaches 2·sqrt(k/m). Past that
+        // the masses gain energy every step and the output runs to ±∞
+        // within a few hundred samples — a high `hz` at an ordinary rate
+        // was enough. So the stiffness is clamped just inside the bound
+        // (the top modes detune slightly; the instrument stays an
+        // instrument) and a non-finite request falls back to the bound.
+        let k_stable = (0.98 / dt).powi(2);
         let k_over_m = (omega / (2.0 * s)).powi(2);
+        let k_over_m = if k_over_m.is_finite() {
+            k_over_m.min(k_stable)
+        } else {
+            k_stable
+        };
         Self {
             x: vec![0.0; n],
             v: vec![0.0; n],
             k_over_m,
-            damping,
-            dt: 1.0 / rate,
+            // Negative damping is energy injection — a guaranteed blow-up.
+            damping: if damping.is_finite() {
+                damping.max(0.0)
+            } else {
+                0.0
+            },
+            dt,
             pickup: n / 3,
         }
     }
@@ -752,6 +776,30 @@ impl MassSpring {
 mod tests {
     use super::*;
     use crate::fft::{Complex, Plan};
+
+    #[test]
+    fn a_mass_spring_tuned_past_stability_stays_finite_and_bounded() {
+        // 20 kHz first mode at 48 kHz, eight masses, no damping: the top
+        // modes sit far past dt·ω < 2. Before the clamp this ran to ±∞.
+        for (hz, damping) in [(20_000.0, 0.0), (5_000.0, -50.0), (f64::NAN, 1.0)] {
+            let mut m = MassSpring::new(8, hz, damping, 48_000.0);
+            m.hit(2, 1.0);
+            let mut peak = 0.0f32;
+            for _ in 0..200_000 {
+                let y = m.tick();
+                assert!(y.is_finite(), "hz {hz}, damping {damping}: {y}");
+                peak = peak.max(y.abs());
+            }
+            assert!(peak < 1.0, "hz {hz}, damping {damping}: peak {peak}");
+        }
+    }
+
+    #[test]
+    fn the_stability_clamp_leaves_an_ordinary_tuning_alone() {
+        // 220 Hz is nowhere near the bound: the first mode is where it was asked.
+        let m = MassSpring::new(8, 220.0, 1.0, 48_000.0);
+        assert!((m.mode_hz(1) - 220.0).abs() < 1e-6, "{}", m.mode_hz(1));
+    }
 
     const RATE: f32 = 48_000.0;
 
