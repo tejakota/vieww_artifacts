@@ -95,6 +95,7 @@ pub mod automation;
 pub mod backend;
 pub mod channels;
 pub mod codec;
+pub mod denormal;
 pub mod device;
 pub mod dsp;
 pub mod fft;

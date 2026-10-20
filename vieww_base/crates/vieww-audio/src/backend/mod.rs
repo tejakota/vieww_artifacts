@@ -162,12 +162,22 @@ impl Counters {
 /// stream is flagged ended so [`DeviceStream::wait_for`] releases and
 /// `stop` runs; the slot poisons itself, so later blocks cost one atomic
 /// load instead of a re-panicked closure per block until teardown.
+///
+/// **Under `panic = "abort"` there is nothing to catch.** The workspace's
+/// `dist` profile — what ships, and what Device Farm measures — aborts on
+/// panic, so there a panicking render closure still ends the process; this
+/// isolation protects `dev`, `release` and `dist-unwind` builds. An
+/// application that wants a misbehaving callback to cost a stream rather
+/// than the process builds with `dist-unwind`.
 pub(crate) fn isolate_render(render: RenderFn, counters: &Arc<Counters>) -> RenderFn {
     let counters = Arc::clone(counters);
     let dead = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&dead);
     let mut render = render;
     Box::new(move |out, info| {
+        // Subnormals off for the block, the thread's own mode back after —
+        // see `crate::denormal`. Two register moves per callback.
+        let _ftz = crate::denormal::FlushDenormals::enable();
         if flag.load(Ordering::Acquire) {
             out.fill(0.0);
             return;
@@ -193,6 +203,7 @@ pub(crate) fn isolate_capture(capture: CaptureFn, counters: &Arc<Counters>) -> C
     let flag = Arc::clone(&dead);
     let mut capture = capture;
     Box::new(move |data, info| {
+        let _ftz = crate::denormal::FlushDenormals::enable();
         if flag.load(Ordering::Acquire) {
             return;
         }

@@ -52,6 +52,11 @@ struct Shared<J> {
     done: AtomicUsize,
     epoch: AtomicU64,
     quit: AtomicBool,
+    /// The caller's flush-to-zero mode for this block (`crate::denormal`),
+    /// which every worker adopts before rendering it: one render, one mode,
+    /// so the bit-identical-across-thread-counts guarantee holds whichever
+    /// mode the caller is in.
+    ftz: AtomicBool,
 }
 
 // SAFETY: a job and its buffer are touched by exactly one thread at a time:
@@ -125,6 +130,7 @@ impl<J: Render + 'static> Pool<J> {
             done: AtomicUsize::new(0),
             epoch: AtomicU64::new(0),
             quit: AtomicBool::new(false),
+            ftz: AtomicBool::new(false),
         });
         let workers = (0..threads)
             .filter_map(|k| {
@@ -151,6 +157,8 @@ impl<J: Render + 'static> Pool<J> {
                             if s.quit.load(Ordering::Acquire) {
                                 return;
                             }
+                            let _ftz =
+                                crate::denormal::FlushDenormals::set(s.ftz.load(Ordering::Acquire));
                             s.work();
                         }
                     })
@@ -219,6 +227,8 @@ impl<J: Render + 'static> Pool<J> {
     fn block(&self, frames: usize) {
         let s = &self.shared;
         s.frames.store(frames, Ordering::Release);
+        s.ftz
+            .store(crate::denormal::FlushDenormals::active(), Ordering::Release);
         s.done.store(0, Ordering::Release);
         s.next.store(0, Ordering::Release);
         s.epoch.fetch_add(1, Ordering::AcqRel);
@@ -404,6 +414,42 @@ mod tests {
         one.render(&mut out);
         assert_eq!(out[2], (0.01f32).sin() * 0.1);
         assert_eq!(out[3], -out[2]);
+    }
+
+    /// Writes a product that is subnormal when its thread is not flushing
+    /// and exactly zero when it is — a probe of whichever thread ran it.
+    struct Probe;
+
+    impl Render for Probe {
+        fn render(&mut self, out: &mut [f32]) {
+            let tiny = std::hint::black_box(f32::MIN_POSITIVE) * std::hint::black_box(0.5);
+            out.fill(tiny);
+        }
+    }
+
+    #[test]
+    fn every_worker_adopts_the_callers_flush_mode() {
+        if !crate::denormal::FlushDenormals::supported() {
+            return;
+        }
+        let probes = || (0..16).map(|_| Probe).collect::<Vec<_>>();
+        let mut serial = Pool::new(probes(), 0, 32);
+        let mut par = Pool::new(probes(), 3, 32);
+        for flush in [false, true] {
+            let _mode = crate::denormal::FlushDenormals::set(flush);
+            let mut a = vec![0.0; 64];
+            let mut b = vec![0.0; 64];
+            serial.render(&mut a);
+            par.render(&mut b);
+            // Uniform: threads do not change a bit, in either mode…
+            assert_eq!(a, b, "flush {flush}");
+            // …and the mode is the caller's, on every worker.
+            if flush {
+                assert!(b.iter().all(|v| *v == 0.0), "a worker did not flush");
+            } else {
+                assert!(b.iter().all(|v| *v > 0.0), "a worker flushed uninvited");
+            }
+        }
     }
 
     #[test]
