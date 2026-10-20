@@ -63,9 +63,17 @@ pub(crate) const UP_HEADROOM: f64 = 0.75;
 /// Consecutive windows that must clear [`UP_HEADROOM`] before going back up.
 pub(crate) const UP_WINDOWS: u32 = 3;
 
-/// A gap between frames longer than this many intervals means the animation
-/// stopped; the evidence so far describes a different stretch of work.
-const GAP_INTERVALS: u32 = 4;
+/// A gap between frames this long means the app went idle; the evidence so
+/// far describes a different stretch of work.
+///
+/// A second, not a few frame intervals. Interfaces draw in bursts — a tap,
+/// a flick, a keyboard sliding in — with pauses of a few hundred
+/// milliseconds between them, and a reset on every pause meant the policy
+/// almost never saw a whole window: Device Farm run 39437190809's S26 CPU
+/// pass drew 600 frames in 5.1 s, only 34 of its last 240 back to back, had
+/// 17 of them late at 120 Hz, and dropped to 60 Hz 1.3 s after the suite
+/// had already judged it. The stutter was there the whole time.
+const IDLE_RESET: Duration = Duration::from_secs(1);
 
 /// Frames in a window's first second are not evidence. Start-up is the
 /// slowest stretch an app has — the first raster, pipelines, fonts — and
@@ -142,9 +150,8 @@ impl Cadence {
     /// One drawn frame's `work` (without its wait for a buffer), finished at
     /// `now`. Returns the new rate when this frame decided a change.
     pub(crate) fn observe(&mut self, work: Duration, now: Duration) -> Option<f32> {
-        let interval = Self::budget(self.target_hz);
         if let Some(last) = self.last {
-            if now.saturating_sub(last) > interval * GAP_INTERVALS {
+            if now.saturating_sub(last) >= IDLE_RESET {
                 self.window.clear();
             }
         }
@@ -358,6 +365,28 @@ mod tests {
             decisions.is_empty(),
             "a bad window in the middle must reset the streak"
         );
+    }
+
+    #[test]
+    fn evidence_carries_across_the_pauses_between_bursts() {
+        let mut c = Cadence::new(120.0).unwrap();
+        let mut t = Duration::ZERO;
+        warmed(&mut c, &mut t);
+        // Bursts of 30 frames with 250 ms between them — taps and flicks —
+        // and 3 of every 30 late (10%, twice the allowance). The window
+        // fills across bursts, so the rate drops within a few of them.
+        let mut decisions = Vec::new();
+        for _ in 0..8 {
+            decisions.extend(run(&mut c, &mut t, 30, |i| {
+                if i % 10 == 0 {
+                    12.0
+                } else {
+                    6.0
+                }
+            }));
+            t += Duration::from_millis(250);
+        }
+        assert_eq!(decisions.first().copied(), Some(60.0), "{decisions:?}");
     }
 
     #[test]
