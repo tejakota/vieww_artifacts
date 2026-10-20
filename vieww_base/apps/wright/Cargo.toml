@@ -1,0 +1,47 @@
+# Wright — an agent harness where the user never writes code.
+#
+# One binary. Four libraries. One external dependency.
+#
+# ─────────────────────────────────────────────────────────────────
+# THE DEPENDENCY. Exactly one: vieww.
+#
+# Everything else this app needs is built in-house, deliberately
+# mimicking the proven designs of tools we studied (tokio's API
+# shape, rig's unified provider surface, reqwest's minimal client,
+# serde_json's value model, git's object store, Bazel's action
+# cache). See docs/DECISIONS.md ADR-002.
+#
+# Spike W-1 (docs/SPIKES.md) wires this in. The vieww_artifacts
+# repository carries its Rust workspace under `vieww_base/`; the
+# spike determines the exact git-dependency wiring (workspace-root
+# manifest or member-path patch) and pins a rev. Until then the
+# scaffold compiles headless-only, std-only, zero-dependency.
+# ─────────────────────────────────────────────────────────────────
+# vieww = { git = "https://github.com/tejakota/vieww_artifacts", rev = "<pinned-by-spike-W-1>" }
+
+[workspace]
+resolver = "2"
+members = ["app", "core", "runtime", "agents", "tools", "engine"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+authors = ["The Wright Authors"]
+rust-version = "1.89"
+
+[workspace.dependencies]
+wright-core = { path = "core" }
+wright-runtime = { path = "runtime" }
+wright-agents = { path = "agents" }
+wright-tools = { path = "tools" }
+wright-engine = { path = "engine" }
+
+# House style, enforced by review (see AGENTS.md):
+#   * std-only unless the crate is `app` (which may add vieww, and nothing else)
+#   * no unsafe outside runtime/src/executor.rs and runtime/src/tls.rs, and there
+#     only with a SAFETY comment
+#   * every module starts with a doc comment a sleepy engineer can parse at 3AM
+[profile.release]
+opt-level = 3
+lto = "thin"
