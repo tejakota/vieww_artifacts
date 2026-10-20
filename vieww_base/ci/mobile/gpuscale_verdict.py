@@ -53,7 +53,7 @@ import sys
 # RAM below LOW_MAX_KB is Low, below MEDIUM_MAX_KB is Medium, above is High;
 # four or fewer usable cores is Low regardless (the small-device catch).
 LOW_MAX_KB = 3 * 1024 * 1024
-MEDIUM_MAX_KB = 7 * 1024 * 1024
+MEDIUM_MAX_KB = 8 * 1024 * 1024
 
 _DURATION = re.compile(r"^(\d+(?:\.\d+)?)(ns|us|µs|ms|s)$")
 

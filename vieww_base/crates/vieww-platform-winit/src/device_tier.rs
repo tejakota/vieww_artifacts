@@ -35,11 +35,12 @@
 //! |---|---|---|---|
 //! | LG Stylo 5 | 2 GB | Low | CPU 36.2 ms, GPU 40.1 ms — both miss the budget |
 //! | Galaxy A36 | 6 GB | Medium | CPU 13.9 ms, GPU 6.8 ms — only the GPU passes |
-//! | Galaxy S20 | 8 GB | High | CPU 9–11 ms |
+//! | Galaxy A73 5G | 8 GB | Medium | CPU 22.8 ms, GPU 6.9 ms at a 120 Hz budget — only the GPU passes |
+//! | Galaxy S20 | 8 GB | Medium | CPU 9–11 ms |
 //! | Galaxy S26 Ultra | 12 GB | High | CPU 5.6 ms, GPU 2.2 ms |
 //! | iPhone 13 / 15 Plus | 4–6 GB | Medium | CPU 5.8–7.5 ms passes |
 //!
-//! RAM is the axis that separates them (2 / 6 / 8–12 GB); core count is the
+//! RAM is the axis that separates them (2 / 6–8 / 12 GB); core count is the
 //! tie-breaker for small devices whose RAM is unreadable. `VIEWW_DEVICE_TIER`
 //! (`low`, `medium`, `high`) overrides the assignment, for A/B runs that want
 //! one phone to take another's profile.
@@ -56,10 +57,12 @@ pub enum DeviceTier {
     /// Stylo 5 (2 GB, Adreno 506). Quality is the cheapest there is, and the
     /// question is whether the GPU path can be made to pass at all.
     Low,
-    /// The middle of the farm: the Galaxy A36 (6 GB), iPhone 13 (4 GB).
+    /// The middle of the farm: the Galaxy A36 (6 GB), A73 (8 GB), S20 (8 GB),
+    /// iPhone 13 (4 GB).
     /// Measurements decide the rasterizer; effects may run if they pay.
     Medium,
-    /// Where every path passes with room: the S26 Ultra (12 GB), S20 (8 GB).
+    /// Where every path passes with room: the S26 Ultra (12 GB) — more than
+    /// 8 GB of RAM.
     /// Full resolution, effects on.
     High,
 }
@@ -126,9 +129,15 @@ impl DeviceFacts {
 /// 2 GB and the next one up has 4 GB, and 3 GB sits between them with room
 /// for the 2.5 GB class in between.
 const LOW_MAX_KB: u64 = 3 * 1024 * 1024;
-/// RAM under which a device is [`DeviceTier::Medium`]: the A36 (6 GB) is the
-/// farm's middle phone, the S20 (8 GB) the bottom of the High band.
-const MEDIUM_MAX_KB: u64 = 7 * 1024 * 1024;
+/// RAM under which a device is [`DeviceTier::Medium`]: 8 GiB, so an 8 GB
+/// phone — whose kernel reports 7.1–7.7 GiB of it — is Medium. It was 7 GiB
+/// until Device Farm run 39382602099 (2026-10-20), which put the Galaxy A73
+/// (8 GB, MemTotal 7,477,188 kB, a mid-range SM7325) in High: High cache
+/// budgets and no resolution-scale eligibility, on the phone the audit's
+/// "mid-tier phone" targets mean. The same move takes the S20 (8 GB) from
+/// the bottom of High to the top of Medium; RAM cannot tell the two apart.
+/// High now starts above 8 GB (the S26 Ultra's 12 GB reads 10.9 GiB).
+const MEDIUM_MAX_KB: u64 = 8 * 1024 * 1024;
 
 /// Which tier a device with these facts gets. Nothing here is a benchmark —
 /// it is a policy about which measurements a device's quality defaults should
@@ -269,8 +278,23 @@ mod tests {
         );
         // Galaxy A36: 6 GB, 8 cores — the middle.
         assert_eq!(resolve_tier(Some(5_883_264), Some(8)), DeviceTier::Medium);
-        // Galaxy S20: 8 GB — High.
-        assert_eq!(resolve_tier(Some(7_700_000), Some(8)), DeviceTier::High);
+        // Galaxy A73 5G: 8 GB, run 39382602099's MemTotal — Medium. Under the
+        // old 7 GiB line it read High.
+        assert_eq!(resolve_tier(Some(7_477_188), Some(8)), DeviceTier::Medium);
+        // Galaxy S20: 8 GB — Medium too since that change (RAM is the only
+        // signal, and the two phones report the same class of it).
+        assert_eq!(resolve_tier(Some(7_700_000), Some(8)), DeviceTier::Medium);
+        // Galaxy S26 Ultra: 12 GB (10.9 GiB reported) — High.
+        assert_eq!(resolve_tier(Some(11_429_000), Some(8)), DeviceTier::High);
+        // The line itself: just under 8 GiB is Medium, 8 GiB is High.
+        assert_eq!(
+            resolve_tier(Some(8 * 1024 * 1024 - 1), Some(8)),
+            DeviceTier::Medium
+        );
+        assert_eq!(
+            resolve_tier(Some(8 * 1024 * 1024), Some(8)),
+            DeviceTier::High
+        );
         // A 4-core phone is Low whatever its RAM says: nothing that small
         // has ever passed the GPU budget in this repository's runs.
         assert_eq!(resolve_tier(Some(8_000_000), Some(4)), DeviceTier::Low);
