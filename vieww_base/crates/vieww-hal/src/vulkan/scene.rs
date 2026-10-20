@@ -44,7 +44,7 @@
 //! and are skipped outright when what they composite misses the damage.
 //!
 //! Two things make the kept pixels unusable, and the renderer checks both
-//! itself rather than trusting a caller ([`Retained`]): a frame of a
+//! itself rather than trusting a caller (`Retained`): a frame of a
 //! different size or clear colour, and a backdrop filter at the top level
 //! whose rectangle reaches outside the damage — it samples `L[0]` as drawn
 //! *so far this frame*, which outside the damage is last frame's finished

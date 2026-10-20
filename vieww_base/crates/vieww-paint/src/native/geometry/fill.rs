@@ -444,7 +444,7 @@ static PLATFORM_RASTER_THREADS: std::sync::atomic::AtomicUsize =
 /// The worker request this process's fills use when `VIEWW_RASTER_THREADS`
 /// is unset — `1` for the serial walk — in place of the core count. The
 /// platform layer calls it once, from the device tier, before the first
-/// frame; the request is read once ([`process_raster_thread_request`]), so a
+/// frame; the request is read once (`process_raster_thread_request`), so a
 /// call after the first non-rectangular fill has no effect. Pixels cannot
 /// move: every row is the same function of the outline either way.
 pub fn set_process_raster_threads(request: usize) {
