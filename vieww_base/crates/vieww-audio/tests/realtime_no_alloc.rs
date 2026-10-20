@@ -10,8 +10,16 @@
 //! post-fader sends, a keyed compressor, a lookahead limiter with delay
 //! compensation, metering and EBU R128 loudness), for multi-core voice
 //! rendering (the worker threads are counted too), and for reading a disk
-//! stream. It is the only test in this binary, so no other test's
-//! allocations can be counted against it.
+//! stream.
+//!
+//! **No test harness** (`harness = false` in Cargo.toml): the counter sees
+//! every thread in the process, and it has to — the voice workers and the
+//! disk reader are part of what is checked — so the process must contain
+//! nothing else. Under libtest it did not: the runner's own thread made 3
+//! allocations (852 bytes) while the render was armed in about one run in
+//! five on a loaded machine, none on the render thread, and failed CI's
+//! workspace test stage (run 39445768442) on a render path that allocated
+//! nothing. Here `main` is the whole program.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -41,7 +49,11 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static GLOBAL: Counting = Counting;
 
-#[test]
+fn main() {
+    rendering_allocates_nothing();
+    println!("realtime_no_alloc: the render path, mixer, parallel voices and disk stream allocate nothing");
+}
+
 fn rendering_allocates_nothing() {
     use vieww_audio::fx::filter::{Svf, SvfMode};
     use vieww_audio::fx::reverb::Freeverb;

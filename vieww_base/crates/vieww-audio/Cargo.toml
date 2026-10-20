@@ -20,3 +20,9 @@ vieww-foundation.workspace = true
 
 [lints]
 workspace = true
+
+# Counts every allocation in the process, so it runs without libtest's
+# threads; see the file's docs.
+[[test]]
+name = "realtime_no_alloc"
+harness = false
