@@ -63,7 +63,7 @@ on:
       # name jobs by their id, separated by spaces or commas — `cross`, or
       # `cross macos` — to re-run just the ones that went red against the
       # current commit. (GitHub's own "Re-run failed jobs" re-runs the *old*
-      # commit, so it cannot pick up a fix.) Ids: gate coverage cross
+      # commit, so it cannot pick up a fix.) Ids: audio-fuzz gate coverage cross
       # gpu-lavapipe macos windows android web ios-simulator android-emulator.
       # The wire check always runs (a few seconds, and it guards the two
       # copies of this file); the report always publishes, listing the legs
@@ -227,6 +227,11 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           cargo test -p vieww-paint --features native --lib simd -- --nocapture
+      # vieww-audio's flush-to-zero guard writes FPCR.FZ on aarch64 through
+      # inline assembly that no x86 machine executes; this is where it runs,
+      # along with the render pool's promise to mirror the caller's mode.
+      - name: Audio flush-to-zero on aarch64 (FPCR)
+        run: cargo test -p vieww-audio --lib -- denormal every_worker_adopts_the_callers_flush_mode
       - name: Metal suite on the runner's GPU
         env:
           VIEWW_REQUIRE_HARDWARE: gpu
@@ -320,6 +325,55 @@ jobs:
         with:
           name: web-readbacks
           path: ${{ runner.temp }}/web/out
+
+  # vieww-audio's decoders against hostile bytes: every cargo-fuzz target
+  # for a fixed time, seeded with the fixtures and the hostile corpus
+  # (crates/vieww-audio/tests/hostile, whose files every `cargo test` already
+  # replays on stable). cargo-fuzz needs nightly, hence a leg of its own.
+  # Reported, not blocking: a fuzzer find is a new bug to triage and add to
+  # the hostile corpus, not a regression in the change being run.
+  audio-fuzz:
+    name: Audio decoders under cargo-fuzz (nightly)
+    if: inputs.legs == 'all' || inputs.legs == '' || contains(format(',{0},', inputs.legs), ',audio-fuzz,') || contains(format(' {0} ', inputs.legs), ' audio-fuzz ') || contains(format(',{0} ', inputs.legs), ',audio-fuzz ') || contains(format(' {0},', inputs.legs), ' audio-fuzz,')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      FUZZ_SECONDS: "120"
+    defaults:
+      run:
+        shell: bash
+        working-directory: vieww_base/crates/vieww-audio
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nightly and cargo-fuzz
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo +nightly install cargo-fuzz --locked
+      - name: Seed each target's corpus
+        run: |
+          for t in $(cargo +nightly fuzz list); do
+            mkdir -p "fuzz/corpus/$t"
+            cp tests/fixtures/*.{wav,flac,mp3,ogg,aac,m4a,aiff} "fuzz/corpus/$t/" 2>/dev/null || true
+            cp tests/hostile/*.bin "fuzz/corpus/$t/"
+          done
+      - name: Fuzz every target
+        run: |
+          status=0
+          for t in $(cargo +nightly fuzz list); do
+            echo "::group::$t"
+            cargo +nightly fuzz run "$t" "fuzz/corpus/$t" -s none -- \
+              -max_total_time="$FUZZ_SECONDS" -rss_limit_mb=2048 -timeout=20 || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+      - name: Findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-fuzz-findings
+          path: vieww_base/crates/vieww-audio/fuzz/artifacts/
+          if-no-files-found: ignore
 
   android-device:
     name: Android device suite (self-hosted)
@@ -434,7 +488,7 @@ jobs:
   report:
     name: Publish results to ci-results/<branch>
     if: always()
-    needs: [wire, gate, coverage, cross, gpu-lavapipe, macos, windows, android, web, ios-simulator, android-emulator]
+    needs: [wire, gate, coverage, cross, gpu-lavapipe, macos, windows, android, web, ios-simulator, android-emulator, audio-fuzz]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
