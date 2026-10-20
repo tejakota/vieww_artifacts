@@ -81,6 +81,10 @@ pub struct Config {
     pub prices: Vec<(String, Price)>,
     /// The model the Interviewer uses (`interview model="..."`).
     pub interview_model: String,
+    /// The speech-to-text model voice input uses (`voice model="..."`).
+    /// Served by whichever OpenAI-compatible provider matches it, at
+    /// `<base>/audio/transcriptions`.
+    pub voice_model: String,
     pub source: String,
 }
 
@@ -152,6 +156,7 @@ impl Config {
                 price("mock-*", 0.0, 0.0, 0.0),
             ],
             interview_model: "claude-sonnet-5-5".into(),
+            voice_model: "whisper-1".into(),
             source: "built-in defaults".into(),
         }
     }
@@ -168,8 +173,25 @@ impl Config {
     /// Parse config text. Entries in the file come FIRST (they win),
     /// the built-ins stay behind them as defaults.
     pub fn parse(text: &str, source: &str) -> Result<Config, String> {
+        let mut cfg = Config::parse_file_only(text, source)?;
+        let b = Config::builtin();
+        cfg.providers.extend(b.providers);
+        cfg.prices.extend(b.prices);
+        if cfg.interview_model.is_empty() {
+            cfg.interview_model = b.interview_model;
+        }
+        if cfg.voice_model.is_empty() {
+            cfg.voice_model = b.voice_model;
+        }
+        Ok(cfg)
+    }
+
+    /// Exactly what the text says, without the built-in defaults behind
+    /// it. This is what Settings edits and writes back: saving the merged
+    /// config would copy every built-in into the user's file.
+    pub fn parse_file_only(text: &str, source: &str) -> Result<Config, String> {
         let doc = parse_doc(text).map_err(|e| format!("{source}: {e}"))?;
-        let mut cfg = Config { providers: Vec::new(), prices: Vec::new(), interview_model: String::new(), source: source.into() };
+        let mut cfg = Config { providers: Vec::new(), prices: Vec::new(), interview_model: String::new(), voice_model: String::new(), source: source.into() };
         for node in &doc {
             let s = |k: &str| node.prop_str(k).map(String::from);
             let num = |k: &str| -> Option<f64> {
@@ -210,16 +232,64 @@ impl Config {
                 "interview" => {
                     cfg.interview_model = s("model").ok_or_else(|| format!("{source}: line {}: interview needs model=\"...\"", node.line))?;
                 }
-                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview)", node.line)),
+                "voice" => {
+                    cfg.voice_model = s("model").ok_or_else(|| format!("{source}: line {}: voice needs model=\"...\"", node.line))?;
+                }
+                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview | voice)", node.line)),
             }
         }
-        let b = Config::builtin();
-        cfg.providers.extend(b.providers);
-        cfg.prices.extend(b.prices);
-        if cfg.interview_model.is_empty() {
-            cfg.interview_model = b.interview_model;
-        }
         Ok(cfg)
+    }
+
+    /// `config.kdl` as written (no built-ins); empty when there is no file.
+    pub fn load_file() -> Result<Config, String> {
+        let path = wright_home().join("config.kdl");
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        Config::parse_file_only(&text, &path.display().to_string())
+    }
+
+    /// The settings as config.kdl text, one line per entry. Parses back to
+    /// the same settings (tested below).
+    pub fn to_kdl(&self) -> String {
+        let q = |s: &str| format!("\"{}\"", wright_core::blueprint::canon::escape_string(s));
+        let mut out = String::from("// Wright settings. Settings in the app rewrites this file; a copy of the\n// previous version is kept as config.kdl.bak.\n");
+        for p in &self.providers {
+            let kind = match p.kind {
+                ProviderKind::Anthropic => "anthropic",
+                ProviderKind::OpenAi => "openai",
+            };
+            out.push_str(&format!("provider {} kind={} base={}", q(&p.name), q(kind), q(&p.base_url)));
+            if let Some(k) = &p.key {
+                out.push_str(&format!(" key={}", q(k)));
+            }
+            out.push_str(&format!(" models={}\n", q(&p.models.join(","))));
+        }
+        for (m, pr) in &self.prices {
+            out.push_str(&format!("price model={} in={} out={} cached={}\n", q(m), q(&pr.input.to_string()), q(&pr.output.to_string()), q(&pr.cached_input.to_string())));
+        }
+        if !self.interview_model.is_empty() {
+            out.push_str(&format!("interview model={}\n", q(&self.interview_model)));
+        }
+        if !self.voice_model.is_empty() {
+            out.push_str(&format!("voice model={}\n", q(&self.voice_model)));
+        }
+        out
+    }
+
+    /// Write [`to_kdl`](Self::to_kdl) to `~/.wright/config.kdl`, keeping the
+    /// previous file as `config.kdl.bak`. Refuses settings that would not
+    /// load back.
+    pub fn save_file(&self) -> Result<std::path::PathBuf, String> {
+        let text = self.to_kdl();
+        Config::parse_file_only(&text, "settings")?;
+        let dir = wright_home();
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let path = dir.join("config.kdl");
+        if path.exists() {
+            let _ = std::fs::copy(&path, dir.join("config.kdl.bak"));
+        }
+        crate::store::write_atomic(&path, text.as_bytes())?;
+        Ok(path)
     }
 
     pub fn provider_for(&self, model: &str) -> Option<&ProviderEntry> {
@@ -241,6 +311,19 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_written_by_the_app_read_back_the_same() {
+        let text = "provider \"local\" kind=\"openai\" base=\"http://127.0.0.1:11434/v1\" models=\"llama*,qwen*\"\n\
+price model=\"llama*\" in=0 out=0\ninterview model=\"qwen3\"\nvoice model=\"whisper-large\"\n";
+        let a = Config::parse_file_only(text, "t").unwrap();
+        let b = Config::parse_file_only(&a.to_kdl(), "t").unwrap();
+        assert_eq!(b.providers.len(), 1);
+        assert_eq!(b.providers[0].models, vec!["llama*", "qwen*"]);
+        assert_eq!(b.prices.len(), 1);
+        assert_eq!((b.interview_model.as_str(), b.voice_model.as_str()), ("qwen3", "whisper-large"));
+        assert!(Config::parse_file_only("", "t").unwrap().providers.is_empty(), "no file means no entries, not the built-ins");
+    }
 
     #[test]
     fn globs() {

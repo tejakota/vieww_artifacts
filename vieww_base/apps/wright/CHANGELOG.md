@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.3.0 — 2026-10-20 — "the workspace"
+
+A new window, built in vieww, and installers for three platforms.
+
+### The window (ADR-019)
+- **Opening:** the W draws itself, grows, softens, and settles as a pale
+  mark behind every page.
+- **Sessions in a row:** Home, one page per project, and a new-session page.
+  Two fingers sideways move between them; swiping past the last starts a
+  new one (its own folder under `~/Wright`, named from your first words).
+- **Overview:** every session as a card; × closes it into **Saved**
+  (Undo, the Saved shelf, Ctrl/Cmd+Shift+T reopen). Closing stops nothing.
+- **The engine, on request:** Space peeks at the live agents and tools,
+  E keeps them; steps run left to right, edges march while work flows,
+  tool chips light up as they are called, and an inspector shows what an
+  agent may touch and its live log.
+- **Approvals in the conversation:** Allow / Don't allow, or drag the
+  card right / left.
+- **Composer:** `+` attaches files or a folder (the system's own dialog,
+  or drop onto the window; files are copied into `artifacts/`), and the
+  mic turns speech into text (any OpenAI-compatible speech model:
+  `voice model="..."`).
+- **Settings:** models and keys (keys go to the OS keychain), defaults,
+  appearance (VS Code Dark/Light Modern, any accent colour), workspace
+  (projects folder, background schedules), and the project's model tiers
+  and spending limits (written to its blueprint, versioned).
+- **Status bar** in the VS Code manner: where you are, what is running,
+  today's spend, theme.
+
+### Installers (ADR-020)
+- `wright-release.yml`: Windows `.exe` installer, macOS universal `.dmg`,
+  Linux `.deb` and `.tar.gz`, each smoke-tested on its own OS.
+- `[profile.dist]` (LTO, stripped). LTO moved out of `release`, which
+  failed on Linux under vieww_base's `prefer-dynamic`.
+- `wright ui --icon <png>`: the app icon, rendered by the app.
+
+### Runtime
+- `wright_runtime::voice`: 16 kHz WAV and OpenAI-compatible transcription;
+  the mock provider answers `/audio/transcriptions`.
+- `Config::parse_file_only` / `to_kdl` / `save_file`: Settings writes
+  `config.kdl` (keeping `config.kdl.bak`) without copying the built-ins.
+
+### Tests
+- The UI is driven end to end headlessly: a run with a dragged approval,
+  swiping and its momentum lock, Space-peek, overview, close/Undo/reopen,
+  attachments, voice through the mock, accent persistence, project limits.
+- **Layout overflow is a failure:** `wright ui --snapshot` fails if any
+  widget overflowed while rendering (vieww's overflow gate).
+
 ## 0.2.0 — 2026-10-20 — "the engine runs"
 
 From a tested scaffold to a harness that builds, checks and delivers a

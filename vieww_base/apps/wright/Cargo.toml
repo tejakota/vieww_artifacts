@@ -11,20 +11,18 @@
 # serde_json's value model, git's object store, Bazel's action
 # cache). See docs/DECISIONS.md ADR-002.
 #
-# Spike W-1 (docs/SPIKES.md) wires this in. The vieww_artifacts
-# repository carries its Rust workspace under `vieww_base/`; the
-# spike determines the exact git-dependency wiring (workspace-root
-# manifest or member-path patch) and pins a rev. Until then the
-# scaffold compiles headless-only, std-only, zero-dependency.
+# Wright lives inside the vieww repository (`vieww_base/apps/wright`), so
+# the app depends on vieww by PATH (app/Cargo.toml): the same repository
+# at the same commit, by construction (ADR-011). The headless binary
+# (no `ui` feature) still has zero external crates.
 # ─────────────────────────────────────────────────────────────────
-# vieww = { git = "https://github.com/tejakota/vieww_artifacts", rev = "<pinned-by-spike-W-1>" }
 
 [workspace]
 resolver = "2"
 members = ["app", "core", "runtime", "agents", "tools", "engine"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 authors = ["The Wright Authors"]
@@ -39,9 +37,24 @@ wright-engine = { path = "engine" }
 
 # House style, enforced by review (see AGENTS.md):
 #   * std-only unless the crate is `app` (which may add vieww, and nothing else)
-#   * no unsafe outside runtime/src/executor.rs and runtime/src/tls.rs, and there
-#     only with a SAFETY comment
+#   * no unsafe outside runtime/src/tls.rs, tools/src/sandbox.rs and the
+#     Windows console call in app/src/ui/mod.rs, and there only with a
+#     SAFETY comment (AGENTS.md rule 2)
 #   * every module starts with a doc comment a sleepy engineer can parse at 3AM
 [profile.release]
 opt-level = 3
+
+# What the installers ship (`cargo build --profile dist`): release, plus
+# link-time optimisation and stripped symbols.
+#
+# LTO lives here rather than in `release` because vieww_base/.cargo/config.toml
+# builds Linux and macOS with `-C prefer-dynamic` (fast incremental links
+# for the framework's own development), and rustc refuses LTO together with
+# prefer-dynamic. The release workflow sets RUSTFLAGS explicitly, which
+# replaces that config, so the shipped binary is static Rust and fully
+# optimised; a plain `cargo build --release` keeps working on every machine.
+[profile.dist]
+inherits = "release"
 lto = "thin"
+codegen-units = 1
+strip = true

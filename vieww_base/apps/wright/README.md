@@ -13,7 +13,7 @@ affected work runs again.
 > Working name. *Wright* (Old English: maker): you write it, agents wright it,
 > the artifact is wrought. See `docs/DECISIONS.md` ADR-008.
 
-## Status: v0.2 — the engine works end to end
+## Status: v0.3 — the workspace
 
 | Area | v0.2 | Notes |
 |---|---|---|
@@ -28,13 +28,14 @@ affected work runs again.
 | Schedules: cron + IANA time zones (TZif), background daemon | ✅ | systemd / launchd unit installer |
 | Interview → Confirm Gate → blueprint | ✅ | the summary is code-generated |
 | Universal project convention (python, node, rust, shell) | ✅ | every skeleton's own tests pass with no installs |
-| vieww UI: Describe · Plan · Run · Result · Inspect | ✅ | headless snapshots; window path needs a display |
+| vieww window: sessions, swipe, overview, live engine, settings, voice, files | ✅ | driven end to end headlessly; see "The window" |
+| Installers: Windows, macOS, Linux | ✅ | `.github/workflows/wright-release.yml` (ADR-020) |
 | Secrets: OS keychain via `security` / `secret-tool`, env for CI | ✅ | Windows Credential Manager: not yet |
 | Recipes gallery, signing, MCP, server mode, teams | ❌ | see `docs/SPIKES.md` §v0.3 |
 
-**184 tests passing (plus 1 live-network test, opt-in), clippy clean, zero warnings.** The headless binary has **zero**
-external crates; the `ui` feature adds exactly one dependency — the vieww
-repository at a pinned commit (ADR-002, ADR-011).
+**191 tests passing (plus 1 live-network test, opt-in), clippy clean, zero warnings.** The headless binary has **zero**
+external crates; the `ui` feature adds exactly one dependency — vieww, from
+the repository Wright lives in, by path (ADR-002, ADR-011).
 
 ## Quick start (offline, in two minutes)
 
@@ -63,6 +64,33 @@ With real models: `wright secret set keychain:wright/anthropic` (or
 from the config. On CI and servers, set `WRIGHT_SECRET_WRIGHT_ANTHROPIC`
 instead (`wright secret env <ref>` prints the variable name).
 
+## The window
+
+```
+ wright        HN Daily Digest  ● ━ ○        All sessions  Engine  ⚙  ?
+ ┌─────────────────────────────────────────────────────────────────────┐
+ │  [Home] [HN Daily Digest] [Word Count CLI] [new]  <- two fingers    │
+ │                                                                     │
+ │   your request                                         (bubble)     │
+ │   Run 3 · running      ✓ Collect  ◌ Summarize  ○ Check  ○ Send      │
+ │   Mailer is asking before it touches the world   [Allow] [Don't]    │
+ │   + │ Ask for a change…                                  mic  send  │
+ └─────────────────────────────────────────────────────────────────────┘
+ ▌wright  HN Daily Digest  ● Running · Summarizer working   $0.004  Dark
+```
+
+| Do | How |
+|---|---|
+| Next / previous session | two fingers sideways (or ← →) |
+| New session | swipe past the last one, or type on Home |
+| Every session at once | **All sessions** (or `O`); × closes into Saved |
+| Reopen a closed session | Undo, the Saved shelf, or Ctrl/Cmd+Shift+T |
+| See the agents and tools, live | hold **Space** to peek; `E` keeps them |
+| Approve | the buttons, or drag the card right (allow) / left (refuse) |
+| Attach files | `+` in the composer, or drop them on the window |
+| Speak | the mic (needs a speech model: `voice model="whisper-1"`) |
+| Settings | ⚙, or Ctrl/Cmd+, — models & keys, defaults, appearance, workspace, project |
+
 ## The commands
 
 ```
@@ -79,7 +107,8 @@ wright daemon               fire schedules in the background
 wright secret set <ref>     put a key in the OS keychain
 wright where [dir]          where the project's history lives
 wright doctor               what works on this machine
-wright ui [dir]             the vieww shell (--snapshot <dir> for PNGs)
+wright ui [dir]             the window (--snapshot <dir>: every screen as PNG;
+                            --icon <png> [--size N] [--padded]: the app icon)
 ```
 
 ## What a firing looks like

@@ -23,8 +23,10 @@ sandbox; the event spine records everything durably for resume and replay.
    (mimicking a proven design, cited in the PR) or argue for an exception
    in a new ADR. `wright-core` stays std-only, always.
 2. **Unsafe only where the OS must be called**: `runtime/src/tls.rs` (the
-   OpenSSL FFI) and `tools/src/sandbox.rs` (Landlock, namespaces,
-   `pre_exec`). Every block carries a `// SAFETY:` comment. The executor
+   OpenSSL FFI), `tools/src/sandbox.rs` (Landlock, namespaces,
+   `pre_exec`) and, on Windows only, `app/src/ui/mod.rs`
+   (`release_private_console`: two kernel32 calls so a double-clicked app
+   has no console window). Every block carries a `// SAFETY:` comment. The executor
    has zero unsafe; keep it that way.
 3. **No crypto, ever, by hand.** TLS reaches the OS backend. Hashing ports
    the public-domain BLAKE3 reference (pinned to official vectors). Any

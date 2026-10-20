@@ -31,3 +31,4 @@ pub mod secrets;
 pub mod store;
 pub mod tls;
 pub mod tz;
+pub mod voice;

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Wright
+GenericName=Agent harness
+Comment=Describe the outcome; agents build, check and deliver it
+Exec=wright
+Icon=wright
+Terminal=false
+Categories=Development;
+Keywords=agents;ai;automation;
+StartupWMClass=Wright

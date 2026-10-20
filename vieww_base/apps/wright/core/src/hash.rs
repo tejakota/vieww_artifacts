@@ -112,8 +112,8 @@ fn first_8_words(compression_output: [u32; 16]) -> [u32; 8] {
 }
 
 fn words_from_le_bytes(bytes: &[u8], words: &mut [u32]) {
-    for (word, chunk) in words.iter_mut().zip(bytes.chunks_exact(4)) {
-        *word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+    for (word, chunk) in words.iter_mut().zip(bytes.as_chunks::<4>().0) {
+        *word = u32::from_le_bytes(*chunk);
     }
 }
 

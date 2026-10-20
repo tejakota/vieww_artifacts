@@ -86,6 +86,13 @@ fn handle(stream: TcpStream, n: usize) -> std::io::Result<()> {
     let mut body = vec![0u8; len.min(64 << 20)];
     reader.read_exact(&mut body)?;
     let mut out = stream;
+    // Speech-to-text (voice input): answer with how much audio arrived, so
+    // a test can tell the recording reached the provider.
+    if line.split_whitespace().nth(1).is_some_and(|path| path.ends_with("/audio/transcriptions")) {
+        let text = format!("mock transcript of {} bytes", body.len());
+        let answer = json::to_string(&Value::obj(vec![("text", Value::str(text))]));
+        return write!(out, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}", answer.len());
+    }
     let req = match json::parse(&String::from_utf8_lossy(&body)) {
         Ok(v) => v,
         Err(e) => return respond_status(&mut out, 400, &format!("bad json: {e}")),

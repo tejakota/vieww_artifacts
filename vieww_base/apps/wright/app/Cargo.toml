@@ -28,10 +28,14 @@ wright-tools = { workspace = true }
 wright-engine = { workspace = true }
 
 # ── THE dependency ─────────────────────────────────────────────────
-# vieww, from the vieww_artifacts repository at a pinned commit. Two
-# crates of that ONE repository: the umbrella (`vieww`, with its native
-# renderer) and its desktop platform layer (`vieww-platform-winit`).
-# ADR-011 records why "one dependency" means "one repository at one
-# pinned rev": the umbrella crate deliberately does not contain a window.
-vieww = { git = "https://github.com/tejakota/vieww_artifacts", rev = "a3e00194d7bc3331e6857420a0f1287b3f6d1a40", features = ["native"], optional = true }
-vieww-platform-winit = { git = "https://github.com/tejakota/vieww_artifacts", rev = "a3e00194d7bc3331e6857420a0f1287b3f6d1a40", optional = true }
+# vieww, from the repository Wright lives in (`vieww_base/crates/`).
+# Two crates of that ONE repository: the umbrella (`vieww`, with its
+# native renderer) and its desktop platform layer (`vieww-platform-winit`).
+# ADR-011: "one dependency" means one repository at one commit — and a
+# path dependency inside the same repository IS the same commit, by
+# construction. (Before Wright moved into `vieww_base/apps/wright` this
+# was a git dependency pinned to a rev; a path dependency also spares
+# CI a second clone of the whole repository, which on Windows tripped
+# over path-length limits in the film folders.)
+vieww = { path = "../../../crates/vieww", features = ["native"], optional = true }
+vieww-platform-winit = { path = "../../../crates/vieww-platform-winit", optional = true }

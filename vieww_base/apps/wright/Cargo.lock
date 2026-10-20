@@ -2801,7 +2801,6 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vieww"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-animation",
  "vieww-asset",
@@ -2825,7 +2824,6 @@ dependencies = [
 [[package]]
 name = "vieww-animation"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
 ]
@@ -2833,7 +2831,6 @@ dependencies = [
 [[package]]
 name = "vieww-asset"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "image",
  "vieww-foundation",
@@ -2842,7 +2839,6 @@ dependencies = [
 [[package]]
 name = "vieww-audio"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
 ]
@@ -2850,7 +2846,6 @@ dependencies = [
 [[package]]
 name = "vieww-effects"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
  "vieww-widget",
@@ -2859,7 +2854,6 @@ dependencies = [
 [[package]]
 name = "vieww-element"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-animation",
  "vieww-foundation",
@@ -2870,7 +2864,6 @@ dependencies = [
 [[package]]
 name = "vieww-embed"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
  "vieww-widget",
@@ -2879,7 +2872,6 @@ dependencies = [
 [[package]]
 name = "vieww-foundation"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "unicode-segmentation",
 ]
@@ -2887,7 +2879,6 @@ dependencies = [
 [[package]]
 name = "vieww-gestures"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-animation",
  "vieww-foundation",
@@ -2896,7 +2887,6 @@ dependencies = [
 [[package]]
 name = "vieww-gpu"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "lyon_tessellation",
  "vieww-foundation",
@@ -2906,7 +2896,6 @@ dependencies = [
 [[package]]
 name = "vieww-hal"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "ash",
  "ash-window",
@@ -2919,7 +2908,6 @@ dependencies = [
 [[package]]
 name = "vieww-image"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
 ]
@@ -2927,7 +2915,6 @@ dependencies = [
 [[package]]
 name = "vieww-mesh"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
 ]
@@ -2935,7 +2922,6 @@ dependencies = [
 [[package]]
 name = "vieww-network"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
 ]
@@ -2943,7 +2929,6 @@ dependencies = [
 [[package]]
 name = "vieww-paint"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "png",
  "skrifa 0.44.0",
@@ -2954,7 +2939,6 @@ dependencies = [
 [[package]]
 name = "vieww-physics"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
 ]
@@ -2962,7 +2946,6 @@ dependencies = [
 [[package]]
 name = "vieww-platform-winit"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "accesskit",
  "accesskit_android",
@@ -2993,7 +2976,6 @@ dependencies = [
 [[package]]
 name = "vieww-render"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-animation",
  "vieww-element",
@@ -3007,7 +2989,6 @@ dependencies = [
 [[package]]
 name = "vieww-render-graph"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
  "vieww-scene",
@@ -3016,7 +2997,6 @@ dependencies = [
 [[package]]
 name = "vieww-render-planner"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
  "vieww-paint",
@@ -3027,7 +3007,6 @@ dependencies = [
 [[package]]
 name = "vieww-scene"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
  "vieww-paint",
@@ -3036,7 +3015,6 @@ dependencies = [
 [[package]]
 name = "vieww-shaders"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "naga",
 ]
@@ -3044,7 +3022,6 @@ dependencies = [
 [[package]]
 name = "vieww-spatial"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-animation",
  "vieww-foundation",
@@ -3053,7 +3030,6 @@ dependencies = [
 [[package]]
 name = "vieww-text"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "cosmic-text",
  "ttf-parser",
@@ -3063,7 +3039,6 @@ dependencies = [
 [[package]]
 name = "vieww-video"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-foundation",
  "vieww-image",
@@ -3072,7 +3047,6 @@ dependencies = [
 [[package]]
 name = "vieww-widget"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "vieww-animation",
  "vieww-foundation",
@@ -3083,7 +3057,6 @@ dependencies = [
 [[package]]
 name = "vieww-widget-macros"
 version = "0.1.0"
-source = "git+https://github.com/tejakota/vieww_artifacts?rev=a3e00194d7bc3331e6857420a0f1287b3f6d1a40#a3e00194d7bc3331e6857420a0f1287b3f6d1a40"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3645,7 +3618,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wright"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "vieww",
  "vieww-platform-winit",
@@ -3658,18 +3631,18 @@ dependencies = [
 
 [[package]]
 name = "wright-agents"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "wright-core",
 ]
 
 [[package]]
 name = "wright-core"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "wright-engine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "wright-agents",
  "wright-core",
@@ -3679,14 +3652,14 @@ dependencies = [
 
 [[package]]
 name = "wright-runtime"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "wright-core",
 ]
 
 [[package]]
 name = "wright-tools"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "wright-core",
  "wright-runtime",

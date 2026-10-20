@@ -302,6 +302,54 @@ verdict — a model saying "done" is never the proof.
 **Why.** From the v0.2 product review: a graph of nine system agents is a
 great explanation for an engineer and an obstacle for everyone else.
 
+## ADR-019 — One window, many sessions, moved with gestures · Accepted
+
+Supersedes the five-screen rail of ADR-018 (its rules stand: plan before
+machinery, proof on the result, engineering on demand).
+
+**Decision.** The window is a row of full pages: Home, one page per
+session (a session IS a project folder), and a new-session page at the
+end. Two fingers sideways move along the row; swiping past the last page
+starts a new session; the overview (button or `O`) shows every session as
+a card with × to close it into **Saved** (closing never stops schedules or
+deletes anything; Undo, the Saved shelf and Ctrl/Cmd+Shift+T bring it
+back). The agents and tools are a layer *under* the conversation: hidden,
+peeked with Space, kept with E. Settings holds models and keys (keys to
+the OS keychain), defaults, appearance (any accent colour; every accent
+role is derived from it), the workspace, and the project's own limits
+(written to its blueprint, so they are versioned like any edit). The
+composer takes files (`+`, or drop on the window) and voice (the mic,
+transcribed by an OpenAI-compatible `voice model`).
+
+**Why.** The v0.3 brief: "flowy, gesturey, live", for people who never
+want to see a graph unless they ask.
+
+**Two vieww facts this design works around** (reported upstream, not
+patched here):
+1. *Pinch is not delivered.* winit's touchpad pinch is not forwarded by
+   `vieww-platform-winit`, and `ScrollEvent` has no modifiers (so
+   Ctrl+wheel cannot stand in). The overview is a button and a key until
+   it is.
+2. *Layers ignore a parent's scale.* A scroll view is a repaint boundary
+   with its own layer, and a `Transformed` ancestor's scale is not applied
+   to it — a shrunk page draws its scrolling part full size. The overview
+   therefore draws miniature cards instead of scaled live pages.
+
+## ADR-020 — Installers are built by CI from scripts anyone can run · Accepted
+
+**Decision.** `.github/workflows/wright-release.yml` builds Windows (Inno
+Setup, per-user), macOS (universal `.app` in a `.dmg`, ad-hoc signed) and
+Linux (`.deb` + `.tar.gz`) from `packaging/`, smoke-tests every binary on
+its own OS (version, plan, headless screens), and publishes a release
+only when asked. The app icon is rendered by the app (`wright ui --icon`)
+from the same painter as the in-app mark. The shipped binary is built with
+`--profile dist` (LTO, stripped) and explicit RUSTFLAGS, which replace
+vieww_base's `prefer-dynamic` development setting.
+
+**Not yet.** Code signing and notarization (they need certificates held as
+secrets), and TLS/sandbox on macOS and Windows (W-5b, W-6b) — the release
+notes say so in a table, per platform.
+
 ---
 
 ## Open questions (honest ledger)
