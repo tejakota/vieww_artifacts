@@ -52,7 +52,9 @@ fn boxes(b: &[u8]) -> Vec<([u8; 4], &[u8])> {
             ),
             n => (8, n as usize),
         };
-        if size < hdr || at + size > b.len() {
+        // `b.len() - at`, not `at + size`: a 64-bit size near `usize::MAX`
+        // (a hostile `size == 1` box) would overflow the sum.
+        if size < hdr || size > b.len() - at {
             break;
         }
         out.push((kind, &b[at + hdr..at + size]));
@@ -295,6 +297,24 @@ pub fn audio_track(file: &[u8]) -> Result<AudioTrack, CodecError> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_huge_64_bit_box_size_is_refused_not_overflowed() {
+        // An empty box first, so the hostile one starts at offset 8: then
+        // `offset + size` overflows. size32 == 1: the real size follows as
+        // 64 bits, here u64::MAX - 3.
+        let mut b = Vec::new();
+        b.extend_from_slice(&8u32.to_be_bytes());
+        b.extend_from_slice(b"free");
+        b.extend_from_slice(&1u32.to_be_bytes());
+        b.extend_from_slice(b"moov");
+        b.extend_from_slice(&(u64::MAX - 3).to_be_bytes());
+        b.extend_from_slice(&[0; 16]);
+        let found = super::boxes(&b);
+        assert_eq!(found.len(), 1, "only the empty box");
+        assert_eq!(&found[0].0, b"free");
+    }
+
     use super::*;
 
     #[test]
