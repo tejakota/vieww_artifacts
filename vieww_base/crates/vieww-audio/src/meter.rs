@@ -216,6 +216,11 @@ pub struct TruePeak {
 
 const TP_TAPS: usize = 24;
 
+/// How many samples behind its input [`TruePeak::tick`]'s estimate is: the
+/// group delay of the 4×`TP_TAPS`-tap interpolator, in input samples
+/// ((4·24 − 1) / 2 / 4 ≈ 11.9, rounded to the sample at or before the peak).
+pub const TRUE_PEAK_DELAY: usize = TP_TAPS / 2 - 1;
+
 impl Default for TruePeak {
     fn default() -> Self {
         Self::new()

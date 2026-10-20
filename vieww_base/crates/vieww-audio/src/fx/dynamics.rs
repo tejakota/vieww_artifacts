@@ -277,8 +277,20 @@ pub struct Limiter {
     sum: f64,
     release: f32,
     env: f32,
+    /// True-peak detection, when asked for ([`Limiter::true_peak`]).
+    tp: Option<Box<TruePeakStage>>,
     /// The last applied gain (for a meter).
     pub gain: f32,
+}
+
+/// The true-peak front end: a BS.1770 4× interpolating detector per channel,
+/// and the audio held back by the detector's group delay so the estimate
+/// arrives with the frame it describes.
+#[derive(Debug, Clone)]
+struct TruePeakStage {
+    det: [crate::meter::TruePeak; 2],
+    hold: std::collections::VecDeque<(f32, f32)>,
+    prev: f32,
 }
 
 impl Limiter {
@@ -312,19 +324,76 @@ impl Limiter {
             sum,
             release: coeff(release, rate),
             env: 1.0,
+            tp: None,
             gain: 1.0,
         }
     }
 
-    /// Latency in samples.
+    /// A limiter whose ceiling is a **true-peak** ceiling (dBTP, ITU-R
+    /// BS.1770 Annex 2) rather than a sample-peak one.
+    ///
+    /// A waveform can peak *between* samples — by up to ~3 dB at high
+    /// frequencies — and a DAC's reconstruction, or the next lossy encode,
+    /// plays that peak. Broadcast and streaming delivery specs (EBU R128,
+    /// −1 dBTP; most platforms, −1 or −2 dBTP) set their ceilings in true
+    /// peak for exactly this reason. The requirement here is taken from a
+    /// 4× interpolating detector per channel (`meter::TruePeak`), with the
+    /// audio delayed by the detector's group delay so the estimate meets the
+    /// frame it belongs to; the extra delay is part of
+    /// [`latency`](Self::latency), so the mixer's delay compensation keeps
+    /// the bus aligned.
+    ///
+    /// The ceiling holds as the BS.1770 meter measures it — the same 4×
+    /// detector a loudness meter or a delivery check runs. That detector can
+    /// read a few tenths of a dB under the continuous waveform near Nyquist
+    /// (0.17 dB on a quarter-rate sine at its worst phase), so, as delivery
+    /// specs themselves do, leave that much headroom: a −1 dBTP limiter for a
+    /// −1 dBTP spec is at the edge; −1.2 is not.
+    #[must_use]
+    pub fn true_peak(ceiling_dbtp: f32, lookahead: f32, release: f32, rate: f32) -> Self {
+        let mut lim = Self::new(ceiling_dbtp, lookahead, release, rate);
+        let mut hold = std::collections::VecDeque::with_capacity(crate::meter::TRUE_PEAK_DELAY + 1);
+        for _ in 0..crate::meter::TRUE_PEAK_DELAY {
+            hold.push_back((0.0, 0.0));
+        }
+        lim.tp = Some(Box::new(TruePeakStage {
+            det: [crate::meter::TruePeak::new(), crate::meter::TruePeak::new()],
+            hold,
+            prev: 0.0,
+        }));
+        lim
+    }
+
+    /// Latency in samples: the lookahead, plus the true-peak detector's
+    /// group delay when [`true_peak`](Self::true_peak) built it.
     #[must_use]
     pub const fn latency(&self) -> usize {
-        self.len
+        if self.tp.is_some() {
+            self.len + crate::meter::TRUE_PEAK_DELAY
+        } else {
+            self.len
+        }
     }
 
     /// Limit one stereo frame (linked).
     pub fn process_frame(&mut self, l: f32, r: f32) -> (f32, f32) {
-        let peak = l.abs().max(r.abs());
+        // True-peak mode: the frame entering the limiter is the one the
+        // detector's latest estimate describes, and its requirement is that
+        // estimate (over this and the previous interval, so the peak's
+        // neighbours on both sides are covered) — never less than the
+        // frame's own sample peak.
+        let (l, r, inter) = match self.tp.as_deref_mut() {
+            Some(tp) => {
+                let t = tp.det[0].tick(l).max(tp.det[1].tick(r));
+                let both = t.max(tp.prev);
+                tp.prev = t;
+                tp.hold.push_back((l, r));
+                let (dl, dr) = tp.hold.pop_front().unwrap_or((0.0, 0.0));
+                (dl, dr, both)
+            }
+            None => (l, r, 0.0),
+        };
+        let peak = l.abs().max(r.abs()).max(inter);
         let need = if peak > self.ceiling {
             self.ceiling / peak
         } else {
@@ -379,7 +448,7 @@ impl super::Stereo for Limiter {
     }
 
     fn latency(&self) -> usize {
-        self.len
+        Limiter::latency(self)
     }
 }
 
@@ -720,6 +789,82 @@ mod tests {
         }
         assert!(max_out <= ceil + 1e-5, "{max_out} > {ceil}");
         assert!(max_out > ceil * 0.9, "actually limiting near the ceiling");
+    }
+
+    /// The peak a 4× meter sees on `x` from frame `from` on, in dBTP. The
+    /// meter runs over the whole signal: started cold mid-signal, its
+    /// interpolator would ring on the step from its empty history and
+    /// over-read.
+    fn true_peak_dbtp(x: &[f32], from: usize) -> f32 {
+        let mut m = crate::meter::TruePeak::new();
+        let mut p = 0.0f32;
+        for (i, v) in x.iter().enumerate() {
+            let t = m.tick(*v);
+            if i >= from {
+                p = p.max(t);
+            }
+        }
+        20.0 * p.log10()
+    }
+
+    /// fs/4 at 45°: every sample is ±0.707, the waveform peaks at 1.0 —
+    /// 3 dB of over that a sample-peak limiter cannot see.
+    fn inter_sample_overs(frames: usize) -> Vec<f32> {
+        let s = std::f32::consts::FRAC_1_SQRT_2;
+        (0..frames).map(|i| [s, s, -s, -s][i % 4]).collect()
+    }
+
+    #[test]
+    fn a_sample_peak_limiter_lets_inter_sample_overs_through() {
+        // The problem, pinned: samples at 0.707 sit under a −1 dB ceiling,
+        // so nothing is limited, and the reconstructed peak is 0 dBTP.
+        let x = inter_sample_overs(9_600);
+        let mut lim = Limiter::new(-1.0, 0.002, 0.05, RATE);
+        let y: Vec<f32> = x.iter().map(|v| lim.process(*v)).collect();
+        assert!(true_peak_dbtp(&y, 2_000) > -0.2);
+    }
+
+    #[test]
+    fn a_true_peak_limiter_holds_its_ceiling_between_samples() {
+        let x = inter_sample_overs(9_600);
+        let mut lim = Limiter::true_peak(-1.0, 0.002, 0.05, RATE);
+        let y: Vec<f32> = x.iter().map(|v| lim.process(*v)).collect();
+        let tp = true_peak_dbtp(&y, 2_000);
+        assert!(
+            tp <= -1.0 + 0.05,
+            "true peak {tp} dBTP over a −1 dBTP ceiling"
+        );
+        assert!(tp > -2.0, "limiting, not muting: {tp}");
+        // Music-like input: bursts of noise at +12 dB, both channels.
+        let mut lim = Limiter::true_peak(-1.0, 0.002, 0.05, RATE);
+        let mut r = Rng::new(3);
+        let (mut l_out, mut r_out) = (Vec::new(), Vec::new());
+        for i in 0..96_000 {
+            let burst = if (i / 4000) % 2 == 0 { 4.0 } else { 0.3 };
+            let v = r.bipolar() * burst;
+            let (l, rr) = lim.process_frame(v, -v * 0.7);
+            l_out.push(l);
+            r_out.push(rr);
+        }
+        for (name, ch) in [("left", &l_out), ("right", &r_out)] {
+            let tp = true_peak_dbtp(ch, 1_000);
+            assert!(tp <= -1.0 + 0.05, "{name}: {tp} dBTP");
+        }
+    }
+
+    #[test]
+    fn a_true_peak_limiter_is_transparent_below_its_ceiling_and_reports_its_delay() {
+        let mut lim = Limiter::true_peak(0.0, 0.001, 0.05, RATE);
+        let lat = lim.latency();
+        assert_eq!(
+            lat,
+            Limiter::new(0.0, 0.001, 0.05, RATE).latency() + crate::meter::TRUE_PEAK_DELAY
+        );
+        let x: Vec<f32> = (0..2000).map(|i| ((i as f32) * 0.01).sin() * 0.5).collect();
+        let y: Vec<f32> = x.iter().map(|v| lim.process(*v)).collect();
+        for i in 0..1800 {
+            assert!((y[i + lat] - x[i]).abs() < 1e-6, "frame {i}");
+        }
     }
 
     #[test]

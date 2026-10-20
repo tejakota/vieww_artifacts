@@ -370,7 +370,20 @@ pub fn saturate(buf: &mut [f32], drive: f32) {
     }
 }
 
-/// Look-ahead peak limiter: output never exceeds `ceiling`.
+/// Look-ahead peak limiter for a **whole buffer at once**: output never
+/// exceeds `ceiling`.
+///
+/// Offline only, by construction: [`process`](Self::process) takes `&self`,
+/// so no gain or look-ahead survives from one call to the next. Over a
+/// complete render that is exactly right — it sees every peak before it
+/// happens. Called per block in a real-time chain it is wrong twice over:
+/// the gain jumps back to unity at every block boundary (pumping, and a
+/// click wherever a block starts mid-reduction), and a peak at the start of
+/// a block cannot be anticipated, so only the final clamp — a hard clip —
+/// catches it. It also allocates per call. For streaming, use
+/// [`fx::dynamics::Limiter`](crate::fx::dynamics::Limiter): stateful,
+/// allocation-free, latency-compensated by the mixer, and with a true-peak
+/// mode.
 #[derive(Debug, Clone)]
 pub struct Limiter {
     pub ceiling: f32,
