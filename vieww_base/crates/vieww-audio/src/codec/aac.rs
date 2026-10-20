@@ -778,7 +778,9 @@ impl Decoder {
                 6 => {
                     let mut n = rd(&mut r, 4)? as usize;
                     if n == 15 {
-                        n += rd(&mut r, 8)? as usize - 1;
+                        // cnt = 15 + esc_count - 1 (ISO 14496-3 fill_element);
+                        // add before subtracting, or esc_count 0 underflows.
+                        n = n + rd(&mut r, 8)? as usize - 1;
                     }
                     r.skip(n * 8).ok_or(CodecError::Truncated)?;
                 }
@@ -906,11 +908,12 @@ pub fn decode_adts(bytes: &[u8]) -> Result<Decoded, CodecError> {
     let d = dec.ok_or(CodecError::NotThisFormat)?;
     let ch = d.channels.max(1);
     reorder(&mut out, ch, cfg);
-    Ok(Decoded {
+    Decoded {
         data: out,
         channels: u8::try_from(ch).unwrap_or(2),
         rate,
-    })
+    }
+    .validated()
 }
 
 /// Decode AAC in an MP4/M4A container.
@@ -954,11 +957,12 @@ pub fn decode_mp4(bytes: &[u8]) -> Result<Decoded, CodecError> {
     if let Some(p) = t.play {
         data.truncate(usize::try_from(p).unwrap_or(usize::MAX) * ch);
     }
-    Ok(Decoded {
+    Decoded {
         data,
         channels: u8::try_from(ch).unwrap_or(2),
         rate,
-    })
+    }
+    .validated()
 }
 
 #[cfg(test)]

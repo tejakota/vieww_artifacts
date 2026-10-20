@@ -13,9 +13,12 @@ use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     if let Ok((m, _)) = vieww_audio::wav::read_wav_multi(data) {
-        assert!(m.rate >= 1 && m.rate <= 768_000, "rate {}", m.rate);
+        assert!(vieww_audio::codec::RATE_RANGE.contains(&m.rate), "rate {}", m.rate);
         let ch = m.layout.channels();
-        assert!(ch >= 1 && ch <= 32, "channels {ch}");
+        assert!(
+            ch >= 1 && ch <= usize::from(vieww_audio::codec::MAX_CHANNELS),
+            "channels {ch}"
+        );
         // The reader caps allocation by the declared frame count; the
         // returned data must not exceed it.
         assert!(

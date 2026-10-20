@@ -11,13 +11,15 @@
 
 /// Check a successful decode.
 pub fn check(d: &vieww_audio::codec::Decoded) {
+    // The bounds every decoder enforces on its way out
+    // (`codec::Decoded::validated`) — one definition, not a second guess.
     assert!(
-        d.rate >= 1 && d.rate <= 768_000,
+        vieww_audio::codec::RATE_RANGE.contains(&d.rate),
         "sample rate out of range: {}",
         d.rate
     );
     assert!(
-        d.channels >= 1 && d.channels <= 32,
+        d.channels >= 1 && d.channels <= vieww_audio::codec::MAX_CHANNELS,
         "channel count out of range: {}",
         d.channels
     );
@@ -33,5 +35,10 @@ pub fn check(d: &vieww_audio::codec::Decoded) {
         assert!(v.is_finite(), "non-finite sample in the output");
         peak = peak.max(v.abs());
     }
-    assert!(peak <= 32.0, "runaway magnitude in the output: {peak}");
+    // Decoders conceal any block past `RUNAWAY` (+18 dBFS), so nothing past
+    // it may survive a decode.
+    assert!(
+        peak <= vieww_audio::codec::RUNAWAY,
+        "runaway magnitude in the output: {peak}"
+    );
 }

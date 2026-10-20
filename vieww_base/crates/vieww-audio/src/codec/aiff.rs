@@ -133,11 +133,12 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, CodecError> {
         .chunks_exact(width)
         .map(decode_one)
         .collect();
-    Ok(Decoded {
+    Decoded {
         data,
         channels: u8::try_from(ch).unwrap_or(u8::MAX),
         rate,
-    })
+    }
+    .validated()
 }
 
 /// Encode big-endian integer AIFF (`bits` 16 or 24).

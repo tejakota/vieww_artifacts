@@ -86,11 +86,12 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, CodecError> {
         .iter()
         .map(|v| (f64::from(*v) * scale) as f32)
         .collect();
-    Ok(Decoded {
+    Decoded {
         data,
         channels: info.channels,
         rate: info.rate,
-    })
+    }
+    .validated()
 }
 
 /// Decode to interleaved integers at the stream's own bit depth.
@@ -395,10 +396,21 @@ fn restore_fixed(s: &mut [i32], order: usize) {
     for i in order..s.len() {
         let p = match order {
             0 => 0,
+            // Wrapping, like the `wrapping_add` below: an honest stream
+            // never overflows here, and a hostile one must not panic (a
+            // debug-build "multiply with overflow" the fuzzer reached). Release
+            // builds already wrapped, so their output is unchanged.
             1 => s[i - 1],
-            2 => 2 * s[i - 1] - s[i - 2],
-            3 => 3 * s[i - 1] - 3 * s[i - 2] + s[i - 3],
-            _ => 4 * s[i - 1] - 6 * s[i - 2] + 4 * s[i - 3] - s[i - 4],
+            2 => s[i - 1].wrapping_mul(2).wrapping_sub(s[i - 2]),
+            3 => s[i - 1]
+                .wrapping_mul(3)
+                .wrapping_sub(s[i - 2].wrapping_mul(3))
+                .wrapping_add(s[i - 3]),
+            _ => s[i - 1]
+                .wrapping_mul(4)
+                .wrapping_sub(s[i - 2].wrapping_mul(6))
+                .wrapping_add(s[i - 3].wrapping_mul(4))
+                .wrapping_sub(s[i - 4]),
         };
         s[i] = s[i].wrapping_add(p);
     }
@@ -828,6 +840,20 @@ pub fn encode(d: &Decoded, bits: u8) -> Result<Vec<u8>, CodecError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_fixed_predictor_wraps_instead_of_overflowing() {
+        // Hostile residuals (found by fuzzing): every order must wrap, not
+        // panic — tests build with overflow checks, so this is the check.
+        for order in 1..=4 {
+            let mut s = vec![i32::MAX, i32::MIN, i32::MAX, i32::MIN, 7, -7, i32::MAX];
+            restore_fixed(&mut s, order);
+        }
+        // And honest input means what it always meant: an order-2 line.
+        let mut s = vec![1, 2, 0, 0, 0];
+        restore_fixed(&mut s, 2);
+        assert_eq!(s, [1, 2, 3, 4, 5]);
+    }
 
     fn wav_ints(bytes: &[u8], bits: u16) -> Vec<i32> {
         // Read PCM straight from the data chunk (16- or 24-bit LE).

@@ -1081,11 +1081,12 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, CodecError> {
     }
     let s = (start * nch).min(pcm.len());
     let e = (s + total * nch).min(pcm.len());
-    Ok(Decoded {
+    Decoded {
         data: pcm[s..e].to_vec(),
         channels: u8::try_from(nch).unwrap_or(2),
         rate: fh.rate,
-    })
+    }
+    .validated()
 }
 
 #[cfg(test)]

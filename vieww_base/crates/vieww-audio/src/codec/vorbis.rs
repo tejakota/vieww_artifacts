@@ -1379,11 +1379,12 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, CodecError> {
             out.truncate(want);
         }
     }
-    Ok(Decoded {
+    Decoded {
         data: out,
         channels: u8::try_from(ch).unwrap_or(u8::MAX),
         rate: s.rate,
-    })
+    }
+    .validated()
 }
 
 #[cfg(test)]

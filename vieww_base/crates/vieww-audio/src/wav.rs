@@ -279,6 +279,15 @@ pub fn read_wav_header(head: &[u8], file_len: u64) -> Result<(WavInfo, u64, u64)
             if channels == 0 {
                 return Err(PcmError::Unsupported("zero channels"));
             }
+            // The same shape every codec decoder is held to
+            // (`codec::Decoded::validated`): a header claiming 0 Hz, a
+            // gigahertz, or hundreds of channels is corrupt, not audio.
+            if !crate::codec::RATE_RANGE.contains(&rate) {
+                return Err(PcmError::Unsupported("a sample rate out of range"));
+            }
+            if channels > u16::from(crate::codec::MAX_CHANNELS) {
+                return Err(PcmError::Unsupported("more channels than supported"));
+            }
             info = Some(WavInfo {
                 format,
                 channels,
@@ -425,6 +434,13 @@ fn decode(bytes: &[u8]) -> Result<(Vec<f32>, WavInfo), PcmError> {
     if channels == 0 {
         return Err(PcmError::Unsupported("zero channels"));
     }
+    // As in `read_wav_multi`: the shape every decoder is held to.
+    if !crate::codec::RATE_RANGE.contains(&rate) {
+        return Err(PcmError::Unsupported("a sample rate out of range"));
+    }
+    if channels > u16::from(crate::codec::MAX_CHANNELS) {
+        return Err(PcmError::Unsupported("more channels than supported"));
+    }
     let width = format.bytes();
     let frame = width * usize::from(channels);
     let usable = data.len() / frame * frame;
@@ -553,6 +569,25 @@ pub fn write_wav_format(
 mod tests {
     use super::*;
     use crate::{Envelope, Tone, Waveform};
+
+    #[test]
+    fn a_header_claiming_an_impossible_rate_or_channel_count_is_refused() {
+        let good = write_wav(&tone(48_000, 64)).unwrap();
+        assert!(read_wav(&good).is_ok() && read_wav_multi(&good).is_ok());
+        let at = good.windows(4).position(|w| w == b"fmt ").unwrap() + 8;
+        for (rate, channels) in [(0u32, None), (2_000_000, None), (48_000, Some(65u16))] {
+            let mut b = good.clone();
+            b[at + 4..at + 8].copy_from_slice(&rate.to_le_bytes());
+            if let Some(ch) = channels {
+                b[at + 2..at + 4].copy_from_slice(&ch.to_le_bytes());
+            }
+            assert!(read_wav(&b).is_err(), "read_wav: {rate} Hz, {channels:?}");
+            assert!(
+                read_wav_multi(&b).is_err(),
+                "read_wav_multi: {rate} Hz, {channels:?}"
+            );
+        }
+    }
 
     fn tone(rate: u32, frames: usize) -> Samples {
         #[expect(

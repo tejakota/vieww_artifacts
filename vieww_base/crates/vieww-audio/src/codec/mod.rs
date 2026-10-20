@@ -38,7 +38,58 @@ pub struct Decoded {
     pub rate: u32,
 }
 
+/// Sample rates a decoder may report: anything else in a header is a
+/// corrupt or hostile file, not audio a mixer can resample.
+pub const RATE_RANGE: std::ops::RangeInclusive<u32> = 1..=768_000;
+
+/// Most channels a decoder may report — 7th-order ambisonics (64), and the
+/// ceiling the device backends clamp to. A count past it is a corrupt
+/// header, and past 255 it could not even be stored in [`Decoded::channels`]
+/// (decoders used to report `u8::MAX` while interleaving by the real count).
+pub const MAX_CHANNELS: u8 = 64;
+
+/// A decoded sample beyond this magnitude (+18 dBFS) is corruption, not
+/// signal: legitimate codec overshoot stays well under 2, while a hostile
+/// global gain or scale factor drives the dequantiser into the millions —
+/// what a mutation fuzzer found in MP3, AAC and MP4 by the hundred
+/// (2026-10-20). Blocks containing such a sample are concealed.
+pub const RUNAWAY: f32 = 8.0;
+
+/// Concealment granularity, in frames: a corrupt run is muted in blocks of
+/// this size rather than sample by sample, so what is left is silence, not
+/// clipped fragments of garbage at the block edges.
+const CONCEAL_FRAMES: usize = 1024;
+
 impl Decoded {
+    /// The last step of every decoder: refuse a shape no mixer can use, and
+    /// conceal what no listener should hear.
+    ///
+    /// * A sample rate outside [`RATE_RANGE`] or a channel count outside
+    ///   `1..=`[`MAX_CHANNELS`] is [`CodecError::Malformed`].
+    /// * Any block of [`CONCEAL_FRAMES`] frames holding a non-finite sample
+    ///   or one beyond [`RUNAWAY`] is replaced by silence — frame-level error
+    ///   concealment, what production decoders do with a corrupt frame,
+    ///   instead of handing the mixer a NaN (which poisons every node it
+    ///   reaches) or a sample in the millions.
+    ///
+    /// Legitimate decodes pass through bit-for-bit: the fixtures, graded
+    /// against ffmpeg, never come near either bound.
+    pub(crate) fn validated(mut self) -> Result<Self, CodecError> {
+        if !RATE_RANGE.contains(&self.rate) {
+            return Err(CodecError::Malformed("sample rate out of range"));
+        }
+        if self.channels == 0 || self.channels > MAX_CHANNELS {
+            return Err(CodecError::Malformed("channel count out of range"));
+        }
+        let block = CONCEAL_FRAMES * usize::from(self.channels);
+        for chunk in self.data.chunks_mut(block) {
+            if chunk.iter().any(|v| !v.is_finite() || v.abs() > RUNAWAY) {
+                chunk.fill(0.0);
+            }
+        }
+        Ok(self)
+    }
+
     /// Frames.
     #[must_use]
     pub fn frames(&self) -> usize {
@@ -168,11 +219,12 @@ pub fn decode(bytes: &[u8]) -> Result<Decoded, CodecError> {
         Format::Wav => {
             let (m, _) =
                 crate::wav::read_wav_multi(bytes).map_err(|_| CodecError::Malformed("WAV"))?;
-            Ok(Decoded {
+            Decoded {
                 channels: u8::try_from(m.layout.channels()).unwrap_or(u8::MAX),
                 data: m.data,
                 rate: m.rate,
-            })
+            }
+            .validated()
         }
         Format::Aiff => aiff::decode(bytes),
         Format::Flac => flac::decode(bytes),
@@ -228,6 +280,73 @@ pub(crate) fn s16le(b: &[u8]) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A clean, varied mono signal well inside full scale — no casts, so
+    /// no precision lints to argue with.
+    fn signal(frames: usize) -> Vec<f32> {
+        std::iter::successors(Some(0.0f32), |x| Some(x + 0.013))
+            .take(frames)
+            .map(|x| x.sin() * 0.9)
+            .collect()
+    }
+
+    #[test]
+    fn validated_refuses_shapes_no_mixer_can_use() {
+        let shaped = |rate: u32, channels: u8| {
+            Decoded {
+                data: vec![0.0; usize::from(channels.max(1)) * 4],
+                channels,
+                rate,
+            }
+            .validated()
+        };
+        assert!(shaped(48_000, 2).is_ok());
+        assert!(shaped(*RATE_RANGE.end(), MAX_CHANNELS).is_ok());
+        assert!(shaped(0, 2).is_err(), "0 Hz");
+        assert!(
+            shaped(RATE_RANGE.end() + 1, 2).is_err(),
+            "past the rate range"
+        );
+        assert!(shaped(48_000, 0).is_err(), "no channels");
+        assert!(
+            shaped(48_000, MAX_CHANNELS + 1).is_err(),
+            "too many channels"
+        );
+    }
+
+    #[test]
+    fn validated_conceals_corrupt_blocks_and_leaves_the_rest_bit_exact() {
+        let clean = signal(CONCEAL_FRAMES * 3);
+        let ok = |data: Vec<f32>| {
+            Decoded {
+                data,
+                channels: 1,
+                rate: 44_100,
+            }
+            .validated()
+            .unwrap()
+            .data
+        };
+        // A runaway sample mutes exactly its own block.
+        let mut data = clean.clone();
+        data[CONCEAL_FRAMES + 7] = 1.0e7;
+        let out = ok(data);
+        assert_eq!(out[..CONCEAL_FRAMES], clean[..CONCEAL_FRAMES]);
+        assert!(out[CONCEAL_FRAMES..2 * CONCEAL_FRAMES]
+            .iter()
+            .all(|v| *v == 0.0));
+        assert_eq!(out[2 * CONCEAL_FRAMES..], clean[2 * CONCEAL_FRAMES..]);
+        // So does a non-finite one.
+        let mut data = clean.clone();
+        data[5] = f32::NAN;
+        let out = ok(data);
+        assert!(out[..CONCEAL_FRAMES].iter().all(|v| *v == 0.0));
+        assert_eq!(out[CONCEAL_FRAMES..], clean[CONCEAL_FRAMES..]);
+        // Legitimate codec overshoot is signal, and passes untouched.
+        let mut data = clean;
+        data[9] = 1.6;
+        assert_eq!(ok(data.clone()), data);
+    }
 
     #[test]
     fn sniffs_every_fixture() {
