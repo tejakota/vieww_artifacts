@@ -1,0 +1,52 @@
+// blueprint.kdl — Word Count CLI
+//
+// A project-building example: one agent writes code and tests inside the
+// universal skeleton; the checks run in the sandbox; nothing is delivered
+// anywhere, so no network and no approvals are needed.
+
+meta {
+    name "Word Count CLI"
+    format 1
+}
+
+intent {
+    summary "A small command-line tool that counts words, lines and characters in files, with tests and CI."
+    confirmed "v1"
+}
+
+project {
+    language "python"
+}
+
+agent Builder {
+    goal "Implement `wc`-style counting in src/word_count_cli/ with a main() entry point and unit tests in tests/"
+    model tier="quality"
+    tools "files-read"
+    tools "files-list"
+    tools "files-write"
+    tools "edit"
+    tools "run-tests"
+    out "build-notes.md"
+    permissions files-read=true files-write=true spawn=true
+}
+
+chips {
+    logging on
+    tests on
+    ci on
+}
+
+guardrails {
+    budget per-firing=1000000 daily=5000000
+    wall-clock 600
+    max-turns 60
+}
+
+deliverable kind="code" {
+    check "Running the tool on a sample file prints correct counts, and every test passes"
+}
+
+models {
+    tier cheap prefer="claude-haiku-5-5" fallback="deepseek-v4-flash"
+    tier quality prefer="claude-sonnet-5-5" fallback="glm-5.2"
+}

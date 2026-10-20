@@ -1,0 +1,19 @@
+# wright-tools — tool implementations behind the permission gate.
+#
+# Every tool takes a `Permit` (from wright-runtime's gate), so the gate
+# is the only path to a tool, enforced by the type system.
+[package]
+name = "wright-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+wright-core = { workspace = true }
+wright-runtime = { workspace = true }
+
+[dev-dependencies]
+# Tests mint permits directly; the shipped binary cannot.
+wright-runtime = { workspace = true, features = ["test-permits"] }

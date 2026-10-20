@@ -1,0 +1,4 @@
+# Fetch git dependencies with the system git (honors corporate proxies
+# and credential helpers).
+[net]
+git-fetch-with-cli = true

@@ -1,0 +1,17 @@
+# wright-core — the pure heart of the harness.
+#
+# Blueprint model + parser + canonical form + validation + diff,
+# the compiler (blueprint -> task graph), the event spine types,
+# and the wire protocols (json / http / sse).
+#
+# No UI. No vieww. No I/O side effects. No unsafe. std-only.
+[package]
+name = "wright-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Intentionally empty. This is the point.

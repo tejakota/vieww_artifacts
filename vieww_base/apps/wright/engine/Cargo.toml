@@ -1,0 +1,17 @@
+# wright-engine — the firing: agent loops, orchestration, the interview,
+# the scheduler, and the mock provider used by tests and demos.
+#
+# Depends on the other Wright crates and nothing else.
+[package]
+name = "wright-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+wright-core = { workspace = true }
+wright-runtime = { workspace = true }
+wright-agents = { workspace = true }
+wright-tools = { workspace = true }

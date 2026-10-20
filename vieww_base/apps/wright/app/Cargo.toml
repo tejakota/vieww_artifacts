@@ -1,0 +1,37 @@
+# wright — the app.
+#
+# One binary: the CLI, the engine, the scheduler daemon, and (with the
+# `ui` feature) the vieww shell. The ONE external dependency is vieww,
+# and it is only pulled in by the `ui` feature, so CI and servers can
+# build a headless binary with zero external crates.
+[package]
+name = "wright"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "wright"
+path = "src/main.rs"
+
+[features]
+default = []
+ui = ["dep:vieww", "dep:vieww-platform-winit"]
+
+[dependencies]
+wright-core = { workspace = true }
+wright-runtime = { workspace = true }
+wright-agents = { workspace = true }
+wright-tools = { workspace = true }
+wright-engine = { workspace = true }
+
+# ── THE dependency ─────────────────────────────────────────────────
+# vieww, from the vieww_artifacts repository at a pinned commit. Two
+# crates of that ONE repository: the umbrella (`vieww`, with its native
+# renderer) and its desktop platform layer (`vieww-platform-winit`).
+# ADR-011 records why "one dependency" means "one repository at one
+# pinned rev": the umbrella crate deliberately does not contain a window.
+vieww = { git = "https://github.com/tejakota/vieww_artifacts", rev = "a3e00194d7bc3331e6857420a0f1287b3f6d1a40", features = ["native"], optional = true }
+vieww-platform-winit = { git = "https://github.com/tejakota/vieww_artifacts", rev = "a3e00194d7bc3331e6857420a0f1287b3f6d1a40", optional = true }

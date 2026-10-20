@@ -1,0 +1,85 @@
+// blueprint.kdl — HN Daily Digest
+//
+// One file. The whole project. The source of truth.
+// Committed by the Confirm Gate at v7; every approved REFINE is a commit.
+//
+// The user never writes this file — the Interview condenses it live and
+// the canvas edits it through gestures. Inspector Mode shows it on demand,
+// because "invisible" must never mean "uninspectable".
+
+meta {
+    name "HN Daily Digest"
+    format 1
+    min-app "0.1.0"
+    created "2026-10-20T11:14:09+05:30"
+    lineage "recipe://hn-digest@2.1.0"
+}
+
+intent {
+    summary "Daily digest of top HN stories, summarized, emailed at 8am."
+    confirmed "v7"
+}
+
+// ── project agents (the visible workforce) ──────────────────────
+
+agent Fetcher {
+    goal "Fetch top 30 HN stories: id, title, url, points"
+    model tier="cheap"
+    tools "http-read"
+    out "stories.json"
+    permissions network=true
+}
+
+agent Summarizer {
+    goal "Write a punchy two-sentence summary per story"
+    model tier="quality"
+    memory scope="firing"
+    in "stories.json"
+    out "summaries.json"
+}
+
+agent Mailer {
+    goal "Compose and send the digest email"
+    model tier="cheap"
+    tools "http-post"
+    in "summaries.json"
+    out "receipt.eml"
+    approval "before-send"
+    retries 0              // never double-send on failure
+    permissions network=true
+}
+
+// ── topology: drag = dependent, drop apart = independent ────────
+
+edge from="Fetcher" to="Summarizer"
+edge from="Summarizer" to="Mailer"
+
+// ── capability chips: each one injects system agents ────────────
+
+chips {
+    scheduling cron="0 8 * * *" tz="Asia/Kolkata"
+    secrets smtp="keychain:wright/hn-digest/smtp"
+    logging on
+    tests on
+}
+
+// ── guardrails: enforced at compile-time, never at 3AM ──────────
+
+guardrails {
+    budget per-firing=500000 daily=3000000   // micro-USD: $0.50 / $3.00
+    wall-clock 300
+    max-turns 40
+}
+
+// ── the definition of done ──────────────────────────────────────
+
+deliverable kind="email" {
+    check "Mail received 08:00-08:05 local, every story present, no dead links"
+}
+
+// ── model tiers: models are commodities, route accordingly ──────
+
+models {
+    tier cheap prefer="deepseek-v4-flash" fallback="glm-5.3-flash"
+    tier quality prefer="claude-opus-4.6" fallback="gpt-5.2"
+}

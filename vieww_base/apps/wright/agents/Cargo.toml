@@ -1,0 +1,15 @@
+# wright-agents — the system workforce.
+#
+# Prompts and contracts for the agents the compiler injects. No logic,
+# no I/O: this crate is the workforce's job descriptions. The runtime
+# reads them when a system task fires.
+[package]
+name = "wright-agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+wright-core = { workspace = true }

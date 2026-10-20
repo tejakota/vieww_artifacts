@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  /* Diagram: the Wright compiler pipeline. Rendered at 1300x420 CSS px,
+     screenshotted at 2x, embedded at ~450pt in the PDF.
+     Palette: cascade seed 42 (bronze family), low-saturation fills. */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #ffffff; font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; }
+  .canvas { width: 1300px; padding: 30px 24px; background: #ffffff; }
+
+  .flow {
+    display: flex; flex-wrap: nowrap; align-items: stretch;
+    gap: 0; max-width: 100%;
+  }
+  .node {
+    flex: 1 1 auto; min-width: 150px; max-width: 100%;
+    background: #f2f1f0;
+    border: 2px solid #c5bfac;
+    border-top: 5px solid #92761f;
+    border-radius: 6px;
+    padding: 20px 16px 18px 16px;
+    text-align: center;
+  }
+  .node .stage {
+    font-size: 15px; letter-spacing: 2.5px; font-weight: 700;
+    color: #92761f; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .node .name {
+    font-size: 30px; font-weight: 700; color: #151513;
+    margin-bottom: 8px; line-height: 1.15;
+  }
+  .node .desc {
+    font-size: 22px; font-weight: 400; color: #7e7c74; line-height: 1.35;
+  }
+  .node + .node { margin-left: 64px; position: relative; }
+  .node + .node::before {
+    content: '';
+    position: absolute; left: -48px; top: 50%;
+    width: 32px; height: 3px; background: #92761f;
+  }
+  .node + .node::after {
+    content: '';
+    position: absolute; left: -20px; top: 50%;
+    transform: translateY(-50%);
+    border-left: 12px solid #92761f;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+  }
+
+  .spine-wrap { margin-top: 56px; position: relative; }
+  .spine-tick {
+    position: absolute; top: -32px; height: 32px; width: 3px;
+    background: #c5bfac;
+  }
+  .spine {
+    background: #4e4732;
+    border-radius: 6px;
+    padding: 18px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px;
+  }
+  .spine .label {
+    font-size: 26px; font-weight: 700; color: #ffffff;
+    letter-spacing: 1px; white-space: nowrap;
+  }
+  .spine .powers {
+    font-size: 21px; font-weight: 400; color: #d8d4c8;
+    text-align: right; line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="flow">
+      <div class="node">
+        <div class="stage">Describe</div>
+        <div class="name">Intent</div>
+        <div class="desc">your words; the Interviewer drafts</div>
+      </div>
+      <div class="node">
+        <div class="stage">Plan</div>
+        <div class="name">Blueprint</div>
+        <div class="desc">you confirm a summary written by code</div>
+      </div>
+      <div class="node">
+        <div class="stage">Run</div>
+        <div class="name">Agents</div>
+        <div class="desc">stages behind the gate, sandboxed</div>
+      </div>
+      <div class="node">
+        <div class="stage">Verify</div>
+        <div class="name">Result</div>
+        <div class="desc">tested + reviewed before delivery</div>
+      </div>
+      <div class="node">
+        <div class="stage">Refine</div>
+        <div class="name">Refire</div>
+        <div class="desc">only what changed runs again</div>
+      </div>
+    </div>
+    <div class="spine-wrap">
+      <div class="spine-tick" style="left: 98px;"></div>
+      <div class="spine-tick" style="left: 649px;"></div>
+      <div class="spine-tick" style="left: 1162px;"></div>
+      <div class="spine">
+        <div class="label">Event spine</div>
+        <div class="powers">append-only &middot; fsynced &middot; resume after a crash &middot; replay, never re-execution &middot; receipts</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
