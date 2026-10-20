@@ -127,6 +127,8 @@ pub struct FrameLog {
     /// existing hook keeps compiling and keeps meaning what it meant, because
     /// a single-window application only ever sees `PRIMARY`.
     window: WindowKey,
+    /// Times the window's frame rate changed (`crate::cadence`).
+    cadence_switches: u32,
 }
 
 impl FrameLog {
@@ -150,6 +152,7 @@ impl FrameLog {
             // The overwhelmingly common case, and the right default for a log
             // built by a test that has no windows at all.
             window: WindowKey::PRIMARY,
+            cadence_switches: 0,
         }
     }
 
@@ -216,6 +219,13 @@ impl FrameLog {
     /// retrospectively would make two reports of the same run disagree.
     pub const fn set_budget(&mut self, budget: Duration) {
         self.budget = budget;
+    }
+
+    /// Note that the window's frame rate changed to `hz`
+    /// (`crate::cadence`); [`set_budget`](Self::set_budget) has already
+    /// moved the budget, and this counts the change for the report.
+    pub const fn note_cadence(&mut self, _hz: f32) {
+        self.cadence_switches += 1;
     }
 
     /// Record a frame that was presented at `at`, having cost `work`.
@@ -487,6 +497,7 @@ impl FrameLog {
 
         FrameReport {
             median_stages: self.stage_medians(),
+            cadence_switches: self.cadence_switches,
             frames: self.frames,
             gpu_frames: self.gpu_frames,
             gpu_direct_frames: self.gpu_direct_frames,
@@ -622,6 +633,11 @@ pub struct FrameReport {
     /// for why these do not add up to [`median_work`](Self::median_work).
     /// All zero when no frame recorded stages.
     pub median_stages: FrameStages,
+    /// Times the frame rate changed during the run — the panel's rate and a
+    /// steady 60 Hz (`crate::cadence`). [`budget`](Self::budget) is the rate
+    /// it ended at; frames were judged against the budget in force when they
+    /// were drawn.
+    pub cadence_switches: u32,
 }
 
 impl FrameReport {
@@ -708,6 +724,14 @@ impl fmt::Display for FrameReport {
                 ms(s.gpu.readback),
                 ms(s.acquire),
                 ms(s.present),
+            )?;
+        }
+        if self.cadence_switches > 0 {
+            write!(
+                f,
+                "; frame rate changed {} time(s), ending at {:.0} Hz",
+                self.cadence_switches,
+                1.0 / self.budget.as_secs_f64().max(f64::MIN_POSITIVE),
             )?;
         }
         Ok(())

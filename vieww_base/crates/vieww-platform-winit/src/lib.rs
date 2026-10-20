@@ -78,6 +78,7 @@ pub(crate) mod a11y;
 #[cfg(target_os = "android")]
 mod a11y_android;
 mod app;
+mod cadence;
 pub mod clipboard;
 pub mod crash;
 pub mod deep_links;

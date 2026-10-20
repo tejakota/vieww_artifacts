@@ -792,6 +792,18 @@ mod demo {
             // Before the event loop and every worker the app starts, as below.
             std::env::set_var("VIEWW_PERF_HINT", "1");
         }
+        // `debug.vieww.cadence=panel`: keep the panel's refresh rate even when
+        // it cannot be held (`VIEWW_CADENCE`, `vieww_platform_winit`'s
+        // `cadence` module) — for a measurement that wants every frame judged
+        // against the panel's budget rather than the adapted one.
+        let cadence = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.cadence")
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_default();
+        if cadence == "panel" {
+            std::env::set_var("VIEWW_CADENCE", "panel");
+        }
         // `debug.vieww.scale=<auto|0.25..1.0>`: the GPU path renders the plan
         // into targets a fraction of the swapchain's size and the final blit
         // enlarges (`VIEWW_GPU_SCALE`, `vieww_platform_winit::quality`) — the

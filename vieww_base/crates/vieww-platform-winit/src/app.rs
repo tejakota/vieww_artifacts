@@ -1201,6 +1201,17 @@ struct WindowState {
     /// per refresh interval (the scheduler's budget, which follows the
     /// monitor) is what the swapchain would have allowed.
     cpu_paced_until: Option<Duration>,
+    /// Which rate this window draws at, when its panel's can be traded for a
+    /// steady 60 Hz — see `crate::cadence`. `None` for a panel at 60 Hz, an
+    /// application that stated its rate, or `VIEWW_CADENCE=panel`.
+    cadence: Option<crate::cadence::Cadence>,
+    /// While the cadence is below the panel's rate: the frame-start grid
+    /// `(anchor, interval)` frames are paced on. A grid rather than "one
+    /// interval after the last frame started", because the latter drifts
+    /// against vsync and on a panel left at 120 Hz turns a steady two-vsync
+    /// cadence into a mix of one and two — the unevenness the lower rate is
+    /// there to remove.
+    pace_grid: Option<(Duration, Duration)>,
     /// What this window clears to.
     ///
     /// Per window rather than read from the config, because [`WindowSpec`](vieww_render::window::WindowSpec) lets a
@@ -1378,9 +1389,20 @@ impl WindowState {
         }
         self.scheduler.set_refresh_rate(hz);
         self.log.set_budget(self.scheduler.budget());
+        self.pace_grid = None;
+        self.cadence = if crate::cadence::disabled() {
+            None
+        } else {
+            crate::cadence::Cadence::new(hz)
+        };
         log::info!(
-            "vieww: {} reports {hz:.1}Hz; frame budget follows it",
-            self.key
+            "vieww: {} reports {hz:.1}Hz; frame budget follows it{}",
+            self.key,
+            if self.cadence.is_some() {
+                ", falling to 60 Hz while it cannot be held"
+            } else {
+                ""
+            }
         );
     }
 
@@ -1658,6 +1680,30 @@ impl WindowState {
                     gpu.run_chore(chore);
                 }
                 self.log.note_stages(gpu.renderer.last_stages());
+                // **The rate this window can hold** (`crate::cadence`), judged
+                // on the frame's own work: the wait for a buffer is the pacing
+                // itself, and counting it would pin a lowered rate down.
+                if let Some(cadence) = &mut self.cadence {
+                    let own = work.saturating_sub(gpu.renderer.last_stages().acquire);
+                    let from = cadence.target_hz();
+                    if let Some(hz) = cadence.observe(own, shared.now()) {
+                        self.scheduler.set_refresh_rate(hz);
+                        self.log.set_budget(self.scheduler.budget());
+                        self.log.note_cadence(hz);
+                        self.pace_grid = None;
+                        self.cpu_paced_until = None;
+                        let asked = crate::cadence::request(&gpu.window, hz);
+                        log::info!(
+                            "vieww: {} frame rate {from:.0} -> {hz:.0} Hz on a {:.0} Hz panel; {asked}",
+                            self.key,
+                            cadence.panel_hz()
+                        );
+                        trace_line(
+                            shared.now(),
+                            format_args!("cadence: {from:.0} -> {hz:.0} Hz ({asked})"),
+                        );
+                    }
+                }
                 if tracing() {
                     let st = gpu.renderer.last_stages();
                     let ms = |d: Duration| d.as_secs_f64() * 1000.0;
@@ -2567,6 +2613,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             display: None,
             display_checked: None,
             cpu_paced_until: None,
+            cadence: None,
+            pace_grid: None,
         };
 
         state.follow_display(&self.shared, &window);
@@ -3330,6 +3378,8 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
         // consulted when nothing wants one *now* — see `LoopAction::SleepUntil`
         // and the `ControlFlow` decision at the bottom of this function.
         let mut wake_at: Option<Duration> = None;
+        // Whether any window is drawing below its panel's rate (`crate::cadence`).
+        let mut reduced_rate = false;
         for index in 0..self.windows.len() {
             // Recorded before the decision, because `next_action` re-requests on
             // the driver's behalf and would otherwise make its own input
@@ -3428,7 +3478,23 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                 let (windows, shared) = (&mut self.windows, &mut self.shared);
                 let window = &mut windows[index];
                 window.draw(shared);
-                if window
+                let lowered = window
+                    .cadence
+                    .as_ref()
+                    .is_some_and(|c| c.target_hz() < c.panel_hz());
+                if lowered {
+                    // A lowered rate paces itself on a fixed grid, whichever
+                    // path presents — see `pace_grid`. A frame that ran long
+                    // skips to the next slot rather than shifting the grid.
+                    let interval = window.scheduler.budget();
+                    let (anchor, interval) = *window.pace_grid.get_or_insert((now, interval));
+                    let slots =
+                        now.saturating_sub(anchor).as_nanos() / interval.as_nanos().max(1) + 1;
+                    let next = anchor + interval * u32::try_from(slots).unwrap_or(u32::MAX);
+                    window.cpu_paced_until = Some(next);
+                    reduced_rate = true;
+                    wake_at = Some(wake_at.map_or(next, |held: Duration| held.min(next)));
+                } else if window
                     .gpu
                     .as_ref()
                     .is_some_and(|gpu| gpu.surface.path() == PresentPath::Cpu)
@@ -3453,8 +3519,11 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
         // A 120 Hz iPhone draws at 60 unless something asks for more while it
         // runs; the display link asks while frames are being drawn and stops
         // asking when the loop goes idle (`crate::ios::display_link_active`).
+        // A window drawing at a lowered rate does not ask for more.
         #[cfg(target_os = "ios")]
-        crate::ios::display_link_active(poll || wake_at.is_some());
+        crate::ios::display_link_active((poll || wake_at.is_some()) && !reduced_rate);
+        #[cfg(not(target_os = "ios"))]
+        let _ = reduced_rate;
 
         if poll {
             // Poll rather than Wait: the swapchain blocks on vsync inside
