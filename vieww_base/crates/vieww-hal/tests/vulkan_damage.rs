@@ -217,7 +217,13 @@ fn render(
 fn differences(a: &[u8], b: &[u8]) -> (usize, Option<(usize, usize)>) {
     let mut count = 0;
     let mut first = None;
-    for (i, (x, y)) in a.chunks_exact(4).zip(b.chunks_exact(4)).enumerate() {
+    for (i, (x, y)) in a
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.as_chunks::<4>().0)
+        .enumerate()
+    {
         if x != y {
             count += 1;
             first.get_or_insert((i % WIDTH as usize, i / WIDTH as usize));
