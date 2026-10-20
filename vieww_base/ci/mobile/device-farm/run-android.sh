@@ -112,6 +112,11 @@ status=0
 # `cpubare` against `cpu` — raster stage 10-32% faster, PSS 4-21 MB lower on
 # every phone — but with all three off at once it could not say which. These
 # three, beside `cpubare` kept as the all-off reference, do. Diagnostic only.
+# Run 39382602099 answered it: the fill cache cost time on every phone and the
+# blur cache on all but the S26 Ultra, so both are now off by default on the
+# tiers they lost on (`CacheBudgets`). There `cpunofill` and `cpunoblur` run
+# what `cpu` runs — kept as a check that the default stayed off (their
+# `cache_budgets` line says which), not as an A/B any more.
 for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill cpunoblur; do
     # `gpuscale` is a GPU pass: the property must say so *before* the launch
     # below. Until 2026-10-19 it was left at 0 here and only device-suite.sh's

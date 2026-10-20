@@ -13,7 +13,16 @@
 //! reading, not a proof; the `cpubare` Device Farm pass is the same-unit A/B.
 //!
 //! Either way the budgets should follow the device: a low-memory phone gets
-//! smaller caches and pays the occasional re-derivation instead. **Pixels
+//! smaller caches and pays the occasional re-derivation instead.
+//!
+//! Run 39382602099 (2026-10-20) then measured each cache off on its own, on
+//! the same unit: the path-fill cache cost frame time on every phone (−1.89
+//! / −6.62 / −0.73 ms median with it off, Stylo 5 / A73 / S26 Ultra), and the
+//! blur cache cost a little on the two smaller phones (−1.09 / −0.20 ms) and
+//! paid only on the S26 Ultra (+0.73 ms). So the fill budget is 0 — off —
+//! everywhere, and the blur cache runs on the High tier and the desktop
+//! default only. The row-parallel walk, the third addition, stays: it is
+//! the one that paid on the low phone (+2.68 ms without it). **Pixels
 //! cannot move**: both caches memoise a deterministic function, a miss runs
 //! the same function a hit replays, so a smaller budget changes only how
 //! often the function runs.
@@ -37,29 +46,29 @@ pub struct CacheBudgets {
     pub fill_bytes: usize,
 }
 
-const MIB: usize = 1024 * 1024;
-
 impl CacheBudgets {
-    /// What a renderer gets when nobody said otherwise: the budgets the two
-    /// caches shipped with, unchanged — so desktop builds, tests and the
-    /// raster-identity gallery see exactly the trade they saw before.
+    /// What a renderer gets when nobody said otherwise, and what the High
+    /// tier gets: the blur cache at the budget it shipped with, the path-fill
+    /// cache off (`VIEWW_PATH_CACHE_MB` opts in). Pixels are the same either
+    /// way, so the raster-identity gallery is unaffected.
     pub const DEFAULT: Self = Self {
         blur_bytes: super::effects::DEFAULT_BLUR_CACHE_BUDGET_BYTES,
-        fill_bytes: super::fill_cache::DEFAULT_FILL_CACHE_BUDGET_BYTES,
+        fill_bytes: 0,
     };
 
-    /// A low-memory device (the LG Stylo 5 class): a quarter of the default.
-    /// Still enough for the static blurs and icon fills of one screen, which
-    /// is the reuse the caches exist for.
+    /// A low-memory device (the LG Stylo 5 class): both caches off. Each
+    /// measured slower on the Stylo 5 with it than without, and the fill
+    /// cache cost 13 MB of PSS there.
     pub const LOW_MEMORY: Self = Self {
-        blur_bytes: 2 * MIB,
-        fill_bytes: 2 * MIB,
+        blur_bytes: 0,
+        fill_bytes: 0,
     };
 
-    /// A mid-range device (the Pixel 5a / A36 class): half the default.
+    /// A mid-range device (the Galaxy A73 / Pixel 5a class): both caches
+    /// off, for the same measurement on the A73.
     pub const MID_MEMORY: Self = Self {
-        blur_bytes: 4 * MIB,
-        fill_bytes: 4 * MIB,
+        blur_bytes: 0,
+        fill_bytes: 0,
     };
 }
 
@@ -88,21 +97,31 @@ pub fn process_cache_budgets() -> CacheBudgets {
 mod tests {
     use super::*;
 
+    const MIB: usize = 1024 * 1024;
+
     #[test]
-    fn the_default_is_what_the_caches_shipped_with() {
+    fn the_default_keeps_the_blur_cache_and_not_the_fill_cache() {
         assert_eq!(CacheBudgets::DEFAULT.blur_bytes, 8 * MIB);
-        assert_eq!(CacheBudgets::DEFAULT.fill_bytes, 8 * MIB);
+        assert_eq!(CacheBudgets::DEFAULT.fill_bytes, 0);
     }
 
     #[test]
     fn the_tiers_only_ever_shrink_the_default() {
         for tier in [CacheBudgets::LOW_MEMORY, CacheBudgets::MID_MEMORY] {
             assert!(tier.blur_bytes <= CacheBudgets::DEFAULT.blur_bytes);
-            assert!(tier.fill_bytes <= CacheBudgets::DEFAULT.fill_bytes);
-            assert!(
-                tier.blur_bytes > 0 && tier.fill_bytes > 0,
-                "a tier never disables a cache"
-            );
+            assert_eq!(tier.fill_bytes, 0, "the fill cache is off on every tier");
         }
+    }
+
+    #[test]
+    fn the_fill_cache_is_off_by_default() {
+        // A zero budget is the bypass (no hash, no store), not a one-entry
+        // cache — and with nothing set, that is what a renderer gets.
+        use super::super::fill_cache::FillCache;
+        assert!(!FillCache::with_budget(CacheBudgets::DEFAULT.fill_bytes).is_enabled());
+        if std::env::var_os("VIEWW_PATH_CACHE_MB").is_none() {
+            assert!(!FillCache::from_env().is_enabled());
+        }
+        assert!(FillCache::with_budget(8 * MIB).is_enabled());
     }
 }

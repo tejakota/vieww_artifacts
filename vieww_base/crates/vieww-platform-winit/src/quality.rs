@@ -155,9 +155,11 @@ mod tests {
 /// blur-band and path-fill caches). Pixels cannot move — both caches memoise
 /// a deterministic function — so unlike [`QualityProfile::resolution_scale`]
 /// this needs no opt-in: a smaller budget changes only how often the CPU
-/// path re-derives a blur or a fill, never what it draws. The High tier keeps
-/// the budgets the caches shipped with; `VIEWW_BLUR_CACHE_MB` /
-/// `VIEWW_PATH_CACHE_MB` still override any tier.
+/// path re-derives a blur or a fill, never what it draws. Since Device Farm
+/// run 39382602099 (`vieww_paint::native::CacheBudgets`' docs): the path-fill
+/// cache is off on every tier, and the blur cache runs on High only — each
+/// measured slower on, on the phones it is now off for. `VIEWW_BLUR_CACHE_MB`
+/// / `VIEWW_PATH_CACHE_MB` still override any tier.
 #[must_use]
 pub const fn cache_budgets_for(tier: DeviceTier) -> vieww_paint::native::CacheBudgets {
     match tier {
@@ -198,6 +200,7 @@ pub fn cache_budgets_status() -> String {
         {
             Some(0) => format!("off ({var}=0)"),
             Some(mb) => format!("{mb} MiB ({var})"),
+            None if tier_bytes == 0 => format!("off (tier {tier})"),
             None => format!("{} MiB (tier {tier})", tier_bytes / (1024 * 1024)),
         }
     };
@@ -230,9 +233,18 @@ mod cache_budget_tests {
             assert!(b.blur_bytes <= default.blur_bytes && b.fill_bytes <= default.fill_bytes);
         }
         assert_eq!(cache_budgets_for(DeviceTier::High), default);
-        assert!(
-            cache_budgets_for(DeviceTier::Low).blur_bytes
-                < cache_budgets_for(DeviceTier::Medium).blur_bytes
-        );
+    }
+
+    #[test]
+    fn the_caches_run_where_they_measured_a_win() {
+        // Run 39382602099: the fill cache cost time on every phone, the blur
+        // cache on the Stylo 5 (Low) and A73 (Medium) but paid on the S26
+        // Ultra (High). The row-parallel walk is not a budget and stays on.
+        for tier in [DeviceTier::Low, DeviceTier::Medium, DeviceTier::High] {
+            assert_eq!(cache_budgets_for(tier).fill_bytes, 0, "{tier:?}");
+        }
+        assert_eq!(cache_budgets_for(DeviceTier::Low).blur_bytes, 0);
+        assert_eq!(cache_budgets_for(DeviceTier::Medium).blur_bytes, 0);
+        assert!(cache_budgets_for(DeviceTier::High).blur_bytes > 0);
     }
 }

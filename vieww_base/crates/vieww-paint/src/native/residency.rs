@@ -149,6 +149,15 @@ impl<K: Eq + Hash + Clone, V> ResidencyCache<K, V> {
         }
     }
 
+    /// The byte budget this cache was built with. `0` is the caller's
+    /// "no cache": a user that can skip its key derivation checks this
+    /// first, because at zero the eviction rule still keeps the newest
+    /// entry resident — an entry's worth of memory and the whole key cost
+    /// for, on churning content, no hits.
+    pub(crate) fn budget(&self) -> usize {
+        self.budget
+    }
+
     #[cfg(test)]
     pub(crate) fn contains(&self, key: &K) -> bool {
         self.entries.contains_key(key)

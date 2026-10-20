@@ -32,10 +32,27 @@
 //! `rasterize`, which takes it before this cache is consulted, so a
 //! four-point panel never pays the hash at all.
 //!
+//! # Off by default
+//!
+//! Device Farm run 39382602099 (2026-10-20, main @ 1c30b7a) switched each
+//! raster addition off on its own, same unit, same run. Turning this cache
+//! off made the CPU path *faster* on all three phones — median −1.89 ms on
+//! the LG Stylo 5, −6.62 ms on the Galaxy A73, −0.73 ms on the S26 Ultra —
+//! and cut PSS 13–15 MB on the two smaller ones; run 39273227484's
+//! all-off pass had pointed the same way. An animated screen churns its
+//! fill geometry every frame, so the exact-bits key almost never hits:
+//! every fill paid the hash over its points, the store, the eviction and a
+//! fresh mask on top of the walk it still did, and a hit's mask clone is a
+//! full copy. So the process default is 0 ([`super::CacheBudgets`]) on every
+//! tier, and the cache is an opt-in (`VIEWW_PATH_CACHE_MB`) until a
+//! workload measures a win — a cheaper hit (shared masks rather than
+//! clones) and admission only for keys seen twice are what it would take.
+//!
 //! # The budget
 //!
 //! [`super::residency::ResidencyCache`], the same budgeted LRU the blur bands
-//! and glyph outlines use: default 8 MiB (`VIEWW_PATH_CACHE_MB` to move it),
+//! and glyph outlines use: off unless `VIEWW_PATH_CACHE_MB` asks for some (8 is what it shipped
+//! with — about one full-screen HD mask),
 //! one oversized one-off admitted over budget per `residency.rs`'s softness
 //! rule, `0` a true bypass — no hashing, no storage, straight to the walk —
 //! because a caller who asks for zero cache should not pay even the hash.
@@ -45,12 +62,6 @@ use vieww_foundation::Rect;
 use super::geometry::fill::rasterize;
 use super::geometry::flatten::Polyline;
 use super::residency::ResidencyCache;
-
-/// The default budget: the blur cache's figure. A full-screen HD coverage
-/// mask is about 8 MB, so the budget holds roughly one of those or a few
-/// dozen panel-shaped masks — and the softness rule means a single giant
-/// one-off still works, it just evicts its neighbours.
-pub(crate) const DEFAULT_FILL_CACHE_BUDGET_BYTES: usize = 8 * 1024 * 1024;
 
 /// FNV-1a 64, byte-wise, over everything [`rasterize`] reads: each
 /// polyline's point count and point bits and closed flag, the polyline
@@ -103,8 +114,9 @@ impl FillKey {
 /// re-derivable at any time") applies to a coverage mask word for word.
 pub(crate) struct FillCache {
     inner: ResidencyCache<FillKey, super::geometry::fill::CoverageMask>,
-    /// `false` only when `VIEWW_PATH_CACHE_MB=0`: a bypass skips even the
-    /// key hash, and the stats stay at zero because no cache is running.
+    /// `false` when the budget is 0 — `VIEWW_PATH_CACHE_MB=0`, or the process
+    /// default, which is 0: a bypass skips even the key hash, and the stats
+    /// stay at zero because no cache is running.
     enabled: bool,
 }
 
@@ -118,22 +130,27 @@ impl FillCache {
             .ok()
             .as_deref()
             .and_then(super::pool::mb_env_bytes);
-        match budget {
-            Some(0) => Self {
-                inner: ResidencyCache::new(0),
-                enabled: false,
-            },
-            Some(bytes) => Self {
-                inner: ResidencyCache::new(bytes),
-                enabled: true,
-            },
-            None => Self {
-                inner: ResidencyCache::new(
-                    super::cache_budgets::process_cache_budgets().fill_bytes,
-                ),
-                enabled: true,
-            },
+        Self::with_budget(budget.unwrap_or_else(|| {
+            // The process default is 0 — off — since Device Farm run
+            // 39382602099 (module docs). A zero from there is the same
+            // bypass as a zero from the variable, not a one-entry cache that
+            // still hashes every fill.
+            super::cache_budgets::process_cache_budgets().fill_bytes
+        }))
+    }
+
+    /// A fill cache at exactly this budget; `0` is the bypass.
+    pub(crate) fn with_budget(bytes: usize) -> Self {
+        Self {
+            inner: ResidencyCache::new(bytes),
+            enabled: bytes > 0,
         }
+    }
+
+    /// Whether fills go through the cache at all (`false`: budget 0).
+    #[cfg(test)]
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.enabled
     }
 
     /// The coverage mask for these polylines over this clip — resident if
@@ -204,7 +221,7 @@ mod tests {
 
     #[test]
     fn a_second_identical_fill_is_a_hit_and_the_same_bytes() {
-        let mut cache = FillCache::from_env();
+        let mut cache = FillCache::with_budget(8 * 1024 * 1024);
         let polylines = blob(3);
         let clip = Rect::new(0.0, 0.0, 200.0, 200.0);
 
@@ -221,7 +238,7 @@ mod tests {
 
     #[test]
     fn a_changed_bit_of_geometry_is_a_miss() {
-        let mut cache = FillCache::from_env();
+        let mut cache = FillCache::with_budget(8 * 1024 * 1024);
         let clip = Rect::new(0.0, 0.0, 200.0, 200.0);
         let polylines = blob(5);
 
@@ -238,7 +255,7 @@ mod tests {
 
     #[test]
     fn a_changed_clip_is_a_miss() {
-        let mut cache = FillCache::from_env();
+        let mut cache = FillCache::with_budget(8 * 1024 * 1024);
         let polylines = blob(6);
         let a = Rect::new(0.0, 0.0, 200.0, 200.0);
         let b = Rect::new(0.0, 0.0, 190.0, 200.0);
@@ -300,7 +317,7 @@ mod tests {
 
     #[test]
     fn an_empty_path_set_round_trips() {
-        let mut cache = FillCache::from_env();
+        let mut cache = FillCache::with_budget(8 * 1024 * 1024);
         let clip = Rect::new(0.0, 0.0, 200.0, 200.0);
         let empty: Vec<Polyline> = Vec::new();
         let a = cache.coverage(&empty, clip);

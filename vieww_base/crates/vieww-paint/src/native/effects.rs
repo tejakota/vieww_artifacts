@@ -36,8 +36,8 @@
 //! bounded at a few entries, that is far below the rate at which the
 //! hardware this runs on flips a bit unasked, and the budgeted LRU
 //! (`native/residency.rs`) bounds the memory the cache may hold — default
-//! 8 MB, `VIEWW_BLUR_CACHE_MB` to move it, zero to turn the cache into a
-//! pass-through. The blurred-shadow-patch cache (`native/shadow.rs`) is the
+//! 8 MB, `VIEWW_BLUR_CACHE_MB` to move it, zero to turn the cache off (no
+//! hashing, no store — the plain band walk). The blurred-shadow-patch cache (`native/shadow.rs`) is the
 //! precedent this follows; layer blurs were the uncached sibling.
 
 use vieww_foundation::filter::ColorMatrix;
@@ -337,6 +337,13 @@ pub(crate) fn blur_cached(
             let band_h = bottom - top;
             let start = top as usize * w as usize;
             let rows = &mut target.pixels[start..start + band_h as usize * w as usize];
+            // A zero budget is no cache: the band walk alone, without the
+            // hash over every input pixel or the copy a store would take.
+            if cache.budget() == 0 {
+                blur_rows(rows, w, band_h, radius, angle);
+                target.grow_ink(3 * radius);
+                return;
+            }
             // Key on the *input* bits: the value stored under it is the
             // band after the passes, so identical input can only have
             // identical output (the kernel is pure), and a collision would
