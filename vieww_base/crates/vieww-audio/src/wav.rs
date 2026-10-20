@@ -188,6 +188,75 @@ impl SampleFormat {
     }
 }
 
+impl SampleFormat {
+    /// One least-significant step of this format in `-1..=1` units, or `None`
+    /// for the float formats, which keep every bit of an `f32` and need no
+    /// dither.
+    #[must_use]
+    pub const fn lsb(self) -> Option<f32> {
+        match self {
+            Self::U8 => Some(1.0 / 128.0),
+            Self::I16 => Some(1.0 / 32_767.0),
+            Self::I24 => Some(1.0 / 8_388_607.0),
+            // Finer than an f32's 24-bit mantissa can carry: nothing to add.
+            Self::I32 | Self::F32 | Self::F64 => None,
+        }
+    }
+
+    /// [`encode_le`](Self::encode_le) with TPDF dither added first — one
+    /// LSB of triangular noise, so the rounding error is independent of the
+    /// signal instead of a distortion of it.
+    pub fn encode_le_dithered(self, v: f32, dither: &mut Dither, out: &mut Vec<u8>) {
+        match self.lsb() {
+            Some(lsb) => self.encode_le(v + dither.tpdf() * lsb, out),
+            None => self.encode_le(v, out),
+        }
+    }
+}
+
+/// TPDF dither for reducing float audio to an integer format.
+///
+/// Rounding to 16 bits without dither makes the error a function of the
+/// signal: a fade or a reverb tail decays into audible, signal-shaped
+/// distortion, and anything quieter than half an LSB vanishes outright.
+/// Adding triangular noise of ±1 LSB before rounding — the textbook choice,
+/// and what every mastering tool does by default — makes the error a
+/// constant, signal-independent noise floor (about −96 dBFS at 16 bits) and
+/// keeps sub-LSB detail audible inside it.
+///
+/// Deterministic: the noise comes from a seeded generator, so the same
+/// render with the same seed writes the same bytes, which keeps this crate's
+/// renders reproducible.
+#[derive(Debug, Clone)]
+pub struct Dither {
+    state: u64,
+}
+
+impl Dither {
+    /// A dither stream from `seed`.
+    #[must_use]
+    pub const fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    /// Uniform on `[0, 1)` (splitmix64; 24 bits, all an f32 holds).
+    fn uniform(&mut self) -> f32 {
+        self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        #[expect(clippy::cast_precision_loss, reason = "24 bits, exact in f32")]
+        let u = (z >> 40) as f32 / 16_777_216.0;
+        u
+    }
+
+    /// One dither value in LSBs: triangular on `(-1, 1)`, mean zero.
+    pub fn tpdf(&mut self) -> f32 {
+        self.uniform() - self.uniform()
+    }
+}
+
 /// What a WAV header said.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WavInfo {
@@ -522,6 +591,30 @@ pub fn write_wav_format(
     samples: &crate::channels::MultiSamples,
     format: SampleFormat,
 ) -> Result<Vec<u8>, PcmError> {
+    write_wav_inner(samples, format, None)
+}
+
+/// [`write_wav_format`] with TPDF [`Dither`] from `seed` on the integer
+/// formats — the writer to use when a float render becomes a 16- or 24-bit
+/// file someone will listen to. Float formats are written exactly as
+/// [`write_wav_format`] writes them.
+///
+/// # Errors
+///
+/// As [`write_wav_format`].
+pub fn write_wav_format_dithered(
+    samples: &crate::channels::MultiSamples,
+    format: SampleFormat,
+    seed: u64,
+) -> Result<Vec<u8>, PcmError> {
+    write_wav_inner(samples, format, Some(Dither::new(seed)))
+}
+
+fn write_wav_inner(
+    samples: &crate::channels::MultiSamples,
+    format: SampleFormat,
+    mut dither: Option<Dither>,
+) -> Result<Vec<u8>, PcmError> {
     let ch = samples.layout.channels();
     let channels = u16::try_from(ch).map_err(|_| PcmError::Unsupported("too many channels"))?;
     if channels == 0 {
@@ -556,8 +649,17 @@ pub fn write_wav_format(
     }
     out.extend_from_slice(b"data");
     out.extend_from_slice(&u32::try_from(data_bytes).unwrap_or(u32::MAX).to_le_bytes());
-    for v in &samples.data {
-        format.encode_le(*v, &mut out);
+    match &mut dither {
+        Some(d) => {
+            for v in &samples.data {
+                format.encode_le_dithered(*v, d, &mut out);
+            }
+        }
+        None => {
+            for v in &samples.data {
+                format.encode_le(*v, &mut out);
+            }
+        }
     }
     if data_bytes & 1 == 1 {
         out.push(0);
@@ -569,6 +671,78 @@ pub fn write_wav_format(
 mod tests {
     use super::*;
     use crate::{Envelope, Tone, Waveform};
+
+    /// A mono sine of `amp` at `rate`, as `MultiSamples`.
+    fn quiet_sine(amp: f32, frames: usize) -> crate::channels::MultiSamples {
+        crate::channels::MultiSamples {
+            data: std::iter::successors(Some(0.0f32), |x| Some(x + 0.0571))
+                .take(frames)
+                .map(|x| x.sin() * amp)
+                .collect(),
+            layout: crate::channels::Layout::Mono,
+            rate: 48_000,
+        }
+    }
+
+    /// The 16-bit samples of a mono WAV this module wrote.
+    fn pcm16(bytes: &[u8]) -> Vec<i16> {
+        let at = bytes.windows(4).position(|w| w == b"data").unwrap() + 8;
+        bytes[at..]
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| i16::from_le_bytes(*c))
+            .collect()
+    }
+
+    #[test]
+    fn dither_keeps_a_signal_quieter_than_one_step_that_rounding_erases() {
+        let lsb = SampleFormat::I16.lsb().unwrap();
+        let sig = quiet_sine(0.4 * lsb, 48_000);
+        // Plain rounding: 0.4 of a step rounds to zero, every sample.
+        let plain = pcm16(&write_wav_format(&sig, SampleFormat::I16).unwrap());
+        assert!(
+            plain.iter().all(|q| *q == 0),
+            "undithered output kept something"
+        );
+        // Dithered: the quantiser is unbiased, so the signal survives in
+        // the correlation — about N·A²/2 in LSB², with a noise std near 1%
+        // of that.
+        let dithered = pcm16(&write_wav_format_dithered(&sig, SampleFormat::I16, 7).unwrap());
+        let corr: f64 = dithered
+            .iter()
+            .zip(&sig.data)
+            .map(|(q, s)| f64::from(*q) * f64::from(*s / lsb))
+            .sum();
+        let expected: f64 = sig.data.iter().map(|s| f64::from(s / lsb).powi(2)).sum();
+        assert!(
+            corr > 0.8 * expected && corr < 1.2 * expected,
+            "{corr} vs {expected}"
+        );
+        // And it is noise, not signal: one step either side, never more.
+        assert!(dithered.iter().all(|q| q.abs() <= 1), "dither past ±1 LSB");
+    }
+
+    #[test]
+    fn dither_is_deterministic_and_leaves_float_formats_alone() {
+        let sig = quiet_sine(0.3, 4_096);
+        let a = write_wav_format_dithered(&sig, SampleFormat::I16, 42).unwrap();
+        assert_eq!(
+            a,
+            write_wav_format_dithered(&sig, SampleFormat::I16, 42).unwrap()
+        );
+        assert_ne!(
+            a,
+            write_wav_format_dithered(&sig, SampleFormat::I16, 43).unwrap()
+        );
+        for fmt in [SampleFormat::F32, SampleFormat::F64, SampleFormat::I32] {
+            assert_eq!(
+                write_wav_format_dithered(&sig, fmt, 42).unwrap(),
+                write_wav_format(&sig, fmt).unwrap(),
+                "{fmt:?} changed"
+            );
+        }
+    }
 
     #[test]
     fn a_header_claiming_an_impossible_rate_or_channel_count_is_refused() {

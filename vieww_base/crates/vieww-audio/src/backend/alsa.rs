@@ -85,6 +85,10 @@ impl Backend for Alsa {
                 let n = frames * usize::from(ch);
                 let mut f = vec![0.0f32; n];
                 let mut q = vec![0i16; n];
+                // The device takes 16-bit samples: dither the reduction
+                // (`wav::Dither`), or quiet passages round into distortion.
+                let mut dither = crate::wav::Dither::new(0x5EED_A15A);
+                let lsb = crate::wav::SampleFormat::I16.lsb().unwrap_or(0.0);
                 let mut done = 0u64;
                 while !s2.load(Ordering::Acquire) {
                     f.fill(0.0);
@@ -98,6 +102,9 @@ impl Backend for Alsa {
                             time: done as f64 / f64::from(rate),
                         },
                     );
+                    for v in &mut f {
+                        *v += dither.tpdf() * lsb;
+                    }
                     crate::simd::f32_to_i16(&f, &mut q);
                     if out.write(&q).is_err() {
                         c2.ended.store(true, Ordering::Release);
