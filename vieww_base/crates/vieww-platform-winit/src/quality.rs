@@ -176,27 +176,45 @@ pub(crate) fn apply_cache_budgets() {
     });
 }
 
-/// The cache-budget line the on-device suite observes as `cache_budgets`.
+/// The cache-budget line the on-device suite observes as `cache_budgets`:
+/// what each cache and the scanline walk are **actually** running with,
+/// and where that came from.
+///
+/// It used to print the tier's budget with an "overrides" note beside it —
+/// so Device Farm run 39273227484's `cpubare` pass, which ran both caches
+/// at 0, reported "blur 2 MiB [VIEWW_BLUR_CACHE_MB overrides]", the number
+/// the override had replaced. Each value now follows the cache's own
+/// reading of its variable (a value that parses wins; anything else falls
+/// back to the tier's), and the raster threads are reported beside them,
+/// because the A/B passes switch those too.
 #[must_use]
 pub fn cache_budgets_status() -> String {
     let budgets = vieww_paint::native::process_cache_budgets();
-    let mb = |bytes: usize| bytes / (1024 * 1024);
-    let overridden = |var: &str| std::env::var(var).is_ok_and(|v| !v.trim().is_empty());
+    let tier = device_facts().tier.name();
+    let effective = |var: &str, tier_bytes: usize| -> String {
+        match std::env::var(var)
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+        {
+            Some(0) => format!("off ({var}=0)"),
+            Some(mb) => format!("{mb} MiB ({var})"),
+            None => format!("{} MiB (tier {tier})", tier_bytes / (1024 * 1024)),
+        }
+    };
+    let workers = vieww_paint::native::raster_worker_limit();
+    let threads = if workers <= 1 {
+        match std::env::var("VIEWW_RASTER_THREADS") {
+            Ok(v) => format!("serial (VIEWW_RASTER_THREADS={})", v.trim()),
+            Err(_) => "serial (one core)".to_string(),
+        }
+    } else {
+        format!("up to {workers} workers per large mask")
+    };
     format!(
-        "blur {} MiB{}, fill {} MiB{} (tier {})",
-        mb(budgets.blur_bytes),
-        if overridden("VIEWW_BLUR_CACHE_MB") {
-            " [VIEWW_BLUR_CACHE_MB overrides]"
-        } else {
-            ""
-        },
-        mb(budgets.fill_bytes),
-        if overridden("VIEWW_PATH_CACHE_MB") {
-            " [VIEWW_PATH_CACHE_MB overrides]"
-        } else {
-            ""
-        },
-        device_facts().tier.name(),
+        "blur {}, fill {}, raster threads {}",
+        effective("VIEWW_BLUR_CACHE_MB", budgets.blur_bytes),
+        effective("VIEWW_PATH_CACHE_MB", budgets.fill_bytes),
+        threads,
     )
 }
 

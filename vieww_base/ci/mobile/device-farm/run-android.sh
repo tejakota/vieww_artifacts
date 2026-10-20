@@ -106,7 +106,13 @@ status=0
 # cache) — the same-unit A/B against `cpu` that says whether those commits
 # moved frame time or PSS, which run f91d07c could only compare across
 # units. Diagnostic only.
-for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare; do
+#
+# `cpunothreads`, `cpunofill` and `cpunoblur` switch off one of those three
+# each (`debug.vieww.bare=threads|fill|blur`). Run 39273227484 measured
+# `cpubare` against `cpu` — raster stage 10-32% faster, PSS 4-21 MB lower on
+# every phone — but with all three off at once it could not say which. These
+# three, beside `cpubare` kept as the all-off reference, do. Diagnostic only.
+for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill cpunoblur; do
     # `gpuscale` is a GPU pass: the property must say so *before* the launch
     # below. Until 2026-10-19 it was left at 0 here and only device-suite.sh's
     # `--gpu` set it — after the app was already up, which `--no-build` does
@@ -117,7 +123,13 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare; do
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
     hint=0; [ "$mode" = cpuhint ] && hint=1
     scale=""; [ "$mode" = gpuscale ] && scale=auto
-    bare=0; [ "$mode" = cpubare ] && bare=1
+    case "$mode" in
+        cpubare) bare=all ;;
+        cpunothreads) bare=threads ;;
+        cpunofill) bare=fill ;;
+        cpunoblur) bare=blur ;;
+        *) bare=0 ;;
+    esac
     sh_ setprop debug.vieww.bare "$bare" >/dev/null
     sh_ setprop debug.vieww.hint "$hint" >/dev/null
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
@@ -161,7 +173,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare; do
         kv "${mode}_suite" PASS
     else
         kv "${mode}_suite" FAIL
-        case "$mode" in cpuvk|cpuhint|gpuscale|cpubare|auto) ;; *) status=1 ;; esac
+        case "$mode" in cpuvk|cpuhint|gpuscale|cpubare|cpunothreads|cpunofill|cpunoblur|auto) ;; *) status=1 ;; esac
     fi
     for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"

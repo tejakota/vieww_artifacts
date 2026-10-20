@@ -189,6 +189,89 @@ def download_job(aws, job, out):
     return target, (parse_result(results[0]) if results else None)
 
 
+def duration_ms(text):
+    """`"37.8ms"` / `"950µs"` / `"1.2s"` → milliseconds; None otherwise."""
+    m = re.fullmatch(r"\s*([0-9.]+)\s*(ms|µs|us|s)\s*", text or "")
+    if not m:
+        return None
+    value = float(m.group(1))
+    return {"ms": value, "µs": value / 1000, "us": value / 1000, "s": value * 1000}[m.group(2)]
+
+
+def frame_median_ms(text):
+    m = re.search(r"median ([0-9.]+\s*(?:ms|µs|us|s))\b", text or "")
+    return duration_ms(m.group(1)) if m else None
+
+
+def raster_stage_ms(text):
+    """The `cpu` stage out of a `frame_stages` line ("medians ms: ... cpu 34.21 ...")."""
+    m = re.search(r"\bcpu ([0-9.]+)", text or "")
+    return float(m.group(1)) if m else None
+
+
+# The A/B passes, in the order the table prints them: what each switches
+# off relative to `cpu`, which has all three on.
+RASTER_AB = [
+    ("cpu", "nothing (all three on)"),
+    ("cpunothreads", "row-parallel walk"),
+    ("cpunofill", "path-fill cache"),
+    ("cpunoblur", "blur cache"),
+    ("cpubare", "all three"),
+]
+
+
+def raster_ab_section(rows):
+    """Per phone, the CPU path with each 2026-10-18/19 raster addition
+    switched off in turn, against the same build with all of them on — same
+    unit, same run, so the deltas are the features' and not the phone's.
+    Negative is better (less time, less memory). Empty when no A/B pass ran."""
+    lines = []
+    for row in rows:
+        r = row["result"] or {}
+        if not any(r.get(f"{mode}_frame_time") for mode, _ in RASTER_AB[1:]):
+            continue
+        base = r.get("cpu_frame_time"), r.get("cpu_frame_stages"), r.get("cpu_total_pss_kb")
+        base_frame, base_raster = frame_median_ms(base[0]), raster_stage_ms(base[1])
+        base_pss = int(base[2]) / 1024 if (base[2] or "").isdigit() else None
+
+        def cell(value, reference, unit, digits):
+            if value is None:
+                return "–"
+            text = f"{value:.{digits}f} {unit}"
+            if reference is not None:
+                text += f" ({value - reference:+.{digits}f})"
+            return text
+
+        if not lines:
+            lines += [
+                "## Raster A/B: the 2026-10-18/19 CPU additions, one at a time",
+                "",
+                "Same phone, same run, same build; only the named feature is off. "
+                "Negative deltas mean switching it off helped — the feature costs that much.",
+                "",
+            ]
+        lines += [
+            f"**{row['device']}**",
+            "",
+            "| pass | switched off | frame median | raster stage median | PSS |",
+            "|---|---|---|---|---|",
+        ]
+        for mode, off in RASTER_AB:
+            frame = frame_median_ms(r.get(f"{mode}_frame_time"))
+            raster = raster_stage_ms(r.get(f"{mode}_frame_stages"))
+            pss_raw = r.get(f"{mode}_total_pss_kb") or ""
+            pss = int(pss_raw) / 1024 if pss_raw.isdigit() else None
+            if mode == "cpu":
+                frame_c, raster_c, pss_c = cell(frame, None, "ms", 2), cell(raster, None, "ms", 2), cell(pss, None, "MB", 0)
+            else:
+                frame_c = cell(frame, base_frame, "ms", 2)
+                raster_c = cell(raster, base_raster, "ms", 2)
+                pss_c = cell(pss, base_pss, "MB", 0)
+            lines.append(f"| `{mode}` | {off} | {frame_c} | {raster_c} | {pss_c} |")
+        lines.append("")
+    return lines
+
+
 def summarize(rows, out, run):
     lines = [
         "# vieww on AWS Device Farm",
@@ -251,6 +334,9 @@ def summarize(rows, out, run):
             ("cpuhint", "CPU path with an Android performance hint (diagnostic)"),
             ("gpuscale", "GPU path at the device tier's resolution (diagnostic)"),
             ("cpubare", "CPU path without raster threads, fill cache or blur cache (diagnostic A/B)"),
+            ("cpunothreads", "CPU path without the row-parallel walk only (diagnostic A/B)"),
+            ("cpunofill", "CPU path without the path-fill cache only (diagnostic A/B)"),
+            ("cpunoblur", "CPU path without the blur cache only (diagnostic A/B)"),
         ]
         detail = []
         for mode, label in passes:
@@ -288,6 +374,7 @@ def summarize(rows, out, run):
             if failed:
                 lines.append(f"- failed checks: {failed}")
             lines.append("")
+    lines.extend(raster_ab_section(rows))
     lines.append(
         "Targets from the audit, for reading the table: product UI p95 under 15 ms and cold start "
         "under 120 ms on a mid-tier phone; release APK under 6 MB."

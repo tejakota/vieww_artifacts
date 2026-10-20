@@ -802,27 +802,41 @@ mod demo {
             // Before the event loop and every worker the app starts, as below.
             std::env::set_var("VIEWW_GPU_SCALE", &scale);
         }
-        // `debug.vieww.bare=1`: the CPU rasterizer with the 2026-10-18/19
-        // additions switched off — the row-parallel scanline walk
-        // (`VIEWW_RASTER_THREADS=0`), the path-fill cache
-        // (`VIEWW_PATH_CACHE_MB=0`) and the blur-band cache
-        // (`VIEWW_BLUR_CACHE_MB=0`). Device Farm run f91d07c read the CPU
-        // raster stage flat-to-slower (LG 30.6 → 34.8 ms, S26 4.7 → 6.6 ms)
-        // and CPU-path PSS up 10–16 MB after they landed, against earlier
-        // runs on other units; this is the same-unit, same-run A/B that says
-        // which of those is theirs.
+        // `debug.vieww.bare`: the CPU rasterizer with some or all of the
+        // 2026-10-18/19 additions switched off — the row-parallel scanline
+        // walk (`threads` → `VIEWW_RASTER_THREADS=0`), the path-fill cache
+        // (`fill` → `VIEWW_PATH_CACHE_MB=0`) and the blur-band cache (`blur`
+        // → `VIEWW_BLUR_CACHE_MB=0`). `1` or `all` is all three; otherwise a
+        // comma-separated list. Device Farm run 39273227484 measured all
+        // three off against on, same unit and run: raster stage 10–32% faster
+        // and PSS 4–21 MB lower on every phone. The one-at-a-time values are
+        // what say which of the three that is.
         let bare = std::process::Command::new("/system/bin/getprop")
             .arg("debug.vieww.bare")
             .output()
-            .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "1");
-        if bare {
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_default();
+        let off: Vec<&str> = match bare.as_str() {
+            "" | "0" => Vec::new(),
+            "1" | "all" => vec!["threads", "fill", "blur"],
+            list => list.split(',').map(str::trim).collect(),
+        };
+        let mut switched = Vec::new();
+        for feature in off {
             // Before the event loop and every worker the app starts, as below.
-            std::env::set_var("VIEWW_RASTER_THREADS", "0");
-            std::env::set_var("VIEWW_PATH_CACHE_MB", "0");
-            std::env::set_var("VIEWW_BLUR_CACHE_MB", "0");
+            let var = match feature {
+                "threads" => "VIEWW_RASTER_THREADS",
+                "fill" => "VIEWW_PATH_CACHE_MB",
+                "blur" => "VIEWW_BLUR_CACHE_MB",
+                _ => continue,
+            };
+            std::env::set_var(var, "0");
+            switched.push(feature);
+        }
+        if !switched.is_empty() {
             suite.observe(
                 "bare",
-                "raster threads, path-fill cache and blur cache off (debug.vieww.bare=1)",
+                &format!("off: {} (debug.vieww.bare={bare})", switched.join(", ")),
             );
         }
         if present == "vulkan" || present == "cpu" {
