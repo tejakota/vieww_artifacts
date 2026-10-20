@@ -779,6 +779,20 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
         median <= budget,
         format!("median {median:?} against a budget of {budget:?}"),
     );
+    // **Pacing, not just the median.** A median inside the budget with one
+    // frame in five outside it is visible stutter on a 120 Hz panel — the
+    // Galaxy A73's shipping path in run 39402544760 (52 of 240). One in
+    // twenty is the allowance: the same share at which the app itself drops
+    // to a steady 60 Hz (`vieww_platform_winit`'s `cadence`), so on a phone
+    // that adapts, this judges the rate it chose.
+    results.check(
+        "frames_inside_their_budget",
+        over * 20 <= sorted.len(),
+        format!(
+            "{over} of {} frames over a budget of {budget:?} (at most 1 in 20)",
+            sorted.len()
+        ),
+    );
     results.check(
         "no_frame_stalled",
         worst <= stall,

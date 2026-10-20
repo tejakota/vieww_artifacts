@@ -30,8 +30,11 @@ What happens:
    their default, which did not, and which devices were missing the data
    to decide.
 
-Exit status: 0 when every phone passed both suites, 1 otherwise (2 for a setup
-error). Uses the `aws` CLI and `curl`, both on GitHub's hosted runners, so the
+Exit status: 0 when every phone's gating passes passed, 1 otherwise (2 for a
+setup error). Which passes gate is `run-android.sh`'s call: `auto` and `cpu`
+always, `gpu` where `auto` chose the GPU; a gating pass that failed only the
+checks `device-farm/known-failures.txt` lists for that phone is reported and
+does not fail the run. Uses the `aws` CLI and `curl`, both on GitHub's hosted runners, so the
 script needs no Python packages.
 """
 
@@ -279,7 +282,7 @@ def summarize(rows, out, run):
         f"run: `{run.get('arn', '?')}` — {run.get('result', '?')}",
         "",
         "| phone | tier | Android | SoC / GPU | RAM | APK | cold start cpu / gpu (ms, median of 3) "
-        "| frame time cpu | frame time gpu | frames drawn by the GPU, cpu pass / gpu pass | PSS cpu / gpu (MB) | suite cpu / gpu |",
+        "| frame time cpu | frame time gpu | frames drawn by the GPU, cpu pass / gpu pass | PSS cpu / gpu (MB) | suite cpu / gpu / auto |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
@@ -317,7 +320,7 @@ def summarize(rows, out, run):
                 ftg=r.get("gpu_frame_time", "–"),
                 gf=" / ".join((r.get(f"{m}_gpu_frames") or "–").split(" drawn")[0] for m in ("cpu", "gpu")),
                 pss=f"{mb('cpu_total_pss_kb')} / {mb('gpu_total_pss_kb')}",
-                suite=f"{r.get('cpu_suite', '–')} / {r.get('gpu_suite', '–')}"
+                suite=f"{r.get('cpu_suite', '–')} / {r.get('gpu_suite', '–')} / {r.get('auto_suite', '–')}"
                 if row["result"]
                 else f"no result ({row['job_result']})",
             )
@@ -325,7 +328,9 @@ def summarize(rows, out, run):
     lines.append("")
     for row in rows:
         r = row["result"] or {}
-        failed = " ".join(filter(None, [r.get("cpu_failed_checks"), r.get("gpu_failed_checks")])).strip()
+        failed = " ".join(
+            filter(None, [r.get(f"{m}_failed_checks") for m in ("cpu", "gpu", "auto")])
+        ).strip()
         passes = [
             ("cpu", "CPU path"),
             ("gpu", "GPU path"),
@@ -351,6 +356,15 @@ def summarize(rows, out, run):
             # with what the pass asked for, and fails the run on a mismatch.
             if r.get(f"{mode}_rasterizer_mismatch"):
                 detail.append(f"  - **wrong rasterizer, run failed**: {r[f'{mode}_rasterizer_mismatch']}")
+            # run-android.sh's gating verdict for this pass, when it gates.
+            if r.get(f"{mode}_gate_failed"):
+                detail.append(f"  - **gate failed, run failed**: {r[f'{mode}_gate_failed']}")
+            if r.get(f"{mode}_known_failure"):
+                detail.append(f"  - known failure (known-failures.txt, not failing the run): {r[f'{mode}_known_failure']}")
+            if r.get(f"{mode}_known_failure_passed"):
+                detail.append(f"  - **passed despite a known-failures.txt entry**: {r[f'{mode}_known_failure_passed']}")
+            if r.get(f"{mode}_cadence"):
+                detail.append(f"  - frame rate: {r[f'{mode}_cadence']}")
             pss = r.get(f"{mode}_total_pss_kb")
             if pss and pss.isdigit():
                 detail.append(f"  - memory: PSS {int(pss) / 1024:.0f} MB")
@@ -374,6 +388,8 @@ def summarize(rows, out, run):
                     detail.append(f"  - {name}: {r[f'{mode}_{key}']}")
         if failed or detail:
             lines.append(f"**{row['device']}**")
+            if r.get("gating_passes"):
+                lines.append(f"- gating passes: {r['gating_passes']}")
             lines.extend(detail)
             if failed:
                 lines.append(f"- failed checks: {failed}")

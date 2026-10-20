@@ -75,6 +75,10 @@ case "$component" in */*) ;; *) component="$package/android.app.NativeActivity" 
 kv component "$component"
 
 status=0
+# Each pass's suite verdict and failed checks, judged after the loop: which
+# passes gate depends on what `auto` chose, which is known only once it ran.
+declare -A verdict=()
+declare -A failed=()
 # `cpuvk` is a diagnostic third pass: the CPU rasterizer presented through the
 # Vulkan swapchain (`debug.vieww.present=vulkan`) instead of ANativeWindow_lock,
 # so the two present paths are compared on the same phone in the same run. Its
@@ -176,15 +180,21 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
     if VIEWW_SCREENSHOT="$out/$mode-screen.png" \
         bash "$root/ci/mobile/device-suite.sh" --no-build $gpu_flag > "$out/$mode-suite.log" 2>&1; then
         kv "${mode}_suite" PASS
+        verdict[$mode]=PASS
     else
         kv "${mode}_suite" FAIL
-        case "$mode" in cpuvk|cpuhint|gpuscale|cpubare|cpunothreads|cpunofill|cpunoblur|auto) ;; *) status=1 ;; esac
+        verdict[$mode]=FAIL
     fi
     for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
-    kv "${mode}_failed_checks" "$(grep -o '__VIEWW_SUITE__ FAIL [a-z_0-9]*\|  FAIL [a-z_0-9]*' "$out/$mode-suite.log" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
+    failed[$mode]="$(grep -o '__VIEWW_SUITE__ FAIL [a-z_0-9]*\|  FAIL [a-z_0-9]*' "$out/$mode-suite.log" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
+    kv "${mode}_failed_checks" "${failed[$mode]}"
+    # Whether the app changed its frame rate (`cadence`: the panel's rate or a
+    # steady 60 Hz), from its frame report.
+    rate="$(grep -m1 -o 'frame rate changed [^;]*' "$out/$mode-suite.log" | sed 's/[[:space:]]*$//')"
+    [ -n "$rate" ] && kv "${mode}_cadence" "$rate"
 
     # Whether the app ran the rasterizer this pass asked for. Its own
     # `rasterizer:` observation names what it read from debug.vieww.gpu at
@@ -222,12 +232,76 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
     fi
 done
 
+# **Which passes gate.** `auto` is what ships, so it always does. `cpu` does
+# too: on the phones where `auto` keeps the CPU it is the same path, and
+# everywhere else it is the fallback when a GPU driver is refused, judged at
+# the rate the app adapted to (60 Hz on a 120 Hz panel it cannot hold). `gpu`
+# gates where `auto` chose it; elsewhere it is a measurement of the path this
+# phone does not ship, and is diagnostic like the rest.
+choice="$(grep -m1 -o 'renderer_choice: [a-z]*' "$out/auto-suite.log" 2>/dev/null | awk '{print $2}')"
+gating="auto cpu"
+[ "$choice" = gpu ] && gating="auto cpu gpu"
+kv gating_passes "$gating (auto chose: ${choice:-not reported})"
+
+# A gating pass that failed only checks listed for this phone in
+# `known-failures.txt` is reported and does not fail the run; see that file.
+known_file="$root/ci/mobile/device-farm/known-failures.txt"
+device="${DEVICEFARM_DEVICE_NAME:-unknown}"
+known_checks() { # pass -> the checks listed for this phone and pass
+    [ -f "$known_file" ] || return 0
+    grep -v '^[[:space:]]*#' "$known_file" | grep '|' | while IFS='|' read -r name pass checks _; do
+        name="$(echo "$name" | sed 's/^ *//; s/ *$//')"
+        pass="$(echo "$pass" | tr -d ' ')"
+        [ "$name" = "$device" ] || continue
+        { [ "$pass" = "*" ] || [ "$pass" = "$1" ]; } && echo "$checks"
+    done | tr '\n' ' '
+}
+known_reason() { # pass -> the reason given for this phone and pass
+    [ -f "$known_file" ] || return 0
+    grep -v '^[[:space:]]*#' "$known_file" | grep '|' | while IFS='|' read -r name pass _ reason; do
+        name="$(echo "$name" | sed 's/^ *//; s/ *$//')"
+        pass="$(echo "$pass" | tr -d ' ')"
+        [ "$name" = "$device" ] || continue
+        { [ "$pass" = "*" ] || [ "$pass" = "$1" ]; } && echo "$reason" | sed 's/^ *//'
+    done | head -1
+}
+for mode in $gating; do
+    listed="$(known_checks "$mode")"
+    case "${verdict[$mode]:-missing}" in
+        PASS)
+            # A listed failure that no longer fails is a stale exception.
+            if [ -n "$(echo "$listed" | tr -d ' ')" ]; then
+                kv "${mode}_known_failure_passed" "listed in known-failures.txt but passed: delete the entry"
+                echo "::warning::run-android: $device $mode passed — its known-failures.txt entry is stale" >&2
+            fi
+            ;;
+        FAIL)
+            unexplained=""
+            for check in ${failed[$mode]:-}; do
+                case " $listed " in *" $check "*) ;; *) unexplained="$unexplained $check" ;; esac
+            done
+            if [ -n "${failed[$mode]:-}" ] && [ -z "$unexplained" ]; then
+                kv "${mode}_known_failure" "${failed[$mode]}— $(known_reason "$mode")"
+                echo "::warning::run-android: $device $mode failed only known checks (${failed[$mode]% })" >&2
+            else
+                kv "${mode}_gate_failed" "${unexplained:- (no check named: the suite itself failed)}"
+                status=1
+            fi
+            ;;
+        *)
+            kv "${mode}_gate_failed" "the pass did not run"
+            status=1
+            ;;
+    esac
+done
+
 sh_ setprop debug.vieww.gpu 0 >/dev/null
 sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ setprop debug.vieww.recalibrate 0 >/dev/null
 sh_ setprop debug.vieww.hint 0 >/dev/null
 sh_ setprop debug.vieww.scale "" >/dev/null
 sh_ setprop debug.vieww.bare 0 >/dev/null
+sh_ setprop debug.vieww.cadence "" >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null
 kv status "$([ "$status" = 0 ] && echo PASS || echo FAIL)"

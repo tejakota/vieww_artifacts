@@ -259,7 +259,7 @@ status=0
 # implementation of Vulkan, so its frame times measure the CI runner's cores and
 # not this framework: the first emulator run reported a 41ms median at
 # 1080x2400 with every other check green. On an emulator, and only there, the
-# two frame-budget checks are reported as warnings. Any other failure — or the
+# three frame-budget checks are reported as warnings. Any other failure — or the
 # same two on a phone — still fails the suite.
 emulator=0
 if [ "$(adb shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r')" = "1" ] \
@@ -268,7 +268,7 @@ if [ "$(adb shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r')" = "1" ] \
 fi
 failed_checks="$(echo "$log" | sed -n 's/.*__VIEWW_SUITE__ FAIL \([a-z_0-9]*\).*/\1/p')"
 if ! echo "$log" | grep -q "__VIEWW_SUITE__ result PASS"; then
-    excused="the_typical_frame_is_inside_its_budget no_frame_stalled"
+    excused="the_typical_frame_is_inside_its_budget frames_inside_their_budget no_frame_stalled"
     remaining=""
     for check in $failed_checks; do
         case " $excused " in
