@@ -22,7 +22,7 @@ resolver = "2"
 members = ["app", "core", "runtime", "agents", "tools", "engine", "infer"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 license = "MIT"
 authors = ["The Wright Authors"]

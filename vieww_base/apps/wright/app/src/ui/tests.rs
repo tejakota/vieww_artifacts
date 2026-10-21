@@ -224,3 +224,78 @@ fn the_palette_keeps_any_accent_readable() {
         }
     }
 }
+
+/// Scrolling by a fraction of a pixel moves the page as one piece: the
+/// frame at 100.6 is the frame at 100.0 moved up exactly one pixel, text and
+/// boxes alike. (Before vieww snapped the shift, each line of text rounded
+/// to the pixel grid on its own and scrolled text looked wavy.)
+#[test]
+fn scrolling_moves_the_page_as_one_piece() {
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    ui.open_settings();
+    let mut t = 0u64;
+    let mut frame_at = |at: f32| {
+        ui.form.scroll.offset.set(at);
+        for _ in 0..3 {
+            t += 1;
+            driver.draw_frame_at(Duration::from_millis(t * 16));
+        }
+        let (pixels, _) = NativeRenderer::new().render_to_pixels(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+        pixels.data().to_vec()
+    };
+    let (a, b) = (frame_at(100.0), frame_at(100.6));
+    // Inside the settings page's scrolling column.
+    let row = |img: &[u8], y: usize| img[(y * 1280 + 360) * 4..(y * 1280 + 1100) * 4].to_vec();
+    for y in 140..700 {
+        assert!(row(&a, y + 1) == row(&b, y), "row {y} of the page did not move by exactly one pixel");
+    }
+}
+
+/// Time a scroll step the way the window paints it (damage-limited, kept
+/// pixels), at device ratios 1 and 2: `cargo test --release -p wright
+/// --features ui scroll_frame_cost -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn scroll_frame_cost() {
+    use vieww::paint::Damage;
+    let home = temp("scrollbench");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    ui.open_settings();
+    let mut t = 0u64;
+    for dpr in [1.0f32, 2.0] {
+        let (w, h) = ((1280.0 * dpr) as u32, (800.0 * dpr) as u32);
+        let mut r = NativeRenderer::new();
+        ui.form.scroll.offset.set(0.0);
+        for _ in 0..3 {
+            t += 1;
+            driver.draw_frame_at(Duration::from_millis(t * 16));
+            r.render_in_place(&driver.scene().scaled(dpr), w, h, ui.pal().ground).unwrap();
+        }
+        let (mut paint, mut area) = (Duration::ZERO, 0.0);
+        for _ in 0..30 {
+            ui.form.scroll.by(7.0);
+            t += 1;
+            driver.draw_frame_at(Duration::from_millis(t * 16));
+            let mut damage = Damage::new(vieww::foundation::Rect::new(0.0, 0.0, w as f32, h as f32));
+            for r0 in driver.damage().regions() {
+                damage.add(vieww::foundation::Rect::new(r0.left * dpr, r0.top * dpr, r0.right * dpr, r0.bottom * dpr));
+            }
+            area += damage.covered_area() / (w as f32 * h as f32);
+            let a = Instant::now();
+            r.render_retained_in_place(&driver.scene().scaled(dpr), &damage, w, h, ui.pal().ground).unwrap();
+            paint += a.elapsed();
+        }
+        eprintln!("dpr {dpr}: {:5.1} ms/frame repaint, {:3.0}% of the window damaged per scroll step", paint.as_secs_f64() * 1e3 / 30.0, area * 100.0 / 30.0);
+    }
+}

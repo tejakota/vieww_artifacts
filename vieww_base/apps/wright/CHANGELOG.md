@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.1 — 2026-10-21 — smooth scrolling
+
+- **Scrolled text no longer looks wavy.** vieww's `Scrollable` now moves
+  its content in whole device pixels. A fractional offset (from a trackpad
+  or a drag) put each line of text at its own sub-pixel phase, and the
+  renderer snaps each line to the pixel grid on its own, so lines stepped
+  out of time with each other and with their boxes. A test now checks that
+  a scroll of 0.6 px moves the page by exactly one pixel, every row alike.
+- **Scrolling is much lighter on the CPU.** Measured scrolling Settings in
+  a 1280x800 window (`scroll_frame_cost`, an opt-in benchmark):
+  171 ms -> 14 ms a frame at a device ratio of 1, 926 ms -> 52 ms at 2.
+  - vieww's CPU renderer repaints neighbouring damage as one region: it
+    replayed the whole scene once per rectangle, and a scrolled panel
+    reports one per card.
+  - vieww's shadow cache is sized to the screen: on a high-density display
+    a dialog's shadow was bigger than the cache and evicted every frame.
+  - Wright's background W is drawn as stacked soft strokes instead of a
+    blurred layer: it looks the same, and it no longer re-blurs under
+    everything that moves in front of it.
+
 ## 0.5.0 — 2026-10-21 — built-in models
 
 - **Built-in models, run by Wright itself** (ADR-022, `docs/MODELS.md`):

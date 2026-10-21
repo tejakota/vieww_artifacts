@@ -60,10 +60,10 @@ fn visible(progress: f32, scale: f32, origin: Offset) -> Vec<Offset> {
 }
 
 impl Painter for Mark {
-    /// One path, stroked once with round caps and joins — so the joints are
-    /// part of the stroke, not discs laid over it, and a transparent colour
-    /// stays one even shade. The soft version is the same stroke in a
-    /// blurred layer.
+    /// One path, stroked with round caps and joins — so the joints are part
+    /// of the stroke, not discs laid over it, and a transparent colour stays
+    /// one even shade. The soft version is that stroke at a few widths,
+    /// stacked thinly, which fades its edge the way a blur would.
     fn paint(&self, book: &mut Sketchbook, size: Size) {
         let side = size.width.min(size.height);
         let scale = side / 24.0;
@@ -80,9 +80,19 @@ impl Painter for Mark {
         let width = STROKE * scale * (1.0 + 0.5 * self.soft);
         let (color, blur) = (self.color, side * 0.012 * self.soft);
         if blur > 0.5 {
-            book.layer(1.0, blur, None, |b| {
-                b.stroke_styled(path, color, width, StrokeStyle::rounded());
-            });
+            // The soft edge as a few translucent strokes, widest first,
+            // instead of a blurred layer: the same falloff to the eye, and
+            // path fills rather than a blur, the most expensive thing the CPU
+            // renderer draws. The mark sits behind everything, so anything
+            // scrolling or animating in front of it repaints it — with a blur
+            // that cost 16 ms of a 25 ms scroll frame at 1x and ~90 ms at 2x.
+            const STEPS: usize = 6;
+            let reach = 3.0 * blur;
+            let alpha = 1.0 - (1.0 - f32::from(color.a) / 255.0).powf(1.0 / STEPS as f32);
+            for k in (0..STEPS).rev() {
+                let w = width + 2.0 * reach * k as f32 / (STEPS - 1) as f32 - reach * 0.6;
+                book.stroke_styled(path.clone(), color.with_alpha((alpha * 255.0).round() as u8), w.max(width * 0.5), StrokeStyle::rounded());
+            }
         } else {
             book.stroke_styled(path, color, width, StrokeStyle::rounded());
         }
