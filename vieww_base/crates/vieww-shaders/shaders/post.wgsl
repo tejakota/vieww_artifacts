@@ -13,9 +13,8 @@
 //   4 MASK     src × mask                  PopLayer's shaped-clip multiply
 //   5 BLEND    blend(mode, src×α, dst)     Target::composite_layer, 28 modes
 //   6 OVER     src × α (pipeline blends)   composite_layer, Normal
-//   7 SEED     mask coverage               shadow caster rasterisation
-//   8 INSET    (1 − src.a) × mask          render_shadow's complement
-//   9 TINT     colour × src.a [× clip]     render_shadow's tint + clip multiply
+//   7 SHADOW   colour × mask [× clip]      render_shadow's tint + clip multiply,
+//                                          over coverage the CPU code blurred
 //
 // Targets are premultiplied RGBA16F, fetched with `textureLoad`. For the blur
 // passes, pixels outside `pc.region` read one of two ways, chosen by
@@ -262,14 +261,7 @@ fn fs_main(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
             return src_at(p) * pc.args.w;
         }
         case 7: {
-            return vec4<f32>(mask_at(p, pc.p0.xy));
-        }
-        case 8: {
-            let blurred = src_at(p).a;
-            return vec4<f32>(clamp(1.0 - blurred, 0.0, 1.0) * mask_at(p, pc.p0.xy));
-        }
-        case 9: {
-            var a = src_at(p).a;
+            var a = mask_at(p, pc.p0.xy);
             if pc.p1.z > 0.5 {
                 a = a * mask_at(p, pc.p1.xy);
             }

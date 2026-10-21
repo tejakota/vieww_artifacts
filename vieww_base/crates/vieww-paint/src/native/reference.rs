@@ -1056,6 +1056,16 @@ impl NativeRenderer {
                         Some(frame) => (&mut frame.target, frame.origin),
                         None => (&mut *root, (0, 0)),
                     };
+                    // The patch is the shadow's whole extent (the same bytes
+                    // wherever the card is, so the cache keeps it as the card
+                    // moves); the surface cuts it here, where it is drawn.
+                    let (sx0, sy0, sx1, sy1) = super::shadow::pixel_bounds(local_surface);
+                    let within = (
+                        sx0 - origin.0,
+                        sy0 - origin.1,
+                        sx1 - origin.0,
+                        sy1 - origin.1,
+                    );
                     // A clip that carries no mask — no clip at all, or a plain
                     // rectangle, which the patch is already confined to —
                     // leaves every pixel at full coverage, so the cached patch
@@ -1073,22 +1083,20 @@ impl NativeRenderer {
                                 }
                             }
                         }
-                        target.composite_layer(
+                        target.composite_layer_within(
                             &clipped,
                             px0 - origin.0,
                             py0 - origin.1,
-                            vieww_foundation::BlendMode::Normal,
-                            1.0,
                             pipeline,
+                            within,
                         );
                     } else {
-                        target.composite_layer(
+                        target.composite_layer_within(
                             patch,
                             px0 - origin.0,
                             py0 - origin.1,
-                            vieww_foundation::BlendMode::Normal,
-                            1.0,
                             pipeline,
+                            within,
                         );
                     }
                 }

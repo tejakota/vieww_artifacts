@@ -35,8 +35,7 @@
 //!               then filtered — CSS backdrop-filter)
 //!   PopLayer    filter → shaped-clip multiply → blend (28 modes) × alpha into
 //!               the parent
-//!   Shadow      caster mask → 3 × (H, V) box blur → inset complement → tint
-//!               → composite, in a scratch target
+//!   Shadow      colour × cached coverage [× clip], source-over, one pass
 //! ```
 //!
 //! Every step mirrors, operation for operation, what
@@ -323,17 +322,19 @@ pub enum Step {
         alpha: f32,
     },
     /// A blurred rounded-rect shadow, drawn source-over into the current
-    /// target within `scissor`.
+    /// target within `scissor`: `color × coverage [× clip]`, one pass.
     ///
-    /// `patch` is the silhouette's extent; outside it the blur reads
-    /// transparent. `inner`, when present, makes it an inset shadow:
-    /// `(1 - blurred) × inner`. `clip` multiplies the result.
+    /// `coverage` is the shadow's *finished* coverage over `patch` — blurred,
+    /// complemented for an inset shadow, cropped to the surface — computed
+    /// once by the CPU renderer's own code (`GpuSeam::shadow_coverage`) and
+    /// cached in the mask atlas by shape, not position, so a card that
+    /// scrolls keeps it. It used to be the unblurred caster, blurred here by
+    /// six passes in a cleared scratch target: eight render passes a shadow,
+    /// each a whole-target load and store on a tiling GPU, every frame.
     Shadow {
         patch: PixelRect,
         scissor: PixelRect,
-        caster: MaskRef,
-        inner: Option<MaskRef>,
-        box_radius: Option<u32>,
+        coverage: MaskRef,
         /// Premultiplied.
         color: [f32; 4],
         clip: Option<MaskRef>,
@@ -772,18 +773,15 @@ fn plan_with(
                     out.plan.note(Unsupported::Shadow);
                     continue;
                 };
+                // Drawn straight into the current target: a shadow needs no
+                // target of its own any more, so it neither deepens the plan
+                // nor counts against `MAX_TARGET_DEPTH`.
                 let top = stack.last().expect("root frame");
-                let level = top.level;
-                if level + 1 >= MAX_TARGET_DEPTH {
-                    out.plan.note(Unsupported::Shadow);
-                    continue;
-                }
                 let local_surface = top.rect.to_rect().intersect(surface);
                 match p.plan_shadow(*rect, *radius, shadow, *transform, clip, local_surface) {
                     ShadowPlan::Nothing => {}
                     ShadowPlan::Gap => out.plan.note(Unsupported::Shadow),
                     ShadowPlan::Step(step, touched) => {
-                        out.plan.target_depth = out.plan.target_depth.max(level + 1);
                         out.step(step);
                         let top = stack.last_mut().expect("root frame");
                         top.ink = top.ink.union(touched);
@@ -1051,78 +1049,70 @@ impl Planner {
         clip: &Clip,
         local_surface: Rect,
     ) -> ShadowPlan {
-        let Some(masks) = self
+        let placement = self
             .seam
-            .shadow_masks(rect, radius, shadow, transform, local_surface)
-        else {
-            return ShadowPlan::Nothing;
-        };
-        let patch = PixelRect {
-            x0: masks.x,
-            y0: masks.y,
-            x1: masks.x + masks.width as i32,
-            y1: masks.y + masks.height as i32,
-        };
-        let key_base = {
+            .shadow_placement(rect, radius, shadow, transform, local_surface);
+        // Keyed by what the coverage depends on — the shape, the blur, the
+        // sub-pixel phase — and not where it is: the same card one scroll
+        // step on, or the next card down, is a hit.
+        let key = {
             let mut h = std::hash::DefaultHasher::new();
-            (
-                "shadow",
-                [rect.left, rect.top, rect.right, rect.bottom, radius].map(f32::to_bits),
-                [
-                    shadow.offset.dx,
-                    shadow.offset.dy,
-                    shadow.blur,
-                    shadow.spread,
-                ]
-                .map(f32::to_bits),
-                shadow.is_inset,
-                [
-                    transform.a,
-                    transform.b,
-                    transform.c,
-                    transform.d,
-                    transform.tx,
-                    transform.ty,
-                ]
-                .map(f32::to_bits),
-                patch,
-            )
-                .hash(&mut h);
-            h.finish()
+            ("shadow-coverage", placement.key).hash(&mut h);
+            MaskKey(h.finish())
         };
-        let Some(caster) = self
-            .masks
-            .get_or_insert(MaskKey(key_base), || {
-                Some((
-                    masks.x,
-                    masks.y,
-                    masks.width,
-                    masks.height,
-                    masks.caster.clone(),
-                ))
-            })
-            .map(MaskRef::from)
-        else {
-            return ShadowPlan::Gap;
-        };
-        let inner = match &masks.inner {
-            None => None,
-            Some(inner) => match self
-                .masks
-                .get_or_insert(MaskKey(key_base ^ 0x9e37_79b9_7f4a_7c15), || {
-                    Some((masks.x, masks.y, masks.width, masks.height, inner.clone()))
+        let slot = match self.masks.get(key) {
+            Some(slot) => slot,
+            None => {
+                let Some(coverage) = self.seam.shadow_coverage(&placement, radius, shadow) else {
+                    return ShadowPlan::Nothing;
+                };
+                match self.masks.get_or_insert(key, || {
+                    Some((
+                        coverage.x,
+                        coverage.y,
+                        coverage.width,
+                        coverage.height,
+                        coverage.alpha,
+                    ))
                 }) {
-                Some(slot) => Some(MaskRef::from(slot)),
-                None => return ShadowPlan::Gap,
-            },
+                    Some(slot) => slot,
+                    None => return ShadowPlan::Gap,
+                }
+            }
+        };
+        // The slot's device position is the canonical one; the placement's
+        // whole-pixel shift puts it where this shadow is.
+        let (sx, sy) = placement.shift;
+        let x0 = slot.device_x + sx;
+        let y0 = slot.device_y + sy;
+        #[expect(clippy::cast_possible_wrap, reason = "mask extents fit a frame")]
+        let patch = PixelRect {
+            x0,
+            y0,
+            x1: x0 + slot.width as i32,
+            y1: y0 + slot.height as i32,
+        };
+        #[expect(clippy::cast_precision_loss, reason = "texel coordinates < 2^24")]
+        let coverage = MaskRef {
+            offset: [
+                (x0 - slot.atlas_x as i32) as f32,
+                (y0 - slot.atlas_y as i32) as f32,
+            ],
         };
         // `NativeRenderer` composites the patch through the clip's *mask* only:
         // a rectangle-only clip does not cut a shadow (the patch is confined to
         // the enclosing buffer instead). Mirrored exactly — this planner's job
         // is parity with the oracle, and a change to that rule belongs in the
         // oracle first.
+        // The coverage is the shadow's whole extent, which can reach past
+        // the surface by the blur's reach (the CPU renderer cuts it where it
+        // draws it, as this does).
         let (scissor, clip_mask) = if clip.shapes().is_empty() {
-            (patch, None)
+            let visible = patch.intersect(PixelRect::round_out(local_surface));
+            if visible.is_empty() {
+                return ShadowPlan::Nothing;
+            }
+            (visible, None)
         } else {
             let region = clip_region(clip, patch, local_surface);
             let Some(region) = region else {
@@ -1145,9 +1135,7 @@ impl Planner {
             Step::Shadow {
                 patch,
                 scissor,
-                caster,
-                inner,
-                box_radius: masks.box_radius,
+                coverage,
                 color,
                 clip: clip_mask,
             },
@@ -2737,16 +2725,62 @@ mod tests {
             let mut planner = Planner::new();
             let plan = planner.plan(&scene, 100.0, 100.0);
             assert!(plan.is_complete(), "{shadow:?}: {:?}", plan.unsupported);
-            let Some(Step::Shadow {
-                inner, box_radius, ..
-            }) = plan.steps.first()
-            else {
+            let Some(Step::Shadow { patch, scissor, .. }) = plan.steps.first() else {
                 panic!("{:?}", plan.steps)
             };
-            assert_eq!(inner.is_some(), shadow.is_inset);
-            assert!(box_radius.is_some());
-            assert_eq!(plan.target_depth, 1, "a shadow uses one work target");
+            assert!(!patch.is_empty() && !scissor.is_empty(), "{shadow:?}");
+            assert_eq!(
+                plan.target_depth, 0,
+                "a shadow draws into the current target, with no work target"
+            );
         }
+    }
+
+    /// The point of keying shadows by shape: a list of identical cards is
+    /// one blurred coverage in the atlas, and scrolling it by whole pixels
+    /// adds nothing and uploads nothing.
+    #[test]
+    fn identical_shadows_share_one_coverage_and_scrolling_keeps_it() {
+        let cards = |scroll: f32| {
+            let mut scene = Scene::default();
+            for row in 0..4 {
+                #[expect(clippy::cast_precision_loss, reason = "four rows")]
+                // Clear of the surface edge at every scroll below: a shadow
+                // the surface crops keeps an absolute key, by design.
+                let top = 60.0 + row as f32 * 60.0 - scroll;
+                scene.push_command(Command::DrawShadow {
+                    rect: Rect::new(20.0, top, 180.0, top + 40.0),
+                    radius: 8.0,
+                    shadow: Shadow::new(Color::BLACK, Offset::new(0.0, 4.0), 10.0),
+                    transform: Transform::IDENTITY,
+                    clip: Clip::NONE,
+                });
+            }
+            scene
+        };
+        let mut planner = Planner::new();
+        let first = planner.plan(&cards(0.0), 200.0, 400.0);
+        assert!(first.is_complete(), "{:?}", first.unsupported);
+        assert_eq!(
+            first
+                .steps
+                .iter()
+                .filter(|s| matches!(s, Step::Shadow { .. }))
+                .count(),
+            4
+        );
+        assert_eq!(planner.mask_atlas().len(), 1, "four cards, one coverage");
+        let version = planner.mask_atlas().version();
+        for scroll in [6.0, 12.0, 18.0] {
+            let plan = planner.plan(&cards(scroll), 200.0, 400.0);
+            assert!(plan.is_complete());
+            assert_eq!(planner.mask_atlas().len(), 1, "scrolled {scroll}");
+        }
+        assert_eq!(
+            planner.mask_atlas().version(),
+            version,
+            "nothing re-uploaded"
+        );
     }
 
     #[test]

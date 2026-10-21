@@ -10,7 +10,7 @@
 //! complement for the inset case, so a CPU-vs-GPU shadow stays comparable
 //! once the SDF shader lands.
 
-use vieww_foundation::{Rect, Shadow, Transform};
+use vieww_foundation::{Offset, Rect, Shadow, Transform};
 
 use super::color::Premul;
 use super::geometry::fill::rasterize;
@@ -27,6 +27,53 @@ pub(crate) fn render_shadow(
     transform: Transform,
     surface: Rect,
 ) -> Option<(Target, i32, i32)> {
+    let ShadowAlpha {
+        x0,
+        y0,
+        width: w,
+        height: h,
+        alpha,
+    } = shadow_alpha(rect, radius, shadow, transform, surface)?;
+    let tint = Premul::from_straight(shadow.color);
+    let mut target = Target::new(w, h);
+    for (i, a) in alpha.iter().enumerate() {
+        target.pixels[i] = tint.scaled(*a);
+    }
+    // Written through `pixels` directly rather than through a compositing
+    // method, so the ink `composite_layer` reads has to be declared here. The
+    // patch is exactly the blurred silhouette's extent — it was sized to it —
+    // so the whole of it counts.
+    target.mark_all_ink();
+    Some((target, x0, y0))
+}
+
+/// A shadow's final coverage before its colour: blurred and complemented
+/// for an inset shadow. What [`render_shadow`] tints, and what the GPU seam
+/// hands the planner whole, so the GPU draws a shadow as one textured pass
+/// instead of re-running the blur.
+///
+/// **Not cropped to `surface`**: it can reach past it by up to the blur's
+/// reach (`shadow_masks` clamps there), and the caller cuts it to the surface
+/// when it draws it. Cropped here, a card's patch would depend on where the
+/// surface's edge falls across it, and a card scrolling under that edge
+/// would need a new patch every frame.
+pub(crate) struct ShadowAlpha {
+    pub(crate) x0: i32,
+    pub(crate) y0: i32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    /// Row-major, `width * height`, in `0..=1`.
+    pub(crate) alpha: Vec<f32>,
+}
+
+/// See [`ShadowAlpha`].
+pub(crate) fn shadow_alpha(
+    rect: Rect,
+    radius: f32,
+    shadow: &Shadow,
+    transform: Transform,
+    surface: Rect,
+) -> Option<ShadowAlpha> {
     let masks = shadow_masks(rect, radius, shadow, transform, surface)?;
     let (w, h) = (masks.width, masks.height);
     let mut alpha = masks.caster;
@@ -44,26 +91,146 @@ pub(crate) fn render_shadow(
         }
     }
 
-    let tint = Premul::from_straight(shadow.color);
-    let mut target = Target::new(w, h);
-    for (i, a) in alpha.iter().enumerate() {
-        target.pixels[i] = tint.scaled(*a);
-    }
-    // Written through `pixels` directly rather than through a compositing
-    // method, so the ink `composite_layer` reads has to be declared here. The
-    // patch is exactly the blurred silhouette's extent — it was sized to it —
-    // so the whole of it counts.
-    target.mark_all_ink();
-    Some((target, masks.x0, masks.y0))
+    Some(ShadowAlpha {
+        x0: masks.x0,
+        y0: masks.y0,
+        width: w,
+        height: h,
+        alpha,
+    })
 }
+
+/// A surface's extent in whole pixels: outward to the pixels it touches.
+pub(crate) fn pixel_bounds(surface: Rect) -> (i32, i32, i32, i32) {
+    (
+        surface.left.floor() as i32,
+        surface.top.floor() as i32,
+        surface.right.ceil() as i32,
+        surface.bottom.ceil() as i32,
+    )
+}
+
+/// Where a shadow is drawn, separated from what it looks like — so the
+/// same card at another place, or the same card one scroll step later,
+/// reuses one blurred patch instead of blurring again.
+///
+/// # Why
+///
+/// Both renderers used to key a shadow by its absolute position. A list
+/// that scrolls moves every card, so every shadow missed every frame: on
+/// the stress screen (a feed of cards scrolling under a header) the GPU
+/// path spent 308 ms of a 397 ms lavapipe frame re-blurring shadows the
+/// previous frame had already blurred, a pixel higher up.
+///
+/// # How
+///
+/// A shadow is a function of its rectangle's *size*, its radius, the
+/// shadow's parameters, the transform's linear part and the **sub-pixel
+/// phase** of where the rectangle lands — not of which whole pixel that is.
+/// [`shadow_frame`] moves the shadow to a canonical place (the rectangle at
+/// the origin, translated only by its device origin's fractional part) and
+/// says how many whole pixels to move the result back by.
+///
+/// That holds while nothing outside the shadow decides its pixels — while
+/// the surface, grown by the blur's reach, holds the whole shadow, so
+/// `shadow_masks`' clamp does not bite. A shadow crossing the screen's edge
+/// is still free (it is cropped where it is drawn); one reaching further
+/// past it than the blur does keeps its absolute key and its place.
+pub(crate) struct ShadowFrame {
+    /// The cache key: everything the patch's bytes depend on, colour
+    /// included (a GPU caller that caches coverage alone can drop it — see
+    /// [`ShadowFrame::coverage_key`]).
+    pub(crate) key: ShadowKey,
+    /// Where to render: the canonical rectangle and transform when the
+    /// shadow is free of the surface, the original ones otherwise.
+    pub(crate) rect: Rect,
+    pub(crate) transform: Transform,
+    pub(crate) surface: Rect,
+    /// Whole pixels to add to the rendered patch's position.
+    pub(crate) shift: (i32, i32),
+}
+
+impl ShadowFrame {
+    /// The key without the colour: what the patch's *coverage* depends on.
+    pub(crate) fn coverage_key(&self) -> [u32; 16] {
+        let mut key = self.key.0;
+        key[5] = 0;
+        key
+    }
+}
+
+/// See [`ShadowFrame`].
+pub(crate) fn shadow_frame(
+    rect: Rect,
+    radius: f32,
+    shadow: &Shadow,
+    transform: Transform,
+    surface: Rect,
+) -> ShadowFrame {
+    let origin = transform.apply(Offset::new(rect.left, rect.top));
+    let whole = (origin.dx.floor(), origin.dy.floor());
+    let canon_rect = Rect::new(0.0, 0.0, rect.right - rect.left, rect.bottom - rect.top);
+    let canon_transform = Transform::new(
+        transform.a,
+        transform.b,
+        transform.c,
+        transform.d,
+        origin.dx - whole.0,
+        origin.dy - whole.1,
+    );
+    let shift = (whole.0 as i32, whole.1 as i32);
+    // Free when the whole unclamped patch, put back where it belongs, is
+    // inside the surface grown by the blur's reach: then the clamp in
+    // `shadow_masks` does not change it.
+    let canon = canon_transform.apply_rect(shadow.bounds(canon_rect));
+    let (sx0, sy0, sx1, sy1) = pixel_bounds(surface.inflate(reach(shadow, transform)));
+    let free = origin.dx.is_finite()
+        && origin.dy.is_finite()
+        && whole.0.abs() < 1.0e7
+        && whole.1.abs() < 1.0e7
+        && canon.left.floor() as i32 + shift.0 >= sx0
+        && canon.top.floor() as i32 + shift.1 >= sy0
+        && canon.right.ceil() as i32 + shift.0 <= sx1
+        && canon.bottom.ceil() as i32 + shift.1 <= sy1;
+    if free {
+        let canon_surface = surface.translate(Offset::new(-whole.0, -whole.1));
+        ShadowFrame {
+            // The surface does not decide a free patch's bytes, so it is
+            // not in the key — a marker is, so a free key can never equal
+            // the absolute key of a shadow that happens to sit at the
+            // origin.
+            key: ShadowKey::new(canon_rect, radius, shadow, canon_transform, FREE),
+            rect: canon_rect,
+            transform: canon_transform,
+            surface: canon_surface,
+            shift,
+        }
+    } else {
+        ShadowFrame {
+            key: ShadowKey::new(rect, radius, shadow, transform, surface),
+            rect,
+            transform,
+            surface,
+            shift: (0, 0),
+        }
+    }
+}
+
+/// The surface a free [`ShadowKey`] carries in place of a real one: no real
+/// surface is NaN.
+const FREE: Rect = Rect {
+    left: f32::NAN,
+    top: f32::NAN,
+    right: f32::NAN,
+    bottom: f32::NAN,
+};
 
 /// The inputs of a shadow before any blur: the caster silhouette's coverage,
 /// the inset confinement mask, the patch placement and the box radius.
 ///
-/// Split out of [`render_shadow`] so the GPU seam
-/// (`native/gpu_seam.rs`) hands a backend *exactly* the silhouettes this
-/// renderer blurs, and runs the same three box passes on the GPU. One
-/// implementation of "what a shadow's mask is", two executors of the blur.
+/// Split out of [`shadow_alpha`], which blurs, complements and crops it —
+/// the coverage both renderers then tint (the GPU seam hands it to a backend
+/// whole). One implementation of a shadow, blur included.
 pub(crate) struct ShadowMasks {
     pub(crate) x0: i32,
     pub(crate) y0: i32,
@@ -87,15 +254,22 @@ pub(crate) fn shadow_masks(
     if shadow.is_invisible() {
         return None;
     }
-    let scale = (transform.a * transform.d - transform.b * transform.c)
-        .abs()
-        .sqrt()
-        .max(0.01);
-    let sigma_device = (shadow.std_dev() * scale).max(0.0);
+    let box_radius = shadow_box_radius(shadow, transform);
 
     let caster = rect.inflate(shadow.spread).translate(shadow.offset);
     let bounds_local = shadow.bounds(rect);
-    let bounds_device = transform.apply_rect(bounds_local).intersect(surface);
+    // **Clamped to the surface grown by the blur's reach (`reach`), not to
+    // the surface.** Three box passes of radius `r` read `3r` pixels each way,
+    // so a pixel inside the surface depends on caster coverage up to `3r`
+    // outside it. Clamped at the surface itself, the blur read transparent
+    // there instead, and a card scrolled half off the top had its shadow
+    // fade towards the screen's edge as if the card ended there. Grown by
+    // the reach, every pixel inside the surface is the shadow's true value;
+    // `shadow_alpha` crops the rest. Still bounded: a window-sized shadow
+    // costs the window plus a margin, never the whole caster.
+    let bounds_device = transform
+        .apply_rect(bounds_local)
+        .intersect(surface.inflate(reach(shadow, transform)));
     if bounds_device.is_empty() {
         return None;
     }
@@ -134,7 +308,6 @@ pub(crate) fn shadow_masks(
     let inner = shadow
         .is_inset
         .then(|| place(rounded_rect_polygon_transformed(rect, radius, transform)));
-    let box_radius = (sigma_device > 0.1).then(|| box_radius_for_sigma(sigma_device));
     Some(ShadowMasks {
         x0,
         y0,
@@ -145,6 +318,35 @@ pub(crate) fn shadow_masks(
         box_radius,
     })
 }
+
+/// The three-box radius a shadow blurs with under `transform`, or `None`
+/// when the blur is too small to run.
+fn shadow_box_radius(shadow: &Shadow, transform: Transform) -> Option<i32> {
+    let scale = (transform.a * transform.d - transform.b * transform.c)
+        .abs()
+        .sqrt()
+        .max(0.01);
+    let sigma_device = (shadow.std_dev() * scale).max(0.0);
+    (sigma_device > 0.1).then(|| box_radius_for_sigma(sigma_device))
+}
+
+/// How far past the surface a shadow's masks are kept, in device pixels.
+///
+/// At least the blur's reach — three box passes of radius `r` read `3r`
+/// pixels, plus one for the edge pixel's own coverage — so every pixel
+/// inside the surface is exact. And [`SLACK`] beyond that, so a card keeps
+/// its cached patch while it scrolls well past the edge rather than only
+/// for its first few pixels: past the reach, the clamp would bite and make
+/// the patch depend on where the edge falls (a miss every frame).
+fn reach(shadow: &Shadow, transform: Transform) -> f32 {
+    shadow_box_radius(shadow, transform).map_or(1.0, |r| (3 * r + 1) as f32) + SLACK
+}
+
+/// See [`reach`]. Bounded on purpose: the clamp is also what keeps a
+/// shadow cast by a huge rectangle (a whole scroll view's content) from
+/// costing a patch the size of the content; it costs the surface plus this,
+/// on each side.
+const SLACK: f32 = 128.0;
 
 /// The per-pass radius of the three-box approximation of a Gaussian of
 /// standard deviation `sigma` — shared by shadows, layer blurs, and the GPU
@@ -304,7 +506,7 @@ pub(crate) struct ShadowCache {
 /// `PartialEq` on floats, so that two keys are equal exactly when the
 /// arithmetic below them would be.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct ShadowKey([u32; 16]);
+pub(crate) struct ShadowKey(pub(crate) [u32; 16]);
 
 impl ShadowKey {
     fn new(rect: Rect, radius: f32, shadow: &Shadow, transform: Transform, surface: Rect) -> Self {
@@ -389,14 +591,16 @@ impl ShadowCache {
         transform: Transform,
         surface: Rect,
     ) -> Option<(&Target, i32, i32)> {
-        let key = ShadowKey::new(rect, radius, shadow, transform, surface);
+        let frame = shadow_frame(rect, radius, shadow, transform, surface);
+        let key = frame.key;
         if let Some(index) = self.entries.iter().position(|(k, ..)| *k == key) {
             self.hits += 1;
             let entry = self.entries.remove(index);
             self.entries.push(entry);
         } else {
             self.misses += 1;
-            let (patch, px0, py0) = render_shadow(rect, radius, shadow, transform, surface)?;
+            let (patch, px0, py0) =
+                render_shadow(frame.rect, radius, shadow, frame.transform, frame.surface)?;
             let cost = patch.pixels.len();
             // Evict oldest-first until this one fits. A single patch larger
             // than the whole budget is still stored — one frame's correctness
@@ -411,6 +615,142 @@ impl ShadowCache {
             self.entries.push((key, patch, px0, py0));
         }
         let (_, patch, px0, py0) = self.entries.last().expect("just pushed");
-        Some((patch, *px0, *py0))
+        Some((patch, *px0 + frame.shift.0, *py0 + frame.shift.1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vieww_foundation::{Color, Offset};
+
+    fn card_shadow() -> Shadow {
+        Shadow::new(Color::rgba(0, 0, 0, 200), Offset::new(0.0, 6.0), 16.0)
+    }
+
+    /// A card half off the top of the surface keeps its true shadow inside
+    /// the surface: the same values a surface large enough to hold the
+    /// whole shadow produces there. Clamped at the surface itself, the blur
+    /// read transparent past it and the shadow faded towards the edge.
+    #[test]
+    fn a_shadow_crossing_the_surface_edge_does_not_fade_at_it() {
+        let rect = Rect::new(40.0, -30.0, 200.0, 60.0);
+        let small = Rect::new(0.0, 0.0, 240.0, 200.0);
+        let large = Rect::new(-400.0, -400.0, 640.0, 600.0);
+        let near =
+            shadow_alpha(rect, 12.0, &card_shadow(), Transform::IDENTITY, small).expect("visible");
+        let whole =
+            shadow_alpha(rect, 12.0, &card_shadow(), Transform::IDENTITY, large).expect("visible");
+        let at = |s: &ShadowAlpha, x: i32, y: i32| {
+            s.alpha[((y - s.y0) as u32 * s.width + (x - s.x0) as u32) as usize]
+        };
+        let mut checked = 0;
+        for y in 0..200 {
+            for x in 0..240 {
+                let inside = |s: &ShadowAlpha| {
+                    x >= s.x0
+                        && y >= s.y0
+                        && x < s.x0 + s.width as i32
+                        && y < s.y0 + s.height as i32
+                };
+                if inside(&whole) {
+                    assert!(
+                        inside(&near),
+                        "({x},{y}) is in the shadow but not the patch"
+                    );
+                    let (a, b) = (at(&near, x, y), at(&whole, x, y));
+                    assert!(
+                        (a - b).abs() < 1e-5,
+                        "({x},{y}): {a} at the edge, {b} in truth"
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 1000, "{checked}");
+    }
+
+    /// A card crossing the surface's edge is still keyed by its shape: as it
+    /// scrolls under the edge, its patch is reused.
+    #[test]
+    fn a_shadow_scrolling_under_the_edge_keeps_its_patch() {
+        let surface = Rect::new(0.0, 0.0, 400.0, 800.0);
+        let mut cache = ShadowCache::new();
+        for top in [10.0, 4.0, -2.0, -8.0] {
+            cache.patch(
+                Rect::new(40.0, top, 360.0, top + 120.0),
+                18.0,
+                &card_shadow(),
+                Transform::IDENTITY,
+                surface,
+            );
+        }
+        assert_eq!(cache.stats(), (3, 1));
+    }
+
+    /// The same card at another whole-pixel position — the next one down a
+    /// list, or this one a scroll step later — is a cache hit, drawn at its
+    /// own place; a sub-pixel move is a different phase, and a miss.
+    #[test]
+    fn a_whole_pixel_move_is_a_cache_hit_at_the_new_place() {
+        let surface = Rect::new(0.0, 0.0, 400.0, 800.0);
+        let mut cache = ShadowCache::new();
+        let at = |top: f32| Rect::new(40.0, top, 360.0, top + 120.0);
+        let (_, x0, y0) = cache
+            .patch(
+                at(200.0),
+                18.0,
+                &card_shadow(),
+                Transform::IDENTITY,
+                surface,
+            )
+            .map(|(p, x, y)| (p.width, x, y))
+            .expect("visible");
+        let (_, x1, y1) = cache
+            .patch(
+                at(206.0),
+                18.0,
+                &card_shadow(),
+                Transform::IDENTITY,
+                surface,
+            )
+            .map(|(p, x, y)| (p.width, x, y))
+            .expect("visible");
+        assert_eq!(cache.stats(), (1, 1), "one miss, then a hit");
+        assert_eq!((x1, y1), (x0, y0 + 6), "drawn where the card now is");
+        // The scroll could equally be the transform's.
+        let moved = Transform::translate(Offset::new(0.0, 12.0));
+        cache.patch(at(200.0), 18.0, &card_shadow(), moved, surface);
+        assert_eq!(cache.stats(), (2, 1));
+        cache.patch(
+            at(200.5),
+            18.0,
+            &card_shadow(),
+            Transform::IDENTITY,
+            surface,
+        );
+        assert_eq!(cache.stats(), (2, 2), "half a pixel is another phase");
+    }
+
+    /// Caching by shape draws exactly what drawing in place draws.
+    #[test]
+    fn a_shadow_from_the_cache_is_the_shadow_drawn_in_place() {
+        let surface = Rect::new(0.0, 0.0, 400.0, 800.0);
+        let rect = Rect::new(37.25, 211.75, 301.0, 330.0);
+        let transform = Transform::translate(Offset::new(3.0, 140.0));
+        let mut cache = ShadowCache::new();
+        let (cached, cx, cy) = cache
+            .patch(rect, 10.0, &card_shadow(), transform, surface)
+            .map(|(p, x, y)| (p.clone(), x, y))
+            .expect("visible");
+        let (direct, dx, dy) =
+            render_shadow(rect, 10.0, &card_shadow(), transform, surface).expect("visible");
+        assert_eq!(
+            (cx, cy, cached.width, cached.height),
+            (dx, dy, direct.width, direct.height)
+        );
+        for (a, b) in cached.pixels.iter().zip(&direct.pixels) {
+            assert!((a.a - b.a).abs() < 1e-4, "{a:?} against {b:?}");
+        }
     }
 }

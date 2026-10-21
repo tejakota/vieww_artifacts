@@ -729,6 +729,43 @@ impl Target {
         );
     }
 
+    /// [`Self::composite_layer`] with the normal blend at full alpha, writing
+    /// only inside `within` (this buffer's coordinates, half-open).
+    ///
+    /// For a cached shadow patch, which is the shadow's whole extent — the
+    /// same bytes wherever the card is — and is cut to the surface here,
+    /// where it is drawn, rather than when it was made.
+    pub(crate) fn composite_layer_within(
+        &mut self,
+        other: &Target,
+        ox: i32,
+        oy: i32,
+        pipeline: ColorPipeline,
+        within: (i32, i32, i32, i32),
+    ) {
+        let Some((x_start, y_start, x_end, y_end)) = self.layer_window(other, ox, oy) else {
+            return;
+        };
+        let (x_start, y_start) = (x_start.max(within.0 - ox), y_start.max(within.1 - oy));
+        let (x_end, y_end) = (x_end.min(within.2 - ox), y_end.min(within.3 - oy));
+        if x_start >= x_end || y_start >= y_end {
+            return;
+        }
+        self.mark_ink(x_start + ox, y_start + oy, x_end + ox, y_end + oy);
+        let normal = matches!(pipeline, ColorPipeline::GammaSpace);
+        self.composite_layer_rows(
+            other,
+            (x_start, y_start, x_end, y_end),
+            ox,
+            oy,
+            BlendMode::Normal,
+            1.0,
+            pipeline,
+            normal,
+            normal,
+        );
+    }
+
     /// The part of `other` (in its own coordinates, half-open) that
     /// [`Self::composite_layer`] reads at `(ox, oy)`: its ink, cut to this
     /// buffer's writable window. `None` when that is empty.

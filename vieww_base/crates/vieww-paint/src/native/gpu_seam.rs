@@ -10,9 +10,10 @@
 //!
 //! - **Shaped clips** — [`GpuSeam::clip_mask`] is the exact antialiased
 //!   coverage `NativeRenderer` multiplies into a clipped draw.
-//! - **Shadows** — [`GpuSeam::shadow_masks`] is the unblurred caster (and, for
-//!   an inset shadow, the confinement box) plus the box radius. The *blur* is
-//!   not done here: the GPU runs the same three separable box passes.
+//! - **Shadows** — [`GpuSeam::shadow_placement`] is the cache key and the
+//!   whole-pixel shift, and [`GpuSeam::shadow_coverage`] the finished
+//!   coverage: blurred, complemented for an inset shadow, cropped. The GPU
+//!   only tints it, so the two renderers share the blur as well as the mask.
 //! - **Blur radii** — [`box_radius_for_sigma`] is the one kernel formula.
 //! - **Gradients** — [`gradient_ramp`] samples the premultiplied stop ramp and
 //!   [`BAYER4`] is the ordered-dither matrix, so a fragment shader evaluates
@@ -58,21 +59,19 @@ pub enum SeamShape<'a> {
     Stroke(&'a vieww_foundation::Path, &'a crate::Stroke),
 }
 
-/// A shadow's masks, before blur. See the module doc.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShadowPatch {
-    /// The patch's device-space top-left and size. `caster` and `inner` both
-    /// cover exactly this rectangle.
-    pub x: i32,
-    pub y: i32,
-    pub width: u32,
-    pub height: u32,
-    /// Unblurred coverage of the offset + spread caster.
-    pub caster: Vec<u8>,
-    /// For an inset shadow: coverage of the box the shadow is confined to.
-    pub inner: Option<Vec<u8>>,
-    /// Three-box blur radius; `None` for a blur too small to run.
-    pub box_radius: Option<u32>,
+/// Where a `DrawShadow` lands and what decides its pixels — the CPU
+/// renderer's own `ShadowFrame`, handed to a backend so its shadow cache
+/// keys exactly as the CPU one does. See [`GpuSeam::shadow_placement`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadowPlacement {
+    /// Everything the shadow's *coverage* depends on (its colour is not in
+    /// it): equal keys, equal coverage, wherever the two shadows are.
+    pub key: [u32; 16],
+    /// Whole device pixels to add to [`GpuSeam::shadow_coverage`]'s patch.
+    pub shift: (i32, i32),
+    rect: Rect,
+    transform: Transform,
+    surface: Rect,
 }
 
 /// A colour glyph, as a backend draws it.
@@ -220,28 +219,63 @@ impl GpuSeam {
         })
     }
 
-    /// The unblurred masks of a `DrawShadow`, confined to `surface` exactly as
-    /// `NativeRenderer` confines them (the enclosing layer's buffer).
+    /// Where a `DrawShadow` lands, separated from what it looks like — the
+    /// cache key and the whole-pixel shift `NativeRenderer`'s shadow cache
+    /// uses. A card scrolled by whole pixels keeps its key.
     #[must_use]
-    pub fn shadow_masks(
+    pub fn shadow_placement(
         &self,
         rect: Rect,
         radius: f32,
         shadow: &Shadow,
         transform: Transform,
         surface: Rect,
-    ) -> Option<ShadowPatch> {
-        let masks = super::shadow::shadow_masks(rect, radius, shadow, transform, surface)?;
-        Some(ShadowPatch {
-            x: masks.x0,
-            y: masks.y0,
-            width: masks.width,
-            height: masks.height,
-            caster: masks.caster.iter().map(|c| to_byte(*c)).collect(),
-            inner: masks
-                .inner
-                .map(|inner| inner.iter().map(|c| to_byte(*c)).collect()),
-            box_radius: masks.box_radius.map(|r| u32::try_from(r).unwrap_or(1)),
+    ) -> ShadowPlacement {
+        let frame = super::shadow::shadow_frame(rect, radius, shadow, transform, surface);
+        ShadowPlacement {
+            key: frame.coverage_key(),
+            shift: frame.shift,
+            rect: frame.rect,
+            transform: frame.transform,
+            surface: frame.surface,
+        }
+    }
+
+    /// A shadow's **final coverage** at `placement` (before the shift): the
+    /// caster blurred by the CPU renderer's own three-box blur, complemented
+    /// for an inset shadow, cropped to the surface — every step
+    /// `NativeRenderer` takes before it tints. A backend multiplies this by
+    /// the colour (and a clip) in one pass; it never blurs a shadow itself.
+    ///
+    /// It used to: this returned the unblurred caster and the GPU ran the
+    /// six blur passes, into a cleared scratch target, every frame — eight
+    /// render passes per shadow, each a whole-target load and store on a
+    /// tiling GPU. The blur is identical either way (the CPU's own kernel);
+    /// done once here, it is cached with the coverage.
+    #[must_use]
+    pub fn shadow_coverage(
+        &self,
+        placement: &ShadowPlacement,
+        radius: f32,
+        shadow: &Shadow,
+    ) -> Option<CoveragePatch> {
+        let alpha = super::shadow::shadow_alpha(
+            placement.rect,
+            radius,
+            shadow,
+            placement.transform,
+            placement.surface,
+        )?;
+        let bytes: Vec<u8> = alpha.alpha.iter().map(|c| to_byte(*c)).collect();
+        if bytes.iter().all(|&a| a == 0) {
+            return None;
+        }
+        Some(CoveragePatch {
+            x: alpha.x0,
+            y: alpha.y0,
+            width: alpha.width,
+            height: alpha.height,
+            alpha: bytes,
         })
     }
 

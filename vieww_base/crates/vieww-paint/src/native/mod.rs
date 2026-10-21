@@ -106,7 +106,7 @@ pub use glyph::{outline_glyph, units_per_em};
 pub use glyph_coverage::{GlyphAlpha, GlyphCoverage, InkedGlyph};
 pub use gpu_seam::{
     box_radius_for_sigma, dashed_path, gradient_ramp, minification_ratio, ColorGlyphParts,
-    CoveragePatch, GpuSeam, SeamShape, ShadowPatch, BAYER4,
+    CoveragePatch, GpuSeam, SeamShape, ShadowPlacement, BAYER4,
 };
 pub use linear::ColorPipeline;
 pub use pixels::Pixels;

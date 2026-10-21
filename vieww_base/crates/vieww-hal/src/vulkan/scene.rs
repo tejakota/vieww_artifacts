@@ -418,18 +418,6 @@ impl Slot {
     }
 }
 
-/// What a blur pass reads past the edge of its region (`post.wgsl`'s
-/// `pc.args.z` for `BOX_H` / `BOX_V`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Edge {
-    /// Transparent: a shadow fades out at its own edge
-    /// (`shadow::box_blur_*`).
-    Transparent,
-    /// The nearest edge pixel, repeated: `effects::blur`'s clamped sampling,
-    /// and CSS's `duplicate` edge mode for `filter` / `backdrop-filter`.
-    Duplicate,
-}
-
 /// Push constants for `post.wgsl`: eight `vec4<f32>`, 128 bytes — the minimum
 /// push-constant size every Vulkan implementation guarantees.
 #[derive(Clone, Copy, Default)]
@@ -449,9 +437,7 @@ mod mode {
     pub(super) const MASK: f32 = 4.0;
     pub(super) const BLEND: f32 = 5.0;
     pub(super) const OVER: f32 = 6.0;
-    pub(super) const SEED: f32 = 7.0;
-    pub(super) const INSET: f32 = 8.0;
-    pub(super) const TINT: f32 = 9.0;
+    pub(super) const SHADOW: f32 = 7.0;
 }
 
 /// `post.wgsl`'s blend-mode numbering: `BlendMode`'s declaration order.
@@ -1961,9 +1947,7 @@ impl SceneRenderer {
                 Step::Shadow {
                     patch,
                     scissor,
-                    caster,
-                    inner,
-                    box_radius,
+                    coverage,
                     color,
                     clip,
                 } => {
@@ -1978,26 +1962,19 @@ impl SceneRenderer {
                         }
                     }
                     self.mark(PassKind::Shadows);
-                    let work = depth + 1;
-                    rec.begin(self, TargetId::Level(work), Some([0.0; 4]));
-                    let mut seed =
-                        Pass::new(TargetId::Level(work), patch, TargetId::Dummy, mode::SEED);
-                    seed.push.p[0] = [caster.offset[0], caster.offset[1], 1.0, 0.0];
-                    self.pass(&mut rec, seed)?;
-                    if let Some(radius) = box_radius {
-                        self.blur(&mut rec, work, patch, radius, Edge::Transparent)?;
-                    }
-                    let mut source = TargetId::Level(work);
-                    if let Some(inner) = inner {
-                        let mut pass =
-                            Pass::new(TargetId::Scratch(work), patch, source, mode::INSET);
-                        pass.push.p[0] = [inner.offset[0], inner.offset[1], 1.0, 0.0];
-                        self.pass(&mut rec, pass)?;
-                        source = TargetId::Scratch(work);
-                    }
-                    let mut tint = Pass::new(TargetId::Level(depth), scissor, source, mode::TINT);
+                    // One pass into the target already open: the coverage
+                    // arrives blurred (`vieww_gpu::Step::Shadow`), so there
+                    // is no work target to clear, no blur, and no render
+                    // pass to switch to and back from.
+                    let mut tint = Pass::new(
+                        TargetId::Level(depth),
+                        scissor,
+                        TargetId::Dummy,
+                        mode::SHADOW,
+                    );
                     tint.read = patch;
                     tint.over = true;
+                    tint.push.p[0] = [coverage.offset[0], coverage.offset[1], 1.0, 0.0];
                     tint.push.p[2] = color;
                     if let Some(clip) = clip {
                         tint.push.p[1] = [clip.offset[0], clip.offset[1], 1.0, 0.0];
@@ -2174,14 +2151,14 @@ impl SceneRenderer {
         level: usize,
         rect: PixelRect,
         radius: u32,
-        edge: Edge,
     ) -> Result<(), VulkanError> {
         #[allow(clippy::cast_precision_loss)]
         let r = radius as f32;
-        let edge = match edge {
-            Edge::Transparent => 0.0,
-            Edge::Duplicate => 1.0,
-        };
+        // `post.wgsl`'s `pc.args.z = 1`: past the rect, the nearest edge
+        // pixel — `effects::blur`'s clamped sampling, CSS's `duplicate` edge
+        // mode for `filter` and `backdrop-filter`. (The transparent edge, 0,
+        // was a shadow's; shadows now arrive blurred.)
+        let edge = 1.0;
         for _ in 0..3 {
             let mut h = Pass::new(
                 TargetId::Scratch(level),
@@ -2216,7 +2193,7 @@ impl SceneRenderer {
         if let Some(radius) = filter.box_radius {
             // Layer and backdrop filters clamp at the rect, as
             // `effects::blur` does (CSS's `duplicate` edge mode).
-            self.blur(rec, level, rect, radius, Edge::Duplicate)?;
+            self.blur(rec, level, rect, radius)?;
         }
         if let Some(m) = filter.color_matrix {
             let mut pass = Pass::new(
