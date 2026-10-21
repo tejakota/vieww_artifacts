@@ -102,6 +102,8 @@ struct Inner {
     /// Page widgets, rebuilt only when the list of sessions changes, so a
     /// swipe moves the same widgets instead of making new ones every frame.
     pages: RefCell<(Vec<PathBuf>, Vec<WidgetNode>)>,
+    /// The focused object last frame (to notice focus moving).
+    last_focus: Cell<Option<vieww::RenderId>>,
 }
 
 /// Everything the shell reads. Signals: reading one in a build subscribes
@@ -128,9 +130,15 @@ pub struct Ui {
     pub clock: Signal<f32>,
     pub splash: Signal<bool>,
     pub mic_level: Signal<f32>,
+    /// The placeholder of the text field that has keyboard focus, if any.
+    /// A vieww field draws its caret unless told not to, and does not know
+    /// whether it is focused; the shell does, so it tells each field.
+    pub typing: Signal<Option<String>>,
     pub home: Composer,
     pub fresh: Composer,
     pub form: settings::Form,
+    pub home_scroll: kit::ScrollState,
+    pub engine_scroll: kit::ScrollState,
     pub size: Rc<Cell<Size>>,
     inner: Rc<Inner>,
 }
@@ -182,9 +190,12 @@ impl Ui {
             clock: rt.signal(0.0),
             splash: rt.signal(true),
             mic_level: rt.signal(0.0),
+            typing: rt.signal(None),
             home: Composer::new(rt, 1),
             fresh: Composer::new(rt, 2),
             form: settings::Form::new(rt),
+            home_scroll: kit::ScrollState::new(rt),
+            engine_scroll: kit::ScrollState::new(rt),
             size: Rc::new(Cell::new(Size::new(1280.0, 800.0))),
             inner: Rc::new(Inner {
                 started: Instant::now(),
@@ -194,10 +205,16 @@ impl Ui {
                 inbox: Arc::new(Inbox::default()),
                 live,
                 pages: RefCell::new((Vec::new(), Vec::new())),
+                last_focus: Cell::new(None),
             }),
         };
         ui.persist();
         ui
+    }
+
+    /// Whether the focused text field is the one with this placeholder.
+    pub fn is_typing_in(&self, placeholder: &str) -> bool {
+        self.typing.get().as_deref() == Some(placeholder)
     }
 
     pub fn pal(&self) -> Pal {
@@ -515,6 +532,18 @@ impl Ui {
         }
         if driver.focused().is_none() {
             driver.focus_next(true);
+        }
+        let focused = driver.focused();
+        if focused != self.inner.last_focus.get() {
+            self.inner.last_focus.set(focused);
+            // Only text fields have a caret; their placeholder is their label.
+            let typing = focused.and_then(|id| {
+                let tree = driver.semantics();
+                tree.node(id).filter(|n| n.role == vieww::Role::TextField).map(|n| n.label.clone().unwrap_or_default())
+            });
+            if typing != self.typing.get() {
+                self.typing.set(typing);
+            }
         }
 
         let now = Instant::now();

@@ -12,6 +12,7 @@
 //! the splash settles into, and the app icon the installers ship
 //! (`wright ui --icon <png>`). One definition, so they cannot drift apart.
 
+use vieww::foundation::StrokeStyle;
 use vieww::prelude::*;
 
 /// The W's corners on the 24-unit grid.
@@ -25,9 +26,8 @@ pub struct Mark {
     pub color: Color,
     /// How much of the stroke is drawn, 0..=1 (the splash animates this).
     pub progress: f32,
-    /// 0 = crisp; 1 = soft and wide, the way the watermark looks. Painted
-    /// as widening low-alpha passes, which reads as a blur and costs a few
-    /// lines instead of a full-window filter.
+    /// 0 = crisp; 1 = blurred and a little heavier, the way the watermark
+    /// looks behind the app.
     pub soft: f32,
 }
 
@@ -38,12 +38,8 @@ impl Mark {
 
     /// The mark, `side` pixels square.
     pub fn widget(self, side: f32) -> WidgetNode {
-        CustomPaint::sized(Size::new(side, side), self).into()
+        Painting::sized(Size::new(side, side), self).into()
     }
-}
-
-fn scaled(c: Color, factor: f32) -> Color {
-    c.with_alpha((c.a as f32 * factor.clamp(0.0, 1.0)) as u8)
 }
 
 /// The polyline up to `progress` of its length, in pixels.
@@ -63,43 +59,39 @@ fn visible(progress: f32, scale: f32, origin: Offset) -> Vec<Offset> {
     out
 }
 
-/// A round-capped, round-joined polyline: lines, with a dot on every
-/// corner and end.
-fn stroke(out: &mut Vec<DrawInstruction>, pts: &[Offset], width: f32, color: Color) {
-    if pts.len() < 2 || color.a == 0 {
-        return;
-    }
-    for w in pts.windows(2) {
-        out.push(DrawInstruction::DrawLine { from: w[0], to: w[1], color, width });
-    }
-    for p in pts {
-        out.push(DrawInstruction::FillCircle { center: *p, radius: width / 2.0, color });
-    }
-}
-
-impl CustomPainter for Mark {
-    fn paint(&self, size: Size) -> Vec<DrawInstruction> {
+impl Painter for Mark {
+    /// One path, stroked once with round caps and joins — so the joints are
+    /// part of the stroke, not discs laid over it, and a transparent colour
+    /// stays one even shade. The soft version is the same stroke in a
+    /// blurred layer.
+    fn paint(&self, book: &mut Sketchbook, size: Size) {
         let side = size.width.min(size.height);
         let scale = side / 24.0;
         let origin = Offset::new((size.width - side) / 2.0, (size.height - side) / 2.0);
         let pts = visible(self.progress, scale, origin);
-        let width = STROKE * scale;
-        let mut out = Vec::new();
-        if self.soft > 0.0 {
-            // Widest and faintest first; each pass narrower and stronger.
-            for k in (1..=6).rev() {
-                let w = width * (1.0 + k as f32 * 0.9 * self.soft);
-                stroke(&mut out, &pts, w, scaled(self.color, 0.22 / k as f32));
-            }
+        if pts.len() < 2 || self.color.a == 0 {
+            return;
         }
-        stroke(&mut out, &pts, width, scaled(self.color, 1.0 - 0.55 * self.soft));
-        out
+        let mut path = Path::new();
+        path.move_to(pts[0]);
+        for p in &pts[1..] {
+            path.line_to(*p);
+        }
+        let width = STROKE * scale * (1.0 + 0.5 * self.soft);
+        let (color, blur) = (self.color, side * 0.012 * self.soft);
+        if blur > 0.5 {
+            book.layer(1.0, blur, None, |b| {
+                b.stroke_styled(path, color, width, StrokeStyle::rounded());
+            });
+        } else {
+            book.stroke_styled(path, color, width, StrokeStyle::rounded());
+        }
+    }
+    fn should_repaint(&self, previous: &dyn Painter) -> bool {
+        previous.as_any().downcast_ref::<Mark>() != Some(self)
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
-    }
-    fn should_repaint(&self, previous: &dyn CustomPainter) -> bool {
-        previous.as_any().downcast_ref::<Mark>() != Some(self)
     }
 }
 

@@ -422,9 +422,8 @@ pub struct Session {
     pub result: Signal<Option<ResultView>>,
     pub approvals: Signal<Vec<(RunId, u32, String, String)>>,
     pub notice: Signal<String>,
-    /// The thread's scroll position, and (viewport, content) heights.
-    pub scroll: Signal<f32>,
-    pub extent: Rc<Cell<(f32, f32)>>,
+    /// Where the conversation is scrolled to.
+    pub scroll: super::kit::ScrollState,
     /// How far the approval card is being dragged sideways.
     pub card_drag: Signal<f32>,
     shared: Arc<Shared>,
@@ -459,8 +458,7 @@ impl Session {
             result: rt.signal(result),
             approvals: rt.signal(Vec::new()),
             notice: rt.signal(String::new()),
-            scroll: rt.signal(0.0),
-            extent: Rc::new(Cell::new((0.0, 0.0))),
+            scroll: super::kit::ScrollState::new(rt),
             card_drag: rt.signal(0.0),
             shared: Arc::new(Shared::default()),
             last_poll: Rc::new(Cell::new(Instant::now())),

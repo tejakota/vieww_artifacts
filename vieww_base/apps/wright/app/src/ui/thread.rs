@@ -27,23 +27,7 @@ pub fn page(ui: &Ui, s: &Session) -> WidgetNode {
         let (ui, s) = (ui.clone(), s.clone());
         Live::new("thread", move || body(&ui, &s)).into()
     };
-    let scroller: WidgetNode = {
-        let s = s.clone();
-        Live::new("thread-scroll", move || {
-            let (scroll, extent) = (s.scroll.clone(), s.extent.clone());
-            let ext = s.extent.clone();
-            Scrollable::vertical(s.scroll.get())
-                .on_drag(Rc::new(move |d: DragDetails| {
-                    let (view, content) = extent.get();
-                    let max = (content - view).max(0.0);
-                    scroll.set((scroll.get() - d.delta.dy).clamp(0.0, max));
-                }))
-                .on_extents(Rc::new(move |e: ScrollExtents| ext.set((e.viewport, e.content))))
-                .child(pad(EdgeInsets::only(24.0, 28.0, 24.0, 150.0), reading(COLUMN, content.clone())))
-                .into()
-        })
-        .into()
-    };
+    let scroller = scroll_area(ui, &s.scroll, pad(EdgeInsets::only(24.0, 28.0, 24.0, 150.0), reading(COLUMN, content)));
     let composer_node: WidgetNode = {
         let (ui, s) = (ui.clone(), s.clone());
         Live::new("thread-composer", move || {
@@ -53,7 +37,7 @@ pub fn page(ui: &Ui, s: &Session) -> WidgetNode {
                 Rc::new(move || {
                     if s.send() {
                         // Show the reply as it arrives.
-                        s.scroll.set(f32::MAX / 4.0);
+                        s.scroll.to_end();
                     }
                 })
             };
@@ -389,6 +373,7 @@ pub fn composer(ui: &Ui, c: &Composer, send: Rc<dyn Fn()>, placeholder: &str, bi
     let prompt = c.prompt.clone();
     let submit = send.clone();
     let field = TextField::new(c.prompt.get())
+        .show_cursor(ui.is_typing_in(placeholder))
         .placeholder(placeholder.to_string())
         .placeholder_color(p.muted)
         .size(if big { 16.0 } else { 15.0 })

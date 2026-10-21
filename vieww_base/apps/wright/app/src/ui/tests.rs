@@ -70,6 +70,13 @@ deliverable kind=\"message\" {{ check \"the hook got a hello\" }}\nmodels {{ tie
     };
     draw(&mut driver);
 
+    // Nothing is being typed into at start: no field draws a caret, and the
+    // keyboard reaches the shortcuts (Space, E, O) instead of a text box.
+    ui.pump(&mut driver);
+    draw(&mut driver);
+    ui.pump(&mut driver);
+    assert_eq!(ui.typing.get(), None, "a fresh window has no text field focused");
+
     // Opening a project puts it in the row, after Home, and shows it.
     assert_eq!(ui.page.get(), 1);
     let s = ui.current_session().expect("the project is a session");
@@ -102,6 +109,17 @@ deliverable kind=\"message\" {{ check \"the hook got a hello\" }}\nmodels {{ tie
     let r = s.result.get().expect("the run finished");
     assert!(r.ok, "{}", r.headline);
     assert!(s.events.get().iter().any(|e| e.kind == wright_core::events::EventKind::ApprovalResolved && e.note.contains("approved")));
+
+    // ── scrolling: the conversation reports its length; the bar can move it ──
+    for _ in 0..3 {
+        draw(&mut driver);
+    }
+    let (view, content) = s.scroll.extent.get();
+    assert!(view > 0.0 && content > 0.0, "the conversation measured itself: {view} / {content}");
+    s.scroll.to_end();
+    assert_eq!(s.scroll.at(), (content - view).max(0.0), "past the end is clamped to the end");
+    s.scroll.by(-1e6);
+    assert_eq!(s.scroll.at(), 0.0);
 
     // ── swiping: sideways scroll follows the fingers, then settles ──
     ui.on_wheel(scroll(-500.0, 0));

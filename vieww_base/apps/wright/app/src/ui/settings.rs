@@ -74,6 +74,7 @@ pub struct Form {
     pub per_run: Signal<TextEditingValue>,
     pub per_day: Signal<TextEditingValue>,
     pub message: Signal<String>,
+    pub scroll: ScrollState,
 }
 
 fn tv(s: impl Into<String>) -> TextEditingValue {
@@ -99,6 +100,7 @@ impl Form {
             per_run: rt.signal(tv("")),
             per_day: rt.signal(tv("")),
             message: rt.signal(String::new()),
+            scroll: ScrollState::new(rt),
         }
     }
 
@@ -166,7 +168,13 @@ pub fn page(ui: &Ui) -> WidgetNode {
                         .child(t(tb.label(), 13.5, if on { p.ink } else { p.muted }))
                         .into()
                 })
-                .on_tap(move || set.set(tb))
+                .on_tap({
+                    let top = f.scroll.offset.clone();
+                    move || {
+                        set.set(tb);
+                        top.set(0.0);
+                    }
+                })
                 .into()
             })
             .collect();
@@ -189,7 +197,7 @@ pub fn page(ui: &Ui) -> WidgetNode {
                 row(10.0, vec![Glyph::Gear.draw(20.0, p.accent_ink), b("Settings", 20.0, p.ink), gap(), t("Esc closes", 12.0, p.muted), icon_button(&p, Glyph::Close, "Close settings", false, move || close.set(false))]),
                 grow(Flex::row().cross_axis_alignment(CrossAxisAlignment::Start).spacing(22.0).children(vec![
                     SizedBox::width(170.0).child(column(4.0, tabs)).into(),
-                    grow(Scrollable::vertical(0.0).child(body)),
+                    grow(scroll_area(&ui, &f.scroll, pad(EdgeInsets::only(0.0, 0.0, 14.0, 0.0), body))),
                 ])),
                 if msg.is_empty() { SizedBox::shrink().into() } else { t(msg, 12.5, p.muted) },
             ]))
@@ -198,7 +206,7 @@ pub fn page(ui: &Ui) -> WidgetNode {
     .into()
 }
 
-fn field(p: &Pal, label: &str, value: &Signal<TextEditingValue>, placeholder: &str, secret: bool) -> WidgetNode {
+fn field(ui: &Ui, p: &Pal, label: &str, value: &Signal<TextEditingValue>, placeholder: &str, secret: bool) -> WidgetNode {
     let v = value.clone();
     column(5.0, vec![
         t(label.to_string(), 12.0, p.muted),
@@ -209,6 +217,7 @@ fn field(p: &Pal, label: &str, value: &Signal<TextEditingValue>, placeholder: &s
             .padding(EdgeInsets::symmetric(12.0, 8.0))
             .child(
                 TextField::new(value.get())
+                    .show_cursor(ui.is_typing_in(placeholder))
                     .single_line()
                     .obscure(secret)
                     .placeholder(placeholder.to_string())
@@ -273,7 +282,7 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
             let cancel = f.key_for.clone();
             let project = ui.current_session().map(|s| (*s.project).clone());
             block.push(row(10.0, vec![
-                grow(field(p, "Paste the key", &f.key_value, "sk-…", true)),
+                grow(field(ui, p, "Paste the key", &f.key_value, "sk-…", true)),
                 button(p, "Save to keychain", Look::Primary, true, move || {
                     let value = form.key_value.get().text.trim().to_string();
                     form.key_value.set(tv(""));
@@ -302,10 +311,10 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
         button(p, "Anthropic", if anthropic { Look::Primary } else { Look::Secondary }, true, move || kind_a.set(true)),
     ]));
     rows.push(row(10.0, vec![
-        grow(field(p, "Name", &f.new_name, "local", false)),
-        grow(field(p, "Address", &f.new_base, "http://127.0.0.1:11434/v1", false)),
+        grow(field(ui, p, "Name", &f.new_name, "local", false)),
+        grow(field(ui, p, "Address", &f.new_base, "http://127.0.0.1:11434/v1", false)),
     ]));
-    rows.push(field(p, "Models it serves (patterns, comma separated)", &f.new_models, "llama*, qwen*", false));
+    rows.push(field(ui, p, "Models it serves (patterns, comma separated)", &f.new_models, "llama*, qwen*", false));
     rows.push(row(10.0, vec![
         button(p, "Add provider", Look::Primary, true, move || {
             let name = form.new_name.get().text.trim().to_string();
@@ -342,9 +351,9 @@ fn defaults(ui: &Ui, p: &Pal) -> WidgetNode {
     let project = ui.current_session().map(|s| (*s.project).clone());
     stretch(14.0, vec![
         section(p, "Drafting plans", "The model the interview uses to turn your description into a blueprint. It talks to you, so a capable model pays off."),
-        field(p, "Interview model", &f.interview, "claude-sonnet-5-5", false),
+        field(ui, p, "Interview model", &f.interview, "claude-sonnet-5-5", false),
         section(p, "Voice", "The speech-to-text model the mic uses. It must be served by an OpenAI-compatible provider (OpenAI, Groq, or a local Whisper server)."),
-        field(p, "Voice model", &f.voice, "whisper-1", false),
+        field(ui, p, "Voice model", &f.voice, "whisper-1", false),
         row(10.0, vec![button(p, "Save defaults", Look::Primary, true, move || {
             let (i, v) = (f.interview.get().text.trim().to_string(), f.voice.get().text.trim().to_string());
             f.edit_file(|c| {
@@ -373,7 +382,7 @@ fn appearance(ui: &Ui, p: &Pal) -> WidgetNode {
             ColorPicker::new(accent).presets(presets).show_sliders(true).on_color_changed(move |c| pick.set_look(pick.mode.get(), c)).into(),
             column(12.0, vec![
                 super::logo::tile(88.0, p.accent, p.on_accent),
-                row(8.0, vec![super::logo::Mark::solid(p.accent_ink).widget(22.0), b("wright", 17.0, p.ink)]),
+                row(4.0, vec![super::logo::Mark::solid(p.accent_ink).widget(22.0), b("wright", 17.0, p.ink)]),
                 mono(theme::hex(accent), 12.5, p.muted),
             ]),
         ]),
@@ -388,7 +397,7 @@ fn workspace(ui: &Ui, p: &Pal) -> WidgetNode {
     let reveal = home.clone();
     stretch(14.0, vec![
         section(p, "New projects", "Each new session gets its own folder here, named from your first words."),
-        field(p, "Projects folder", &f.projects_dir, "~/Wright", false),
+        field(ui, p, "Projects folder", &f.projects_dir, "~/Wright", false),
         row(10.0, vec![button(p, "Save", Look::Primary, true, move || {
             let dir = std::path::PathBuf::from(save_dir.projects_dir.get().text.trim());
             if dir.as_os_str().is_empty() {
@@ -431,7 +440,7 @@ fn project(ui: &Ui, p: &Pal) -> WidgetNode {
                 .radius(corner::FIELD)
                 .border(Border::new(p.line_strong, 1.0))
                 .padding(EdgeInsets::symmetric(12.0, 8.0))
-                .child(TextField::new(v).single_line().placeholder(ph.to_string()).placeholder_color(p.muted).size(13.5).color(p.ink).cursor(p.accent_ink, 2.0).on_changed(std::rc::Rc::new(move |x: TextEditingValue| {
+                .child(TextField::new(v).show_cursor(ui.is_typing_in(ph)).single_line().placeholder(ph.to_string()).placeholder_color(p.muted).size(13.5).color(p.ink).cursor(p.accent_ink, 2.0).on_changed(std::rc::Rc::new(move |x: TextEditingValue| {
                     let mut all = sig.get();
                     all[i] = x;
                     sig.set(all);
@@ -446,7 +455,7 @@ fn project(ui: &Ui, p: &Pal) -> WidgetNode {
         row(10.0, vec![grow(tier_field(0, "Everyday work: prefer", "deepseek-v4-flash")), grow(tier_field(1, "…fall back to", "glm-5.3-flash"))]),
         row(10.0, vec![grow(tier_field(2, "Careful work (review, delivery): prefer", "claude-sonnet-5-5")), grow(tier_field(3, "…fall back to", "gpt-5.5"))]),
         b("Spending limits (USD)", 14.0, p.ink),
-        row(10.0, vec![grow(field(p, "Per run", &f.per_run, "1.00", false)), grow(field(p, "Per day", &f.per_day, "5.00", false))]),
+        row(10.0, vec![grow(field(ui, p, "Per run", &f.per_run, "1.00", false)), grow(field(ui, p, "Per day", &f.per_day, "5.00", false))]),
         row(10.0, vec![button(p, "Save to the blueprint", Look::Primary, true, move || {
             let t4 = form.tiers.get();
             let tiers = [t4[0].text.trim().to_string(), t4[1].text.trim().to_string(), t4[2].text.trim().to_string(), t4[3].text.trim().to_string()];

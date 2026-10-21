@@ -417,6 +417,85 @@ pub fn glide(target: f32, ms: u64, snap: bool, build: impl Fn(f32) -> WidgetNode
         .into()
 }
 
+// ── scrolling ────────────────────────────────────────────────────
+
+/// Where a scroll area is, and how long its window and content are.
+///
+/// The offset may be set past the end (`to_end`): it is clamped where it is
+/// drawn, so "stay at the bottom" survives content arriving later.
+#[derive(Clone)]
+pub struct ScrollState {
+    pub offset: Signal<f32>,
+    /// (window, content) lengths, reported by layout.
+    pub extent: Signal<(f32, f32)>,
+}
+
+impl ScrollState {
+    pub fn new(rt: &vieww::element::Runtime) -> ScrollState {
+        ScrollState { offset: rt.signal(0.0), extent: rt.signal((0.0, 0.0)) }
+    }
+    fn max(&self) -> f32 {
+        let (view, content) = self.extent.get();
+        (content - view).max(0.0)
+    }
+    /// Where it really is (the stored offset may be past the end).
+    pub fn at(&self) -> f32 {
+        self.offset.get().clamp(0.0, self.max())
+    }
+    pub fn by(&self, dy: f32) {
+        self.offset.set((self.at() + dy).clamp(0.0, self.max()));
+    }
+    pub fn to_end(&self) {
+        self.offset.set(f32::MAX);
+    }
+}
+
+/// A vertical scroll area: wheel, trackpad or drag moves it, and a thin
+/// scroll bar on the right shows where you are and can be dragged — for
+/// everyone without a trackpad.
+pub fn scroll_area(ui: &super::Ui, state: &ScrollState, child: WidgetNode) -> WidgetNode {
+    let (ui, state) = (ui.clone(), state.clone());
+    Live::new("scroll-area", move || {
+        let p = ui.pal();
+        let (view, content) = state.extent.get();
+        let at = state.at();
+        let (wheel, ext) = (state.clone(), state.extent.clone());
+        let body: WidgetNode = Scrollable::vertical(at)
+            .on_drag(Rc::new(move |d: vieww::foundation::DragDetails| wheel.by(-d.delta.dy)))
+            .on_extents(Rc::new(move |e: ScrollExtents| {
+                if ext.get() != (e.viewport, e.content) {
+                    ext.set((e.viewport, e.content));
+                }
+            }))
+            .child(child.clone())
+            .into();
+        if content <= view + 1.0 || view <= 0.0 {
+            return body;
+        }
+        // The thumb: as tall as the window is of the content, never tiny.
+        let track = view - 8.0;
+        let thumb = (track * view / content).clamp(36.0, track);
+        let top = 4.0 + (track - thumb) * at / (content - view);
+        let (drag, per_px) = (state.clone(), (content - view) / (track - thumb).max(1.0));
+        let bar: WidgetNode = GestureDetector::new()
+            .on_drag_update(move |d: vieww::foundation::DragDetails| drag.by(d.delta.dy * per_px))
+            .child(Pressable::sensed(move |s: Sense| {
+                Container::new()
+                    .width(if s.hover > 0.0 || s.press > 0.0 { 8.0 } else { 6.0 })
+                    .height(thumb)
+                    .radius(4.0)
+                    .color(p.ink.with_alpha(if s.press > 0.0 { 140 } else if s.hover > 0.0 { 110 } else { 60 }))
+                    .into()
+            }))
+            .into();
+        Stack::new()
+            .fit(StackFit::Expand)
+            .children(vec![body, Positioned::new().right(3.0).top(top).child(bar).into()])
+            .into()
+    })
+    .into()
+}
+
 // ── keyboard ─────────────────────────────────────────────────────
 
 /// Wraps the whole shell so keys that nothing inside wanted reach the

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.1 — 2026-10-21 — first-install fixes
+
+- **The window opens centred and fits the screen.** It was placed by the
+  OS default and, on a 1366x768 laptop, spilled off the bottom right
+  (fixed in vieww-platform-winit for every vieww app).
+- **The background W matches the logo.** The mark is one round-joined
+  stroke; the watermark is that stroke blurred. Before, transparent
+  segments overlapped at the joints and showed as darker discs.
+- **Scroll bars.** Home, sessions, the engine and Settings scroll with a
+  wheel, a trackpad, or a thin bar on the right you can drag. (Home and
+  Settings did not scroll at all before.)
+- **The caret shows only in the field you are typing in.** A vieww text
+  field always draws its caret; the shell now tells each field whether it
+  has focus.
+- The mark and "wright" sit closer together in the top bar and status bar.
+
 ## 0.3.0 — 2026-10-20 — "the workspace"
 
 A new window, built in vieww, and installers for three platforms.

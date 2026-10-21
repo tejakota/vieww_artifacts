@@ -21,6 +21,7 @@ const STARTERS: [(&str, &str, &str); 3] = [
 ];
 
 pub fn home(ui: &Ui) -> WidgetNode {
+    let ui2 = ui.clone();
     let ui = ui.clone();
     let content: WidgetNode = Live::new("home", move || {
         let p = ui.pal();
@@ -96,7 +97,7 @@ pub fn home(ui: &Ui) -> WidgetNode {
         stretch(18.0, items)
     })
     .into();
-    Scrollable::vertical(0.0).child(pad(EdgeInsets::only(32.0, 12.0, 32.0, 60.0), reading(720.0, content))).into()
+    scroll_area(&ui2, &ui2.home_scroll, pad(EdgeInsets::only(32.0, 12.0, 32.0, 60.0), reading(720.0, content)))
 }
 
 /// Cards in rows of `per`.

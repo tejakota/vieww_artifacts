@@ -62,7 +62,10 @@ fn frame(ui: &Ui, app: &WidgetNode) -> WidgetNode {
             .into();
     }
     let mark = Mark { color: p.accent.with_alpha(p.watermark), progress: 1.0, soft: 1.0 };
-    stack(vec![ground, layer(Center::new().child(mark.widget(side))), layer(app.clone())])
+    // A repaint boundary: the blurred mark is recorded once and reused, so
+    // nothing animating above it pays for the blur again.
+    let watermark = RepaintBoundary::new().child(Center::new().child(mark.widget(side)));
+    stack(vec![ground, layer(watermark), layer(app.clone())])
 }
 
 /// The opening, as a function of time `t` (0..1 over 3.2 s):
@@ -137,8 +140,7 @@ fn top_bar(ui: &Ui) -> WidgetNode {
         Container::new()
             .padding(EdgeInsets::only(18.0, 10.0, 14.0, 10.0))
             .child(row(12.0, vec![
-                Mark::solid(p.accent_ink).widget(20.0),
-                b("wright", 16.0, p.ink),
+                row(3.0, vec![Mark::solid(p.accent_ink).widget(20.0), b("wright", 16.0, p.ink)]),
                 gap(),
                 SizedBox::width(300.0).child(Align::new(Alignment::CENTER_RIGHT).child(line(title, 13.5, p.ink))).into(),
                 row(0.0, dots),
@@ -184,7 +186,7 @@ fn status_bar(ui: &Ui) -> WidgetNode {
             Container::new()
                 .color(p.accent)
                 .padding(EdgeInsets::symmetric(12.0, 0.0))
-                .child(Center::new().child(row(6.0, vec![Mark::solid(p.on_accent).widget(13.0), b("wright", 12.0, p.on_accent)])))
+                .child(Center::new().child(row(3.0, vec![Mark::solid(p.on_accent).widget(13.0), b("wright", 12.0, p.on_accent)])))
                 .into(),
             line(where_, 12.0, p.ink),
             dot,

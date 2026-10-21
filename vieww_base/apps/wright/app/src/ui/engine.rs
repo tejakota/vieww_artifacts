@@ -62,7 +62,7 @@ pub fn layer(ui: &Ui) -> WidgetNode {
             })
             .into()
         };
-        let mut body = vec![grow(Scrollable::vertical(0.0).child(pad(EdgeInsets::only(0.0, 6.0, 0.0, 6.0), graph)))];
+        let mut body = vec![grow(scroll_area(&ui, &ui.engine_scroll, pad(EdgeInsets::only(0.0, 6.0, 0.0, 6.0), graph)))];
         if let Some(name) = selected {
             if let Some(card) = plan.cards().find(|c| c.name == name) {
                 body.push(SizedBox::width(INSPECTOR_W).child(inspector(&ui, &p, &s, card, &events, &progress)).into());
