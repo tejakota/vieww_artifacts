@@ -1,0 +1,169 @@
+name: Wright - built-in models
+
+# Checks Wright's own inference engine (vieww_base/apps/wright/infer):
+#
+#   reference   Tiny random models in the real file formats, run through
+#               llama.cpp and whisper.cpp (built here at pinned commits) and
+#               through Wright: tokens, logits and language guesses must agree.
+#               Then the REAL Qwen3-1.7B and Whisper base, compared with the
+#               same references.
+#   platforms   On Windows, macOS and Linux: `wright model pull` downloads and
+#               verifies the real files (on Windows and macOS through the
+#               system curl), `wright model listen` transcribes JFK, the real
+#               model calls a tool, and the timings are printed.
+#
+# Manual only, like every workflow in this repository:
+# Actions -> "Wright - built-in models" -> Run workflow.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUST_VERSION: "1.98.1"
+  # whisper.cpp's sample, from the same commit references.sh pins.
+  JFK_URL: https://raw.githubusercontent.com/ggml-org/whisper.cpp/231638a0717b7822784297e5980965ffcec05810/samples/jfk.wav
+
+defaults:
+  run:
+    shell: bash
+    working-directory: vieww_base/apps/wright
+
+jobs:
+  reference:
+    name: Against llama.cpp and whisper.cpp
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Rust ${{ env.RUST_VERSION }}
+        working-directory: .
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+
+      - name: Python tools for the test models
+        run: python3 -m pip install --quiet gguf numpy
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ref
+          key: wright-refs-${{ hashFiles('vieww_base/apps/wright/scripts/models/references.sh') }}
+
+      - name: Build llama.cpp and whisper.cpp (pinned)
+        run: bash scripts/models/references.sh "$RUNNER_TEMP/ref"
+
+      - name: Make the fixtures
+        run: bash scripts/models/fixtures.sh "$RUNNER_TEMP/ref" "$RUNNER_TEMP/fixtures"
+
+      - name: Tiny models, token for token
+        run: |
+          export WRIGHT_TINY_DIR="$RUNNER_TEMP/fixtures"
+          export WRIGHT_VOCAB_DIR="$RUNNER_TEMP/ref/llama.cpp/models"
+          export WRIGHT_LLAMA_TOKENIZE="$RUNNER_TEMP/ref/llama.cpp/build/bin/llama-tokenize"
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/ref/llama.cpp/build/bin"
+          cargo test --release -p wright-infer
+
+      - name: Download the real models
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          cargo build --release -p wright
+          ./target/release/wright model pull
+          ./target/release/wright model list
+
+      - name: Real models against the references
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          models="$WRIGHT_HOME/models"
+          ref="$RUNNER_TEMP/ref"
+          export LD_LIBRARY_PATH="$ref/llama.cpp/build/bin:$ref/whisper.cpp/build/bin"
+          P="The three most important rules for writing maintainable software are"
+          got="$("$ref/llama.cpp/build/bin/llama-simple" -m "$models/Qwen3-1.7B-Q8_0.gguf" -n 32 "$P" 2>/dev/null)"
+          printf '%s\n%s\n' "$P" "${got#"$P"}" > "$RUNNER_TEMP/qwen.expect"
+          cat "$RUNNER_TEMP/qwen.expect"
+          curl -sSfL -o "$RUNNER_TEMP/jfk.wav" "$JFK_URL"
+          "$ref/whisper.cpp/build/bin/whisper-cli" -m "$models/ggml-base.bin" -f "$RUNNER_TEMP/jfk.wav" -l auto -nt -bs 1 -bo 1 -otxt -of "$RUNNER_TEMP/jfk" >/dev/null 2>&1
+          cat "$RUNNER_TEMP/jfk.txt"
+          export WRIGHT_REAL_MODELS=1 WRIGHT_REAL_JFK="$RUNNER_TEMP/jfk.wav"
+          export WRIGHT_REAL_QWEN_EXPECT="$RUNNER_TEMP/qwen.expect" WRIGHT_REAL_WHISPER_EXPECT="$RUNNER_TEMP/jfk.txt"
+          cargo test --release -p wright-infer --test real -- --nocapture --test-threads 1
+
+  platforms:
+    name: Real models on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-2022
+          - name: macos-arm64
+            os: macos-14
+          - name: linux-x64
+            os: ubuntu-22.04
+    steps:
+      - name: Allow long paths (Windows)
+        if: runner.os == 'Windows'
+        working-directory: .
+        run: git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Rust ${{ env.RUST_VERSION }}
+        working-directory: .
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+
+      - name: Build
+        env:
+          RUSTFLAGS: ${{ runner.os == 'macOS' && '-C target-cpu=apple-m1' || '-C target-cpu=x86-64-v2' }}
+        run: |
+          cargo build --release -p wright
+          cargo build --release -p wright-infer --examples
+
+      - name: Doctor (https transport, models)
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          ./target/release/wright doctor || true
+
+      - name: Download and verify the models
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          ./target/release/wright model pull
+          ./target/release/wright model list
+
+      - name: Listen
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          curl -sSfL -o "$RUNNER_TEMP/jfk.wav" "$JFK_URL"
+          ./target/release/wright model listen "$RUNNER_TEMP/jfk.wav" | tee "$RUNNER_TEMP/heard.txt"
+          grep -qi "ask not what your country can do for you" "$RUNNER_TEMP/heard.txt"
+
+      - name: Ask
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          ./target/release/wright model ask "In one sentence: why do tests matter?"
+
+      - name: Tool calls and transcripts (greedy)
+        env:
+          RUSTFLAGS: ${{ runner.os == 'macOS' && '-C target-cpu=apple-m1' || '-C target-cpu=x86-64-v2' }}
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home" WRIGHT_REAL_MODELS=1 WRIGHT_REAL_JFK="$RUNNER_TEMP/jfk.wav"
+          cargo test --release -p wright-infer --test real -- --nocapture --test-threads 1
+
+      - name: Timings
+        run: |
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          ./target/release/examples/bench "$WRIGHT_HOME/models/Qwen3-1.7B-Q8_0.gguf" 300 32
+          ./target/release/examples/listen "$WRIGHT_HOME/models/ggml-base.bin" "$RUNNER_TEMP/jfk.wav"
