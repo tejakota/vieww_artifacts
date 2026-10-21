@@ -104,7 +104,8 @@ use winit::window::Window;
 use vieww_foundation::{Color, Rect};
 use vieww_gpu::{PixelRect, Planner as GpuPlanner};
 use vieww_hal::vulkan::{
-    GpuFrameTimings, Redrawn, SceneRenderer, VulkanDevice, VulkanError, VulkanSwapchain,
+    GpuFrameTimings, GpuPassTimes, Redrawn, SceneRenderer, VulkanDevice, VulkanError,
+    VulkanSwapchain,
 };
 use vieww_paint::native::{NativeRenderer as CpuRenderer, RendererError, SceneReport};
 use vieww_paint::{Damage, Scene};
@@ -646,6 +647,12 @@ pub struct FrameStages {
     /// path includes waiting for the swapchain image to become free, because
     /// the frame's final blit waits on that semaphore.
     pub gpu: GpuFrameTimings,
+    /// The GPU's own time for a GPU frame, by kind of work, from timestamp
+    /// queries (see [`GpuPassTimes`]). `None` on a CPU frame or where the
+    /// queue records no timestamps. **Not a stage of this thread**: it is the
+    /// GPU's clock, overlapping `gpu.wait`, so [`total`](Self::total) leaves
+    /// it out.
+    pub gpu_passes: Option<GpuPassTimes>,
     /// Acquiring a swapchain image to render straight into (direct path).
     pub acquire: Duration,
     /// Handing the frame to the swapchain: `present_pixels` (staging upload,
@@ -1544,6 +1551,7 @@ impl NativeRenderer {
                         }
                     };
                     self.stages.gpu = renderer.last_timings();
+                    self.stages.gpu_passes = renderer.last_pass_times();
                     let presenting = Instant::now();
                     device
                         .present_acquired(swapchain, image)
@@ -1575,6 +1583,7 @@ impl NativeRenderer {
                     )
                     .map_err(|error| NativeError::Render(error.to_string()))?;
                 self.stages.gpu = renderer.last_timings();
+                self.stages.gpu_passes = renderer.last_pass_times();
                 let presenting = Instant::now();
                 device
                     .present_pixels(swapchain, &pixels)
@@ -1903,6 +1912,11 @@ mod tests {
             acquire: ms(9),
             present: ms(10),
             cpu_core: Some(3),
+            // The GPU's own clock, overlapping `wait`: not part of the total.
+            gpu_passes: Some(GpuPassTimes {
+                draw: ms(100),
+                ..GpuPassTimes::default()
+            }),
         };
         assert_eq!(stages.total(), ms(55));
         assert_eq!(FrameStages::default().total(), Duration::ZERO);

@@ -858,6 +858,37 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
             format!("p95 ms: {}", line(&log.stage_percentile(0.95))),
         );
     }
+    // **Where the GPU's own time went**, by kind of work, from timestamp
+    // queries — `gpu_wait` above is one number on the CPU's clock and cannot
+    // say whether a slow GPU frame is geometry, layers, filters or shadows
+    // (`vieww_hal::vulkan::GpuPassTimes`). Said outright when the queue
+    // records no timestamps, rather than printed as zeroes.
+    let passes = |t: &vieww_hal::vulkan::GpuPassTimes| {
+        format!(
+            "draw {:.2} layers {:.2} filters {:.2} shadows {:.2} blit {:.2} total {:.2}",
+            ms(t.draw),
+            ms(t.layers),
+            ms(t.filters),
+            ms(t.shadows),
+            ms(t.blit),
+            ms(t.total()),
+        )
+    };
+    match (stages.gpu_passes, log.stage_percentile(0.95).gpu_passes) {
+        (Some(median), Some(p95)) => {
+            results.observe(
+                "gpu_passes",
+                format!("medians ms: {}; p95 ms: {}", passes(&median), passes(&p95)),
+            );
+        }
+        _ if !stages.gpu.total().is_zero() => {
+            results.observe(
+                "gpu_passes",
+                "unavailable: this GPU's queue records no timestamps",
+            );
+        }
+        _ => {}
+    }
     if let Some((work, stages)) = log.worst_frame_stages() {
         // What the stages leave out of the frame's work is time spent outside
         // the renderer — build, layout, or the thread not running at all.

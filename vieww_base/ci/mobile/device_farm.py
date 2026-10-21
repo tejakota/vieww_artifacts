@@ -374,6 +374,8 @@ def summarize(rows, out, run):
                 ("startup_stages", "start-up"),
                 ("frame_stages", "stages"),
                 ("frame_stages_p95", "stages"),
+                ("gpu_passes", "GPU time by kind of work"),
+                ("input_latency", "input to present"),
                 ("worst_frame", "worst frame"),
                 ("raster_by_core", "raster by core"),
                 ("cpu_clocks", "clocks at report"),

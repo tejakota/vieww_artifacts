@@ -149,6 +149,11 @@ pub struct SceneRenderer {
     /// The rectangles of `L[0]` the frame being recorded redraws; `None`
     /// redraws all of it. Set by `execute` for the length of one frame.
     frame_clip: Option<Vec<PixelRect>>,
+    /// Timestamp queries, when the queue can record them — see
+    /// [`GpuPassTimes`].
+    queries: Option<Queries>,
+    /// What the last frame whose timestamps were read spent on the GPU.
+    pass_times: Option<GpuPassTimes>,
 }
 
 /// What the frame target `L[0]` holds after a frame: that frame's finished
@@ -237,6 +242,79 @@ impl GpuFrameTimings {
     pub fn total(&self) -> Duration {
         self.upload + self.record + self.submit + self.wait + self.readback
     }
+}
+
+/// Where one frame's time went **on the GPU**, by kind of work, from
+/// timestamp queries — what [`GpuFrameTimings::wait`] cannot say, because
+/// that is one number for the whole frame on the CPU's clock.
+///
+/// The question behind it: on the LG Stylo 5 (Device Farm run 39538891917)
+/// the GPU spent about 12 ms on a frame whose damage was 8.6% of the
+/// screen. Plain geometry redrawn under the damage, or layers, filters and
+/// shadows recomputed over their full extent (the module docs say why they
+/// are), are different problems with different fixes; these fields say which.
+///
+/// # How it is measured
+///
+/// A timestamp is written each time the frame's commands change kind, and
+/// the interval up to the next one is charged to the kind that began it.
+/// Timestamps are written at `BOTTOM_OF_PIPE`, so an interval is the time
+/// between one group of work finishing and the next finishing: on a GPU
+/// that overlaps adjacent work this is an attribution, not an isolated
+/// cost, and the fields sum to the frame's GPU time ([`total`](Self::total))
+/// rather than to the sum of what each would cost alone.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GpuPassTimes {
+    /// Geometry drawn into the frame or a layer (`Step::Draw`), including
+    /// clearing the damaged rectangles.
+    pub draw: Duration,
+    /// Layer copies, masks and composites (`PushLayer` / `PopLayer`).
+    pub layers: Duration,
+    /// Filters: blurs, colour matrices — a layer's or a backdrop's.
+    pub filters: Duration,
+    /// Box shadows: seed, blur, inset and tint.
+    pub shadows: Duration,
+    /// The frame's last step: the blit into the swapchain image, or the
+    /// copy into the readback buffer.
+    pub blit: Duration,
+}
+
+impl GpuPassTimes {
+    /// The frame's GPU time: every kind, summed.
+    #[must_use]
+    pub fn total(&self) -> Duration {
+        self.draw + self.layers + self.filters + self.shadows + self.blit
+    }
+}
+
+/// The kind of work a timestamp interval is charged to — [`GpuPassTimes`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PassKind {
+    Draw,
+    Layers,
+    Filters,
+    Shadows,
+    Blit,
+}
+
+/// Timestamp slots per frame. A kind changes a few times per layer, filter
+/// or shadow; a frame that changes more often than this charges the rest to
+/// the kind it was in when the slots ran out (`Queries::overflowed`).
+const QUERY_SLOTS: u32 = 128;
+
+/// The timestamp query pool and this frame's marks — see [`GpuPassTimes`].
+struct Queries {
+    pool: vk::QueryPool,
+    /// Nanoseconds per tick (`VkPhysicalDeviceLimits::timestampPeriod`).
+    period: f32,
+    /// `timestampValidBits` as a mask: ticks wrap at it.
+    mask: u64,
+    /// The kind each written timestamp begins; the last one ends the frame.
+    kinds: Vec<PassKind>,
+    /// Whether this frame ran out of slots.
+    overflowed: bool,
+    /// A submitted frame whose timestamps have not been read yet.
+    pending: bool,
 }
 
 /// Which image a post descriptor set binds.
@@ -659,6 +737,31 @@ impl SceneRenderer {
         let masks = create_texture(&handle, &mem_props, vk::Format::R8_UNORM, 1, 1)?;
         let ramps = create_texture(&handle, &mem_props, vk::Format::R32G32B32A32_SFLOAT, 1, 1)?;
         let dummy = create_target(&handle, &mem_props, rp_load, 1, 1)?;
+        let queries = match device.timestamp_support() {
+            Some((period, bits)) => {
+                let pool = unsafe {
+                    handle.create_query_pool(
+                        &vk::QueryPoolCreateInfo::default()
+                            .query_type(vk::QueryType::TIMESTAMP)
+                            .query_count(QUERY_SLOTS),
+                        None,
+                    )
+                }?;
+                Some(Queries {
+                    pool,
+                    period,
+                    mask: if bits >= 64 {
+                        u64::MAX
+                    } else {
+                        (1u64 << bits) - 1
+                    },
+                    kinds: Vec::with_capacity(QUERY_SLOTS as usize),
+                    overflowed: false,
+                    pending: false,
+                })
+            }
+            None => None,
+        };
 
         let mut renderer = Self {
             device: handle,
@@ -699,6 +802,8 @@ impl SceneRenderer {
             timings: GpuFrameTimings::default(),
             retained: None,
             frame_clip: None,
+            queries,
+            pass_times: None,
         };
 
         let uniform_info = [vk::DescriptorBufferInfo {
@@ -976,6 +1081,14 @@ impl SceneRenderer {
     #[must_use]
     pub const fn last_timings(&self) -> GpuFrameTimings {
         self.timings
+    }
+
+    /// Where the last measured frame's GPU time went, by kind of work — see
+    /// [`GpuPassTimes`]. `None` when the queue cannot record timestamps, or
+    /// no frame has been read yet.
+    #[must_use]
+    pub const fn last_pass_times(&self) -> Option<GpuPassTimes> {
+        self.pass_times
     }
 
     /// Execute `plan` at `width` x `height` over `clear` and read the frame
@@ -1427,6 +1540,119 @@ impl SceneRenderer {
 
     // ── execution ──────────────────────────────────────────────────────────
 
+    /// Start this frame's timestamps: reset the slots (outside any render
+    /// pass, which is where `execute` calls this) and mark the first kind.
+    fn begin_marks(&mut self) {
+        let cmd = self.command_buffer;
+        if let Some(queries) = &mut self.queries {
+            queries.kinds.clear();
+            queries.overflowed = false;
+            // SAFETY: recording into the frame's command buffer.
+            unsafe {
+                self.device
+                    .cmd_reset_query_pool(cmd, queries.pool, 0, QUERY_SLOTS);
+            }
+        }
+        self.mark(PassKind::Draw);
+    }
+
+    /// The frame's commands from here on are `kind`'s: write a timestamp
+    /// when the kind changes. One slot is kept back for [`end_marks`].
+    ///
+    /// [`end_marks`]: Self::end_marks
+    fn mark(&mut self, kind: PassKind) {
+        let cmd = self.command_buffer;
+        let Some(queries) = &mut self.queries else {
+            return;
+        };
+        if queries.kinds.last() == Some(&kind) {
+            return;
+        }
+        #[expect(clippy::cast_possible_truncation, reason = "at most QUERY_SLOTS")]
+        let slot = queries.kinds.len() as u32;
+        if slot + 1 >= QUERY_SLOTS {
+            queries.overflowed = true;
+            return;
+        }
+        // SAFETY: recording into the frame's command buffer; `slot` was
+        // reset by `begin_marks` and is written once this frame.
+        unsafe {
+            self.device.cmd_write_timestamp(
+                cmd,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                queries.pool,
+                slot,
+            );
+        }
+        queries.kinds.push(kind);
+    }
+
+    /// The frame's last timestamp, closing the last interval.
+    fn end_marks(&mut self) {
+        let cmd = self.command_buffer;
+        if let Some(queries) = &mut self.queries {
+            #[expect(clippy::cast_possible_truncation, reason = "at most QUERY_SLOTS")]
+            let slot = queries.kinds.len() as u32;
+            // SAFETY: as in `mark`; `mark` always leaves this slot free.
+            unsafe {
+                self.device.cmd_write_timestamp(
+                    cmd,
+                    vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                    queries.pool,
+                    slot,
+                );
+            }
+            queries.pending = true;
+        }
+    }
+
+    /// Read the timestamps of the frame last submitted, once its fence has
+    /// signalled, into [`last_pass_times`](Self::last_pass_times). Never
+    /// waits: results that are not ready (they always are after the fence)
+    /// leave the previous figures in place.
+    fn collect_marks(&mut self) {
+        let Some(queries) = &mut self.queries else {
+            return;
+        };
+        if !std::mem::take(&mut queries.pending) || queries.kinds.is_empty() {
+            return;
+        }
+        let mut ticks = vec![0u64; queries.kinds.len() + 1];
+        // SAFETY: every slot read was written by the frame whose fence has
+        // signalled; no `WAIT` flag, so this cannot block.
+        let read = unsafe {
+            self.device.get_query_pool_results(
+                queries.pool,
+                0,
+                &mut ticks,
+                vk::QueryResultFlags::TYPE_64,
+            )
+        };
+        if read.is_err() {
+            return;
+        }
+        let mut times = GpuPassTimes::default();
+        for (index, kind) in queries.kinds.iter().enumerate() {
+            let delta = ticks[index + 1].wrapping_sub(ticks[index]) & queries.mask;
+            #[expect(
+                clippy::cast_precision_loss,
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a tick count times nanoseconds per tick, rounded"
+            )]
+            let nanos = (delta as f64 * f64::from(queries.period)).round() as u64;
+            let spent = Duration::from_nanos(nanos);
+            match kind {
+                PassKind::Draw => times.draw += spent,
+                PassKind::Layers => times.layers += spent,
+                PassKind::Filters => times.filters += spent,
+                PassKind::Shadows => times.shadows += spent,
+                PassKind::Blit => times.blit += spent,
+            }
+        }
+        self.pass_times = Some(times);
+    }
+
     fn begin_commands(&self) -> Result<(), VulkanError> {
         let cmd = self.command_buffer;
         unsafe {
@@ -1553,6 +1779,7 @@ impl SceneRenderer {
         });
         self.frame_clip = clip;
         self.begin_commands()?;
+        self.begin_marks();
         let a = f32::from(clear.a) / 255.0;
         let premultiplied_clear = [
             f32::from(clear.r) / 255.0 * a,
@@ -1615,6 +1842,7 @@ impl SceneRenderer {
                     first_run,
                     run_count,
                 } => {
+                    self.mark(PassKind::Draw);
                     rec.ensure_open(self, TargetId::Level(depth));
                     let clip = if depth == 0 {
                         self.frame_clip.as_deref()
@@ -1624,6 +1852,7 @@ impl SceneRenderer {
                     self.draw_runs(plan, first_run, run_count, width, height, clip);
                 }
                 Step::PushLayer { rect, backdrop } => {
+                    self.mark(PassKind::Layers);
                     let parent = depth;
                     depth += 1;
                     rec.begin(self, TargetId::Level(depth), Some([0.0; 4]));
@@ -1639,6 +1868,7 @@ impl SceneRenderer {
                                 mode::COPY,
                             ),
                         )?;
+                        self.mark(PassKind::Filters);
                         self.filter(&mut rec, depth, rect, filter)?;
                     }
                 }
@@ -1655,8 +1885,10 @@ impl SceneRenderer {
                     let mut source = TargetId::Level(child);
                     if !rect.is_empty() {
                         if let Some(filter) = filter {
+                            self.mark(PassKind::Filters);
                             self.filter(&mut rec, child, rect, filter)?;
                         }
+                        self.mark(PassKind::Layers);
                         if let Some(MaskRef { offset }) = mask {
                             let mut pass =
                                 Pass::new(TargetId::Scratch(child), rect, source, mode::MASK);
@@ -1668,6 +1900,7 @@ impl SceneRenderer {
                     let Some(region) = composite else {
                         continue;
                     };
+                    self.mark(PassKind::Layers);
                     if blend == BlendMode::Normal {
                         let mut pass =
                             Pass::new(TargetId::Level(depth), region, source, mode::OVER);
@@ -1714,6 +1947,7 @@ impl SceneRenderer {
                             }
                         }
                     }
+                    self.mark(PassKind::Shadows);
                     let work = depth + 1;
                     rec.begin(self, TargetId::Level(work), Some([0.0; 4]));
                     let mut seed =
@@ -1743,6 +1977,7 @@ impl SceneRenderer {
             }
         }
         rec.end(self);
+        self.mark(PassKind::Blit);
 
         let cmd = self.command_buffer;
         let frame = self.levels[0].image;
@@ -1830,11 +2065,13 @@ impl SceneRenderer {
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             );
         }
+        self.end_marks();
         self.timings.record = recording.elapsed();
         self.frame_clip = None;
         let (submit, wait) = self.submit_and_wait(out.map(|t| t.ready))?;
         self.timings.submit = submit;
         self.timings.wait = wait;
+        self.collect_marks();
         self.retained = Some(Retained {
             size: (width, height),
             clear,
@@ -2182,6 +2419,9 @@ impl Drop for SceneRenderer {
                 destroy_texture(&self.device, texture);
             }
             self.device.destroy_fence(self.fence, None);
+            if let Some(queries) = self.queries.take() {
+                self.device.destroy_query_pool(queries.pool, None);
+            }
             self.device.destroy_command_pool(self.command_pool, None);
             for pipeline in [self.scene_pipeline, self.post_replace, self.post_over] {
                 self.device.destroy_pipeline(pipeline, None);

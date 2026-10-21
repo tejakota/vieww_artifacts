@@ -190,7 +190,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
         kv "${mode}_suite" FAIL
         verdict[$mode]=FAIL
     fi
-    for key in frame_time frame_stages frame_stages_p95 worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
+    for key in frame_time frame_stages frame_stages_p95 gpu_passes input_latency worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done

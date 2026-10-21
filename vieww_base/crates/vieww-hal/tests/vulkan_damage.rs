@@ -413,3 +413,45 @@ fn overlapping_damage_rectangles_draw_each_pixel_once() {
     let union = 40 * 32 + 40 * 30 - 20 * 18 + 36 * 28;
     assert_eq!(redrawn, Redrawn::Damage { pixels: union });
 }
+
+#[test]
+#[ignore = "needs a Vulkan loader + ICD; run with `cargo test -p vieww-hal --features vulkan -- --ignored --test-threads=1`"]
+fn gpu_time_is_split_by_the_kind_of_work_that_spent_it() {
+    let Some(mut gpu) = open_gpu() else { return };
+    let mut planner = Planner::new();
+
+    // Blurred layer, shadow, blend layer, plain geometry: every kind.
+    render(
+        &mut gpu,
+        &mut planner,
+        &scene(CHIP_AFTER, None),
+        Color::BLACK,
+        None,
+    );
+    let Some(busy) = gpu.renderer.last_pass_times() else {
+        eprintln!("skipping: this queue records no timestamps");
+        return;
+    };
+    let cpu = gpu.renderer.last_timings();
+    assert!(busy.filters > std::time::Duration::ZERO, "{busy:?}");
+    assert!(busy.shadows > std::time::Duration::ZERO, "{busy:?}");
+    assert!(busy.layers > std::time::Duration::ZERO, "{busy:?}");
+    // The GPU's time for the frame lies inside the CPU's view of it: from
+    // the submit to the fence. A millisecond of slack for the two clocks.
+    assert!(
+        busy.total() <= cpu.submit + cpu.wait + std::time::Duration::from_millis(1),
+        "GPU {busy:?} against CPU submit {:?} + wait {:?}",
+        cpu.submit,
+        cpu.wait
+    );
+
+    // Plain geometry only: nothing may be charged to filters or shadows.
+    let mut plain = Scene::default();
+    checker(&mut plain);
+    render(&mut gpu, &mut planner, &plain, Color::BLACK, None);
+    let quiet = gpu.renderer.last_pass_times().expect("measured above");
+    assert_eq!(quiet.filters, std::time::Duration::ZERO, "{quiet:?}");
+    assert_eq!(quiet.shadows, std::time::Duration::ZERO, "{quiet:?}");
+    assert_eq!(quiet.layers, std::time::Duration::ZERO, "{quiet:?}");
+    assert!(quiet.draw > std::time::Duration::ZERO, "{quiet:?}");
+}

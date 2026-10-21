@@ -32,7 +32,7 @@ pub mod scene;
 #[cfg(feature = "shader-compiler")]
 pub use compute::{ComputeBuffer, ComputeKernel};
 pub use pipeline_cache::set_pipeline_cache_file;
-pub use scene::{GpuFrameTimings, Redrawn, SceneRenderer};
+pub use scene::{GpuFrameTimings, GpuPassTimes, Redrawn, SceneRenderer};
 
 /// [`VulkanDevice::for_window`] and [`swapchain::VulkanSwapchain`] — real
 /// windowed presentation. See that module's own docs.
@@ -541,6 +541,28 @@ impl VulkanDevice {
     /// command pool has to be created against.
     pub(crate) const fn queue_family_index(&self) -> u32 {
         self.queue_family
+    }
+
+    /// Whether [`raw_queue`](Self::raw_queue) can record timestamps, and
+    /// what one tick is: `(nanoseconds per tick, valid bits)`. `None` when the
+    /// queue family reports no valid timestamp bits or the device a zero
+    /// period — then a renderer measures nothing on the GPU's clock rather
+    /// than reporting zeroes as if it had.
+    pub(crate) fn timestamp_support(&self) -> Option<(f32, u32)> {
+        // SAFETY: queries on a live physical device.
+        let (families, props) = unsafe {
+            (
+                self.instance
+                    .get_physical_device_queue_family_properties(self.physical_device),
+                self.instance
+                    .get_physical_device_properties(self.physical_device),
+            )
+        };
+        let bits = families
+            .get(self.queue_family as usize)?
+            .timestamp_valid_bits;
+        let period = props.limits.timestamp_period;
+        (bits > 0 && period > 0.0).then_some((period, bits))
     }
 }
 

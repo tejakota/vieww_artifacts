@@ -358,7 +358,36 @@ impl FrameLog {
             acquire: at(|s| s.acquire),
             present: at(|s| s.present),
             cpu_core: None,
+            gpu_passes: self.gpu_pass_percentile(p),
         }
+    }
+
+    /// The `p`th percentile of each kind of GPU work
+    /// ([`vieww_hal::vulkan::GpuPassTimes`]), over the recent frames whose
+    /// GPU time was measured; `None` when none was. Per kind, like
+    /// [`stage_percentile`](Self::stage_percentile): the fields need not
+    /// come from one frame.
+    fn gpu_pass_percentile(&self, p: f64) -> Option<vieww_hal::vulkan::GpuPassTimes> {
+        let measured: Vec<vieww_hal::vulkan::GpuPassTimes> = self
+            .recent
+            .iter()
+            .filter_map(|frame| frame.stages.gpu_passes)
+            .collect();
+        if measured.is_empty() {
+            return None;
+        }
+        let at = |pick: fn(&vieww_hal::vulkan::GpuPassTimes) -> Duration| {
+            let mut values: Vec<Duration> = measured.iter().map(pick).collect();
+            values.sort_unstable();
+            percentile(&values, p)
+        };
+        Some(vieww_hal::vulkan::GpuPassTimes {
+            draw: at(|t| t.draw),
+            layers: at(|t| t.layers),
+            filters: at(|t| t.filters),
+            shadows: at(|t| t.shadows),
+            blit: at(|t| t.blit),
+        })
     }
 
     /// The CPU raster stage per core it ended on: `(core, frames, median)`,
