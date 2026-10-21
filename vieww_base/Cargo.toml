@@ -78,7 +78,8 @@ members = [
     "examples/fixtures",
     "examples/features/*",
     "apps/viewwstudio",
-    "apps/viewwsite"
+    "apps/viewwsite",
+    "apps/wrightsite"
 ]
 
 # The fuzz harness builds with sanitizers and its own pinned profile;

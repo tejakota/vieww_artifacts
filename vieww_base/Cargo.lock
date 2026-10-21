@@ -6510,6 +6510,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
+name = "wrightsite"
+version = "0.1.0"
+dependencies = [
+ "vieww",
+ "vieww-asset",
+ "vieww-element",
+ "vieww-platform-web",
+ "vieww-platform-web-dom",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "x11-dl"
 version = "2.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

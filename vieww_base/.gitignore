@@ -1,6 +1,7 @@
 # Build output
 /target/
 dist/
+site-shots/
 fixtures-out/
 census-out/
 gpu-test-out/
