@@ -112,6 +112,37 @@ pub struct VulkanSwapchain {
     command_pool: vk::CommandPool,
     /// The one command buffer every present records into.
     command_buffer: vk::CommandBuffer,
+    /// Changes whenever something other than a `SceneRenderer` frame writes
+    /// an image (a CPU present, an abandoned image) and when the swapchain is
+    /// rebuilt — so a renderer that tracks what each image holds (partial
+    /// blits, `SceneRenderer`'s present history) knows to forget it.
+    pub(crate) generation: u64,
+    /// Whether this swapchain was made for partial blits: `clipped` off, so
+    /// every image owns all its pixels, and `TRANSFER_SRC` usage, so the
+    /// renderer can read an image back to verify what it holds.
+    pub(crate) partial: bool,
+}
+
+/// A fresh [`VulkanSwapchain::generation`].
+pub(crate) fn next_generation() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Whether swapchains are made for partial blits (`SceneRenderer`'s present
+/// history): `VIEWW_PARTIAL_BLIT=1` or `=0` says; unset, on Android only,
+/// where the full-frame copy into the swapchain image was 2.5 ms of the LG
+/// Stylo 5's 11.7 ms GPU frame (Device Farm run 39594824376). Even on, the
+/// renderer copies partially only once it has verified, on this device,
+/// that an image keeps what was last written to it.
+#[must_use]
+pub fn partial_blit_wanted() -> bool {
+    match std::env::var("VIEWW_PARTIAL_BLIT").as_deref() {
+        Ok("1") => true,
+        Ok("0") => false,
+        _ => cfg!(target_os = "android"),
+    }
 }
 
 impl std::fmt::Debug for VulkanSwapchain {
@@ -306,6 +337,9 @@ impl VulkanDevice {
         swapchain: &mut VulkanSwapchain,
         pixels: &[u8],
     ) -> Result<(), VulkanError> {
+        // An image is about to hold a CPU frame: what a `SceneRenderer`
+        // last wrote to any of them is no longer known to be there.
+        swapchain.generation = next_generation();
         let expected = (swapchain.width as usize) * (swapchain.height as usize) * 4;
         if pixels.len() != expected {
             return Err(VulkanError::Vulkan(format!(
@@ -564,6 +598,13 @@ pub struct AcquiredImage {
     pub(crate) done: vk::Semaphore,
     pub(crate) width: u32,
     pub(crate) height: u32,
+    /// The swapchain's [`generation`](VulkanSwapchain) at acquisition.
+    pub(crate) generation: u64,
+    /// Whether the swapchain was made for partial blits.
+    pub(crate) partial: bool,
+    /// Whether the image stores blue first — how its bytes compare with a
+    /// frame read back as RGBA.
+    pub(crate) bgra: bool,
 }
 
 impl AcquiredImage {
@@ -663,6 +704,9 @@ impl VulkanDevice {
             done: swapchain.render_done[index as usize],
             width: swapchain.width,
             height: swapchain.height,
+            generation: swapchain.generation,
+            partial: swapchain.partial,
+            bgra: matches!(swapchain.order, ChannelOrder::Bgra),
         };
         if image.extent() != expected {
             self.abandon_acquired(swapchain, image)?;
@@ -715,6 +759,9 @@ impl VulkanDevice {
         swapchain: &mut VulkanSwapchain,
         image: AcquiredImage,
     ) -> Result<(), VulkanError> {
+        // `UNDEFINED` below lets the driver discard the image: whatever a
+        // renderer last wrote to it is no longer known to be there.
+        swapchain.generation = next_generation();
         swapchain.ensure_upload_resources(self, 4)?;
         let cmd = swapchain.command_buffer;
         let barrier = vk::ImageMemoryBarrier::default()
@@ -843,6 +890,20 @@ impl VulkanSwapchain {
         }
 
         let swapchain_loader = ash::khr::swapchain::Device::new(&device.instance, &device.device);
+        // Partial blits need two things of the swapchain: images that own
+        // every pixel (`clipped` off — on, a region another window covered
+        // may come back undefined, and a partial copy would leave it so) and
+        // images the renderer may read back, which is how it verifies the
+        // driver keeps an image's contents between presents.
+        let partial = partial_blit_wanted()
+            && capabilities
+                .supported_usage_flags
+                .contains(vk::ImageUsageFlags::TRANSFER_SRC);
+        let usage = if partial {
+            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC
+        } else {
+            vk::ImageUsageFlags::TRANSFER_DST
+        };
         let create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface)
             .min_image_count(image_count)
@@ -850,12 +911,12 @@ impl VulkanSwapchain {
             .image_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
             .image_extent(extent)
             .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::TRANSFER_DST)
+            .image_usage(usage)
             .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
             .pre_transform(capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(present_mode)
-            .clipped(true);
+            .clipped(!partial);
         let swapchain = unsafe { swapchain_loader.create_swapchain(&create_info, None) }
             .map_err(|e| VulkanError::Vulkan(format!("creating swapchain: {e}")))?;
         let images = unsafe { swapchain_loader.get_swapchain_images(swapchain) }
@@ -887,6 +948,8 @@ impl VulkanSwapchain {
             staging_capacity: 0,
             command_pool: vk::CommandPool::null(),
             command_buffer: vk::CommandBuffer::null(),
+            generation: next_generation(),
+            partial,
         })
     }
 

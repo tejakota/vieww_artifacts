@@ -69,6 +69,7 @@ use ash::vk;
 use vieww_foundation::{BlendMode, Color};
 use vieww_gpu::{FilterOp, MaskRef, PixelRect, Planner, ScenePlan, Step, Vertex};
 
+use super::present_history::{self, PresentHistory};
 #[cfg(feature = "vulkan-swapchain")]
 use super::AcquiredImage;
 use super::{translate_wgsl_to_spirv, Stage, VulkanDevice, VulkanError};
@@ -91,6 +92,28 @@ struct BlitTarget {
     /// source is a different size — nearest-neighbour upscaling doubles
     /// pixels instead of blending them.
     filter: vk::Filter,
+    /// The swapchain image's own extent: where the blit ends in it. Not
+    /// `src_extent` — with a resolution scale on, those differ, and a blit
+    /// to the render extent filled only the image's top-left corner.
+    dst_extent: [u32; 2],
+    /// For [`PresentHistory`]: which image, of which generation of the
+    /// swapchain, made for partial blits or not, in which byte order.
+    index: u32,
+    generation: u64,
+    partial: bool,
+    bgra: bool,
+}
+
+/// A frame's image reads, looked at once the GPU has finished the frame —
+/// see `present_history`.
+#[derive(Debug, Clone, Copy)]
+struct PendingProbe {
+    index: u32,
+    before: bool,
+    after: bool,
+    compare: bool,
+    extent: (u32, u32),
+    bgra: bool,
 }
 
 /// Colour format of every render target.
@@ -166,6 +189,15 @@ pub struct SceneRenderer {
     /// Time spent in [`settle`](Self::settle) since the last frame was
     /// recorded: charged to the next frame's [`GpuFrameTimings::wait`].
     settled_wait: Duration,
+    /// What each swapchain image holds, so a frame copies only what changed
+    /// — see `present_history`.
+    presents: PresentHistory,
+    /// Host-visible buffers a swapchain image is read into, before and
+    /// after a frame's copy, while partial copies are being verified.
+    probe_before: Buffer,
+    probe_after: Buffer,
+    /// The last frame's reads, until its fence has signalled.
+    pending_probe: Option<PendingProbe>,
 }
 
 /// What the frame target `L[0]` holds after a frame: that frame's finished
@@ -807,6 +839,10 @@ impl SceneRenderer {
             in_flight: false,
             overlap: true,
             settled_wait: Duration::ZERO,
+            presents: PresentHistory::new(),
+            probe_before: Buffer::EMPTY,
+            probe_after: Buffer::EMPTY,
+            pending_probe: None,
         };
 
         let uniform_info = [vk::DescriptorBufferInfo {
@@ -1251,6 +1287,11 @@ impl SceneRenderer {
             } else {
                 vk::Filter::LINEAR
             },
+            dst_extent: [width, height],
+            index: target.index,
+            generation: target.generation,
+            partial: target.partial,
+            bgra: target.bgra,
         };
         self.execute(plan, render_width, render_height, clear, Some(blit), damage)
     }
@@ -1794,6 +1835,9 @@ impl SceneRenderer {
                 .sum(),
         });
         self.frame_clip = clip;
+        // Every frame changes `L[0]`, whether or not it reaches a swapchain
+        // image; an image written later has to catch up on all of them.
+        self.presents.record_change(self.frame_clip.as_deref());
         self.begin_commands()?;
         self.begin_marks();
         let a = f32::from(clear.a) / 255.0;
@@ -2027,40 +2071,180 @@ impl SceneRenderer {
                 // source corner is the render extent, the destination the
                 // swapchain image's — the same numbers at full resolution,
                 // an enlargement when a resolution scale is on.
-                transition(
-                    &self.device,
-                    cmd,
-                    target.image,
-                    vk::ImageLayout::UNDEFINED,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                //
+                // **Only what changed since this image was last written**,
+                // once this device has shown that its images keep what was
+                // written to them (`present_history`); until then, and on a
+                // scaled frame, all of it.
+                let [dst_width, dst_height] = target.dst_extent;
+                let plan = self.presents.plan(
+                    target.index,
+                    target.generation,
+                    (dst_width, dst_height),
+                    target.partial,
+                    target.src_extent == target.dst_extent,
                 );
+                if plan.read_before || plan.read_after {
+                    self.ensure_probe_buffers(u64::from(dst_width) * u64::from(dst_height) * 4)?;
+                }
+                let image_copy = vk::BufferImageCopy {
+                    buffer_offset: 0,
+                    buffer_row_length: 0,
+                    buffer_image_height: 0,
+                    image_subresource: color_layers(),
+                    image_offset: vk::Offset3D::default(),
+                    image_extent: vk::Extent3D {
+                        width: dst_width,
+                        height: dst_height,
+                        depth: 1,
+                    },
+                };
+                if plan.read_before {
+                    // What the image kept since it was last written.
+                    transition(
+                        &self.device,
+                        cmd,
+                        target.image,
+                        vk::ImageLayout::PRESENT_SRC_KHR,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    );
+                    self.device.cmd_copy_image_to_buffer(
+                        cmd,
+                        target.image,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        self.probe_before.handle,
+                        &[image_copy],
+                    );
+                    transition(
+                        &self.device,
+                        cmd,
+                        target.image,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    );
+                } else {
+                    // A partial copy keeps the image's pixels, so its layout
+                    // moves on from where the last present left it; a full
+                    // one lets the driver discard them.
+                    transition(
+                        &self.device,
+                        cmd,
+                        target.image,
+                        if plan.region.is_some() {
+                            vk::ImageLayout::PRESENT_SRC_KHR
+                        } else {
+                            vk::ImageLayout::UNDEFINED
+                        },
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    );
+                }
                 #[expect(clippy::cast_possible_wrap, reason = "frame extents")]
                 let corner = |extent: [u32; 2]| vk::Offset3D {
                     x: extent[0] as i32,
                     y: extent[1] as i32,
                     z: 1,
                 };
-                self.device.cmd_blit_image(
-                    cmd,
-                    frame,
-                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    target.image,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    &[vk::ImageBlit {
+                let regions: Vec<vk::ImageBlit> = match &plan.region {
+                    None => vec![vk::ImageBlit {
                         src_subresource: color_layers(),
                         src_offsets: [vk::Offset3D::default(), corner(target.src_extent)],
                         dst_subresource: color_layers(),
-                        dst_offsets: [vk::Offset3D::default(), corner([width, height])],
+                        dst_offsets: [vk::Offset3D::default(), corner(target.dst_extent)],
                     }],
-                    target.filter,
+                    Some(rects) => rects
+                        .iter()
+                        .map(|r| {
+                            let offsets = [
+                                vk::Offset3D {
+                                    x: r.x0,
+                                    y: r.y0,
+                                    z: 0,
+                                },
+                                vk::Offset3D {
+                                    x: r.x1,
+                                    y: r.y1,
+                                    z: 1,
+                                },
+                            ];
+                            vk::ImageBlit {
+                                src_subresource: color_layers(),
+                                src_offsets: offsets,
+                                dst_subresource: color_layers(),
+                                dst_offsets: offsets,
+                            }
+                        })
+                        .collect(),
+                };
+                if !regions.is_empty() {
+                    self.device.cmd_blit_image(
+                        cmd,
+                        frame,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        target.image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        &regions,
+                        target.filter,
+                    );
+                }
+                if plan.read_after {
+                    // What the image now holds, for the next frame that
+                    // writes it to check against.
+                    transition(
+                        &self.device,
+                        cmd,
+                        target.image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    );
+                    self.device.cmd_copy_image_to_buffer(
+                        cmd,
+                        target.image,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        self.probe_after.handle,
+                        &[image_copy],
+                    );
+                    transition(
+                        &self.device,
+                        cmd,
+                        target.image,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        vk::ImageLayout::PRESENT_SRC_KHR,
+                    );
+                } else {
+                    transition(
+                        &self.device,
+                        cmd,
+                        target.image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        vk::ImageLayout::PRESENT_SRC_KHR,
+                    );
+                }
+                if plan.compare_frame {
+                    // The frame itself, to compare the image with.
+                    self.device.cmd_copy_image_to_buffer(
+                        cmd,
+                        frame,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        self.readback.handle,
+                        &[image_copy],
+                    );
+                }
+                present_history::count_copy(
+                    &plan,
+                    (dst_width, dst_height),
+                    self.presents.trust(),
+                    target.partial,
                 );
-                transition(
-                    &self.device,
-                    cmd,
-                    target.image,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    vk::ImageLayout::PRESENT_SRC_KHR,
-                );
+                if plan.read_before || plan.read_after || plan.compare_frame {
+                    self.pending_probe = Some(PendingProbe {
+                        index: target.index,
+                        before: plan.read_before,
+                        after: plan.read_after,
+                        compare: plan.compare_frame,
+                        extent: (dst_width, dst_height),
+                        bgra: target.bgra,
+                    });
+                }
             },
         }
         unsafe {
@@ -2088,6 +2272,7 @@ impl SceneRenderer {
                 self.timings.submit = self.submit(out.map(|t| t.ready), out.map(|t| t.done))?;
                 self.timings.wait = carried + self.wait_for_fence()?;
                 self.collect_marks();
+                self.collect_probe()?;
             }
         }
         self.retained = Some(Retained {
@@ -2374,7 +2559,7 @@ impl SceneRenderer {
         self.settled_wait += self.wait_for_fence()?;
         self.in_flight = false;
         self.collect_marks();
-        Ok(())
+        self.collect_probe()
     }
 
     /// Whether a frame into a swapchain image is left in flight
@@ -2396,6 +2581,92 @@ impl SceneRenderer {
     #[must_use]
     pub const fn overlaps(&self) -> bool {
         self.overlap
+    }
+
+    /// Host-visible buffers of at least `bytes` for a swapchain image's
+    /// reads (`present_history`).
+    fn ensure_probe_buffers(&mut self, bytes: u64) -> Result<(), VulkanError> {
+        for slot in [&mut self.probe_before, &mut self.probe_after] {
+            if slot.capacity < bytes {
+                let fresh = allocate_buffer(
+                    &self.device,
+                    vk::BufferUsageFlags::TRANSFER_DST,
+                    self.host_visible_memory,
+                    bytes,
+                )?;
+                let old = std::mem::replace(slot, fresh);
+                // SAFETY: every frame that could read `old` has been waited
+                // for — the caller settled before recording this one.
+                unsafe { destroy_buffer(&self.device, old) };
+            }
+        }
+        Ok(())
+    }
+
+    /// The bytes of a probe buffer.
+    fn probe_bytes(&self, buffer: &Buffer, len: usize) -> Result<Vec<u8>, VulkanError> {
+        let mut out = vec![0u8; len];
+        // SAFETY: host-visible memory of at least `len` bytes, written by a
+        // frame whose fence has signalled.
+        unsafe {
+            let ptr =
+                self.device
+                    .map_memory(buffer.memory, 0, len as u64, vk::MemoryMapFlags::empty())?
+                    as *const u8;
+            std::ptr::copy_nonoverlapping(ptr, out.as_mut_ptr(), len);
+            self.device.unmap_memory(buffer.memory);
+        }
+        Ok(out)
+    }
+
+    /// Look at the last frame's swapchain-image reads, now that the GPU
+    /// has finished it: what the image kept, what it now holds, and — in
+    /// check mode — whether that is the frame.
+    fn collect_probe(&mut self) -> Result<(), VulkanError> {
+        let Some(probe) = self.pending_probe.take() else {
+            return Ok(());
+        };
+        let (width, height) = probe.extent;
+        let len = width as usize * height as usize * 4;
+        let before = if probe.before {
+            Some(present_history::hash_bytes(
+                &self.probe_bytes(&self.probe_before, len)?,
+            ))
+        } else {
+            None
+        };
+        let after = if probe.after {
+            Some(self.probe_bytes(&self.probe_after, len)?)
+        } else {
+            None
+        };
+        self.presents.verified(
+            probe.index,
+            before,
+            after.as_deref().map(present_history::hash_bytes),
+        );
+        if let (true, Some(image)) = (probe.compare, after.as_deref()) {
+            let frame = self.read_back(width, height)?;
+            // The blit's float-to-8-bit conversion and the oracle's may
+            // round a channel apart by one; a trail is not that subtle.
+            let differs = |a: u8, b: u8| a.abs_diff(b) > 1;
+            let bad = image
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(frame.as_chunks::<4>().0)
+                .filter(|(i, f)| {
+                    let i = if probe.bgra {
+                        [i[2], i[1], i[0], i[3]]
+                    } else {
+                        **i
+                    };
+                    (0..3).any(|c| differs(i[c], f[c]))
+                })
+                .count();
+            self.presents.frame_mismatch(bad as u64);
+        }
+        Ok(())
     }
 
     /// Premultiplied RGBA16F → straight RGBA8, rounded exactly as
@@ -2516,6 +2787,8 @@ impl Drop for SceneRenderer {
                 std::mem::replace(&mut self.vertices, Buffer::EMPTY),
                 std::mem::replace(&mut self.indices, Buffer::EMPTY),
                 std::mem::replace(&mut self.uniform, Buffer::EMPTY),
+                std::mem::replace(&mut self.probe_before, Buffer::EMPTY),
+                std::mem::replace(&mut self.probe_after, Buffer::EMPTY),
             ] {
                 destroy_buffer(&self.device, buffer);
             }
@@ -2952,7 +3225,7 @@ fn clipped(scissor: vk::Rect2D, clip: Option<&[PixelRect]>) -> Vec<vk::Rect2D> {
 
 /// `rects`' union as rectangles that do not overlap: each one minus every
 /// rectangle already taken, as up to four bands around the overlap.
-fn disjoint(rects: impl IntoIterator<Item = PixelRect>) -> Vec<PixelRect> {
+pub(super) fn disjoint(rects: impl IntoIterator<Item = PixelRect>) -> Vec<PixelRect> {
     let mut out: Vec<PixelRect> = Vec::new();
     for rect in rects {
         let mut pieces = vec![rect];

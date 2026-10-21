@@ -28,10 +28,12 @@ use super::{AdapterInfo, Device as HalDevice};
 #[cfg(feature = "shader-compiler")]
 pub mod compute;
 pub mod pipeline_cache;
+mod present_history;
 pub mod scene;
 #[cfg(feature = "shader-compiler")]
 pub use compute::{ComputeBuffer, ComputeKernel};
 pub use pipeline_cache::set_pipeline_cache_file;
+pub use present_history::{partial_blit_stats, PartialBlitStats};
 pub use scene::{GpuFrameTimings, GpuPassTimes, Redrawn, SceneRenderer};
 
 /// [`VulkanDevice::for_window`] and [`swapchain::VulkanSwapchain`] — real
