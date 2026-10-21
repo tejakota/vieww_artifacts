@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
-use vieww_foundation::{Axis, DragDetails, Key, Offset, ScrollEvent, TextDirection};
+use vieww_foundation::{Axis, DragDetails, Key, Offset, ScrollEvent, TextDirection, ViewMetrics};
 
 use crate::{
     widget_node_from, BuildContext, Directionality, GestureDetector, Handler, Inherited,
@@ -203,6 +203,16 @@ impl Scrollable {
     }
 }
 
+/// `offset` rounded to the nearest whole device pixel (`ratio` device
+/// pixels to a logical one; a ratio that is not a positive number leaves the
+/// offset as it is).
+fn snap_to_device_pixels(offset: f32, ratio: f32) -> f32 {
+    if !(ratio.is_finite() && ratio > 0.0) || !offset.is_finite() {
+        return offset;
+    }
+    (offset * ratio).round() / ratio
+}
+
 impl Widget for Scrollable {
     fn debug_name(&self) -> &'static str {
         "Scrollable"
@@ -224,7 +234,18 @@ impl Widget for Scrollable {
         let reversed =
             self.axis == Axis::Horizontal && Directionality::of(ctx) == TextDirection::Rtl;
 
-        let mut viewport = Viewport::new(self.axis).offset(self.offset);
+        // **The content moves in whole device pixels.** The offset a drag or a
+        // trackpad produces is fractional (7.3 points, say), and shifting the
+        // content by a fraction of a pixel puts every line of text at a new
+        // sub-pixel phase. The renderer snaps glyphs to whole pixels, each
+        // line from its own fractional baseline, so the lines crossed their
+        // rounding points at different moments and stepped out of time with
+        // each other and with their boxes, whose edges glide: scrolled text
+        // looked wavy. Snapping the shift keeps every line's phase fixed, so
+        // the page moves as one piece. The caller's offset is untouched — a
+        // long scroll does not drift — only what is drawn is rounded.
+        let offset = snap_to_device_pixels(self.offset, ctx.inherit_or(ViewMetrics::default()).device_pixel_ratio);
+        let mut viewport = Viewport::new(self.axis).offset(offset);
         if let Some(handler) = &self.on_extents {
             viewport = viewport.on_extents(Rc::clone(handler));
         }
@@ -261,7 +282,6 @@ impl Widget for Scrollable {
         // An unbounded main axis has no window to read and falls back to the
         // declared value, which is exactly what that setter is now for.
         let axis = self.axis;
-        let offset = self.offset;
         let declared = self.viewport;
         let inner = LayoutBuilder::new(move |constraints| {
             let measured = match axis {
@@ -425,6 +445,16 @@ mod tests {
             "a drag and a wheel, and deliberately no tap — a tap recogniser \
              here would take taps from the rows inside"
         );
+    }
+
+    #[test]
+    fn the_content_moves_in_whole_device_pixels() {
+        assert_eq!(snap_to_device_pixels(7.3, 1.0), 7.0);
+        assert_eq!(snap_to_device_pixels(7.3, 2.0), 7.5);
+        assert_eq!(snap_to_device_pixels(7.3, 1.25), 7.2);
+        assert_eq!(snap_to_device_pixels(-3.4, 1.0), -3.0);
+        assert_eq!(snap_to_device_pixels(5.5, 0.0), 5.5, "no ratio, no snapping");
+        assert_eq!(snap_to_device_pixels(5.5, f32::NAN), 5.5);
     }
 
     #[test]

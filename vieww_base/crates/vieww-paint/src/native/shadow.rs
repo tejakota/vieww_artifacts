@@ -337,13 +337,34 @@ impl ShadowKey {
     }
 }
 
-/// How many patch pixels the cache may hold at once.
+/// How many patch pixels the cache may hold at once, at least.
 ///
 /// A patch is one [`Premul`] — sixteen bytes — per pixel, so this is a
-/// budget of about thirty megabytes. Generous for a desktop window and firmly
-/// bounded, which is the property that matters: a scene that animates a
-/// shadow's blur every frame must degrade to "no reuse", not to "no memory".
+/// budget of about thirty megabytes. Firmly bounded, which is the property
+/// that matters: a scene that animates a shadow's blur every frame must
+/// degrade to "no reuse", not to "no memory".
+///
+/// # At least, because a fixed number thrashes on a high-density screen
+///
+/// A panel's shadow covers the panel plus its blur, and at a device ratio of
+/// 2 a dialog over most of a 1280x800 window is a patch of about three million
+/// pixels — more than this whole budget. It was still stored ("one frame's
+/// correctness is not worth a memory bound") and then evicted by the next,
+/// smaller shadow of the same frame, which it evicted in turn on the next
+/// frame: every shadow missed, every frame. Measured on Wright's settings
+/// dialog while scrolling at ratio 2: 209 ms a frame with the thrash, and the
+/// shadow's share of it gone with room for it. So the budget is also never
+/// less than one and a half surfaces — a window-sized shadow's patch is the
+/// window plus its blur margin, and the rest is room for the small ones beside
+/// it — and still bounded by what is on screen.
 const PIXEL_BUDGET: usize = 2_000_000;
+
+/// The budget for a surface: [`PIXEL_BUDGET`], or one and a half times the
+/// surface's pixel count when that is larger.
+fn budget_for(surface: Rect) -> usize {
+    let area = (surface.width().max(0.0) * surface.height().max(0.0)) as usize;
+    PIXEL_BUDGET.max(area + area / 2)
+}
 
 impl ShadowCache {
     pub(crate) fn new() -> Self {
@@ -381,7 +402,8 @@ impl ShadowCache {
             // than the whole budget is still stored — one frame's correctness
             // is not worth trading for a memory bound — and evicted on the
             // next miss.
-            while self.pixels + cost > PIXEL_BUDGET && !self.entries.is_empty() {
+            let budget = budget_for(surface);
+            while self.pixels + cost > budget && !self.entries.is_empty() {
                 let (_, dropped, ..) = self.entries.remove(0);
                 self.pixels -= dropped.pixels.len();
             }
