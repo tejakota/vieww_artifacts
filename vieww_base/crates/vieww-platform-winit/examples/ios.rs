@@ -78,7 +78,11 @@ fn main() {
     // it — Android needs the activity handle, iOS needs a bundle, and neither
     // needs a different tree. The suite reporting the same check names on both
     // is what makes the two runs comparable at all.
+    // The suite reports the CPU raster by kind of command
+    // (`raster_by_kind`); set before the renderer exists, which reads it.
+    std::env::set_var("VIEWW_RASTER_PROFILE", "1");
     let perf = screen::PerfLink::new();
+    let stress = screen::StressLink::new();
     let suite = DeviceSuite::new();
 
     // **Firebase Test Lab's Game Loop collects `Documents/GameLoopResults/`.**
@@ -127,6 +131,7 @@ fn main() {
         .title("vieww")
         .size(PREVIEW)
         .on_frame(perf.hook())
+        .on_frame(stress.hook())
         .on_frame(suite.hook())
         // Reports where the button and the field ended up, so the
         // device script taps what is on screen rather than a constant
@@ -148,9 +153,16 @@ fn main() {
             // the Android example for why the difference is load-bearing.
             let demo = screen::Demo::new(driver);
             perf.attach(&demo);
+            stress.attach(&demo);
             let probe = suite.probe(demo.taps());
             suite.watch_drawer(demo.drawer());
-            driver.set_root(demo.screen("A frame, on an iPhone.", TargetPlatform::IOS, probe));
+            // `VIEWW_SCREEN=stress` (the runner's launch environment) for the
+            // heavy screen the Android phones run too.
+            driver.set_root(if screen::wants_stress() {
+                demo.stress_screen(TargetPlatform::IOS, probe)
+            } else {
+                demo.screen("A frame, on an iPhone.", TargetPlatform::IOS, probe)
+            });
         });
 
     match result {

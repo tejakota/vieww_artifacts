@@ -104,6 +104,7 @@ pub mod services;
 // tray needs to turn an `IconData` into pixels. Both are behind the feature
 // because the tray pulls GTK on Linux — see the manifest — and because a
 // rasteriser with no tray to feed is dead code under `-D warnings`.
+mod cpu_time;
 #[cfg(all(
     feature = "desktop-services",
     not(any(target_os = "android", target_os = "ios"))
@@ -122,12 +123,14 @@ pub mod rasterizer_choice;
 mod startup;
 mod stats;
 pub mod storage;
+mod thermal;
 mod windows;
 
 pub use app::{App, CloseRequest, Closing, Pinch, PinchPhase, PlatformError, Waker};
 pub use deep_links::PlatformDeepLinks;
 pub use windows::PlatformWindows;
 
+pub use cpu_time::process_cpu_time;
 pub use device_tier::{device_facts, device_facts_status, resolve_tier, DeviceFacts, DeviceTier};
 pub use input::{PointerTranslator, TouchPhase};
 pub use keys::{ime, KeyTranslator};
@@ -140,6 +143,7 @@ pub use scale::{Physical, Scale};
 pub use startup::{pipeline_cache_status, report as startup_report};
 pub use stats::{Frame, FrameLog, FrameReport};
 pub use storage::{data_dir, FileStorage};
+pub use thermal::{status_name as thermal_status_name, thermal_reading, ThermalReading};
 /// The activity handle `android_main` is handed, re-exported so an application
 /// needs no direct dependency on `android-activity`.
 ///

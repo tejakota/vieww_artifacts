@@ -625,6 +625,7 @@ mod demo {
         // which only exists once the loop is running — so the hook is installed
         // now and pointed at the tree when `build` creates it.
         let perf = screen::PerfLink::new();
+        let stress = screen::StressLink::new();
         // Runs against the same tree a human is looking at, and reports on a
         // sentinel line after 120 frames. `ci/mobile/device-suite.sh` reads it.
         let suite = DeviceSuite::new();
@@ -871,6 +872,50 @@ mod demo {
                 &format!("off: {} (debug.vieww.bare={bare})", switched.join(", ")),
             );
         }
+        // The stress screen and a longer pass: `debug.vieww.screen=stress`
+        // swaps the light demo for a feed-like screen (shadows, layers,
+        // filters, a backdrop blur over a list that scrolls every frame);
+        // `debug.vieww.frames=3600` measures for a minute rather than ten
+        // seconds, long enough for a phone to warm up and throttle. Set
+        // before the loop, as everything above is.
+        let prop = |name: &str| {
+            std::process::Command::new("/system/bin/getprop")
+                .arg(name)
+                .output()
+                .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+                .unwrap_or_default()
+        };
+        // The suite reports the CPU raster by kind of command
+        // (`raster_by_kind`); two clock reads a command, set before the
+        // renderer exists, which reads it.
+        std::env::set_var("VIEWW_RASTER_PROFILE", "1");
+        let screen_prop = prop("debug.vieww.screen");
+        if screen_prop == "stress" {
+            std::env::set_var("VIEWW_SCREEN", "stress");
+            suite.observe("screen", "stress (debug.vieww.screen=stress)");
+        }
+        // Copies into the swapchain image: partial (the default here, once
+        // verified on this phone) or always whole (`debug.vieww.partialblit=0`,
+        // the `gpufullcopy` A/B), and the check mode that reads every image
+        // back and compares it with its frame (`debug.vieww.blitcheck=1`,
+        // the `gpucheck` pass).
+        match prop("debug.vieww.partialblit").as_str() {
+            "0" => {
+                std::env::set_var("VIEWW_PARTIAL_BLIT", "0");
+                suite.observe("partial_blit_mode", "off (debug.vieww.partialblit=0)");
+            }
+            "1" => std::env::set_var("VIEWW_PARTIAL_BLIT", "1"),
+            _ => {}
+        }
+        if prop("debug.vieww.blitcheck") == "1" {
+            std::env::set_var("VIEWW_PARTIAL_BLIT_CHECK", "1");
+            suite.observe("partial_blit_mode", "checked (debug.vieww.blitcheck=1)");
+        }
+        let frames_prop = prop("debug.vieww.frames");
+        if frames_prop.parse::<u64>().is_ok() {
+            std::env::set_var("VIEWW_SUITE_FRAMES", &frames_prop);
+            suite.observe("frames", &format!("debug.vieww.frames={frames_prop}"));
+        }
         if present == "vulkan" || present == "cpu" {
             // Before the event loop and every worker the app starts, so no
             // other thread is reading the environment yet.
@@ -891,6 +936,7 @@ mod demo {
             .title("vieww")
             .report_crashes(crashes)
             .on_frame(perf.hook())
+            .on_frame(stress.hook())
             .on_frame(suite.hook())
             // Activates the button the way a screen reader does, and checks the
             // handler ran. `before_frame` because dispatching needs `&mut`.
@@ -924,6 +970,7 @@ mod demo {
             // phone would be the same 33-second scan it is everywhere else.
             let demo = screen::Demo::new(driver);
             perf.attach(&demo);
+            stress.attach(&demo);
             let probe = suite.probe(demo.taps());
             // The latch `modal_semantics` pulls. Handed over here for the
             // reason the tap counter is: the hooks were installed before
@@ -933,10 +980,12 @@ mod demo {
             // reaches the pasteboard — `RenderEditableText` asks its scope
             // for a `Clipboard`, and finds one only if something published
             // it here.
-            driver.set_root(Inherited::new(
-                services,
-                demo.screen("A frame, on a phone.", TargetPlatform::Android, probe),
-            ));
+            let root = if screen::wants_stress() {
+                demo.stress_screen(TargetPlatform::Android, probe)
+            } else {
+                demo.screen("A frame, on a phone.", TargetPlatform::Android, probe)
+            };
+            driver.set_root(Inherited::new(services, root));
         });
 
         match result {

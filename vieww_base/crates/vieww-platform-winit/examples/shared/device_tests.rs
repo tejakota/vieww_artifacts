@@ -60,6 +60,170 @@ use crate::screen::{MENU_ITEMS, MENU_LABEL, TAP_LABEL};
 /// kind of absence, one that looks like a check nobody wrote.
 const FRAMES: u64 = 600;
 
+/// How many frames this run watches: [`FRAMES`], or more for the sustained
+/// pass — `VIEWW_SUITE_FRAMES` (Android: `debug.vieww.frames`), never fewer
+/// than [`FRAMES`]. 3600 is a minute at 60 Hz: long enough for a phone to
+/// warm up and throttle, which ten seconds never is.
+fn frames() -> u64 {
+    static N: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *N.get_or_init(|| {
+        std::env::var("VIEWW_SUITE_FRAMES")
+            .ok()
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .map_or(FRAMES, |n| n.max(FRAMES))
+    })
+}
+
+/// What the suite watches while frames go by, for the report: the process's
+/// CPU time across the measured window, how hot the device got, and — on a
+/// sustained run — how the first [`FRAMES`] frames compared with the last.
+#[derive(Debug, Default)]
+struct Watch {
+    /// CPU time and frame count where the measured window (the frame log's
+    /// last 240 frames) began.
+    window_start: Option<(Duration, u64, std::time::Instant)>,
+    /// The first thermal reading, the latest, and the worst seen.
+    thermal_first: Option<vieww_platform_winit::ThermalReading>,
+    thermal_last: Option<vieww_platform_winit::ThermalReading>,
+    worst_status: Option<i32>,
+    worst_headroom: Option<f32>,
+    hottest: Option<f32>,
+    last_sample: Option<std::time::Instant>,
+    started: Option<std::time::Instant>,
+    /// On a sustained run, the frame log at frame [`FRAMES`]: median work,
+    /// frames over budget, samples.
+    early: Option<(Duration, usize, usize)>,
+}
+
+impl Watch {
+    /// Once per frame. Thermal readings are taken once a second, the rate
+    /// Android answers `AThermal_getThermalHeadroom` at.
+    fn frame(&mut self, log: &FrameLog) {
+        let now = std::time::Instant::now();
+        self.started.get_or_insert(now);
+        if self
+            .last_sample
+            .is_none_or(|last| now.duration_since(last) >= Duration::from_secs(1))
+        {
+            self.last_sample = Some(now);
+            let reading = vieww_platform_winit::thermal_reading();
+            if !reading.is_empty() {
+                self.thermal_first.get_or_insert(reading);
+                self.thermal_last = Some(reading);
+                if let Some(status) = reading.status {
+                    self.worst_status = Some(self.worst_status.map_or(status, |w| w.max(status)));
+                }
+                if let Some(headroom) = reading.headroom {
+                    self.worst_headroom =
+                        Some(self.worst_headroom.map_or(headroom, |w| w.max(headroom)));
+                }
+                if let Some(celsius) = reading.hottest_celsius {
+                    self.hottest = Some(self.hottest.map_or(celsius, |w| w.max(celsius)));
+                }
+            }
+        }
+        let window = 240.min(frames());
+        if self.window_start.is_none() && log.frames() >= frames() - window {
+            if let Some(cpu) = vieww_platform_winit::process_cpu_time() {
+                self.window_start = Some((cpu, log.frames(), now));
+            }
+        }
+        if frames() > FRAMES && self.early.is_none() && log.frames() >= FRAMES {
+            let mut samples = log.work_samples();
+            if !samples.is_empty() {
+                samples.sort_unstable();
+                let over = samples.iter().filter(|w| **w > log.budget()).count();
+                self.early = Some((samples[samples.len() / 2], over, samples.len()));
+            }
+        }
+    }
+
+    /// The report's lines about the window just measured.
+    fn observe(&self, results: &mut Results, log: &FrameLog) {
+        let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+        // **CPU per frame, every thread** — what the battery pays on the CPU
+        // side, which frame time does not say (four threads drawing a frame in
+        // 5 ms cost more than one drawing it in 8). Device Farm phones are on
+        // a charger, so this and `gpu_passes` stand in for battery drain.
+        if let (Some((start_cpu, start_frames, start_at)), Some(cpu)) =
+            (self.window_start, vieww_platform_winit::process_cpu_time())
+        {
+            let frames_in = log.frames().saturating_sub(start_frames).max(1);
+            let used = cpu.saturating_sub(start_cpu);
+            let wall = start_at.elapsed();
+            #[expect(clippy::cast_precision_loss, reason = "frame counts")]
+            let per_frame = ms(used) / frames_in as f64;
+            results.observe(
+                "cpu_time",
+                format!(
+                    "process CPU {per_frame:.2} ms per frame over the last {frames_in} frames, every \
+                     thread ({:.0}% of one core)",
+                    100.0 * used.as_secs_f64() / wall.as_secs_f64().max(1e-6),
+                ),
+            );
+        }
+        // **How hot it got.** A ten-second pass never warms a phone; the
+        // sustained pass does, and this says how far.
+        let mut thermal = Vec::new();
+        if let (Some(first), Some(last)) = (self.thermal_first, self.thermal_last) {
+            if let (Some(a), Some(b)) = (first.status, last.status) {
+                thermal.push(format!(
+                    "status {} -> {} (worst {})",
+                    vieww_platform_winit::thermal_status_name(a),
+                    vieww_platform_winit::thermal_status_name(b),
+                    vieww_platform_winit::thermal_status_name(self.worst_status.unwrap_or(b)),
+                ));
+            }
+            if let (Some(a), Some(b)) = (first.headroom, last.headroom) {
+                thermal.push(format!(
+                    "headroom {a:.2} -> {b:.2} (highest {:.2}; 1.0 is severe throttling)",
+                    self.worst_headroom.unwrap_or(b)
+                ));
+            }
+            if let (Some(a), Some(b)) = (first.hottest_celsius, last.hottest_celsius) {
+                thermal.push(format!(
+                    "hottest zone {a:.1} -> {b:.1} °C (peak {:.1})",
+                    self.hottest.unwrap_or(b)
+                ));
+            }
+        }
+        let over = self
+            .started
+            .map_or(Duration::ZERO, |s| s.elapsed())
+            .as_secs_f64();
+        if thermal.is_empty() {
+            results.observe("thermal", "not reported by this device");
+        } else {
+            results.observe(
+                "thermal",
+                format!("{} over {over:.0} s", thermal.join("; ")),
+            );
+        }
+        // **The first frames against the last**, on a run long enough for
+        // that to differ: a phone that throttles shows it here as a slower,
+        // later window.
+        if let Some((early_median, early_over, early_n)) = self.early {
+            let mut late = log.work_samples();
+            late.sort_unstable();
+            let late_median = late.get(late.len() / 2).copied().unwrap_or_default();
+            let late_over = late.iter().filter(|w| **w > log.budget()).count();
+            results.observe(
+                "sustained",
+                format!(
+                    "frames {}-{}: median {:.2} ms, {early_over} of {early_n} over budget; last \
+                     {} of {} frames: median {:.2} ms, {late_over} over; {over:.0} s",
+                    FRAMES.saturating_sub(early_n as u64) + 1,
+                    FRAMES,
+                    ms(early_median),
+                    late.len(),
+                    log.frames(),
+                    ms(late_median),
+                ),
+            );
+        }
+    }
+}
+
 /// A line of the report. `ok: None` is an observation rather than a check.
 #[derive(Debug)]
 struct Line {
@@ -689,13 +853,19 @@ impl DeviceSuite {
     pub(crate) fn hook(&self) -> impl FnMut(&FrameLog) + 'static {
         let results = Rc::clone(&self.results);
         let sink = self.sink.clone();
+        let mut watch = Watch::default();
         move |log| {
-            if log.frames() < FRAMES || results.borrow().reported {
+            if results.borrow().reported {
+                return;
+            }
+            watch.frame(log);
+            if log.frames() < frames() {
                 return;
             }
             let text = {
                 let mut results = results.borrow_mut();
                 frame_checks(&mut results, log);
+                watch.observe(&mut results, log);
                 results.reported = true;
                 print(&results)
             };
@@ -734,14 +904,14 @@ fn cpu_clocks() -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(" | "))
 }
 
-/// What the frame log says after [`FRAMES`] frames.
+/// What the frame log says after [`frames`] frames.
 fn frame_checks(results: &mut Results, log: &FrameLog) {
     let samples = log.work_samples();
     let budget = log.budget();
 
     results.check(
         "frames_were_presented",
-        log.frames() >= FRAMES,
+        log.frames() >= frames(),
         format!("{} frames", log.frames()),
     );
 
@@ -912,6 +1082,40 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
             },
         );
     }
+    // **The copy into the swapchain image, partial or whole**
+    // (`vieww_hal::vulkan::partial_blit_stats`): whether this device kept
+    // its images between presents (probed before partial copies are
+    // trusted), and how much of the screen the copies actually covered.
+    // With `VIEWW_PARTIAL_BLIT_CHECK=1` every written image was also read
+    // back and compared with the frame: a trail is a failed check here.
+    let partial = vieww_hal::vulkan::partial_blit_stats();
+    if let Some(state) = partial.state {
+        #[expect(clippy::cast_precision_loss, reason = "a ratio of pixel counts")]
+        let share = partial.copied_pixels as f64 / (partial.frame_pixels.max(1) as f64);
+        results.observe(
+            "partial_blit",
+            format!(
+                "{state}: {} partial and {} full copies, {:.1}% of the frames' pixels copied; \
+                 {} image(s) kept their contents, {} did not",
+                partial.partial_frames,
+                partial.full_frames,
+                share * 100.0,
+                partial.probes_ok,
+                partial.probes_bad,
+            ),
+        );
+        if partial.checked_frames > 0 {
+            results.check(
+                "partial_copies_leave_no_trails",
+                partial.check_bad_pixels == 0 && partial.probes_bad == 0,
+                format!(
+                    "{} frames compared with their images: {} pixel(s) differed; \
+                     {} image(s) lost what was written to them",
+                    partial.checked_frames, partial.check_bad_pixels, partial.probes_bad,
+                ),
+            );
+        }
+    }
     match (stages.gpu_passes, log.stage_percentile(0.95).gpu_passes) {
         (Some(median), Some(p95)) => {
             results.observe(
@@ -926,6 +1130,32 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
             );
         }
         _ => {}
+    }
+    // **Where the CPU raster's time went**, by kind of command — the CPU
+    // path's `gpu_passes` (`vieww_paint::native::RasterKindTimes`). The
+    // Stylo 5 drew the demo's CPU frames in 34 ms with the raster nearly all
+    // of it, and nothing said whether that was text, shadows or the layer
+    // composites. Present when the entry point set `VIEWW_RASTER_PROFILE=1`
+    // and frames ran on the CPU.
+    if let (Some(median), Some(p95)) = (stages.cpu_kinds, log.stage_percentile(0.95).cpu_kinds) {
+        let kinds = |t: &vieww_paint::native::RasterKindTimes| {
+            format!(
+                "text {:.2} shadows {:.2} paths {:.2} rects {:.2} images {:.2} \
+                 layers {:.2} composite {:.2} total {:.2}",
+                ms(t.text),
+                ms(t.shadows),
+                ms(t.paths),
+                ms(t.rects),
+                ms(t.images),
+                ms(t.layers),
+                ms(t.composite),
+                ms(t.total()),
+            )
+        };
+        results.observe(
+            "raster_by_kind",
+            format!("medians ms: {}; p95 ms: {}", kinds(&median), kinds(&p95)),
+        );
     }
     if let Some((work, stages)) = log.worst_frame_stages() {
         // What the stages leave out of the frame's work is time spent outside
@@ -1067,16 +1297,29 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
     } else {
         report.full_repaints() / log.frames() as f64
     };
-    results.check(
-        "damage_tracking_costs_a_fraction_of_a_full_repaint",
-        report.surface_pixels > 0 && per_frame <= 0.25,
-        format!(
-            "{per_frame:.3} full repaints per frame over {} frames, \
-             against a {}px surface",
-            log.frames(),
-            report.surface_pixels,
-        ),
+    let damage = format!(
+        "{per_frame:.3} full repaints per frame over {} frames, \
+         against a {}px surface",
+        log.frames(),
+        report.surface_pixels,
     );
+    // **Not on the stress screen** (`VIEWW_SCREEN=stress`), whose list
+    // scrolls under a full-width backdrop blur every frame: there a whole
+    // surface each frame is the right answer, and a bound of 0.25 would fail a
+    // renderer for drawing what changed. Reported, so a stress run still says
+    // what it rasterised; the bound stays where it means something.
+    if std::env::var("VIEWW_SCREEN").is_ok_and(|screen| screen == "stress") {
+        results.observe(
+            "damage",
+            format!("{damage} (stress screen: the whole list moves every frame)"),
+        );
+    } else {
+        results.check(
+            "damage_tracking_costs_a_fraction_of_a_full_repaint",
+            report.surface_pixels > 0 && per_frame <= 0.25,
+            damage,
+        );
+    }
 
     // Which frames those repaints were, which the ratio above cannot say.
     //

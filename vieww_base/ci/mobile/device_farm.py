@@ -343,6 +343,11 @@ def summarize(rows, out, run):
             ("cpunothreads", "CPU path without the row-parallel walk only (diagnostic A/B)"),
             ("cpunofill", "CPU path without the path-fill cache only (diagnostic A/B)"),
             ("cpunoblur", "CPU path without the blur cache only (diagnostic A/B)"),
+            ("stresscpu", "stress screen, CPU path (diagnostic)"),
+            ("stressgpu", "stress screen, GPU path (diagnostic)"),
+            ("sustained", "stress screen for 3600 frames on what auto chose (diagnostic)"),
+            ("gpucheck", "GPU path, every swapchain copy read back and compared with its frame"),
+            ("gpufullcopy", "GPU path copying whole frames into the swapchain (diagnostic A/B)"),
         ]
         detail = []
         for mode, label in passes:
@@ -351,7 +356,7 @@ def summarize(rows, out, run):
             detail.append(f"- {label}: {r.get(f'{mode}_frame_time', '–')}")
             # A pass labelled GPU whose frames the CPU drew is a mislabelled
             # number, not a slow GPU — run f91d07c printed two of those.
-            if mode in ("gpu", "gpuscale", "gpuserial") and gpu_frames_drawn(r.get(f"{mode}_gpu_frames")) == 0:
+            if mode in ("gpu", "gpuscale", "gpuserial", "stressgpu", "gpucheck", "gpufullcopy") and gpu_frames_drawn(r.get(f"{mode}_gpu_frames")) == 0:
                 detail.append("  - **not a GPU measurement**: 0 frames were drawn by the GPU rasterizer in this pass")
             # run-android.sh compares the app's own `rasterizer:` observation
             # with what the pass asked for, and fails the run on a mismatch.
@@ -377,6 +382,12 @@ def summarize(rows, out, run):
                 ("frame_stages_p95", "stages"),
                 ("gpu_passes", "GPU time by kind of work"),
                 ("gpu_overlap", "CPU/GPU overlap"),
+                ("raster_by_kind", "CPU raster by kind of work"),
+                ("partial_blit", "copies into the swapchain"),
+                ("cpu_time", "CPU time"),
+                ("thermal", "thermal"),
+                ("sustained", "over the run"),
+                ("pss_over_time", "PSS over time"),
                 ("input_latency", "input to present"),
                 ("worst_frame", "worst frame"),
                 ("raster_by_core", "raster by core"),
@@ -467,7 +478,7 @@ def main():
             }
         ),
         "--execution-configuration",
-        json.dumps({"jobTimeoutMinutes": 30, "videoCapture": bool(args.video)}),
+        json.dumps({"jobTimeoutMinutes": 45, "videoCapture": bool(args.video)}),
     )["run"]
     say(f"scheduled {run['arn']}")
     (out / "run-arn.txt").write_text(run["arn"] + "\n")

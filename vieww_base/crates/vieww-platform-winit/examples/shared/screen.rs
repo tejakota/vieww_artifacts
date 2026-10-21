@@ -182,6 +182,12 @@ pub(crate) struct Demo {
     /// reach" has an answer that could be wrong in an interesting way rather
     /// than only in an obvious one.
     drawer: Signal<bool>,
+    /// The stress screen's list position, driven a step every frame — see
+    /// [`Demo::stress_screen`].
+    stress_scroll: vieww_element::ScrollController,
+    /// The stress screen's thumbnails: four generated pictures, shared by
+    /// every row (an `Image` clone is a reference, not a copy).
+    art: Rc<Vec<vieww_foundation::Image>>,
 }
 
 impl Demo {
@@ -201,7 +207,121 @@ impl Demo {
             pulse,
             choice: runtime.signal(0_usize),
             drawer: runtime.signal(false),
+            stress_scroll: vieww_element::ScrollController::new(
+                &runtime,
+                vieww_gestures::ScrollPhysics::android(),
+            ),
+            art: Rc::new((0..4).map(stress_art).collect()),
         }
+    }
+
+    /// The stress screen's scroll position, for the hook that moves it.
+    pub(crate) fn stress_scroll(&self) -> vieww_element::ScrollController {
+        self.stress_scroll.clone()
+    }
+
+    /// **A screen as heavy as a real app's**, for measuring what the demo
+    /// screen cannot.
+    ///
+    /// The demo is light on purpose: its steady frames redraw a moving band
+    /// and a graph, and Device Farm run 39594824376 measured exactly zero GPU
+    /// time on layers, filters and shadows on all three phones. That answered
+    /// "is reusing layer pixels worth it?" only for a screen with no layers.
+    /// This one has what feeds and media apps have, and keeps all of it moving:
+    ///
+    /// - a list of [`STRESS_ROWS`] cards, each with a drop shadow, a rounded
+    ///   thumbnail and three lines of wrapped text, **scrolling every frame**
+    ///   ([`STRESS_SPEED`] points per frame, a steady fling) so the whole
+    ///   list area is damaged every frame;
+    /// - every fifth card inside three nested layers (opacity, saturation,
+    ///   opacity), every seventh with a blurred thumbnail — layers and filters
+    ///   over content that moves;
+    /// - a **frosted header** — a backdrop blur over the scrolling list, the
+    ///   most expensive thing a GPU compositor is asked for — holding the
+    ///   suite's own button, counter, field and menu, so every check the demo
+    ///   screen answers is still answered here;
+    /// - a floating card whose shadow and opacity animate every frame.
+    ///
+    /// Taps find the button and the field by label and role, as on the demo
+    /// screen (`DeviceSuite::tap_targets`), so nothing in `device-suite.sh`
+    /// knows which screen it is driving.
+    pub(crate) fn stress_screen(
+        &self,
+        platform: TargetPlatform,
+        probe: impl Into<WidgetNode>,
+    ) -> WidgetNode {
+        let theme = ThemeData::adaptive(platform, true);
+        let colors = theme.colors;
+        let bump = self.taps.clone();
+        let open_drawer = self.drawer.clone();
+        let header = Filtered::blur(14.0).with_backdrop().child(
+            Container::new()
+                .color(colors.surface.with_alpha(150))
+                .child(
+                    SafeArea::new().child(
+                        Container::new()
+                            .padding(EdgeInsets::symmetric(20.0, 12.0))
+                            .child(
+                                Flex::column()
+                                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                                    .children(children![
+                                        Text::new("vieww · stress")
+                                            .size(28.0)
+                                            .bold()
+                                            .color(colors.on_surface),
+                                        SizedBox::height(10.0),
+                                        Flex::row().children(children![
+                                            Button::new(TAP_LABEL).on_pressed(move || {
+                                                bump.set(bump.peek() + 1);
+                                            }),
+                                            SizedBox::width(12.0),
+                                            Button::new(MENU_LABEL).on_pressed(move || {
+                                                open_drawer.set(true);
+                                            }),
+                                        ]),
+                                        SizedBox::height(8.0),
+                                        Counter {
+                                            taps: self.taps.clone()
+                                        },
+                                        SizedBox::height(8.0),
+                                        Field {
+                                            value: self.field.clone()
+                                        },
+                                        probe.into(),
+                                    ]),
+                            ),
+                    ),
+                ),
+        );
+        Theme::new(theme)
+            .child(Stack::new().fit(StackFit::Expand).children(children![
+                Container::new().gradient(
+                    vieww_foundation::Gradient::linear(
+                        vieww_foundation::Offset::new(0.0, 0.0),
+                        vieww_foundation::Offset::new(1.0, 1.0),
+                    )
+                    .with_stops(&[
+                        (0.0, Color::rgba(18, 22, 40, 255)),
+                        (1.0, Color::rgba(40, 16, 48, 255)),
+                    ]),
+                ),
+                StressList {
+                    scroll: self.stress_scroll.clone(),
+                    art: Rc::clone(&self.art),
+                },
+                Positioned::new().left(0.0).right(0.0).top(0.0).child(header),
+                Positioned::new()
+                    .left(24.0)
+                    .right(24.0)
+                    .bottom(28.0)
+                    .child(Floater {
+                        pulse: self.pulse.clone()
+                    }),
+                NavMenu {
+                    open: self.drawer.clone(),
+                },
+            ]))
+            .into()
     }
 
     /// Whether the drawer is up, so a device check can open it without a finger.
@@ -766,3 +886,250 @@ impl Widget for Gallery {
 }
 
 widget_node_from!(Gallery);
+
+// ── the stress screen ──────────────────────────────────────────────
+
+/// Rows in the stress screen's list: enough that it never runs out while the
+/// suite watches (scrolling resets at the end).
+pub(crate) const STRESS_ROWS: usize = 400;
+
+/// Each row's height, in logical points.
+pub(crate) const STRESS_ROW: f32 = 148.0;
+
+/// How far the list moves each frame, in logical points: 360 points a second
+/// at 60 Hz, a steady fling.
+pub(crate) const STRESS_SPEED: f32 = 6.0;
+
+/// The list starts below the frosted header, so the first rows are not
+/// under it at rest; once it scrolls, every row passes beneath the blur.
+const STRESS_HEADER: f32 = 230.0;
+
+/// One of the stress screen's thumbnails: a generated 128x128 picture, so the
+/// screen needs no assets and draws the same pixels everywhere.
+fn stress_art(seed: usize) -> vieww_foundation::Image {
+    const SIDE: u32 = 128;
+    let mut pixels = Vec::with_capacity((SIDE * SIDE * 4) as usize);
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        reason = "colour arithmetic on 0..=255"
+    )]
+    for y in 0..SIDE {
+        for x in 0..SIDE {
+            let (fx, fy) = (x as f32 / SIDE as f32, y as f32 / SIDE as f32);
+            let ring = ((fx - 0.5).hypot(fy - 0.5) * (8.0 + seed as f32 * 3.0)).sin() * 0.5 + 0.5;
+            let r = (255.0 * (0.25 + 0.75 * fx * ring)) as u8;
+            let g = (255.0 * (0.2 + 0.6 * fy * (1.0 - ring))) as u8;
+            let b = (255.0 * (0.4 + 0.6 * ((seed as f32 + fx + fy) * 2.1).sin().abs())) as u8;
+            pixels.extend_from_slice(&[r, g, b, 255]);
+        }
+    }
+    vieww_foundation::Image::from_rgba8(pixels, SIDE, SIDE)
+}
+
+/// What a row says.
+const STRESS_TITLES: [&str; 6] = [
+    "Morning ride along the river",
+    "Quarterly numbers, explained",
+    "A recipe that needs one pan",
+    "What the tide tables say",
+    "Field notes from the hills",
+    "The night market, in pictures",
+];
+
+/// One card of the stress list. Every fifth sits inside three nested layers,
+/// every seventh has a blurred thumbnail, every third a gradient ground.
+fn stress_row(index: usize, art: &[vieww_foundation::Image]) -> WidgetNode {
+    let thumb_image = art[index % art.len()].clone();
+    let thumb: WidgetNode = Clip::rounded(14.0)
+        .child(SizedBox::square(88.0).child(Image::new(thumb_image)))
+        .into();
+    let thumb: WidgetNode = if index.is_multiple_of(7) {
+        Filtered::blur(2.5).child(thumb).into()
+    } else {
+        thumb
+    };
+    let title = STRESS_TITLES[index % STRESS_TITLES.len()];
+    let body = format!(
+        "Card {index}. A paragraph long enough to wrap onto a second and a third line, \
+         so every row lays out and shapes real text rather than a single word."
+    );
+    let mut card = Container::new()
+        .radius(18.0)
+        .padding(EdgeInsets::all(14.0))
+        .shadow(vieww_foundation::Shadow::new(
+            Color::rgba(0, 0, 0, 110),
+            vieww_foundation::Offset::new(0.0, 6.0),
+            16.0,
+        ));
+    card = if index.is_multiple_of(3) {
+        card.gradient(
+            vieww_foundation::Gradient::linear(
+                vieww_foundation::Offset::new(0.0, 0.0),
+                vieww_foundation::Offset::new(1.0, 0.0),
+            )
+            .with_stops(&[
+                (0.0, Color::rgba(44, 52, 92, 255)),
+                (1.0, Color::rgba(70, 40, 96, 255)),
+            ]),
+        )
+    } else {
+        card.color(Color::rgba(36, 40, 64, 255))
+    };
+    let card = card.child(Flex::row().children(children![
+        thumb,
+        SizedBox::width(14.0),
+        Flexible::new(1).child(
+            Flex::column()
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .children(children![
+                    Text::new(title).size(16.0).bold().color(Color::WHITE),
+                    SizedBox::height(4.0),
+                    Text::new(body)
+                        .size(12.5)
+                        .max_lines(3)
+                        .color(Color::rgba(200, 204, 224, 255)),
+                ]),
+        ),
+    ]));
+    let card: WidgetNode = if index.is_multiple_of(5) {
+        Opacity::new(0.92)
+            .child(
+                Filtered::new()
+                    .saturation(0.6)
+                    .child(Opacity::new(0.97).child(card)),
+            )
+            .into()
+    } else {
+        card.into()
+    };
+    Padding::new(EdgeInsets::symmetric(16.0, 8.0))
+        .child(card)
+        .into()
+}
+
+/// A card floating over the list whose shadow and opacity follow the pulse,
+/// so a layer and a shadow change every frame even where the list does not.
+#[derive(Debug)]
+struct Floater {
+    pulse: Animation<f32>,
+}
+
+impl Widget for Floater {
+    fn debug_name(&self) -> &'static str {
+        "Floater"
+    }
+
+    fn kind(&self) -> WidgetKind<'_> {
+        WidgetKind::Composed
+    }
+
+    fn build(&self, _ctx: &BuildContext) -> WidgetNode {
+        let t = self.pulse.value().clamp(0.0, 255.0) / 255.0;
+        let breathe = 0.5 - 0.5 * (t * std::f32::consts::TAU).cos();
+        Opacity::new(0.75 + 0.25 * breathe)
+            .child(
+                Container::new()
+                    .height(64.0)
+                    .radius(32.0)
+                    .color(Color::rgba(60, 70, 120, 255))
+                    .shadow(vieww_foundation::Shadow::new(
+                        #[expect(
+                            clippy::cast_possible_truncation,
+                            clippy::cast_sign_loss,
+                            reason = "80..=200"
+                        )]
+                        Color::rgba(90, 120, 255, (80.0 + 120.0 * breathe) as u8),
+                        vieww_foundation::Offset::new(0.0, 4.0 + 8.0 * breathe),
+                        10.0 + 20.0 * breathe,
+                    ))
+                    .padding(EdgeInsets::symmetric(24.0, 0.0))
+                    .alignment(Alignment::CENTER_LEFT)
+                    .child(Text::new("Now playing · stress").color(Color::WHITE)),
+            )
+            .into()
+    }
+}
+
+widget_node_from!(Floater);
+
+/// The stress list, as its own widget so that reading the scroll offset
+/// happens inside a build — and so a step of the scroll rebuilds this and
+/// nothing above it.
+#[derive(Debug)]
+struct StressList {
+    scroll: vieww_element::ScrollController,
+    art: Rc<Vec<vieww_foundation::Image>>,
+}
+
+impl Widget for StressList {
+    fn debug_name(&self) -> &'static str {
+        "StressList"
+    }
+
+    fn kind(&self) -> WidgetKind<'_> {
+        WidgetKind::Composed
+    }
+
+    fn build(&self, _ctx: &BuildContext) -> WidgetNode {
+        let art = Rc::clone(&self.art);
+        let rows: vieww_widget::ItemBuilder = Rc::new(move |index| stress_row(index, &art));
+        let scroll = &self.scroll;
+        Scrollable::vertical(scroll.offset())
+            .on_drag(scroll.on_drag())
+            .on_drag_end(scroll.on_drag_end())
+            .on_extents(scroll.on_extents())
+            .child(
+                Padding::new(EdgeInsets::only(0.0, STRESS_HEADER, 0.0, 120.0))
+                    .child(ListView::new(STRESS_ROWS, STRESS_ROW, rows)),
+            )
+            .into()
+    }
+}
+
+widget_node_from!(StressList);
+
+/// Whether this run asked for the stress screen: `VIEWW_SCREEN=stress`
+/// (Android sets it from `debug.vieww.screen`).
+pub(crate) fn wants_stress() -> bool {
+    std::env::var("VIEWW_SCREEN").is_ok_and(|screen| screen == "stress")
+}
+
+/// Joins `App::on_frame` to the stress list, as [`PerfLink`] joins it to the
+/// graph: the hook exists before the tree does, so it is handed a slot.
+///
+/// Each frame it moves the list [`STRESS_SPEED`] points on, and back to the
+/// top at the end — a fling that never stops, so every frame the suite
+/// measures redraws the whole list under the frosted header.
+#[derive(Debug, Default)]
+pub(crate) struct StressLink {
+    scroll: Rc<RefCell<Option<vieww_element::ScrollController>>>,
+}
+
+impl StressLink {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// The closure to hand to `App::on_frame`.
+    pub(crate) fn hook(&self) -> impl FnMut(&FrameLog) + 'static {
+        let slot = Rc::clone(&self.scroll);
+        move |_log| {
+            if let Some(scroll) = slot.borrow().as_ref() {
+                let max = scroll.max_offset();
+                let next = scroll.peek() + STRESS_SPEED;
+                // Before the first layout the extent is unknown (zero): keep
+                // still rather than jump to the end of nothing.
+                if max > 0.0 {
+                    scroll.jump_to(if next > max { 0.0 } else { next });
+                }
+            }
+        }
+    }
+
+    /// Fill the slot, once `build` has made the demo.
+    pub(crate) fn attach(&self, demo: &Demo) {
+        *self.scroll.borrow_mut() = Some(demo.stress_scroll());
+    }
+}

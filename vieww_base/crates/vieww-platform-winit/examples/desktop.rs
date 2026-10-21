@@ -129,7 +129,11 @@ fn install_logger() {
 #[cfg(not(target_os = "android"))]
 fn main() {
     install_logger();
+    // The suite reports the CPU raster by kind of command
+    // (`raster_by_kind`); set before the renderer exists, which reads it.
+    std::env::set_var("VIEWW_RASTER_PROFILE", "1");
     let perf = screen::PerfLink::new();
+    let stress = screen::StressLink::new();
     let device = DeviceSuite::new();
     let desktop = DesktopSuite::new(&device);
 
@@ -152,6 +156,7 @@ fn main() {
 
     let result = app
         .on_frame(perf.hook())
+        .on_frame(stress.hook())
         .on_frame(device.hook())
         .after_frame(device.tap_targets())
         .after_frame(desktop.surface(WINDOW))
@@ -161,13 +166,15 @@ fn main() {
         .run(|driver| {
             let demo = screen::Demo::new(driver);
             perf.attach(&demo);
+            stress.attach(&demo);
             let probe = device.probe(demo.taps());
             device.watch_drawer(demo.drawer());
-            driver.set_root(demo.screen(
-                "A frame, on a desktop.",
-                TargetPlatform::current(),
-                probe,
-            ));
+            // `VIEWW_SCREEN=stress` for the heavy screen the phones run too.
+            driver.set_root(if screen::wants_stress() {
+                demo.stress_screen(TargetPlatform::current(), probe)
+            } else {
+                demo.screen("A frame, on a desktop.", TargetPlatform::current(), probe)
+            });
         });
 
     match result {

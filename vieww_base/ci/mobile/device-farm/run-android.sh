@@ -126,14 +126,42 @@ declare -A failed=()
 # and worst frames, so phones above Low now walk serially by default
 # (`quality::raster_threads_for`) and their `cpunothreads` runs what `cpu`
 # runs; on a Low phone it is still the A/B.
-for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads cpunofill cpunoblur; do
+#
+# `stresscpu` and `stressgpu` run the stress screen (`debug.vieww.screen=
+# stress`: a feed of shadowed cards scrolling every frame under a frosted
+# header, with nested layers and blurred thumbnails) on each rasterizer. The
+# demo screen is light by design, and run 39594824376 measured exactly zero
+# GPU time on layers, filters and shadows on every phone — so it could not say
+# what a real app's screen costs. Diagnostic only.
+#
+# `sustained` is the stress screen for a minute (`debug.vieww.frames=3600`)
+# on whatever `auto` chose: the pass that warms the phone up. The app reports
+# its thermal status and headroom (`thermal`), the first ten seconds against
+# the last four (`sustained`) and CPU time per frame (`cpu_time`); this
+# script samples PSS every ten seconds alongside (`pss_over_time`), which is
+# what says whether memory grows. Diagnostic only.
+#
+# `gpucheck` is the GPU path with every copy into the swapchain image read
+# back and compared with its frame (`debug.vieww.blitcheck=1`): the copies
+# are partial once the phone has shown it keeps its images
+# (`vieww_hal::vulkan` `present_history`), and this is the pass that proves a
+# partial copy leaves no trail. Its `partial_copies_leave_no_trails` check
+# fails the run on any phone. `gpufullcopy` copies whole frames
+# (`debug.vieww.partialblit=0`) — beside `gpu`, the A/B for what partial
+# copies save (`gpu_passes`' blit). Both diagnostic otherwise.
+for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads cpunofill cpunoblur stresscpu stressgpu sustained gpucheck gpufullcopy; do
     # `gpuscale` is a GPU pass: the property must say so *before* the launch
     # below. Until 2026-10-19 it was left at 0 here and only device-suite.sh's
     # `--gpu` set it — after the app was already up, which `--no-build` does
     # not relaunch — so the Pixel 5a and S26 Ultra rows of run f91d07c drew
     # all 600 frames on the CPU under a "GPU at 0.75x" label (the LG Stylo 5
     # happened to read the property late enough to get the GPU).
-    gpu=0; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ] || [ "$mode" = gpuserial ]; } && gpu=1; [ "$mode" = auto ] && gpu=auto
+    gpu=0; case "$mode" in gpu|gpuscale|gpuserial|stressgpu|gpucheck|gpufullcopy) gpu=1 ;; esac
+    blitcheck=0; [ "$mode" = gpucheck ] && blitcheck=1
+    partialblit=""; [ "$mode" = gpufullcopy ] && partialblit=0
+    { [ "$mode" = auto ] || [ "$mode" = sustained ]; } && gpu=auto
+    screen=""; case "$mode" in stress*|sustained) screen=stress ;; esac
+    frames=""; [ "$mode" = sustained ] && frames=3600
     # `gpuserial`: the GPU path waiting for every frame, as it did before
     # frames overlapped (`debug.vieww.overlap=0`) — beside `gpu`, the A/B for
     # the overlap on this phone's driver.
@@ -154,11 +182,18 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
     sh_ setprop debug.vieww.scale "$scale" >/dev/null
     sh_ setprop debug.vieww.overlap "\"$overlap\"" >/dev/null
+    sh_ setprop debug.vieww.screen "\"$screen\"" >/dev/null
+    sh_ setprop debug.vieww.blitcheck "$blitcheck" >/dev/null
+    sh_ setprop debug.vieww.partialblit "\"$partialblit\"" >/dev/null
+    sh_ setprop debug.vieww.frames "\"$frames\"" >/dev/null
 
     # 1. Cold start, three times. TotalTime is the platform's own measure of
     # launch to first frame drawn; WaitTime adds the system's share.
     starts=()
-    for i in 1 2 3; do
+    # The stress passes measure frames, not launches: their cold starts would
+    # only repeat what `cpu` and `gpu` measured, for a minute of farm time.
+    launches="1 2 3"; { [ -n "$screen" ] || [ "$mode" = gpucheck ] || [ "$mode" = gpufullcopy ]; } && launches=""
+    for i in $launches; do
         sh_ am force-stop "$package" >/dev/null
         recalibrate=0; [ "$mode" = auto ] && [ "$i" = 1 ] && recalibrate=1
         sh_ setprop debug.vieww.recalibrate "$recalibrate" >/dev/null
@@ -175,7 +210,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
     done
     sh_ setprop debug.vieww.recalibrate 0 >/dev/null
     [ "$mode" = auto ] && kv auto_calibration "$(tr '\n' ' ' < "$out/auto-calibration.txt" 2>/dev/null)"
-    kv "${mode}_cold_start_ms" "$(printf '%s ' "${starts[@]:-}")"
+    [ -n "$launches" ] && kv "${mode}_cold_start_ms" "$(printf '%s ' "${starts[@]:-}")"
 
     # 2. The suite, against a fresh launch.
     sh_ am force-stop "$package" >/dev/null
@@ -185,9 +220,25 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
     # Not an array: Device Farm's host runs bash 4.2, where "${empty[@]}"
     # under `set -u` is an unbound variable — which is exactly how the first
     # real run (2026-10-15) died here on all three phones, before any suite.
-    gpu_flag=""; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ] || [ "$mode" = gpuserial ]; } && gpu_flag="--gpu"
+    gpu_flag=""; [ "$gpu" = 1 ] && gpu_flag="--gpu"
+    # PSS every ten seconds through the sustained pass, in the background: a
+    # single reading at the end says how big the app is, a series says
+    # whether it keeps growing.
+    sampler=""
+    if [ "$mode" = sustained ]; then
+        : > "$out/$mode-pss.txt"
+        (
+            t=0
+            while sleep 10; do
+                t=$(( t + 10 ))
+                kb="$(sh_ dumpsys meminfo "$package" | grep -m1 -E 'TOTAL PSS:|^ *TOTAL ' | grep -oE '[0-9]+' | head -1)"
+                [ -n "$kb" ] && echo "$t $kb" >> "$out/$mode-pss.txt"
+            done
+        ) &
+        sampler=$!
+    fi
     # shellcheck disable=SC2086 # $gpu_flag is empty or one word, on purpose
-    if VIEWW_SCREENSHOT="$out/$mode-screen.png" \
+    if VIEWW_SCREENSHOT="$out/$mode-screen.png" VIEWW_SUITE_FRAMES="${frames:-600}" \
         bash "$root/ci/mobile/device-suite.sh" --no-build $gpu_flag > "$out/$mode-suite.log" 2>&1; then
         kv "${mode}_suite" PASS
         verdict[$mode]=PASS
@@ -195,7 +246,15 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
         kv "${mode}_suite" FAIL
         verdict[$mode]=FAIL
     fi
-    for key in frame_time frame_stages frame_stages_p95 gpu_passes gpu_overlap input_latency worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
+    if [ -n "$sampler" ]; then
+        kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null
+        if [ -s "$out/$mode-pss.txt" ]; then
+            series="$(awk '{printf "%ss:%d ", $1, $2/1024}' "$out/$mode-pss.txt")"
+            growth="$(awk 'NR==1 {first=$2} {last=$2} END {printf "%+.1f", (last-first)/1024}' "$out/$mode-pss.txt")"
+            kv "${mode}_pss_over_time" "${series}MB (first to last: ${growth} MB)"
+        fi
+    fi
+    for key in frame_time frame_stages frame_stages_p95 gpu_passes gpu_overlap input_latency worst_frame startup_stages renderer_choice raster_by_core raster_by_kind partial_blit cpu_clocks cpu_time thermal sustained screen perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
@@ -215,8 +274,8 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
     # while the app was still starting, and the A73 and Stylo 5 `auto` passes
     # drew all 600 frames on the CPU and failed, silently, under `auto`.
     case "$mode" in
-        gpu|gpuscale|gpuserial) want="planned GPU path requested" ;;
-        auto) want="measured on this phone" ;;
+        gpu|gpuscale|gpuserial|stressgpu|gpucheck|gpufullcopy) want="planned GPU path requested" ;;
+        auto|sustained) want="measured on this phone" ;;
         *) want="CPU rasterizer" ;;
     esac
     ran="$(grep -m1 -o 'rasterizer: .*' "$out/$mode-suite.log" | sed 's/^rasterizer: //')"
@@ -252,6 +311,15 @@ choice="$(grep -m1 -o 'renderer_choice: [a-z]*' "$out/auto-suite.log" 2>/dev/nul
 gating="auto cpu"
 [ "$choice" = gpu ] && gating="auto cpu gpu"
 kv gating_passes "$gating (auto chose: ${choice:-not reported})"
+
+# A partial copy that left a trail is a wrong frame on screen, whichever
+# pass found it: `gpucheck` compares every image with its frame, and a
+# failed comparison fails the run on every phone, listed or not.
+if [ -n "${failed[gpucheck]:-}" ] && [[ " ${failed[gpucheck]} " == *" partial_copies_leave_no_trails "* ]]; then
+    kv gpucheck_gate_failed "partial_copies_leave_no_trails: a partial copy into the swapchain image left a trail"
+    echo "::error::run-android: $(sh_ getprop ro.product.model) gpucheck: partial copies left a trail" >&2
+    status=1
+fi
 
 # A gating pass that failed only checks listed for this phone in
 # `known-failures.txt` is reported and does not fail the run; see that file.
@@ -321,6 +389,10 @@ sh_ setprop debug.vieww.hint 0 >/dev/null
 sh_ setprop debug.vieww.scale "" >/dev/null
 sh_ setprop debug.vieww.overlap '""' >/dev/null
 sh_ setprop debug.vieww.bare 0 >/dev/null
+sh_ setprop debug.vieww.screen '""' >/dev/null
+sh_ setprop debug.vieww.blitcheck 0 >/dev/null
+sh_ setprop debug.vieww.partialblit '""' >/dev/null
+sh_ setprop debug.vieww.frames '""' >/dev/null
 sh_ setprop debug.vieww.cadence "" >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null

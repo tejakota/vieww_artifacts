@@ -200,20 +200,36 @@ field_y="${taps_line#*field=*,}"
 echo "device-suite: the app reports button ${tap_x},${tap_y} and field ${field_x},${field_y} (physical)"
 
 taps=0
-max_taps=6
+# Enough taps for the input-latency figure to be a distribution rather than
+# an anecdote: run 39594824376 had six per pass, so its p95 *was* its worst.
+# Bursts of four, a quarter-second apart, between polls of the log — so they
+# land during the frames the suite measures, not before them.
+max_taps=40
+field_tapped=0
 
 # Poll rather than sleep. How long the app needs depends on the device, and a
 # fixed sleep is either too short on a slow phone or wasted on a fast one.
-deadline=$(( $(date +%s) + 45 ))
+# A longer pass (`VIEWW_SUITE_FRAMES`, which run-android.sh exports with the
+# `debug.vieww.frames` it sets) gets longer: 3600 frames on a phone that
+# holds 30 fps is two minutes on its own.
+frames="${VIEWW_SUITE_FRAMES:-600}"
+case "$frames" in ''|*[!0-9]*) frames=600 ;; esac
+deadline=$(( $(date +%s) + 45 + frames / 20 ))
 log=""
 while [ "$(date +%s)" -lt "$deadline" ]; do
-    if [ "$taps" -lt "$max_taps" ]; then
+    burst=0
+    while [ "$taps" -lt "$max_taps" ] && [ "$burst" -lt 4 ]; do
         adb shell input tap "$tap_x" "$tap_y" >/dev/null 2>&1 || true
-        # And the field, so the keyboard comes up. Harmless if it misses, and
-        # harmless if it lands: a focused field changes nothing else the suite
-        # asserts on.
+        taps=$(( taps + 1 )); burst=$(( burst + 1 ))
+        sleep 0.25
+    done
+    if [ "$field_tapped" = 0 ]; then
+        # And the field, once, so the keyboard comes up. Harmless if it
+        # misses, and harmless if it lands: a focused field changes nothing
+        # else the suite asserts on. Once, because every tap on it is a
+        # keyboard animation the frame times would then be measuring.
         adb shell input tap "$field_x" "$field_y" >/dev/null 2>&1 || true
-        taps=$(( taps + 1 ))
+        field_tapped=1
     fi
 
     log="$(adb logcat -d --pid="$pid" 2>/dev/null | tr -d '\r' | grep "__VIEWW_SUITE__" || true)"
@@ -225,9 +241,9 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         adb logcat -d --pid="$pid" 2>/dev/null | tail -30 >&2
         exit 5
     fi
-    sleep 2
+    [ "$taps" -ge "$max_taps" ] && sleep 2
 done
-echo "device-suite: sent $taps tap(s) each at ${tap_x},${tap_y} and ${field_x},${field_y}"
+echo "device-suite: sent $taps tap(s) at ${tap_x},${tap_y} and $field_tapped at ${field_x},${field_y}"
 
 # What the frame looked like, from whichever rasterizer drew it. The suite
 # checks behaviour, not pixels; a screenshot per run is what lets a CPU frame
@@ -241,7 +257,7 @@ fi
 
 if ! echo "$log" | grep -q "__VIEWW_SUITE__ result "; then
     echo "device-suite: the app never finished reporting." >&2
-    echo "  It needs 600 frames, so it must be drawing continuously — if the" >&2
+    echo "  It needs $frames frames, so it must be drawing continuously — if the" >&2
     echo "  screen went to sleep or the app was backgrounded, it never gets" >&2
     echo "  there. Recent output:" >&2
     adb logcat -d --pid="$pid" 2>/dev/null | tail -30 >&2
