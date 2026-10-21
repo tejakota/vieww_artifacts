@@ -124,7 +124,7 @@ mod stats;
 pub mod storage;
 mod windows;
 
-pub use app::{App, CloseRequest, Closing, PlatformError, Waker};
+pub use app::{App, CloseRequest, Closing, Pinch, PinchPhase, PlatformError, Waker};
 pub use deep_links::PlatformDeepLinks;
 pub use windows::PlatformWindows;
 

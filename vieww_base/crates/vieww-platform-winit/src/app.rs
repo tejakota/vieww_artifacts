@@ -237,6 +237,44 @@ type BeforeFrameHook = Box<dyn FnMut(&mut FrameDriver)>;
 /// is a size an application will hand back to [`App::size`] on the next launch
 /// and that one is logical too.
 type CloseHook = Box<dyn FnMut(CloseRequest) -> Closing>;
+type PinchHook = Box<dyn FnMut(Pinch) -> bool>;
+
+/// A two-finger pinch on a trackpad.
+///
+/// # Why this is its own hook and not a pointer event
+///
+/// A touchscreen pinch is two pointers, and the gesture arena already turns
+/// those into [`ScaleDetails`](vieww_foundation::ScaleDetails). A *trackpad*
+/// pinch has no pointers at all: macOS reports it as a magnification gesture
+/// and nothing else, and Windows precision touchpads report it as a mouse
+/// wheel with Control held (the convention every Windows app that zooms
+/// reads). Neither reached the tree before this, so a vieww app could not
+/// answer a pinch on a laptop.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Pinch {
+    /// How much the fingers spread since the last report, as a fraction:
+    /// positive apart (zoom in), negative together (zoom out).
+    pub delta: f32,
+    pub phase: PinchPhase,
+}
+
+/// Where a pinch is. A Control+wheel pinch has no start or end and reports
+/// every step as [`PinchPhase::Moved`]; read a pause as its end.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinchPhase {
+    Started,
+    Moved,
+    Ended,
+}
+
+/// A Control+wheel step as a pinch: a notch (one line) is a tenth, a
+/// trackpad's pixels a two-hundredth each. Wheel away from you is zoom in.
+fn wheel_as_pinch(delta: MouseScrollDelta) -> f32 {
+    match delta {
+        MouseScrollDelta::LineDelta(_, y) => y * 0.1,
+        MouseScrollDelta::PixelDelta(p) => p.y as f32 / 200.0,
+    }
+}
 
 /// What the platform knows about a window that is being asked to close.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -311,6 +349,8 @@ pub struct App {
     android: Option<AndroidApp>,
     /// Asked before a window closes. See [`App::on_close_request`].
     on_close: Option<CloseHook>,
+    /// Told about trackpad pinches. See [`App::on_pinch`].
+    on_pinch: Option<PinchHook>,
     /// Run before each frame is built, able to change the tree.
     ///
     /// The one hook that takes `&mut FrameDriver`. See [`App::before_frame`].
@@ -382,6 +422,7 @@ impl App {
             android: None,
             before_frame: Vec::new(),
             on_close: None,
+            on_pinch: None,
             runtime,
             windows,
         }
@@ -747,6 +788,21 @@ impl App {
         H: FnMut(CloseRequest) -> Closing + 'static,
     {
         self.on_close = Some(Box::new(hook));
+        self
+    }
+
+    /// Answer a two-finger pinch on a trackpad (see [`Pinch`]).
+    ///
+    /// Return `true` when the pinch changed something, which asks for a
+    /// frame. While a hook is set, Control+wheel is a pinch and not a scroll
+    /// (it is how Windows touchpads report one); without a hook it scrolls as
+    /// it always did.
+    #[must_use]
+    pub fn on_pinch<H>(mut self, hook: H) -> Self
+    where
+        H: FnMut(Pinch) -> bool + 'static,
+    {
+        self.on_pinch = Some(Box::new(hook));
         self
     }
 
@@ -3292,6 +3348,27 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                     .input
                     .mouse_button(button, state == ElementState::Pressed, now);
                 window.pointer(event);
+            }
+            WindowEvent::PinchGesture { delta, phase, .. } => {
+                if let Some(hook) = self.shared.config.on_pinch.as_mut() {
+                    let phase = match phase {
+                        winit::event::TouchPhase::Started => PinchPhase::Started,
+                        winit::event::TouchPhase::Moved => PinchPhase::Moved,
+                        winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled => PinchPhase::Ended,
+                    };
+                    if hook(Pinch { delta: delta as f32, phase }) {
+                        self.windows[index].scheduler.request_frame();
+                    }
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. }
+                if self.windows[index].keys.modifiers().control() && self.shared.config.on_pinch.is_some() =>
+            {
+                if let Some(hook) = self.shared.config.on_pinch.as_mut() {
+                    if hook(Pinch { delta: wheel_as_pinch(delta), phase: PinchPhase::Moved }) {
+                        self.windows[index].scheduler.request_frame();
+                    }
+                }
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let window = &mut self.windows[index];
