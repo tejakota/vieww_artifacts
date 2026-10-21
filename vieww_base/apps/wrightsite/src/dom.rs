@@ -148,7 +148,10 @@ fn eyebrow(label: &str) -> WidgetNode {
         row(
             7.0,
             children![
-                Container::new().color(ACCENT_INK).radius(999.0).size(5.0, 5.0),
+                Container::new()
+                    .color(ACCENT_INK)
+                    .radius(999.0)
+                    .size(5.0, 5.0),
                 text(
                     label,
                     mono(10.5, ACCENT_INK)
@@ -259,8 +262,7 @@ fn button(label: &str, href: &str, filled: bool) -> WidgetNode {
             css,
             text(
                 label,
-                sans(14.5, if filled { Color::WHITE } else { INK })
-                    .weight(FontWeight::Medium),
+                sans(14.5, if filled { Color::WHITE } else { INK }).weight(FontWeight::Medium),
             ),
         )
         .with("wr-btn"),
@@ -577,10 +579,22 @@ fn window_section() -> WidgetNode {
             Styled::class(
                 "wr-grid4",
                 Flex::column().spacing(16.0).children(children![
-                    shot("1-describe.png", "THE INTERVIEW", "Describe the outcome, in your words."),
-                    shot("2-plan.png", "THE CONFIRM GATE", "The plan, generated from the blueprint."),
+                    shot(
+                        "1-describe.png",
+                        "THE INTERVIEW",
+                        "Describe the outcome, in your words."
+                    ),
+                    shot(
+                        "2-plan.png",
+                        "THE CONFIRM GATE",
+                        "The plan, generated from the blueprint."
+                    ),
                     shot("3-run.png", "THE FIRING", "The event river, and the gate."),
-                    shot("4-result.png", "THE RECEIPT", "Delivered, with its history."),
+                    shot(
+                        "4-result.png",
+                        "THE RECEIPT",
+                        "Delivered, with its history."
+                    ),
                 ]),
             )
             .into(),
@@ -622,7 +636,7 @@ fn demo() -> WidgetNode {
             )),
             spacer(18.0),
             Text::new(
-                "A real vieww screen, running here — computed, not replayed. Answer the gate."
+                "A real vieww screen, running here — computed, not replayed. Answer the gate.",
             )
             .style(mono(12.0, INK_3))
             .align(TextAlign::Center)
@@ -664,14 +678,44 @@ fn mount_demo(_id: &str) {}
 /// The eight stages of the example firing, as the window would show them.
 fn firing() -> WidgetNode {
     let stages: &[(&str, &str, &str, &str)] = &[
-        ("01", "Shipwright", "built-in", "lays the universal skeleton — no model, milliseconds"),
-        ("02", "Logwright", "chip: logging", "logging, inside that skeleton"),
+        (
+            "01",
+            "Shipwright",
+            "built-in",
+            "lays the universal skeleton — no model, milliseconds",
+        ),
+        (
+            "02",
+            "Logwright",
+            "chip: logging",
+            "logging, inside that skeleton",
+        ),
         ("03", "Fetcher", "your agent", "live data: always fresh"),
-        ("04", "Summarizer", "your agent", "cached if its input did not change"),
+        (
+            "04",
+            "Summarizer",
+            "your agent",
+            "cached if its input did not change",
+        ),
         ("05", "Testwright", "chip: tests", "writes + runs checks"),
-        ("06", "Reviewer", "", "APPROVE or REJECT — rejection stops delivery"),
-        ("07", "Mailer", "", "touches the world: asks first, never cached, never retried"),
-        ("08", "Operator", "built-in", "registers the schedule; the receipt is written"),
+        (
+            "06",
+            "Reviewer",
+            "",
+            "APPROVE or REJECT — rejection stops delivery",
+        ),
+        (
+            "07",
+            "Mailer",
+            "",
+            "touches the world: asks first, never cached, never retried",
+        ),
+        (
+            "08",
+            "Operator",
+            "built-in",
+            "registers the schedule; the receipt is written",
+        ),
     ];
     let rows: Vec<WidgetNode> = stages
         .iter()
@@ -688,25 +732,30 @@ fn firing() -> WidgetNode {
                 .into()
             };
             reveal(Styled::class(
-                if emphasis { "wr-stage wr-stage-hot" } else { "wr-stage" },
-                Container::new().padding(EdgeInsets::symmetric(18.0, 13.0)).child(
-                    Flex::row()
-                        .main_axis_size(MainAxisSize::Min)
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .spacing(14.0)
-                        .children(children![
-                            text(number, mono(11.0, INK_3)),
-                            text(name, sans(14.5, INK).weight(FontWeight::Bold)),
-                            Flexible::new(1).child(
-                                Text::new(note.to_string())
-                                    .style(sans(13.0, INK_2))
-                                    .align(TextAlign::End),
-                            ),
-                            chip_node,
-                        ]),
-                ),
+                if emphasis {
+                    "wr-stage wr-stage-hot"
+                } else {
+                    "wr-stage"
+                },
+                Container::new()
+                    .padding(EdgeInsets::symmetric(18.0, 13.0))
+                    .child(
+                        Flex::row()
+                            .main_axis_size(MainAxisSize::Min)
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .spacing(14.0)
+                            .children(children![
+                                text(number, mono(11.0, INK_3)),
+                                text(name, sans(14.5, INK).weight(FontWeight::Bold)),
+                                Flexible::new(1).child(
+                                    Text::new(note.to_string())
+                                        .style(sans(13.0, INK_2))
+                                        .align(TextAlign::End),
+                                ),
+                                chip_node,
+                            ]),
+                    ),
             ))
-            .into()
         })
         .collect();
     section(
@@ -833,7 +882,10 @@ fn terminal(title: &str, lines: &[&str]) -> WidgetNode {
                 .cross_axis_alignment(CrossAxisAlignment::Start)
                 .into()
             } else {
-                text(line, mono(12.5, if line.starts_with("  ") { INK_2 } else { INK_3 })).into()
+                text(
+                    line,
+                    mono(12.5, if line.starts_with("  ") { INK_2 } else { INK_3 }),
+                )
             }
         })
         .collect();
@@ -996,7 +1048,10 @@ fn cache() -> WidgetNode {
             spacer(44.0),
             reveal(Styled::block(
                 "display:flex;justify-content:center",
-                terminal("wright diff — what an edit refires, before anything runs", &diff),
+                terminal(
+                    "wright diff — what an edit refires, before anything runs",
+                    &diff,
+                ),
             )),
         ],
     )
@@ -1235,7 +1290,12 @@ fn closing(host: Option<Os>) -> WidgetNode {
                     .children(children![
                         mark(44.0),
                         spacer(22.0),
-                        heading("h2", "You write it. Agents wright it.", 36.0, TextAlign::Center),
+                        heading(
+                            "h2",
+                            "You write it. Agents wright it.",
+                            36.0,
+                            TextAlign::Center
+                        ),
                         Styled::class(
                             "wr-gradient-text",
                             heading("div", "The artifact is wrought.", 36.0, TextAlign::Center),

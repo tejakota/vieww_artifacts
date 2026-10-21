@@ -3354,18 +3354,27 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
                     let phase = match phase {
                         winit::event::TouchPhase::Started => PinchPhase::Started,
                         winit::event::TouchPhase::Moved => PinchPhase::Moved,
-                        winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled => PinchPhase::Ended,
+                        winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled => {
+                            PinchPhase::Ended
+                        }
                     };
-                    if hook(Pinch { delta: delta as f32, phase }) {
+                    if hook(Pinch {
+                        delta: delta as f32,
+                        phase,
+                    }) {
                         self.windows[index].scheduler.request_frame();
                     }
                 }
             }
             WindowEvent::MouseWheel { delta, .. }
-                if self.windows[index].keys.modifiers().control() && self.shared.config.on_pinch.is_some() =>
+                if self.windows[index].keys.modifiers().control()
+                    && self.shared.config.on_pinch.is_some() =>
             {
                 if let Some(hook) = self.shared.config.on_pinch.as_mut() {
-                    if hook(Pinch { delta: wheel_as_pinch(delta), phase: PinchPhase::Moved }) {
+                    if hook(Pinch {
+                        delta: wheel_as_pinch(delta),
+                        phase: PinchPhase::Moved,
+                    }) {
                         self.windows[index].scheduler.request_frame();
                     }
                 }

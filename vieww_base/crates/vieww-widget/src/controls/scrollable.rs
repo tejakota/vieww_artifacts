@@ -244,7 +244,10 @@ impl Widget for Scrollable {
         // looked wavy. Snapping the shift keeps every line's phase fixed, so
         // the page moves as one piece. The caller's offset is untouched — a
         // long scroll does not drift — only what is drawn is rounded.
-        let offset = snap_to_device_pixels(self.offset, ctx.inherit_or(ViewMetrics::default()).device_pixel_ratio);
+        let offset = snap_to_device_pixels(
+            self.offset,
+            ctx.inherit_or(ViewMetrics::default()).device_pixel_ratio,
+        );
         let mut viewport = Viewport::new(self.axis).offset(offset);
         if let Some(handler) = &self.on_extents {
             viewport = viewport.on_extents(Rc::clone(handler));
@@ -453,7 +456,11 @@ mod tests {
         assert_eq!(snap_to_device_pixels(7.3, 2.0), 7.5);
         assert_eq!(snap_to_device_pixels(7.3, 1.25), 7.2);
         assert_eq!(snap_to_device_pixels(-3.4, 1.0), -3.0);
-        assert_eq!(snap_to_device_pixels(5.5, 0.0), 5.5, "no ratio, no snapping");
+        assert_eq!(
+            snap_to_device_pixels(5.5, 0.0),
+            5.5,
+            "no ratio, no snapping"
+        );
         assert_eq!(snap_to_device_pixels(5.5, f32::NAN), 5.5);
     }
 

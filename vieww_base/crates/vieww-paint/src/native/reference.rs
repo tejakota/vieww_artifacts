@@ -94,7 +94,9 @@ fn coalesce_for_replay(mut regions: Vec<Rect>) -> Vec<Rect> {
                 }
             }
         }
-        let Some((i, j, _)) = best else { return regions };
+        let Some((i, j, _)) = best else {
+            return regions;
+        };
         let b = regions.swap_remove(j);
         let a = regions.swap_remove(i);
         regions.push(a.union(b));
@@ -1835,13 +1837,25 @@ mod tests {
     #[test]
     fn neighbouring_damage_is_one_replay_and_far_corners_stay_two() {
         // A scrolled panel: cards stacked with 2 px gaps.
-        let cards: Vec<Rect> = (0..11).map(|i| Rect::new(353.0, 119.0 + 54.0 * i as f32, 1105.0, 171.0 + 54.0 * i as f32)).collect();
+        let cards: Vec<Rect> = (0..11)
+            .map(|i| {
+                Rect::new(
+                    353.0,
+                    119.0 + 54.0 * i as f32,
+                    1105.0,
+                    171.0 + 54.0 * i as f32,
+                )
+            })
+            .collect();
         let merged = coalesce_for_replay(cards.clone());
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0], cards.iter().fold(cards[0], |a, b| a.union(*b)));
         // A caret blinking top left and a spinner bottom right: merging would
         // repaint the whole window for two small changes.
-        let apart = coalesce_for_replay(vec![Rect::new(10.0, 10.0, 20.0, 30.0), Rect::new(1200.0, 760.0, 1230.0, 790.0)]);
+        let apart = coalesce_for_replay(vec![
+            Rect::new(10.0, 10.0, 20.0, 30.0),
+            Rect::new(1200.0, 760.0, 1230.0, 790.0),
+        ]);
         assert_eq!(apart.len(), 2);
         assert!(coalesce_for_replay(Vec::new()).is_empty());
     }
@@ -1853,15 +1867,29 @@ mod tests {
     fn a_window_sized_shadow_does_not_thrash_the_cache() {
         use vieww_foundation::{Offset, Shadow};
         let mut scene = Scene::new();
-        scene.draw_shadow(Rect::new(200.0, 100.0, 2360.0, 1500.0), 16.0, Shadow::new(Color::rgba(0, 0, 0, 90), Offset::new(0.0, 40.0), 120.0));
+        scene.draw_shadow(
+            Rect::new(200.0, 100.0, 2360.0, 1500.0),
+            16.0,
+            Shadow::new(Color::rgba(0, 0, 0, 90), Offset::new(0.0, 40.0), 120.0),
+        );
         scene.fill_rect(Rect::new(200.0, 100.0, 2360.0, 1500.0), Color::WHITE.into());
-        scene.draw_shadow(Rect::new(300.0, 300.0, 700.0, 400.0), 8.0, Shadow::new(Color::rgba(0, 0, 0, 40), Offset::new(0.0, 12.0), 40.0));
+        scene.draw_shadow(
+            Rect::new(300.0, 300.0, 700.0, 400.0),
+            8.0,
+            Shadow::new(Color::rgba(0, 0, 0, 40), Offset::new(0.0, 12.0), 40.0),
+        );
         let mut renderer = NativeRenderer::new();
         for _ in 0..3 {
-            renderer.render_in_place(&scene, 2560, 1600, Color::WHITE).expect("render");
+            renderer
+                .render_in_place(&scene, 2560, 1600, Color::WHITE)
+                .expect("render");
         }
         let (hits, misses) = renderer.shadow_cache_stats();
-        assert_eq!((hits, misses), (4, 2), "two misses on the first frame, then hits");
+        assert_eq!(
+            (hits, misses),
+            (4, 2),
+            "two misses on the first frame, then hits"
+        );
     }
 
     /// The retained repaint of many neighbouring regions draws the same
@@ -1872,8 +1900,14 @@ mod tests {
         let mut after = Scene::new();
         for i in 0..8u8 {
             let y = 10.0 + 20.0 * f32::from(i);
-            before.fill_rect(Rect::new(10.0, y, 150.0, y + 18.0), Color::rgb(30 * i, 90, 160).into());
-            after.fill_rect(Rect::new(10.0, y + 3.0, 150.0, y + 21.0), Color::rgb(30 * i, 90, 160).into());
+            before.fill_rect(
+                Rect::new(10.0, y, 150.0, y + 18.0),
+                Color::rgb(30 * i, 90, 160).into(),
+            );
+            after.fill_rect(
+                Rect::new(10.0, y + 3.0, 150.0, y + 21.0),
+                Color::rgb(30 * i, 90, 160).into(),
+            );
         }
         let mut damage = Damage::new(Rect::new(0.0, 0.0, 200.0, 200.0));
         for i in 0..8 {
@@ -1881,10 +1915,15 @@ mod tests {
             damage.add(Rect::new(10.0, y, 150.0, y + 21.0));
         }
         let mut retained = NativeRenderer::new();
-        retained.render_in_place(&before, 200, 200, Color::WHITE).unwrap();
-        retained.render_retained_in_place(&after, &damage, 200, 200, Color::WHITE).unwrap();
+        retained
+            .render_in_place(&before, 200, 200, Color::WHITE)
+            .unwrap();
+        retained
+            .render_retained_in_place(&after, &damage, 200, 200, Color::WHITE)
+            .unwrap();
         let mut full = NativeRenderer::new();
-        full.render_in_place(&after, 200, 200, Color::WHITE).unwrap();
+        full.render_in_place(&after, 200, 200, Color::WHITE)
+            .unwrap();
         assert!(retained.last_frame() == full.last_frame());
     }
 

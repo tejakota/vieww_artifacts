@@ -198,9 +198,7 @@ pub(crate) fn repo() -> String {
                 web_sys::window()
                     .and_then(|window| window.document())
                     .and_then(|document| {
-                        document
-                            .query_selector("meta[name=\"wright-repo\"]")
-                            .ok()?
+                        document.query_selector("meta[name=\"wright-repo\"]").ok()?
                     })
                     .and_then(|meta| meta.get_attribute("content"))
                     .filter(|value| !value.is_empty() && !value.starts_with("__"))
@@ -350,7 +348,14 @@ struct Mark {
 impl Mark {
     /// The W at `side` points square.
     fn widget(color: Color, side: f32) -> WidgetNode {
-        Painting::sized(Size::new(side, side), Self { color, progress: 1.0 }).into()
+        Painting::sized(
+            Size::new(side, side),
+            Self {
+                color,
+                progress: 1.0,
+            },
+        )
+        .into()
     }
 }
 
@@ -370,9 +375,7 @@ impl Painter for Mark {
         // because the page should draw the mark the way the app does.
         let lens: Vec<f32> = pts
             .windows(2)
-            .map(|w| {
-                ((w[1].dx - w[0].dx).powi(2) + (w[1].dy - w[0].dy).powi(2)).sqrt()
-            })
+            .map(|w| ((w[1].dx - w[0].dx).powi(2) + (w[1].dy - w[0].dy).powi(2)).sqrt())
             .collect();
         let mut left = lens.iter().sum::<f32>() * self.progress.clamp(0.0, 1.0);
         let mut visible = vec![pts[0]];
@@ -395,12 +398,7 @@ impl Painter for Mark {
         for point in &visible[1..] {
             path.line_to(*point);
         }
-        book.stroke_styled(
-            path,
-            self.color,
-            W_STROKE * scale,
-            StrokeStyle::rounded(),
-        );
+        book.stroke_styled(path, self.color, W_STROKE * scale, StrokeStyle::rounded());
     }
     fn should_repaint(&self, previous: &dyn Painter) -> bool {
         previous.as_any().downcast_ref::<Self>() != Some(self)
@@ -440,7 +438,7 @@ pub struct Site {
     /// The demo's heartbeat: one firing, auto-played once on mount, held at
     /// the approval gate until the reader answers it. See [`session_screen`].
     pub fire: Animation<f32>,
-    /// The second half of the firing: what [Allow] releases.
+    /// The second half of the firing: what **Allow** releases.
     pub deliver: Animation<f32>,
     /// The gate's answer: 0 pending, 1 allowed, 2 refused.
     pub gate: Signal<u8>,
@@ -502,7 +500,8 @@ impl Widget for Site {
                 divider(column),
                 self.anchors.reveal(6, &self.scroll, features(column, wide)),
                 divider(column),
-                self.anchors.reveal(7, &self.scroll, get_started(column, wide)),
+                self.anchors
+                    .reveal(7, &self.scroll, get_started(column, wide)),
                 divider(column),
                 self.anchors.mark(
                     2,
@@ -590,12 +589,34 @@ const SYN_PUNCT: Color = Color::rgb(0xD4, 0xD4, 0xD4);
 /// falls through to punctuation rather than to a wrong colour.
 const KEYWORDS: &[&str] = &[
     // The blueprint's nodes.
-    "meta", "intent", "project", "agent", "edge", "chips", "guardrails",
-    "deliverable", "models", "scheduling", "secrets", "logging", "tests", "ci",
+    "meta",
+    "intent",
+    "project",
+    "agent",
+    "edge",
+    "chips",
+    "guardrails",
+    "deliverable",
+    "models",
+    "scheduling",
+    "secrets",
+    "logging",
+    "tests",
+    "ci",
     // The CLI's verbs, for the terminal blocks.
-    "wright", "cargo", "build", "sudo", "apt", "install",
+    "wright",
+    "cargo",
+    "build",
+    "sudo",
+    "apt",
+    "install",
     // The structural words of a plan's output.
-    "true", "false", "on", "off", "in", "out",
+    "true",
+    "false",
+    "on",
+    "off",
+    "in",
+    "out",
 ];
 
 /// One line of source, as coloured spans. Tokenised once per line, not once
@@ -764,7 +785,13 @@ impl Art {
 /// The sections the nav can jump to, in page order. The label is what the
 /// nav shows and the index is the slot each section writes its measured
 /// position into. One list, so a link and a section cannot drift apart.
-pub const SECTIONS: &[&str] = &["The flow", "The window", "Live demo", "Blueprint", "Download"];
+pub const SECTIONS: &[&str] = &[
+    "The flow",
+    "The window",
+    "Live demo",
+    "Blueprint",
+    "Download",
+];
 
 /// Where each section starts, in document coordinates, once it has been laid
 /// out — `viewwsite::Anchors`' arrangement, which is the fix for a nav that
@@ -963,9 +990,7 @@ impl Widget for Scrollbar {
                         paging.jump_to(paging.peek() + viewport);
                     }
                 })
-                .child(
-                    Container::new().color(Color::rgba(0, 0, 0, 1)).child(bar),
-                )
+                .child(Container::new().color(Color::rgba(0, 0, 0, 1)).child(bar))
                 .into()
         })
         .into()
@@ -1017,7 +1042,10 @@ fn eyebrow(text: &str) -> WidgetNode {
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .spacing(8.0)
                 .children(children![
-                    Container::new().color(ACCENT_INK).radius(999.0).size(6.0, 6.0),
+                    Container::new()
+                        .color(ACCENT_INK)
+                        .radius(999.0)
+                        .size(6.0, 6.0),
                     Text::new(spaced(text)).style(mono(10.5, ACCENT_INK)),
                 ]),
         )
@@ -1053,9 +1081,9 @@ fn chip(text: &str, ink: Color) -> WidgetNode {
 // The window's stage glyphs — ✓, ◌, ○ — drawn as strokes rather than set as
 // text, so they are the same pixels on every host and no font subset decides
 // what the run looks like. The shapes are the window's own vocabulary: a
-/// finished stage is a check, a working stage is a ring that breathes with
+// finished stage is a check, a working stage is a ring that breathes with
 // the animation that is moving it, a pending stage is a thin ring, and a
-/// refused stage is a cross.
+// refused stage is a cross.
 
 /// A check, stroked — two lines, round caps.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1175,11 +1203,13 @@ fn nav(
                                 } else {
                                     GROUND
                                 })
-                                .child(
-                                    Text::new((*label).to_string())
-                                        .size(12.5)
-                                        .color(if sense.hover > 0.0 { Color::WHITE } else { INK_2 }),
-                                )
+                                .child(Text::new((*label).to_string()).size(12.5).color(
+                                    if sense.hover > 0.0 {
+                                        Color::WHITE
+                                    } else {
+                                        INK_2
+                                    },
+                                ))
                                 .into()
                         })
                         .on_tap(move || target.jump_to(anchors.target(index))),
@@ -1264,10 +1294,7 @@ fn hero(column: f32, wide: bool, host: Option<Os>, entrance: f32) -> WidgetNode 
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .spacing(9.0)
                 .children(children![
-                    Container::new()
-                        .color(GOOD)
-                        .radius(999.0)
-                        .size(7.0, 7.0),
+                    Container::new().color(GOOD).radius(999.0).size(7.0, 7.0),
                     Text::new("v0.5.1").style(mono(11.5, Color::WHITE)),
                     Text::new("·").style(mono(11.5, INK_3)),
                     Text::new(if wide {
@@ -1396,9 +1423,15 @@ fn stats(wide: bool) -> WidgetNode {
         .collect();
 
     let row = if wide {
-        Flex::row().cross_axis_alignment(CrossAxisAlignment::Start).spacing(16.0).children(cells)
+        Flex::row()
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .spacing(16.0)
+            .children(cells)
     } else {
-        Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(12.0).children(cells)
+        Flex::column()
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .spacing(12.0)
+            .children(cells)
     };
 
     Container::new()
@@ -1558,7 +1591,7 @@ const STAGES: &[(&str, &str)] = &[
 const GATE_STAGE: usize = 6;
 /// The demo's whole clock: one firing to the gate.
 const FIRE_MS: u64 = 4200;
-/// The second half: [Allow] releases Mailer and Operator.
+/// The second half: **Allow** releases Mailer and Operator.
 const DELIVER_MS: u64 = 2400;
 
 /// The session screen — the window in miniature.
@@ -1566,13 +1599,13 @@ const DELIVER_MS: u64 = 2400;
 /// A widget rather than a function because it **reads the animations and the
 /// gate**, and a signal read is only a subscription inside a `build`. That is
 /// also what keeps a tap cheap: the element that reads the run is this one,
-/// so pressing [Allow] rebuilds a screen-sized subtree and leaves the rest of
+/// so pressing **Allow** rebuilds a screen-sized subtree and leaves the rest of
 /// the page untouched.
 #[derive(Debug)]
 pub struct Session {
     /// The firing's first half: 0 to 1 across the six sandboxed stages.
     pub fire: Animation<f32>,
-    /// The firing's second half: what [Allow] releases.
+    /// The firing's second half: what **Allow** releases.
     pub deliver: Animation<f32>,
     /// The gate's answer: 0 pending, 1 allowed, 2 refused.
     pub gate: Signal<u8>,
@@ -1747,12 +1780,12 @@ impl Widget for Session {
                                 .spacing(8.0)
                                 .children(children![
                                     CursorArea::new(Cursor::Pointer).child(
-                                        Button::new("Allow")
-                                            .style(ButtonStyle::Filled)
-                                            .on_pressed(move || {
+                                        Button::new("Allow").style(ButtonStyle::Filled).on_pressed(
+                                            move || {
                                                 allow_gate.set(1);
                                                 allow_deliver.forward(Duration::ZERO);
-                                            }),
+                                            }
+                                        ),
                                     ),
                                     CursorArea::new(Cursor::Pointer).child(
                                         Button::new("Don't")
@@ -1786,52 +1819,52 @@ impl Widget for Session {
                 .color(SURFACE_2)
                 .radius(999.0)
                 .padding(EdgeInsets::symmetric(12.0, 7.0))
-                .child(
-                    Text::new("+  Ask for a change…")
-                        .style(mono(10.5, INK_3)),
-                )
+                .child(Text::new("+  Ask for a change…").style(mono(10.5, INK_3)))
                 .into()
         };
 
         // The screen: top strip, the request, the run, the gate, the composer.
-        let screen = Flex::column()
-            .cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .spacing(0.0)
-            .children(children![
-                // The session strip — the window's own furniture.
-                Container::new()
-                    .color(SURFACE)
-                    .padding(EdgeInsets::symmetric(12.0, 8.0))
-                    .child(
-                        Flex::row()
-                            .cross_axis_alignment(CrossAxisAlignment::Center)
-                            .spacing(7.0)
-                            .children(children![
-                                SizedBox::from_size(Size::new(14.0, 14.0)).child(mark(14.0)),
-                                Text::new("HN Daily Digest").size(11.5).color(Color::WHITE).bold(),
-                                Container::new()
-                                    .color(run.dot())
-                                    .radius(999.0)
-                                    .size(6.0, 6.0),
-                                Flexible::expanded(1).child(SizedBox::shrink()),
-                                Text::new("Engine").style(mono(9.5, INK_3)),
-                            ]),
-                    ),
-                Container::new().padding(EdgeInsets::all(10.0)).child(
-                    Flex::column()
-                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                        .spacing(9.0)
-                        .children(children![
-                            // Your request, in its bubble — the window puts
-                            // the person on the right. The `Constrained` is
-                            // load-bearing: a flex row hands its children
-                            // unbounded width, and a Text there measures
-                            // intrinsically — one long line that walks off
-                            // the screen instead of a bubble that wraps.
+        let screen =
+            Flex::column()
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .spacing(0.0)
+                .children(children![
+                    // The session strip — the window's own furniture.
+                    Container::new()
+                        .color(SURFACE)
+                        .padding(EdgeInsets::symmetric(12.0, 8.0))
+                        .child(
                             Flex::row()
-                                .main_axis_alignment(MainAxisAlignment::End)
+                                .cross_axis_alignment(CrossAxisAlignment::Center)
+                                .spacing(7.0)
                                 .children(children![
-                                    Constrained::new(Constraints::new(
+                                    SizedBox::from_size(Size::new(14.0, 14.0)).child(mark(14.0)),
+                                    Text::new("HN Daily Digest")
+                                        .size(11.5)
+                                        .color(Color::WHITE)
+                                        .bold(),
+                                    Container::new()
+                                        .color(run.dot())
+                                        .radius(999.0)
+                                        .size(6.0, 6.0),
+                                    Flexible::expanded(1).child(SizedBox::shrink()),
+                                    Text::new("Engine").style(mono(9.5, INK_3)),
+                                ]),
+                        ),
+                    Container::new().padding(EdgeInsets::all(10.0)).child(
+                        Flex::column()
+                            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                            .spacing(9.0)
+                            .children(children![
+                                // Your request, in its bubble — the window puts
+                                // the person on the right. The `Constrained` is
+                                // load-bearing: a flex row hands its children
+                                // unbounded width, and a Text there measures
+                                // intrinsically — one long line that walks off
+                                // the screen instead of a bubble that wraps.
+                                Flex::row()
+                                    .main_axis_alignment(MainAxisAlignment::End)
+                                    .children(children![Constrained::new(Constraints::new(
                                         0.0,
                                         262.0,
                                         0.0,
@@ -1850,19 +1883,18 @@ impl Widget for Session {
                                                 .size(11.0)
                                                 .color(Color::WHITE),
                                             ),
-                                    ),
-                                ]),
-                            // The run card.
-                            Container::new()
-                                .color(SURFACE)
-                                .radius(12.0)
-                                .border(Border::thin(LINE_STRONG))
-                                .padding(EdgeInsets::all(10.0))
-                                .child(
-                                    Flex::column()
-                                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                                        .spacing(5.0)
-                                        .children(children![
+                                    ),]),
+                                // The run card.
+                                Container::new()
+                                    .color(SURFACE)
+                                    .radius(12.0)
+                                    .border(Border::thin(LINE_STRONG))
+                                    .padding(EdgeInsets::all(10.0))
+                                    .child(
+                                        Flex::column()
+                                            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                                            .spacing(5.0)
+                                            .children(children![
                                             Flex::row()
                                                 .cross_axis_alignment(CrossAxisAlignment::Center)
                                                 .children(children![
@@ -1886,42 +1918,39 @@ impl Widget for Session {
                                             )
                                             .style(mono(8.5, INK_3)),
                                         ]),
-                                ),
-                            // The gate, when the run is holding at it.
-                            gate_card.map_or_else(
-                                || SizedBox::shrink().into(),
-                                |card| card,
-                            ),
-                            // The composer, or the way to fire again.
-                            composer,
-                        ]),
-                ),
-                Flexible::expanded(1).child(SizedBox::shrink()),
-                // The status bar.
-                Container::new()
-                    .color(STATUS)
-                    .border(Border::thin(LINE))
-                    .padding(EdgeInsets::symmetric(12.0, 6.0))
-                    .child(
-                        Flex::row()
-                            .cross_axis_alignment(CrossAxisAlignment::Center)
-                            .spacing(6.0)
-                            .children(children![
-                                Container::new()
-                                    .color(run.dot())
-                                    .radius(999.0)
-                                    .size(6.0, 6.0),
-                                Text::new(run.status()).style(mono(9.0, INK_2)),
-                                Flexible::expanded(1).child(SizedBox::shrink()),
-                                Text::new(if run.refused {
-                                    "stopped".to_owned()
-                                } else {
-                                    format!("±${:.4} budget", run.cost() * 2.0)
-                                })
-                                .style(mono(9.0, INK_3)),
+                                    ),
+                                // The gate, when the run is holding at it.
+                                gate_card.unwrap_or_else(|| SizedBox::shrink().into()),
+                                // The composer, or the way to fire again.
+                                composer,
                             ]),
                     ),
-            ]);
+                    Flexible::expanded(1).child(SizedBox::shrink()),
+                    // The status bar.
+                    Container::new()
+                        .color(STATUS)
+                        .border(Border::thin(LINE))
+                        .padding(EdgeInsets::symmetric(12.0, 6.0))
+                        .child(
+                            Flex::row()
+                                .cross_axis_alignment(CrossAxisAlignment::Center)
+                                .spacing(6.0)
+                                .children(children![
+                                    Container::new()
+                                        .color(run.dot())
+                                        .radius(999.0)
+                                        .size(6.0, 6.0),
+                                    Text::new(run.status()).style(mono(9.0, INK_2)),
+                                    Flexible::expanded(1).child(SizedBox::shrink()),
+                                    Text::new(if run.refused {
+                                        "stopped".to_owned()
+                                    } else {
+                                        format!("±${:.4} budget", run.cost() * 2.0)
+                                    })
+                                    .style(mono(9.0, INK_3)),
+                                ]),
+                        ),
+                ]);
 
         Container::new().color(GROUND).child(screen).into()
     }
@@ -1956,7 +1985,7 @@ pub fn session_screen(
 ///
 /// Called by [`root`] and by `dom.rs`'s island mount, so both halves of the
 /// page start the same firing the same way: `fire` plays once to the gate
-/// and holds; `deliver` waits, attached, for [Allow].
+/// and holds; `deliver` waits, attached, for **Allow**.
 pub fn start_demo(
     runtime: &vieww::element::Runtime,
     tickers: &mut Tickers,
@@ -2062,11 +2091,7 @@ fn demo_band(
 /// the frame, and the screen inside its bezel. The radii differ by the bezel
 /// width, which is what stops the inner corners looking loose inside the
 /// outer ones.
-fn demo(
-    fire: &Animation<f32>,
-    deliver: &Animation<f32>,
-    gate: &Signal<u8>,
-) -> WidgetNode {
+fn demo(fire: &Animation<f32>, deliver: &Animation<f32>, gate: &Signal<u8>) -> WidgetNode {
     Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .spacing(10.0)
@@ -2076,16 +2101,13 @@ fn demo(
                 .radius(18.0)
                 .border(Border::thin(LINE_STRONG))
                 .padding(EdgeInsets::all(8.0))
-                .child(
-                    Container::new()
-                        .color(GROUND)
-                        .radius(12.0)
-                        .child(SizedBox::from_size(Size::new(300.0, 520.0)).child(Session {
-                            fire: fire.clone(),
-                            deliver: deliver.clone(),
-                            gate: gate.clone(),
-                        })),
-                ),
+                .child(Container::new().color(GROUND).radius(12.0).child(
+                    SizedBox::from_size(Size::new(300.0, 520.0)).child(Session {
+                        fire: fire.clone(),
+                        deliver: deliver.clone(),
+                        gate: gate.clone(),
+                    })
+                ),),
             Text::new("A real vieww screen, running here. Answer the gate.")
                 .style(mono(11.0, INK_3)),
         ])
@@ -2139,9 +2161,7 @@ fn flow(column: f32, wide: bool) -> WidgetNode {
                                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                                 .spacing(14.0)
                                 .children(children![
-                                    Container::new()
-                                        .color(ACCENT)
-                                        .child(SizedBox::width(2.0)),
+                                    Container::new().color(ACCENT).child(SizedBox::width(2.0)),
                                     Flexible::expanded(1).child(
                                         Flex::column()
                                             .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -2204,8 +2224,16 @@ fn flow(column: f32, wide: bool) -> WidgetNode {
 /// whole story in pictures.
 fn window_section(column: f32, wide: bool, art: &Art) -> WidgetNode {
     let shots = [
-        ("THE INTERVIEW", "Describe the outcome, in your words.", &art.describe),
-        ("THE CONFIRM GATE", "The plan, generated from the blueprint.", &art.plan),
+        (
+            "THE INTERVIEW",
+            "Describe the outcome, in your words.",
+            &art.describe,
+        ),
+        (
+            "THE CONFIRM GATE",
+            "The plan, generated from the blueprint.",
+            &art.plan,
+        ),
         ("THE FIRING", "The event river, and the gate.", &art.run),
         ("THE RECEIPT", "Delivered, with its history.", &art.result),
     ];
@@ -2230,9 +2258,8 @@ fn window_section(column: f32, wide: bool, art: &Art) -> WidgetNode {
                                     .color(Color::rgb(0x14, 0x14, 0x14))
                                     .padding(EdgeInsets::all(8.0))
                                     .child(
-                                        AspectRatio::new(1.6).child(
-                                            Image::new(image).fit(BoxFit::Cover),
-                                        ),
+                                        AspectRatio::new(1.6)
+                                            .child(Image::new(image).fit(BoxFit::Cover),),
                                     ),
                                 Container::new().padding(EdgeInsets::all(12.0)).child(
                                     Flex::column()
@@ -2316,13 +2343,19 @@ fn window_section(column: f32, wide: bool, art: &Art) -> WidgetNode {
 /// done, what is working, what is waiting on you.
 fn firing(_column: f32, wide: bool) -> WidgetNode {
     let notes = [
-        ("built-in", "lays the universal skeleton — no model, milliseconds"),
+        (
+            "built-in",
+            "lays the universal skeleton — no model, milliseconds",
+        ),
         ("chip: logging", "logging, inside that skeleton"),
         ("your agent", "live data: always fresh"),
         ("your agent", "cached if its input did not change"),
         ("chip: tests", "writes + runs checks"),
         ("", "APPROVE or REJECT — rejection stops delivery"),
-        ("", "touches the world: asks first, never cached, never retried"),
+        (
+            "",
+            "touches the world: asks first, never cached, never retried",
+        ),
         ("built-in", "registers the schedule; the receipt is written"),
     ];
 
@@ -2344,9 +2377,7 @@ fn firing(_column: f32, wide: bool) -> WidgetNode {
                             .color(Color::WHITE)
                             .bold(),
                         Flexible::expanded(1).child(SizedBox::shrink()),
-                        Text::new((*note).to_string())
-                            .size(12.5)
-                            .color(INK_2),
+                        Text::new((*note).to_string()).size(12.5).color(INK_2),
                         SizedBox::width(12.0),
                         if chip_text.is_empty() {
                             SizedBox::width(90.0).into()
@@ -2417,10 +2448,8 @@ fn firing(_column: f32, wide: bool) -> WidgetNode {
             .children(children![
                 SizedBox::height(2.0),
                 stack,
-                Text::new(
-                    "Stage glyphs from a live run: done, working, waiting — and the gate."
-                )
-                .style(mono(11.0, INK_3)),
+                Text::new("Stage glyphs from a live run: done, working, waiting — and the gate.")
+                    .style(mono(11.0, INK_3)),
             ])
             .into(),
     )
@@ -2527,7 +2556,10 @@ fn terminal_block(lines: &[&str], size: f32, title: &str) -> WidgetNode {
                     .into()
             } else {
                 Text::new((*line).to_string())
-                    .style(mono(size, if line.starts_with("  ") { INK_2 } else { INK_3 }))
+                    .style(mono(
+                        size,
+                        if line.starts_with("  ") { INK_2 } else { INK_3 },
+                    ))
                     .into()
             }
         })
@@ -2545,9 +2577,7 @@ fn terminal_block(lines: &[&str], size: f32, title: &str) -> WidgetNode {
                         Container::new()
                             .color(SURFACE_2)
                             .padding(EdgeInsets::symmetric(14.0, 8.0))
-                            .child(
-                                Text::new(title.to_string()).style(mono(11.0, INK_3)),
-                            ),
+                            .child(Text::new(title.to_string()).style(mono(11.0, INK_3)),),
                         Container::new().padding(EdgeInsets::all(16.0)).child(
                             Flex::column()
                                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -2650,12 +2680,7 @@ fn blueprint(wide: bool) -> WidgetNode {
             .spacing(14.0)
             .children(children![
                 SizedBox::height(6.0),
-                code_block(
-                    &kdl,
-                    if wide { 12.5 } else { 11.0 },
-                    "blueprint.kdl",
-                    "kdl"
-                ),
+                code_block(&kdl, if wide { 12.5 } else { 11.0 }, "blueprint.kdl", "kdl"),
                 terminal_block(
                     &plan,
                     if wide { 12.5 } else { 11.0 },
@@ -2710,7 +2735,11 @@ fn cache(_column: f32, wide: bool) -> WidgetNode {
                             .color(INK_2),
                         ]),
                 ),
-                Flexible::expanded(1).child(terminal_block(&diff, 12.5, "wright diff — what an edit refires, before anything runs")),
+                Flexible::expanded(1).child(terminal_block(
+                    &diff,
+                    12.5,
+                    "wright diff — what an edit refires, before anything runs"
+                )),
             ])
             .into()
     } else {
@@ -2768,7 +2797,10 @@ fn card(tag: &str, title: &str, body: &str) -> WidgetNode {
                         .padding(EdgeInsets::all(7.0))
                         .child(Mark::widget(ACCENT_INK, 18.0)),
                     Text::new(spaced(tag)).style(mono(9.5, INK_3)),
-                    Text::new(title.to_string()).size(14.5).color(Color::WHITE).bold(),
+                    Text::new(title.to_string())
+                        .size(14.5)
+                        .color(Color::WHITE)
+                        .bold(),
                     Text::new(body.to_string()).size(13.0).color(INK_2),
                 ]),
         )
@@ -2841,9 +2873,7 @@ fn features(_column: f32, wide: bool) -> WidgetNode {
             .map(|pair| {
                 let mut row: Vec<WidgetNode> = pair
                     .iter()
-                    .map(|card_node| {
-                        Flexible::expanded(1).child(card_node.clone()).into()
-                    })
+                    .map(|card_node| Flexible::expanded(1).child(card_node.clone()).into())
                     .collect();
                 if pair.len() == 1 {
                     row.push(Flexible::expanded(1).child(SizedBox::shrink()).into());
@@ -2918,33 +2948,34 @@ fn get_started(_column: f32, wide: bool) -> WidgetNode {
     let step_cells: Vec<WidgetNode> = steps
         .iter()
         .map(|(number, title, body)| {
-            Flexible::expanded(1).child(
-                Flex::column()
-                    .cross_axis_alignment(CrossAxisAlignment::Start)
-                    .spacing(6.0)
-                    .children(children![
-                        Flex::row()
-                            .cross_axis_alignment(CrossAxisAlignment::Center)
-                            .spacing(9.0)
-                            .children(children![
-                                Container::new()
-                                    .color(WASH)
-                                    .radius(999.0)
-                                    .border(Border::thin(ACCENT))
-                                    .padding(EdgeInsets::all(6.0))
-                                    .child(
-                                        Text::new((*number).to_string())
-                                            .style(mono(11.0, ACCENT_INK).bold()),
-                                    ),
-                                Text::new((*title).to_string())
-                                    .size(14.5)
-                                    .color(Color::WHITE)
-                                    .bold(),
-                            ]),
-                        Text::new((*body).to_string()).size(13.0).color(INK_2),
-                    ]),
-            )
-            .into()
+            Flexible::expanded(1)
+                .child(
+                    Flex::column()
+                        .cross_axis_alignment(CrossAxisAlignment::Start)
+                        .spacing(6.0)
+                        .children(children![
+                            Flex::row()
+                                .cross_axis_alignment(CrossAxisAlignment::Center)
+                                .spacing(9.0)
+                                .children(children![
+                                    Container::new()
+                                        .color(WASH)
+                                        .radius(999.0)
+                                        .border(Border::thin(ACCENT))
+                                        .padding(EdgeInsets::all(6.0))
+                                        .child(
+                                            Text::new((*number).to_string())
+                                                .style(mono(11.0, ACCENT_INK).bold()),
+                                        ),
+                                    Text::new((*title).to_string())
+                                        .size(14.5)
+                                        .color(Color::WHITE)
+                                        .bold(),
+                                ]),
+                            Text::new((*body).to_string()).size(13.0).color(INK_2),
+                        ]),
+                )
+                .into()
         })
         .collect();
 
@@ -2999,7 +3030,9 @@ fn asset_row(asset: &'static Asset, wide: bool) -> WidgetNode {
                     .cross_axis_alignment(CrossAxisAlignment::Start)
                     .spacing(3.0)
                     .children(children![
-                        Text::new(asset.label.to_string()).size(13.5).color(Color::WHITE),
+                        Text::new(asset.label.to_string())
+                            .size(13.5)
+                            .color(Color::WHITE),
                         Text::new(asset.file.to_string()).style(mono(11.5, ACCENT_INK)),
                     ]);
 
@@ -3320,7 +3353,16 @@ pub fn root(driver: &mut FrameDriver, host: Option<Os>) -> WidgetNode {
     entrance.forward(Duration::ZERO);
 
     let anchors = Anchors::new(&runtime);
-    page(scroll, entrance, host, fire, deliver, gate, Art::embedded(), anchors)
+    page(
+        scroll,
+        entrance,
+        host,
+        fire,
+        deliver,
+        gate,
+        Art::embedded(),
+        anchors,
+    )
 }
 
 /// The tree, with everything it needs already built.
@@ -3330,6 +3372,10 @@ pub fn root(driver: &mut FrameDriver, host: Option<Os>) -> WidgetNode {
 /// entrance and the demo's firing rather than during them — can supply the
 /// pieces itself.
 #[must_use]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each is one of the page's clocks or inputs, named at the call site; a struct would only rename them"
+)]
 pub fn page(
     scroll: ScrollController,
     entrance: Animation<f32>,
