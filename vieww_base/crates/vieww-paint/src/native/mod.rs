@@ -111,5 +111,7 @@ pub use gpu_seam::{
 pub use linear::ColorPipeline;
 pub use pixels::Pixels;
 pub use pool::PoolStats;
-pub use reference::{AaMode, GlyphRasterStats, NativeRenderer, RendererError, SceneReport};
+pub use reference::{
+    AaMode, GlyphRasterStats, NativeRenderer, RasterKindTimes, RendererError, SceneReport,
+};
 pub use residency::ResidencyStats;

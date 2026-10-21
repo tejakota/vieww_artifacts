@@ -25,6 +25,7 @@
 //! cites).
 
 use std::fmt;
+use std::time::Duration;
 
 use crate::{Clip, Command, Damage, Scene};
 use vieww_foundation::{Color, MemoryPressure, Rect, Transform, Trim};
@@ -195,6 +196,66 @@ fn paint_faded(paint: &crate::Paint, alpha: f32) -> crate::Paint {
     }
 }
 
+/// Where one frame's CPU raster time went, by kind of command — the CPU
+/// path's counterpart to the GPU's timestamp-query breakdown
+/// (`vieww_hal::vulkan::GpuPassTimes`).
+///
+/// `cpu 34 ms` on the LG Stylo 5 said the CPU rasterizer was the frame, and
+/// nothing about which part of it: text, shadows, the composite of a layer
+/// and the blur its filter runs are different fixes. Measured per command
+/// with a monotonic clock, only when asked ([`NativeRenderer::profile_kinds`]):
+/// off, nothing here reads a clock, which also keeps the renderer usable on
+/// `wasm32-unknown-unknown`, where `Instant::now` panics.
+///
+/// A command applied once per damage region is timed once per region, so
+/// the kinds add up to the walk's whole time (less the per-command clock
+/// reads), not to one pass over the scene.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RasterKindTimes {
+    /// `FillRect` — backgrounds, boxes, the cursor.
+    pub rects: Duration,
+    /// `FillPath` and `StrokePath` — rounded and arbitrary shapes, borders.
+    pub paths: Duration,
+    /// `DrawGlyphs` — text, monochrome and colour.
+    pub text: Duration,
+    /// `DrawImage` — sampling, including mip selection.
+    pub images: Duration,
+    /// `DrawShadow` — the blurred box under a card.
+    pub shadows: Duration,
+    /// `PushLayer` — allocating the layer, and a backdrop layer's sampling
+    /// and filtering of what is behind it.
+    pub layers: Duration,
+    /// `PopLayer` — the layer's filter (a blur, a colour matrix) and its
+    /// composite back onto what is below.
+    pub composite: Duration,
+}
+
+impl RasterKindTimes {
+    /// Every kind together.
+    #[must_use]
+    pub fn total(&self) -> Duration {
+        self.rects
+            + self.paths
+            + self.text
+            + self.images
+            + self.shadows
+            + self.layers
+            + self.composite
+    }
+
+    fn slot(&mut self, command: &Command) -> &mut Duration {
+        match command {
+            Command::FillRect { .. } => &mut self.rects,
+            Command::FillPath { .. } | Command::StrokePath { .. } => &mut self.paths,
+            Command::DrawGlyphs { .. } => &mut self.text,
+            Command::DrawImage { .. } => &mut self.images,
+            Command::DrawShadow { .. } => &mut self.shadows,
+            Command::PushLayer { .. } => &mut self.layers,
+            Command::PopLayer => &mut self.composite,
+        }
+    }
+}
+
 pub struct NativeRenderer {
     glyphs: GlyphCache,
     /// Clip masks already rasterised this frame — see `native/clip.rs`'s
@@ -261,6 +322,10 @@ pub struct NativeRenderer {
     /// drawing API applies, made a caller's decision rather than the
     /// renderer's.
     hairline_floor: Option<f32>,
+    /// Whether to time each command by kind — see [`RasterKindTimes`].
+    kind_profile: bool,
+    /// The last frame's times, when `kind_profile` is on.
+    kind_times: RasterKindTimes,
 }
 
 impl fmt::Debug for NativeRenderer {
@@ -314,6 +379,8 @@ impl NativeRenderer {
             lcd_frame: false,
             filtered_layer_guard: None,
             hairline_floor: None,
+            kind_profile: false,
+            kind_times: RasterKindTimes::default(),
         }
     }
 
@@ -344,6 +411,8 @@ impl NativeRenderer {
             lcd_frame: false,
             filtered_layer_guard: None,
             hairline_floor: None,
+            kind_profile: false,
+            kind_times: RasterKindTimes::default(),
         }
     }
 
@@ -371,6 +440,8 @@ impl NativeRenderer {
             lcd_frame: false,
             filtered_layer_guard: None,
             hairline_floor: None,
+            kind_profile: false,
+            kind_times: RasterKindTimes::default(),
         }
     }
 
@@ -398,6 +469,8 @@ impl NativeRenderer {
             lcd_frame: false,
             filtered_layer_guard: None,
             hairline_floor: None,
+            kind_profile: false,
+            kind_times: RasterKindTimes::default(),
         }
     }
 
@@ -596,6 +669,7 @@ impl NativeRenderer {
         height: u32,
         base: Color,
     ) -> Result<SceneReport, RendererError> {
+        self.kind_times = RasterKindTimes::default();
         let surface = Rect::new(0.0, 0.0, width as f32, height as f32);
         // Whether this frame's root admits LCD text — the mode choice, an
         // opaque background and the gamma-space pipeline together. Read per
@@ -612,7 +686,9 @@ impl NativeRenderer {
         let mut stack: Vec<LayerFrame> = Vec::new();
         let mut failure = None;
         for command in scene.commands() {
-            if let Err(error) = self.apply(command, &mut root, &mut stack, surface, &mut report) {
+            if let Err(error) =
+                self.apply_timed(command, &mut root, &mut stack, surface, &mut report)
+            {
                 failure = Some(error);
                 break;
             }
@@ -756,6 +832,7 @@ impl NativeRenderer {
         let full = Rect::new(0.0, 0.0, width as f32, height as f32);
         let regions = coalesce_for_replay(damage.repaint_regions());
         let mut report = SceneReport::default();
+        self.kind_times = RasterKindTimes::default();
         if regions.is_empty() {
             // Nothing changed. The buffer already holds the right picture and
             // the output already holds the right bytes — this is the case a
@@ -807,7 +884,9 @@ impl NativeRenderer {
                     report.skipped_commands += 1;
                     continue;
                 }
-                if let Err(error) = self.apply(command, &mut root, &mut stack, full, &mut report) {
+                if let Err(error) =
+                    self.apply_timed(command, &mut root, &mut stack, full, &mut report)
+                {
                     failure = Some(error);
                     break;
                 }
@@ -887,6 +966,41 @@ impl NativeRenderer {
         let (pixels, mut report) = self.render_to_pixels(&culled, width, height, base)?;
         report.skipped_commands += scene.len() - culled.len();
         Ok((pixels, report))
+    }
+
+    /// Time each command by kind, when asked: see [`RasterKindTimes`].
+    ///
+    /// Off by default. On, it costs two clock reads per command — about
+    /// 50 ns on a phone's vDSO, so a few hundred microseconds on a scene of
+    /// a few thousand commands.
+    pub fn profile_kinds(&mut self, on: bool) -> &mut Self {
+        self.kind_profile = on;
+        self.kind_times = RasterKindTimes::default();
+        self
+    }
+
+    /// The last frame's raster time by kind of command; `None` unless
+    /// [`profile_kinds`](Self::profile_kinds) is on.
+    #[must_use]
+    pub fn last_kind_times(&self) -> Option<RasterKindTimes> {
+        self.kind_profile.then_some(self.kind_times)
+    }
+
+    fn apply_timed(
+        &mut self,
+        command: &Command,
+        root: &mut Target,
+        stack: &mut Vec<LayerFrame>,
+        surface: Rect,
+        report: &mut SceneReport,
+    ) -> Result<(), RendererError> {
+        if !self.kind_profile {
+            return self.apply(command, root, stack, surface, report);
+        }
+        let started = std::time::Instant::now();
+        let result = self.apply(command, root, stack, surface, report);
+        *self.kind_times.slot(command) += started.elapsed();
+        result
     }
 
     fn apply(
@@ -2220,6 +2334,46 @@ mod tests {
 
     /// A guard set above the frame's filtered-layer count stays quiet and
     /// changes nothing — it is a ceiling, not a quota.
+    /// The kind profile is off unless asked for, and on it puts the time
+    /// where the work was: a frame of one big blurred layer spends its time
+    /// in the layer's composite (the blur runs at `PopLayer`), and its kinds
+    /// add up to no more than the walk took.
+    #[test]
+    fn raster_time_by_kind_is_opt_in_and_lands_on_the_kind_that_did_the_work() {
+        let content = Rect::new(0.0, 0.0, 400.0, 400.0);
+        let mut scene = Scene::new();
+        scene.push_filtered_layer(content, 1.0, BlendMode::Normal, ImageFilter::blur(12.0));
+        scene.fill_path(&Path::rect(content), Color::WHITE.into());
+        scene.pop_layer();
+
+        let mut renderer = NativeRenderer::new();
+        renderer
+            .render_in_place(&scene, 400, 400, Color::TRANSPARENT)
+            .expect("render");
+        assert_eq!(renderer.last_kind_times(), None, "off by default");
+
+        renderer.profile_kinds(true);
+        let started = std::time::Instant::now();
+        renderer
+            .render_in_place(&scene, 400, 400, Color::TRANSPARENT)
+            .expect("render");
+        let walk = started.elapsed();
+        let kinds = renderer.last_kind_times().expect("on");
+        assert!(kinds.composite > Duration::ZERO, "{kinds:?}");
+        assert!(
+            kinds.composite > kinds.paths,
+            "the blur is the work: {kinds:?}"
+        );
+        assert_eq!(kinds.text, Duration::ZERO);
+        assert!(kinds.total() <= walk, "{kinds:?} against {walk:?}");
+
+        // A second frame starts from zero rather than accumulating.
+        renderer
+            .render_in_place(&Scene::new(), 400, 400, Color::TRANSPARENT)
+            .expect("render");
+        assert_eq!(renderer.last_kind_times(), Some(RasterKindTimes::default()));
+    }
+
     #[test]
     fn a_guard_above_the_filtered_layer_count_stays_quiet() {
         let content = Rect::new(10.0, 10.0, 60.0, 40.0);

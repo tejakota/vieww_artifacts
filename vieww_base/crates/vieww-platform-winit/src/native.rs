@@ -107,7 +107,9 @@ use vieww_hal::vulkan::{
     GpuFrameTimings, GpuPassTimes, Redrawn, SceneRenderer, VulkanDevice, VulkanError,
     VulkanSwapchain,
 };
-use vieww_paint::native::{NativeRenderer as CpuRenderer, RendererError, SceneReport};
+use vieww_paint::native::{
+    NativeRenderer as CpuRenderer, RasterKindTimes, RendererError, SceneReport,
+};
 use vieww_paint::{Damage, Scene};
 use vieww_render_planner::{DeviceProfile, Executor, GpuKind, ShadowPlanner};
 
@@ -666,6 +668,11 @@ pub struct FrameStages {
     /// 31 ms presented to the window and 21 ms through Vulkan (2026-10-17),
     /// and a core or its clock is the remaining suspect.
     pub cpu_core: Option<u16>,
+    /// The CPU raster by kind of command — text, shadows, layer composites
+    /// and the rest ([`RasterKindTimes`]) — on a CPU frame, when
+    /// `VIEWW_RASTER_PROFILE=1` asked for it. Not a stage: it divides
+    /// [`cpu_raster`](Self::cpu_raster) rather than adding to it.
+    pub cpu_kinds: Option<RasterKindTimes>,
 }
 
 impl FrameStages {
@@ -914,7 +921,12 @@ impl NativeRenderer {
         Self::for_window(window.as_ref(), width, height)
     }
 
-    fn with_device(device: Option<Rc<VulkanDevice>>, cpu: CpuRenderer) -> Self {
+    fn with_device(device: Option<Rc<VulkanDevice>>, mut cpu: CpuRenderer) -> Self {
+        // Time the CPU raster by kind of command (`FrameStages::cpu_kinds`)
+        // when asked: two clock reads a command, so off unless measuring.
+        if std::env::var("VIEWW_RASTER_PROFILE").is_ok_and(|v| v == "1") {
+            cpu.profile_kinds(true);
+        }
         Self {
             device,
             cpu,
@@ -1230,6 +1242,7 @@ impl NativeRenderer {
 
         self.stages.cpu_raster = rasterising.elapsed() - self.stages.scale;
         self.stages.cpu_core = current_core();
+        self.stages.cpu_kinds = self.cpu.last_kind_times();
         self.present_last_cpu_frame(surface, (physical_width, physical_height), changed)?;
         Ok(report)
     }
@@ -1941,6 +1954,10 @@ mod tests {
             acquire: ms(9),
             present: ms(10),
             cpu_core: Some(3),
+            cpu_kinds: Some(RasterKindTimes {
+                text: ms(200),
+                ..RasterKindTimes::default()
+            }),
             // The GPU's own clock, overlapping `wait`: not part of the total.
             gpu_passes: Some(GpuPassTimes {
                 draw: ms(100),

@@ -378,7 +378,37 @@ impl FrameLog {
             present: at(|s| s.present),
             cpu_core: None,
             gpu_passes: self.gpu_pass_percentile(p),
+            cpu_kinds: self.cpu_kind_percentile(p),
         }
+    }
+
+    /// The `p`th percentile of each kind of CPU raster work
+    /// ([`vieww_paint::native::RasterKindTimes`]) over the recent frames that
+    /// measured it; `None` when none did. Per kind, as
+    /// [`gpu_pass_percentile`](Self::gpu_pass_percentile) is.
+    fn cpu_kind_percentile(&self, p: f64) -> Option<vieww_paint::native::RasterKindTimes> {
+        let measured: Vec<vieww_paint::native::RasterKindTimes> = self
+            .recent
+            .iter()
+            .filter_map(|frame| frame.stages.cpu_kinds)
+            .collect();
+        if measured.is_empty() {
+            return None;
+        }
+        let at = |pick: fn(&vieww_paint::native::RasterKindTimes) -> Duration| {
+            let mut values: Vec<Duration> = measured.iter().map(pick).collect();
+            values.sort_unstable();
+            percentile(&values, p)
+        };
+        Some(vieww_paint::native::RasterKindTimes {
+            rects: at(|t| t.rects),
+            paths: at(|t| t.paths),
+            text: at(|t| t.text),
+            images: at(|t| t.images),
+            shadows: at(|t| t.shadows),
+            layers: at(|t| t.layers),
+            composite: at(|t| t.composite),
+        })
     }
 
     /// The `p`th percentile of each kind of GPU work
