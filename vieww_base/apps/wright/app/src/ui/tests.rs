@@ -200,11 +200,54 @@ deliverable kind=\"message\" {{ check \"the hook got a hello\" }}\nmodels {{ tie
     assert!(!commit.is_empty());
     assert!(super::settings::save_project(&dir, ["mock-1".into(), String::new(), "mock-1".into(), String::new()], "5", "1").is_err(), "a day cannot allow less than one run");
 
+    // ── a conversation: something on screen at once, the reply as it comes,
+    //    and all of it kept for when the session is reopened ──
+    let fresh = temp("talk").canonicalize().unwrap();
+    let talk = super::session::Session::open(&ui.rt, fresh.clone(), 9_001);
+    talk.say("Every Monday, email me a summary of my sales folder".into());
+    assert!(talk.pending.get().is_some(), "the moment you send, the screen says something is happening");
+    assert!(talk.interviewing.get());
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while talk.confirm.get().is_none() && Instant::now() < deadline {
+        talk.pump();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(talk.confirm.get().is_some(), "the interview reached its summary");
+    assert!(talk.pending.get().is_none(), "waiting for you is not 'working'");
+    talk.answer_confirm(true);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while talk.plan.get().is_none() && Instant::now() < deadline {
+        talk.pump();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let plan = talk.plan.get().expect("the plan was written");
+    assert!(!talk.interviewing.get() && talk.pending.get().is_none());
+    let said = talk.chat.get();
+    assert!(said.len() >= 2 && said[0].0 && !said[1].0, "{said:?}");
+    let again = super::session::Session::open(&ui.rt, fresh.clone(), 9_002);
+    assert_eq!(again.chat.get(), said, "the conversation comes back with the session");
+    assert_eq!(again.drafted.get(), said.len(), "and knows which part drafted the plan");
+    let card = super::session::saved_summary(&fresh);
+    assert_eq!((card.title, card.messages), (plan.name.clone(), said.len()));
+    assert!(card.last.is_some());
+    // Its card on Home, among the saved.
+    ui.saved.set(vec![fresh.clone()]);
+    ui.go(0);
+    for _ in 0..90 {
+        ui.pump(&mut driver);
+        draw(&mut driver);
+    }
+    let (png, _) = NativeRenderer::new().render_to_png(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+    let out = std::env::var("WRIGHT_UI_SHOTS").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
+    std::fs::write(out.join("home-saved.png"), png).unwrap();
+    ui.saved.set(Vec::new());
+    ui.go(1);
+
     // ── every screen renders ──
     let shots = temp("shots");
     let n = shell::snapshots(Some(&dir), &shots).unwrap();
     assert!(n >= 6);
-    for f in ["1-splash", "2-home", "3-session", "4-engine", "5-overview", "6-settings", "6-settings-download", "7-light", "8-export"] {
+    for f in ["1-splash", "2-home", "3-session", "4-engine", "5-overview", "6-settings", "6-settings-download", "6-settings-agents", "7-light", "8-export", "9-thinking"] {
         assert!(shots.join(format!("{f}.png")).exists(), "{f}");
     }
     let icon = shots.join("icon.png");
@@ -298,4 +341,29 @@ fn scroll_frame_cost() {
         }
         eprintln!("dpr {dpr}: {:5.1} ms/frame repaint, {:3.0}% of the window damaged per scroll step", paint.as_secs_f64() * 1e3 / 30.0, area * 100.0 / 30.0);
     }
+}
+
+/// A two-finger pinch on a trackpad: fingers together shows every session,
+/// apart goes back; a small twitch does nothing, and one pinch moves once.
+#[test]
+fn pinching_opens_and_closes_the_overview() {
+    use vieww_platform_winit::{Pinch, PinchPhase};
+    let mut driver = FrameDriver::new(Size::new(1280.0, 800.0));
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    ui.splash.set(false);
+    let pinch = |delta: f32, phase| ui.on_pinch(Pinch { delta, phase });
+    assert!(!pinch(0.0, PinchPhase::Started));
+    assert!(!pinch(-0.05, PinchPhase::Moved), "a twitch is not a pinch");
+    assert!(!ui.overview.get());
+    assert!(pinch(-0.1, PinchPhase::Moved));
+    assert!(ui.overview.get(), "fingers together: the overview");
+    assert!(!pinch(-0.3, PinchPhase::Moved) && !pinch(0.4, PinchPhase::Moved), "one pinch, one move");
+    assert!(ui.overview.get());
+    pinch(0.0, PinchPhase::Ended);
+    assert!(pinch(0.2, PinchPhase::Moved), "Ctrl + wheel (Windows) has no Started; a new pinch counts");
+    assert!(!ui.overview.get(), "fingers apart: back");
+    ui.help.set(true);
+    pinch(0.0, PinchPhase::Ended);
+    assert!(!pinch(-0.5, PinchPhase::Moved), "not while a panel is open");
 }

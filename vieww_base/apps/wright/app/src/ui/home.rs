@@ -84,14 +84,21 @@ pub fn home(ui: &Ui) -> WidgetNode {
             para("Describe the outcome in your own words. Wright drafts a plan, shows what it will touch and what it costs, and runs nothing until you approve.", 16.0, p.muted),
             composer(&ui, &ui.home, send, "Every Monday, read the CSVs in my sales folder and email me a one-page summary", true),
             row(10.0, starters),
+            {
+                let u = ui.clone();
+                row(6.0, vec![
+                    t(format!("Built in: {} agents of Wright's own and {} tools a plan can hand out.", wright_agents::WORKFORCE.len(), wright_core::palette::PALETTE.len()), 12.5, p.muted),
+                    button(&p, "See agents & tools", Look::Quiet, true, move || u.open_agents_and_tools()),
+                ])
+            },
         ];
         if !cards.is_empty() {
-            items.push(row(10.0, vec![b("SESSIONS", 11.5, p.muted), t("Swipe sideways with two fingers to move between them", 12.5, p.muted)]));
+            items.push(row(10.0, vec![b("SESSIONS", 11.5, p.muted), t("Swipe sideways with two fingers to move between them; pinch to see them all", 12.5, p.muted)]));
             items.push(wrap_rows(cards, 2));
         }
         let saved = ui.saved.get();
         if !saved.is_empty() {
-            items.push(row(10.0, vec![b("SAVED", 11.5, p.muted), t("Closed sessions keep their history and schedules. Open one to bring it back.", 12.5, p.muted)]));
+            items.push(row(10.0, vec![b("SAVED", 11.5, p.muted), t("Closed sessions keep their conversation, plan, history and schedules. Open one to pick up where you left off.", 12.5, p.muted)]));
             items.push(saved_shelf(&ui, &saved));
         }
         stretch(18.0, items)
@@ -113,11 +120,46 @@ fn wrap_rows(items: Vec<WidgetNode>, per: usize) -> WidgetNode {
 /// Saved sessions as chips: tap to reopen.
 pub fn saved_shelf(ui: &Ui, saved: &[std::path::PathBuf]) -> WidgetNode {
     let p = ui.pal();
-    let chips: Vec<WidgetNode> = saved
+    let cards: Vec<WidgetNode> = saved
         .iter()
         .take(8)
         .map(|path| {
-            let name = path.file_name().map(|n| n.to_string_lossy().replace('-', " ")).unwrap_or_default();
+            let sum = super::session::saved_summary(path);
+            let (u, path) = (ui.clone(), path.clone());
+            Pressable::sensed(move |st: Sense| {
+                let mut rows = vec![row(6.0, vec![Glyph::Restore.draw(14.0, p.accent_ink), grow(line(sum.title.clone(), 14.0, p.ink))])];
+                match &sum.last {
+                    Some(last) => {
+                        rows.push(line(last.clone(), 12.5, p.muted));
+                        rows.push(t(format!("{} message{} · open to continue", sum.messages, if sum.messages == 1 { "" } else { "s" }), 11.5, p.muted));
+                    }
+                    None => rows.push(t("No conversation kept · open to continue", 12.0, p.muted)),
+                }
+                Container::new()
+                    .width(330.0)
+                    .color(p.surface.lerp(p.surface2, st.hover))
+                    .radius(corner::CARD)
+                    .border(Border::new(if st.hover > 0.0 { p.line_strong } else { p.line }, 1.0))
+                    .padding(EdgeInsets::all(14.0))
+                    .child(stretch(5.0, rows))
+                    .into()
+            })
+            .on_tap(move || u.reopen(&path))
+            .into()
+        })
+        .collect();
+    wrap_rows(cards, 2)
+}
+
+/// The same, small: one chip per saved session (for the overview, where
+/// the sessions themselves take the room).
+pub fn saved_chips(ui: &Ui, saved: &[std::path::PathBuf]) -> WidgetNode {
+    let p = ui.pal();
+    let chips: Vec<WidgetNode> = saved
+        .iter()
+        .take(6)
+        .map(|path| {
+            let name = super::session::saved_summary(path).title;
             let (u, path) = (ui.clone(), path.clone());
             Pressable::sensed(move |s: Sense| {
                 Container::new()
@@ -132,7 +174,7 @@ pub fn saved_shelf(ui: &Ui, saved: &[std::path::PathBuf]) -> WidgetNode {
             .into()
         })
         .collect();
-    wrap_rows(chips, 4)
+    row(8.0, chips)
 }
 
 /// The page past the last session: start something new.

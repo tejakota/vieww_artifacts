@@ -68,13 +68,19 @@ fn body(ui: &Ui, s: &Session) -> WidgetNode {
         ])),
     }
 
-    // Drafting: the interview's questions and answers, then its summary.
+    // Drafting: the interview's questions and answers (kept, so a session
+    // reopened from Saved shows how its plan came about), then its summary.
+    let drafted = if plan.is_none() { chat.len() } else { s.drafted.get().min(chat.len()) };
+    let skip_request = usize::from(chat.first().is_some_and(|(u, t)| *u && Some(t) == request.as_ref()));
+    for (user, text) in chat[..drafted].iter().skip(skip_request) {
+        items.push(if *user { bubble(&p, text) } else { para(text.clone(), 15.0, p.ink) });
+    }
     if plan.is_none() {
-        for (user, text) in chat.iter().skip(if request.is_some() { 1 } else { 0 }) {
-            items.push(if *user { bubble(&p, text) } else { para(text.clone(), 15.0, p.ink) });
-        }
         if let Some(lines) = s.confirm.get() {
             items.push(confirm_card(&p, s, &lines));
+        }
+        if let Some(live) = pending(ui, s) {
+            items.push(live);
         }
     }
 
@@ -96,11 +102,14 @@ fn body(ui: &Ui, s: &Session) -> WidgetNode {
     }
     // After a plan exists, the conversation is about changes.
     if plan.is_some() {
-        for (user, text) in chat.iter() {
+        for (user, text) in chat[drafted..].iter() {
             items.push(if *user { bubble(&p, text) } else { para(text.clone(), 15.0, p.ink) });
         }
         if let Some(lines) = s.confirm.get() {
             items.push(confirm_card(&p, s, &lines));
+        }
+        if let Some(live) = pending(ui, s) {
+            items.push(live);
         }
     }
     let notice = s.notice.get();
@@ -108,6 +117,32 @@ fn body(ui: &Ui, s: &Session) -> WidgetNode {
         items.push(t(notice, 13.0, p.wait));
     }
     stretch(16.0, items)
+}
+
+/// A reply on its way: the words so far, and under them a spinner with
+/// what Wright is doing and for how long — so the screen is never still
+/// while something is happening.
+fn pending(ui: &Ui, s: &Session) -> Option<WidgetNode> {
+    let now = s.pending.get()?;
+    let mut rows: Vec<WidgetNode> = Vec::new();
+    if !now.text.trim().is_empty() {
+        rows.push(para(now.text.clone(), 15.0, ui.pal().ink));
+    }
+    let status: WidgetNode = {
+        let (u, since, what) = (ui.clone(), now.since, now.what.clone());
+        Live::new("reply-status", move || {
+            let p = u.pal();
+            let secs = since.elapsed().as_secs();
+            let mut parts = vec![Glyph::spinner(16.0, p.accent_ink, u.clock.get()), t(format!("{what}…"), 13.0, p.muted)];
+            if secs >= 2 {
+                parts.push(t(format!("{secs}s"), 12.0, p.muted));
+            }
+            row(8.0, parts)
+        })
+        .into()
+    };
+    rows.push(status);
+    Some(column(8.0, rows))
 }
 
 fn bubble(p: &Pal, text: &str) -> WidgetNode {
@@ -177,6 +212,10 @@ fn plan_card(ui: &Ui, p: &Pal, s: &Session, pl: &super::session::PlanView) -> Wi
         button(p, "Change something", Look::Secondary, true, move || change.composer.prompt.set(TextEditingValue::new(""))),
         gap(),
         button(p, "See the agents", Look::Quiet, true, move || engine.set_engine(EngineView::Open)),
+        button(p, "Agents & tools", Look::Quiet, true, {
+            let u = ui.clone();
+            move || u.open_agents_and_tools()
+        }),
     ]));
     card(p, stretch(12.0, items))
 }

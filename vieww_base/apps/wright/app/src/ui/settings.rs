@@ -32,6 +32,7 @@ use super::Ui;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Models,
+    AgentsTools,
     Defaults,
     Appearance,
     Workspace,
@@ -39,10 +40,11 @@ pub enum Tab {
 }
 
 impl Tab {
-    const ALL: [Tab; 5] = [Tab::Models, Tab::Defaults, Tab::Appearance, Tab::Workspace, Tab::Project];
+    const ALL: [Tab; 6] = [Tab::Models, Tab::AgentsTools, Tab::Defaults, Tab::Appearance, Tab::Workspace, Tab::Project];
     fn label(self) -> &'static str {
         match self {
             Tab::Models => "Models & keys",
+            Tab::AgentsTools => "Agents & tools",
             Tab::Defaults => "Defaults",
             Tab::Appearance => "Appearance",
             Tab::Workspace => "Workspace",
@@ -236,6 +238,7 @@ pub fn page(ui: &Ui) -> WidgetNode {
             .collect();
         let body = match tab {
             Tab::Models => models(&ui, &p),
+            Tab::AgentsTools => agents_and_tools(&ui, &p),
             Tab::Defaults => defaults(&ui, &p),
             Tab::Appearance => appearance(&ui, &p),
             Tab::Workspace => workspace(&ui, &p),
@@ -486,6 +489,67 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
         }),
         t("Local addresses need no key; anything else gets a keychain entry to fill in.", 12.0, p.muted),
     ]));
+    stretch(12.0, rows)
+}
+
+/// What Wright works with, out of the box: its own agents (the workforce
+/// that drafts, builds, checks and explains every project) and the tools a
+/// plan can hand to an agent. Nothing to install or set up; this page is
+/// for knowing what is there.
+fn agents_and_tools(ui: &Ui, p: &Pal) -> WidgetNode {
+    use wright_core::palette::{Capability, Effect, PALETTE};
+    let mut rows = vec![section(
+        p,
+        "Wright's own agents",
+        "Built in, always there. You never write these: Wright brings each one in when a plan needs it, and every one follows a fixed contract. The agents of your own project are the ones your plan names; they appear on the plan card and in the Engine view (hold Space).",
+    )];
+    for a in wright_agents::WORKFORCE {
+        rows.push(card(p, column(4.0, vec![
+            row(8.0, vec![b(a.name, 14.0, p.ink), gap(), pill(format!("joins at {}", a.injected_by), p.muted, p.surface2)]),
+            para(a.duty, 13.0, p.muted),
+        ])));
+    }
+    rows.push(divider(p));
+    rows.push(section(
+        p,
+        "Tools",
+        "What an agent can be given. A plan grants each agent only the tools it needs, inside the project folder; anything that reaches outside this machine stops and asks you first.",
+    ));
+    for tool in PALETTE {
+        let (effect, fg, bg) = match tool.effect {
+            Effect::None => ("only reads", p.good, p.good_soft),
+            Effect::Workspace => ("changes the project (undoable)", p.accent_ink, p.accent_soft),
+            Effect::World => ("touches the world · asks first", p.wait, p.wait_soft),
+        };
+        let needs: Vec<&str> = tool
+            .caps
+            .iter()
+            .map(|c| match c {
+                Capability::ReadFiles => "read files",
+                Capability::WriteFiles => "write files",
+                Capability::Network => "network",
+                Capability::Shell => "shell",
+                Capability::Spawn => "run programs",
+            })
+            .collect();
+        let mut head = vec![b(tool.name, 13.5, p.ink), pill(effect, fg, bg)];
+        if !tool.implemented {
+            head.push(pill("not yet", p.bad, p.surface2));
+        }
+        let mut lines = vec![row(8.0, head), para(tool.summary, 12.5, p.muted)];
+        if !needs.is_empty() {
+            lines.push(t(format!("Needs: {}", needs.join(", ")), 11.5, p.muted));
+        }
+        rows.push(column(4.0, lines));
+    }
+    if let Some(plan) = ui.current_session().and_then(|s| s.plan.get()) {
+        rows.push(divider(p));
+        rows.push(section(p, &format!("In this project: {}", plan.name), "The agents this plan names, and the tools each one was given."));
+        for c in plan.cards() {
+            let tools = if c.tools.is_empty() { "no tools".to_string() } else { c.tools.join(", ") };
+            rows.push(column(3.0, vec![row(8.0, vec![b(c.name.clone(), 13.5, p.ink), pill(c.role, p.muted, p.surface2)]), t(format!("{} · {tools}", c.model), 12.0, p.muted)]));
+        }
+    }
     stretch(12.0, rows)
 }
 

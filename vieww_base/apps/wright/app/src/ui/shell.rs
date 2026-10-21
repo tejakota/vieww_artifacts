@@ -323,7 +323,7 @@ fn track(ui: &Ui, pages: &[WidgetNode], w: f32, h: f32, o: f32, x: f32) -> Widge
     }
     let saved = ui.saved.get();
     if !saved.is_empty() {
-        let shelf = row(12.0, vec![b("SAVED", 11.0, p.muted), home::saved_shelf(ui, &saved)]);
+        let shelf = row(12.0, vec![b("SAVED", 11.0, p.muted), home::saved_chips(ui, &saved)]);
         layers.push(at(0.0, h - 70.0, w, 60.0, fade(phase(o, 0.6, 1.0), Center::new().child(shelf))));
     }
     layers.push(at(0.0, 18.0, w, 24.0, fade(phase(o, 0.6, 1.0), Center::new().child(t("Click a session to open it · × closes it into Saved · Esc goes back", 12.5, p.muted)))));
@@ -411,18 +411,21 @@ fn overlays(ui: &Ui) -> WidgetNode {
 fn help(ui: &Ui, p: &Pal) -> WidgetNode {
     let close = ui.help.clone();
     let replay = ui.clone();
+    let list = ui.clone();
     let entry = |k: &str, v: &str| -> WidgetNode { row(14.0, vec![SizedBox::width(150.0).child(b(k.to_string(), 13.5, p.ink)).into(), grow(para(v.to_string(), 13.5, p.muted))]) };
     card(p, stretch(12.0, vec![
         b("Gestures and shortcuts", 18.0, p.ink),
         entry("Two-finger swipe", "Next or previous session. Arrow keys too."),
         entry("Swipe past the last", "Start a new session."),
-        entry("All sessions (O)", "Every session side by side. × closes one into Saved."),
+        entry("Pinch (or O)", "Fingers together: every session side by side. Apart: back to the one you were on. × closes one into Saved."),
         entry("Hold Space", "Peek at the live agents and tools. E keeps them open."),
         entry("Drag an approval", "Right allows, left refuses. The buttons do the same."),
         entry("+ in the composer", "Attach files or a folder, or drop them on the window."),
         entry("Ctrl/Cmd + Shift + T", "Reopen the last closed session."),
         entry("Ctrl/Cmd + ,", "Settings. Esc backs out of anything."),
+        entry("Agents & tools", "Wright's built-in agents and every tool a plan can grant, in Settings."),
         row(10.0, vec![
+            button(p, "Agents & tools", Look::Secondary, true, move || list.open_agents_and_tools()),
             button(p, "Replay the opening", Look::Secondary, true, move || {
                 replay.help.set(false);
                 replay.splash.set(true);
@@ -497,6 +500,9 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     ui.form.pulls.set([(wright_runtime::local::TEXT_MODEL.to_string(), super::settings::Pull::Working { line: "Downloading the built-in model qwen3-1.7b (first use, once): 42% of 1.83 GB".into(), percent: 42 })].into_iter().collect());
     shot(&mut driver, "6-settings-download", 200)?;
     ui.form.pulls.set(Default::default());
+    ui.open_agents_and_tools();
+    shot(&mut driver, "6-settings-agents", 400)?;
+    ui.form.tab.set(super::settings::Tab::Models);
     ui.settings.set(false);
     ui.mode.set(Mode::Light);
     shot(&mut driver, "7-light", 600)?;
@@ -508,7 +514,16 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
         s.scroll.to_end();
         shot(&mut driver, "8-export", 600)?;
         s.export_menu.set(false);
-        n += 1;
+        // A reply on its way: the words so far and what Wright is doing.
+        s.pending.set(Some(super::session::Pending {
+            what: "Drafting the plan".into(),
+            text: "Got it: a weekly summary of the sales folder. I'll draft a plan with one reader and one writer".into(),
+            since: std::time::Instant::now() - std::time::Duration::from_secs(7),
+        }));
+        s.scroll.to_end();
+        shot(&mut driver, "9-thinking", 600)?;
+        s.pending.set(None);
+        n += 3;
     }
     match vieww::render::overflow::reported() {
         0 => Ok(n),

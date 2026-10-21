@@ -32,6 +32,19 @@ pub trait InterviewIo {
     fn ask(&mut self) -> Option<String>;
     /// Show the Confirm Gate summary; true = confirmed.
     fn confirm(&mut self, lines: &[Line]) -> bool;
+    /// What the Interviewer is doing while you wait ("Thinking", "Checking
+    /// the draft plan", a first-use model download). Shown until the next
+    /// `say`; nothing by default.
+    fn working(&mut self, _what: &str) {}
+    /// The Interviewer's words so far, while it is still writing them (the
+    /// whole text each time, not the new part). Nothing by default.
+    fn partial(&mut self, _so_far: &str) {}
+    /// The conversation so far, when this interview picks one up (a session
+    /// reopened from Saved): `(you, text)`, oldest first. The next `ask` is
+    /// what comes after it.
+    fn earlier(&mut self) -> Vec<(bool, String)> {
+        Vec::new()
+    }
 }
 
 const FORMAT_REFERENCE: &str = r#"
@@ -108,6 +121,30 @@ fn interview_endpoint<'c>(config: &'c Config, io: &mut dyn InterviewIo) -> Resul
     }
 }
 
+/// The messages to start from: an earlier conversation (if any), then
+/// `next` from you. Turns alternate and start with you, so neighbours from
+/// the same side are joined and a conversation that opened with Wright gets
+/// a short note in front.
+fn resumed(earlier: &[(bool, String)], next: String) -> Vec<Message> {
+    let mut turns: Vec<(bool, String)> = Vec::new();
+    for (you, text) in earlier.iter().map(|(y, t)| (*y, t.trim())).filter(|(_, t)| !t.is_empty()).chain([(true, next.trim())]) {
+        match turns.last_mut() {
+            Some((side, joined)) if *side == you => {
+                joined.push_str("\n\n");
+                joined.push_str(text);
+            }
+            _ => turns.push((you, text.to_string())),
+        }
+    }
+    if turns.first().is_some_and(|(you, _)| !you) {
+        turns.insert(0, (true, "(We are picking up an earlier conversation.)".into()));
+    }
+    turns
+        .into_iter()
+        .map(|(you, text)| if you { Message::user_text(text) } else { Message { role: Role::Assistant, blocks: vec![Block::Text(text)] } })
+        .collect()
+}
+
 /// Run the interview. On confirmation, writes `blueprint.kdl` into
 /// `project_dir` (and commits it to the store) and returns it.
 pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) -> Result<Option<Blueprint>, String> {
@@ -115,6 +152,7 @@ pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) 
     let client = entry.client();
     let net = NetConfig::from_env();
 
+    let earlier = io.earlier();
     let first = match io.ask() {
         Some(t) if !t.trim().is_empty() => t,
         _ => return Ok(None),
@@ -122,12 +160,27 @@ pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) 
     let mut req = CompletionRequest::new(model.clone());
     req.system = system_prompt(&model);
     req.tools = vec![propose_tool()];
-    req.messages.push(Message::user_text(first));
+    req.messages = resumed(&earlier, first);
 
     let mut proposal: Option<Blueprint> = None;
     for _turn in 0..40 {
         let ep = [Endpoint { model: model.clone(), provider: client.as_ref(), api_key: key.as_ref().map(|k| k.expose().to_string()) }];
-        let resp = models::call(&ep, &req, &net, 3, &mut |_| {}, &mut |_| {})?;
+        io.working("Thinking");
+        let mut so_far = String::new();
+        let resp = {
+            let io = &mut *io;
+            let mut on_delta = |d: &models::Delta| match d {
+                models::Delta::Text(t) => {
+                    so_far.push_str(t);
+                    io.partial(so_far.trim_start());
+                }
+                models::Delta::ToolStarted(name) if name == "propose_blueprint" => io.working("Drafting the plan"),
+                models::Delta::ToolStarted(_) => {}
+                models::Delta::Status(s) => io.working(s),
+            };
+            let mut on_retry = |_: &str| {};
+            models::call(&ep, &req, &net, 3, &mut on_delta, &mut on_retry)?
+        };
         req.messages.push(Message { role: Role::Assistant, blocks: resp.blocks.clone() });
         let text = resp.text();
         if !text.trim().is_empty() {
@@ -140,6 +193,7 @@ pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) 
                 let content = if name != "propose_blueprint" {
                     format!("Unknown tool '{name}'. Use propose_blueprint.")
                 } else {
+                    io.working("Checking the draft plan");
                     match check_proposal(input.str_of("kdl").unwrap_or("")) {
                         Ok(bp) => {
                             proposal = Some(bp);
@@ -230,6 +284,19 @@ mod tests {
         let err = check_proposal(bad).unwrap_err();
         assert!(err.contains("not allowed to use the network"), "{err}");
         assert!(check_proposal("garbage {").unwrap_err().contains("parse"));
+    }
+
+    #[test]
+    fn an_earlier_conversation_is_picked_up_in_turns() {
+        let roles = |m: &[Message]| m.iter().map(|m| m.role == Role::User).collect::<Vec<_>>();
+        // Fresh: just the message.
+        let m = resumed(&[], "make a digest".into());
+        assert_eq!((roles(&m), m[0].blocks.clone()), (vec![true], vec![Block::Text("make a digest".into())]));
+        // Wright spoke first (a fallback note), you twice in a row, blanks dropped.
+        let earlier = vec![(false, "(using the built-in model)".to_string()), (true, "a digest".into()), (false, "Of what?".into()), (true, "my sales folder".into()), (true, "  ".into())];
+        let m = resumed(&earlier, "weekly".into());
+        assert_eq!(roles(&m), vec![true, false, true, false, true]);
+        assert_eq!(m[4].blocks, vec![Block::Text("my sales folder\n\nweekly".into())]);
     }
 
     #[test]

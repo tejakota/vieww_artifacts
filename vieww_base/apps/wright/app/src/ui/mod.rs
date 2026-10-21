@@ -104,6 +104,9 @@ struct Inner {
     pages: RefCell<(Vec<PathBuf>, Vec<WidgetNode>)>,
     /// The focused object last frame (to notice focus moving).
     last_focus: Cell<Option<vieww::RenderId>>,
+    /// A pinch in progress: how far the fingers have moved in total, when
+    /// they last moved, and whether it has already done its one thing.
+    pinch: Cell<(f32, Option<Instant>, bool)>,
 }
 
 /// Everything the shell reads. Signals: reading one in a build subscribes
@@ -206,6 +209,7 @@ impl Ui {
                 live,
                 pages: RefCell::new((Vec::new(), Vec::new())),
                 last_focus: Cell::new(None),
+                pinch: Cell::new((0.0, None, false)),
             }),
         };
         ui.persist();
@@ -318,6 +322,14 @@ impl Ui {
         self.form.reload(self.current_session().map(|s| (*s.project).clone()).as_deref());
         self.form.message.set(String::new());
         self.settings.set(true);
+    }
+
+    /// Settings, on the page that lists Wright's agents and tools.
+    pub fn open_agents_and_tools(&self) {
+        self.help.set(false);
+        self.open_settings();
+        self.form.tab.set(settings::Tab::AgentsTools);
+        self.form.scroll.offset.set(0.0);
     }
 
     fn say(&self, text: impl Into<String>, undo: Option<PathBuf>) {
@@ -433,6 +445,37 @@ impl Ui {
         if d.abs() > 0.3 * w {
             self.commit_swipe();
         }
+    }
+
+    /// A trackpad pinch: fingers together shows every session (the
+    /// overview), apart again goes back to the one you were on. One pinch
+    /// does one thing; a pause or lifting the fingers starts the next.
+    pub fn on_pinch(&self, p: vieww_platform_winit::Pinch) -> bool {
+        use vieww_platform_winit::PinchPhase;
+        /// How far the fingers move before it counts: a deliberate pinch,
+        /// not a palm resting on the pad.
+        const ENOUGH: f32 = 0.12;
+        if self.settings.get() || self.help.get() || self.splash.get() {
+            return false;
+        }
+        let now = Instant::now();
+        let (mut total, last, mut done) = self.inner.pinch.get();
+        if p.phase == PinchPhase::Started || last.is_none_or(|t| now.duration_since(t) > Duration::from_millis(350)) {
+            (total, done) = (0.0, false);
+        }
+        total += p.delta;
+        let mut changed = false;
+        if !done {
+            if total <= -ENOUGH && !self.overview.get() {
+                self.set_overview(true);
+                (done, changed) = (true, true);
+            } else if total >= ENOUGH && self.overview.get() {
+                self.set_overview(false);
+                (done, changed) = (true, true);
+            }
+        }
+        self.inner.pinch.set(if p.phase == PinchPhase::Ended { (0.0, None, false) } else { (total, Some(now), done) });
+        changed
     }
 
     fn commit_swipe(&self) {
@@ -566,7 +609,7 @@ impl Ui {
         if let Some((_, rec)) = self.inner.recording.borrow().as_ref() {
             self.mic_level.set(rec.level());
         }
-        let busy = self.sessions.get().iter().any(|s| s.running.get() || s.exporting.get().is_some() || s.status().1 == session::Tone::Live);
+        let busy = self.sessions.get().iter().any(|s| s.running.get() || s.exporting.get().is_some() || s.pending.get().is_some() || s.status().1 == session::Tone::Live);
         let live = busy
             || self.splash.get()
             || self.dragging.get()
@@ -745,7 +788,9 @@ fn window(project: Option<PathBuf>) -> i32 {
     }
     let ui: Rc<RefCell<Option<Ui>>> = Rc::new(RefCell::new(None));
     let for_hook = Rc::clone(&ui);
+    let for_pinch = Rc::clone(&ui);
     let result = app
+        .on_pinch(move |p| for_pinch.borrow().as_ref().is_some_and(|u| u.on_pinch(p)))
         .before_frame(move |driver| {
             if let Some(u) = for_hook.borrow().as_ref() {
                 u.pump(driver);

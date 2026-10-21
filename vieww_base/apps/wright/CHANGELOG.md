@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.2 — 2026-10-21 — a livelier conversation
+
+- **You can see a reply being written.** The moment you send, the thread
+  shows a spinner and what Wright is doing ("Reading your message",
+  "Thinking", "Drafting the plan", "Checking the draft plan", or a model
+  download line), with a seconds counter. The reply then appears word by
+  word as the model streams it, and the page follows it down. Before this,
+  the screen did not change until the whole answer had arrived.
+- **Saved sessions keep their conversation.** Every message is written as it
+  happens to `conversation.jsonl` in the project's store (beside its run
+  history, outside the project folder). A session reopened from Saved, or
+  after a restart, shows the whole conversation: the part that drafted the
+  plan above the plan, and the changes you asked for below it. If you type
+  in a session whose interview had ended, the interviewer starts from that
+  conversation instead of from scratch. Saved cards on Home now show the
+  plan's name, the last message and how many messages there are. The
+  overview shows smaller chips.
+- **Agents & tools page** (Settings → Agents & tools; also on Home, in Help
+  and on the plan card). It lists Wright's nine built-in agents (Interviewer,
+  Architect, Shipwright, Testwright, Logwright, Reviewer, Firewright,
+  Operator, Explainer), with what each does and when it joins. It lists
+  every tool a plan can grant, with what the tool may touch (only reads /
+  changes the project / touches the world and asks first) and the
+  permissions it needs. With a project open, it also lists that plan's own
+  agents and the tools each was given.
+- **Pinch to see every session.** On a trackpad, pinch with two fingers
+  together to open the overview and apart to go back. This works on macOS
+  (the native gesture) and on Windows (where a touchpad pinch arrives as
+  Ctrl + wheel). vieww's desktop layer gained `App::on_pinch` for this. One
+  pinch moves the view once, and a small twitch does nothing. The `O` key
+  still works.
+
 ## 0.5.1 — 2026-10-21 — smooth scrolling
 
 - **Scrolled text no longer looks wavy.** vieww's `Scrollable` now moves

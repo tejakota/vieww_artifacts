@@ -6,7 +6,7 @@
 //! [`Session::pump`], which drains it into signals, and the app's waker
 //! makes an idle window draw when something arrives.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -264,6 +264,89 @@ fn last_run(project: &Path) -> Option<RunId> {
     Store::open(project).ok()?.runs().last().copied()
 }
 
+// ── the conversation, kept ───────────────────────────────────────
+
+/// Where a session's conversation is kept: beside its run history, in the
+/// project's store (outside the project folder, like everything else Wright
+/// remembers about it), one JSON line per message:
+/// `{"you":true,"text":"..."}`. Appended as messages arrive, so a crash or a
+/// close loses nothing, and read back when the session opens — from Saved,
+/// or at the next launch.
+fn conversation_file(project: &Path) -> Option<PathBuf> {
+    Store::open(project).ok().map(|s| s.root().join("conversation.jsonl"))
+}
+
+/// The conversation, and how many of its messages came before the plan
+/// was written (a `{"plan":true}` line marks the moment): those drafted
+/// the plan, the rest asked for changes to it.
+pub fn load_conversation(project: &Path) -> (Vec<(bool, String)>, usize) {
+    let Some(text) = conversation_file(project).and_then(|f| std::fs::read_to_string(f).ok()) else { return (Vec::new(), 0) };
+    let (mut chat, mut drafted) = (Vec::new(), None);
+    for v in text.lines().filter_map(|l| json::parse(l).ok()) {
+        if v.get("plan").and_then(|p| p.as_bool()) == Some(true) {
+            drafted.get_or_insert(chat.len());
+        } else if let (Some(you), Some(text)) = (v.get("you").and_then(|y| y.as_bool()), v.str_of("text")) {
+            chat.push((you, text.to_string()));
+        }
+    }
+    let drafted = drafted.unwrap_or(chat.len());
+    (chat, drafted)
+}
+
+/// What a saved (closed) session is, for its card: a title (the plan's
+/// name, else what was asked, else the folder), the last message, and how
+/// many there are.
+pub struct SavedSummary {
+    pub title: String,
+    pub last: Option<String>,
+    pub messages: usize,
+}
+
+pub fn saved_summary(project: &Path) -> SavedSummary {
+    let (chat, _) = load_conversation(project);
+    let one_line = |s: &str, n: usize| {
+        let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+        if s.chars().count() > n { format!("{}…", s.chars().take(n - 1).collect::<String>().trim_end()) } else { s }
+    };
+    let folder = project.file_name().map(|n| n.to_string_lossy().replace('-', " ")).unwrap_or_default();
+    let title = load_plan(project)
+        .map(|p| p.name)
+        .filter(|n| !n.is_empty())
+        .or_else(|| chat.iter().find(|(you, _)| *you).map(|(_, t)| one_line(t, 48)))
+        .unwrap_or(folder);
+    let last = chat.last().map(|(you, t)| if *you { format!("You: {}", one_line(t, 90)) } else { one_line(t, 96) });
+    SavedSummary { title, last, messages: chat.len() }
+}
+
+fn mark_plan_written(project: &Path) {
+    use std::io::Write as _;
+    if let Some(Ok(mut f)) = conversation_file(project).map(|p| std::fs::OpenOptions::new().create(true).append(true).open(p)) {
+        let _ = writeln!(f, "{{\"plan\":true}}");
+    }
+}
+
+fn keep_conversation(project: &Path, messages: &[(bool, String)]) {
+    use std::io::Write as _;
+    let Some(path) = conversation_file(project) else { return };
+    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) else { return };
+    for (you, text) in messages {
+        let line = json::to_string(&json::Value::obj(vec![("you", json::Value::Bool(*you)), ("text", json::Value::str(text.clone()))]));
+        let _ = writeln!(f, "{line}");
+    }
+}
+
+/// While a reply is on its way: what Wright is doing and what it has
+/// written so far.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pending {
+    /// "Thinking", "Drafting the plan", "Checking the draft plan", a
+    /// download line…
+    pub what: String,
+    /// The reply as it streams in (empty until the first words).
+    pub text: String,
+    pub since: Instant,
+}
+
 // ── the worker bridge ────────────────────────────────────────────
 
 /// The worker-thread side of a session.
@@ -276,6 +359,9 @@ pub struct Shared {
     interview_done: Mutex<Option<Result<bool, String>>>,
     exported: Mutex<Option<Result<Exported, String>>>,
     to_interview: Mutex<Option<Sender<Reply>>>,
+    /// What the interview is doing and its words so far (`working`,
+    /// `partial`); `None` once it is waiting for you again.
+    live: Mutex<Option<Option<(String, String)>>>,
 }
 
 enum Reply {
@@ -304,21 +390,53 @@ impl WakeHandle {
 
 /// Interview I/O over channels: the worker blocks, the UI answers.
 struct ChannelIo {
+    earlier: Vec<(bool, String)>,
+    /// What is on screen while it works: (doing, written so far).
+    now: (String, String),
     first: Option<String>,
     rx: Receiver<Reply>,
     shared: Arc<Shared>,
     wake: WakeHandle,
 }
 
+impl ChannelIo {
+    /// Change what the screen shows while you wait.
+    fn live(&mut self, change: impl FnOnce(&mut (String, String))) {
+        change(&mut self.now);
+        *self.shared.live.lock().unwrap_or_else(|p| p.into_inner()) = Some(Some(self.now.clone()));
+        self.wake.wake();
+    }
+
+    /// Nothing in progress: the interview is waiting for you.
+    fn idle(&mut self) {
+        self.now = Default::default();
+        *self.shared.live.lock().unwrap_or_else(|p| p.into_inner()) = Some(None);
+        self.wake.wake();
+    }
+}
+
 impl InterviewIo for ChannelIo {
     fn say(&mut self, text: &str) {
         self.shared.chat.lock().unwrap_or_else(|p| p.into_inner()).push((false, text.to_string()));
-        self.wake.wake();
+        // The words are in the conversation now; nothing is half-written.
+        self.live(|l| l.1.clear());
+    }
+    fn earlier(&mut self) -> Vec<(bool, String)> {
+        std::mem::take(&mut self.earlier)
+    }
+    fn working(&mut self, what: &str) {
+        let what = what.to_string();
+        self.live(|l| l.0 = what);
+    }
+    fn partial(&mut self, so_far: &str) {
+        let text = so_far.to_string();
+        self.live(|l| l.1 = text);
     }
     fn ask(&mut self) -> Option<String> {
         if let Some(f) = self.first.take() {
             return Some(f);
         }
+        self.idle();
         loop {
             match self.rx.recv() {
                 Ok(Reply::Text(t)) => return Some(t),
@@ -329,7 +447,7 @@ impl InterviewIo for ChannelIo {
     }
     fn confirm(&mut self, lines: &[Line]) -> bool {
         *self.shared.confirm.lock().unwrap_or_else(|p| p.into_inner()) = Some(lines.to_vec());
-        self.wake.wake();
+        self.idle();
         loop {
             match self.rx.recv() {
                 Ok(Reply::Confirm(b)) => return b,
@@ -436,9 +554,15 @@ pub struct Session {
     pub export_menu: Signal<bool>,
     pub exporting: Signal<Option<Kind>>,
     pub exports: Signal<Vec<Result<Exported, String>>>,
+    /// How many messages of `chat` drafted the plan (all of them, until
+    /// there is a plan); the rest asked for changes.
+    pub drafted: Signal<usize>,
+    /// A reply on its way (see [`Pending`]); `None` when nothing is.
+    pub pending: Signal<Option<Pending>>,
+    /// The interview is running (drafting or changing the plan).
+    pub interviewing: Signal<bool>,
     shared: Arc<Shared>,
     last_poll: Rc<Cell<Instant>>,
-    interviewing: Rc<RefCell<bool>>,
 }
 
 impl std::fmt::Debug for Session {
@@ -449,6 +573,7 @@ impl std::fmt::Debug for Session {
 
 impl Session {
     pub fn open(rt: &vieww::element::Runtime, project: PathBuf, composer_id: u64) -> Session {
+        let (conversation, drafted) = load_conversation(&project);
         let plan = load_plan(&project);
         let (events, result) = match last_run(&project) {
             Some(run) => (
@@ -460,7 +585,7 @@ impl Session {
         Session {
             project: Rc::new(project),
             composer: Composer::new(rt, composer_id),
-            chat: rt.signal(Vec::new()),
+            chat: rt.signal(conversation),
             confirm: rt.signal(None),
             plan: rt.signal(plan),
             events: rt.signal(events),
@@ -473,9 +598,11 @@ impl Session {
             export_menu: rt.signal(false),
             exporting: rt.signal(None),
             exports: rt.signal(Vec::new()),
+            drafted: rt.signal(drafted),
+            pending: rt.signal(None),
+            interviewing: rt.signal(false),
             shared: Arc::new(Shared::default()),
             last_poll: Rc::new(Cell::new(Instant::now())),
-            interviewing: Rc::new(RefCell::new(false)),
         }
     }
 
@@ -498,7 +625,7 @@ impl Session {
             let working: Vec<String> = progress.agents.iter().filter(|(_, (s, _))| *s == State::Working).map(|(n, _)| n.clone()).collect();
             return (if working.is_empty() { "Running".into() } else { format!("Running · {} working", working.join(", ")) }, Tone::Live);
         }
-        if *self.interviewing.borrow() {
+        if self.interviewing.get() {
             return ("Drafting the plan with you".into(), Tone::Live);
         }
         match (self.result.get(), self.plan.get()) {
@@ -529,15 +656,30 @@ impl Session {
         }
         let new_chat = take(&self.shared.chat);
         if !new_chat.is_empty() {
+            keep_conversation(&self.project, &new_chat);
             self.chat.update(|c| c.extend(new_chat));
+        }
+        if let Some(live) = self.shared.live.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            let next = live.map(|(what, text)| {
+                let since = self.pending.get().map_or_else(Instant::now, |p| p.since);
+                Pending { what: if what.is_empty() { "Thinking".into() } else { what }, text, since }
+            });
+            if next != self.pending.get() {
+                self.pending.set(next);
+            }
         }
         if let Some(lines) = self.shared.confirm.lock().unwrap_or_else(|p| p.into_inner()).take() {
             self.confirm.set(Some(lines));
         }
         if let Some(done) = self.shared.interview_done.lock().unwrap_or_else(|p| p.into_inner()).take() {
-            *self.interviewing.borrow_mut() = false;
+            self.interviewing.set(false);
+            self.pending.set(None);
             match done {
                 Ok(true) => {
+                    if self.plan.get().is_none() {
+                        mark_plan_written(&self.project);
+                        self.drafted.set(self.chat.get().len());
+                    }
                     self.plan.set(load_plan(&self.project));
                     self.notice.set(String::new());
                 }
@@ -614,6 +756,9 @@ impl Session {
     /// Send `text` as the user's message.
     pub fn say(&self, text: String) {
         self.chat.update(|c| c.push((true, text.clone())));
+        keep_conversation(&self.project, &[(true, text.clone())]);
+        // Something is happening from this moment, before any model answers.
+        self.pending.set(Some(Pending { what: "Reading your message".into(), text: String::new(), since: Instant::now() }));
         // An interview already waiting for an answer gets this one.
         if let Some(tx) = self.shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
             if tx.send(Reply::Text(text.clone())).is_ok() {
@@ -622,12 +767,19 @@ impl Session {
         }
         let (tx, rx) = channel::<Reply>();
         *self.shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()) = Some(tx);
-        *self.interviewing.borrow_mut() = true;
+        self.interviewing.set(true);
+        // A conversation from before (a reopened session, or one whose
+        // interview stopped) carries on rather than starting over: what was
+        // said since the plan was written, or all of it if there is none.
+        let chat = self.chat.get();
+        let from = if self.plan.get().is_some() { self.drafted.get().min(chat.len()) } else { 0 };
+        let mut earlier: Vec<(bool, String)> = chat[from..chat.len().saturating_sub(1)].to_vec();
+        earlier.drain(..earlier.len().saturating_sub(40));
         let project = (*self.project).clone();
         let shared = Arc::clone(&self.shared);
         let wake = WakeHandle::current();
         std::thread::spawn(move || {
-            let mut io = ChannelIo { first: Some(text), rx, shared: Arc::clone(&shared), wake: wake.clone() };
+            let mut io = ChannelIo { earlier, now: Default::default(), first: Some(text), rx, shared: Arc::clone(&shared), wake: wake.clone() };
             let r = Config::load().and_then(|cfg| interview::interview(&project, &cfg, &mut io)).map(|bp| bp.is_some());
             *shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()) = None;
             *shared.interview_done.lock().unwrap_or_else(|p| p.into_inner()) = Some(r);
@@ -654,6 +806,7 @@ impl Session {
 
     pub fn answer_confirm(&self, yes: bool) {
         self.confirm.set(None);
+        self.pending.set(Some(Pending { what: if yes { "Writing the blueprint".into() } else { "Noting what to change".into() }, text: String::new(), since: Instant::now() }));
         if let Some(tx) = self.shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
             let _ = tx.send(Reply::Confirm(yes));
         }
@@ -681,4 +834,41 @@ pub enum Tone {
     Wait,
     Good,
     Bad,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What the interview reports while it works reaches the screen: the
+    /// status line, the words as they stream, and nothing once it waits.
+    #[test]
+    fn a_reply_shows_while_it_is_written() {
+        let mut driver = vieww::render::FrameDriver::new(vieww::prelude::Size::new(800.0, 600.0));
+        let dir = std::env::temp_dir().join(format!("wright-live-{}", std::process::id()));
+        let s = Session::open(driver.elements().runtime(), dir, 1);
+        let (_tx, rx) = channel::<Reply>();
+        let mut io = ChannelIo { earlier: vec![(true, "before".into())], now: Default::default(), first: None, rx, shared: Arc::clone(&s.shared), wake: WakeHandle(None) };
+        assert_eq!(io.earlier(), vec![(true, "before".to_string())]);
+        assert!(io.earlier().is_empty(), "handed over once");
+
+        io.working("Thinking");
+        s.pump();
+        assert_eq!(s.pending.get().map(|p| (p.what, p.text)), Some(("Thinking".into(), String::new())));
+        let since = s.pending.get().unwrap().since;
+        io.partial("Which fol");
+        s.pump();
+        io.working("Drafting the plan");
+        s.pump();
+        let now = s.pending.get().unwrap();
+        assert_eq!((now.what.as_str(), now.text.as_str()), ("Drafting the plan", "Which fol"));
+        assert_eq!(now.since, since, "the clock runs from the first sign of work");
+        io.say("Which folder?");
+        s.pump();
+        assert_eq!(s.chat.get().last(), Some(&(false, "Which folder?".to_string())));
+        assert_eq!(s.pending.get().map(|p| p.text), Some(String::new()), "said, so no longer half-written");
+        io.idle();
+        s.pump();
+        assert_eq!(s.pending.get(), None, "waiting for you");
+    }
 }
