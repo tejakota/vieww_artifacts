@@ -338,6 +338,7 @@ def summarize(rows, out, run):
             ("cpuvk", "CPU path presented through Vulkan (diagnostic)"),
             ("cpuhint", "CPU path with an Android performance hint (diagnostic)"),
             ("gpuscale", "GPU path at the device tier's resolution (diagnostic)"),
+            ("gpuserial", "GPU path waiting for every frame, without the overlap (diagnostic A/B)"),
             ("cpubare", "CPU path without raster threads, fill cache or blur cache (diagnostic A/B)"),
             ("cpunothreads", "CPU path without the row-parallel walk only (diagnostic A/B)"),
             ("cpunofill", "CPU path without the path-fill cache only (diagnostic A/B)"),
@@ -350,7 +351,7 @@ def summarize(rows, out, run):
             detail.append(f"- {label}: {r.get(f'{mode}_frame_time', '–')}")
             # A pass labelled GPU whose frames the CPU drew is a mislabelled
             # number, not a slow GPU — run f91d07c printed two of those.
-            if mode in ("gpu", "gpuscale") and gpu_frames_drawn(r.get(f"{mode}_gpu_frames")) == 0:
+            if mode in ("gpu", "gpuscale", "gpuserial") and gpu_frames_drawn(r.get(f"{mode}_gpu_frames")) == 0:
                 detail.append("  - **not a GPU measurement**: 0 frames were drawn by the GPU rasterizer in this pass")
             # run-android.sh compares the app's own `rasterizer:` observation
             # with what the pass asked for, and fails the run on a mismatch.
@@ -375,6 +376,7 @@ def summarize(rows, out, run):
                 ("frame_stages", "stages"),
                 ("frame_stages_p95", "stages"),
                 ("gpu_passes", "GPU time by kind of work"),
+                ("gpu_overlap", "CPU/GPU overlap"),
                 ("input_latency", "input to present"),
                 ("worst_frame", "worst frame"),
                 ("raster_by_core", "raster by core"),

@@ -900,6 +900,18 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
             results.observe("input_latency", "no input reached this window");
         }
     }
+    // Which way the GPU frames ran: overlapping the app's next frame, or
+    // waited for one by one (`debug.vieww.overlap=0`, the `gpuserial` pass).
+    if !stages.gpu.total().is_zero() {
+        results.observe(
+            "gpu_overlap",
+            if vieww_platform_winit::native::gpu_overlap() {
+                "on: the app builds the next frame while the GPU draws this one"
+            } else {
+                "off: every GPU frame waited for before the next (VIEWW_GPU_OVERLAP=0)"
+            },
+        );
+    }
     match (stages.gpu_passes, log.stage_percentile(0.95).gpu_passes) {
         (Some(median), Some(p95)) => {
             results.observe(

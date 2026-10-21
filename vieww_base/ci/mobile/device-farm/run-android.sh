@@ -126,14 +126,18 @@ declare -A failed=()
 # and worst frames, so phones above Low now walk serially by default
 # (`quality::raster_threads_for`) and their `cpunothreads` runs what `cpu`
 # runs; on a Low phone it is still the A/B.
-for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill cpunoblur; do
+for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads cpunofill cpunoblur; do
     # `gpuscale` is a GPU pass: the property must say so *before* the launch
     # below. Until 2026-10-19 it was left at 0 here and only device-suite.sh's
     # `--gpu` set it — after the app was already up, which `--no-build` does
     # not relaunch — so the Pixel 5a and S26 Ultra rows of run f91d07c drew
     # all 600 frames on the CPU under a "GPU at 0.75x" label (the LG Stylo 5
     # happened to read the property late enough to get the GPU).
-    gpu=0; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ]; } && gpu=1; [ "$mode" = auto ] && gpu=auto
+    gpu=0; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ] || [ "$mode" = gpuserial ]; } && gpu=1; [ "$mode" = auto ] && gpu=auto
+    # `gpuserial`: the GPU path waiting for every frame, as it did before
+    # frames overlapped (`debug.vieww.overlap=0`) — beside `gpu`, the A/B for
+    # the overlap on this phone's driver.
+    overlap=""; [ "$mode" = gpuserial ] && overlap=0
     present=""; [ "$mode" = cpuvk ] && present="vulkan"
     hint=0; [ "$mode" = cpuhint ] && hint=1
     scale=""; [ "$mode" = gpuscale ] && scale=auto
@@ -149,6 +153,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
     sh_ setprop debug.vieww.scale "$scale" >/dev/null
+    sh_ setprop debug.vieww.overlap "\"$overlap\"" >/dev/null
 
     # 1. Cold start, three times. TotalTime is the platform's own measure of
     # launch to first frame drawn; WaitTime adds the system's share.
@@ -180,7 +185,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
     # Not an array: Device Farm's host runs bash 4.2, where "${empty[@]}"
     # under `set -u` is an unbound variable — which is exactly how the first
     # real run (2026-10-15) died here on all three phones, before any suite.
-    gpu_flag=""; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ]; } && gpu_flag="--gpu"
+    gpu_flag=""; { [ "$mode" = gpu ] || [ "$mode" = gpuscale ] || [ "$mode" = gpuserial ]; } && gpu_flag="--gpu"
     # shellcheck disable=SC2086 # $gpu_flag is empty or one word, on purpose
     if VIEWW_SCREENSHOT="$out/$mode-screen.png" \
         bash "$root/ci/mobile/device-suite.sh" --no-build $gpu_flag > "$out/$mode-suite.log" 2>&1; then
@@ -190,7 +195,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
         kv "${mode}_suite" FAIL
         verdict[$mode]=FAIL
     fi
-    for key in frame_time frame_stages frame_stages_p95 gpu_passes input_latency worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
+    for key in frame_time frame_stages frame_stages_p95 gpu_passes gpu_overlap input_latency worst_frame startup_stages renderer_choice raster_by_core cpu_clocks perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done
@@ -210,7 +215,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale cpubare cpunothreads cpunofill c
     # while the app was still starting, and the A73 and Stylo 5 `auto` passes
     # drew all 600 frames on the CPU and failed, silently, under `auto`.
     case "$mode" in
-        gpu|gpuscale) want="planned GPU path requested" ;;
+        gpu|gpuscale|gpuserial) want="planned GPU path requested" ;;
         auto) want="measured on this phone" ;;
         *) want="CPU rasterizer" ;;
     esac
@@ -314,6 +319,7 @@ sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ setprop debug.vieww.recalibrate 0 >/dev/null
 sh_ setprop debug.vieww.hint 0 >/dev/null
 sh_ setprop debug.vieww.scale "" >/dev/null
+sh_ setprop debug.vieww.overlap '""' >/dev/null
 sh_ setprop debug.vieww.bare 0 >/dev/null
 sh_ setprop debug.vieww.cadence "" >/dev/null
 sh_ am force-stop "$package" >/dev/null

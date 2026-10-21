@@ -79,6 +79,9 @@ use super::{translate_wgsl_to_spirv, Stage, VulkanDevice, VulkanError};
 struct BlitTarget {
     image: vk::Image,
     ready: vk::Semaphore,
+    /// Signalled when the frame's commands finish, for the present to wait
+    /// on — see [`SceneRenderer::settle`].
+    done: vk::Semaphore,
     /// Where the scene frame ends in its own coordinates: the render
     /// extent, which is the target's unless a resolution scale says
     /// otherwise (then the blit enlarges). `[0, 0]` corners, so one corner
@@ -154,6 +157,15 @@ pub struct SceneRenderer {
     queries: Option<Queries>,
     /// What the last frame whose timestamps were read spent on the GPU.
     pass_times: Option<GpuPassTimes>,
+    /// A submitted frame the CPU has not waited for yet — see
+    /// [`settle`](Self::settle).
+    in_flight: bool,
+    /// Whether a frame into a swapchain image is left in flight
+    /// ([`set_overlap`](Self::set_overlap)).
+    overlap: bool,
+    /// Time spent in [`settle`](Self::settle) since the last frame was
+    /// recorded: charged to the next frame's [`GpuFrameTimings::wait`].
+    settled_wait: Duration,
 }
 
 /// What the frame target `L[0]` holds after a frame: that frame's finished
@@ -212,12 +224,13 @@ const MAX_CLIP_RECTS: usize = 8;
 /// # What the fields can and cannot say
 ///
 /// These are host-side wall-clock durations, not GPU timestamps. `wait` is
-/// the time the CPU blocked on the frame's fence, which is the GPU executing
-/// this frame **plus** anything queued ahead of it — on a renderer that waits
-/// for every frame, as this one does today, nothing is ahead of it, so `wait`
-/// is a fair upper bound on GPU execution time. Once two frames are in flight
-/// (the roadmap's next GPU item) it stops being one, and GPU timestamp queries
-/// are the replacement.
+/// the time the CPU blocked on a fence. On a frame read back, or with
+/// [`SceneRenderer::set_overlap`] off, that is this frame's own fence, and a
+/// fair upper bound on its GPU time. With frames overlapping (the default for
+/// a frame into a swapchain image) it is the time this frame waited for the
+/// **previous** one before it could touch the renderer's resources — the part
+/// of the GPU's work the application's own work did not cover. Either way the
+/// GPU's own time is [`GpuPassTimes`], from timestamp queries.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GpuFrameTimings {
     /// Planner atlases (glyphs, images, masks, ramps), uniforms, vertex and
@@ -229,7 +242,8 @@ pub struct GpuFrameTimings {
     pub record: Duration,
     /// The `vkQueueSubmit` call itself (plus ending the command buffer).
     pub submit: Duration,
-    /// Blocked on the frame's fence: GPU execution, see the type docs.
+    /// Blocked on a fence: this frame's, or the previous frame's when they
+    /// overlap — see the type docs.
     pub wait: Duration,
     /// Mapping the readback buffer and converting RGBA16F to RGBA8. Zero on
     /// the direct-to-swapchain path, which has no readback.
@@ -804,6 +818,9 @@ impl SceneRenderer {
             frame_clip: None,
             queries,
             pass_times: None,
+            in_flight: false,
+            overlap: true,
+            settled_wait: Duration::ZERO,
         };
 
         let uniform_info = [vk::DescriptorBufferInfo {
@@ -844,6 +861,7 @@ impl SceneRenderer {
     ///
     /// Any Vulkan call failing.
     pub fn upload_atlas(&mut self, atlas: &vieww_gpu::Atlas) -> Result<(), VulkanError> {
+        self.settle()?;
         self.upload(
             Slot::Glyphs,
             atlas.texels(),
@@ -860,6 +878,7 @@ impl SceneRenderer {
     ///
     /// Any Vulkan call failing.
     pub fn upload_planner(&mut self, planner: &Planner) -> Result<(), VulkanError> {
+        self.settle()?;
         self.upload_atlas(planner.atlas())?;
         let images = planner.image_atlas();
         self.upload(
@@ -902,6 +921,7 @@ impl SceneRenderer {
     ///
     /// Any Vulkan call failing.
     pub fn upload_masks(&mut self, masks: &vieww_gpu::MaskAtlas) -> Result<(), VulkanError> {
+        self.settle()?;
         let held = self.texture(Slot::Masks).version;
         let side = masks.side();
         let same_size = {
@@ -1036,6 +1056,7 @@ impl SceneRenderer {
         height: u32,
         clear: Color,
     ) -> Result<Vec<u8>, VulkanError> {
+        self.settle()?;
         let started = Instant::now();
         self.upload_planner(planner)?;
         let atlases = started.elapsed();
@@ -1065,6 +1086,7 @@ impl SceneRenderer {
         clear: Color,
         damage: Option<&[PixelRect]>,
     ) -> Result<(Vec<u8>, Redrawn), VulkanError> {
+        self.settle()?;
         if !plan.is_complete() {
             return Err(VulkanError::Vulkan("incomplete plan".into()));
         }
@@ -1105,6 +1127,7 @@ impl SceneRenderer {
         height: u32,
         clear: Color,
     ) -> Result<Vec<u8>, VulkanError> {
+        self.settle()?;
         if !plan.is_complete() {
             let kinds: Vec<String> = plan
                 .unsupported
@@ -1133,6 +1156,7 @@ impl SceneRenderer {
         height: u32,
         clear: Color,
     ) -> Result<Vec<u8>, VulkanError> {
+        self.settle()?;
         self.render_with(plan, width, height, clear, None)
             .map(|(pixels, _)| pixels)
     }
@@ -1197,6 +1221,7 @@ impl SceneRenderer {
         scale: f32,
         damage: Option<&[PixelRect]>,
     ) -> Result<Redrawn, VulkanError> {
+        self.settle()?;
         if !plan.is_complete() {
             return Err(VulkanError::Vulkan("incomplete plan".into()));
         }
@@ -1233,6 +1258,7 @@ impl SceneRenderer {
         let blit = BlitTarget {
             image: target.image,
             ready: target.ready,
+            done: target.done,
             src_extent: [render_width, render_height],
             filter: if render_width == width && render_height == height {
                 vk::Filter::NEAREST
@@ -1654,6 +1680,10 @@ impl SceneRenderer {
     }
 
     fn begin_commands(&self) -> Result<(), VulkanError> {
+        debug_assert!(
+            !self.in_flight,
+            "the command buffer of a frame still in flight was re-recorded; settle() first"
+        );
         let cmd = self.command_buffer;
         unsafe {
             self.device
@@ -2068,10 +2098,21 @@ impl SceneRenderer {
         self.end_marks();
         self.timings.record = recording.elapsed();
         self.frame_clip = None;
-        let (submit, wait) = self.submit_and_wait(out.map(|t| t.ready))?;
-        self.timings.submit = submit;
-        self.timings.wait = wait;
-        self.collect_marks();
+        // What waiting for the previous frame cost this one, when they
+        // overlap — see `settle`.
+        let carried = std::mem::take(&mut self.settled_wait);
+        match out {
+            Some(target) if self.overlap => {
+                self.timings.submit = self.submit(Some(target.ready), Some(target.done))?;
+                self.timings.wait = carried;
+                self.in_flight = true;
+            }
+            _ => {
+                self.timings.submit = self.submit(out.map(|t| t.ready), out.map(|t| t.done))?;
+                self.timings.wait = carried + self.wait_for_fence()?;
+                self.collect_marks();
+            }
+        }
         self.retained = Some(Retained {
             size: (width, height),
             clear,
@@ -2266,9 +2307,26 @@ impl SceneRenderer {
         &self,
         wait: Option<vk::Semaphore>,
     ) -> Result<(Duration, Duration), VulkanError> {
+        let submitted = self.submit(wait, None)?;
+        Ok((submitted, self.wait_for_fence()?))
+    }
+
+    /// Submit the recorded command buffer against the fence, waiting on
+    /// `wait` before its transfers and signalling `signal` when it is done.
+    /// Returns how long the submit took.
+    fn submit(
+        &self,
+        wait: Option<vk::Semaphore>,
+        signal: Option<vk::Semaphore>,
+    ) -> Result<Duration, VulkanError> {
+        debug_assert!(
+            !self.in_flight,
+            "a submission reused the fence of a frame still in flight; settle() first"
+        );
         let cmd = self.command_buffer;
         let cmds = [cmd];
         let waits: Vec<vk::Semaphore> = wait.into_iter().collect();
+        let signals: Vec<vk::Semaphore> = signal.into_iter().collect();
         // The whole program may run before the swapchain image is free; only
         // the blit into it must wait.
         let stages = vec![vk::PipelineStageFlags::TRANSFER; waits.len()];
@@ -2281,16 +2339,86 @@ impl SceneRenderer {
                 &[vk::SubmitInfo::default()
                     .command_buffers(&cmds)
                     .wait_semaphores(&waits)
-                    .wait_dst_stage_mask(&stages)],
+                    .wait_dst_stage_mask(&stages)
+                    .signal_semaphores(&signals)],
                 self.fence,
             )?;
         }
-        let submitted = submitting.elapsed();
+        Ok(submitting.elapsed())
+    }
+
+    /// Block until the last submission's fence signals; how long it took.
+    fn wait_for_fence(&self) -> Result<Duration, VulkanError> {
         let waiting = Instant::now();
         unsafe {
             self.device.wait_for_fences(&[self.fence], true, u64::MAX)?;
         }
-        Ok((submitted, waiting.elapsed()))
+        Ok(waiting.elapsed())
+    }
+
+    /// Wait for the frame left in flight, if there is one: after this, every
+    /// resource the renderer owns — command buffer, fence, uniform, vertex
+    /// and index buffers, atlases, the kept frame `L[0]` — is the CPU's
+    /// again, and the frame's GPU timings are read
+    /// ([`last_pass_times`](Self::last_pass_times)).
+    ///
+    /// # Frames in flight
+    ///
+    /// [`render_planned_to`](Self::render_planned_to) submits a frame into a
+    /// swapchain image and returns without waiting for it: the present waits
+    /// on the GPU instead ([`AcquiredImage`]'s `done` semaphore), and the
+    /// application builds, lays out and plans its next frame while the GPU
+    /// draws this one. That is the overlap Flutter's raster thread and Qt's
+    /// render thread exist for, and the LG Stylo 5 is why it matters: about
+    /// 5 ms of CPU work and 12 ms of GPU work per frame, run one after the
+    /// other, were a 17.3 ms frame against a 16.7 ms budget (Device Farm run
+    /// 39538891917).
+    ///
+    /// Only one frame is ever in flight, and every method that touches a
+    /// resource calls this first, so nothing the GPU may still be reading is
+    /// written: the overlap is the application's work against the GPU's,
+    /// not two frames' GPU work against each other. **A caller must call it
+    /// before acquiring a swapchain image or presenting by any other path**:
+    /// the swapchain reuses one acquire semaphore, and the frame in flight
+    /// may not have consumed its wait on it yet.
+    ///
+    /// The time spent here is charged to the next frame's
+    /// [`GpuFrameTimings::wait`], which therefore means "waiting for the
+    /// previous frame" while frames overlap; [`GpuPassTimes`] is the GPU's
+    /// own time.
+    ///
+    /// # Errors
+    ///
+    /// The fence wait failing (a lost device).
+    pub fn settle(&mut self) -> Result<(), VulkanError> {
+        if !self.in_flight {
+            return Ok(());
+        }
+        self.settled_wait += self.wait_for_fence()?;
+        self.in_flight = false;
+        self.collect_marks();
+        Ok(())
+    }
+
+    /// Whether a frame into a swapchain image is left in flight
+    /// ([`settle`](Self::settle)) — on by default. Off waits for every frame
+    /// before returning, as this renderer always did: the comparison a phone
+    /// with a doubtful driver needs, and nothing else.
+    ///
+    /// # Errors
+    ///
+    /// Settling a frame in flight failing.
+    pub fn set_overlap(&mut self, on: bool) -> Result<(), VulkanError> {
+        self.settle()?;
+        self.overlap = on;
+        Ok(())
+    }
+
+    /// Whether frames into a swapchain image overlap the caller's work — see
+    /// [`set_overlap`](Self::set_overlap).
+    #[must_use]
+    pub const fn overlaps(&self) -> bool {
+        self.overlap
     }
 
     /// Premultiplied RGBA16F → straight RGBA8, rounded exactly as

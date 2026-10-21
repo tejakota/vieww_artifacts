@@ -931,6 +931,67 @@ commit messages):
   host round trip (the module docs' follow-up).
 - Cold-core stalls (RC6) and the ideas in §4.5's list, unchanged.
 
+## 4.7 After Device Farm 39538891917: overlap the CPU and the GPU, and measure the GPU
+
+**What the run said** (2026-10-21, main at 8e6996a). The run passed: the
+Stylo 5 and the A73's CPU fallback as known failures, the S26's CPU entry
+flagged stale. The GPU damage path took the Stylo 5's GPU frame from
+40 ms to 17.3 ms — over a 16.7 ms budget by 0.6 ms, with 11.9 ms of it the
+CPU blocked on the GPU (`gpu_wait`). `SceneRenderer` waited for every
+frame's fence before returning, so the application's ~5 ms and the GPU's
+~12 ms ran one after the other.
+
+Read against the cross-framework research (Flutter's UI/raster threads,
+Qt's render thread, Lynx's background thread, Impeller's precompiled
+pipelines, Qt's batching, Uno's partial repaint, Flutter's dynamic
+resolution): vieww already has every technique on that list except two —
+CPU/GPU overlap, and reusing a layer's *pixels* across frames
+(`RepaintBoundary` keeps a subtree's recording, not its raster). Which of
+the two the Stylo needs could not be read from one `gpu_wait` number.
+
+**Done** (this entry's patch; evidence in the commit messages):
+
+- *GPU time by kind of work.* Timestamp queries split each GPU frame into
+  draw, layers, filters, shadows and blit (`GpuPassTimes`); the device
+  suite reports `gpu_passes`, or that the queue records no timestamps.
+- *Input to present.* `latency.rs`'s log is wired per window (presses,
+  touches, wheel, key presses, IME text; not hover, releases or IME
+  enable/disable); an input belongs to the first frame whose build starts
+  after it; an input nothing answers within 1 s is counted apart. The
+  suite reports `input_latency`, observed and not gated.
+- *Frames in flight.* A GPU frame into the swapchain is submitted and left
+  in flight; the present waits on a per-image semaphore instead of the CPU
+  on a fence; the renderer settles it before touching any resource, and
+  the platform layer before any acquire or CPU present. One frame in
+  flight: the application's work overlaps the GPU's, two frames' GPU work
+  never does. `VIEWW_GPU_OVERLAP=0` / `debug.vieww.overlap=0` turns it off;
+  Device Farm's new `gpuserial` pass is that, beside `gpu`.
+- *Found by running everything under Vulkan's synchronisation validation*
+  (now the way to check this renderer): readback copies unordered after
+  the render passes writing them (three offscreen passes), and
+  `present_pixels`' layout transition unordered after the acquire — both
+  predating this patch, both fixed; and, in this patch's own first draft,
+  an abandoned image presented on a semaphore nothing signalled — a hang
+  on a resize — fixed before it shipped.
+
+**What lavapipe cannot show.** Its X11 present blocks until the frame is
+rendered, so the GPU's time moves from `gpu_wait` into `present` and the
+frame gets no faster there (`wait_loop`'s `gpu_overlap` prints the
+breakdown). Android's WSI hands the semaphore to the compositor. The
+`gpu` against `gpuserial` passes are the measurement.
+
+**Still open:**
+
+- The next run's numbers: the Stylo 5's `gpu` frame time against
+  `gpuserial`, and its `gpu_passes`. Filters, shadows and layers
+  dominating says reuse layer pixels next; plain draw dominating says
+  overdraw.
+- Two frames' resources (separate command buffers, uniform, vertex and
+  index buffers) would also overlap recording with the GPU; only if one
+  frame in flight falls short.
+- Input latency from the platform's own event time (Android's
+  `MotionEvent.getEventTime`), and to scan-out rather than present.
+
 # 5. Process and infrastructure
 
 ## 5.1 The coverage number is produced, not watched

@@ -821,6 +821,19 @@ mod demo {
             // Before the event loop and every worker the app starts, as below.
             std::env::set_var("VIEWW_GPU_SCALE", &scale);
         }
+        // `debug.vieww.overlap=0`: the GPU path waits for every frame before
+        // returning instead of building the next one while the GPU draws
+        // (`VIEWW_GPU_OVERLAP`, `vieww_platform_winit::native::gpu_overlap`,
+        // `vieww_hal`'s `SceneRenderer::settle`) — the comparison for a phone
+        // whose driver is in doubt.
+        let overlap = std::process::Command::new("/system/bin/getprop")
+            .arg("debug.vieww.overlap")
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_default();
+        if overlap == "0" {
+            std::env::set_var("VIEWW_GPU_OVERLAP", "0");
+        }
         // `debug.vieww.bare`: the CPU rasterizer with some or all of the
         // 2026-10-18/19 additions switched off — the row-parallel scanline
         // walk (`threads` → `VIEWW_RASTER_THREADS=0`), the path-fill cache

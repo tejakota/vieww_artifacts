@@ -851,6 +851,383 @@ fn a_gpu_frame_redraws_only_what_changed() {
 /// How many lines of a failed scenario's trace to print.
 const TRACE_TAIL: usize = 80;
 
+/// A frame whose whole surface changes, so every GPU frame is a full redraw.
+#[derive(Debug)]
+struct Flasher {
+    phase: vieww_element::Signal<u32>,
+}
+
+/// The colour [`Flasher`] fills the window with at `phase`.
+fn flasher_colour(phase: u32) -> Color {
+    if phase.is_multiple_of(2) {
+        Color::rgba(255, 0, 255, 255)
+    } else {
+        Color::rgba(0, 255, 255, 255)
+    }
+}
+
+impl Widget for Flasher {
+    fn debug_name(&self) -> &'static str {
+        "Flasher"
+    }
+
+    fn kind(&self) -> WidgetKind<'_> {
+        WidgetKind::Composed
+    }
+
+    fn build(&self, _ctx: &BuildContext) -> WidgetNode {
+        ColoredBox::new(flasher_colour(self.phase.get())).into()
+    }
+}
+
+vieww_widget::widget_node_from!(Flasher);
+
+/// Frames [`measure_gpu_overlap`] draws; the medians come from all of them.
+const OVERLAP_FRAMES: u32 = 90;
+
+/// CPU work each frame does before its build: the application's share that
+/// the GPU's work on the previous frame can hide behind.
+const OVERLAP_CPU_WORK: Duration = Duration::from_millis(6);
+
+/// One run for [`the_app_builds_the_next_frame_while_the_gpu_draws_this_one`],
+/// under whatever `VIEWW_GPU_OVERLAP` its parent set: every frame spins the
+/// CPU for [`OVERLAP_CPU_WORK`] before its build and changes the whole window,
+/// and the run prints its median GPU wait and frame work, its GPU frame count,
+/// and whether the last frame's colour is what is on the screen.
+fn measure_gpu_overlap() {
+    vieww_hardware::skip_without!(display, gpu);
+    arm_deadline("measure_gpu_overlap");
+
+    let app = App::new()
+        .title("vieww wait-loop: gpu overlap")
+        .prefer_gpu();
+    let windows = app.windows();
+    let waker = Arc::new(app.waker());
+    let phase: Rc<std::cell::RefCell<Option<vieww_element::Signal<u32>>>> = Rc::default();
+    let frames = Rc::new(Cell::new(0u32));
+    let done = Rc::new(Cell::new(false));
+
+    let report = app
+        .before_frame({
+            let phase = Rc::clone(&phase);
+            let frames = Rc::clone(&frames);
+            move |_driver| {
+                if let Some(phase) = &*phase.borrow() {
+                    if frames.get() < OVERLAP_FRAMES {
+                        frames.set(frames.get() + 1);
+                        phase.set(frames.get());
+                        let spin = std::time::Instant::now();
+                        while spin.elapsed() < OVERLAP_CPU_WORK {
+                            std::hint::spin_loop();
+                        }
+                    }
+                }
+            }
+        })
+        .after_frame({
+            let waker = Arc::clone(&waker);
+            let done = Rc::clone(&done);
+            move |_driver| {
+                if !done.get() {
+                    waker.wake();
+                }
+            }
+        })
+        .on_frame({
+            let frames = Rc::clone(&frames);
+            let done = Rc::clone(&done);
+            let waker = Arc::clone(&waker);
+            move |log| {
+                if frames.get() >= OVERLAP_FRAMES && !done.get() {
+                    done.set(true);
+                    let stages = log.stage_medians();
+                    // The last frame is presented by now; give the X server a
+                    // moment to have composed it before reading the screen.
+                    std::thread::sleep(Duration::from_millis(200));
+                    let want = flasher_colour(OVERLAP_FRAMES);
+                    let matching = screen_pixels_matching(want);
+                    println!(
+                        "OVERLAP gpu_wait_us={} acquire_us={} present_us={} plan_us={} record_us={} gpu_time_us={} work_us={} gpu_frames={} frames={} last_colour_pixels={}",
+                        stages.gpu.wait.as_micros(),
+                        stages.acquire.as_micros(),
+                        stages.present.as_micros(),
+                        stages.plan.as_micros(),
+                        stages.gpu.record.as_micros(),
+                        stages.gpu_passes.map_or(0, |p| p.total().as_micros()),
+                        log.report().median_work.as_micros(),
+                        log.report().gpu_frames,
+                        log.report().frames,
+                        matching.map_or_else(|| "unknown".to_owned(), |n| n.to_string()),
+                    );
+                    let _ = Windows::close(&*windows, WindowKey::PRIMARY);
+                    waker.wake();
+                }
+            }
+        })
+        .run({
+            let phase = Rc::clone(&phase);
+            move |driver| {
+                let signal = driver.elements().runtime().signal(0_u32);
+                *phase.borrow_mut() = Some(signal.clone());
+                driver.set_root(Flasher { phase: signal });
+            }
+        });
+    report.expect("the window opened, flashed, and closed");
+}
+
+/// Pixels of the root window exactly `colour`, from ImageMagick's `import`.
+fn screen_pixels_matching(colour: Color) -> Option<usize> {
+    let out = std::process::Command::new("import")
+        .args(["-window", "root", "-depth", "8", "rgb:-"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let near = |a: u8, b: u8| a.abs_diff(b) <= 4;
+    Some(
+        out.stdout
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .filter(|p| near(p[0], colour.r) && near(p[1], colour.g) && near(p[2], colour.b))
+            .count(),
+    )
+}
+
+/// One run of [`measure_gpu_overlap`] in its own process with
+/// `VIEWW_GPU_OVERLAP` set to `overlap`: `(fence wait, present, GPU frames,
+/// frames, last-colour pixels)`, medians for the first two. Its own process because the switch is read
+/// once per process.
+fn overlap_run(overlap: &str) -> (Duration, Duration, u64, u64, Option<usize>) {
+    let binary = std::env::current_exe().expect("a test binary knows its own path");
+    let output = std::process::Command::new(&binary)
+        .arg("gpu_overlap_measure")
+        .env("VIEWW_GPU_OVERLAP", overlap)
+        .output()
+        .unwrap_or_else(|error| panic!("could not re-execute {binary:?}: {error}"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "the VIEWW_GPU_OVERLAP={overlap} run failed: {}\n{stdout}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("OVERLAP "))
+        .unwrap_or_else(|| {
+            panic!("the VIEWW_GPU_OVERLAP={overlap} run reported nothing:\n{stdout}")
+        });
+    let field = |name: &str| -> &str {
+        line.split_whitespace()
+            .find_map(|kv| kv.strip_prefix(name)?.strip_prefix('='))
+            .unwrap_or_else(|| panic!("no {name} in {line:?}"))
+    };
+    let number = |name: &str| -> u64 { field(name).parse().expect("a number") };
+    (
+        Duration::from_micros(number("gpu_wait_us")),
+        Duration::from_micros(number("present_us")),
+        number("gpu_frames"),
+        number("frames"),
+        field("last_colour_pixels").parse().ok(),
+    )
+}
+
+/// The GPU draws a frame while the application builds the next one.
+///
+/// `SceneRenderer` used to wait for every frame's fence before returning, so
+/// the CPU's work and the GPU's ran one after the other: on the LG Stylo 5,
+/// about 5 ms and 12 ms, a 17.3 ms frame against a 16.7 ms budget (Device
+/// Farm run 39538891917). Now a frame into the swapchain is left in flight
+/// and waited for only when the next one needs the renderer
+/// (`SceneRenderer::settle`).
+///
+/// Measured, not assumed: the same window — every frame a full redraw after
+/// [`OVERLAP_CPU_WORK`] of application work — runs with overlap on and off.
+/// Off, the CPU blocks on the fence for the GPU's whole frame (`gpu_wait`);
+/// on, it returns and the wait on the fence all but disappears. On both,
+/// every frame is a GPU frame, and with overlap on the screen shows the last
+/// frame's colour: a present that did not wait for the GPU would show a stale
+/// or half-drawn one.
+///
+/// **What this cannot show here is the frame getting faster**, and the
+/// printed breakdown says why: on lavapipe under Xvfb, `vkQueuePresentKHR`
+/// itself blocks until the frame is rendered — Mesa's software X11 present
+/// copies the finished image to the server on the CPU — so the GPU's time
+/// moves from `gpu_wait` into `present` (2026-10-21: 8.86 ms waited on the
+/// fence serial; 7.66 ms in present overlapped, against 7.52 ms of GPU time).
+/// Android's WSI hands the semaphore to the compositor and returns, which is
+/// where the overlap pays; Device Farm's `gpu` and `gpuserial` passes
+/// measure it.
+fn the_app_builds_the_next_frame_while_the_gpu_draws_this_one() {
+    vieww_hardware::skip_without!(display, gpu);
+    arm_deadline("the_app_builds_the_next_frame_while_the_gpu_draws_this_one");
+
+    let (serial_wait, serial_present, serial_gpu, serial_frames, _) = overlap_run("0");
+    let (overlap_wait, overlap_present, overlap_gpu, overlap_frames, last_colour) =
+        overlap_run("1");
+    eprintln!(
+        "wait_loop: gpu_overlap: median fence wait {:.2} ms serial, {:.2} ms overlapped; \
+         median present {:.2} ms serial, {:.2} ms overlapped (a present that blocks on \
+         rendering, as lavapipe's X11 one does, takes the GPU's time instead)",
+        serial_wait.as_secs_f64() * 1000.0,
+        overlap_wait.as_secs_f64() * 1000.0,
+        serial_present.as_secs_f64() * 1000.0,
+        overlap_present.as_secs_f64() * 1000.0,
+    );
+    assert_eq!(serial_gpu, serial_frames, "every serial frame on the GPU");
+    assert_eq!(
+        overlap_gpu, overlap_frames,
+        "every overlapped frame on the GPU"
+    );
+    // Serial: the CPU waits for the GPU's whole frame — and there is one to
+    // wait for, or this test proves nothing.
+    assert!(
+        serial_wait >= Duration::from_micros(500),
+        "the GPU's frame is too quick to measure an overlap against: {serial_wait:?}"
+    );
+    // Overlapped: the application's work covered most of it.
+    assert!(
+        overlap_wait * 2 <= serial_wait,
+        "overlap left the CPU waiting {overlap_wait:?} against {serial_wait:?} serial"
+    );
+    if let Some(pixels) = last_colour {
+        assert!(
+            pixels > 10_000,
+            "the screen does not show the last frame's colour ({pixels} pixels match)"
+        );
+    }
+}
+
+/// Every other frame nests more layers than the GPU planner can express, so
+/// that frame falls back to the CPU and is presented through `present_pixels`
+/// — straight after a GPU frame that may still be in flight.
+#[derive(Debug)]
+struct Mixer {
+    phase: vieww_element::Signal<u32>,
+}
+
+impl Widget for Mixer {
+    fn debug_name(&self) -> &'static str {
+        "Mixer"
+    }
+
+    fn kind(&self) -> WidgetKind<'_> {
+        WidgetKind::Composed
+    }
+
+    fn build(&self, _ctx: &BuildContext) -> WidgetNode {
+        let phase = self.phase.get();
+        let mut node: WidgetNode = ColoredBox::new(flasher_colour(phase)).into();
+        if phase % 2 == 1 {
+            // Deeper than `vieww_gpu::MAX_TARGET_DEPTH` (32): the plan has a
+            // gap, and the CPU draws this frame.
+            for _ in 0..40 {
+                node = Opacity::new(0.99).child(node).into();
+            }
+        }
+        node
+    }
+}
+
+vieww_widget::widget_node_from!(Mixer);
+
+/// A CPU frame presented right after a GPU frame left in flight.
+///
+/// The swapchain reuses one acquire semaphore, and a GPU frame in flight may
+/// still be waiting on it when the CPU path's `present_pixels` acquires and
+/// signals it again — undefined behaviour that a lenient driver hides. The
+/// platform layer settles the GPU frame first (`SceneRenderer::settle`). Here
+/// frames alternate between the GPU and a CPU fallback forty times; both
+/// kinds must have drawn, and the last frame's colour must be on the screen.
+/// The run under Vulkan's synchronisation validation is the half of the proof
+/// a test cannot assert by itself (`ci` runs it plainly).
+fn cpu_frames_between_gpu_frames_in_flight_present_cleanly() {
+    vieww_hardware::skip_without!(display, gpu);
+    arm_deadline("cpu_frames_between_gpu_frames_in_flight_present_cleanly");
+
+    const MIXED: u32 = 40;
+    let app = App::new()
+        .title("vieww wait-loop: gpu/cpu mix")
+        .prefer_gpu();
+    let windows = app.windows();
+    let waker = Arc::new(app.waker());
+    let phase: Rc<std::cell::RefCell<Option<vieww_element::Signal<u32>>>> = Rc::default();
+    let frames = Rc::new(Cell::new(0u32));
+    let done = Rc::new(Cell::new(false));
+    let seen = Rc::new(Cell::new((0u64, 0u64, None::<usize>)));
+
+    let report = app
+        .before_frame({
+            let phase = Rc::clone(&phase);
+            let frames = Rc::clone(&frames);
+            move |_driver| {
+                if let Some(phase) = &*phase.borrow() {
+                    if frames.get() < MIXED {
+                        frames.set(frames.get() + 1);
+                        phase.set(frames.get());
+                    }
+                }
+            }
+        })
+        .after_frame({
+            let waker = Arc::clone(&waker);
+            let done = Rc::clone(&done);
+            move |_driver| {
+                if !done.get() {
+                    waker.wake();
+                }
+            }
+        })
+        .on_frame({
+            let frames = Rc::clone(&frames);
+            let done = Rc::clone(&done);
+            let seen = Rc::clone(&seen);
+            let waker = Arc::clone(&waker);
+            move |log| {
+                if frames.get() >= MIXED && !done.get() {
+                    done.set(true);
+                    std::thread::sleep(Duration::from_millis(200));
+                    let report = log.report();
+                    seen.set((
+                        report.gpu_frames,
+                        report.frames,
+                        screen_pixels_matching(flasher_colour(MIXED)),
+                    ));
+                    let _ = Windows::close(&*windows, WindowKey::PRIMARY);
+                    waker.wake();
+                }
+            }
+        })
+        .run({
+            let phase = Rc::clone(&phase);
+            move |driver| {
+                let signal = driver.elements().runtime().signal(0_u32);
+                *phase.borrow_mut() = Some(signal.clone());
+                driver.set_root(Mixer { phase: signal });
+            }
+        });
+    report.expect("the window opened, alternated, and closed");
+    let (gpu_frames, frames, last_colour) = seen.get();
+    eprintln!(
+        "wait_loop: gpu_cpu_mix: {gpu_frames} of {frames} frames on the GPU, the rest on the CPU"
+    );
+    assert!(
+        gpu_frames >= u64::from(MIXED) / 4,
+        "too few GPU frames: {gpu_frames} of {frames}"
+    );
+    assert!(
+        gpu_frames + u64::from(MIXED) / 4 <= frames,
+        "too few CPU frames: {gpu_frames} of {frames} on the GPU"
+    );
+    if let Some(pixels) = last_colour {
+        assert!(
+            pixels > 10_000,
+            "the last frame's colour is not on screen ({pixels} pixels)"
+        );
+    }
+}
+
 /// The scenarios, by the name a child process is given.
 ///
 /// One table rather than three `if` arms so that the parent's list and the
@@ -873,7 +1250,18 @@ const SCENARIOS: &[(&str, fn())] = &[
     ),
     ("gpu_frame", a_gpu_planned_frame_presents_to_a_real_window),
     ("gpu_damage", a_gpu_frame_redraws_only_what_changed),
+    (
+        "gpu_overlap",
+        the_app_builds_the_next_frame_while_the_gpu_draws_this_one,
+    ),
+    (
+        "gpu_cpu_mix",
+        cpu_frames_between_gpu_frames_in_flight_present_cleanly,
+    ),
 ];
+
+/// Processes a scenario starts for itself, not run on their own.
+const HELPERS: &[(&str, fn())] = &[("gpu_overlap_measure", measure_gpu_overlap)];
 
 /// Parent: run each scenario in a child. Child: run the one it was named.
 ///
@@ -888,6 +1276,7 @@ fn main() {
     if let Some(name) = args.next() {
         let (_, scenario) = SCENARIOS
             .iter()
+            .chain(HELPERS)
             .find(|(known, _)| *known == name)
             .unwrap_or_else(|| panic!("no scenario named {name:?}"));
         scenario();

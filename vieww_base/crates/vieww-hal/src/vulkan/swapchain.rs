@@ -75,11 +75,21 @@ pub struct VulkanSwapchain {
     order: ChannelOrder,
     width: u32,
     height: u32,
-    /// Reused across frames — safe only because every
-    /// [`VulkanDevice::present_pixels`] call `vkQueueWaitIdle`s before
-    /// returning, so the semaphore is never re-signalled before its previous
-    /// signal was consumed. See the module docs on "simple over fast".
+    /// Reused across frames — safe only because the submission that waited
+    /// on its last signal has finished before the next acquire signals it
+    /// again: every [`VulkanDevice::present_pixels`] call `vkQueueWaitIdle`s
+    /// before returning, and a `SceneRenderer` frame left in flight is
+    /// waited for (`SceneRenderer::settle`) before the next acquire — the
+    /// caller's job, which `vieww-platform-winit`'s `NativeRenderer` does.
+    /// See the module docs on "simple over fast".
     image_available: vk::Semaphore,
+    /// One per image, signalled by the submission that renders into it and
+    /// waited on by its present — see [`AcquiredImage`]. Per image rather
+    /// than one: a present's wait on a semaphore cannot be tracked with a
+    /// fence, so one semaphore re-signalled every frame could be signalled
+    /// again while the previous present still waits on it; an image is not
+    /// acquired again until its present is done with it.
+    render_done: Vec<vk::Semaphore>,
     /// The staging buffer `present_pixels` uploads through, kept for the
     /// swapchain's life rather than created and destroyed per frame.
     ///
@@ -547,6 +557,11 @@ pub struct AcquiredImage {
     /// Signalled by the presentation engine when the image may be written;
     /// the first submission that touches the image waits on it.
     pub(crate) ready: vk::Semaphore,
+    /// Signalled by the submission that renders the image, and waited on by
+    /// [`VulkanDevice::present_acquired`] — so the present follows the GPU's
+    /// work without the CPU waiting for it (`SceneRenderer`'s frames in
+    /// flight). One per swapchain image; see `VulkanSwapchain::render_done`.
+    pub(crate) done: vk::Semaphore,
     pub(crate) width: u32,
     pub(crate) height: u32,
 }
@@ -645,6 +660,7 @@ impl VulkanDevice {
             index,
             image: swapchain.images[index as usize],
             ready: swapchain.image_available,
+            done: swapchain.render_done[index as usize],
             width: swapchain.width,
             height: swapchain.height,
         };
@@ -655,9 +671,11 @@ impl VulkanDevice {
         Ok(Some(image))
     }
 
-    /// Present an image a renderer has finished writing and left in
-    /// `PRESENT_SRC_KHR`, with every submission that wrote it already
-    /// retired (as `SceneRenderer`'s are: it waits on its fence).
+    /// Present an image a renderer has written and left in
+    /// `PRESENT_SRC_KHR`, waiting on the GPU for its
+    /// [`done`](AcquiredImage) semaphore rather than on the CPU for the work:
+    /// the submission that wrote it must have signalled that semaphore, as
+    /// `SceneRenderer::render_planned_to` does, and may still be running.
     ///
     /// # Errors
     ///
@@ -670,7 +688,9 @@ impl VulkanDevice {
     ) -> Result<(), VulkanError> {
         let swapchains = [swapchain.swapchain];
         let image_indices = [image.index];
+        let waits = [image.done];
         let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(&waits)
             .swapchains(&swapchains)
             .image_indices(&image_indices);
         match unsafe {
@@ -731,12 +751,20 @@ impl VulkanDevice {
                 &[barrier],
             );
             self.device.end_command_buffer(cmd)?;
+            // Signals the image's `done` semaphore, because the present below
+            // waits on it like every other: an abandoned image that skipped
+            // it left the present waiting on a semaphore nothing would ever
+            // signal — a hang on the first resize that landed between an
+            // acquire and its frame (validation:
+            // VUID-vkQueuePresentKHR-pWaitSemaphores-03268).
+            let signals = [image.done];
             self.device.queue_submit(
                 self.queue,
                 &[vk::SubmitInfo::default()
                     .wait_semaphores(&waits)
                     .wait_dst_stage_mask(&stages)
-                    .command_buffers(&cmds)],
+                    .command_buffers(&cmds)
+                    .signal_semaphores(&signals)],
                 vk::Fence::null(),
             )?;
             self.device.queue_wait_idle(self.queue)?;
@@ -836,6 +864,11 @@ impl VulkanSwapchain {
         let semaphore_info = vk::SemaphoreCreateInfo::default();
         let image_available = unsafe { device.device.create_semaphore(&semaphore_info, None) }
             .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
+        let render_done = images
+            .iter()
+            .map(|_| unsafe { device.device.create_semaphore(&semaphore_info, None) })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| VulkanError::Vulkan(e.to_string()))?;
 
         Ok(Self {
             surface_loader,
@@ -848,6 +881,7 @@ impl VulkanSwapchain {
             width: extent.width,
             height: extent.height,
             image_available,
+            render_done,
             staging: vk::Buffer::null(),
             staging_memory: vk::DeviceMemory::null(),
             staging_capacity: 0,
@@ -906,6 +940,11 @@ impl VulkanSwapchain {
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
             device.device.destroy_semaphore(self.image_available, None);
+            // After the swapchain, for the same reason as `image_available`:
+            // destroying it ends any present still waiting on one.
+            for semaphore in self.render_done.drain(..) {
+                device.device.destroy_semaphore(semaphore, None);
+            }
         }
     }
 }

@@ -1247,6 +1247,14 @@ impl NativeRenderer {
         // full-frame allocation per present, which the Vieww standard's
         // steady-state clause counts. The rasterisation already ran at the
         // swapchain's own extent, so there is nothing left to resample.
+        // A GPU frame may still be in flight, holding a wait on the swapchain's
+        // acquire semaphore that `present_pixels` is about to signal again —
+        // see `SceneRenderer::settle`.
+        if let Some(gpu) = &mut self.gpu {
+            gpu.renderer
+                .settle()
+                .map_err(|error| NativeError::Render(error.to_string()))?;
+        }
         let frame = self.cpu.last_frame();
         debug_assert_eq!(
             frame.len(),
@@ -1368,7 +1376,12 @@ impl NativeRenderer {
         };
         if let (None, false, Some(device)) = (&self.gpu, self.gpu_unavailable, &device) {
             match SceneRenderer::new(device) {
-                Ok(renderer) => {
+                Ok(mut renderer) => {
+                    if !gpu_overlap() {
+                        renderer
+                            .set_overlap(false)
+                            .map_err(|error| NativeError::Render(error.to_string()))?;
+                    }
                     self.gpu = Some(GpuRaster {
                         planner: GpuPlanner::new(),
                         renderer,
@@ -1520,6 +1533,12 @@ impl NativeRenderer {
                 // (`direct_route` above checked both, plus the linear filter
                 // the resolution scale's enlarging blit needs.)
                 if base.a == 255 && device.can_blit_scene_frames(swapchain) {
+                    // The previous frame, if still in flight, is done with the
+                    // acquire semaphore and every resource this one writes.
+                    // Planning above ran while it drew; this is the remainder.
+                    renderer
+                        .settle()
+                        .map_err(|error| NativeError::Render(error.to_string()))?;
                     let acquiring = Instant::now();
                     let acquired = device
                         .acquire_image(swapchain, extent)
@@ -1645,6 +1664,16 @@ impl NativeRenderer {
             gpu_redrawn: None,
         })
     }
+}
+
+/// Whether a GPU frame into the swapchain is left in flight while the
+/// application builds the next one (`SceneRenderer::settle`): on unless
+/// `VIEWW_GPU_OVERLAP=0` (Android: `debug.vieww.overlap=0`), the switch for
+/// comparing a phone whose driver is in doubt. Read once per process.
+#[must_use]
+pub fn gpu_overlap() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("VIEWW_GPU_OVERLAP").map_or(true, |v| v.trim() != "0"))
 }
 
 /// Device pixels a GPU frame's damage is grown by on every side — see

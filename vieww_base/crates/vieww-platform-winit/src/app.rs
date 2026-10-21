@@ -1614,7 +1614,13 @@ impl WindowState {
                 // `vieww-hal`'s `vulkan::swapchain` module docs) and returns
                 // only once the frame is genuinely on the swapchain, so a
                 // wall-clock duration around it is the raster-plus-present
-                // cost, not the frame interval.
+                // cost, not the frame interval. A GPU frame into the
+                // swapchain is the exception: it returns with the frame still
+                // in flight (`SceneRenderer::settle`), and what it measures
+                // is the CPU's share plus whatever wait the *previous* frame
+                // still needed — the frame's cost on this thread, which is
+                // what the budget is about. The GPU's own time is
+                // `FrameStages::gpu_passes`.
                 let elapsed = started.elapsed();
                 let factor = f64::from(self.scale.factor());
                 // **The pixels this frame actually rasterised, not the ones it
