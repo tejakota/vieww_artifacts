@@ -350,6 +350,24 @@ vieww_base's `prefer-dynamic` development setting.
 secrets), and TLS/sandbox on macOS and Windows (W-5b, W-6b) — the release
 notes say so in a table, per platform.
 
+## ADR-021 — Export: a copy always, a package only with proof · Accepted
+
+**Decision.** `wright export` (and Export on the result card) makes the
+project's source as a zip, plus the package its language makes: a Python
+wheel, a Rust crate, or a built React app. Packages require the last run
+to have passed its checks and the Reviewer's approval; the source zip does
+not (a copy is not a claim). Exports go to `Exports/<project>` beside the
+project, never inside it, so exporting changes no cache key and the next
+export does not include the last. The zip and the wheel are written by
+Wright (std only: `core::zip`, `core::sha256`) with fixed timestamps, so
+the same project exports the same bytes; the crate and the web build run
+`cargo package` / `npm run build` on the user's machine, outside the
+sandbox, because a person asked for them.
+
+**React** joins the convention with rule 1 intact: logic in plain
+modules tested by `node --test` with nothing installed; JSX and Vite only
+for running and building.
+
 ---
 
 ## Open questions (honest ledger)

@@ -565,7 +565,7 @@ impl Ui {
         if let Some((_, rec)) = self.inner.recording.borrow().as_ref() {
             self.mic_level.set(rec.level());
         }
-        let busy = self.sessions.get().iter().any(|s| s.running.get() || s.status().1 == session::Tone::Live);
+        let busy = self.sessions.get().iter().any(|s| s.running.get() || s.exporting.get().is_some() || s.status().1 == session::Tone::Live);
         let live = busy
             || self.splash.get()
             || self.dragging.get()

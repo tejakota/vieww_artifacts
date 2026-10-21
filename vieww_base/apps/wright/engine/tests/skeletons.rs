@@ -53,3 +53,32 @@ fn shell_skeleton_runs_and_tests_green() {
 fn rust_skeleton_runs_and_tests_green() {
     check("rust", "cargo");
 }
+
+/// React: the logic tests need nothing installed (rule 1 holds). The
+/// app itself needs npm; its build is checked only when asked
+/// (`WRIGHT_TEST_NPM=1`), because it downloads packages.
+#[test]
+fn react_skeleton_tests_green_without_installs() {
+    if std::process::Command::new("node").arg("--version").output().is_err() {
+        eprintln!("node not installed; skipping react");
+        return;
+    }
+    let bp = parse::blueprint("meta { name \"Skeleton Check react\" }\nintent { summary \"s\" confirmed \"v1\" }\nproject { language \"react\" }\n").unwrap();
+    let dir = std::env::temp_dir().join(format!("wright-skel-react-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for f in convention::skeleton(&bp) {
+        let p = dir.join(&f.path);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, &f.contents).unwrap();
+    }
+    let run = |cmd: &str| {
+        let out = std::process::Command::new("sh").arg("-c").arg(cmd).current_dir(&dir).output().unwrap();
+        assert!(out.status.success(), "react: `{cmd}` failed\n{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    };
+    run(&convention::test_cmd(&bp));
+    assert!(!dir.join("node_modules").exists(), "the tests ran with nothing installed");
+    if std::env::var("WRIGHT_TEST_NPM").is_ok() {
+        run("npm install --no-audit --no-fund && npm run build");
+        assert!(dir.join("dist/index.html").exists(), "vite built the app");
+    }
+}

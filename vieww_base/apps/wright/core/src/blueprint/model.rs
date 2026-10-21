@@ -290,7 +290,7 @@ pub struct Chips {
 /// for the language apply.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectSpec {
-    /// One of the convention's languages: python, node, rust, shell, none.
+    /// One of the convention's languages: python, node, react, rust, shell, none.
     pub language: String,
     pub test_cmd: String,
     pub run_cmd: String,

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 — 2026-10-21 — export
+
+- **`wright export`** and **Export** on the result card (ADR-021):
+  - the source as a `.zip` — always; without logs, caches, installs or
+    builds; the same project makes the same bytes;
+  - a **Python wheel** (`py3-none-any`), written by Wright with no `build`
+    package: RECORD hashes, METADATA from the blueprint and README, and a
+    console command when `__main__.py` has `main()`. pip installs it;
+  - a **Rust crate** via `cargo package` (into a scratch folder; the
+    project's `target/` is untouched);
+  - a **React web build**: `npm install`, `npm run build`, `dist/` zipped.
+  Packages need the last run to have passed its checks and review. Exports
+  go to `Exports/<project>` beside the project.
+- **React projects** (`language "react"`): Vite + React 18, logic tested
+  with no installs (`node --test`), JSX for the screen.
+- `core::zip` (stored, reproducible) and `core::sha256` (FIPS 180-4),
+  both std-only and checked against the published test values.
+- Tests check exports with the tools that read them: Python's zipfile,
+  pip (install, import, run), cargo, and a real Vite build with
+  `WRIGHT_TEST_NPM=1`.
+
 ## 0.3.1 — 2026-10-21 — first-install fixes
 
 - **The window opens centred and fits the screen.** It was placed by the

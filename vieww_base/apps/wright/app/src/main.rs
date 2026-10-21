@@ -9,6 +9,9 @@
 //!   wright replay <run> [dir]   reconstruct a past run from its log (--at N)
 //!   wright approve [dir]        list / answer pending approvals
 //!   wright diff [old] [new]     what an edit refires, and why
+//!   wright export [dir]         the project as a .zip, plus its package: a Python
+//!                               wheel, a Rust crate or a web build (--zip --wheel
+//!                               --crate --web, --out DIR)
 //!   wright schedule ...         list | remove [dir] | install
 //!   wright daemon               fire schedules in the background
 //!   wright secret set <ref>     put a key in the OS keychain
@@ -44,6 +47,7 @@ fn main() {
         Some("replay") => cmd::replay(rest),
         Some("approve") => cmd::approve(rest),
         Some("diff") => cmd::diff(rest),
+        Some("export") => cmd::export(rest),
         Some("schedule") => cmd::schedule(rest),
         Some("daemon") => cmd::daemon(),
         Some("secret") => cmd::secret(rest),

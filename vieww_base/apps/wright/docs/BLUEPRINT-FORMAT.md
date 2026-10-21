@@ -56,7 +56,7 @@ comment   := "//" to end of line
 
 ```kdl
 project {
-    language "python"                       // picks the skeleton (docs/PROJECT-CONVENTION.md)
+    language "python"                       // python, node, react, rust, shell or none: picks the skeleton (docs/PROJECT-CONVENTION.md)
     test "PYTHONPATH=src python3 -m unittest discover -s tests -t . -q"   // optional override
     run "PYTHONPATH=src python3 -m my_tool" // optional override
 }

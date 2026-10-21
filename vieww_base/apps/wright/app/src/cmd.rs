@@ -590,6 +590,40 @@ pub fn where_(args: &[String]) -> i32 {
     }
 }
 
+// ── export ───────────────────────────────────────────────────────
+
+/// `wright export [dir] [--zip|--wheel|--crate|--web] [--out DIR]` — the
+/// project as a zip, plus the package its language makes (a Python wheel,
+/// a Rust crate, a built web app). With no kind given, every one that
+/// applies. Packages need a last run that passed its checks and review.
+pub fn export(args: &[String]) -> i32 {
+    use wright_engine::export::{self, Kind};
+    let out_arg = flag_value(args, "--out");
+    let (pos, flags) = split(args);
+    let pos: Vec<&str> = pos.into_iter().filter(|p| Some(*p) != out_arg).collect();
+    let dir = project_dir(pos.first().copied());
+    let dir = dir.canonicalize().unwrap_or(dir);
+    let bp = match wright_engine::load_blueprint(&dir) {
+        Ok(b) => b,
+        Err(e) => return fail(e),
+    };
+    let asked: Vec<Kind> = Kind::ALL.into_iter().filter(|k| flags.contains(&k.flag())).collect();
+    let kinds = if asked.is_empty() { export::available(&bp) } else { asked };
+    let out = out_arg.map(PathBuf::from).unwrap_or_else(|| export::default_out(&dir));
+    let mut failed = 0;
+    for kind in kinds {
+        match export::export(&dir, kind, &out) {
+            Ok(e) => println!("{:<16} {}
+{:<16} {} bytes · sha256 {}", kind.label(), e.path.display(), "", e.bytes, e.sha256),
+            Err(err) => {
+                failed += 1;
+                eprintln!("{:<16} not made: {err}", kind.label());
+            }
+        }
+    }
+    i32::from(failed > 0)
+}
+
 // ── doctor ───────────────────────────────────────────────────────
 
 const DOCTOR_BLUEPRINT: &str = "meta { name \"doctor\" }\nintent { summary \"self test\" confirmed \"v1\" }\nagent Probe { goal \"prove the machine compiles\" tools \"files-read\" permissions files-read=true }\ndeliverable kind=\"check\" { check \"doctor ran\" }";

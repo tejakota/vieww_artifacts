@@ -24,6 +24,7 @@ use wright_core::confirm::{self, Line};
 use wright_core::events::{Event, EventKind, RunId};
 use wright_core::wire::json;
 use wright_engine::approve::StoreApprover;
+use wright_engine::export::{self, Exported, Kind};
 use wright_engine::interview::{self, InterviewIo};
 use wright_engine::{fire, FireOptions, Trigger};
 use wright_runtime::config::Config;
@@ -46,6 +47,8 @@ pub struct Card {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanView {
     pub name: String,
+    /// The convention language (what the project can be exported as).
+    pub language: String,
     pub request: String,
     pub lines: Vec<Line>,
     /// Steps in order; cards in one step run at the same time.
@@ -215,6 +218,7 @@ pub fn load_plan(project: &Path) -> Option<PlanView> {
         .collect();
     Some(PlanView {
         name: bp.meta.name.clone(),
+        language: bp.project.language.clone(),
         request: bp.intent.summary.clone(),
         lines,
         stages,
@@ -270,6 +274,7 @@ pub struct Shared {
     confirm: Mutex<Option<Vec<Line>>>,
     finished: Mutex<Option<Result<ResultView, String>>>,
     interview_done: Mutex<Option<Result<bool, String>>>,
+    exported: Mutex<Option<Result<Exported, String>>>,
     to_interview: Mutex<Option<Sender<Reply>>>,
 }
 
@@ -426,6 +431,11 @@ pub struct Session {
     pub scroll: super::kit::ScrollState,
     /// How far the approval card is being dragged sideways.
     pub card_drag: Signal<f32>,
+    /// The Export menu, the export in progress, and the latest results
+    /// (newest first).
+    pub export_menu: Signal<bool>,
+    pub exporting: Signal<Option<Kind>>,
+    pub exports: Signal<Vec<Result<Exported, String>>>,
     shared: Arc<Shared>,
     last_poll: Rc<Cell<Instant>>,
     interviewing: Rc<RefCell<bool>>,
@@ -460,6 +470,9 @@ impl Session {
             notice: rt.signal(String::new()),
             scroll: super::kit::ScrollState::new(rt),
             card_drag: rt.signal(0.0),
+            export_menu: rt.signal(false),
+            exporting: rt.signal(None),
+            exports: rt.signal(Vec::new()),
             shared: Arc::new(Shared::default()),
             last_poll: Rc::new(Cell::new(Instant::now())),
             interviewing: Rc::new(RefCell::new(false)),
@@ -540,6 +553,13 @@ impl Session {
                 Err(e) => self.notice.set(format!("The run did not start: {e}")),
             }
         }
+        if let Some(r) = self.shared.exported.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            self.exporting.set(None);
+            self.exports.update(|v| {
+                v.insert(0, r);
+                v.truncate(4);
+            });
+        }
         if self.running.get() && self.last_poll.get().elapsed() > Duration::from_millis(400) {
             self.last_poll.set(Instant::now());
             if let Ok(store) = Store::open(&self.project) {
@@ -611,6 +631,23 @@ impl Session {
             let r = Config::load().and_then(|cfg| interview::interview(&project, &cfg, &mut io)).map(|bp| bp.is_some());
             *shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()) = None;
             *shared.interview_done.lock().unwrap_or_else(|p| p.into_inner()) = Some(r);
+            wake.wake();
+        });
+    }
+
+    /// Export in the background, into `Exports/<project>` next to it.
+    pub fn export(&self, kind: Kind) {
+        if self.exporting.get().is_some() {
+            return;
+        }
+        self.export_menu.set(false);
+        self.exporting.set(Some(kind));
+        let project = (*self.project).clone();
+        let shared = Arc::clone(&self.shared);
+        let wake = WakeHandle::current();
+        std::thread::spawn(move || {
+            let r = export::export(&project, kind, &export::default_out(&project));
+            *shared.exported.lock().unwrap_or_else(|p| p.into_inner()) = Some(r);
             wake.wake();
         });
     }

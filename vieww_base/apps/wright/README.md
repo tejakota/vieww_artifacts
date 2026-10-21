@@ -27,13 +27,13 @@ affected work runs again.
 | TLS: OS OpenSSL via dlopen, Linux; HTTP CONNECT proxies | ✅ | macOS/Windows TLS: refuses loudly (W-6b) |
 | Schedules: cron + IANA time zones (TZif), background daemon | ✅ | systemd / launchd unit installer |
 | Interview → Confirm Gate → blueprint | ✅ | the summary is code-generated |
-| Universal project convention (python, node, rust, shell) | ✅ | every skeleton's own tests pass with no installs |
+| Universal project convention (python, node, react, rust, shell) | ✅ | every skeleton's own tests pass with no installs |
 | vieww window: sessions, swipe, overview, live engine, settings, voice, files | ✅ | driven end to end headlessly; see "The window" |
 | Installers: Windows, macOS, Linux | ✅ | `.github/workflows/wright-release.yml` (ADR-020) |
 | Secrets: OS keychain via `security` / `secret-tool`, env for CI | ✅ | Windows Credential Manager: not yet |
 | Recipes gallery, signing, MCP, server mode, teams | ❌ | see `docs/SPIKES.md` §v0.3 |
 
-**191 tests passing (plus 1 live-network test, opt-in), clippy clean, zero warnings.** The headless binary has **zero**
+**199 tests passing (plus 1 live-network test, opt-in), clippy clean, zero warnings.** The headless binary has **zero**
 external crates; the `ui` feature adds exactly one dependency — vieww, from
 the repository Wright lives in, by path (ADR-002, ADR-011).
 
@@ -90,6 +90,7 @@ instead (`wright secret env <ref>` prints the variable name).
 | Attach files | `+` in the composer, or drop them on the window |
 | Speak | the mic (needs a speech model: `voice model="whisper-1"`) |
 | Settings | ⚙, or Ctrl/Cmd+, — models & keys, defaults, appearance, workspace, project |
+| Export | **Export** on the result: the source as a .zip, or the package (wheel, crate, web build) once a run has passed its checks |
 
 ## The commands
 
@@ -102,6 +103,8 @@ wright runs [dir]           run history
 wright replay <run> [dir]   reconstruct a past run from its log (--at N) — no re-execution
 wright approve [dir]        list / answer pending approvals (any terminal, any time)
 wright diff [old] [new]     what an edit refires, and why
+wright export [dir]         the project as a .zip, plus its package: a Python wheel,
+                            a Rust crate or a web build (--zip --wheel --crate --web)
 wright schedule ...         list | remove [dir] | install (login service)
 wright daemon               fire schedules in the background
 wright secret set <ref>     put a key in the OS keychain

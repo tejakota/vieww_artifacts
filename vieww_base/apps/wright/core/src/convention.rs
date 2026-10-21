@@ -36,7 +36,7 @@
 use crate::blueprint::model::Blueprint;
 
 /// Languages the convention has a skeleton for.
-pub const LANGUAGES: &[&str] = &["python", "node", "rust", "shell", "none"];
+pub const LANGUAGES: &[&str] = &["python", "node", "react", "rust", "shell", "none"];
 
 /// One file of the skeleton.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,7 +89,7 @@ pub fn slug(name: &str) -> String {
 pub fn default_test_cmd(language: &str) -> &'static str {
     match language {
         "python" => "PYTHONPATH=src python3 -m unittest discover -s tests -t . -q",
-        "node" => "node --test",
+        "node" | "react" => "node --test",
         "rust" => "cargo test --quiet",
         "shell" => "sh tests/run.sh",
         _ => "",
@@ -101,6 +101,8 @@ pub fn default_run_cmd(language: &str, slug: &str) -> String {
     match language {
         "python" => format!("PYTHONPATH=src python3 -m {slug}"),
         "node" => "node src/index.js".into(),
+        // A web app needs its tool chain to run (`npm install` once).
+        "react" => "npm install --no-audit --no-fund && npm run dev".into(),
         "rust" => "cargo run --quiet".into(),
         "shell" => "sh bin/main.sh".into(),
         _ => String::new(),
@@ -139,6 +141,7 @@ pub fn skeleton(bp: &Blueprint) -> Vec<SkeletonFile> {
     match lang {
         "python" => files.extend(python(&slug, &bp.meta.name)),
         "node" => files.extend(node(&slug, &bp.meta.name)),
+        "react" => files.extend(react(&slug, &bp.meta.name)),
         "rust" => files.extend(rust(&slug, &bp.meta.name)),
         "shell" => files.extend(shell(&bp.meta.name)),
         _ => {}
@@ -201,6 +204,7 @@ fn gitignore(lang: &str) -> String {
     match lang {
         "python" => s.push_str("__pycache__/\n*.pyc\n.venv/\n"),
         "node" => s.push_str("node_modules/\n"),
+        "react" => s.push_str("node_modules/\ndist/\n"),
         "rust" => s.push_str("target/\n"),
         _ => {}
     }
@@ -329,6 +333,122 @@ test('logger writes json lines', async () => {\n  const dir = fs.mkdtempSync(pat
     ]
 }
 
+// A React app (Vite). The split that keeps rule 1 ("tests need no
+// installs"): what the app *does* lives in plain modules under `src/`
+// (`logic.js`), tested by `node --test` with nothing installed; the JSX
+// that draws it needs Vite and React, installed by `npm install` when you
+// run or build it. `wright export --web` builds `dist/`.
+const REACT_PACKAGE: &str = r#"{
+  "name": "{slug}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "5.4.11"
+  }
+}
+"#;
+
+const REACT_INDEX: &str = r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{name}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+"#;
+
+const REACT_VITE: &str = r#"// Vite config: React, and relative asset paths so dist/ works from any folder.
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  base: './',
+});
+"#;
+
+const REACT_MAIN: &str = r#"// Entry point: mounts <App /> into #root.
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App.jsx';
+import { getLogger } from './log.js';
+
+getLogger('main').info('started', { project: {name:?} });
+createRoot(document.getElementById('root')).render(<App />);
+"#;
+
+const REACT_APP: &str = r#"// The app's one screen. Keep logic in logic.js (tested); this file draws it.
+import React from 'react';
+import { greeting } from './logic.js';
+
+export default function App() {
+  return (
+    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 32 }}>
+      <h1>{greeting({name:?})}</h1>
+    </main>
+  );
+}
+"#;
+
+const REACT_LOGIC: &str = r#"// What the app does, as plain functions: tested by `node --test`, no installs.
+export function greeting(name) {
+  return `Hello from ${name}`;
+}
+"#;
+
+const REACT_LOG: &str = r#"// Structured logging in the browser: one JSON object per line, to the console.
+export function getLogger(component) {
+  const write = (level, event, fields = {}) =>
+    console.info(JSON.stringify({ ts: new Date().toISOString(), level, component, event, ...fields }));
+  return {
+    info: (e, f) => write('info', e, f),
+    warn: (e, f) => write('warn', e, f),
+    error: (e, f) => write('error', e, f),
+  };
+}
+"#;
+
+const REACT_TEST: &str = r#"// Logic tests: run with `node --test`, nothing installed.
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { greeting } from '../src/logic.js';
+
+test('greets by name', () => {
+  assert.strictEqual(greeting('Wright'), 'Hello from Wright');
+});
+"#;
+
+fn react(slug: &str, name: &str) -> Vec<SkeletonFile> {
+    let fill = |t: &str| t.replace("{slug}", &slug.replace('_', "-")).replace("{name:?}", &format!("{name:?}")).replace("{name}", name);
+    vec![
+        file("package.json", fill(REACT_PACKAGE)),
+        file("index.html", fill(REACT_INDEX)),
+        file("vite.config.js", REACT_VITE.to_string()),
+        file("src/main.jsx", fill(REACT_MAIN)),
+        file("src/App.jsx", fill(REACT_APP)),
+        file("src/logic.js", REACT_LOGIC.to_string()),
+        file("src/log.js", REACT_LOG.to_string()),
+        file("test/logic.test.js", REACT_TEST.to_string()),
+    ]
+}
+
 fn rust(slug: &str, name: &str) -> Vec<SkeletonFile> {
     vec![
         file("Cargo.toml", format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n", slug.replace('_', "-"))),
@@ -373,7 +493,7 @@ fn ci_yaml(bp: &Blueprint) -> String {
     let test = test_cmd(bp);
     let setup = match bp.project.language.as_str() {
         "python" => "      - uses: actions/setup-python@v5\n        with: { python-version: '3.12' }\n",
-        "node" => "      - uses: actions/setup-node@v4\n        with: { node-version: '22' }\n",
+        "node" | "react" => "      - uses: actions/setup-node@v4\n        with: { node-version: '22' }\n",
         "rust" => "      - uses: dtolnay/rust-toolchain@stable\n",
         _ => "",
     };

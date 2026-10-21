@@ -31,4 +31,6 @@ pub mod events;
 pub mod hash;
 pub mod palette;
 pub mod schedule;
+pub mod sha256;
 pub mod wire;
+pub mod zip;

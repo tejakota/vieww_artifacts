@@ -319,13 +319,96 @@ fn result_card(ui: &Ui, p: &Pal, s: &Session, r: &super::session::ResultView) ->
     if !made.is_empty() {
         items.push(stretch(6.0, made));
     }
+    let menu = s.export_menu.clone();
     items.push(row(10.0, vec![
         button(p, "Run again", Look::Secondary, true, move || again.start_run()),
+        button(p, "Export", if s.export_menu.get() { Look::Primary } else { Look::Secondary }, s.exporting.get().is_none(), move || menu.set(!menu.get())),
         button(p, "Open the folder", Look::Secondary, true, move || super::picker::reveal(&folder)),
         gap(),
         button(p, "How it was built", Look::Quiet, true, move || engine.set_engine(EngineView::Open)),
     ]));
+    if s.export_menu.get() {
+        items.push(export_menu(p, s, r.ok));
+    }
+    items.extend(export_status(ui, p, s));
     card(p, stretch(12.0, items))
+}
+
+/// What this project can be exported as. Packages are offered only with
+/// the proof: a run that passed its checks and review.
+fn export_menu(p: &Pal, s: &Session, verified: bool) -> WidgetNode {
+    use wright_engine::export::Kind;
+    let language = s.plan.get().map(|pl| pl.language).unwrap_or_default();
+    let mut kinds = vec![Kind::Zip];
+    match language.as_str() {
+        "python" => kinds.push(Kind::Wheel),
+        "rust" => kinds.push(Kind::Crate),
+        "react" => kinds.push(Kind::Web),
+        _ => {}
+    }
+    let rows: Vec<WidgetNode> = kinds
+        .into_iter()
+        .map(|kind| {
+            let what = match kind {
+                Kind::Zip => "The source, without logs, caches or builds",
+                Kind::Wheel => "A .whl that pip installs, with its command",
+                Kind::Crate => "A .crate from cargo package",
+                Kind::Web => "npm install + npm run build, then dist/ as a .zip",
+            };
+            let allowed = verified || !kind.needs_proof();
+            let why = if allowed { what.to_string() } else { format!("{what} — after a run passes its checks") };
+            let go = s.clone();
+            let p = *p;
+            let item = Pressable::sensed(move |st: Sense| {
+                Container::new()
+                    .color(if allowed { p.surface.lerp(p.accent_soft, st.hover) } else { p.surface })
+                    .radius(corner::SMALL)
+                    .padding(EdgeInsets::symmetric(12.0, 8.0))
+                    .child(row(10.0, vec![
+                        Glyph::File.draw(15.0, if allowed { p.ink } else { p.muted }),
+                        column(1.0, vec![t(kind.label(), 13.5, if allowed { p.ink } else { p.muted }), t(why.clone(), 12.0, p.muted)]),
+                    ]))
+                    .into()
+            });
+            if allowed {
+                item.on_tap(move || go.export(kind)).into()
+            } else {
+                item.into()
+            }
+        })
+        .collect();
+    Container::new()
+        .color(p.surface)
+        .radius(corner::CARD)
+        .border(Border::new(p.line_strong, 1.0))
+        .padding(EdgeInsets::all(6.0))
+        .child(stretch(2.0, rows))
+        .into()
+}
+
+/// The export in progress, then each result: where it went, or why not.
+fn export_status(ui: &Ui, p: &Pal, s: &Session) -> Vec<WidgetNode> {
+    let mut out = Vec::new();
+    if let Some(kind) = s.exporting.get() {
+        let u = ui.clone();
+        let spin: WidgetNode = Live::new("export-spin", move || Glyph::spinner(16.0, u.pal().accent_ink, u.clock.get())).into();
+        out.push(row(8.0, vec![spin, t(format!("Making the {}…", kind.label().to_lowercase()), 13.0, p.muted)]));
+    }
+    for r in s.exports.get() {
+        out.push(match r {
+            Ok(e) => {
+                let dir = e.path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+                let name = e.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                row(10.0, vec![
+                    Glyph::Done.draw(16.0, p.good),
+                    fill(format!("{name} · {}", human_size(e.bytes)), 13.0, p.ink),
+                    button(p, "Show in folder", Look::Quiet, true, move || super::picker::reveal(&dir)),
+                ])
+            }
+            Err(why) => row(10.0, vec![Glyph::Failed.draw(16.0, p.bad), grow(para(why, 12.5, p.bad))]),
+        });
+    }
+    out
 }
 
 fn first_line(s: &str, n: usize) -> String {

@@ -38,7 +38,7 @@ BLUEPRINT FORMAT (KDL dialect; one node per line; strings in double quotes)
 
 meta { name "Project name" format 1 }
 intent { summary "One sentence in the person's words." confirmed "" }
-project { language "python" }            // python | node | rust | shell | none
+project { language "python" }            // python | node | react | rust | shell | none
 agent Fetcher {                          // one card; a name, then fields:
   goal "One sentence: what this agent does."
   model tier="cheap"                     // cheap | quality

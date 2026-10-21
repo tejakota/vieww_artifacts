@@ -497,6 +497,15 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     ui.mode.set(Mode::Light);
     shot(&mut driver, "7-light", 600)?;
     n += 3;
+    if let Some(s) = ui.sessions.get().first().cloned() {
+        ui.mode.set(Mode::Dark);
+        ui.go(1);
+        s.export_menu.set(true);
+        s.scroll.to_end();
+        shot(&mut driver, "8-export", 600)?;
+        s.export_menu.set(false);
+        n += 1;
+    }
     match vieww::render::overflow::reported() {
         0 => Ok(n),
         k => Err(format!("{k} layout overflow(s) while rendering (each is printed above as 'vieww: ... overflowed')")),

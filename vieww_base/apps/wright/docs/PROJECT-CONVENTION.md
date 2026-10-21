@@ -36,6 +36,7 @@ in `~/.wright/projects/` — `wright where` prints the path.
 |---|---|---|---|---|---|
 | python | `src/<slug>/` package with `__main__.py` | `src/<slug>/log.py` | `tests/test_*.py` (unittest) | `PYTHONPATH=src python3 -m unittest discover -s tests -t . -q` | `PYTHONPATH=src python3 -m <slug>` |
 | node | `src/index.js` (ES modules) | `src/log.js` | `test/*.test.js` (node:test) | `node --test` | `node src/index.js` |
+| react | `src/App.jsx` + `src/logic.js` (Vite) | `src/log.js` (console) | `test/*.test.js` on `src/logic.js` (node:test) | `node --test` | `npm install && npm run dev` |
 | rust | `src/main.rs` | `src/log.rs` | `tests/*.rs` | `cargo test --quiet` | `cargo run --quiet` |
 | shell | `bin/main.sh` | `lib/log.sh` | `tests/test_*.sh` + `tests/run.sh` | `sh tests/run.sh` | `sh bin/main.sh` |
 | none | — | — | — | — | — |
@@ -46,7 +47,10 @@ in `~/.wright/projects/` — `wright where` prints the path.
 ## Rules
 
 1. **Zero-install tests.** The generated test command uses only the
-   language's standard toolchain — no pip, no npm install, no crates. A
+   language's standard toolchain — no pip, no npm install, no crates.
+   React keeps the rule by splitting what the app *does* (`src/logic.js`,
+   tested by `node --test`) from the JSX that draws it (which needs
+   `npm install`, only to run or build the app). A
    fresh machine runs the tests the moment the skeleton lands. This is
    enforced by `engine/tests/skeletons.rs`, which lays every language's
    skeleton and runs its test AND run commands. (That test caught a real

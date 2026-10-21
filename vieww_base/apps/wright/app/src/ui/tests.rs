@@ -110,6 +110,21 @@ deliverable kind=\"message\" {{ check \"the hook got a hello\" }}\nmodels {{ tie
     assert!(r.ok, "{}", r.headline);
     assert!(s.events.get().iter().any(|e| e.kind == wright_core::events::EventKind::ApprovalResolved && e.note.contains("approved")));
 
+    // ── export: from the result card, in the background, next to the project ──
+    s.export_menu.set(true);
+    draw(&mut driver);
+    s.export(wright_engine::export::Kind::Zip);
+    assert!(!s.export_menu.get(), "choosing an export closes the menu");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while s.exports.get().is_empty() && Instant::now() < deadline {
+        ui.pump(&mut driver);
+        draw(&mut driver);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let made = s.exports.get()[0].clone().expect("the zip was made");
+    assert!(made.path.starts_with(dir.parent().unwrap().join("Exports")), "{}", made.path.display());
+    assert!(made.path.exists() && s.exporting.get().is_none());
+
     // ── scrolling: the conversation reports its length; the bar can move it ──
     for _ in 0..3 {
         draw(&mut driver);
@@ -189,7 +204,7 @@ deliverable kind=\"message\" {{ check \"the hook got a hello\" }}\nmodels {{ tie
     let shots = temp("shots");
     let n = shell::snapshots(Some(&dir), &shots).unwrap();
     assert!(n >= 6);
-    for f in ["1-splash", "2-home", "3-session", "4-engine", "5-overview", "6-settings", "7-light"] {
+    for f in ["1-splash", "2-home", "3-session", "4-engine", "5-overview", "6-settings", "7-light", "8-export"] {
         assert!(shots.join(format!("{f}.png")).exists(), "{f}");
     }
     let icon = shots.join("icon.png");
