@@ -78,7 +78,7 @@ check() {
 			# failing tests' names and panics. Capped: the point is the first
 			# screenful, not a second copy of the log.
 			sed 's/\x1b\[[0-9;]*m//g' "$check_log" |
-				grep -E '^(error|warning)(\[|:)|^ *--> |^test .* FAILED$|panicked at|^---- ' |
+				grep -E '^(error|warning)(\[|:)|^ *--> |^test .* FAILED$|panicked at|^---- |^Diff in ' |
 				head -n 60
 		} >>"$failure_details"
 		printf '    FAILED: %s (exit %s)\n' "$current_stage" "$rc" >&2

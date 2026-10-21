@@ -23,7 +23,7 @@
 # hold), and `gpu` where `auto` chose the GPU.
 
 # LG Stylo 5
-LM-Q720 | * | the_typical_frame_is_inside_its_budget frames_inside_their_budget | RC5, PENDING.md §4.5: on an msm8953 against 16.7 ms, the CPU path's median is 36 ms and the GPU path's 17.9 ms (run 39417211158; 40 ms before it redrew only damage), 11.9 ms of it waiting on the GPU. The CPU path's cost per damaged pixel is next. 60 Hz at full resolution stays the target.
+LM-Q720 | cpu | the_typical_frame_is_inside_its_budget frames_inside_their_budget | RC5, PENDING.md §4.7: the CPU path on an msm8953 is 35 ms against 16.7 ms (run 39594824376), with the raster stage about 30 ms whatever the damage. The GPU path now passes here - 11.7 ms with frames overlapping, 16.4 ms without - and `auto` ships it; this is the fallback's bar.
 # Samsung Galaxy A73 5G
 SM-A736B | cpu | the_typical_frame_is_inside_its_budget frames_inside_their_budget no_frame_stalled | PENDING.md §4.5: the CPU fallback's pacing at 60 Hz depends on which cores the scheduler gives the render thread: it failed in runs 39402544760 and 39417211158 (16.6 ms median; worst frames 78-93 ms on cold cores, RC6) and passed in 39445718596. Kept until it passes three runs in a row; the shipping path is the GPU, which passes.
 # Samsung Galaxy S26 Ultra
