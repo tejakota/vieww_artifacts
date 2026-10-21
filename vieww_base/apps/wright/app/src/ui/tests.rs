@@ -25,6 +25,129 @@ fn scroll(dx: f32, t: u64) -> ScrollEvent {
     ScrollEvent { position: Offset::new(600.0, 400.0), delta: Offset::new(dx, 0.0), timestamp: Duration::from_millis(t) }
 }
 
+/// The four product-page screens (`apps/wrightsite/assets/`), captured from
+/// the real shell so the page cannot drift from the app: describe (Home with
+/// the request typed), the confirm gate (the plan card, before anything
+/// runs), the firing (the engine live, the gate up), and the receipt. Runs
+/// against the mock provider, offline; writes to `WRIGHT_UI_SHOTS`.
+#[test]
+fn the_site_screens() {
+    let home = temp("site-shots");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let mock = wright_engine::mock::MockProvider::start(0).unwrap();
+    std::fs::write(home.join("config.kdl"), format!("provider \"mock\" base=\"{}\" models=\"*\"\nvoice model=\"mock-whisper\"\n", mock.base_url())).unwrap();
+    std::env::set_var("WRIGHT_ALLOW_PRIVATE_NETWORK", "1");
+
+    // A local sink the demo's Fetcher reads from and the Mailer delivers to,
+    // so the firing exercises the network, the gate and the delivery.
+    let sink = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = sink.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        use std::io::{Read as _, Write as _};
+        for s in sink.incoming().flatten() {
+            let mut s = s;
+            let mut buf = [0u8; 65536];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\nok");
+        }
+    });
+
+    // The demo project the page's story tells: the repository's own
+    // hn-digest blueprint, aimed at the sink so the gate is real.
+    let dir = temp("hn-digest");
+    let bp = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/hn-digest/blueprint.kdl"))
+        .unwrap()
+        .replace(
+            "goal \"Fetch top 30 HN stories: id, title, url, points\"",
+            &format!("goal \"Fetch the top stories from http://127.0.0.1:{port}/top.json: id, title, url, points\""),
+        )
+        .replace(
+            "goal \"Compose and send the digest email\"",
+            &format!("goal \"Compose and send the digest to http://127.0.0.1:{port}/send\""),
+        );
+    std::fs::write(dir.join("blueprint.kdl"), bp).unwrap();
+
+    let out = std::env::var("WRIGHT_UI_SHOTS").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
+    std::fs::create_dir_all(&out).unwrap();
+    let size = Size::new(1280.0, 800.0);
+    let mut clock = 0u64;
+    // Frames until the stage's fades and glides have settled: the shell's
+    // transitions run on the frame clock, so a capture taken too soon
+    // catches them halfway.
+    let mut settle = |driver: &mut FrameDriver, ui: &Ui, frames: usize| {
+        for _ in 0..frames {
+            clock += 16;
+            ui.pump(driver);
+            driver.draw_frame_at(Duration::from_millis(clock));
+        }
+    };
+
+    // ── 1-describe: Home, the request typed, nothing sent yet ──
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    ui.home.prompt.set(TextEditingValue::new(
+        "Every morning at 8, fetch the top Hacker News stories, summarize them, and email me the digest.",
+    ));
+    settle(&mut driver, &ui, 8);
+    let (png, _) = NativeRenderer::new().render_to_png(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+    std::fs::write(out.join("1-describe.png"), png).unwrap();
+    drop(driver);
+
+    // ── a second launch, straight into the project: the plan, before
+    //    anything has run ──
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), Some(dir.clone()), std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    settle(&mut driver, &ui, 8);
+    let (png, _) = NativeRenderer::new().render_to_png(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+    std::fs::write(out.join("2-plan.png"), png).unwrap();
+
+    let s = ui.current_session().expect("the project opened as a session");
+    assert!(s.plan.get().is_some(), "the blueprint is on disk, so the plan is ready");
+
+    // ── 3-run: the firing. The thread scrolled to the gate: the run card's
+    //    steps with their last notes, and the Mailer's approval card ──
+    s.start_run();
+    let mut saw_card = false;
+    let deadline = Instant::now() + Duration::from_secs(120);
+    while s.result.get().is_none() && Instant::now() < deadline {
+        settle(&mut driver, &ui, 1);
+        if let Some((run, n, agent, _)) = s.approvals.get().first().cloned() {
+            if !saw_card {
+                saw_card = true;
+                assert_eq!(agent, "Mailer", "the before-send gate belongs to the Mailer");
+                s.scroll.to_end();
+                settle(&mut driver, &ui, 40);
+                let (png, _) = NativeRenderer::new().render_to_png(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+                std::fs::write(out.join("3-run.png"), png).unwrap();
+                // The same moment with the engine open on the live graph.
+                ui.set_engine(EngineView::Open);
+                settle(&mut driver, &ui, 40);
+                let (png, _) = NativeRenderer::new().render_to_png(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+                std::fs::write(out.join("3-run-engine.png"), png).unwrap();
+                ui.set_engine(EngineView::Hidden);
+                settle(&mut driver, &ui, 40);
+            }
+            s.answer_approval(run, n, true);
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(saw_card, "the approval request reached the UI");
+    let r = s.result.get().expect("the run finished");
+    assert!(r.ok, "{}", r.headline);
+
+    // ── 4-result: the receipt, with the run card above it ──
+    s.scroll.to_end();
+    settle(&mut driver, &ui, 40);
+    let (png, _) = NativeRenderer::new().render_to_png(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+    std::fs::write(out.join("4-result.png"), png).unwrap();
+}
+
 #[test]
 fn the_shell_end_to_end() {
     let home = temp("home");
