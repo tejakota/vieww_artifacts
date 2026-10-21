@@ -1,0 +1,230 @@
+name: Wright - desktop installers
+
+# Builds Wright (vieww_base/apps/wright) for Windows, macOS and Linux,
+# smoke-tests each binary on its own platform, packages an installer for
+# each, and - when asked - publishes them as one GitHub release.
+#
+#   Windows  Wright-Setup-<v>-x64.exe (Inno Setup, per user, no admin)  + portable .zip
+#   macOS    Wright-<v>-macos-universal.dmg (Apple silicon + Intel)     + .app.zip
+#   Linux    wright_<v>_amd64.deb                                       + .tar.gz
+#
+# Packaging lives in vieww_base/apps/wright/packaging/ as ordinary scripts,
+# so every step here can be run by hand on the matching machine.
+#
+# Manual only, like every workflow in this repository:
+# Actions -> "Wright - desktop installers" -> Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp on the installers (no leading v), e.g. 0.3.0"
+        required: true
+        default: "0.3.0"
+      publish:
+        description: "Publish a GitHub release (tag wright-v<version>). Off = artifacts only."
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark the release as a pre-release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wright-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # vieww_base/rust-toolchain.toml pins the same version.
+  RUST_VERSION: "1.98.1"
+  VERSION: ${{ inputs.version }}
+
+defaults:
+  run:
+    shell: bash
+    working-directory: vieww_base/apps/wright
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-2022
+          - name: macos-universal
+            os: macos-14
+          - name: linux-x64
+            os: ubuntu-22.04
+
+    steps:
+      # The repository has deep paths (film fixtures); Windows' 260-character
+      # limit breaks a plain checkout without this.
+      - name: Allow long paths (Windows)
+        if: runner.os == 'Windows'
+        working-directory: .
+        run: git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Rust ${{ env.RUST_VERSION }}
+        working-directory: .
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            rustup target add --toolchain "$RUST_VERSION" aarch64-apple-darwin x86_64-apple-darwin
+          fi
+
+      - name: Linux build libraries
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q pkg-config libx11-dev libxkbcommon-dev libwayland-dev libasound2-dev dpkg-dev
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            vieww_base/apps/wright/target
+          key: wright-${{ matrix.name }}-${{ env.RUST_VERSION }}-${{ hashFiles('vieww_base/apps/wright/Cargo.lock') }}
+          restore-keys: wright-${{ matrix.name }}-${{ env.RUST_VERSION }}-
+
+      # The full suite needs Linux (the sandbox and TLS are Linux-only today;
+      # elsewhere those tools refuse by design, and the end-to-end tests
+      # exercise them). It includes the headless UI drive and the
+      # no-layout-overflow gate.
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo clippy --workspace --all-targets --features wright/ui -- -D warnings
+          cargo test --workspace --features wright/ui
+
+      # RUSTFLAGS is set explicitly: it replaces vieww_base/.cargo/config.toml's
+      # `-C prefer-dynamic` (fine for developing vieww, wrong for a binary
+      # people download) and keeps the x86-64-v2 baseline that config sets.
+      - name: Build (Windows, Linux)
+        if: runner.os != 'macOS'
+        env:
+          RUSTFLAGS: "-C target-cpu=x86-64-v2"
+        run: |
+          cargo build --profile dist -p wright --features ui
+          mkdir -p ../../../out
+          if [ "$RUNNER_OS" = "Windows" ]; then cp target/dist/wright.exe ../../../out/; else cp target/dist/wright ../../../out/; fi
+
+      - name: Build (macOS, both architectures)
+        if: runner.os == 'macOS'
+        run: |
+          RUSTFLAGS="-C target-cpu=apple-m1" cargo build --profile dist -p wright --features ui --target aarch64-apple-darwin
+          RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --profile dist -p wright --features ui --target x86_64-apple-darwin
+          mkdir -p ../../../out
+          lipo -create -output ../../../out/wright target/aarch64-apple-darwin/dist/wright target/x86_64-apple-darwin/dist/wright
+          lipo -info ../../../out/wright
+
+      - name: Smoke test the shipped binary
+        run: |
+          bin=../../../out/wright
+          [ "$RUNNER_OS" = "Windows" ] && bin=../../../out/wright.exe
+          "$bin" --version
+          "$bin" doctor || true
+          "$bin" plan examples/hn-digest
+          export WRIGHT_HOME="$RUNNER_TEMP/wright-home"
+          "$bin" ui examples/hn-digest --snapshot "$RUNNER_TEMP/screens"
+          ls "$RUNNER_TEMP/screens"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Static Rust: nothing from the toolchain may be needed at run time.
+            ! ldd "$bin" | grep -E 'libstd-|librustc' || { echo "binary links the Rust standard library dynamically"; exit 1; }
+          fi
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          dist="$(cd ../../.. && pwd)/out/dist"
+          mkdir -p "$dist"
+          cp ../../../out/wright.exe README.md LICENSE CHANGELOG.md "$dist/"
+          cp -r examples "$dist/examples"
+          ../../../out/wright.exe ui --icon "$RUNNER_TEMP/icon-256.png" --size 256
+          python -m pip install --quiet pillow
+          python packaging/make-ico.py "$RUNNER_TEMP/icon-256.png" "$dist/wright.ico"
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -f "$iscc" ]; then choco install innosetup --no-progress -y; fi
+          "$iscc" //Q "//DAppVersion=$VERSION" "//DDist=$(cygpath -w "$dist")" packaging/windows/wright.iss
+          (cd "$dist" && 7z a -tzip "../wright-$VERSION-windows-x64.zip" . >/dev/null)
+          mkdir -p ../../../release
+          mv ../../../out/out/Wright-Setup-*.exe ../../../out/wright-*-windows-x64.zip ../../../release/
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          bash packaging/macos/build-app.sh "$VERSION" target/aarch64-apple-darwin/dist/wright target/x86_64-apple-darwin/dist/wright "$(cd ../../.. && pwd)/release"
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          bash packaging/linux/build-deb.sh "$VERSION" ../../../out/wright "$(cd ../../.. && pwd)/release"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wright-${{ env.VERSION }}-${{ matrix.name }}
+          path: release/*
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens-${{ matrix.name }}
+          path: ${{ runner.temp }}/screens
+
+  release:
+    name: Publish release
+    needs: build
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: vieww_base/apps/wright/packaging
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wright-${{ env.VERSION }}-*
+          path: release
+          merge-multiple: true
+
+      - name: Checksums and notes
+        run: |
+          (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          sed "s/@VERSION@/$VERSION/g" vieww_base/apps/wright/packaging/RELEASE-NOTES.md > notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [ "${{ inputs.prerelease }}" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "wright-v$VERSION" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Wright $VERSION" \
+            --notes-file notes.md \
+            "${flags[@]}"
