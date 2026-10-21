@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.0 — 2026-10-21 — built-in models
+
+- **Built-in models, run by Wright itself** (ADR-022, `docs/MODELS.md`):
+  `qwen3-1.7b` (Qwen3-1.7B, 8-bit: text and tool calls) and `whisper-base`
+  (speech to text, 99 languages). No key, no account; after a one-time
+  download nothing leaves the machine.
+  - Downloaded on first use into `~/.wright/models`, resumable, checked
+    against pinned SHA-256s (a wrong file is deleted, never loaded).
+    `WRIGHT_MODEL_MIRROR` for networks that cannot reach Hugging Face.
+  - **Voice uses the built-in Whisper by default.**
+  - **No key? The project still runs**: a model with no provider or key
+    falls back to `qwen3-1.7b`, with a line in the event river saying so;
+    it is also the last fallback if every cloud endpoint fails mid-run.
+    `builtin fallback=false` (or Settings) turns this off.
+  - `wright model list | pull | rm | ask | listen`; Settings → Models &
+    keys → **Built-in models** (download with progress, remove, the
+    fallback switch); `wright doctor` reports them.
+- **`wright-infer`**, a new std-only crate: GGUF and whisper.cpp file
+  readers, Qwen's tokenizer, the Qwen3 decoder with a reusable key/value
+  cache, Qwen3's chat and tool-call format, WAV decoding, the log-mel
+  spectrogram, Whisper's encoder and decoder. Checked against llama.cpp
+  and whisper.cpp on every CI run (tokens, logits, language guesses) and
+  on the real weights on Windows, macOS and Linux
+  (`.github/workflows/wright-models.yml`).
+- **Prompt safety:** text from outside (messages, tool results, fetched
+  pages) is never encoded with control tokens, so it cannot open a turn.
+- **HTTPS on macOS and Windows** through the system curl (ADR-023): cloud
+  providers and model downloads now work there. The request, keys
+  included, goes to curl on stdin, never on the command line.
+  `wright doctor` shows which transport carries HTTPS.
+- `core::sha256` hashes in pieces (`Sha256::update`), for gigabyte files.
+
 ## 0.4.0 — 2026-10-21 — export
 
 - **`wright export`** and **Export** on the result card (ADR-021):

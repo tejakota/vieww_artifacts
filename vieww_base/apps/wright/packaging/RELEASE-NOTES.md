@@ -19,13 +19,15 @@ Describe the outcome; agents build, check and deliver it.
 | The window (splash, sessions, engine, settings, voice, files) | yes | yes | yes |
 | Plans, the run store, history, schedules | yes | yes | yes |
 | Local model servers over `http://` (Ollama, LM Studio, vLLM, the mock) | yes | yes | yes |
-| Cloud model providers over `https://` | yes (OS OpenSSL) | **not yet** | **not yet** |
+| Cloud model providers over `https://` | yes (OS OpenSSL) | yes (system curl) | yes (system curl) |
+| Built-in models (Qwen3-1.7B, Whisper base), no key needed | yes | yes | yes |
 | Sandboxed tools: shell, git, run-tests | yes (Landlock) | **refuse** | **refuse** |
 | Keys in the OS keychain | `secret-tool` | Keychain | environment variables only (`wright secret env <ref>` names them) |
 
-On macOS and Windows, TLS and the sandbox refuse loudly rather than run
-unprotected; they are the next platform work (W-5b, W-6b in `docs/SPIKES.md`).
-Until then, point Wright at a local model server in Settings → Models & keys.
+On macOS and Windows, HTTPS goes through the system's own curl, and the
+sandbox refuses loudly rather than run unprotected (W-5b in
+`docs/SPIKES.md`). The built-in models download on first use (1.9 GB in
+all, once) — or ahead of time from Settings → Models & keys.
 
 ### First launch
 

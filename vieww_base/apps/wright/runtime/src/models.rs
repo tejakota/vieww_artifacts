@@ -145,6 +145,9 @@ impl CompletionResponse {
 pub enum Delta {
     Text(String),
     ToolStarted(String),
+    /// Not output: something worth a line while the person waits (the
+    /// built-in model downloading on first use, say).
+    Status(String),
 }
 
 // ── provider trait ───────────────────────────────────────────────
@@ -164,6 +167,32 @@ pub trait Provider: Send + Sync {
     fn parse_response(&self, body: &[u8]) -> Result<CompletionResponse, String>;
     /// A fresh decoder for one streaming response.
     fn decoder(&self) -> Box<dyn StreamDecoder>;
+    /// Served in-process by the built-in engine, not over HTTP.
+    fn is_local(&self) -> bool {
+        false
+    }
+}
+
+/// The built-in models (`local.rs`), as a provider: no HTTP, no key.
+#[derive(Debug, Clone, Default)]
+pub struct Builtin;
+
+impl Provider for Builtin {
+    fn name(&self) -> &str {
+        "built-in"
+    }
+    fn build_request(&self, _: &CompletionRequest, _: Option<&str>) -> Result<Request, String> {
+        Err("the built-in models are not called over HTTP".into())
+    }
+    fn parse_response(&self, _: &[u8]) -> Result<CompletionResponse, String> {
+        Err("the built-in models are not called over HTTP".into())
+    }
+    fn decoder(&self) -> Box<dyn StreamDecoder> {
+        Box::new(OpenAiDecoder::default())
+    }
+    fn is_local(&self) -> bool {
+        true
+    }
 }
 
 fn tool_input_value(text: &str) -> Value {
@@ -661,6 +690,10 @@ pub fn call_once(
     net_cfg: &NetConfig,
     on_delta: &mut dyn FnMut(&Delta),
 ) -> Result<CompletionResponse, CallError> {
+    if provider.is_local() {
+        // In-process: nothing to retry that would go differently.
+        return crate::local::complete(req, on_delta).map_err(|m| CallError { message: m, retryable: false, retry_after: None });
+    }
     let http_req = provider.build_request(req, api_key).map_err(|m| CallError { message: m, retryable: false, retry_after: None })?;
     let mut s = net::send_streaming(&http_req, net_cfg).map_err(|m| CallError { message: m, retryable: true, retry_after: None })?;
     if s.head.status != 200 {

@@ -12,10 +12,13 @@
 //! * [`store`] — the project's durable memory under `.wright/`: fsynced
 //!   event logs, content-addressed objects, cache, blueprint history,
 //!   cross-process approvals, spend.
-//! * [`net`] / [`tls`] — HTTP over TCP and OS-native TLS, with proxies.
+//! * [`net`] / [`tls`] / [`curl`] — HTTP over TCP and OS-native TLS, with
+//!   proxies; the OS's curl carries HTTPS where TLS is not wired natively.
 //! * [`models`] — Anthropic + OpenAI-compatible providers: streaming,
 //!   tool calling, retries, fallback.
 //! * [`config`] — which provider serves which model, and what it costs.
+//! * [`local`] — the built-in models: catalog, verified downloads, and the
+//!   engine slot `wright-infer` fills.
 //! * [`secrets`] — `keychain:` references resolved at the last moment.
 //! * [`tz`] — the OS zone database, for schedules.
 //!
@@ -23,8 +26,10 @@
 
 pub mod cache;
 pub mod config;
+pub mod curl;
 pub mod executor;
 pub mod gate;
+pub mod local;
 pub mod models;
 pub mod net;
 pub mod secrets;

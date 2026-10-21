@@ -1,6 +1,7 @@
-//! SHA-256 (FIPS 180-4), for the one place a format demands it: a Python
-//! wheel's RECORD file lists every file's SHA-256. Everything else in
-//! Wright hashes with BLAKE3 (`hash.rs`).
+//! SHA-256 (FIPS 180-4), for the places the outside world demands it: a
+//! Python wheel's RECORD lists every file's SHA-256, and the built-in
+//! models are pinned by the SHA-256 their publisher lists. Everything else
+//! in Wright hashes with BLAKE3 (`hash.rs`).
 //!
 //! A direct transcription of the standard: pad, then 64 rounds per
 //! 64-byte block. Checked against the NIST examples below.
@@ -46,27 +47,77 @@ fn compress(h: &mut [u32; 8], block: &[u8; 64]) {
     }
 }
 
+/// SHA-256 over data that arrives in pieces (a model file being
+/// downloaded, a gigabyte read in chunks).
+#[derive(Clone)]
+pub struct Sha256 {
+    h: [u32; 8],
+    buf: [u8; 64],
+    fill: usize,
+    len: u64,
+}
+
+impl Default for Sha256 {
+    fn default() -> Self {
+        Sha256 { h: H0, buf: [0; 64], fill: 0, len: 0 }
+    }
+}
+
+impl Sha256 {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn update(&mut self, mut data: &[u8]) {
+        self.len = self.len.wrapping_add(data.len() as u64);
+        if self.fill > 0 {
+            let take = (64 - self.fill).min(data.len());
+            self.buf[self.fill..self.fill + take].copy_from_slice(&data[..take]);
+            self.fill += take;
+            data = &data[take..];
+            if self.fill < 64 {
+                return;
+            }
+            let block = self.buf;
+            compress(&mut self.h, &block);
+            self.fill = 0;
+        }
+        let (blocks, rest) = data.as_chunks::<64>();
+        for block in blocks {
+            compress(&mut self.h, block);
+        }
+        self.buf[..rest.len()].copy_from_slice(rest);
+        self.fill = rest.len();
+    }
+
+    pub fn finish(mut self) -> [u8; 32] {
+        // Padding: 0x80, zeros, then the length in bits (big-endian u64).
+        let bits = self.len.wrapping_mul(8);
+        let mut tail = [0u8; 128];
+        tail[..self.fill].copy_from_slice(&self.buf[..self.fill]);
+        tail[self.fill] = 0x80;
+        let total = if self.fill < 56 { 64 } else { 128 };
+        tail[total - 8..total].copy_from_slice(&bits.to_be_bytes());
+        for block in tail[..total].as_chunks::<64>().0 {
+            compress(&mut self.h, block);
+        }
+        let mut out = [0u8; 32];
+        for (chunk, word) in out.as_chunks_mut::<4>().0.iter_mut().zip(self.h) {
+            *chunk = word.to_be_bytes();
+        }
+        out
+    }
+
+    pub fn finish_hex(self) -> String {
+        self.finish().iter().map(|b| format!("{b:02x}")).collect()
+    }
+}
+
 /// The SHA-256 digest of `data`.
 pub fn digest(data: &[u8]) -> [u8; 32] {
-    let mut h = H0;
-    let (blocks, rest) = data.as_chunks::<64>();
-    for block in blocks {
-        compress(&mut h, block);
-    }
-    // Padding: 0x80, zeros, then the length in bits (big-endian u64).
-    let mut tail = [0u8; 128];
-    tail[..rest.len()].copy_from_slice(rest);
-    tail[rest.len()] = 0x80;
-    let total = if rest.len() < 56 { 64 } else { 128 };
-    tail[total - 8..total].copy_from_slice(&((data.len() as u64).wrapping_mul(8)).to_be_bytes());
-    for block in tail[..total].as_chunks::<64>().0 {
-        compress(&mut h, block);
-    }
-    let mut out = [0u8; 32];
-    for (chunk, word) in out.as_chunks_mut::<4>().0.iter_mut().zip(h) {
-        *chunk = word.to_be_bytes();
-    }
-    out
+    let mut s = Sha256::new();
+    s.update(data);
+    s.finish()
 }
 
 pub fn hex(data: &[u8]) -> String {
@@ -119,5 +170,21 @@ mod tests {
         assert_eq!(base64_url(b"foo"), "Zm9v");
         assert_eq!(base64_url(b"foob"), "Zm9vYg");
         assert_eq!(base64_url(&[0xfb, 0xff]), "-_8");
+    }
+
+    #[test]
+    fn pieces_hash_like_the_whole() {
+        let data: Vec<u8> = (0..1000u32).map(|i| (i * 31 % 251) as u8).collect();
+        for cut in [0, 1, 55, 56, 63, 64, 65, 500, 999, 1000] {
+            let mut s = Sha256::new();
+            s.update(&data[..cut]);
+            s.update(&data[cut..]);
+            assert_eq!(s.finish(), digest(&data), "split at {cut}");
+        }
+        let mut s = Sha256::new();
+        for b in data.chunks(7) {
+            s.update(b);
+        }
+        assert_eq!(s.finish_hex(), hex(&data));
     }
 }

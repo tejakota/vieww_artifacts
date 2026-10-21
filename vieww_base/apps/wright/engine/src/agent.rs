@@ -29,6 +29,7 @@ use wright_core::palette;
 use wright_core::wire::json::{self, Value};
 use wright_runtime::config::Config;
 use wright_runtime::gate::{BudgetMeter, Gate, Verdict};
+use wright_runtime::local;
 use wright_runtime::models::{self, Block, CompletionRequest, Endpoint, Message, Role, StopReason, ToolDef};
 use wright_runtime::net::NetConfig;
 use wright_runtime::secrets;
@@ -214,6 +215,20 @@ impl FiringEnv {
             };
             out.push((entry.client(), model.clone(), key));
         }
+        // The built-in model, last: it keeps a project moving when no
+        // provider or key is set up, and answers if every cloud endpoint
+        // fails mid-run. `builtin fallback=false` turns this off.
+        if self.config.falls_back_to_builtin() && local::available() {
+            if let Some(entry) = self.config.builtin_text() {
+                if !out.iter().any(|(_, m, _)| m == local::TEXT_MODEL) {
+                    if out.is_empty() {
+                        let name = Self::task_name(task);
+                        self.spine.note(EventKind::Note, Some(&name), format!("{}. Using the built-in model {} (on this machine, free) instead.", problems.join("; "), local::TEXT_MODEL));
+                    }
+                    out.push((entry.client(), local::TEXT_MODEL.to_string(), None));
+                }
+            }
+        }
         if out.is_empty() {
             return Err(problems.join("; "));
         }
@@ -276,8 +291,14 @@ impl FiringEnv {
                 .iter()
                 .map(|(p, m, k)| Endpoint { model: m.clone(), provider: p.as_ref(), api_key: k.as_ref().map(|v| v.expose().to_string()) })
                 .collect();
-            let mut on_delta = |_: &models::Delta| {};
             let spine = &self.spine;
+            // Status lines (the built-in model downloading on first use)
+            // are worth a line in the river; streamed text is not.
+            let mut on_delta = |d: &models::Delta| {
+                if let models::Delta::Status(s) = d {
+                    spine.note(EventKind::Note, me, s.clone());
+                }
+            };
             let mut on_retry = |msg: &str| spine.note(EventKind::AgentRetrying, me, msg.to_string());
             let resp = models::call(&eps, &req, &self.net, 3, &mut on_delta, &mut on_retry)?;
             result.turns += 1;

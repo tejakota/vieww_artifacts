@@ -11,7 +11,7 @@
 | W-5 executor I/O | **bridge done** | thread-per-call `spawn_blocking` behind the same API (documented); a reactor is a server-mode concern (v0.3) |
 | W-5b sandbox | **Linux done** | Landlock FS + TCP rules, user+net namespace, `no_new_privs`, process-group kill; macOS Seatbelt / Windows AppContainer: refuse until wired |
 | W-6 OS-native TLS | **Linux done** | OpenSSL via `dlopen`, SNI, hostname check, TLS 1.2 floor, CONNECT proxies; tested live direct and through a proxy |
-| W-6b TLS macOS/Windows | open | refuses loudly; no plaintext fallback |
+| W-6b TLS macOS/Windows | **bridged** | HTTPS through the system curl (ADR-023); native Security.framework / SChannel FFI still open |
 | W-7 replay | **done** | `wright replay <run> --at N` (projection only, ADR-016); `wright resume` continues crashed runs |
 | W-8 daemon | **done (Linux/macOS)** | `wright daemon` + `wright schedule install` (systemd user unit / launchd agent) |
 

@@ -24,7 +24,8 @@ affected work runs again.
 | Durable run store, resume after crash, receipts | ✅ | fsynced event log, BLAKE3 content-addressed objects |
 | Tools: files, edit, apply-patch, git, run-tests, shell, http | ✅ | `browser` refuses loudly (not implemented) |
 | Sandbox (Landlock + network namespace), Linux | ✅ | macOS/Windows: sandboxed tools refuse (W-5b) |
-| TLS: OS OpenSSL via dlopen, Linux; HTTP CONNECT proxies | ✅ | macOS/Windows TLS: refuses loudly (W-6b) |
+| TLS: OS OpenSSL via dlopen, Linux; HTTP CONNECT proxies | ✅ | macOS/Windows: through the system curl (ADR-023); native FFI is W-6b |
+| Built-in models: Qwen3-1.7B (text, tools), Whisper base (voice), run in-process | ✅ | checked against llama.cpp / whisper.cpp; `docs/MODELS.md` |
 | Schedules: cron + IANA time zones (TZif), background daemon | ✅ | systemd / launchd unit installer |
 | Interview → Confirm Gate → blueprint | ✅ | the summary is code-generated |
 | Universal project convention (python, node, react, rust, shell) | ✅ | every skeleton's own tests pass with no installs |
@@ -33,19 +34,27 @@ affected work runs again.
 | Secrets: OS keychain via `security` / `secret-tool`, env for CI | ✅ | Windows Credential Manager: not yet |
 | Recipes gallery, signing, MCP, server mode, teams | ❌ | see `docs/SPIKES.md` §v0.3 |
 
-**199 tests passing (plus 1 live-network test, opt-in), clippy clean, zero warnings.** The headless binary has **zero**
+**236 tests passing (plus 1 live-network test, opt-in), clippy clean, zero warnings.** Eight of them compare the built-in engine with llama.cpp and whisper.cpp, or run the real models; they need fixtures (`scripts/models/`) and skip without them — CI provides them (`docs/MODELS.md`). The headless binary has **zero**
 external crates; the `ui` feature adds exactly one dependency — vieww, from
 the repository Wright lives in, by path (ADR-002, ADR-011).
 
-## Quick start (offline, in two minutes)
+## Quick start (no key needed)
 
 ```bash
 cargo build --release                       # headless CLI (no external crates)
 cargo build --release --features ui         # + the vieww shell
 
 ./target/release/wright doctor              # what works on this machine
+./target/release/wright model pull          # the built-in models (1.9 GB, once;
+                                            # otherwise they download on first use)
+./target/release/wright model ask "Plan a tiny CLI that counts words."
+```
 
-# An offline model, so everything below runs with no API key:
+With no key set up, projects run on the built-in `qwen3-1.7b` (and say
+so). For a fully offline demo with scripted answers instead:
+
+```bash
+# Scripted answers (the mock provider), for demos and CI:
 ./target/release/wright mock-provider --port 7878 &
 mkdir -p ~/.wright && echo 'provider "mock" base="http://127.0.0.1:7878/v1" models="*"
 interview model="mock-1"' > ~/.wright/config.kdl
@@ -59,7 +68,7 @@ mkdir demo && cd demo
 ../target/release/wright ui . --snapshot shots/   # every screen as PNG, headless
 ```
 
-With real models: `wright secret set keychain:wright/anthropic` (or
+With cloud models: `wright secret set keychain:wright/anthropic` (or
 `deepseek`, `openai`, `zai`, `moonshot`, `xai`) and remove the mock provider
 from the config. On CI and servers, set `WRIGHT_SECRET_WRIGHT_ANTHROPIC`
 instead (`wright secret env <ref>` prints the variable name).
@@ -88,7 +97,7 @@ instead (`wright secret env <ref>` prints the variable name).
 | See the agents and tools, live | hold **Space** to peek; `E` keeps them |
 | Approve | the buttons, or drag the card right (allow) / left (refuse) |
 | Attach files | `+` in the composer, or drop them on the window |
-| Speak | the mic (needs a speech model: `voice model="whisper-1"`) |
+| Speak | the mic — transcribed on this machine by the built-in Whisper (or any speech model you set) |
 | Settings | ⚙, or Ctrl/Cmd+, — models & keys, defaults, appearance, workspace, project |
 | Export | **Export** on the result: the source as a .zip, or the package (wheel, crate, web build) once a run has passed its checks |
 
@@ -108,6 +117,7 @@ wright export [dir]         the project as a .zip, plus its package: a Python wh
 wright schedule ...         list | remove [dir] | install (login service)
 wright daemon               fire schedules in the background
 wright secret set <ref>     put a key in the OS keychain
+wright model ...            the built-in models: list | pull [id] | rm <id> | ask | listen
 wright where [dir]          where the project's history lives
 wright doctor               what works on this machine
 wright ui [dir]             the window (--snapshot <dir>: every screen as PNG;
@@ -141,13 +151,15 @@ wright/
 ├── core/      blueprint, compiler, confirm summary, convention, schedule, events,
 │              wire (JSON / HTTP / SSE), BLAKE3 — pure, std-only
 ├── runtime/   executor, permission gate + permits, cache keys, durable store,
-│              net + TLS + proxies, model providers, config, secrets, time zones
+│              net + TLS (+ system curl) + proxies, model providers, built-in
+│              model downloads, config, secrets, time zones
 ├── tools/     tool implementations, path guard, Landlock sandbox, patch engine
 ├── agents/    the system workforce: prompts as contracts, verdict parsing
 ├── engine/    agent loop, firing, interview, scheduler, approvals, mock provider
+├── infer/     the built-in models: GGUF, tokenizer, Qwen3, Whisper — std-only
 ├── app/       the binary: CLI + (feature `ui`) the vieww shell
 ├── examples/  the HN Daily Digest blueprint
-└── docs/      ARCHITECTURE, BLUEPRINT-FORMAT, PROJECT-CONVENTION, DECISIONS, SPIKES
+└── docs/      ARCHITECTURE, BLUEPRINT-FORMAT, PROJECT-CONVENTION, DECISIONS, SPIKES, MODELS
 ```
 
 ## House rules

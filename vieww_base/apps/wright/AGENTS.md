@@ -27,7 +27,8 @@ sandbox; the event spine records everything durably for resume and replay.
    `pre_exec`) and, on Windows only, `app/src/ui/mod.rs`
    (`release_private_console`: two kernel32 calls so a double-clicked app
    has no console window). Every block carries a `// SAFETY:` comment. The executor
-   has zero unsafe; keep it that way.
+   has zero unsafe; keep it that way. So does `infer/` (the built-in
+   models): its kernels are safe Rust the compiler vectorizes (ADR-022).
 3. **No crypto, ever, by hand.** TLS reaches the OS backend. Hashing ports
    the public-domain BLAKE3 reference (pinned to official vectors). Any
    signature scheme (recipes, SSO) goes through OS APIs per ADR-012.
@@ -79,6 +80,7 @@ sandbox; the event spine records everything durably for resume and replay.
 | Add a tool | `core/src/palette.rs` (spec: caps, `Reads`, `Effect`, schema) + `tools/src/lib.rs` (impl, takes a `Permit`) + tests |
 | Add a system agent | `core/src/compiler/mod.rs` (SystemKind + placement) + `agents/src/lib.rs` (contract) + `engine/src/mock.rs` (script) |
 | Add a provider | `runtime/src/models.rs` (build + stream decoder, canned-byte tests) + `runtime/src/config.rs` (built-in entry) |
+| Touch the built-in models | `infer/` — then regenerate the fixtures (`scripts/models/references.sh` + `fixtures.sh`) and run `cargo test --release -p wright-infer` with `WRIGHT_TINY_DIR` etc. (see `docs/MODELS.md`); a new model file means a new pin in `runtime/src/local.rs` |
 | Change firing behavior | `engine/src/firing.rs` — then run `cargo test -p wright-engine` (end-to-end, ~1 min) |
 | Change the project skeleton | `core/src/convention.rs` + `docs/PROJECT-CONVENTION.md`; `engine/tests/skeletons.rs` runs every language's tests |
 | Change a UI screen | `app/src/ui.rs`; check with `wright ui <project> --snapshot <dir>` and look at the PNGs |

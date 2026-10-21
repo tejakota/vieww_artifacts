@@ -5,6 +5,8 @@
 //!
 //! * plain TCP for `http://` (local model gateways, the mock provider);
 //! * OS-native TLS for `https://` (see `tls.rs`) — never a downgrade;
+//!   where Wright has no native binding yet (Windows, macOS), the OS's own
+//!   `curl` carries the request (see `curl.rs`), on the same TLS stack;
 //! * corporate proxies: `HTTPS_PROXY` / `HTTP_PROXY` (CONNECT tunnels for
 //!   https, absolute-form requests for http), `NO_PROXY` with exact
 //!   hosts, domain suffixes, `*`, and IPv4 CIDR ranges — the shapes
@@ -21,12 +23,15 @@ use std::time::Duration;
 
 use wright_core::wire::http::{self, BodyReader, Head, Limits, Request, Response, Url};
 
+use crate::curl::{self, CurlConn};
 use crate::tls::TlsStream;
 
-/// A connected stream: plain or TLS.
+/// A connected stream: plain, TLS, or a running curl (whose output is the
+/// raw response; the request went in when it started).
 pub enum Conn {
     Tcp(TcpStream),
     Tls(Box<TlsStream>),
+    Curl(Box<CurlConn>),
 }
 
 impl Read for Conn {
@@ -34,6 +39,7 @@ impl Read for Conn {
         match self {
             Conn::Tcp(s) => s.read(buf),
             Conn::Tls(s) => s.read(buf),
+            Conn::Curl(s) => s.read(buf),
         }
     }
 }
@@ -43,6 +49,7 @@ impl Write for Conn {
         match self {
             Conn::Tcp(s) => s.write(buf),
             Conn::Tls(s) => s.write(buf),
+            Conn::Curl(s) => s.write(buf),
         }
     }
 
@@ -50,6 +57,7 @@ impl Write for Conn {
         match self {
             Conn::Tcp(s) => s.flush(),
             Conn::Tls(s) => s.flush(),
+            Conn::Curl(s) => s.flush(),
         }
     }
 }
@@ -81,6 +89,11 @@ impl Proxy {
             return Err(format!("bad proxy '{s}'"));
         }
         Ok(Proxy { host, port, auth })
+    }
+
+    /// The `Proxy-Authorization` value (for handing to curl).
+    pub fn auth(&self) -> Option<&str> {
+        self.auth.as_deref()
     }
 }
 
@@ -251,10 +264,40 @@ fn write_request(conn: &mut Conn, req: &Request, absolute: bool) -> Result<(), S
     }
 }
 
-/// Send a request and read the whole response.
-pub fn send(req: &Request, cfg: &NetConfig) -> Result<Response, String> {
+/// How `https://` is carried on this machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transport {
+    /// Wright's own binding to the OS TLS library.
+    Native,
+    /// The OS's `curl`.
+    Curl,
+}
+
+/// Native TLS where it is wired and loads; the OS's curl otherwise.
+/// `WRIGHT_TLS=curl` or `=native` forces one (for tests, or a machine
+/// whose OpenSSL is broken).
+pub fn https_transport() -> Transport {
+    match std::env::var("WRIGHT_TLS").as_deref() {
+        Ok("curl") => Transport::Curl,
+        Ok("native") => Transport::Native,
+        _ if TlsStream::backend().is_ok() => Transport::Native,
+        _ => Transport::Curl,
+    }
+}
+
+/// Connect and send `req`; the response is read from what comes back.
+fn open(req: &Request, cfg: &NetConfig) -> Result<Conn, String> {
+    if req.url.is_tls() && https_transport() == Transport::Curl {
+        return curl::start(req, cfg).map(|c| Conn::Curl(Box::new(c)));
+    }
     let (mut conn, absolute) = connect(&req.url, cfg)?;
     write_request(&mut conn, req, absolute)?;
+    Ok(conn)
+}
+
+/// Send a request and read the whole response.
+pub fn send(req: &Request, cfg: &NetConfig) -> Result<Response, String> {
+    let mut conn = open(req, cfg)?;
     http::decode_response_with(&mut conn, &cfg.limits)
 }
 
@@ -267,12 +310,19 @@ pub struct Streaming {
 /// Send a request and return as soon as the head arrives; read the
 /// body incrementally from `Streaming::body`.
 pub fn send_streaming(req: &Request, cfg: &NetConfig) -> Result<Streaming, String> {
-    let (mut conn, absolute) = connect(&req.url, cfg)?;
-    write_request(&mut conn, req, absolute)?;
+    let conn = open(req, cfg)?;
     let mut br = BufReader::with_capacity(16 * 1024, conn);
     let head = http::read_head(&mut br, &cfg.limits)?;
     let body = BodyReader::new(br, &head, &cfg.limits)?;
     Ok(Streaming { head, body })
+}
+
+/// What carries HTTPS here, for `wright doctor`.
+pub fn https_backend() -> Result<String, String> {
+    match https_transport() {
+        Transport::Native => TlsStream::backend(),
+        Transport::Curl => curl::version().map(|v| format!("{v} (the system curl)")),
+    }
 }
 
 #[cfg(test)]
@@ -334,11 +384,13 @@ mod tests {
     /// Live check through the real network: one host reached directly
     /// and one through this machine's proxy (if any). TLS verification
     /// is on; any genuine HTTP status proves the handshake, the tunnel
-    /// and the framing. Ignored by default: `cargo test -- --ignored live_`.
+    /// and the framing. Ignored by default: `cargo test -- --ignored live_`
+    /// (with `WRIGHT_TLS=curl` to check the curl transport the same way).
     #[test]
     #[ignore]
     fn live_https_direct_and_proxied() {
         let cfg = NetConfig::from_env();
+        eprintln!("https via {:?}: {:?}", https_transport(), https_backend());
         for u in ["https://index.crates.io/config.json", "https://api.github.com/repos/tejakota/vieww_artifacts"] {
             let url = parse_url(u).unwrap();
             let via = if cfg.proxy_for(&url).is_some() { "proxy" } else { "direct" };

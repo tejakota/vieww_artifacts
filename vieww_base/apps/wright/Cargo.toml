@@ -1,6 +1,6 @@
 # Wright — an agent harness where the user never writes code.
 #
-# One binary. Four libraries. One external dependency.
+# One binary. Six libraries. One external dependency.
 #
 # ─────────────────────────────────────────────────────────────────
 # THE DEPENDENCY. Exactly one: vieww.
@@ -19,10 +19,10 @@
 
 [workspace]
 resolver = "2"
-members = ["app", "core", "runtime", "agents", "tools", "engine"]
+members = ["app", "core", "runtime", "agents", "tools", "engine", "infer"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 authors = ["The Wright Authors"]
@@ -34,6 +34,7 @@ wright-runtime = { path = "runtime" }
 wright-agents = { path = "agents" }
 wright-tools = { path = "tools" }
 wright-engine = { path = "engine" }
+wright-infer = { path = "infer" }
 
 # House style, enforced by review (see AGENTS.md):
 #   * std-only unless the crate is `app` (which may add vieww, and nothing else)

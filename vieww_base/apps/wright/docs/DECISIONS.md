@@ -368,6 +368,55 @@ sandbox, because a person asked for them.
 modules tested by `node --test` with nothing installed; JSX and Vite only
 for running and building.
 
+## ADR-022 — Built-in models, run by Wright itself · Accepted
+
+**Decision.** Wright runs two small open models in-process — Qwen3-1.7B
+(8-bit) for text and tool calls, Whisper base for speech — with its own
+std-only engine (`infer/`), not a bundled C++ runtime or a side server.
+The files are not in the installer: they download on first use into
+`~/.wright/models`, resumably, and are refused unless they match the
+SHA-256 pinned in `runtime/src/local.rs`. In config they are an ordinary
+provider of kind `builtin`, last in the list; voice uses Whisper by
+default, and a model with no provider or no key falls back to Qwen3 with
+a line in the event river (`builtin fallback=false` turns that off).
+
+**Why.** The first run should not need an account, a key or a credit
+card, and voice should not leave the machine. In-process keeps the
+one-dependency rule (ADR-002) and the zero-external-crates headless build;
+a 1.8 GB runtime download beats a 1.8 GB installer. Qwen3-1.7B is the
+smallest open model that calls tools reliably in its own chat format;
+Whisper base is the smallest multilingual Whisper that transcribes
+instructions well.
+
+**How we know it is right.** The engine is checked against llama.cpp and
+whisper.cpp — tokens, logits, language guesses — on random models in the
+real formats in every CI run, and on the real weights on all three
+platforms (`docs/MODELS.md`).
+
+**Boundaries.** The runtime does not depend on `infer`: it defines a
+`LocalBackend` trait and the app installs the engine at startup. Content
+is never encoded with control tokens (a tool result cannot open a turn).
+Kernels are safe Rust; hand-written SIMD would need `unsafe` and is an
+open question below.
+
+## ADR-023 — HTTPS on macOS and Windows through the system curl · Accepted
+
+**Decision.** Where Wright has no native TLS binding yet (macOS, Windows),
+`net.rs` hands `https://` requests to the operating system's own curl
+(`/usr/bin/curl`, `%SystemRoot%\System32\curl.exe`), which is built on the
+platform's TLS stack and trust store. The whole request, keys included,
+goes in as a config file on **stdin** — the command line is only
+`-q --config -` — and the raw response (`--include --raw`) comes back
+through the same head parser and body reader as a direct connection.
+Wright decides proxying (its `NO_PROXY` rules) and passes it explicitly;
+`~/.curlrc` and curl's own proxy environment are ignored. Linux keeps the
+OpenSSL binding; `WRIGHT_TLS=curl|native` forces either.
+
+**Why.** Cloud providers and model downloads on two of three platforms,
+now, without hand-rolled crypto (rule 3), new `unsafe` (rule 2), or a
+crate (rule 1). The Security.framework / SChannel FFI (W-6b) remains the
+plan; curl is the bridge, not the destination.
+
 ---
 
 ## Open questions (honest ledger)
@@ -389,3 +438,7 @@ for running and building.
    undesigned.
 5. **Agent-authored tools.** v1 palette is closed. Tool-packs as signed
    artifacts referenced by hash is the leading v2 design.
+7. **SIMD for the built-in engine.** Hand-written AVX2/AVX-512/NEON
+   kernels would make prompts ~3x faster (llama.cpp's margin today) but
+   need `unsafe` loads. Allow one small, test-pinned `infer/src/simd.rs`,
+   or wait for safe SIMD in stable Rust? (`docs/MODELS.md`, "Speed".)

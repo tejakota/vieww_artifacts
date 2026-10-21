@@ -14,7 +14,14 @@
 //! provider "local" kind="openai" base="http://127.0.0.1:7878/v1" models="*"
 //! price model="claude-opus-*" in=15 out=75 cached=1.5
 //! interview model="claude-sonnet-5-5"
+//! voice model="whisper-base"
+//! builtin fallback=true
 //! ```
+//!
+//! The built-in models (`qwen3-1.7b`, `whisper-base`; see `local.rs`) are
+//! a provider of kind `builtin`, last in the list. With `builtin
+//! fallback=true` (the default) a model with no provider or no key falls
+//! back to them instead of failing.
 //!
 //! Model patterns are comma-separated globs where `*` matches anything.
 //! The first provider whose pattern matches wins. Prices are USD per
@@ -28,12 +35,14 @@ use std::path::PathBuf;
 
 use wright_core::blueprint::parse::{parse_doc, KdlValue};
 
-use crate::models::{Anthropic, OpenAiCompatible, Provider};
+use crate::models::{Anthropic, Builtin, OpenAiCompatible, Provider};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderKind {
     Anthropic,
     OpenAi,
+    /// Wright's own built-in models, run in-process.
+    Builtin,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +64,7 @@ impl ProviderEntry {
         match self.kind {
             ProviderKind::Anthropic => Box::new(Anthropic { base_url: self.base_url.clone() }),
             ProviderKind::OpenAi => Box::new(OpenAiCompatible { base_url: self.base_url.clone() }),
+            ProviderKind::Builtin => Box::new(Builtin),
         }
     }
 }
@@ -83,8 +93,12 @@ pub struct Config {
     pub interview_model: String,
     /// The speech-to-text model voice input uses (`voice model="..."`).
     /// Served by whichever OpenAI-compatible provider matches it, at
-    /// `<base>/audio/transcriptions`.
+    /// `<base>/audio/transcriptions`, or by the built-in Whisper.
     pub voice_model: String,
+    /// Fall back to the built-in models when a model has no provider or
+    /// no key (`builtin fallback=false` turns it off). `None`: not set in
+    /// this file (the default, on, applies).
+    pub builtin_fallback: Option<bool>,
     pub source: String,
 }
 
@@ -145,6 +159,7 @@ impl Config {
                 p("zai", ProviderKind::OpenAi, "https://api.z.ai/api/paas/v4", "glm-*"),
                 p("moonshot", ProviderKind::OpenAi, "https://api.moonshot.ai/v1", "kimi-*,moonshot-*"),
                 p("xai", ProviderKind::OpenAi, "https://api.x.ai/v1", "grok-*"),
+                ProviderEntry { name: "built-in".into(), kind: ProviderKind::Builtin, base_url: String::new(), key: None, models: crate::local::CATALOG.iter().map(|m| m.id.to_string()).collect() },
             ],
             prices: vec![
                 price("claude-opus-*", 15.0, 75.0, 1.5),
@@ -154,9 +169,12 @@ impl Config {
                 price("glm-*", 0.6, 2.2, 0.11),
                 price("kimi-*", 0.6, 2.5, 0.15),
                 price("mock-*", 0.0, 0.0, 0.0),
+                price(crate::local::TEXT_MODEL, 0.0, 0.0, 0.0),
+                price(crate::local::SPEECH_MODEL, 0.0, 0.0, 0.0),
             ],
             interview_model: "claude-sonnet-5-5".into(),
-            voice_model: "whisper-1".into(),
+            voice_model: crate::local::SPEECH_MODEL.into(),
+            builtin_fallback: Some(true),
             source: "built-in defaults".into(),
         }
     }
@@ -183,6 +201,9 @@ impl Config {
         if cfg.voice_model.is_empty() {
             cfg.voice_model = b.voice_model;
         }
+        if cfg.builtin_fallback.is_none() {
+            cfg.builtin_fallback = b.builtin_fallback;
+        }
         Ok(cfg)
     }
 
@@ -191,7 +212,7 @@ impl Config {
     /// config would copy every built-in into the user's file.
     pub fn parse_file_only(text: &str, source: &str) -> Result<Config, String> {
         let doc = parse_doc(text).map_err(|e| format!("{source}: {e}"))?;
-        let mut cfg = Config { providers: Vec::new(), prices: Vec::new(), interview_model: String::new(), voice_model: String::new(), source: source.into() };
+        let mut cfg = Config { providers: Vec::new(), prices: Vec::new(), interview_model: String::new(), voice_model: String::new(), builtin_fallback: None, source: source.into() };
         for node in &doc {
             let s = |k: &str| node.prop_str(k).map(String::from);
             let num = |k: &str| -> Option<f64> {
@@ -207,7 +228,8 @@ impl Config {
                     let kind = match s("kind").as_deref() {
                         Some("anthropic") => ProviderKind::Anthropic,
                         Some("openai") | None => ProviderKind::OpenAi,
-                        Some(other) => return Err(format!("{source}: line {}: unknown provider kind '{other}' (anthropic | openai)", node.line)),
+                        Some("builtin") => ProviderKind::Builtin,
+                        Some(other) => return Err(format!("{source}: line {}: unknown provider kind '{other}' (anthropic | openai | builtin)", node.line)),
                     };
                     let key = s("key");
                     if let Some(k) = &key {
@@ -215,10 +237,14 @@ impl Config {
                             return Err(format!("{source}: line {}: provider keys must be keychain: references, never values", node.line));
                         }
                     }
+                    let base_url = match kind {
+                        ProviderKind::Builtin => s("base").unwrap_or_default(),
+                        _ => s("base").ok_or_else(|| format!("{source}: line {}: provider needs base=\"https://...\"", node.line))?,
+                    };
                     cfg.providers.push(ProviderEntry {
                         name,
                         kind,
-                        base_url: s("base").ok_or_else(|| format!("{source}: line {}: provider needs base=\"https://...\"", node.line))?,
+                        base_url,
                         key,
                         models: s("models").unwrap_or_else(|| "*".into()).split(',').map(|m| m.trim().to_string()).collect(),
                     });
@@ -235,7 +261,14 @@ impl Config {
                 "voice" => {
                     cfg.voice_model = s("model").ok_or_else(|| format!("{source}: line {}: voice needs model=\"...\"", node.line))?;
                 }
-                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview | voice)", node.line)),
+                "builtin" => {
+                    cfg.builtin_fallback = Some(match node.prop("fallback") {
+                        Some(KdlValue::Bool(b)) => *b,
+                        Some(KdlValue::Str(t)) if t == "true" || t == "false" => t == "true",
+                        _ => return Err(format!("{source}: line {}: builtin needs fallback=true or fallback=false", node.line)),
+                    });
+                }
+                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview | voice | builtin)", node.line)),
             }
         }
         Ok(cfg)
@@ -257,6 +290,7 @@ impl Config {
             let kind = match p.kind {
                 ProviderKind::Anthropic => "anthropic",
                 ProviderKind::OpenAi => "openai",
+                ProviderKind::Builtin => "builtin",
             };
             out.push_str(&format!("provider {} kind={} base={}", q(&p.name), q(kind), q(&p.base_url)));
             if let Some(k) = &p.key {
@@ -272,6 +306,9 @@ impl Config {
         }
         if !self.voice_model.is_empty() {
             out.push_str(&format!("voice model={}\n", q(&self.voice_model)));
+        }
+        if let Some(on) = self.builtin_fallback {
+            out.push_str(&format!("builtin fallback={on}\n"));
         }
         out
     }
@@ -294,6 +331,16 @@ impl Config {
 
     pub fn provider_for(&self, model: &str) -> Option<&ProviderEntry> {
         self.providers.iter().find(|p| p.matches(model))
+    }
+
+    /// Whether to fall back to the built-in models (default: yes).
+    pub fn falls_back_to_builtin(&self) -> bool {
+        self.builtin_fallback.unwrap_or(true)
+    }
+
+    /// The built-in text model as a provider entry, for falling back to.
+    pub fn builtin_text(&self) -> Option<&ProviderEntry> {
+        self.providers.iter().find(|p| p.kind == ProviderKind::Builtin && p.matches(crate::local::TEXT_MODEL))
     }
 
     /// Price of a model. Unknown models get a deliberately HIGH default
@@ -323,6 +370,22 @@ price model=\"llama*\" in=0 out=0\ninterview model=\"qwen3\"\nvoice model=\"whis
         assert_eq!(b.prices.len(), 1);
         assert_eq!((b.interview_model.as_str(), b.voice_model.as_str()), ("qwen3", "whisper-large"));
         assert!(Config::parse_file_only("", "t").unwrap().providers.is_empty(), "no file means no entries, not the built-ins");
+        let off = Config::parse_file_only("builtin fallback=false\n", "t").unwrap();
+        assert_eq!(Config::parse_file_only(&off.to_kdl(), "t").unwrap().builtin_fallback, Some(false));
+    }
+
+    #[test]
+    fn the_builtin_models_are_a_last_resort_provider() {
+        let cfg = Config::builtin();
+        assert_eq!(cfg.provider_for("qwen3-1.7b").unwrap().kind, ProviderKind::Builtin);
+        assert_eq!(cfg.provider_for("whisper-base").unwrap().kind, ProviderKind::Builtin);
+        assert_eq!(cfg.voice_model, "whisper-base", "voice is local by default");
+        assert_eq!(cfg.price_of("qwen3-1.7b").cost_micro(1_000_000, 0, 1_000_000), 0);
+        assert!(cfg.falls_back_to_builtin());
+        // A user's own catch-all provider still wins over the built-ins.
+        let mine = Config::parse("provider \"gw\" base=\"http://127.0.0.1:1/v1\" models=\"*\"\n", "t").unwrap();
+        assert_eq!(mine.provider_for("qwen3-1.7b").unwrap().name, "gw");
+        assert!(Config::parse("builtin fallback=false\n", "t").map(|c| !c.falls_back_to_builtin()).unwrap());
     }
 
     #[test]

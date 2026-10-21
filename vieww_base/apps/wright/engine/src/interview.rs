@@ -17,10 +17,11 @@ use wright_core::blueprint::{canon, parse, validate, Blueprint};
 use wright_core::compiler;
 use wright_core::confirm::{self, Line};
 use wright_core::palette::PALETTE;
-use wright_runtime::config::Config;
+use wright_runtime::config::{Config, ProviderEntry};
+use wright_runtime::local;
 use wright_runtime::models::{self, Block, CompletionRequest, Endpoint, Message, Role, ToolDef};
 use wright_runtime::net::NetConfig;
-use wright_runtime::secrets;
+use wright_runtime::secrets::{self, SecretValue};
 use wright_runtime::store::{write_atomic, Store};
 
 /// How the interview talks to a person.
@@ -83,15 +84,34 @@ pub fn check_proposal(kdl: &str) -> Result<Blueprint, String> {
     Ok(bp)
 }
 
+/// The Interviewer's model, provider and key: the configured one, or the
+/// built-in model when that one has no provider or no key (and fallback
+/// is on), with a word to the person about it.
+fn interview_endpoint<'c>(config: &'c Config, io: &mut dyn InterviewIo) -> Result<(String, &'c ProviderEntry, Option<SecretValue>), String> {
+    let model = config.interview_model.clone();
+    let problem = match config.provider_for(&model) {
+        None => format!("no provider is configured for the interview model '{model}' ({})", config.source),
+        Some(entry) => match &entry.key {
+            None => return Ok((model, entry, None)),
+            Some(r) => match secrets::resolve(r) {
+                Ok(k) => return Ok((model, entry, Some(k))),
+                Err(e) => format!("the interview model '{model}' needs a key: {e}"),
+            },
+        },
+    };
+    match config.builtin_text() {
+        Some(entry) if config.falls_back_to_builtin() && local::available() => {
+            io.say(&format!("({problem}. Using the built-in model {} on this machine instead; add a key in Settings for a stronger interviewer.)", local::TEXT_MODEL));
+            Ok((local::TEXT_MODEL.to_string(), entry, None))
+        }
+        _ => Err(problem),
+    }
+}
+
 /// Run the interview. On confirmation, writes `blueprint.kdl` into
 /// `project_dir` (and commits it to the store) and returns it.
 pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) -> Result<Option<Blueprint>, String> {
-    let model = config.interview_model.clone();
-    let entry = config.provider_for(&model).ok_or_else(|| format!("no provider is configured for the interview model '{model}' ({})", config.source))?;
-    let key = match &entry.key {
-        Some(r) => Some(secrets::resolve(r)?),
-        None => None,
-    };
+    let (model, entry, key) = interview_endpoint(config, io)?;
     let client = entry.client();
     let net = NetConfig::from_env();
 

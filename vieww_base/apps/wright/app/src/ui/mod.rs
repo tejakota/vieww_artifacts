@@ -505,6 +505,7 @@ impl Ui {
         for s in self.sessions.get() {
             s.pump();
         }
+        self.form.pump();
         let voice = std::mem::take(&mut *self.inner.inbox.voice.lock().unwrap_or_else(|p| p.into_inner()));
         for (id, r) in voice {
             if let Some(c) = self.composer_by_id(id) {

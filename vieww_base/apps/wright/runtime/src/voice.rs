@@ -10,7 +10,9 @@
 //! this module is the pure half — resampling, WAV bytes, the request and the
 //! answer — so it can be tested with no microphone and no network.
 //!
-//! The endpoint is OpenAI's speech-to-text shape, which OpenAI, Groq and
+//! By default the model is the built-in Whisper (`whisper-base`, run on
+//! this machine by `wright-infer`: speech never leaves it). Any other
+//! model goes to OpenAI's speech-to-text shape, which OpenAI, Groq and
 //! local servers (whisper.cpp's server, faster-whisper-server, LocalAI)
 //! all speak. The model comes from `voice model="..."` in config.kdl and
 //! is routed like any other model: the first provider whose `models`
@@ -102,6 +104,9 @@ pub fn transcribe(cfg: &Config, wav: &[u8]) -> Result<String, String> {
              provider \"openai\" base=\"https://api.openai.com/v1\" key=\"keychain:wright/openai\" models=\"gpt-*,whisper-*\""
         ));
     };
+    if p.kind == ProviderKind::Builtin {
+        return crate::local::transcribe(model, wav);
+    }
     if p.kind != ProviderKind::OpenAi {
         return Err(format!("'{}' cannot transcribe speech; point `voice model=` at an OpenAI-compatible provider", p.name));
     }

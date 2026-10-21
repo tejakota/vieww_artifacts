@@ -624,6 +624,86 @@ pub fn export(args: &[String]) -> i32 {
     i32::from(failed > 0)
 }
 
+// ── model ────────────────────────────────────────────────────────
+
+/// `wright model` — the built-in models.
+pub fn model(args: &[String]) -> i32 {
+    use std::io::Write as _;
+    use wright_runtime::local::{self, Kind};
+    let find = |id: &str| local::find(id).ok_or_else(|| format!("no built-in model '{id}' (wright model list)"));
+    let pull = |m: &local::BuiltinModel| -> Result<(), String> {
+        let mut shown = u32::MAX;
+        local::pull(m, &mut |p| {
+            if p.percent() != shown {
+                shown = p.percent();
+                print!("\r  {:<80}", local::progress_line(m, p));
+                let _ = std::io::stdout().flush();
+            }
+        })?;
+        println!("\r  {:<80}", format!("{} ready: {}", m.id, m.path().display()));
+        Ok(())
+    };
+    let result: Result<(), String> = match args.first().map(String::as_str) {
+        None | Some("list") => {
+            println!("Built-in models (run on this machine; no key, no account) — {}", local::models_dir().display());
+            for m in &local::CATALOG {
+                let state = if m.installed() { "ready".to_string() } else if m.partial() > 0 { format!("{} of {} downloaded", local::human_bytes(m.partial()), m.size_text()) } else { "not downloaded".into() };
+                println!("  {:<14} {:<6} {:>8}  {:<20} {}", m.id, if m.kind == Kind::Text { "text" } else { "speech" }, m.size_text(), state, m.about);
+            }
+            println!("\nThey download on first use. `wright model pull` fetches them now; `builtin fallback=false` in config.kdl stops Wright using them.");
+            Ok(())
+        }
+        Some("pull") => match args.get(1).map(String::as_str) {
+            None | Some("all") => local::CATALOG.iter().try_for_each(pull),
+            Some(id) => find(id).and_then(pull),
+        },
+        Some("rm") | Some("remove") => match args.get(1) {
+            Some(id) => find(id).and_then(|m| local::remove(m).map(|_| println!("removed {}", m.id))),
+            None => Err("usage: wright model rm <id>".into()),
+        },
+        Some("ask") => {
+            let prompt = args[1..].join(" ");
+            if prompt.trim().is_empty() {
+                Err("usage: wright model ask \"<prompt>\"".into())
+            } else {
+                let mut req = wright_runtime::models::CompletionRequest::new(local::TEXT_MODEL);
+                req.messages.push(wright_runtime::models::Message::user_text(prompt));
+                req.max_tokens = 512;
+                local::complete(&req, &mut |d| match d {
+                    wright_runtime::models::Delta::Text(t) => {
+                        print!("{t}");
+                        let _ = std::io::stdout().flush();
+                    }
+                    wright_runtime::models::Delta::Status(s) => eprint!("\r  {s:<80}"),
+                    _ => {}
+                })
+                .map(|r| println!("\n\n({} in, {} out, {})", r.usage.input_tokens, r.usage.output_tokens, r.model))
+            }
+        }
+        Some("listen") => match args.get(1) {
+            Some(file) => std::fs::read(file)
+                .map_err(|e| format!("{file}: {e}"))
+                .and_then(|wav| {
+                    let m = find(local::SPEECH_MODEL)?;
+                    if !m.installed() {
+                        pull(m)?;
+                    }
+                    local::transcribe(local::SPEECH_MODEL, &wav)
+                })
+                .map(|text| println!("{text}")),
+            None => Err("usage: wright model listen <file.wav>".into()),
+        },
+        Some(other) => Err(format!("unknown: wright model {other} (list | pull [id] | rm <id> | ask \"<prompt>\" | listen <file.wav>)")),
+    };
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("\nerror: {e}");
+            1
+        }
+    }
+}
+
 // ── doctor ───────────────────────────────────────────────────────
 
 const DOCTOR_BLUEPRINT: &str = "meta { name \"doctor\" }\nintent { summary \"self test\" confirmed \"v1\" }\nagent Probe { goal \"prove the machine compiles\" tools \"files-read\" permissions files-read=true }\ndeliverable kind=\"check\" { check \"doctor ran\" }";
@@ -654,7 +734,17 @@ pub fn doctor() -> i32 {
     );
     let ex = Executor::new();
     line("executor", if ex.block_on(async { 41 + 1 }) == 42 { Ok("block_on, spawn_blocking".into()) } else { Err("broken".into()) });
-    line("tls", wright_runtime::tls::TlsStream::backend());
+    line("https", wright_runtime::net::https_backend());
+    for m in &wright_runtime::local::CATALOG {
+        let state = if m.installed() {
+            Ok(format!("{} ready ({}, {})", m.id, m.size_text(), m.license))
+        } else if m.partial() > 0 {
+            Ok(format!("{}: {} of {} downloaded (wright model pull {} resumes)", m.id, wright_runtime::local::human_bytes(m.partial()), m.size_text(), m.id))
+        } else {
+            Ok(format!("{} downloads on first use ({}), or now: wright model pull {}", m.id, m.size_text(), m.id))
+        };
+        line(if m.kind == wright_runtime::local::Kind::Text { "built-in text" } else { "built-in speech" }, state);
+    }
     line("sandbox", wright_tools::sandbox::capabilities());
     line("time zones", wright_runtime::tz::load("Asia/Kolkata").map(|_| "system zone database".into()));
     let git = std::process::Command::new("git").arg("--version").output();

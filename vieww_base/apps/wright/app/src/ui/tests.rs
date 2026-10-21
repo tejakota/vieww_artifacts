@@ -204,7 +204,7 @@ deliverable kind=\"message\" {{ check \"the hook got a hello\" }}\nmodels {{ tie
     let shots = temp("shots");
     let n = shell::snapshots(Some(&dir), &shots).unwrap();
     assert!(n >= 6);
-    for f in ["1-splash", "2-home", "3-session", "4-engine", "5-overview", "6-settings", "7-light", "8-export"] {
+    for f in ["1-splash", "2-home", "3-session", "4-engine", "5-overview", "6-settings", "6-settings-download", "7-light", "8-export"] {
         assert!(shots.join(format!("{f}.png")).exists(), "{f}");
     }
     let icon = shots.join("icon.png");

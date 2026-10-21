@@ -15,6 +15,8 @@
 //!   wright schedule ...         list | remove [dir] | install
 //!   wright daemon               fire schedules in the background
 //!   wright secret set <ref>     put a key in the OS keychain
+//!   wright model ...            the built-in models: list | pull [id] | rm <id>
+//!                               | ask "<prompt>" | listen <file.wav>
 //!   wright mock-provider        an offline model, for demos and CI
 //!   wright where [dir]          where the project's history lives
 //!   wright doctor               what works on this machine
@@ -36,6 +38,8 @@ pub fn ui_status() -> String {
 }
 
 fn main() {
+    // The built-in models (qwen3-1.7b, whisper-base), for every command.
+    wright_infer::install();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let rest = if args.is_empty() { &[][..] } else { &args[1..] };
     let code = match args.first().map(String::as_str) {
@@ -51,6 +55,7 @@ fn main() {
         Some("schedule") => cmd::schedule(rest),
         Some("daemon") => cmd::daemon(),
         Some("secret") => cmd::secret(rest),
+        Some("model") | Some("models") => cmd::model(rest),
         Some("mock-provider") => cmd::mock_provider(rest),
         Some("where") => cmd::where_(rest),
         Some("doctor") => cmd::doctor(),

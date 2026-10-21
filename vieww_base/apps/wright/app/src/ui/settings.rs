@@ -2,7 +2,8 @@
 //! the workspace, and the open project's own limits.
 //!
 //! ```text
-//!  Models & keys   providers, their models, key Ready / Missing / Not needed
+//!  Models & keys   the built-in models (download, remove, fall back to them),
+//!                  providers, their models, key Ready / Missing / Not needed
 //!  Defaults        the interview model, the voice model
 //!  Appearance      dark / light, any accent colour
 //!  Workspace       where new projects go, background schedules
@@ -15,12 +16,16 @@
 //! `blueprint.kdl` in canonical form and records the version in history,
 //! exactly as an edit by hand would be.
 
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use vieww::prelude::*;
 use wright_runtime::config::{Config, ProviderEntry, ProviderKind};
+use wright_runtime::local::{self, BuiltinModel};
 
 use super::kit::*;
+use super::session::WakeHandle;
 use super::theme::{self, Mode, Pal};
 use super::Ui;
 
@@ -55,9 +60,21 @@ pub enum KeyState {
     NotNeeded,
 }
 
+/// A built-in model download started from Settings.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pull {
+    Working { line: String, percent: u32 },
+    Done,
+    Failed(String),
+}
+
 /// The form state Settings edits.
 #[derive(Clone)]
 pub struct Form {
+    /// Downloads by model id, as the UI shows them…
+    pub pulls: Signal<BTreeMap<String, Pull>>,
+    /// …and as the download threads report them (copied over in `pump`).
+    pulled: Arc<Mutex<BTreeMap<String, Pull>>>,
     pub tab: Signal<Tab>,
     pub config: Signal<Option<Config>>,
     pub keys: Signal<Vec<(String, KeyState)>>,
@@ -84,6 +101,8 @@ fn tv(s: impl Into<String>) -> TextEditingValue {
 impl Form {
     pub fn new(rt: &vieww::element::Runtime) -> Form {
         Form {
+            pulls: rt.signal(BTreeMap::new()),
+            pulled: Arc::new(Mutex::new(BTreeMap::new())),
             tab: rt.signal(Tab::Models),
             config: rt.signal(None),
             keys: rt.signal(Vec::new()),
@@ -131,6 +150,43 @@ impl Form {
             self.tiers.set([tv(m.cheap.prefer.clone()), tv(m.cheap.fallback.clone()), tv(m.quality.prefer.clone()), tv(m.quality.fallback.clone())]);
             self.per_run.set(tv(format!("{:.2}", bp.guardrails.per_firing_micro_usd as f64 / 1e6)));
             self.per_day.set(tv(format!("{:.2}", bp.guardrails.daily_micro_usd as f64 / 1e6)));
+        }
+    }
+
+    /// Download a built-in model in the background.
+    pub fn pull(&self, m: &'static BuiltinModel) {
+        if matches!(self.pulls.get().get(m.id), Some(Pull::Working { .. })) {
+            return;
+        }
+        let shared = Arc::clone(&self.pulled);
+        let set = move |state: Pull| {
+            shared.lock().unwrap_or_else(|p| p.into_inner()).insert(m.id.to_string(), state);
+        };
+        set(Pull::Working { line: format!("Starting the download of {}…", m.id), percent: 0 });
+        self.pump();
+        let wake = WakeHandle::current();
+        std::thread::spawn(move || {
+            let mut last = u32::MAX;
+            let r = local::pull(m, &mut |p| {
+                if p.percent() != last {
+                    last = p.percent();
+                    set(Pull::Working { line: local::progress_line(m, p), percent: p.percent() });
+                    wake.wake();
+                }
+            });
+            set(match r {
+                Ok(_) => Pull::Done,
+                Err(e) => Pull::Failed(e),
+            });
+            wake.wake();
+        });
+    }
+
+    /// Bring download progress from the worker threads into view.
+    pub fn pump(&self) {
+        let now = self.pulled.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        if now != self.pulls.get() {
+            self.pulls.set(now);
         }
     }
 
@@ -235,6 +291,91 @@ fn section(p: &Pal, title: &str, sub: &str) -> WidgetNode {
     column(4.0, vec![b(title.to_string(), 15.0, p.ink), para(sub.to_string(), 12.5, p.muted)])
 }
 
+/// The built-in models: what they are, whether they are here, and the
+/// switch for falling back to them.
+fn builtin(ui: &Ui, p: &Pal, cfg: &Config) -> Vec<WidgetNode> {
+    let f = &ui.form;
+    let pulls = f.pulls.get();
+    let mut rows = vec![section(
+        p,
+        "Built-in models",
+        "Two small open models Wright runs on this machine: no key, no account, nothing leaves it. A project with no key set up runs on them; voice uses the built-in Whisper unless you choose another model.",
+    )];
+    for m in &local::CATALOG {
+        let installed = m.installed();
+        let pull = pulls.get(m.id).cloned();
+        let badge = match (&pull, installed) {
+            (Some(Pull::Working { percent, .. }), _) => pill(format!("Downloading {percent}%"), p.accent_ink, p.accent_soft),
+            (_, true) => pill("Ready", p.good, p.good_soft),
+            (Some(Pull::Failed(_)), _) => pill("Download failed", p.wait, p.wait_soft),
+            _ if m.partial() > 0 => pill(format!("{} of {}", local::human_bytes(m.partial()), m.size_text()), p.wait, p.wait_soft),
+            _ => pill("Downloads on first use", p.muted, p.surface2),
+        };
+        let mut actions = Vec::new();
+        let working = matches!(pull, Some(Pull::Working { .. }));
+        if !installed {
+            let form = f.clone();
+            actions.push(button(p, if m.partial() > 0 { "Resume download" } else { "Download now" }, Look::Secondary, !working, move || form.pull(m)));
+        } else {
+            let (form, project) = (f.clone(), ui.current_session().map(|s| (*s.project).clone()));
+            actions.push(button(p, "Remove", Look::Quiet, true, move || {
+                match local::remove(m) {
+                    Ok(()) => form.message.set(format!("Removed {}. It downloads again when it is next needed.", m.id)),
+                    Err(e) => form.message.set(format!("Not removed: {e}")),
+                }
+                form.pulled.lock().unwrap_or_else(|p| p.into_inner()).remove(m.id);
+                form.pump();
+                form.reload(project.as_deref());
+            }));
+        }
+        let kind = if m.kind == local::Kind::Text { "text and tool calls" } else { "speech to text" };
+        let mut block = vec![
+            row(10.0, vec![b(m.id.to_string(), 14.0, p.ink), badge, gap(), row(8.0, actions)]),
+            para(m.about.to_string(), 12.5, p.muted),
+            mono(format!("{kind}  ·  {}  ·  {}  ·  sha256 {}…", m.size_text(), m.license, &m.sha256[..12]), 11.5, p.muted),
+        ];
+        match &pull {
+            Some(Pull::Working { line, percent }) => {
+                block.push(progress_bar(p, *percent as f32 / 100.0));
+                block.push(t(line.clone(), 11.5, p.muted));
+            }
+            Some(Pull::Failed(e)) => block.push(para(e.clone(), 11.5, p.wait)),
+            _ => {}
+        }
+        rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::CARD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::all(14.0)).child(stretch(6.0, block)).into());
+    }
+    let on = cfg.falls_back_to_builtin();
+    let (form_on, form_off) = (f.clone(), f.clone());
+    let project = ui.current_session().map(|s| (*s.project).clone());
+    let project2 = project.clone();
+    rows.push(row(10.0, vec![
+        t("When a model has no key:", 12.5, p.ink),
+        button(p, "Use the built-in model", if on { Look::Primary } else { Look::Secondary }, true, move || {
+            form_on.edit_file(|c| c.builtin_fallback = Some(true));
+            form_on.reload(project.as_deref());
+        }),
+        button(p, "Stop and ask for a key", if on { Look::Secondary } else { Look::Primary }, true, move || {
+            form_off.edit_file(|c| c.builtin_fallback = Some(false));
+            form_off.reload(project2.as_deref());
+        }),
+    ]));
+    rows
+}
+
+/// A thin bar, `done` of the way across.
+fn progress_bar(p: &Pal, done: f32) -> WidgetNode {
+    let done = done.clamp(0.0, 1.0);
+    Container::new()
+        .color(p.surface2)
+        .radius(corner::SMALL)
+        .height(6.0)
+        .child(Flex::row().children(vec![
+            Flexible::expanded((done * 1000.0).round().max(1.0) as u16).child(Container::new().color(p.accent).radius(corner::SMALL).height(6.0)).into(),
+            Flexible::expanded(((1.0 - done) * 1000.0).round().max(1.0) as u16).child(SizedBox::shrink()).into(),
+        ]))
+        .into()
+}
+
 fn models(ui: &Ui, p: &Pal) -> WidgetNode {
     let f = &ui.form;
     let cfg = f.config.get().unwrap_or_else(Config::builtin);
@@ -242,9 +383,11 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
     let keys = f.keys.get();
     let editing = f.key_for.get();
     let mut seen = Vec::new();
-    let mut rows = vec![section(p, "Model providers", "Agents use the first provider whose models match. Keys live in your system's keychain; Wright never writes them to a file.")];
+    let mut rows = builtin(ui, p, &cfg);
+    rows.push(divider(p));
+    rows.push(section(p, "Model providers", "Agents use the first provider whose models match. Keys live in your system's keychain; Wright never writes them to a file."));
     for prov in &cfg.providers {
-        if seen.contains(&prov.name) {
+        if seen.contains(&prov.name) || prov.kind == ProviderKind::Builtin {
             continue;
         }
         seen.push(prov.name.clone());
@@ -352,8 +495,8 @@ fn defaults(ui: &Ui, p: &Pal) -> WidgetNode {
     stretch(14.0, vec![
         section(p, "Drafting plans", "The model the interview uses to turn your description into a blueprint. It talks to you, so a capable model pays off."),
         field(ui, p, "Interview model", &f.interview, "claude-sonnet-5-5", false),
-        section(p, "Voice", "The speech-to-text model the mic uses. It must be served by an OpenAI-compatible provider (OpenAI, Groq, or a local Whisper server)."),
-        field(ui, p, "Voice model", &f.voice, "whisper-1", false),
+        section(p, "Voice", "The speech-to-text model the mic uses. whisper-base is built in and runs on this machine; any other model is sent to an OpenAI-compatible provider (OpenAI's whisper-1, Groq, or a Whisper server)."),
+        field(ui, p, "Voice model", &f.voice, "whisper-base", false),
         row(10.0, vec![button(p, "Save defaults", Look::Primary, true, move || {
             let (i, v) = (f.interview.get().text.trim().to_string(), f.voice.get().text.trim().to_string());
             f.edit_file(|c| {

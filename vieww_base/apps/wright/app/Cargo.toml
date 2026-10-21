@@ -26,6 +26,7 @@ wright-runtime = { workspace = true }
 wright-agents = { workspace = true }
 wright-tools = { workspace = true }
 wright-engine = { workspace = true }
+wright-infer = { workspace = true }
 
 # ── THE dependency ─────────────────────────────────────────────────
 # vieww, from the repository Wright lives in (`vieww_base/crates/`).

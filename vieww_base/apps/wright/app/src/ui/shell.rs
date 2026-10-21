@@ -493,10 +493,14 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     ui.set_overview(false);
     ui.open_settings();
     shot(&mut driver, "6-settings", 400)?;
+    // A built-in model mid-download, as Settings shows it.
+    ui.form.pulls.set([(wright_runtime::local::TEXT_MODEL.to_string(), super::settings::Pull::Working { line: "Downloading the built-in model qwen3-1.7b (first use, once): 42% of 1.83 GB".into(), percent: 42 })].into_iter().collect());
+    shot(&mut driver, "6-settings-download", 200)?;
+    ui.form.pulls.set(Default::default());
     ui.settings.set(false);
     ui.mode.set(Mode::Light);
     shot(&mut driver, "7-light", 600)?;
-    n += 3;
+    n += 4;
     if let Some(s) = ui.sessions.get().first().cloned() {
         ui.mode.set(Mode::Dark);
         ui.go(1);

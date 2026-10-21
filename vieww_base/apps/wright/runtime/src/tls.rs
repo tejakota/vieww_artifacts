@@ -2,11 +2,16 @@
 //!
 //! TLS reaches the OS-native implementation on each platform:
 //!
-//! | Platform | Backend                 | Binding             | Status (v0.2)        |
-//! |----------|-------------------------|---------------------|----------------------|
-//! | Linux    | system OpenSSL 1.1 / 3  | `dlopen` at runtime | real, tested live    |
-//! | macOS    | Security.framework      | direct FFI          | refuses loudly (W-6) |
-//! | Windows  | SChannel                | direct FFI          | refuses loudly (W-6) |
+//! | Platform | Backend                 | Binding             | Status (v0.5)                 |
+//! |----------|-------------------------|---------------------|-------------------------------|
+//! | Linux    | system OpenSSL 1.1 / 3  | `dlopen` at runtime | real, tested live             |
+//! | macOS    | Security.framework      | the system `curl`   | via `curl.rs` (FFI: W-6)      |
+//! | Windows  | SChannel                | the system `curl`   | via `curl.rs` (FFI: W-6)      |
+//!
+//! Where this file has no binding, `net.rs` hands HTTPS requests to the
+//! OS's own curl (`curl.rs`), which is built on the same OS TLS stack and
+//! trust store. That is still no hand-rolled crypto and no plaintext; the
+//! direct FFI remains the plan (Spike W-6).
 //!
 //! Binding the operating system is not "adding a dependency" — it is
 //! using the platform we already ship on. OpenSSL is loaded with
