@@ -2273,6 +2273,8 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
                 .map_err(|error| PlatformError::Window(error.to_string()))?,
         );
         crate::startup::mark("window created");
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        fit_and_center(&window);
 
         let scale = Scale::new(window.scale_factor());
 
@@ -3702,4 +3704,42 @@ const fn pointer_button(button: MouseButton) -> Option<PointerButton> {
         // that survives being carried across platforms, and button 9 does not.
         MouseButton::Other(_) => None,
     }
+}
+
+/// Open a desktop window centred on its monitor, and no larger than fits.
+///
+/// winit leaves placement to the OS, and the OS default is not "centred":
+/// Windows cascades new windows from the top-left (`CW_USEDEFAULT`), and a
+/// window requested at 1280x800 on a 1366x768 laptop spilled off the bottom
+/// right and had to be dragged into view (Wright, first Windows install,
+/// 2026-10-21). So: shrink to at most 92% x 88% of the monitor (its size
+/// includes the taskbar, which winit cannot see), then centre.
+///
+/// Best effort, never an error: Wayland refuses to let clients position
+/// windows (the compositor places them, usually centred already) and
+/// reports no position, and a window with no monitor yet is left alone.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn fit_and_center(window: &Window) {
+    let Some(monitor) = window.current_monitor().or_else(|| window.primary_monitor()) else {
+        return;
+    };
+    let area = monitor.size();
+    let origin = monitor.position();
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "a fraction of a monitor's pixel size")]
+    let (max_w, max_h) = ((f64::from(area.width) * 0.92) as u32, (f64::from(area.height) * 0.88) as u32);
+    let inner = window.inner_size();
+    if inner.width > max_w || inner.height > max_h {
+        let _ = window.request_inner_size(PhysicalSize::new(inner.width.min(max_w), inner.height.min(max_h)));
+    }
+    let outer = window.outer_size();
+    let (w, h) = (outer.width.min(area.width), outer.height.min(area.height));
+    #[expect(clippy::cast_possible_wrap, reason = "monitor and window sizes are far below i32::MAX")]
+    let (x, y) = (
+        origin.x + (area.width as i32 - w as i32) / 2,
+        origin.y + ((area.height as i32 - h as i32) / 2).max(0),
+    );
+    window.set_outer_position(PhysicalPosition::new(x, y));
 }
