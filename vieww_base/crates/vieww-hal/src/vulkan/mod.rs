@@ -199,6 +199,30 @@ fn load_entry_fallback(first: String) -> Result<ash::Entry, VulkanError> {
     Err(VulkanError::Loading(format!("{first}; {detail}")))
 }
 
+/// The dependency every offscreen render pass here needs, because each one
+/// ends in `TRANSFER_SRC_OPTIMAL` and is then read back with
+/// `vkCmdCopyImageToBuffer`: without it nothing orders the copy after the
+/// pass's colour writes and its final layout transition. Vulkan's
+/// synchronisation validation reports exactly that (`SYNC-HAZARD-READ-AFTER-
+/// WRITE`, `vkCmdCopyImageToBuffer` after `vkCmdEndRenderPass`); a lenient
+/// driver such as lavapipe hides it, and a tiled GPU may hand the copy pixels
+/// that are not written yet.
+const COPY_AFTER_RENDER: [vk::SubpassDependency; 1] = [vk::SubpassDependency {
+    src_subpass: 0,
+    dst_subpass: vk::SUBPASS_EXTERNAL,
+    src_stage_mask: vk::PipelineStageFlags::from_raw(
+        vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT.as_raw()
+            | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS.as_raw(),
+    ),
+    dst_stage_mask: vk::PipelineStageFlags::TRANSFER,
+    src_access_mask: vk::AccessFlags::from_raw(
+        vk::AccessFlags::COLOR_ATTACHMENT_WRITE.as_raw()
+            | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE.as_raw(),
+    ),
+    dst_access_mask: vk::AccessFlags::TRANSFER_READ,
+    dependency_flags: vk::DependencyFlags::empty(),
+}];
+
 impl VulkanDevice {
     /// Bring up a headless Vulkan 1.1 device on the first adapter that
     /// offers a graphics queue — spec §4.3's "Vulkan 1.1 ... Timeline
@@ -663,7 +687,8 @@ impl HalDevice for VulkanDevice {
         let subpasses = [subpass];
         let render_pass_info = vk::RenderPassCreateInfo::default()
             .attachments(&attachments)
-            .subpasses(&subpasses);
+            .subpasses(&subpasses)
+            .dependencies(&COPY_AFTER_RENDER);
         let render_pass = unsafe { device.create_render_pass(&render_pass_info, None) }?;
 
         let fb_attachments = [image_view];
@@ -1075,7 +1100,8 @@ impl VulkanDevice {
         let subpasses = [subpass];
         let render_pass_info = vk::RenderPassCreateInfo::default()
             .attachments(&attachments)
-            .subpasses(&subpasses);
+            .subpasses(&subpasses)
+            .dependencies(&COPY_AFTER_RENDER);
         let render_pass = unsafe { device.create_render_pass(&render_pass_info, None) }?;
 
         let fb_attachments = [image_view];
@@ -1721,7 +1747,8 @@ impl VulkanDevice {
         let subpasses = [subpass];
         let render_pass_info = vk::RenderPassCreateInfo::default()
             .attachments(&attachments)
-            .subpasses(&subpasses);
+            .subpasses(&subpasses)
+            .dependencies(&COPY_AFTER_RENDER);
         let render_pass = unsafe { device.create_render_pass(&render_pass_info, None) }?;
 
         let fb_attachments = [image_view, depth_view];
