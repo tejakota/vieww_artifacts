@@ -413,9 +413,16 @@ impl VulkanDevice {
             .src_access_mask(vk::AccessFlags::empty())
             .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE);
         unsafe {
+            // From `TRANSFER`, the stage the submit's wait on `image_available`
+            // applies to, not `TOP_OF_PIPE`: only a barrier whose source stage
+            // includes the wait's is ordered after it, and from `TOP_OF_PIPE`
+            // the layout transition could run while the presentation engine
+            // was still reading the image (synchronisation validation:
+            // SYNC-HAZARD-WRITE-AFTER-READ against the acquire, on every CPU
+            // frame a GPU frame preceded).
             self.device.cmd_pipeline_barrier(
                 command_buffer,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::TRANSFER,
                 vk::DependencyFlags::empty(),
                 &[],
