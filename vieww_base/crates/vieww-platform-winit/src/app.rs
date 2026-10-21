@@ -3720,7 +3720,10 @@ const fn pointer_button(button: MouseButton) -> Option<PointerButton> {
 /// reports no position, and a window with no monitor yet is left alone.
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn fit_and_center(window: &Window) {
-    let Some(monitor) = window.current_monitor().or_else(|| window.primary_monitor()) else {
+    let Some(monitor) = window
+        .current_monitor()
+        .or_else(|| window.primary_monitor())
+    else {
         return;
     };
     let area = monitor.size();
@@ -3728,15 +3731,28 @@ fn fit_and_center(window: &Window) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "a fraction of a monitor's pixel size")]
-    let (max_w, max_h) = ((f64::from(area.width) * 0.92) as u32, (f64::from(area.height) * 0.88) as u32);
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a fraction of a monitor's pixel size"
+    )]
+    let (max_w, max_h) = (
+        (f64::from(area.width) * 0.92) as u32,
+        (f64::from(area.height) * 0.88) as u32,
+    );
     let inner = window.inner_size();
     if inner.width > max_w || inner.height > max_h {
-        let _ = window.request_inner_size(PhysicalSize::new(inner.width.min(max_w), inner.height.min(max_h)));
+        let _ = window.request_inner_size(PhysicalSize::new(
+            inner.width.min(max_w),
+            inner.height.min(max_h),
+        ));
     }
     let outer = window.outer_size();
     let (w, h) = (outer.width.min(area.width), outer.height.min(area.height));
-    #[expect(clippy::cast_possible_wrap, reason = "monitor and window sizes are far below i32::MAX")]
+    #[expect(
+        clippy::cast_possible_wrap,
+        reason = "monitor and window sizes are far below i32::MAX"
+    )]
     let (x, y) = (
         origin.x + (area.width as i32 - w as i32) / 2,
         origin.y + ((area.height as i32 - h as i32) / 2).max(0),
