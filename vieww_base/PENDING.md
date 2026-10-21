@@ -966,6 +966,14 @@ the two the Stylo needs could not be read from one `gpu_wait` number.
   flight: the application's work overlaps the GPU's, two frames' GPU work
   never does. `VIEWW_GPU_OVERLAP=0` / `debug.vieww.overlap=0` turns it off;
   Device Farm's new `gpuserial` pass is that, beside `gpu`.
+- *`auto` judges the CPU's pacing, not only its median.* The S26's first
+  launch measured a 3.52 ms CPU median, under 60% of 8.33 ms, so the GPU
+  was never tried; the CPU then fell to 60 Hz while the GPU held 120 Hz at
+  1.5 ms. The CPU is now kept only if no more than one frame in twenty of
+  its calibration is over the budget, the same bar as `cadence` and
+  `frames_inside_their_budget`. Whether the S26's calibration frames show
+  it is the next run's to say: they are the start-up screen, not the
+  suite's.
 - *Found by running everything under Vulkan's synchronisation validation*
   (now the way to check this renderer): readback copies unordered after
   the render passes writing them (three offscreen passes), and

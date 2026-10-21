@@ -32,8 +32,10 @@
 //! in a small file:
 //!
 //! 1. **First launch:** the CPU path. If its median frame fits in
-//!    [`COMFORTABLE`] of the budget, that is the answer — the GPU is never
-//!    loaded on this device, which is the lightest outcome there is.
+//!    [`COMFORTABLE`] of the budget **and** no more than one frame in twenty
+//!    misses the budget (`crate::cadence::MAX_OVER_SHARE`), that is the
+//!    answer — the GPU is never loaded on this device, which is the lightest
+//!    outcome there is.
 //! 2. Otherwise **the next launch** runs the GPU path and measures it. The GPU
 //!    is kept if it is clearly faster ([`CLEARLY_FASTER`]), or if it is the
 //!    only one of the two inside the budget; otherwise a tie goes to the CPU,
@@ -121,9 +123,22 @@ pub(crate) enum Next {
     TryGpu,
 }
 
-/// After the CPU path's median: keep it, or try the GPU next time.
-pub(crate) fn after_cpu(cpu: Duration, budget: Duration) -> Next {
-    if cpu.as_secs_f64() <= budget.as_secs_f64() * COMFORTABLE {
+/// After the CPU path's median and the share of its frames over the budget:
+/// keep it, or try the GPU next time.
+///
+/// **A median is not pacing.** The Galaxy S26 Ultra's first launch in Device
+/// Farm run 39538891917 measured a 3.52 ms CPU median — under 60% of its
+/// 8.33 ms budget — so the GPU was never tried; the CPU path then could not
+/// hold 120 Hz, the window fell to 60, and the phone shipped a 60 Hz CPU
+/// path beside a GPU path holding 120 Hz at 1.5 ms. The A73 showed the same
+/// shape in run 39402544760: a median inside the budget with 22% of frames
+/// outside it. So the CPU is kept only if its frames also keep the bar the
+/// rest of the framework holds pacing to — no more than one in twenty over
+/// the budget (`crate::cadence::MAX_OVER_SHARE`, which drops the rate, and
+/// the device suite's `frames_inside_their_budget`).
+pub(crate) fn after_cpu(cpu: Duration, over_share: f64, budget: Duration) -> Next {
+    let comfortable = cpu.as_secs_f64() <= budget.as_secs_f64() * COMFORTABLE;
+    if comfortable && over_share <= crate::cadence::MAX_OVER_SHARE {
         Next::Final(Rasterizer::Cpu)
     } else {
         Next::TryGpu
@@ -262,8 +277,11 @@ impl Measuring {
         }
         self.samples.sort_unstable();
         let median = self.samples[self.samples.len() / 2];
+        #[expect(clippy::cast_precision_loss, reason = "forty samples")]
+        let over_share = self.samples.iter().filter(|work| **work > budget).count() as f64
+            / self.samples.len() as f64;
         let record = match self.launch {
-            Launch::MeasureCpu => match after_cpu(median, budget) {
+            Launch::MeasureCpu => match after_cpu(median, over_share, budget) {
                 Next::Final(rasterizer) => Record {
                     launch: Launch::Use(rasterizer),
                     cpu: Some(median),
@@ -475,12 +493,35 @@ mod tests {
             ),
         ];
         for (phone, cpu, gpu, budget, expected) in phones {
-            let chosen = match after_cpu(ms(cpu), ms(budget)) {
+            let chosen = match after_cpu(ms(cpu), 0.0, ms(budget)) {
                 Next::Final(rasterizer) => rasterizer,
                 Next::TryGpu => after_gpu(ms(cpu), ms(gpu), 1.0, ms(budget)),
             };
             assert_eq!(chosen, expected, "{phone}");
         }
+    }
+
+    /// Device Farm run 39538891917: the Galaxy S26 Ultra's CPU median was
+    /// comfortable, its pacing was not.
+    #[test]
+    fn a_comfortable_median_with_frames_over_budget_still_tries_the_gpu() {
+        // 3.52 ms against 8.33: comfortable by the median alone.
+        assert_eq!(
+            after_cpu(ms(3.52), 0.0, ms(HZ120)),
+            Next::Final(Rasterizer::Cpu)
+        );
+        // One frame in twenty over the budget is the allowance...
+        assert_eq!(
+            after_cpu(ms(3.52), 0.05, ms(HZ120)),
+            Next::Final(Rasterizer::Cpu)
+        );
+        // ...and more is not: the S26's suite had 17 of 240 (7%) over.
+        assert_eq!(after_cpu(ms(3.52), 0.07, ms(HZ120)), Next::TryGpu);
+        // Measured next launch, the GPU's 1.5 ms is clearly faster.
+        assert_eq!(
+            after_gpu(ms(3.52), ms(1.5), 1.0, ms(HZ120)),
+            Rasterizer::Gpu
+        );
     }
 
     #[test]
