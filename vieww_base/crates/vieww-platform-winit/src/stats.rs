@@ -129,6 +129,10 @@ pub struct FrameLog {
     window: WindowKey,
     /// Times the window's frame rate changed (`crate::cadence`).
     cadence_switches: u32,
+    /// The window's input-to-present latency (`crate::latency`), attached
+    /// before the `App::on_frame` hooks run — the same reason as `window`:
+    /// the hook gets the one per-window object, and this is per window.
+    input_latency: Option<crate::latency::InputLatencyReport>,
 }
 
 impl FrameLog {
@@ -153,7 +157,22 @@ impl FrameLog {
             // built by a test that has no windows at all.
             window: WindowKey::PRIMARY,
             cadence_switches: 0,
+            input_latency: None,
         }
+    }
+
+    /// Attach the window's input-to-present latency so far — see
+    /// [`input_latency`](Self::input_latency).
+    pub fn note_input_latency(&mut self, report: crate::latency::InputLatencyReport) {
+        self.input_latency = Some(report);
+    }
+
+    /// The window's input-to-present latency (`crate::latency`), as of the
+    /// last time the window attached it — before each `App::on_frame` call.
+    /// `None` for a log no window has attached one to.
+    #[must_use]
+    pub const fn input_latency(&self) -> Option<crate::latency::InputLatencyReport> {
+        self.input_latency
     }
 
     /// Name the window these frames belong to.

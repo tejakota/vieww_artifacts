@@ -874,6 +874,32 @@ fn frame_checks(results: &mut Results, log: &FrameLog) {
             ms(t.total()),
         )
     };
+    // **Input to present**, per input (`vieww_platform_winit::InputLatencyLog`):
+    // from a tap or key reaching the window's event loop to the present call
+    // that showed it. Observed, not gated, until phones have given numbers
+    // to set a bar from. Not touch-panel to photon: winit carries no
+    // platform event time, and scan-out comes after the present.
+    if let Some(latency) = log.input_latency() {
+        if latency.total_events > 0 {
+            results.observe(
+                "input_latency",
+                format!(
+                    "input to present ms: median {:.1} p95 {:.1} p99 {:.1} worst {:.1} \
+                     over {} inputs in {} frames; {} unanswered within {} s",
+                    ms(latency.p50),
+                    ms(latency.p95),
+                    ms(latency.p99),
+                    ms(latency.worst),
+                    latency.samples,
+                    latency.frames_with_input,
+                    latency.unanswered,
+                    vieww_platform_winit::UNANSWERED_AFTER.as_secs(),
+                ),
+            );
+        } else {
+            results.observe("input_latency", "no input reached this window");
+        }
+    }
     match (stages.gpu_passes, log.stage_percentile(0.95).gpu_passes) {
         (Some(median), Some(p95)) => {
             results.observe(

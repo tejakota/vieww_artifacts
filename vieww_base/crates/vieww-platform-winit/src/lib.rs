@@ -131,7 +131,7 @@ pub use windows::PlatformWindows;
 pub use device_tier::{device_facts, device_facts_status, resolve_tier, DeviceFacts, DeviceTier};
 pub use input::{PointerTranslator, TouchPhase};
 pub use keys::{ime, KeyTranslator};
-pub use latency::{InputLatencyLog, InputLatencyReport};
+pub use latency::{InputLatencyLog, InputLatencyReport, UNANSWERED_AFTER};
 pub use lifecycle::Lifecycle;
 pub use perf_hint::perf_hint_status;
 pub use quality::{cache_budgets_for, cache_budgets_status, gpu_scale_status, QualityProfile};

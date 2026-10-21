@@ -1186,6 +1186,8 @@ struct WindowState {
     /// Which frames are worth asking on.
     inset_watch: InsetWatch,
     log: FrameLog,
+    /// Input to present, per input — see `crate::latency`.
+    input_latency: crate::latency::InputLatencyLog,
     lifecycle: Lifecycle,
     /// Whether this window has put a frame on screen yet. See
     /// [`WindowState::may_draw`].
@@ -1452,6 +1454,11 @@ impl WindowState {
     /// can say so — which is why the fan-out did not need a breaking change to
     /// the hook signature.
     fn notify_frame(&mut self, shared: &mut Shared) {
+        // Sorting 240 latencies is cheap, but not free on every frame of an
+        // app that has no hook to read them.
+        if !shared.config.on_frame.is_empty() {
+            self.log.note_input_latency(self.input_latency.report());
+        }
         for hook in &mut shared.config.on_frame {
             hook(&self.log);
         }
@@ -1518,6 +1525,8 @@ impl WindowState {
 
         let now = shared.epoch.elapsed();
         let epoch = shared.epoch;
+        // The inputs dispatched so far are the ones this build can show.
+        self.input_latency.frame_started();
         let stats = self
             .driver
             .drive(&mut self.scheduler, now, || epoch.elapsed());
@@ -1648,8 +1657,10 @@ impl WindowState {
                         _ => surface,
                     }
                 };
+                let presented_at = Instant::now();
                 self.log
-                    .record(stats, elapsed, pixels, Instant::now(), drawn_on_gpu);
+                    .record(stats, elapsed, pixels, presented_at, drawn_on_gpu);
+                self.input_latency.frame_presented(presented_at);
                 // The same work the frame log judges against the budget.
                 let work = stats.map_or(elapsed, |stats| stats.total + elapsed);
                 if let Some(measuring) = &mut gpu.measuring {
@@ -2609,6 +2620,7 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
             insets: SystemInsets::NONE,
             inset_watch: InsetWatch::new(),
             log,
+            input_latency: crate::latency::InputLatencyLog::new(),
             lifecycle: Lifecycle::default(),
             presented: false,
             background,
@@ -3086,6 +3098,30 @@ impl<F: FnOnce(&mut FrameDriver)> ApplicationHandler<UserEvent> for Runner<F> {
             );
         if inert {
             return;
+        }
+        // What a person did, for input-to-present latency (`crate::latency`).
+        // Left out: pointer movement without a button (hover usually changes
+        // nothing, and would wait for an unrelated frame), key releases, and
+        // the IME being enabled or disabled — the platform does that when a
+        // window opens or a field takes focus, not a person, and counting
+        // it measured window creation as a 219 ms "input".
+        if matches!(
+            event,
+            WindowEvent::MouseInput { .. }
+                | WindowEvent::MouseWheel { .. }
+                | WindowEvent::Touch(_)
+                | WindowEvent::KeyboardInput {
+                    event: winit::event::KeyEvent {
+                        state: winit::event::ElementState::Pressed,
+                        ..
+                    },
+                    ..
+                }
+                | WindowEvent::Ime(winit::event::Ime::Commit(_) | winit::event::Ime::Preedit(..))
+        ) {
+            self.windows[index]
+                .input_latency
+                .input_arrived(Instant::now());
         }
 
         // The adapter watches for focus and window-geometry changes it has to

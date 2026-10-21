@@ -58,22 +58,41 @@
 //! tiny helper so the tests read as "advance the clock" rather than
 //! `Duration` arithmetic at every call site.
 //!
-//! # Integration status
+//! # Which frame an input belongs to
 //!
-//! This module is real and fully tested standalone but is **not wired into
-//! `app.rs`'s winit event loop** — that would mean finding and touching
-//! every pointer/keyboard/scroll dispatch site across a 2,700-line event
-//! loop to call [`InputLatencyLog::input_arrived`], and the one place
-//! `FrameLog::record` is already called (`app.rs`, where a frame's present
-//! completes) to call [`InputLatencyLog::frame_presented`] alongside it.
-//! Both call sites are straightforward in principle — `frame_presented`
-//! belongs immediately next to the existing `self.log.record(stats, gpu,
-//! pixels, Instant::now())` call, using the same `Instant::now()` — but
-//! wiring every input dispatch site correctly, without missing one and
-//! silently under-counting, is real further work this delivery does not
-//! claim to have done. What is done is the measurement mechanism itself:
-//! proven correct, ready for an `App` to hold one and call into from both
-//! sides.
+//! An input that arrives *while* a frame is being built is not in that
+//! frame: the build has already read the state it changes. Charging it to
+//! that frame's present would make the latency look shorter than what the
+//! user waited for. So a caller that knows when a frame's build begins
+//! calls [`InputLatencyLog::frame_started`] there, which closes the set of
+//! inputs that frame can show, and [`InputLatencyLog::frame_presented`]
+//! measures only those; anything later waits for the next frame. A caller
+//! that never marks frame starts gets the coalescing above unchanged.
+//!
+//! # Inputs nothing answered
+//!
+//! A press on something inert changes nothing, and no frame follows it.
+//! Measuring it against whatever frame happens to present next — an
+//! animation seconds later — would put a number in the tail that says
+//! nothing about responsiveness. An input still unpresented after
+//! [`UNANSWERED_AFTER`] is counted in
+//! [`InputLatencyReport::unanswered`] instead of the percentiles.
+//!
+//! # Integration
+//!
+//! `app.rs` keeps one log per window: every pointer press or release,
+//! touch, wheel step, key and IME event that reaches a window which is not
+//! inert calls [`InputLatencyLog::input_arrived`]; the frame's build marks
+//! [`InputLatencyLog::frame_started`]; the present marks
+//! [`InputLatencyLog::frame_presented`] beside `FrameLog::record`. Pointer
+//! *movement* without a button is left out: hover usually changes nothing,
+//! and every such event would wait for an unrelated frame.
+//!
+//! What it measures is **input to present**: from the event reaching the
+//! window's event loop (not the touch panel — winit does not carry the
+//! platform's event time) to the present call returning (not light leaving
+//! the display). The display's scan-out, and on the GPU path the GPU's
+//! work when frames overlap, come after it.
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -85,15 +104,26 @@ use crate::stats::percentile;
 /// `WINDOW`.
 const WINDOW: usize = 240;
 
+/// How long an input may wait for a frame before it counts as unanswered —
+/// see the module docs' "Inputs nothing answered".
+pub const UNANSWERED_AFTER: Duration = Duration::from_secs(1);
+
 /// A rolling record of input-to-photon latencies.
 #[derive(Debug)]
 pub struct InputLatencyLog {
     /// Inputs that have arrived but not yet been incorporated into a
     /// presented frame.
     pending: Vec<Instant>,
+    /// Inputs the frame being built can show — moved here by
+    /// [`InputLatencyLog::frame_started`].
+    in_frame: Vec<Instant>,
+    /// Whether the caller marks frame starts; until it does, a present
+    /// closes everything pending (see the module docs).
+    marks_frames: bool,
     recent: VecDeque<Duration>,
     total_events: u64,
     frames_with_input: u64,
+    unanswered: u64,
 }
 
 impl Default for InputLatencyLog {
@@ -107,9 +137,12 @@ impl InputLatencyLog {
     pub fn new() -> Self {
         Self {
             pending: Vec::new(),
+            in_frame: Vec::new(),
+            marks_frames: false,
             recent: VecDeque::with_capacity(WINDOW),
             total_events: 0,
             frames_with_input: 0,
+            unanswered: 0,
         }
     }
 
@@ -129,23 +162,45 @@ impl InputLatencyLog {
     /// input is measured against this one presentation time rather than
     /// only the earliest or the latest.
     pub fn frame_presented(&mut self, presented_at: Instant) {
-        if self.pending.is_empty() {
+        let closing = if self.marks_frames {
+            std::mem::take(&mut self.in_frame)
+        } else {
+            std::mem::take(&mut self.pending)
+        };
+        if closing.is_empty() {
             return;
         }
-        self.frames_with_input += 1;
-        for arrived in self.pending.drain(..) {
+        let mut answered = false;
+        for arrived in closing {
             let latency = presented_at.saturating_duration_since(arrived);
+            if latency > UNANSWERED_AFTER {
+                self.unanswered += 1;
+                continue;
+            }
+            answered = true;
             if self.recent.len() == WINDOW {
                 self.recent.pop_front();
             }
             self.recent.push_back(latency);
         }
+        if answered {
+            self.frames_with_input += 1;
+        }
+    }
+
+    /// Mark the start of a frame's build: the inputs that arrived before
+    /// this point are the ones it can show — see the module docs' "Which
+    /// frame an input belongs to". A frame that is started and never
+    /// presented hands its inputs on to the next one.
+    pub fn frame_started(&mut self) {
+        self.marks_frames = true;
+        self.in_frame.append(&mut self.pending);
     }
 
     /// Inputs that have arrived but whose frame has not presented yet.
     #[must_use]
     pub fn pending_events(&self) -> usize {
-        self.pending.len()
+        self.pending.len() + self.in_frame.len()
     }
 
     /// What this log says so far.
@@ -157,6 +212,7 @@ impl InputLatencyLog {
             samples: sorted.len(),
             total_events: self.total_events,
             frames_with_input: self.frames_with_input,
+            unanswered: self.unanswered,
             p50: percentile(&sorted, 0.50),
             p95: percentile(&sorted, 0.95),
             p99: percentile(&sorted, 0.99),
@@ -176,6 +232,9 @@ pub struct InputLatencyReport {
     /// Presented frames that incorporated at least one pending input, over
     /// this log's whole lifetime.
     pub frames_with_input: u64,
+    /// Inputs no frame presented within [`UNANSWERED_AFTER`], over this
+    /// log's whole lifetime — not in the percentiles.
+    pub unanswered: u64,
     pub p50: Duration,
     pub p95: Duration,
     pub p99: Duration,
@@ -344,5 +403,51 @@ mod tests {
             (WINDOW + 50) as u64,
             "total_events is a lifetime count, not windowed"
         );
+    }
+
+    #[test]
+    fn an_input_arriving_during_a_build_waits_for_the_next_frame() {
+        let mut clock = MockClock::new();
+        let mut log = InputLatencyLog::new();
+        log.input_arrived(clock.now()); // t = 0, before the build
+        log.frame_started(); // t = 0
+        log.input_arrived(clock.advance(Duration::from_millis(4))); // t = 4, mid-build
+        log.frame_presented(clock.advance(Duration::from_millis(6))); // t = 10
+                                                                      // Only the first is closed, at 10 ms; the second is still waiting.
+        let first = log.report();
+        assert_eq!(first.samples, 1);
+        assert_eq!(first.p50, Duration::from_millis(10));
+        assert_eq!(log.pending_events(), 1);
+        log.frame_started(); // t = 10
+        log.frame_presented(clock.advance(Duration::from_millis(16))); // t = 26
+        let second = log.report();
+        assert_eq!(second.samples, 2);
+        assert_eq!(second.worst, Duration::from_millis(22), "4 ms -> 26 ms");
+        assert_eq!(log.pending_events(), 0);
+    }
+
+    #[test]
+    fn a_started_frame_that_never_presents_hands_its_inputs_on() {
+        let mut clock = MockClock::new();
+        let mut log = InputLatencyLog::new();
+        log.input_arrived(clock.now());
+        log.frame_started(); // nothing changed: no present follows
+        log.frame_started();
+        log.frame_presented(clock.advance(Duration::from_millis(20)));
+        assert_eq!(log.report().p50, Duration::from_millis(20));
+    }
+
+    #[test]
+    fn an_input_nothing_answered_is_counted_apart_from_the_percentiles() {
+        let mut clock = MockClock::new();
+        let mut log = InputLatencyLog::new();
+        log.input_arrived(clock.now()); // a press on something inert
+        log.frame_started();
+        // The next frame is an unrelated animation, three seconds later.
+        log.frame_presented(clock.advance(Duration::from_secs(3)));
+        let report = log.report();
+        assert_eq!(report.samples, 0);
+        assert_eq!(report.unanswered, 1);
+        assert_eq!(report.frames_with_input, 0);
     }
 }
