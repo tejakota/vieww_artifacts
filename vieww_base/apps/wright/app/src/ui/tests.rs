@@ -391,6 +391,42 @@ fn the_palette_keeps_any_accent_readable() {
     }
 }
 
+/// The brand has one place at the top of the window: the title bar, the
+/// strip that carries the minimise and close buttons — its title text and
+/// its icon. The shell's own top bar, one strip below, starts with the page
+/// title; a second "wright" directly under the first read as a stutter, and
+/// this test is what keeps it from coming back.
+#[test]
+fn the_brand_is_on_the_title_bar_not_the_top_bar() {
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    ui.splash.set(false);
+    let dump = vieww::debug_tree(shell::top_bar(&ui));
+    assert!(!dump.contains("wright"), "the top bar repeats the name the title bar now carries:\n{dump}");
+    assert!(dump.contains("Home"), "the page title is still the bar's first label:\n{dump}");
+}
+
+/// The window icon is the installers' tile, rendered headlessly: the blue
+/// ground, the white W somewhere on it, the corners rounded away so the
+/// window's own background shows through them.
+#[test]
+fn the_window_icon_is_the_installers_tile() {
+    let icon = shell::window_icon().expect("the window icon renders headlessly");
+    assert_eq!((icon.width, icon.height), (32, 32));
+    assert_eq!(icon.rgba.len(), 32 * 32 * 4);
+    let at = |x: u32, y: u32| {
+        let i = ((y * icon.width + x) as usize) * 4;
+        (icon.rgba[i], icon.rgba[i + 1], icon.rgba[i + 2], icon.rgba[i + 3])
+    };
+    let ground = logo::ICON_GROUND;
+    let (r, g, b, a) = at(16, 30);
+    assert_eq!((r, g, b, a), (ground.r, ground.g, ground.b, 255), "the tile's blue ground, clear of the W");
+    assert!(icon.rgba.as_chunks::<4>().0.contains(&[255, 255, 255, 255]), "the white W is on the tile");
+    assert_eq!(at(1, 1).3, 0, "the corner is rounded away");
+}
+
 /// Scrolling by a fraction of a pixel moves the page as one piece: the
 /// frame at 100.6 is the frame at 100.0 moved up exactly one pixel, text and
 /// boxes alike. (Before vieww snapped the shift, each line of text rounded

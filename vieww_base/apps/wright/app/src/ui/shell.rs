@@ -105,7 +105,13 @@ fn app(ui: &Ui) -> WidgetNode {
 
 // ── top bar ──────────────────────────────────────────────────────
 
-fn top_bar(ui: &Ui) -> WidgetNode {
+/// The bar under the window's title bar: the page title, the session dots,
+/// the view toggles. The brand is not on it — the name and the mark live on
+/// the title bar itself, one strip up (the window's icon and title text,
+/// beside the minimise and close buttons), and a second "wright" directly
+/// under that read as a stutter. `pub(crate)` for the test that holds this
+/// bar to it.
+pub(crate) fn top_bar(ui: &Ui) -> WidgetNode {
     let ui = ui.clone();
     Live::new("top-bar", move || {
         let p = ui.pal();
@@ -140,9 +146,7 @@ fn top_bar(ui: &Ui) -> WidgetNode {
         Container::new()
             .padding(EdgeInsets::only(18.0, 10.0, 14.0, 10.0))
             .child(row(12.0, vec![
-                row(3.0, vec![Mark::solid(p.accent_ink).widget(20.0), b("wright", 16.0, p.ink)]),
-                gap(),
-                SizedBox::width(300.0).child(Align::new(Alignment::CENTER_RIGHT).child(line(title, 13.5, p.ink))).into(),
+                SizedBox::width(300.0).child(Align::new(Alignment::CENTER_LEFT).child(line(title, 13.5, p.ink))).into(),
                 row(0.0, dots),
                 gap(),
                 tool_button(&p, Glyph::Sessions, "All sessions", None, overview_on, move || a.set_overview(!a.overview.get())),
@@ -487,6 +491,25 @@ pub fn render_icon(path: &Path, side: u32, padded: bool) -> Result<(), String> {
     driver.set_root(Center::new().child(logo::tile(tile_side, logo::ICON_GROUND, logo::ICON_INK)));
     driver.draw_frame_at(Duration::from_millis(16));
     png(&mut driver, &mut NativeRenderer::new(), size, Color::rgba(0, 0, 0, 0), path)
+}
+
+/// The window's icon, in pixels the platform can draw beside the title:
+/// the same tile the installers ship, rendered headlessly. This is the
+/// brand's place on a desktop window — the title bar, where the minimise
+/// and close buttons are — so the shell draws the mark nowhere else at the
+/// top. Windows and X11 put it in that bar; macOS carries it to the Dock;
+/// a compositor that takes neither has still the title text, "wright".
+pub fn window_icon() -> Option<vieww_platform_winit::WindowIcon> {
+    use vieww::paint::native::NativeRenderer;
+    const SIDE: u32 = 32;
+    let size = Size::new(SIDE as f32, SIDE as f32);
+    let mut driver = FrameDriver::new(size);
+    driver.set_root(Center::new().child(logo::tile(SIDE as f32, logo::ICON_GROUND, logo::ICON_INK)));
+    driver.draw_frame_at(Duration::from_millis(16));
+    let (pixels, _) = NativeRenderer::new()
+        .render_to_pixels(driver.scene(), SIDE, SIDE, Color::rgba(0, 0, 0, 0))
+        .ok()?;
+    Some(vieww_platform_winit::WindowIcon::new(SIDE, SIDE, pixels.data().to_vec()))
 }
 
 /// Every screen of the shell to PNG, headless. Uses `WRIGHT_HOME` like

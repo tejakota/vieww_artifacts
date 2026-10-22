@@ -126,7 +126,7 @@ pub mod storage;
 mod thermal;
 mod windows;
 
-pub use app::{App, CloseRequest, Closing, Pinch, PinchPhase, PlatformError, Waker};
+pub use app::{App, CloseRequest, Closing, Pinch, PinchPhase, PlatformError, Waker, WindowIcon};
 pub use deep_links::PlatformDeepLinks;
 pub use windows::PlatformWindows;
 

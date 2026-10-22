@@ -301,6 +301,51 @@ pub enum Closing {
     Vetoed,
 }
 
+/// A window icon: the picture the title bar, the taskbar and the alt-tab
+/// switcher draw beside the window's title.
+///
+/// Straight-alpha RGBA8, tightly packed, top row first — the shape the
+/// renderer's pixel output already arrives in (`vieww-paint`'s
+/// `Pixels::data`), so an application can render its icon once, headlessly,
+/// and hand the bytes over without re-encoding them.
+///
+/// # Why raw pixels, and not `IconData`
+///
+/// The tray's icon is a single filled path tinted at rasterise time, which is
+/// the right shape for a glyph. A window's icon is a *picture* — for an app
+/// like Wright, the mark on its rounded tile: two colours and a corner
+/// radius — and a tinted path cannot say that. Pixels can, and they are what
+/// `winit::window::Icon::from_rgba` takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowIcon {
+    /// The icon's width, in pixels.
+    pub width: u32,
+    /// The icon's height, in pixels.
+    pub height: u32,
+    /// Exactly `width * height * 4` bytes of straight-alpha RGBA8.
+    pub rgba: Vec<u8>,
+}
+
+impl WindowIcon {
+    /// An icon from straight-alpha RGBA8 bytes, top row first.
+    ///
+    /// # Panics
+    ///
+    /// If `rgba` is not exactly `width * height * 4` bytes — the same contract
+    /// `winit::window::Icon::from_rgba` enforces later. Named here, where the
+    /// mistake is made, rather than at window creation, where a rejected icon
+    /// would only demote the window to the platform's default picture.
+    #[must_use]
+    pub fn new(width: u32, height: u32, rgba: Vec<u8>) -> Self {
+        assert_eq!(
+            rgba.len(),
+            (width as usize) * (height as usize) * 4,
+            "a {width}x{height} RGBA8 icon is width * height * 4 bytes"
+        );
+        Self { width, height, rgba }
+    }
+}
+
 /// An application: a window, and a widget tree inside it.
 ///
 /// ```no_run
@@ -319,6 +364,8 @@ pub struct App {
     title: String,
     size: Size,
     background: Color,
+    /// The window's icon, when the application supplies one — see [`App::icon`].
+    icon: Option<WindowIcon>,
     /// The theme published above the application's tree — see [`App::theme`].
     theme: Option<std::rc::Rc<vieww_widget::ThemeData>>,
     refresh_hz: f32,
@@ -378,6 +425,7 @@ impl std::fmt::Debug for App {
             .field("title", &self.title)
             .field("size", &self.size)
             .field("background", &self.background)
+            .field("icon", &self.icon.is_some())
             .field("refresh_hz", &self.refresh_hz)
             .field("refresh_stated", &self.refresh_stated)
             .field("stop", &self.stop)
@@ -408,6 +456,7 @@ impl App {
             title: "vieww".to_owned(),
             size: Size::new(800.0, 600.0),
             background: Color::WHITE,
+            icon: None,
             theme: None,
             refresh_hz: 60.0,
             refresh_stated: false,
@@ -460,6 +509,26 @@ impl App {
     #[must_use]
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = title.into();
+        self
+    }
+
+    /// The window's icon: the picture the title bar, the taskbar and the
+    /// alt-tab switcher draw beside the title.
+    ///
+    /// Windows and X11 draw it **in the title bar itself** — the logo's place
+    /// on a desktop window, in the bar that already carries the minimise and
+    /// close buttons. macOS shows it in the Dock; Wayland compositors take it
+    /// for the taskbar or ignore it. A request, like [`size`](Self::size),
+    /// not a guarantee.
+    ///
+    /// ```no_run
+    /// # use vieww_platform_winit::{App, WindowIcon};
+    /// # let rgba = vec![0; 32 * 32 * 4];
+    /// App::new().title("wright").icon(WindowIcon::new(32, 32, rgba));
+    /// ```
+    #[must_use]
+    pub fn icon(mut self, icon: WindowIcon) -> Self {
+        self.icon = Some(icon);
         self
     }
 
@@ -2314,8 +2383,23 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         title: &str,
         size: Size,
     ) -> Result<NewSurface, PlatformError> {
+        // The picture beside the title, on the bar that carries the minimise
+        // and close buttons. `Icon::from_rgba` re-checks the byte count that
+        // `WindowIcon::new` already refused, so a rejection here is a platform
+        // quirk, not bad application data: the window opens with the
+        // platform's default icon rather than not at all.
+        let icon = self.shared.config.icon.as_ref().and_then(|icon| {
+            match winit::window::Icon::from_rgba(icon.rgba.clone(), icon.width, icon.height) {
+                Ok(icon) => Some(icon),
+                Err(error) => {
+                    trace_line(self.shared.now(), format_args!("window icon rejected: {error}"));
+                    None
+                }
+            }
+        });
         let attributes = Window::default_attributes()
             .with_title(title.to_owned())
+            .with_window_icon(icon)
             // AccessKit's adapter has to exist before the window is ever shown,
             // and panics if it does not. So the window is born invisible and
             // revealed by the caller, once the adapter is attached.
@@ -3886,4 +3970,28 @@ fn fit_and_center(window: &Window) {
         origin.y + ((area.height as i32 - h as i32) / 2).max(0),
     );
     window.set_outer_position(PhysicalPosition::new(x, y));
+}
+
+#[cfg(test)]
+mod window_icon {
+    use super::*;
+
+    #[test]
+    fn the_default_window_has_no_icon() {
+        assert!(App::new().icon.is_none());
+    }
+
+    #[test]
+    fn an_icon_set_is_the_icon_kept() {
+        let app = App::new().icon(WindowIcon::new(1, 1, vec![1, 2, 3, 4]));
+        let icon = app.icon.expect("the icon the builder was handed");
+        assert_eq!((icon.width, icon.height), (1, 1));
+        assert_eq!(icon.rgba, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    #[should_panic(expected = "RGBA8")]
+    fn an_icon_with_the_wrong_number_of_bytes_is_refused_where_it_is_built() {
+        let _ = WindowIcon::new(2, 2, vec![0; 15]);
+    }
 }

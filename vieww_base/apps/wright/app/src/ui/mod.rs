@@ -823,7 +823,17 @@ fn release_private_console() {
 fn window(project: Option<PathBuf>) -> i32 {
     #[cfg(target_os = "windows")]
     release_private_console();
-    let app = vieww_platform_winit::App::new().title("Wright").size(Size::new(1280.0, 800.0));
+    // The brand's place at the top of the window is the title bar itself —
+    // the strip that carries the minimise and close buttons: its text is the
+    // name, and the icon rendered below is the mark, drawn beside it on the
+    // platforms that put a picture there (Windows and X11, in the bar;
+    // macOS, the Dock). The shell's own top bar, one strip down, starts with
+    // the page title — it does not repeat the brand.
+    let app = vieww_platform_winit::App::new().title("wright").size(Size::new(1280.0, 800.0));
+    let app = match shell::window_icon() {
+        Some(icon) => app.icon(icon),
+        None => app,
+    };
     let waker = app.waker();
     APP_WAKER.with_borrow_mut(|w| *w = Some(waker.clone()));
     let live = Arc::new(AtomicBool::new(true));
