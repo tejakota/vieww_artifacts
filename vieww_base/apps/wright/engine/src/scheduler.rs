@@ -284,6 +284,10 @@ mod tests {
 
     #[test]
     fn registry_round_trips_and_is_idempotent() {
+        // WRIGHT_HOME is process-wide and the handoff drives flip it too:
+        // hold the shared env lock so the registry file is this test's
+        // alone for as long as it runs.
+        let _env = crate::test_support::env_lock();
         let home = std::env::temp_dir().join(format!("wright-home-sched-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::env::set_var("WRIGHT_HOME", &home);

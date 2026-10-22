@@ -237,10 +237,6 @@ mod tests {
     use super::*;
     use std::fs;
 
-    /// Env vars are process-wide and tests run in parallel: any test
-    /// that flips one takes this lock.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     fn tmp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("wright-handoff-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
@@ -250,7 +246,7 @@ mod tests {
 
     #[test]
     fn a_project_with_a_run_hands_off_its_three_things() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = crate::test_support::env_lock();
         std::env::set_var("WRIGHT_HOME", tmp("home"));
         let dir = tmp("full");
         let store = Store::open(&dir).unwrap();
@@ -286,7 +282,7 @@ mod tests {
 
     #[test]
     fn a_project_without_runs_refuses_with_a_sentence() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = crate::test_support::env_lock();
         std::env::set_var("WRIGHT_HOME", tmp("home2"));
         let dir = tmp("empty");
         let err = handoff(&dir, None).unwrap_err();
