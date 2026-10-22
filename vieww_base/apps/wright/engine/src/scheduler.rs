@@ -37,7 +37,9 @@ fn registry_path() -> PathBuf {
 
 pub fn load() -> Vec<Entry> {
     let text = std::fs::read_to_string(registry_path()).unwrap_or_default();
-    let Ok(v) = json::parse(&text) else { return Vec::new() };
+    let Ok(v) = json::parse(&text) else {
+        return Vec::new();
+    };
     v.as_arr()
         .unwrap_or(&[])
         .iter()
@@ -46,7 +48,10 @@ pub fn load() -> Vec<Entry> {
                 project: e.str_of("project")?.to_string(),
                 cron: e.str_of("cron")?.to_string(),
                 tz: e.str_of("tz").unwrap_or("UTC").to_string(),
-                last_fired_minute: e.get("last_fired_minute").and_then(|n| n.as_f64()).unwrap_or(0.0) as i64,
+                last_fired_minute: e
+                    .get("last_fired_minute")
+                    .and_then(|n| n.as_f64())
+                    .unwrap_or(0.0) as i64,
             })
         })
         .collect()
@@ -73,12 +78,15 @@ fn save(entries: &[Entry]) -> Result<(), String> {
 pub fn next_fire(cron: &str, tz_name: &str, after: i64) -> Result<i64, String> {
     let c = Cron::parse(cron)?;
     let zone = tz::load(tz_name)?;
-    c.next_after(after, &zone).ok_or_else(|| format!("'{cron}' never fires"))
+    c.next_after(after, &zone)
+        .ok_or_else(|| format!("'{cron}' never fires"))
 }
 
 /// Human form of a UTC instant in a zone: "2026-10-21 08:00".
 pub fn local_string(utc: i64, tz_name: &str) -> String {
-    let off = tz::load(tz_name).map(|z| z.offset_at(utc) as i64).unwrap_or(0);
+    let off = tz::load(tz_name)
+        .map(|z| z.offset_at(utc) as i64)
+        .unwrap_or(0);
     schedule::format_minute(utc + off)
 }
 
@@ -93,7 +101,12 @@ pub fn register(project: &Path, cron: &str, tz_name: &str) -> Result<String, Str
             e.cron = cron.into();
             e.tz = tz_name.into();
         }
-        None => entries.push(Entry { project, cron: cron.into(), tz: tz_name.into(), last_fired_minute: 0 }),
+        None => entries.push(Entry {
+            project,
+            cron: cron.into(),
+            tz: tz_name.into(),
+            last_fired_minute: 0,
+        }),
     }
     save(&entries)?;
     Ok(local_string(next, tz_name))
@@ -129,7 +142,11 @@ pub fn daemon(mut fire: impl FnMut(&Path), mut log: impl FnMut(&str)) -> ! {
                     if minute > e.last_fired_minute {
                         e.last_fired_minute = minute;
                         changed = true;
-                        log(&format!("firing {} (scheduled {})", e.project, local_string(t, &e.tz)));
+                        log(&format!(
+                            "firing {} (scheduled {})",
+                            e.project,
+                            local_string(t, &e.tz)
+                        ));
                         fire(Path::new(&e.project));
                     }
                 }
@@ -165,7 +182,10 @@ pub fn install_unit(wright_binary: &Path) -> Result<(PathBuf, String), String> {
             wright_binary.display()
         );
         write_atomic(&p, unit.as_bytes())?;
-        Ok((p, "systemctl --user daemon-reload && systemctl --user enable --now wright".into()))
+        Ok((
+            p,
+            "systemctl --user daemon-reload && systemctl --user enable --now wright".into(),
+        ))
     } else {
         Err("installing a login service is not wired for this OS yet; run `wright daemon` from your startup programs".into())
     }

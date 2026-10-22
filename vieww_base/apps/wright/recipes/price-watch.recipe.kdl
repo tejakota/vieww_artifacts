@@ -1,0 +1,8 @@
+// wright.recipe/1 — verify with: wright recipe verify <file>
+recipe "price-watch" {
+  version "1.0"
+  publisher "Wright gallery"
+  description "Watch a product page daily; note the price when it changes; keep a log you can read."
+  blueprint "meta { name \"Price watch\" }\nintent { summary \"watch the product page daily and keep a log of price changes\" confirmed \"v1\" }\nagent Watcher { goal \"fetch the product page from https://example.invalid/product and read the price\" tools \"http-read\" out \"seen.json\" permissions network=true }\nagent Recorder { goal \"compare with the last seen price and append any change to the price log\" in \"seen.json\" out \"changes.json\" }\nedge from=\"Watcher\" to=\"Recorder\" out=\"seen.json\" in=\"seen.json\" schema=\"json-object\"\nchips { scheduling cron=\"0 9 * * *\" tz=\"UTC\" logging on }\nmodels { tier cheap prefer=\"deepseek-v4-flash\" }\ndeliverable kind=\"log\" { check \"the price log records every change\" accept \"each log line names the date and the price\" }"
+  publisher-key ""
+}

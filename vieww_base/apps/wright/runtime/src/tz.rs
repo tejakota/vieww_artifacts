@@ -9,7 +9,12 @@ use std::path::PathBuf;
 
 use wright_core::schedule::TimeZone;
 
-const DIRS: &[&str] = &["/usr/share/zoneinfo", "/usr/lib/zoneinfo", "/usr/share/lib/zoneinfo", "/etc/zoneinfo"];
+const DIRS: &[&str] = &[
+    "/usr/share/zoneinfo",
+    "/usr/lib/zoneinfo",
+    "/usr/share/lib/zoneinfo",
+    "/etc/zoneinfo",
+];
 
 /// Load a zone by IANA name ("Asia/Kolkata"). "UTC" needs no file.
 pub fn load(name: &str) -> Result<TimeZone, String> {
@@ -19,9 +24,13 @@ pub fn load(name: &str) -> Result<TimeZone, String> {
     let valid = !name.is_empty()
         && !name.starts_with('/')
         && !name.split('/').any(|p| p == ".." || p.is_empty())
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || "/_+-".contains(c));
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/_+-".contains(c));
     if !valid {
-        return Err(format!("'{name}' is not a valid time zone name (like Asia/Kolkata)"));
+        return Err(format!(
+            "'{name}' is not a valid time zone name (like Asia/Kolkata)"
+        ));
     }
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Ok(d) = std::env::var("TZDIR") {
@@ -60,7 +69,10 @@ mod tests {
         assert_eq!(ny.offset_at(utc(2026, 12, 1, 12, 0)), -5 * 3600);
         // Historic: 1990 had DST too (from the transition table, not the footer).
         assert_eq!(ny.offset_at(utc(1990, 7, 1, 12, 0)), -4 * 3600);
-        let next = Cron::parse("0 8 * * *").unwrap().next_after(utc(2026, 10, 20, 10, 0), &kolkata).unwrap();
+        let next = Cron::parse("0 8 * * *")
+            .unwrap()
+            .next_after(utc(2026, 10, 20, 10, 0), &kolkata)
+            .unwrap();
         assert_eq!(next, utc(2026, 10, 21, 2, 30));
     }
 

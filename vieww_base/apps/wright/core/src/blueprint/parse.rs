@@ -37,7 +37,10 @@ pub struct ParseError {
 
 impl ParseError {
     fn new(line: usize, msg: impl Into<String>) -> Self {
-        ParseError { line, msg: msg.into() }
+        ParseError {
+            line,
+            msg: msg.into(),
+        }
     }
 }
 
@@ -352,7 +355,13 @@ impl P {
                 ));
             }
         };
-        let mut node = KdlNode { line, name, args: Vec::new(), props: Vec::new(), children: Vec::new() };
+        let mut node = KdlNode {
+            line,
+            name,
+            args: Vec::new(),
+            props: Vec::new(),
+            children: Vec::new(),
+        };
         let mut seen_prop = false;
         loop {
             let line = self.line();
@@ -450,7 +459,10 @@ impl P {
                     return Ok(nodes);
                 }
                 Tok::Eof => {
-                    return Err(ParseError::new(self.line(), "unterminated block (missing '}')"));
+                    return Err(ParseError::new(
+                        self.line(),
+                        "unterminated block (missing '}')",
+                    ));
                 }
                 _ => {
                     nodes.push(self.parse_node()?);
@@ -463,7 +475,10 @@ impl P {
 
 /// Parse source text into a generic KDL document tree.
 pub fn parse_doc(src: &str) -> Result<Vec<KdlNode>, ParseError> {
-    let mut p = P { toks: tokenize(src)?, pos: 0 };
+    let mut p = P {
+        toks: tokenize(src)?,
+        pos: 0,
+    };
     p.parse_doc()
 }
 
@@ -507,7 +522,10 @@ fn map_blueprint(doc: &[KdlNode]) -> Result<Blueprint, ParseError> {
             "models" => map_models(node, &mut bp.models)?,
             "project" => map_project(node, &mut bp.project)?,
             other => {
-                return Err(ParseError::new(node.line, format!("unknown section '{other}'")));
+                return Err(ParseError::new(
+                    node.line,
+                    format!("unknown section '{other}'"),
+                ));
             }
         }
     }
@@ -516,7 +534,10 @@ fn map_blueprint(doc: &[KdlNode]) -> Result<Blueprint, ParseError> {
         return Err(ParseError::new(0, "blueprint is missing a 'meta' section"));
     }
     if !seen_intent {
-        return Err(ParseError::new(0, "blueprint is missing an 'intent' section"));
+        return Err(ParseError::new(
+            0,
+            "blueprint is missing an 'intent' section",
+        ));
     }
     Ok(bp)
 }
@@ -536,16 +557,16 @@ fn map_meta(node: &KdlNode, meta: &mut Meta) -> Result<(), ParseError> {
         match child.name.as_str() {
             "name" => meta.name = want_str(child, "meta.name")?,
             "format" => {
-                meta.format = child
-                    .arg_int()
-                    .ok_or_else(|| ParseError::new(child.line, "'format' needs an integer argument"))?
-                    as u32;
+                meta.format = child.arg_int().ok_or_else(|| {
+                    ParseError::new(child.line, "'format' needs an integer argument")
+                })? as u32;
             }
             "min-app" => meta.min_app = want_str(child, "meta.min-app")?,
             "created" => meta.created = want_str(child, "meta.created")?,
             "lineage" => meta.lineage = want_str(child, "meta.lineage")?,
             other => {
-                return Err(ParseError::new(child.line,
+                return Err(ParseError::new(
+                    child.line,
                     format!("unknown field '{other}' in 'meta'"),
                 ));
             }
@@ -561,7 +582,8 @@ fn map_intent(node: &KdlNode, intent: &mut Intent) -> Result<(), ParseError> {
             "confirmed" => intent.confirmed = want_str(child, "intent.confirmed")?,
             "evidence" => intent.evidence = want_str(child, "intent.evidence")?,
             other => {
-                return Err(ParseError::new(child.line,
+                return Err(ParseError::new(
+                    child.line,
                     format!("unknown field '{other}' in 'intent'"),
                 ));
             }
@@ -571,44 +593,49 @@ fn map_intent(node: &KdlNode, intent: &mut Intent) -> Result<(), ParseError> {
 }
 
 fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
-    let name = node
-        .arg_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| ParseError::new(node.line, "agent needs a name: agent \"Fetcher\" { ... }"))?;
-    let mut a = AgentDef { name, ..AgentDef::default() };
+    let name = node.arg_str().map(|s| s.to_string()).ok_or_else(|| {
+        ParseError::new(node.line, "agent needs a name: agent \"Fetcher\" { ... }")
+    })?;
+    let mut a = AgentDef {
+        name,
+        ..AgentDef::default()
+    };
 
     for child in &node.children {
         match child.name.as_str() {
             "goal" => a.goal = want_str(child, "agent.goal")?,
             "model" => {
-                let tier = child
-                    .prop_str("tier")
-                    .ok_or_else(|| ParseError::new(child.line, "'model' needs tier=\"cheap|quality|auto\""))?;
-                a.model_tier = ModelTier::parse(tier)
-                    .ok_or_else(|| ParseError::new(child.line, format!("unknown model tier '{tier}'")))?;
+                let tier = child.prop_str("tier").ok_or_else(|| {
+                    ParseError::new(child.line, "'model' needs tier=\"cheap|quality|auto\"")
+                })?;
+                a.model_tier = ModelTier::parse(tier).ok_or_else(|| {
+                    ParseError::new(child.line, format!("unknown model tier '{tier}'"))
+                })?;
             }
             "tools" => {
                 let t = want_str(child, "agent.tools")?;
                 a.tools.push(t);
             }
             "memory" => {
-                let scope = child
-                    .prop_str("scope")
-                    .ok_or_else(|| ParseError::new(child.line, "'memory' needs scope=\"none|firing|project\""))?;
-                a.memory = MemoryScope::parse(scope)
-                    .ok_or_else(|| ParseError::new(child.line, format!("unknown memory scope '{scope}'")))?;
+                let scope = child.prop_str("scope").ok_or_else(|| {
+                    ParseError::new(child.line, "'memory' needs scope=\"none|firing|project\"")
+                })?;
+                a.memory = MemoryScope::parse(scope).ok_or_else(|| {
+                    ParseError::new(child.line, format!("unknown memory scope '{scope}'"))
+                })?;
             }
             "in" => a.inputs.push(want_str(child, "agent.in")?),
             "out" => a.outputs.push(want_str(child, "agent.out")?),
             "approval" => {
                 let pol = want_str(child, "agent.approval")?;
-                a.approval = ApprovalPolicy::parse(&pol)
-                    .ok_or_else(|| ParseError::new(child.line, format!("unknown approval policy '{pol}'")))?;
+                a.approval = ApprovalPolicy::parse(&pol).ok_or_else(|| {
+                    ParseError::new(child.line, format!("unknown approval policy '{pol}'"))
+                })?;
             }
             "retries" => {
-                let n = child
-                    .arg_int()
-                    .ok_or_else(|| ParseError::new(child.line, "'retries' needs an integer argument"))?;
+                let n = child.arg_int().ok_or_else(|| {
+                    ParseError::new(child.line, "'retries' needs an integer argument")
+                })?;
                 if !(0..=255).contains(&n) {
                     return Err(ParseError::new(child.line, "'retries' must be 0..=255"));
                 }
@@ -617,7 +644,10 @@ fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
             "permissions" => {
                 for (key, value) in &child.props {
                     let on = value.as_bool().ok_or_else(|| {
-                        ParseError::new(child.line, format!("permission '{key}' must be true or false"))
+                        ParseError::new(
+                            child.line,
+                            format!("permission '{key}' must be true or false"),
+                        )
                     })?;
                     if on {
                         a.permissions = a.permissions.with(match key.as_str() {
@@ -627,7 +657,8 @@ fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
                             "shell" => PermissionSet::SHELL,
                             "spawn" => PermissionSet::SPAWN,
                             other => {
-                                return Err(ParseError::new(child.line,
+                                return Err(ParseError::new(
+                                    child.line,
                                     format!("unknown permission '{other}'"),
                                 ));
                             }
@@ -635,12 +666,55 @@ fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
                     }
                 }
             }
+            "worker" => {
+                a.worker = Some(want_str(child, "agent.worker")?);
+            }
+            "worker-files" => a.worker_files.push(want_str(child, "agent.worker-files")?),
+            "worker-timeout" => {
+                a.worker_timeout_secs = child
+                    .arg_int()
+                    .ok_or_else(|| {
+                        ParseError::new(child.line, "'worker-timeout' needs an integer argument")
+                    })?
+                    .max(1) as u64;
+            }
+            "mcp" => {
+                a.mcp_server = Some(
+                    child
+                        .prop_str("server")
+                        .ok_or_else(|| {
+                            ParseError::new(
+                                child.line,
+                                "'mcp' needs server=\"name\" (as named in config.kdl)",
+                            )
+                        })?
+                        .to_string(),
+                );
+                a.mcp_allow = child
+                    .prop_str("allow")
+                    .unwrap_or("")
+                    .split(',')
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty())
+                    .collect();
+            }
             other => {
-                return Err(ParseError::new(child.line,
+                return Err(ParseError::new(
+                    child.line,
                     format!("unknown field '{other}' in agent '{}'", a.name),
                 ));
             }
         }
+    }
+    // A worker step runs through the `worker` tool; an MCP card through
+    // `mcp-call`. Adding the tool HERE — not in the compiler — keeps one
+    // source of truth: validation, the legs, the gate and the canonical
+    // form all see the same allowlist. Idempotent, so round-trips.
+    if a.worker.is_some() && !a.tools.iter().any(|t| t == "worker") {
+        a.tools.push("worker".into());
+    }
+    if a.mcp_server.is_some() && !a.tools.iter().any(|t| t == "mcp-call") {
+        a.tools.push("mcp-call".into());
     }
     Ok(a)
 }
@@ -654,7 +728,24 @@ fn map_edge(node: &KdlNode) -> Result<Edge, ParseError> {
         .prop_str("to")
         .ok_or_else(|| ParseError::new(node.line, "edge needs to=\"...\""))?
         .to_string();
-    Ok(Edge { from, to })
+    let out = node.prop_str("out").map(String::from);
+    let input = node.prop_str("in").map(String::from);
+    let schema = match node.prop_str("schema") {
+        Some(s) => Some(crate::schema::Shape::parse(s).ok_or_else(|| {
+            ParseError::new(
+                node.line,
+                format!("unknown edge schema '{s}' (any | text | json-object | json-array | csv)"),
+            )
+        })?),
+        None => None,
+    };
+    Ok(Edge {
+        from,
+        to,
+        out,
+        input,
+        schema,
+    })
 }
 
 fn map_chips(node: &KdlNode, chips: &mut Chips) -> Result<(), ParseError> {
@@ -670,9 +761,9 @@ fn map_chips(node: &KdlNode, chips: &mut Chips) -> Result<(), ParseError> {
             }
             "secrets" => {
                 for (key, value) in &child.props {
-                    let reference = value
-                        .as_str()
-                        .ok_or_else(|| ParseError::new(child.line, "secret values must be strings"))?;
+                    let reference = value.as_str().ok_or_else(|| {
+                        ParseError::new(child.line, "secret values must be strings")
+                    })?;
                     if !reference.starts_with("keychain:") {
                         return Err(ParseError::new(child.line,
                             format!(
@@ -681,7 +772,10 @@ fn map_chips(node: &KdlNode, chips: &mut Chips) -> Result<(), ParseError> {
                             ),
                         ));
                     }
-                    chips.secrets.push(SecretRef { name: key.clone(), reference: reference.to_string() });
+                    chips.secrets.push(SecretRef {
+                        name: key.clone(),
+                        reference: reference.to_string(),
+                    });
                 }
             }
             "logging" => chips.logging = bool_arg(child, "logging")?,
@@ -689,7 +783,10 @@ fn map_chips(node: &KdlNode, chips: &mut Chips) -> Result<(), ParseError> {
             "ci" => chips.ci = bool_arg(child, "ci")?,
             "webhooks" => chips.webhooks = bool_arg(child, "webhooks")?,
             other => {
-                return Err(ParseError::new(child.line, format!("unknown chip '{other}'")));
+                return Err(ParseError::new(
+                    child.line,
+                    format!("unknown chip '{other}'"),
+                ));
             }
         }
     }
@@ -715,17 +812,22 @@ fn map_guardrails(node: &KdlNode, g: &mut Guardrails) -> Result<(), ParseError> 
             "wall-clock" => {
                 g.wall_clock_secs = child
                     .arg_int()
-                    .ok_or_else(|| ParseError::new(child.line, "'wall-clock' needs an integer argument"))?
+                    .ok_or_else(|| {
+                        ParseError::new(child.line, "'wall-clock' needs an integer argument")
+                    })?
                     .max(0) as u64;
             }
             "max-turns" => {
                 g.max_turns = child
                     .arg_int()
-                    .ok_or_else(|| ParseError::new(child.line, "'max-turns' needs an integer argument"))?
+                    .ok_or_else(|| {
+                        ParseError::new(child.line, "'max-turns' needs an integer argument")
+                    })?
                     .max(0) as u32;
             }
             other => {
-                return Err(ParseError::new(child.line,
+                return Err(ParseError::new(
+                    child.line,
                     format!("unknown field '{other}' in 'guardrails'"),
                 ));
             }
@@ -739,21 +841,34 @@ fn map_deliverable(node: &KdlNode) -> Result<Deliverable, ParseError> {
     let check = node
         .child("check")
         .and_then(|c| c.arg_str())
-        .ok_or_else(|| ParseError::new(node.line, "deliverable needs a 'check' child with a string"))?
+        .ok_or_else(|| {
+            ParseError::new(node.line, "deliverable needs a 'check' child with a string")
+        })?
         .to_string();
-    Ok(Deliverable { kind, check })
+    let mut accept = Vec::new();
+    for child in &node.children {
+        if child.name == "accept" {
+            accept.push(want_str(child, "deliverable.accept")?);
+        }
+    }
+    Ok(Deliverable {
+        kind,
+        check,
+        accept,
+    })
 }
 
 fn map_models(node: &KdlNode, models: &mut ModelTiers) -> Result<(), ParseError> {
     for child in &node.children {
         if child.name != "tier" {
-            return Err(ParseError::new(child.line,
+            return Err(ParseError::new(
+                child.line,
                 format!("unknown field '{}' in 'models'", child.name),
             ));
         }
-        let tier_name = child
-            .arg_str()
-            .ok_or_else(|| ParseError::new(child.line, "'tier' needs a name: tier cheap prefer=..."))?;
+        let tier_name = child.arg_str().ok_or_else(|| {
+            ParseError::new(child.line, "'tier' needs a name: tier cheap prefer=...")
+        })?;
         let pref = TierPref {
             prefer: child.prop_str("prefer").unwrap_or("").to_string(),
             fallback: child.prop_str("fallback").unwrap_or("").to_string(),
@@ -762,7 +877,10 @@ fn map_models(node: &KdlNode, models: &mut ModelTiers) -> Result<(), ParseError>
             "cheap" => models.cheap = pref,
             "quality" => models.quality = pref,
             other => {
-                return Err(ParseError::new(child.line, format!("unknown tier '{other}' (cheap | quality)")));
+                return Err(ParseError::new(
+                    child.line,
+                    format!("unknown tier '{other}' (cheap | quality)"),
+                ));
             }
         }
     }
@@ -788,7 +906,10 @@ fn map_project(node: &KdlNode, p: &mut ProjectSpec) -> Result<(), ParseError> {
             "test" => p.test_cmd = want_str(child, "project.test")?,
             "run" => p.run_cmd = want_str(child, "project.run")?,
             other => {
-                return Err(ParseError::new(child.line, format!("unknown field '{other}' in 'project'")));
+                return Err(ParseError::new(
+                    child.line,
+                    format!("unknown field '{other}' in 'project'"),
+                ));
             }
         }
     }
@@ -880,8 +1001,12 @@ models {
         let fetcher = bp.agent("Fetcher").unwrap();
         assert_eq!(fetcher.model_tier, ModelTier::Cheap);
         assert_eq!(fetcher.tools, vec!["http-read"]);
-        assert!(fetcher.permissions.allows(crate::palette::Capability::Network));
-        assert!(!fetcher.permissions.allows(crate::palette::Capability::Shell));
+        assert!(fetcher
+            .permissions
+            .allows(crate::palette::Capability::Network));
+        assert!(!fetcher
+            .permissions
+            .allows(crate::palette::Capability::Shell));
 
         let mailer = bp.agent("Mailer").unwrap();
         assert_eq!(mailer.approval, ApprovalPolicy::BeforeSend);
@@ -896,7 +1021,10 @@ models {
         assert_eq!(sched.cron, "0 8 * * *");
         assert_eq!(sched.tz, "Asia/Kolkata");
         assert_eq!(bp.chips.secrets.len(), 1);
-        assert_eq!(bp.chips.secrets[0].reference, "keychain:wright/hn-digest/smtp");
+        assert_eq!(
+            bp.chips.secrets[0].reference,
+            "keychain:wright/hn-digest/smtp"
+        );
         assert!(bp.chips.logging && bp.chips.tests);
 
         assert_eq!(bp.guardrails.per_firing_micro_usd, 500_000);

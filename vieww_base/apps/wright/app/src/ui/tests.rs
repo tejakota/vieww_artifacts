@@ -490,3 +490,41 @@ fn pinching_opens_and_closes_the_overview() {
     pinch(0.0, PinchPhase::Ended);
     assert!(!pinch(-0.5, PinchPhase::Moved), "not while a panel is open");
 }
+
+#[test]
+fn speech_alone_starts_a_session_on_home() {
+    // Voice-first (the memo's item 6): the mic is the main way to start
+    // on Home. Driving the same path the mic worker takes — a transcript
+    // lands in the inbox, the shell pumps — the session must begin from
+    // the spoken words alone, with the Confirm Gate still ahead of it.
+    let home = temp("voice-first");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    ui.pump(&mut driver);
+    assert_eq!(ui.sessions.get().len(), 0, "Home starts with no sessions");
+
+    // A transcript arrives from the voice worker for the home composer.
+    ui.home.voice.set(super::session::Voice::Transcribing);
+    ui.inner
+        .inbox
+        .voice
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .push((ui.home.id, Ok("A command line tool that counts words in files, with tests".to_string())));
+    ui.pump(&mut driver);
+
+    assert_eq!(ui.sessions.get().len(), 1, "speech alone starts the session");
+    assert_eq!(ui.home.voice.get(), super::session::Voice::Idle, "the composer settles");
+    // The spoken words are the session's opening message: typing them
+    // and pressing send does the same thing; this test pins that.
+    let chat = ui.sessions.get()[0].chat.get();
+    assert!(!chat.is_empty(), "the session opened with the spoken words");
+    assert!(chat[0].1.contains("counts words in files"), "chat: {chat:?}");
+    assert!(chat[0].0, "the first message is the person's");
+    std::env::remove_var("WRIGHT_HOME");
+}

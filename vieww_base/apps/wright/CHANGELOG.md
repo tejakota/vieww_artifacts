@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.0.0 — 2026-10-22 — trust before reach, agents as workers, recipes at the end
+
+The release the strategy memo ordered, whole: the memo set out four
+releases (trust, workers, everywhere, recipes), and every later step
+leans on the gate rule and the signed receipts — so those came first,
+and they carry the rest of the roadmap with them in one go. What this
+machine cannot test honestly (the native sandbox and TLS legs for
+macOS and Windows, a published gallery with real publisher keys) is
+written down in `docs/AUDIT-2026-10.md`, not pretended.
+
+- **The Rule of Two is enforced** (ADR-024). Every tool names the legs
+  it puts an agent on — private data, untrusted input, an outbound
+  channel — and the validator refuses a plan whose agent holds all
+  three without `approval "before-send"`. Untrusted data is tracked as
+  a taint: an artifact made from outside input carries the mark through
+  the whole graph, and anything that reads it inherits it. The gate
+  asks before every outbound step of a 3-leg agent, whatever the card
+  says. The Confirm Gate says all of this in words.
+- **Receipts are signed and verifiable** (ADR-025). Runs now write
+  `wright.run-receipt/2`: every consumed input's hash, every
+  acceptance sentence with its verdict, the Rule-of-Two agents, and an
+  Ed25519 signature over the receipt's exact bytes. Ed25519 and SHA-512
+  are reference ports in `wright-core` (no crates, no unsafe), pinned
+  byte-for-byte to the RFC's vectors and to OpenSSL on this machine.
+  `wright verify` runs five checks in words — signature, event log,
+  artifacts, inputs, blueprint — and a tampered byte fails by name.
+- **Acceptance in words** (the memo's item 1). A deliverable can carry
+  `accept "..."` sentences: the person approves the promise, Testwright
+  turns each into a check (`ACCEPT 1: PASS` lines, parsed strictly),
+  and the Reviewer may not approve a run whose sentences fail — the
+  engine enforces it, not the prompt.
+- **A spending promise before the run** (item 3). `wright run` shows the
+  estimate as a sentence ("about $0.04; the built-in model would be free
+  but slower") and offers the built-in as a plain choice, not a config.
+- **Other agents as workers** (ADR-026). A step can say `worker
+  "claude-code"` (or codex, kimi-code, zcode — configured per machine):
+  it runs in a sandboxed copy, its diff is applied whole or not at all,
+  inside `worker-files` scope only, under the card's clock, through
+  the permit gate, and its output goes through Wright's tests. No model
+  cost on your plan.
+- **MCP behind permits** (ADR-029). Hash-pinned MCP servers (config
+  refuses an unpinned one; `wright mcp-hash` prints the pin), cards
+  allow-list the exact tools, the server must offer them too, answers
+  are treated as outside data, and the Rule of Two applies.
+- **Typed edges** (ADR-027). An edge can bind `out=`/`in=` names with a
+  `schema=` of five readable shapes; broken names fail at plan time,
+  broken bytes before the consumer runs.
+- **Recipes, curated and signed** (ADR-028). `wright recipe
+  list|install|sign|verify` over a `recipes/` gallery; nothing installs
+  unsigned — that is the lesson of the poisoned marketplaces.
+- **Explain any run in one screen** (item 5). `wright explain` prints
+  the story — plan, what ran, what it sent, what it made, the verdict,
+  the numbers — from the store, never from a model.
+- **Hand-off as a feature** (item 7). `wright handoff` writes a PR
+  folder: HANDOFF.md (what this is, in the owner's words, promises
+  listed), the exact committed blueprint, every receipt, the project's
+  full diff against its first commit, and the checks.
+- **A public benchmark** (ADR-030). `wright bench` measures time to a
+  checked outcome and human interventions per run; the receipts stay
+  for verification.
+- **Voice first on Home** (item 6). The mic is now the main way to
+  start: a big speak affordance sits above the composer, and a
+  transcript starts the interview on its own (typing still needs send —
+  a keyboard is a decision already made). Everything runs on this
+  machine's built-in Whisper; nothing leaves.
+
 ## 0.5.2 — 2026-10-21 — a livelier conversation
 
 - **You can see a reply being written.** The moment you send, the thread

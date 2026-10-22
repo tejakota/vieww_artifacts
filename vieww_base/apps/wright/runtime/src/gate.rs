@@ -22,7 +22,7 @@ use std::collections::HashMap;
 
 use wright_core::blueprint::{ApprovalPolicy, PermissionSet};
 use wright_core::compiler::TaskGraph;
-use wright_core::palette::{self, Capability, Effect, ToolSpec};
+use wright_core::palette::{self, Capability, Effect, Leg, Legs, ToolSpec};
 
 /// A spending meter, in micro-USD. Charging past the cap fails.
 #[derive(Debug, Clone)]
@@ -33,7 +33,10 @@ pub struct BudgetMeter {
 
 impl BudgetMeter {
     pub fn new(cap_micro_usd: u64) -> Self {
-        BudgetMeter { cap_micro_usd, spent_micro_usd: 0 }
+        BudgetMeter {
+            cap_micro_usd,
+            spent_micro_usd: 0,
+        }
     }
 
     pub fn can_afford(&self, amount: u64) -> bool {
@@ -95,7 +98,12 @@ impl Permit {
     /// binary cannot forge a permit.
     #[cfg(any(test, feature = "test-permits"))]
     pub fn for_tests(agent: &str, tool: &'static ToolSpec, grants: PermissionSet) -> Permit {
-        Permit { agent: agent.into(), tool, grants, _seal: Seal }
+        Permit {
+            agent: agent.into(),
+            tool,
+            grants,
+            _seal: Seal,
+        }
     }
 }
 
@@ -133,6 +141,9 @@ pub struct Grant {
     pub permissions: PermissionSet,
     pub tools: Vec<String>,
     pub approval: ApprovalPolicy,
+    /// The Rule of Two legs this task stands on (ADR-024): the gate
+    /// reads them, not the caller's conscience.
+    pub legs: Legs,
 }
 
 /// Per-task grants, built from the compiled task graph.
@@ -148,7 +159,15 @@ impl Gate {
                 .tasks
                 .iter()
                 .map(|t| {
-                    (t.name(), Grant { permissions: t.permissions, tools: t.tools.clone(), approval: t.approval })
+                    (
+                        t.name(),
+                        Grant {
+                            permissions: t.permissions,
+                            tools: t.tools.clone(),
+                            approval: t.approval,
+                            legs: t.legs,
+                        },
+                    )
                 })
                 .collect(),
         }
@@ -159,14 +178,24 @@ impl Gate {
     }
 
     /// Decide one tool call. On Allow the estimate is charged.
-    pub fn check(&self, agent: &str, tool_name: &str, budget: &mut BudgetMeter, est_cost_micro_usd: u64) -> Verdict {
+    pub fn check(
+        &self,
+        agent: &str,
+        tool_name: &str,
+        budget: &mut BudgetMeter,
+        est_cost_micro_usd: u64,
+    ) -> Verdict {
         // Unknown agents have no grants at all.
         let Some(grant) = self.grants.get(agent) else {
-            return Verdict::Deny(format!("'{agent}' is not part of this firing and may not use tools"));
+            return Verdict::Deny(format!(
+                "'{agent}' is not part of this firing and may not use tools"
+            ));
         };
         // 1. The allowlist.
         if !grant.tools.iter().any(|t| t == tool_name) {
-            return Verdict::Deny(format!("'{agent}' does not have the '{tool_name}' tool (not in its blueprint card)"));
+            return Verdict::Deny(format!(
+                "'{agent}' does not have the '{tool_name}' tool (not in its blueprint card)"
+            ));
         }
         let Some(tool) = palette::find(tool_name) else {
             return Verdict::Deny(format!("'{tool_name}' is not a known tool"));
@@ -189,7 +218,25 @@ impl Gate {
                 budget.cap_micro_usd as f64 / 1e6
             ));
         }
-        // 4. Approval: the GATE reads the policy, the caller cannot skip it.
+        // 4. The Rule of Two (ADR-024): an agent holding all three legs
+        // asks before EVERY outbound step, even when the card already
+        // promised `approval "before-send"` — the promise names the
+        // combination; the ask names the actual send. Defense in depth:
+        // the validator should have refused an unapproved 3-leg agent
+        // before the firing ever started.
+        if grant.legs.is_three_legged() && tool.legs.has(Leg::OutboundChannel) {
+            return Verdict::Ask(Pending {
+                agent: agent.into(),
+                tool,
+                reason: format!(
+                    "'{agent}' holds private data, untrusted input and an outbound channel at once — the Rule of Two. It wants to use '{}': {}",
+                    tool.name, tool.summary
+                ),
+                est_cost_micro_usd,
+                grants: grant.permissions,
+            });
+        }
+        // 5. Approval: the GATE reads the policy, the caller cannot skip it.
         if tool.effect == Effect::World && grant.approval == ApprovalPolicy::BeforeSend {
             return Verdict::Ask(Pending {
                 agent: agent.into(),
@@ -200,7 +247,12 @@ impl Gate {
             });
         }
         budget.charge(est_cost_micro_usd);
-        Verdict::Allow(Permit { agent: agent.into(), tool, grants: grant.permissions, _seal: Seal })
+        Verdict::Allow(Permit {
+            agent: agent.into(),
+            tool,
+            grants: grant.permissions,
+            _seal: Seal,
+        })
     }
 
     /// A human approved: re-check the budget (time passed), then permit.
@@ -208,7 +260,12 @@ impl Gate {
         if !budget.charge(pending.est_cost_micro_usd) {
             return Err("approved, but the budget ran out while waiting".into());
         }
-        Ok(Permit { agent: pending.agent, tool: pending.tool, grants: pending.grants, _seal: Seal })
+        Ok(Permit {
+            agent: pending.agent,
+            tool: pending.tool,
+            grants: pending.grants,
+            _seal: Seal,
+        })
     }
 }
 
@@ -277,8 +334,12 @@ deliverable kind=\"k\" { check \"c\" }";
     #[test]
     fn output_contract_tool_is_always_available_to_producers() {
         let mut budget = BudgetMeter::new(1);
-        assert!(gate().check("Summarizer", "write-output", &mut budget, 0).is_allow());
-        assert!(!gate().check("Summarizer", "files-write", &mut budget, 0).is_allow());
+        assert!(gate()
+            .check("Summarizer", "write-output", &mut budget, 0)
+            .is_allow());
+        assert!(!gate()
+            .check("Summarizer", "files-write", &mut budget, 0)
+            .is_allow());
     }
 
     #[test]
@@ -293,7 +354,9 @@ deliverable kind=\"k\" { check \"c\" }";
     #[test]
     fn unknown_agent_has_no_grants() {
         let mut budget = BudgetMeter::new(100);
-        assert!(!gate().check("Ghost", "files-read", &mut budget, 0).is_allow());
+        assert!(!gate()
+            .check("Ghost", "files-read", &mut budget, 0)
+            .is_allow());
     }
 
     #[test]
@@ -301,7 +364,61 @@ deliverable kind=\"k\" { check \"c\" }";
         let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\nagent A { goal \"a\" }\nchips { tests on }\ndeliverable kind=\"k\" { check \"c\" }";
         let g = Gate::from_graph(&compile(&parse::blueprint(src).unwrap()).unwrap());
         let mut budget = BudgetMeter::new(100);
-        assert!(g.check("Testwright", "run-tests", &mut budget, 0).is_allow());
-        assert!(!g.check("Reviewer", "files-write", &mut budget, 0).is_allow(), "the Reviewer only reads");
+        assert!(g
+            .check("Testwright", "run-tests", &mut budget, 0)
+            .is_allow());
+        assert!(
+            !g.check("Reviewer", "files-write", &mut budget, 0)
+                .is_allow(),
+            "the Reviewer only reads"
+        );
+    }
+
+    #[test]
+    fn the_rule_of_two_asks_on_every_outbound_step_of_a_three_leg_agent() {
+        // One agent that reads files, reads the web and can POST: three
+        // legs. Even with NO approval policy on the card, the gate asks
+        // before the send — the validator refuses such a blueprint, so
+        // this is the runtime's belt-and-braces (ADR-024).
+        let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
+agent Greedy { goal \"g\" tools \"files-read\" tools \"http-read\" tools \"http-post\" out \"o.json\" permissions network=true files-read=true }\n\
+deliverable kind=\"k\" { check \"c\" }";
+        let g = Gate::from_graph(&compile(&parse::blueprint(src).unwrap()).unwrap());
+        let mut budget = BudgetMeter::new(1_000_000);
+        // reading is allowed without a stop...
+        assert!(g.check("Greedy", "files-read", &mut budget, 0).is_allow());
+        assert!(g.check("Greedy", "http-read", &mut budget, 0).is_allow());
+        // ...but every outbound step asks, naming the rule.
+        match g.check("Greedy", "http-post", &mut budget, 5_000) {
+            Verdict::Ask(p) => assert!(p.reason.contains("Rule of Two"), "{}", p.reason),
+            other => panic!("expected the Rule of Two ask, got {other:?}"),
+        }
+        assert_eq!(budget.spent_micro_usd, 0, "asking is free");
+        // A second outbound step asks again — every step, not the first.
+        match g.check("Greedy", "http-post", &mut budget, 5_000) {
+            Verdict::Ask(p) => assert!(p.reason.contains("Rule of Two")),
+            other => panic!("the ask must repeat, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn two_leg_agents_do_not_hit_the_rule_ask() {
+        // The classic split (fetch, then mail) never trips the Rule of
+        // Two: the Mailer has outbound + untrusted but no private data.
+        let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
+agent Fetcher { goal \"f\" tools \"http-read\" out \"stories.json\" permissions network=true }\n\
+agent Mailer { goal \"m\" tools \"http-post\" in \"stories.json\" approval \"before-send\" permissions network=true }\n\
+edge from=\"Fetcher\" to=\"Mailer\"\n\
+deliverable kind=\"email\" { check \"c\" }";
+        let g = Gate::from_graph(&compile(&parse::blueprint(src).unwrap()).unwrap());
+        let mut budget = BudgetMeter::new(1_000_000);
+        match g.check("Mailer", "http-post", &mut budget, 5_000) {
+            Verdict::Ask(p) => assert!(
+                p.reason.contains("wants to use"),
+                "the ordinary approval ask: {}",
+                p.reason
+            ),
+            other => panic!("expected the ordinary before-send ask, got {other:?}"),
+        }
     }
 }

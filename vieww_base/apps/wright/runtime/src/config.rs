@@ -10,13 +10,19 @@
 //!
 //! ```kdl
 //! provider "anthropic" kind="anthropic" base="https://api.anthropic.com" key="keychain:wright/anthropic" models="claude-*"
-//! provider "deepseek" kind="openai" base="https://api.deepseek.com/v1" key="keychain:wright/deepseek" models="deepseek-*"
-//! provider "local" kind="openai" base="http://127.0.0.1:7878/v1" models="*"
 //! price model="claude-opus-*" in=15 out=75 cached=1.5
 //! interview model="claude-sonnet-5-5"
 //! voice model="whisper-base"
 //! builtin fallback=true
+//! worker "claude-code" command="claude" args="-p" timeout=900
+//! mcp "weather" command="uvx" args="mcp-server-weather,--local" hash="blake3:..." timeout=60
 //! ```
+//!
+//! Workers (ADR-026) are the external coding agents a blueprint can
+//! hand a step to: `claude-code`, `codex`, `kimi-code`, `zcode` are
+//! known by default; the command line each runs is configured here,
+//! per machine. MCP servers (ADR-029) are pinned by the BLAKE3 of the
+//! executable they run — an unpinned server is refused at call time.
 //!
 //! The built-in models (`qwen3-1.7b`, `whisper-base`; see `local.rs`) are
 //! a provider of kind `builtin`, last in the list. With `builtin
@@ -62,8 +68,12 @@ impl ProviderEntry {
 
     pub fn client(&self) -> Box<dyn Provider> {
         match self.kind {
-            ProviderKind::Anthropic => Box::new(Anthropic { base_url: self.base_url.clone() }),
-            ProviderKind::OpenAi => Box::new(OpenAiCompatible { base_url: self.base_url.clone() }),
+            ProviderKind::Anthropic => Box::new(Anthropic {
+                base_url: self.base_url.clone(),
+            }),
+            ProviderKind::OpenAi => Box::new(OpenAiCompatible {
+                base_url: self.base_url.clone(),
+            }),
             ProviderKind::Builtin => Box::new(Builtin),
         }
     }
@@ -77,11 +87,47 @@ pub struct Price {
     pub cached_input: f64,
 }
 
+/// One external coding agent a blueprint can hand a step to (ADR-026).
+/// The defaults carry the four the memo names; the machine's config can
+/// override the command line (where the binary lives, what flags it
+/// takes) without touching a blueprint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkerEntry {
+    /// Blueprint-facing id: `worker "claude-code"`.
+    pub name: String,
+    /// The executable to run, resolved through PATH.
+    pub command: String,
+    /// Static args, comma-separated in config (`args="-p,--json"`),
+    /// passed before the prompt.
+    pub args: Vec<String>,
+    /// Wall-clock seconds before the run is killed (default 900).
+    pub timeout_secs: u64,
+}
+
+/// One hash-pinned MCP server (ADR-029).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpEntry {
+    /// Blueprint-facing id: `mcp server="weather"`.
+    pub name: String,
+    /// The executable that IS the server.
+    pub command: String,
+    /// Static args, comma-separated in config.
+    pub args: Vec<String>,
+    /// The pin: `blake3:<hex>` of the executable file. A server whose
+    /// binary no longer hashes to this is refused, loudly.
+    pub hash: String,
+    /// Wall-clock seconds per tool call (default 60).
+    pub timeout_secs: u64,
+}
+
 impl Price {
     /// Cost in micro-USD. (USD per million tokens == micro-USD per token.)
     pub fn cost_micro(&self, input: u64, cached: u64, output: u64) -> u64 {
         let fresh = input.saturating_sub(cached);
-        (fresh as f64 * self.input + cached as f64 * self.cached_input + output as f64 * self.output).ceil() as u64
+        (fresh as f64 * self.input
+            + cached as f64 * self.cached_input
+            + output as f64 * self.output)
+            .ceil() as u64
     }
 }
 
@@ -95,6 +141,10 @@ pub struct Config {
     /// Served by whichever OpenAI-compatible provider matches it, at
     /// `<base>/audio/transcriptions`, or by the built-in Whisper.
     pub voice_model: String,
+    /// External coding agents blueprints can hand steps to (ADR-026).
+    pub workers: Vec<WorkerEntry>,
+    /// Hash-pinned MCP servers (ADR-029).
+    pub mcp_servers: Vec<McpEntry>,
     /// Fall back to the built-in models when a model has no provider or
     /// no key (`builtin fallback=false` turns it off). `None`: not set in
     /// this file (the default, on, applies).
@@ -135,13 +185,17 @@ pub fn wright_home() -> PathBuf {
     if let Ok(h) = std::env::var("WRIGHT_HOME") {
         return PathBuf::from(h);
     }
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_else(|_| ".".into());
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".into());
     PathBuf::from(home).join(".wright")
 }
 
 impl Config {
     /// Public endpoints of the major providers. Prices are list prices
-    /// at the time of writing — override them in config.kdl.
+    /// at the time of writing — override them in config.kdl. The four
+    /// workers the memo names are preconfigured; a machine that has one
+    /// of them installed needs no config at all.
     pub fn builtin() -> Config {
         let p = |name: &str, kind: ProviderKind, base: &str, models: &str| ProviderEntry {
             name: name.into(),
@@ -150,16 +204,69 @@ impl Config {
             key: Some(format!("keychain:wright/{name}")),
             models: models.split(',').map(String::from).collect(),
         };
-        let price = |m: &str, i: f64, o: f64, c: f64| (m.to_string(), Price { input: i, output: o, cached_input: c });
+        let price = |m: &str, i: f64, o: f64, c: f64| {
+            (
+                m.to_string(),
+                Price {
+                    input: i,
+                    output: o,
+                    cached_input: c,
+                },
+            )
+        };
+        let worker = |name: &str, command: &str, args: &str| WorkerEntry {
+            name: name.into(),
+            command: command.into(),
+            args: if args.is_empty() {
+                Vec::new()
+            } else {
+                args.split(',').map(|s| s.to_string()).collect()
+            },
+            timeout_secs: 900,
+        };
         Config {
             providers: vec![
-                p("anthropic", ProviderKind::Anthropic, "https://api.anthropic.com", "claude-*"),
-                p("openai", ProviderKind::OpenAi, "https://api.openai.com/v1", "gpt-*,o1*,o3*,o4*"),
-                p("deepseek", ProviderKind::OpenAi, "https://api.deepseek.com/v1", "deepseek-*"),
-                p("zai", ProviderKind::OpenAi, "https://api.z.ai/api/paas/v4", "glm-*"),
-                p("moonshot", ProviderKind::OpenAi, "https://api.moonshot.ai/v1", "kimi-*,moonshot-*"),
+                p(
+                    "anthropic",
+                    ProviderKind::Anthropic,
+                    "https://api.anthropic.com",
+                    "claude-*",
+                ),
+                p(
+                    "openai",
+                    ProviderKind::OpenAi,
+                    "https://api.openai.com/v1",
+                    "gpt-*,o1*,o3*,o4*",
+                ),
+                p(
+                    "deepseek",
+                    ProviderKind::OpenAi,
+                    "https://api.deepseek.com/v1",
+                    "deepseek-*",
+                ),
+                p(
+                    "zai",
+                    ProviderKind::OpenAi,
+                    "https://api.z.ai/api/paas/v4",
+                    "glm-*",
+                ),
+                p(
+                    "moonshot",
+                    ProviderKind::OpenAi,
+                    "https://api.moonshot.ai/v1",
+                    "kimi-*,moonshot-*",
+                ),
                 p("xai", ProviderKind::OpenAi, "https://api.x.ai/v1", "grok-*"),
-                ProviderEntry { name: "built-in".into(), kind: ProviderKind::Builtin, base_url: String::new(), key: None, models: crate::local::CATALOG.iter().map(|m| m.id.to_string()).collect() },
+                ProviderEntry {
+                    name: "built-in".into(),
+                    kind: ProviderKind::Builtin,
+                    base_url: String::new(),
+                    key: None,
+                    models: crate::local::CATALOG
+                        .iter()
+                        .map(|m| m.id.to_string())
+                        .collect(),
+                },
             ],
             prices: vec![
                 price("claude-opus-*", 15.0, 75.0, 1.5),
@@ -174,6 +281,13 @@ impl Config {
             ],
             interview_model: "claude-sonnet-5-5".into(),
             voice_model: crate::local::SPEECH_MODEL.into(),
+            workers: vec![
+                worker("claude-code", "claude", "--print"),
+                worker("codex", "codex", "exec"),
+                worker("kimi-code", "kimi", "code"),
+                worker("zcode", "zcode", "--headless"),
+            ],
+            mcp_servers: Vec::new(),
             builtin_fallback: Some(true),
             source: "built-in defaults".into(),
         }
@@ -212,7 +326,16 @@ impl Config {
     /// config would copy every built-in into the user's file.
     pub fn parse_file_only(text: &str, source: &str) -> Result<Config, String> {
         let doc = parse_doc(text).map_err(|e| format!("{source}: {e}"))?;
-        let mut cfg = Config { providers: Vec::new(), prices: Vec::new(), interview_model: String::new(), voice_model: String::new(), builtin_fallback: None, source: source.into() };
+        let mut cfg = Config {
+            providers: Vec::new(),
+            prices: Vec::new(),
+            interview_model: String::new(),
+            voice_model: String::new(),
+            workers: Vec::new(),
+            mcp_servers: Vec::new(),
+            builtin_fallback: None,
+            source: source.into(),
+        };
         for node in &doc {
             let s = |k: &str| node.prop_str(k).map(String::from);
             let num = |k: &str| -> Option<f64> {
@@ -268,7 +391,34 @@ impl Config {
                         _ => return Err(format!("{source}: line {}: builtin needs fallback=true or fallback=false", node.line)),
                     });
                 }
-                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview | voice | builtin)", node.line)),
+                "worker" => {
+                    let name = node.arg_str().ok_or_else(|| format!("{source}: line {}: worker needs a name (worker \"claude-code\" command=...)", node.line))?.to_string();
+                    let command = s("command").ok_or_else(|| format!("{source}: line {}: worker '{name}' needs command=\"...\"", node.line))?;
+                    let args = s("args").unwrap_or_default().split(',').map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
+                    let timeout_secs = num("timeout").unwrap_or(900.0).max(1.0) as u64;
+                    if cfg.workers.iter().any(|w: &WorkerEntry| w.name == name) {
+                        return Err(format!("{source}: line {}: two workers are both named '{name}'", node.line));
+                    }
+                    cfg.workers.push(WorkerEntry { name, command, args, timeout_secs });
+                }
+                "mcp" => {
+                    let name = node.arg_str().ok_or_else(|| format!("{source}: line {}: mcp needs a name (mcp \"weather\" command=... hash=...)", node.line))?.to_string();
+                    let command = s("command").ok_or_else(|| format!("{source}: line {}: mcp '{name}' needs command=\"...\"", node.line))?;
+                    let args = s("args").unwrap_or_default().split(',').map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
+                    let hash = s("hash").unwrap_or_default();
+                    if !hash.starts_with("blake3:") || hash.len() != 7 + 64 {
+                        return Err(format!(
+                            "{source}: line {}: mcp '{name}' needs the executable pinned: hash=\"blake3:<64 hex chars>\" (run `wright mcp-hash <command>` to compute it). Unpinned servers are not run (ADR-029).",
+                            node.line
+                        ));
+                    }
+                    let timeout_secs = num("timeout").unwrap_or(60.0).max(1.0) as u64;
+                    if cfg.mcp_servers.iter().any(|m: &McpEntry| m.name == name) {
+                        return Err(format!("{source}: line {}: two MCP servers are both named '{name}'", node.line));
+                    }
+                    cfg.mcp_servers.push(McpEntry { name, command, args, hash, timeout_secs });
+                }
+                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview | voice | builtin | worker | mcp)", node.line)),
             }
         }
         Ok(cfg)
@@ -292,14 +442,25 @@ impl Config {
                 ProviderKind::OpenAi => "openai",
                 ProviderKind::Builtin => "builtin",
             };
-            out.push_str(&format!("provider {} kind={} base={}", q(&p.name), q(kind), q(&p.base_url)));
+            out.push_str(&format!(
+                "provider {} kind={} base={}",
+                q(&p.name),
+                q(kind),
+                q(&p.base_url)
+            ));
             if let Some(k) = &p.key {
                 out.push_str(&format!(" key={}", q(k)));
             }
             out.push_str(&format!(" models={}\n", q(&p.models.join(","))));
         }
         for (m, pr) in &self.prices {
-            out.push_str(&format!("price model={} in={} out={} cached={}\n", q(m), q(&pr.input.to_string()), q(&pr.output.to_string()), q(&pr.cached_input.to_string())));
+            out.push_str(&format!(
+                "price model={} in={} out={} cached={}\n",
+                q(m),
+                q(&pr.input.to_string()),
+                q(&pr.output.to_string()),
+                q(&pr.cached_input.to_string())
+            ));
         }
         if !self.interview_model.is_empty() {
             out.push_str(&format!("interview model={}\n", q(&self.interview_model)));
@@ -307,10 +468,40 @@ impl Config {
         if !self.voice_model.is_empty() {
             out.push_str(&format!("voice model={}\n", q(&self.voice_model)));
         }
+        for w in &self.workers {
+            out.push_str(&format!(
+                "worker {} command={} args={} timeout={}\n",
+                q(&w.name),
+                q(&w.command),
+                q(&w.args.join(",")),
+                q(&w.timeout_secs.to_string())
+            ));
+        }
+        for m in &self.mcp_servers {
+            out.push_str(&format!(
+                "mcp {} command={} args={} hash={} timeout={}\n",
+                q(&m.name),
+                q(&m.command),
+                q(&m.args.join(",")),
+                q(&m.hash),
+                q(&m.timeout_secs.to_string())
+            ));
+        }
         if let Some(on) = self.builtin_fallback {
             out.push_str(&format!("builtin fallback={on}\n"));
         }
         out
+    }
+
+    /// The configured worker a blueprint names, or None with a plain
+    /// sentence for the plan-time error.
+    pub fn worker_for(&self, name: &str) -> Option<&WorkerEntry> {
+        self.workers.iter().find(|w| w.name == name)
+    }
+
+    /// A configured MCP server by name.
+    pub fn mcp_for(&self, name: &str) -> Option<&McpEntry> {
+        self.mcp_servers.iter().find(|m| m.name == name)
     }
 
     /// Write [`to_kdl`](Self::to_kdl) to `~/.wright/config.kdl`, keeping the
@@ -340,7 +531,9 @@ impl Config {
 
     /// The built-in text model as a provider entry, for falling back to.
     pub fn builtin_text(&self) -> Option<&ProviderEntry> {
-        self.providers.iter().find(|p| p.kind == ProviderKind::Builtin && p.matches(crate::local::TEXT_MODEL))
+        self.providers
+            .iter()
+            .find(|p| p.kind == ProviderKind::Builtin && p.matches(crate::local::TEXT_MODEL))
     }
 
     /// Price of a model. Unknown models get a deliberately HIGH default
@@ -351,7 +544,11 @@ impl Config {
             .iter()
             .find(|(p, _)| glob(p, model))
             .map(|(_, pr)| *pr)
-            .unwrap_or(Price { input: 15.0, output: 75.0, cached_input: 15.0 })
+            .unwrap_or(Price {
+                input: 15.0,
+                output: 75.0,
+                cached_input: 15.0,
+            })
     }
 }
 
@@ -368,24 +565,54 @@ price model=\"llama*\" in=0 out=0\ninterview model=\"qwen3\"\nvoice model=\"whis
         assert_eq!(b.providers.len(), 1);
         assert_eq!(b.providers[0].models, vec!["llama*", "qwen*"]);
         assert_eq!(b.prices.len(), 1);
-        assert_eq!((b.interview_model.as_str(), b.voice_model.as_str()), ("qwen3", "whisper-large"));
-        assert!(Config::parse_file_only("", "t").unwrap().providers.is_empty(), "no file means no entries, not the built-ins");
+        assert_eq!(
+            (b.interview_model.as_str(), b.voice_model.as_str()),
+            ("qwen3", "whisper-large")
+        );
+        assert!(
+            Config::parse_file_only("", "t")
+                .unwrap()
+                .providers
+                .is_empty(),
+            "no file means no entries, not the built-ins"
+        );
         let off = Config::parse_file_only("builtin fallback=false\n", "t").unwrap();
-        assert_eq!(Config::parse_file_only(&off.to_kdl(), "t").unwrap().builtin_fallback, Some(false));
+        assert_eq!(
+            Config::parse_file_only(&off.to_kdl(), "t")
+                .unwrap()
+                .builtin_fallback,
+            Some(false)
+        );
     }
 
     #[test]
     fn the_builtin_models_are_a_last_resort_provider() {
         let cfg = Config::builtin();
-        assert_eq!(cfg.provider_for("qwen3-1.7b").unwrap().kind, ProviderKind::Builtin);
-        assert_eq!(cfg.provider_for("whisper-base").unwrap().kind, ProviderKind::Builtin);
+        assert_eq!(
+            cfg.provider_for("qwen3-1.7b").unwrap().kind,
+            ProviderKind::Builtin
+        );
+        assert_eq!(
+            cfg.provider_for("whisper-base").unwrap().kind,
+            ProviderKind::Builtin
+        );
         assert_eq!(cfg.voice_model, "whisper-base", "voice is local by default");
-        assert_eq!(cfg.price_of("qwen3-1.7b").cost_micro(1_000_000, 0, 1_000_000), 0);
+        assert_eq!(
+            cfg.price_of("qwen3-1.7b")
+                .cost_micro(1_000_000, 0, 1_000_000),
+            0
+        );
         assert!(cfg.falls_back_to_builtin());
         // A user's own catch-all provider still wins over the built-ins.
-        let mine = Config::parse("provider \"gw\" base=\"http://127.0.0.1:1/v1\" models=\"*\"\n", "t").unwrap();
+        let mine = Config::parse(
+            "provider \"gw\" base=\"http://127.0.0.1:1/v1\" models=\"*\"\n",
+            "t",
+        )
+        .unwrap();
         assert_eq!(mine.provider_for("qwen3-1.7b").unwrap().name, "gw");
-        assert!(Config::parse("builtin fallback=false\n", "t").map(|c| !c.falls_back_to_builtin()).unwrap());
+        assert!(Config::parse("builtin fallback=false\n", "t")
+            .map(|c| !c.falls_back_to_builtin())
+            .unwrap());
     }
 
     #[test]
@@ -405,14 +632,21 @@ price model=\"llama*\" in=0 out=0\ninterview model=\"qwen3\"\nvoice model=\"whis
         )
         .unwrap();
         assert_eq!(cfg.provider_for("deepseek-v4-flash").unwrap().name, "local");
-        assert_eq!(cfg.provider_for("claude-opus-5-5").unwrap().name, "anthropic");
+        assert_eq!(
+            cfg.provider_for("claude-opus-5-5").unwrap().name,
+            "anthropic"
+        );
         assert_eq!(cfg.price_of("deepseek-v4-flash").input, 1.0);
         assert!(cfg.provider_for("local-thing").is_none());
     }
 
     #[test]
     fn keys_must_be_references() {
-        let err = Config::parse("provider \"x\" base=\"https://x\" key=\"sk-live-123\"\n", "test").unwrap_err();
+        let err = Config::parse(
+            "provider \"x\" base=\"https://x\" key=\"sk-live-123\"\n",
+            "test",
+        )
+        .unwrap_err();
         assert!(err.contains("keychain"));
     }
 
@@ -420,6 +654,11 @@ price model=\"llama*\" in=0 out=0\ninterview model=\"qwen3\"\nvoice model=\"whis
     fn unknown_models_are_priced_high_so_budgets_fail_safe() {
         let p = Config::builtin().price_of("brand-new-model");
         assert!(p.output >= 75.0);
-        assert_eq!(Config::builtin().price_of("claude-sonnet-5-5").cost_micro(1_000_000, 0, 0), 3_000_000);
+        assert_eq!(
+            Config::builtin()
+                .price_of("claude-sonnet-5-5")
+                .cost_micro(1_000_000, 0, 0),
+            3_000_000
+        );
     }
 }

@@ -9,7 +9,9 @@ use wright_core::events::EventKind;
 use wright_engine::{fire, FireOptions, TaskStatus};
 use wright_runtime::config::Config;
 use wright_runtime::local::{self, LocalBackend};
-use wright_runtime::models::{Block, CompletionRequest, CompletionResponse, Delta, StopReason, Usage};
+use wright_runtime::models::{
+    Block, CompletionRequest, CompletionResponse, Delta, StopReason, Usage,
+};
 use wright_runtime::store::Store;
 
 struct Stand {
@@ -17,21 +19,42 @@ struct Stand {
 }
 
 impl LocalBackend for Stand {
-    fn complete(&self, req: &CompletionRequest, on_delta: &mut dyn FnMut(&Delta)) -> Result<CompletionResponse, String> {
+    fn complete(
+        &self,
+        req: &CompletionRequest,
+        on_delta: &mut dyn FnMut(&Delta),
+    ) -> Result<CompletionResponse, String> {
         self.asked.lock().unwrap().push(req.model.clone());
-        on_delta(&Delta::Status("Loading the built-in model (stand-in)".into()));
-        Ok(CompletionResponse { blocks: vec![Block::Text("Done: the note is written.".into())], usage: Usage { input_tokens: 100, output_tokens: 8, cached_input_tokens: 0 }, stop: StopReason::EndTurn, model: req.model.clone() })
+        on_delta(&Delta::Status(
+            "Loading the built-in model (stand-in)".into(),
+        ));
+        Ok(CompletionResponse {
+            blocks: vec![Block::Text("Done: the note is written.".into())],
+            usage: Usage {
+                input_tokens: 100,
+                output_tokens: 8,
+                cached_input_tokens: 0,
+            },
+            stop: StopReason::EndTurn,
+            model: req.model.clone(),
+        })
     }
     fn transcribe(&self, _: &str, _: &[u8]) -> Result<String, String> {
         Ok("hello".into())
     }
 }
 
-static STAND: Stand = Stand { asked: Mutex::new(Vec::new()) };
+static STAND: Stand = Stand {
+    asked: Mutex::new(Vec::new()),
+};
 
 struct Forward;
 impl LocalBackend for Forward {
-    fn complete(&self, req: &CompletionRequest, on_delta: &mut dyn FnMut(&Delta)) -> Result<CompletionResponse, String> {
+    fn complete(
+        &self,
+        req: &CompletionRequest,
+        on_delta: &mut dyn FnMut(&Delta),
+    ) -> Result<CompletionResponse, String> {
         STAND.complete(req, on_delta)
     }
     fn transcribe(&self, m: &str, w: &[u8]) -> Result<String, String> {
@@ -60,23 +83,65 @@ models { tier cheap prefer=\"claude-haiku-5-5\" fallback=\"\" tier quality prefe
     .unwrap();
     // The built-in defaults only: Anthropic with a keychain reference that
     // is not set on this machine.
-    let opts = FireOptions { config: Some(Config::parse("", "test").unwrap()), ..FireOptions::default() };
+    let opts = FireOptions {
+        config: Some(Config::parse("", "test").unwrap()),
+        ..FireOptions::default()
+    };
     let s = fire(&dir, opts).unwrap();
     let writer = &s.tasks.iter().find(|(n, _)| n == "Writer").unwrap().1;
-    assert!(matches!(writer, TaskStatus::Ran { .. }), "{writer:?} ({})", s.headline);
-    assert!(STAND.asked.lock().unwrap().iter().all(|m| m == local::TEXT_MODEL));
+    assert!(
+        matches!(writer, TaskStatus::Ran { .. }),
+        "{writer:?} ({})",
+        s.headline
+    );
+    assert!(STAND
+        .asked
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|m| m == local::TEXT_MODEL));
 
     let store = Store::open(&dir).unwrap();
     let ev = store.read_events(s.run).unwrap();
-    let notes: Vec<&str> = ev.events().iter().filter(|e| e.kind == EventKind::Note && e.agent.as_deref() == Some("Writer")).map(|e| e.note.as_str()).collect();
-    assert!(notes.iter().any(|n| n.contains("claude-haiku-5-5") && n.contains("Using the built-in model qwen3-1.7b")), "{notes:?}");
-    assert!(notes.iter().any(|n| n.contains("stand-in")), "status lines reach the river: {notes:?}");
-    let tokens = ev.events().iter().find(|e| e.kind == EventKind::TokensRecorded && e.agent.as_deref() == Some("Writer")).unwrap();
-    assert!(tokens.note.contains("qwen3-1.7b") && tokens.note.contains("$0.00"), "free, and visibly the built-in: {}", tokens.note);
+    let notes: Vec<&str> = ev
+        .events()
+        .iter()
+        .filter(|e| e.kind == EventKind::Note && e.agent.as_deref() == Some("Writer"))
+        .map(|e| e.note.as_str())
+        .collect();
+    assert!(
+        notes
+            .iter()
+            .any(|n| n.contains("claude-haiku-5-5")
+                && n.contains("Using the built-in model qwen3-1.7b")),
+        "{notes:?}"
+    );
+    assert!(
+        notes.iter().any(|n| n.contains("stand-in")),
+        "status lines reach the river: {notes:?}"
+    );
+    let tokens = ev
+        .events()
+        .iter()
+        .find(|e| e.kind == EventKind::TokensRecorded && e.agent.as_deref() == Some("Writer"))
+        .unwrap();
+    assert!(
+        tokens.note.contains("qwen3-1.7b") && tokens.note.contains("$0.00"),
+        "free, and visibly the built-in: {}",
+        tokens.note
+    );
 
     // Turned off, the same project fails with the real problem instead.
     let off = Config::parse("builtin fallback=false\n", "test").unwrap();
-    let s = fire(&dir, FireOptions { config: Some(off), no_cache: true, ..FireOptions::default() }).unwrap();
+    let s = fire(
+        &dir,
+        FireOptions {
+            config: Some(off),
+            no_cache: true,
+            ..FireOptions::default()
+        },
+    )
+    .unwrap();
     assert!(!s.ok);
     let writer = &s.tasks.iter().find(|(n, _)| n == "Writer").unwrap().1;
     assert!(!matches!(writer, TaskStatus::Ran { .. }), "{writer:?}");

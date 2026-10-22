@@ -99,7 +99,7 @@ which agent wrote it and which firing it belongs to.",
     SystemAgentSpec {
         kind: SystemKind::Testwright,
         name: "Testwright",
-        duty: "Writes and runs the checks that define 'done'.",
+        duty: "Writes and runs the checks that define 'done', promise by promise.",
         injected_by: "the tests chip",
         prompt: "\
 You are the Testwright. The deliverable's check line is your spec: \
@@ -112,8 +112,16 @@ check fails, your report must contain what was expected and what was \
 found. You never fix the product yourself — you report it and let the \
 Reviewer route it.
 
+When the plan carries numbered promises (`promise 1: ...`), each one is a \
+sentence the person approved. Turn EVERY promise into a real check and \
+report one line per promise, before your summary line, exactly in the \
+form `ACCEPT 1: PASS` or `ACCEPT 1: FAIL: <one-sentence reason>` — same \
+numbering as the plan, no promises skipped, no extras invented.
+
 Your final message MUST end with exactly one line: `TESTS: PASS` or \
-`TESTS: FAIL: <one-sentence reason>`. You are done when that line is written.",
+`TESTS: FAIL: <one-sentence reason>`. A promise that failed means the \
+summary line must be TESTS: FAIL. You are done when the summary line is \
+written.",
     },
     SystemAgentSpec {
         kind: SystemKind::Logwright,
@@ -146,8 +154,12 @@ ring, files longer than a screen without a map comment, and any \
 secret or permission that grew beyond the blueprint. You are the last \
 gate before anything leaves the machine: if you reject, nothing is \
 delivered. When you reject, name the exact file and the exact reason; \
-when you approve, say what you checked, so the receipt is worth reading. \
-If the Testwright reported TESTS: FAIL, you must reject.
+when you approve, say what you checked, so the receipt is worth reading.
+
+The promises the person approved outrank every opinion: if the \
+Testwright reported any `ACCEPT n: FAIL`, you must reject, even if \
+you like the work. If the Testwright reported TESTS: FAIL, you must \
+reject.
 
 Your final message MUST end with exactly one line: `VERDICT: APPROVE` or \
 `VERDICT: REJECT: <one-sentence reason>`. You are done when that line is written.",
@@ -212,10 +224,56 @@ pub fn verdict_marker(kind: SystemKind) -> Option<&'static str> {
     }
 }
 
+/// The acceptance-sentence lines the Testwright must write when the
+/// plan carries promises (ADR-025): `ACCEPT <n>: PASS` or
+/// `ACCEPT <n>: FAIL: <reason>`, one per numbered promise. Strict on
+/// purpose: the numbers must be digits, the verdicts must be PASS or
+/// FAIL, and a FAIL must carry a reason.
+pub fn parse_accepts(text: &str) -> Vec<(usize, Result<(), String>)> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        // Markdown decoration (bold, backticks, quotes) around the whole
+        // line is tolerated; the contract inside stays strict.
+        let t = line
+            .trim()
+            .trim_start_matches(['*', '`', '>', ' '])
+            .trim_end_matches(['*', '`', ' ']);
+        let Some(rest) = t.strip_prefix("ACCEPT ") else {
+            continue;
+        };
+        let rest = rest.trim_start_matches(['*', '`', ' ']);
+        let Some((n_txt, verdict)) = rest.split_once(':') else {
+            continue;
+        };
+        let Ok(n) = n_txt.trim().parse::<usize>() else {
+            continue;
+        };
+        let verdict = verdict.trim();
+        if verdict.starts_with("PASS") {
+            out.push((n, Ok(())));
+        } else if let Some(reason) = verdict.strip_prefix("FAIL") {
+            let reason = reason.trim_start_matches(':').trim();
+            out.push((
+                n,
+                if reason.is_empty() {
+                    Err("no reason given".into())
+                } else {
+                    Err(reason.to_string())
+                },
+            ));
+        }
+        // anything else is not an ACCEPT line; strictness means we skip
+        // it rather than guess.
+    }
+    out
+}
+
 /// Parse a final message's verdict line: Ok(()) for PASS/APPROVE,
 /// Err(reason) for FAIL/REJECT, Err("...missing...") when absent.
 pub fn parse_verdict(kind: SystemKind, text: &str) -> Result<(), String> {
-    let Some(marker) = verdict_marker(kind) else { return Ok(()) };
+    let Some(marker) = verdict_marker(kind) else {
+        return Ok(());
+    };
     let line = text
         .lines()
         .rev()
@@ -229,14 +287,18 @@ pub fn parse_verdict(kind: SystemKind, text: &str) -> Result<(), String> {
     if rest.starts_with("PASS") || rest.starts_with("APPROVE") {
         Ok(())
     } else {
-        Err(rest.split_once(':').map(|(_, r)| r.trim().to_string()).filter(|r| !r.is_empty()).unwrap_or_else(|| rest.to_string()))
+        Err(rest
+            .split_once(':')
+            .map(|(_, r)| r.trim().to_string())
+            .filter(|r| !r.is_empty())
+            .unwrap_or_else(|| rest.to_string()))
     }
 }
 
 /// Version of the prompt TEMPLATES in this crate. It is part of every
 /// cache key: change a template's wording, bump this, and every result
 /// produced under the old wording is invalidated (a prompt is code).
-pub const PROMPT_VERSION: u32 = 2;
+pub const PROMPT_VERSION: u32 = 3;
 
 /// The system prompt for one of the user's project agents.
 ///
@@ -258,7 +320,10 @@ Your goal: {goal}\n\n",
     );
     let _ = bp;
     if !agent.inputs.is_empty() {
-        s.push_str(&format!("Your inputs (provided below by Wright): {}\n", agent.inputs.join(", ")));
+        s.push_str(&format!(
+            "Your inputs (provided below by Wright): {}\n",
+            agent.inputs.join(", ")
+        ));
     }
     if agent.outputs.is_empty() {
         s.push_str("You produce no artifact files; your result is what you do with your tools.\n");
@@ -315,7 +380,11 @@ mod tests {
         for k in kinds {
             let s = spec(k);
             assert!(!s.prompt.is_empty(), "{} has an empty prompt", s.name);
-            assert!(s.prompt.len() > 200, "{}'s prompt is suspiciously thin", s.name);
+            assert!(
+                s.prompt.len() > 200,
+                "{}'s prompt is suspiciously thin",
+                s.name
+            );
         }
     }
 
@@ -334,11 +403,40 @@ mod tests {
     }
 
     #[test]
+    fn accept_lines_parse_strictly() {
+        let text = "I checked both promises.\nACCEPT 1: PASS\nACCEPT 2: FAIL: the digest had no links\nTESTS: FAIL: promise 2 failed";
+        let accepts = parse_accepts(text);
+        assert_eq!(accepts.len(), 2);
+        assert_eq!(accepts[0], (1, Ok(())));
+        assert_eq!(accepts[1], (2, Err("the digest had no links".to_string())));
+        // strictness: junk is skipped, not guessed
+        assert!(parse_accepts("ACCEPT one: PASS").is_empty());
+        assert!(parse_accepts("ACCEPT 1: MAYBE").is_empty());
+        // markdown decoration tolerated
+        let deco = parse_accepts("**ACCEPT 1: PASS**");
+        assert_eq!(deco, vec![(1, Ok(()))]);
+    }
+
+    #[test]
     fn verdict_lines_parse() {
-        assert_eq!(parse_verdict(SystemKind::Reviewer, "Checked 3 files.\nVERDICT: APPROVE"), Ok(()));
-        assert_eq!(parse_verdict(SystemKind::Reviewer, "**VERDICT: REJECT: summaries.json is empty**"), Err("summaries.json is empty".into()));
-        assert_eq!(parse_verdict(SystemKind::Testwright, "ran\nTESTS: PASS"), Ok(()));
-        assert!(parse_verdict(SystemKind::Testwright, "I think it works").unwrap_err().contains("did not end"));
+        assert_eq!(
+            parse_verdict(SystemKind::Reviewer, "Checked 3 files.\nVERDICT: APPROVE"),
+            Ok(())
+        );
+        assert_eq!(
+            parse_verdict(
+                SystemKind::Reviewer,
+                "**VERDICT: REJECT: summaries.json is empty**"
+            ),
+            Err("summaries.json is empty".into())
+        );
+        assert_eq!(
+            parse_verdict(SystemKind::Testwright, "ran\nTESTS: PASS"),
+            Ok(())
+        );
+        assert!(parse_verdict(SystemKind::Testwright, "I think it works")
+            .unwrap_err()
+            .contains("did not end"));
         assert_eq!(parse_verdict(SystemKind::Logwright, "anything"), Ok(()));
     }
 }

@@ -52,6 +52,8 @@ pub enum Trigger {
     Manual,
     Schedule,
     Resume,
+    /// The public benchmark (ADR-030): same firing, measured.
+    Bench,
 }
 
 impl Trigger {
@@ -60,6 +62,7 @@ impl Trigger {
             Trigger::Manual => "manual",
             Trigger::Schedule => "schedule",
             Trigger::Resume => "resume",
+            Trigger::Bench => "bench",
         }
     }
 }
@@ -134,9 +137,11 @@ pub struct RunSummary {
 /// Read, parse and validate `blueprint.kdl` from a project directory.
 pub fn load_blueprint(project_dir: &Path) -> Result<Blueprint, String> {
     let path = project_dir.join("blueprint.kdl");
-    let src = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let src = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let bp = parse::blueprint(&src).map_err(|e| format!("{}: {e}", path.display()))?;
-    validate::validate(&bp).map_err(|errs| format!("the blueprint is not valid:\n  - {}", errs.join("\n  - ")))?;
+    validate::validate(&bp)
+        .map_err(|errs| format!("the blueprint is not valid:\n  - {}", errs.join("\n  - ")))?;
     Ok(bp)
 }
 
@@ -153,15 +158,24 @@ impl ProjectLock {
     fn take(store: &Store) -> Result<ProjectLock, String> {
         let p = store.root().join("firing.lock");
         for _ in 0..2 {
-            match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&p)
+            {
                 Ok(mut f) => {
                     use std::io::Write;
                     let _ = write!(f, "{}", std::process::id());
                     return Ok(ProjectLock(p));
                 }
                 Err(_) => {
-                    let pid: u32 = std::fs::read_to_string(&p).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0);
-                    let alive = pid != 0 && (cfg!(not(target_os = "linux")) || Path::new(&format!("/proc/{pid}")).exists());
+                    let pid: u32 = std::fs::read_to_string(&p)
+                        .ok()
+                        .and_then(|t| t.trim().parse().ok())
+                        .unwrap_or(0);
+                    let alive = pid != 0
+                        && (cfg!(not(target_os = "linux"))
+                            || Path::new(&format!("/proc/{pid}")).exists());
                     if alive && pid != std::process::id() {
                         return Err(format!("this project is already firing (process {pid}); wait for it, or stop it"));
                     }
@@ -185,12 +199,15 @@ fn usd(micro: u64) -> String {
 
 /// Fire the project in `project_dir`.
 pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String> {
-    let project_dir = project_dir.canonicalize().map_err(|e| format!("{}: {e}", project_dir.display()))?;
+    let project_dir = project_dir
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", project_dir.display()))?;
     let bp = load_blueprint(&project_dir)?;
     let graph = compiler::compile(&bp)?;
     let store = Store::open(&project_dir)?;
     let canonical = canon::canonical(&bp);
-    let commit = store.commit_blueprint(&canonical, &format!("fired ({})", opts.trigger.as_str()))?;
+    let commit =
+        store.commit_blueprint(&canonical, &format!("fired ({})", opts.trigger.as_str()))?;
     let _lock = ProjectLock::take(&store)?;
 
     let config = match opts.config {
@@ -203,7 +220,10 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     let spent_today = store.spent_on(&day);
     let daily_left = bp.guardrails.daily_micro_usd.saturating_sub(spent_today);
     if daily_left == 0 {
-        return Err(format!("the daily budget ({}) is already spent today; nothing fired", usd(bp.guardrails.daily_micro_usd)));
+        return Err(format!(
+            "the daily budget ({}) is already spent today; nothing fired",
+            usd(bp.guardrails.daily_micro_usd)
+        ));
     }
     let cap = bp.guardrails.per_firing_micro_usd.min(daily_left);
 
@@ -227,9 +247,11 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     tools.secrets = bp.chips.secrets.clone();
     tools.allow_private_network = opts.allow_private_network || tools.allow_private_network;
     if bp.project.language == "rust" {
-        let cargo_home = std::env::var("CARGO_HOME").map(PathBuf::from).unwrap_or_else(|_| {
-            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".cargo")
-        });
+        let cargo_home = std::env::var("CARGO_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".cargo")
+            });
         tools.sandbox_extra_rw.push(cargo_home);
     }
 
@@ -237,7 +259,11 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     // On resume, what the first attempt spent still counts.
     for e in spine.events() {
         if e.kind == EventKind::TokensRecorded {
-            budget.record(e.data_value().and_then(|v| v.get("cost_micro_usd").and_then(|c| c.as_u64())).unwrap_or(0));
+            budget.record(
+                e.data_value()
+                    .and_then(|v| v.get("cost_micro_usd").and_then(|c| c.as_u64()))
+                    .unwrap_or(0),
+            );
         }
     }
 
@@ -256,6 +282,7 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
         cancel: AtomicBool::new(false),
         reports: Mutex::new(BTreeMap::new()),
         written: Mutex::new(BTreeMap::new()),
+        accepts: Mutex::new(BTreeMap::new()),
         bp: bp.clone(),
         graph: graph.clone(),
     });
@@ -266,7 +293,12 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
         None,
         match opts.resume {
             Some(_) => format!("resumed run {run} ({} task(s) already done)", done.len()),
-            None => format!("firing \"{}\" ({}), budget {}", bp.meta.name, opts.trigger.as_str(), usd(cap)),
+            None => format!(
+                "firing \"{}\" ({}), budget {}",
+                bp.meta.name,
+                opts.trigger.as_str(),
+                usd(cap)
+            ),
         },
         json::to_string(&Value::obj(vec![
             ("blueprint", Value::str(commit.clone())),
@@ -280,7 +312,11 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     // halfway through a firing.
     for s in &bp.chips.secrets {
         if let Err(e) = wright_runtime::secrets::resolve(&s.reference) {
-            env.spine.note(EventKind::Note, None, format!("warning: secret '{}' is not available: {e}", s.name));
+            env.spine.note(
+                EventKind::Note,
+                None,
+                format!("warning: secret '{}' is not available: {e}", s.name),
+            );
         }
     }
 
@@ -300,12 +336,16 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
             set.spawn(&ex, async move {
                 let st = Arc::clone(&status);
                 let v = Arc::clone(&verdict);
-                let outcome = spawn_blocking(move || run_task(&env, &task, &st, &v, already, no_cache)).await;
+                let outcome =
+                    spawn_blocking(move || run_task(&env, &task, &st, &v, already, no_cache)).await;
                 let (id_, s) = match outcome {
                     Ok(pair) => pair,
                     Err(panic) => (id, TaskStatus::Failed(format!("crashed: {panic}"))),
                 };
-                status.lock().unwrap_or_else(|p| p.into_inner()).insert(id_, s);
+                status
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(id_, s);
             });
         }
         set.block_until_all_done(&ex);
@@ -314,22 +354,77 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     // ── the receipt ──────────────────────────────────────────────
     let status = status.lock().unwrap_or_else(|p| p.into_inner()).clone();
     let verdict = verdict.lock().unwrap_or_else(|p| p.into_inner()).clone();
-    let tasks: Vec<(String, TaskStatus)> = graph.tasks.iter().map(|t| (t.name(), status.get(&t.id).cloned().unwrap_or(TaskStatus::Skipped("never scheduled".into())))).collect();
-    let cost: u64 = env.budget.lock().unwrap_or_else(|p| p.into_inner()).spent_micro_usd;
-    let failed: Vec<&(String, TaskStatus)> = tasks.iter().filter(|(_, s)| matches!(s, TaskStatus::Failed(_))).collect();
+    let tasks: Vec<(String, TaskStatus)> = graph
+        .tasks
+        .iter()
+        .map(|t| {
+            (
+                t.name(),
+                status
+                    .get(&t.id)
+                    .cloned()
+                    .unwrap_or(TaskStatus::Skipped("never scheduled".into())),
+            )
+        })
+        .collect();
+    let cost: u64 = env
+        .budget
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .spent_micro_usd;
+    let failed: Vec<&(String, TaskStatus)> = tasks
+        .iter()
+        .filter(|(_, s)| matches!(s, TaskStatus::Failed(_)))
+        .collect();
     let rejected = matches!(verdict, Some(Err(_)));
     let ok = failed.is_empty() && !rejected;
-    let ran = tasks.iter().filter(|(_, s)| matches!(s, TaskStatus::Ran { .. })).count();
-    let cached = tasks.iter().filter(|(_, s)| matches!(s, TaskStatus::Cached { .. })).count();
-    let saved: u64 = tasks.iter().filter_map(|(_, s)| if let TaskStatus::Cached { saved_micro_usd } = s { Some(*saved_micro_usd) } else { None }).sum();
+    let ran = tasks
+        .iter()
+        .filter(|(_, s)| matches!(s, TaskStatus::Ran { .. }))
+        .count();
+    let cached = tasks
+        .iter()
+        .filter(|(_, s)| matches!(s, TaskStatus::Cached { .. }))
+        .count();
+    let saved: u64 = tasks
+        .iter()
+        .filter_map(|(_, s)| {
+            if let TaskStatus::Cached { saved_micro_usd } = s {
+                Some(*saved_micro_usd)
+            } else {
+                None
+            }
+        })
+        .sum();
     let headline = if ok {
-        format!("done: {ran} ran, {cached} cached (saved {}), cost {}", usd(saved), usd(cost))
+        format!(
+            "done: {ran} ran, {cached} cached (saved {}), cost {}",
+            usd(saved),
+            usd(cost)
+        )
     } else if rejected {
-        format!("stopped: the Reviewer rejected the work — {} — nothing was delivered", verdict.as_ref().and_then(|v| v.clone().err()).unwrap_or_default())
+        format!(
+            "stopped: the Reviewer rejected the work — {} — nothing was delivered",
+            verdict
+                .as_ref()
+                .and_then(|v| v.clone().err())
+                .unwrap_or_default()
+        )
     } else {
         format!(
             "failed: {}",
-            failed.iter().map(|(n, s)| format!("{n} ({})", if let TaskStatus::Failed(r) = s { r.as_str() } else { "" })).collect::<Vec<_>>().join("; ")
+            failed
+                .iter()
+                .map(|(n, s)| format!(
+                    "{n} ({})",
+                    if let TaskStatus::Failed(r) = s {
+                        r.as_str()
+                    } else {
+                        ""
+                    }
+                ))
+                .collect::<Vec<_>>()
+                .join("; ")
         )
     };
 
@@ -342,17 +437,74 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
         }
     }
     env.spine.emit(
-        if ok { EventKind::RunFinished } else { EventKind::RunFailed },
+        if ok {
+            EventKind::RunFinished
+        } else {
+            EventKind::RunFailed
+        },
         None,
         headline.clone(),
-        json::to_string(&Value::obj(vec![("cost_micro_usd", Value::int(cost as i64)), ("saved_micro_usd", Value::int(saved as i64))])),
+        json::to_string(&Value::obj(vec![
+            ("cost_micro_usd", Value::int(cost as i64)),
+            ("saved_micro_usd", Value::int(saved as i64)),
+        ])),
     )?;
     store.record_spend(&day, run, cost)?;
 
     let events_path = store.run_dir(run).join("events.jsonl");
-    let events_hash = std::fs::read(&events_path).map(|b| hash::blake3_hex(&b)).unwrap_or_default();
-    let receipt = Value::obj(vec![
-        ("format", Value::str("wright.run-receipt/1")),
+    let events_hash = std::fs::read(&events_path)
+        .map(|b| hash::blake3_hex(&b))
+        .unwrap_or_default();
+    // Receipt v2 (ADR-025): the inputs the plan consumed, with their
+    // hashes, so a verifier can name what the work was based on; the
+    // Rule of Two agents, so the risky ones are visible; the acceptance
+    // sentences with their verdicts; and an Ed25519 signature over the
+    // exact receipt bytes, so none of the above can be edited quietly.
+    let mut input_set: BTreeMap<String, String> = BTreeMap::new();
+    for a in &bp.agents {
+        for i in &a.inputs {
+            if let Ok(bytes) = std::fs::read(project_dir.join("artifacts").join(i)) {
+                input_set.insert(i.clone(), store.put_object(&bytes).unwrap_or_default());
+            }
+        }
+    }
+    let rule_of_two_agents: Vec<String> = bp
+        .agents
+        .iter()
+        .filter(|a| wright_core::rule_of_two::legs_of_agent(&bp, &a.name).is_three_legged())
+        .map(|a| a.name.clone())
+        .collect();
+    let accepts_state = env
+        .accepts
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
+    let mut accept_records: Vec<Value> = Vec::new();
+    {
+        // Numbered sentences in blueprint order; the state is filled by
+        // the Testwright's ACCEPT lines (missing = never checked).
+        let mut n = 0usize;
+        for d in &bp.deliverables {
+            for sentence in &d.accept {
+                n += 1;
+                let ok = accepts_state.get(&n).copied();
+                accept_records.push(Value::obj(vec![
+                    ("n", Value::int(n as i64)),
+                    ("sentence", Value::str(sentence.clone())),
+                    (
+                        "ok",
+                        match ok {
+                            Some(true) => Value::Bool(true),
+                            Some(false) => Value::Bool(false),
+                            None => Value::Null,
+                        },
+                    ),
+                ]));
+            }
+        }
+    }
+    let mut receipt = Value::obj(vec![
+        ("format", Value::str("wright.run-receipt/2")),
         ("run", Value::int(run as i64)),
         ("project", Value::str(bp.meta.name.clone())),
         ("project_dir", Value::str(project_dir.display().to_string())),
@@ -365,24 +517,66 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
         ("cost_micro_usd", Value::int(cost as i64)),
         ("saved_micro_usd", Value::int(saved as i64)),
         (
+            "inputs",
+            Value::Arr(
+                input_set
+                    .iter()
+                    .map(|(k, h)| {
+                        Value::obj(vec![
+                            ("name", Value::str(k.clone())),
+                            ("blake3", Value::str(h.clone())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        (
+            "rule_of_two",
+            Value::Arr(
+                rule_of_two_agents
+                    .iter()
+                    .map(|a| Value::str(a.clone()))
+                    .collect(),
+            ),
+        ),
+        ("accepts", Value::Arr(accept_records)),
+        (
             "tasks",
             Value::Arr(
                 tasks
                     .iter()
                     .map(|(n, s)| {
                         let detail = match s {
-                            TaskStatus::Ran { cost_micro_usd } => Value::int(*cost_micro_usd as i64),
-                            TaskStatus::Cached { saved_micro_usd } => Value::int(*saved_micro_usd as i64),
+                            TaskStatus::Ran { cost_micro_usd } => {
+                                Value::int(*cost_micro_usd as i64)
+                            }
+                            TaskStatus::Cached { saved_micro_usd } => {
+                                Value::int(*saved_micro_usd as i64)
+                            }
                             TaskStatus::Skipped(r) | TaskStatus::Failed(r) => Value::str(r.clone()),
                         };
-                        Value::obj(vec![("name", Value::str(n.clone())), ("status", Value::str(s.label())), ("detail", detail)])
+                        Value::obj(vec![
+                            ("name", Value::str(n.clone())),
+                            ("status", Value::str(s.label())),
+                            ("detail", detail),
+                        ])
                     })
                     .collect(),
             ),
         ),
         (
             "artifacts",
-            Value::Arr(artifacts.iter().map(|(n, h)| Value::obj(vec![("name", Value::str(n.clone())), ("blake3", Value::str(h.clone()))])).collect()),
+            Value::Arr(
+                artifacts
+                    .iter()
+                    .map(|(n, h)| {
+                        Value::obj(vec![
+                            ("name", Value::str(n.clone())),
+                            ("blake3", Value::str(h.clone())),
+                        ])
+                    })
+                    .collect(),
+            ),
         ),
         (
             "verdict",
@@ -395,10 +589,40 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
         ("events_blake3", Value::str(events_hash)),
         ("wright", Value::str(APP_VERSION)),
     ]);
+    // Sign the exact bytes of the receipt as it stands (no signature
+    // field yet), then append the signature block. The JSON writer is
+    // insertion-ordered, so a verifier can re-parse, strip the field
+    // and reproduce these bytes exactly.
     let receipt_path = store.run_dir(run).join("receipt.json");
+    let signed = match wright_runtime::signing::SigningKey::resolve() {
+        Ok(key) => {
+            let bytes = json::to_string(&receipt);
+            let sig = key.sign(bytes.as_bytes());
+            let hex_sig: String = sig.iter().map(|b| format!("{b:02x}")).collect();
+            receipt.set(
+                "signature",
+                Value::obj(vec![
+                    ("public_key", Value::str(key.public_hex())),
+                    ("provenance", Value::str(key.provenance_str())),
+                    ("value", Value::str(hex_sig)),
+                ]),
+            );
+            true
+        }
+        Err(_) => false,
+    };
+    let _ = signed;
     write_atomic(&receipt_path, json::to_string(&receipt).as_bytes())?;
 
-    Ok(RunSummary { run, ok, headline, cost_micro_usd: cost, tasks, verdict, receipt: receipt_path })
+    Ok(RunSummary {
+        run,
+        ok,
+        headline,
+        cost_micro_usd: cost,
+        tasks,
+        verdict,
+        receipt: receipt_path,
+    })
 }
 
 /// Tasks a previous attempt finished, with their final report text.
@@ -407,7 +631,10 @@ fn finished_tasks(events: &[Event]) -> BTreeMap<String, String> {
     for e in events {
         if matches!(e.kind, EventKind::AgentFinished | EventKind::CacheHit) {
             if let Some(a) = &e.agent {
-                let report = e.data_value().and_then(|v| v.str_of("report").map(String::from)).unwrap_or_default();
+                let report = e
+                    .data_value()
+                    .and_then(|v| v.str_of("report").map(String::from))
+                    .unwrap_or_default();
                 done.insert(a.clone(), report);
             }
         }
@@ -416,7 +643,9 @@ fn finished_tasks(events: &[Event]) -> BTreeMap<String, String> {
 }
 
 fn artifact_hash(env: &FiringEnv, name: &str) -> String {
-    std::fs::read(env.tools.artifacts_dir().join(name)).map(|b| hash::blake3_hex(&b)).unwrap_or_else(|_| "missing".into())
+    std::fs::read(env.tools.artifacts_dir().join(name))
+        .map(|b| hash::blake3_hex(&b))
+        .unwrap_or_else(|_| "missing".into())
 }
 
 /// The cache key for a task, or None if it may never be cached.
@@ -429,7 +658,11 @@ fn key_for(env: &FiringEnv, task: &Task) -> Option<String> {
         TaskKind::Project(name) => {
             let agent = bp.agent(name)?;
             let inputs: Vec<String> = agent.inputs.iter().map(|i| artifact_hash(env, i)).collect();
-            let ws = if agent.reads_workspace() { Some(env.store.workspace_hash()) } else { None };
+            let ws = if agent.reads_workspace() {
+                Some(env.store.workspace_hash())
+            } else {
+                None
+            };
             // The effective prompt = the agent's canonical card + the
             // template version + inference settings. All of it is keyed.
             let def = format!(
@@ -470,8 +703,17 @@ fn key_for(env: &FiringEnv, task: &Task) -> Option<String> {
                 // The Reviewer judges the Testwright's report too: a
                 // cached approval must never outlive a new test result.
                 if *kind == SystemKind::Reviewer {
-                    let report = env.reports.lock().unwrap_or_else(|p| p.into_inner()).get("Testwright").cloned().unwrap_or_default();
-                    inputs.push(format!("testwright-report={}", hash::blake3_hex(report.as_bytes())));
+                    let report = env
+                        .reports
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .get("Testwright")
+                        .cloned()
+                        .unwrap_or_default();
+                    inputs.push(format!(
+                        "testwright-report={}",
+                        hash::blake3_hex(report.as_bytes())
+                    ));
                 }
                 for a in &bp.agents {
                     for o in &a.outputs {
@@ -490,6 +732,129 @@ fn key_for(env: &FiringEnv, task: &Task) -> Option<String> {
                 app_version: APP_VERSION,
             }))
         }
+    }
+}
+
+/// Run one worker step (ADR-026): the external agent does the work,
+/// Wright keeps the contract, the tests and the receipt. Costs nothing
+/// on this plan's budget — the worker's own account pays for its model;
+/// the clock and the scope are enforced by the tool itself.
+fn run_worker_step(
+    env: &FiringEnv,
+    task: &Task,
+    agent: &wright_core::blueprint::AgentDef,
+    worker_name: &str,
+    me: Option<&str>,
+) -> (usize, TaskStatus) {
+    let name = task.name();
+    env.spine.note(
+        EventKind::AgentStarted,
+        me,
+        format!(
+            "handing this step to {worker_name}, an external coding agent, in a sandboxed copy"
+        ),
+    );
+    let Some(entry) = env.config.worker_for(worker_name).cloned() else {
+        let why = format!(
+            "the card names the worker '{worker_name}', but no worker with that name is configured on this machine. Add a `worker \"{worker_name}\" command=\"...\"` line to config.kdl (ADR-026)."
+        );
+        env.spine.note(EventKind::AgentFailed, me, why.clone());
+        return (task.id, TaskStatus::Failed(why));
+    };
+    // The tool context: worker + scope + clock, on top of the shared one.
+    let mut ctx = env.tools.clone();
+    ctx.worker = Some(entry);
+    ctx.worker_name = Some(worker_name.to_string());
+    ctx.worker_files = agent.worker_files.clone();
+    ctx.worker_timeout_secs = agent.worker_timeout_secs;
+
+    // The brief: the goal, the inputs this copy holds, the outputs the
+    // plan expects. The worker sees nothing else of Wright.
+    let mut prompt = format!("{}\n", agent.goal);
+    if !agent.inputs.is_empty() {
+        prompt.push_str(&format!(
+            "\nInput files (in this copy): {}.\n",
+            agent
+                .inputs
+                .iter()
+                .map(|i| format!("artifacts/{i}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !agent.outputs.is_empty() {
+        prompt.push_str(&format!(
+            "\nYou must produce these output files in the copy: {}.\n",
+            agent.outputs.join(", ")
+        ));
+    }
+
+    // The gate: same as every tool call.
+    let verdict = {
+        let mut budget = env.budget.lock().unwrap_or_else(|p| p.into_inner());
+        env.gate.check(&name, "worker", &mut budget, 0)
+    };
+    let permit = match verdict {
+        wright_runtime::gate::Verdict::Allow(p) => p,
+        wright_runtime::gate::Verdict::Deny(why) => {
+            env.spine.note(EventKind::AgentFailed, me, why.clone());
+            return (task.id, TaskStatus::Failed(why));
+        }
+        wright_runtime::gate::Verdict::Ask(_) => {
+            // The worker tool carries no outbound leg, so the Rule of Two
+            // cannot ask here; an approval-policy ask is refused in a
+            // headless worker step rather than guessed at.
+            let why: String =
+                "a worker step paused for an approval, which headless worker runs do not allow"
+                    .into();
+            env.spine.note(EventKind::AgentFailed, me, why.clone());
+            return (task.id, TaskStatus::Failed(why));
+        }
+    };
+    let input = wright_core::wire::json::Value::obj(vec![(
+        "prompt",
+        wright_core::wire::json::Value::str(prompt.clone()),
+    )]);
+    match wright_tools::run(permit, &input, &ctx) {
+        Ok(o) => {
+            if !o.wrote.is_empty() {
+                env.written
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(name.clone(), o.wrote.clone());
+            }
+            let report = format!("the worker {worker_name} finished. {}", o.text);
+            env.reports
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(name.clone(), report.clone());
+            let _ = env.spine.emit(
+                EventKind::AgentFinished,
+                me,
+                first_sentence_of(&o.text),
+                wright_core::wire::json::to_string(&wright_core::wire::json::Value::obj(vec![
+                    ("cost_micro_usd", wright_core::wire::json::Value::int(0)),
+                    (
+                        "report",
+                        wright_core::wire::json::Value::str(o.text.clone()),
+                    ),
+                ])),
+            );
+            (task.id, TaskStatus::Ran { cost_micro_usd: 0 })
+        }
+        Err(e) => {
+            let why = e.to_string();
+            env.spine.note(EventKind::AgentFailed, me, why.clone());
+            (task.id, TaskStatus::Failed(why))
+        }
+    }
+}
+
+fn first_sentence_of(s: &str) -> String {
+    let t = s.trim();
+    match t.find(['.', '\n']) {
+        Some(i) if i > 3 => t[..=i].to_string(),
+        _ => t.lines().next().unwrap_or("").to_string(),
     }
 }
 
@@ -531,8 +896,59 @@ fn run_task(
     // 3. Finished by an earlier attempt of this run (resume).
     if let Some(report) = already {
         record_verdict(env, task, &report, verdict);
-        env.spine.note(EventKind::Note, me, "already finished before the resume; kept");
+        env.spine.note(
+            EventKind::Note,
+            me,
+            "already finished before the resume; kept",
+        );
         return (task.id, TaskStatus::Ran { cost_micro_usd: 0 });
+    }
+
+    // 3b. Typed edges (ADR-027): every promised hand-off this task
+    // consumes is checked BEFORE it runs — a broken promise stops the
+    // plan here, in words, instead of two agents later in an apology.
+    if let TaskKind::Project(n) = &task.kind {
+        for e in &env.bp.edges {
+            if &e.to != n {
+                continue;
+            }
+            if let (Some(out), Some(shape)) = (&e.out, &e.schema) {
+                let path = env.tools.artifacts_dir().join(out);
+                match std::fs::read(&path) {
+                    Ok(bytes) => {
+                        if let Err(why) = shape.check_bytes(&bytes) {
+                            let reason = format!(
+                                "the hand-off {out} from {} to {} promised to be {}, but {why} — nothing downstream runs",
+                                e.from,
+                                e.to,
+                                shape.promise()
+                            );
+                            env.spine.note(EventKind::AgentFailed, me, reason.clone());
+                            return (task.id, TaskStatus::Failed(reason));
+                        }
+                    }
+                    Err(_) => {
+                        let reason = format!(
+                            "the hand-off {out} from {} to {} was promised, but {} never produced it",
+                            e.from, e.to, e.from
+                        );
+                        env.spine.note(EventKind::AgentFailed, me, reason.clone());
+                        return (task.id, TaskStatus::Failed(reason));
+                    }
+                }
+            }
+        }
+    }
+
+    // 3c. Worker steps (ADR-026): no model call — the engine hands the
+    // goal to the configured external agent, through the gate like
+    // every other tool call. Their output lands in the workspace and
+    // goes through the same Testwright and Reviewer as everything else.
+    if let TaskKind::Project(n) = &task.kind {
+        let agent = env.bp.agent(n).expect("compiled from this blueprint");
+        if let Some(worker_name) = &agent.worker {
+            return run_worker_step(env, task, agent, worker_name, me);
+        }
     }
 
     // 4. Built-ins.
@@ -567,12 +983,28 @@ fn run_task(
                     let _ = env.spine.emit(
                         EventKind::CacheHit,
                         me,
-                        format!("cached — free (saved ~{} from run {})", usd(entry.cost_micro_usd), entry.produced_by_run),
-                        json::to_string(&Value::obj(vec![("key", Value::str(k.clone())), ("report", Value::str(report))])),
+                        format!(
+                            "cached — free (saved ~{} from run {})",
+                            usd(entry.cost_micro_usd),
+                            entry.produced_by_run
+                        ),
+                        json::to_string(&Value::obj(vec![
+                            ("key", Value::str(k.clone())),
+                            ("report", Value::str(report)),
+                        ])),
                     );
-                    return (task.id, TaskStatus::Cached { saved_micro_usd: entry.cost_micro_usd });
+                    return (
+                        task.id,
+                        TaskStatus::Cached {
+                            saved_micro_usd: entry.cost_micro_usd,
+                        },
+                    );
                 }
-                Err(e) => env.spine.note(EventKind::Note, me, format!("cache entry unusable ({e}); running instead")),
+                Err(e) => env.spine.note(
+                    EventKind::Note,
+                    me,
+                    format!("cache entry unusable ({e}); running instead"),
+                ),
             }
         }
     }
@@ -583,16 +1015,30 @@ fn run_task(
         Freshness::Delivery => " (touches the world: never cached, never retried)",
         Freshness::Cacheable => "",
     };
-    let model = task.model.as_ref().map(|m| m.primary.clone()).unwrap_or_default();
-    env.spine.note(EventKind::AgentStarted, me, format!("working on {model}{why_fresh}"));
+    let model = task
+        .model
+        .as_ref()
+        .map(|m| m.primary.clone())
+        .unwrap_or_default();
+    env.spine.note(
+        EventKind::AgentStarted,
+        me,
+        format!("working on {model}{why_fresh}"),
+    );
     let attempts = 1 + task.retries as u32;
     let mut last_err = String::new();
     let mut spent = 0;
     for attempt in 1..=attempts {
-        match env.run_agent(task).and_then(|r| check_contract(env, task, r)) {
+        match env
+            .run_agent(task)
+            .and_then(|r| check_contract(env, task, r))
+        {
             Ok(r) => {
                 spent += r.cost_micro_usd;
-                env.reports.lock().unwrap_or_else(|p| p.into_inner()).insert(name.clone(), r.final_text.clone());
+                env.reports
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(name.clone(), r.final_text.clone());
                 record_verdict(env, task, &r.final_text, verdict);
                 if let Some(k) = key {
                     let _ = save_to_cache(env, task, &k, spent, &r.final_text);
@@ -601,17 +1047,37 @@ fn run_task(
                     EventKind::AgentFinished,
                     me,
                     format!("done in {} turn(s), {}", r.turns, usd(spent)),
-                    json::to_string(&Value::obj(vec![("cost_micro_usd", Value::int(spent as i64)), ("report", Value::str(r.final_text))])),
+                    json::to_string(&Value::obj(vec![
+                        ("cost_micro_usd", Value::int(spent as i64)),
+                        ("report", Value::str(r.final_text)),
+                    ])),
                 );
-                return (task.id, TaskStatus::Ran { cost_micro_usd: spent });
+                return (
+                    task.id,
+                    TaskStatus::Ran {
+                        cost_micro_usd: spent,
+                    },
+                );
             }
             Err(e) => {
                 last_err = e;
-                let hopeless = ["budget", "cancelled", "wall clock", "max-turns", "no provider", "is not in your keychain", "not available"]
-                    .iter()
-                    .any(|w| last_err.contains(w));
+                let hopeless = [
+                    "budget",
+                    "cancelled",
+                    "wall clock",
+                    "max-turns",
+                    "no provider",
+                    "is not in your keychain",
+                    "not available",
+                ]
+                .iter()
+                .any(|w| last_err.contains(w));
                 if attempt < attempts && !hopeless {
-                    env.spine.note(EventKind::AgentRetrying, me, format!("attempt {attempt} failed: {last_err}; retrying"));
+                    env.spine.note(
+                        EventKind::AgentRetrying,
+                        me,
+                        format!("attempt {attempt} failed: {last_err}; retrying"),
+                    );
                 } else {
                     break;
                 }
@@ -620,19 +1086,38 @@ fn run_task(
     }
     env.spine.note(EventKind::AgentFailed, me, last_err.clone());
     // A failed checker is a rejection: delivery must not proceed.
-    if matches!(task.kind, TaskKind::System(SystemKind::Reviewer) | TaskKind::System(SystemKind::Testwright)) {
-        *verdict.lock().unwrap_or_else(|p| p.into_inner()) = Some(Err(format!("{name} failed: {last_err}")));
+    if matches!(
+        task.kind,
+        TaskKind::System(SystemKind::Reviewer) | TaskKind::System(SystemKind::Testwright)
+    ) {
+        *verdict.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(Err(format!("{name} failed: {last_err}")));
     }
     (task.id, TaskStatus::Failed(last_err))
 }
 
 /// Project agents must have written every declared output.
-fn check_contract(env: &FiringEnv, task: &Task, r: crate::agent::AgentResult) -> Result<crate::agent::AgentResult, String> {
+fn check_contract(
+    env: &FiringEnv,
+    task: &Task,
+    r: crate::agent::AgentResult,
+) -> Result<crate::agent::AgentResult, String> {
     if let TaskKind::Project(n) = &task.kind {
         let agent = env.bp.agent(n).expect("compiled from this blueprint");
-        let missing: Vec<&String> = agent.outputs.iter().filter(|o| !env.tools.artifacts_dir().join(o).is_file()).collect();
+        let missing: Vec<&String> = agent
+            .outputs
+            .iter()
+            .filter(|o| !env.tools.artifacts_dir().join(o).is_file())
+            .collect();
         if !missing.is_empty() {
-            return Err(format!("finished without writing {}", missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")));
+            return Err(format!(
+                "finished without writing {}",
+                missing
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
     }
     if let TaskKind::System(kind) = task.kind {
@@ -647,14 +1132,65 @@ fn check_contract(env: &FiringEnv, task: &Task, r: crate::agent::AgentResult) ->
     Ok(r)
 }
 
-fn record_verdict(env: &FiringEnv, task: &Task, report: &str, verdict: &Mutex<Option<Result<(), String>>>) {
-    let TaskKind::System(kind) = task.kind else { return };
+fn record_verdict(
+    env: &FiringEnv,
+    task: &Task,
+    report: &str,
+    verdict: &Mutex<Option<Result<(), String>>>,
+) {
+    let TaskKind::System(kind) = task.kind else {
+        return;
+    };
     if wright_agents::verdict_marker(kind).is_none() {
         return;
     }
     let v = wright_agents::parse_verdict(kind, report);
-    env.reports.lock().unwrap_or_else(|p| p.into_inner()).insert(task.name(), report.to_string());
+    env.reports
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(task.name(), report.to_string());
+    // Acceptance sentences (ADR-025): the Testwright reports one line
+    // per promise; a broken one is a failure no matter what the summary
+    // line said, and the Reviewer may not approve past it.
+    if kind == SystemKind::Testwright {
+        for (n, r) in wright_agents::parse_accepts(report) {
+            env.accepts
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(n, r.is_ok());
+        }
+    }
+    let broken_promises: Vec<usize> = env
+        .accepts
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .filter(|(_, ok)| !**ok)
+        .map(|(n, _)| *n)
+        .collect();
     let mut slot = verdict.lock().unwrap_or_else(|p| p.into_inner());
+    if kind == SystemKind::Reviewer && !broken_promises.is_empty() {
+        // A verdict may not approve past a broken promise, whatever the
+        // Reviewer said: the promises are the person's, not the model's.
+        *slot = Some(Err(format!(
+            "acceptance promise(s) {} failed — the Reviewer may not approve a run whose sentences fail (ADR-025)",
+            broken_promises.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
+        )));
+        env.spine.note(
+            EventKind::Verdict,
+            Some(&task.name()),
+            format!(
+                "{} : NOT PASSED — broken promise(s) {}",
+                task.name(),
+                broken_promises
+                    .iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+        return;
+    }
     match (kind, &v) {
         // The Reviewer has the final word; a Testwright failure is
         // recorded too, so delivery stops even if the Reviewer errs.
@@ -674,16 +1210,28 @@ fn record_verdict(env: &FiringEnv, task: &Task, report: &str, verdict: &Mutex<Op
     );
 }
 
-fn save_to_cache(env: &FiringEnv, task: &Task, key: &str, cost: u64, report: &str) -> Result<(), String> {
+fn save_to_cache(
+    env: &FiringEnv,
+    task: &Task,
+    key: &str,
+    cost: u64,
+    report: &str,
+) -> Result<(), String> {
     let mut artifacts = Vec::new();
     if let TaskKind::Project(n) = &task.kind {
         for o in &env.bp.agent(n).expect("compiled").outputs {
-            let bytes = std::fs::read(env.tools.artifacts_dir().join(o)).map_err(|e| e.to_string())?;
+            let bytes =
+                std::fs::read(env.tools.artifacts_dir().join(o)).map_err(|e| e.to_string())?;
             artifacts.push((o.clone(), env.store.put_object(&bytes)?));
         }
     }
     artifacts.push(("__report".into(), env.store.put_object(report.as_bytes())?));
-    env.store.cache_put(&CacheEntry { key: key.into(), artifacts, cost_micro_usd: cost, produced_by_run: env.spine.run() })
+    env.store.cache_put(&CacheEntry {
+        key: key.into(),
+        artifacts,
+        cost_micro_usd: cost,
+        produced_by_run: env.spine.run(),
+    })
 }
 
 /// Put cached artifacts back in place; return the cached report text.
@@ -726,16 +1274,27 @@ fn shipwright(env: &FiringEnv) -> Result<String, String> {
         created.push(f.path);
     }
     let git_init = if !root.join(".git").exists() {
-        std::process::Command::new("git").args(["init", "-q"]).current_dir(root).status().map(|s| s.success()).unwrap_or(false)
+        std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
     } else {
         false
     };
     if !created.is_empty() {
-        env.written.lock().unwrap_or_else(|p| p.into_inner()).insert("Shipwright".into(), created.clone());
+        env.written
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert("Shipwright".into(), created.clone());
     }
     Ok(match (created.len(), git_init) {
         (0, _) => "skeleton already in place".into(),
-        (n, g) => format!("laid the skeleton: {n} file(s){}", if g { ", git initialized" } else { "" }),
+        (n, g) => format!(
+            "laid the skeleton: {n} file(s){}",
+            if g { ", git initialized" } else { "" }
+        ),
     })
 }
 
@@ -746,11 +1305,17 @@ fn operator(env: &FiringEnv) -> Result<String, String> {
     };
     let next = crate::scheduler::register(&env.tools.project, &sched.cron, &sched.tz)?;
     let note = format!("scheduled: next run {next} ({})", sched.tz);
-    env.spine.note(EventKind::ScheduleRegistered, Some("Operator"), note.clone());
+    env.spine.note(
+        EventKind::ScheduleRegistered,
+        Some("Operator"),
+        note.clone(),
+    );
     Ok(note)
 }
 
 /// Agents that will refire on the next firing, and why — for `wright plan`.
 pub fn never_cached_names(bp: &Blueprint) -> BTreeSet<String> {
-    wright_core::blueprint::diff::never_cached(bp).into_keys().collect()
+    wright_core::blueprint::diff::never_cached(bp)
+        .into_keys()
+        .collect()
 }

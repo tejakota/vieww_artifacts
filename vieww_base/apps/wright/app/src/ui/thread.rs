@@ -591,7 +591,7 @@ fn file_chip(p: &Pal, c: &Composer, f: &std::path::Path) -> WidgetNode {
 }
 
 /// Five bars that follow the voice.
-fn meter(p: &Pal, level: f32, clock: f32) -> WidgetNode {
+pub(crate) fn meter(p: &Pal, level: f32, clock: f32) -> WidgetNode {
     let bars: Vec<WidgetNode> = (0..5)
         .map(|i| {
             let wobble = ((clock * 9.0 + i as f32 * 1.3).sin() * 0.5 + 0.5) * 0.35 + 0.65;

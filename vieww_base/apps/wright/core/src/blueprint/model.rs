@@ -5,6 +5,7 @@
 //! no UI state without a field here. The blueprint round-trips.
 
 use crate::palette::{self, Capability, Effect, Reads};
+use crate::schema::Shape;
 
 // ── meta ─────────────────────────────────────────────────────────
 
@@ -196,6 +197,22 @@ pub struct AgentDef {
     /// Retries on failure. 0 for side-effectful agents (never double-send).
     pub retries: u8,
     pub permissions: PermissionSet,
+    /// Hand this step to an external coding agent (ADR-026): the worker
+    /// id as named in config (`worker "claude-code" command=...`).
+    /// None for ordinary model-backed agents.
+    pub worker: Option<String>,
+    /// The files/dirs a worker may change (`worker-files "src/"`).
+    /// Empty = the whole sandboxed copy is fair game, and every change
+    /// is applied. Narrowed scopes are checked against the diff.
+    pub worker_files: Vec<String>,
+    /// Wall-clock seconds for the worker run (default 300).
+    pub worker_timeout_secs: u64,
+    /// The MCP server this agent may talk to (ADR-029), as named in
+    /// config (`mcp "weather" command=... hash=...`).
+    pub mcp_server: Option<String>,
+    /// The server tools this agent may call (`mcp allow="tool1,tool2"`).
+    /// Empty = none — the card must name them explicitly.
+    pub mcp_allow: Vec<String>,
 }
 
 impl Default for AgentDef {
@@ -211,6 +228,11 @@ impl Default for AgentDef {
             approval: ApprovalPolicy::None,
             retries: 2,
             permissions: PermissionSet::none(),
+            worker: None,
+            worker_files: Vec::new(),
+            worker_timeout_secs: 300,
+            mcp_server: None,
+            mcp_allow: Vec::new(),
         }
     }
 }
@@ -242,14 +264,30 @@ impl AgentDef {
             .iter()
             .filter_map(|t| palette::find(t))
             .any(|t| t.reads == Reads::Workspace)
+            || self.worker.is_some()
+    }
+
+    /// True when this step runs as an external worker (ADR-026): no
+    /// model call — the engine hands the goal to the configured agent
+    /// binary in a sandboxed copy and applies its diff whole or not at all.
+    pub fn is_worker_step(&self) -> bool {
+        self.worker.is_some()
     }
 }
 
 /// A dependency edge. Drag one card onto another and this is born.
+/// A *typed* edge (ADR-027) also names the output and input artifacts
+/// it binds, and the shape those bytes are promised to have.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Edge {
     pub from: String,
     pub to: String,
+    /// The producer's output artifact this edge carries.
+    pub out: Option<String>,
+    /// The consumer's input artifact it lands in.
+    pub input: Option<String>,
+    /// The promised shape of the hand-off.
+    pub schema: Option<Shape>,
 }
 
 // ── chips ────────────────────────────────────────────────────────
@@ -298,7 +336,11 @@ pub struct ProjectSpec {
 
 impl Default for ProjectSpec {
     fn default() -> Self {
-        ProjectSpec { language: "none".into(), test_cmd: String::new(), run_cmd: String::new() }
+        ProjectSpec {
+            language: "none".into(),
+            test_cmd: String::new(),
+            run_cmd: String::new(),
+        }
     }
 }
 
@@ -330,10 +372,15 @@ impl Default for Guardrails {
 // ── deliverable & models ─────────────────────────────────────────
 
 /// The definition of done, in plain language the user confirmed.
+/// An `accept` line is an acceptance sentence (ADR-025): the person
+/// reads it as a promise, Testwright turns it into a check, and the
+/// Reviewer may not approve a run whose sentences failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Deliverable {
     pub kind: String,
     pub check: String,
+    /// Numbered acceptance sentences, in blueprint order.
+    pub accept: Vec<String>,
 }
 
 /// One tier's routing preference.
@@ -395,12 +442,20 @@ impl Blueprint {
 
     /// Names of agents that feed `name` directly.
     pub fn upstream_of(&self, name: &str) -> Vec<String> {
-        self.edges.iter().filter(|e| e.to == name).map(|e| e.from.clone()).collect()
+        self.edges
+            .iter()
+            .filter(|e| e.to == name)
+            .map(|e| e.from.clone())
+            .collect()
     }
 
     /// Names of agents that `name` feeds directly.
     pub fn downstream_of(&self, name: &str) -> Vec<String> {
-        self.edges.iter().filter(|e| e.from == name).map(|e| e.to.clone()).collect()
+        self.edges
+            .iter()
+            .filter(|e| e.from == name)
+            .map(|e| e.to.clone())
+            .collect()
     }
 
     /// Agents with no outgoing edges — the natural tail of the graph.

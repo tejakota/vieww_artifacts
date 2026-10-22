@@ -75,7 +75,11 @@ pub struct KeyInputs<'a> {
 
 /// Compute the cache key.
 pub fn cache_key(k: &KeyInputs<'_>) -> String {
-    let tools_text: Vec<String> = k.tools.iter().map(|t| format!("{}@{}", t, palette::version_of(t))).collect();
+    let tools_text: Vec<String> = k
+        .tools
+        .iter()
+        .map(|t| format!("{}@{}", t, palette::version_of(t)))
+        .collect();
     let (primary, fallback, tier) = match k.resolved {
         Some(r) => (r.primary.as_str(), r.fallback.as_str(), r.tier.as_str()),
         None => ("", "", "builtin"),
@@ -111,7 +115,11 @@ pub fn agent_key(
         tools: &task.tools,
         permission_bits: task.permissions.bits(),
         input_hashes,
-        workspace_hash: if agent.reads_workspace() { workspace_hash } else { None },
+        workspace_hash: if agent.reads_workspace() {
+            workspace_hash
+        } else {
+            None
+        },
         app_version,
     })
 }
@@ -142,7 +150,10 @@ agent Fetcher {{ goal \"g\" {extra} }}\ndeliverable kind=\"k\" {{ check \"c\" }}
         );
         let bp = parse::blueprint(&src).unwrap();
         let g = compile(&bp).unwrap();
-        (bp.agent("Fetcher").unwrap().clone(), g.by_name("Fetcher").unwrap().clone())
+        (
+            bp.agent("Fetcher").unwrap().clone(),
+            g.by_name("Fetcher").unwrap().clone(),
+        )
     }
 
     #[test]
@@ -167,7 +178,11 @@ agent Fetcher {{ goal \"g\" {extra} }}\ndeliverable kind=\"k\" {{ check \"c\" }}
         let (a, mut t) = setup("tools \"http-read\" permissions network=true");
         let before = agent_key(&a, &t, &[], None, "0.2.0");
         t.permissions = PermissionSet::none();
-        assert_ne!(before, agent_key(&a, &t, &[], None, "0.2.0"), "an artifact made with broader powers is a different artifact");
+        assert_ne!(
+            before,
+            agent_key(&a, &t, &[], None, "0.2.0"),
+            "an artifact made with broader powers is a different artifact"
+        );
     }
 
     #[test]
@@ -182,9 +197,15 @@ agent Fetcher {{ goal \"g\" {extra} }}\ndeliverable kind=\"k\" {{ check \"c\" }}
     #[test]
     fn workspace_hash_counts_only_for_workspace_readers() {
         let (a, t) = setup("");
-        assert_eq!(agent_key(&a, &t, &[], Some("w1"), "0.2.0"), agent_key(&a, &t, &[], Some("w2"), "0.2.0"));
+        assert_eq!(
+            agent_key(&a, &t, &[], Some("w1"), "0.2.0"),
+            agent_key(&a, &t, &[], Some("w2"), "0.2.0")
+        );
         let (a, t) = setup("tools \"files-read\" permissions files-read=true");
-        assert_ne!(agent_key(&a, &t, &[], Some("w1"), "0.2.0"), agent_key(&a, &t, &[], Some("w2"), "0.2.0"));
+        assert_ne!(
+            agent_key(&a, &t, &[], Some("w1"), "0.2.0"),
+            agent_key(&a, &t, &[], Some("w2"), "0.2.0")
+        );
     }
 
     #[test]

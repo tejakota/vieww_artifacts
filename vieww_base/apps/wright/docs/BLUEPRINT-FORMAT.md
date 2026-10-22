@@ -184,8 +184,55 @@ cost, saved, per-task status, artifacts with BLAKE3 hashes, the Reviewer's
 verdict, and `events_blake3` — the hash of the event log, so a receipt and
 its log can be checked against each other by machine.
 
-## Recipes (v0.3, not implemented)
+## The new card lines (1.0.0)
 
-A recipe is a parameterized blueprint (`param` nodes generate the install
-mini-interview). Signing needs Ed25519, which the doctrine routes through OS
-APIs (ADR-012); until that lands, recipes are not distributed.
+A step may hand its work to an external coding agent (ADR-026):
+
+```kdl
+agent Coder {
+  goal "write the word-counting tool"
+  worker "claude-code"          # as named in config.kdl (ADR-026)
+  worker-files "src/"           # only these paths may change; absent = all
+  worker-timeout 600            # seconds; the run is killed past it
+  out "done.txt"
+}
+```
+
+A card may talk to a hash-pinned MCP server (ADR-029):
+
+```kdl
+agent Looker {
+  goal "check tomorrow's weather"
+  mcp server="weather" allow="get_forecast"   # the server must offer it too
+  approval "before-send"
+  out "forecast.txt"
+}
+```
+
+An edge may be typed (ADR-027): the names are checked against the cards
+at plan time, the bytes against the shape before the consumer runs.
+
+```kdl
+edge from="Fetcher" to="Summarizer" out="stories.json" in="stories.json" schema="json-array"
+```
+
+A deliverable may carry acceptance sentences (ADR-025): the person
+approves the promise, Testwright checks each one and reports
+`ACCEPT <n>: PASS|FAIL`, and the Reviewer may not approve a run with a
+broken promise.
+
+```kdl
+deliverable kind="email" {
+  check "the digest arrives with every story"
+  accept "every story in the digest has its own link"
+  accept "the email names today's date"
+}
+```
+
+## Recipes (ADR-028)
+
+A recipe is one KDL file — id, version, publisher, description, the full
+blueprint text, the publisher's Ed25519 public key — plus a signature
+line covering the recipe's canonical bytes. `wright recipe sign` signs
+with the machine's publishing key; `install` refuses anything unsigned
+or tampered, in words.

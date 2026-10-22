@@ -30,7 +30,9 @@ use wright_core::wire::json::{self, Value};
 use wright_runtime::config::Config;
 use wright_runtime::gate::{BudgetMeter, Gate, Verdict};
 use wright_runtime::local;
-use wright_runtime::models::{self, Block, CompletionRequest, Endpoint, Message, Role, StopReason, ToolDef};
+use wright_runtime::models::{
+    self, Block, CompletionRequest, Endpoint, Message, Role, StopReason, ToolDef,
+};
 use wright_runtime::net::NetConfig;
 use wright_runtime::secrets;
 use wright_runtime::store::Store;
@@ -61,10 +63,18 @@ pub struct FiringEnv {
     pub reports: Mutex<BTreeMap<String, String>>,
     /// Files written this firing, by task name.
     pub written: Mutex<BTreeMap<String, Vec<String>>>,
+    /// Acceptance sentences (ADR-025): number -> kept? Filled by the
+    /// Testwright's ACCEPT lines; the Reviewer may not approve a run
+    /// with a broken promise, and the receipt carries every one.
+    pub accepts: Mutex<BTreeMap<usize, bool>>,
 }
 
 /// A provider client, the model id it serves, and its resolved key.
-type ResolvedEndpoint = (Box<dyn models::Provider>, String, Option<secrets::SecretValue>);
+type ResolvedEndpoint = (
+    Box<dyn models::Provider>,
+    String,
+    Option<secrets::SecretValue>,
+);
 
 /// What one agent run produced.
 #[derive(Debug, Clone, Default)]
@@ -102,10 +112,24 @@ fn usd(micro: u64) -> String {
 /// A human-sized summary of a tool input (no file contents in events).
 fn input_summary(tool: &str, input: &Value) -> String {
     match tool {
-        "write-output" => format!("{} ({} bytes)", input.str_of("name").unwrap_or("?"), input.str_of("content").map(str::len).unwrap_or(0)),
-        "files-write" => format!("{} ({} bytes)", input.str_of("path").unwrap_or("?"), input.str_of("content").map(str::len).unwrap_or(0)),
+        "write-output" => format!(
+            "{} ({} bytes)",
+            input.str_of("name").unwrap_or("?"),
+            input.str_of("content").map(str::len).unwrap_or(0)
+        ),
+        "files-write" => format!(
+            "{} ({} bytes)",
+            input.str_of("path").unwrap_or("?"),
+            input.str_of("content").map(str::len).unwrap_or(0)
+        ),
         "files-read" | "files-list" | "edit" => input.str_of("path").unwrap_or(".").to_string(),
-        "apply-patch" => format!("{} line patch", input.str_of("patch").map(|p| p.lines().count()).unwrap_or(0)),
+        "apply-patch" => format!(
+            "{} line patch",
+            input
+                .str_of("patch")
+                .map(|p| p.lines().count())
+                .unwrap_or(0)
+        ),
         "shell" => short(input.str_of("command").unwrap_or(""), 120),
         "http-read" | "http-post" => input.str_of("url").unwrap_or("?").to_string(),
         "git" => input.get("args").map(json::to_string).unwrap_or_default(),
@@ -144,7 +168,10 @@ impl FiringEnv {
             }
             TaskKind::System(kind) => {
                 let spec = wright_agents::spec(*kind);
-                user.push_str(&format!("Project: {}\nIntent: {}\n", bp.meta.name, bp.intent.summary));
+                user.push_str(&format!(
+                    "Project: {}\nIntent: {}\n",
+                    bp.meta.name, bp.intent.summary
+                ));
                 user.push_str(&format!("Language: {}\n", bp.project.language));
                 let test = wright_core::convention::test_cmd(bp);
                 if !test.is_empty() {
@@ -154,15 +181,34 @@ impl FiringEnv {
                 for d in &bp.deliverables {
                     user.push_str(&format!("- [{}] {}\n", d.kind, d.check));
                 }
+                let mut promise_no = 0usize;
+                if bp.deliverables.iter().any(|d| !d.accept.is_empty()) {
+                    user.push_str("\nThe promises the person approved (numbered):\n");
+                    for d in &bp.deliverables {
+                        for sentence in &d.accept {
+                            promise_no += 1;
+                            user.push_str(&format!("- promise {promise_no}: {sentence}\n"));
+                        }
+                    }
+                }
                 user.push_str("\nArtifacts produced so far:\n");
                 let mut any = false;
                 if let Ok(rd) = std::fs::read_dir(self.tools.artifacts_dir()) {
-                    let mut names: Vec<_> = rd.flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| !n.starts_with('.')).collect();
+                    let mut names: Vec<_> = rd
+                        .flatten()
+                        .map(|e| e.file_name().to_string_lossy().to_string())
+                        .filter(|n| !n.starts_with('.'))
+                        .collect();
                     names.sort();
                     for n in names {
                         any = true;
-                        let text = std::fs::read_to_string(self.tools.artifacts_dir().join(&n)).unwrap_or_default();
-                        user.push_str(&format!("=== artifacts/{n} ({} bytes) ===\n{}\n", text.len(), text.chars().take(4096).collect::<String>()));
+                        let text = std::fs::read_to_string(self.tools.artifacts_dir().join(&n))
+                            .unwrap_or_default();
+                        user.push_str(&format!(
+                            "=== artifacts/{n} ({} bytes) ===\n{}\n",
+                            text.len(),
+                            text.chars().take(4096).collect::<String>()
+                        ));
                     }
                 }
                 if !any {
@@ -177,7 +223,12 @@ impl FiringEnv {
                 }
                 drop(written);
                 if *kind == SystemKind::Reviewer {
-                    if let Some(t) = self.reports.lock().unwrap_or_else(|p| p.into_inner()).get("Testwright") {
+                    if let Some(t) = self
+                        .reports
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .get("Testwright")
+                    {
                         user.push_str(&format!("\nThe Testwright's report:\n{t}\n"));
                     }
                 }
@@ -192,7 +243,10 @@ impl FiringEnv {
     }
 
     fn endpoints_for(&self, task: &Task) -> Result<Vec<ResolvedEndpoint>, String> {
-        let resolved = task.model.as_ref().ok_or("built-in tasks do not call models")?;
+        let resolved = task
+            .model
+            .as_ref()
+            .ok_or("built-in tasks do not call models")?;
         let mut out = Vec::new();
         let mut problems = Vec::new();
         for model in [&resolved.primary, &resolved.fallback] {
@@ -200,7 +254,10 @@ impl FiringEnv {
                 continue;
             }
             let Some(entry) = self.config.provider_for(model) else {
-                problems.push(format!("no provider is configured for model '{model}' (add one to {})", self.config.source));
+                problems.push(format!(
+                    "no provider is configured for model '{model}' (add one to {})",
+                    self.config.source
+                ));
                 continue;
             };
             let key = match &entry.key {
@@ -223,7 +280,15 @@ impl FiringEnv {
                 if !out.iter().any(|(_, m, _)| m == local::TEXT_MODEL) {
                     if out.is_empty() {
                         let name = Self::task_name(task);
-                        self.spine.note(EventKind::Note, Some(&name), format!("{}. Using the built-in model {} (on this machine, free) instead.", problems.join("; "), local::TEXT_MODEL));
+                        self.spine.note(
+                            EventKind::Note,
+                            Some(&name),
+                            format!(
+                                "{}. Using the built-in model {} (on this machine, free) instead.",
+                                problems.join("; "),
+                                local::TEXT_MODEL
+                            ),
+                        );
                     }
                     out.push((entry.client(), local::TEXT_MODEL.to_string(), None));
                 }
@@ -244,14 +309,22 @@ impl FiringEnv {
 
         let mut tool_ctx = self.tools.clone();
         if let TaskKind::Project(n) = &task.kind {
-            tool_ctx.outputs = self.bp.agent(n).map(|a| a.outputs.clone()).unwrap_or_default();
+            tool_ctx.outputs = self
+                .bp
+                .agent(n)
+                .map(|a| a.outputs.clone())
+                .unwrap_or_default();
         }
         let tool_defs: Vec<ToolDef> = task
             .tools
             .iter()
             .filter_map(|t| palette::find(t))
             .filter(|t| t.implemented)
-            .map(|t| ToolDef { name: t.name.into(), description: t.summary.into(), schema: t.schema.into() })
+            .map(|t| ToolDef {
+                name: t.name.into(),
+                description: t.summary.into(),
+                schema: t.schema.into(),
+            })
             .collect();
 
         let mut req = CompletionRequest::new(endpoints[0].1.clone());
@@ -266,13 +339,20 @@ impl FiringEnv {
                 return Err("cancelled".into());
             }
             if Instant::now() >= self.deadline {
-                return Err(format!("the firing's wall clock ({}s) ran out", self.bp.guardrails.wall_clock_secs));
+                return Err(format!(
+                    "the firing's wall clock ({}s) ran out",
+                    self.bp.guardrails.wall_clock_secs
+                ));
             }
             if self.turns_left.fetch_sub(1, Ordering::SeqCst) <= 0 {
-                return Err(format!("the firing used all {} model turns (guardrails.max-turns)", self.bp.guardrails.max_turns));
+                return Err(format!(
+                    "the firing used all {} model turns (guardrails.max-turns)",
+                    self.bp.guardrails.max_turns
+                ));
             }
             // Estimate before spending: prompt chars / 4 at the input price.
-            let chars: usize = req.system.len() + req.messages.iter().map(Message::text_len).sum::<usize>();
+            let chars: usize =
+                req.system.len() + req.messages.iter().map(Message::text_len).sum::<usize>();
             let price = self.config.price_of(&endpoints[0].1);
             let est = price.cost_micro((chars / 4) as u64, 0, 512);
             {
@@ -289,7 +369,11 @@ impl FiringEnv {
 
             let eps: Vec<Endpoint<'_>> = endpoints
                 .iter()
-                .map(|(p, m, k)| Endpoint { model: m.clone(), provider: p.as_ref(), api_key: k.as_ref().map(|v| v.expose().to_string()) })
+                .map(|(p, m, k)| Endpoint {
+                    model: m.clone(),
+                    provider: p.as_ref(),
+                    api_key: k.as_ref().map(|v| v.expose().to_string()),
+                })
                 .collect();
             let spine = &self.spine;
             // Status lines (the built-in model downloading on first use)
@@ -299,20 +383,32 @@ impl FiringEnv {
                     spine.note(EventKind::Note, me, s.clone());
                 }
             };
-            let mut on_retry = |msg: &str| spine.note(EventKind::AgentRetrying, me, msg.to_string());
+            let mut on_retry =
+                |msg: &str| spine.note(EventKind::AgentRetrying, me, msg.to_string());
             let resp = models::call(&eps, &req, &self.net, 3, &mut on_delta, &mut on_retry)?;
             result.turns += 1;
 
             let price = self.config.price_of(&resp.model);
-            let cost = price.cost_micro(resp.usage.input_tokens, resp.usage.cached_input_tokens, resp.usage.output_tokens);
+            let cost = price.cost_micro(
+                resp.usage.input_tokens,
+                resp.usage.cached_input_tokens,
+                resp.usage.output_tokens,
+            );
             result.cost_micro_usd += cost;
-            self.budget.lock().unwrap_or_else(|p| p.into_inner()).record(cost);
+            self.budget
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .record(cost);
             self.spine.emit(
                 EventKind::TokensRecorded,
                 me,
                 format!(
                     "{} tokens in ({} cached), {} out on {} — {}",
-                    resp.usage.input_tokens, resp.usage.cached_input_tokens, resp.usage.output_tokens, resp.model, usd(cost)
+                    resp.usage.input_tokens,
+                    resp.usage.cached_input_tokens,
+                    resp.usage.output_tokens,
+                    resp.model,
+                    usd(cost)
                 ),
                 json::to_string(&Value::obj(vec![
                     ("in", Value::int(resp.usage.input_tokens as i64)),
@@ -324,9 +420,13 @@ impl FiringEnv {
             )?;
             let text = resp.text();
             if !text.trim().is_empty() {
-                self.spine.emit(EventKind::ModelText, me, short(&text, 280), String::new())?;
+                self.spine
+                    .emit(EventKind::ModelText, me, short(&text, 280), String::new())?;
             }
-            req.messages.push(Message { role: Role::Assistant, blocks: resp.blocks.clone() });
+            req.messages.push(Message {
+                role: Role::Assistant,
+                blocks: resp.blocks.clone(),
+            });
 
             let uses = resp.tool_uses();
             if uses.is_empty() {
@@ -344,15 +444,29 @@ impl FiringEnv {
                     Ok(t) => (t, false),
                     Err(t) => (t, true),
                 };
-                results.push(Block::ToolResult { id: id.to_string(), content, is_error });
+                results.push(Block::ToolResult {
+                    id: id.to_string(),
+                    content,
+                    is_error,
+                });
             }
-            req.messages.push(Message { role: Role::User, blocks: results });
+            req.messages.push(Message {
+                role: Role::User,
+                blocks: results,
+            });
             compact(&mut req.messages);
         }
     }
 
     /// One tool call through the gate. Ok(text) or Err(text) for the model.
-    fn one_tool_call(&self, task: &Task, name: &str, tool: &str, input: &Value, ctx: &ToolCtx) -> Result<String, String> {
+    fn one_tool_call(
+        &self,
+        task: &Task,
+        name: &str,
+        tool: &str,
+        input: &Value,
+        ctx: &ToolCtx,
+    ) -> Result<String, String> {
         let me = Some(name);
         let summary = input_summary(tool, input);
         let verdict = {
@@ -362,19 +476,55 @@ impl FiringEnv {
         let permit = match verdict {
             Verdict::Allow(p) => p,
             Verdict::Deny(why) => {
-                self.spine.note(EventKind::ToolDenied, me, format!("{tool} {summary}: {why}"));
+                self.spine.note(
+                    EventKind::ToolDenied,
+                    me,
+                    format!("{tool} {summary}: {why}"),
+                );
                 return Err(format!("DENIED by the permission gate: {why}"));
             }
             Verdict::Ask(pending) => {
                 let n = self.approval_seq.fetch_add(1, Ordering::SeqCst) + 1;
                 let preview = match tool {
-                    "http-post" => format!("POST {}\n{}", input.str_of("url").unwrap_or("?"), input.str_of("body").unwrap_or("").chars().take(1200).collect::<String>()),
+                    "http-post" => format!(
+                        "POST {}\n{}",
+                        input.str_of("url").unwrap_or("?"),
+                        input
+                            .str_of("body")
+                            .unwrap_or("")
+                            .chars()
+                            .take(1200)
+                            .collect::<String>()
+                    ),
                     _ => short(&json::to_string(input), 600),
                 };
-                let ask = Ask { run: self.spine.run(), n, agent: name.into(), tool: tool.into(), reason: pending.reason.clone(), preview };
-                self.spine.note(EventKind::ApprovalRequested, me, format!("{} (request {n}, asking via {})", pending.reason, self.approver.name()));
+                let ask = Ask {
+                    run: self.spine.run(),
+                    n,
+                    agent: name.into(),
+                    tool: tool.into(),
+                    reason: pending.reason.clone(),
+                    preview,
+                };
+                self.spine.note(
+                    EventKind::ApprovalRequested,
+                    me,
+                    format!(
+                        "{} (request {n}, asking via {})",
+                        pending.reason,
+                        self.approver.name()
+                    ),
+                );
                 let approved = self.approver.decide(&ask);
-                self.spine.note(EventKind::ApprovalResolved, me, if approved { format!("request {n} approved") } else { format!("request {n} denied") });
+                self.spine.note(
+                    EventKind::ApprovalResolved,
+                    me,
+                    if approved {
+                        format!("request {n} approved")
+                    } else {
+                        format!("request {n} denied")
+                    },
+                );
                 if !approved {
                     return Err("DENIED: a human declined this action. Do not retry it; finish without it and say so.".into());
                 }
@@ -385,30 +535,56 @@ impl FiringEnv {
                 }
             }
         };
-        let _ = task;
         let started = Instant::now();
         let out = wright_tools::run(permit, input, ctx);
         let ms = started.elapsed().as_millis();
         match out {
             Ok(o) => {
-                self.spine.note(EventKind::ToolCalled, me, format!("{tool} {summary} — ok ({ms} ms)"));
+                self.spine.note(
+                    EventKind::ToolCalled,
+                    me,
+                    format!("{tool} {summary} — ok ({ms} ms)"),
+                );
                 if !o.wrote.is_empty() {
+                    // Untrusted-data tracking (ADR-024): artifacts a
+                    // three-leg-or-untrusted task writes carry the mark,
+                    // so the event says so and the taint flows on.
+                    let untrusted = task.legs.is_untrusted();
                     for f in &o.wrote {
-                        let h = std::fs::read(ctx.project.join(f)).map(|b| wright_core::hash::blake3_hex(&b)).unwrap_or_default();
+                        let h = std::fs::read(ctx.project.join(f))
+                            .map(|b| wright_core::hash::blake3_hex(&b))
+                            .unwrap_or_default();
                         let _ = self.spine.emit(
                             EventKind::ArtifactWritten,
                             me,
-                            f.clone(),
-                            json::to_string(&Value::obj(vec![("path", Value::str(f.clone())), ("hash", Value::str(h))])),
+                            if untrusted {
+                                format!("{f} (untrusted input touched this)")
+                            } else {
+                                f.clone()
+                            },
+                            json::to_string(&Value::obj(vec![
+                                ("path", Value::str(f.clone())),
+                                ("hash", Value::str(h)),
+                                ("untrusted", Value::Bool(untrusted)),
+                            ])),
                         );
                     }
-                    self.written.lock().unwrap_or_else(|p| p.into_inner()).entry(name.to_string()).or_default().extend(o.wrote.iter().cloned());
+                    self.written
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .entry(name.to_string())
+                        .or_default()
+                        .extend(o.wrote.iter().cloned());
                 }
                 Ok(o.text)
             }
             Err(e) => {
                 let msg = e.to_string();
-                self.spine.note(EventKind::ToolCalled, me, format!("{tool} {summary} — error: {}", short(&msg, 160)));
+                self.spine.note(
+                    EventKind::ToolCalled,
+                    me,
+                    format!("{tool} {summary} — error: {}", short(&msg, 160)),
+                );
                 if matches!(e, ToolError::NotImplemented(_)) {
                     Err(format!("{msg}. Use another tool or finish without it."))
                 } else {
@@ -447,13 +623,27 @@ mod tests {
         let big = "x".repeat(200_000);
         let mut msgs = vec![Message::user_text("start")];
         for i in 0..4 {
-            msgs.push(Message { role: Role::Assistant, blocks: vec![Block::Text(format!("turn {i}"))] });
-            msgs.push(Message { role: Role::User, blocks: vec![Block::ToolResult { id: format!("t{i}"), content: big.clone(), is_error: false }] });
+            msgs.push(Message {
+                role: Role::Assistant,
+                blocks: vec![Block::Text(format!("turn {i}"))],
+            });
+            msgs.push(Message {
+                role: Role::User,
+                blocks: vec![Block::ToolResult {
+                    id: format!("t{i}"),
+                    content: big.clone(),
+                    is_error: false,
+                }],
+            });
         }
         compact(&mut msgs);
         let last = msgs.last().unwrap();
-        assert!(matches!(&last.blocks[0], Block::ToolResult { content, .. } if content.len() == 200_000));
-        assert!(matches!(&msgs[2].blocks[0], Block::ToolResult { content, .. } if content.starts_with("[elided")));
+        assert!(
+            matches!(&last.blocks[0], Block::ToolResult { content, .. } if content.len() == 200_000)
+        );
+        assert!(
+            matches!(&msgs[2].blocks[0], Block::ToolResult { content, .. } if content.starts_with("[elided"))
+        );
         assert!(msgs.iter().map(Message::text_len).sum::<usize>() < 500_000);
     }
 

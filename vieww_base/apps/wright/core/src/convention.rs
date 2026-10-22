@@ -49,7 +49,11 @@ pub struct SkeletonFile {
 }
 
 fn file(path: impl Into<String>, contents: impl Into<String>) -> SkeletonFile {
-    SkeletonFile { path: path.into(), contents: contents.into(), executable: false }
+    SkeletonFile {
+        path: path.into(),
+        contents: contents.into(),
+        executable: false,
+    }
 }
 
 /// Artifact names are plain file names: no separators, no dot-dot, no
@@ -59,7 +63,9 @@ pub fn is_safe_artifact_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 128
         && !name.starts_with('.')
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// A filesystem/package-safe slug of the project name ("HN Daily Digest"
@@ -161,7 +167,9 @@ fn readme(bp: &Blueprint) -> String {
     s.push_str("## Run it\n\n```sh\nwright run blueprint.kdl\n```\n\n");
     let run = run_cmd(bp);
     if !run.is_empty() {
-        s.push_str(&format!("Or run the code directly:\n\n```sh\n{run}\n```\n\n"));
+        s.push_str(&format!(
+            "Or run the code directly:\n\n```sh\n{run}\n```\n\n"
+        ));
     }
     let test = test_cmd(bp);
     if !test.is_empty() {
@@ -299,9 +307,17 @@ if __name__ == "__main__":
 
 fn python(slug: &str, name: &str) -> Vec<SkeletonFile> {
     vec![
-        file(format!("src/{slug}/__init__.py"), format!("\"\"\"{name} — set up by Wright (universal project convention).\"\"\"\n")),
+        file(
+            format!("src/{slug}/__init__.py"),
+            format!("\"\"\"{name} — set up by Wright (universal project convention).\"\"\"\n"),
+        ),
         file(format!("src/{slug}/log.py"), PY_LOG),
-        file(format!("src/{slug}/__main__.py"), PY_MAIN.replace("{slug}", slug).replace("{name:?}", &format!("{name:?}"))),
+        file(
+            format!("src/{slug}/__main__.py"),
+            PY_MAIN
+                .replace("{slug}", slug)
+                .replace("{name:?}", &format!("{name:?}")),
+        ),
         file("tests/__init__.py", ""),
         file("tests/test_smoke.py", PY_SMOKE.replace("{slug}", slug)),
     ]
@@ -436,7 +452,11 @@ test('greets by name', () => {
 "#;
 
 fn react(slug: &str, name: &str) -> Vec<SkeletonFile> {
-    let fill = |t: &str| t.replace("{slug}", &slug.replace('_', "-")).replace("{name:?}", &format!("{name:?}")).replace("{name}", name);
+    let fill = |t: &str| {
+        t.replace("{slug}", &slug.replace('_', "-"))
+            .replace("{name:?}", &format!("{name:?}"))
+            .replace("{name}", name)
+    };
     vec![
         file("package.json", fill(REACT_PACKAGE)),
         file("index.html", fill(REACT_INDEX)),
@@ -492,8 +512,12 @@ fn shell(name: &str) -> Vec<SkeletonFile> {
 fn ci_yaml(bp: &Blueprint) -> String {
     let test = test_cmd(bp);
     let setup = match bp.project.language.as_str() {
-        "python" => "      - uses: actions/setup-python@v5\n        with: { python-version: '3.12' }\n",
-        "node" | "react" => "      - uses: actions/setup-node@v4\n        with: { node-version: '22' }\n",
+        "python" => {
+            "      - uses: actions/setup-python@v5\n        with: { python-version: '3.12' }\n"
+        }
+        "node" | "react" => {
+            "      - uses: actions/setup-node@v4\n        with: { node-version: '22' }\n"
+        }
         "rust" => "      - uses: dtolnay/rust-toolchain@stable\n",
         _ => "",
     };
@@ -528,7 +552,14 @@ mod tests {
         for lang in LANGUAGES {
             let files = skeleton(&bp(lang));
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-            for must in ["README.md", "AGENTS.md", ".gitignore", "artifacts/.keep", "logs/.keep", ".github/workflows/ci.yml"] {
+            for must in [
+                "README.md",
+                "AGENTS.md",
+                ".gitignore",
+                "artifacts/.keep",
+                "logs/.keep",
+                ".github/workflows/ci.yml",
+            ] {
                 assert!(paths.contains(&must), "{lang} is missing {must}");
             }
         }

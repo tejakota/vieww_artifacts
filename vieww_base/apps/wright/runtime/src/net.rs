@@ -75,14 +75,20 @@ pub struct Proxy {
 impl Proxy {
     /// Parse `http://[user:pass@]host:port`.
     pub fn parse(s: &str) -> Result<Proxy, String> {
-        let rest = s.strip_prefix("http://").or_else(|| s.strip_prefix("https://")).unwrap_or(s);
+        let rest = s
+            .strip_prefix("http://")
+            .or_else(|| s.strip_prefix("https://"))
+            .unwrap_or(s);
         let rest = rest.trim_end_matches('/');
         let (auth, hostport) = match rest.rsplit_once('@') {
             Some((cred, hp)) => (Some(format!("Basic {}", base64(cred.as_bytes()))), hp),
             None => (None, rest),
         };
         let (host, port) = match hostport.rsplit_once(':') {
-            Some((h, p)) => (h.trim_matches(['[', ']']).to_string(), p.parse().map_err(|_| format!("bad proxy port in '{s}'"))?),
+            Some((h, p)) => (
+                h.trim_matches(['[', ']']).to_string(),
+                p.parse().map_err(|_| format!("bad proxy port in '{s}'"))?,
+            ),
             None => (hostport.to_string(), 80),
         };
         if host.is_empty() {
@@ -102,12 +108,24 @@ fn base64(data: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
         out.push(T[(n >> 18) as usize & 63] as char);
         out.push(T[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { T[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -137,17 +155,26 @@ impl Default for NetConfig {
 }
 
 fn env_any(names: &[&str]) -> Option<String> {
-    names.iter().find_map(|n| std::env::var(n).ok()).filter(|v| !v.trim().is_empty())
+    names
+        .iter()
+        .find_map(|n| std::env::var(n).ok())
+        .filter(|v| !v.trim().is_empty())
 }
 
 impl NetConfig {
     /// Read proxy settings from the standard environment variables.
     pub fn from_env() -> Self {
         NetConfig {
-            https_proxy: env_any(&["HTTPS_PROXY", "https_proxy"]).and_then(|p| Proxy::parse(&p).ok()),
+            https_proxy: env_any(&["HTTPS_PROXY", "https_proxy"])
+                .and_then(|p| Proxy::parse(&p).ok()),
             http_proxy: env_any(&["HTTP_PROXY", "http_proxy"]).and_then(|p| Proxy::parse(&p).ok()),
             no_proxy: env_any(&["NO_PROXY", "no_proxy"])
-                .map(|v| v.split(',').map(|s| s.trim().to_ascii_lowercase()).filter(|s| !s.is_empty()).collect())
+                .map(|v| {
+                    v.split(',')
+                        .map(|s| s.trim().to_ascii_lowercase())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
                 .unwrap_or_default(),
             ..NetConfig::default()
         }
@@ -158,7 +185,11 @@ impl NetConfig {
         if self.bypasses(&url.host) {
             return None;
         }
-        if url.is_tls() { self.https_proxy.as_ref() } else { self.http_proxy.as_ref() }
+        if url.is_tls() {
+            self.https_proxy.as_ref()
+        } else {
+            self.http_proxy.as_ref()
+        }
     }
 
     /// NO_PROXY matching: `*`, exact host, `.suffix` / `*.suffix`,
@@ -171,16 +202,24 @@ impl NetConfig {
                 return true;
             }
             if let Some((net, bits)) = rule.split_once('/') {
-                if let (Some(IpAddr::V4(h)), Ok(IpAddr::V4(n)), Ok(bits)) = (ip, net.parse::<IpAddr>(), bits.parse::<u32>()) {
+                if let (Some(IpAddr::V4(h)), Ok(IpAddr::V4(n)), Ok(bits)) =
+                    (ip, net.parse::<IpAddr>(), bits.parse::<u32>())
+                {
                     if bits <= 32 {
-                        let mask = if bits == 0 { 0 } else { u32::MAX << (32 - bits) };
+                        let mask = if bits == 0 {
+                            0
+                        } else {
+                            u32::MAX << (32 - bits)
+                        };
                         return u32::from(h) & mask == u32::from(n) & mask;
                     }
                 }
                 return false;
             }
             let suffix = rule.trim_start_matches('*').trim_start_matches('.');
-            !suffix.is_empty() && ip.is_none() && (host == suffix || host.ends_with(&format!(".{suffix}")))
+            !suffix.is_empty()
+                && ip.is_none()
+                && (host == suffix || host.ends_with(&format!(".{suffix}")))
         })
     }
 }
@@ -213,7 +252,8 @@ fn tunnel(proxy: &Proxy, url: &Url, cfg: &NetConfig) -> Result<TcpStream, String
         req.push_str(&format!("Proxy-Authorization: {auth}\r\n"));
     }
     req.push_str("\r\n");
-    s.write_all(req.as_bytes()).map_err(|e| format!("proxy CONNECT: {e}"))?;
+    s.write_all(req.as_bytes())
+        .map_err(|e| format!("proxy CONNECT: {e}"))?;
     // Read the proxy's answer byte-by-byte up to the blank line, so not
     // one byte of the tunnelled TLS stream is swallowed by a buffer.
     let mut head = Vec::new();
@@ -232,7 +272,10 @@ fn tunnel(proxy: &Proxy, url: &Url, cfg: &NetConfig) -> Result<TcpStream, String
     let status = status_line.split_whitespace().nth(1).unwrap_or("");
     if status != "200" {
         let first = status_line.lines().next().unwrap_or("").to_string();
-        return Err(format!("the proxy refused the connection to {} ({first})", url.authority()));
+        return Err(format!(
+            "the proxy refused the connection to {} ({first})",
+            url.authority()
+        ));
     }
     Ok(s)
 }
@@ -243,11 +286,17 @@ pub fn connect(url: &Url, cfg: &NetConfig) -> Result<(Conn, bool), String> {
     match (url.is_tls(), cfg.proxy_for(url)) {
         (true, Some(p)) => {
             let tcp = tunnel(p, url, cfg)?;
-            Ok((Conn::Tls(Box::new(TlsStream::connect(tcp, &url.host)?)), false))
+            Ok((
+                Conn::Tls(Box::new(TlsStream::connect(tcp, &url.host)?)),
+                false,
+            ))
         }
         (true, None) => {
             let tcp = tcp_connect(&url.host, url.port, cfg)?;
-            Ok((Conn::Tls(Box::new(TlsStream::connect(tcp, &url.host)?)), false))
+            Ok((
+                Conn::Tls(Box::new(TlsStream::connect(tcp, &url.host)?)),
+                false,
+            ))
         }
         (false, Some(p)) => Ok((Conn::Tcp(tcp_connect(&p.host, p.port, cfg)?), true)),
         (false, None) => Ok((Conn::Tcp(tcp_connect(&url.host, url.port, cfg)?), false)),
@@ -349,7 +398,12 @@ mod tests {
     #[test]
     fn no_proxy_rules() {
         let cfg = NetConfig {
-            no_proxy: vec!["localhost".into(), ".internal.corp".into(), "10.0.0.0/8".into(), "api.anthropic.com".into()],
+            no_proxy: vec![
+                "localhost".into(),
+                ".internal.corp".into(),
+                "10.0.0.0/8".into(),
+                "api.anthropic.com".into(),
+            ],
             https_proxy: Some(Proxy::parse("http://p:1").unwrap()),
             ..NetConfig::default()
         };
@@ -372,7 +426,8 @@ mod tests {
             let mut buf = [0u8; 1024];
             let n = s.read(&mut buf).unwrap();
             let req = String::from_utf8_lossy(&buf[..n]).to_string();
-            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok").unwrap();
+            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .unwrap();
             req
         });
         let url = parse_url(&format!("http://127.0.0.1:{port}/ping")).unwrap();
@@ -391,12 +446,23 @@ mod tests {
     fn live_https_direct_and_proxied() {
         let cfg = NetConfig::from_env();
         eprintln!("https via {:?}: {:?}", https_transport(), https_backend());
-        for u in ["https://index.crates.io/config.json", "https://api.github.com/repos/tejakota/vieww_artifacts"] {
+        for u in [
+            "https://index.crates.io/config.json",
+            "https://api.github.com/repos/tejakota/vieww_artifacts",
+        ] {
             let url = parse_url(u).unwrap();
-            let via = if cfg.proxy_for(&url).is_some() { "proxy" } else { "direct" };
+            let via = if cfg.proxy_for(&url).is_some() {
+                "proxy"
+            } else {
+                "direct"
+            };
             let req = Request::new("GET", url).header("User-Agent", "wright-live-test");
             let resp = send(&req, &cfg).unwrap_or_else(|e| panic!("{u}: {e}"));
-            eprintln!("{u} via {via}: HTTP {} ({} bytes)", resp.status, resp.body.len());
+            eprintln!(
+                "{u} via {via}: HTTP {} ({} bytes)",
+                resp.status,
+                resp.body.len()
+            );
             assert!((100..600).contains(&resp.status));
         }
     }

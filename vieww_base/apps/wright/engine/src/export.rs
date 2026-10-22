@@ -85,8 +85,15 @@ pub fn available(bp: &Blueprint) -> Vec<Kind> {
 
 /// `<parent of the project>/Exports/<project folder name>`.
 pub fn default_out(project: &Path) -> PathBuf {
-    let name = project.file_name().map(|n| n.to_owned()).unwrap_or_else(|| "project".into());
-    project.parent().unwrap_or(project).join("Exports").join(name)
+    let name = project
+        .file_name()
+        .map(|n| n.to_owned())
+        .unwrap_or_else(|| "project".into());
+    project
+        .parent()
+        .unwrap_or(project)
+        .join("Exports")
+        .join(name)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -101,14 +108,22 @@ pub struct Exported {
 pub fn verified(project: &Path) -> Result<(), String> {
     let store = Store::open(project)?;
     let Some(run) = store.runs().last().copied() else {
-        return Err("this project has not run yet — run it, and export once its checks pass".into());
+        return Err(
+            "this project has not run yet — run it, and export once its checks pass".into(),
+        );
     };
-    let receipt = std::fs::read_to_string(store.run_dir(run).join("receipt.json")).map_err(|_| format!("run {run} has no receipt yet (still running, or it stopped)"))?;
-    let ok = json::parse(&receipt).ok().and_then(|v| v.get("ok").and_then(|b| b.as_bool())).unwrap_or(false);
+    let receipt = std::fs::read_to_string(store.run_dir(run).join("receipt.json"))
+        .map_err(|_| format!("run {run} has no receipt yet (still running, or it stopped)"))?;
+    let ok = json::parse(&receipt)
+        .ok()
+        .and_then(|v| v.get("ok").and_then(|b| b.as_bool()))
+        .unwrap_or(false);
     if ok {
         Ok(())
     } else {
-        Err(format!("the last run ({run}) did not pass its checks and review — fix that first, then export"))
+        Err(format!(
+            "the last run ({run}) did not pass its checks and review — fix that first, then export"
+        ))
     }
 }
 
@@ -116,7 +131,11 @@ pub fn verified(project: &Path) -> Result<(), String> {
 pub fn export(project: &Path, kind: Kind, out: &Path) -> Result<Exported, String> {
     let bp = crate::load_blueprint(project)?;
     if !available(&bp).contains(&kind) {
-        return Err(format!("a {} is not available for a {} project", kind.label().to_lowercase(), bp.project.language));
+        return Err(format!(
+            "a {} is not available for a {} project",
+            kind.label().to_lowercase(),
+            bp.project.language
+        ));
     }
     if kind.needs_proof() {
         verified(project)?;
@@ -130,31 +149,66 @@ pub fn export(project: &Path, kind: Kind, out: &Path) -> Result<Exported, String
     };
     let path = out.join(name);
     write_atomic(&path, &bytes)?;
-    Ok(Exported { kind, bytes: bytes.len() as u64, sha256: sha256::hex(&bytes), path })
+    Ok(Exported {
+        kind,
+        bytes: bytes.len() as u64,
+        sha256: sha256::hex(&bytes),
+        path,
+    })
 }
 
 // ── the files of a project ───────────────────────────────────────
 
 /// Folders that are never part of what a project *is*.
-const SKIP_DIRS: &[&str] = &[".git", ".wright", "target", "node_modules", "dist", "__pycache__", ".venv", "venv", ".pytest_cache", ".mypy_cache"];
+const SKIP_DIRS: &[&str] = &[
+    ".git",
+    ".wright",
+    "target",
+    "node_modules",
+    "dist",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".pytest_cache",
+    ".mypy_cache",
+];
 
 /// Every regular file under `dir`, as (path relative to `dir` with `/`,
 /// bytes), sorted so the same tree makes the same archive. Symbolic links
 /// are skipped: an export copies the project, not what it points at.
 fn files(dir: &Path, skip: &dyn Fn(&str, bool) -> bool) -> Result<Vec<(String, Vec<u8>)>, String> {
-    fn walk(root: &Path, dir: &Path, skip: &dyn Fn(&str, bool) -> bool, out: &mut Vec<(String, Vec<u8>)>) -> Result<(), String> {
-        let mut entries: Vec<_> = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?.flatten().collect();
+    fn walk(
+        root: &Path,
+        dir: &Path,
+        skip: &dyn Fn(&str, bool) -> bool,
+        out: &mut Vec<(String, Vec<u8>)>,
+    ) -> Result<(), String> {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .map_err(|e| format!("{}: {e}", dir.display()))?
+            .flatten()
+            .collect();
         entries.sort_by_key(|e| e.file_name());
         for e in entries {
             let meta = std::fs::symlink_metadata(e.path()).map_err(|err| err.to_string())?;
-            let rel = e.path().strip_prefix(root).map_err(|err| err.to_string())?.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect::<Vec<_>>().join("/");
+            let rel = e
+                .path()
+                .strip_prefix(root)
+                .map_err(|err| err.to_string())?
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+                .join("/");
             if meta.file_type().is_symlink() || skip(&rel, meta.is_dir()) {
                 continue;
             }
             if meta.is_dir() {
                 walk(root, &e.path(), skip, out)?;
             } else if meta.is_file() {
-                out.push((rel, std::fs::read(e.path()).map_err(|err| format!("{}: {err}", e.path().display()))?));
+                out.push((
+                    rel,
+                    std::fs::read(e.path())
+                        .map_err(|err| format!("{}: {err}", e.path().display()))?,
+                ));
             }
         }
         Ok(())
@@ -196,34 +250,74 @@ fn wheel(project: &Path, bp: &Blueprint) -> Result<(String, Vec<u8>), String> {
     let slug = convention::slug(&bp.meta.name);
     let pkg = project.join("src").join(&slug);
     if !pkg.is_dir() {
-        return Err(format!("no Python package at src/{slug}/ — the convention puts the code there"));
+        return Err(format!(
+            "no Python package at src/{slug}/ — the convention puts the code there"
+        ));
     }
     let init = std::fs::read_to_string(pkg.join("__init__.py")).unwrap_or_default();
     let version = init
         .lines()
-        .find_map(|l| l.trim().strip_prefix("__version__").map(|r| r.trim().trim_start_matches('=').trim().trim_matches(|c| c == '"' || c == '\'').to_string()))
+        .find_map(|l| {
+            l.trim().strip_prefix("__version__").map(|r| {
+                r.trim()
+                    .trim_start_matches('=')
+                    .trim()
+                    .trim_matches(|c| c == '"' || c == '\'')
+                    .to_string()
+            })
+        })
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| "0.1.0".into());
     let dist = format!("{slug}-{version}.dist-info");
-    let skip = |rel: &str, is_dir: bool| (is_dir && rel.rsplit('/').next() == Some("__pycache__")) || rel.ends_with(".pyc");
-    let mut entries: Vec<(String, Vec<u8>)> = files(&pkg, &skip)?.into_iter().map(|(p, d)| (format!("{slug}/{p}"), d)).collect();
+    let skip = |rel: &str, is_dir: bool| {
+        (is_dir && rel.rsplit('/').next() == Some("__pycache__")) || rel.ends_with(".pyc")
+    };
+    let mut entries: Vec<(String, Vec<u8>)> = files(&pkg, &skip)?
+        .into_iter()
+        .map(|(p, d)| (format!("{slug}/{p}"), d))
+        .collect();
 
-    let summary = bp.intent.summary.lines().next().unwrap_or("").trim().to_string();
+    let summary = bp
+        .intent
+        .summary
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let readme = std::fs::read_to_string(project.join("README.md")).unwrap_or_default();
     let metadata = format!(
         "Metadata-Version: 2.1\nName: {name}\nVersion: {version}\nSummary: {summary}\nRequires-Python: >=3.9\nDescription-Content-Type: text/markdown\n\n{readme}",
         name = slug.replace('_', "-"),
     );
     entries.push((format!("{dist}/METADATA"), metadata.into_bytes()));
-    entries.push((format!("{dist}/WHEEL"), format!("Wheel-Version: 1.0\nGenerator: wright {}\nRoot-Is-Purelib: true\nTag: py3-none-any\n", env!("CARGO_PKG_VERSION")).into_bytes()));
+    entries.push((
+        format!("{dist}/WHEEL"),
+        format!(
+            "Wheel-Version: 1.0\nGenerator: wright {}\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            env!("CARGO_PKG_VERSION")
+        )
+        .into_bytes(),
+    ));
     let main = std::fs::read_to_string(pkg.join("__main__.py")).unwrap_or_default();
     if main.contains("def main(") {
-        entries.push((format!("{dist}/entry_points.txt"), format!("[console_scripts]\n{} = {slug}.__main__:main\n", slug.replace('_', "-")).into_bytes()));
+        entries.push((
+            format!("{dist}/entry_points.txt"),
+            format!(
+                "[console_scripts]\n{} = {slug}.__main__:main\n",
+                slug.replace('_', "-")
+            )
+            .into_bytes(),
+        ));
     }
     // RECORD: every file with its SHA-256 and size; RECORD itself unhashed.
     let mut record = String::new();
     for (path, data) in &entries {
-        record.push_str(&format!("{path},sha256={},{}\n", sha256::base64_url(&sha256::digest(data)), data.len()));
+        record.push_str(&format!(
+            "{path},sha256={},{}\n",
+            sha256::base64_url(&sha256::digest(data)),
+            data.len()
+        ));
     }
     record.push_str(&format!("{dist}/RECORD,,\n"));
     entries.push((format!("{dist}/RECORD"), record.into_bytes()));
@@ -248,12 +342,22 @@ fn tool(name: &str) -> Command {
 }
 
 fn run(mut cmd: Command, dir: &Path, what: &str) -> Result<(), String> {
-    let out = cmd.current_dir(dir).output().map_err(|e| format!("could not start {what}: {e} — is it installed and on PATH?"))?;
+    let out = cmd
+        .current_dir(dir)
+        .output()
+        .map_err(|e| format!("could not start {what}: {e} — is it installed and on PATH?"))?;
     if out.status.success() {
         return Ok(());
     }
     let err = String::from_utf8_lossy(&out.stderr);
-    let tail: Vec<&str> = err.lines().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: Vec<&str> = err
+        .lines()
+        .rev()
+        .take(12)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     Err(format!("{what} failed:\n{}", tail.join("\n")))
 }
 
@@ -263,7 +367,14 @@ fn crate_file(project: &Path) -> Result<(String, Vec<u8>), String> {
     let scratch = std::env::temp_dir().join(format!("wright-crate-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     let mut cmd = tool("cargo");
-    cmd.args(["package", "--allow-dirty", "--no-verify", "--quiet", "--target-dir"]).arg(&scratch);
+    cmd.args([
+        "package",
+        "--allow-dirty",
+        "--no-verify",
+        "--quiet",
+        "--target-dir",
+    ])
+    .arg(&scratch);
     run(cmd, project, "cargo package")?;
     let found = std::fs::read_dir(scratch.join("package"))
         .map_err(|e| format!("cargo package wrote nothing: {e}"))?
@@ -271,7 +382,10 @@ fn crate_file(project: &Path) -> Result<(String, Vec<u8>), String> {
         .map(|e| e.path())
         .find(|p| p.extension().is_some_and(|x| x == "crate"))
         .ok_or("cargo package made no .crate file")?;
-    let name = found.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let name = found
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
     let bytes = std::fs::read(&found).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_dir_all(&scratch);
     Ok((name, bytes))
@@ -300,5 +414,8 @@ fn web(project: &Path, bp: &Blueprint) -> Result<(String, Vec<u8>), String> {
         .unwrap_or_else(|| "0.1.0".into());
     let slug = convention::slug(&bp.meta.name).replace('_', "-");
     let entries = files(&dist, &|_, _| false)?;
-    Ok((format!("{slug}-{version}-web.zip"), zip_of(&slug, &entries)?))
+    Ok((
+        format!("{slug}-{version}-web.zip"),
+        zip_of(&slug, &entries)?,
+    ))
 }

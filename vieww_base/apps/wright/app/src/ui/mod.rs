@@ -556,6 +556,17 @@ impl Ui {
                     Ok(text) if !text.is_empty() => {
                         c.insert_text(&text);
                         c.voice.set(Voice::Idle);
+                        // Voice-first (the memo's item 6): on Home — and
+                        // on the new-session page — speech alone STARTS
+                        // the session. The person spoke their project;
+                        // the interview begins from their words, and
+                        // the Confirm Gate still guards everything that
+                        // runs. Nothing else changes: typing still needs
+                        // the send button, because a keyboard is a
+                        // decision already made.
+                        if id == self.home.id || id == self.fresh.id {
+                            self.start_session_from(&c);
+                        }
                     }
                     Ok(_) => c.voice.set(Voice::Failed("No words came through — try again a little closer to the mic.".into())),
                     Err(e) => c.voice.set(Voice::Failed(e)),

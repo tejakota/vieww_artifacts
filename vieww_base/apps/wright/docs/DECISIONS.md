@@ -214,6 +214,11 @@ an Ed25519 implementation in v0.3.
 **Reversal.** An ADR naming a specific reviewed reference implementation
 for a specific primitive, BLAKE3-style, with vectors.
 
+*(Exercised, 2026-10-22: ADR-025 names Ed25519 — RFC 8032 reference port,
+`core/src/ed25519.rs` — and SHA-512 — FIPS 180-4, `core/src/sha512.rs` — for
+receipt and recipe signing, pinned to the RFC's and NIST's vectors plus
+OpenSSL cross-vectors computed on the build machine.)*
+
 ---
 
 ## ADR-013 — Wright's state lives outside the project · Accepted
@@ -442,3 +447,186 @@ plan; curl is the bridge, not the destination.
    kernels would make prompts ~3x faster (llama.cpp's margin today) but
    need `unsafe` loads. Allow one small, test-pinned `infer/src/simd.rs`,
    or wait for safe SIMD in stable Rust? (`docs/MODELS.md`, "Speed".)
+
+## ADR-024 — The Rule of Two, enforced by the validator and the gate · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #1, made checkable. An agent may not hold private data,
+untrusted input and an outbound channel at once unless a human approved
+that combination. Every tool on the palette carries its *legs*:
+`PrivateData` (it can read the person's own files), `UntrustedInput`
+(its output depends on the outside world), `OutboundChannel` (it can
+send something out).
+
+- **Legs are typed on the palette**, not inferred from prose:
+  `files-read` stands on the private leg, `http-read` on untrusted,
+  `http-post` on outbound, `shell` on private+untrusted, and the new
+  `worker` and `mcp-call` tools say theirs (ADR-026/029).
+- **Taint is a fixpoint** (the memo's bet #4): an artifact is untrusted
+  when any producer on the untrusted leg made it; anything that reads
+  it inherits the leg, so the mark follows the data through the graph,
+  not the tool that touched it last. `core/src/rule_of_two.rs` iterates
+  to a fixed point (bounded; validation refuses cycles first).
+- **The validator refuses** a 3-leg agent without `approval
+  "before-send"` on its card, in one sentence a person can read.
+- **The gate asks again** before every outbound step of a 3-leg agent,
+  even when the card promised approval — the promise names the
+  combination, the ask names the actual send. Belt and braces, because
+  a blueprint is compiled, not trusted.
+- Artifacts an untrusted-touched task writes say so in the event spine.
+
+The hn-digest's split (fetch, then send) never trips: the Fetcher holds
+untrusted, the Mailer outbound + inherited-untrusted — two legs each,
+and the Mailer already promised to ask before sending.
+
+## ADR-025 — Signed receipts, acceptance sentences, and `wright verify` · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's moves #1 and #2. A receipt is only worth something if a
+third party can check it, so receipts are now `wright.run-receipt/2`:
+
+- **Every input the plan consumed is recorded with its BLAKE3** (stored
+  in the object store), so a verifier can name what the work was based on.
+- **Every numbered acceptance sentence is recorded with its verdict** —
+  the promises a person approved, kept or broken, in the receipt.
+- **The Rule of Two agents are named**, so the risky ones are visible.
+- **The whole receipt is signed with Ed25519** over its exact JSON bytes
+  (the writer is insertion-ordered, so bytes reproduce), with a
+  reference port of RFC 8032 in `core/src/ed25519.rs` — no crates, no
+  unsafe, pinned byte-for-byte to the RFC's vectors and to three
+  OpenSSL-generated pairs computed on this machine. The signing key
+  lives in the OS keychain (`keychain:wright/receipt-signing`), with an
+  env override for CI and an honest local-generated fallback whose
+  provenance the receipt states. SHA-512 (FIPS 180-4) is ported the
+  same way, constants computed from their definitions and pinned to
+  OpenSSL's digests.
+- **`wright verify` runs five checks** and prints them in words:
+  signature, event log hash, artifacts vs the store and the folder,
+  inputs, blueprint commit. v1 receipts are reported as pre-signature,
+  never silently passed.
+
+Acceptance sentences: a deliverable may carry `accept "..."` lines —
+promises the person reads in the Confirm Gate, Testwright must check
+(`ACCEPT <n>: PASS|FAIL` per numbered promise, parsed strictly by
+`wright_agents::parse_accepts`), and the Reviewer may not approve past
+a broken one — enforced in the engine, not in the prompt.
+
+## ADR-026 — Other agents as workers · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's move #3 and bet #2. A blueprint hands a step to an external
+coding agent — Claude Code, Codex, Kimi Code, ZCode, anything the
+machine configures — with Wright as the manager:
+
+```kdl
+agent Coder { goal "write the tool" worker "claude-code"
+             worker-files "src/" worker-timeout 600 out "done.txt" }
+```
+
+- **Workers are config, not blueprints**: `worker "claude-code"
+  command="claude" args="--print" timeout=900` in config.kdl; the four
+  the memo names ship as defaults.
+- **A copy, never the real project**: the tool clones the workspace to
+  a throwaway temp dir, writes a `WORKER.md` brief, runs the agent with
+  the prompt as its last argument, and diffs the copy back.
+- **All or nothing**: when the diff steps outside `worker-files`,
+  NOTHING is applied; partial takeovers are refused in words.
+- **No keys**: the run gets a scrubbed environment; on Linux with
+  Landlock it also gets the kernel sandbox `shell` gets, and where the
+  kernel has no Landlock the run says so and proceeds with the copy +
+  scrubbed env + the card's clock.
+- **No model budget**: the engine runs the step through the gate
+  (a `worker` tool call, permit and all), never calls a model; the
+  external agent's own account pays for its tokens.
+- The worker's output goes through the same Testwright and Reviewer as
+  everything else, and worker tasks are never cached — an external
+  agent's answer is not a function of the workspace bytes.
+
+## ADR-027 — Typed edges · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #6. An edge may name its artifact and promise a shape:
+
+```kdl
+edge from="Fetcher" to="Summarizer" out="stories.json" in="stories.json" schema="json-array"
+```
+
+Five shapes, deliberately readable: `any`, `text`, `json-object`,
+`json-array`, `csv` — checked over the actual bytes in one pass. Names
+are validated at plan time (the binding must match the cards); bytes
+are checked at fire time, before the consumer runs, and a broken
+promise fails the plan with both sides named. One file, one shape;
+unions and regexes would be the start of a type system, and this is a
+contract you can say out loud.
+
+## ADR-028 — Recipes are curated and signed, and nothing installs unsigned · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's move #4. A recipe is one KDL file: `recipe "id" { version,
+publisher, description, blueprint, publisher-key }` plus a `signature`
+line. The signature (Ed25519, the same reference port as receipts)
+covers the recipe's canonical bytes — the meaning, not the layout — so
+a publisher can reformat the file without re-signing while an edited
+blueprint fails verification. `wright recipe sign` signs with this
+machine's publishing key; `install` verifies FIRST and refuses an
+unsigned or tampered recipe with the sentence that quotes this ADR; the
+gallery ships unsigned *sources* by design, because the gallery's own
+rule is that nothing installs without a signature. The README in
+`recipes/` says exactly that.
+
+## ADR-029 — MCP behind permits · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #3. MCP servers are other people's programs, so they run
+inside the same law as everything else:
+
+```kdl
+# config.kdl — the pin is BLAKE3 of the executable's bytes
+mcp "weather" command="uvx" args="mcp-server-weather,--local" hash="blake3:..." timeout=60
+```
+
+```kdl
+# the card allow-lists tools; anything else does not exist
+agent Looker { goal "weather" mcp server="weather" allow="get_forecast"
+               approval "before-send" out "w.txt" }
+```
+
+- **Pinned by hash**: before the first spawn, the executable is hashed
+  and compared with the pin; a server that changed since the pin was
+  approved is refused, loudly. `wright mcp-hash <command>` prints the
+  pin to paste. Config refuses an unpinned server at parse time.
+- **The card is the law**: the server name must match, the tool must be
+  allow-listed, and the server's own tools/list must offer it — both
+  sides of the contract must agree.
+- **The wire is std-only**: JSON-RPC 2.0, one message per line, over the
+  server's stdio (MCP's stdio transport, protocol 2024-11-05). A fresh
+  process per call; a watchdog thread owns the clock; teardown kills.
+- **Answers are outside data**: the palette marks `mcp-call` untrusted
+  and outbound, so taint tracking and the Rule of Two apply — an MCP
+  agent reading your files without a human approval is refused at plan
+  time (ADR-024).
+
+## ADR-030 — A public benchmark: time to a checked outcome · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #8. `wright bench [dir] [--runs N]` fires the project
+through the real engine and measures the two numbers that matter to a
+person who does not write code:
+
+- **Time to a checked outcome**: from `RunStarted` to a receipt whose
+  verdict is `approve` — the OUTCOME CHECKED, not "the model answered".
+- **Human interventions**: every `ApprovalRequested` the run raised;
+  zero is the number an unattended run is allowed to have.
+
+Two rules keep it honest: the reported median is the pessimistic (lower)
+one, and every measured run's receipt stays in the store for
+`wright verify` — a benchmark number nobody can audit is marketing.
+The release gate is the same numbers over the recipe gallery, recorded
+in docs/BENCHMARK.md on a machine that can run the sandbox fully.

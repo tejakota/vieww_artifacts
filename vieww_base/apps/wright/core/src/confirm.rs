@@ -14,6 +14,8 @@
 use crate::blueprint::model::*;
 use crate::compiler::{SystemKind, TaskGraph, TaskKind};
 use crate::convention;
+use crate::palette::Leg;
+use crate::rule_of_two;
 use crate::schedule::Cron;
 
 /// One line of the summary.
@@ -28,7 +30,11 @@ pub struct Line {
 }
 
 fn line(source: impl Into<String>, text: impl Into<String>, attention: bool) -> Line {
-    Line { source: source.into(), text: text.into(), attention }
+    Line {
+        source: source.into(),
+        text: text.into(),
+        attention,
+    }
 }
 
 fn usd(micro: u64) -> String {
@@ -38,9 +44,17 @@ fn usd(micro: u64) -> String {
 /// Build the summary for a blueprint and its compiled graph.
 pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
     let mut out = Vec::new();
-    out.push(line("meta", format!("Wright will build \"{}\".", bp.meta.name), false));
+    out.push(line(
+        "meta",
+        format!("Wright will build \"{}\".", bp.meta.name),
+        false,
+    ));
     if !bp.intent.summary.is_empty() {
-        out.push(line("intent", format!("In your words: {}", bp.intent.summary), false));
+        out.push(line(
+            "intent",
+            format!("In your words: {}", bp.intent.summary),
+            false,
+        ));
     }
     if bp.project.language != "none" {
         out.push(line(
@@ -64,12 +78,63 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
         t.push('.');
         out.push(line(format!("agent:{}", a.name), t, false));
 
+        // Worker steps: name the program that does the work and what it
+        // may touch (ADR-026). Nothing here hides that another agent runs.
+        if let Some(w) = &a.worker {
+            let scope = if a.worker_files.is_empty() {
+                "the whole project".to_string()
+            } else {
+                format!("only {}", a.worker_files.join(", "))
+            };
+            out.push(line(
+                format!("agent:{}", a.name),
+                format!("  {} is done by {} ({}), an external coding agent: it runs in a sandboxed copy, may change {}, and its changes are applied whole or not at all.", a.name, w, a.worker_timeout_secs, scope),
+                true,
+            ));
+        }
+        // MCP cards: name the server and the exact tools allowed (ADR-029).
+        if let Some(server) = &a.mcp_server {
+            out.push(line(
+                format!("agent:{}", a.name),
+                format!(
+                    "  {} may call only {} on the MCP server '{}', pinned by hash in the settings. Its answers are treated as outside data.",
+                    a.name,
+                    a.mcp_allow.join(", "),
+                    server
+                ),
+                true,
+            ));
+        }
+
         let perms = a.permissions.names();
         if perms.is_empty() {
             out.push(line(format!("agent:{}", a.name), format!("  {} is fully sandboxed: no files outside its outputs, no network, no programs.", a.name), false));
         } else {
             let risky = a.permissions.bits() & (PermissionSet::NETWORK | PermissionSet::SHELL) != 0;
-            out.push(line(format!("agent:{}", a.name), format!("  {} may {}.", a.name, join_and(&perms)), risky));
+            out.push(line(
+                format!("agent:{}", a.name),
+                format!("  {} may {}.", a.name, join_and(&perms)),
+                risky,
+            ));
+        }
+        // The Rule of Two, in words (ADR-024): what this agent holds.
+        let legs = rule_of_two::legs_of_agent(bp, &a.name);
+        if legs.is_three_legged() {
+            out.push(line(
+                format!("agent:{}", a.name),
+                format!(
+                    "  {} holds all three legs at once — {}. Wright will ask you before every send it makes.",
+                    a.name,
+                    rule_of_two::describe_legs(legs)
+                ),
+                true,
+            ));
+        } else if !legs.is_none() {
+            out.push(line(
+                format!("agent:{}", a.name),
+                format!("  {} {}.", a.name, rule_of_two::describe_legs(legs)),
+                legs.has(Leg::OutboundChannel),
+            ));
         }
         if a.is_delivery() {
             let ask = if a.approval == ApprovalPolicy::BeforeSend {
@@ -83,15 +148,43 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
                 true,
             ));
         } else if a.is_volatile() {
-            out.push(line(format!("agent:{}", a.name), format!("  {} reads live data, so it runs fresh every time.", a.name), false));
+            out.push(line(
+                format!("agent:{}", a.name),
+                format!("  {} reads live data, so it runs fresh every time.", a.name),
+                false,
+            ));
         }
+    }
+
+    // Typed edges: the hand-offs, promised in words (ADR-027).
+    for e in &bp.edges {
+        if let Some(shape) = &e.schema {
+            let carried = e.out.clone().unwrap_or_default();
+            out.push(line(
+                format!("edge:{}->{}", e.from, e.to),
+                format!(
+                    "The hand-off from {} to {} ({} {}) is promised to be {} — a broken one stops the plan before it runs.",
+                    e.from, e.to, e.from, carried, shape.promise()
+                ),
+                false,
+            ));
+        }
+    }
+    // Untrusted data, tracked (the memo's bet #4): what the plan knows
+    // came from outside, and where it flows.
+    let tainted = rule_of_two::untrusted_artifacts(bp);
+    if !tainted.is_empty() {
+        let list: Vec<String> = tainted.iter().cloned().collect();
+        out.push(line("taint", format!("These artifacts carry outside data: {}. Anything that reads them is treated as untrusted-touched.", list.join(", ")), false));
     }
 
     let system: Vec<&str> = graph
         .tasks
         .iter()
         .filter_map(|t| match t.kind {
-            TaskKind::System(k) if k != SystemKind::Shipwright && k != SystemKind::Operator => Some(k.name()),
+            TaskKind::System(k) if k != SystemKind::Shipwright && k != SystemKind::Operator => {
+                Some(k.name())
+            }
             _ => None,
         })
         .collect();
@@ -103,26 +196,54 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
         ));
     }
     if bp.chips.logging {
-        out.push(line("chip:logging", "Logwright sets up structured logs in logs/.", false));
+        out.push(line(
+            "chip:logging",
+            "Logwright sets up structured logs in logs/.",
+            false,
+        ));
     }
     if bp.chips.ci {
-        out.push(line("chip:ci", "Firewright sets up CI (.github/workflows/ci.yml).", false));
+        out.push(line(
+            "chip:ci",
+            "Firewright sets up CI (.github/workflows/ci.yml).",
+            false,
+        ));
     }
     if !system.is_empty() {
-        out.push(line("compiler", format!("Wright adds these helpers for you: {}.", system.join(", ")), false));
+        out.push(line(
+            "compiler",
+            format!("Wright adds these helpers for you: {}.", system.join(", ")),
+            false,
+        ));
     }
 
     if let Some(s) = &bp.chips.scheduling {
-        let when = Cron::describe(&s.cron).unwrap_or_else(|| format!("on the schedule '{}'", s.cron));
-        out.push(line("chip:scheduling", format!("It runs {when} ({}), while Wright's background service is running.", s.tz), false));
+        let when =
+            Cron::describe(&s.cron).unwrap_or_else(|| format!("on the schedule '{}'", s.cron));
+        out.push(line(
+            "chip:scheduling",
+            format!(
+                "It runs {when} ({}), while Wright's background service is running.",
+                s.tz
+            ),
+            false,
+        ));
     } else {
-        out.push(line("chip:scheduling", "It runs when you press Run (no schedule).", false));
+        out.push(line(
+            "chip:scheduling",
+            "It runs when you press Run (no schedule).",
+            false,
+        ));
     }
     if !bp.chips.secrets.is_empty() {
         let names: Vec<&str> = bp.chips.secrets.iter().map(|s| s.name.as_str()).collect();
         out.push(line(
             "chip:secrets",
-            format!("It uses {} from your keychain: {}. Values are never stored or logged.", plural(names.len(), "secret"), names.join(", ")),
+            format!(
+                "It uses {} from your keychain: {}. Values are never stored or logged.",
+                plural(names.len(), "secret"),
+                names.join(", ")
+            ),
             true,
         ));
     }
@@ -141,7 +262,16 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
     ));
 
     for d in &bp.deliverables {
-        out.push(line("deliverable", format!("Done means: {}", d.check), false));
+        out.push(line(
+            "deliverable",
+            format!("Done means: {}", d.check),
+            false,
+        ));
+        // Acceptance sentences, numbered as Testwright reports them:
+        // the person reads these as the run's promises.
+        for (i, sentence) in d.accept.iter().enumerate() {
+            out.push(line("deliverable", format!("  promise {}: {} — Testwright must check this, and the Reviewer may not approve a run where it fails.", i + 1, sentence), false));
+        }
     }
     let test = convention::test_cmd(bp);
     if !test.is_empty() {
@@ -151,14 +281,22 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
 }
 
 fn plural(n: usize, word: &str) -> String {
-    if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
+    if n == 1 {
+        format!("1 {word}")
+    } else {
+        format!("{n} {word}s")
+    }
 }
 
 fn join_and(items: &[&str]) -> String {
     match items.len() {
         0 => String::new(),
         1 => items[0].to_string(),
-        _ => format!("{} and {}", items[..items.len() - 1].join(", "), items[items.len() - 1]),
+        _ => format!(
+            "{} and {}",
+            items[..items.len() - 1].join(", "),
+            items[items.len() - 1]
+        ),
     }
 }
 
@@ -182,6 +320,83 @@ mod tests {
         assert!(all.contains("every day at 08:00"), "{all}");
         assert!(all.contains("Summarizer is fully sandboxed"), "{all}");
         // Attention flags are set from bits, not prose.
-        assert!(lines.iter().any(|l| l.attention && l.source == "chip:secrets"));
+        assert!(lines
+            .iter()
+            .any(|l| l.attention && l.source == "chip:secrets"));
+    }
+
+    #[test]
+    fn rule_of_two_taint_and_promises_read_in_plain_words() {
+        let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
+agent Fetcher { goal \"fetch\" tools \"http-read\" out \"stories.json\" permissions network=true }\n\
+agent Summarizer { goal \"sum\" in \"stories.json\" out \"summaries.json\" }\n\
+agent Mailer { goal \"mail\" tools \"http-post\" in \"summaries.json\" approval \"before-send\" permissions network=true }\n\
+edge from=\"Fetcher\" to=\"Summarizer\" out=\"stories.json\" in=\"stories.json\" schema=\"json-array\"\n\
+edge from=\"Summarizer\" to=\"Mailer\"\n\
+deliverable kind=\"email\" { check \"c\" accept \"every story has a link\" }\n";
+        let bp = parse::blueprint(src).unwrap();
+        let g = compile(&bp).unwrap();
+        let lines = summary(&bp, &g);
+        let all: String = lines
+            .iter()
+            .map(|l| l.text.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            all.contains("takes untrusted input"),
+            "the Fetcher's legs are named: {all}"
+        );
+        assert!(
+            all.contains("can send outward"),
+            "the Mailer's legs are named: {all}"
+        );
+        assert!(all.contains("carry outside data"), "taint is listed: {all}");
+        assert!(
+            all.contains("promised to be a JSON array"),
+            "typed edges promise in words: {all}"
+        );
+        assert!(
+            all.contains("promise 1: every story has a link"),
+            "acceptance sentences are numbered: {all}"
+        );
+        assert!(
+            all.contains("the Reviewer may not approve"),
+            "the enforcement is said: {all}"
+        );
+    }
+
+    #[test]
+    fn worker_and_mcp_cards_are_said_out_loud() {
+        let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
+agent Coder { goal \"write the tool\" worker \"claude-code\" worker-files \"src/\" out \"done.txt\" }\n\
+agent Looker { goal \"weather\" mcp server=\"weather\" allow=\"get_forecast\" approval \"before-send\" out \"w.txt\" permissions spawn=true network=true }\n\
+deliverable kind=\"k\" { check \"c\" }\n";
+        let bp = parse::blueprint(src).unwrap();
+        let g = compile(&bp).unwrap();
+        let all: String = summary(&bp, &g)
+            .iter()
+            .map(|l| l.text.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            all.contains("done by claude-code"),
+            "the worker is named: {all}"
+        );
+        assert!(
+            all.contains("sandboxed copy"),
+            "the sandbox promise is said: {all}"
+        );
+        assert!(
+            all.contains("only src/"),
+            "the worker's scope is said: {all}"
+        );
+        assert!(
+            all.contains("MCP server 'weather'"),
+            "the MCP server is named: {all}"
+        );
+        assert!(
+            all.contains("only get_forecast"),
+            "the MCP allowlist is named: {all}"
+        );
     }
 }

@@ -7,7 +7,11 @@ use wright_core::blueprint::parse;
 use wright_core::convention;
 
 fn check(lang: &str, tool: &str) {
-    if std::process::Command::new(tool).arg("--version").output().is_err() {
+    if std::process::Command::new(tool)
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("{tool} not installed; skipping {lang}");
         return;
     }
@@ -23,7 +27,12 @@ fn check(lang: &str, tool: &str) {
         std::fs::write(&p, &f.contents).unwrap();
     }
     for cmd in [convention::test_cmd(&bp), convention::run_cmd(&bp)] {
-        let out = std::process::Command::new("sh").arg("-c").arg(&cmd).current_dir(&dir).output().unwrap();
+        let out = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&cmd)
+            .current_dir(&dir)
+            .output()
+            .unwrap();
         assert!(
             out.status.success(),
             "{lang}: `{cmd}` failed\n{}\n{}",
@@ -31,7 +40,10 @@ fn check(lang: &str, tool: &str) {
             String::from_utf8_lossy(&out.stderr)
         );
     }
-    assert!(dir.join("logs/main.log").exists(), "{lang}: running it wrote a structured log line");
+    assert!(
+        dir.join("logs/main.log").exists(),
+        "{lang}: running it wrote a structured log line"
+    );
 }
 
 #[test]
@@ -59,7 +71,11 @@ fn rust_skeleton_runs_and_tests_green() {
 /// (`WRIGHT_TEST_NPM=1`), because it downloads packages.
 #[test]
 fn react_skeleton_tests_green_without_installs() {
-    if std::process::Command::new("node").arg("--version").output().is_err() {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("node not installed; skipping react");
         return;
     }
@@ -72,11 +88,24 @@ fn react_skeleton_tests_green_without_installs() {
         std::fs::write(&p, &f.contents).unwrap();
     }
     let run = |cmd: &str| {
-        let out = std::process::Command::new("sh").arg("-c").arg(cmd).current_dir(&dir).output().unwrap();
-        assert!(out.status.success(), "react: `{cmd}` failed\n{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        let out = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "react: `{cmd}` failed\n{}\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
     };
     run(&convention::test_cmd(&bp));
-    assert!(!dir.join("node_modules").exists(), "the tests ran with nothing installed");
+    assert!(
+        !dir.join("node_modules").exists(),
+        "the tests ran with nothing installed"
+    );
     if std::env::var("WRIGHT_TEST_NPM").is_ok() {
         run("npm install --no-audit --no-fund && npm run build");
         assert!(dir.join("dist/index.html").exists(), "vite built the app");

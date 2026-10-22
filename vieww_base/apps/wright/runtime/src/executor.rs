@@ -75,7 +75,11 @@ impl Shared {
     fn wait(&self, max: Duration) {
         let mut flag = lock(&self.signal_lock);
         if !*flag {
-            flag = self.signal.wait_timeout(flag, max).map(|(g, _)| g).unwrap_or_else(|p| p.into_inner().0);
+            flag = self
+                .signal
+                .wait_timeout(flag, max)
+                .map(|(g, _)| g)
+                .unwrap_or_else(|p| p.into_inner().0);
         }
         *flag = false;
     }
@@ -122,11 +126,20 @@ impl Executor {
         F: Future<Output = ()> + Send + 'static,
     {
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
-        lock(&self.shared.slots)
-            .insert(id, Slot { fut: Some(Box::pin(fut)), outcome: Outcome::Running, cancel_requested: false });
+        lock(&self.shared.slots).insert(
+            id,
+            Slot {
+                fut: Some(Box::pin(fut)),
+                outcome: Outcome::Running,
+                cancel_requested: false,
+            },
+        );
         lock(&self.shared.ready).push_back(id);
         self.shared.notify();
-        TaskHandle { id, shared: Arc::clone(&self.shared) }
+        TaskHandle {
+            id,
+            shared: Arc::clone(&self.shared),
+        }
     }
 
     /// Run a future to completion on this executor, pumping spawned
@@ -134,7 +147,10 @@ impl Executor {
     pub fn block_on<F: Future>(&self, fut: F) -> F::Output {
         let mut fut = Box::pin(fut);
         // The main future gets id 0; its waker just signals the loop.
-        let waker = Waker::from(Arc::new(TaskWaker { id: 0, shared: Arc::clone(&self.shared) }));
+        let waker = Waker::from(Arc::new(TaskWaker {
+            id: 0,
+            shared: Arc::clone(&self.shared),
+        }));
         let mut cx = Context::from_waker(&waker);
         loop {
             if let Poll::Ready(v) = fut.as_mut().poll(&mut cx) {
@@ -186,7 +202,10 @@ impl Executor {
         };
         let Some(mut fut) = taken else { return };
 
-        let waker = Waker::from(Arc::new(TaskWaker { id, shared: Arc::clone(&self.shared) }));
+        let waker = Waker::from(Arc::new(TaskWaker {
+            id,
+            shared: Arc::clone(&self.shared),
+        }));
         let mut cx = Context::from_waker(&waker);
         let polled = catch_unwind(AssertUnwindSafe(|| fut.as_mut().poll(&mut cx)));
         let mut slots = lock(&self.shared.slots);
@@ -216,7 +235,10 @@ impl Executor {
 
     /// Number of tasks whose slots are still held (for leak tests).
     pub fn live_slots(&self) -> usize {
-        lock(&self.shared.slots).values().filter(|s| s.fut.is_some()).count()
+        lock(&self.shared.slots)
+            .values()
+            .filter(|s| s.fut.is_some())
+            .count()
     }
 }
 
@@ -245,7 +267,10 @@ impl TaskHandle {
     }
 
     pub fn outcome(&self) -> Outcome {
-        lock(&self.shared.slots).get(&self.id).map(|s| s.outcome.clone()).unwrap_or(Outcome::Done)
+        lock(&self.shared.slots)
+            .get(&self.id)
+            .map(|s| s.outcome.clone())
+            .unwrap_or(Outcome::Done)
     }
 
     pub fn is_done(&self) -> bool {
@@ -261,7 +286,9 @@ pub struct TaskSet {
 
 impl TaskSet {
     pub fn new() -> Self {
-        TaskSet { handles: Vec::new() }
+        TaskSet {
+            handles: Vec::new(),
+        }
     }
 
     pub fn spawn<F>(&mut self, ex: &Executor, fut: F)
@@ -331,20 +358,27 @@ where
     T: Send + 'static,
     F: FnOnce() -> T + Send + 'static,
 {
-    let state = Arc::new(Mutex::new(BlockingState::<T> { result: None, waker: None }));
+    let state = Arc::new(Mutex::new(BlockingState::<T> {
+        result: None,
+        waker: None,
+    }));
     let s2 = Arc::clone(&state);
-    let spawned = std::thread::Builder::new().name("wright-blocking".into()).spawn(move || {
-        let r = catch_unwind(AssertUnwindSafe(f));
-        let waker = {
-            let mut st = lock(&s2);
-            st.result = Some(r);
-            st.waker.take()
-        };
-        if let Some(w) = waker {
-            w.wake();
-        }
-    });
-    let spawn_error = spawned.err().map(|e| format!("could not start a worker thread: {e}"));
+    let spawned = std::thread::Builder::new()
+        .name("wright-blocking".into())
+        .spawn(move || {
+            let r = catch_unwind(AssertUnwindSafe(f));
+            let waker = {
+                let mut st = lock(&s2);
+                st.result = Some(r);
+                st.waker.take()
+            };
+            if let Some(w) = waker {
+                w.wake();
+            }
+        });
+    let spawn_error = spawned
+        .err()
+        .map(|e| format!("could not start a worker thread: {e}"));
     std::future::poll_fn(move |cx| {
         if let Some(e) = &spawn_error {
             return Poll::Ready(Err(e.clone()));
@@ -410,7 +444,10 @@ impl CancellationToken {
 
     /// Resolves when the token is cancelled.
     pub async fn cancelled(&self) {
-        CancelledFut { token: self.clone() }.await
+        CancelledFut {
+            token: self.clone(),
+        }
+        .await
     }
 }
 
@@ -534,20 +571,26 @@ mod tests {
         });
 
         set.block_until_all_done(&ex);
-        assert!(done.load(Ordering::SeqCst), "waiter must observe cancellation");
+        assert!(
+            done.load(Ordering::SeqCst),
+            "waiter must observe cancellation"
+        );
     }
 
     #[test]
     fn repeated_polls_do_not_duplicate_wakers() {
         let token = CancellationToken::new();
         let mut fut = Box::pin(token.cancelled());
-        let waker = Waker::from(Arc::new(TaskWaker { id: 0, shared: Arc::new(Shared {
-            ready: Mutex::new(VecDeque::new()),
-            slots: Mutex::new(HashMap::new()),
-            next_id: AtomicU64::new(1),
-            signal: Condvar::new(),
-            signal_lock: Mutex::new(false),
-        }) }));
+        let waker = Waker::from(Arc::new(TaskWaker {
+            id: 0,
+            shared: Arc::new(Shared {
+                ready: Mutex::new(VecDeque::new()),
+                slots: Mutex::new(HashMap::new()),
+                next_id: AtomicU64::new(1),
+                signal: Condvar::new(),
+                signal_lock: Mutex::new(false),
+            }),
+        }));
         let mut cx = Context::from_waker(&waker);
         for _ in 0..5 {
             assert!(fut.as_mut().poll(&mut cx).is_pending());
@@ -664,6 +707,9 @@ mod tests {
             });
         }
         set.block_until_all_done(&ex);
-        assert!(started.elapsed() < Duration::from_millis(350), "four 100ms jobs ran concurrently");
+        assert!(
+            started.elapsed() < Duration::from_millis(350),
+            "four 100ms jobs ran concurrently"
+        );
     }
 }

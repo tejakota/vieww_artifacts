@@ -40,9 +40,17 @@ pub enum Role {
 pub enum Block {
     Text(String),
     /// The model asks to run a tool. `input` is a JSON object.
-    ToolUse { id: String, name: String, input: Value },
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
     /// The harness answers a tool use.
-    ToolResult { id: String, content: String, is_error: bool },
+    ToolResult {
+        id: String,
+        content: String,
+        is_error: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,7 +61,10 @@ pub struct Message {
 
 impl Message {
     pub fn user_text(t: impl Into<String>) -> Self {
-        Message { role: Role::User, blocks: vec![Block::Text(t.into())] }
+        Message {
+            role: Role::User,
+            blocks: vec![Block::Text(t.into())],
+        }
     }
 
     /// Total characters of text in this message (for compaction).
@@ -90,7 +101,14 @@ pub struct CompletionRequest {
 
 impl CompletionRequest {
     pub fn new(model: impl Into<String>) -> Self {
-        CompletionRequest { model: model.into(), system: String::new(), messages: Vec::new(), tools: Vec::new(), max_tokens: 4096, stream: true }
+        CompletionRequest {
+            model: model.into(),
+            system: String::new(),
+            messages: Vec::new(),
+            tools: Vec::new(),
+            max_tokens: 4096,
+            stream: true,
+        }
     }
 }
 
@@ -124,7 +142,13 @@ impl CompletionResponse {
     pub fn text(&self) -> String {
         self.blocks
             .iter()
-            .filter_map(|b| if let Block::Text(t) = b { Some(t.as_str()) } else { None })
+            .filter_map(|b| {
+                if let Block::Text(t) = b {
+                    Some(t.as_str())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>()
             .join("")
     }
@@ -162,7 +186,11 @@ pub trait StreamDecoder: Send {
 pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
     /// Build the HTTP request. Pure (the key is an argument).
-    fn build_request(&self, req: &CompletionRequest, api_key: Option<&str>) -> Result<Request, String>;
+    fn build_request(
+        &self,
+        req: &CompletionRequest,
+        api_key: Option<&str>,
+    ) -> Result<Request, String>;
     /// Parse a complete non-streaming body. Pure.
     fn parse_response(&self, body: &[u8]) -> Result<CompletionResponse, String>;
     /// A fresh decoder for one streaming response.
@@ -217,12 +245,25 @@ impl OpenAiCompatible {
     fn messages(req: &CompletionRequest) -> Vec<Value> {
         let mut out = Vec::new();
         if !req.system.is_empty() {
-            out.push(Value::obj(vec![("role", Value::str("system")), ("content", Value::str(req.system.clone()))]));
+            out.push(Value::obj(vec![
+                ("role", Value::str("system")),
+                ("content", Value::str(req.system.clone())),
+            ]));
         }
         for m in &req.messages {
             match m.role {
                 Role::Assistant => {
-                    let text: String = m.blocks.iter().filter_map(|b| if let Block::Text(t) = b { Some(t.as_str()) } else { None }).collect();
+                    let text: String = m
+                        .blocks
+                        .iter()
+                        .filter_map(|b| {
+                            if let Block::Text(t) = b {
+                                Some(t.as_str())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
                     let calls: Vec<Value> = m
                         .blocks
                         .iter()
@@ -230,12 +271,28 @@ impl OpenAiCompatible {
                             Block::ToolUse { id, name, input } => Some(Value::obj(vec![
                                 ("id", Value::str(id.clone())),
                                 ("type", Value::str("function")),
-                                ("function", Value::obj(vec![("name", Value::str(name.clone())), ("arguments", Value::str(json::to_string(input)))])),
+                                (
+                                    "function",
+                                    Value::obj(vec![
+                                        ("name", Value::str(name.clone())),
+                                        ("arguments", Value::str(json::to_string(input))),
+                                    ]),
+                                ),
                             ])),
                             _ => None,
                         })
                         .collect();
-                    let mut pairs = vec![("role", Value::str("assistant")), ("content", if text.is_empty() { Value::Null } else { Value::str(text) })];
+                    let mut pairs = vec![
+                        ("role", Value::str("assistant")),
+                        (
+                            "content",
+                            if text.is_empty() {
+                                Value::Null
+                            } else {
+                                Value::str(text)
+                            },
+                        ),
+                    ];
                     if !calls.is_empty() {
                         pairs.push(("tool_calls", Value::Arr(calls)));
                     }
@@ -246,16 +303,31 @@ impl OpenAiCompatible {
                     let mut text = String::new();
                     for b in &m.blocks {
                         match b {
-                            Block::ToolResult { id, content, is_error } => {
-                                let c = if *is_error { format!("ERROR: {content}") } else { content.clone() };
-                                out.push(Value::obj(vec![("role", Value::str("tool")), ("tool_call_id", Value::str(id.clone())), ("content", Value::str(c))]));
+                            Block::ToolResult {
+                                id,
+                                content,
+                                is_error,
+                            } => {
+                                let c = if *is_error {
+                                    format!("ERROR: {content}")
+                                } else {
+                                    content.clone()
+                                };
+                                out.push(Value::obj(vec![
+                                    ("role", Value::str("tool")),
+                                    ("tool_call_id", Value::str(id.clone())),
+                                    ("content", Value::str(c)),
+                                ]));
                             }
                             Block::Text(t) => text.push_str(t),
                             Block::ToolUse { .. } => {}
                         }
                     }
                     if !text.is_empty() {
-                        out.push(Value::obj(vec![("role", Value::str("user")), ("content", Value::str(text))]));
+                        out.push(Value::obj(vec![
+                            ("role", Value::str("user")),
+                            ("content", Value::str(text)),
+                        ]));
                     }
                 }
             }
@@ -269,7 +341,11 @@ impl Provider for OpenAiCompatible {
         "openai-compatible"
     }
 
-    fn build_request(&self, req: &CompletionRequest, api_key: Option<&str>) -> Result<Request, String> {
+    fn build_request(
+        &self,
+        req: &CompletionRequest,
+        api_key: Option<&str>,
+    ) -> Result<Request, String> {
         let mut body = vec![
             ("model", Value::str(req.model.clone())),
             ("messages", Value::Arr(Self::messages(req))),
@@ -287,7 +363,10 @@ impl Provider for OpenAiCompatible {
                             Value::obj(vec![
                                 ("name", Value::str(t.name.clone())),
                                 ("description", Value::str(t.description.clone())),
-                                ("parameters", json::parse(&t.schema).unwrap_or(Value::Obj(vec![]))),
+                                (
+                                    "parameters",
+                                    json::parse(&t.schema).unwrap_or(Value::Obj(vec![])),
+                                ),
                             ]),
                         ),
                     ])
@@ -297,10 +376,18 @@ impl Provider for OpenAiCompatible {
         }
         if req.stream {
             body.push(("stream", Value::Bool(true)));
-            body.push(("stream_options", Value::obj(vec![("include_usage", Value::Bool(true))])));
+            body.push((
+                "stream_options",
+                Value::obj(vec![("include_usage", Value::Bool(true))]),
+            ));
         }
-        let url = parse_url(&format!("{}/chat/completions", self.base_url.trim_end_matches('/')))?;
-        let mut r = Request::new("POST", url).header("Content-Type", "application/json").header("Accept", "text/event-stream, application/json");
+        let url = parse_url(&format!(
+            "{}/chat/completions",
+            self.base_url.trim_end_matches('/')
+        ))?;
+        let mut r = Request::new("POST", url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream, application/json");
         if let Some(k) = api_key {
             r = r.header("Authorization", &format!("Bearer {k}"));
         }
@@ -309,7 +396,9 @@ impl Provider for OpenAiCompatible {
 
     fn parse_response(&self, body: &[u8]) -> Result<CompletionResponse, String> {
         let v = json::parse(&String::from_utf8_lossy(body))?;
-        let msg = v.path("choices", &["0", "message"]).ok_or("response has no choices[0].message")?;
+        let msg = v
+            .path("choices", &["0", "message"])
+            .ok_or("response has no choices[0].message")?;
         let mut blocks = Vec::new();
         if let Some(t) = msg.str_of("content") {
             if !t.is_empty() {
@@ -320,12 +409,23 @@ impl Provider for OpenAiCompatible {
             for c in calls {
                 blocks.push(Block::ToolUse {
                     id: c.str_of("id").unwrap_or("call").to_string(),
-                    name: c.path("function", &["name"]).and_then(|n| n.as_str()).unwrap_or("").to_string(),
-                    input: tool_input_value(c.path("function", &["arguments"]).and_then(|a| a.as_str()).unwrap_or("")),
+                    name: c
+                        .path("function", &["name"])
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    input: tool_input_value(
+                        c.path("function", &["arguments"])
+                            .and_then(|a| a.as_str())
+                            .unwrap_or(""),
+                    ),
                 });
             }
         }
-        let finish = v.path("choices", &["0", "finish_reason"]).and_then(|f| f.as_str()).unwrap_or("");
+        let finish = v
+            .path("choices", &["0", "finish_reason"])
+            .and_then(|f| f.as_str())
+            .unwrap_or("");
         Ok(CompletionResponse {
             blocks,
             usage: openai_usage(v.get("usage")),
@@ -343,7 +443,10 @@ fn openai_usage(u: Option<&Value>) -> Usage {
     let Some(u) = u else { return Usage::default() };
     Usage {
         input_tokens: u.get("prompt_tokens").and_then(|n| n.as_u64()).unwrap_or(0),
-        output_tokens: u.get("completion_tokens").and_then(|n| n.as_u64()).unwrap_or(0),
+        output_tokens: u
+            .get("completion_tokens")
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0),
         cached_input_tokens: u
             .path("prompt_tokens_details", &["cached_tokens"])
             .and_then(|n| n.as_u64())
@@ -378,12 +481,18 @@ impl StreamDecoder for OpenAiDecoder {
         }
         let v = json::parse(&msg.data)?;
         if let Some(err) = v.get("error") {
-            return Err(format!("provider error: {}", err.str_of("message").unwrap_or("unknown")));
+            return Err(format!(
+                "provider error: {}",
+                err.str_of("message").unwrap_or("unknown")
+            ));
         }
         if let Some(m) = v.str_of("model") {
             self.model = m.to_string();
         }
-        if v.get("usage").map(|u| !matches!(u, Value::Null)).unwrap_or(false) {
+        if v.get("usage")
+            .map(|u| !matches!(u, Value::Null))
+            .unwrap_or(false)
+        {
             self.usage = openai_usage(v.get("usage"));
         }
         let mut out = Vec::new();
@@ -399,7 +508,8 @@ impl StreamDecoder for OpenAiDecoder {
                     for c in calls {
                         let idx = c.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
                         while self.calls.len() <= idx {
-                            self.calls.push((String::new(), String::new(), String::new()));
+                            self.calls
+                                .push((String::new(), String::new(), String::new()));
                         }
                         let slot = &mut self.calls[idx];
                         if let Some(id) = c.str_of("id") {
@@ -411,7 +521,9 @@ impl StreamDecoder for OpenAiDecoder {
                             }
                             slot.1.push_str(name);
                         }
-                        if let Some(args) = c.path("function", &["arguments"]).and_then(|a| a.as_str()) {
+                        if let Some(args) =
+                            c.path("function", &["arguments"]).and_then(|a| a.as_str())
+                        {
                             slot.2.push_str(args);
                         }
                     }
@@ -433,10 +545,25 @@ impl StreamDecoder for OpenAiDecoder {
             if name.is_empty() {
                 continue;
             }
-            blocks.push(Block::ToolUse { id: if id.is_empty() { format!("call_{i}") } else { id }, name, input: tool_input_value(&args) });
+            blocks.push(Block::ToolUse {
+                id: if id.is_empty() {
+                    format!("call_{i}")
+                } else {
+                    id
+                },
+                name,
+                input: tool_input_value(&args),
+            });
         }
-        let stop = self.stop.ok_or("the stream ended before the model finished (no finish_reason)")?;
-        Ok(CompletionResponse { blocks, usage: self.usage, stop, model: self.model })
+        let stop = self
+            .stop
+            .ok_or("the stream ended before the model finished (no finish_reason)")?;
+        Ok(CompletionResponse {
+            blocks,
+            usage: self.usage,
+            stop,
+            model: self.model,
+        })
     }
 }
 
@@ -450,7 +577,9 @@ pub struct Anthropic {
 
 impl Default for Anthropic {
     fn default() -> Self {
-        Anthropic { base_url: "https://api.anthropic.com".into() }
+        Anthropic {
+            base_url: "https://api.anthropic.com".into(),
+        }
     }
 }
 
@@ -459,7 +588,11 @@ impl Provider for Anthropic {
         "anthropic"
     }
 
-    fn build_request(&self, req: &CompletionRequest, api_key: Option<&str>) -> Result<Request, String> {
+    fn build_request(
+        &self,
+        req: &CompletionRequest,
+        api_key: Option<&str>,
+    ) -> Result<Request, String> {
         let messages: Vec<Value> = req
             .messages
             .iter()
@@ -468,14 +601,21 @@ impl Provider for Anthropic {
                     .blocks
                     .iter()
                     .map(|b| match b {
-                        Block::Text(t) => Value::obj(vec![("type", Value::str("text")), ("text", Value::str(t.clone()))]),
+                        Block::Text(t) => Value::obj(vec![
+                            ("type", Value::str("text")),
+                            ("text", Value::str(t.clone())),
+                        ]),
                         Block::ToolUse { id, name, input } => Value::obj(vec![
                             ("type", Value::str("tool_use")),
                             ("id", Value::str(id.clone())),
                             ("name", Value::str(name.clone())),
                             ("input", input.clone()),
                         ]),
-                        Block::ToolResult { id, content, is_error } => Value::obj(vec![
+                        Block::ToolResult {
+                            id,
+                            content,
+                            is_error,
+                        } => Value::obj(vec![
                             ("type", Value::str("tool_result")),
                             ("tool_use_id", Value::str(id.clone())),
                             ("content", Value::str(content.clone())),
@@ -484,12 +624,22 @@ impl Provider for Anthropic {
                     })
                     .collect();
                 Value::obj(vec![
-                    ("role", Value::str(if m.role == Role::User { "user" } else { "assistant" })),
+                    (
+                        "role",
+                        Value::str(if m.role == Role::User {
+                            "user"
+                        } else {
+                            "assistant"
+                        }),
+                    ),
                     ("content", Value::Arr(content)),
                 ])
             })
             .collect();
-        let mut body = vec![("model", Value::str(req.model.clone())), ("max_tokens", Value::int(req.max_tokens as i64))];
+        let mut body = vec![
+            ("model", Value::str(req.model.clone())),
+            ("max_tokens", Value::int(req.max_tokens as i64)),
+        ];
         if !req.system.is_empty() {
             // The system prompt is stable across every turn of an agent,
             // so mark it cacheable: later turns pay the cached rate.
@@ -498,7 +648,10 @@ impl Provider for Anthropic {
                 Value::Arr(vec![Value::obj(vec![
                     ("type", Value::str("text")),
                     ("text", Value::str(req.system.clone())),
-                    ("cache_control", Value::obj(vec![("type", Value::str("ephemeral"))])),
+                    (
+                        "cache_control",
+                        Value::obj(vec![("type", Value::str("ephemeral"))]),
+                    ),
                 ])]),
             ));
         }
@@ -511,7 +664,10 @@ impl Provider for Anthropic {
                     Value::obj(vec![
                         ("name", Value::str(t.name.clone())),
                         ("description", Value::str(t.description.clone())),
-                        ("input_schema", json::parse(&t.schema).unwrap_or(Value::Obj(vec![]))),
+                        (
+                            "input_schema",
+                            json::parse(&t.schema).unwrap_or(Value::Obj(vec![])),
+                        ),
                     ])
                 })
                 .collect();
@@ -520,7 +676,10 @@ impl Provider for Anthropic {
         if req.stream {
             body.push(("stream", Value::Bool(true)));
         }
-        let url = parse_url(&format!("{}/v1/messages", self.base_url.trim_end_matches('/')))?;
+        let url = parse_url(&format!(
+            "{}/v1/messages",
+            self.base_url.trim_end_matches('/')
+        ))?;
         let mut r = Request::new("POST", url)
             .header("Content-Type", "application/json")
             .header("anthropic-version", "2023-06-01");
@@ -533,9 +692,15 @@ impl Provider for Anthropic {
     fn parse_response(&self, body: &[u8]) -> Result<CompletionResponse, String> {
         let v = json::parse(&String::from_utf8_lossy(body))?;
         let mut blocks = Vec::new();
-        for b in v.get("content").and_then(|c| c.as_arr()).ok_or("response has no content")? {
+        for b in v
+            .get("content")
+            .and_then(|c| c.as_arr())
+            .ok_or("response has no content")?
+        {
             match b.str_of("type") {
-                Some("text") => blocks.push(Block::Text(b.str_of("text").unwrap_or("").to_string())),
+                Some("text") => {
+                    blocks.push(Block::Text(b.str_of("text").unwrap_or("").to_string()))
+                }
                 Some("tool_use") => blocks.push(Block::ToolUse {
                     id: b.str_of("id").unwrap_or("").to_string(),
                     name: b.str_of("name").unwrap_or("").to_string(),
@@ -563,7 +728,9 @@ fn anthropic_usage(u: Option<&Value>, into: &mut Usage) {
     let Some(u) = u else { return };
     let n = |k: &str| u.get(k).and_then(|x| x.as_u64());
     if let Some(i) = n("input_tokens") {
-        into.input_tokens = i + n("cache_creation_input_tokens").unwrap_or(0) + n("cache_read_input_tokens").unwrap_or(0);
+        into.input_tokens = i
+            + n("cache_creation_input_tokens").unwrap_or(0)
+            + n("cache_read_input_tokens").unwrap_or(0);
         into.cached_input_tokens = n("cache_read_input_tokens").unwrap_or(0);
     }
     if let Some(o) = n("output_tokens") {
@@ -603,7 +770,9 @@ impl StreamDecoder for AnthropicDecoder {
             }
             "content_block_start" => {
                 let idx = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-                let cb = v.get("content_block").ok_or("content_block_start without a block")?;
+                let cb = v
+                    .get("content_block")
+                    .ok_or("content_block_start without a block")?;
                 while self.blocks.len() <= idx {
                     self.blocks.push(Default::default());
                 }
@@ -611,9 +780,19 @@ impl StreamDecoder for AnthropicDecoder {
                 if ty == "tool_use" {
                     let name = cb.str_of("name").unwrap_or("").to_string();
                     out.push(Delta::ToolStarted(name.clone()));
-                    self.blocks[idx] = (ty, cb.str_of("id").unwrap_or("").to_string(), name, String::new());
+                    self.blocks[idx] = (
+                        ty,
+                        cb.str_of("id").unwrap_or("").to_string(),
+                        name,
+                        String::new(),
+                    );
                 } else {
-                    self.blocks[idx] = (ty, String::new(), String::new(), cb.str_of("text").unwrap_or("").to_string());
+                    self.blocks[idx] = (
+                        ty,
+                        String::new(),
+                        String::new(),
+                        cb.str_of("text").unwrap_or("").to_string(),
+                    );
                 }
             }
             "content_block_delta" => {
@@ -626,7 +805,9 @@ impl StreamDecoder for AnthropicDecoder {
                             slot.3.push_str(t);
                             out.push(Delta::Text(t.to_string()));
                         }
-                        Some("input_json_delta") => slot.3.push_str(d.str_of("partial_json").unwrap_or("")),
+                        Some("input_json_delta") => {
+                            slot.3.push_str(d.str_of("partial_json").unwrap_or(""))
+                        }
                         _ => {}
                     }
                 }
@@ -640,7 +821,9 @@ impl StreamDecoder for AnthropicDecoder {
             "error" => {
                 return Err(format!(
                     "provider error: {}",
-                    v.path("error", &["message"]).and_then(|m| m.as_str()).unwrap_or("unknown")
+                    v.path("error", &["message"])
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("unknown")
                 ));
             }
             _ => {} // ping, content_block_stop, message_stop
@@ -654,12 +837,23 @@ impl StreamDecoder for AnthropicDecoder {
             .into_iter()
             .filter_map(|(ty, id, name, text)| match ty.as_str() {
                 "text" if !text.is_empty() => Some(Block::Text(text)),
-                "tool_use" => Some(Block::ToolUse { id, name, input: tool_input_value(&text) }),
+                "tool_use" => Some(Block::ToolUse {
+                    id,
+                    name,
+                    input: tool_input_value(&text),
+                }),
                 _ => None,
             })
             .collect();
-        let stop = self.stop.ok_or("the stream ended before the model finished (no stop_reason)")?;
-        Ok(CompletionResponse { blocks, usage: self.usage, stop, model: self.model })
+        let stop = self
+            .stop
+            .ok_or("the stream ended before the model finished (no stop_reason)")?;
+        Ok(CompletionResponse {
+            blocks,
+            usage: self.usage,
+            stop,
+            model: self.model,
+        })
     }
 }
 
@@ -678,7 +872,11 @@ fn error_message(body: &[u8]) -> String {
     let text = String::from_utf8_lossy(body);
     json::parse(&text)
         .ok()
-        .and_then(|v| v.path("error", &["message"]).and_then(|m| m.as_str()).map(String::from))
+        .and_then(|v| {
+            v.path("error", &["message"])
+                .and_then(|m| m.as_str())
+                .map(String::from)
+        })
         .unwrap_or_else(|| text.chars().take(300).collect())
 }
 
@@ -692,25 +890,58 @@ pub fn call_once(
 ) -> Result<CompletionResponse, CallError> {
     if provider.is_local() {
         // In-process: nothing to retry that would go differently.
-        return crate::local::complete(req, on_delta).map_err(|m| CallError { message: m, retryable: false, retry_after: None });
+        return crate::local::complete(req, on_delta).map_err(|m| CallError {
+            message: m,
+            retryable: false,
+            retry_after: None,
+        });
     }
-    let http_req = provider.build_request(req, api_key).map_err(|m| CallError { message: m, retryable: false, retry_after: None })?;
-    let mut s = net::send_streaming(&http_req, net_cfg).map_err(|m| CallError { message: m, retryable: true, retry_after: None })?;
+    let http_req = provider
+        .build_request(req, api_key)
+        .map_err(|m| CallError {
+            message: m,
+            retryable: false,
+            retry_after: None,
+        })?;
+    let mut s = net::send_streaming(&http_req, net_cfg).map_err(|m| CallError {
+        message: m,
+        retryable: true,
+        retry_after: None,
+    })?;
     if s.head.status != 200 {
         let mut body = Vec::new();
         let _ = s.body.by_ref().take(64 * 1024).read_to_end(&mut body);
         let status = s.head.status;
         return Err(CallError {
-            message: format!("{} returned HTTP {status}: {}", provider.name(), error_message(&body)),
+            message: format!(
+                "{} returned HTTP {status}: {}",
+                provider.name(),
+                error_message(&body)
+            ),
             retryable: status == 429 || status == 408 || status >= 500,
-            retry_after: s.head.header("retry-after").and_then(|v| v.trim().parse().ok()),
+            retry_after: s
+                .head
+                .header("retry-after")
+                .and_then(|v| v.trim().parse().ok()),
         });
     }
-    let is_sse = s.head.header("content-type").map(|c| c.contains("event-stream")).unwrap_or(false);
+    let is_sse = s
+        .head
+        .header("content-type")
+        .map(|c| c.contains("event-stream"))
+        .unwrap_or(false);
     if !is_sse {
         let mut body = Vec::new();
-        s.body.read_to_end(&mut body).map_err(|e| CallError { message: e.to_string(), retryable: true, retry_after: None })?;
-        let mut resp = provider.parse_response(&body).map_err(|m| CallError { message: m, retryable: false, retry_after: None })?;
+        s.body.read_to_end(&mut body).map_err(|e| CallError {
+            message: e.to_string(),
+            retryable: true,
+            retry_after: None,
+        })?;
+        let mut resp = provider.parse_response(&body).map_err(|m| CallError {
+            message: m,
+            retryable: false,
+            retry_after: None,
+        })?;
         if resp.model.is_empty() {
             resp.model = req.model.clone();
         }
@@ -720,10 +951,22 @@ pub fn call_once(
     let mut parser = SseParser::new();
     let mut buf = [0u8; 8192];
     loop {
-        let n = s.body.read(&mut buf).map_err(|e| CallError { message: format!("stream interrupted: {e}"), retryable: true, retry_after: None })?;
-        let msgs = if n == 0 { parser.finish() } else { parser.feed(&buf[..n]) };
+        let n = s.body.read(&mut buf).map_err(|e| CallError {
+            message: format!("stream interrupted: {e}"),
+            retryable: true,
+            retry_after: None,
+        })?;
+        let msgs = if n == 0 {
+            parser.finish()
+        } else {
+            parser.feed(&buf[..n])
+        };
         for m in &msgs {
-            for d in decoder.on_message(m).map_err(|e| CallError { retryable: e.contains("overloaded"), message: e, retry_after: None })? {
+            for d in decoder.on_message(m).map_err(|e| CallError {
+                retryable: e.contains("overloaded"),
+                message: e,
+                retry_after: None,
+            })? {
                 on_delta(&d);
             }
         }
@@ -731,7 +974,11 @@ pub fn call_once(
             break;
         }
     }
-    let mut resp = decoder.finish().map_err(|m| CallError { message: m, retryable: true, retry_after: None })?;
+    let mut resp = decoder.finish().map_err(|m| CallError {
+        message: m,
+        retryable: true,
+        retry_after: None,
+    })?;
     if resp.model.is_empty() {
         resp.model = req.model.clone();
     }
@@ -788,19 +1035,36 @@ mod tests {
     fn tool_req() -> CompletionRequest {
         let mut r = CompletionRequest::new("m");
         r.system = "You are terse.".into();
-        r.tools.push(ToolDef { name: "files-read".into(), description: "read".into(), schema: r#"{"type":"object","properties":{"path":{"type":"string"}}}"#.into() });
+        r.tools.push(ToolDef {
+            name: "files-read".into(),
+            description: "read".into(),
+            schema: r#"{"type":"object","properties":{"path":{"type":"string"}}}"#.into(),
+        });
         r.messages.push(Message::user_text("read a.txt"));
         r.messages.push(Message {
             role: Role::Assistant,
-            blocks: vec![Block::ToolUse { id: "t1".into(), name: "files-read".into(), input: json::parse(r#"{"path":"a.txt"}"#).unwrap() }],
+            blocks: vec![Block::ToolUse {
+                id: "t1".into(),
+                name: "files-read".into(),
+                input: json::parse(r#"{"path":"a.txt"}"#).unwrap(),
+            }],
         });
-        r.messages.push(Message { role: Role::User, blocks: vec![Block::ToolResult { id: "t1".into(), content: "hello".into(), is_error: false }] });
+        r.messages.push(Message {
+            role: Role::User,
+            blocks: vec![Block::ToolResult {
+                id: "t1".into(),
+                content: "hello".into(),
+                is_error: false,
+            }],
+        });
         r
     }
 
     #[test]
     fn openai_request_carries_tools_and_results() {
-        let p = OpenAiCompatible { base_url: "https://api.deepseek.com/v1".into() };
+        let p = OpenAiCompatible {
+            base_url: "https://api.deepseek.com/v1".into(),
+        };
         let http = p.build_request(&tool_req(), Some("sk-test")).unwrap();
         assert_eq!(http.url.path, "/v1/chat/completions");
         let body = String::from_utf8(http.body.clone()).unwrap();
@@ -815,12 +1079,18 @@ mod tests {
 
     #[test]
     fn anthropic_request_shape() {
-        let http = Anthropic::default().build_request(&tool_req(), Some("key")).unwrap();
+        let http = Anthropic::default()
+            .build_request(&tool_req(), Some("key"))
+            .unwrap();
         assert_eq!(http.url.path, "/v1/messages");
         let body = String::from_utf8(http.body.clone()).unwrap();
         assert!(body.contains(r#""cache_control":{"type":"ephemeral"}"#));
-        assert!(body.contains(r#""type":"tool_use","id":"t1","name":"files-read","input":{"path":"a.txt"}"#));
-        assert!(body.contains(r#""type":"tool_result","tool_use_id":"t1","content":"hello","is_error":false"#));
+        assert!(body.contains(
+            r#""type":"tool_use","id":"t1","name":"files-read","input":{"path":"a.txt"}"#
+        ));
+        assert!(body.contains(
+            r#""type":"tool_result","tool_use_id":"t1","content":"hello","is_error":false"#
+        ));
         assert!(body.contains(r#""input_schema":{"type":"object""#));
         assert!(http.encode_head().contains("x-api-key: key"));
     }
@@ -845,7 +1115,10 @@ mod tests {
             "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":30}}\n\n",
             "data: [DONE]\n\n"
         );
-        let mut dec = OpenAiCompatible { base_url: String::new() }.decoder();
+        let mut dec = OpenAiCompatible {
+            base_url: String::new(),
+        }
+        .decoder();
         let deltas = feed(&mut dec, raw);
         assert_eq!(deltas[0], Delta::Text("Let me ".into()));
         assert!(deltas.contains(&Delta::ToolStarted("files-read".into())));
@@ -878,30 +1151,50 @@ mod tests {
         assert_eq!(resp.text(), "Reading.");
         assert_eq!(resp.stop, StopReason::ToolUse);
         assert_eq!(resp.tool_uses()[0].2.str_of("path"), Some("a.txt"));
-        assert_eq!(resp.usage, Usage { input_tokens: 90, output_tokens: 25, cached_input_tokens: 40 });
+        assert_eq!(
+            resp.usage,
+            Usage {
+                input_tokens: 90,
+                output_tokens: 25,
+                cached_input_tokens: 40
+            }
+        );
     }
 
     #[test]
     fn truncated_stream_is_an_error_not_a_silent_success() {
         let mut dec = Anthropic::default().decoder();
-        feed(&mut dec, "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1}}}\n\n");
+        feed(
+            &mut dec,
+            "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1}}}\n\n",
+        );
         assert!(dec.finish().is_err());
     }
 
     #[test]
     fn non_streaming_bodies_parse() {
         let body = br#"{"model":"m","choices":[{"message":{"content":"pong","tool_calls":[{"id":"x","function":{"name":"edit","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":12,"completion_tokens":3}}"#;
-        let r = OpenAiCompatible { base_url: String::new() }.parse_response(body).unwrap();
+        let r = OpenAiCompatible {
+            base_url: String::new(),
+        }
+        .parse_response(body)
+        .unwrap();
         assert_eq!(r.text(), "pong");
         assert_eq!(r.tool_uses().len(), 1);
         let body = br#"{"content":[{"type":"text","text":"pong"}],"usage":{"input_tokens":12,"output_tokens":3},"stop_reason":"end_turn"}"#;
         let r = Anthropic::default().parse_response(body).unwrap();
-        assert_eq!((r.text().as_str(), r.stop.clone()), ("pong", StopReason::EndTurn));
+        assert_eq!(
+            (r.text().as_str(), r.stop.clone()),
+            ("pong", StopReason::EndTurn)
+        );
     }
 
     #[test]
     fn provider_error_messages_are_extracted() {
-        assert_eq!(error_message(br#"{"error":{"type":"overloaded","message":"Overloaded"}}"#), "Overloaded");
+        assert_eq!(
+            error_message(br#"{"error":{"type":"overloaded","message":"Overloaded"}}"#),
+            "Overloaded"
+        );
         assert_eq!(error_message(b"plain text"), "plain text");
     }
 }

@@ -13,7 +13,7 @@ affected work runs again.
 > Working name. *Wright* (Old English: maker): you write it, agents wright it,
 > the artifact is wrought. See `docs/DECISIONS.md` ADR-008.
 
-## Status: v0.3 — the workspace
+## Status: v1.0 — trust before reach, recipes at the end
 
 | Area | v0.2 | Notes |
 |---|---|---|
@@ -32,9 +32,16 @@ affected work runs again.
 | vieww window: sessions, swipe, overview, live engine, settings, voice, files | ✅ | driven end to end headlessly; see "The window" |
 | Installers: Windows, macOS, Linux | ✅ | `.github/workflows/wright-release.yml` (ADR-020) |
 | Secrets: OS keychain via `security` / `secret-tool`, env for CI | ✅ | Windows Credential Manager: not yet |
-| Recipes gallery, signing, MCP, server mode, teams | ❌ | see `docs/SPIKES.md` §v0.3 |
+| Rule of Two: typed legs, taint fixpoint, validator + gate enforcement | ✅ | ADR-024; 3-leg agents need a human approval, and the gate asks anyway |
+| Signed receipts + `wright verify` (Ed25519, SHA-512 reference ports) | ✅ | ADR-025; five checks, inputs' hashes, acceptance verdicts |
+| Workers: claude-code / codex / kimi-code / zcode steps, sandboxed copy, all-or-nothing | ✅ | ADR-026 |
+| MCP behind permits: hash-pinned servers, allow-listed tools | ✅ | ADR-029; `wright mcp-hash` |
+| Typed edges: out=/in=/schema= over five readable shapes | ✅ | ADR-027; checked at plan and fire time |
+| Recipes gallery + signing, `wright recipe list/sign/verify/install` | ✅ | ADR-028; unsigned installs are refused |
+| `wright explain`, `wright handoff`, `wright bench`, cost choice in `wright run` | ✅ | one-screen run story; PR folder; public benchmark |
+| Server mode, teams | ❌ | not in the memo's scope for this release |
 
-**236 tests passing (plus 1 live-network test, opt-in), clippy clean, zero warnings.** Eight of them compare the built-in engine with llama.cpp and whisper.cpp, or run the real models; they need fixtures (`scripts/models/`) and skip without them — CI provides them (`docs/MODELS.md`). The headless binary has **zero**
+**380+ tests passing (plus the live-network opt-in set), clippy clean. Twelve failures on kernels before 5.13 are the sandbox failing closed (Landlock needs 5.13+) — the same tests pass on 5.13+; the new trust suite (`engine/tests/trust.rs`) runs everywhere.** Eight of them compare the built-in engine with llama.cpp and whisper.cpp, or run the real models; they need fixtures (`scripts/models/`) and skip without them — CI provides them (`docs/MODELS.md`). The headless binary has **zero**
 external crates; the `ui` feature adds exactly one dependency — vieww, from
 the repository Wright lives in, by path (ADR-002, ADR-011).
 
@@ -48,6 +55,31 @@ cargo build --release --features ui         # + the vieww shell
 ./target/release/wright model pull          # the built-in models (1.9 GB, once;
                                             # otherwise they download on first use)
 ./target/release/wright model ask "Plan a tiny CLI that counts words."
+```
+
+### The trust tour (all offline, all verifiable)
+
+```bash
+# What a plan may touch, in words — the Rule of Two included:
+./target/release/wright plan myproject
+
+# Fire it, choose what you pay (the estimate comes first):
+./target/release/wright run myproject
+
+# Prove what ran — five checks over the signed receipt:
+./target/release/wright verify myproject
+
+# The one-screen story of the run:
+./target/release/wright explain myproject
+
+# Hand the project to a developer as a PR folder:
+./target/release/wright handoff myproject
+
+# Time to a checked outcome, interventions per run:
+./target/release/wright bench myproject --runs 3
+
+# The recipe gallery — nothing installs unsigned:
+./target/release/wright recipe list
 ```
 
 With no key set up, projects run on the built-in `qwen3-1.7b` (and say

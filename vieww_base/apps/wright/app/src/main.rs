@@ -7,6 +7,16 @@
 //!   wright resume <run> [dir]   continue a run that crashed or was stopped
 //!   wright runs [dir]           run history
 //!   wright replay <run> [dir]   reconstruct a past run from its log (--at N)
+//!   wright verify [run|dir]      check a receipt: signature, log,
+//!                                artifacts, inputs, blueprint (ADR-025)
+//!   wright explain [run|dir]     the one-screen story of a run
+//!   wright handoff [dir]         the project as a PR folder: plan,
+//!                                receipts, patch — for a human
+//!   wright bench [dir]           time to a checked outcome, and
+//!                                interventions per run (ADR-030)
+//!   wright recipe ...            list | install | sign | verify — the
+//!                                curated, signed gallery (ADR-028)
+//!   wright mcp-hash <cmd>        the BLAKE3 pin for an MCP server
 //!   wright approve [dir]        list / answer pending approvals
 //!   wright diff [old] [new]     what an edit refires, and why
 //!   wright export [dir]         the project as a .zip, plus its package: a Python
@@ -50,6 +60,12 @@ fn main() {
         Some("runs") => cmd::runs(rest),
         Some("replay") => cmd::replay(rest),
         Some("approve") => cmd::approve(rest),
+        Some("verify") => cmd::verify(rest),
+        Some("explain") => cmd::explain(rest),
+        Some("handoff") => cmd::handoff(rest),
+        Some("bench") => cmd::bench(rest),
+        Some("recipe") | Some("recipes") => cmd::recipe(rest),
+        Some("mcp-hash") => cmd::mcp_hash(rest),
         Some("diff") => cmd::diff(rest),
         Some("export") => cmd::export(rest),
         Some("schedule") => cmd::schedule(rest),

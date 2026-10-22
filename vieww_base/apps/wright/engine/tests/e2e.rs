@@ -63,7 +63,9 @@ fn site(body: &'static str) -> (u16, Arc<Mutex<Vec<String>>>) {
             let mut b = vec![0; len];
             r.read_exact(&mut b).unwrap();
             if first.starts_with("POST") {
-                p2.lock().unwrap().push(String::from_utf8_lossy(&b).to_string());
+                p2.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&b).to_string());
             }
             let mut s = s;
             write!(s, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
@@ -127,7 +129,11 @@ models {{
 
 fn opts(approve: bool) -> FireOptions {
     FireOptions {
-        approver: if approve { Box::new(AutoApprove) } else { Box::new(AutoDeny) },
+        approver: if approve {
+            Box::new(AutoApprove)
+        } else {
+            Box::new(AutoDeny)
+        },
         config: Some(config("")),
         allow_private_network: true,
         ..FireOptions::default()
@@ -135,7 +141,11 @@ fn opts(approve: bool) -> FireOptions {
 }
 
 fn status_of<'a>(s: &'a wright_engine::RunSummary, name: &str) -> &'a TaskStatus {
-    &s.tasks.iter().find(|(n, _)| n == name).unwrap_or_else(|| panic!("no task {name}")).1
+    &s.tasks
+        .iter()
+        .find(|(n, _)| n == name)
+        .unwrap_or_else(|| panic!("no task {name}"))
+        .1
 }
 
 #[test]
@@ -148,14 +158,42 @@ fn the_digest_fires_end_to_end_then_the_cache_and_freshness_rules_hold() {
     // ── firing 1: everything runs ─────────────────────────────────
     let s1 = fire(&dir, opts(true)).unwrap();
     assert!(s1.ok, "{}\n{:?}", s1.headline, s1.tasks);
-    for t in ["Shipwright", "Logwright", "Fetcher", "Summarizer", "Testwright", "Reviewer", "Mailer", "Operator"] {
-        assert!(matches!(status_of(&s1, t), TaskStatus::Ran { .. }), "{t}: {:?}", status_of(&s1, t));
+    for t in [
+        "Shipwright",
+        "Logwright",
+        "Fetcher",
+        "Summarizer",
+        "Testwright",
+        "Reviewer",
+        "Mailer",
+        "Operator",
+    ] {
+        assert!(
+            matches!(status_of(&s1, t), TaskStatus::Ran { .. }),
+            "{t}: {:?}",
+            status_of(&s1, t)
+        );
     }
     assert_eq!(s1.verdict, Some(Ok(())));
-    assert_eq!(inbox.lock().unwrap().len(), 1, "the Mailer delivered exactly once");
-    assert!(inbox.lock().unwrap()[0].contains("made_by"), "the digest carried the summaries");
+    assert_eq!(
+        inbox.lock().unwrap().len(),
+        1,
+        "the Mailer delivered exactly once"
+    );
+    assert!(
+        inbox.lock().unwrap()[0].contains("made_by"),
+        "the digest carried the summaries"
+    );
     // the skeleton, the artifacts, the checks
-    for f in ["README.md", "AGENTS.md", "src/hn_digest_e2e/log.py", "tests/test_smoke.py", "tests/test_wright_outputs.py", "artifacts/stories.json", "artifacts/summaries.json"] {
+    for f in [
+        "README.md",
+        "AGENTS.md",
+        "src/hn_digest_e2e/log.py",
+        "tests/test_smoke.py",
+        "tests/test_wright_outputs.py",
+        "artifacts/stories.json",
+        "artifacts/summaries.json",
+    ] {
         assert!(dir.join(f).exists(), "missing {f}");
     }
     // the receipt is machine-checkable
@@ -165,28 +203,54 @@ fn the_digest_fires_end_to_end_then_the_cache_and_freshness_rules_hold() {
     let store = Store::open(&dir).unwrap();
     let ev = store.read_events(s1.run).unwrap();
     let kinds: Vec<EventKind> = ev.events().iter().map(|e| e.kind).collect();
-    assert!(kinds.contains(&EventKind::AgentRetrying), "the flaky model was retried");
-    assert!(ev.events().iter().any(|e| e.kind == EventKind::ScheduleRegistered && e.note.contains("08:00")));
+    assert!(
+        kinds.contains(&EventKind::AgentRetrying),
+        "the flaky model was retried"
+    );
+    assert!(ev
+        .events()
+        .iter()
+        .any(|e| e.kind == EventKind::ScheduleRegistered && e.note.contains("08:00")));
     // tests ran before anything was sent
-    let pos = |pred: &dyn Fn(&wright_core::events::Event) -> bool| ev.events().iter().position(pred).unwrap();
+    let pos = |pred: &dyn Fn(&wright_core::events::Event) -> bool| {
+        ev.events().iter().position(pred).unwrap()
+    };
     let approved = pos(&|e| e.kind == EventKind::Verdict && e.agent.as_deref() == Some("Reviewer"));
     let sent = pos(&|e| e.kind == EventKind::ToolCalled && e.note.starts_with("http-post"));
-    assert!(approved < sent, "the Reviewer approved before the Mailer sent");
+    assert!(
+        approved < sent,
+        "the Reviewer approved before the Mailer sent"
+    );
 
     // ── firing 2: same blueprint ─────────────────────────────────
     let s2 = fire(&dir, opts(true)).unwrap();
     assert!(s2.ok, "{}", s2.headline);
-    assert!(matches!(status_of(&s2, "Fetcher"), TaskStatus::Ran { .. }), "live data is fetched fresh every firing");
-    assert!(matches!(status_of(&s2, "Summarizer"), TaskStatus::Cached { .. }), "same fetched content -> Summarizer is a cache hit");
-    assert!(matches!(status_of(&s2, "Logwright"), TaskStatus::Cached { .. }), "setup happens once");
-    assert!(matches!(status_of(&s2, "Mailer"), TaskStatus::Ran { .. }), "delivery is never cached");
+    assert!(
+        matches!(status_of(&s2, "Fetcher"), TaskStatus::Ran { .. }),
+        "live data is fetched fresh every firing"
+    );
+    assert!(
+        matches!(status_of(&s2, "Summarizer"), TaskStatus::Cached { .. }),
+        "same fetched content -> Summarizer is a cache hit"
+    );
+    assert!(
+        matches!(status_of(&s2, "Logwright"), TaskStatus::Cached { .. }),
+        "setup happens once"
+    );
+    assert!(
+        matches!(status_of(&s2, "Mailer"), TaskStatus::Ran { .. }),
+        "delivery is never cached"
+    );
     assert_eq!(inbox.lock().unwrap().len(), 2);
 
     // ── firing 3: nobody watching -> the send is denied, nothing leaves ──
     let s3 = fire(&dir, opts(false)).unwrap();
     assert_eq!(inbox.lock().unwrap().len(), 2, "auto-deny means no email");
     let ev3 = store.read_events(s3.run).unwrap();
-    assert!(ev3.events().iter().any(|e| e.kind == EventKind::ApprovalResolved && e.note.contains("denied")));
+    assert!(ev3
+        .events()
+        .iter()
+        .any(|e| e.kind == EventKind::ApprovalResolved && e.note.contains("denied")));
 
     // ── the cache is content-addressed and tamper-evident ──
     let history = store.blueprint_history();
@@ -198,11 +262,18 @@ fn failing_tests_stop_delivery() {
     env();
     let (news, _) = site(r#"[{"id":1}]"#);
     let (mail, inbox) = site(r#"{"ok":true}"#);
-    let dir = project("reject", &digest(news, mail, "test \"echo 'FAIL: digest is wrong'; exit 1\""));
+    let dir = project(
+        "reject",
+        &digest(news, mail, "test \"echo 'FAIL: digest is wrong'; exit 1\""),
+    );
     let s = fire(&dir, opts(true)).unwrap();
     assert!(!s.ok);
     assert!(s.headline.contains("rejected"), "{}", s.headline);
-    assert!(matches!(status_of(&s, "Mailer"), TaskStatus::Skipped(r) if r.contains("Reviewer")), "{:?}", status_of(&s, "Mailer"));
+    assert!(
+        matches!(status_of(&s, "Mailer"), TaskStatus::Skipped(r) if r.contains("Reviewer")),
+        "{:?}",
+        status_of(&s, "Mailer")
+    );
     assert!(inbox.lock().unwrap().is_empty(), "nothing was delivered");
 }
 
@@ -219,7 +290,13 @@ fn a_crashed_firing_resumes_without_redoing_finished_work() {
     // Summarizer finished.
     let store = Store::open(&dir).unwrap();
     let ev = store.read_events(s1.run).unwrap();
-    let cut = ev.events().iter().position(|e| e.kind == EventKind::AgentFinished && e.agent.as_deref() == Some("Summarizer")).unwrap();
+    let cut = ev
+        .events()
+        .iter()
+        .position(|e| {
+            e.kind == EventKind::AgentFinished && e.agent.as_deref() == Some("Summarizer")
+        })
+        .unwrap();
     let crashed = store.new_run().unwrap().run();
     let lines: Vec<String> = ev.events()[..=cut]
         .iter()
@@ -229,14 +306,32 @@ fn a_crashed_firing_resumes_without_redoing_finished_work() {
             e.to_json_line()
         })
         .collect();
-    std::fs::write(store.run_dir(crashed).join("events.jsonl"), lines.join("\n") + "\n").unwrap();
+    std::fs::write(
+        store.run_dir(crashed).join("events.jsonl"),
+        lines.join("\n") + "\n",
+    )
+    .unwrap();
 
-    let s2 = fire(&dir, FireOptions { resume: Some(crashed), ..opts(true) }).unwrap();
+    let s2 = fire(
+        &dir,
+        FireOptions {
+            resume: Some(crashed),
+            ..opts(true)
+        },
+    )
+    .unwrap();
     assert_eq!(s2.run, crashed, "resume continues the same run");
     assert!(s2.ok, "{}", s2.headline);
     let ev2 = store.read_events(crashed).unwrap();
-    let restarted = |name: &str| ev2.events()[cut + 1..].iter().any(|e| e.kind == EventKind::AgentStarted && e.agent.as_deref() == Some(name));
-    assert!(!restarted("Fetcher") && !restarted("Summarizer"), "finished work is not redone");
+    let restarted = |name: &str| {
+        ev2.events()[cut + 1..]
+            .iter()
+            .any(|e| e.kind == EventKind::AgentStarted && e.agent.as_deref() == Some(name))
+    };
+    assert!(
+        !restarted("Fetcher") && !restarted("Summarizer"),
+        "finished work is not redone"
+    );
     assert!(restarted("Mailer"));
     assert_eq!(inbox.lock().unwrap().len(), 2);
 }
@@ -248,9 +343,22 @@ fn the_budget_stops_a_firing_cleanly() {
     let (mail, inbox) = site(r#"{"ok":true}"#);
     let bp = digest(news, mail, "").replace("per-firing=500000", "per-firing=20");
     let dir = project("budget", &bp);
-    let s = fire(&dir, FireOptions { config: Some(config("price model=\"mock-*\" in=50 out=50\n")), ..opts(true) }).unwrap();
+    let s = fire(
+        &dir,
+        FireOptions {
+            config: Some(config("price model=\"mock-*\" in=50 out=50\n")),
+            ..opts(true)
+        },
+    )
+    .unwrap();
     assert!(!s.ok);
-    assert!(s.tasks.iter().any(|(_, st)| matches!(st, TaskStatus::Failed(r) if r.contains("budget"))), "{:?}", s.tasks);
+    assert!(
+        s.tasks
+            .iter()
+            .any(|(_, st)| matches!(st, TaskStatus::Failed(r) if r.contains("budget"))),
+        "{:?}",
+        s.tasks
+    );
     assert!(inbox.lock().unwrap().is_empty());
 }
 
@@ -259,18 +367,39 @@ fn interview_to_confirmed_blueprint_to_working_project() {
     env();
     let dir = std::env::temp_dir().join(format!("wright-e2e-interview-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let mut io = Scripted { answers: vec!["A tool that turns my notes into a weekly summary".into()], confirm_answer: true, transcript: Vec::new() };
-    let bp = interview(&dir, &config(""), &mut io).unwrap().expect("confirmed");
+    let mut io = Scripted {
+        answers: vec!["A tool that turns my notes into a weekly summary".into()],
+        confirm_answer: true,
+        transcript: Vec::new(),
+    };
+    let bp = interview(&dir, &config(""), &mut io)
+        .unwrap()
+        .expect("confirmed");
     assert_eq!(bp.intent.confirmed, "v1");
-    assert!(io.transcript.iter().any(|l| l.contains("summary: Builder will")), "{:#?}", io.transcript);
+    assert!(
+        io.transcript
+            .iter()
+            .any(|l| l.contains("summary: Builder will")),
+        "{:#?}",
+        io.transcript
+    );
     assert!(Path::new(&dir.join("blueprint.kdl")).exists());
 
     let s = fire(&dir, opts(true)).unwrap();
     assert!(s.ok, "{}\n{:?}", s.headline, s.tasks);
     assert!(dir.join("artifacts/result.json").exists());
     // the generated project's own tests pass, standalone
-    let out = std::process::Command::new("sh").arg("-c").arg(wright_core::convention::test_cmd(&bp)).current_dir(&dir).output().unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(wright_core::convention::test_cmd(&bp))
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
@@ -278,7 +407,11 @@ fn declining_the_confirm_gate_writes_nothing() {
     env();
     let dir = std::env::temp_dir().join(format!("wright-e2e-decline-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let mut io = Scripted { answers: vec!["Something".into()], confirm_answer: false, transcript: Vec::new() };
+    let mut io = Scripted {
+        answers: vec!["Something".into()],
+        confirm_answer: false,
+        transcript: Vec::new(),
+    };
     assert!(interview(&dir, &config(""), &mut io).unwrap().is_none());
     assert!(!dir.join("blueprint.kdl").exists());
 }
@@ -297,6 +430,14 @@ fn a_cached_approval_never_outlives_a_new_test_failure() {
     std::fs::write(dir.join("tests/test_broken.py"), "import unittest\n\nclass T(unittest.TestCase):\n    def test_x(self):\n        self.fail('broken on purpose')\n").unwrap();
     let s2 = fire(&dir, opts(true)).unwrap();
     assert!(!s2.ok, "{}", s2.headline);
-    assert!(matches!(status_of(&s2, "Mailer"), TaskStatus::Skipped(_)), "{:?}", status_of(&s2, "Mailer"));
-    assert_eq!(inbox.lock().unwrap().len(), 1, "only the first, green run delivered");
+    assert!(
+        matches!(status_of(&s2, "Mailer"), TaskStatus::Skipped(_)),
+        "{:?}",
+        status_of(&s2, "Mailer")
+    );
+    assert_eq!(
+        inbox.lock().unwrap().len(),
+        1,
+        "only the first, green run delivered"
+    );
 }

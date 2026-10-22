@@ -22,7 +22,11 @@ pub struct Spine {
 impl Spine {
     pub fn new(writer: RunWriter) -> Spine {
         let run = writer.run();
-        Spine { writer: Mutex::new(writer), run, listeners: Vec::new() }
+        Spine {
+            writer: Mutex::new(writer),
+            run,
+            listeners: Vec::new(),
+        }
     }
 
     pub fn run(&self) -> RunId {
@@ -38,7 +42,13 @@ impl Spine {
     /// write fails the event is still shown live, and the error is
     /// returned so the firing can stop: an unrecorded firing is not a
     /// firing Wright can stand behind.
-    pub fn emit(&self, kind: EventKind, agent: Option<&str>, note: impl Into<String>, data: String) -> Result<Event, String> {
+    pub fn emit(
+        &self,
+        kind: EventKind,
+        agent: Option<&str>,
+        note: impl Into<String>,
+        data: String,
+    ) -> Result<Event, String> {
         let e = {
             let mut w = self.writer.lock().unwrap_or_else(|p| p.into_inner());
             w.append(kind, agent, note, data)?
@@ -56,6 +66,11 @@ impl Spine {
 
     /// A snapshot of the events so far.
     pub fn events(&self) -> Vec<Event> {
-        self.writer.lock().unwrap_or_else(|p| p.into_inner()).log().events().to_vec()
+        self.writer
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .log()
+            .events()
+            .to_vec()
     }
 }

@@ -200,16 +200,231 @@ fn report(summary: &wright_engine::RunSummary) {
     println!("  receipt: {}", summary.receipt.display());
 }
 
+// ── trust: verify, explain, handoff, bench, recipes, mcp-hash ─────
+
+/// `wright verify [run|receipt|dir]` — five checks, one verdict (ADR-025).
+pub fn verify(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let target = pos.first().copied().unwrap_or(".");
+    // A receipt file? Verify it in place.
+    if target.ends_with(".json") && Path::new(target).is_file() {
+        let receipt = PathBuf::from(target);
+        // Receipts live in Wright's store, outside the project: verifying
+        // one needs the project dir as the second argument.
+        let project = pos.get(1).copied().unwrap_or(".");
+        let v = wright_engine::verify::receipt_file(&PathBuf::from(project), &receipt);
+        print!("{}", v.report());
+        return if v.ok { 0 } else { 1 };
+    }
+    // A run number? Verify that run of this (or the named) project.
+    if let Ok(run) = target.parse::<u64>() {
+        let dir = project_dir(pos.get(1).copied());
+        match wright_engine::verify::project_run(&dir, Some(run)) {
+            Ok(v) => {
+                print!("{}", v.report());
+                if v.ok { 0 } else { 1 }
+            }
+            Err(e) => fail(e),
+        }
+    } else {
+        let dir = project_dir(Some(target));
+        match wright_engine::verify::project_run(&dir, None) {
+            Ok(v) => {
+                print!("{}", v.report());
+                if v.ok { 0 } else { 1 }
+            }
+            Err(e) => fail(e),
+        }
+    }
+}
+
+/// `wright explain [run|dir]` — the one-screen story of a run.
+pub fn explain(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let target = pos.first().copied().unwrap_or(".");
+    if let Ok(run) = target.parse::<u64>() {
+        let dir = project_dir(pos.get(1).copied());
+        let store = match Store::open(&dir) {
+            Ok(s) => s,
+            Err(e) => return fail(e),
+        };
+        match wright_engine::explain::story_of_run(&store, run) {
+            Ok(text) => {
+                print!("{text}");
+                0
+            }
+            Err(e) => fail(e),
+        }
+    } else {
+        let dir = project_dir(Some(target));
+        match wright_engine::explain::latest(&dir) {
+            Ok(text) => {
+                print!("{text}");
+                0
+            }
+            Err(e) => fail(e),
+        }
+    }
+}
+
+/// `wright handoff [dir]` — the project as a PR folder for a human.
+pub fn handoff(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let dir = project_dir(pos.first().copied());
+    match wright_engine::handoff::handoff(&dir, None) {
+        Ok(out) => {
+            println!("handed off to {}", out.display());
+            println!("HANDOFF.md says what this is; receipts/ proves what ran; project.patch is the work.");
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
+/// `wright bench [dir] [--runs N]` — time to a checked outcome (ADR-030).
+pub fn bench(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let dir = project_dir(pos.first().copied());
+    let runs: u32 = flag_value(args, "--runs").and_then(|v| v.parse().ok()).unwrap_or(3);
+    println!("firing {runs} time(s) and measuring (each run's receipt stays, verify it):\n");
+    match wright_engine::bench::run(&dir, runs) {
+        Ok(r) => {
+            print!("{}", r.table());
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
+/// `wright recipe list|install|sign|verify` — the curated, signed gallery (ADR-028).
+pub fn recipe(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let Some(cmd) = pos.first().copied() else {
+        println!("usage: wright recipe list | install <file.recipe.kdl> [target-dir] | sign <file.recipe.kdl> | verify <file.recipe.kdl>");
+        return 2;
+    };
+    match cmd {
+        "list" => {
+            let (listed, problems) = wright_engine::recipe::list();
+            if listed.is_empty() {
+                println!("no recipes in the gallery (looked in ./recipes and {}).", wright_home().join("recipes").display());
+            }
+            for l in &listed {
+                let signed = if l.recipe.signature.is_some() { "signed" } else { "UNSIGNED" };
+                println!("[{signed}] {} — {} (v{}) by {}", l.recipe.id, l.recipe.description, l.recipe.version, l.recipe.publisher);
+                println!("        {}", l.path.display());
+            }
+            for p in &problems {
+                println!("? {p}");
+            }
+            0
+        }
+        "verify" => {
+            let Some(file) = pos.get(1).copied() else {
+                return fail("usage: wright recipe verify <file.recipe.kdl>");
+            };
+            let r = match std::fs::read_to_string(file).map_err(|e| e.to_string()).and_then(|t| wright_core::recipe::Recipe::parse(&t)) {
+                Ok(r) => r,
+                Err(e) => return fail(e),
+            };
+            match r.verify() {
+                Ok(()) => {
+                    println!("OK: recipe '{}' verifies: {}'s signature covers its exact meaning.", r.id, r.publisher);
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        "install" => {
+            let Some(file) = pos.get(1).copied() else {
+                return fail("usage: wright recipe install <file.recipe.kdl> [target-dir]");
+            };
+            let target = PathBuf::from(pos.get(2).copied().unwrap_or("."));
+            match wright_engine::recipe::install(&PathBuf::from(file), &target) {
+                Ok(dir) => {
+                    println!("installed '{}' into {}", file, dir.display());
+                    println!("run it: wright run {}", dir.display());
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        "sign" => {
+            let Some(file) = pos.get(1).copied() else {
+                return fail("usage: wright recipe sign <file.recipe.kdl>");
+            };
+            match wright_engine::recipe::sign(&PathBuf::from(file)) {
+                Ok(()) => {
+                    println!("signed {} with this machine's publishing key.", file);
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        other => fail(format!("unknown recipe command '{other}' (list | install | sign | verify)")),
+    }
+}
+
+/// `wright mcp-hash <command>` — the pin for config.kdl (ADR-029).
+pub fn mcp_hash(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let Some(command) = pos.first().copied() else {
+        return fail("usage: wright mcp-hash <the command config.kdl runs> (e.g. wright mcp-hash uvx)");
+    };
+    match wright_tools::mcp::pin_for_command(command) {
+        Ok(pin) => {
+            println!("{pin}");
+            println!("paste it into config.kdl as hash=\"{pin}\" on the mcp line");
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
 /// `wright run [dir] [--yes] [--headless] [--no-cache] [--quiet]`
+/// Fire the project: plan, cost sentence, choice, firing, report.
 pub fn run(args: &[String]) -> i32 {
     let (pos, flags) = split(args);
     let dir = project_dir(pos.first().copied());
     let quiet = flags.contains(&"--quiet");
+    let yes = flags.contains(&"--yes") || flags.contains(&"--headless");
+
+    // The spending promise (the memo's item 3): the estimate BEFORE the
+    // run, as a plain sentence; the built-in model offered as a choice,
+    // not hidden in a config file.
+    let mut forced_config = None;
+    match (load_for_cost(&dir), quiet) {
+        (Ok((bp, graph, cfg)), false) => {
+            let plan = wright_engine::cost::estimate(&bp, &graph, &cfg);
+            println!("{}\n", plan.sentence);
+            if !yes && plan.builtin_possible && plan.est_micro_usd > 0 && std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+                for (key, label) in wright_engine::cost::choices(&plan) {
+                    println!("  [{key}] {label}");
+                }
+                print!("choice (1): ");
+                let _ = std::io::Write::flush(&mut std::io::stdout());
+                let mut line = String::new();
+                let _ = std::io::BufRead::read_line(&mut std::io::stdin().lock(), &mut line);
+                if line.trim() == "2" {
+                    // Run everything on the built-in model: drop every
+                    // non-builtin provider, and the fallback does the rest.
+                    let mut builtin_only = cfg.clone();
+                    builtin_only.providers.retain(|p| matches!(p.kind, wright_runtime::config::ProviderKind::Builtin));
+                    forced_config = Some(builtin_only);
+                    println!("running on the built-in model: free, slower, nothing leaves this machine.\n");
+                }
+            }
+        }
+        (Err(e), false) => return fail(e),
+        _ => {}
+    }
+
     let mut opts = FireOptions {
         trigger: Trigger::Manual,
         approver: approver_for(&flags, &dir),
         no_cache: flags.contains(&"--no-cache"),
         allow_private_network: flags.contains(&"--allow-private-network"),
+        config: forced_config,
         ..FireOptions::default()
     };
     if !quiet {
@@ -222,6 +437,13 @@ pub fn run(args: &[String]) -> i32 {
         }
         Err(e) => fail(e),
     }
+}
+
+/// Read+validate the blueprint and compile it, for the cost estimate.
+fn load_for_cost(dir: &Path) -> Result<(Blueprint, wright_core::compiler::TaskGraph, Config), String> {
+    let bp = wright_engine::load_blueprint(dir)?;
+    let graph = compiler::compile(&bp)?;
+    Ok((bp, graph, Config::load()?))
 }
 
 /// `wright resume <run> [dir] [--yes]`

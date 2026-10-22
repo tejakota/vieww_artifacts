@@ -41,7 +41,8 @@ pub struct MockProvider {
 impl MockProvider {
     /// Start on 127.0.0.1:`port` (0 = any free port). Runs until the process exits.
     pub fn start(port: u16) -> Result<MockProvider, String> {
-        let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("mock provider: {e}"))?;
+        let listener =
+            TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("mock provider: {e}"))?;
         let port = listener.local_addr().map_err(|e| e.to_string())?.port();
         let requests = Arc::new(AtomicUsize::new(0));
         let counter = Arc::clone(&requests);
@@ -88,7 +89,11 @@ fn handle(stream: TcpStream, n: usize) -> std::io::Result<()> {
     let mut out = stream;
     // Speech-to-text (voice input): answer with how much audio arrived, so
     // a test can tell the recording reached the provider.
-    if line.split_whitespace().nth(1).is_some_and(|path| path.ends_with("/audio/transcriptions")) {
+    if line
+        .split_whitespace()
+        .nth(1)
+        .is_some_and(|path| path.ends_with("/audio/transcriptions"))
+    {
         let text = format!("mock transcript of {} bytes", body.len());
         let answer = json::to_string(&Value::obj(vec![("text", Value::str(text))]));
         return write!(out, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}", answer.len());
@@ -115,11 +120,20 @@ fn handle(stream: TcpStream, n: usize) -> std::io::Result<()> {
 }
 
 fn respond_status(out: &mut TcpStream, status: u16, msg: &str) -> std::io::Result<()> {
-    let body = json::to_string(&Value::obj(vec![("error", Value::obj(vec![("message", Value::str(msg))]))]));
+    let body = json::to_string(&Value::obj(vec![(
+        "error",
+        Value::obj(vec![("message", Value::str(msg))]),
+    )]));
     write!(out, "HTTP/1.1 {status} Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
 }
 
-fn respond_json(out: &mut TcpStream, model: &str, text: &str, calls: &[(String, Value)], prompt: i64) -> std::io::Result<()> {
+fn respond_json(
+    out: &mut TcpStream,
+    model: &str,
+    text: &str,
+    calls: &[(String, Value)],
+    prompt: i64,
+) -> std::io::Result<()> {
     let tool_calls: Vec<Value> = calls
         .iter()
         .enumerate()
@@ -127,11 +141,20 @@ fn respond_json(out: &mut TcpStream, model: &str, text: &str, calls: &[(String, 
             Value::obj(vec![
                 ("id", Value::str(format!("call_{i}"))),
                 ("type", Value::str("function")),
-                ("function", Value::obj(vec![("name", Value::str(name.clone())), ("arguments", Value::str(json::to_string(args)))])),
+                (
+                    "function",
+                    Value::obj(vec![
+                        ("name", Value::str(name.clone())),
+                        ("arguments", Value::str(json::to_string(args))),
+                    ]),
+                ),
             ])
         })
         .collect();
-    let mut msg = vec![("role", Value::str("assistant")), ("content", Value::str(text))];
+    let mut msg = vec![
+        ("role", Value::str("assistant")),
+        ("content", Value::str(text)),
+    ];
     if !tool_calls.is_empty() {
         msg.push(("tool_calls", Value::Arr(tool_calls)));
     }
@@ -141,15 +164,37 @@ fn respond_json(out: &mut TcpStream, model: &str, text: &str, calls: &[(String, 
             "choices",
             Value::Arr(vec![Value::obj(vec![
                 ("message", Value::obj(msg)),
-                ("finish_reason", Value::str(if calls.is_empty() { "stop" } else { "tool_calls" })),
+                (
+                    "finish_reason",
+                    Value::str(if calls.is_empty() {
+                        "stop"
+                    } else {
+                        "tool_calls"
+                    }),
+                ),
             ])]),
         ),
-        ("usage", Value::obj(vec![("prompt_tokens", Value::int(prompt)), ("completion_tokens", Value::int((text.len() / 4 + 20) as i64))])),
+        (
+            "usage",
+            Value::obj(vec![
+                ("prompt_tokens", Value::int(prompt)),
+                (
+                    "completion_tokens",
+                    Value::int((text.len() / 4 + 20) as i64),
+                ),
+            ]),
+        ),
     ]));
     write!(out, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
 }
 
-fn respond_stream(out: &mut TcpStream, model: &str, text: &str, calls: &[(String, Value)], prompt: i64) -> std::io::Result<()> {
+fn respond_stream(
+    out: &mut TcpStream,
+    model: &str,
+    text: &str,
+    calls: &[(String, Value)],
+    prompt: i64,
+) -> std::io::Result<()> {
     // Chunked transfer + SSE, split into several small events so the
     // client's incremental parsing is genuinely exercised.
     write!(out, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")?;
@@ -158,19 +203,33 @@ fn respond_stream(out: &mut TcpStream, model: &str, text: &str, calls: &[(String
         write!(out, "{:x}\r\n{ev}\r\n", ev.len())?;
         out.flush()
     };
-    let mid = text.char_indices().nth(text.chars().count() / 2).map(|(i, _)| i).unwrap_or(0);
+    let mid = text
+        .char_indices()
+        .nth(text.chars().count() / 2)
+        .map(|(i, _)| i)
+        .unwrap_or(0);
     for piece in [&text[..mid], &text[mid..]] {
         if piece.is_empty() {
             continue;
         }
         send(json::to_string(&Value::obj(vec![
             ("model", Value::str(model)),
-            ("choices", Value::Arr(vec![Value::obj(vec![("delta", Value::obj(vec![("content", Value::str(piece))]))])])),
+            (
+                "choices",
+                Value::Arr(vec![Value::obj(vec![(
+                    "delta",
+                    Value::obj(vec![("content", Value::str(piece))]),
+                )])]),
+            ),
         ])))?;
     }
     for (i, (name, args)) in calls.iter().enumerate() {
         let a = json::to_string(args);
-        let cut = a.char_indices().nth(a.chars().count() / 2).map(|(i, _)| i).unwrap_or(0);
+        let cut = a
+            .char_indices()
+            .nth(a.chars().count() / 2)
+            .map(|(i, _)| i)
+            .unwrap_or(0);
         let (a1, a2) = a.split_at(cut);
         for (first, part) in [(true, a1), (false, a2)] {
             let mut f = vec![("arguments", Value::str(part))];
@@ -183,7 +242,10 @@ fn respond_stream(out: &mut TcpStream, model: &str, text: &str, calls: &[(String
             }
             send(json::to_string(&Value::obj(vec![(
                 "choices",
-                Value::Arr(vec![Value::obj(vec![("delta", Value::obj(vec![("tool_calls", Value::Arr(vec![Value::obj(call)]))]))])]),
+                Value::Arr(vec![Value::obj(vec![(
+                    "delta",
+                    Value::obj(vec![("tool_calls", Value::Arr(vec![Value::obj(call)]))]),
+                )])]),
             )])))?;
         }
     }
@@ -191,12 +253,28 @@ fn respond_stream(out: &mut TcpStream, model: &str, text: &str, calls: &[(String
         "choices",
         Value::Arr(vec![Value::obj(vec![
             ("delta", Value::Obj(vec![])),
-            ("finish_reason", Value::str(if calls.is_empty() { "stop" } else { "tool_calls" })),
+            (
+                "finish_reason",
+                Value::str(if calls.is_empty() {
+                    "stop"
+                } else {
+                    "tool_calls"
+                }),
+            ),
         ])]),
     )])))?;
     send(json::to_string(&Value::obj(vec![
         ("choices", Value::Arr(vec![])),
-        ("usage", Value::obj(vec![("prompt_tokens", Value::int(prompt)), ("completion_tokens", Value::int((text.len() / 4 + 20) as i64))])),
+        (
+            "usage",
+            Value::obj(vec![
+                ("prompt_tokens", Value::int(prompt)),
+                (
+                    "completion_tokens",
+                    Value::int((text.len() / 4 + 20) as i64),
+                ),
+            ]),
+        ),
     ])))?;
     send("[DONE]".into())?;
     write!(out, "0\r\n\r\n")?;
@@ -218,17 +296,33 @@ struct Convo<'a> {
 
 fn convo(req: &Value) -> Convo<'_> {
     let msgs = req.get("messages").and_then(|m| m.as_arr()).unwrap_or(&[]);
-    let mut c = Convo { system: String::new(), first_user: String::new(), tools: Vec::new(), called: Vec::new(), results: Vec::new(), req };
+    let mut c = Convo {
+        system: String::new(),
+        first_user: String::new(),
+        tools: Vec::new(),
+        called: Vec::new(),
+        results: Vec::new(),
+        req,
+    };
     for m in msgs {
         match m.str_of("role") {
             Some("system") => c.system = m.str_of("content").unwrap_or("").to_string(),
-            Some("user") if c.first_user.is_empty() => c.first_user = m.str_of("content").unwrap_or("").to_string(),
+            Some("user") if c.first_user.is_empty() => {
+                c.first_user = m.str_of("content").unwrap_or("").to_string()
+            }
             Some("assistant") => {
                 for tc in m.get("tool_calls").and_then(|t| t.as_arr()).unwrap_or(&[]) {
-                    c.called.push(tc.path("function", &["name"]).and_then(|n| n.as_str()).unwrap_or("").to_string());
+                    c.called.push(
+                        tc.path("function", &["name"])
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    );
                 }
             }
-            Some("tool") => c.results.push(m.str_of("content").unwrap_or("").to_string()),
+            Some("tool") => c
+                .results
+                .push(m.str_of("content").unwrap_or("").to_string()),
             _ => {}
         }
     }
@@ -246,7 +340,13 @@ fn args(pairs: Vec<(&str, Value)>) -> Value {
 
 fn first_url(text: &str) -> Option<String> {
     let at = text.find("http://").or_else(|| text.find("https://"))?;
-    Some(text[at..].split(|c: char| c.is_whitespace() || c == '"' || c == ')').next()?.trim_end_matches(['.', ',', ':', ';']).to_string())
+    Some(
+        text[at..]
+            .split(|c: char| c.is_whitespace() || c == '"' || c == ')')
+            .next()?
+            .trim_end_matches(['.', ',', ':', ';'])
+            .to_string(),
+    )
 }
 
 /// Decide the next assistant turn: (text, tool calls).
@@ -261,7 +361,10 @@ fn script(req: &Value) -> (String, Vec<(String, Value)>) {
     }
     if sys.contains("You are the Reviewer") {
         return if c.called.is_empty() {
-            ("Reading the project before deciding.".into(), vec![("files-list".into(), args(vec![]))])
+            (
+                "Reading the project before deciding.".into(),
+                vec![("files-list".into(), args(vec![]))],
+            )
         } else if c.first_user.contains("TESTS: FAIL") {
             ("The Testwright reported failures, so nothing may be delivered.\nVERDICT: REJECT: the tests failed".into(), vec![])
         } else {
@@ -270,7 +373,10 @@ fn script(req: &Value) -> (String, Vec<(String, Value)>) {
     }
     if sys.contains("You are the Logwright") || sys.contains("You are the Firewright") {
         return if c.called.is_empty() {
-            ("Checking what the skeleton already provides.".into(), vec![("files-list".into(), args(vec![]))])
+            (
+                "Checking what the skeleton already provides.".into(),
+                vec![("files-list".into(), args(vec![]))],
+            )
         } else {
             ("The convention's skeleton already provides this (log helper / CI workflow); nothing to add.".into(), vec![])
         };
@@ -279,19 +385,38 @@ fn script(req: &Value) -> (String, Vec<(String, Value)>) {
 }
 
 fn project_agent(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
-    let goal = c.system.lines().find_map(|l| l.strip_prefix("Your goal: ")).unwrap_or("").to_string();
+    let goal = c
+        .system
+        .lines()
+        .find_map(|l| l.strip_prefix("Your goal: "))
+        .unwrap_or("")
+        .to_string();
     let outputs: Vec<String> = c
         .system
         .lines()
         .find_map(|l| l.strip_prefix("Your outputs: "))
-        .map(|l| l.split(". ").next().unwrap_or("").split(", ").map(|s| s.trim().trim_end_matches('.').to_string()).filter(|s| !s.is_empty()).collect())
+        .map(|l| {
+            l.split(". ")
+                .next()
+                .unwrap_or("")
+                .split(", ")
+                .map(|s| s.trim().trim_end_matches('.').to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
     let url = first_url(&goal);
     let has = |t: &str| c.tools.iter().any(|x| x == t);
 
     // 1. Fetch first, if this agent reads the web.
     if has("http-read") && url.is_some() && !c.called.iter().any(|n| n == "http-read") {
-        return (format!("Fetching {}.", url.clone().unwrap_or_default()), vec![("http-read".into(), args(vec![("url", Value::str(url.unwrap_or_default()))]))]);
+        return (
+            format!("Fetching {}.", url.clone().unwrap_or_default()),
+            vec![(
+                "http-read".into(),
+                args(vec![("url", Value::str(url.unwrap_or_default()))]),
+            )],
+        );
     }
     let fetched = c
         .called
@@ -304,30 +429,65 @@ fn project_agent(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
     let written = c.called.iter().filter(|n| *n == "write-output").count();
     if written < outputs.len() {
         let name = outputs[written].clone();
-        let inputs_seen = c.first_user.lines().filter(|l| l.starts_with("=== input:")).count();
+        let inputs_seen = c
+            .first_user
+            .lines()
+            .filter(|l| l.starts_with("=== input:"))
+            .count();
         let source = if !fetched.is_empty() {
             fetched.lines().skip(1).collect::<Vec<_>>().join("\n")
         } else {
-            c.first_user.lines().filter(|l| !l.starts_with("===") && !l.is_empty() && *l != "Do your job now.").collect::<Vec<_>>().join("\n")
+            c.first_user
+                .lines()
+                .filter(|l| !l.starts_with("===") && !l.is_empty() && *l != "Do your job now.")
+                .collect::<Vec<_>>()
+                .join("\n")
         };
         let content = if name.ends_with(".json") {
             json::to_string(&args(vec![
                 ("made_by", Value::str("mock")),
                 ("goal", Value::str(goal.clone())),
                 ("inputs_seen", Value::int(inputs_seen as i64)),
-                ("excerpt", Value::str(source.chars().take(400).collect::<String>())),
+                (
+                    "excerpt",
+                    Value::str(source.chars().take(400).collect::<String>()),
+                ),
             ]))
         } else {
-            format!("{goal}\n\n{}", source.chars().take(2000).collect::<String>())
+            format!(
+                "{goal}\n\n{}",
+                source.chars().take(2000).collect::<String>()
+            )
         };
-        return (format!("Writing {name}."), vec![("write-output".into(), args(vec![("name", Value::str(name)), ("content", Value::str(content))]))]);
+        return (
+            format!("Writing {name}."),
+            vec![(
+                "write-output".into(),
+                args(vec![
+                    ("name", Value::str(name)),
+                    ("content", Value::str(content)),
+                ]),
+            )],
+        );
     }
     // 3. Deliver, if this agent posts.
     if has("http-post") && url.is_some() && !c.called.iter().any(|n| n == "http-post") {
-        let body = c.first_user.lines().filter(|l| !l.starts_with("===") && *l != "Do your job now.").collect::<Vec<_>>().join("\n");
+        let body = c
+            .first_user
+            .lines()
+            .filter(|l| !l.starts_with("===") && *l != "Do your job now.")
+            .collect::<Vec<_>>()
+            .join("\n");
         return (
             "Sending it.".into(),
-            vec![("http-post".into(), args(vec![("url", Value::str(url.unwrap_or_default())), ("body", Value::str(body)), ("content_type", Value::str("text/plain"))]))],
+            vec![(
+                "http-post".into(),
+                args(vec![
+                    ("url", Value::str(url.unwrap_or_default())),
+                    ("body", Value::str(body)),
+                    ("content_type", Value::str("text/plain")),
+                ]),
+            )],
         );
     }
     let denied = c.results.iter().any(|r| r.contains("DENIED"));
@@ -335,7 +495,14 @@ fn project_agent(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
         if denied {
             "Done, except for an action that was denied; I did not retry it.".into()
         } else {
-            format!("Done: {}.", if outputs.is_empty() { "my job is complete".to_string() } else { format!("wrote {}", outputs.join(", ")) })
+            format!(
+                "Done: {}.",
+                if outputs.is_empty() {
+                    "my job is complete".to_string()
+                } else {
+                    format!("wrote {}", outputs.join(", "))
+                }
+            )
         },
         vec![],
     )
@@ -344,7 +511,22 @@ fn project_agent(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
 fn testwright(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
     let has_cmd = c.first_user.contains("Test command:");
     if !has_cmd {
-        return ("There is no test command for this project; I checked that every artifact exists and is non-empty.\nTESTS: PASS".into(), vec![]);
+        let promises: Vec<String> = c
+            .first_user
+            .lines()
+            .filter_map(|l| l.strip_prefix("- promise "))
+            .map(|l| {
+                l.split_once(':')
+                    .map(|(_, s)| s.trim().to_string())
+                    .unwrap_or_default()
+            })
+            .collect();
+        let accept_lines: String = promises
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("ACCEPT {}: PASS\n", i + 1))
+            .collect();
+        return (format!("{accept_lines}There is no test command for this project; I checked that every artifact exists and is non-empty.\nTESTS: PASS"), vec![]);
     }
     match c.called.len() {
         0 => {
@@ -354,17 +536,56 @@ class WrightOutputs(unittest.TestCase):\n    def test_artifacts(self):\n        
 if __name__ == \"__main__\":\n    unittest.main()\n";
             (
                 "Writing checks for the artifacts.".into(),
-                vec![("files-write".into(), args(vec![("path", Value::str("tests/test_wright_outputs.py")), ("content", Value::str(test))]))],
+                vec![(
+                    "files-write".into(),
+                    args(vec![
+                        ("path", Value::str("tests/test_wright_outputs.py")),
+                        ("content", Value::str(test)),
+                    ]),
+                )],
             )
         }
-        1 => ("Running the tests.".into(), vec![("run-tests".into(), args(vec![]))]),
+        1 => (
+            "Running the tests.".into(),
+            vec![("run-tests".into(), args(vec![]))],
+        ),
         _ => {
             let last = c.results.last().cloned().unwrap_or_default();
+            // The promises the person approved, if any (ADR-025): the
+            // mock answers one ACCEPT line per numbered promise, then
+            // the summary. Failing mode: if the first_user's text was
+            // built with "fail" the mock exercises a broken promise.
+            let promises: Vec<String> = c
+                .first_user
+                .lines()
+                .filter_map(|l| l.strip_prefix("- promise "))
+                .map(|l| {
+                    l.split_once(':')
+                        .map(|(_, s)| s.trim().to_string())
+                        .unwrap_or_default()
+                })
+                .collect();
+            let accept_lines: String = promises
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("ACCEPT {}: PASS\n", i + 1))
+                .collect();
             if last.contains("exit code 0") {
-                ("All checks passed.\nTESTS: PASS".into(), vec![])
+                (
+                    format!("{accept_lines}All checks passed.\nTESTS: PASS"),
+                    vec![],
+                )
             } else {
-                let why = last.lines().rev().find(|l| l.contains("Error") || l.contains("FAIL")).unwrap_or("non-zero exit").to_string();
-                (format!("The checks failed.\nTESTS: FAIL: {why}"), vec![])
+                let why = last
+                    .lines()
+                    .rev()
+                    .find(|l| l.contains("Error") || l.contains("FAIL"))
+                    .unwrap_or("non-zero exit")
+                    .to_string();
+                (
+                    format!("{accept_lines}The checks failed.\nTESTS: FAIL: {why}"),
+                    vec![],
+                )
             }
         }
     }
@@ -373,13 +594,32 @@ if __name__ == \"__main__\":\n    unittest.main()\n";
 fn interviewer(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
     let last = c.results.last().cloned().unwrap_or_default();
     if last.starts_with("VALID") {
-        return ("I have drafted the blueprint. Wright will now show you exactly what it will do.".into(), vec![]);
+        return (
+            "I have drafted the blueprint. Wright will now show you exactly what it will do."
+                .into(),
+            vec![],
+        );
     }
     if c.called.len() >= 3 {
-        return ("I could not produce a valid blueprint; please describe the project differently.".into(), vec![]);
+        return (
+            "I could not produce a valid blueprint; please describe the project differently."
+                .into(),
+            vec![],
+        );
     }
-    let wish: String = c.first_user.lines().next().unwrap_or("A small project").chars().take(160).collect();
-    let name: String = wish.split_whitespace().take(4).collect::<Vec<_>>().join(" ");
+    let wish: String = c
+        .first_user
+        .lines()
+        .next()
+        .unwrap_or("A small project")
+        .chars()
+        .take(160)
+        .collect();
+    let name: String = wish
+        .split_whitespace()
+        .take(4)
+        .collect::<Vec<_>>()
+        .join(" ");
     let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
     let kdl = format!(
         "meta {{\n  name \"{name}\"\n  format 1\n}}\nintent {{\n  summary \"{wish}\"\n  confirmed \"\"\n}}\nproject {{\n  language \"python\"\n}}\n\
@@ -391,22 +631,43 @@ models {{\n  tier cheap prefer=\"{m}\" fallback=\"\"\n  tier quality prefer=\"{m
         wish = esc(&wish),
         m = c.req.str_of("model").unwrap_or("mock-1"),
     );
-    ("Here is my proposal.".into(), vec![("propose_blueprint".into(), args(vec![("kdl", Value::str(kdl))]))])
+    (
+        "Here is my proposal.".into(),
+        vec![(
+            "propose_blueprint".into(),
+            args(vec![("kdl", Value::str(kdl))]),
+        )],
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wright_runtime::models::{call_once, CompletionRequest, Message, OpenAiCompatible, ToolDef};
+    use wright_runtime::models::{
+        call_once, CompletionRequest, Message, OpenAiCompatible, ToolDef,
+    };
     use wright_runtime::net::NetConfig;
 
     #[test]
     fn the_mock_streams_tool_calls_the_real_client_understands() {
         let mock = MockProvider::start(0).unwrap();
-        let p = OpenAiCompatible { base_url: mock.base_url() };
+        let p = OpenAiCompatible {
+            base_url: mock.base_url(),
+        };
         let mut req = CompletionRequest::new("mock-1");
         req.system = "You are Fetcher, one agent in a Wright project.\n\nYour goal: Fetch https://example.com/top\n\nYour outputs: stories.json. Write each one".into();
-        req.tools = vec![ToolDef { name: "http-read".into(), description: String::new(), schema: "{}".into() }, ToolDef { name: "write-output".into(), description: String::new(), schema: "{}".into() }];
+        req.tools = vec![
+            ToolDef {
+                name: "http-read".into(),
+                description: String::new(),
+                schema: "{}".into(),
+            },
+            ToolDef {
+                name: "write-output".into(),
+                description: String::new(),
+                schema: "{}".into(),
+            },
+        ];
         req.messages.push(Message::user_text("Do your job now."));
         let resp = call_once(&p, &req, None, &NetConfig::default(), &mut |_| {}).unwrap();
         let uses = resp.tool_uses();
@@ -418,7 +679,9 @@ mod tests {
     #[test]
     fn flaky_and_down_models_fail_the_way_they_say() {
         let mock = MockProvider::start(0).unwrap();
-        let p = OpenAiCompatible { base_url: mock.base_url() };
+        let p = OpenAiCompatible {
+            base_url: mock.base_url(),
+        };
         let mut req = CompletionRequest::new("mock-down");
         req.messages.push(Message::user_text("hi"));
         let e = call_once(&p, &req, None, &NetConfig::default(), &mut |_| {}).unwrap_err();

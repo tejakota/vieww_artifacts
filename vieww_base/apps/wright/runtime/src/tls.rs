@@ -53,7 +53,11 @@ impl TlsStream {
             Err(format!(
                 "TLS on {} is not wired yet (Spike W-6: {}); refusing to downgrade to plaintext",
                 std::env::consts::OS,
-                if cfg!(target_os = "macos") { "Security.framework" } else { "SChannel" }
+                if cfg!(target_os = "macos") {
+                    "Security.framework"
+                } else {
+                    "SChannel"
+                }
             ))
         }
     }
@@ -203,7 +207,9 @@ mod linux {
             // SAFETY: valid handle from dlopen, valid C string.
             let p = unsafe { dlsym(handle, c.as_ptr()) };
             if p.is_null() {
-                Err(format!("OpenSSL is too old: missing {name} (need 1.1.1 or newer)"))
+                Err(format!(
+                    "OpenSSL is too old: missing {name} (need 1.1.1 or newer)"
+                ))
             } else {
                 Ok(p)
             }
@@ -212,15 +218,22 @@ mod linux {
         // OpenSSL function with exactly the signature of its type alias
         // (see openssl/ssl.h, openssl/err.h for 1.1.1 and 3.x).
         unsafe {
-            let version_fn: FnVersion = std::mem::transmute::<*mut c_void, FnVersion>(sym("OpenSSL_version")?);
+            let version_fn: FnVersion =
+                std::mem::transmute::<*mut c_void, FnVersion>(sym("OpenSSL_version")?);
             let version = CStr::from_ptr(version_fn(0)).to_string_lossy().into_owned();
             Ok(Lib {
                 version,
-                tls_client_method: std::mem::transmute::<*mut c_void, FnMethod>(sym("TLS_client_method")?),
+                tls_client_method: std::mem::transmute::<*mut c_void, FnMethod>(sym(
+                    "TLS_client_method",
+                )?),
                 ctx_new: std::mem::transmute::<*mut c_void, FnCtxNew>(sym("SSL_CTX_new")?),
                 ctx_free: std::mem::transmute::<*mut c_void, FnCtxFree>(sym("SSL_CTX_free")?),
-                ctx_default_verify_paths: std::mem::transmute::<*mut c_void, FnCtxInt>(sym("SSL_CTX_set_default_verify_paths")?),
-                ctx_set_verify: std::mem::transmute::<*mut c_void, FnCtxSetVerify>(sym("SSL_CTX_set_verify")?),
+                ctx_default_verify_paths: std::mem::transmute::<*mut c_void, FnCtxInt>(sym(
+                    "SSL_CTX_set_default_verify_paths",
+                )?),
+                ctx_set_verify: std::mem::transmute::<*mut c_void, FnCtxSetVerify>(sym(
+                    "SSL_CTX_set_verify",
+                )?),
                 ctx_ctrl: std::mem::transmute::<*mut c_void, FnCtrl>(sym("SSL_CTX_ctrl")?),
                 ssl_new: std::mem::transmute::<*mut c_void, FnSslNew>(sym("SSL_new")?),
                 ssl_free: std::mem::transmute::<*mut c_void, FnSslFree>(sym("SSL_free")?),
@@ -232,10 +245,16 @@ mod linux {
                 read: std::mem::transmute::<*mut c_void, FnRw>(sym("SSL_read")?),
                 write: std::mem::transmute::<*mut c_void, FnRw>(sym("SSL_write")?),
                 get_error: std::mem::transmute::<*mut c_void, FnGetError>(sym("SSL_get_error")?),
-                verify_result: std::mem::transmute::<*mut c_void, FnVerifyResult>(sym("SSL_get_verify_result")?),
+                verify_result: std::mem::transmute::<*mut c_void, FnVerifyResult>(sym(
+                    "SSL_get_verify_result",
+                )?),
                 err_get: std::mem::transmute::<*mut c_void, FnErrGet>(sym("ERR_get_error")?),
-                err_string: std::mem::transmute::<*mut c_void, FnErrString>(sym("ERR_error_string_n")?),
-                set_alpn: sym("SSL_set_alpn_protos").ok().map(|p| std::mem::transmute::<*mut c_void, FnAlpn>(p)),
+                err_string: std::mem::transmute::<*mut c_void, FnErrString>(sym(
+                    "ERR_error_string_n",
+                )?),
+                set_alpn: sym("SSL_set_alpn_protos")
+                    .ok()
+                    .map(|p| std::mem::transmute::<*mut c_void, FnAlpn>(p)),
             })
         }
     }
@@ -253,9 +272,17 @@ mod linux {
                 // SAFETY: buffer and its exact length are passed.
                 unsafe { (self.err_string)(e, buf.as_mut_ptr(), buf.len()) };
                 // SAFETY: ERR_error_string_n always NUL-terminates.
-                msgs.push(unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned());
+                msgs.push(
+                    unsafe { CStr::from_ptr(buf.as_ptr()) }
+                        .to_string_lossy()
+                        .into_owned(),
+                );
             }
-            if msgs.is_empty() { "unknown OpenSSL error".into() } else { msgs.join("; ") }
+            if msgs.is_empty() {
+                "unknown OpenSSL error".into()
+            } else {
+                msgs.join("; ")
+            }
         }
     }
 
@@ -284,14 +311,28 @@ mod linux {
                 return Err(format!("TLS context: {}", lib.last_error()));
             }
             // From here on, the guard frees what we allocated on early return.
-            let mut conn = SslConn { lib, ctx, ssl: std::ptr::null_mut(), tcp, closed: false };
+            let mut conn = SslConn {
+                lib,
+                ctx,
+                ssl: std::ptr::null_mut(),
+                tcp,
+                closed: false,
+            };
             // SAFETY: ctx is a valid SSL_CTX for every call below.
             unsafe {
                 if (lib.ctx_default_verify_paths)(ctx) != 1 {
-                    return Err(format!("loading the system trust store: {}", lib.last_error()));
+                    return Err(format!(
+                        "loading the system trust store: {}",
+                        lib.last_error()
+                    ));
                 }
                 (lib.ctx_set_verify)(ctx, SSL_VERIFY_PEER, std::ptr::null());
-                (lib.ctx_ctrl)(ctx, SSL_CTRL_SET_MIN_PROTO_VERSION, TLS1_2_VERSION, std::ptr::null_mut());
+                (lib.ctx_ctrl)(
+                    ctx,
+                    SSL_CTRL_SET_MIN_PROTO_VERSION,
+                    TLS1_2_VERSION,
+                    std::ptr::null_mut(),
+                );
                 conn.ssl = (lib.ssl_new)(ctx);
             }
             if conn.ssl.is_null() {
@@ -305,7 +346,12 @@ mod linux {
                 if (lib.set_fd)(ssl, conn.tcp.as_raw_fd()) != 1 {
                     return Err(format!("TLS fd: {}", lib.last_error()));
                 }
-                (lib.ssl_ctrl)(ssl, SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_HOST_NAME, chost.as_ptr() as *mut c_void);
+                (lib.ssl_ctrl)(
+                    ssl,
+                    SSL_CTRL_SET_TLSEXT_HOSTNAME,
+                    TLSEXT_NAMETYPE_HOST_NAME,
+                    chost.as_ptr() as *mut c_void,
+                );
                 if (lib.set1_host)(ssl, chost.as_ptr()) != 1 {
                     return Err(format!("TLS hostname check setup: {}", lib.last_error()));
                 }
@@ -335,11 +381,16 @@ mod linux {
             // SAFETY: ssl is valid while self lives.
             let code = unsafe { (self.lib.get_error)(self.ssl, rc) };
             match code {
-                SSL_ERROR_WANT_READ | SSL_ERROR_WANT_WRITE => io::Error::new(io::ErrorKind::WouldBlock, format!("TLS {what} timed out")),
+                SSL_ERROR_WANT_READ | SSL_ERROR_WANT_WRITE => {
+                    io::Error::new(io::ErrorKind::WouldBlock, format!("TLS {what} timed out"))
+                }
                 SSL_ERROR_SYSCALL => {
                     let os = io::Error::last_os_error();
                     if os.raw_os_error().unwrap_or(0) == 0 {
-                        io::Error::new(io::ErrorKind::UnexpectedEof, format!("TLS {what}: connection closed"))
+                        io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            format!("TLS {what}: connection closed"),
+                        )
                     } else {
                         os
                     }
@@ -415,7 +466,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn openssl_loads_from_the_system() {
-        let v = TlsStream::backend().expect("system OpenSSL should be present on CI and dev machines");
+        let v =
+            TlsStream::backend().expect("system OpenSSL should be present on CI and dev machines");
         assert!(v.starts_with("OpenSSL"), "{v}");
     }
 
@@ -432,7 +484,8 @@ mod tests {
             }
         });
         let tcp = TcpStream::connect(addr).unwrap();
-        tcp.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        tcp.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
         let err = match TlsStream::connect(tcp, "localhost") {
             Err(e) => e,
             Ok(_) => panic!("a plaintext server must not complete a TLS handshake"),

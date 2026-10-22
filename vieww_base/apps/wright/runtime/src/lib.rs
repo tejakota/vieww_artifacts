@@ -33,6 +33,7 @@ pub mod local;
 pub mod models;
 pub mod net;
 pub mod secrets;
+pub mod signing;
 pub mod store;
 pub mod tls;
 pub mod tz;
