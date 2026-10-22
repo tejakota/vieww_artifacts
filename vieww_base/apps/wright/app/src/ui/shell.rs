@@ -106,11 +106,13 @@ fn app(ui: &Ui) -> WidgetNode {
 // ── top bar ──────────────────────────────────────────────────────
 
 /// The bar under the window's title bar: the page title, the session dots,
-/// the view toggles. The brand is not on it — the name and the mark live on
-/// the title bar itself, one strip up (the window's icon and title text,
-/// beside the minimise and close buttons), and a second "wright" directly
-/// under that read as a stutter. `pub(crate)` for the test that holds this
-/// bar to it.
+/// the view toggles. The dots own the bar's exact middle — the title and the
+/// toggles sit on symmetric flanks either side of them, so the pager reads
+/// from the window's centre line. The brand is not on the bar — the name and
+/// the mark live on the title bar itself, one strip up (the window's icon and
+/// title text, beside the minimise and close buttons), and a second "wright"
+/// directly under that read as a stutter. `pub(crate)` for the test that
+/// holds this bar to it.
 pub(crate) fn top_bar(ui: &Ui) -> WidgetNode {
     let ui = ui.clone();
     Live::new("top-bar", move || {
@@ -144,17 +146,22 @@ pub(crate) fn top_bar(ui: &Ui) -> WidgetNode {
         let overview_on = ui.overview.get();
         let (a, b2, c, d) = (ui.clone(), ui.clone(), ui.clone(), ui.clone());
         Container::new()
-            .padding(EdgeInsets::only(18.0, 10.0, 14.0, 10.0))
-            .child(row(12.0, vec![
-                SizedBox::width(300.0).child(Align::new(Alignment::CENTER_LEFT).child(line(title, 13.5, p.ink))).into(),
+            .padding(EdgeInsets::symmetric(16.0, 10.0))
+            .child(row(0.0, vec![
+                // Equal flanks: whatever the title weighs on the left and
+                // the toggles on the right, the dots keep the middle.
+                grow(SizedBox::width(300.0).child(
+                    Align::new(Alignment::CENTER_LEFT).child(line(title, 13.5, p.ink)),
+                )),
                 row(0.0, dots),
-                gap(),
-                tool_button(&p, Glyph::Sessions, "All sessions", None, overview_on, move || a.set_overview(!a.overview.get())),
-                tool_button(&p, Glyph::Engine, "Engine", if live > 0 { Some(format!("{live} live")) } else { None }, engine_on, move || {
-                    b2.set_engine(if b2.engine.get() == EngineView::Hidden { EngineView::Open } else { EngineView::Hidden })
-                }),
-                icon_button(&p, Glyph::Gear, "Settings", false, move || c.open_settings()),
-                icon_button(&p, Glyph::Help, "Gestures and shortcuts", false, move || d.help.set(!d.help.get())),
+                grow(Align::new(Alignment::CENTER_RIGHT).child(row(12.0, vec![
+                    tool_button(&p, Glyph::Sessions, "All sessions", None, overview_on, move || a.set_overview(!a.overview.get())),
+                    tool_button(&p, Glyph::Engine, "Engine", if live > 0 { Some(format!("{live} live")) } else { None }, engine_on, move || {
+                        b2.set_engine(if b2.engine.get() == EngineView::Hidden { EngineView::Open } else { EngineView::Hidden })
+                    }),
+                    icon_button(&p, Glyph::Gear, "Settings", false, move || c.open_settings()),
+                    icon_button(&p, Glyph::Help, "Gestures and shortcuts", false, move || d.help.set(!d.help.get())),
+                ]))),
             ]))
             .into()
     })
