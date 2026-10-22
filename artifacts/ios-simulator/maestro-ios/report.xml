@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="iPhone 15 Pro - iOS 17.4 - E63A4C69-8ADF-4037-A5EE-AE47A98E069B" tests="1" failures="0" time="84.692" timestamp="2026-10-22T13:55:04">
+    <testcase id="vieww demo screen" name="vieww demo screen" classname="vieww demo screen" file="ci/mobile/maestro/demo.yaml" time="84.191" timestamp="2026-10-22T13:55:05" status="SUCCESS">
+      <properties>
+        <property name="tags" value="smoke"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
