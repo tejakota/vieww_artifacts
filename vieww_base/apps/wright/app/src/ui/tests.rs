@@ -424,6 +424,54 @@ fn the_brand_is_on_the_title_bar_not_the_top_bar() {
     assert!(dump.contains("Home"), "the page title is still the bar's first label:\n{dump}");
 }
 
+/// The session dots own the window's centre line: the pager sits centred
+/// in the top bar, whatever the title on the left and the toggles on the
+/// right weigh. (The dots began life tucked against the title box, visibly
+/// left of centre.) The pill of the page you are on is read from both ends
+/// of the pager — Home and the new-session page — because the pill moves:
+/// the midpoint of the two pill centres is the pager's centre.
+#[test]
+fn the_dots_own_the_middle_of_the_top_bar() {
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    let accent = ui.pal().accent;
+    // The active dot is the accent-filled pill; in the top strip it is the
+    // only thing drawn in that colour, so its span says where it sits.
+    let pill = |driver: &mut FrameDriver| -> (usize, usize) {
+        ui.pump(driver);
+        driver.draw_frame_at(Duration::from_millis(16));
+        let (pixels, _) = NativeRenderer::new().render_to_pixels(driver.scene(), 1280, 800, ui.pal().ground).unwrap();
+        let data = pixels.data();
+        let (mut lo, mut hi) = (usize::MAX, 0);
+        for y in 0..45 {
+            for x in 0..1280 {
+                let i = (y * 1280 + x) * 4;
+                if (data[i], data[i + 1], data[i + 2], data[i + 3]) == (accent.r, accent.g, accent.b, 255) {
+                    lo = lo.min(x);
+                    hi = hi.max(x);
+                }
+            }
+        }
+        assert!(hi > lo, "the active dot's pill renders in the accent colour on the top strip");
+        (lo, hi)
+    };
+    let (lo, hi) = pill(&mut driver);
+    let home_centre = (lo + hi) as f32 / 2.0;
+    ui.go(ui.sessions.get().len() + 1);
+    let (lo, hi) = pill(&mut driver);
+    let new_centre = (lo + hi) as f32 / 2.0;
+    let centre = (home_centre + new_centre) / 2.0;
+    assert!(
+        (centre - 640.0).abs() <= 1.0,
+        "the pager centres on {}, not the window's middle (pills at {home_centre} and {new_centre})",
+        centre
+    );
+}
+
 /// The window icon is the installers' tile, rendered headlessly: the blue
 /// ground, the white W somewhere on it, the corners rounded away so the
 /// window's own background shows through them.
