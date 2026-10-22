@@ -254,6 +254,12 @@ fn run_external(
                 if out.success() && !out.timed_out {
                     return Ok((out.output, "kernel sandbox"));
                 }
+                if out.timed_out && wright_runtime::killswitch::is_stopped() {
+                    return Err(ToolError::Failed(format!(
+                        "the worker '{}' was stopped by the kill switch. Nothing was applied.",
+                        entry.name
+                    )));
+                }
                 if out.timed_out {
                     return Err(ToolError::Failed(format!(
                         "the worker '{}' ran past its {}s timeout and was killed. Nothing was applied.",
@@ -462,6 +468,14 @@ fn direct_run(
                 return Err(worker_failed(entry, &format!("{output}{err}")));
             }
             Ok(None) => {
+                if wright_runtime::killswitch::is_stopped() {
+                    kill_group(&mut child);
+                    let _ = child.wait();
+                    return Err(ToolError::Failed(format!(
+                        "the worker '{}' was stopped by the kill switch. Nothing was applied.",
+                        entry.name
+                    )));
+                }
                 if start.elapsed() > timeout {
                     kill_group(&mut child);
                     let _ = child.wait();

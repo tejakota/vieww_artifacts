@@ -65,23 +65,72 @@ agent Fetcher {                          // one card; a name, then fields:
 edge from="Fetcher" to="Summarizer"      // Summarizer runs after Fetcher and receives its outputs
 chips { scheduling cron="0 8 * * *" tz="Asia/Kolkata" logging on tests on }
 guardrails { budget per-firing=500000 daily=3000000 wall-clock 300 max-turns 40 }   // budgets in micro-USD
-deliverable kind="email" { check "What must be true when it is done." }
+deliverable kind="email" {
+  check "What must be true when it is done."
+  accept "One promise the person can read and a test can check."   // 1-3 lines; each becomes a check the Reviewer enforces
+}
 models { tier cheap prefer="model-id" fallback="model-id" tier quality prefer="model-id" fallback="model-id" }
+
+edge from="Fetcher" to="Summarizer" out="stories.json" in="stories.json" schema="json-array"   // a typed hand-off (json-object | json-array | text | csv | any)
 
 Rules: every tool's capability must be granted in permissions; every `in` must be produced
 by an agent connected by edges; secrets are chips { secrets name="keychain:path" } — never values.
+Write `accept` lines for what the person cares about: they read them as promises before anything runs.
+An agent that holds private data, untrusted input AND an outbound channel needs `approval "before-send"`.
 "#;
 
-fn system_prompt(models_hint: &str) -> String {
+fn system_prompt(models_hint: &str, config: &Config) -> String {
     let spec = wright_agents::spec(compiler::SystemKind::Interviewer);
     let mut tools = String::from("\nTOOL PALETTE\n");
     for t in PALETTE
         .iter()
-        .filter(|t| t.name != "write-output" && t.implemented)
+        .filter(|t| t.name != "write-output" && t.name != "worker" && t.name != "mcp-call" && t.implemented)
     {
         tools.push_str(&format!("- {}: {}\n", t.name, t.summary));
     }
-    format!("{}\n{FORMAT_REFERENCE}{tools}\nUse these model ids in the models section unless told otherwise: {models_hint}.\nAsk at most one short question at a time. If the request is already clear, propose immediately.", spec.prompt)
+    format!(
+        "{}\n{FORMAT_REFERENCE}{tools}{}\nUse these model ids in the models section unless told otherwise: {models_hint}.\nAsk at most one short question at a time. If the request is already clear, propose immediately.",
+        spec.prompt,
+        hands_on_this_machine(config)
+    )
+}
+
+/// The external agents and MCP servers this machine actually has — so the
+/// Interviewer can offer them, and never invents one that is not there.
+pub fn hands_on_this_machine(config: &Config) -> String {
+    let workers: Vec<String> = config
+        .workers
+        .iter()
+        .filter_map(|w| {
+            wright_tools::worker::resolve_command(&w.command)
+                .ok()
+                .map(|p| format!("- {} (runs {})", w.name, p.display()))
+        })
+        .collect();
+    let mut out = String::from("\nWORKERS ON THIS MACHINE (external coding agents)\n");
+    if workers.is_empty() {
+        out.push_str("None are installed. Never write a `worker` line.\n");
+    } else {
+        out.push_str(&workers.join("\n"));
+        out.push_str(
+            "\nWhen one step is substantial coding inside the project — write a program, change code, make failing tests pass — \
+hand that step to a worker instead of a plain agent:\n\
+agent Coder {\n  goal \"One sentence: the code to write and what done looks like.\"\n  worker \"<name from the list>\"\n  worker-files \"src/\"              // the folders it may change; as narrow as works\n  out \"report.md\"                  // optional\n  approval \"before-send\"            // required: a worker sends the project copy to its own vendor\n  permissions files-read=true files-write=true spawn=true network=true\n}\n\
+Its work is still checked by Wright's tests and Reviewer. Use a worker only for coding; a plain agent does the rest. \
+Say in your summary that the step goes to that worker, so the person knows.\n",
+        );
+    }
+    if !config.mcp_servers.is_empty() {
+        out.push_str("\nMCP SERVERS ON THIS MACHINE (pinned)\n");
+        for m in &config.mcp_servers {
+            out.push_str(&format!("- {}\n", m.name));
+        }
+        out.push_str(
+            "An agent may use one with `mcp server=\"<name>\" allow=\"<tool>,<tool>\"` — list only the tools it needs; \
+its answers count as untrusted input.\n",
+        );
+    }
+    out
 }
 
 fn propose_tool() -> ToolDef {
@@ -97,6 +146,15 @@ pub fn check_proposal(kdl: &str) -> Result<Blueprint, String> {
     let bp = parse::blueprint(kdl).map_err(|e| format!("It does not parse: {e}"))?;
     validate::validate(&bp).map_err(|errs| format!("It is not valid:\n- {}", errs.join("\n- ")))?;
     compiler::compile(&bp).map_err(|e| format!("It does not compile: {e}"))?;
+    Ok(bp)
+}
+
+/// [`check_proposal`], and the organization's policy: a plan the policy
+/// would refuse at firing is sent back now, so the Interviewer drafts
+/// within the rules instead of the person finding out later.
+pub fn check_proposal_with(kdl: &str, config: &Config) -> Result<Blueprint, String> {
+    let bp = check_proposal(kdl)?;
+    crate::org::enforce(&bp, config).map_err(|e| format!("It breaks the rules: {e}"))?;
     Ok(bp)
 }
 
@@ -188,7 +246,7 @@ pub fn interview(
         _ => return Ok(None),
     };
     let mut req = CompletionRequest::new(model.clone());
-    req.system = system_prompt(&model);
+    req.system = system_prompt(&model, config);
     req.tools = vec![propose_tool()];
     req.messages = resumed(&earlier, first);
 
@@ -233,7 +291,7 @@ pub fn interview(
                     format!("Unknown tool '{name}'. Use propose_blueprint.")
                 } else {
                     io.working("Checking the draft plan");
-                    match check_proposal(input.str_of("kdl").unwrap_or("")) {
+                    match check_proposal_with(input.str_of("kdl").unwrap_or(""), config) {
                         Ok(bp) => {
                             proposal = Some(bp);
                             "VALID. Wright will now show the person the summary.".into()
@@ -363,12 +421,32 @@ mod tests {
 
     #[test]
     fn the_reference_mentions_every_implemented_tool() {
-        let p = system_prompt("m");
+        let p = system_prompt("m", &Config::builtin());
+        // `worker` and `mcp-call` are reached through their own card lines
+        // (`worker "..."`, `mcp server=...`), offered only when this machine
+        // has one — never as a bare tool name.
         for t in PALETTE
             .iter()
-            .filter(|t| t.implemented && t.name != "write-output")
+            .filter(|t| t.implemented && !["write-output", "worker", "mcp-call"].contains(&t.name))
         {
             assert!(p.contains(t.name), "{}", t.name);
         }
+        assert!(p.contains("accept \""), "acceptance sentences are taught");
+        assert!(p.contains("schema="), "typed edges are taught");
+    }
+
+    #[test]
+    fn workers_are_offered_only_when_this_machine_has_one() {
+        let mut cfg = Config::parse("", "t").unwrap();
+        for w in cfg.workers.iter_mut() {
+            w.command = "/no/such/agent".into();
+        }
+        let none = hands_on_this_machine(&cfg);
+        assert!(none.contains("Never write a `worker` line"), "{none}");
+        cfg.workers[0].command = "sh".into(); // on every PATH
+        let one = hands_on_this_machine(&cfg);
+        assert!(one.contains(&format!("- {} (runs", cfg.workers[0].name)), "{one}");
+        assert!(one.contains("approval \\\"before-send\\\"") || one.contains("approval \"before-send\""), "{one}");
+        assert!(!one.contains("MCP SERVERS"), "no MCP section without servers");
     }
 }

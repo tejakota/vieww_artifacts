@@ -4,11 +4,16 @@
 //! MCP servers are other people's programs; the memo's rule for them is
 //! the same as its rule for recipes: provenance or nothing. So:
 //!
-//! 1. **The server is pinned by hash.** config.kdl names the executable
-//!    and the BLAKE3 of its bytes (`hash="blake3:..."`). Before the very
-//!    first call, the file is hashed again; a binary that changed since
-//!    the pin was set is REFUSED, loudly. (Compute the pin with
-//!    `wright mcp-hash <command>`.)
+//! 1. **The server is pinned by hash — all of it.** A single-program
+//!    server is pinned by the BLAKE3 of its bytes (`hash="blake3:..."`,
+//!    from `wright mcp-hash <command>`). Most servers are not one program
+//!    but a package a launcher fetches at start (`npx pkg`, `uvx pkg`), and
+//!    pinning the launcher pins nothing that matters — so config refuses
+//!    a launcher with a file pin, and `wright mcp install` instead freezes
+//!    an EXACT version into Wright's own folder and pins the whole tree
+//!    (`hash="tree-blake3:..."`, every file and link, ADR-035). Before a
+//!    call the pin is checked again; anything that changed is REFUSED,
+//!    loudly.
 //! 2. **The card allow-lists tools.** `mcp server="weather"
 //!    allow="get_forecast"` — a tool not on the card does not exist.
 //!    The server is asked for its list first, and an allow-listed name
@@ -75,11 +80,31 @@ pub fn run(permit: &Permit, input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, 
         )));
     }
 
-    // 1. The pin: the executable's bytes must still hash to the config's
-    //    pin. A server that updated itself out from under the pin is a
+    // 1. The pin: the server's bytes must still hash to the config's pin.
+    //    A server that updated itself out from under the pin is a
     //    different program than the one approved.
     let exe = find_executable(&entry.command).map_err(ToolError::Failed)?;
-    let pinned = pin_of(&exe).map_err(ToolError::Failed)?;
+    let pinned = match &entry.tree {
+        Some(tree) => {
+            let tree = std::path::Path::new(tree);
+            // The command must BE part of the pinned tree, or the pin
+            // covers files that never run.
+            let inside = match (std::fs::canonicalize(tree), exe.parent().and_then(|p| std::fs::canonicalize(p).ok())) {
+                (Ok(t), Some(e)) => e.starts_with(&t),
+                _ => false,
+            };
+            if !inside {
+                return Err(ToolError::Failed(format!(
+                    "the MCP server '{}' runs {}, which is outside its pinned folder {} — the pin would not cover what runs",
+                    entry.name,
+                    exe.display(),
+                    tree.display()
+                )));
+            }
+            tree_pin(tree).map_err(ToolError::Failed)?
+        }
+        None => pin_of(&exe).map_err(ToolError::Failed)?,
+    };
     if pinned != entry.hash {
         return Err(ToolError::Failed(format!(
             "the MCP server '{}' changed since it was pinned: its command hashes to {}, but config.kdl pins {}. \
@@ -285,7 +310,9 @@ fn spawn_server(entry: &McpEntry, timeout: Duration) -> Result<std::process::Chi
     let mut cmd = Command::new(&entry.command);
     cmd.args(&entry.args)
         .env_clear()
-        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        // PATH is not a secret, and an installed npm server starts through
+        // `#!/usr/bin/env node`, which needs it.
+        .env("PATH", std::env::var_os("PATH").unwrap_or_else(|| "/usr/local/bin:/usr/bin:/bin".into()))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -318,6 +345,60 @@ pub fn pin_of(exe: &std::path::Path) -> Result<String, String> {
     let bytes =
         std::fs::read(exe).map_err(|e| format!("read '{}' to pin it: {e}", exe.display()))?;
     Ok(format!("blake3:{}", hash::blake3_hex(&bytes)))
+}
+
+/// The pin of a whole installed server: BLAKE3 over every file and link
+/// under `root`, in sorted path order — path, kind, the executable bit and
+/// the content (a link's target). Bytecode caches the interpreter writes
+/// as it runs (`__pycache__`, `*.pyc`) are not the server and are left
+/// out, or the first call would break the pin.
+pub fn tree_pin(root: &std::path::Path) -> Result<String, String> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, Vec<u8>)>) -> Result<(), String> {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .map_err(|e| format!("{}: {e}", dir.display()))?
+            .flatten()
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name == "__pycache__" || name.ends_with(".pyc") {
+                continue;
+            }
+            let path = e.path();
+            let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+            let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            if meta.file_type().is_symlink() {
+                let target = std::fs::read_link(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                out.push((format!("L {rel}"), target.to_string_lossy().as_bytes().to_vec()));
+            } else if meta.is_dir() {
+                walk(root, &path, out)?;
+            } else {
+                #[cfg(unix)]
+                let exec = {
+                    use std::os::unix::fs::PermissionsExt;
+                    meta.permissions().mode() & 0o111 != 0
+                };
+                #[cfg(not(unix))]
+                let exec = false;
+                let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                out.push((format!("F{} {rel}", if exec { "x" } else { "" }), bytes));
+            }
+        }
+        Ok(())
+    }
+    let mut items = Vec::new();
+    walk(root, root, &mut items)?;
+    if items.is_empty() {
+        return Err(format!("{} is empty — nothing to pin", root.display()));
+    }
+    let mut buf: Vec<u8> = Vec::new();
+    for (head, body) in &items {
+        buf.extend_from_slice(head.as_bytes());
+        buf.push(0);
+        buf.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        buf.extend_from_slice(hash::blake3_hex(body).as_bytes());
+    }
+    Ok(format!("tree-blake3:{}", hash::blake3_hex(&buf)))
 }
 
 /// What `wright mcp-hash <command>` prints, so a person can pin a
@@ -380,6 +461,7 @@ for line in sys.stdin:
             args: Vec::new(),
             hash: pin,
             timeout_secs: 30,
+            tree: None,
         }
     }
 
@@ -475,6 +557,33 @@ for line in sys.stdin:
         );
         assert!(err.to_string().contains("refused"), "{}", err);
         // and nothing ran: the error came before any server process.
+    }
+
+    /// A server installed as a folder (what `wright mcp install` makes): a
+    /// library file next to the program. Changing the LIBRARY — the code a
+    /// launcher would have fetched — is what the old file pin never saw.
+    #[test]
+    fn a_tree_pin_covers_the_servers_code_not_just_its_launcher() {
+        let tree = tmp("tree");
+        std::fs::create_dir_all(tree.join("lib")).unwrap();
+        std::fs::write(tree.join("lib").join("forecast.txt"), "sunny").unwrap();
+        let mut entry = stub_server(&tree);
+        entry.tree = Some(tree.to_string_lossy().to_string());
+        entry.hash = tree_pin(&tree).unwrap();
+        let ctx = ctx_with(entry.clone(), &["get_forecast"]);
+        assert!(run(&permit("Looker"), &call("get_forecast", "{}"), &ctx).is_ok());
+        // The program is untouched; a file it loads is not.
+        std::fs::write(tree.join("lib").join("forecast.txt"), "exfiltrate").unwrap();
+        let err = run(&permit("Looker"), &call("get_forecast", "{}"), &ctx).unwrap_err();
+        assert!(err.to_string().contains("changed since it was pinned"), "{err}");
+        // A command outside its pinned folder is refused: the pin would
+        // cover files that never run.
+        let elsewhere = tmp("elsewhere");
+        let outside = stub_server(&elsewhere);
+        entry.command = outside.command;
+        entry.hash = tree_pin(&tree).unwrap();
+        let err = run(&permit("Looker"), &call("get_forecast", "{}"), &ctx_with(entry, &["get_forecast"])).unwrap_err();
+        assert!(err.to_string().contains("outside its pinned folder"), "{err}");
     }
 
     #[test]

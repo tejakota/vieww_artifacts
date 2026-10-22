@@ -451,6 +451,13 @@ mod linux {
         let status = loop {
             match child.try_wait() {
                 Ok(Some(s)) => break s,
+                Ok(None) if wright_runtime::killswitch::is_stopped() => {
+                    // The kill switch: the command goes now, not at its clock.
+                    timed_out = true;
+                    // SAFETY: plain kill(2) of our own child's process group.
+                    unsafe { kill(-pid, SIGKILL) };
+                    break child.wait().map_err(|e| e.to_string())?;
+                }
                 Ok(None) if Instant::now() >= deadline => {
                     timed_out = true;
                     // SAFETY: plain kill(2) of our own child's process group.

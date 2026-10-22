@@ -31,11 +31,17 @@ fn env() -> &'static (PathBuf, MockProvider) {
 
 fn config(prices: &str) -> Config {
     let (_, mock) = env();
-    Config::parse(
+    let mut cfg = Config::parse(
         &format!("provider \"mock\" kind=\"openai\" base=\"{}\" models=\"mock-*\"\ninterview model=\"mock-1\"\n{prices}", mock.base_url()),
         "test config",
     )
-    .unwrap()
+    .unwrap();
+    // The same plans on every machine: a worker installed here (Claude
+    // Code on a developer's laptop) must not change what is drafted.
+    for w in cfg.workers.iter_mut() {
+        w.command = "/no/such/agent".into();
+    }
+    cfg
 }
 
 /// A tiny HTTP server: GET returns `body`; POST bodies are recorded.

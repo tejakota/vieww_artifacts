@@ -30,6 +30,7 @@ pub mod convention;
 pub mod ed25519;
 pub mod events;
 pub mod hash;
+pub mod jcs;
 pub mod palette;
 pub mod recipe;
 pub mod rule_of_two;

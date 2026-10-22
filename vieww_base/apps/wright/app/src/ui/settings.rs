@@ -9,6 +9,11 @@
 //!  Network         office machines: an extra certificate file (PEM) for
 //!                  networks that inspect HTTPS, environment variables
 //!                  (proxies, mirrors), and what is in effect right now
+//!  Fleet           everything this computer runs on its own: state, next
+//!                  run, last run, time to trust; pause, resume, approve;
+//!                  the kill switch
+//!  Organization    the signed organization policy, this project against
+//!                  it, administrator approval, every receipt verified
 //!  Workspace       where new projects go, background schedules
 //!  This project    model tiers and spending limits (the blueprint's own)
 //! ```
@@ -39,12 +44,14 @@ pub enum Tab {
     Defaults,
     Appearance,
     Network,
+    Fleet,
+    Organization,
     Workspace,
     Project,
 }
 
 impl Tab {
-    const ALL: [Tab; 7] = [Tab::Models, Tab::AgentsTools, Tab::Defaults, Tab::Appearance, Tab::Network, Tab::Workspace, Tab::Project];
+    const ALL: [Tab; 9] = [Tab::Models, Tab::AgentsTools, Tab::Defaults, Tab::Appearance, Tab::Network, Tab::Fleet, Tab::Organization, Tab::Workspace, Tab::Project];
     fn label(self) -> &'static str {
         match self {
             Tab::Models => "Models & keys",
@@ -52,6 +59,8 @@ impl Tab {
             Tab::Defaults => "Defaults",
             Tab::Appearance => "Appearance",
             Tab::Network => "Network",
+            Tab::Fleet => "Fleet",
+            Tab::Organization => "Organization",
             Tab::Workspace => "Workspace",
             Tab::Project => "This project",
         }
@@ -107,6 +116,12 @@ pub struct Form {
     pub env_value: Signal<TextEditingValue>,
     /// A file chosen in the system dialog, from its worker thread.
     picked: Arc<Mutex<Option<Picked>>>,
+    /// Fleet: every scheduled project, read when Settings opens.
+    pub fleet: Signal<Vec<wright_engine::fleet::Row>>,
+    /// Organization: the policy's sentences, or why it cannot be trusted.
+    pub policy: Signal<Option<Result<Vec<String>, String>>>,
+    /// Organization: the last fleet-wide verification.
+    pub verified: Signal<Option<Vec<wright_engine::org::RunCheck>>>,
     pub message: Signal<String>,
     pub scroll: ScrollState,
 }
@@ -139,6 +154,9 @@ impl Form {
             env_name: rt.signal(tv("")),
             env_value: rt.signal(tv("")),
             picked: Arc::new(Mutex::new(None)),
+            fleet: rt.signal(Vec::new()),
+            policy: rt.signal(None),
+            verified: rt.signal(None),
             message: rt.signal(String::new()),
             scroll: ScrollState::new(rt),
         }
@@ -167,6 +185,12 @@ impl Form {
         self.config.set(Some(merged));
         self.projects_dir.set(tv(super::store::projects_dir().display().to_string()));
         self.ca_path.set(tv(Config::load_file().ok().and_then(|c| c.ca_file).unwrap_or_default()));
+        self.fleet.set(wright_engine::fleet::rows());
+        self.policy.set(match wright_runtime::policy::load() {
+            Ok(Some(p)) => Some(Ok(p.sentences())),
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
+        });
         if let Some(bp) = project.and_then(|p| wright_engine::load_blueprint(p).ok()) {
             let m = &bp.models;
             self.tiers.set([tv(m.cheap.prefer.clone()), tv(m.cheap.fallback.clone()), tv(m.quality.prefer.clone()), tv(m.quality.fallback.clone())]);
@@ -283,6 +307,8 @@ pub fn page(ui: &Ui) -> WidgetNode {
             Tab::Defaults => defaults(&ui, &p),
             Tab::Appearance => appearance(&ui, &p),
             Tab::Network => network(&ui, &p),
+            Tab::Fleet => fleet(&ui, &p),
+            Tab::Organization => organization(&ui, &p),
             Tab::Workspace => workspace(&ui, &p),
             Tab::Project => project(&ui, &p),
         };
@@ -799,6 +825,173 @@ fn hide_password(v: &str) -> String {
         }
     }
     v.to_string()
+}
+
+/// Everything this computer runs on its own, and the switch that stops it.
+fn fleet(ui: &Ui, p: &Pal) -> WidgetNode {
+    use wright_engine::scheduler::State;
+    let f = ui.form.clone();
+    let stopped = ui.stopped.get();
+    let mut rows = vec![section(
+        p,
+        "Everything that runs on its own",
+        "Projects with a schedule. A new schedule waits until you let it run unattended — after you have watched a run pass — and waits again whenever its plan changes.",
+    )];
+    let (stop, start) = (ui.clone(), ui.clone());
+    rows.push(match &stopped {
+        None => row(10.0, vec![
+            button(p, "Stop everything", Look::Secondary, true, move || stop.stop_everything("stopped from Settings")),
+            grow(t("One switch: no firing starts, firings in flight stop, approvals are refused — here and in the background service.", 12.5, p.muted)),
+        ]),
+        Some(reason) => row(10.0, vec![
+            pill("STOPPED", p.bad, p.surface2),
+            grow(copyable(reason.clone(), 12.5, p.ink)),
+            button(p, "Start again", Look::Primary, true, move || start.start_again()),
+        ]),
+    });
+    let list = f.fleet.get();
+    if list.is_empty() {
+        rows.push(t("Nothing is scheduled on this computer.", 13.0, p.muted));
+    }
+    for r in list {
+        let (label, fg, bg) = if r.firing_now {
+            ("firing now", p.accent_ink, p.accent_soft)
+        } else {
+            match (&r.held, r.state) {
+                (None, _) => ("runs on its own", p.good, p.good_soft),
+                (Some(_), State::Paused) => ("paused", p.muted, p.surface2),
+                (Some(_), State::Awaiting) => ("waiting for you", p.wait, p.wait_soft),
+                (Some(_), State::Active) => ("held", p.wait, p.wait_soft),
+            }
+        };
+        let mut actions: Vec<WidgetNode> = Vec::new();
+        let dir = r.dir.clone();
+        let form = f.clone();
+        let refresh = move |form: &Form, msg: String| {
+            form.message.set(msg);
+            form.fleet.set(wright_engine::fleet::rows());
+        };
+        if r.state == State::Paused {
+            let (d, fm, rf) = (dir.clone(), form.clone(), refresh);
+            actions.push(button(p, "Resume", Look::Secondary, true, move || {
+                let m = match wright_engine::scheduler::set_state(&d, State::Active) {
+                    Ok(_) => "Resumed.".to_string(),
+                    Err(e) => e,
+                };
+                rf(&fm, m);
+            }));
+        } else {
+            let (d, fm, rf) = (dir.clone(), form.clone(), refresh);
+            actions.push(button(p, "Pause", Look::Quiet, true, move || {
+                let m = match wright_engine::scheduler::set_state(&d, State::Paused) {
+                    Ok(_) => "Paused. It will not run until you resume it.".to_string(),
+                    Err(e) => e,
+                };
+                rf(&fm, m);
+            }));
+        }
+        if r.trust.is_none() {
+            let (d, fm, rf) = (dir.clone(), form.clone(), refresh);
+            actions.push(button(p, "Let it run unattended", Look::Primary, true, move || {
+                let m = match wright_engine::unattended::approve(&d, "window") {
+                    Ok(a) => wright_engine::unattended::describe(&a),
+                    Err(e) => format!("Not yet: {e}"),
+                };
+                rf(&fm, m);
+            }));
+        } else {
+            let (d, fm, rf) = (dir.clone(), form.clone(), refresh);
+            actions.push(button(p, "Take it back", Look::Quiet, true, move || {
+                let m = match wright_engine::unattended::revoke(&d) {
+                    Ok(_) => "It will not run unattended until you let it again.".to_string(),
+                    Err(e) => e,
+                };
+                rf(&fm, m);
+            }));
+        }
+        let mut block = vec![
+            row(10.0, vec![b(r.name.clone(), 14.0, p.ink), pill(label, fg, bg), gap(), row(8.0, actions)]),
+            copyable_mono(format!("{} {} · next {} · {}", r.cron, r.tz, r.next, r.dir.display()), 11.5, p.muted),
+        ];
+        if let Some(why) = &r.held {
+            block.push(copyable(why.clone(), 12.5, p.wait));
+        }
+        match &r.last {
+            Some(l) => block.push(copyable(
+                format!(
+                    "Last run {} {} — {} — ${:.4} — receipt {}",
+                    l.run,
+                    if l.ok { "passed" } else { "failed" },
+                    l.headline,
+                    l.cost_micro_usd as f64 / 1e6,
+                    if l.verified { "verifies" } else { "does NOT verify" }
+                ),
+                12.5,
+                if l.ok && l.verified { p.ink } else { p.bad },
+            )),
+            None => block.push(t("Never run yet.", 12.5, p.muted)),
+        }
+        if let Some(tr) = &r.trust {
+            block.push(copyable(tr.clone(), 12.5, p.good));
+        }
+        if r.waiting_on_you > 0 {
+            block.push(t(format!("{} approval(s) waiting on you in its session.", r.waiting_on_you), 12.5, p.wait));
+        }
+        rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::CARD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::all(14.0)).child(stretch(6.0, block)).into());
+    }
+    stretch(12.0, rows)
+}
+
+/// The administrator's side, as a person on the machine sees it.
+fn organization(ui: &Ui, p: &Pal) -> WidgetNode {
+    let f = ui.form.clone();
+    let mut rows = vec![section(
+        p,
+        "Your organization's rules",
+        "An IT team can set rules for every Wright on its computers: budgets, tools, the network, model providers, external agents, and who approves unattended runs. The rules are signed by an administrator; a policy that was changed or is not signed stops everything until IT fixes it.",
+    )];
+    match f.policy.get() {
+        None => {
+            rows.push(t(format!("No organization policy on this computer (IT installs one in {}).", wright_runtime::policy::system_dir().display()), 13.0, p.muted));
+            rows.push(t("For administrators, from a terminal:", 12.5, p.muted));
+            for c in ["wright admin keygen --name \"IT security\"", "wright admin policy init policy.kdl", "wright admin policy sign policy.kdl --name \"IT security\"", "wright admin approve <project> --name \"IT security\"", "wright admin fleet-verify <projects folder> --json"] {
+                rows.push(copyable_mono(c, 12.0, p.ink));
+            }
+        }
+        Some(Err(e)) => rows.push(copyable(e, 13.0, p.bad)),
+        Some(Ok(lines)) => {
+            for l in lines {
+                rows.push(row(8.0, vec![Glyph::Done.draw(14.0, p.good), grow(copyable(l, 13.0, p.ink))]));
+            }
+        }
+    }
+    if let Some(s) = ui.current_session() {
+        if let Ok(bp) = wright_engine::load_blueprint(&s.project) {
+            rows.push(divider(p));
+            rows.push(b(format!("This project: {}", bp.meta.name), 14.0, p.ink));
+            let cfg = Config::load().unwrap_or_else(|_| Config::builtin());
+            rows.push(match wright_engine::org::enforce(&bp, &cfg) {
+                Ok(None) => t("No policy to check it against.", 12.5, p.muted),
+                Ok(Some(pol)) => t(format!("{}'s policy allows this plan.", pol.org), 12.5, p.good),
+                Err(e) => copyable(e, 12.5, p.bad),
+            });
+            if let Err(e) = wright_engine::org::approval(&s.project) {
+                rows.push(copyable(format!("Unattended runs: {e}."), 12.5, p.wait));
+            }
+        }
+    }
+    rows.push(divider(p));
+    rows.push(section(p, "Every receipt on this computer", "Each run of every project here and every scheduled one, through all six checks: signature and signer, the event log, artifacts, inputs, the plan, and the agents' identities."));
+    let go = f.clone();
+    rows.push(row(10.0, vec![button(p, "Verify every receipt", Look::Secondary, true, move || {
+        go.verified.set(Some(wright_engine::org::fleet_verify(&[super::store::projects_dir()])));
+    })]));
+    if let Some(checks) = f.verified.get() {
+        let report = wright_engine::org::fleet_report(&checks, false);
+        let all_ok = checks.iter().all(|c| c.ok);
+        rows.push(copyable(report.trim_end().to_string(), 12.5, if all_ok { p.good } else { p.bad }));
+    }
+    stretch(12.0, rows)
 }
 
 fn workspace(ui: &Ui, p: &Pal) -> WidgetNode {

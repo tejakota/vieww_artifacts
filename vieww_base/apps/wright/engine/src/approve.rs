@@ -77,6 +77,11 @@ impl Approver for StoreApprover {
             if let Some(answer) = self.store.approval_answer(ask.run, ask.n) {
                 return answer;
             }
+            // Stopped while waiting: the answer is no.
+            if wright_runtime::killswitch::is_stopped() {
+                let _ = self.store.answer_approval(ask.run, ask.n, false);
+                return false;
+            }
             std::thread::sleep(Duration::from_millis(200));
         }
         let _ = self.store.answer_approval(ask.run, ask.n, false);

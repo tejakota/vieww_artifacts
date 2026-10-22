@@ -6,7 +6,7 @@
 //! `wright verify` prints one line per check and a verdict; each line
 //! says what it compared, in words.
 //!
-//! The five checks:
+//! The six checks:
 //!
 //! 1. **The signature.** The receipt's exact JSON bytes (minus the
 //!    signature field) are signed with Ed25519. Verify re-parses,
@@ -32,6 +32,9 @@
 //! 5. **The blueprint.** The receipt names the blueprint commit's hash;
 //!    the store's history must contain it and the stored text must
 //!    still parse. A plan nobody can reproduce fails here.
+//! 6. **The identities.** Every task acted under its own identity: each
+//!    one delegated by the receipt's signer, attesting to its calls, and
+//!    every tool call in the log made under one of them, by its agent.
 
 use std::path::Path;
 
@@ -262,8 +265,13 @@ pub fn verify_text_pinned(store: &Store, text: &str, pins: &[String]) -> Verific
         }
     };
 
+    // 6. The identities: every task acted under an identity this
+    //    receipt's signer delegated, each attests to its own calls, and
+    //    the log's tool calls match those attestations one for one.
+    let identities_ok = check_identities(store, &v, run, &mut checks);
+
     Verification {
-        ok: sig_ok && events_ok && artifacts_ok && inputs_ok && blueprint_ok,
+        ok: sig_ok && events_ok && artifacts_ok && inputs_ok && blueprint_ok && identities_ok,
         checks,
         run,
     }
@@ -357,6 +365,68 @@ fn check_signature(v: &Value, checks: &mut Vec<Check>, pins: &[String]) -> bool 
         });
         false
     }
+}
+
+fn check_identities(store: &Store, v: &Value, run: Option<u64>, checks: &mut Vec<Check>) -> bool {
+    let Some(list) = v.get("identities").and_then(|a| a.as_arr().map(|x| x.to_vec())) else {
+        checks.push(Check {
+            name: "identities",
+            ok: true,
+            note: "not recorded — this receipt predates task-scoped identities".into(),
+        });
+        return true;
+    };
+    let signer = v.get("signature").and_then(|s| s.str_of("public_key")).unwrap_or("");
+    let mut by_did: std::collections::BTreeMap<String, (String, u64)> = std::collections::BTreeMap::new();
+    for id in &list {
+        match wright_runtime::identity::verify_closed(id, signer) {
+            Ok(agent) => {
+                by_did.insert(id.str_of("did").unwrap_or("").to_string(), (agent, id.get("calls").and_then(|n| n.as_u64()).unwrap_or(0)));
+            }
+            Err(e) => {
+                checks.push(Check { name: "identities", ok: false, note: e });
+                return false;
+            }
+        }
+    }
+    // The log's calls, per identity.
+    let mut seen: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+    if let Some(log) = run.and_then(|r| store.read_events(r).ok()) {
+        for e in log.events() {
+            if e.kind != wright_core::events::EventKind::ToolCalled {
+                continue;
+            }
+            let Some(did) = e.data_value().and_then(|d| d.str_of("identity").map(String::from)) else { continue };
+            if did.is_empty() {
+                continue;
+            }
+            match by_did.get(&did) {
+                Some((agent, _)) if Some(agent.as_str()) == e.agent.as_deref() => *seen.entry(did).or_insert(0) += 1,
+                Some((agent, _)) => {
+                    checks.push(Check { name: "identities", ok: false, note: format!("a call by {} was made under {agent}'s identity", e.agent.as_deref().unwrap_or("?")) });
+                    return false;
+                }
+                None => {
+                    checks.push(Check { name: "identities", ok: false, note: format!("a call in the log was made under {}, which this machine never issued", hash::short(&did)) });
+                    return false;
+                }
+            }
+        }
+    }
+    for (did, (agent, calls)) in &by_did {
+        let logged = seen.get(did).copied().unwrap_or(0);
+        if logged != *calls {
+            checks.push(Check { name: "identities", ok: false, note: format!("{agent}'s identity attests to {calls} call(s), but the log shows {logged}") });
+            return false;
+        }
+    }
+    let total: u64 = by_did.values().map(|(_, c)| c).sum();
+    checks.push(Check {
+        name: "identities",
+        ok: true,
+        note: format!("{} task-scoped identit{}, each delegated by the signer and revoked at its task's end; all {total} tool call(s) in the log were made under them", by_did.len(), if by_did.len() == 1 { "y" } else { "ies" }),
+    });
+    true
 }
 
 fn check_artifacts(store: &Store, v: &Value, checks: &mut Vec<Check>) -> bool {

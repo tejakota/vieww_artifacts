@@ -199,6 +199,18 @@ pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
         let _ = Shape::Any; // (shapes parse in the parser; this validates binding)
     }
 
+    // per-agent secrets name the blueprint's own secrets
+    for a in &bp.agents {
+        for sec in &a.secrets {
+            if !bp.chips.secrets.iter().any(|s| &s.name == sec) {
+                errs.push(format!(
+                    "Agent '{}' uses the secret '{}', which the blueprint does not declare (chips {{ secrets {}=\"keychain:...\" }}).",
+                    a.name, sec, sec
+                ));
+            }
+        }
+    }
+
     // worker steps: the files they may change must exist in the plan's
     // world, and the card must carry the permissions the worker tool needs
     for a in &bp.agents {

@@ -621,6 +621,33 @@ fn interviewer(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
         .collect::<Vec<_>>()
         .join(" ");
     let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+    // A coding request on a machine that has a worker: hand the coding to
+    // it, the way the Interviewer's contract says to.
+    let sys = c.system.as_str();
+    let worker = sys
+        .split("WORKERS ON THIS MACHINE")
+        .nth(1)
+        .and_then(|rest| rest.lines().find_map(|l| l.strip_prefix("- ").and_then(|l| l.split(" (runs").next())))
+        .map(str::to_string);
+    let coding = ["code", "program", "tool", "script", "cli", "app", "fix"]
+        .iter()
+        .any(|w| wish.to_lowercase().split(|c: char| !c.is_alphanumeric()).any(|word| word == *w));
+    if let (Some(worker), true) = (worker, coding) {
+        let kdl = format!(
+            "meta {{\n  name \"{name}\"\n  format 1\n}}\nintent {{\n  summary \"{wish}\"\n  confirmed \"\"\n}}\nproject {{\n  language \"python\"\n}}\n\
+agent Coder {{\n  goal \"{wish}\"\n  worker \"{worker}\"\n  worker-files \"src/\"\n  approval \"before-send\"\n  permissions files-read=true files-write=true spawn=true network=true\n}}\n\
+chips {{\n  logging on\n  tests on\n}}\n\
+deliverable kind=\"artifact\" {{\n  check \"the program works\"\n  accept \"the tests pass\"\n}}\n\
+models {{\n  tier cheap prefer=\"{m}\" fallback=\"\"\n  tier quality prefer=\"{m}\" fallback=\"\"\n}}\n",
+            name = esc(&name),
+            wish = esc(&wish),
+            m = c.req.str_of("model").unwrap_or("mock-1"),
+        );
+        return (
+            format!("Here is my proposal: the coding goes to {worker}, in a sandboxed copy, and Wright's tests check it."),
+            vec![("propose_blueprint".into(), args(vec![("kdl", Value::str(kdl))]))],
+        );
+    }
     let kdl = format!(
         "meta {{\n  name \"{name}\"\n  format 1\n}}\nintent {{\n  summary \"{wish}\"\n  confirmed \"\"\n}}\nproject {{\n  language \"python\"\n}}\n\
 agent Builder {{\n  goal \"{wish}\"\n  model tier=\"cheap\"\n  out \"result.json\"\n}}\n\

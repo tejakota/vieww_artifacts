@@ -381,6 +381,28 @@ fn result_card(ui: &Ui, p: &Pal, s: &Session, r: &super::session::ResultView) ->
     if !made.is_empty() {
         items.push(stretch(6.0, made));
     }
+    // A scheduled plan waits for the person's go-ahead to run unattended.
+    // After a passing run is exactly when to offer it.
+    if let Some(entry) = wright_engine::scheduler::entry_for(&s.project) {
+        let held = wright_engine::scheduler::hold_reason(&entry);
+        let trust = wright_engine::unattended::current(&s.project).ok();
+        let (go, notice) = (s.project.clone(), s.notice.clone());
+        let mut line_items = vec![Glyph::Waiting.draw(15.0, if held.is_none() { p.good } else { p.wait })];
+        line_items.push(grow(match (&held, &trust) {
+            (None, Some(a)) => copyable(wright_engine::unattended::describe(a), 13.0, p.good),
+            (Some(why), _) => copyable(format!("On its schedule ({} {}): {why}.", entry.cron, entry.tz), 13.0, p.muted),
+            (None, None) => copyable("Runs on its schedule.".to_string(), 13.0, p.muted),
+        }));
+        if trust.is_none() && r.ok {
+            line_items.push(button(p, "Let it run unattended", Look::Primary, true, move || {
+                notice.set(match wright_engine::unattended::approve(&go, "window") {
+                    Ok(a) => wright_engine::unattended::describe(&a),
+                    Err(e) => format!("Not yet: {e}"),
+                });
+            }));
+        }
+        items.push(row(10.0, line_items));
+    }
     let menu = s.export_menu.clone();
     items.push(row(10.0, vec![
         button(p, "Run again", Look::Secondary, true, move || again.start_run()),

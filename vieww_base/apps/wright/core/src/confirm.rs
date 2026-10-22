@@ -78,6 +78,16 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
         t.push('.');
         out.push(line(format!("agent:{}", a.name), t, false));
 
+        // Credentials: each agent's own, said by name.
+        let secrets = crate::blueprint::secrets_for(bp, a);
+        if !secrets.is_empty() {
+            out.push(line(
+                format!("agent:{}", a.name),
+                format!("  {} may use the secret{} {} — no other agent can.", a.name, if secrets.len() == 1 { "" } else { "s" }, secrets.join(", ")),
+                true,
+            ));
+        }
+
         // Worker steps: name the program that does the work and what it
         // may touch (ADR-026). Nothing here hides that another agent runs.
         if let Some(w) = &a.worker {

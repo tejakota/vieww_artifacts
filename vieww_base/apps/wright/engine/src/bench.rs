@@ -20,6 +20,12 @@
 //! prints the table; the release gate (docs/BENCHMARK.md) records the
 //! same numbers on a machine that can run the sandbox fully.
 //!
+//! * **Time to trust** — the number that matters most for a person who
+//!   does not write code: from the first version of the plan to the
+//!   moment they approved it to run unattended (`crate::unattended`),
+//!   with the runs, failures, approvals and plan changes it took. A
+//!   checked outcome is a step on that road; the go-ahead is the end.
+//!
 //! Benchmarks that lie are worse than no benchmarks, so two rules hold:
 //! the tool never reports a median it cannot back with every sample, and
 //! every reported run's receipt remains in the store for re-verification
@@ -75,6 +81,9 @@ pub struct Report {
     pub checked_share: f64,
     /// Total interventions across all runs.
     pub interventions: u64,
+    /// Time to trust, in words: the recorded road to the go-ahead, or the
+    /// road so far when there is none yet.
+    pub trust: String,
 }
 
 impl Report {
@@ -93,6 +102,9 @@ impl Report {
             )),
             None => out.push_str(&format!("\nno run reached a checked outcome ({} run(s) measured)", self.samples.len())),
         }
+        out.push_str("\n\ntime to trust: ");
+        out.push_str(&self.trust);
+        out.push('\n');
         out
     }
 }
@@ -141,7 +153,43 @@ pub fn run(project_dir: &Path, runs: u32) -> Result<Report, String> {
             interventions,
         });
     }
-    Ok(summarize(samples))
+    let mut report = summarize(samples);
+    report.trust = trust_line(project_dir);
+    Ok(report)
+}
+
+/// The time-to-trust sentence for a project.
+pub fn trust_line(project_dir: &Path) -> String {
+    use crate::unattended;
+    match unattended::recorded(project_dir) {
+        Some(a) => {
+            let r = &a.road;
+            format!(
+                "{} from the first plan to the go-ahead to run unattended — {} run(s) before it ({} passed), {} approval(s) asked ({} refused), {} change(s) to the plan{}",
+                unattended::human_duration(a.time_to_trust_ms()),
+                r.runs,
+                r.passed,
+                r.asked,
+                r.refused,
+                r.changes,
+                match unattended::current(project_dir) {
+                    Ok(_) => String::new(),
+                    Err(why) => format!(" (now held: {why})"),
+                }
+            )
+        }
+        None => match unattended::road(project_dir) {
+            Ok(r) => format!(
+                "not trusted to run unattended yet — {} so far, {} run(s) ({} passed), {} approval(s) asked, {} change(s) to the plan",
+                unattended::human_duration(wright_core::events::now_ms().saturating_sub(r.started_ms)),
+                r.runs,
+                r.passed,
+                r.asked,
+                r.changes
+            ),
+            Err(e) => format!("unknown ({e})"),
+        },
+    }
 }
 
 fn summarize(samples: Vec<Sample>) -> Report {
@@ -171,6 +219,7 @@ fn summarize(samples: Vec<Sample>) -> Report {
             checked as f64 / total as f64
         },
         interventions,
+        trust: String::new(),
     }
 }
 

@@ -672,6 +672,7 @@ fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
                 a.worker = Some(want_str(child, "agent.worker")?);
             }
             "worker-files" => a.worker_files.push(want_str(child, "agent.worker-files")?),
+            "secret" => a.secrets.push(want_str(child, "agent.secret")?),
             "worker-timeout" => {
                 a.worker_timeout_secs = child
                     .arg_int()

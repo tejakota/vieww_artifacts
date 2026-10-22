@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use wright_core::blueprint::{canon, parse, validate, Blueprint};
+use wright_core::blueprint::{canon, parse, validate, Blueprint, PermissionSet};
 use wright_core::compiler::{self, SystemKind, Task, TaskKind};
 use wright_core::convention;
 use wright_core::events::{now_ms, Event, EventKind, RunId};
@@ -202,6 +202,10 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     let project_dir = project_dir
         .canonicalize()
         .map_err(|e| format!("{}: {e}", project_dir.display()))?;
+    // The kill switch: nothing starts while Wright is stopped.
+    if let Some(why) = wright_runtime::killswitch::refusal() {
+        return Err(why);
+    }
     let bp = load_blueprint(&project_dir)?;
     let graph = compiler::compile(&bp)?;
     let store = Store::open(&project_dir)?;
@@ -214,6 +218,9 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
         Some(c) => c,
         None => Config::load()?,
     };
+    // The organization's policy, when there is one: a plan it does not
+    // allow does not fire (and a policy that cannot be trusted stops all).
+    let policy = crate::org::enforce(&bp, &config)?;
 
     // Daily budget: what is left today caps this firing too.
     let day = today_utc();
@@ -245,6 +252,7 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     let mut tools = ToolCtx::new(&project_dir)?;
     tools.test_cmd = convention::test_cmd(&bp);
     tools.secrets = bp.chips.secrets.clone();
+    tools.allowed_hosts = policy.as_ref().and_then(|p| p.allow_hosts.clone());
     tools.allow_private_network = opts.allow_private_network || tools.allow_private_network;
     if bp.project.language == "rust" {
         let cargo_home = std::env::var("CARGO_HOME")
@@ -268,7 +276,23 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     }
 
     let env = Arc::new(FiringEnv {
-        gate: Gate::from_graph(&graph),
+        gate: Gate::from_graph(&graph).with_identities(
+            std::sync::Arc::new(wright_runtime::identity::Registry::new(
+                wright_runtime::signing::SigningKey::resolve()
+                    .map_err(|e| format!("cannot issue agent identities without a signing key: {e}"))?,
+            )),
+            graph
+                .tasks
+                .iter()
+                .map(|t| {
+                    let scope = match &t.kind {
+                        TaskKind::Project(n) => bp.agent(n).map(|a| wright_core::blueprint::secrets_for(&bp, a)).unwrap_or_default(),
+                        TaskKind::System(_) => Vec::new(),
+                    };
+                    (t.name(), scope)
+                })
+                .collect(),
+        ),
         budget: Mutex::new(budget),
         turns_left: AtomicI64::new(bp.guardrails.max_turns as i64),
         spine,
@@ -586,6 +610,20 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
                 Some(Err(r)) => Value::str(format!("reject: {r}")),
             },
         ),
+        // Where the money went, per agent, model and tool — from the
+        // event log, signed with the rest (the receipt's `spend`).
+        ("spend", crate::spend::attribute(&env.spine.events()).to_value()),
+        // Every task-scoped identity: delegated by this machine's key,
+        // attested by itself over its calls, revoked at its task's end.
+        (
+            "identities",
+            Value::Arr(
+                env.gate
+                    .identities()
+                    .map(|r| r.close_all().iter().map(|c| c.to_value()).collect())
+                    .unwrap_or_default(),
+            ),
+        ),
         ("events_blake3", Value::str(events_hash)),
         ("wright", Value::str(APP_VERSION)),
     ]);
@@ -594,25 +632,27 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     // insertion-ordered, so a verifier can re-parse, strip the field
     // and reproduce these bytes exactly.
     let receipt_path = store.run_dir(run).join("receipt.json");
-    let signed = match wright_runtime::signing::SigningKey::resolve() {
-        Ok(key) => {
-            let bytes = json::to_string(&receipt);
-            let sig = key.sign(bytes.as_bytes());
-            let hex_sig: String = sig.iter().map(|b| format!("{b:02x}")).collect();
-            receipt.set(
-                "signature",
-                Value::obj(vec![
-                    ("public_key", Value::str(key.public_hex())),
-                    ("provenance", Value::str(key.provenance_str())),
-                    ("value", Value::str(hex_sig)),
-                ]),
-            );
-            true
-        }
-        Err(_) => false,
-    };
-    let _ = signed;
+    let mut credential: Option<Value> = None;
+    if let Ok(key) = wright_runtime::signing::SigningKey::resolve() {
+        let bytes = json::to_string(&receipt);
+        let sig = key.sign(bytes.as_bytes());
+        let hex_sig: String = sig.iter().map(|b| format!("{b:02x}")).collect();
+        receipt.set(
+            "signature",
+            Value::obj(vec![
+                ("public_key", Value::str(key.public_hex())),
+                ("provenance", Value::str(key.provenance_str())),
+                ("value", Value::str(hex_sig)),
+            ]),
+        );
+        // The same facts as a standard credential (eddsa-jcs-2022), which
+        // anyone can check without Wright.
+        credential = crate::credential::issue(&receipt, &key).ok();
+    }
     write_atomic(&receipt_path, json::to_string(&receipt).as_bytes())?;
+    if let Some(vc) = &credential {
+        write_atomic(&store.run_dir(run).join("receipt.vc.json"), json::to_string(vc).as_bytes())?;
+    }
 
     Ok(RunSummary {
         run,
@@ -858,7 +898,24 @@ fn run_worker_step(
         "prompt",
         wright_core::wire::json::Value::str(prompt.clone()),
     )]);
-    match wright_tools::run(permit, &input, &ctx) {
+    let identity = permit.identity().unwrap_or("").to_string();
+    let input_hash = wright_core::hash::blake3_hex(json::to_string(&input).as_bytes());
+    let result = wright_tools::run(permit, &input, &ctx);
+    if let Some(r) = env.gate.identities() {
+        r.record(&name, "worker", &input_hash, result.is_ok());
+    }
+    let _ = env.spine.emit(
+        EventKind::ToolCalled,
+        me,
+        format!("worker {worker_name} — {}", if result.is_ok() { "ok" } else { "error" }),
+        json::to_string(&Value::obj(vec![
+            ("tool", Value::str("worker")),
+            ("ok", Value::Bool(result.is_ok())),
+            ("identity", Value::str(identity)),
+            ("input_blake3", Value::str(input_hash)),
+        ])),
+    );
+    match result {
         Ok(o) => {
             if !o.wrote.is_empty() {
                 env.written
@@ -911,6 +968,53 @@ fn first_sentence_of(s: &str) -> String {
 
 /// Run (or skip, or restore) one task. Returns its id and status.
 fn run_task(
+    env: &FiringEnv,
+    task: &Task,
+    status: &Mutex<BTreeMap<usize, TaskStatus>>,
+    verdict: &Mutex<Option<Result<(), String>>>,
+    already: Option<String>,
+    no_cache: bool,
+) -> (usize, TaskStatus) {
+    let out = run_task_body(env, task, status, verdict, already, no_cache);
+    // The task is over: its identity attests to its calls and is revoked,
+    // whatever the outcome — nothing can act under it again.
+    if let Some(r) = env.gate.identities() {
+        r.revoke(&task.name());
+    }
+    out
+}
+
+/// Issue the task's own identity: its card's grant, nothing more, valid
+/// until the firing's clock runs out.
+fn issue_identity(env: &FiringEnv, task: &Task) -> Result<(), String> {
+    let Some(r) = env.gate.identities() else { return Ok(()) };
+    let left = env.deadline.saturating_duration_since(Instant::now()).as_millis() as u64;
+    let p = task.permissions.bits();
+    let words: Vec<&str> = [
+        (PermissionSet::READ_FILES, "files-read"),
+        (PermissionSet::WRITE_FILES, "files-write"),
+        (PermissionSet::NETWORK, "network"),
+        (PermissionSet::SHELL, "shell"),
+        (PermissionSet::SPAWN, "spawn"),
+    ]
+    .iter()
+    .filter(|(bit, _)| p & bit != 0)
+    .map(|(_, w)| *w)
+    .collect();
+    let did = r.issue(wright_runtime::identity::Claims {
+        agent: task.name(),
+        run: env.spine.run(),
+        tools: task.tools.clone(),
+        permissions: words.join(" "),
+        secrets: env.gate.secrets_of(&task.name()),
+        issued_ms: now_ms(),
+        expires_ms: now_ms() + left,
+    })?;
+    env.spine.note(EventKind::Note, Some(&task.name()), format!("acting as {did} (this task only)"));
+    Ok(())
+}
+
+fn run_task_body(
     env: &FiringEnv,
     task: &Task,
     status: &Mutex<BTreeMap<usize, TaskStatus>>,
@@ -991,6 +1095,12 @@ fn run_task(
         }
     }
 
+    // 3b'. From here on the task acts: under its own identity.
+    if let Err(e) = issue_identity(env, task) {
+        env.spine.note(EventKind::AgentFailed, me, e.clone());
+        return (task.id, TaskStatus::Failed(e));
+    }
+
     // 3c. Worker steps (ADR-026): no model call — the engine hands the
     // goal to the configured external agent, through the gate like
     // every other tool call. Their output lands in the workspace and
@@ -1042,6 +1152,7 @@ fn run_task(
                         json::to_string(&Value::obj(vec![
                             ("key", Value::str(k.clone())),
                             ("report", Value::str(report)),
+                            ("saved_micro_usd", Value::int(entry.cost_micro_usd as i64)),
                         ])),
                     );
                     return (
@@ -1355,7 +1466,13 @@ fn operator(env: &FiringEnv) -> Result<String, String> {
         return Ok("no schedule to register".into());
     };
     let next = crate::scheduler::register(&env.tools.project, &sched.cron, &sched.tz)?;
-    let note = format!("scheduled: next run {next} ({})", sched.tz);
+    let note = match crate::scheduler::entry_for(&env.tools.project).and_then(|e| crate::scheduler::hold_reason(&e)) {
+        None => format!("scheduled: next run {next} ({})", sched.tz),
+        Some(why) => format!(
+            "scheduled for {next} ({}), but it will not run unattended yet: {why}. Approve it with `wright schedule approve`, or Let it run unattended in the window.",
+            sched.tz
+        ),
+    };
     env.spine.note(
         EventKind::ScheduleRegistered,
         Some("Operator"),

@@ -19,6 +19,9 @@
 //! * [`config`] — which provider serves which model, and what it costs.
 //! * [`local`] — the built-in models: catalog, verified downloads, and the
 //!   engine slot `wright-infer` fills.
+//! * [`identity`] — a task-scoped, revocable identity per agent per firing.
+//! * [`killswitch`] — one file that stops every firing, everywhere.
+//! * [`policy`] — the organization's signed rules, failing closed.
 //! * [`secrets`] — `keychain:` references resolved at the last moment.
 //! * [`tz`] — the OS zone database, for schedules.
 //!
@@ -29,9 +32,12 @@ pub mod config;
 pub mod curl;
 pub mod executor;
 pub mod gate;
+pub mod identity;
+pub mod killswitch;
 pub mod local;
 pub mod models;
 pub mod net;
+pub mod policy;
 pub mod secrets;
 pub mod signing;
 pub mod store;

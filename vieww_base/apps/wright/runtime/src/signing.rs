@@ -115,6 +115,12 @@ impl SigningKey {
         }
     }
 
+    /// A fixed key, for tests.
+    #[cfg(test)]
+    pub fn for_tests(seed: [u8; 32]) -> SigningKey {
+        SigningKey { seed, provenance: Provenance::Ephemeral }
+    }
+
     /// Resolve the machine's key: env override, then the OS keychain,
     /// then a generated file key — each reported honestly by its
     /// provenance. `WRIGHT_EPHEMERAL_SIGNING=1` forces an in-memory key
@@ -225,7 +231,7 @@ impl SigningKey {
 /// signing key.
 pub fn signer(public_hex: &str, pinned_now: &[String]) -> Result<String, String> {
     let k = public_hex.trim().to_ascii_lowercase();
-    if pinned_now.iter().any(|p| p.trim().eq_ignore_ascii_case(&k)) {
+    if pinned_now.iter().any(|p| normalize_key(p).is_some_and(|p| p == k)) {
         return Ok("the key you named with --key".into());
     }
     if let Ok(cfg) = crate::config::Config::load() {
@@ -243,6 +249,69 @@ pub fn signer(public_hex: &str, pinned_now: &[String]) -> Result<String, String>
          Ask the signer for their public key and check it with --key <64 hex>, or pin it: add `trust \"<who>\" key=\"{k}\"` to config.kdl (or `wright trust add \"<who>\" {k}`)",
         &k[..k.len().min(12)]
     ))
+}
+
+/// The keychain reference of an administrator's signing key.
+pub const ADMIN_KEY_REF: &str = "keychain:wright/admin-signing";
+
+fn admin_file() -> PathBuf {
+    wright_home().join("keys").join("admin-signing.seed")
+}
+
+/// This machine's administrator key, if one was made here (`wright admin
+/// keygen`): env override, then the keychain, then Wright's key folder.
+pub fn admin_key() -> Result<[u8; 32], String> {
+    if let Ok(name) = secrets::env_name(ADMIN_KEY_REF) {
+        if let Ok(v) = std::env::var(&name) {
+            return from_hex(v.trim());
+        }
+    }
+    if let Ok(v) = secrets::resolve(ADMIN_KEY_REF) {
+        return from_hex(v.expose());
+    }
+    let text = std::fs::read_to_string(admin_file())
+        .map_err(|_| "no administrator key on this machine: run `wright admin keygen` (an administrator's own machine, not the employees')".to_string())?;
+    from_hex(text.trim())
+}
+
+/// Make a new administrator key: the keychain when it can, else a file
+/// only this user can read. Returns the seed and where it went.
+pub fn new_admin_key() -> Result<([u8; 32], String), String> {
+    let seed = generate_seed()?;
+    if secrets::store(ADMIN_KEY_REF, &to_hex(&seed)).is_ok() {
+        return Ok((seed, format!("the system keychain ({ADMIN_KEY_REF})")));
+    }
+    let p = admin_file();
+    if let Some(dir) = p.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    use std::io::Write;
+    o.open(&p)
+        .and_then(|mut f| f.write_all(to_hex(&seed).as_bytes()))
+        .map_err(|e| format!("cannot write {}: {e} (an administrator key already there is never overwritten)", p.display()))?;
+    Ok((seed, format!("{} (readable only by you; no keychain was available)", p.display())))
+}
+
+/// A key as people pass it around — 64 hex characters, or a `did:key`
+/// (`did:key:z6Mk…`) — as lower-case hex. None when it is neither.
+pub fn normalize_key(k: &str) -> Option<String> {
+    let k = k.trim();
+    if k.starts_with("did:key:") {
+        return wright_core::jcs::did_key_public(k).ok().map(|pk| to_hex(&pk));
+    }
+    (k.len() == 64 && k.bytes().all(|b| b.is_ascii_hexdigit())).then(|| k.to_ascii_lowercase())
+}
+
+/// 32 bytes from the OS random source, for keys that live one task.
+pub fn random_seed() -> Result<[u8; 32], String> {
+    generate_seed()
 }
 
 /// 32 bytes from the operating system's random source.
@@ -371,6 +440,9 @@ mod tests {
         let why = signer(&stranger, &[]).unwrap_err();
         assert!(why.contains("not one this machine trusts"), "{why}");
         assert!(signer(&stranger, std::slice::from_ref(&stranger)).is_ok(), "--key pins it");
+        let did = wright_core::jcs::did_key(&ed25519::public_key(&[9u8; 32]));
+        assert!(signer(&stranger, &[did]).is_ok(), "a did:key pins it too");
+        assert!(normalize_key("not a key").is_none());
         std::env::remove_var("WRIGHT_HOME");
     }
 }

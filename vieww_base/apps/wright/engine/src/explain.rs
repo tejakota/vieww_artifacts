@@ -210,6 +210,14 @@ pub fn story_of_run(store: &Store, run: u64) -> Result<String, String> {
             r.get("signature").is_some()
         ));
     }
+    // Where the money went — from the log, so older receipts get it too.
+    let spend = crate::spend::attribute(events);
+    if !spend.agents.is_empty() {
+        out.push_str("\nWHERE THE MONEY WENT\n");
+        for l in spend.lines() {
+            out.push_str(&format!("  {l}\n"));
+        }
+    }
 
     Ok(out)
 }

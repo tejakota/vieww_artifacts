@@ -711,3 +711,88 @@ with a password must be `keychain:` references (rule 4); Settings stores
 such values in the keychain for you. Verified end to end against a real
 HTTPS-inspecting proxy: a trust store without the proxy's root fails
 with X509 error 19, the same machine with `WRIGHT_CA_FILE` succeeds.
+
+## ADR-035 — MCP servers are pinned whole, never by their launcher · Accepted
+
+Date: 2026-10-22 · Amends: ADR-029
+
+A pin of `npx`/`uvx` pins the launcher, not the server it downloads at
+every start. Config now refuses a launcher with a file pin. `wright mcp
+install <name> npm:<pkg>@<ver> | pypi:<pkg>==<ver>` installs one EXACT
+version into `<wright home>/mcp/<name>/` (npm with `--ignore-scripts`
+unless `--allow-scripts`; PyPI in a private virtualenv) and pins the whole
+tree (`tree-blake3:` over every file, link and executable bit; bytecode
+caches excluded). A call re-hashes the tree and refuses any change; the
+command must live inside the pinned tree. Checked against a real
+`mcp-server-time` install: a one-line change in its package is refused.
+
+## ADR-036 — One kill switch, and the fleet on one screen · Accepted
+
+`<wright home>/STOP` is the signal every process already looks at. While
+it exists no firing starts, the gate denies every tool call (so firings in
+flight stop mid-turn), sandboxed commands and workers are killed, pending
+approvals are refused and the service fires nothing. `wright stop/start`,
+Stop everything in the window (status bar, Settings > Fleet), a banner
+while it is pulled. `wright fleet` / Settings > Fleet lists every
+scheduled project: state, next run, last run and whether its receipt
+verifies, approvals waiting, time to trust; pause, resume, approve.
+
+## ADR-037 — Unattended runs need a go-ahead; time to trust is measured · Accepted
+
+A schedule no longer fires just because its first run registered it: it
+waits (`awaiting`) until the person approves unattended runs (`wright
+schedule approve`, Let it run unattended) — allowed only after a run has
+passed — and waits again whenever the plan's content hash changes.
+Registries written before this keep firing (state defaults to active).
+The approval records the road to it — runs, passes, approvals asked and
+refused, plan changes, elapsed time — and `wright bench` reports it as
+**time to trust**.
+
+## ADR-038 — Spend is attributed and signed · Accepted
+
+The receipt's `spend` section attributes cost per agent (model calls,
+tokens in/cached/out, models, tool calls and failures, cache savings) and
+per model, from the provider usage in the event log. `wright explain`
+shows it; `wright spend --csv` exports per-run, per-agent rows to the
+micro-dollar for reconciliation.
+
+## ADR-039 — The receipt as a W3C Verifiable Credential · Accepted
+
+Every run also writes `receipt.vc.json`: VC Data Model 2.0, issuer the
+signer's `did:key`, Data Integrity proof `eddsa-jcs-2022` (RFC 8785 JCS,
+SHA-256, Ed25519, base58btc). JCS, base58 and did:key are std-only in
+`wright-core`. Verified independently with Digital Bazaar's reference
+cryptosuite (`scripts/verify-credential/`); a one-byte edit fails there
+too. `wright verify x.vc.json` checks the proof AND that the issuer is
+pinned (ADR-031) — a standard format with a self-certified key proves
+nothing. `wright trust add` and `--key` accept a did:key.
+
+## ADR-040 — Task-scoped agent identities · Accepted
+
+Every task gets its own Ed25519 identity for its run (OS randomness), a
+delegation signed by the machine key over its claims (agent, run, tools,
+permissions, secrets, issued/expires), checked by the gate on every call
+(none before the task, after it, past the clock), recorded per call
+(tool, input hash, outcome), and revoked at the task's end after it signs
+an attestation over its calls. Secrets are per identity: a card's
+`secret "name"` lines; with none in the plan, only agents holding a
+sending tool get the plan's secrets. The receipt lists every identity;
+`wright verify` gains a sixth check that each was delegated by the signer,
+each attestation matches, and every tool call in the log was made under
+one of them by its own agent.
+
+## ADR-041 — Organization policy and the admin console · Accepted
+
+An organization's rules live in an administrators-only system folder
+(`/etc/wright`, `/Library/Application Support/Wright`,
+`%ProgramData%\Wright`; `WRIGHT_POLICY_DIR` only when that folder holds
+none): `admins.kdl` (administrator keys) and a `policy.kdl` signed by one
+of them. Rules: run/day budget caps, forbidden tools, a network
+allow-list (enforced at the http tools), allowed model providers, workers
+and MCP servers, required tests, and administrator approval of each exact
+plan for unattended runs. A plan that breaks a rule does not fire and the
+Interviewer is shown why; a policy that is unsigned, signed by a
+non-administrator or edited after signing stops everything (fail closed).
+`wright admin keygen | policy init/sign/show/check | approve |
+fleet-verify [--json]`; Settings > Organization shows the rules, this
+project against them, and verifies every receipt on the computer.

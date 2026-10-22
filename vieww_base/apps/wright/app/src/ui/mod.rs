@@ -107,6 +107,8 @@ struct Inner {
     /// A pinch in progress: how far the fingers have moved in total, when
     /// they last moved, and whether it has already done its one thing.
     pinch: Cell<(f32, Option<Instant>, bool)>,
+    /// When the kill switch was last read from disk.
+    stop_polled: Cell<Instant>,
 }
 
 /// Everything the shell reads. Signals: reading one in a build subscribes
@@ -137,6 +139,9 @@ pub struct Ui {
     /// A vieww field draws its caret unless told not to, and does not know
     /// whether it is focused; the shell does, so it tells each field.
     pub typing: Signal<Option<String>>,
+    /// The kill switch, as last read (it is a file other processes —
+    /// `wright stop`, the background service — can pull too): its reason.
+    pub stopped: Signal<Option<String>>,
     pub home: Composer,
     pub fresh: Composer,
     pub form: settings::Form,
@@ -194,6 +199,7 @@ impl Ui {
             splash: rt.signal(true),
             mic_level: rt.signal(0.0),
             typing: rt.signal(None),
+            stopped: rt.signal(wright_runtime::killswitch::current().map(|s| s.reason)),
             home: Composer::new(rt, 1),
             fresh: Composer::new(rt, 2),
             form: settings::Form::new(rt),
@@ -210,6 +216,7 @@ impl Ui {
                 pages: RefCell::new((Vec::new(), Vec::new())),
                 last_focus: Cell::new(None),
                 pinch: Cell::new((0.0, None, false)),
+                stop_polled: Cell::new(Instant::now()),
             }),
         };
         ui.persist();
@@ -325,6 +332,28 @@ impl Ui {
         self.form.reload(self.current_session().map(|s| (*s.project).clone()).as_deref());
         self.form.message.set(String::new());
         self.settings.set(true);
+    }
+
+    /// The kill switch: nothing runs, sends or fetches anywhere on this
+    /// machine until it is released.
+    pub fn stop_everything(&self, reason: &str) {
+        match wright_runtime::killswitch::engage(reason, "window") {
+            Ok(s) => {
+                self.stopped.set(Some(s.reason));
+                self.say("Stopped everything. Nothing runs until you start again.", None);
+            }
+            Err(e) => self.say(format!("Could not stop: {e}"), None),
+        }
+    }
+
+    pub fn start_again(&self) {
+        match wright_runtime::killswitch::release() {
+            Ok(_) => {
+                self.stopped.set(None);
+                self.say("Started again. Schedules fire as before.", None);
+            }
+            Err(e) => self.say(format!("Could not start: {e}"), None),
+        }
     }
 
     /// Settings, on the page that lists Wright's agents and tools.
@@ -605,6 +634,15 @@ impl Ui {
         }
 
         let now = Instant::now();
+        // The kill switch can be pulled from anywhere (a terminal, the
+        // service): look at it about once a second.
+        if now.duration_since(self.inner.stop_polled.get()) > Duration::from_millis(900) {
+            self.inner.stop_polled.set(now);
+            let s = wright_runtime::killswitch::current().map(|s| s.reason);
+            if s != self.stopped.get() {
+                self.stopped.set(s);
+            }
+        }
         if self.dragging.get() {
             if let Some(last) = self.inner.swipe.get().last {
                 if now.duration_since(last) > Duration::from_millis(150) {

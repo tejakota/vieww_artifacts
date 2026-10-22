@@ -190,11 +190,27 @@ pub struct McpEntry {
     pub command: String,
     /// Static args, comma-separated in config.
     pub args: Vec<String>,
-    /// The pin: `blake3:<hex>` of the executable file. A server whose
-    /// binary no longer hashes to this is refused, loudly.
+    /// The pin: `blake3:<hex>` of the executable file, or — for a server
+    /// installed into Wright's own folder (`wright mcp install`) —
+    /// `tree-blake3:<hex>` of the whole installed tree. A server whose
+    /// bytes no longer hash to this is refused, loudly.
     pub hash: String,
     /// Wall-clock seconds per tool call (default 60).
     pub timeout_secs: u64,
+    /// For a tree pin: the installed folder the command must live in.
+    pub tree: Option<String>,
+}
+
+/// Programs that fetch the real server at launch (`npx pkg`, `uvx pkg`):
+/// pinning their own bytes pins the launcher, not the server it
+/// downloads, so they are refused unless the pin covers an installed
+/// tree. `wright mcp install` freezes such a server instead.
+pub const MCP_LAUNCHERS: [&str; 10] = ["npx", "uvx", "pipx", "bunx", "pnpx", "pnpm", "yarn", "uv", "docker", "podman"];
+
+fn launcher_name(command: &str) -> Option<&'static str> {
+    let base = command.rsplit(['/', '\\']).next().unwrap_or(command);
+    let base = base.strip_suffix(".exe").or_else(|| base.strip_suffix(".cmd")).unwrap_or(base);
+    MCP_LAUNCHERS.iter().copied().find(|l| *l == base)
 }
 
 impl Price {
@@ -610,9 +626,21 @@ impl Config {
                     let command = s("command").ok_or_else(|| format!("{source}: line {}: mcp '{name}' needs command=\"...\"", node.line))?;
                     let args = s("args").unwrap_or_default().split(',').map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
                     let hash = s("hash").unwrap_or_default();
-                    if !hash.starts_with("blake3:") || hash.len() != 7 + 64 {
+                    let tree = s("tree").filter(|t| !t.trim().is_empty());
+                    let file_pin = hash.starts_with("blake3:") && hash.len() == 7 + 64;
+                    let tree_pin = hash.starts_with("tree-blake3:") && hash.len() == 12 + 64;
+                    if !file_pin && !tree_pin {
                         return Err(format!(
-                            "{source}: line {}: mcp '{name}' needs the executable pinned: hash=\"blake3:<64 hex chars>\" (run `wright mcp-hash <command>` to compute it). Unpinned servers are not run (ADR-029).",
+                            "{source}: line {}: mcp '{name}' needs a pin: hash=\"blake3:<64 hex chars>\" for a program (`wright mcp-hash <command>`), or install it with `wright mcp install` to pin the whole server. Unpinned servers are not run (ADR-029).",
+                            node.line
+                        ));
+                    }
+                    if tree_pin && tree.is_none() {
+                        return Err(format!("{source}: line {}: mcp '{name}' has a tree pin but no tree=\"<folder>\"", node.line));
+                    }
+                    if let (Some(l), false) = (launcher_name(&command), tree_pin) {
+                        return Err(format!(
+                            "{source}: line {}: mcp '{name}' runs `{l}`, which downloads the server each time it starts — a pin of `{l}` itself pins the launcher, not the server's code. Freeze it instead: `wright mcp install {name} npm:<package>@<version>` (or pypi:<package>==<version>), which installs that exact version into Wright's folder and pins every file (ADR-035).",
                             node.line
                         ));
                     }
@@ -620,7 +648,7 @@ impl Config {
                     if cfg.mcp_servers.iter().any(|m: &McpEntry| m.name == name) {
                         return Err(format!("{source}: line {}: two MCP servers are both named '{name}'", node.line));
                     }
-                    cfg.mcp_servers.push(McpEntry { name, command, args, hash, timeout_secs });
+                    cfg.mcp_servers.push(McpEntry { name, command, args, hash, timeout_secs, tree });
                 }
                 "tls" => {
                     let file = s("ca-file").map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).ok_or_else(|| format!("{source}: line {}: tls needs ca-file=\"/path/to/certificates.pem\"", node.line))?;
@@ -708,13 +736,17 @@ impl Config {
         }
         for m in &self.mcp_servers {
             out.push_str(&format!(
-                "mcp {} command={} args={} hash={} timeout={}\n",
+                "mcp {} command={} args={} hash={} timeout={}",
                 q(&m.name),
                 q(&m.command),
                 q(&m.args.join(",")),
                 q(&m.hash),
                 q(&m.timeout_secs.to_string())
             ));
+            if let Some(t) = &m.tree {
+                out.push_str(&format!(" tree={}", q(t)));
+            }
+            out.push('\n');
         }
         if let Some(on) = self.builtin_fallback {
             out.push_str(&format!("builtin fallback={on}\n"));
@@ -963,6 +995,22 @@ worker \"claude-code\" command=\"claude\" args=\"--print\" env=\"ANTHROPIC_API_K
         assert!(check_ca_file(&der).unwrap_err().contains("openssl x509"));
         assert!(check_ca_file(&dir.join("missing.pem")).is_err());
         assert_eq!(expand_home("/abs/x.pem"), PathBuf::from("/abs/x.pem"));
+    }
+
+
+    #[test]
+    fn a_launcher_pin_is_refused_and_a_tree_pin_round_trips() {
+        let h = "a".repeat(64);
+        let err = Config::parse_file_only(&format!("mcp \"time\" command=\"uvx\" args=\"mcp-server-time\" hash=\"blake3:{h}\"\n"), "t").unwrap_err();
+        assert!(err.contains("downloads the server each time") && err.contains("wright mcp install"), "{err}");
+        let err = Config::parse_file_only(&format!("mcp \"x\" command=\"/usr/local/bin/npx\" hash=\"blake3:{h}\"\n"), "t").unwrap_err();
+        assert!(err.contains("npx"), "{err}");
+        let text = format!("mcp \"time\" command=\"/home/me/.wright/mcp/time/venv/bin/mcp-server-time\" hash=\"tree-blake3:{h}\" tree=\"/home/me/.wright/mcp/time\"\n");
+        let cfg = Config::parse_file_only(&text, "t").unwrap();
+        assert_eq!(cfg.mcp_servers[0].tree.as_deref(), Some("/home/me/.wright/mcp/time"));
+        let back = Config::parse_file_only(&cfg.to_kdl(), "t").unwrap();
+        assert_eq!(back.mcp_servers, cfg.mcp_servers);
+        assert!(Config::parse_file_only(&format!("mcp \"x\" command=\"/a\" hash=\"tree-blake3:{h}\"\n"), "t").is_err(), "a tree pin needs its tree");
     }
 
 }

@@ -20,6 +20,7 @@
 //! | browser       | (not implemented: refuses loudly)             |                               |
 
 pub mod mcp;
+pub mod mcp_install;
 pub mod patch;
 pub mod paths;
 pub mod sandbox;
@@ -68,6 +69,9 @@ pub struct ToolCtx {
     pub mcp_server: Option<crate::config_shim::McpEntry>,
     /// The server tools this card may call (empty = none).
     pub mcp_allow: Vec<String>,
+    /// The organization's network allow-list (`network allow=...` in its
+    /// policy): http tools reach only these hosts. None = no such rule.
+    pub allowed_hosts: Option<Vec<String>>,
 }
 
 impl ToolCtx {
@@ -90,6 +94,7 @@ impl ToolCtx {
             worker_timeout_secs: 0,
             mcp_server: None,
             mcp_allow: Vec::new(),
+            allowed_hosts: None,
         })
     }
 
@@ -152,7 +157,7 @@ pub fn run(permit: Permit, input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, T
         "run-tests" => run_tests(&permit, ctx),
         "shell" => shell(&permit, input, ctx),
         "http-read" => http_read(input, ctx),
-        "http-post" => http_post(input, ctx),
+        "http-post" => http_post(&permit, input, ctx),
         "worker" => worker::run(&permit, input, ctx),
         "mcp-call" => mcp::run(&permit, input, ctx),
         "browser" => Err(ToolError::NotImplemented("browser")),
@@ -499,6 +504,14 @@ fn shell(permit: &Permit, input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, To
 /// Refuse addresses an agent should never reach by default: loopback,
 /// private ranges, link-local (cloud metadata lives at 169.254.169.254).
 fn check_public(host: &str, port: u16, ctx: &ToolCtx) -> Result<(), ToolError> {
+    if let Some(allowed) = &ctx.allowed_hosts {
+        if !wright_runtime::policy::host_allowed(allowed, host) {
+            return Err(ToolError::Failed(format!(
+                "{host} is not on your organization's network allow-list ({}); the request was not sent",
+                if allowed.is_empty() { "nothing is allowed".into() } else { allowed.join(", ") }
+            )));
+        }
+    }
     if ctx.allow_private_network {
         return Ok(());
     }
@@ -559,7 +572,7 @@ fn http_read(input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
     ok(format!("HTTP {}\n{}", resp.status, resp.body_text()))
 }
 
-fn http_post(input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
+fn http_post(permit: &Permit, input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
     let url = parse_url(s(input, "url")?).map_err(ToolError::BadInput)?;
     check_public(&url.host, url.port, ctx)?;
     let body = s(input, "body")?;
@@ -568,6 +581,14 @@ fn http_post(input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, ToolError> {
         .header("Content-Type", ctype)
         .header("User-Agent", "Wright/0.2");
     if let Some(name) = input.str_of("auth_secret") {
+        // Secrets are per identity: an agent resolves only what its own
+        // task-scoped identity was delegated, never the blueprint's set.
+        if !permit.may_use_secret(name) {
+            return Err(ToolError::Failed(format!(
+                "'{}' may not use the secret '{name}': its identity was not given it (add `secret \"{name}\"` to its card)",
+                permit.agent()
+            )));
+        }
         let r = ctx.secrets.iter().find(|s| s.name == name).ok_or_else(|| {
             ToolError::BadInput(format!("'{name}' is not a secret in this blueprint"))
         })?;

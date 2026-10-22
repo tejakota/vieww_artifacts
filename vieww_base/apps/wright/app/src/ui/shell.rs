@@ -94,7 +94,7 @@ fn splash_frame(p: &Pal, side: f32, t: f32, app: &WidgetNode) -> WidgetNode {
 fn app(ui: &Ui) -> WidgetNode {
     let column: WidgetNode = Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .children(vec![top_bar(ui), grow(stage(ui)), status_bar(ui)])
+        .children(vec![top_bar(ui), stop_banner(ui), grow(stage(ui)), status_bar(ui)])
         .into();
     let overlays: WidgetNode = {
         let ui = ui.clone();
@@ -157,6 +157,31 @@ fn top_bar(ui: &Ui) -> WidgetNode {
     .into()
 }
 
+/// While the kill switch is pulled, a band across the window says so —
+/// whoever pulled it, from wherever — with the one button that lifts it.
+fn stop_banner(ui: &Ui) -> WidgetNode {
+    let ui = ui.clone();
+    Live::new("stop-banner", move || {
+        let Some(reason) = ui.stopped.get() else {
+            return SizedBox::shrink().into();
+        };
+        let p = ui.pal();
+        let go = ui.clone();
+        Container::new()
+            .color(p.bad.with_alpha(40))
+            .border(Border::new(p.bad, 1.0))
+            .padding(EdgeInsets::symmetric(18.0, 8.0))
+            .child(row(12.0, vec![
+                Glyph::Stop.draw(16.0, p.bad),
+                b("Everything is stopped", 13.5, p.ink),
+                fill(format!("{reason} · nothing runs, sends or fetches on this computer until you start again"), 13.0, p.muted),
+                button(&p, "Start again", Look::Primary, true, move || go.start_again()),
+            ]))
+            .into()
+    })
+    .into()
+}
+
 // ── status bar ───────────────────────────────────────────────────
 
 fn status_bar(ui: &Ui) -> WidgetNode {
@@ -194,6 +219,10 @@ fn status_bar(ui: &Ui) -> WidgetNode {
         ];
         if let Some(micro) = spent {
             items.push(t(format!("${:.4} today", micro as f64 / 1e6), 12.0, p.muted));
+        }
+        if ui.stopped.get().is_none() {
+            let stop = ui.clone();
+            items.push(status_button(&p, Glyph::Stop, "Stop everything", move || stop.stop_everything("stopped from the window")));
         }
         items.push(status_button(&p, Glyph::Theme, if mode == Mode::Dark { "Dark" } else { "Light" }, move || flip.set_look(flip.mode.get().flip(), flip.accent.get())));
         items.push(status_button(&p, Glyph::Gear, "Settings", move || gear.open_settings()));
@@ -511,7 +540,11 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     ui.form.tab.set(super::settings::Tab::Network);
     ui.form.scroll.offset.set(0.0);
     shot(&mut driver, "6-settings-network", 400)?;
-    n += 1;
+    ui.form.tab.set(super::settings::Tab::Fleet);
+    shot(&mut driver, "6-settings-fleet", 400)?;
+    ui.form.tab.set(super::settings::Tab::Organization);
+    shot(&mut driver, "6-settings-organization", 400)?;
+    n += 3;
     ui.form.tab.set(super::settings::Tab::Models);
     ui.settings.set(false);
     ui.mode.set(Mode::Light);
@@ -533,7 +566,11 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
         s.scroll.to_end();
         shot(&mut driver, "9-thinking", 600)?;
         s.pending.set(None);
-        n += 3;
+        // The kill switch, as the window shows it (drawn, not pulled).
+        ui.stopped.set(Some("a test of the stop banner".into()));
+        shot(&mut driver, "10-stopped", 300)?;
+        ui.stopped.set(None);
+        n += 4;
     }
     match vieww::render::overflow::reported() {
         0 => Ok(n),

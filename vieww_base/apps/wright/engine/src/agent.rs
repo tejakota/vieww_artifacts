@@ -338,6 +338,10 @@ impl FiringEnv {
             if self.cancel.load(Ordering::SeqCst) {
                 return Err("cancelled".into());
             }
+            if let Some(why) = wright_runtime::killswitch::refusal() {
+                self.cancel.store(true, Ordering::SeqCst);
+                return Err(why);
+            }
             if Instant::now() >= self.deadline {
                 return Err(format!(
                     "the firing's wall clock ({}s) ran out",
@@ -536,14 +540,27 @@ impl FiringEnv {
             }
         };
         let started = Instant::now();
+        let identity = permit.identity().unwrap_or("").to_string();
+        let input_hash = wright_core::hash::blake3_hex(json::to_string(input).as_bytes());
         let out = wright_tools::run(permit, input, ctx);
         let ms = started.elapsed().as_millis();
+        // The call counts against the identity that made it.
+        if let Some(r) = self.gate.identities() {
+            r.record(name, tool, &input_hash, out.is_ok());
+        }
         match out {
             Ok(o) => {
-                self.spine.note(
+                let _ = self.spine.emit(
                     EventKind::ToolCalled,
                     me,
                     format!("{tool} {summary} — ok ({ms} ms)"),
+                    json::to_string(&Value::obj(vec![
+                        ("tool", Value::str(tool)),
+                        ("ok", Value::Bool(true)),
+                        ("ms", Value::int(ms as i64)),
+                        ("identity", Value::str(identity.clone())),
+                        ("input_blake3", Value::str(input_hash.clone())),
+                    ])),
                 );
                 if !o.wrote.is_empty() {
                     // Untrusted-data tracking (ADR-024): artifacts a
@@ -580,10 +597,17 @@ impl FiringEnv {
             }
             Err(e) => {
                 let msg = e.to_string();
-                self.spine.note(
+                let _ = self.spine.emit(
                     EventKind::ToolCalled,
                     me,
                     format!("{tool} {summary} — error: {}", short(&msg, 160)),
+                    json::to_string(&Value::obj(vec![
+                        ("tool", Value::str(tool)),
+                        ("ok", Value::Bool(false)),
+                        ("ms", Value::int(ms as i64)),
+                        ("identity", Value::str(identity.clone())),
+                        ("input_blake3", Value::str(input_hash.clone())),
+                    ])),
                 );
                 if matches!(e, ToolError::NotImplemented(_)) {
                     Err(format!("{msg}. Use another tool or finish without it."))

@@ -213,6 +213,11 @@ pub struct AgentDef {
     /// The server tools this agent may call (`mcp allow="tool1,tool2"`).
     /// Empty = none — the card must name them explicitly.
     pub mcp_allow: Vec<String>,
+    /// The blueprint secrets this agent's identity may use
+    /// (`secret "smtp"`, one line each). No agent shares another's
+    /// credentials. When NO card in a blueprint names any, the legacy rule
+    /// applies: secrets go only to agents holding a tool that sends.
+    pub secrets: Vec<String>,
 }
 
 impl Default for AgentDef {
@@ -233,6 +238,7 @@ impl Default for AgentDef {
             worker_timeout_secs: 300,
             mcp_server: None,
             mcp_allow: Vec::new(),
+            secrets: Vec::new(),
         }
     }
 }

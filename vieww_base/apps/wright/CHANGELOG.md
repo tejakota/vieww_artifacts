@@ -112,6 +112,29 @@ never ran) found and fixed:
   directory; "1 sessions"; starter cards of even height; plan lines no
   longer carry the CLI's indentation into the window.
 
+### Governance, operations and proof (same release)
+
+- **Kill switch and fleet** (ADR-036): `wright stop` / Stop everything
+  halts every firing on the machine, mid-turn; `wright fleet` and
+  Settings > Fleet show everything scheduled, with pause and resume.
+- **Unattended runs need a go-ahead; time to trust** (ADR-037): a new or
+  changed schedule waits for "Let it run unattended" after a passing run;
+  `wright bench` reports how long and how much it took to get there.
+- **Per-agent spend in the receipt** (ADR-038), `wright spend --csv`.
+- **A receipt anyone can verify** (ADR-039): `receipt.vc.json`, a W3C
+  Verifiable Credential (eddsa-jcs-2022, did:key), checked by Digital
+  Bazaar's reference library; `wright verify x.vc.json`, `wright receipt vc`.
+- **Task-scoped agent identities** (ADR-040): one revocable identity per
+  task, per-agent secrets (`secret "smtp"`), a sixth verify check.
+- **Organization policy and admin console** (ADR-041): signed rules
+  enforced at plan time and at the gate, admin approval of plans for
+  unattended runs, fleet-wide receipt verification; `wright admin`,
+  Settings > Organization.
+- **MCP servers pinned whole** (ADR-035): `wright mcp install` freezes an
+  exact npm/PyPI version and pins every file; launcher pins are refused.
+- **The Interviewer offers workers** installed on this machine for coding
+  steps, and now writes `accept` promises and typed hand-offs.
+
 ## 0.5.2 — 2026-10-21 — a livelier conversation
 
 - **You can see a reply being written.** The moment you send, the thread

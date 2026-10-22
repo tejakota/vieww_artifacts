@@ -151,9 +151,40 @@ deliverable kind=\"report\" {{ check \"a digest exists\" accept \"the digest say
         "the sentence itself is in the receipt"
     );
 
-    // all five checks pass
+    // where the money went, per agent, is in the (signed) receipt
+    let parsed = wright_core::wire::json::parse(&receipt).unwrap();
+    let agents = parsed.get("spend").and_then(|s| s.get("agents")).and_then(|a| a.as_arr().map(|x| x.to_vec())).expect("spend.agents");
+    assert!(agents.iter().any(|a| a.str_of("agent") == Some("Fetcher")), "{receipt}");
+    let fetcher = agents.iter().find(|a| a.str_of("agent") == Some("Fetcher")).unwrap();
+    assert!(fetcher.get("model_calls").and_then(|n| n.as_u64()).unwrap_or(0) >= 1);
+    assert!(
+        fetcher.get("tools").and_then(|t| t.as_arr().map(|x| x.to_vec())).unwrap_or_default().iter().any(|t| t.str_of("tool") == Some("http-read")),
+        "the Fetcher's tool calls are attributed: {receipt}"
+    );
+
+    // the standard credential beside it verifies on its own — and only
+    // for an issuer this machine trusts
+    let vc_path = summary.receipt.with_file_name("receipt.vc.json");
+    let checked = wright_engine::credential::verify_file(&vc_path, &[]).unwrap();
+    assert!(checked.issuer.starts_with("did:key:z6Mk"), "{checked:?}");
+    assert_eq!(checked.run, summary.run);
+    let vc_text = std::fs::read_to_string(&vc_path).unwrap();
+    assert!(vc_text.contains("\"cryptosuite\":\"eddsa-jcs-2022\""), "{vc_text}");
+    let forged = vc_text.replace("digest-demo", "digest-forged");
+    let forged_doc = wright_core::wire::json::parse(&forged).unwrap();
+    let err = wright_engine::credential::verify(&forged_doc, &[]).unwrap_err();
+    assert!(err.contains("changed after it was signed"), "{err}");
+
+    // every task acted under its own identity, and the check says so
+    let ids = parsed.get("identities").and_then(|a| a.as_arr().map(|x| x.to_vec())).expect("identities in the receipt");
+    let dids: std::collections::BTreeSet<&str> = ids.iter().filter_map(|i| i.str_of("did")).collect();
+    assert_eq!(dids.len(), ids.len(), "no two tasks share an identity");
+    assert!(ids.iter().any(|i| i.get("claims").and_then(|c| c.str_of("agent")) == Some("Fetcher")));
+
+    // all six checks pass
     let v = trust_verify::project_run(&dir, Some(summary.run)).unwrap();
     assert!(v.ok, "{}", v.report());
+    assert!(v.report().contains("task-scoped identit"), "{}", v.report());
 
     // one edited byte and the receipt fails verification
     let tampered = receipt.replace("digest-demo", "digest-DAMAGED");
@@ -410,4 +441,58 @@ deliverable kind=\"report\" {{ check \"it exists\" }}\n"
     assert_eq!(store.runs(), vec![summary.run]);
     let v = trust_verify::project_run(&dir, None).unwrap();
     assert!(v.ok, "{}", v.report());
+}
+
+/// The Interviewer offers a worker for a coding step — but only one this
+/// machine actually has — and the plan it drafts is one Wright accepts:
+/// worker card, scope, approval, and the person is told in the summary.
+#[test]
+fn the_interviewer_hands_coding_to_an_installed_worker() {
+    let (home_dir, _) = mock_env();
+    let _ = &home_dir;
+    let stub_dir = home("interview-worker");
+    let stub = stub_dir.join("fake-codex.sh");
+    std::fs::write(&stub, "#!/bin/sh\necho done\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let mut cfg = config("");
+    for w in cfg.workers.iter_mut() {
+        w.command = "/no/such/agent".into(); // none of the presets here
+    }
+    cfg.workers.push(wright_runtime::config::WorkerEntry {
+        name: "fake-codex".into(),
+        command: stub.to_string_lossy().to_string(),
+        args: Vec::new(),
+        timeout_secs: 30,
+        env: Vec::new(),
+    });
+    let dir = home("interview-project");
+    let mut io = wright_engine::interview::Scripted {
+        answers: vec!["a command line tool that counts words in files".into()],
+        confirm_answer: true,
+        transcript: Vec::new(),
+    };
+    let bp = wright_engine::interview::interview(&dir, &cfg, &mut io).unwrap().expect("a plan");
+    let coder = bp.agents.iter().find(|a| a.worker.is_some()).expect("the coding went to a worker");
+    assert_eq!(coder.worker.as_deref(), Some("fake-codex"));
+    assert_eq!(coder.worker_files, vec!["src/".to_string()]);
+    let said = io.transcript.join("\n");
+    assert!(said.contains("done by fake-codex"), "the summary names the worker: {said}");
+    assert!(said.contains("asked before it starts"), "{said}");
+
+    // Without an installed worker, the same request stays a plain agent.
+    for w in cfg.workers.iter_mut() {
+        w.command = "/no/such/agent".into();
+    }
+    let dir = home("interview-project-2");
+    let mut io = wright_engine::interview::Scripted {
+        answers: vec!["a command line tool that counts words in files".into()],
+        confirm_answer: true,
+        transcript: Vec::new(),
+    };
+    let bp = wright_engine::interview::interview(&dir, &cfg, &mut io).unwrap().expect("a plan");
+    assert!(bp.agents.iter().all(|a| a.worker.is_none()), "no worker invented");
 }

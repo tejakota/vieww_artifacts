@@ -71,6 +71,11 @@ pub struct Permit {
     agent: String,
     tool: &'static ToolSpec,
     grants: PermissionSet,
+    /// The task-scoped identity this call is made under, when the firing
+    /// issues identities (see `crate::identity`).
+    identity: Option<String>,
+    /// Secrets this identity may resolve; `None` when identities are off.
+    secrets: Option<Vec<String>>,
     _seal: Seal,
 }
 
@@ -92,6 +97,20 @@ impl Permit {
         self.grants
     }
 
+    /// The `did:key` this call is made under, if identities are on.
+    pub fn identity(&self) -> Option<&str> {
+        self.identity.as_deref()
+    }
+
+    /// Whether this call may resolve the secret `name`. With identities
+    /// on, only the secrets the agent's identity was delegated.
+    pub fn may_use_secret(&self, name: &str) -> bool {
+        match &self.secrets {
+            None => true,
+            Some(list) => list.iter().any(|s| s == name),
+        }
+    }
+
     /// Test-only constructor, so tool unit tests can run tools directly.
     /// It exists only under `cfg(test)` or the `test-permits` feature,
     /// which only `wright-tools`' dev-dependencies turn on — the shipped
@@ -102,6 +121,8 @@ impl Permit {
             agent: agent.into(),
             tool,
             grants,
+            identity: None,
+            secrets: None,
             _seal: Seal,
         }
     }
@@ -148,6 +169,10 @@ pub struct Grant {
 
 /// Per-task grants, built from the compiled task graph.
 pub struct Gate {
+    /// Task-scoped identities; when set, no agent acts without a live one.
+    identities: Option<std::sync::Arc<crate::identity::Registry>>,
+    /// Secrets each agent's identity is delegated (agent -> names).
+    secret_scope: HashMap<String, Vec<String>>,
     grants: HashMap<String, Grant>,
 }
 
@@ -155,6 +180,8 @@ impl Gate {
     /// Build from the task graph (project AND system agents).
     pub fn from_graph(graph: &TaskGraph) -> Self {
         Gate {
+            identities: None,
+            secret_scope: HashMap::new(),
             grants: graph
                 .tasks
                 .iter()
@@ -173,6 +200,31 @@ impl Gate {
         }
     }
 
+    /// Require a live task-scoped identity for every call, and scope
+    /// secrets per agent (`scope`: agent -> the secrets it may use).
+    pub fn with_identities(mut self, registry: std::sync::Arc<crate::identity::Registry>, scope: HashMap<String, Vec<String>>) -> Self {
+        self.identities = Some(registry);
+        self.secret_scope = scope;
+        self
+    }
+
+    /// The registry, when identities are on.
+    pub fn identities(&self) -> Option<&std::sync::Arc<crate::identity::Registry>> {
+        self.identities.as_ref()
+    }
+
+    /// The secrets an agent's identity is delegated.
+    pub fn secrets_of(&self, agent: &str) -> Vec<String> {
+        self.secret_scope.get(agent).cloned().unwrap_or_default()
+    }
+
+    fn identity_for(&self, agent: &str) -> Result<(Option<String>, Option<Vec<String>>), String> {
+        match &self.identities {
+            None => Ok((None, None)),
+            Some(r) => r.check(agent).map(|did| (Some(did), Some(self.secrets_of(agent)))),
+        }
+    }
+
     pub fn grant_of(&self, agent: &str) -> Option<&Grant> {
         self.grants.get(agent)
     }
@@ -185,6 +237,18 @@ impl Gate {
         budget: &mut BudgetMeter,
         est_cost_micro_usd: u64,
     ) -> Verdict {
+        // 0. The kill switch beats everything: while Wright is stopped no
+        // tool runs — so a firing in flight cannot send or fetch more.
+        if let Some(why) = crate::killswitch::refusal() {
+            return Verdict::Deny(why);
+        }
+        // 0b. Identity: with identities on, an agent acts only under its
+        // own live, task-scoped identity — none before its task starts,
+        // none after it ends or the clock runs out.
+        let (identity, secrets) = match self.identity_for(agent) {
+            Ok(x) => x,
+            Err(why) => return Verdict::Deny(why),
+        };
         // Unknown agents have no grants at all.
         let Some(grant) = self.grants.get(agent) else {
             return Verdict::Deny(format!(
@@ -251,12 +315,20 @@ impl Gate {
             agent: agent.into(),
             tool,
             grants: grant.permissions,
+            identity,
+            secrets,
             _seal: Seal,
         })
     }
 
     /// A human approved: re-check the budget (time passed), then permit.
     pub fn approve(&self, pending: Pending, budget: &mut BudgetMeter) -> Result<Permit, String> {
+        // Approved while Wright was being stopped: the stop wins.
+        if let Some(why) = crate::killswitch::refusal() {
+            return Err(why);
+        }
+        // The identity must still be live when the human answers.
+        let (identity, secrets) = self.identity_for(&pending.agent)?;
         if !budget.charge(pending.est_cost_micro_usd) {
             return Err("approved, but the budget ran out while waiting".into());
         }
@@ -264,6 +336,8 @@ impl Gate {
             agent: pending.agent,
             tool: pending.tool,
             grants: pending.grants,
+            identity,
+            secrets,
             _seal: Seal,
         })
     }

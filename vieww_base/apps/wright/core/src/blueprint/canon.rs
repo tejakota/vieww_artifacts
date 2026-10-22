@@ -56,6 +56,9 @@ pub fn agent_canon(a: &AgentDef) -> String {
         a.permissions.bits() & PermissionSet::SHELL != 0,
         a.permissions.bits() & PermissionSet::SPAWN != 0
     ));
+    for sec in &a.secrets {
+        s.push_str(&format!("  secret \"{}\"\n", escape_string(sec)));
+    }
     if let Some(w) = &a.worker {
         s.push_str(&format!("  worker \"{}\"\n", escape_string(w)));
         for f in &a.worker_files {
