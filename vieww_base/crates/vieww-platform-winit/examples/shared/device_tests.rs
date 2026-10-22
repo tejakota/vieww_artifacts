@@ -74,6 +74,22 @@ fn frames() -> u64 {
     })
 }
 
+/// How long, at least, this run watches: `VIEWW_SUITE_SECONDS` (Android:
+/// `debug.vieww.seconds`), 0 when unset. The sustained pass asks for a
+/// minute by the clock rather than a frame count: 3600 frames was a minute
+/// on a phone that holds 60 fps and five on one that draws the stress
+/// screen at 12 (Device Farm, 2026-10-22: the pass outran its deadline on
+/// every phone and reported nothing).
+fn seconds() -> u64 {
+    static N: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *N.get_or_init(|| {
+        std::env::var("VIEWW_SUITE_SECONDS")
+            .ok()
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    })
+}
+
 /// What the suite watches while frames go by, for the report: the process's
 /// CPU time across the measured window, how hot the device got, and — on a
 /// sustained run — how the first [`FRAMES`] frames compared with the last.
@@ -123,12 +139,19 @@ impl Watch {
             }
         }
         let window = 240.min(frames());
-        if self.window_start.is_none() && log.frames() >= frames() - window {
+        // The measured window is the run's last stretch: the last 240 frames
+        // of a counted run, the last five seconds of a timed one.
+        let window_open = if seconds() > 0 {
+            self.elapsed() + Duration::from_secs(5) >= Duration::from_secs(seconds())
+        } else {
+            log.frames() >= frames() - window
+        };
+        if self.window_start.is_none() && window_open {
             if let Some(cpu) = vieww_platform_winit::process_cpu_time() {
                 self.window_start = Some((cpu, log.frames(), now));
             }
         }
-        if frames() > FRAMES && self.early.is_none() && log.frames() >= FRAMES {
+        if (frames() > FRAMES || seconds() > 0) && self.early.is_none() && log.frames() >= FRAMES {
             let mut samples = log.work_samples();
             if !samples.is_empty() {
                 samples.sort_unstable();
@@ -136,6 +159,17 @@ impl Watch {
                 self.early = Some((samples[samples.len() / 2], over, samples.len()));
             }
         }
+    }
+
+    /// How long the run has been watched.
+    fn elapsed(&self) -> Duration {
+        self.started.map_or(Duration::ZERO, |s| s.elapsed())
+    }
+
+    /// Whether the run has watched long enough to report: its frames, and
+    /// its seconds when it asked for some.
+    fn done(&self, log: &FrameLog) -> bool {
+        log.frames() >= frames() && self.elapsed() >= Duration::from_secs(seconds())
     }
 
     /// The report's lines about the window just measured.
@@ -859,7 +893,7 @@ impl DeviceSuite {
                 return;
             }
             watch.frame(log);
-            if log.frames() < frames() {
+            if !watch.done(log) {
                 return;
             }
             let text = {

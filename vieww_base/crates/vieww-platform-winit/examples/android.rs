@@ -911,6 +911,13 @@ mod demo {
             std::env::set_var("VIEWW_PARTIAL_BLIT_CHECK", "1");
             suite.observe("partial_blit_mode", "checked (debug.vieww.blitcheck=1)");
         }
+        // The sustained pass is a minute by the clock (`debug.vieww.seconds`),
+        // whatever the phone's frame rate.
+        let seconds_prop = prop("debug.vieww.seconds");
+        if seconds_prop.parse::<u64>().is_ok() {
+            std::env::set_var("VIEWW_SUITE_SECONDS", &seconds_prop);
+            suite.observe("seconds", &format!("debug.vieww.seconds={seconds_prop}"));
+        }
         let frames_prop = prop("debug.vieww.frames");
         if frames_prop.parse::<u64>().is_ok() {
             std::env::set_var("VIEWW_SUITE_FRAMES", &frames_prop);

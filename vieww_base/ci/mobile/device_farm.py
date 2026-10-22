@@ -345,7 +345,7 @@ def summarize(rows, out, run):
             ("cpunoblur", "CPU path without the blur cache only (diagnostic A/B)"),
             ("stresscpu", "stress screen, CPU path (diagnostic)"),
             ("stressgpu", "stress screen, GPU path (diagnostic)"),
-            ("sustained", "stress screen for 3600 frames on what auto chose (diagnostic)"),
+            ("sustained", "stress screen for a minute on what auto chose (diagnostic)"),
             ("gpucheck", "GPU path, every swapchain copy read back and compared with its frame"),
             ("gpufullcopy", "GPU path copying whole frames into the swapchain (diagnostic A/B)"),
         ]

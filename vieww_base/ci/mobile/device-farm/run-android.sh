@@ -134,7 +134,7 @@ declare -A failed=()
 # GPU time on layers, filters and shadows on every phone — so it could not say
 # what a real app's screen costs. Diagnostic only.
 #
-# `sustained` is the stress screen for a minute (`debug.vieww.frames=3600`)
+# `sustained` is the stress screen for a minute (`debug.vieww.seconds=60`)
 # on whatever `auto` chose: the pass that warms the phone up. The app reports
 # its thermal status and headroom (`thermal`), the first ten seconds against
 # the last four (`sustained`) and CPU time per frame (`cpu_time`); this
@@ -161,7 +161,11 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
     partialblit=""; [ "$mode" = gpufullcopy ] && partialblit=0
     { [ "$mode" = auto ] || [ "$mode" = sustained ]; } && gpu=auto
     screen=""; case "$mode" in stress*|sustained) screen=stress ;; esac
-    frames=""; [ "$mode" = sustained ] && frames=3600
+    # The sustained pass is a minute by the clock, not 3600 frames: that was
+    # five minutes on a phone drawing the stress screen at 12 fps, and the
+    # pass outran its deadline on every phone (2026-10-22).
+    frames=""
+    seconds=""; [ "$mode" = sustained ] && seconds=60
     # `gpuserial`: the GPU path waiting for every frame, as it did before
     # frames overlapped (`debug.vieww.overlap=0`) — beside `gpu`, the A/B for
     # the overlap on this phone's driver.
@@ -180,12 +184,17 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
     sh_ setprop debug.vieww.hint "$hint" >/dev/null
     sh_ setprop debug.vieww.gpu "$gpu" >/dev/null
     sh_ setprop debug.vieww.present "\"$present\"" >/dev/null
-    sh_ setprop debug.vieww.scale "$scale" >/dev/null
+    # Quoted, as the others are: `setprop name ""` with a bare empty value is
+    # refused, so the `auto` left by `gpuscale` stayed set and every later
+    # pass ran at the reduced resolution (2026-10-22: `gpuserial`, `gpucheck`
+    # and the stress passes on the Stylo 5 and A73).
+    sh_ setprop debug.vieww.scale "\"$scale\"" >/dev/null
     sh_ setprop debug.vieww.overlap "\"$overlap\"" >/dev/null
     sh_ setprop debug.vieww.screen "\"$screen\"" >/dev/null
     sh_ setprop debug.vieww.blitcheck "$blitcheck" >/dev/null
     sh_ setprop debug.vieww.partialblit "\"$partialblit\"" >/dev/null
     sh_ setprop debug.vieww.frames "\"$frames\"" >/dev/null
+    sh_ setprop debug.vieww.seconds "\"$seconds\"" >/dev/null
 
     # 1. Cold start, three times. TotalTime is the platform's own measure of
     # launch to first frame drawn; WaitTime adds the system's share.
@@ -238,7 +247,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
         sampler=$!
     fi
     # shellcheck disable=SC2086 # $gpu_flag is empty or one word, on purpose
-    if VIEWW_SCREENSHOT="$out/$mode-screen.png" VIEWW_SUITE_FRAMES="${frames:-600}" \
+    if VIEWW_SCREENSHOT="$out/$mode-screen.png" VIEWW_SUITE_FRAMES="${frames:-600}" VIEWW_SUITE_SECONDS="${seconds:-0}" \
         bash "$root/ci/mobile/device-suite.sh" --no-build $gpu_flag > "$out/$mode-suite.log" 2>&1; then
         kv "${mode}_suite" PASS
         verdict[$mode]=PASS
@@ -386,13 +395,14 @@ sh_ setprop debug.vieww.gpu 0 >/dev/null
 sh_ setprop debug.vieww.present '""' >/dev/null
 sh_ setprop debug.vieww.recalibrate 0 >/dev/null
 sh_ setprop debug.vieww.hint 0 >/dev/null
-sh_ setprop debug.vieww.scale "" >/dev/null
+sh_ setprop debug.vieww.scale '""' >/dev/null
 sh_ setprop debug.vieww.overlap '""' >/dev/null
 sh_ setprop debug.vieww.bare 0 >/dev/null
 sh_ setprop debug.vieww.screen '""' >/dev/null
 sh_ setprop debug.vieww.blitcheck 0 >/dev/null
 sh_ setprop debug.vieww.partialblit '""' >/dev/null
 sh_ setprop debug.vieww.frames '""' >/dev/null
+sh_ setprop debug.vieww.seconds '""' >/dev/null
 sh_ setprop debug.vieww.cadence "" >/dev/null
 sh_ am force-stop "$package" >/dev/null
 sh_ svc power stayon false >/dev/null

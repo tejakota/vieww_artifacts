@@ -209,12 +209,18 @@ field_tapped=0
 
 # Poll rather than sleep. How long the app needs depends on the device, and a
 # fixed sleep is either too short on a slow phone or wasted on a fast one.
-# A longer pass (`VIEWW_SUITE_FRAMES`, which run-android.sh exports with the
-# `debug.vieww.frames` it sets) gets longer: 3600 frames on a phone that
-# holds 30 fps is two minutes on its own.
+# A longer pass gets longer: `VIEWW_SUITE_FRAMES` and `VIEWW_SUITE_SECONDS`,
+# which run-android.sh exports with the `debug.vieww.frames` and
+# `debug.vieww.seconds` it sets. Sized for the slowest screen on the slowest
+# phone — 4 fps — since a pass that finishes early stops polling at once:
+# `45 + frames / 20` ran out on every phone's stress passes (2026-10-22),
+# whose frames take 60-250 ms, with `adb shell input tap` itself taking
+# 2.5 s each on a busy LG Stylo 5.
 frames="${VIEWW_SUITE_FRAMES:-600}"
 case "$frames" in ''|*[!0-9]*) frames=600 ;; esac
-deadline=$(( $(date +%s) + 45 + frames / 20 ))
+seconds="${VIEWW_SUITE_SECONDS:-0}"
+case "$seconds" in ''|*[!0-9]*) seconds=0 ;; esac
+deadline=$(( $(date +%s) + 60 + frames / 4 + seconds ))
 log=""
 while [ "$(date +%s)" -lt "$deadline" ]; do
     burst=0
