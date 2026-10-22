@@ -38,7 +38,10 @@ pub const MAX_SECONDS: usize = 120;
 /// plenty for speech, which carries almost nothing above 4 kHz).
 pub fn to_speech_rate(interleaved: &[f32], channels: usize, rate: u32) -> Vec<f32> {
     let channels = channels.max(1);
-    let mono: Vec<f32> = interleaved.chunks(channels).map(|f| f.iter().sum::<f32>() / f.len() as f32).collect();
+    let mono: Vec<f32> = interleaved
+        .chunks(channels)
+        .map(|f| f.iter().sum::<f32>() / f.len() as f32)
+        .collect();
     if rate == RATE || rate == 0 {
         return mono;
     }
@@ -108,22 +111,44 @@ pub fn transcribe(cfg: &Config, wav: &[u8]) -> Result<String, String> {
         return crate::local::transcribe(model, wav);
     }
     if p.kind != ProviderKind::OpenAi {
-        return Err(format!("'{}' cannot transcribe speech; point `voice model=` at an OpenAI-compatible provider", p.name));
+        return Err(format!(
+            "'{}' cannot transcribe speech; point `voice model=` at an OpenAI-compatible provider",
+            p.name
+        ));
     }
-    let url = parse_url(&format!("{}/audio/transcriptions", p.base_url.trim_end_matches('/')))?;
-    let boundary = format!("wright{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    let url = parse_url(&format!(
+        "{}/audio/transcriptions",
+        p.base_url.trim_end_matches('/')
+    ))?;
+    let boundary = format!(
+        "wright{:x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    );
     let mut req = Request::new("POST", url)
-        .header("Content-Type", &format!("multipart/form-data; boundary={boundary}"))
+        .header(
+            "Content-Type",
+            &format!("multipart/form-data; boundary={boundary}"),
+        )
         .body(multipart(&boundary, model, wav));
     if let Some(reference) = &p.key {
-        let key = secrets::resolve(reference).map_err(|e| format!("voice needs the {} key: {e}", p.name))?;
+        let key = secrets::resolve(reference)
+            .map_err(|e| format!("voice needs the {} key: {e}", p.name))?;
         req = req.header("Authorization", &format!("Bearer {}", key.expose()));
     }
     let resp = net::send(&req, &NetConfig::from_env())?;
     if resp.status != 200 {
-        return Err(format!("{} returned HTTP {} for speech-to-text: {}", p.name, resp.status, resp.body_text().chars().take(200).collect::<String>()));
+        return Err(format!(
+            "{} returned HTTP {} for speech-to-text: {}",
+            p.name,
+            resp.status,
+            resp.body_text().chars().take(200).collect::<String>()
+        ));
     }
-    let v = json::parse(&resp.body_text()).map_err(|e| format!("speech-to-text answer was not JSON: {e}"))?;
+    let v = json::parse(&resp.body_text())
+        .map_err(|e| format!("speech-to-text answer was not JSON: {e}"))?;
     Ok(v.str_of("text").unwrap_or("").trim().to_string())
 }
 
@@ -146,7 +171,11 @@ mod tests {
         assert_eq!(&w[0..4], b"RIFF");
         assert_eq!(&w[8..16], b"WAVEfmt ");
         assert_eq!(u32::from_le_bytes([w[24], w[25], w[26], w[27]]), RATE);
-        assert_eq!(u32::from_le_bytes([w[40], w[41], w[42], w[43]]), 6, "three samples, two bytes each");
+        assert_eq!(
+            u32::from_le_bytes([w[40], w[41], w[42], w[43]]),
+            6,
+            "three samples, two bytes each"
+        );
         assert_eq!(i16::from_le_bytes([w[46], w[47]]), 32767);
     }
 

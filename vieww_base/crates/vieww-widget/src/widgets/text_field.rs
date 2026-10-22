@@ -61,10 +61,21 @@ use vieww_text::TextSpan;
 /// It governs the key rather than the content — a `\n` handed down in the value
 /// still lays out as two lines.
 ///
-/// # What it does not do yet
+/// # The clipboard
 ///
-/// No clipboard: cut, copy and paste have nowhere to go, because a pasteboard is
-/// an OS service and no platform provides one to this tree yet.
+/// Cut, copy and paste go to the [`Clipboard`](crate::foundation::Clipboard)
+/// the application published above the root in its `SharedServices`
+/// (`vieww_platform_winit::services::platform()` registers the system
+/// pasteboard). Without one they are reported unhandled. An obscured field
+/// never copies or cuts its contents.
+///
+/// # Read-only text you can still copy
+///
+/// [`read_only`](Self::read_only) keeps selection, the keyboard's caret and
+/// selection moves, Select All and Copy, and declines every key that would
+/// change the text — so those keys reach the application's shortcuts. It is
+/// how a reply, a log line or an error message becomes copyable. Give it an
+/// `on_changed` (to keep the selection) and, ideally, `on_selection`.
 #[derive(Clone)]
 pub struct TextField {
     value: TextEditingValue,
@@ -90,6 +101,7 @@ pub struct TextField {
     on_add_caret: Option<Handler<TextSelection>>,
     single_line: bool,
     on_submit: Option<Handler<String>>,
+    read_only: bool,
     obscure: Obscured,
     placeholder: String,
     placeholder_color: Option<Color>,
@@ -120,6 +132,7 @@ impl TextField {
             on_add_caret: None,
             single_line: false,
             on_submit: None,
+            read_only: false,
             obscure: Obscured::No,
             placeholder: String::new(),
             placeholder_color: None,
@@ -195,6 +208,19 @@ impl TextField {
     pub const fn selection_color(mut self, color: Color) -> Self {
         self.selection_color = Some(color);
         self
+    }
+
+    /// Selectable and copyable, never editable. See the type's docs.
+    #[must_use]
+    pub const fn read_only(mut self) -> Self {
+        self.read_only = true;
+        self
+    }
+
+    /// Whether this field is [`read_only`](Self::read_only).
+    #[must_use]
+    pub const fn is_read_only(&self) -> bool {
+        self.read_only
     }
 
     /// Called with the value the field would like to become.
@@ -604,7 +630,7 @@ impl Widget for TextField {
                 format!("{}..{}", composing.start, composing.end),
             ));
         }
-        if self.on_changed.is_none() {
+        if self.on_changed.is_none() || self.read_only {
             props.push(("read_only", "true".to_owned()));
         }
         props

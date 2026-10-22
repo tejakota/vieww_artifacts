@@ -70,10 +70,16 @@ impl BlueprintDiff {
 pub fn diff(old: &Blueprint, new: &Blueprint) -> BlueprintDiff {
     let mut d = BlueprintDiff::default();
 
-    let old_agents: BTreeMap<&str, String> =
-        old.agents.iter().map(|a| (a.name.as_str(), canon::agent_canon(a))).collect();
-    let new_agents: BTreeMap<&str, String> =
-        new.agents.iter().map(|a| (a.name.as_str(), canon::agent_canon(a))).collect();
+    let old_agents: BTreeMap<&str, String> = old
+        .agents
+        .iter()
+        .map(|a| (a.name.as_str(), canon::agent_canon(a)))
+        .collect();
+    let new_agents: BTreeMap<&str, String> = new
+        .agents
+        .iter()
+        .map(|a| (a.name.as_str(), canon::agent_canon(a)))
+        .collect();
 
     for (name, text) in &new_agents {
         match old_agents.get(name) {
@@ -160,7 +166,13 @@ impl RefirePlan {
         cached.sort_by_key(pos);
         let mut fresh: Vec<String> = self.fresh.iter().cloned().collect();
         fresh.sort_by_key(pos);
-        let is_are = |v: &[String]| if v.len() == 1 { format!("{} is", v[0]) } else { format!("{} are", v.join(" + ")) };
+        let is_are = |v: &[String]| {
+            if v.len() == 1 {
+                format!("{} is", v[0])
+            } else {
+                format!("{} are", v.join(" + "))
+            }
+        };
         let mut s = if runs.is_empty() {
             "Nothing needs to run again because of this change.".to_string()
         } else {
@@ -170,7 +182,10 @@ impl RefirePlan {
             s.push_str(&format!(" {} cached — free.", is_are(&cached)));
         }
         if !fresh.is_empty() {
-            s.push_str(&format!(" {} fresh every run anyway (live data or delivery).", is_are(&fresh)));
+            s.push_str(&format!(
+                " {} fresh every run anyway (live data or delivery).",
+                is_are(&fresh)
+            ));
         }
         s
     }
@@ -184,7 +199,10 @@ pub fn never_cached(bp: &Blueprint) -> BTreeMap<String, String> {
         if a.is_delivery() {
             out.insert(a.name.clone(), "touches the world (never cached)".into());
         } else if a.is_volatile() {
-            out.insert(a.name.clone(), "reads the outside world (fresh every firing)".into());
+            out.insert(
+                a.name.clone(),
+                "reads the outside world (fresh every firing)".into(),
+            );
         }
     }
     close_downstream(bp, &mut out, "upstream is fresh every firing");
@@ -216,7 +234,9 @@ pub fn refire_plan(d: &BlueprintDiff, new: &Blueprint) -> RefirePlan {
     let mut marked: BTreeMap<String, String> = BTreeMap::new();
     let mark = |name: &str, why: &str, marked: &mut BTreeMap<String, String>| {
         if all.contains(name) {
-            marked.entry(name.to_string()).or_insert_with(|| why.to_string());
+            marked
+                .entry(name.to_string())
+                .or_insert_with(|| why.to_string());
         }
     };
 
@@ -238,7 +258,11 @@ pub fn refire_plan(d: &BlueprintDiff, new: &Blueprint) -> RefirePlan {
             if a.model_tier.as_str() == tier.as_str()
                 || (tier == "cheap" && a.model_tier == ModelTier::Auto)
             {
-                mark(&a.name, &format!("model tier '{tier}' changed"), &mut marked);
+                mark(
+                    &a.name,
+                    &format!("model tier '{tier}' changed"),
+                    &mut marked,
+                );
             }
         }
     }
@@ -246,7 +270,11 @@ pub fn refire_plan(d: &BlueprintDiff, new: &Blueprint) -> RefirePlan {
     // An edge carries an input. Adding or removing one changes what the
     // TARGET receives; the source's own work is untouched.
     for e in d.edges_added.iter().chain(d.edges_removed.iter()) {
-        mark(&e.to, &format!("inputs changed (edge {} -> {})", e.from, e.to), &mut marked);
+        mark(
+            &e.to,
+            &format!("inputs changed (edge {} -> {})", e.from, e.to),
+            &mut marked,
+        );
     }
 
     close_downstream(new, &mut marked, "upstream refired");
@@ -254,8 +282,14 @@ pub fn refire_plan(d: &BlueprintDiff, new: &Blueprint) -> RefirePlan {
     // ── system agents ──────────────────────────────────────────
     let mut system: BTreeMap<String, String> = BTreeMap::new();
     let any_project = !marked.is_empty();
-    if new.chips.tests && (any_project || d.deliverables_changed || d.chip_changed.contains("tests")) {
-        let why = if d.deliverables_changed { "definition of done changed" } else { "checks the new work" };
+    if new.chips.tests
+        && (any_project || d.deliverables_changed || d.chip_changed.contains("tests"))
+    {
+        let why = if d.deliverables_changed {
+            "definition of done changed"
+        } else {
+            "checks the new work"
+        };
         system.insert("Testwright".into(), why.into());
         system.insert("Reviewer".into(), why.into());
     }
@@ -263,7 +297,9 @@ pub fn refire_plan(d: &BlueprintDiff, new: &Blueprint) -> RefirePlan {
         // Delivery agents re-deliver against the new definition of done.
         for a in &new.agents {
             if a.is_delivery() {
-                marked.entry(a.name.clone()).or_insert_with(|| "definition of done changed".into());
+                marked
+                    .entry(a.name.clone())
+                    .or_insert_with(|| "definition of done changed".into());
             }
         }
     }
@@ -290,8 +326,24 @@ pub fn refire_plan(d: &BlueprintDiff, new: &Blueprint) -> RefirePlan {
     let mut reasons = marked;
     reasons.extend(system);
     let mut order = super::validate::topo_order(new).unwrap_or_default();
-    order.extend(["Logwright", "Firewright", "Testwright", "Reviewer", "Operator"].map(String::from));
-    RefirePlan { refire, cached, fresh, system_refire, reasons, order }
+    order.extend(
+        [
+            "Logwright",
+            "Firewright",
+            "Testwright",
+            "Reviewer",
+            "Operator",
+        ]
+        .map(String::from),
+    );
+    RefirePlan {
+        refire,
+        cached,
+        fresh,
+        system_refire,
+        reasons,
+        order,
+    }
 }
 
 #[cfg(test)]
@@ -338,7 +390,10 @@ deliverable kind=\"email\" { check \"c\" }";
         let d = diff(&old, &new);
         assert!(d.guardrails_changed);
         let plan = refire_plan(&d, &new);
-        assert!(plan.refire.is_empty(), "guardrails must never invalidate work");
+        assert!(
+            plan.refire.is_empty(),
+            "guardrails must never invalidate work"
+        );
         assert!(plan.system_refire.is_empty());
         assert_eq!(plan.cached.len(), 3);
     }
@@ -374,7 +429,13 @@ deliverable kind=\"email\" { check \"c\" }";
         // Regression: v0.1 refired every agent touching ANY edge.
         let old = hn();
         let mut new = old.clone();
-        new.edges.push(Edge { from: "Fetcher".into(), to: "Mailer".into() });
+        new.edges.push(Edge {
+            from: "Fetcher".into(),
+            to: "Mailer".into(),
+            out: None,
+            input: None,
+            schema: None,
+        });
         let plan = refire_plan(&diff(&old, &new), &new);
         assert_eq!(plan.refire, names(&["Mailer"]));
         assert_eq!(plan.cached, names(&["Fetcher", "Summarizer"]));
@@ -409,7 +470,10 @@ edge from=\"Fetcher\" to=\"Summarizer\"\ndeliverable kind=\"k\" { check \"c\" }"
         assert_eq!(plan.fresh, names(&["Fetcher"]));
         assert_eq!(plan.cached, names(&["Other"]));
         let s = plan.sentence();
-        assert!(s.contains("Other is cached") && s.contains("Fetcher is fresh every run"), "{s}");
+        assert!(
+            s.contains("Other is cached") && s.contains("Fetcher is fresh every run"),
+            "{s}"
+        );
     }
 
     #[test]
@@ -424,9 +488,15 @@ deliverable kind=\"email\" { check \"c\" }";
         let bp = parse::blueprint(src).unwrap();
         let never = never_cached(&bp);
         assert!(never.contains_key("Fetcher"));
-        assert!(never.contains_key("Summarizer"), "downstream of fresh data is fresh");
+        assert!(
+            never.contains_key("Summarizer"),
+            "downstream of fresh data is fresh"
+        );
         assert!(never.contains_key("Mailer"));
-        assert!(!never.contains_key("Archiver"), "independent pure agent stays cacheable");
+        assert!(
+            !never.contains_key("Archiver"),
+            "independent pure agent stays cacheable"
+        );
     }
 
     #[test]
@@ -458,7 +528,8 @@ deliverable kind=\"email\" { check \"c\" }";
     fn removing_a_middle_edge_refires_its_former_target() {
         let old = hn();
         let mut new = old.clone();
-        new.edges.retain(|e| !(e.from == "Summarizer" && e.to == "Mailer"));
+        new.edges
+            .retain(|e| !(e.from == "Summarizer" && e.to == "Mailer"));
         let plan = refire_plan(&diff(&old, &new), &new);
         assert_eq!(plan.refire, names(&["Mailer"]));
     }

@@ -278,6 +278,18 @@ pub trait RenderObject: Any + Debug + 'static {
         false
     }
 
+    /// Whether Tab (and [`FrameDriver::focus_next`](crate::FrameDriver::focus_next))
+    /// passes over this object even though a press can focus it.
+    ///
+    /// Selectable read-only text is the case: a click puts the keyboard
+    /// there so Copy works, but it is not a control, and a window that hands
+    /// its first focus to a paragraph instead of the text box below it has
+    /// put the user's typing somewhere it cannot go. Browsers draw the same
+    /// line. Defaults to `false`.
+    fn skips_traversal(&self) -> bool {
+        false
+    }
+
     /// Whether focus is confined to this object's subtree while it is mounted.
     ///
     /// Declared by the render object rather than pushed and popped imperatively,

@@ -77,7 +77,11 @@ impl RunOutput {
             (false, Some(c)) => format!("exit code {c}"),
             (false, None) => "killed by a signal".to_string(),
         };
-        let trunc = if self.truncated { "[... earlier output truncated ...]\n" } else { "" };
+        let trunc = if self.truncated {
+            "[... earlier output truncated ...]\n"
+        } else {
+            ""
+        };
         format!("{status}\n{trunc}{}", self.output)
     }
 }
@@ -93,11 +97,17 @@ pub fn capabilities() -> Result<String, String> {
         if abi <= 0 {
             return Err("Landlock is not available (kernel 5.13+ with Landlock enabled is required); shell, git and run-tests will refuse".into());
         }
-        Ok(format!("Landlock ABI {abi}{}", if abi >= 4 { ", network rules" } else { "" }))
+        Ok(format!(
+            "Landlock ABI {abi}{}",
+            if abi >= 4 { ", network rules" } else { "" }
+        ))
     }
     #[cfg(not(target_os = "linux"))]
     {
-        Err("the process sandbox is Linux-only in v0.2; shell, git and run-tests will refuse".into())
+        Err(
+            "the process sandbox is Linux-only in v0.2; shell, git and run-tests will refuse"
+                .into(),
+        )
     }
 }
 
@@ -179,7 +189,14 @@ mod linux {
     /// Landlock ABI version, or <= 0 if unavailable.
     pub fn landlock_abi() -> c_long {
         // SAFETY: the documented version query: null attr, size 0.
-        unsafe { syscall(SYS_LANDLOCK_CREATE_RULESET, std::ptr::null::<c_void>(), 0usize, LANDLOCK_CREATE_RULESET_VERSION) }
+        unsafe {
+            syscall(
+                SYS_LANDLOCK_CREATE_RULESET,
+                std::ptr::null::<c_void>(),
+                0usize,
+                LANDLOCK_CREATE_RULESET_VERSION,
+            )
+        }
     }
 
     fn all_fs_rights(abi: c_long) -> u64 {
@@ -208,10 +225,23 @@ mod linux {
     static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
 
     fn read_only_roots(policy: &Policy) -> Vec<PathBuf> {
-        let mut dirs: Vec<PathBuf> = ["/usr", "/bin", "/sbin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/nix", "/snap", "/proc", "/sys/devices/system/cpu"]
-            .iter()
-            .map(PathBuf::from)
-            .collect();
+        let mut dirs: Vec<PathBuf> = [
+            "/usr",
+            "/bin",
+            "/sbin",
+            "/lib",
+            "/lib64",
+            "/lib32",
+            "/etc",
+            "/opt",
+            "/nix",
+            "/snap",
+            "/proc",
+            "/sys/devices/system/cpu",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
         if let Ok(path) = std::env::var("PATH") {
             for d in path.split(':').filter(|d| d.starts_with('/')) {
                 let d = PathBuf::from(d);
@@ -234,12 +264,22 @@ mod linux {
     pub fn run(program: &str, args: &[&str], policy: &Policy) -> Result<RunOutput, String> {
         let abi = landlock_abi();
         if abi <= 0 {
-            return Err("Landlock is not available on this kernel; refusing to run commands unsandboxed".into());
+            return Err(
+                "Landlock is not available on this kernel; refusing to run commands unsandboxed"
+                    .into(),
+            );
         }
-        let workdir = policy.workdir.canonicalize().map_err(|e| format!("workdir: {e}"))?;
+        let workdir = policy
+            .workdir
+            .canonicalize()
+            .map_err(|e| format!("workdir: {e}"))?;
 
         // A private scratch HOME/TMPDIR, outside the project, deleted after.
-        let scratch = std::env::temp_dir().join(format!("wright-sbx-{}-{}", std::process::id(), SCRATCH_SEQ.fetch_add(1, Ordering::Relaxed)));
+        let scratch = std::env::temp_dir().join(format!(
+            "wright-sbx-{}-{}",
+            std::process::id(),
+            SCRATCH_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(scratch.join("tmp")).map_err(|e| format!("scratch: {e}"))?;
         let _cleanup = Cleanup(scratch.clone());
 
@@ -256,20 +296,32 @@ mod linux {
         if let Some(fd) = open_path(Path::new("/dev")) {
             rules.push((READ_FILE | WRITE_FILE | READ_DIR, fd));
         }
-        for d in std::iter::once(&workdir).chain(policy.extra_rw.iter()).chain(std::iter::once(&scratch)) {
+        for d in std::iter::once(&workdir)
+            .chain(policy.extra_rw.iter())
+            .chain(std::iter::once(&scratch))
+        {
             match open_path(d) {
                 Some(fd) => rules.push((fs_all, fd)),
                 None => return Err(format!("cannot open {} for the sandbox", d.display())),
             }
         }
-        let rule_specs: Vec<(u64, c_int)> = rules.iter().map(|(a, fd)| (*a, fd.as_raw_fd())).collect();
+        let rule_specs: Vec<(u64, c_int)> =
+            rules.iter().map(|(a, fd)| (*a, fd.as_raw_fd())).collect();
         let allow_network = policy.allow_network;
-        let handled_net = if abi >= 4 && !allow_network { NET_BIND_TCP | NET_CONNECT_TCP } else { 0 };
+        let handled_net = if abi >= 4 && !allow_network {
+            NET_BIND_TCP | NET_CONNECT_TCP
+        } else {
+            0
+        };
         if !allow_network && abi < 4 {
             // We will rely on the network namespace alone; check it works
             // here, in the parent, so a failure is a clean refusal.
             // (Probed in a throwaway child via the same unshare call.)
-            let ok = Command::new("/bin/true").pre_exec_unshare_probe().status().map(|s| s.success()).unwrap_or(false);
+            let ok = Command::new("/bin/true")
+                .pre_exec_unshare_probe()
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
             if !ok {
                 return Err("cannot isolate the network on this kernel (no Landlock net rules, no network namespaces); refusing to run a command without network permission".into());
             }
@@ -281,7 +333,10 @@ mod linux {
         cmd.args(args)
             .current_dir(&workdir)
             .env_clear()
-            .env("PATH", std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".into()))
+            .env(
+                "PATH",
+                std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".into()),
+            )
             .env("HOME", &scratch)
             .env("TMPDIR", scratch.join("tmp"))
             .env("LANG", "C.UTF-8")
@@ -303,25 +358,51 @@ mod linux {
         unsafe {
             cmd.pre_exec(move || {
                 setpgid(0, 0);
-                let fsize = RLimit { cur: 512 << 20, max: 512 << 20 };
+                let fsize = RLimit {
+                    cur: 512 << 20,
+                    max: 512 << 20,
+                };
                 setrlimit(RLIMIT_FSIZE, &fsize);
                 let core = RLimit { cur: 0, max: 0 };
                 setrlimit(RLIMIT_CORE, &core);
-                if !allow_network && unshare(CLONE_NEWUSER | CLONE_NEWNET) != 0 && handled_net == 0 {
+                if !allow_network && unshare(CLONE_NEWUSER | CLONE_NEWNET) != 0 && handled_net == 0
+                {
                     return Err(std::io::Error::other("network isolation failed"));
                 }
                 if prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
-                let attr = RulesetAttr { handled_access_fs: fs_all, handled_access_net: handled_net };
-                let size = if abi >= 4 { std::mem::size_of::<RulesetAttr>() } else { 8 };
-                let ruleset = syscall(SYS_LANDLOCK_CREATE_RULESET, &attr as *const RulesetAttr, size, 0u32) as c_int;
+                let attr = RulesetAttr {
+                    handled_access_fs: fs_all,
+                    handled_access_net: handled_net,
+                };
+                let size = if abi >= 4 {
+                    std::mem::size_of::<RulesetAttr>()
+                } else {
+                    8
+                };
+                let ruleset = syscall(
+                    SYS_LANDLOCK_CREATE_RULESET,
+                    &attr as *const RulesetAttr,
+                    size,
+                    0u32,
+                ) as c_int;
                 if ruleset < 0 {
                     return Err(std::io::Error::last_os_error());
                 }
                 for (access, fd) in rule_specs.iter() {
-                    let rule = PathBeneath { allowed_access: *access & fs_all, parent_fd: *fd };
-                    if syscall(SYS_LANDLOCK_ADD_RULE, ruleset, LANDLOCK_RULE_PATH_BENEATH, &rule as *const PathBeneath, 0u32) != 0 {
+                    let rule = PathBeneath {
+                        allowed_access: *access & fs_all,
+                        parent_fd: *fd,
+                    };
+                    if syscall(
+                        SYS_LANDLOCK_ADD_RULE,
+                        ruleset,
+                        LANDLOCK_RULE_PATH_BENEATH,
+                        &rule as *const PathBeneath,
+                        0u32,
+                    ) != 0
+                    {
                         // A directory whose type does not support every
                         // right (rare) is skipped rather than fatal.
                         continue;
@@ -335,7 +416,9 @@ mod linux {
             });
         }
 
-        let mut child = cmd.spawn().map_err(|e| format!("could not start '{program}': {e}"))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("could not start '{program}': {e}"))?;
         drop(cmd); // closes our copies of the pipe's write ends
         drop(rules);
         let pid = child.id() as c_int;
@@ -368,6 +451,13 @@ mod linux {
         let status = loop {
             match child.try_wait() {
                 Ok(Some(s)) => break s,
+                Ok(None) if wright_runtime::killswitch::is_stopped() => {
+                    // The kill switch: the command goes now, not at its clock.
+                    timed_out = true;
+                    // SAFETY: plain kill(2) of our own child's process group.
+                    unsafe { kill(-pid, SIGKILL) };
+                    break child.wait().map_err(|e| e.to_string())?;
+                }
                 Ok(None) if Instant::now() >= deadline => {
                     timed_out = true;
                     // SAFETY: plain kill(2) of our own child's process group.
@@ -383,7 +473,12 @@ mod linux {
         unsafe { kill(-pid, SIGKILL) };
         let (output, truncated) = reader_thread.join().unwrap_or_default();
         let _ = status.signal();
-        Ok(RunOutput { code: status.code(), output, timed_out, truncated })
+        Ok(RunOutput {
+            code: status.code(),
+            output,
+            timed_out,
+            truncated,
+        })
     }
 
     struct Cleanup(PathBuf);
@@ -439,7 +534,10 @@ mod tests {
     fn writes_outside_the_project_are_blocked() {
         let p = project("outside");
         let victim = std::env::temp_dir().join(format!("wright-victim-{}", std::process::id()));
-        let out = sh(&format!("echo pwned > {}", victim.display()), &Policy::new(&p));
+        let out = sh(
+            &format!("echo pwned > {}", victim.display()),
+            &Policy::new(&p),
+        );
         assert!(!out.success());
         assert!(!victim.exists(), "the sandbox let a write escape");
     }
@@ -447,10 +545,14 @@ mod tests {
     #[test]
     fn home_secrets_are_invisible() {
         let p = project("home");
-        let secret_dir = std::env::temp_dir().join(format!("wright-fake-home-{}", std::process::id()));
+        let secret_dir =
+            std::env::temp_dir().join(format!("wright-fake-home-{}", std::process::id()));
         std::fs::create_dir_all(&secret_dir).unwrap();
         std::fs::write(secret_dir.join("id_rsa"), "PRIVATE").unwrap();
-        let out = sh(&format!("cat {}/id_rsa", secret_dir.display()), &Policy::new(&p));
+        let out = sh(
+            &format!("cat {}/id_rsa", secret_dir.display()),
+            &Policy::new(&p),
+        );
         assert!(!out.output.contains("PRIVATE"), "{}", out.report());
     }
 

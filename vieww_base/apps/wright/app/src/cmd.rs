@@ -31,14 +31,35 @@ fn usd(micro: u64) -> String {
 fn split(args: &[String]) -> (Vec<&str>, Vec<&str>) {
     let mut pos = Vec::new();
     let mut flags = Vec::new();
-    for a in args {
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
         if a.starts_with("--") {
-            flags.push(a.as_str());
+            flags.push(a);
+            // A flag that takes a value takes the next word with it, so
+            // `--key <hex>` never reads as a project directory.
+            if VALUE_FLAGS.contains(&a) {
+                i += 1;
+            }
         } else {
-            pos.push(a.as_str());
+            pos.push(a);
         }
+        i += 1;
     }
     (pos, flags)
+}
+
+/// Flags followed by a value (`--key <hex>`): `split` keeps the value out
+/// of the positional arguments. Read the value with [`flag_values`].
+const VALUE_FLAGS: [&str; 8] = ["--key", "--trust", "--runs", "--at", "--port", "--out", "--bin", "--name"];
+
+/// Every value given for a repeatable flag (`--key a --key b`).
+fn flag_values<'a>(args: &'a [String], name: &str) -> Vec<&'a str> {
+    args.iter()
+        .enumerate()
+        .filter(|(_, a)| a.as_str() == name)
+        .filter_map(|(i, _)| args.get(i + 1).map(String::as_str))
+        .collect()
 }
 
 fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
@@ -200,16 +221,409 @@ fn report(summary: &wright_engine::RunSummary) {
     println!("  receipt: {}", summary.receipt.display());
 }
 
+// ── trust: verify, explain, handoff, bench, recipes, mcp-hash ─────
+
+/// `wright verify [run|receipt|dir]` — five checks, one verdict (ADR-025).
+pub fn verify(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    // Keys the person checked with the signer themselves, for this call.
+    let pins: Vec<String> = flag_values(args, "--key").into_iter().map(String::from).collect();
+    let target = pos.first().copied().unwrap_or(".");
+    // A standard credential (receipt.vc.json)? Its proof and its issuer.
+    if target.ends_with(".vc.json") && Path::new(target).is_file() {
+        return match wright_engine::credential::verify_file(Path::new(target), &pins) {
+            Ok(c) => {
+                println!("[OK] proof: eddsa-jcs-2022 over the canonical credential verifies");
+                println!("[OK] issuer: {} — {}", c.issuer, c.who);
+                println!("\nverified: run {} as its issuer signed it. (For the artifacts and the log, run `wright verify {}` on the project.)", c.run, c.run);
+                0
+            }
+            Err(e) => {
+                println!("[FAILED] {e}");
+                println!("\nNOT verified.");
+                1
+            }
+        };
+    }
+    // A receipt file? Verify it in place.
+    if target.ends_with(".json") && Path::new(target).is_file() {
+        let receipt = PathBuf::from(target);
+        // Receipts live in Wright's store, outside the project: verifying
+        // one needs the project dir as the second argument.
+        let project = pos.get(1).copied().unwrap_or(".");
+        let v = wright_engine::verify::receipt_file_pinned(&PathBuf::from(project), &receipt, &pins);
+        print!("{}", v.report());
+        return if v.ok { 0 } else { 1 };
+    }
+    // A run number? Verify that run of this (or the named) project.
+    if let Ok(run) = target.parse::<u64>() {
+        let dir = project_dir(pos.get(1).copied());
+        match wright_engine::verify::project_run_pinned(&dir, Some(run), &pins) {
+            Ok(v) => {
+                print!("{}", v.report());
+                if v.ok { 0 } else { 1 }
+            }
+            Err(e) => fail(e),
+        }
+    } else {
+        let dir = project_dir(Some(target));
+        match wright_engine::verify::project_run_pinned(&dir, None, &pins) {
+            Ok(v) => {
+                print!("{}", v.report());
+                if v.ok { 0 } else { 1 }
+            }
+            Err(e) => fail(e),
+        }
+    }
+}
+
+/// `wright explain [run|dir]` — the one-screen story of a run.
+pub fn explain(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let target = pos.first().copied().unwrap_or(".");
+    if let Ok(run) = target.parse::<u64>() {
+        let dir = project_dir(pos.get(1).copied());
+        let store = match Store::open(&dir) {
+            Ok(s) => s,
+            Err(e) => return fail(e),
+        };
+        match wright_engine::explain::story_of_run(&store, run) {
+            Ok(text) => {
+                print!("{text}");
+                0
+            }
+            Err(e) => fail(e),
+        }
+    } else {
+        let dir = project_dir(Some(target));
+        match wright_engine::explain::latest(&dir) {
+            Ok(text) => {
+                print!("{text}");
+                0
+            }
+            Err(e) => fail(e),
+        }
+    }
+}
+
+/// `wright handoff [dir]` — the project as a PR folder for a human.
+pub fn handoff(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let dir = project_dir(pos.first().copied());
+    match wright_engine::handoff::handoff(&dir, None) {
+        Ok(out) => {
+            println!("handed off to {}", out.display());
+            println!("HANDOFF.md says what this is; receipts/ proves what ran; project.patch is the work.");
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
+/// `wright bench [dir] [--runs N]` — time to a checked outcome (ADR-030).
+pub fn bench(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let dir = project_dir(pos.first().copied());
+    let runs: u32 = flag_value(args, "--runs").and_then(|v| v.parse().ok()).unwrap_or(3);
+    println!("firing {runs} time(s) and measuring (each run's receipt stays, verify it):\n");
+    match wright_engine::bench::run(&dir, runs) {
+        Ok(r) => {
+            print!("{}", r.table());
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
+/// `wright recipe list|install|sign|verify` — the curated, signed gallery (ADR-028).
+pub fn recipe(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let Some(cmd) = pos.first().copied() else {
+        println!("usage: wright recipe list | install <file.recipe.kdl> [target-dir] [--trust <publisher key>] | sign <file.recipe.kdl> | verify <file.recipe.kdl> [--trust <publisher key>]");
+        return 2;
+    };
+    let pins: Vec<String> = flag_values(args, "--trust").into_iter().map(String::from).collect();
+    match cmd {
+        "list" => {
+            let (listed, problems) = wright_engine::recipe::list();
+            if listed.is_empty() {
+                println!("no recipes in the gallery (looked in ./recipes and {}).", wright_home().join("recipes").display());
+            }
+            for l in &listed {
+                let signed = if l.recipe.signature.is_some() { "signed" } else { "UNSIGNED" };
+                println!("[{signed}] {} — {} (v{}) by {}", l.recipe.id, l.recipe.description, l.recipe.version, l.recipe.publisher);
+                println!("        {}", l.path.display());
+            }
+            for p in &problems {
+                println!("? {p}");
+            }
+            0
+        }
+        "verify" => {
+            let Some(file) = pos.get(1).copied() else {
+                return fail("usage: wright recipe verify <file.recipe.kdl>");
+            };
+            let r = match std::fs::read_to_string(file).map_err(|e| e.to_string()).and_then(|t| wright_core::recipe::Recipe::parse(&t)) {
+                Ok(r) => r,
+                Err(e) => return fail(e),
+            };
+            match r.verify().and_then(|_| wright_engine::recipe::publisher_trusted(&r, &pins)) {
+                Ok(who) => {
+                    println!("OK: recipe '{}' verifies: its signature covers its exact meaning, and the key is {who}.", r.id);
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        "install" => {
+            let Some(file) = pos.get(1).copied() else {
+                return fail("usage: wright recipe install <file.recipe.kdl> [target-dir]");
+            };
+            let target = PathBuf::from(pos.get(2).copied().unwrap_or("."));
+            match wright_engine::recipe::install(&PathBuf::from(file), &target, &pins) {
+                Ok(dir) => {
+                    println!("installed '{}' into {}", file, dir.display());
+                    println!("run it: wright run {}", dir.display());
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        "sign" => {
+            let Some(file) = pos.get(1).copied() else {
+                return fail("usage: wright recipe sign <file.recipe.kdl>");
+            };
+            match wright_engine::recipe::sign(&PathBuf::from(file)) {
+                Ok(()) => {
+                    println!("signed {} with this machine's publishing key.", file);
+                    if let Ok(k) = wright_runtime::signing::SigningKey::resolve() {
+                        println!("people who install it pin this public key: {}", k.public_hex());
+                        println!("  wright trust add \"<your name>\" {}", k.public_hex());
+                    }
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        other => fail(format!("unknown recipe command '{other}' (list | install | sign | verify)")),
+    }
+}
+
+/// `wright trust list | add <name> <key> | remove <key> | me` — the
+/// signing keys this machine accepts on receipts and recipes.
+pub fn trust(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let edit = |change: &dyn Fn(&mut Config) -> Result<(), String>| -> i32 {
+        match Config::load_file().and_then(|mut c| {
+            change(&mut c)?;
+            c.save_file()
+        }) {
+            Ok(path) => {
+                println!("saved {}", path.display());
+                0
+            }
+            Err(e) => fail(e),
+        }
+    };
+    match pos.first().copied() {
+        None | Some("list") => {
+            let cfg = Config::load().unwrap_or_else(|_| Config::builtin());
+            if cfg.trusted.is_empty() {
+                println!("no keys pinned. Receipts and recipes verify only against this machine's own key until you pin one:");
+                println!("  wright trust add \"<who>\" <64 hex characters>");
+            }
+            for t in &cfg.trusted {
+                println!("{}  {}", t.key, t.name);
+            }
+            if let Some(k) = wright_runtime::signing::SigningKey::existing() {
+                println!("{}  this machine ({})", k.public_hex(), k.provenance_str());
+            }
+            0
+        }
+        Some("me") => match wright_runtime::signing::SigningKey::resolve() {
+            Ok(k) => {
+                println!("{}", k.public_hex());
+                if let Some(pk) = wright_runtime::signing::normalize_key(&k.public_hex()).and_then(|h| {
+                    let mut b = [0u8; 32];
+                    for (i, x) in b.iter_mut().enumerate() {
+                        *x = u8::from_str_radix(&h[i * 2..i * 2 + 2], 16).ok()?;
+                    }
+                    Some(b)
+                }) {
+                    println!("{}", wright_core::jcs::did_key(&pk));
+                }
+                0
+            }
+            Err(e) => fail(e),
+        },
+        Some("add") => {
+            let (Some(name), Some(key)) = (pos.get(1).copied(), pos.get(2).copied()) else {
+                return fail("usage: wright trust add <name> <64 hex characters>");
+            };
+            let Some(key) = wright_runtime::signing::normalize_key(key) else {
+                return fail("a key is 64 hex characters or a did:key (an Ed25519 public key)");
+            };
+            let name = name.to_string();
+            edit(&move |c: &mut Config| {
+                c.trusted.retain(|t| t.key != key);
+                c.trusted.push(wright_runtime::config::TrustedKey { name: name.clone(), key: key.clone() });
+                Ok(())
+            })
+        }
+        Some("remove") => {
+            let Some(key) = pos.get(1).copied() else {
+                return fail("usage: wright trust remove <key or name>");
+            };
+            let k = key.to_ascii_lowercase();
+            edit(&move |c: &mut Config| {
+                let before = c.trusted.len();
+                c.trusted.retain(|t| t.key != k && t.name != key);
+                if c.trusted.len() == before {
+                    return Err(format!("no pinned key matches '{key}'"));
+                }
+                Ok(())
+            })
+        }
+        Some(other) => fail(format!("unknown trust command '{other}' (list | add | remove | me)")),
+    }
+}
+
+/// `wright mcp install <name> npm:<pkg>@<ver> | pypi:<pkg>==<ver> [--bin x]
+/// [--allow-scripts]` and `wright mcp list` — servers frozen at an exact
+/// version and pinned whole (ADR-035).
+pub fn mcp(args: &[String]) -> i32 {
+    let (pos, flags) = split(args);
+    match pos.first().copied() {
+        Some("install") => {
+            let (Some(name), Some(spec)) = (pos.get(1).copied(), pos.get(2).copied()) else {
+                return fail("usage: wright mcp install <name> npm:<package>@<version> | pypi:<package>==<version> [--bin <program>] [--allow-scripts]");
+            };
+            let source = match wright_tools::mcp_install::Source::parse(spec) {
+                Ok(s) => s,
+                Err(e) => return fail(e),
+            };
+            let bin = flag_value(args, "--bin");
+            println!("installing {spec} into {} ...", wright_home().join("mcp").join(name).display());
+            let installed = match wright_tools::mcp_install::install(name, &source, bin, flags.contains(&"--allow-scripts"), &wright_home().join("mcp")) {
+                Ok(i) => i,
+                Err(e) => return fail(e),
+            };
+            let entry = wright_runtime::config::McpEntry {
+                name: name.to_string(),
+                command: installed.command.display().to_string(),
+                args: Vec::new(),
+                hash: installed.hash.clone(),
+                timeout_secs: 60,
+                tree: Some(installed.tree.display().to_string()),
+            };
+            match Config::load_file().and_then(|mut c| {
+                c.mcp_servers.retain(|m| m.name != entry.name);
+                c.mcp_servers.push(entry);
+                c.save_file()
+            }) {
+                Ok(path) => {
+                    println!("pinned {name} at {}", installed.hash);
+                    println!("saved to {}. A card uses it with: mcp server=\"{name}\" allow=\"<tool>,<tool>\"", path.display());
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        Some("list") | None => {
+            let cfg = Config::load().unwrap_or_else(|_| Config::builtin());
+            if cfg.mcp_servers.is_empty() {
+                println!("no MCP servers. Add one: wright mcp install <name> npm:<package>@<version>");
+            }
+            for m in &cfg.mcp_servers {
+                let state = match &m.tree {
+                    Some(t) => match wright_tools::mcp::tree_pin(Path::new(t)) {
+                        Ok(p) if p == m.hash => "pinned, intact".to_string(),
+                        Ok(_) => "CHANGED since it was pinned — calls are refused".to_string(),
+                        Err(e) => format!("cannot check: {e}"),
+                    },
+                    None => match wright_tools::mcp::pin_for_command(&m.command) {
+                        Ok(p) if p == m.hash => "program pinned, intact".to_string(),
+                        Ok(_) => "CHANGED since it was pinned — calls are refused".to_string(),
+                        Err(e) => format!("cannot check: {e}"),
+                    },
+                };
+                println!("{}  {}  ({state})", m.name, m.command);
+            }
+            0
+        }
+        Some(other) => fail(format!("unknown mcp command '{other}' (install | list)")),
+    }
+}
+
+/// `wright mcp-hash <command>` — the pin for config.kdl (ADR-029).
+pub fn mcp_hash(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let Some(command) = pos.first().copied() else {
+        return fail("usage: wright mcp-hash <the program config.kdl runs | an installed server folder>");
+    };
+    if Path::new(command).is_dir() {
+        return match wright_tools::mcp::tree_pin(Path::new(command)) {
+            Ok(pin) => {
+                println!("{pin}");
+                0
+            }
+            Err(e) => fail(e),
+        };
+    }
+    match wright_tools::mcp::pin_for_command(command) {
+        Ok(pin) => {
+            println!("{pin}");
+            println!("paste it into config.kdl as hash=\"{pin}\" on the mcp line");
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
 /// `wright run [dir] [--yes] [--headless] [--no-cache] [--quiet]`
+/// Fire the project: plan, cost sentence, choice, firing, report.
 pub fn run(args: &[String]) -> i32 {
     let (pos, flags) = split(args);
     let dir = project_dir(pos.first().copied());
     let quiet = flags.contains(&"--quiet");
+    let yes = flags.contains(&"--yes") || flags.contains(&"--headless");
+
+    // The spending promise (the memo's item 3): the estimate BEFORE the
+    // run, as a plain sentence; the built-in model offered as a choice,
+    // not hidden in a config file.
+    let mut forced_config = None;
+    match (load_for_cost(&dir), quiet) {
+        (Ok((bp, graph, cfg)), false) => {
+            let plan = wright_engine::cost::estimate(&bp, &graph, &cfg);
+            println!("{}\n", plan.sentence);
+            if !yes && plan.builtin_possible && plan.est_micro_usd > 0 && std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+                for (key, label) in wright_engine::cost::choices(&plan) {
+                    println!("  [{key}] {label}");
+                }
+                print!("choice (1): ");
+                let _ = std::io::Write::flush(&mut std::io::stdout());
+                let mut line = String::new();
+                let _ = std::io::BufRead::read_line(&mut std::io::stdin().lock(), &mut line);
+                if line.trim() == "2" {
+                    // Run everything on the built-in model: drop every
+                    // non-builtin provider, and the fallback does the rest.
+                    let mut builtin_only = cfg.clone();
+                    builtin_only.providers.retain(|p| matches!(p.kind, wright_runtime::config::ProviderKind::Builtin));
+                    forced_config = Some(builtin_only);
+                    println!("running on the built-in model: free, slower, nothing leaves this machine.\n");
+                }
+            }
+        }
+        (Err(e), false) => return fail(e),
+        _ => {}
+    }
+
     let mut opts = FireOptions {
         trigger: Trigger::Manual,
         approver: approver_for(&flags, &dir),
         no_cache: flags.contains(&"--no-cache"),
         allow_private_network: flags.contains(&"--allow-private-network"),
+        config: forced_config,
         ..FireOptions::default()
     };
     if !quiet {
@@ -222,6 +636,13 @@ pub fn run(args: &[String]) -> i32 {
         }
         Err(e) => fail(e),
     }
+}
+
+/// Read+validate the blueprint and compile it, for the cost estimate.
+fn load_for_cost(dir: &Path) -> Result<(Blueprint, wright_core::compiler::TaskGraph, Config), String> {
+    let bp = wright_engine::load_blueprint(dir)?;
+    let graph = compiler::compile(&bp)?;
+    Ok((bp, graph, Config::load()?))
 }
 
 /// `wright resume <run> [dir] [--yes]`
@@ -476,7 +897,8 @@ pub fn schedule(args: &[String]) -> i32 {
                 let next = wright_engine::scheduler::next_fire(&e.cron, &e.tz, (wright_core::events::now_ms() / 1000) as i64)
                     .map(|t| wright_engine::scheduler::local_string(t, &e.tz))
                     .unwrap_or_else(|err| err);
-                println!("{}  [{} {}]  next: {next}", e.project, e.cron, e.tz);
+                let state = wright_engine::scheduler::hold_reason(&e).unwrap_or_else(|| "active".into());
+                println!("{}  [{} {}]  next: {next}  ({state})", e.project, e.cron, e.tz);
             }
             0
         }
@@ -492,6 +914,48 @@ pub fn schedule(args: &[String]) -> i32 {
                 Err(e) => fail(e),
             }
         }
+        "pause" | "resume" => {
+            let dir = project_dir(pos.get(1).copied());
+            let dir = dir.canonicalize().unwrap_or(dir);
+            let state = if pos[0] == "pause" { wright_engine::scheduler::State::Paused } else { wright_engine::scheduler::State::Active };
+            if state == wright_engine::scheduler::State::Active {
+                if let Err(why) = wright_engine::unattended::current(&dir) {
+                    return fail(format!("{why}. Give the go-ahead with `wright schedule approve {}`.", dir.display()));
+                }
+            }
+            match wright_engine::scheduler::set_state(&dir, state) {
+                Ok(true) => {
+                    println!("{} {}.", if pos[0] == "pause" { "Paused" } else { "Resumed" }, dir.display());
+                    0
+                }
+                Ok(false) => fail(format!("{} has no schedule", dir.display())),
+                Err(e) => fail(e),
+            }
+        }
+        "approve" => {
+            let dir = project_dir(pos.get(1).copied());
+            let dir = dir.canonicalize().unwrap_or(dir);
+            match wright_engine::unattended::approve(&dir, "cli") {
+                Ok(a) => {
+                    println!("Approved to run unattended: {}.", dir.display());
+                    println!("{}", wright_engine::unattended::describe(&a));
+                    println!("If the plan changes, it waits for your go-ahead again.");
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        "revoke" => {
+            let dir = project_dir(pos.get(1).copied());
+            let dir = dir.canonicalize().unwrap_or(dir);
+            match wright_engine::unattended::revoke(&dir) {
+                Ok(_) => {
+                    println!("{} will not run unattended until you approve it again.", dir.display());
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
         "install" => {
             let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("wright"));
             match wright_engine::scheduler::install_unit(&exe) {
@@ -503,8 +967,268 @@ pub fn schedule(args: &[String]) -> i32 {
                 Err(e) => fail(e),
             }
         }
-        other => fail(format!("unknown schedule command '{other}' (list | remove | install)")),
+        other => fail(format!("unknown schedule command '{other}' (list | approve | revoke | pause | resume | remove | install)")),
     }
+}
+
+/// `wright spend [dir] [--csv]` — cost per run and agent; `--csv` prints
+/// rows a finance team can reconcile against the provider's invoice.
+pub fn spend(args: &[String]) -> i32 {
+    let (pos, flags) = split(args);
+    let dir = project_dir(pos.first().copied());
+    let store = match Store::open(&dir) {
+        Ok(s) => s,
+        Err(e) => return fail(e),
+    };
+    let mut rows = Vec::new();
+    for run in store.runs() {
+        let Ok(log) = store.read_events(run) else { continue };
+        let finished = log.events().last().map(|e| e.at_ms).unwrap_or(0);
+        rows.push((run, finished, wright_engine::spend::attribute(log.events())));
+    }
+    if flags.contains(&"--csv") {
+        print!("{}", wright_engine::spend::csv(&rows));
+        return 0;
+    }
+    if rows.is_empty() {
+        println!("no runs yet");
+    }
+    let mut total = 0u64;
+    for (run, _, s) in &rows {
+        total += s.total_micro_usd;
+        println!("run {run}: ${:.4}", s.total_micro_usd as f64 / 1e6);
+        for l in s.lines() {
+            println!("  {l}");
+        }
+    }
+    println!("\nall runs: ${:.4}", total as f64 / 1e6);
+    0
+}
+
+/// `wright receipt vc [run] [dir] [--out file]` — the run's receipt as a
+/// W3C Verifiable Credential (eddsa-jcs-2022, did:key). Runs from before
+/// credentials existed are issued now, from their signed receipt, but only
+/// with the same key that signed it.
+pub fn receipt(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    if pos.first().copied() != Some("vc") {
+        return fail("usage: wright receipt vc [run] [dir] [--out <file>]");
+    }
+    let (run, dir) = match pos.get(1).and_then(|r| r.parse::<u64>().ok()) {
+        Some(r) => (Some(r), project_dir(pos.get(2).copied())),
+        None => (None, project_dir(pos.get(1).copied())),
+    };
+    let store = match Store::open(&dir) {
+        Ok(s) => s,
+        Err(e) => return fail(e),
+    };
+    let Some(run) = run.or_else(|| store.runs().last().copied()) else {
+        return fail("this project has no runs yet");
+    };
+    let run_dir = store.run_dir(run);
+    let vc_path = run_dir.join("receipt.vc.json");
+    let text = match std::fs::read_to_string(&vc_path) {
+        Ok(t) => t,
+        Err(_) => {
+            let receipt = match std::fs::read_to_string(run_dir.join("receipt.json")).map_err(|e| e.to_string()).and_then(|t| wright_core::wire::json::parse(&t)) {
+                Ok(r) => r,
+                Err(e) => return fail(format!("run {run} has no readable receipt: {e}")),
+            };
+            let key = match wright_runtime::signing::SigningKey::resolve() {
+                Ok(k) => k,
+                Err(e) => return fail(e),
+            };
+            if receipt.get("signature").and_then(|s| s.str_of("public_key")) != Some(key.public_hex().as_str()) {
+                return fail(format!("run {run} was signed by another key; only its signer can issue its credential"));
+            }
+            if !wright_engine::verify::project_run(&dir, Some(run)).map(|v| v.ok).unwrap_or(false) {
+                return fail(format!("run {run}'s receipt does not verify; a credential for it would vouch for something false"));
+            }
+            match wright_engine::credential::issue(&receipt, &key) {
+                Ok(vc) => {
+                    let t = wright_core::wire::json::to_string(&vc);
+                    let _ = wright_runtime::store::write_atomic(&vc_path, t.as_bytes());
+                    t
+                }
+                Err(e) => return fail(e),
+            }
+        }
+    };
+    match flag_value(args, "--out") {
+        Some(out) => match std::fs::write(out, &text) {
+            Ok(()) => {
+                println!("wrote {out} — anyone can check it with any eddsa-jcs-2022 verifier, or `wright verify {out}`");
+                0
+            }
+            Err(e) => fail(format!("{out}: {e}")),
+        },
+        None => {
+            println!("{text}");
+            0
+        }
+    }
+}
+
+/// A starter organization policy (unsigned) for `wright admin policy init`.
+const POLICY_TEMPLATE: &str = "policy \"Your organization\" version=1
+budget max-per-run=\"2.00\" max-per-day=\"10.00\"
+tools forbid=\"shell\"
+network allow=\"api.anthropic.com,*.your-company.com\"
+providers allow=\"anthropic,built-in\"
+workers allow=\"claude-code\"
+mcp allow=\"\"
+require tests=true unattended=\"admin\"
+";
+
+/// `wright admin ...` — the administrator's console: keys, the signed
+/// organization policy, approval of plans for unattended runs, and
+/// verification of every receipt on the machine.
+pub fn admin(args: &[String]) -> i32 {
+    let (pos, flags) = split(args);
+    let name = flag_value(args, "--name").unwrap_or("IT");
+    let one = |i: usize| pos.get(i).copied();
+    match (one(0), one(1)) {
+        (Some("keygen"), _) => match wright_runtime::signing::new_admin_key() {
+            Ok((seed, place)) => {
+                let pk = wright_core::ed25519::public_key(&seed);
+                let hex = wright_runtime::signing::to_hex(&pk);
+                println!("A new administrator key is in {place}.");
+                println!("Its public half goes in admins.kdl, in the policy folder ({}):", wright_runtime::policy::system_dir().display());
+                println!("  admin \"{name}\" key=\"{hex}\"");
+                println!("(as a did:key: {})", wright_core::jcs::did_key(&pk));
+                0
+            }
+            Err(e) => fail(e),
+        },
+        (Some("policy"), Some("init")) => {
+            let out = PathBuf::from(one(2).unwrap_or("policy.kdl"));
+            if out.exists() {
+                return fail(format!("{} already exists", out.display()));
+            }
+            match std::fs::write(&out, POLICY_TEMPLATE) {
+                Ok(()) => {
+                    println!("wrote {} — edit it, then `wright admin policy sign {} --name \"{name}\"`", out.display(), out.display());
+                    0
+                }
+                Err(e) => fail(e.to_string()),
+            }
+        }
+        (Some("policy"), Some("sign")) => {
+            let Some(file) = one(2) else { return fail("usage: wright admin policy sign <policy.kdl> --name \"<admin name>\"") };
+            let seed = match wright_runtime::signing::admin_key() {
+                Ok(s) => s,
+                Err(e) => return fail(e),
+            };
+            match std::fs::read_to_string(file).map_err(|e| e.to_string()).and_then(|t| wright_runtime::policy::sign(&t, &seed, name)) {
+                Ok(signed) => match std::fs::write(file, signed) {
+                    Ok(()) => {
+                        println!("signed {file} as {name}. Put it beside admins.kdl in {}.", wright_runtime::policy::system_dir().display());
+                        0
+                    }
+                    Err(e) => fail(e.to_string()),
+                },
+                Err(e) => fail(e),
+            }
+        }
+        (Some("policy"), Some("show")) | (Some("policy"), None) => match wright_runtime::policy::load() {
+            Ok(Some(p)) => {
+                println!("{}", p.source.display());
+                for l in p.sentences() {
+                    println!("  {l}");
+                }
+                0
+            }
+            Ok(None) => {
+                println!("No organization policy on this machine (looked in {}).", wright_runtime::policy::system_dir().display());
+                0
+            }
+            Err(e) => fail(e),
+        },
+        (Some("policy"), Some("check")) => {
+            let dir = project_dir(one(2));
+            let bp = match wright_engine::load_blueprint(&dir) {
+                Ok(b) => b,
+                Err(e) => return fail(e),
+            };
+            let cfg = Config::load().unwrap_or_else(|_| Config::builtin());
+            match wright_engine::org::enforce(&bp, &cfg) {
+                Ok(None) => {
+                    println!("No organization policy; nothing to check against.");
+                    0
+                }
+                Ok(Some(p)) => {
+                    println!("{}'s policy allows this plan.", p.org);
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        (Some("approve"), _) => {
+            let dir = project_dir(one(1));
+            let dir = dir.canonicalize().unwrap_or(dir);
+            let seed = match wright_runtime::signing::admin_key() {
+                Ok(s) => s,
+                Err(e) => return fail(e),
+            };
+            match wright_engine::org::approve(&dir, &seed, name) {
+                Ok(h) => {
+                    println!("{name} approved blueprint {} of {} for unattended runs.", wright_core::hash::short(&h), dir.display());
+                    println!("A change to the plan needs a new approval.");
+                    0
+                }
+                Err(e) => fail(e),
+            }
+        }
+        (Some("fleet-verify"), _) => {
+            let roots: Vec<PathBuf> = pos[1..].iter().map(PathBuf::from).collect();
+            let checks = wright_engine::org::fleet_verify(&roots);
+            print!("{}", wright_engine::org::fleet_report(&checks, flags.contains(&"--json")));
+            if checks.iter().all(|c| c.ok) { 0 } else { 1 }
+        }
+        _ => fail(
+            "usage: wright admin keygen [--name <you>]\n\
+             \x20      wright admin policy init [file] | sign <file> --name <you> | show | check [dir]\n\
+             \x20      wright admin approve [dir] --name <you>\n\
+             \x20      wright admin fleet-verify [projects-folder ...] [--json]",
+        ),
+    }
+}
+
+/// `wright stop ["why"]` — the kill switch: nothing runs, sends or
+/// fetches anywhere on this machine until `wright start`.
+pub fn stop(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let reason = pos.join(" ");
+    match wright_runtime::killswitch::engage(&reason, "cli") {
+        Ok(s) => {
+            println!("STOPPED: {}.", s.reason);
+            println!("No firing starts; firings in flight stop at their next step; pending approvals are refused.");
+            println!("Start again with: wright start");
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
+/// `wright start` — release the kill switch.
+pub fn start(_args: &[String]) -> i32 {
+    match wright_runtime::killswitch::release() {
+        Ok(true) => {
+            println!("Started again. Schedules fire as before.");
+            0
+        }
+        Ok(false) => {
+            println!("Wright was not stopped.");
+            0
+        }
+        Err(e) => fail(e),
+    }
+}
+
+/// `wright fleet` — everything scheduled, its state and its last run.
+pub fn fleet(_args: &[String]) -> i32 {
+    print!("{}", wright_engine::fleet::report(&wright_engine::fleet::rows()));
+    0
 }
 
 /// `wright daemon` — fire schedules forever.
@@ -735,6 +1459,17 @@ pub fn doctor() -> i32 {
     let ex = Executor::new();
     line("executor", if ex.block_on(async { 41 + 1 }) == 42 { Ok("block_on, spawn_blocking".into()) } else { Err("broken".into()) });
     line("https", wright_runtime::net::https_backend());
+    line(
+        "extra CAs",
+        match wright_runtime::config::ca_file() {
+            None => Ok("none (the system store only; add one with `tls ca-file=\"...\"` in config.kdl or WRIGHT_CA_FILE)".into()),
+            Some(f) => wright_runtime::config::check_ca_file(&f).map(|n| format!("{} ({n} certificate{})", f.display(), if n == 1 { "" } else { "s" })),
+        },
+    );
+    for (k, _) in Config::load().map(|c| c.env).unwrap_or_default() {
+        let state = if std::env::var_os(&k).is_some() { "set" } else { "NOT set (see the warning above)" };
+        println!("    env {k:<24} {state}");
+    }
     for m in &wright_runtime::local::CATALOG {
         let state = if m.installed() {
             Ok(format!("{} ready ({}, {})", m.id, m.size_text(), m.license))

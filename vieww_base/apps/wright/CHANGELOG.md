@@ -1,5 +1,140 @@
 # Changelog
 
+## 1.0.0 — 2026-10-22 — trust before reach, agents as workers, recipes at the end
+
+The release the strategy memo ordered, whole: the memo set out four
+releases (trust, workers, everywhere, recipes), and every later step
+leans on the gate rule and the signed receipts — so those came first,
+and they carry the rest of the roadmap with them in one go. What this
+machine cannot test honestly (the native sandbox and TLS legs for
+macOS and Windows, a published gallery with real publisher keys) is
+written down in `docs/AUDIT-2026-10.md`, not pretended.
+
+- **The Rule of Two is enforced** (ADR-024). Every tool names the legs
+  it puts an agent on — private data, untrusted input, an outbound
+  channel — and the validator refuses a plan whose agent holds all
+  three without `approval "before-send"`. Untrusted data is tracked as
+  a taint: an artifact made from outside input carries the mark through
+  the whole graph, and anything that reads it inherits it. The gate
+  asks before every outbound step of a 3-leg agent, whatever the card
+  says. The Confirm Gate says all of this in words.
+- **Receipts are signed and verifiable** (ADR-025). Runs now write
+  `wright.run-receipt/2`: every consumed input's hash, every
+  acceptance sentence with its verdict, the Rule-of-Two agents, and an
+  Ed25519 signature over the receipt's exact bytes. Ed25519 and SHA-512
+  are reference ports in `wright-core` (no crates, no unsafe), pinned
+  byte-for-byte to the RFC's vectors and to OpenSSL on this machine.
+  `wright verify` runs five checks in words — signature, event log,
+  artifacts, inputs, blueprint — and a tampered byte fails by name.
+- **Acceptance in words** (the memo's item 1). A deliverable can carry
+  `accept "..."` sentences: the person approves the promise, Testwright
+  turns each into a check (`ACCEPT 1: PASS` lines, parsed strictly),
+  and the Reviewer may not approve a run whose sentences fail — the
+  engine enforces it, not the prompt.
+- **A spending promise before the run** (item 3). `wright run` shows the
+  estimate as a sentence ("about $0.04; the built-in model would be free
+  but slower") and offers the built-in as a plain choice, not a config.
+- **Other agents as workers** (ADR-026). A step can say `worker
+  "claude-code"` (or codex, kimi-code, zcode — configured per machine):
+  it runs in a sandboxed copy, its diff is applied whole or not at all,
+  inside `worker-files` scope only, under the card's clock, through
+  the permit gate, and its output goes through Wright's tests. No model
+  cost on your plan.
+- **MCP behind permits** (ADR-029). Hash-pinned MCP servers (config
+  refuses an unpinned one; `wright mcp-hash` prints the pin), cards
+  allow-list the exact tools, the server must offer them too, answers
+  are treated as outside data, and the Rule of Two applies.
+- **Typed edges** (ADR-027). An edge can bind `out=`/`in=` names with a
+  `schema=` of five readable shapes; broken names fail at plan time,
+  broken bytes before the consumer runs.
+- **Recipes, curated and signed** (ADR-028). `wright recipe
+  list|install|sign|verify` over a `recipes/` gallery; nothing installs
+  unsigned — that is the lesson of the poisoned marketplaces.
+- **Explain any run in one screen** (item 5). `wright explain` prints
+  the story — plan, what ran, what it sent, what it made, the verdict,
+  the numbers — from the store, never from a model.
+- **Hand-off as a feature** (item 7). `wright handoff` writes a PR
+  folder: HANDOFF.md (what this is, in the owner's words, promises
+  listed), the exact committed blueprint, every receipt, the project's
+  full diff against its first commit, and the checks.
+- **A public benchmark** (ADR-030). `wright bench` measures time to a
+  checked outcome and human interventions per run; the receipts stay
+  for verification.
+- **Voice first on Home** (item 6). The mic is now the main way to
+  start: a big speak affordance sits above the composer, and a
+  transcript starts the interview on its own (typing still needs send —
+  a keyboard is a decision already made). Everything runs on this
+  machine's built-in Whisper; nothing leaves.
+
+### Review before merge (same release)
+
+A second pass over 1.0.0 on a kernel WITH Landlock (the first pass ran
+on 5.10, where the kernel sandbox — and so the worker's real path —
+never ran) found and fixed:
+
+- **Signatures now say who** (ADR-031). `wright verify` and recipe
+  install trusted the key embedded in the file, so an edited receipt or
+  recipe re-signed with a fresh key passed. Keys must be pinned
+  (`wright trust add`, config `trust` lines, this machine's own key, or
+  `--key`/`--trust` for one call). The signing seed comes from the OS
+  random source, not clock/pid mixing; the key file is 0600 from birth.
+  A recipe can no longer name a folder outside the install target.
+- **Workers actually work** (ADR-032). Under Landlock they could not
+  start, had no network to reach their model, and no way to sign in;
+  7 tests failed here. A worker is now an outbound channel: it needs
+  `approval "before-send"`, the gate asks before the copy leaves, it gets
+  its configured sign-in env, its copy is private and deleted, its output
+  pipes no longer stall, and leftover processes are killed. Configuring
+  any setting no longer hides the four preconfigured workers.
+- **Checks run for every plan that delivers or promises** (ADR-033).
+  The gallery's recipes promised acceptance checks that never ran and
+  delivered unreviewed; Testwright and the Reviewer are now always placed
+  when a plan delivers or has `accept` sentences.
+- **Office networks** (ADR-034). Settings > Network: add a certificate
+  file (PEM, file chooser or path; trusted in addition to the system
+  store) and environment variables (proxy, mirrors; secrets go to the
+  keychain). `tls ca-file` / `env` in config.kdl, `WRIGHT_CA_FILE`, and
+  `wright doctor` reports both.
+- **Copy and paste everywhere.** The window never published the system
+  pasteboard to its text fields, so Ctrl/Cmd+C/V/X did nothing anywhere.
+  It does now; replies, plans, results, errors, logs, paths and settings
+  messages are selectable and copyable (vieww gained read-only selectable
+  text that is not a Tab stop and lets editing keys reach shortcuts), with
+  Copy buttons on replies, the plan, the agent log and paths. Password
+  fields never copy or cut.
+- **Nothing spills out of its box.** Pills never wrap (one line,
+  ellipsis); the plan's "needs care" column is a minimum width, not a
+  fixed 78×20 box; cards clip as a last resort; settings text boxes fill
+  their width; engine cards stay opaque and the page behind the agents
+  view is blurred and dimmed.
+- Smaller: CLI flags that take values (`--runs`, `--at`, `--port`,
+  `--out`, `--key`, `--trust`) no longer read their value as a project
+  directory; "1 sessions"; starter cards of even height; plan lines no
+  longer carry the CLI's indentation into the window.
+
+### Governance, operations and proof (same release)
+
+- **Kill switch and fleet** (ADR-036): `wright stop` / Stop everything
+  halts every firing on the machine, mid-turn; `wright fleet` and
+  Settings > Fleet show everything scheduled, with pause and resume.
+- **Unattended runs need a go-ahead; time to trust** (ADR-037): a new or
+  changed schedule waits for "Let it run unattended" after a passing run;
+  `wright bench` reports how long and how much it took to get there.
+- **Per-agent spend in the receipt** (ADR-038), `wright spend --csv`.
+- **A receipt anyone can verify** (ADR-039): `receipt.vc.json`, a W3C
+  Verifiable Credential (eddsa-jcs-2022, did:key), checked by Digital
+  Bazaar's reference library; `wright verify x.vc.json`, `wright receipt vc`.
+- **Task-scoped agent identities** (ADR-040): one revocable identity per
+  task, per-agent secrets (`secret "smtp"`), a sixth verify check.
+- **Organization policy and admin console** (ADR-041): signed rules
+  enforced at plan time and at the gate, admin approval of plans for
+  unattended runs, fleet-wide receipt verification; `wright admin`,
+  Settings > Organization.
+- **MCP servers pinned whole** (ADR-035): `wright mcp install` freezes an
+  exact npm/PyPI version and pins every file; launcher pins are refused.
+- **The Interviewer offers workers** installed on this machine for coding
+  steps, and now writes `accept` promises and typed hand-offs.
+
 ## 0.5.2 — 2026-10-21 — a livelier conversation
 
 - **You can see a reply being written.** The moment you send, the thread

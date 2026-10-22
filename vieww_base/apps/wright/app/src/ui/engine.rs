@@ -219,20 +219,23 @@ fn node(ui: &Ui, p: &Pal, card: &Card, state: State, hot: &[String], selected: b
     if rest > 0 {
         chips.push(t(format!("+{rest}"), 10.5, p.muted));
     }
+    // A queued card is quieter — its words fade, its surface does not: a
+    // see-through card let the page behind the engine view read through
+    // it, word over word.
+    let faded = if state == State::Queued { 0.6 } else { 1.0 };
     let body = Container::new()
         .color(p.surface)
         .radius(corner::CARD)
         .border(Border::new(edge, if matches!(state, State::Working | State::Waiting) || selected { 2.0 } else { 1.0 }))
         .padding(EdgeInsets::all(11.0))
-        .child(stretch(4.0, vec![
+        .child(fade(faded, stretch(4.0, vec![
             row(6.0, vec![fill(card.name.clone(), 13.5, p.ink), pill(state.label(), pill_fg, pill_bg)]),
-            Text::new(format!("{} · {}", card.role, if card.model.is_empty() { "no model" } else { &card.model })).size(11.5).color(p.muted).max_lines(2).into(),
+            Text::new(format!("{} · {}", card.role, if card.model.is_empty() { "no model" } else { &card.model })).size(11.5).color(p.muted).max_lines(2).overflow(vieww::text::TextOverflow::Ellipsis).into(),
             gap(),
             row(4.0, chips),
-        ]));
+        ])));
     let (sel, name) = (ui.selected.clone(), card.name.clone());
-    let faded = if state == State::Queued { 0.6 } else { 1.0 };
-    fade(faded, tap(body, move || sel.set(if sel.get().as_deref() == Some(name.as_str()) { None } else { Some(name.clone()) })))
+    tap(body, move || sel.set(if sel.get().as_deref() == Some(name.as_str()) { None } else { Some(name.clone()) }))
 }
 
 fn inspector(ui: &Ui, p: &Pal, s: &Session, card: &Card, events: &[Event], progress: &Progress) -> WidgetNode {
@@ -247,8 +250,15 @@ fn inspector(ui: &Ui, p: &Pal, s: &Session, card: &Card, events: &[Event], progr
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
-        .map(|e| row(8.0, vec![SizedBox::width(52.0).child(mono(format!("+{:.1}s", e.at_ms.saturating_sub(start) as f64 / 1000.0), 11.0, p.muted)).into(), grow(Text::new(e.note.clone()).size(12.0).color(p.ink).max_lines(2))]))
+        .map(|e| row(8.0, vec![SizedBox::width(52.0).child(mono(format!("+{:.1}s", e.at_ms.saturating_sub(start) as f64 / 1000.0), 11.0, p.muted)).into(), grow(copyable(e.note.clone(), 12.0, p.ink))]))
         .collect();
+    // The whole log, for pasting into a bug report or a message.
+    let full_log: String = events
+        .iter()
+        .filter(|e| e.agent.as_deref() == Some(card.name.as_str()) && e.kind != EventKind::TokensRecorded)
+        .map(|e| format!("+{:.1}s  {}", e.at_ms.saturating_sub(start) as f64 / 1000.0, e.note))
+        .collect::<Vec<_>>()
+        .join("\n");
     let time = match state {
         State::Done | State::Failed => format!("{:.1}s", progress.seconds(&card.name)),
         State::Cached => "reused from cache, $0".into(),
@@ -262,7 +272,7 @@ fn inspector(ui: &Ui, p: &Pal, s: &Session, card: &Card, events: &[Event], progr
         kv(p, "May touch", &card.touch),
         kv(p, "Tools", &if card.tools.is_empty() { "none".to_string() } else { card.tools.join(", ") }),
         kv(p, "Time", &time),
-        t("Live log", 12.0, p.muted),
+        row(8.0, vec![t("Live log", 12.0, p.muted), gap(), if full_log.is_empty() { SizedBox::shrink().into() } else { copy_icon(p.muted, full_log) }]),
         Container::new()
             .color(p.surface2)
             .radius(corner::FIELD)
@@ -277,7 +287,7 @@ fn card_box(p: &Pal, child: WidgetNode) -> WidgetNode {
 }
 
 fn kv(p: &Pal, k: &str, v: &str) -> WidgetNode {
-    row(8.0, vec![SizedBox::width(78.0).child(t(k.to_string(), 12.5, p.muted)).into(), grow(para(v.to_string(), 12.5, p.ink))])
+    row(8.0, vec![SizedBox::width(78.0).child(line(k.to_string(), 12.5, p.muted)).into(), grow(copyable(v.to_string(), 12.5, p.ink))])
 }
 
 fn ticker(p: &Pal, events: &[Event], progress: &Progress) -> WidgetNode {

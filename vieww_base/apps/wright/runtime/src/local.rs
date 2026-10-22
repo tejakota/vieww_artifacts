@@ -110,8 +110,13 @@ impl BuiltinModel {
     }
 
     fn installed_in(&self, dir: &Path) -> bool {
-        let size_ok = std::fs::metadata(self.path_in(dir)).map(|m| m.len() == self.size).unwrap_or(false);
-        size_ok && std::fs::read_to_string(self.marker_in(dir)).map(|h| h.trim() == self.sha256).unwrap_or(false)
+        let size_ok = std::fs::metadata(self.path_in(dir))
+            .map(|m| m.len() == self.size)
+            .unwrap_or(false);
+        size_ok
+            && std::fs::read_to_string(self.marker_in(dir))
+                .map(|h| h.trim() == self.sha256)
+                .unwrap_or(false)
     }
 
     /// Bytes of a download in progress (to resume from).
@@ -120,7 +125,9 @@ impl BuiltinModel {
     }
 
     fn partial_in(&self, dir: &Path) -> u64 {
-        std::fs::metadata(self.part_in(dir)).map(|m| m.len()).unwrap_or(0)
+        std::fs::metadata(self.part_in(dir))
+            .map(|m| m.len())
+            .unwrap_or(0)
     }
 
     pub fn size_text(&self) -> String {
@@ -166,17 +173,29 @@ impl DirLock {
         let p = dir.join(format!("{}.lock", m.file));
         // A lock older than a day is from a Wright that died mid-download.
         if let Ok(meta) = std::fs::metadata(&p) {
-            let age = meta.modified().ok().and_then(|t| SystemTime::now().duration_since(t).ok()).unwrap_or_default();
+            let age = meta
+                .modified()
+                .ok()
+                .and_then(|t| SystemTime::now().duration_since(t).ok())
+                .unwrap_or_default();
             if age > Duration::from_secs(24 * 3600) {
                 let _ = std::fs::remove_file(&p);
             }
         }
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&p)
+        {
             Ok(mut f) => {
                 let _ = writeln!(f, "{}", std::process::id());
                 Ok(DirLock(p))
             }
-            Err(_) => Err(format!("another Wright is downloading {} (remove {} if not)", m.id, p.display())),
+            Err(_) => Err(format!(
+                "another Wright is downloading {} (remove {} if not)",
+                m.id,
+                p.display()
+            )),
         }
     }
 }
@@ -192,7 +211,9 @@ impl Drop for DirLock {
 /// catalog's.
 fn source_url(m: &BuiltinModel) -> String {
     match std::env::var("WRIGHT_MODEL_MIRROR") {
-        Ok(base) if !base.trim().is_empty() => format!("{}/{}", base.trim().trim_end_matches('/'), m.file),
+        Ok(base) if !base.trim().is_empty() => {
+            format!("{}/{}", base.trim().trim_end_matches('/'), m.file)
+        }
         _ => m.url.to_string(),
     }
 }
@@ -203,7 +224,12 @@ pub fn pull(m: &BuiltinModel, on_progress: &mut dyn FnMut(Progress)) -> Result<P
     pull_into(m, &models_dir(), &source_url(m), on_progress)
 }
 
-fn pull_into(m: &BuiltinModel, dir: &Path, from: &str, on_progress: &mut dyn FnMut(Progress)) -> Result<PathBuf, String> {
+fn pull_into(
+    m: &BuiltinModel,
+    dir: &Path,
+    from: &str,
+    on_progress: &mut dyn FnMut(Progress),
+) -> Result<PathBuf, String> {
     let _one = PULLING.lock().unwrap_or_else(|p| p.into_inner());
     if m.installed_in(dir) {
         return Ok(m.path_in(dir));
@@ -212,7 +238,9 @@ fn pull_into(m: &BuiltinModel, dir: &Path, from: &str, on_progress: &mut dyn FnM
     let _lock = DirLock::take(m, dir)?;
     let (part, path, marker) = (m.part_in(dir), m.path_in(dir), m.marker_in(dir));
     let mut cfg = NetConfig::from_env();
-    cfg.limits.max_body = usize::try_from(m.size).unwrap_or(usize::MAX).saturating_add(1 << 20);
+    cfg.limits.max_body = usize::try_from(m.size)
+        .unwrap_or(usize::MAX)
+        .saturating_add(1 << 20);
     cfg.io_timeout = Duration::from_secs(60);
     let mut have = m.partial_in(dir);
     if have > m.size {
@@ -224,20 +252,33 @@ fn pull_into(m: &BuiltinModel, dir: &Path, from: &str, on_progress: &mut dyn FnM
     // CDN), a few hops, never from HTTPS down to plain HTTP.
     let mut stream = None;
     for _hop in 0..6 {
-        let mut req = Request::new("GET", parse_url(&url)?).header("User-Agent", concat!("wright/", env!("CARGO_PKG_VERSION")));
+        let mut req = Request::new("GET", parse_url(&url)?)
+            .header("User-Agent", concat!("wright/", env!("CARGO_PKG_VERSION")));
         if have > 0 {
             req = req.header("Range", &format!("bytes={have}-"));
         }
-        let s = net::send_streaming(&req, &cfg).map_err(|e| format!("downloading {}: {e}", m.id))?;
+        let s =
+            net::send_streaming(&req, &cfg).map_err(|e| format!("downloading {}: {e}", m.id))?;
         match s.head.status {
             301 | 302 | 303 | 307 | 308 => {
-                let next = s.head.header("location").ok_or("a redirect without a location")?.to_string();
+                let next = s
+                    .head
+                    .header("location")
+                    .ok_or("a redirect without a location")?
+                    .to_string();
                 let here = parse_url(&url)?;
                 if next.starts_with('/') {
-                    url = format!("{}://{}{next}", if here.is_tls() { "https" } else { "http" }, here.authority());
+                    url = format!(
+                        "{}://{}{next}",
+                        if here.is_tls() { "https" } else { "http" },
+                        here.authority()
+                    );
                 } else {
                     if here.is_tls() && !next.starts_with("https://") {
-                        return Err(format!("{} redirected from HTTPS to '{next}'; refusing", m.id));
+                        return Err(format!(
+                            "{} redirected from HTTPS to '{next}'; refusing",
+                            m.id
+                        ));
                     }
                     url = next;
                 }
@@ -252,46 +293,86 @@ fn pull_into(m: &BuiltinModel, dir: &Path, from: &str, on_progress: &mut dyn FnM
                 break;
             }
             416 if have == m.size => break, // already complete; just check it
-            status => return Err(format!("downloading {}: HTTP {status} from {}", m.id, url.split('?').next().unwrap_or(""))),
+            status => {
+                return Err(format!(
+                    "downloading {}: HTTP {status} from {}",
+                    m.id,
+                    url.split('?').next().unwrap_or("")
+                ))
+            }
         }
     }
     if let Some(mut s) = stream {
-        let mut f = std::fs::OpenOptions::new().create(true).write(true).append(have > 0).truncate(have == 0).open(&part).map_err(|e| format!("{}: {e}", part.display()))?;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(have > 0)
+            .truncate(have == 0)
+            .open(&part)
+            .map_err(|e| format!("{}: {e}", part.display()))?;
         let mut buf = vec![0u8; 1 << 20];
         let mut last = 0u64;
-        on_progress(Progress { phase: Phase::Downloading, done: have, total: m.size });
+        on_progress(Progress {
+            phase: Phase::Downloading,
+            done: have,
+            total: m.size,
+        });
         loop {
-            let n = s.body.read(&mut buf).map_err(|e| format!("downloading {}: {e} (run again to resume)", m.id))?;
+            let n = s
+                .body
+                .read(&mut buf)
+                .map_err(|e| format!("downloading {}: {e} (run again to resume)", m.id))?;
             if n == 0 {
                 break;
             }
-            f.write_all(&buf[..n]).map_err(|e| format!("{}: {e}", part.display()))?;
+            f.write_all(&buf[..n])
+                .map_err(|e| format!("{}: {e}", part.display()))?;
             have += n as u64;
             if have > m.size {
                 drop(f);
                 let _ = std::fs::remove_file(&part);
-                return Err(format!("{} is larger than the pinned file; refusing it", m.id));
+                return Err(format!(
+                    "{} is larger than the pinned file; refusing it",
+                    m.id
+                ));
             }
             if have - last >= 8 << 20 || have == m.size {
                 last = have;
-                on_progress(Progress { phase: Phase::Downloading, done: have, total: m.size });
+                on_progress(Progress {
+                    phase: Phase::Downloading,
+                    done: have,
+                    total: m.size,
+                });
             }
         }
-        f.sync_all().map_err(|e| format!("{}: {e}", part.display()))?;
+        f.sync_all()
+            .map_err(|e| format!("{}: {e}", part.display()))?;
     } else if have != m.size {
         return Err(format!("downloading {}: too many redirects", m.id));
     }
     if have != m.size {
-        return Err(format!("{}: got {} of {} (run again to resume)", m.id, human_bytes(have), m.size_text()));
+        return Err(format!(
+            "{}: got {} of {} (run again to resume)",
+            m.id,
+            human_bytes(have),
+            m.size_text()
+        ));
     }
     // Check every byte against the pinned hash before it may be used.
-    let got = hash_file(&part, &mut |done| on_progress(Progress { phase: Phase::Checking, done, total: m.size }))?;
+    let got = hash_file(&part, &mut |done| {
+        on_progress(Progress {
+            phase: Phase::Checking,
+            done,
+            total: m.size,
+        })
+    })?;
     if got != m.sha256 {
         let _ = std::fs::remove_file(&part);
         return Err(format!("{} failed its checksum (got {got}); the download was deleted. Try again, or check WRIGHT_MODEL_MIRROR", m.id));
     }
     std::fs::rename(&part, &path).map_err(|e| format!("{}: {e}", path.display()))?;
-    std::fs::write(&marker, format!("{}\n", m.sha256)).map_err(|e| format!("{}: {e}", marker.display()))?;
+    std::fs::write(&marker, format!("{}\n", m.sha256))
+        .map_err(|e| format!("{}: {e}", marker.display()))?;
     Ok(path)
 }
 
@@ -301,7 +382,9 @@ fn hash_file(p: &Path, on_progress: &mut dyn FnMut(u64)) -> Result<String, Strin
     let mut buf = vec![0u8; 4 << 20];
     let mut done = 0u64;
     loop {
-        let n = f.read(&mut buf).map_err(|e| format!("{}: {e}", p.display()))?;
+        let n = f
+            .read(&mut buf)
+            .map_err(|e| format!("{}: {e}", p.display()))?;
         if n == 0 {
             break;
         }
@@ -338,7 +421,11 @@ pub trait LocalBackend: Send + Sync {
     /// A completion from `req.model`. `on_delta` gets text as it is
     /// written, and [`Delta::Status`] lines (a first-use download, model
     /// loading) worth showing.
-    fn complete(&self, req: &CompletionRequest, on_delta: &mut dyn FnMut(&Delta)) -> Result<CompletionResponse, String>;
+    fn complete(
+        &self,
+        req: &CompletionRequest,
+        on_delta: &mut dyn FnMut(&Delta),
+    ) -> Result<CompletionResponse, String>;
     /// Speech (WAV bytes) to text.
     fn transcribe(&self, model: &str, wav: &[u8]) -> Result<String, String>;
 }
@@ -360,20 +447,36 @@ pub fn available() -> bool {
     backend().is_some()
 }
 
-pub fn complete(req: &CompletionRequest, on_delta: &mut dyn FnMut(&Delta)) -> Result<CompletionResponse, String> {
-    backend().ok_or("this build of Wright has no built-in model engine")?.complete(req, on_delta)
+pub fn complete(
+    req: &CompletionRequest,
+    on_delta: &mut dyn FnMut(&Delta),
+) -> Result<CompletionResponse, String> {
+    backend()
+        .ok_or("this build of Wright has no built-in model engine")?
+        .complete(req, on_delta)
 }
 
 pub fn transcribe(model: &str, wav: &[u8]) -> Result<String, String> {
-    backend().ok_or("this build of Wright has no built-in model engine")?.transcribe(model, wav)
+    backend()
+        .ok_or("this build of Wright has no built-in model engine")?
+        .transcribe(model, wav)
 }
 
 /// A status line for a download in progress: "Downloading qwen3-1.7b
 /// (first use): 42% of 1.83 GB".
 pub fn progress_line(m: &BuiltinModel, p: Progress) -> String {
     match p.phase {
-        Phase::Downloading => format!("Downloading the built-in model {} (first use, once): {}% of {}", m.id, p.percent(), m.size_text()),
-        Phase::Checking => format!("Checking {} against its pinned checksum: {}%", m.id, p.percent()),
+        Phase::Downloading => format!(
+            "Downloading the built-in model {} (first use, once): {}% of {}",
+            m.id,
+            p.percent(),
+            m.size_text()
+        ),
+        Phase::Checking => format!(
+            "Checking {} against its pinned checksum: {}%",
+            m.id,
+            p.percent()
+        ),
     }
 }
 
@@ -386,7 +489,10 @@ mod tests {
     fn the_catalog_is_well_formed() {
         for m in &CATALOG {
             assert_eq!(m.sha256.len(), 64);
-            assert!(m.sha256.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()));
+            assert!(m
+                .sha256
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()));
             assert!(m.url.starts_with("https://") && m.url.ends_with(m.file));
             assert!(m.size > 1_000_000);
         }
@@ -416,12 +522,25 @@ mod tests {
                 let n = s.read(&mut buf).unwrap_or(0);
                 let req = String::from_utf8_lossy(&buf[..n]).to_string();
                 if req.starts_with("GET /redirect") {
-                    let _ = s.write_all(b"HTTP/1.1 302 Found\r\nLocation: /m.bin\r\nContent-Length: 0\r\n\r\n");
+                    let _ = s.write_all(
+                        b"HTTP/1.1 302 Found\r\nLocation: /m.bin\r\nContent-Length: 0\r\n\r\n",
+                    );
                     continue;
                 }
-                let from: usize = req.lines().find_map(|l| l.strip_prefix("Range: bytes=")).and_then(|r| r.trim_end_matches('-').parse().ok()).unwrap_or(0);
+                let from: usize = req
+                    .lines()
+                    .find_map(|l| l.strip_prefix("Range: bytes="))
+                    .and_then(|r| r.trim_end_matches('-').parse().ok())
+                    .unwrap_or(0);
                 let body = &served[from..];
-                let head = if from > 0 { format!("HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\n\r\n", body.len()) } else { format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()) };
+                let head = if from > 0 {
+                    format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\n\r\n",
+                        body.len()
+                    )
+                } else {
+                    format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len())
+                };
                 let _ = s.write_all(head.as_bytes());
                 if cut_once {
                     cut_once = false;
@@ -432,21 +551,42 @@ mod tests {
             }
         });
         let from = format!("http://127.0.0.1:{port}/redirect-to/m.bin");
-        let m = BuiltinModel { id: "test-model", kind: Kind::Text, about: "", file: "m.bin", url: "https://example.invalid/m.bin", sha256: sha, size: content.len() as u64, license: "" };
+        let m = BuiltinModel {
+            id: "test-model",
+            kind: Kind::Text,
+            about: "",
+            file: "m.bin",
+            url: "https://example.invalid/m.bin",
+            sha256: sha,
+            size: content.len() as u64,
+            license: "",
+        };
         let first = pull_into(&m, &home, &from, &mut |_| {});
         assert!(first.is_err(), "the connection was cut: {first:?}");
-        assert_eq!(m.partial_in(&home), 1_000_000, "the first million bytes are kept");
+        assert_eq!(
+            m.partial_in(&home),
+            1_000_000,
+            "the first million bytes are kept"
+        );
         let mut phases = Vec::new();
         let path = pull_into(&m, &home, &from, &mut |p| phases.push(p.phase)).unwrap();
         assert!(m.installed_in(&home));
         assert_eq!(std::fs::read(&path).unwrap(), content);
         assert!(phases.contains(&Phase::Downloading) && phases.contains(&Phase::Checking));
         // Installed: no network at all.
-        assert!(pull_into(&m, &home, "http://127.0.0.1:1/never", &mut |_| panic!("no progress for an installed model")).is_ok());
+        assert!(
+            pull_into(&m, &home, "http://127.0.0.1:1/never", &mut |_| panic!(
+                "no progress for an installed model"
+            ))
+            .is_ok()
+        );
         remove_in(&m, &home).unwrap();
         assert!(!m.installed_in(&home) && !path.exists());
         // A file that does not match its pin is deleted, not installed.
-        let bad = BuiltinModel { sha256: "0000000000000000000000000000000000000000000000000000000000000000", ..m };
+        let bad = BuiltinModel {
+            sha256: "0000000000000000000000000000000000000000000000000000000000000000",
+            ..m
+        };
         let e = pull_into(&bad, &home, &from, &mut |_| {}).unwrap_err();
         assert!(e.contains("checksum"), "{e}");
         assert!(!bad.installed_in(&home) && bad.partial_in(&home) == 0);

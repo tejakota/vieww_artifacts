@@ -38,7 +38,10 @@ pub struct Hunk {
 
 fn strip_prefix(p: &str) -> String {
     let p = p.split('\t').next().unwrap_or(p).trim();
-    p.strip_prefix("a/").or_else(|| p.strip_prefix("b/")).unwrap_or(p).to_string()
+    p.strip_prefix("a/")
+        .or_else(|| p.strip_prefix("b/"))
+        .unwrap_or(p)
+        .to_string()
 }
 
 /// Parse a unified diff into per-file patches.
@@ -55,13 +58,24 @@ pub fn parse(text: &str) -> Result<Vec<FilePatch>, String> {
                 .ok_or_else(|| format!("line {}: '---' without a following '+++'", i + 1))?;
             let create = old.trim().starts_with("/dev/null");
             let delete = new.trim().starts_with("/dev/null");
-            let path = if delete { strip_prefix(old) } else { strip_prefix(new) };
-            files.push(FilePatch { path, create, delete, hunks: Vec::new() });
+            let path = if delete {
+                strip_prefix(old)
+            } else {
+                strip_prefix(new)
+            };
+            files.push(FilePatch {
+                path,
+                create,
+                delete,
+                hunks: Vec::new(),
+            });
             i += 2;
             continue;
         }
         if l.starts_with("@@") {
-            let file = files.last_mut().ok_or_else(|| format!("line {}: hunk before any file header", i + 1))?;
+            let file = files
+                .last_mut()
+                .ok_or_else(|| format!("line {}: hunk before any file header", i + 1))?;
             // @@ -a,b +c,d @@
             let old_start = l
                 .split_whitespace()
@@ -69,7 +83,10 @@ pub fn parse(text: &str) -> Result<Vec<FilePatch>, String> {
                 .and_then(|r| r.trim_start_matches('-').split(',').next())
                 .and_then(|n| n.parse::<usize>().ok())
                 .unwrap_or(1);
-            let mut hunk = Hunk { old_start, lines: Vec::new() };
+            let mut hunk = Hunk {
+                old_start,
+                lines: Vec::new(),
+            };
             i += 1;
             while i < lines.len() && !lines[i].starts_with("@@") && !lines[i].starts_with("--- ") {
                 let hl = lines[i];
@@ -127,17 +144,28 @@ pub fn apply_to(old: &str, fp: &FilePatch) -> Result<String, String> {
     let mut cur: Vec<String> = old.lines().map(String::from).collect();
     let mut offset: isize = 0;
     for (n, h) in fp.hunks.iter().enumerate() {
-        let before: Vec<String> = h.lines.iter().filter(|(op, _)| *op != '+').map(|(_, t)| t.clone()).collect();
-        let after: Vec<String> = h.lines.iter().filter(|(op, _)| *op != '-').map(|(_, t)| t.clone()).collect();
+        let before: Vec<String> = h
+            .lines
+            .iter()
+            .filter(|(op, _)| *op != '+')
+            .map(|(_, t)| t.clone())
+            .collect();
+        let after: Vec<String> = h
+            .lines
+            .iter()
+            .filter(|(op, _)| *op != '-')
+            .map(|(_, t)| t.clone())
+            .collect();
         let hint = ((h.old_start as isize - 1) + offset).max(0) as usize;
-        let at = find(&cur, &before, hint).ok_or_else(|| {
-            format!(
+        let at =
+            find(&cur, &before, hint).ok_or_else(|| {
+                format!(
                 "{}: hunk {} does not match the file (its context/removed lines were not found){}",
                 fp.path,
                 n + 1,
                 before.first().map(|l| format!("; first expected line: {l:?}")).unwrap_or_default()
             )
-        })?;
+            })?;
         cur.splice(at..at + before.len(), after.iter().cloned());
         offset += after.len() as isize - before.len() as isize;
     }
@@ -191,6 +219,9 @@ mod tests {
     fn multiple_hunks_track_offsets() {
         let old = "1\n2\n3\n4\n5\n6\n7\n8\n";
         let patch = "--- a/n\n+++ b/n\n@@ -2,1 +2,2 @@\n 2\n+2.5\n@@ -7,1 +8,1 @@\n-7\n+seven\n";
-        assert_eq!(apply_to(old, &parse(patch).unwrap()[0]).unwrap(), "1\n2\n2.5\n3\n4\n5\n6\nseven\n8\n");
+        assert_eq!(
+            apply_to(old, &parse(patch).unwrap()[0]).unwrap(),
+            "1\n2\n2.5\n3\n4\n5\n6\nseven\n8\n"
+        );
     }
 }

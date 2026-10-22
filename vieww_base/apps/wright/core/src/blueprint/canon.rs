@@ -56,6 +56,28 @@ pub fn agent_canon(a: &AgentDef) -> String {
         a.permissions.bits() & PermissionSet::SHELL != 0,
         a.permissions.bits() & PermissionSet::SPAWN != 0
     ));
+    for sec in &a.secrets {
+        s.push_str(&format!("  secret \"{}\"\n", escape_string(sec)));
+    }
+    if let Some(w) = &a.worker {
+        s.push_str(&format!("  worker \"{}\"\n", escape_string(w)));
+        for f in &a.worker_files {
+            s.push_str(&format!("  worker-files \"{}\"\n", escape_string(f)));
+        }
+        s.push_str(&format!("  worker-timeout {}\n", a.worker_timeout_secs));
+    }
+    if let Some(server) = &a.mcp_server {
+        let allow = if a.mcp_allow.is_empty() {
+            String::new()
+        } else {
+            a.mcp_allow.join(",")
+        };
+        s.push_str(&format!(
+            "  mcp server=\"{}\" allow=\"{}\"\n",
+            escape_string(server),
+            escape_string(&allow)
+        ));
+    }
     s.push_str("}\n");
     s
 }
@@ -67,15 +89,33 @@ pub fn canonical(bp: &Blueprint) -> String {
     s.push_str("meta {\n");
     s.push_str(&format!("  name \"{}\"\n", escape_string(&bp.meta.name)));
     s.push_str(&format!("  format {}\n", bp.meta.format));
-    s.push_str(&format!("  min-app \"{}\"\n", escape_string(&bp.meta.min_app)));
-    s.push_str(&format!("  created \"{}\"\n", escape_string(&bp.meta.created)));
-    s.push_str(&format!("  lineage \"{}\"\n", escape_string(&bp.meta.lineage)));
+    s.push_str(&format!(
+        "  min-app \"{}\"\n",
+        escape_string(&bp.meta.min_app)
+    ));
+    s.push_str(&format!(
+        "  created \"{}\"\n",
+        escape_string(&bp.meta.created)
+    ));
+    s.push_str(&format!(
+        "  lineage \"{}\"\n",
+        escape_string(&bp.meta.lineage)
+    ));
     s.push_str("}\n");
 
     s.push_str("intent {\n");
-    s.push_str(&format!("  summary \"{}\"\n", escape_string(&bp.intent.summary)));
-    s.push_str(&format!("  confirmed \"{}\"\n", escape_string(&bp.intent.confirmed)));
-    s.push_str(&format!("  evidence \"{}\"\n", escape_string(&bp.intent.evidence)));
+    s.push_str(&format!(
+        "  summary \"{}\"\n",
+        escape_string(&bp.intent.summary)
+    ));
+    s.push_str(&format!(
+        "  confirmed \"{}\"\n",
+        escape_string(&bp.intent.confirmed)
+    ));
+    s.push_str(&format!(
+        "  evidence \"{}\"\n",
+        escape_string(&bp.intent.evidence)
+    ));
     s.push_str("}\n");
 
     let mut agents: Vec<&AgentDef> = bp.agents.iter().collect();
@@ -87,11 +127,22 @@ pub fn canonical(bp: &Blueprint) -> String {
     let mut edges = bp.edges.clone();
     edges.sort();
     for e in &edges {
-        s.push_str(&format!(
-            "edge from=\"{}\" to=\"{}\"\n",
+        let mut line = format!(
+            "edge from=\"{}\" to=\"{}\"",
             escape_string(&e.from),
             escape_string(&e.to)
-        ));
+        );
+        if let Some(o) = &e.out {
+            line.push_str(&format!(" out=\"{}\"", escape_string(o)));
+        }
+        if let Some(i) = &e.input {
+            line.push_str(&format!(" in=\"{}\"", escape_string(i)));
+        }
+        if let Some(s) = &e.schema {
+            line.push_str(&format!(" schema=\"{}\"", s.as_str()));
+        }
+        s.push_str(&line);
+        s.push('\n');
     }
 
     s.push_str("chips {\n");
@@ -125,10 +176,14 @@ pub fn canonical(bp: &Blueprint) -> String {
 
     for d in &bp.deliverables {
         s.push_str(&format!(
-            "deliverable kind=\"{}\" {{\n  check \"{}\"\n}}\n",
+            "deliverable kind=\"{}\" {{\n  check \"{}\"\n",
             escape_string(&d.kind),
             escape_string(&d.check)
         ));
+        for a in &d.accept {
+            s.push_str(&format!("  accept \"{}\"\n", escape_string(a)));
+        }
+        s.push_str("}\n");
     }
 
     s.push_str(&format!(
@@ -155,7 +210,11 @@ pub fn canonical(bp: &Blueprint) -> String {
 }
 
 fn on_off(b: bool) -> &'static str {
-    if b { "on" } else { "off" }
+    if b {
+        "on"
+    } else {
+        "off"
+    }
 }
 
 /// The canonical text is also the on-disk form Wright writes: the UI

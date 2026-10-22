@@ -35,7 +35,10 @@ pub fn resolve(project: &Path, rel: &str) -> Result<PathBuf, PathError> {
             Component::CurDir => continue,
             Component::Normal(name) => {
                 if first && (name == ".wright" || name == ".git") {
-                    return Err(format!("'{rel}' is inside {} — not reachable by agents", name.to_string_lossy()));
+                    return Err(format!(
+                        "'{rel}' is inside {} — not reachable by agents",
+                        name.to_string_lossy()
+                    ));
                 }
                 first = false;
                 out.push(name);
@@ -45,9 +48,15 @@ pub fn resolve(project: &Path, rel: &str) -> Result<PathBuf, PathError> {
                     }
                 }
             }
-            Component::ParentDir => return Err(format!("'{rel}' uses '..' (paths must stay inside the project)")),
+            Component::ParentDir => {
+                return Err(format!(
+                    "'{rel}' uses '..' (paths must stay inside the project)"
+                ))
+            }
             Component::RootDir | Component::Prefix(_) => {
-                return Err(format!("'{rel}' is absolute (paths are relative to the project)"));
+                return Err(format!(
+                    "'{rel}' is absolute (paths are relative to the project)"
+                ));
             }
         }
     }
@@ -59,15 +68,21 @@ pub fn resolve(project: &Path, rel: &str) -> Result<PathBuf, PathError> {
 /// anything through a symlink (each level re-checked as it appears).
 pub fn create_parents(project: &Path, target: &Path) -> Result<(), PathError> {
     let parent = target.parent().ok_or("no parent directory")?;
-    let rel = parent.strip_prefix(project).map_err(|_| "outside the project".to_string())?;
+    let rel = parent
+        .strip_prefix(project)
+        .map_err(|_| "outside the project".to_string())?;
     let mut cur = project.to_path_buf();
     for c in rel.components() {
         cur.push(c);
         match std::fs::symlink_metadata(&cur) {
-            Ok(m) if m.file_type().is_symlink() => return Err("a parent directory is a symbolic link (refused)".into()),
+            Ok(m) if m.file_type().is_symlink() => {
+                return Err("a parent directory is a symbolic link (refused)".into())
+            }
             Ok(m) if m.is_dir() => {}
             Ok(_) => return Err(format!("'{}' exists and is not a directory", cur.display())),
-            Err(_) => std::fs::create_dir(&cur).map_err(|e| format!("create {}: {e}", cur.display()))?,
+            Err(_) => {
+                std::fs::create_dir(&cur).map_err(|e| format!("create {}: {e}", cur.display()))?
+            }
         }
     }
     Ok(())
@@ -95,7 +110,14 @@ mod tests {
     #[test]
     fn escapes_are_refused() {
         let p = project("escape");
-        for bad in ["../x", "a/../../x", "/etc/passwd", ".wright/cache/k.json", ".git/config", "a\0b"] {
+        for bad in [
+            "../x",
+            "a/../../x",
+            "/etc/passwd",
+            ".wright/cache/k.json",
+            ".git/config",
+            "a\0b",
+        ] {
             assert!(resolve(&p, bad).is_err(), "{bad} must be refused");
         }
     }
@@ -106,8 +128,12 @@ mod tests {
         let p = project("symlink");
         std::os::unix::fs::symlink("/etc/hostname", p.join("innocent.txt")).unwrap();
         std::os::unix::fs::symlink("/etc", p.join("cfg")).unwrap();
-        assert!(resolve(&p, "innocent.txt").unwrap_err().contains("symbolic link"));
-        assert!(resolve(&p, "cfg/passwd").unwrap_err().contains("symbolic link"));
+        assert!(resolve(&p, "innocent.txt")
+            .unwrap_err()
+            .contains("symbolic link"));
+        assert!(resolve(&p, "cfg/passwd")
+            .unwrap_err()
+            .contains("symbolic link"));
     }
 
     #[cfg(unix)]

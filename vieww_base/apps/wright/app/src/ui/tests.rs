@@ -490,3 +490,76 @@ fn pinching_opens_and_closes_the_overview() {
     pinch(0.0, PinchPhase::Ended);
     assert!(!pinch(-0.5, PinchPhase::Moved), "not while a panel is open");
 }
+
+#[test]
+fn speech_alone_starts_a_session_on_home() {
+    // Voice-first (the memo's item 6): the mic is the main way to start
+    // on Home. Driving the same path the mic worker takes — a transcript
+    // lands in the inbox, the shell pumps — the session must begin from
+    // the spoken words alone, with the Confirm Gate still ahead of it.
+    let home = temp("voice-first");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(driver.elements().runtime(), None, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    ui.pump(&mut driver);
+    assert_eq!(ui.sessions.get().len(), 0, "Home starts with no sessions");
+
+    // A transcript arrives from the voice worker for the home composer.
+    ui.home.voice.set(super::session::Voice::Transcribing);
+    ui.inner
+        .inbox
+        .voice
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .push((ui.home.id, Ok("A command line tool that counts words in files, with tests".to_string())));
+    ui.pump(&mut driver);
+
+    assert_eq!(ui.sessions.get().len(), 1, "speech alone starts the session");
+    assert_eq!(ui.home.voice.get(), super::session::Voice::Idle, "the composer settles");
+    // The spoken words are the session's opening message: typing them
+    // and pressing send does the same thing; this test pins that.
+    let chat = ui.sessions.get()[0].chat.get();
+    assert!(!chat.is_empty(), "the session opened with the spoken words");
+    assert!(chat[0].1.contains("counts words in files"), "chat: {chat:?}");
+    assert!(chat[0].0, "the first message is the person's");
+    std::env::remove_var("WRIGHT_HOME");
+}
+
+/// Copyable text: select it, copy it, and the words land on the window's
+/// pasteboard — while letters typed at it still reach the shortcuts.
+#[test]
+fn reading_text_can_be_selected_and_copied() {
+    use std::rc::Rc;
+    use vieww::foundation::{Clipboard, MemoryClipboard, Modifiers, Services, SharedServices, TargetPlatform};
+    let mut driver = FrameDriver::new(Size::new(600.0, 200.0));
+    let board = Rc::new(MemoryClipboard::new());
+    kit::init_copy(driver.elements().runtime(), Rc::clone(&board) as Rc<dyn Clipboard>);
+    let mut registry = Services::new();
+    registry.provide::<dyn Clipboard>(Rc::clone(&board) as Rc<dyn Clipboard>);
+    let reply = "The plan reads the CSVs and emails a one-page summary.";
+    driver.set_root(Inherited::new(SharedServices::new(registry), kit::copyable(reply, 15.0, Color::hex(0x222222))));
+    driver.draw_frame();
+    // Not a Tab stop (the first focus must stay with the composer)...
+    assert!(!driver.focus_next(true), "reading text is not a Tab stop");
+    // ...a press is what puts the keyboard there.
+    let at = driver.semantics().nodes().iter().find(|n| n.label.as_deref() == Some(reply)).expect("the text is in the tree").bounds;
+    let p = Offset::new(at.left + 4.0, at.top + at.height() / 2.0);
+    driver.handle_pointer(&vieww::foundation::PointerEvent::down(vieww::foundation::PointerId(1), p, Duration::ZERO));
+    driver.handle_pointer(&vieww::foundation::PointerEvent::up(vieww::foundation::PointerId(1), p, Duration::from_millis(40)));
+    driver.draw_frame();
+    let shortcut = Modifiers::shortcut_for(TargetPlatform::current());
+    for c in ["a", "c"] {
+        assert!(driver.handle_key(&KeyEvent::down(LogicalKey::Character(c.into()), Duration::ZERO).with_modifiers(shortcut)));
+        driver.draw_frame();
+    }
+    assert_eq!(board.read_text().unwrap().as_deref(), Some(reply));
+    // A plain letter is not the text's: it goes on to the app (E, O, ?).
+    assert!(!driver.handle_key(&KeyEvent::down(LogicalKey::Character("e".into()), Duration::ZERO)));
+    // And the Copy buttons write to the same pasteboard.
+    assert!(kit::copy_text("a whole plan"));
+    assert_eq!(board.read_text().unwrap().as_deref(), Some("a whole plan"));
+}

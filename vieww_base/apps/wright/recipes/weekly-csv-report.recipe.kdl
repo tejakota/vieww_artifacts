@@ -1,0 +1,8 @@
+// wright.recipe/1 — verify with: wright recipe verify <file>
+recipe "weekly-csv-report" {
+  version "1.0"
+  publisher "Wright gallery"
+  description "Every Monday, read the CSVs in a sales folder and write a one-page summary report."
+  blueprint "meta { name \"Weekly report\" }\nintent { summary \"a one-page weekly summary of the CSVs in my sales folder\" confirmed \"v1\" }\nagent Reader { goal \"read every CSV in the folder data/sales and total the numbers\" tools \"files-read\" tools \"files-list\" out \"totals.json\" permissions files-read=true }\nagent Writer { goal \"write a one-page report from the totals\" in \"totals.json\" out \"report.md\" }\nedge from=\"Reader\" to=\"Writer\" out=\"totals.json\" in=\"totals.json\" schema=\"json-object\"\nmodels { tier cheap prefer=\"deepseek-v4-flash\" }\ndeliverable kind=\"report\" { check \"artifacts/report.md exists and reads on one page\" accept \"the report names the total for every CSV file\" accept \"every number in the report appears in one of the CSVs\" }"
+  publisher-key ""
+}

@@ -31,6 +31,28 @@ pub enum Value {
 impl Value {
     /// Get by key. Objects match by name; arrays match by numeric
     /// index as a string ("0", "1", ...) — enough for light pathing.
+    /// Set a key in an Obj (append or replace); a no-op on other kinds.
+    pub fn set(&mut self, key: &str, value: Value) {
+        if let Value::Obj(fields) = self {
+            for f in fields.iter_mut() {
+                if f.0 == key {
+                    f.1 = value;
+                    return;
+                }
+            }
+            fields.push((key.to_string(), value));
+        }
+    }
+
+    /// The key's value, mutable, if this is an Obj holding it.
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
+        if let Value::Obj(fields) = self {
+            fields.iter_mut().find(|f| f.0 == key).map(|f| &mut f.1)
+        } else {
+            None
+        }
+    }
+
     pub fn get(&self, key: &str) -> Option<&Value> {
         match self {
             Value::Obj(pairs) => pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v),
@@ -116,7 +138,11 @@ impl Value {
 /// Parse a JSON document. Errors are human strings, not typed enums;
 /// they go into logs and provider error messages.
 pub fn parse(src: &str) -> Result<Value, String> {
-    let mut p = Parser { b: src.as_bytes(), i: 0, depth: 0 };
+    let mut p = Parser {
+        b: src.as_bytes(),
+        i: 0,
+        depth: 0,
+    };
     p.skip_ws();
     let v = p.value()?;
     p.skip_ws();
@@ -161,9 +187,16 @@ impl<'a> Parser<'a> {
             Some(b'{') | Some(b'[') => {
                 self.depth += 1;
                 if self.depth > MAX_DEPTH {
-                    return Err(format!("JSON nested deeper than {MAX_DEPTH} levels at byte {}", self.i));
+                    return Err(format!(
+                        "JSON nested deeper than {MAX_DEPTH} levels at byte {}",
+                        self.i
+                    ));
                 }
-                let v = if self.peek() == Some(b'{') { self.object() } else { self.array() };
+                let v = if self.peek() == Some(b'{') {
+                    self.object()
+                } else {
+                    self.array()
+                };
                 self.depth -= 1;
                 v
             }
@@ -274,8 +307,7 @@ impl<'a> Parser<'a> {
                                     if !(0xDC00..0xE000).contains(&low) {
                                         return Err("invalid low surrogate".into());
                                     }
-                                    let combined =
-                                        0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                                    let combined = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
                                     char::from_u32(combined).ok_or("invalid surrogate pair")?
                                 } else {
                                     '\u{FFFD}' // lone surrogate: replace, be lenient
@@ -336,7 +368,8 @@ impl<'a> Parser<'a> {
                 self.i += 1;
             }
         }
-        let text = std::str::from_utf8(&self.b[start..self.i]).map_err(|_| "bad number".to_string())?;
+        let text =
+            std::str::from_utf8(&self.b[start..self.i]).map_err(|_| "bad number".to_string())?;
         text.parse::<f64>()
             .map(Value::Num)
             .map_err(|_| format!("invalid number '{text}'"))
@@ -429,7 +462,12 @@ mod tests {
     fn round_trip() {
         let src = r#"{"a":[1,2.5,"x"],"b":{"c":true,"d":null},"e":"he said \"hi\"\n"}"#;
         let v = parse(src).unwrap();
-        assert_eq!(v.get("b").and_then(|b| b.get("c")).and_then(|c| c.as_bool()), Some(true));
+        assert_eq!(
+            v.get("b")
+                .and_then(|b| b.get("c"))
+                .and_then(|c| c.as_bool()),
+            Some(true)
+        );
         let out = to_string(&v);
         let v2 = parse(&out).unwrap();
         assert_eq!(v, v2);

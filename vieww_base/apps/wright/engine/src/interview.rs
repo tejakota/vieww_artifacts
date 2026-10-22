@@ -65,20 +65,72 @@ agent Fetcher {                          // one card; a name, then fields:
 edge from="Fetcher" to="Summarizer"      // Summarizer runs after Fetcher and receives its outputs
 chips { scheduling cron="0 8 * * *" tz="Asia/Kolkata" logging on tests on }
 guardrails { budget per-firing=500000 daily=3000000 wall-clock 300 max-turns 40 }   // budgets in micro-USD
-deliverable kind="email" { check "What must be true when it is done." }
+deliverable kind="email" {
+  check "What must be true when it is done."
+  accept "One promise the person can read and a test can check."   // 1-3 lines; each becomes a check the Reviewer enforces
+}
 models { tier cheap prefer="model-id" fallback="model-id" tier quality prefer="model-id" fallback="model-id" }
+
+edge from="Fetcher" to="Summarizer" out="stories.json" in="stories.json" schema="json-array"   // a typed hand-off (json-object | json-array | text | csv | any)
 
 Rules: every tool's capability must be granted in permissions; every `in` must be produced
 by an agent connected by edges; secrets are chips { secrets name="keychain:path" } — never values.
+Write `accept` lines for what the person cares about: they read them as promises before anything runs.
+An agent that holds private data, untrusted input AND an outbound channel needs `approval "before-send"`.
 "#;
 
-fn system_prompt(models_hint: &str) -> String {
+fn system_prompt(models_hint: &str, config: &Config) -> String {
     let spec = wright_agents::spec(compiler::SystemKind::Interviewer);
     let mut tools = String::from("\nTOOL PALETTE\n");
-    for t in PALETTE.iter().filter(|t| t.name != "write-output" && t.implemented) {
+    for t in PALETTE
+        .iter()
+        .filter(|t| t.name != "write-output" && t.name != "worker" && t.name != "mcp-call" && t.implemented)
+    {
         tools.push_str(&format!("- {}: {}\n", t.name, t.summary));
     }
-    format!("{}\n{FORMAT_REFERENCE}{tools}\nUse these model ids in the models section unless told otherwise: {models_hint}.\nAsk at most one short question at a time. If the request is already clear, propose immediately.", spec.prompt)
+    format!(
+        "{}\n{FORMAT_REFERENCE}{tools}{}\nUse these model ids in the models section unless told otherwise: {models_hint}.\nAsk at most one short question at a time. If the request is already clear, propose immediately.",
+        spec.prompt,
+        hands_on_this_machine(config)
+    )
+}
+
+/// The external agents and MCP servers this machine actually has — so the
+/// Interviewer can offer them, and never invents one that is not there.
+pub fn hands_on_this_machine(config: &Config) -> String {
+    let workers: Vec<String> = config
+        .workers
+        .iter()
+        .filter_map(|w| {
+            wright_tools::worker::resolve_command(&w.command)
+                .ok()
+                .map(|p| format!("- {} (runs {})", w.name, p.display()))
+        })
+        .collect();
+    let mut out = String::from("\nWORKERS ON THIS MACHINE (external coding agents)\n");
+    if workers.is_empty() {
+        out.push_str("None are installed. Never write a `worker` line.\n");
+    } else {
+        out.push_str(&workers.join("\n"));
+        out.push_str(
+            "\nWhen one step is substantial coding inside the project — write a program, change code, make failing tests pass — \
+hand that step to a worker instead of a plain agent:\n\
+agent Coder {\n  goal \"One sentence: the code to write and what done looks like.\"\n  worker \"<name from the list>\"\n  worker-files \"src/\"              // the folders it may change; as narrow as works\n  out \"report.md\"                  // optional\n  approval \"before-send\"            // required: a worker sends the project copy to its own vendor\n  permissions files-read=true files-write=true spawn=true network=true\n}\n\
+Its work is still checked by Wright's tests and Reviewer. Use a worker only for coding; a plain agent does the rest. \
+Say in your summary that the step goes to that worker, so the person knows.\n",
+        );
+    }
+    if !config.mcp_servers.is_empty() {
+        out.push_str("\nMCP SERVERS ON THIS MACHINE (pinned)\n");
+        for m in &config.mcp_servers {
+            out.push_str(&format!("- {}\n", m.name));
+        }
+        out.push_str(
+            "An agent may use one with `mcp server=\"<name>\" allow=\"<tool>,<tool>\"` — list only the tools it needs; \
+its answers count as untrusted input.\n",
+        );
+    }
+    out
 }
 
 fn propose_tool() -> ToolDef {
@@ -97,13 +149,28 @@ pub fn check_proposal(kdl: &str) -> Result<Blueprint, String> {
     Ok(bp)
 }
 
+/// [`check_proposal`], and the organization's policy: a plan the policy
+/// would refuse at firing is sent back now, so the Interviewer drafts
+/// within the rules instead of the person finding out later.
+pub fn check_proposal_with(kdl: &str, config: &Config) -> Result<Blueprint, String> {
+    let bp = check_proposal(kdl)?;
+    crate::org::enforce(&bp, config).map_err(|e| format!("It breaks the rules: {e}"))?;
+    Ok(bp)
+}
+
 /// The Interviewer's model, provider and key: the configured one, or the
 /// built-in model when that one has no provider or no key (and fallback
 /// is on), with a word to the person about it.
-fn interview_endpoint<'c>(config: &'c Config, io: &mut dyn InterviewIo) -> Result<(String, &'c ProviderEntry, Option<SecretValue>), String> {
+fn interview_endpoint<'c>(
+    config: &'c Config,
+    io: &mut dyn InterviewIo,
+) -> Result<(String, &'c ProviderEntry, Option<SecretValue>), String> {
     let model = config.interview_model.clone();
     let problem = match config.provider_for(&model) {
-        None => format!("no provider is configured for the interview model '{model}' ({})", config.source),
+        None => format!(
+            "no provider is configured for the interview model '{model}' ({})",
+            config.source
+        ),
         Some(entry) => match &entry.key {
             None => return Ok((model, entry, None)),
             Some(r) => match secrets::resolve(r) {
@@ -127,7 +194,12 @@ fn interview_endpoint<'c>(config: &'c Config, io: &mut dyn InterviewIo) -> Resul
 /// a short note in front.
 fn resumed(earlier: &[(bool, String)], next: String) -> Vec<Message> {
     let mut turns: Vec<(bool, String)> = Vec::new();
-    for (you, text) in earlier.iter().map(|(y, t)| (*y, t.trim())).filter(|(_, t)| !t.is_empty()).chain([(true, next.trim())]) {
+    for (you, text) in earlier
+        .iter()
+        .map(|(y, t)| (*y, t.trim()))
+        .filter(|(_, t)| !t.is_empty())
+        .chain([(true, next.trim())])
+    {
         match turns.last_mut() {
             Some((side, joined)) if *side == you => {
                 joined.push_str("\n\n");
@@ -137,17 +209,33 @@ fn resumed(earlier: &[(bool, String)], next: String) -> Vec<Message> {
         }
     }
     if turns.first().is_some_and(|(you, _)| !you) {
-        turns.insert(0, (true, "(We are picking up an earlier conversation.)".into()));
+        turns.insert(
+            0,
+            (true, "(We are picking up an earlier conversation.)".into()),
+        );
     }
     turns
         .into_iter()
-        .map(|(you, text)| if you { Message::user_text(text) } else { Message { role: Role::Assistant, blocks: vec![Block::Text(text)] } })
+        .map(|(you, text)| {
+            if you {
+                Message::user_text(text)
+            } else {
+                Message {
+                    role: Role::Assistant,
+                    blocks: vec![Block::Text(text)],
+                }
+            }
+        })
         .collect()
 }
 
 /// Run the interview. On confirmation, writes `blueprint.kdl` into
 /// `project_dir` (and commits it to the store) and returns it.
-pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) -> Result<Option<Blueprint>, String> {
+pub fn interview(
+    project_dir: &Path,
+    config: &Config,
+    io: &mut dyn InterviewIo,
+) -> Result<Option<Blueprint>, String> {
     let (model, entry, key) = interview_endpoint(config, io)?;
     let client = entry.client();
     let net = NetConfig::from_env();
@@ -158,13 +246,17 @@ pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) 
         _ => return Ok(None),
     };
     let mut req = CompletionRequest::new(model.clone());
-    req.system = system_prompt(&model);
+    req.system = system_prompt(&model, config);
     req.tools = vec![propose_tool()];
     req.messages = resumed(&earlier, first);
 
     let mut proposal: Option<Blueprint> = None;
     for _turn in 0..40 {
-        let ep = [Endpoint { model: model.clone(), provider: client.as_ref(), api_key: key.as_ref().map(|k| k.expose().to_string()) }];
+        let ep = [Endpoint {
+            model: model.clone(),
+            provider: client.as_ref(),
+            api_key: key.as_ref().map(|k| k.expose().to_string()),
+        }];
         io.working("Thinking");
         let mut so_far = String::new();
         let resp = {
@@ -174,14 +266,19 @@ pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) 
                     so_far.push_str(t);
                     io.partial(so_far.trim_start());
                 }
-                models::Delta::ToolStarted(name) if name == "propose_blueprint" => io.working("Drafting the plan"),
+                models::Delta::ToolStarted(name) if name == "propose_blueprint" => {
+                    io.working("Drafting the plan")
+                }
                 models::Delta::ToolStarted(_) => {}
                 models::Delta::Status(s) => io.working(s),
             };
             let mut on_retry = |_: &str| {};
             models::call(&ep, &req, &net, 3, &mut on_delta, &mut on_retry)?
         };
-        req.messages.push(Message { role: Role::Assistant, blocks: resp.blocks.clone() });
+        req.messages.push(Message {
+            role: Role::Assistant,
+            blocks: resp.blocks.clone(),
+        });
         let text = resp.text();
         if !text.trim().is_empty() {
             io.say(text.trim());
@@ -194,7 +291,7 @@ pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) 
                     format!("Unknown tool '{name}'. Use propose_blueprint.")
                 } else {
                     io.working("Checking the draft plan");
-                    match check_proposal(input.str_of("kdl").unwrap_or("")) {
+                    match check_proposal_with(input.str_of("kdl").unwrap_or(""), config) {
                         Ok(bp) => {
                             proposal = Some(bp);
                             "VALID. Wright will now show the person the summary.".into()
@@ -205,9 +302,16 @@ pub fn interview(project_dir: &Path, config: &Config, io: &mut dyn InterviewIo) 
                         }
                     }
                 };
-                results.push(Block::ToolResult { id: id.to_string(), is_error: !content.starts_with("VALID"), content });
+                results.push(Block::ToolResult {
+                    id: id.to_string(),
+                    is_error: !content.starts_with("VALID"),
+                    content,
+                });
             }
-            req.messages.push(Message { role: Role::User, blocks: results });
+            req.messages.push(Message {
+                role: Role::User,
+                blocks: results,
+            });
             continue;
         }
         // The Interviewer finished a turn without a tool call.
@@ -234,7 +338,8 @@ pub fn write_confirmed(project_dir: &Path, mut bp: Blueprint) -> Result<Blueprin
     let version = store.blueprint_history().len() + 1;
     bp.intent.confirmed = format!("v{version}");
     if bp.meta.created.is_empty() {
-        bp.meta.created = wright_core::schedule::rfc3339_utc((wright_core::events::now_ms() / 1000) as i64);
+        bp.meta.created =
+            wright_core::schedule::rfc3339_utc((wright_core::events::now_ms() / 1000) as i64);
     }
     let text = format!(
         "// blueprint.kdl — {}\n// Written by Wright after you confirmed it. The UI edits this file;\n// you may edit it by hand too (`wright plan` checks your edit).\n\n{}",
@@ -242,7 +347,10 @@ pub fn write_confirmed(project_dir: &Path, mut bp: Blueprint) -> Result<Blueprin
         canon::canonical(&bp)
     );
     write_atomic(&project_dir.join("blueprint.kdl"), text.as_bytes())?;
-    store.commit_blueprint(&canon::canonical(&bp), &format!("confirmed {}", bp.intent.confirmed))?;
+    store.commit_blueprint(
+        &canon::canonical(&bp),
+        &format!("confirmed {}", bp.intent.confirmed),
+    )?;
     Ok(bp)
 }
 
@@ -291,19 +399,54 @@ mod tests {
         let roles = |m: &[Message]| m.iter().map(|m| m.role == Role::User).collect::<Vec<_>>();
         // Fresh: just the message.
         let m = resumed(&[], "make a digest".into());
-        assert_eq!((roles(&m), m[0].blocks.clone()), (vec![true], vec![Block::Text("make a digest".into())]));
+        assert_eq!(
+            (roles(&m), m[0].blocks.clone()),
+            (vec![true], vec![Block::Text("make a digest".into())])
+        );
         // Wright spoke first (a fallback note), you twice in a row, blanks dropped.
-        let earlier = vec![(false, "(using the built-in model)".to_string()), (true, "a digest".into()), (false, "Of what?".into()), (true, "my sales folder".into()), (true, "  ".into())];
+        let earlier = vec![
+            (false, "(using the built-in model)".to_string()),
+            (true, "a digest".into()),
+            (false, "Of what?".into()),
+            (true, "my sales folder".into()),
+            (true, "  ".into()),
+        ];
         let m = resumed(&earlier, "weekly".into());
         assert_eq!(roles(&m), vec![true, false, true, false, true]);
-        assert_eq!(m[4].blocks, vec![Block::Text("my sales folder\n\nweekly".into())]);
+        assert_eq!(
+            m[4].blocks,
+            vec![Block::Text("my sales folder\n\nweekly".into())]
+        );
     }
 
     #[test]
     fn the_reference_mentions_every_implemented_tool() {
-        let p = system_prompt("m");
-        for t in PALETTE.iter().filter(|t| t.implemented && t.name != "write-output") {
+        let p = system_prompt("m", &Config::builtin());
+        // `worker` and `mcp-call` are reached through their own card lines
+        // (`worker "..."`, `mcp server=...`), offered only when this machine
+        // has one — never as a bare tool name.
+        for t in PALETTE
+            .iter()
+            .filter(|t| t.implemented && !["write-output", "worker", "mcp-call"].contains(&t.name))
+        {
             assert!(p.contains(t.name), "{}", t.name);
         }
+        assert!(p.contains("accept \""), "acceptance sentences are taught");
+        assert!(p.contains("schema="), "typed edges are taught");
+    }
+
+    #[test]
+    fn workers_are_offered_only_when_this_machine_has_one() {
+        let mut cfg = Config::parse("", "t").unwrap();
+        for w in cfg.workers.iter_mut() {
+            w.command = "/no/such/agent".into();
+        }
+        let none = hands_on_this_machine(&cfg);
+        assert!(none.contains("Never write a `worker` line"), "{none}");
+        cfg.workers[0].command = "sh".into(); // on every PATH
+        let one = hands_on_this_machine(&cfg);
+        assert!(one.contains(&format!("- {} (runs", cfg.workers[0].name)), "{one}");
+        assert!(one.contains("approval \\\"before-send\\\"") || one.contains("approval \"before-send\""), "{one}");
+        assert!(!one.contains("MCP SERVERS"), "no MCP section without servers");
     }
 }

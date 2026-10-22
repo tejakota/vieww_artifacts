@@ -11,6 +11,8 @@ use std::rc::Rc;
 use vieww::prelude::*;
 
 use super::kit::*;
+use super::session::Voice;
+use super::theme::Pal;
 use super::thread::{composer, tone_color};
 use super::Ui;
 
@@ -82,8 +84,11 @@ pub fn home(ui: &Ui) -> WidgetNode {
             SizedBox::height(28.0).into(),
             Text::new("What should exist?").size(46.0).color(p.ink).weight(FontWeight::Bold).into(),
             para("Describe the outcome in your own words. Wright drafts a plan, shows what it will touch and what it costs, and runs nothing until you approve.", 16.0, p.muted),
+            speak_hero(&ui),
             composer(&ui, &ui.home, send, "Every Monday, read the CSVs in my sales folder and email me a one-page summary", true),
-            row(10.0, starters),
+            // Stretch: the three cards stand as tall as the tallest, so a
+            // shorter subtitle does not leave one card floating in the row.
+            Flex::row().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0).children(starters).into(),
             {
                 let u = ui.clone();
                 row(6.0, vec![
@@ -105,6 +110,87 @@ pub fn home(ui: &Ui) -> WidgetNode {
     })
     .into();
     scroll_area(&ui2, &ui2.home_scroll, pad(EdgeInsets::only(32.0, 12.0, 32.0, 60.0), reading(720.0, content)))
+}
+
+/// The mic, as the main way to start (the memo's item 6): one big
+/// affordance that says SPEAK FIRST. It opens the same voice pipeline
+/// the composer's mic icon uses — but it is the first thing a person
+/// tries, not a small button beside a keyboard they were reaching for.
+/// With built-in Whisper on this machine, speaking costs nothing and
+/// leaks nothing; the transcript starts the session when it lands.
+fn speak_hero(ui: &Ui) -> WidgetNode {
+    let p = ui.pal();
+    let (u, c) = (ui.clone(), ui.home.clone());
+    let listening = c.voice.get() == Voice::Listening;
+    let node: WidgetNode = match c.voice.get() {
+        Voice::Listening => {
+            let u2 = u.clone();
+            let c2 = c.clone();
+            Pressable::sensed(move |s: Sense| {
+            let level = u.mic_level.get();
+            Container::new()
+                .width(520.0)
+                .color(p.accent_soft)
+                .radius(corner::CARD)
+                .border(Border::new(p.accent, 1.0 + s.hover))
+                .padding(EdgeInsets::all(14.0))
+                .child(row(12.0, vec![
+                    Glyph::Mic.draw(22.0, p.accent_ink),
+                    grow(column(3.0, vec![
+                        b("Listening — say what should exist.".to_string(), 15.0, p.ink),
+                        t("Tap to stop; Wright writes it down and starts.", 12.5, p.muted),
+                    ])),
+                    meter_bars(&p, level, u.clock.get()),
+                ]))
+                .into()
+        })
+        .on_tap(move || u2.stop_voice(&c2))
+        .into()
+        }
+        Voice::Transcribing => {
+            let u = u.clone();
+            Container::new()
+                .width(520.0)
+                .color(p.surface)
+                .radius(corner::CARD)
+                .border(Border::new(p.line_strong, 1.5))
+                .padding(EdgeInsets::all(14.0))
+                .child(row(12.0, vec![
+                    Glyph::spinner(22.0, p.accent_ink, u.clock.get()),
+                    b("Writing it down...".to_string(), 15.0, p.ink),
+                ]))
+                .into()
+        }
+        _ => {
+            let u3 = u.clone();
+            let c3 = c.clone();
+            Pressable::sensed(move |s: Sense| {
+            Container::new()
+                .width(520.0)
+                .color(p.surface.lerp(p.accent_soft, s.hover))
+                .radius(corner::CARD)
+                .border(Border::new(if s.hover > 0.0 { p.accent } else { p.line_strong }, 1.5))
+                .padding(EdgeInsets::all(14.0))
+                .child(row(12.0, vec![
+                    Glyph::Mic.draw(22.0, p.accent_ink),
+                    grow(column(3.0, vec![
+                        b("Speak instead of typing.".to_string(), 15.0, p.ink),
+                        t("Tap, say what should exist, tap again — the transcript starts the interview. Nothing leaves this machine.", 12.5, p.muted),
+                    ])),
+                ]))
+                .into()
+        })
+        .on_tap(move || u3.start_voice(&c3))
+        .into()
+        }
+    };
+    let _ = listening;
+    node
+}
+
+/// Five bars that follow the voice, sized for the hero.
+fn meter_bars(p: &Pal, level: f32, clock: f32) -> WidgetNode {
+    super::thread::meter(p, level, clock)
 }
 
 /// Cards in rows of `per`.

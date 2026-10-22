@@ -20,7 +20,7 @@ on:
       version:
         description: "Version to stamp on the installers (no leading v), e.g. 0.3.0"
         required: true
-        default: "0.5.2"
+        default: "1.0.0"
       publish:
         description: "Publish a GitHub release (tag wright-v<version>). Off = artifacts only."
         type: boolean

@@ -146,22 +146,137 @@ pub mod corner {
     pub const CHIP: f32 = 11.0;
 }
 
+/// Rule of the house for every box: **nothing it holds is drawn outside
+/// it.** Text that can be long is one line with an ellipsis (`line`,
+/// `fill`, `pill`) or wraps inside its width (`para`); a slot is never a
+/// fixed size around text; and cards clip as a last resort, so a row that
+/// is wider than the card is cut at the card's edge, never painted over
+/// its neighbours.
 pub fn card(p: &Pal, child: impl Into<WidgetNode>) -> WidgetNode {
-    Container::new()
-        .color(p.surface)
-        .radius(corner::CARD)
-        .border(Border::new(p.line, 1.0))
-        .padding(EdgeInsets::symmetric(20.0, 18.0))
-        .child(child)
+    Clip::rounded(corner::CARD)
+        .child(
+            Container::new()
+                .color(p.surface)
+                .radius(corner::CARD)
+                .border(Border::new(p.line, 1.0))
+                .padding(EdgeInsets::symmetric(20.0, 18.0))
+                .child(child),
+        )
         .into()
 }
 
 pub fn tinted(fill: Color, edge: Color, child: impl Into<WidgetNode>) -> WidgetNode {
-    Container::new().color(fill).radius(corner::CARD).border(Border::new(edge, 1.0)).padding(EdgeInsets::symmetric(20.0, 18.0)).child(child).into()
+    Clip::rounded(corner::CARD)
+        .child(Container::new().color(fill).radius(corner::CARD).border(Border::new(edge, 1.0)).padding(EdgeInsets::symmetric(20.0, 18.0)).child(child))
+        .into()
 }
 
+/// A chip: one line, never wrapping — a pill sizes to its words, and when
+/// the room is smaller than the words it ends in an ellipsis instead of
+/// growing a second line out of its rounded box.
 pub fn pill(label: impl Into<String>, fg: Color, bg: Color) -> WidgetNode {
-    Container::new().color(bg).radius(corner::CHIP).padding(EdgeInsets::symmetric(10.0, 3.0)).child(t(label, 11.5, fg)).into()
+    Container::new().color(bg).radius(corner::CHIP).padding(EdgeInsets::symmetric(10.0, 3.0)).child(line(label, 11.5, fg)).into()
+}
+
+/// A box at least `min` wide, as wide as its content otherwise — the
+/// right way to line up a column of marks or labels (a fixed-size box
+/// lets anything longer than the guess spill out of it).
+pub fn at_least(min: f32, child: impl Into<WidgetNode>) -> WidgetNode {
+    Constrained::new(Constraints::new(min, f32::INFINITY, 0.0, f32::INFINITY)).child(child).into()
+}
+
+// ── copyable text ────────────────────────────────────────────────
+
+/// Which text is selected (its hash) and where.
+type Selected = Option<(u64, vieww::foundation::TextSelection)>;
+
+thread_local! {
+    /// The one text selection in the window (like a browser: selecting in
+    /// one place clears the other), keyed by the selected text's hash.
+    static SELECTION: std::cell::RefCell<Option<Signal<Selected>>> = const { std::cell::RefCell::new(None) };
+    /// The pasteboard the window was given (the system one; a memory one
+    /// headless), for the Copy buttons.
+    static PASTEBOARD: std::cell::RefCell<Option<Rc<dyn vieww::foundation::Clipboard>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Set up copyable text for this thread's window.
+pub fn init_copy(rt: &vieww::element::Runtime, clipboard: Rc<dyn vieww::foundation::Clipboard>) {
+    SELECTION.with_borrow_mut(|s| *s = Some(rt.signal(None)));
+    PASTEBOARD.with_borrow_mut(|c| *c = Some(clipboard));
+}
+
+/// Put `text` on the pasteboard. False when there is none.
+pub fn copy_text(text: &str) -> bool {
+    PASTEBOARD.with_borrow(|c| c.as_ref().is_some_and(|c| c.write_text(text).is_ok()))
+}
+
+fn text_key(s: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+
+/// Wrapping text a person can select with the pointer and copy (Ctrl/Cmd+C,
+/// or Ctrl/Cmd+A then C). Use it for anything worth keeping — replies,
+/// plans, errors, paths, results. Not inside something that is itself
+/// tapped or dragged: the text takes the pointer.
+pub fn copyable(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
+    let text: String = s.into();
+    let Some(sel) = SELECTION.with_borrow(|s| s.clone()) else {
+        return para(text, size, color);
+    };
+    let key = text_key(&text);
+    Live::new("copyable", move || {
+        let mut value = TextEditingValue::new(text.clone());
+        value.selection = match sel.get() {
+            Some((k, range)) if k == key => range,
+            _ => vieww::foundation::TextSelection::collapsed(0),
+        };
+        let (on_change, on_select, same) = (sel.clone(), sel.clone(), text.clone());
+        TextField::new(value)
+            .read_only()
+            .show_cursor(false)
+            .size(size)
+            .color(color)
+            .cursor(color, 0.0)
+            .selection_color(color.with_alpha(60))
+            .on_changed(Rc::new(move |v: TextEditingValue| {
+                // Selection and caret moves only: the field is read-only.
+                if v.text == same {
+                    on_change.set(Some((key, v.selection)));
+                }
+            }))
+            .on_selection(Rc::new(move |range: vieww::foundation::TextSelection| on_select.set(Some((key, range)))))
+            .into()
+    })
+    .into()
+}
+
+/// One line of copyable monospace (a path, a hash, a command).
+pub fn copyable_mono(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
+    let text: String = s.into();
+    row(6.0, vec![grow(mono(text.clone(), size, color)), copy_icon(color, text)])
+}
+
+/// A small "copy" affordance: puts `text` on the pasteboard.
+pub fn copy_icon(color: Color, text: String) -> WidgetNode {
+    Semantics::new()
+        .label("Copy".to_string())
+        .child(
+            Pressable::sensed(move |s: Sense| {
+                Container::new()
+                    .padding(EdgeInsets::symmetric(6.0, 2.0))
+                    .radius(corner::SMALL)
+                    .color(color.with_alpha((s.hover * 30.0) as u8))
+                    .child(line("Copy", 11.5, color))
+                    .into()
+            })
+            .on_tap(move || {
+                copy_text(&text);
+            }),
+        )
+        .into()
 }
 
 pub fn divider(p: &Pal) -> WidgetNode {

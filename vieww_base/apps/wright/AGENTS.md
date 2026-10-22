@@ -29,9 +29,19 @@ sandbox; the event spine records everything durably for resume and replay.
    has no console window). Every block carries a `// SAFETY:` comment. The executor
    has zero unsafe; keep it that way. So does `infer/` (the built-in
    models): its kernels are safe Rust the compiler vectorizes (ADR-022).
-3. **No crypto, ever, by hand.** TLS reaches the OS backend. Hashing ports
-   the public-domain BLAKE3 reference (pinned to official vectors). Any
-   signature scheme (recipes, SSO) goes through OS APIs per ADR-012.
+   The crypto reference ports (`core/src/sha512.rs`, `core/src/ed25519.rs`)
+   are safe Rust and stay pinned to the standard's own vectors plus
+   OpenSSL cross-vectors — a port that loses its vectors is dead code
+   (ADR-012's reversal clause, exercised by ADR-025). The MCP client
+   (`tools/src/mcp.rs`) and the worker tool (`tools/src/worker.rs`) are
+   std-only subprocess users: no unsafe, and every external program they
+   spawn is scoped (a copy and a clock; a hash pin).
+3. **No crypto, ever, by hand — except a reviewed reference port with its
+   vectors.** TLS reaches the OS backend. Hashing ports the public-domain
+   BLAKE3 reference (pinned to official vectors); Ed25519 and SHA-512 are
+   reference ports pinned to the RFC's vectors and OpenSSL, per ADR-012's
+   reversal clause (exercised by ADR-025 — receipts had to be verifiable
+   on a machine with no OS keychain story, which was the point).
 4. **Secrets are references.** `keychain:` scheme only, anywhere a secret
    appears — blueprints AND `config.kdl`. A secret value in code, logs,
    events, or a test is a bug you fix before the PR is reviewable.

@@ -51,7 +51,11 @@ impl Url {
     /// The `Host` header value: host, bracketed if IPv6, plus the port
     /// when it is not the scheme's default.
     pub fn host_header(&self) -> String {
-        let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
+        let host = if self.host.contains(':') {
+            format!("[{}]", self.host)
+        } else {
+            self.host.clone()
+        };
         if self.port == self.default_port() {
             host
         } else {
@@ -61,7 +65,11 @@ impl Url {
 
     /// `host:port` for CONNECT and logs.
     pub fn authority(&self) -> String {
-        let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
+        let host = if self.host.contains(':') {
+            format!("[{}]", self.host)
+        } else {
+            self.host.clone()
+        };
         format!("{host}:{}", self.port)
     }
 }
@@ -82,7 +90,9 @@ pub fn parse_url(s: &str) -> Result<Url, String> {
         .ok_or_else(|| format!("URL needs a scheme (https://...): {s}"))?;
     let scheme = scheme.to_ascii_lowercase();
     if scheme != "https" && scheme != "http" {
-        return Err(format!("unsupported scheme '{scheme}' (http or https only)"));
+        return Err(format!(
+            "unsupported scheme '{scheme}' (http or https only)"
+        ));
     }
     // The authority ends at the first '/', '?' or '#'.
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
@@ -103,21 +113,32 @@ pub fn parse_url(s: &str) -> Result<Url, String> {
     let (host, port) = if let Some(after) = authority.strip_prefix('[') {
         let (h, rest) = after.split_once(']').ok_or("unterminated IPv6 literal")?;
         let port = match rest.strip_prefix(':') {
-            Some(p) => p.parse().map_err(|_| format!("invalid port in '{authority}'"))?,
+            Some(p) => p
+                .parse()
+                .map_err(|_| format!("invalid port in '{authority}'"))?,
             None if rest.is_empty() => default_port,
             None => return Err(format!("invalid authority '{authority}'")),
         };
         (h.to_string(), port)
     } else {
         match authority.rsplit_once(':') {
-            Some((h, p)) => (h.to_string(), p.parse().map_err(|_| format!("invalid port in '{authority}'"))?),
+            Some((h, p)) => (
+                h.to_string(),
+                p.parse()
+                    .map_err(|_| format!("invalid port in '{authority}'"))?,
+            ),
             None => (authority.to_string(), default_port),
         }
     };
     if host.is_empty() {
         return Err("URL has an empty host".into());
     }
-    Ok(Url { scheme, host: host.to_ascii_lowercase(), port, path })
+    Ok(Url {
+        scheme,
+        host: host.to_ascii_lowercase(),
+        port,
+        path,
+    })
 }
 
 // ── limits ───────────────────────────────────────────────────────
@@ -133,7 +154,10 @@ pub struct Limits {
 
 impl Default for Limits {
     fn default() -> Self {
-        Limits { max_head: 64 * 1024, max_body: 32 * 1024 * 1024 }
+        Limits {
+            max_head: 64 * 1024,
+            max_body: 32 * 1024 * 1024,
+        }
     }
 }
 
@@ -149,7 +173,8 @@ pub struct Request {
 
 fn valid_token(s: &str) -> bool {
     !s.is_empty()
-        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
 }
 
 fn valid_value(s: &str) -> bool {
@@ -158,7 +183,12 @@ fn valid_value(s: &str) -> bool {
 
 impl Request {
     pub fn new(method: &str, url: Url) -> Self {
-        Request { method: method.to_string(), url, headers: Vec::new(), body: Vec::new() }
+        Request {
+            method: method.to_string(),
+            url,
+            headers: Vec::new(),
+            body: Vec::new(),
+        }
     }
 
     /// Add a header. Validated at encode time (an invalid header makes
@@ -181,7 +211,9 @@ impl Request {
     /// Encode onto a stream. Host, Content-Length and Connection are
     /// added. Fails without writing anything if any header is invalid.
     pub fn encode(&self, out: &mut dyn Write) -> std::io::Result<()> {
-        let head = self.head_text().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        let head = self
+            .head_text()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         out.write_all(head.as_bytes())?;
         out.write_all(&self.body)?;
         out.flush()
@@ -198,7 +230,9 @@ impl Request {
                 return Err(format!("invalid header name '{k}'"));
             }
             if !valid_value(v) {
-                return Err(format!("header '{k}' contains a line break or control character (refused)"));
+                return Err(format!(
+                    "header '{k}' contains a line break or control character (refused)"
+                ));
             }
             head.push_str(&format!("{k}: {v}\r\n"));
         }
@@ -212,7 +246,8 @@ impl Request {
     /// The encoded head as text, for tests and logs. Secrets never get
     /// here: auth headers are added by the runtime at send time only.
     pub fn encode_head(&self) -> String {
-        self.head_text().unwrap_or_else(|e| format!("<invalid request: {e}>"))
+        self.head_text()
+            .unwrap_or_else(|e| format!("<invalid request: {e}>"))
     }
 }
 
@@ -228,7 +263,10 @@ pub struct Head {
 impl Head {
     pub fn header(&self, name: &str) -> Option<&str> {
         let name = name.to_ascii_lowercase();
-        self.headers.iter().find(|(k, _)| *k == name).map(|(_, v)| v.as_str())
+        self.headers
+            .iter()
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -243,7 +281,10 @@ pub struct Response {
 impl Response {
     pub fn header(&self, name: &str) -> Option<&str> {
         let name = name.to_ascii_lowercase();
-        self.headers.iter().find(|(k, _)| *k == name).map(|(_, v)| v.as_str())
+        self.headers
+            .iter()
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| v.as_str())
     }
 
     pub fn body_text(&self) -> String {
@@ -337,9 +378,15 @@ impl<R: BufRead> BodyReader<R> {
         let framing = if chunked {
             Framing::Chunked
         } else if let Some(len) = head.header("content-length") {
-            let n: u64 = len.trim().parse().map_err(|_| format!("bad Content-Length '{len}'"))?;
+            let n: u64 = len
+                .trim()
+                .parse()
+                .map_err(|_| format!("bad Content-Length '{len}'"))?;
             if n > limits.max_body as u64 {
-                return Err(format!("response body of {n} bytes exceeds the {}-byte limit (refused)", limits.max_body));
+                return Err(format!(
+                    "response body of {n} bytes exceeds the {}-byte limit (refused)",
+                    limits.max_body
+                ));
             }
             Framing::Length(n)
         } else if head.status == 204 || head.status == 304 || (100..200).contains(&head.status) {
@@ -351,12 +398,20 @@ impl<R: BufRead> BodyReader<R> {
             Framing::Length(n) => n,
             _ => 0,
         };
-        Ok(BodyReader { inner, framing, remaining, done: matches!(framing, Framing::Length(0)), total: 0, max_body: limits.max_body })
+        Ok(BodyReader {
+            inner,
+            framing,
+            remaining,
+            done: matches!(framing, Framing::Length(0)),
+            total: 0,
+            max_body: limits.max_body,
+        })
     }
 
     fn next_chunk_size(&mut self) -> std::io::Result<u64> {
         let mut budget = 1024usize;
-        let line = read_line_bounded(&mut self.inner, &mut budget).map_err(std::io::Error::other)?;
+        let line =
+            read_line_bounded(&mut self.inner, &mut budget).map_err(std::io::Error::other)?;
         let size_hex = line.split(';').next().unwrap_or("").trim();
         u64::from_str_radix(size_hex, 16)
             .map_err(|_| std::io::Error::other(format!("bad chunk size '{size_hex}'")))
@@ -365,7 +420,10 @@ impl<R: BufRead> BodyReader<R> {
     fn count(&mut self, n: usize) -> std::io::Result<()> {
         self.total += n;
         if self.total > self.max_body {
-            return Err(std::io::Error::other(format!("response body exceeds the {}-byte limit (refused)", self.max_body)));
+            return Err(std::io::Error::other(format!(
+                "response body exceeds the {}-byte limit (refused)",
+                self.max_body
+            )));
         }
         Ok(())
     }
@@ -389,7 +447,10 @@ impl<R: BufRead> Read for BodyReader<R> {
                 let want = (self.remaining.min(out.len() as u64)) as usize;
                 let n = self.inner.read(&mut out[..want])?;
                 if n == 0 {
-                    return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "body truncated"));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "body truncated",
+                    ));
                 }
                 self.remaining -= n as u64;
                 if self.remaining == 0 {
@@ -405,7 +466,8 @@ impl<R: BufRead> Read for BodyReader<R> {
                         // Trailers until a blank line.
                         let mut budget = 16 * 1024;
                         loop {
-                            let l = read_line_bounded(&mut self.inner, &mut budget).map_err(std::io::Error::other)?;
+                            let l = read_line_bounded(&mut self.inner, &mut budget)
+                                .map_err(std::io::Error::other)?;
                             if l.is_empty() {
                                 break;
                             }
@@ -414,19 +476,25 @@ impl<R: BufRead> Read for BodyReader<R> {
                         return Ok(0);
                     }
                     if size > self.max_body as u64 {
-                        return Err(std::io::Error::other("chunk larger than the body limit (refused)"));
+                        return Err(std::io::Error::other(
+                            "chunk larger than the body limit (refused)",
+                        ));
                     }
                     self.remaining = size;
                 }
                 let want = (self.remaining.min(out.len() as u64)) as usize;
                 let n = self.inner.read(&mut out[..want])?;
                 if n == 0 {
-                    return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "chunk truncated"));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "chunk truncated",
+                    ));
                 }
                 self.remaining -= n as u64;
                 if self.remaining == 0 {
                     let mut budget = 4;
-                    read_line_bounded(&mut self.inner, &mut budget).map_err(std::io::Error::other)?; // CRLF after data
+                    read_line_bounded(&mut self.inner, &mut budget)
+                        .map_err(std::io::Error::other)?; // CRLF after data
                 }
                 self.count(n)?;
                 Ok(n)
@@ -443,13 +511,19 @@ pub fn decode_response_with(r: &mut dyn Read, limits: &Limits) -> Result<Respons
     let mut body = Vec::new();
     let mut buf = [0u8; 16 * 1024];
     loop {
-        let n = body_reader.read(&mut buf).map_err(|e| format!("read body: {e}"))?;
+        let n = body_reader
+            .read(&mut buf)
+            .map_err(|e| format!("read body: {e}"))?;
         if n == 0 {
             break;
         }
         body.extend_from_slice(&buf[..n]);
     }
-    Ok(Response { status: head.status, headers: head.headers, body })
+    Ok(Response {
+        status: head.status,
+        headers: head.headers,
+        body,
+    })
 }
 
 /// Read one full response with default limits.
@@ -465,7 +539,10 @@ mod tests {
     #[test]
     fn url_parsing() {
         let u = parse_url("https://api.openai.com/v1/chat/completions").unwrap();
-        assert_eq!((u.host.as_str(), u.port, u.path.as_str()), ("api.openai.com", 443, "/v1/chat/completions"));
+        assert_eq!(
+            (u.host.as_str(), u.port, u.path.as_str()),
+            ("api.openai.com", 443, "/v1/chat/completions")
+        );
         let u = parse_url("http://localhost:8080").unwrap();
         assert_eq!((u.port, u.path.as_str()), (8080, "/"));
         let u = parse_url("https://example.com?q=1#frag").unwrap();
@@ -474,15 +551,20 @@ mod tests {
         assert_eq!((u.host.as_str(), u.port), ("::1", 7878));
         assert_eq!(u.host_header(), "[::1]:7878");
         assert!(parse_url("ftp://x").is_err());
-        assert!(parse_url("https://user:pw@host/").unwrap_err().contains("credentials"));
+        assert!(parse_url("https://user:pw@host/")
+            .unwrap_err()
+            .contains("credentials"));
         assert!(parse_url("https://a b/").is_err());
     }
 
     #[test]
     fn request_encoding() {
-        let req = Request::new("POST", parse_url("https://api.openai.com/v1/chat/completions").unwrap())
-            .header("Content-Type", "application/json")
-            .json_body("{\"model\":\"x\"}".into());
+        let req = Request::new(
+            "POST",
+            parse_url("https://api.openai.com/v1/chat/completions").unwrap(),
+        )
+        .header("Content-Type", "application/json")
+        .json_body("{\"model\":\"x\"}".into());
         let head = req.encode_head();
         assert!(head.starts_with("POST /v1/chat/completions HTTP/1.1\r\n"));
         assert!(head.contains("Host: api.openai.com\r\n"));
@@ -493,7 +575,8 @@ mod tests {
 
     #[test]
     fn header_injection_is_refused() {
-        let req = Request::new("GET", parse_url("http://x/").unwrap()).header("X-Note", "a\r\nEvil: 1");
+        let req =
+            Request::new("GET", parse_url("http://x/").unwrap()).header("X-Note", "a\r\nEvil: 1");
         let mut out = Vec::new();
         assert!(req.encode(&mut out).is_err());
         assert!(out.is_empty(), "nothing reaches the wire");
@@ -502,23 +585,39 @@ mod tests {
     #[test]
     fn decodes_content_length_chunked_and_eof() {
         let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
-        assert_eq!(decode_response(&mut Cursor::new(&raw[..])).unwrap().body, b"hello");
+        assert_eq!(
+            decode_response(&mut Cursor::new(&raw[..])).unwrap().body,
+            b"hello"
+        );
         let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n";
-        assert_eq!(decode_response(&mut Cursor::new(&raw[..])).unwrap().body, b"hello world");
+        assert_eq!(
+            decode_response(&mut Cursor::new(&raw[..])).unwrap().body,
+            b"hello world"
+        );
         let raw = b"HTTP/1.1 200 OK\r\n\r\nruns to the end";
-        assert_eq!(decode_response(&mut Cursor::new(&raw[..])).unwrap().body, b"runs to the end");
+        assert_eq!(
+            decode_response(&mut Cursor::new(&raw[..])).unwrap().body,
+            b"runs to the end"
+        );
     }
 
     #[test]
     fn hostile_sizes_are_refused_not_allocated() {
         let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 99999999999999\r\n\r\nx";
-        assert!(decode_response(&mut Cursor::new(&raw[..])).unwrap_err().contains("exceeds"));
+        assert!(decode_response(&mut Cursor::new(&raw[..]))
+            .unwrap_err()
+            .contains("exceeds"));
         let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nffffffffffff\r\nx";
         assert!(decode_response(&mut Cursor::new(&raw[..])).is_err());
         let mut huge = b"HTTP/1.1 200 OK\r\nX: ".to_vec();
         huge.extend(std::iter::repeat_n(b'a', 100_000));
-        assert!(decode_response(&mut Cursor::new(&huge[..])).unwrap_err().contains("too large"));
-        let small = Limits { max_head: 1024, max_body: 4 };
+        assert!(decode_response(&mut Cursor::new(&huge[..]))
+            .unwrap_err()
+            .contains("too large"));
+        let small = Limits {
+            max_head: 1024,
+            max_body: 4,
+        };
         let raw = b"HTTP/1.1 200 OK\r\n\r\nmore than four";
         assert!(decode_response_with(&mut Cursor::new(&raw[..]), &small).is_err());
     }

@@ -137,13 +137,18 @@ impl Event {
     /// Parse one JSON line written by [`Event::to_json_line`].
     pub fn from_json_line(line: &str) -> Result<Event, String> {
         let v = json::parse(line)?;
-        let num = |k: &str| v.get(k).and_then(|n| n.as_u64()).ok_or_else(|| format!("event is missing '{k}'"));
+        let num = |k: &str| {
+            v.get(k)
+                .and_then(|n| n.as_u64())
+                .ok_or_else(|| format!("event is missing '{k}'"))
+        };
         let kind_s = v.str_of("kind").ok_or("event is missing 'kind'")?;
         Ok(Event {
             seq: num("seq")?,
             run: num("run")?,
             at_ms: num("at_ms").unwrap_or(0),
-            kind: EventKind::parse(kind_s).ok_or_else(|| format!("unknown event kind '{kind_s}'"))?,
+            kind: EventKind::parse(kind_s)
+                .ok_or_else(|| format!("unknown event kind '{kind_s}'"))?,
             agent: v.str_of("agent").map(String::from),
             note: v.str_of("note").unwrap_or("").to_string(),
             data: v.get("data").map(json::to_string).unwrap_or_default(),
@@ -177,7 +182,10 @@ pub fn now_ms() -> u64 {
 
 impl EventLog {
     pub fn new(run: RunId) -> Self {
-        EventLog { run, events: Vec::new() }
+        EventLog {
+            run,
+            events: Vec::new(),
+        }
     }
 
     /// Rebuild a log from stored events (resume, replay). Sequence
@@ -185,7 +193,11 @@ impl EventLog {
     pub fn from_events(run: RunId, events: Vec<Event>) -> Result<Self, String> {
         for (i, e) in events.iter().enumerate() {
             if e.seq != i as u64 + 1 {
-                return Err(format!("event log is not contiguous at position {} (seq {})", i + 1, e.seq));
+                return Err(format!(
+                    "event log is not contiguous at position {} (seq {})",
+                    i + 1,
+                    e.seq
+                ));
             }
         }
         Ok(EventLog { run, events })
@@ -196,12 +208,23 @@ impl EventLog {
     }
 
     /// Append an event; returns a copy of it. The ONLY way in.
-    pub fn append(&mut self, kind: EventKind, agent: Option<&str>, note: impl Into<String>) -> Event {
+    pub fn append(
+        &mut self,
+        kind: EventKind,
+        agent: Option<&str>,
+        note: impl Into<String>,
+    ) -> Event {
         self.append_with(kind, agent, note, String::new())
     }
 
     /// Append with structured data (a JSON object string).
-    pub fn append_with(&mut self, kind: EventKind, agent: Option<&str>, note: impl Into<String>, data: String) -> Event {
+    pub fn append_with(
+        &mut self,
+        kind: EventKind,
+        agent: Option<&str>,
+        note: impl Into<String>,
+        data: String,
+    ) -> Event {
         let e = Event {
             seq: self.events.len() as u64 + 1,
             run: self.run,
@@ -229,7 +252,10 @@ impl EventLog {
 
     /// Events up to and including `seq` — a past snapshot of the run.
     pub fn snapshot_at(&self, seq: u64) -> EventLog {
-        EventLog { run: self.run, events: self.events.iter().take(seq as usize).cloned().collect() }
+        EventLog {
+            run: self.run,
+            events: self.events.iter().take(seq as usize).cloned().collect(),
+        }
     }
 
     /// Fork: clone the prefix up to `seq` under a new run id, with a
@@ -240,7 +266,11 @@ impl EventLog {
         for e in &mut forked.events {
             e.run = new_run;
         }
-        forked.append(EventKind::RunStarted, None, format!("forked from run {} at event {}", self.run, seq));
+        forked.append(
+            EventKind::RunStarted,
+            None,
+            format!("forked from run {} at event {}", self.run, seq),
+        );
         forked
     }
 }
@@ -262,13 +292,26 @@ mod tests {
     #[test]
     fn json_lines_round_trip() {
         let mut log = EventLog::new(4);
-        log.append_with(EventKind::TokensRecorded, Some("Fetcher"), "1,200 tokens", r#"{"in":1000,"out":200}"#.into());
+        log.append_with(
+            EventKind::TokensRecorded,
+            Some("Fetcher"),
+            "1,200 tokens",
+            r#"{"in":1000,"out":200}"#.into(),
+        );
         log.append(EventKind::Note, None, "a \"quoted\"\nline");
         for e in log.events() {
             let back = Event::from_json_line(&e.to_json_line()).unwrap();
             assert_eq!(&back, e);
         }
-        assert_eq!(log.events()[0].data_value().unwrap().get("in").unwrap().as_u64(), Some(1000));
+        assert_eq!(
+            log.events()[0]
+                .data_value()
+                .unwrap()
+                .get("in")
+                .unwrap()
+                .as_u64(),
+            Some(1000)
+        );
     }
 
     #[test]
@@ -289,6 +332,11 @@ mod tests {
         assert_eq!(fork.run(), 9);
         assert_eq!(fork.len(), 2);
         assert!(fork.events().iter().all(|e| e.run == 9));
-        assert!(fork.events().last().unwrap().note.contains("forked from run 3"));
+        assert!(fork
+            .events()
+            .last()
+            .unwrap()
+            .note
+            .contains("forked from run 3"));
     }
 }

@@ -75,13 +75,28 @@ impl Store {
     /// short hash of the project's canonical path (two projects with the
     /// same folder name never collide).
     pub fn default_root(project_dir: &Path) -> PathBuf {
-        let canon = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());
+        let canon = project_dir
+            .canonicalize()
+            .unwrap_or_else(|_| project_dir.to_path_buf());
         let name: String = canon
             .file_name()
-            .map(|n| n.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).collect())
+            .map(|n| {
+                n.to_string_lossy()
+                    .chars()
+                    .map(|c| {
+                        if c.is_ascii_alphanumeric() || c == '-' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect()
+            })
             .unwrap_or_else(|| "project".into());
         let id = hash::blake3_hex(canon.to_string_lossy().as_bytes());
-        crate::config::wright_home().join("projects").join(format!("{name}-{}", &id[..10]))
+        crate::config::wright_home()
+            .join("projects")
+            .join(format!("{name}-{}", &id[..10]))
     }
 
     /// Open (creating if needed) the store for a project directory.
@@ -95,7 +110,10 @@ impl Store {
         for sub in ["runs", "objects", "cache", "blueprints", "approvals"] {
             fs::create_dir_all(root.join(sub)).map_err(|e| io("create", &root.join(sub), e))?;
         }
-        Ok(Store { project_dir: project_dir.to_path_buf(), root })
+        Ok(Store {
+            project_dir: project_dir.to_path_buf(),
+            root,
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -107,7 +125,10 @@ impl Store {
     /// All run ids, ascending.
     pub fn runs(&self) -> Vec<RunId> {
         let mut ids: Vec<RunId> = fs::read_dir(self.root.join("runs"))
-            .map(|rd| rd.filter_map(|e| e.ok()?.file_name().to_str()?.parse().ok()).collect())
+            .map(|rd| {
+                rd.filter_map(|e| e.ok()?.file_name().to_str()?.parse().ok())
+                    .collect()
+            })
             .unwrap_or_default();
         ids.sort_unstable();
         ids
@@ -176,7 +197,10 @@ impl Store {
         // Content addressing is also an integrity check: a tampered or
         // corrupted object is refused, never served.
         if hash::blake3_hex(&bytes) != h {
-            return Err(format!("object {} is corrupt (its content no longer matches its hash)", hash::short(h)));
+            return Err(format!(
+                "object {} is corrupt (its content no longer matches its hash)",
+                hash::short(h)
+            ));
         }
         Ok(bytes)
     }
@@ -208,14 +232,22 @@ impl Store {
                 Value::Arr(
                     e.artifacts
                         .iter()
-                        .map(|(n, h)| Value::obj(vec![("name", Value::str(n.clone())), ("hash", Value::str(h.clone()))]))
+                        .map(|(n, h)| {
+                            Value::obj(vec![
+                                ("name", Value::str(n.clone())),
+                                ("hash", Value::str(h.clone())),
+                            ])
+                        })
                         .collect(),
                 ),
             ),
             ("cost_micro_usd", Value::int(e.cost_micro_usd as i64)),
             ("run", Value::int(e.produced_by_run as i64)),
         ]);
-        write_atomic(&self.root.join("cache").join(format!("{}.json", e.key)), json::to_string(&v).as_bytes())
+        write_atomic(
+            &self.root.join("cache").join(format!("{}.json", e.key)),
+            json::to_string(&v).as_bytes(),
+        )
     }
 
     // ── blueprint history ────────────────────────────────────────
@@ -233,10 +265,19 @@ impl Store {
             write_atomic(&p, canonical_text.as_bytes())?;
         }
         let seq = history.len() + 1;
-        let line = format!("{seq}\t{h}\t{}\t{}\n", wright_core::events::now_ms(), message.replace(['\n', '\t'], " "));
+        let line = format!(
+            "{seq}\t{h}\t{}\t{}\n",
+            wright_core::events::now_ms(),
+            message.replace(['\n', '\t'], " ")
+        );
         let log = self.root.join("blueprints").join("log");
-        let mut f = OpenOptions::new().create(true).append(true).open(&log).map_err(|e| io("open", &log, e))?;
-        f.write_all(line.as_bytes()).map_err(|e| io("append", &log, e))?;
+        let mut f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)
+            .map_err(|e| io("open", &log, e))?;
+        f.write_all(line.as_bytes())
+            .map_err(|e| io("append", &log, e))?;
         f.sync_all().map_err(|e| io("sync", &log, e))?;
         Ok(h)
     }
@@ -264,9 +305,19 @@ impl Store {
     // ── approvals (cross-process) ────────────────────────────────
 
     /// Post an approval request; any UI or CLI watching can answer it.
-    pub fn post_approval(&self, run: RunId, n: u32, agent: &str, reason: &str) -> Result<PathBuf, String> {
+    pub fn post_approval(
+        &self,
+        run: RunId,
+        n: u32,
+        agent: &str,
+        reason: &str,
+    ) -> Result<PathBuf, String> {
         let p = self.root.join("approvals").join(format!("{run}-{n}.req"));
-        let v = Value::obj(vec![("run", Value::int(run as i64)), ("agent", Value::str(agent)), ("reason", Value::str(reason))]);
+        let v = Value::obj(vec![
+            ("run", Value::int(run as i64)),
+            ("agent", Value::str(agent)),
+            ("reason", Value::str(reason)),
+        ]);
         write_atomic(&p, json::to_string(&v).as_bytes())?;
         Ok(p)
     }
@@ -284,7 +335,10 @@ impl Store {
 
     /// Answer a pending request (used by `wright approve` and the UI).
     pub fn answer_approval(&self, run: RunId, n: u32, approve: bool) -> Result<(), String> {
-        write_atomic(&self.root.join("approvals").join(format!("{run}-{n}.res")), if approve { b"approve" } else { b"deny" })
+        write_atomic(
+            &self.root.join("approvals").join(format!("{run}-{n}.res")),
+            if approve { b"approve" } else { b"deny" },
+        )
     }
 
     /// Requests without an answer yet: (run, n, agent, reason).
@@ -293,15 +347,28 @@ impl Store {
         let mut out = Vec::new();
         for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
             let name = e.file_name().to_string_lossy().to_string();
-            let Some(stem) = name.strip_suffix(".req") else { continue };
-            let Some((r, n)) = stem.split_once('-') else { continue };
-            let (Ok(r), Ok(n)) = (r.parse::<RunId>(), n.parse::<u32>()) else { continue };
+            let Some(stem) = name.strip_suffix(".req") else {
+                continue;
+            };
+            let Some((r, n)) = stem.split_once('-') else {
+                continue;
+            };
+            let (Ok(r), Ok(n)) = (r.parse::<RunId>(), n.parse::<u32>()) else {
+                continue;
+            };
             if self.approval_answer(r, n).is_some() {
                 continue;
             }
-            let v = fs::read_to_string(e.path()).ok().and_then(|t| json::parse(&t).ok());
+            let v = fs::read_to_string(e.path())
+                .ok()
+                .and_then(|t| json::parse(&t).ok());
             let (agent, reason) = v
-                .map(|v| (v.str_of("agent").unwrap_or("").to_string(), v.str_of("reason").unwrap_or("").to_string()))
+                .map(|v| {
+                    (
+                        v.str_of("agent").unwrap_or("").to_string(),
+                        v.str_of("reason").unwrap_or("").to_string(),
+                    )
+                })
                 .unwrap_or_default();
             out.push((r, n, agent, reason));
         }
@@ -313,8 +380,16 @@ impl Store {
 
     pub fn record_spend(&self, day: &str, run: RunId, micro_usd: u64) -> Result<(), String> {
         let p = self.root.join("spend.jsonl");
-        let line = json::to_string(&Value::obj(vec![("day", Value::str(day)), ("run", Value::int(run as i64)), ("micro_usd", Value::int(micro_usd as i64))]));
-        let mut f = OpenOptions::new().create(true).append(true).open(&p).map_err(|e| io("open", &p, e))?;
+        let line = json::to_string(&Value::obj(vec![
+            ("day", Value::str(day)),
+            ("run", Value::int(run as i64)),
+            ("micro_usd", Value::int(micro_usd as i64)),
+        ]));
+        let mut f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&p)
+            .map_err(|e| io("open", &p, e))?;
         writeln!(f, "{line}").map_err(|e| io("append", &p, e))?;
         f.sync_all().map_err(|e| io("sync", &p, e))
     }
@@ -360,7 +435,9 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
         }
         let path = e.path();
         if ft.is_dir() {
-            if (dir == root && NOT_WORKSPACE_TOP.contains(&name.as_str())) || NOT_WORKSPACE_ANY.contains(&name.as_str()) {
+            if (dir == root && NOT_WORKSPACE_TOP.contains(&name.as_str()))
+                || NOT_WORKSPACE_ANY.contains(&name.as_str())
+            {
                 continue;
             }
             collect_files(root, &path, out);
@@ -388,8 +465,16 @@ pub struct RunWriter {
 
 impl RunWriter {
     fn open(path: &Path, log: EventLog) -> Result<RunWriter, String> {
-        let file = OpenOptions::new().create(true).append(true).open(path).map_err(|e| io("open", path, e))?;
-        Ok(RunWriter { file, log, path: path.to_path_buf() })
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|e| io("open", path, e))?;
+        Ok(RunWriter {
+            file,
+            log,
+            path: path.to_path_buf(),
+        })
     }
 
     pub fn run(&self) -> RunId {
@@ -405,11 +490,22 @@ impl RunWriter {
     }
 
     /// Append, write, fsync. The event exists once this returns Ok.
-    pub fn append(&mut self, kind: EventKind, agent: Option<&str>, note: impl Into<String>, data: String) -> Result<Event, String> {
+    pub fn append(
+        &mut self,
+        kind: EventKind,
+        agent: Option<&str>,
+        note: impl Into<String>,
+        data: String,
+    ) -> Result<Event, String> {
         let e = self.log.append_with(kind, agent, note, data);
         let line = e.to_json_line();
-        self.file.write_all(line.as_bytes()).and_then(|_| self.file.write_all(b"\n")).map_err(|er| io("append", &self.path, er))?;
-        self.file.sync_data().map_err(|er| io("sync", &self.path, er))?;
+        self.file
+            .write_all(line.as_bytes())
+            .and_then(|_| self.file.write_all(b"\n"))
+            .map_err(|er| io("append", &self.path, er))?;
+        self.file
+            .sync_data()
+            .map_err(|er| io("sync", &self.path, er))?;
         Ok(e)
     }
 }
@@ -435,8 +531,10 @@ mod tests {
         let store = st(&dir);
         let mut w = store.new_run().unwrap();
         assert_eq!(w.run(), 1);
-        w.append(EventKind::RunStarted, None, "go", String::new()).unwrap();
-        w.append(EventKind::AgentStarted, Some("A"), "a", r#"{"x":1}"#.into()).unwrap();
+        w.append(EventKind::RunStarted, None, "go", String::new())
+            .unwrap();
+        w.append(EventKind::AgentStarted, Some("A"), "a", r#"{"x":1}"#.into())
+            .unwrap();
         drop(w);
         // Simulate a crash mid-write: a torn trailing line.
         let p = store.run_dir(1).join("events.jsonl");
@@ -460,7 +558,12 @@ mod tests {
     #[test]
     fn cache_entries_round_trip() {
         let store = st(&tmp("cache"));
-        let e = CacheEntry { key: "k".repeat(64), artifacts: vec![("a.json".into(), "h".repeat(64))], cost_micro_usd: 1234, produced_by_run: 7 };
+        let e = CacheEntry {
+            key: "k".repeat(64),
+            artifacts: vec![("a.json".into(), "h".repeat(64))],
+            cost_micro_usd: 1234,
+            produced_by_run: 7,
+        };
         store.cache_put(&e).unwrap();
         assert_eq!(store.cache_get(&e.key), Some(e));
     }
@@ -470,10 +573,15 @@ mod tests {
         let store = st(&tmp("bp"));
         let h1 = store.commit_blueprint("meta {}\n", "first").unwrap();
         store.commit_blueprint("meta {}\n", "same again").unwrap();
-        let h2 = store.commit_blueprint("meta { name \"x\" }\n", "second").unwrap();
+        let h2 = store
+            .commit_blueprint("meta { name \"x\" }\n", "second")
+            .unwrap();
         let hist = store.blueprint_history();
         assert_eq!(hist.len(), 2);
-        assert_eq!((hist[0].hash.as_str(), hist[1].hash.as_str()), (h1.as_str(), h2.as_str()));
+        assert_eq!(
+            (hist[0].hash.as_str(), hist[1].hash.as_str()),
+            (h1.as_str(), h2.as_str())
+        );
         assert_eq!(store.blueprint_at(&h1).unwrap(), "meta {}\n");
     }
 

@@ -56,8 +56,15 @@ pub fn path_of(reference: &str) -> Result<&str, String> {
     let path = reference
         .strip_prefix("keychain:")
         .ok_or_else(|| format!("'{reference}' is not a keychain: reference"))?;
-    if path.is_empty() || path.len() > 200 || !path.chars().all(|c| c.is_ascii_alphanumeric() || "/-_.".contains(c)) {
-        return Err(format!("'{reference}' has an invalid path (letters, digits, / - _ . only)"));
+    if path.is_empty()
+        || path.len() > 200
+        || !path
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/-_.".contains(c))
+    {
+        return Err(format!(
+            "'{reference}' has an invalid path (letters, digits, / - _ . only)"
+        ));
     }
     Ok(path)
 }
@@ -67,7 +74,13 @@ pub fn env_name(reference: &str) -> Result<String, String> {
     let path = path_of(reference)?;
     Ok(format!(
         "WRIGHT_SECRET_{}",
-        path.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect::<String>()
+        path.chars()
+            .map(|c| if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            })
+            .collect::<String>()
     ))
 }
 
@@ -81,9 +94,15 @@ pub fn resolve(reference: &str) -> Result<SecretValue, String> {
     }
     let path = path_of(reference)?;
     let out = if cfg!(target_os = "macos") {
-        Command::new("security").args(["find-generic-password", "-s", "wright", "-a", path, "-w"]).stderr(Stdio::null()).output()
+        Command::new("security")
+            .args(["find-generic-password", "-s", "wright", "-a", path, "-w"])
+            .stderr(Stdio::null())
+            .output()
     } else if cfg!(target_os = "linux") {
-        Command::new("secret-tool").args(["lookup", "service", "wright", "key", path]).stderr(Stdio::null()).output()
+        Command::new("secret-tool")
+            .args(["lookup", "service", "wright", "key", path])
+            .stderr(Stdio::null())
+            .output()
     } else {
         return Err(format!("{reference} is not set: set the {var} environment variable (the Windows keychain is not wired yet)"));
     };
@@ -110,7 +129,18 @@ pub fn resolve(reference: &str) -> Result<SecretValue, String> {
 pub fn store(reference: &str, value: &str) -> Result<(), String> {
     let path = path_of(reference)?;
     let status = if cfg!(target_os = "macos") {
-        Command::new("security").args(["add-generic-password", "-U", "-s", "wright", "-a", path, "-w", value]).status()
+        Command::new("security")
+            .args([
+                "add-generic-password",
+                "-U",
+                "-s",
+                "wright",
+                "-a",
+                path,
+                "-w",
+                value,
+            ])
+            .status()
     } else if cfg!(target_os = "linux") {
         use std::io::Write;
         let mut child = Command::new("secret-tool")
@@ -118,10 +148,18 @@ pub fn store(reference: &str, value: &str) -> Result<(), String> {
             .stdin(Stdio::piped())
             .spawn()
             .map_err(|_| "secret-tool is not installed (install libsecret-tools), or use the WRIGHT_SECRET_ environment variable".to_string())?;
-        child.stdin.take().map(|mut s| s.write_all(value.as_bytes())).transpose().map_err(|e| e.to_string())?;
+        child
+            .stdin
+            .take()
+            .map(|mut s| s.write_all(value.as_bytes()))
+            .transpose()
+            .map_err(|e| e.to_string())?;
         child.wait()
     } else {
-        return Err("the Windows keychain is not wired yet; use the WRIGHT_SECRET_ environment variable".into());
+        return Err(
+            "the Windows keychain is not wired yet; use the WRIGHT_SECRET_ environment variable"
+                .into(),
+        );
     };
     match status {
         Ok(s) if s.success() => Ok(()),
@@ -136,10 +174,16 @@ mod tests {
 
     #[test]
     fn env_names_are_derived_from_paths() {
-        assert_eq!(env_name("keychain:wright/hn-digest/smtp").unwrap(), "WRIGHT_SECRET_WRIGHT_HN_DIGEST_SMTP");
+        assert_eq!(
+            env_name("keychain:wright/hn-digest/smtp").unwrap(),
+            "WRIGHT_SECRET_WRIGHT_HN_DIGEST_SMTP"
+        );
         assert!(env_name("plain").is_err());
         assert!(env_name("keychain:a b").is_err());
-        assert!(env_name("keychain:$(rm -rf)").is_err(), "no shell metacharacters reach a command line");
+        assert!(
+            env_name("keychain:$(rm -rf)").is_err(),
+            "no shell metacharacters reach a command line"
+        );
     }
 
     #[test]
@@ -154,6 +198,9 @@ mod tests {
     #[test]
     fn missing_secrets_say_how_to_fix_it() {
         let err = resolve("keychain:definitely/not/set/anywhere").unwrap_err();
-        assert!(err.contains("WRIGHT_SECRET_DEFINITELY_NOT_SET_ANYWHERE"), "{err}");
+        assert!(
+            err.contains("WRIGHT_SECRET_DEFINITELY_NOT_SET_ANYWHERE"),
+            "{err}"
+        );
     }
 }

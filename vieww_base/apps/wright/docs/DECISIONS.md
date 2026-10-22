@@ -214,6 +214,11 @@ an Ed25519 implementation in v0.3.
 **Reversal.** An ADR naming a specific reviewed reference implementation
 for a specific primitive, BLAKE3-style, with vectors.
 
+*(Exercised, 2026-10-22: ADR-025 names Ed25519 — RFC 8032 reference port,
+`core/src/ed25519.rs` — and SHA-512 — FIPS 180-4, `core/src/sha512.rs` — for
+receipt and recipe signing, pinned to the RFC's and NIST's vectors plus
+OpenSSL cross-vectors computed on the build machine.)*
+
 ---
 
 ## ADR-013 — Wright's state lives outside the project · Accepted
@@ -442,3 +447,352 @@ plan; curl is the bridge, not the destination.
    kernels would make prompts ~3x faster (llama.cpp's margin today) but
    need `unsafe` loads. Allow one small, test-pinned `infer/src/simd.rs`,
    or wait for safe SIMD in stable Rust? (`docs/MODELS.md`, "Speed".)
+
+## ADR-024 — The Rule of Two, enforced by the validator and the gate · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #1, made checkable. An agent may not hold private data,
+untrusted input and an outbound channel at once unless a human approved
+that combination. Every tool on the palette carries its *legs*:
+`PrivateData` (it can read the person's own files), `UntrustedInput`
+(its output depends on the outside world), `OutboundChannel` (it can
+send something out).
+
+- **Legs are typed on the palette**, not inferred from prose:
+  `files-read` stands on the private leg, `http-read` on untrusted,
+  `http-post` on outbound, `shell` on private+untrusted, and the new
+  `worker` and `mcp-call` tools say theirs (ADR-026/029).
+- **Taint is a fixpoint** (the memo's bet #4): an artifact is untrusted
+  when any producer on the untrusted leg made it; anything that reads
+  it inherits the leg, so the mark follows the data through the graph,
+  not the tool that touched it last. `core/src/rule_of_two.rs` iterates
+  to a fixed point (bounded; validation refuses cycles first).
+- **The validator refuses** a 3-leg agent without `approval
+  "before-send"` on its card, in one sentence a person can read.
+- **The gate asks again** before every outbound step of a 3-leg agent,
+  even when the card promised approval — the promise names the
+  combination, the ask names the actual send. Belt and braces, because
+  a blueprint is compiled, not trusted.
+- Artifacts an untrusted-touched task writes say so in the event spine.
+
+The hn-digest's split (fetch, then send) never trips: the Fetcher holds
+untrusted, the Mailer outbound + inherited-untrusted — two legs each,
+and the Mailer already promised to ask before sending.
+
+## ADR-025 — Signed receipts, acceptance sentences, and `wright verify` · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's moves #1 and #2. A receipt is only worth something if a
+third party can check it, so receipts are now `wright.run-receipt/2`:
+
+- **Every input the plan consumed is recorded with its BLAKE3** (stored
+  in the object store), so a verifier can name what the work was based on.
+- **Every numbered acceptance sentence is recorded with its verdict** —
+  the promises a person approved, kept or broken, in the receipt.
+- **The Rule of Two agents are named**, so the risky ones are visible.
+- **The whole receipt is signed with Ed25519** over its exact JSON bytes
+  (the writer is insertion-ordered, so bytes reproduce), with a
+  reference port of RFC 8032 in `core/src/ed25519.rs` — no crates, no
+  unsafe, pinned byte-for-byte to the RFC's vectors and to three
+  OpenSSL-generated pairs computed on this machine. The signing key
+  lives in the OS keychain (`keychain:wright/receipt-signing`), with an
+  env override for CI and an honest local-generated fallback whose
+  provenance the receipt states. SHA-512 (FIPS 180-4) is ported the
+  same way, constants computed from their definitions and pinned to
+  OpenSSL's digests.
+- **`wright verify` runs five checks** and prints them in words:
+  signature, event log hash, artifacts vs the store and the folder,
+  inputs, blueprint commit. v1 receipts are reported as pre-signature,
+  never silently passed.
+
+Acceptance sentences: a deliverable may carry `accept "..."` lines —
+promises the person reads in the Confirm Gate, Testwright must check
+(`ACCEPT <n>: PASS|FAIL` per numbered promise, parsed strictly by
+`wright_agents::parse_accepts`), and the Reviewer may not approve past
+a broken one — enforced in the engine, not in the prompt.
+
+## ADR-026 — Other agents as workers · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's move #3 and bet #2. A blueprint hands a step to an external
+coding agent — Claude Code, Codex, Kimi Code, ZCode, anything the
+machine configures — with Wright as the manager:
+
+```kdl
+agent Coder { goal "write the tool" worker "claude-code"
+             worker-files "src/" worker-timeout 600 out "done.txt" }
+```
+
+- **Workers are config, not blueprints**: `worker "claude-code"
+  command="claude" args="--print" timeout=900` in config.kdl; the four
+  the memo names ship as defaults.
+- **A copy, never the real project**: the tool clones the workspace to
+  a throwaway temp dir, writes a `WORKER.md` brief, runs the agent with
+  the prompt as its last argument, and diffs the copy back.
+- **All or nothing**: when the diff steps outside `worker-files`,
+  NOTHING is applied; partial takeovers are refused in words.
+- **No keys**: the run gets a scrubbed environment; on Linux with
+  Landlock it also gets the kernel sandbox `shell` gets, and where the
+  kernel has no Landlock the run says so and proceeds with the copy +
+  scrubbed env + the card's clock.
+- **No model budget**: the engine runs the step through the gate
+  (a `worker` tool call, permit and all), never calls a model; the
+  external agent's own account pays for its tokens.
+- The worker's output goes through the same Testwright and Reviewer as
+  everything else, and worker tasks are never cached — an external
+  agent's answer is not a function of the workspace bytes.
+
+## ADR-027 — Typed edges · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #6. An edge may name its artifact and promise a shape:
+
+```kdl
+edge from="Fetcher" to="Summarizer" out="stories.json" in="stories.json" schema="json-array"
+```
+
+Five shapes, deliberately readable: `any`, `text`, `json-object`,
+`json-array`, `csv` — checked over the actual bytes in one pass. Names
+are validated at plan time (the binding must match the cards); bytes
+are checked at fire time, before the consumer runs, and a broken
+promise fails the plan with both sides named. One file, one shape;
+unions and regexes would be the start of a type system, and this is a
+contract you can say out loud.
+
+## ADR-028 — Recipes are curated and signed, and nothing installs unsigned · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's move #4. A recipe is one KDL file: `recipe "id" { version,
+publisher, description, blueprint, publisher-key }` plus a `signature`
+line. The signature (Ed25519, the same reference port as receipts)
+covers the recipe's canonical bytes — the meaning, not the layout — so
+a publisher can reformat the file without re-signing while an edited
+blueprint fails verification. `wright recipe sign` signs with this
+machine's publishing key; `install` verifies FIRST and refuses an
+unsigned or tampered recipe with the sentence that quotes this ADR; the
+gallery ships unsigned *sources* by design, because the gallery's own
+rule is that nothing installs without a signature. The README in
+`recipes/` says exactly that.
+
+## ADR-029 — MCP behind permits · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #3. MCP servers are other people's programs, so they run
+inside the same law as everything else:
+
+```kdl
+# config.kdl — the pin is BLAKE3 of the executable's bytes
+mcp "weather" command="uvx" args="mcp-server-weather,--local" hash="blake3:..." timeout=60
+```
+
+```kdl
+# the card allow-lists tools; anything else does not exist
+agent Looker { goal "weather" mcp server="weather" allow="get_forecast"
+               approval "before-send" out "w.txt" }
+```
+
+- **Pinned by hash**: before the first spawn, the executable is hashed
+  and compared with the pin; a server that changed since the pin was
+  approved is refused, loudly. `wright mcp-hash <command>` prints the
+  pin to paste. Config refuses an unpinned server at parse time.
+- **The card is the law**: the server name must match, the tool must be
+  allow-listed, and the server's own tools/list must offer it — both
+  sides of the contract must agree.
+- **The wire is std-only**: JSON-RPC 2.0, one message per line, over the
+  server's stdio (MCP's stdio transport, protocol 2024-11-05). A fresh
+  process per call; a watchdog thread owns the clock; teardown kills.
+- **Answers are outside data**: the palette marks `mcp-call` untrusted
+  and outbound, so taint tracking and the Rule of Two apply — an MCP
+  agent reading your files without a human approval is refused at plan
+  time (ADR-024).
+
+## ADR-030 — A public benchmark: time to a checked outcome · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Supersedes: none
+
+The memo's bet #8. `wright bench [dir] [--runs N]` fires the project
+through the real engine and measures the two numbers that matter to a
+person who does not write code:
+
+- **Time to a checked outcome**: from `RunStarted` to a receipt whose
+  verdict is `approve` — the OUTCOME CHECKED, not "the model answered".
+- **Human interventions**: every `ApprovalRequested` the run raised;
+  zero is the number an unattended run is allowed to have.
+
+Two rules keep it honest: the reported median is the pessimistic (lower)
+one, and every measured run's receipt stays in the store for
+`wright verify` — a benchmark number nobody can audit is marketing.
+The release gate is the same numbers over the recipe gallery, recorded
+in docs/BENCHMARK.md on a machine that can run the sandbox fully.
+
+## ADR-031 — A signature says who only when the key is pinned · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Amends: ADR-025, ADR-028
+
+The first cut of `wright verify` and `wright recipe install` checked a
+signature against the public key **embedded in the same file**. That
+proves the bytes were not changed after signing — and nothing about who
+signed them: anyone can edit a receipt or a recipe, mint a fresh key,
+re-sign, and pass. It is exactly the ClawHub failure the memo cites.
+
+Decision: a valid signature counts only when its key is one this machine
+trusts — a `trust "name" key="<hex>"` line in config.kdl (`wright trust
+add`), this machine's own signing key, or a key named for one call
+(`wright verify --key <hex>`, `wright recipe install --trust <hex>`).
+Anything else fails, in words that say how to pin it. The signing seed
+now comes from the OS random source (`/dev/urandom`; std's OS-seeded
+hasher keys elsewhere) instead of clock/pid mixing, and the key file is
+created 0600 from its first byte. Verifying never mints a key.
+
+A recipe's folder name is outside input too: it is reduced to one plain
+folder name inside the target (no separators, no `..`).
+
+## ADR-032 — A worker is an outbound channel · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Amends: ADR-026
+
+A worker (Claude Code, Codex, Kimi Code, ZCode) is a model client: it
+sends what it reads to its own vendor. ADR-026 modelled it without the
+outbound leg and ran it with the network shut — so on any kernel with
+Landlock the worker could neither start (its program was outside the
+sandbox's executable roots) nor reach its model, and it had no way to
+sign in. The suites only passed on a kernel without Landlock.
+
+Decision: the `worker` tool stands on all three Rule-of-Two legs. A plan
+with a worker must carry `approval "before-send"`, and the gate asks
+before the project copy is handed over (through the same approver as any
+other send; a refusal applies nothing). Under the kernel sandbox the
+worker gets the network, its program's directories become read+exec, and
+its config line may give it a sign-in environment
+(`env="ANTHROPIC_API_KEY=keychain:wright/anthropic"`), resolved at start;
+nothing else of Wright's environment reaches it. The copy is private
+(0700) and deleted after every run; the worker's pipes are drained while
+it runs; its process group is killed when it exits. A worker card that
+never mentions `retries` gets 1, the most the validator allows.
+
+## ADR-033 — Checks run for every plan that delivers or promises · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Amends: the compiler's placement rule
+
+Testwright and the Reviewer were placed only when the `tests` chip was
+on. A plan with `accept` sentences or a delivery agent and the chip off —
+the gallery's own recipes — told the person "Testwright must check
+this" and then compiled with no Testwright and no Reviewer, so its Mailer
+sent unreviewed work. Decision: the checks are placed when the chip is on
+**or** any deliverable has an `accept` sentence **or** any agent
+delivers. AGENTS.md rule 7 now holds without a chip to forget.
+
+## ADR-034 — Office machines: extra CAs and an environment, in settings · Accepted
+
+Date: 2026-10-22 · Status: Accepted
+
+Company laptops often sit behind a proxy that re-signs HTTPS with the
+organization's own root. Wright honoured `SSL_CERT_FILE` (which REPLACES
+OpenSSL's default store) and nothing else, so the fix was a shell
+variable most people cannot set and that broke public sites.
+
+Decision: `tls ca-file="..."` in config.kdl (Settings > Network, with a
+file chooser, or `WRIGHT_CA_FILE`) names a PEM file that is loaded IN
+ADDITION to the system store (`SSL_CTX_load_verify_locations` after the
+default paths); the OS curl used on macOS/Windows gets it as `--cacert`.
+The file is checked (exists, holds PEM certificates) before it is saved
+or used, and an unknown-issuer TLS error now says where to add one.
+`env "NAME" value="..."` lines set variables for Wright and everything it
+starts (proxy, NO_PROXY, package and model mirrors) — applied first thing
+in `main`, before any thread, and again when Settings saves; a variable
+the person exported themselves wins. Secret-looking names and proxy URLs
+with a password must be `keychain:` references (rule 4); Settings stores
+such values in the keychain for you. Verified end to end against a real
+HTTPS-inspecting proxy: a trust store without the proxy's root fails
+with X509 error 19, the same machine with `WRIGHT_CA_FILE` succeeds.
+
+## ADR-035 — MCP servers are pinned whole, never by their launcher · Accepted
+
+Date: 2026-10-22 · Amends: ADR-029
+
+A pin of `npx`/`uvx` pins the launcher, not the server it downloads at
+every start. Config now refuses a launcher with a file pin. `wright mcp
+install <name> npm:<pkg>@<ver> | pypi:<pkg>==<ver>` installs one EXACT
+version into `<wright home>/mcp/<name>/` (npm with `--ignore-scripts`
+unless `--allow-scripts`; PyPI in a private virtualenv) and pins the whole
+tree (`tree-blake3:` over every file, link and executable bit; bytecode
+caches excluded). A call re-hashes the tree and refuses any change; the
+command must live inside the pinned tree. Checked against a real
+`mcp-server-time` install: a one-line change in its package is refused.
+
+## ADR-036 — One kill switch, and the fleet on one screen · Accepted
+
+`<wright home>/STOP` is the signal every process already looks at. While
+it exists no firing starts, the gate denies every tool call (so firings in
+flight stop mid-turn), sandboxed commands and workers are killed, pending
+approvals are refused and the service fires nothing. `wright stop/start`,
+Stop everything in the window (status bar, Settings > Fleet), a banner
+while it is pulled. `wright fleet` / Settings > Fleet lists every
+scheduled project: state, next run, last run and whether its receipt
+verifies, approvals waiting, time to trust; pause, resume, approve.
+
+## ADR-037 — Unattended runs need a go-ahead; time to trust is measured · Accepted
+
+A schedule no longer fires just because its first run registered it: it
+waits (`awaiting`) until the person approves unattended runs (`wright
+schedule approve`, Let it run unattended) — allowed only after a run has
+passed — and waits again whenever the plan's content hash changes.
+Registries written before this keep firing (state defaults to active).
+The approval records the road to it — runs, passes, approvals asked and
+refused, plan changes, elapsed time — and `wright bench` reports it as
+**time to trust**.
+
+## ADR-038 — Spend is attributed and signed · Accepted
+
+The receipt's `spend` section attributes cost per agent (model calls,
+tokens in/cached/out, models, tool calls and failures, cache savings) and
+per model, from the provider usage in the event log. `wright explain`
+shows it; `wright spend --csv` exports per-run, per-agent rows to the
+micro-dollar for reconciliation.
+
+## ADR-039 — The receipt as a W3C Verifiable Credential · Accepted
+
+Every run also writes `receipt.vc.json`: VC Data Model 2.0, issuer the
+signer's `did:key`, Data Integrity proof `eddsa-jcs-2022` (RFC 8785 JCS,
+SHA-256, Ed25519, base58btc). JCS, base58 and did:key are std-only in
+`wright-core`. Verified independently with Digital Bazaar's reference
+cryptosuite (`scripts/verify-credential/`); a one-byte edit fails there
+too. `wright verify x.vc.json` checks the proof AND that the issuer is
+pinned (ADR-031) — a standard format with a self-certified key proves
+nothing. `wright trust add` and `--key` accept a did:key.
+
+## ADR-040 — Task-scoped agent identities · Accepted
+
+Every task gets its own Ed25519 identity for its run (OS randomness), a
+delegation signed by the machine key over its claims (agent, run, tools,
+permissions, secrets, issued/expires), checked by the gate on every call
+(none before the task, after it, past the clock), recorded per call
+(tool, input hash, outcome), and revoked at the task's end after it signs
+an attestation over its calls. Secrets are per identity: a card's
+`secret "name"` lines; with none in the plan, only agents holding a
+sending tool get the plan's secrets. The receipt lists every identity;
+`wright verify` gains a sixth check that each was delegated by the signer,
+each attestation matches, and every tool call in the log was made under
+one of them by its own agent.
+
+## ADR-041 — Organization policy and the admin console · Accepted
+
+An organization's rules live in an administrators-only system folder
+(`/etc/wright`, `/Library/Application Support/Wright`,
+`%ProgramData%\Wright`; `WRIGHT_POLICY_DIR` only when that folder holds
+none): `admins.kdl` (administrator keys) and a `policy.kdl` signed by one
+of them. Rules: run/day budget caps, forbidden tools, a network
+allow-list (enforced at the http tools), allowed model providers, workers
+and MCP servers, required tests, and administrator approval of each exact
+plan for unattended runs. A plan that breaks a rule does not fire and the
+Interviewer is shown why; a policy that is unsigned, signed by a
+non-administrator or edited after signing stops everything (fail closed).
+`wright admin keygen | policy init/sign/show/check | approve |
+fleet-verify [--json]`; Settings > Organization shows the rules, this
+project against them, and verifies every receipt on the computer.

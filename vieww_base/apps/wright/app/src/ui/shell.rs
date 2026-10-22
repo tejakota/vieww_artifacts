@@ -94,7 +94,7 @@ fn splash_frame(p: &Pal, side: f32, t: f32, app: &WidgetNode) -> WidgetNode {
 fn app(ui: &Ui) -> WidgetNode {
     let column: WidgetNode = Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .children(vec![top_bar(ui), grow(stage(ui)), status_bar(ui)])
+        .children(vec![top_bar(ui), stop_banner(ui), grow(stage(ui)), status_bar(ui)])
         .into();
     let overlays: WidgetNode = {
         let ui = ui.clone();
@@ -157,6 +157,31 @@ fn top_bar(ui: &Ui) -> WidgetNode {
     .into()
 }
 
+/// While the kill switch is pulled, a band across the window says so —
+/// whoever pulled it, from wherever — with the one button that lifts it.
+fn stop_banner(ui: &Ui) -> WidgetNode {
+    let ui = ui.clone();
+    Live::new("stop-banner", move || {
+        let Some(reason) = ui.stopped.get() else {
+            return SizedBox::shrink().into();
+        };
+        let p = ui.pal();
+        let go = ui.clone();
+        Container::new()
+            .color(p.bad.with_alpha(40))
+            .border(Border::new(p.bad, 1.0))
+            .padding(EdgeInsets::symmetric(18.0, 8.0))
+            .child(row(12.0, vec![
+                Glyph::Stop.draw(16.0, p.bad),
+                b("Everything is stopped", 13.5, p.ink),
+                fill(format!("{reason} · nothing runs, sends or fetches on this computer until you start again"), 13.0, p.muted),
+                button(&p, "Start again", Look::Primary, true, move || go.start_again()),
+            ]))
+            .into()
+    })
+    .into()
+}
+
 // ── status bar ───────────────────────────────────────────────────
 
 fn status_bar(ui: &Ui) -> WidgetNode {
@@ -168,7 +193,7 @@ fn status_bar(ui: &Ui) -> WidgetNode {
                 let (st, tone) = s.status();
                 (s.title(), st, tone, Some(s.spent_today()))
             }
-            None if ui.page.get() == 0 => ("Home".into(), format!("{} sessions · {} saved", ui.sessions.get().len(), ui.saved.get().len()), Tone::Quiet, None),
+            None if ui.page.get() == 0 => ("Home".into(), format!("{} · {} saved", plural(ui.sessions.get().len(), "session"), ui.saved.get().len()), Tone::Quiet, None),
             None => ("New session".into(), "Describe what should exist".into(), Tone::Quiet, None),
         };
         let dot: WidgetNode = {
@@ -194,6 +219,10 @@ fn status_bar(ui: &Ui) -> WidgetNode {
         ];
         if let Some(micro) = spent {
             items.push(t(format!("${:.4} today", micro as f64 / 1e6), 12.0, p.muted));
+        }
+        if ui.stopped.get().is_none() {
+            let stop = ui.clone();
+            items.push(status_button(&p, Glyph::Stop, "Stop everything", move || stop.stop_everything("stopped from the window")));
         }
         items.push(status_button(&p, Glyph::Theme, if mode == Mode::Dark { "Dark" } else { "Light" }, move || flip.set_look(flip.mode.get().flip(), flip.accent.get())));
         items.push(status_button(&p, Glyph::Gear, "Settings", move || gear.open_settings()));
@@ -246,7 +275,12 @@ fn stage(ui: &Ui) -> WidgetNode {
             };
             let ui2 = ui.clone();
             glide(engine_on, 300, false, move |e| {
-                let mut layers = vec![layer(fade(1.0 - 0.82 * e, Transformed::new(Transform::scale_around(Offset::new(w / 2.0, h / 2.0), 1.0 - 0.03 * e, 1.0 - 0.03 * e)).child(track.clone())))];
+                // Behind the agents, the page goes soft: blurred and dimmed,
+                // so the boxes read cleanly instead of word-over-word with the
+                // conversation underneath. The blur grows with the fade-in.
+                let page: WidgetNode = Transformed::new(Transform::scale_around(Offset::new(w / 2.0, h / 2.0), 1.0 - 0.03 * e, 1.0 - 0.03 * e)).child(track.clone()).into();
+                let page: WidgetNode = if e > 0.01 { vieww::widget::Filtered::blur(10.0 * e).child(page).into() } else { page };
+                let mut layers = vec![layer(fade(1.0 - 0.88 * e, page))];
                 if e > 0.01 {
                     layers.push(layer(fade(e, shift(0.0, 16.0 * (1.0 - e), engine::layer(&ui2)))));
                 }
@@ -342,7 +376,7 @@ fn mini(ui: &Ui, p: &Pal, i: usize, words: bool) -> WidgetNode {
         0 => column(8.0, vec![
             b("What should exist?", 16.0, p.ink),
             Container::new().height(26.0).color(p.surface).radius(13.0).border(Border::new(p.line_strong, 1.0)).into(),
-            t(format!("{} sessions · {} saved", sessions.len(), ui.saved.get().len()), 11.0, p.muted),
+            t(format!("{} · {} saved", plural(sessions.len(), "session"), ui.saved.get().len()), 11.0, p.muted),
         ]),
         k if k <= sessions.len() => {
             let s = &sessions[k - 1];
@@ -502,6 +536,15 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     ui.form.pulls.set(Default::default());
     ui.open_agents_and_tools();
     shot(&mut driver, "6-settings-agents", 400)?;
+    // Office machines: certificates and environment variables.
+    ui.form.tab.set(super::settings::Tab::Network);
+    ui.form.scroll.offset.set(0.0);
+    shot(&mut driver, "6-settings-network", 400)?;
+    ui.form.tab.set(super::settings::Tab::Fleet);
+    shot(&mut driver, "6-settings-fleet", 400)?;
+    ui.form.tab.set(super::settings::Tab::Organization);
+    shot(&mut driver, "6-settings-organization", 400)?;
+    n += 3;
     ui.form.tab.set(super::settings::Tab::Models);
     ui.settings.set(false);
     ui.mode.set(Mode::Light);
@@ -523,10 +566,19 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
         s.scroll.to_end();
         shot(&mut driver, "9-thinking", 600)?;
         s.pending.set(None);
-        n += 3;
+        // The kill switch, as the window shows it (drawn, not pulled).
+        ui.stopped.set(Some("a test of the stop banner".into()));
+        shot(&mut driver, "10-stopped", 300)?;
+        ui.stopped.set(None);
+        n += 4;
     }
     match vieww::render::overflow::reported() {
         0 => Ok(n),
         k => Err(format!("{k} layout overflow(s) while rendering (each is printed above as 'vieww: ... overflowed')")),
     }
+}
+
+/// "1 session", "2 sessions".
+fn plural(n: usize, word: &str) -> String {
+    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
 }

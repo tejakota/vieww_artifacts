@@ -20,7 +20,11 @@ pub fn crc32(data: &[u8]) -> u32 {
     for (i, slot) in table.iter_mut().enumerate() {
         let mut c = i as u32;
         for _ in 0..8 {
-            c = if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 == 1 {
+                0xEDB8_8320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
         }
         *slot = c;
     }
@@ -50,17 +54,23 @@ impl ZipWriter {
 
     /// Add a file at `name` (forward slashes; no leading slash, no `..`).
     pub fn add(&mut self, name: &str, data: &[u8]) -> Result<(), String> {
-        if name.is_empty() || name.starts_with('/') || name.split('/').any(|p| p == ".." || p.is_empty()) || name.contains('\\') {
+        if name.is_empty()
+            || name.starts_with('/')
+            || name.split('/').any(|p| p == ".." || p.is_empty())
+            || name.contains('\\')
+        {
             return Err(format!("not a safe archive path: {name:?}"));
         }
         if self.count == u16::MAX {
             return Err("too many files for a zip without ZIP64 (65,535)".into());
         }
-        let offset = u32::try_from(self.out.len()).map_err(|_| "archive larger than 4 GiB".to_string())?;
+        let offset =
+            u32::try_from(self.out.len()).map_err(|_| "archive larger than 4 GiB".to_string())?;
         let size = u32::try_from(data.len()).map_err(|_| format!("{name} is larger than 4 GiB"))?;
         let crc = crc32(data);
         let name_bytes = name.as_bytes();
-        let name_len = u16::try_from(name_bytes.len()).map_err(|_| format!("path too long: {name}"))?;
+        let name_len =
+            u16::try_from(name_bytes.len()).map_err(|_| format!("path too long: {name}"))?;
         // UTF-8 names (general-purpose flag bit 11), stored, version 2.0.
         const FLAGS: u16 = 1 << 11;
         let local = [
@@ -92,10 +102,10 @@ impl ZipWriter {
             &size.to_le_bytes(),
             &size.to_le_bytes(),
             &name_len.to_le_bytes(),
-            &0u16.to_le_bytes(), // extra
-            &0u16.to_le_bytes(), // comment
-            &0u16.to_le_bytes(), // disk
-            &0u16.to_le_bytes(), // internal attributes
+            &0u16.to_le_bytes(),                 // extra
+            &0u16.to_le_bytes(),                 // comment
+            &0u16.to_le_bytes(),                 // disk
+            &0u16.to_le_bytes(),                 // internal attributes
             &(0o100_644u32 << 16).to_le_bytes(), // external: a regular file, rw-r--r--
             &offset.to_le_bytes(),
         ]
@@ -108,8 +118,10 @@ impl ZipWriter {
 
     /// The finished archive.
     pub fn finish(mut self) -> Result<Vec<u8>, String> {
-        let dir_offset = u32::try_from(self.out.len()).map_err(|_| "archive larger than 4 GiB".to_string())?;
-        let dir_size = u32::try_from(self.central.len()).map_err(|_| "directory larger than 4 GiB".to_string())?;
+        let dir_offset =
+            u32::try_from(self.out.len()).map_err(|_| "archive larger than 4 GiB".to_string())?;
+        let dir_size = u32::try_from(self.central.len())
+            .map_err(|_| "directory larger than 4 GiB".to_string())?;
         self.out.extend_from_slice(&self.central);
         let end = [
             &0x0605_4b50u32.to_le_bytes()[..],
@@ -149,7 +161,11 @@ mod tests {
         let a = make();
         assert_eq!(a, make());
         assert_eq!(&a[0..4], b"PK\x03\x04");
-        assert_eq!(&a[a.len() - 22..a.len() - 18], b"PK\x05\x06", "ends with the end-of-directory record");
+        assert_eq!(
+            &a[a.len() - 22..a.len() - 18],
+            b"PK\x05\x06",
+            "ends with the end-of-directory record"
+        );
     }
 
     #[test]

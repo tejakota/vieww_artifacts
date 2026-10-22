@@ -65,13 +65,22 @@ pub struct StoreApprover {
 impl Approver for StoreApprover {
     fn decide(&self, ask: &Ask) -> bool {
         let reason = format!("{}\n{}", ask.reason, ask.preview);
-        if self.store.post_approval(ask.run, ask.n, &ask.agent, &reason).is_err() {
+        if self
+            .store
+            .post_approval(ask.run, ask.n, &ask.agent, &reason)
+            .is_err()
+        {
             return false;
         }
         let deadline = Instant::now() + self.timeout;
         while Instant::now() < deadline {
             if let Some(answer) = self.store.approval_answer(ask.run, ask.n) {
                 return answer;
+            }
+            // Stopped while waiting: the answer is no.
+            if wright_runtime::killswitch::is_stopped() {
+                let _ = self.store.answer_approval(ask.run, ask.n, false);
+                return false;
             }
             std::thread::sleep(Duration::from_millis(200));
         }

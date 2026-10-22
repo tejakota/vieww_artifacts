@@ -7,6 +7,8 @@
 
 use super::model::*;
 use crate::palette;
+use crate::rule_of_two;
+use crate::schema::Shape;
 
 /// Validate a blueprint. Ok(()) or every problem we found, together.
 pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
@@ -20,7 +22,10 @@ pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
     let mut seen = std::collections::BTreeSet::new();
     for a in &bp.agents {
         if !seen.insert(a.name.clone()) {
-            errs.push(format!("Two agents are both named '{}' — names must be unique.", a.name));
+            errs.push(format!(
+                "Two agents are both named '{}' — names must be unique.",
+                a.name
+            ));
         }
         if a.goal.trim().is_empty() {
             errs.push(format!("Agent '{}' has no goal sentence.", a.name));
@@ -30,7 +35,10 @@ pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
     // edges reference real agents
     for e in &bp.edges {
         if bp.agent(&e.from).is_none() {
-            errs.push(format!("Edge starts at '{}', which does not exist.", e.from));
+            errs.push(format!(
+                "Edge starts at '{}', which does not exist.",
+                e.from
+            ));
         }
         if bp.agent(&e.to).is_none() {
             errs.push(format!("Edge points at '{}', which does not exist.", e.to));
@@ -39,7 +47,10 @@ pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
 
     // no cycles
     if let Err(cycle) = topo_order(bp) {
-        errs.push(format!("The graph has a cycle: {}. Agents cannot depend on themselves.", cycle));
+        errs.push(format!(
+            "The graph has a cycle: {}. Agents cannot depend on themselves.",
+            cycle
+        ));
     }
 
     // tools are known, and the agent holds every capability they need
@@ -68,7 +79,8 @@ pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
                             ));
                         }
                     }
-                    if t == "run-tests" && bp.project.test_cmd.is_empty()
+                    if t == "run-tests"
+                        && bp.project.test_cmd.is_empty()
                         && crate::convention::default_test_cmd(&bp.project.language).is_empty()
                     {
                         errs.push(format!(
@@ -99,7 +111,10 @@ pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
                 .map(|p| p.name.as_str())
                 .collect();
             if producers.is_empty() {
-                errs.push(format!("Agent '{}' needs '{}', but no agent produces it.", a.name, i));
+                errs.push(format!(
+                    "Agent '{}' needs '{}', but no agent produces it.",
+                    a.name, i
+                ));
             } else if !producers.iter().any(|p| reaches(bp, p, &a.name)) {
                 errs.push(format!(
                     "Agent '{}' needs '{}' from '{}', but there is no edge path between them — connect the cards.",
@@ -123,6 +138,109 @@ pub fn validate(bp: &Blueprint) -> Result<(), Vec<String>> {
     for d in &bp.deliverables {
         if d.check.trim().is_empty() {
             errs.push(format!("Deliverable '{}' has an empty check.", d.kind));
+        }
+        for a in &d.accept {
+            // Acceptance sentences are promises a person approves and
+            // Testwright turns into checks; a blank one is a lie.
+            if a.trim().len() < 8 {
+                errs.push(format!(
+                    "Deliverable '{}' has an acceptance sentence that is too short to check: \"{}\" — write what a reader could verify.",
+                    d.kind, a
+                ));
+            }
+            if a.trim().len() > 300 {
+                errs.push(format!(
+                    "Deliverable '{}' has an acceptance sentence longer than 300 characters — split it into two sentences.",
+                    d.kind
+                ));
+            }
+        }
+    }
+
+    // the Rule of Two (ADR-024): no agent holds private data, untrusted
+    // input and an outbound channel at once without a promised human ask
+    for v in rule_of_two::violations(bp) {
+        let a = bp.agent(&v.agent);
+        let approved = a
+            .map(|x| x.approval == ApprovalPolicy::BeforeSend)
+            .unwrap_or(false);
+        if !approved {
+            errs.push(v.sentence());
+        }
+    }
+
+    // typed edges (ADR-027): names must match the cards, shapes must be named
+    for e in &bp.edges {
+        let (Some(from), Some(to)) = (bp.agent(&e.from), bp.agent(&e.to)) else {
+            continue; // dangling edge: named above
+        };
+        if let Some(o) = &e.out {
+            if !from.outputs.iter().any(|x| x == o) {
+                errs.push(format!(
+                    "The edge {} -> {} carries out=\"{}\", but '{}' does not declare that output.",
+                    e.from, e.to, o, e.from
+                ));
+            }
+        }
+        if let Some(i) = &e.input {
+            if !to.inputs.iter().any(|x| x == i) {
+                errs.push(format!(
+                    "The edge {} -> {} carries in=\"{}\", but '{}' does not read that input.",
+                    e.from, e.to, i, e.to
+                ));
+            }
+        }
+        if e.schema.is_some() && e.out.is_none() {
+            errs.push(format!(
+                "The edge {} -> {} promises a schema but no out=\"...\" — a promise needs a name.",
+                e.from, e.to
+            ));
+        }
+        let _ = Shape::Any; // (shapes parse in the parser; this validates binding)
+    }
+
+    // per-agent secrets name the blueprint's own secrets
+    for a in &bp.agents {
+        for sec in &a.secrets {
+            if !bp.chips.secrets.iter().any(|s| &s.name == sec) {
+                errs.push(format!(
+                    "Agent '{}' uses the secret '{}', which the blueprint does not declare (chips {{ secrets {}=\"keychain:...\" }}).",
+                    a.name, sec, sec
+                ));
+            }
+        }
+    }
+
+    // worker steps: the files they may change must exist in the plan's
+    // world, and the card must carry the permissions the worker tool needs
+    for a in &bp.agents {
+        if let Some(w) = &a.worker {
+            if a.goal.trim().is_empty() {
+                errs.push(format!("Worker '{}' has no goal sentence — the worker gets exactly that text and nothing else.", a.name));
+            }
+            let _ = w;
+            for f in &a.worker_files {
+                if f.contains("..") || f.starts_with('/') {
+                    errs.push(format!(
+                        "Worker '{}' may change '{}': worker-files are project-relative paths, not absolute or parent-escaping.",
+                        a.name, f
+                    ));
+                }
+            }
+            if a.retries > 1 {
+                errs.push(format!(
+                    "Worker '{}' has retries={} — external agents are slow and expensive; at most one retry is allowed.",
+                    a.name, a.retries
+                ));
+            }
+        }
+        if let Some(server) = &a.mcp_server {
+            if a.mcp_allow.is_empty() {
+                errs.push(format!(
+                    "Agent '{}' names the MCP server '{}' but allows no tools — add allow=\"tool,tool\" or remove the card line.",
+                    a.name, server
+                ));
+            }
         }
     }
 
@@ -230,7 +348,10 @@ mod tests {
         let bp = parse::blueprint(GOOD).unwrap();
         assert!(validate(&bp).is_ok());
         // A -> B: A first (no dependencies), then B.
-        assert_eq!(topo_order(&bp).unwrap(), vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(
+            topo_order(&bp).unwrap(),
+            vec!["A".to_string(), "B".to_string()]
+        );
     }
 
     #[test]
@@ -261,7 +382,11 @@ mod tests {
     fn missing_capability_is_caught_before_any_firing() {
         let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\nagent A { goal \"1\" tools \"http-read\" }\ndeliverable kind=\"k\" { check \"c\" }\n";
         let errs = validate(&parse::blueprint(src).unwrap()).unwrap_err();
-        assert!(errs.iter().any(|e| e.contains("not allowed to use the network")), "{errs:?}");
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("not allowed to use the network")),
+            "{errs:?}"
+        );
     }
 
     #[test]

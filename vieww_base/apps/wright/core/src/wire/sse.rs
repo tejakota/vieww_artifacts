@@ -80,7 +80,10 @@ fn parse_block(block: &str) -> Option<SseMessage> {
     if !saw_any || data_lines.is_empty() {
         return None;
     }
-    Some(SseMessage { event, data: data_lines.join("\n") })
+    Some(SseMessage {
+        event,
+        data: data_lines.join("\n"),
+    })
 }
 
 #[cfg(test)]

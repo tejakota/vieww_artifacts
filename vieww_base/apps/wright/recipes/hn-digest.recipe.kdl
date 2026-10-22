@@ -1,0 +1,8 @@
+// wright.recipe/1 — verify with: wright recipe verify <file>
+recipe "hn-digest" {
+  version "1.0"
+  publisher "Wright gallery"
+  description "Every morning at 8, the top Hacker News stories, summarized, in your inbox."
+  blueprint "meta { name \"HN digest\" }\nintent { summary \"every morning at 8, the top HN stories summarized and emailed to me\" confirmed \"v1\" }\nagent Fetcher { goal \"fetch the current front-page stories from https://hn.algolia.com/api/v1/search?tags=front_page\" tools \"http-read\" out \"stories.json\" permissions network=true }\nagent Summarizer { goal \"summarize each story in one sentence\" in \"stories.json\" out \"digest.md\" }\nagent Mailer { goal \"email the digest through the mail API at https://example.invalid/send\" tools \"http-post\" in \"digest.md\" approval \"before-send\" permissions network=true }\nedge from=\"Fetcher\" to=\"Summarizer\" out=\"stories.json\" in=\"stories.json\" schema=\"json-object\"\nedge from=\"Summarizer\" to=\"Mailer\"\nchips { scheduling cron=\"0 8 * * *\" tz=\"UTC\" }\nmodels { tier cheap prefer=\"deepseek-v4-flash\" }\ndeliverable kind=\"email\" { check \"the digest arrives with every story\" accept \"every story in the digest has its own link\" }"
+  publisher-key ""
+}
