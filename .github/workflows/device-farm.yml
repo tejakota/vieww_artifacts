@@ -177,9 +177,15 @@ jobs:
         run: |
           video=(); [ "$VIDEO" = true ] && video=(--video)
           set +e
+          # The script's own output goes into the results too, with how it
+          # ended: a failure before any phone reported (credentials, a device
+          # pool, an exception) otherwise leaves the folder empty and
+          # ci-results with nothing but "phones: failure".
+          mkdir -p "$OUT"
           python3 ci/mobile/device_farm.py --apk ../dist/vieww-devicefarm.apk --out "$OUT" \
-            --devices "$DEVICES" --count "$COUNT" "${video[@]}"
-          status=$?
+            --devices "$DEVICES" --count "$COUNT" "${video[@]}" 2>&1 | tee "$OUT/device_farm.log"
+          status=${PIPESTATUS[0]}
+          echo "device_farm.py exited $status" >> "$OUT/device_farm.log"
           [ -f "$OUT/SUMMARY.md" ] && cat "$OUT/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
           exit $status
       - name: Upload everything
@@ -287,9 +293,15 @@ jobs:
         run: |
           video=""; [ "$VIDEO" = true ] && video="--video"
           set +e
+          # As on the phones job: the script's output and exit status go into
+          # the results. Run 39594824376's iPhones failed with nothing in
+          # ci-results to say why — the folder was empty, so nothing was
+          # uploaded and nothing published.
+          mkdir -p "$OUT"
           python3 ci/mobile/device_farm.py --platform ios --ipa ../dist/vieww.ipa --out "$OUT" \
-            --devices "$DEVICES" --count "$COUNT" $video
-          status=$?
+            --devices "$DEVICES" --count "$COUNT" $video 2>&1 | tee "$OUT/device_farm.log"
+          status=${PIPESTATUS[0]}
+          echo "device_farm.py exited $status" >> "$OUT/device_farm.log"
           [ -f "$OUT/SUMMARY.md" ] && cat "$OUT/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
           exit $status
       - name: Upload everything
