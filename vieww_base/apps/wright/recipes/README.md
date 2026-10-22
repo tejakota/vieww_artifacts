@@ -12,9 +12,12 @@ signature. A publisher signs a recipe with their machine's key
 wright recipe sign recipes/hn-digest.recipe.kdl
 ```
 
-and it becomes installable
+and prints its public key. Someone who installs it pins that key once —
+a signature by a key nobody pinned proves the bytes are intact, not who
+made them (ADR-031):
 
 ```
+wright trust add "Wright gallery" <the publisher's 64-hex public key>
 wright recipe install recipes/hn-digest.recipe.kdl
 ```
 

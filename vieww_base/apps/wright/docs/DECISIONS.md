@@ -630,3 +630,84 @@ one, and every measured run's receipt stays in the store for
 `wright verify` — a benchmark number nobody can audit is marketing.
 The release gate is the same numbers over the recipe gallery, recorded
 in docs/BENCHMARK.md on a machine that can run the sandbox fully.
+
+## ADR-031 — A signature says who only when the key is pinned · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Amends: ADR-025, ADR-028
+
+The first cut of `wright verify` and `wright recipe install` checked a
+signature against the public key **embedded in the same file**. That
+proves the bytes were not changed after signing — and nothing about who
+signed them: anyone can edit a receipt or a recipe, mint a fresh key,
+re-sign, and pass. It is exactly the ClawHub failure the memo cites.
+
+Decision: a valid signature counts only when its key is one this machine
+trusts — a `trust "name" key="<hex>"` line in config.kdl (`wright trust
+add`), this machine's own signing key, or a key named for one call
+(`wright verify --key <hex>`, `wright recipe install --trust <hex>`).
+Anything else fails, in words that say how to pin it. The signing seed
+now comes from the OS random source (`/dev/urandom`; std's OS-seeded
+hasher keys elsewhere) instead of clock/pid mixing, and the key file is
+created 0600 from its first byte. Verifying never mints a key.
+
+A recipe's folder name is outside input too: it is reduced to one plain
+folder name inside the target (no separators, no `..`).
+
+## ADR-032 — A worker is an outbound channel · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Amends: ADR-026
+
+A worker (Claude Code, Codex, Kimi Code, ZCode) is a model client: it
+sends what it reads to its own vendor. ADR-026 modelled it without the
+outbound leg and ran it with the network shut — so on any kernel with
+Landlock the worker could neither start (its program was outside the
+sandbox's executable roots) nor reach its model, and it had no way to
+sign in. The suites only passed on a kernel without Landlock.
+
+Decision: the `worker` tool stands on all three Rule-of-Two legs. A plan
+with a worker must carry `approval "before-send"`, and the gate asks
+before the project copy is handed over (through the same approver as any
+other send; a refusal applies nothing). Under the kernel sandbox the
+worker gets the network, its program's directories become read+exec, and
+its config line may give it a sign-in environment
+(`env="ANTHROPIC_API_KEY=keychain:wright/anthropic"`), resolved at start;
+nothing else of Wright's environment reaches it. The copy is private
+(0700) and deleted after every run; the worker's pipes are drained while
+it runs; its process group is killed when it exits. A worker card that
+never mentions `retries` gets 1, the most the validator allows.
+
+## ADR-033 — Checks run for every plan that delivers or promises · Accepted
+
+Date: 2026-10-22 · Status: Accepted · Amends: the compiler's placement rule
+
+Testwright and the Reviewer were placed only when the `tests` chip was
+on. A plan with `accept` sentences or a delivery agent and the chip off —
+the gallery's own recipes — told the person "Testwright must check
+this" and then compiled with no Testwright and no Reviewer, so its Mailer
+sent unreviewed work. Decision: the checks are placed when the chip is on
+**or** any deliverable has an `accept` sentence **or** any agent
+delivers. AGENTS.md rule 7 now holds without a chip to forget.
+
+## ADR-034 — Office machines: extra CAs and an environment, in settings · Accepted
+
+Date: 2026-10-22 · Status: Accepted
+
+Company laptops often sit behind a proxy that re-signs HTTPS with the
+organization's own root. Wright honoured `SSL_CERT_FILE` (which REPLACES
+OpenSSL's default store) and nothing else, so the fix was a shell
+variable most people cannot set and that broke public sites.
+
+Decision: `tls ca-file="..."` in config.kdl (Settings > Network, with a
+file chooser, or `WRIGHT_CA_FILE`) names a PEM file that is loaded IN
+ADDITION to the system store (`SSL_CTX_load_verify_locations` after the
+default paths); the OS curl used on macOS/Windows gets it as `--cacert`.
+The file is checked (exists, holds PEM certificates) before it is saved
+or used, and an unknown-issuer TLS error now says where to add one.
+`env "NAME" value="..."` lines set variables for Wright and everything it
+starts (proxy, NO_PROXY, package and model mirrors) — applied first thing
+in `main`, before any thread, and again when Settings saves; a variable
+the person exported themselves wins. Secret-looking names and proxy URLs
+with a password must be `keychain:` references (rule 4); Settings stores
+such values in the keychain for you. Verified end to end against a real
+HTTPS-inspecting proxy: a trust store without the proxy's root fails
+with X509 error 19, the same machine with `WRIGHT_CA_FILE` succeeds.

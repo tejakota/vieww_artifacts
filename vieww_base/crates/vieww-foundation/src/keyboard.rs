@@ -496,6 +496,24 @@ impl TextIntent {
     pub const fn needs_clipboard(&self) -> bool {
         matches!(self, Self::Copy | Self::Cut | Self::Paste)
     }
+
+    /// `true` for intents that change the text rather than the caret or
+    /// the selection — what a read-only field declines, so the key goes
+    /// on to the application's own shortcuts.
+    #[must_use]
+    pub const fn changes_text(&self) -> bool {
+        matches!(
+            self,
+            Self::Insert(_)
+                | Self::Newline
+                | Self::DeleteBackward
+                | Self::DeleteForward
+                | Self::DeleteWordBackward
+                | Self::DeleteWordForward
+                | Self::Cut
+                | Self::Paste
+        )
+    }
 }
 
 /// What a platform input method is doing to the text.

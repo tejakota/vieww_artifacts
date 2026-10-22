@@ -18,9 +18,11 @@
 //!
 //! The one rule that matters most: **nothing touches the world before
 //! the checks pass.** A delivery agent (one with a World-effect tool)
-//! depends on the Reviewer when the tests chip is on, so a bad digest
-//! is caught before it is emailed, not reported after. (v0.1 had this
-//! backwards: tests ran after the Mailer had already sent.)
+//! depends on the Reviewer — always: a plan that delivers, or that makes
+//! acceptance promises, gets Testwright and the Reviewer whether or not
+//! its tests chip is on — so a bad digest is caught before it is
+//! emailed, not reported after. (v0.1 had this backwards: tests ran
+//! after the Mailer had already sent.)
 //!
 //! Built-in tasks (Shipwright, Operator) are deterministic code in the
 //! engine, not model calls: they are free, instant, and identical every
@@ -325,7 +327,16 @@ pub fn compile(bp: &Blueprint) -> Result<TaskGraph, String> {
         .filter(|&id| !tasks[id].delivery)
         .collect();
     let mut gate_for_delivery: Option<usize> = None;
-    if bp.chips.tests {
+    // The checks run when the tests chip asks for them — AND whenever the
+    // plan makes a promise only they can keep: an acceptance sentence
+    // (the Confirm Gate tells the person "Testwright must check this"),
+    // or a delivery agent (nothing leaves the machine before the checks,
+    // AGENTS.md rule 7). Without this, a plan with `accept` lines and the
+    // chip off — the gallery's own recipes — promised a check that never
+    // ran, and its Mailer sent unreviewed work.
+    let promises = bp.deliverables.iter().any(|d| !d.accept.is_empty());
+    let delivers = name_to_id.values().any(|&id| tasks[id].delivery);
+    if bp.chips.tests || promises || delivers {
         let tw = push(
             &mut tasks,
             TaskKind::System(SystemKind::Testwright),
@@ -442,6 +453,10 @@ mod tests {
 
     /// The HN digest, condensed. logging + tests + scheduling + secrets ON.
     fn hn() -> Blueprint {
+        parse::blueprint(&hn_src()).unwrap()
+    }
+
+    fn hn_src() -> String {
         let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
 agent Fetcher { goal \"fetch\" tools \"http-read\" out \"stories.json\" permissions network=true }\n\
 agent Summarizer { goal \"sum\" model tier=\"quality\" in \"stories.json\" out \"summaries.json\" }\n\
@@ -452,13 +467,45 @@ chips { scheduling cron=\"0 8 * * *\" secrets smtp=\"keychain:x/y\" logging on t
 guardrails { budget per-firing=900000 daily=3000000 max-turns 40 }\n\
 deliverable kind=\"email\" { check \"c\" }\n\
 models { tier cheap prefer=\"deepseek-v4-flash\" tier quality prefer=\"claude-opus-4.6\" }";
-        parse::blueprint(src).unwrap()
+        src.to_string()
     }
 
     fn id_of(g: &TaskGraph, name: &str) -> usize {
         g.by_name(name)
             .unwrap_or_else(|| panic!("no task {name}"))
             .id
+    }
+
+    #[test]
+    fn a_plan_that_delivers_is_checked_even_with_the_tests_chip_off() {
+        // The gallery's own HN recipe: `accept` sentences, a Mailer, and no
+        // `tests on`. Before, it compiled with no Testwright and no Reviewer:
+        // the promise was printed and never checked, and the Mailer sent.
+        let src = hn_src().replace(" tests on", "");
+        let bp = parse::blueprint(&src).unwrap();
+        assert!(!bp.chips.tests);
+        let g = compile(&bp).unwrap();
+        let (rv, mailer) = (id_of(&g, "Reviewer"), id_of(&g, "Mailer"));
+        assert!(g.tasks[mailer].deps.contains(&rv), "Mailer waits for the Reviewer");
+        assert!(g.by_name("Testwright").is_some());
+
+        // A plan with nothing to deliver and no promise stays as light as
+        // the chip says.
+        let quiet = parse::blueprint(
+            "meta { name \"q\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
+agent Writer { goal \"write\" out \"a.md\" }\n\
+deliverable kind=\"report\" { check \"c\" }\n",
+        )
+        .unwrap();
+        assert!(compile(&quiet).unwrap().by_name("Reviewer").is_none());
+        // ...but a promise brings the checks.
+        let promised = parse::blueprint(
+            "meta { name \"q\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
+agent Writer { goal \"write\" out \"a.md\" }\n\
+deliverable kind=\"report\" { check \"c\" accept \"it has a title\" }\n",
+        )
+        .unwrap();
+        assert!(compile(&promised).unwrap().by_name("Reviewer").is_some());
     }
 
     #[test]

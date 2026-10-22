@@ -166,6 +166,38 @@ deliverable kind=\"report\" {{ check \"a digest exists\" accept \"the digest say
         v.report()
     );
 
+    // A forger edits the receipt and RE-SIGNS it with a fresh key of
+    // their own: the bytes and the signature agree, but nobody pinned
+    // that key — so the receipt still fails, and says why.
+    use wright_core::wire::json::{self, Value};
+    let parsed = json::parse(&tampered).unwrap();
+    let Value::Obj(fields) = parsed else { panic!("a receipt is an object") };
+    let body: Vec<(String, Value)> = fields.iter().filter(|(k, _)| k != "signature").cloned().collect();
+    let bytes = json::to_string(&Value::Obj(body.clone()));
+    let forger = [9u8; 32];
+    let forger_pub: String = wright_core::ed25519::public_key(&forger).iter().map(|b| format!("{b:02x}")).collect();
+    let sig: String = wright_core::ed25519::sign(&forger, bytes.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+    let mut resigned = body;
+    resigned.push((
+        "signature".into(),
+        Value::obj(vec![
+            ("public_key", Value::str(forger_pub.clone())),
+            ("value", Value::str(sig)),
+            ("provenance", Value::str("os-keychain")),
+        ]),
+    ));
+    std::fs::write(&summary.receipt, json::to_string(&Value::Obj(resigned))).unwrap();
+    let v = trust_verify::project_run(&dir, Some(summary.run)).unwrap();
+    assert!(!v.ok, "a stranger's signature must not verify: {}", v.report());
+    assert!(v.report().contains("not one this machine trusts"), "{}", v.report());
+    // ...and pinning that key on purpose is a decision the verifier makes
+    let v = trust_verify::project_run_pinned(&dir, Some(summary.run), std::slice::from_ref(&forger_pub)).unwrap();
+    assert!(
+        v.checks.iter().find(|c| c.name == "signature").is_some_and(|c| c.ok),
+        "a pinned key's signature is accepted: {}",
+        v.report()
+    );
+
     // and the explain view tells the story
     let story = wright_engine::explain::latest(&dir).unwrap();
     assert!(story.contains("WHAT RAN"), "{story}");
@@ -231,7 +263,7 @@ fn a_worker_step_runs_an_external_agent_and_applies_whole() {
         "worker",
         "meta { name \"worker-demo\" }\n\
 intent { summary \"a worker does it\" confirmed \"v1\" }\n\
-agent Coder { goal \"write the digest file\" worker \"fake-claude\" retries 1 out \"digest.md\" permissions files-read=true files-write=true spawn=true }\n\
+agent Coder { goal \"write the digest file\" worker \"fake-claude\" retries 1 out \"digest.md\" approval \"before-send\" permissions files-read=true files-write=true spawn=true network=true }\n\
 models { tier cheap prefer=\"mock-1\" }
 deliverable kind=\"report\" { check \"the file exists\" }\n",
     );
@@ -245,6 +277,7 @@ deliverable kind=\"report\" { check \"the file exists\" }\n",
         command: stub.to_string_lossy().to_string(),
         args: Vec::new(),
         timeout_secs: 30,
+        env: Vec::new(),
     });
     let summary = fire_once(&dir, cfg);
     assert!(summary.ok, "the worker step must pass: {summary:?}");
@@ -254,6 +287,74 @@ deliverable kind=\"report\" { check \"the file exists\" }\n",
     let receipt = std::fs::read_to_string(&summary.receipt).unwrap();
     assert!(receipt.contains("Coder"), "{receipt}");
     assert!(receipt.contains("\"status\":\"ran\""), "{receipt}");
+    // the copy the worker saw is gone: it held the whole project
+    let leftovers: Vec<_> = std::fs::read_dir(std::env::temp_dir())
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with(&format!("wright-worker-{}-", std::process::id())))
+        .collect();
+    assert!(leftovers.is_empty(), "worker copies left behind: {leftovers:?}");
+}
+
+#[test]
+fn a_worker_step_asks_first_and_a_refusal_applies_nothing() {
+    let (home_dir, _) = mock_env();
+    let _ = &home_dir;
+    let stub_dir = home("worker-stub-refused");
+    let stub = stub_dir.join("fake-codex.sh");
+    std::fs::write(&stub, "#!/bin/sh\necho '# Summary' > artifacts/digest.md\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let dir = project(
+        "worker-refused",
+        "meta { name \"worker-refused\" }\n\
+intent { summary \"a worker does it\" confirmed \"v1\" }\n\
+agent Coder { goal \"write the digest file\" worker \"fake-codex\" out \"digest.md\" approval \"before-send\" permissions files-read=true files-write=true spawn=true network=true }\n\
+models { tier cheap prefer=\"mock-1\" }
+deliverable kind=\"report\" { check \"the file exists\" }\n",
+    );
+    std::fs::create_dir_all(dir.join("artifacts")).unwrap();
+    let mut cfg = config("");
+    cfg.workers.push(wright_runtime::config::WorkerEntry {
+        name: "fake-codex".into(),
+        command: stub.to_string_lossy().to_string(),
+        args: Vec::new(),
+        timeout_secs: 30,
+        env: Vec::new(),
+    });
+    let summary = fire(
+        &dir,
+        FireOptions {
+            trigger: Trigger::Manual,
+            approver: Box::new(wright_engine::approve::AutoDeny),
+            listeners: Vec::new(),
+            config: Some(cfg),
+            allow_private_network: true,
+            resume: None,
+            no_cache: false,
+        },
+    )
+    .unwrap();
+    assert!(!summary.ok, "a refused worker step must not pass: {summary:?}");
+    assert!(summary.headline.contains("declined"), "{}", summary.headline);
+    assert!(!dir.join("artifacts").join("digest.md").exists(), "nothing may be applied after a refusal");
+}
+
+#[test]
+fn a_worker_plan_without_an_approval_is_refused_by_the_rule_of_two() {
+    let bp = wright_core::blueprint::parse::blueprint(
+        "meta { name \"w\" }\n\
+intent { summary \"a worker does it\" confirmed \"v1\" }\n\
+agent Coder { goal \"write it\" worker \"claude-code\" out \"x.md\" permissions files-read=true files-write=true spawn=true network=true }\n\
+models { tier cheap prefer=\"mock-1\" }
+deliverable kind=\"report\" { check \"x\" }\n",
+    )
+    .unwrap();
+    let errs = wright_core::blueprint::validate::validate(&bp).unwrap_err();
+    assert!(errs.iter().any(|e| e.contains("Coder") && e.contains("before-send")), "{errs:?}");
 }
 
 #[test]

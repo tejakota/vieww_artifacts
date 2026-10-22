@@ -207,6 +207,14 @@ pub struct RenderEditableText {
     /// then reported unhandled, so the key travels on to whatever else might want
     /// it rather than being eaten by a field that cannot act on it.
     clipboard: Option<Rc<dyn Clipboard>>,
+    /// Selectable, copyable, never editable: text a person reads and wants
+    /// to copy (a reply, a log line, an error). The pointer selects, the
+    /// keyboard moves and extends the selection, Copy and Select All work;
+    /// anything that would change the text is reported *unhandled*, so a
+    /// key like Space or `e` reaches the application's shortcuts instead
+    /// of vanishing into a field that cannot use it. No input method
+    /// either — there is nothing to compose into.
+    read_only: bool,
     /// Whether a line longer than the available width breaks onto a second
     /// visual row.
     ///
@@ -283,9 +291,17 @@ impl RenderEditableText {
             multiline: true,
             on_submit: None,
             clipboard: None,
+            read_only: false,
             wrap: true,
             probe: None,
         }
+    }
+
+    /// Selectable and copyable, but not editable. See the field's docs.
+    #[must_use]
+    pub const fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
     }
 
     /// Show one character per character held, instead of the text.
@@ -906,14 +922,17 @@ impl RenderEditableText {
             TextIntent::Copy => {
                 // A caret is not a selection. Copying the whole field here would
                 // overwrite whatever the user actually had on their pasteboard.
-                if self.value.selected_text().is_empty() {
+                // And an obscured field never gives its contents away: the
+                // dots on screen are the point, and every platform's password
+                // box refuses copy for the same reason.
+                if self.value.selected_text().is_empty() || self.obscure.is_obscured() {
                     return true;
                 }
                 let _ = clipboard.write_text(self.value.selected_text());
                 true
             }
             TextIntent::Cut => {
-                if self.value.selected_text().is_empty() {
+                if self.value.selected_text().is_empty() || self.obscure.is_obscured() {
                     return true;
                 }
                 if clipboard.write_text(self.value.selected_text()).is_err() {
@@ -1148,6 +1167,12 @@ impl RenderObject for RenderEditableText {
         self.on_changed.is_some()
     }
 
+    fn skips_traversal(&self) -> bool {
+        // Reachable by a press (so it can be copied), not by Tab: text to
+        // read is not a control.
+        self.read_only
+    }
+
     fn handle_key(&self, event: &vieww_foundation::KeyEvent) -> bool {
         let Some(handler) = &self.on_changed else {
             return false;
@@ -1189,6 +1214,12 @@ impl RenderObject for RenderEditableText {
             return true;
         }
 
+        // A read-only field keeps the caret and the selection — that is
+        // the point of it — and lets every text-changing key go on.
+        if self.read_only && intent.changes_text() {
+            return false;
+        }
+
         if intent.needs_clipboard() {
             return self.use_clipboard(&intent, handler);
         }
@@ -1209,7 +1240,7 @@ impl RenderObject for RenderEditableText {
     }
 
     fn accepts_text(&self) -> bool {
-        self.on_changed.is_some()
+        self.on_changed.is_some() && !self.read_only
     }
 
     fn ime_cursor_area(&self) -> Option<Rect> {
@@ -1220,6 +1251,9 @@ impl RenderObject for RenderEditableText {
         let Some(handler) = &self.on_changed else {
             return false;
         };
+        if self.read_only {
+            return false;
+        }
         let mut value = self.value.clone();
         if !value.apply_ime(event) {
             return false;
@@ -1456,6 +1490,14 @@ impl RenderObject for RenderEditableText {
         // field, hello" and needs to know which word is which. A label — what
         // the field is *for* — normally has to come from outside, since this
         // object has only ever been told what is in it.
+        // A read-only field is static text that happens to be selectable:
+        // announcing it as a text field would invite typing that goes
+        // nowhere. Its words are its label, the way a `Text`'s are.
+        if self.read_only {
+            return Some(
+                crate::Semantics::new(crate::Role::Label).with_label(self.value.text.clone()),
+            );
+        }
         let mut semantics = crate::Semantics::new(crate::Role::TextField);
 
         // **An obscured field does not put its contents in the semantics tree.**

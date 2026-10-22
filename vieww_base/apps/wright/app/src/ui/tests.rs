@@ -528,3 +528,38 @@ fn speech_alone_starts_a_session_on_home() {
     assert!(chat[0].0, "the first message is the person's");
     std::env::remove_var("WRIGHT_HOME");
 }
+
+/// Copyable text: select it, copy it, and the words land on the window's
+/// pasteboard — while letters typed at it still reach the shortcuts.
+#[test]
+fn reading_text_can_be_selected_and_copied() {
+    use std::rc::Rc;
+    use vieww::foundation::{Clipboard, MemoryClipboard, Modifiers, Services, SharedServices, TargetPlatform};
+    let mut driver = FrameDriver::new(Size::new(600.0, 200.0));
+    let board = Rc::new(MemoryClipboard::new());
+    kit::init_copy(driver.elements().runtime(), Rc::clone(&board) as Rc<dyn Clipboard>);
+    let mut registry = Services::new();
+    registry.provide::<dyn Clipboard>(Rc::clone(&board) as Rc<dyn Clipboard>);
+    let reply = "The plan reads the CSVs and emails a one-page summary.";
+    driver.set_root(Inherited::new(SharedServices::new(registry), kit::copyable(reply, 15.0, Color::hex(0x222222))));
+    driver.draw_frame();
+    // Not a Tab stop (the first focus must stay with the composer)...
+    assert!(!driver.focus_next(true), "reading text is not a Tab stop");
+    // ...a press is what puts the keyboard there.
+    let at = driver.semantics().nodes().iter().find(|n| n.label.as_deref() == Some(reply)).expect("the text is in the tree").bounds;
+    let p = Offset::new(at.left + 4.0, at.top + at.height() / 2.0);
+    driver.handle_pointer(&vieww::foundation::PointerEvent::down(vieww::foundation::PointerId(1), p, Duration::ZERO));
+    driver.handle_pointer(&vieww::foundation::PointerEvent::up(vieww::foundation::PointerId(1), p, Duration::from_millis(40)));
+    driver.draw_frame();
+    let shortcut = Modifiers::shortcut_for(TargetPlatform::current());
+    for c in ["a", "c"] {
+        assert!(driver.handle_key(&KeyEvent::down(LogicalKey::Character(c.into()), Duration::ZERO).with_modifiers(shortcut)));
+        driver.draw_frame();
+    }
+    assert_eq!(board.read_text().unwrap().as_deref(), Some(reply));
+    // A plain letter is not the text's: it goes on to the app (E, O, ?).
+    assert!(!driver.handle_key(&KeyEvent::down(LogicalKey::Character("e".into()), Duration::ZERO)));
+    // And the Copy buttons write to the same pasteboard.
+    assert!(kit::copy_text("a whole plan"));
+    assert_eq!(board.read_text().unwrap().as_deref(), Some("a whole plan"));
+}

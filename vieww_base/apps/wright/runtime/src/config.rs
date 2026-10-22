@@ -16,7 +16,28 @@
 //! builtin fallback=true
 //! worker "claude-code" command="claude" args="-p" timeout=900
 //! mcp "weather" command="uvx" args="mcp-server-weather,--local" hash="blake3:..." timeout=60
+//! tls ca-file="/etc/ssl/certs/corp-root.pem"
+//! env "HTTPS_PROXY" value="http://proxy.corp.example:3128"
+//! env "PIP_INDEX_URL" value="https://pypi.corp.example/simple"
+//! trust "Wright gallery" key="<64 hex chars: the publisher's Ed25519 public key>"
 //! ```
+//!
+//! **Office machines.** `tls ca-file` names a PEM file of extra
+//! certificate authorities (a corporate root that re-signs HTTPS); it is
+//! trusted IN ADDITION to the system store, never instead of it, and
+//! `WRIGHT_CA_FILE` overrides it for one process. `env` lines set
+//! environment variables for Wright and everything it starts (proxies,
+//! package mirrors, the CA variables other tools read). A variable whose
+//! name says it is a secret (`*KEY*`, `*TOKEN*`, `*SECRET*`,
+//! `*PASSWORD*`, `*AUTH*`, `*CREDENTIAL*`) must be a `keychain:`
+//! reference, like every other secret here. [`apply_to_process`] puts
+//! them in place at startup.
+//!
+//! **Trust.** `trust` lines pin the Ed25519 keys whose signatures this
+//! machine accepts: recipe publishers (ADR-028) and receipt signers
+//! (ADR-025). A signature by a key nobody pinned proves only that the
+//! bytes were not changed after signing, not WHO signed them, so
+//! `wright recipe install` and `wright verify` refuse it.
 //!
 //! Workers (ADR-026) are the external coding agents a blueprint can
 //! hand a step to: `claude-code`, `codex`, `kimi-code`, `zcode` are
@@ -102,6 +123,62 @@ pub struct WorkerEntry {
     pub args: Vec<String>,
     /// Wall-clock seconds before the run is killed (default 900).
     pub timeout_secs: u64,
+    /// Environment the worker gets on top of the scrubbed base — what it
+    /// needs to sign in to its own model (`env="ANTHROPIC_API_KEY=keychain:wright/anthropic"`).
+    /// Values are `keychain:` references or plain non-secret text; they
+    /// are resolved only at the moment the worker starts.
+    pub env: Vec<(String, String)>,
+}
+
+/// One pinned signing key (`trust "name" key="hex"`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrustedKey {
+    /// Who it belongs to, as the person wrote it.
+    pub name: String,
+    /// 64 lower-case hex characters: an Ed25519 public key.
+    pub key: String,
+}
+
+/// Names that say "this value is a secret": they must be keychain refs.
+pub fn looks_secret(name: &str) -> bool {
+    let n = name.to_ascii_uppercase();
+    ["KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "AUTH", "CREDENTIAL"]
+        .iter()
+        .any(|w| n.contains(w))
+}
+
+/// A proxy URL with a password in it (`http://user:pass@host`) is a
+/// secret too, whatever its variable is called.
+fn carries_password(value: &str) -> bool {
+    let rest = value.split_once("://").map(|(_, r)| r).unwrap_or(value);
+    let authority = rest.split('/').next().unwrap_or("");
+    authority.contains('@') && authority.split('@').next().is_some_and(|u| u.contains(':'))
+}
+
+/// Environment variable names: letters, digits, underscores, not
+/// starting with a digit (the portable POSIX set).
+pub fn valid_env_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.as_bytes()[0].is_ascii_digit()
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+/// Check one `NAME=value` pair against the secrets rule. `Err` is a
+/// sentence for the person.
+pub fn check_env_pair(name: &str, value: &str) -> Result<(), String> {
+    if !valid_env_name(name) {
+        return Err(format!("'{name}' is not a valid environment variable name (letters, digits and _ only)"));
+    }
+    if value.starts_with("keychain:") {
+        return Ok(());
+    }
+    if looks_secret(name) || carries_password(value) {
+        return Err(format!(
+            "{name} holds a secret, so it must be a keychain: reference (store it with `wright secret set keychain:wright/{}`), never the value itself",
+            name.to_ascii_lowercase()
+        ));
+    }
+    Ok(())
 }
 
 /// One hash-pinned MCP server (ADR-029).
@@ -149,6 +226,12 @@ pub struct Config {
     /// no key (`builtin fallback=false` turns it off). `None`: not set in
     /// this file (the default, on, applies).
     pub builtin_fallback: Option<bool>,
+    /// Extra certificate authorities, a PEM file (`tls ca-file="..."`).
+    pub ca_file: Option<String>,
+    /// Environment variables for Wright and what it starts (`env "NAME" value="..."`).
+    pub env: Vec<(String, String)>,
+    /// Signing keys this machine accepts (`trust "name" key="hex"`).
+    pub trusted: Vec<TrustedKey>,
     pub source: String,
 }
 
@@ -178,6 +261,104 @@ pub fn glob(pattern: &str, text: &str) -> bool {
         }
     }
     true
+}
+
+// ── the process environment (office machines) ──────────────────────
+
+/// Names of the variables Wright itself set from `env` lines, so a
+/// later change in Settings can replace them — while a variable the
+/// person exported in their own shell is never overwritten.
+static SET_BY_WRIGHT: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// The extra-CA variable every TLS path reads (`runtime/src/tls.rs`,
+/// `runtime/src/curl.rs`). Set it yourself to override `tls ca-file`.
+pub const CA_ENV: &str = "WRIGHT_CA_FILE";
+
+/// The extra certificate authorities for this process, if any.
+pub fn ca_file() -> Option<PathBuf> {
+    std::env::var_os(CA_ENV)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Check a CA file before anyone relies on it: it must exist and hold
+/// at least one PEM certificate. Ok(number of certificates).
+pub fn check_ca_file(path: &std::path::Path) -> Result<usize, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let text = String::from_utf8_lossy(&bytes);
+    let n = text.matches("-----BEGIN CERTIFICATE-----").count();
+    if n == 0 {
+        return Err(format!(
+            "{} holds no PEM certificate (a file of '-----BEGIN CERTIFICATE-----' blocks). A .cer/.der file converts with: openssl x509 -inform der -in corp.cer -out corp.pem",
+            path.display()
+        ));
+    }
+    Ok(n)
+}
+
+/// Put the config's `env` lines and `tls ca-file` into this process's
+/// environment, so Wright and every program it starts see them. Called
+/// first thing in `main`, before any thread exists, and again when
+/// Settings saves. A variable the person already exported wins over the
+/// config (the shell is the more specific place). Returns one sentence
+/// per entry that could not be applied (a keychain entry that is
+/// missing, a CA file that is not there).
+pub fn apply_to_process(cfg: &Config) -> Vec<String> {
+    let mut problems = Vec::new();
+    let mut ours = SET_BY_WRIGHT.lock().unwrap_or_else(|p| p.into_inner());
+    // Forget values Wright set earlier that the config no longer has.
+    let wanted: Vec<&str> = cfg
+        .env
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .chain(cfg.ca_file.iter().map(|_| CA_ENV))
+        .collect();
+    ours.retain(|k| {
+        if wanted.contains(&k.as_str()) {
+            true
+        } else {
+            std::env::remove_var(k);
+            false
+        }
+    });
+    let set = |k: &str, v: &str, ours: &mut Vec<String>| {
+        let mine = ours.iter().any(|x| x == k);
+        if std::env::var_os(k).is_some() && !mine {
+            return; // the person's own environment wins
+        }
+        std::env::set_var(k, v);
+        if !mine {
+            ours.push(k.to_string());
+        }
+    };
+    for (k, v) in &cfg.env {
+        if v.starts_with("keychain:") {
+            match crate::secrets::resolve(v) {
+                Ok(secret) => set(k, secret.expose(), &mut ours),
+                Err(e) => problems.push(format!("{k} was not set: {e}")),
+            }
+        } else {
+            set(k, v, &mut ours);
+        }
+    }
+    if let Some(f) = &cfg.ca_file {
+        let path = expand_home(f);
+        match check_ca_file(&path) {
+            Ok(_) => set(CA_ENV, &path.to_string_lossy(), &mut ours),
+            Err(e) => problems.push(format!("the extra certificate authorities were not added: {e}")),
+        }
+    }
+    problems
+}
+
+/// `~/x` -> the home directory's `x`; anything else unchanged.
+pub fn expand_home(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
+        if let Ok(h) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+            return PathBuf::from(h).join(rest);
+        }
+    }
+    PathBuf::from(path)
 }
 
 /// Where Wright keeps machine-wide state.
@@ -223,6 +404,7 @@ impl Config {
                 args.split(',').map(|s| s.to_string()).collect()
             },
             timeout_secs: 900,
+            env: Vec::new(),
         };
         Config {
             providers: vec![
@@ -289,6 +471,9 @@ impl Config {
             ],
             mcp_servers: Vec::new(),
             builtin_fallback: Some(true),
+            ca_file: None,
+            env: Vec::new(),
+            trusted: Vec::new(),
             source: "built-in defaults".into(),
         }
     }
@@ -318,6 +503,15 @@ impl Config {
         if cfg.builtin_fallback.is_none() {
             cfg.builtin_fallback = b.builtin_fallback;
         }
+        // The preconfigured workers stay available behind the file's own
+        // (a file that configures one worker, or none, must not make the
+        // other three disappear — it used to, the moment Settings saved
+        // anything at all).
+        for w in b.workers {
+            if !cfg.workers.iter().any(|x| x.name == w.name) {
+                cfg.workers.push(w);
+            }
+        }
         Ok(cfg)
     }
 
@@ -334,6 +528,9 @@ impl Config {
             workers: Vec::new(),
             mcp_servers: Vec::new(),
             builtin_fallback: None,
+            ca_file: None,
+            env: Vec::new(),
+            trusted: Vec::new(),
             source: source.into(),
         };
         for node in &doc {
@@ -399,7 +596,14 @@ impl Config {
                     if cfg.workers.iter().any(|w: &WorkerEntry| w.name == name) {
                         return Err(format!("{source}: line {}: two workers are both named '{name}'", node.line));
                     }
-                    cfg.workers.push(WorkerEntry { name, command, args, timeout_secs });
+                    let mut env = Vec::new();
+                    for pair in s("env").unwrap_or_default().split(',').map(str::trim).filter(|p| !p.is_empty()) {
+                        let (k, v) = pair.split_once('=').ok_or_else(|| format!("{source}: line {}: worker '{name}' env entries are NAME=value, comma separated", node.line))?;
+                        let (k, v) = (k.trim().to_string(), v.trim().to_string());
+                        check_env_pair(&k, &v).map_err(|e| format!("{source}: line {}: worker '{name}': {e}", node.line))?;
+                        env.push((k, v));
+                    }
+                    cfg.workers.push(WorkerEntry { name, command, args, timeout_secs, env });
                 }
                 "mcp" => {
                     let name = node.arg_str().ok_or_else(|| format!("{source}: line {}: mcp needs a name (mcp \"weather\" command=... hash=...)", node.line))?.to_string();
@@ -418,7 +622,27 @@ impl Config {
                     }
                     cfg.mcp_servers.push(McpEntry { name, command, args, hash, timeout_secs });
                 }
-                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview | voice | builtin | worker | mcp)", node.line)),
+                "tls" => {
+                    let file = s("ca-file").map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).ok_or_else(|| format!("{source}: line {}: tls needs ca-file=\"/path/to/certificates.pem\"", node.line))?;
+                    cfg.ca_file = Some(file);
+                }
+                "env" => {
+                    let name = node.arg_str().ok_or_else(|| format!("{source}: line {}: env needs a name (env \"HTTPS_PROXY\" value=...)", node.line))?.to_string();
+                    let value = s("value").ok_or_else(|| format!("{source}: line {}: env '{name}' needs value=\"...\"", node.line))?;
+                    check_env_pair(&name, &value).map_err(|e| format!("{source}: line {}: {e}", node.line))?;
+                    cfg.env.retain(|(k, _)| k != &name);
+                    cfg.env.push((name, value));
+                }
+                "trust" => {
+                    let name = node.arg_str().ok_or_else(|| format!("{source}: line {}: trust needs a name (trust \"Wright gallery\" key=...)", node.line))?.to_string();
+                    let key = s("key").unwrap_or_default().trim().to_ascii_lowercase();
+                    if key.len() != 64 || !key.bytes().all(|b| b.is_ascii_hexdigit()) {
+                        return Err(format!("{source}: line {}: trust '{name}' needs key=\"<64 hex characters>\" (an Ed25519 public key)", node.line));
+                    }
+                    cfg.trusted.retain(|t| t.key != key);
+                    cfg.trusted.push(TrustedKey { name, key });
+                }
+                other => return Err(format!("{source}: line {}: unknown setting '{other}' (provider | price | interview | voice | builtin | worker | mcp | tls | env | trust)", node.line)),
             }
         }
         Ok(cfg)
@@ -470,12 +694,17 @@ impl Config {
         }
         for w in &self.workers {
             out.push_str(&format!(
-                "worker {} command={} args={} timeout={}\n",
+                "worker {} command={} args={} timeout={}",
                 q(&w.name),
                 q(&w.command),
                 q(&w.args.join(",")),
                 q(&w.timeout_secs.to_string())
             ));
+            if !w.env.is_empty() {
+                let pairs: Vec<String> = w.env.iter().map(|(k, v)| format!("{k}={v}")).collect();
+                out.push_str(&format!(" env={}", q(&pairs.join(","))));
+            }
+            out.push('\n');
         }
         for m in &self.mcp_servers {
             out.push_str(&format!(
@@ -490,7 +719,22 @@ impl Config {
         if let Some(on) = self.builtin_fallback {
             out.push_str(&format!("builtin fallback={on}\n"));
         }
+        if let Some(f) = &self.ca_file {
+            out.push_str(&format!("tls ca-file={}\n", q(f)));
+        }
+        for (k, v) in &self.env {
+            out.push_str(&format!("env {} value={}\n", q(k), q(v)));
+        }
+        for t in &self.trusted {
+            out.push_str(&format!("trust {} key={}\n", q(&t.name), q(&t.key)));
+        }
         out
+    }
+
+    /// The name a pinned key was trusted under, if it is pinned.
+    pub fn trusts(&self, public_hex: &str) -> Option<&str> {
+        let k = public_hex.to_ascii_lowercase();
+        self.trusted.iter().find(|t| t.key == k).map(|t| t.name.as_str())
     }
 
     /// The configured worker a blueprint names, or None with a plain
@@ -661,4 +905,64 @@ price model=\"llama*\" in=0 out=0\ninterview model=\"qwen3\"\nvoice model=\"whis
             3_000_000
         );
     }
+
+    #[test]
+    fn office_settings_round_trip_and_secrets_stay_references() {
+        let key = "ab".repeat(32);
+        let text = format!(
+            "tls ca-file=\"/etc/ssl/corp.pem\"\n\
+env \"HTTPS_PROXY\" value=\"http://proxy.corp:3128\"\n\
+env \"NPM_TOKEN\" value=\"keychain:wright/npm\"\n\
+trust \"Wright gallery\" key=\"{key}\"\n\
+worker \"claude-code\" command=\"claude\" args=\"--print\" env=\"ANTHROPIC_API_KEY=keychain:wright/anthropic\"\n"
+        );
+        let cfg = Config::parse_file_only(&text, "t").unwrap();
+        assert_eq!(cfg.ca_file.as_deref(), Some("/etc/ssl/corp.pem"));
+        assert_eq!(cfg.env.len(), 2);
+        assert_eq!(cfg.trusts(&key.to_uppercase()), Some("Wright gallery"));
+        assert_eq!(cfg.workers[0].env, vec![("ANTHROPIC_API_KEY".to_string(), "keychain:wright/anthropic".to_string())]);
+        let back = Config::parse_file_only(&cfg.to_kdl(), "t").unwrap();
+        assert_eq!(back.ca_file, cfg.ca_file);
+        assert_eq!(back.env, cfg.env);
+        assert_eq!(back.trusted, cfg.trusted);
+        assert_eq!(back.workers, cfg.workers);
+
+        // A secret-looking variable with a literal value is refused...
+        let err = Config::parse_file_only("env \"GITHUB_TOKEN\" value=\"ghp_abc\"\n", "t").unwrap_err();
+        assert!(err.contains("keychain:"), "{err}");
+        // ...so is a proxy URL carrying a password, whatever its name...
+        let err = Config::parse_file_only("env \"HTTPS_PROXY\" value=\"http://me:hunter2@proxy:3128\"\n", "t").unwrap_err();
+        assert!(err.contains("keychain:"), "{err}");
+        // ...and so is a worker sign-in given as a value.
+        let err = Config::parse_file_only("worker \"codex\" command=\"codex\" env=\"OPENAI_API_KEY=sk-123\"\n", "t").unwrap_err();
+        assert!(err.contains("keychain:"), "{err}");
+        assert!(Config::parse_file_only("env \"1BAD\" value=\"x\"\n", "t").is_err());
+        assert!(Config::parse_file_only("trust \"x\" key=\"short\"\n", "t").is_err());
+    }
+
+    #[test]
+    fn a_config_file_does_not_hide_the_preconfigured_workers() {
+        let cfg = Config::parse("worker \"claude-code\" command=\"/opt/claude\"\n", "t").unwrap();
+        assert_eq!(cfg.worker_for("claude-code").unwrap().command, "/opt/claude", "the file wins");
+        for w in ["codex", "kimi-code", "zcode"] {
+            assert!(cfg.worker_for(w).is_some(), "{w} is still there");
+        }
+        let empty = Config::parse("interview model=\"x\"\n", "t").unwrap();
+        assert!(empty.worker_for("claude-code").is_some(), "any config file at all used to drop them");
+    }
+
+    #[test]
+    fn the_ca_file_is_checked_before_anyone_relies_on_it() {
+        let dir = std::env::temp_dir().join(format!("wright-ca-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let good = dir.join("corp.pem");
+        std::fs::write(&good, "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n").unwrap();
+        assert_eq!(check_ca_file(&good).unwrap(), 1);
+        let der = dir.join("corp.cer");
+        std::fs::write(&der, [0x30u8, 0x82, 0x01]).unwrap();
+        assert!(check_ca_file(&der).unwrap_err().contains("openssl x509"));
+        assert!(check_ca_file(&dir.join("missing.pem")).is_err());
+        assert_eq!(expand_home("/abs/x.pem"), PathBuf::from("/abs/x.pem"));
+    }
+
 }

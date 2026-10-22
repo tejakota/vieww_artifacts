@@ -6,6 +6,9 @@
 //!                  providers, their models, key Ready / Missing / Not needed
 //!  Defaults        the interview model, the voice model
 //!  Appearance      dark / light, any accent colour
+//!  Network         office machines: an extra certificate file (PEM) for
+//!                  networks that inspect HTTPS, environment variables
+//!                  (proxies, mirrors), and what is in effect right now
 //!  Workspace       where new projects go, background schedules
 //!  This project    model tiers and spending limits (the blueprint's own)
 //! ```
@@ -35,18 +38,20 @@ pub enum Tab {
     AgentsTools,
     Defaults,
     Appearance,
+    Network,
     Workspace,
     Project,
 }
 
 impl Tab {
-    const ALL: [Tab; 6] = [Tab::Models, Tab::AgentsTools, Tab::Defaults, Tab::Appearance, Tab::Workspace, Tab::Project];
+    const ALL: [Tab; 7] = [Tab::Models, Tab::AgentsTools, Tab::Defaults, Tab::Appearance, Tab::Network, Tab::Workspace, Tab::Project];
     fn label(self) -> &'static str {
         match self {
             Tab::Models => "Models & keys",
             Tab::AgentsTools => "Agents & tools",
             Tab::Defaults => "Defaults",
             Tab::Appearance => "Appearance",
+            Tab::Network => "Network",
             Tab::Workspace => "Workspace",
             Tab::Project => "This project",
         }
@@ -70,6 +75,9 @@ pub enum Pull {
     Failed(String),
 }
 
+/// A file-dialog answer.
+type Picked = Result<Vec<std::path::PathBuf>, String>;
+
 /// The form state Settings edits.
 #[derive(Clone)]
 pub struct Form {
@@ -92,6 +100,13 @@ pub struct Form {
     pub tiers: Signal<[TextEditingValue; 4]>,
     pub per_run: Signal<TextEditingValue>,
     pub per_day: Signal<TextEditingValue>,
+    /// Network: the certificate file path being edited.
+    pub ca_path: Signal<TextEditingValue>,
+    /// Network: a new environment variable.
+    pub env_name: Signal<TextEditingValue>,
+    pub env_value: Signal<TextEditingValue>,
+    /// A file chosen in the system dialog, from its worker thread.
+    picked: Arc<Mutex<Option<Picked>>>,
     pub message: Signal<String>,
     pub scroll: ScrollState,
 }
@@ -120,6 +135,10 @@ impl Form {
             tiers: rt.signal([tv(""), tv(""), tv(""), tv("")]),
             per_run: rt.signal(tv("")),
             per_day: rt.signal(tv("")),
+            ca_path: rt.signal(tv("")),
+            env_name: rt.signal(tv("")),
+            env_value: rt.signal(tv("")),
+            picked: Arc::new(Mutex::new(None)),
             message: rt.signal(String::new()),
             scroll: ScrollState::new(rt),
         }
@@ -147,6 +166,7 @@ impl Form {
         self.voice.set(tv(merged.voice_model.clone()));
         self.config.set(Some(merged));
         self.projects_dir.set(tv(super::store::projects_dir().display().to_string()));
+        self.ca_path.set(tv(Config::load_file().ok().and_then(|c| c.ca_file).unwrap_or_default()));
         if let Some(bp) = project.and_then(|p| wright_engine::load_blueprint(p).ok()) {
             let m = &bp.models;
             self.tiers.set([tv(m.cheap.prefer.clone()), tv(m.cheap.fallback.clone()), tv(m.quality.prefer.clone()), tv(m.quality.fallback.clone())]);
@@ -190,6 +210,27 @@ impl Form {
         if now != self.pulls.get() {
             self.pulls.set(now);
         }
+        if let Some(r) = self.picked.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            match r {
+                Ok(paths) => {
+                    if let Some(first) = paths.first() {
+                        self.ca_path.set(tv(first.display().to_string()));
+                        self.message.set("Chosen. Save to start using it.".into());
+                    }
+                }
+                Err(e) => self.message.set(e),
+            }
+        }
+    }
+
+    /// Ask the system's file dialog for the certificate file.
+    pub fn choose_ca_file(&self) {
+        let (slot, wake) = (Arc::clone(&self.picked), WakeHandle::current());
+        std::thread::spawn(move || {
+            let r = super::picker::pick(false);
+            *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(r);
+            wake.wake();
+        });
     }
 
     /// Change the file config (no built-ins) and save it.
@@ -241,6 +282,7 @@ pub fn page(ui: &Ui) -> WidgetNode {
             Tab::AgentsTools => agents_and_tools(&ui, &p),
             Tab::Defaults => defaults(&ui, &p),
             Tab::Appearance => appearance(&ui, &p),
+            Tab::Network => network(&ui, &p),
             Tab::Workspace => workspace(&ui, &p),
             Tab::Project => project(&ui, &p),
         };
@@ -258,7 +300,7 @@ pub fn page(ui: &Ui) -> WidgetNode {
                     SizedBox::width(170.0).child(column(4.0, tabs)).into(),
                     grow(scroll_area(&ui, &f.scroll, pad(EdgeInsets::only(0.0, 0.0, 14.0, 0.0), body))),
                 ])),
-                if msg.is_empty() { SizedBox::shrink().into() } else { t(msg, 12.5, p.muted) },
+                if msg.is_empty() { SizedBox::shrink().into() } else { copyable(msg, 12.5, p.muted) },
             ]))
             .into()
     })
@@ -267,7 +309,9 @@ pub fn page(ui: &Ui) -> WidgetNode {
 
 fn field(ui: &Ui, p: &Pal, label: &str, value: &Signal<TextEditingValue>, placeholder: &str, secret: bool) -> WidgetNode {
     let v = value.clone();
-    column(5.0, vec![
+    // Stretch, not start: a text box fills the room it was given (a box
+    // that shrinks to the placeholder's width cuts off what is typed).
+    stretch(5.0, vec![
         t(label.to_string(), 12.0, p.muted),
         Container::new()
             .color(p.surface2)
@@ -342,7 +386,7 @@ fn builtin(ui: &Ui, p: &Pal, cfg: &Config) -> Vec<WidgetNode> {
                 block.push(progress_bar(p, *percent as f32 / 100.0));
                 block.push(t(line.clone(), 11.5, p.muted));
             }
-            Some(Pull::Failed(e)) => block.push(para(e.clone(), 11.5, p.wait)),
+            Some(Pull::Failed(e)) => block.push(copyable(e.clone(), 11.5, p.wait)),
             _ => {}
         }
         rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::CARD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::all(14.0)).child(stretch(6.0, block)).into());
@@ -418,10 +462,10 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
         }
         let mut block = vec![
             row(10.0, vec![b(prov.name.clone(), 14.0, p.ink), badge, if mine.contains(&prov.name) { pill("yours", p.accent_ink, p.accent_soft) } else { SizedBox::shrink().into() }, gap(), row(8.0, actions)]),
-            mono(format!("{}  ·  {}", prov.base_url, prov.models.join(", ")), 11.5, p.muted),
+            copyable_mono(format!("{}  ·  {}", prov.base_url, prov.models.join(", ")), 11.5, p.muted),
         ];
         if let KeyState::Missing(why) = &state {
-            block.push(para(why.clone(), 11.5, p.muted));
+            block.push(copyable(why.clone(), 11.5, p.muted));
         }
         if editing.as_deref() == Some(prov.name.as_str()) {
             let (form, reference) = (f.clone(), prov.key.clone().unwrap_or_default());
@@ -596,6 +640,167 @@ fn appearance(ui: &Ui, p: &Pal) -> WidgetNode {
     ])
 }
 
+/// Office machines. A network that inspects HTTPS re-signs every site
+/// with the organization's own root certificate; without that root, every
+/// model call and download fails verification. Proxies and package mirrors
+/// arrive as environment variables. Both are written to config.kdl and put
+/// into effect at once (and at every start).
+fn network(ui: &Ui, p: &Pal) -> WidgetNode {
+    use wright_runtime::config::{self as rc, check_ca_file, expand_home};
+    let f = ui.form.clone();
+    let file_cfg = Config::load_file().unwrap_or_else(|_| Config::builtin());
+    let mut rows = vec![section(
+        p,
+        "Certificates",
+        "If your organization inspects HTTPS (common on office laptops), add its root certificate here so Wright can reach model providers and downloads. It is trusted in addition to this computer's own certificates, never instead of them. The file is PEM text: blocks that begin with -----BEGIN CERTIFICATE-----. Your IT team can give you one; a .cer/.der file converts with `openssl x509 -inform der -in corp.cer -out corp.pem`.",
+    )];
+    let typed = f.ca_path.get().text.trim().to_string();
+    let status: WidgetNode = if typed.is_empty() {
+        t("No extra certificates. This computer's own trust store is used.", 12.5, p.muted)
+    } else {
+        match check_ca_file(&expand_home(&typed)) {
+            Ok(n) => row(8.0, vec![pill(format!("{n} certificate{}", if n == 1 { "" } else { "s" }), p.good, p.good_soft), grow(t("found in this file", 12.5, p.muted))]),
+            Err(e) => copyable(e, 12.5, p.wait),
+        }
+    };
+    let (choose, save, clear) = (f.clone(), f.clone(), f.clone());
+    let project = ui.current_session().map(|s| (*s.project).clone());
+    let project2 = project.clone();
+    rows.push(row(10.0, vec![
+        grow(field(ui, p, "Certificate file (paste a path, or choose one)", &f.ca_path, "/path/to/company-root.pem", false)),
+        button(p, "Choose file…", Look::Secondary, true, move || choose.choose_ca_file()),
+    ]));
+    rows.push(status);
+    rows.push(row(10.0, vec![
+        button(p, "Save certificates", Look::Primary, !typed.is_empty(), move || {
+            let path = save.ca_path.get().text.trim().to_string();
+            if let Err(e) = check_ca_file(&expand_home(&path)) {
+                save.message.set(format!("Not saved: {e}"));
+                return;
+            }
+            save.edit_file(|c| c.ca_file = Some(path.clone()));
+            apply_now(&save);
+            save.reload(project.as_deref());
+        }),
+        button(p, "Remove", Look::Quiet, file_cfg.ca_file.is_some(), move || {
+            clear.edit_file(|c| c.ca_file = None);
+            apply_now(&clear);
+            clear.reload(project2.as_deref());
+        }),
+    ]));
+    if std::env::var_os(rc::CA_ENV).is_some() && file_cfg.ca_file.is_none() {
+        rows.push(t(format!("{} is set in your environment, so that file is in use for this session.", rc::CA_ENV), 12.0, p.muted));
+    }
+
+    rows.push(divider(p));
+    rows.push(section(
+        p,
+        "Environment variables",
+        "For Wright and every program it runs: a proxy (HTTPS_PROXY, NO_PROXY), a package mirror (PIP_INDEX_URL, npm_config_registry), a model mirror (WRIGHT_MODEL_MIRROR). A variable you already set in your own shell wins over these. Values whose names say they are secret (…KEY, …TOKEN, …SECRET, …PASSWORD), and proxy addresses with a password in them, go to the system keychain, not to a file.",
+    ));
+    for (k, v) in &file_cfg.env {
+        let shown = if v.starts_with("keychain:") { format!("from the keychain ({v})") } else { v.clone() };
+        let (form, name) = (f.clone(), k.clone());
+        let project = ui.current_session().map(|s| (*s.project).clone());
+        let live = std::env::var_os(k).is_some();
+        rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::FIELD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::symmetric(12.0, 8.0)).child(row(10.0, vec![
+            b(k.clone(), 13.0, p.ink),
+            grow(line(shown, 12.5, p.muted)),
+            if live { pill("in effect", p.good, p.good_soft) } else { pill("not set", p.wait, p.wait_soft) },
+            button(p, "Remove", Look::Quiet, true, move || {
+                form.edit_file(|c| c.env.retain(|(n, _)| n != &name));
+                apply_now(&form);
+                form.reload(project.as_deref());
+            }),
+        ])).into());
+    }
+    let add = f.clone();
+    let project3 = ui.current_session().map(|s| (*s.project).clone());
+    rows.push(row(10.0, vec![
+        SizedBox::width(220.0).child(field(ui, p, "Name", &f.env_name, "HTTPS_PROXY", false)).into(),
+        grow(field(ui, p, "Value", &f.env_value, "http://proxy.example.com:3128", rc::looks_secret(f.env_name.get().text.trim()))),
+    ]));
+    rows.push(row(10.0, vec![button(p, "Add variable", Look::Primary, true, move || {
+        let name = add.env_name.get().text.trim().to_string();
+        let value = add.env_value.get().text.trim().to_string();
+        if name.is_empty() {
+            add.message.set("A variable needs a name.".into());
+            return;
+        }
+        let stored = match store_env_value(&name, &value) {
+            Ok(v) => v,
+            Err(e) => {
+                add.message.set(format!("Not saved: {e}"));
+                return;
+            }
+        };
+        add.edit_file(|c| {
+            c.env.retain(|(n, _)| n != &name);
+            c.env.push((name.clone(), stored.clone()));
+        });
+        add.env_name.set(tv(""));
+        add.env_value.set(tv(""));
+        apply_now(&add);
+        add.reload(project3.as_deref());
+    })]));
+
+    rows.push(divider(p));
+    rows.push(section(p, "In effect now", "What Wright sees in this session. Passwords inside proxy addresses are hidden."));
+    for k in ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", rc::CA_ENV, "SSL_CERT_FILE", "WRIGHT_MODEL_MIRROR", "WRIGHT_HOME"] {
+        let v = std::env::var(k).or_else(|_| std::env::var(k.to_ascii_lowercase())).ok();
+        rows.push(row(10.0, vec![
+            SizedBox::width(190.0).child(mono(k.to_string(), 12.0, p.ink)).into(),
+            grow(match v {
+                Some(v) => copyable_mono(hide_password(&v), 12.0, p.muted),
+                None => t("not set", 12.0, p.muted),
+            }),
+        ]));
+    }
+    stretch(12.0, rows)
+}
+
+/// Put the saved settings into effect for this session, and say so.
+fn apply_now(f: &Form) {
+    match Config::load() {
+        Ok(cfg) => {
+            let problems = wright_runtime::config::apply_to_process(&cfg);
+            if !problems.is_empty() {
+                f.message.set(problems.join(" "));
+            }
+        }
+        Err(e) => f.message.set(e),
+    }
+}
+
+/// A value for `env`: secrets go to the keychain and come back as a
+/// reference; everything else is stored as written.
+pub fn store_env_value(name: &str, value: &str) -> Result<String, String> {
+    use wright_runtime::config::{check_env_pair, looks_secret};
+    if !wright_runtime::config::valid_env_name(name) {
+        return check_env_pair(name, value).map(|_| value.to_string());
+    }
+    let secret = !value.starts_with("keychain:") && (looks_secret(name) || check_env_pair(name, value).is_err());
+    if secret {
+        let reference = format!("keychain:wright/env-{}", name.to_ascii_lowercase().replace('_', "-"));
+        wright_runtime::secrets::store(&reference, value)?;
+        return Ok(reference);
+    }
+    check_env_pair(name, value)?;
+    Ok(value.to_string())
+}
+
+/// `http://user:pass@host` -> `http://user:•••@host`.
+fn hide_password(v: &str) -> String {
+    if let Some((scheme, rest)) = v.split_once("://") {
+        if let Some((cred, host)) = rest.split_once('@') {
+            if let Some((user, _)) = cred.split_once(':') {
+                return format!("{scheme}://{user}:•••@{host}");
+            }
+        }
+    }
+    v.to_string()
+}
+
 fn workspace(ui: &Ui, p: &Pal) -> WidgetNode {
     let f = ui.form.clone();
     let save_dir = f.clone();
@@ -624,7 +829,7 @@ fn workspace(ui: &Ui, p: &Pal) -> WidgetNode {
         })]),
         divider(p),
         section(p, "Wright's own records", "Run history, cache and receipts live outside your projects, here:"),
-        row(10.0, vec![mono(home.display().to_string(), 12.5, p.ink), button(p, "Open", Look::Quiet, true, move || super::picker::reveal(&reveal))]),
+        row(10.0, vec![grow(copyable_mono(home.display().to_string(), 12.5, p.ink)), button(p, "Open", Look::Quiet, true, move || super::picker::reveal(&reveal))]),
     ])
 }
 
@@ -640,7 +845,7 @@ fn project(ui: &Ui, p: &Pal) -> WidgetNode {
     let tier_field = |i: usize, label: &str, ph: &str| -> WidgetNode {
         let sig = f.tiers.clone();
         let v = tiers[i].clone();
-        column(5.0, vec![
+        stretch(5.0, vec![
             t(label.to_string(), 12.0, p.muted),
             Container::new()
                 .color(p.surface2)

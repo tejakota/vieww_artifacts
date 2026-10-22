@@ -151,6 +151,7 @@ mod linux {
     type FnErrString = unsafe extern "C" fn(c_ulong, *mut c_char, usize);
     type FnVersion = unsafe extern "C" fn(c_int) -> *const c_char;
     type FnAlpn = unsafe extern "C" fn(*mut c_void, *const u8, u32) -> c_int;
+    type FnLoadVerify = unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> c_int;
 
     pub struct Lib {
         pub version: String,
@@ -158,6 +159,7 @@ mod linux {
         ctx_new: FnCtxNew,
         ctx_free: FnCtxFree,
         ctx_default_verify_paths: FnCtxInt,
+        ctx_load_verify_locations: FnLoadVerify,
         ctx_set_verify: FnCtxSetVerify,
         ctx_ctrl: FnCtrl,
         ssl_new: FnSslNew,
@@ -230,6 +232,9 @@ mod linux {
                 ctx_free: std::mem::transmute::<*mut c_void, FnCtxFree>(sym("SSL_CTX_free")?),
                 ctx_default_verify_paths: std::mem::transmute::<*mut c_void, FnCtxInt>(sym(
                     "SSL_CTX_set_default_verify_paths",
+                )?),
+                ctx_load_verify_locations: std::mem::transmute::<*mut c_void, FnLoadVerify>(sym(
+                    "SSL_CTX_load_verify_locations",
                 )?),
                 ctx_set_verify: std::mem::transmute::<*mut c_void, FnCtxSetVerify>(sym(
                     "SSL_CTX_set_verify",
@@ -326,6 +331,29 @@ mod linux {
                         lib.last_error()
                     ));
                 }
+            }
+            // Extra authorities (an office's own root, `tls ca-file` /
+            // WRIGHT_CA_FILE): ADDED to the system store, never replacing
+            // it, so public sites keep verifying too.
+            if let Some(extra) = crate::config::ca_file() {
+                let cfile = CString::new(extra.to_string_lossy().as_bytes())
+                    .map_err(|_| "the CA file path contains NUL".to_string())?;
+                // SAFETY: ctx is valid; cfile is a NUL-terminated path that
+                // outlives the call (OpenSSL reads the file during it); the
+                // directory argument may be null.
+                let ok = unsafe {
+                    (lib.ctx_load_verify_locations)(ctx, cfile.as_ptr(), std::ptr::null())
+                };
+                if ok != 1 {
+                    return Err(format!(
+                        "loading the extra certificate authorities from {}: {} (check Settings > Network)",
+                        extra.display(),
+                        lib.last_error()
+                    ));
+                }
+            }
+            // SAFETY: ctx is a valid SSL_CTX for every call below.
+            unsafe {
                 (lib.ctx_set_verify)(ctx, SSL_VERIFY_PEER, std::ptr::null());
                 (lib.ctx_ctrl)(
                     ctx,
@@ -365,7 +393,17 @@ mod linux {
                     let verify = (lib.verify_result)(ssl);
                     let detail = lib.last_error();
                     return Err(if verify != X509_V_OK {
-                        format!("TLS handshake with {host} failed: the certificate could not be verified (X509 error {verify}) — {detail}")
+                        format!(
+                            "TLS handshake with {host} failed: the certificate could not be verified (X509 error {verify}) — {detail}{}",
+                            // 19, 20, 21: an issuer this machine does not
+                            // know — what an office network that inspects
+                            // HTTPS looks like from here.
+                            if matches!(verify, 19..=21) {
+                                ". If this machine is on an office network that inspects HTTPS, add your organization's root certificate in Settings > Network (or `tls ca-file=\"...\"` in config.kdl, or WRIGHT_CA_FILE)."
+                            } else {
+                                ""
+                            }
+                        )
                     } else {
                         format!("TLS handshake with {host} failed: {detail}")
                     });

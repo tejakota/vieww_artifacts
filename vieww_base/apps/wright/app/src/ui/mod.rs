@@ -213,6 +213,9 @@ impl Ui {
             }),
         };
         ui.persist();
+        // Headless (snapshots, tests): a pasteboard only this process sees.
+        // The window replaces it with the system one right after.
+        kit::init_copy(rt, Rc::new(vieww::foundation::MemoryClipboard::new()));
         ui
     }
 
@@ -797,6 +800,12 @@ fn window(project: Option<PathBuf>) -> i32 {
             }
         });
     }
+    // The platform's services above the root: the system pasteboard is
+    // what makes cut, copy and paste work in every text field (and the
+    // Copy buttons). Without this the fields had nowhere to send Ctrl+C.
+    let registry = vieww_platform_winit::services::platform();
+    let clipboard: Option<Rc<dyn vieww::foundation::Clipboard>> = registry.get::<dyn vieww::foundation::Clipboard>();
+    let services = vieww::foundation::SharedServices::new(registry);
     let ui: Rc<RefCell<Option<Ui>>> = Rc::new(RefCell::new(None));
     let for_hook = Rc::clone(&ui);
     let for_pinch = Rc::clone(&ui);
@@ -810,8 +819,11 @@ fn window(project: Option<PathBuf>) -> i32 {
         .run(move |driver| {
             shell::register(driver);
             let u = Ui::new(driver.elements().runtime(), project, live);
+            if let Some(c) = clipboard.clone() {
+                kit::init_copy(driver.elements().runtime(), c);
+            }
             *ui.borrow_mut() = Some(u.clone());
-            driver.set_root(shell::root(&u));
+            driver.set_root(Inherited::new(services.clone(), shell::root(&u)));
         });
     match result {
         Ok(_) => 0,

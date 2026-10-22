@@ -13,7 +13,11 @@
 //!    re-serializes (the JSON writer is insertion-ordered, so the bytes
 //!    come back identical), strips the signature field, and verifies
 //!    against the embedded public key — reporting the key's provenance
-//!    (os-keychain / env / local:generated / ephemeral) honestly.
+//!    (os-keychain / env / local:generated / ephemeral) honestly. Then
+//!    WHO signed: the key must be one this machine trusts (a `--key`
+//!    named on the command line, a `trust` line in config.kdl, or this
+//!    machine's own key). A valid signature by a stranger's key fails:
+//!    anyone can edit a receipt and re-sign it with a fresh key.
 //! 2. **The event log.** The receipt names the BLAKE3 of events.jsonl;
 //!    hash the file as it is now and compare. A log edited after the
 //!    fact fails here.
@@ -73,6 +77,11 @@ impl Verification {
 
 /// Verify a receipt file in place, with its project's store.
 pub fn receipt_file(project_dir: &Path, receipt: &Path) -> Verification {
+    receipt_file_pinned(project_dir, receipt, &[])
+}
+
+/// [`receipt_file`], also trusting the public keys in `pins` (hex).
+pub fn receipt_file_pinned(project_dir: &Path, receipt: &Path, pins: &[String]) -> Verification {
     let store = match Store::open(project_dir) {
         Ok(s) => s,
         Err(e) => return fail(format!("cannot open the project store: {e}")),
@@ -81,11 +90,16 @@ pub fn receipt_file(project_dir: &Path, receipt: &Path) -> Verification {
     if text.is_empty() {
         return fail(format!("cannot read {}", receipt.display()));
     }
-    verify_text(&store, &text)
+    verify_text_pinned(&store, &text, pins)
 }
 
 /// Verify the latest (or a named) run of a project.
 pub fn project_run(project_dir: &Path, run: Option<u64>) -> Result<Verification, String> {
+    project_run_pinned(project_dir, run, &[])
+}
+
+/// [`project_run`], also trusting the public keys in `pins` (hex).
+pub fn project_run_pinned(project_dir: &Path, run: Option<u64>, pins: &[String]) -> Result<Verification, String> {
     let store = Store::open(project_dir)?;
     let run = match run {
         Some(r) => r,
@@ -97,7 +111,7 @@ pub fn project_run(project_dir: &Path, run: Option<u64>) -> Result<Verification,
     };
     let path = store.run_dir(run).join("receipt.json");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(verify_text(&store, &text))
+    Ok(verify_text_pinned(&store, &text, pins))
 }
 
 fn fail(note: String) -> Verification {
@@ -115,6 +129,11 @@ fn fail(note: String) -> Verification {
 /// The whole thing. `text` is the receipt's JSON; the store must be the
 /// project's own (artifacts, objects, blueprint history).
 pub fn verify_text(store: &Store, text: &str) -> Verification {
+    verify_text_pinned(store, text, &[])
+}
+
+/// [`verify_text`], also trusting the public keys in `pins` (hex).
+pub fn verify_text_pinned(store: &Store, text: &str, pins: &[String]) -> Verification {
     let v = match json::parse(text) {
         Ok(v) => v,
         Err(e) => return fail(format!("the receipt is not valid JSON ({e})")),
@@ -130,7 +149,7 @@ pub fn verify_text(store: &Store, text: &str) -> Verification {
     let mut checks = Vec::new();
 
     // 1. The signature over the exact bytes, minus the signature field.
-    let sig_ok = check_signature(&v, &mut checks);
+    let sig_ok = check_signature(&v, &mut checks, pins);
 
     // 2. The event log's hash.
     let events_ok = match run {
@@ -250,7 +269,7 @@ pub fn verify_text(store: &Store, text: &str) -> Verification {
     }
 }
 
-fn check_signature(v: &Value, checks: &mut Vec<Check>) -> bool {
+fn check_signature(v: &Value, checks: &mut Vec<Check>, pins: &[String]) -> bool {
     let Some(sig) = v.get("signature") else {
         checks.push(Check {
             name: "signature",
@@ -316,8 +335,20 @@ fn check_signature(v: &Value, checks: &mut Vec<Check>) -> bool {
             }
             other => other,
         };
-        checks.push(Check { name: "signature", ok: true, note: format!("Ed25519 signature by {} verifies over the receipt's exact bytes ({}). The key is {worth}", hash::short(public_hex), provenance) });
-        true
+        match wright_runtime::signing::signer(public_hex, pins) {
+            Ok(who) => {
+                checks.push(Check { name: "signature", ok: true, note: format!("Ed25519 signature by {} — {who} — verifies over the receipt's exact bytes ({}). The key is {worth}", hash::short(public_hex), provenance) });
+                true
+            }
+            Err(why) => {
+                checks.push(Check {
+                    name: "signature",
+                    ok: false,
+                    note: format!("the signature matches the receipt's bytes, but {why}"),
+                });
+                false
+            }
+        }
     } else {
         checks.push(Check {
             name: "signature",

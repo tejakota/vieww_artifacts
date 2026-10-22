@@ -66,6 +66,52 @@ written down in `docs/AUDIT-2026-10.md`, not pretended.
   a keyboard is a decision already made). Everything runs on this
   machine's built-in Whisper; nothing leaves.
 
+### Review before merge (same release)
+
+A second pass over 1.0.0 on a kernel WITH Landlock (the first pass ran
+on 5.10, where the kernel sandbox — and so the worker's real path —
+never ran) found and fixed:
+
+- **Signatures now say who** (ADR-031). `wright verify` and recipe
+  install trusted the key embedded in the file, so an edited receipt or
+  recipe re-signed with a fresh key passed. Keys must be pinned
+  (`wright trust add`, config `trust` lines, this machine's own key, or
+  `--key`/`--trust` for one call). The signing seed comes from the OS
+  random source, not clock/pid mixing; the key file is 0600 from birth.
+  A recipe can no longer name a folder outside the install target.
+- **Workers actually work** (ADR-032). Under Landlock they could not
+  start, had no network to reach their model, and no way to sign in;
+  7 tests failed here. A worker is now an outbound channel: it needs
+  `approval "before-send"`, the gate asks before the copy leaves, it gets
+  its configured sign-in env, its copy is private and deleted, its output
+  pipes no longer stall, and leftover processes are killed. Configuring
+  any setting no longer hides the four preconfigured workers.
+- **Checks run for every plan that delivers or promises** (ADR-033).
+  The gallery's recipes promised acceptance checks that never ran and
+  delivered unreviewed; Testwright and the Reviewer are now always placed
+  when a plan delivers or has `accept` sentences.
+- **Office networks** (ADR-034). Settings > Network: add a certificate
+  file (PEM, file chooser or path; trusted in addition to the system
+  store) and environment variables (proxy, mirrors; secrets go to the
+  keychain). `tls ca-file` / `env` in config.kdl, `WRIGHT_CA_FILE`, and
+  `wright doctor` reports both.
+- **Copy and paste everywhere.** The window never published the system
+  pasteboard to its text fields, so Ctrl/Cmd+C/V/X did nothing anywhere.
+  It does now; replies, plans, results, errors, logs, paths and settings
+  messages are selectable and copyable (vieww gained read-only selectable
+  text that is not a Tab stop and lets editing keys reach shortcuts), with
+  Copy buttons on replies, the plan, the agent log and paths. Password
+  fields never copy or cut.
+- **Nothing spills out of its box.** Pills never wrap (one line,
+  ellipsis); the plan's "needs care" column is a minimum width, not a
+  fixed 78×20 box; cards clip as a last resort; settings text boxes fill
+  their width; engine cards stay opaque and the page behind the agents
+  view is blurred and dimmed.
+- Smaller: CLI flags that take values (`--runs`, `--at`, `--port`,
+  `--out`, `--key`, `--trust`) no longer read their value as a project
+  directory; "1 sessions"; starter cards of even height; plan lines no
+  longer carry the CLI's indentation into the window.
+
 ## 0.5.2 — 2026-10-21 — a livelier conversation
 
 - **You can see a reply being written.** The moment you send, the thread

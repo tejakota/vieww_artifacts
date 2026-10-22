@@ -8,14 +8,18 @@
 //!   wright runs [dir]           run history
 //!   wright replay <run> [dir]   reconstruct a past run from its log (--at N)
 //!   wright verify [run|dir]      check a receipt: signature, log,
-//!                                artifacts, inputs, blueprint (ADR-025)
+//!                                artifacts, inputs, blueprint (ADR-025);
+//!                                --key <hex> trusts that signer for once
+//!   wright trust ...             list | add <name> <key> | remove | me —
+//!                                the signers this machine accepts
 //!   wright explain [run|dir]     the one-screen story of a run
 //!   wright handoff [dir]         the project as a PR folder: plan,
 //!                                receipts, patch — for a human
 //!   wright bench [dir]           time to a checked outcome, and
 //!                                interventions per run (ADR-030)
 //!   wright recipe ...            list | install | sign | verify — the
-//!                                curated, signed gallery (ADR-028)
+//!                                curated, signed gallery (ADR-028);
+//!                                only pinned publishers install
 //!   wright mcp-hash <cmd>        the BLAKE3 pin for an MCP server
 //!   wright approve [dir]        list / answer pending approvals
 //!   wright diff [old] [new]     what an edit refires, and why
@@ -48,6 +52,15 @@ pub fn ui_status() -> String {
 }
 
 fn main() {
+    // Office machines first, before any thread exists: the config's `env`
+    // lines (proxies, mirrors) and its extra certificate authorities
+    // (`tls ca-file`) go into this process's environment, so every
+    // connection Wright makes — and every program it starts — sees them.
+    if let Ok(cfg) = wright_runtime::config::Config::load() {
+        for problem in wright_runtime::config::apply_to_process(&cfg) {
+            eprintln!("warning: {problem}");
+        }
+    }
     // The built-in models (qwen3-1.7b, whisper-base), for every command.
     wright_infer::install();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -66,6 +79,7 @@ fn main() {
         Some("bench") => cmd::bench(rest),
         Some("recipe") | Some("recipes") => cmd::recipe(rest),
         Some("mcp-hash") => cmd::mcp_hash(rest),
+        Some("trust") => cmd::trust(rest),
         Some("diff") => cmd::diff(rest),
         Some("export") => cmd::export(rest),
         Some("schedule") => cmd::schedule(rest),

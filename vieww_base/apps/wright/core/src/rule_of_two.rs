@@ -47,9 +47,10 @@ pub fn legs_of_agent(bp: &Blueprint, name: &str) -> Legs {
             }
         }
         // worker steps hand the work to another program: whatever it
-        // reads is what that program reads, and its output is untrusted.
+        // reads is what that program reads, its output is untrusted, and
+        // it talks to its own vendor — all three legs, always.
         if a.worker.is_some() {
-            legs = legs.with(Leg::PrivateData) | Legs::untrusted();
+            legs = legs.with(Leg::PrivateData).with(Leg::OutboundChannel) | Legs::untrusted();
         }
     }
     // Inherit the untrusted leg from every untrusted input artifact.

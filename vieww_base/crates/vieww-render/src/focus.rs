@@ -452,7 +452,11 @@ fn collect_traps(tree: &RenderTree, id: RenderId, roots: &mut Vec<RenderId>) {
 }
 
 fn collect(tree: &RenderTree, id: RenderId, order: &mut Vec<RenderId>) {
-    if is_focusable(tree, id) {
+    if is_focusable(tree, id)
+        && !tree
+            .object(id)
+            .is_some_and(|object| object.skips_traversal())
+    {
         order.push(id);
     }
     for &child in tree.children(id) {

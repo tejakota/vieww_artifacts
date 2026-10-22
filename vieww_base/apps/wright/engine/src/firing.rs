@@ -800,15 +800,58 @@ fn run_worker_step(
             env.spine.note(EventKind::AgentFailed, me, why.clone());
             return (task.id, TaskStatus::Failed(why));
         }
-        wright_runtime::gate::Verdict::Ask(_) => {
-            // The worker tool carries no outbound leg, so the Rule of Two
-            // cannot ask here; an approval-policy ask is refused in a
-            // headless worker step rather than guessed at.
-            let why: String =
-                "a worker step paused for an approval, which headless worker runs do not allow"
-                    .into();
-            env.spine.note(EventKind::AgentFailed, me, why.clone());
-            return (task.id, TaskStatus::Failed(why));
+        wright_runtime::gate::Verdict::Ask(pending) => {
+            // A worker talks to its own vendor with the project's copy in
+            // hand: the Rule of Two's three legs, so the gate asks before
+            // the copy is handed over — the same approver every other
+            // outbound step goes through (a person in the window, a file
+            // under schedule, or a refusal when nobody can answer).
+            let n = env.approval_seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            let ask = crate::approve::Ask {
+                run: env.spine.run(),
+                n,
+                agent: name.clone(),
+                tool: "worker".into(),
+                reason: pending.reason.clone(),
+                preview: format!(
+                    "hand a copy of this project to {worker_name} ({}), which sends it to its own model service, with this brief:\n{}",
+                    entry_command(env, worker_name),
+                    prompt.chars().take(1200).collect::<String>()
+                ),
+            };
+            env.spine.note(
+                EventKind::ApprovalRequested,
+                me,
+                format!(
+                    "{} (request {n}, asking via {})",
+                    pending.reason,
+                    env.approver.name()
+                ),
+            );
+            let approved = env.approver.decide(&ask);
+            env.spine.note(
+                EventKind::ApprovalResolved,
+                me,
+                if approved {
+                    format!("request {n} approved")
+                } else {
+                    format!("request {n} denied")
+                },
+            );
+            if !approved {
+                let why = format!("a person declined handing this step to {worker_name}; nothing was sent and nothing changed");
+                env.spine.note(EventKind::AgentFailed, me, why.clone());
+                return (task.id, TaskStatus::Failed(why));
+            }
+            let mut budget = env.budget.lock().unwrap_or_else(|p| p.into_inner());
+            match env.gate.approve(pending, &mut budget) {
+                Ok(p) => p,
+                Err(e) => {
+                    let why = e.to_string();
+                    env.spine.note(EventKind::AgentFailed, me, why.clone());
+                    return (task.id, TaskStatus::Failed(why));
+                }
+            }
         }
     };
     let input = wright_core::wire::json::Value::obj(vec![(
@@ -848,6 +891,14 @@ fn run_worker_step(
             (task.id, TaskStatus::Failed(why))
         }
     }
+}
+
+/// The program a configured worker runs, for the approval's words.
+fn entry_command(env: &FiringEnv, worker_name: &str) -> String {
+    env.config
+        .worker_for(worker_name)
+        .map(|w| w.command.clone())
+        .unwrap_or_else(|| worker_name.to_string())
 }
 
 fn first_sentence_of(s: &str) -> String {

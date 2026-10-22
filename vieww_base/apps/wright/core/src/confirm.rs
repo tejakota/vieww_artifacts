@@ -88,7 +88,13 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
             };
             out.push(line(
                 format!("agent:{}", a.name),
-                format!("  {} is done by {} ({}), an external coding agent: it runs in a sandboxed copy, may change {}, and its changes are applied whole or not at all.", a.name, w, a.worker_timeout_secs, scope),
+                format!(
+                    "  {} is done by {}, an external coding agent: it gets a sandboxed copy of the project, sends it to its own model service (so you are asked before it starts), may change {}, stops after {}, and its changes are applied whole or not at all.",
+                    a.name,
+                    w,
+                    scope,
+                    minutes(a.worker_timeout_secs)
+                ),
                 true,
             ));
         }
@@ -300,6 +306,16 @@ fn join_and(items: &[&str]) -> String {
     }
 }
 
+/// A clock in words: "15 minutes", "1 minute", "45 seconds".
+fn minutes(secs: u64) -> String {
+    if secs >= 60 && secs.is_multiple_of(60) {
+        let m = secs / 60;
+        format!("{m} minute{}", if m == 1 { "" } else { "s" })
+    } else {
+        format!("{secs} seconds")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,8 +383,11 @@ deliverable kind=\"email\" { check \"c\" accept \"every story has a link\" }\n";
 
     #[test]
     fn worker_and_mcp_cards_are_said_out_loud() {
+        assert_eq!(minutes(900), "15 minutes");
+        assert_eq!(minutes(60), "1 minute");
+        assert_eq!(minutes(45), "45 seconds");
         let src = "meta { name \"x\" }\nintent { summary \"s\" confirmed \"v1\" }\n\
-agent Coder { goal \"write the tool\" worker \"claude-code\" worker-files \"src/\" out \"done.txt\" }\n\
+agent Coder { goal \"write the tool\" worker \"claude-code\" worker-files \"src/\" out \"done.txt\" approval \"before-send\" }\n\
 agent Looker { goal \"weather\" mcp server=\"weather\" allow=\"get_forecast\" approval \"before-send\" out \"w.txt\" permissions spawn=true network=true }\n\
 deliverable kind=\"k\" { check \"c\" }\n";
         let bp = parse::blueprint(src).unwrap();

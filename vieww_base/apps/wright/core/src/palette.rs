@@ -318,12 +318,14 @@ pub const PALETTE: &[ToolSpec] = &[
     },
     ToolSpec {
         name: "worker",
-        caps: &[Capability::ReadFiles, Capability::WriteFiles, Capability::Spawn],
-        version: 1,
+        caps: &[Capability::ReadFiles, Capability::WriteFiles, Capability::Spawn, Capability::Network],
+        // v2: a worker talks to its own vendor, so it is an outbound
+        // channel (ADR-026, revised): the version is part of the cache key.
+        version: 2,
         reads: Reads::Workspace,
         effect: Effect::Workspace,
-        legs: Legs::private_data().with(Leg::UntrustedInput),
-        summary: "Hand this step to an external coding agent (claude-code, codex, kimi-code, zcode) in a sandboxed copy; its diff is applied whole or not at all.",
+        legs: Legs::private_data().with(Leg::UntrustedInput).with(Leg::OutboundChannel),
+        summary: "Hand this step to an external coding agent (claude-code, codex, kimi-code, zcode) in a sandboxed copy; it talks to its own vendor, so it asks you first, and its diff is applied whole or not at all.",
         schema: r#"{"type":"object","properties":{"prompt":{"type":"string","description":"The full instruction for the worker agent, including which files it may change"}},"required":["prompt"]}"#,
         implemented: true,
     },

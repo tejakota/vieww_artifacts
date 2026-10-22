@@ -73,7 +73,7 @@ fn body(ui: &Ui, s: &Session) -> WidgetNode {
     let drafted = if plan.is_none() { chat.len() } else { s.drafted.get().min(chat.len()) };
     let skip_request = usize::from(chat.first().is_some_and(|(u, t)| *u && Some(t) == request.as_ref()));
     for (user, text) in chat[..drafted].iter().skip(skip_request) {
-        items.push(if *user { bubble(&p, text) } else { para(text.clone(), 15.0, p.ink) });
+        items.push(if *user { bubble(&p, text) } else { reply(&p, text) });
     }
     if plan.is_none() {
         if let Some(lines) = s.confirm.get() {
@@ -103,7 +103,7 @@ fn body(ui: &Ui, s: &Session) -> WidgetNode {
     // After a plan exists, the conversation is about changes.
     if plan.is_some() {
         for (user, text) in chat[drafted..].iter() {
-            items.push(if *user { bubble(&p, text) } else { para(text.clone(), 15.0, p.ink) });
+            items.push(if *user { bubble(&p, text) } else { reply(&p, text) });
         }
         if let Some(lines) = s.confirm.get() {
             items.push(confirm_card(&p, s, &lines));
@@ -114,7 +114,7 @@ fn body(ui: &Ui, s: &Session) -> WidgetNode {
     }
     let notice = s.notice.get();
     if !notice.is_empty() {
-        items.push(t(notice, 13.0, p.wait));
+        items.push(copyable(notice, 13.0, p.wait));
     }
     stretch(16.0, items)
 }
@@ -145,11 +145,16 @@ fn pending(ui: &Ui, s: &Session) -> Option<WidgetNode> {
     Some(column(8.0, rows))
 }
 
+/// Wright's reply: selectable text, and a Copy for all of it.
+fn reply(p: &Pal, text: &str) -> WidgetNode {
+    column(4.0, vec![copyable(text.to_string(), 15.0, p.ink), copy_icon(p.muted, text.to_string())])
+}
+
 fn bubble(p: &Pal, text: &str) -> WidgetNode {
     Align::new(Alignment::CENTER_RIGHT)
         .child(
             Constrained::new(Constraints::new(0.0, 560.0, 0.0, f32::INFINITY))
-                .child(Container::new().color(p.bubble).radius(20.0).padding(EdgeInsets::symmetric(16.0, 11.0)).child(para(text.to_string(), 15.0, p.ink))),
+                .child(Container::new().color(p.bubble).radius(20.0).padding(EdgeInsets::symmetric(16.0, 11.0)).child(copyable(text.to_string(), 15.0, p.ink))),
         )
         .into()
 }
@@ -161,16 +166,32 @@ fn confirm_card(p: &Pal, s: &Session, lines: &[wright_core::confirm::Line]) -> W
         t("Written from the blueprint by Wright, not by a model.", 12.5, p.muted),
     ];
     rows.extend(lines.iter().take(16).map(|l| plan_line(p, l)));
+    let all: String = lines.iter().map(|l| l.text.trim().to_string()).collect::<Vec<_>>().join("\n");
     rows.push(row(10.0, vec![
         button(p, "Build this", Look::Primary, true, move || yes.answer_confirm(true)),
         button(p, "Change something", Look::Secondary, true, move || no.answer_confirm(false)),
+        gap(),
+        copy_icon(p.muted, all),
     ]));
     card(p, column(8.0, rows))
 }
 
 fn plan_line(p: &Pal, l: &wright_core::confirm::Line) -> WidgetNode {
+    // The mark sits in a column at least 84 px wide so the sentences line
+    // up — never in a fixed box: a fixed 78×20 slot is what pushed "needs
+    // care" onto two lines and out of its pill.
     let mark = if l.attention { pill("needs care", p.wait, p.wait_soft) } else { Container::new().width(6.0).height(6.0).radius(3.0).color(p.line_strong).into() };
-    row(10.0, vec![sized(78.0, 20.0, Align::new(Alignment::CENTER_LEFT).child(mark)), grow(para(l.text.clone(), 14.0, p.ink))])
+    Flex::row()
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .spacing(10.0)
+        .children(vec![
+            pad(EdgeInsets::only(0.0, if l.attention { 1.0 } else { 7.0 }, 0.0, 0.0), at_least(84.0, mark)),
+            // The CLI indents sub-points with spaces; here the mark column
+            // already says it, and the spaces would push the first line
+            // right of the lines it wraps onto.
+            grow(copyable(l.text.trim().to_string(), 14.0, p.ink)),
+        ])
+        .into()
 }
 
 fn plan_card(ui: &Ui, p: &Pal, s: &Session, pl: &super::session::PlanView) -> WidgetNode {
@@ -345,14 +366,16 @@ fn result_card(ui: &Ui, p: &Pal, s: &Session, r: &super::session::ResultView) ->
     let (icon, title) = if r.ok { (Glyph::Done.draw(22.0, p.good), "Delivered and verified") } else { (Glyph::Failed.draw(22.0, p.bad), "Stopped — nothing unverified was delivered") };
     let mut chips = vec![];
     if !r.tests.is_empty() {
-        chips.push(pill(first_line(&r.tests, 48), p.good, p.good_soft));
+        // The one chip whose words vary: it gives way (ellipsis) before
+        // the row runs out of the card.
+        chips.push(Flexible::new(1).fit(FlexFit::Loose).child(pill(first_line(&r.tests, 48), p.good, p.good_soft)).into());
     }
     chips.push(pill(format!("Review: {}", r.verdict), if r.ok { p.good } else { p.bad }, if r.ok { p.good_soft } else { p.surface2 }));
     chips.push(pill("Receipt saved", p.muted, p.surface2));
     let made: Vec<WidgetNode> = r.artifacts.iter().take(6).map(|(name, size)| row(10.0, vec![Glyph::File.draw(15.0, p.muted), fill(name.clone(), 13.5, p.ink), t(human_size(*size), 12.0, p.muted)])).collect();
     let mut items = vec![
         row(12.0, vec![icon, b(title, 18.0, p.ink), gap(), t(format!("run {} · ${:.4}", r.run, r.cost), 12.5, p.muted)]),
-        para(r.headline.clone(), 13.5, p.muted),
+        copyable(r.headline.clone(), 13.5, p.muted),
         row(8.0, chips),
     ];
     if !made.is_empty() {
@@ -444,7 +467,7 @@ fn export_status(ui: &Ui, p: &Pal, s: &Session) -> Vec<WidgetNode> {
                     button(p, "Show in folder", Look::Quiet, true, move || super::picker::reveal(&dir)),
                 ])
             }
-            Err(why) => row(10.0, vec![Glyph::Failed.draw(16.0, p.bad), grow(para(why, 12.5, p.bad))]),
+            Err(why) => row(10.0, vec![Glyph::Failed.draw(16.0, p.bad), grow(copyable(why, 12.5, p.bad))]),
         });
     }
     out
@@ -553,7 +576,7 @@ pub fn composer(ui: &Ui, c: &Composer, send: Rc<dyn Fn()>, placeholder: &str, bi
             .into(),
     );
     if let Voice::Failed(why) = c.voice.get() {
-        items.push(t(why, 12.0, p.wait));
+        items.push(copyable(why, 12.0, p.wait));
     }
     stretch(8.0, items)
 }

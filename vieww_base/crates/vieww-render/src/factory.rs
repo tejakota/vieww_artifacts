@@ -239,6 +239,7 @@ impl RenderFactory {
             .cursor(widget.cursor_color(), widget.cursor_width())
             .show_cursor(widget.cursor_shown())
             .obscure(widget.obscuring())
+            .read_only(widget.is_read_only())
             .clipboard(ambient_clipboard(scope))
             .wrap(widget.wraps())
             .spans(widget.text_spans().map(|spans| Rc::new(spans.to_vec())));

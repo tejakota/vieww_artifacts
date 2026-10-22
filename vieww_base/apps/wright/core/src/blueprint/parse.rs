@@ -596,6 +596,7 @@ fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
     let name = node.arg_str().map(|s| s.to_string()).ok_or_else(|| {
         ParseError::new(node.line, "agent needs a name: agent \"Fetcher\" { ... }")
     })?;
+    let mut explicit_retries = false;
     let mut a = AgentDef {
         name,
         ..AgentDef::default()
@@ -640,6 +641,7 @@ fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
                     return Err(ParseError::new(child.line, "'retries' must be 0..=255"));
                 }
                 a.retries = n as u8;
+                explicit_retries = true;
             }
             "permissions" => {
                 for (key, value) in &child.props {
@@ -712,6 +714,12 @@ fn map_agent(node: &KdlNode) -> Result<AgentDef, ParseError> {
     // form all see the same allowlist. Idempotent, so round-trips.
     if a.worker.is_some() && !a.tools.iter().any(|t| t == "worker") {
         a.tools.push("worker".into());
+    }
+    // A worker allows at most one retry (validation says why); a card
+    // that never mentioned retries gets that, not the general default of
+    // two — which validation would refuse, for a line nobody wrote.
+    if a.worker.is_some() && !explicit_retries {
+        a.retries = a.retries.min(1);
     }
     if a.mcp_server.is_some() && !a.tools.iter().any(|t| t == "mcp-call") {
         a.tools.push("mcp-call".into());

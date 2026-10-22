@@ -63,13 +63,18 @@ pub fn list() -> (Vec<Listed>, Vec<String>) {
 }
 
 /// Install a recipe file into a NEW project directory. Refuses before
-/// touching anything if the recipe does not verify (ADR-028) or its
-/// blueprint does not validate, and refuses an existing non-empty
-/// directory — a recipe is a beginning, not a transplant.
-pub fn install(file: &Path, target_dir: &Path) -> Result<PathBuf, String> {
+/// touching anything if the recipe does not verify (ADR-028), if its
+/// publisher's key is not one this machine trusts (a signature by a key
+/// nobody pinned proves nothing about who made it — anyone can edit a
+/// recipe and re-sign it with a fresh key), or if its blueprint does not
+/// validate; and refuses an existing directory — a recipe is a
+/// beginning, not a transplant. `pins` are extra public keys (hex)
+/// trusted for this one call (`--trust`).
+pub fn install(file: &Path, target_dir: &Path, pins: &[String]) -> Result<PathBuf, String> {
     let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let recipe = Recipe::parse(&text)?;
     recipe.verify()?;
+    publisher_trusted(&recipe, pins)?;
     let bp = wright_core::blueprint::parse::blueprint(&recipe.blueprint)
         .map_err(|e| format!("the embedded blueprint does not parse: {e}"))?;
     wright_core::blueprint::validate::validate(&bp).map_err(|errs| {
@@ -78,7 +83,9 @@ pub fn install(file: &Path, target_dir: &Path) -> Result<PathBuf, String> {
             errs.join("\n  - ")
         )
     })?;
-    let dir = target_dir.join(&bp.meta.name);
+    // The folder is named by the recipe's own text — outside input. It
+    // must stay one plain folder inside the target, never `../..`.
+    let dir = target_dir.join(folder_name(&bp.meta.name, &recipe.id));
     if dir.exists() {
         return Err(format!("'{}' already exists; a recipe installs into a fresh folder, never over one that exists", dir.display()));
     }
@@ -86,6 +93,41 @@ pub fn install(file: &Path, target_dir: &Path) -> Result<PathBuf, String> {
     std::fs::write(dir.join("blueprint.kdl"), &recipe.blueprint)
         .map_err(|e| format!("{}: {e}", dir.display()))?;
     Ok(dir)
+}
+
+/// Who published this recipe, if this machine trusts their key.
+pub fn publisher_trusted(recipe: &Recipe, pins: &[String]) -> Result<String, String> {
+    wright_runtime::signing::signer(&recipe.publisher_key, pins).map_err(|why| {
+        format!(
+            "recipe '{}' is signed, and the signature matches its content, but {why}",
+            recipe.id
+        )
+    })
+}
+
+/// A project folder name from untrusted text: letters, digits, spaces,
+/// `-`, `_` and `.` survive; anything else becomes `-`; no leading dot,
+/// no `..`, never empty.
+pub fn folder_name(name: &str, fallback: &str) -> String {
+    let clean = |s: &str| -> String {
+        let mapped: String = s
+            .chars()
+            .map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.') { c } else { '-' })
+            .collect();
+        let mut out = mapped.replace("..", "-");
+        out = out.trim_matches(|c: char| c == '.' || c == ' ' || c == '-').to_string();
+        out.chars().take(80).collect()
+    };
+    let a = clean(name);
+    if !a.is_empty() {
+        return a;
+    }
+    let b = clean(fallback);
+    if b.is_empty() {
+        "recipe".into()
+    } else {
+        b
+    }
 }
 
 /// Sign a recipe file with the machine's publishing key.
@@ -151,7 +193,7 @@ mod tests {
         };
         let f = dir.join("weekly.recipe.kdl");
         std::fs::write(&f, r.to_kdl()).unwrap();
-        let err = install(&f, &dir).unwrap_err();
+        let err = install(&f, &dir, &[]).unwrap_err();
         assert!(err.contains("no signature"), "{err}");
         assert!(err.contains("Unsigned recipes are not installed"), "{err}");
         assert!(!dir.join("Weekly demo").exists(), "nothing was created");
@@ -172,10 +214,26 @@ mod tests {
         r.sign_with(&[5u8; 32]);
         let f = dir.join("weekly.recipe.kdl");
         std::fs::write(&f, r.to_kdl()).unwrap();
-        let installed = install(&f, &dir).unwrap();
+        // A valid signature by a key nobody pinned is refused: anyone can
+        // re-sign an edited recipe with a fresh key.
+        let err = install(&f, &dir, &[]).unwrap_err();
+        assert!(err.contains("not one this machine trusts"), "{err}");
+        assert!(!dir.join("Weekly demo").exists(), "nothing was created");
+        // Pinned, it installs.
+        let pin = r.publisher_key.clone();
+        let installed = install(&f, &dir, std::slice::from_ref(&pin)).unwrap();
         assert!(installed.join("blueprint.kdl").exists());
         // twice refuses: the folder exists now
-        let err = install(&f, &dir).unwrap_err();
+        let err = install(&f, &dir, std::slice::from_ref(&pin)).unwrap_err();
         assert!(err.contains("already exists"), "{err}");
+    }
+
+    #[test]
+    fn a_recipe_cannot_name_a_folder_outside_the_target() {
+        assert_eq!(folder_name("../../.ssh", "x"), "ssh");
+        assert_eq!(folder_name("a/b\\c", "x"), "a-b-c");
+        assert_eq!(folder_name("...", "fallback id"), "fallback id");
+        assert_eq!(folder_name("Weekly demo", "x"), "Weekly demo");
+        assert!(!folder_name("..\\..\\Windows", "x").contains(".."));
     }
 }

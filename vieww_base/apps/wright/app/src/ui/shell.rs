@@ -168,7 +168,7 @@ fn status_bar(ui: &Ui) -> WidgetNode {
                 let (st, tone) = s.status();
                 (s.title(), st, tone, Some(s.spent_today()))
             }
-            None if ui.page.get() == 0 => ("Home".into(), format!("{} sessions · {} saved", ui.sessions.get().len(), ui.saved.get().len()), Tone::Quiet, None),
+            None if ui.page.get() == 0 => ("Home".into(), format!("{} · {} saved", plural(ui.sessions.get().len(), "session"), ui.saved.get().len()), Tone::Quiet, None),
             None => ("New session".into(), "Describe what should exist".into(), Tone::Quiet, None),
         };
         let dot: WidgetNode = {
@@ -246,7 +246,12 @@ fn stage(ui: &Ui) -> WidgetNode {
             };
             let ui2 = ui.clone();
             glide(engine_on, 300, false, move |e| {
-                let mut layers = vec![layer(fade(1.0 - 0.82 * e, Transformed::new(Transform::scale_around(Offset::new(w / 2.0, h / 2.0), 1.0 - 0.03 * e, 1.0 - 0.03 * e)).child(track.clone())))];
+                // Behind the agents, the page goes soft: blurred and dimmed,
+                // so the boxes read cleanly instead of word-over-word with the
+                // conversation underneath. The blur grows with the fade-in.
+                let page: WidgetNode = Transformed::new(Transform::scale_around(Offset::new(w / 2.0, h / 2.0), 1.0 - 0.03 * e, 1.0 - 0.03 * e)).child(track.clone()).into();
+                let page: WidgetNode = if e > 0.01 { vieww::widget::Filtered::blur(10.0 * e).child(page).into() } else { page };
+                let mut layers = vec![layer(fade(1.0 - 0.88 * e, page))];
                 if e > 0.01 {
                     layers.push(layer(fade(e, shift(0.0, 16.0 * (1.0 - e), engine::layer(&ui2)))));
                 }
@@ -342,7 +347,7 @@ fn mini(ui: &Ui, p: &Pal, i: usize, words: bool) -> WidgetNode {
         0 => column(8.0, vec![
             b("What should exist?", 16.0, p.ink),
             Container::new().height(26.0).color(p.surface).radius(13.0).border(Border::new(p.line_strong, 1.0)).into(),
-            t(format!("{} sessions · {} saved", sessions.len(), ui.saved.get().len()), 11.0, p.muted),
+            t(format!("{} · {} saved", plural(sessions.len(), "session"), ui.saved.get().len()), 11.0, p.muted),
         ]),
         k if k <= sessions.len() => {
             let s = &sessions[k - 1];
@@ -502,6 +507,11 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     ui.form.pulls.set(Default::default());
     ui.open_agents_and_tools();
     shot(&mut driver, "6-settings-agents", 400)?;
+    // Office machines: certificates and environment variables.
+    ui.form.tab.set(super::settings::Tab::Network);
+    ui.form.scroll.offset.set(0.0);
+    shot(&mut driver, "6-settings-network", 400)?;
+    n += 1;
     ui.form.tab.set(super::settings::Tab::Models);
     ui.settings.set(false);
     ui.mode.set(Mode::Light);
@@ -529,4 +539,9 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
         0 => Ok(n),
         k => Err(format!("{k} layout overflow(s) while rendering (each is printed above as 'vieww: ... overflowed')")),
     }
+}
+
+/// "1 session", "2 sessions".
+fn plural(n: usize, word: &str) -> String {
+    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
 }

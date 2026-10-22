@@ -31,14 +31,35 @@ fn usd(micro: u64) -> String {
 fn split(args: &[String]) -> (Vec<&str>, Vec<&str>) {
     let mut pos = Vec::new();
     let mut flags = Vec::new();
-    for a in args {
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
         if a.starts_with("--") {
-            flags.push(a.as_str());
+            flags.push(a);
+            // A flag that takes a value takes the next word with it, so
+            // `--key <hex>` never reads as a project directory.
+            if VALUE_FLAGS.contains(&a) {
+                i += 1;
+            }
         } else {
-            pos.push(a.as_str());
+            pos.push(a);
         }
+        i += 1;
     }
     (pos, flags)
+}
+
+/// Flags followed by a value (`--key <hex>`): `split` keeps the value out
+/// of the positional arguments. Read the value with [`flag_values`].
+const VALUE_FLAGS: [&str; 6] = ["--key", "--trust", "--runs", "--at", "--port", "--out"];
+
+/// Every value given for a repeatable flag (`--key a --key b`).
+fn flag_values<'a>(args: &'a [String], name: &str) -> Vec<&'a str> {
+    args.iter()
+        .enumerate()
+        .filter(|(_, a)| a.as_str() == name)
+        .filter_map(|(i, _)| args.get(i + 1).map(String::as_str))
+        .collect()
 }
 
 fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
@@ -205,6 +226,8 @@ fn report(summary: &wright_engine::RunSummary) {
 /// `wright verify [run|receipt|dir]` — five checks, one verdict (ADR-025).
 pub fn verify(args: &[String]) -> i32 {
     let (pos, _) = split(args);
+    // Keys the person checked with the signer themselves, for this call.
+    let pins: Vec<String> = flag_values(args, "--key").into_iter().map(String::from).collect();
     let target = pos.first().copied().unwrap_or(".");
     // A receipt file? Verify it in place.
     if target.ends_with(".json") && Path::new(target).is_file() {
@@ -212,14 +235,14 @@ pub fn verify(args: &[String]) -> i32 {
         // Receipts live in Wright's store, outside the project: verifying
         // one needs the project dir as the second argument.
         let project = pos.get(1).copied().unwrap_or(".");
-        let v = wright_engine::verify::receipt_file(&PathBuf::from(project), &receipt);
+        let v = wright_engine::verify::receipt_file_pinned(&PathBuf::from(project), &receipt, &pins);
         print!("{}", v.report());
         return if v.ok { 0 } else { 1 };
     }
     // A run number? Verify that run of this (or the named) project.
     if let Ok(run) = target.parse::<u64>() {
         let dir = project_dir(pos.get(1).copied());
-        match wright_engine::verify::project_run(&dir, Some(run)) {
+        match wright_engine::verify::project_run_pinned(&dir, Some(run), &pins) {
             Ok(v) => {
                 print!("{}", v.report());
                 if v.ok { 0 } else { 1 }
@@ -228,7 +251,7 @@ pub fn verify(args: &[String]) -> i32 {
         }
     } else {
         let dir = project_dir(Some(target));
-        match wright_engine::verify::project_run(&dir, None) {
+        match wright_engine::verify::project_run_pinned(&dir, None, &pins) {
             Ok(v) => {
                 print!("{}", v.report());
                 if v.ok { 0 } else { 1 }
@@ -300,9 +323,10 @@ pub fn bench(args: &[String]) -> i32 {
 pub fn recipe(args: &[String]) -> i32 {
     let (pos, _) = split(args);
     let Some(cmd) = pos.first().copied() else {
-        println!("usage: wright recipe list | install <file.recipe.kdl> [target-dir] | sign <file.recipe.kdl> | verify <file.recipe.kdl>");
+        println!("usage: wright recipe list | install <file.recipe.kdl> [target-dir] [--trust <publisher key>] | sign <file.recipe.kdl> | verify <file.recipe.kdl> [--trust <publisher key>]");
         return 2;
     };
+    let pins: Vec<String> = flag_values(args, "--trust").into_iter().map(String::from).collect();
     match cmd {
         "list" => {
             let (listed, problems) = wright_engine::recipe::list();
@@ -327,9 +351,9 @@ pub fn recipe(args: &[String]) -> i32 {
                 Ok(r) => r,
                 Err(e) => return fail(e),
             };
-            match r.verify() {
-                Ok(()) => {
-                    println!("OK: recipe '{}' verifies: {}'s signature covers its exact meaning.", r.id, r.publisher);
+            match r.verify().and_then(|_| wright_engine::recipe::publisher_trusted(&r, &pins)) {
+                Ok(who) => {
+                    println!("OK: recipe '{}' verifies: its signature covers its exact meaning, and the key is {who}.", r.id);
                     0
                 }
                 Err(e) => fail(e),
@@ -340,7 +364,7 @@ pub fn recipe(args: &[String]) -> i32 {
                 return fail("usage: wright recipe install <file.recipe.kdl> [target-dir]");
             };
             let target = PathBuf::from(pos.get(2).copied().unwrap_or("."));
-            match wright_engine::recipe::install(&PathBuf::from(file), &target) {
+            match wright_engine::recipe::install(&PathBuf::from(file), &target, &pins) {
                 Ok(dir) => {
                     println!("installed '{}' into {}", file, dir.display());
                     println!("run it: wright run {}", dir.display());
@@ -356,12 +380,87 @@ pub fn recipe(args: &[String]) -> i32 {
             match wright_engine::recipe::sign(&PathBuf::from(file)) {
                 Ok(()) => {
                     println!("signed {} with this machine's publishing key.", file);
+                    if let Ok(k) = wright_runtime::signing::SigningKey::resolve() {
+                        println!("people who install it pin this public key: {}", k.public_hex());
+                        println!("  wright trust add \"<your name>\" {}", k.public_hex());
+                    }
                     0
                 }
                 Err(e) => fail(e),
             }
         }
         other => fail(format!("unknown recipe command '{other}' (list | install | sign | verify)")),
+    }
+}
+
+/// `wright trust list | add <name> <key> | remove <key> | me` — the
+/// signing keys this machine accepts on receipts and recipes.
+pub fn trust(args: &[String]) -> i32 {
+    let (pos, _) = split(args);
+    let edit = |change: &dyn Fn(&mut Config) -> Result<(), String>| -> i32 {
+        match Config::load_file().and_then(|mut c| {
+            change(&mut c)?;
+            c.save_file()
+        }) {
+            Ok(path) => {
+                println!("saved {}", path.display());
+                0
+            }
+            Err(e) => fail(e),
+        }
+    };
+    match pos.first().copied() {
+        None | Some("list") => {
+            let cfg = Config::load().unwrap_or_else(|_| Config::builtin());
+            if cfg.trusted.is_empty() {
+                println!("no keys pinned. Receipts and recipes verify only against this machine's own key until you pin one:");
+                println!("  wright trust add \"<who>\" <64 hex characters>");
+            }
+            for t in &cfg.trusted {
+                println!("{}  {}", t.key, t.name);
+            }
+            if let Some(k) = wright_runtime::signing::SigningKey::existing() {
+                println!("{}  this machine ({})", k.public_hex(), k.provenance_str());
+            }
+            0
+        }
+        Some("me") => match wright_runtime::signing::SigningKey::resolve() {
+            Ok(k) => {
+                println!("{}", k.public_hex());
+                0
+            }
+            Err(e) => fail(e),
+        },
+        Some("add") => {
+            let (Some(name), Some(key)) = (pos.get(1).copied(), pos.get(2).copied()) else {
+                return fail("usage: wright trust add <name> <64 hex characters>");
+            };
+            let key = key.trim().to_ascii_lowercase();
+            if key.len() != 64 || !key.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return fail("a key is 64 hex characters (an Ed25519 public key)");
+            }
+            let name = name.to_string();
+            edit(&move |c: &mut Config| {
+                c.trusted.retain(|t| t.key != key);
+                c.trusted.push(wright_runtime::config::TrustedKey { name: name.clone(), key: key.clone() });
+                Ok(())
+            })
+        }
+        Some("remove") => {
+            let Some(key) = pos.get(1).copied() else {
+                return fail("usage: wright trust remove <key or name>");
+            };
+            let k = key.to_ascii_lowercase();
+            edit(&move |c: &mut Config| {
+                let before = c.trusted.len();
+                c.trusted.retain(|t| t.key != k && t.name != key);
+                if c.trusted.len() == before {
+                    return Err(format!("no pinned key matches '{key}'"));
+                }
+                Ok(())
+            })
+        }
+        Some(other) => fail(format!("unknown trust command '{other}' (list | add | remove | me)")),
     }
 }
 
@@ -957,6 +1056,17 @@ pub fn doctor() -> i32 {
     let ex = Executor::new();
     line("executor", if ex.block_on(async { 41 + 1 }) == 42 { Ok("block_on, spawn_blocking".into()) } else { Err("broken".into()) });
     line("https", wright_runtime::net::https_backend());
+    line(
+        "extra CAs",
+        match wright_runtime::config::ca_file() {
+            None => Ok("none (the system store only; add one with `tls ca-file=\"...\"` in config.kdl or WRIGHT_CA_FILE)".into()),
+            Some(f) => wright_runtime::config::check_ca_file(&f).map(|n| format!("{} ({n} certificate{})", f.display(), if n == 1 { "" } else { "s" })),
+        },
+    );
+    for (k, _) in Config::load().map(|c| c.env).unwrap_or_default() {
+        let state = if std::env::var_os(&k).is_some() { "set" } else { "NOT set (see the warning above)" };
+        println!("    env {k:<24} {state}");
+    }
     for m in &wright_runtime::local::CATALOG {
         let state = if m.installed() {
             Ok(format!("{} ready ({}, {})", m.id, m.size_text(), m.license))

@@ -126,7 +126,13 @@ impl SigningKey {
             .map(|v| v == "1")
             .unwrap_or(false)
         {
-            let seed = *EPHEMERAL.get_or_init(generate_seed);
+            let seed = match EPHEMERAL.get() {
+                Some(s) => *s,
+                None => {
+                    let fresh = generate_seed()?;
+                    *EPHEMERAL.get_or_init(|| fresh)
+                }
+            };
             return Ok(SigningKey {
                 seed,
                 provenance: Provenance::Ephemeral,
@@ -160,47 +166,117 @@ impl SigningKey {
                 provenance: Provenance::LocalGenerated,
             });
         }
-        let seed = generate_seed();
+        let seed = generate_seed()?;
         if let Some(dir) = p.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
+        // Created with 0600 from the first byte: written first and
+        // narrowed afterwards, the key sat world-readable in between.
+        let mut o = std::fs::OpenOptions::new();
+        o.write(true).create_new(true);
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::write(&p, to_hex(&seed));
-            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+            use std::os::unix::fs::OpenOptionsExt;
+            o.mode(0o600);
         }
-        #[cfg(not(unix))]
         {
-            let _ = std::fs::write(&p, to_hex(&seed));
+            use std::io::Write;
+            let mut f = o
+                .open(&p)
+                .map_err(|e| format!("cannot create the signing key {}: {e}", p.display()))?;
+            f.write_all(to_hex(&seed).as_bytes())
+                .and_then(|_| f.sync_all())
+                .map_err(|e| format!("cannot write the signing key {}: {e}", p.display()))?;
         }
         Ok(SigningKey {
             seed,
             provenance: Provenance::LocalGenerated,
         })
     }
+
+    /// This machine's key if it already has one — never generating one
+    /// (verifying a receipt must not mint a key as a side effect).
+    pub fn existing() -> Option<SigningKey> {
+        if std::env::var("WRIGHT_EPHEMERAL_SIGNING").map(|v| v == "1").unwrap_or(false) {
+            return SigningKey::resolve().ok();
+        }
+        if let Ok(name) = secrets::env_name(KEY_REF) {
+            if let Ok(v) = std::env::var(&name) {
+                return from_hex(v.trim()).ok().map(|seed| SigningKey { seed, provenance: Provenance::Env });
+            }
+        }
+        if let Ok(v) = secrets::resolve(KEY_REF) {
+            if let Ok(seed) = from_hex(v.expose()) {
+                return Some(SigningKey { seed, provenance: Provenance::OsKeychain });
+            }
+        }
+        let text = std::fs::read_to_string(file_path()).ok()?;
+        from_hex(text.trim()).ok().map(|seed| SigningKey { seed, provenance: Provenance::LocalGenerated })
+    }
 }
 
-/// A seed from the OS: mix the clock, the pid and a heap address;
-/// not a cryptographic RNG, so say so — used only for the generated
-/// fallback file and tests. (The keychain paths are the ones that matter.)
-fn generate_seed() -> [u8; 32] {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let mut seed = [0u8; 32];
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let mut state = (now.as_nanos() as u64)
-        ^ ((std::process::id() as u64) << 32)
-        ^ (&seed as *const [u8; 32] as u64);
-    for b in seed.iter_mut() {
-        // xorshift64* — small, fast, and enough for a local fallback key.
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        *b = (state >> 24) as u64 as u8;
+/// Who a public key belongs to, as far as THIS machine knows — or why it
+/// is not trusted. A valid signature proves the bytes were not changed
+/// after signing; only a pinned key says who signed them (anyone can
+/// make a fresh key and re-sign an edited receipt or recipe).
+///
+/// Trusted, in order: a key passed on the command line (`--key`), a
+/// `trust "name" key="..."` line in config.kdl, and this machine's own
+/// signing key.
+pub fn signer(public_hex: &str, pinned_now: &[String]) -> Result<String, String> {
+    let k = public_hex.trim().to_ascii_lowercase();
+    if pinned_now.iter().any(|p| p.trim().eq_ignore_ascii_case(&k)) {
+        return Ok("the key you named with --key".into());
     }
-    seed
+    if let Ok(cfg) = crate::config::Config::load() {
+        if let Some(name) = cfg.trusts(&k) {
+            return Ok(format!("{name} (pinned in config.kdl)"));
+        }
+    }
+    if let Some(own) = SigningKey::existing() {
+        if own.public_hex() == k {
+            return Ok("this machine's own signing key".into());
+        }
+    }
+    Err(format!(
+        "the key {}… is not one this machine trusts. Anyone can sign with a fresh key, so a signature alone does not say who made this. \
+         Ask the signer for their public key and check it with --key <64 hex>, or pin it: add `trust \"<who>\" key=\"{k}\"` to config.kdl (or `wright trust add \"<who>\" {k}`)",
+        &k[..k.len().min(12)]
+    ))
+}
+
+/// 32 bytes from the operating system's random source.
+///
+/// Unix: `/dev/urandom` (the kernel CSPRNG; never blocks once seeded).
+/// Elsewhere: the standard library's hasher keys, which std seeds from
+/// the OS generator (`ProcessPrng` on Windows), stretched through
+/// SHA-512 with a counter — no `unsafe`, no crate, and nothing derived
+/// from the clock or the process id.
+fn generate_seed() -> Result<[u8; 32], String> {
+    let mut seed = [0u8; 32];
+    #[cfg(unix)]
+    {
+        use std::io::Read;
+        let mut f = std::fs::File::open("/dev/urandom")
+            .map_err(|e| format!("cannot read the system random source: {e}"))?;
+        f.read_exact(&mut seed)
+            .map_err(|e| format!("cannot read the system random source: {e}"))?;
+        Ok(seed)
+    }
+    #[cfg(not(unix))]
+    {
+        use std::hash::{BuildHasher, Hasher};
+        let mut material = Vec::with_capacity(16 * 8);
+        for i in 0..16u64 {
+            // Each RandomState::new() carries OS-seeded keys.
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_u64(i);
+            material.extend_from_slice(&h.finish().to_le_bytes());
+        }
+        let digest = wright_core::sha512::sha512(&[&material]);
+        seed.copy_from_slice(&digest[..32]);
+        Ok(seed)
+    }
 }
 
 #[cfg(test)]
@@ -259,11 +335,10 @@ mod tests {
             "same process, same ephemeral key"
         );
         std::env::remove_var("WRIGHT_EPHEMERAL_SIGNING");
-        // generate_seed produces 32 bytes, differing call to call in at
-        // least the time-derived bytes.
-        let a = generate_seed();
-        let b = generate_seed();
-        assert_ne!(a, b, "the clock must move");
+        // generate_seed reads the OS random source: two draws differ.
+        let a = generate_seed().unwrap();
+        let b = generate_seed().unwrap();
+        assert_ne!(a, b, "two draws from the OS generator differ");
     }
 
     #[test]
@@ -284,6 +359,18 @@ mod tests {
         let msg = b"receipt";
         let sig = k1.sign(msg);
         assert!(SigningKey::verify(&k1.public_hex(), msg, &sig));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(file_path()).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "only this user may read the key");
+        }
+        // trust: this machine's own key is trusted, a stranger's is not
+        assert!(signer(&k1.public_hex(), &[]).is_ok());
+        let stranger = to_hex(&ed25519::public_key(&[9u8; 32]));
+        let why = signer(&stranger, &[]).unwrap_err();
+        assert!(why.contains("not one this machine trusts"), "{why}");
+        assert!(signer(&stranger, std::slice::from_ref(&stranger)).is_ok(), "--key pins it");
         std::env::remove_var("WRIGHT_HOME");
     }
 }

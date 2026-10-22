@@ -86,7 +86,9 @@ pub fn home(ui: &Ui) -> WidgetNode {
             para("Describe the outcome in your own words. Wright drafts a plan, shows what it will touch and what it costs, and runs nothing until you approve.", 16.0, p.muted),
             speak_hero(&ui),
             composer(&ui, &ui.home, send, "Every Monday, read the CSVs in my sales folder and email me a one-page summary", true),
-            row(10.0, starters),
+            // Stretch: the three cards stand as tall as the tallest, so a
+            // shorter subtitle does not leave one card floating in the row.
+            Flex::row().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0).children(starters).into(),
             {
                 let u = ui.clone();
                 row(6.0, vec![
@@ -129,7 +131,7 @@ fn speak_hero(ui: &Ui) -> WidgetNode {
             Container::new()
                 .width(520.0)
                 .color(p.accent_soft)
-                .radius(corner::CARD as f32)
+                .radius(corner::CARD)
                 .border(Border::new(p.accent, 1.0 + s.hover))
                 .padding(EdgeInsets::all(14.0))
                 .child(row(12.0, vec![
@@ -150,7 +152,7 @@ fn speak_hero(ui: &Ui) -> WidgetNode {
             Container::new()
                 .width(520.0)
                 .color(p.surface)
-                .radius(corner::CARD as f32)
+                .radius(corner::CARD)
                 .border(Border::new(p.line_strong, 1.5))
                 .padding(EdgeInsets::all(14.0))
                 .child(row(12.0, vec![
@@ -166,7 +168,7 @@ fn speak_hero(ui: &Ui) -> WidgetNode {
             Container::new()
                 .width(520.0)
                 .color(p.surface.lerp(p.accent_soft, s.hover))
-                .radius(corner::CARD as f32)
+                .radius(corner::CARD)
                 .border(Border::new(if s.hover > 0.0 { p.accent } else { p.line_strong }, 1.5))
                 .padding(EdgeInsets::all(14.0))
                 .child(row(12.0, vec![

@@ -159,6 +159,15 @@ pub fn config(req: &Request, cfg: &NetConfig, body: &BodyArg) -> String {
         "speed-time",
         Some(&cfg.io_timeout.as_secs().max(1).to_string()),
     );
+    // Extra authorities (`tls ca-file` / WRIGHT_CA_FILE). The OS curl
+    // treats this file as THE trust list for the request (Schannel and
+    // Secure Transport have no "add to the system store" switch), so on
+    // these platforms the file should be the office's full bundle — which
+    // is what IT departments hand out. A root IT already installed in
+    // the system store needs no file at all here.
+    if let Some(ca) = crate::config::ca_file() {
+        line("cacert", Some(&ca.to_string_lossy()));
+    }
     match cfg.proxy_for(&req.url) {
         Some(p) => {
             line("proxy", Some(&format!("http://{}:{}", p.host, p.port)));
