@@ -29,6 +29,18 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+/// How many recent frames' masks a compaction keeps: those used by any of
+/// the last four frames, not only the last one.
+///
+/// A list scrolling by a fractional number of device pixels alternates
+/// between pairs of sub-pixel phases for its cards' shadows (the quarter
+/// pixels `vieww_paint`'s shadow cache keys by): what one frame uses, the
+/// next does not, and the one after uses again. Keeping only the previous
+/// frame's masks dropped half the cards' shadows at every compaction — and
+/// an animated shadow beside them, a new mask every frame, made compactions
+/// frequent.
+const KEEP_FRAMES: u64 = 4;
+
 /// Where a mask was placed, and the device pixel its first texel covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MaskSlot {
@@ -246,7 +258,7 @@ impl MaskAtlas {
         let live: u64 = self
             .entries
             .values()
-            .filter(|e| e.last_used >= previous)
+            .filter(|e| e.last_used + KEEP_FRAMES > previous)
             .map(|e| u64::from(e.width) * u64::from(e.height))
             .sum();
         if live * 2 > self.used_texels {
@@ -255,7 +267,7 @@ impl MaskAtlas {
         let keep: Vec<(MaskKey, Entry, Vec<u8>)> = self
             .entries
             .iter()
-            .filter(|(_, e)| e.last_used >= previous)
+            .filter(|(_, e)| e.last_used + KEEP_FRAMES > previous)
             .map(|(k, e)| (*k, *e, self.copy_out(e)))
             .collect();
         if keep.len() == self.entries.len() {
@@ -576,18 +588,42 @@ mod tests {
     }
 
     #[test]
-    fn compaction_keeps_last_frames_masks_and_drops_the_rest() {
+    fn compaction_keeps_recent_frames_masks_and_drops_the_rest() {
         let mut atlas = MaskAtlas::new();
         for id in 0..60u64 {
             insert(&mut atlas, id, 30, 30, 5).unwrap();
         }
+        // Only mask 3 is used in the next four frames; the other 59 were last
+        // used before them.
+        for _ in 0..KEEP_FRAMES {
+            atlas.begin_frame();
+            insert(&mut atlas, 3, 30, 30, 5).unwrap();
+        }
+        assert_eq!(
+            atlas.len(),
+            60,
+            "kept while used within {KEEP_FRAMES} frames"
+        );
         atlas.begin_frame();
-        // Only mask 3 is used in this frame.
-        let kept = insert(&mut atlas, 3, 30, 30, 5).unwrap();
-        atlas.begin_frame();
-        assert_eq!(atlas.len(), 1, "only the mask used last frame survives");
+        assert_eq!(atlas.len(), 1, "only the mask used recently survives");
         let again = atlas.get_or_insert(MaskKey(3), || None).unwrap();
         assert_eq!(texel(&atlas, again, 0, 0), 5);
-        let _ = kept;
+    }
+
+    /// A scrolling list alternates between pairs of shadow phases: a mask
+    /// used every other frame survives every compaction.
+    #[test]
+    fn a_mask_used_every_other_frame_survives_compaction() {
+        let mut atlas = MaskAtlas::new();
+        for id in 0..60u64 {
+            insert(&mut atlas, id, 30, 30, 5).unwrap();
+        }
+        for frame in 0..12u64 {
+            atlas.begin_frame();
+            insert(&mut atlas, 1000 + frame % 2, 30, 30, 7).unwrap();
+        }
+        assert!(atlas.get_or_insert(MaskKey(1000), || None).is_some());
+        assert!(atlas.get_or_insert(MaskKey(1001), || None).is_some());
+        assert!(atlas.len() <= 2 + 1, "the stale ones went: {}", atlas.len());
     }
 }

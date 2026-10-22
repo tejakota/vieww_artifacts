@@ -115,3 +115,4 @@ pub use reference::{
     AaMode, GlyphRasterStats, NativeRenderer, RasterKindTimes, RendererError, SceneReport,
 };
 pub use residency::ResidencyStats;
+pub use shadow::shadow_blurs;

@@ -12,43 +12,27 @@
 
 use vieww_foundation::{Offset, Rect, Shadow, Transform};
 
-use super::color::Premul;
 use super::geometry::fill::rasterize;
 use super::rounded_rect::rounded_rect_polygon_transformed;
-use super::target::Target;
 
-/// Render `shadow` cast by a rounded rect (`rect`/`radius`, local space)
-/// under `transform`, clamped to `surface`. Returns the tinted, blurred
-/// patch and its top-left in device space, or `None` if it would be empty.
-pub(crate) fn render_shadow(
-    rect: Rect,
-    radius: f32,
-    shadow: &Shadow,
-    transform: Transform,
-    surface: Rect,
-) -> Option<(Target, i32, i32)> {
-    let ShadowAlpha {
-        x0,
-        y0,
-        width: w,
-        height: h,
-        alpha,
-    } = shadow_alpha(rect, radius, shadow, transform, surface)?;
-    let tint = Premul::from_straight(shadow.color);
-    let mut target = Target::new(w, h);
-    for (i, a) in alpha.iter().enumerate() {
-        target.pixels[i] = tint.scaled(*a);
-    }
-    // Written through `pixels` directly rather than through a compositing
-    // method, so the ink `composite_layer` reads has to be declared here. The
-    // patch is exactly the blurred silhouette's extent — it was sized to it —
-    // so the whole of it counts.
-    target.mark_all_ink();
-    Some((target, x0, y0))
+/// Shadows blurred, and their pixels, process-wide — both renderers blur
+/// through [`shadow_alpha`]. What a report divides by frames to say whether
+/// the caches are holding: a steady screen blurs nothing.
+static BLURS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static BLURRED_PIXELS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many shadows have been blurred since the process started, and how
+/// many pixels that covered — for a report, not for decisions.
+#[must_use]
+pub fn shadow_blurs() -> (u64, u64) {
+    (
+        BLURS.load(std::sync::atomic::Ordering::Relaxed),
+        BLURRED_PIXELS.load(std::sync::atomic::Ordering::Relaxed),
+    )
 }
 
 /// A shadow's final coverage before its colour: blurred and complemented
-/// for an inset shadow. What [`render_shadow`] tints, and what the GPU seam
+/// for an inset shadow. What the shadow cache keeps and tints as it draws, and what the GPU seam
 /// hands the planner whole, so the GPU draws a shadow as one textured pass
 /// instead of re-running the blur.
 ///
@@ -57,6 +41,7 @@ pub(crate) fn render_shadow(
 /// when it draws it. Cropped here, a card's patch would depend on where the
 /// surface's edge falls across it, and a card scrolling under that edge
 /// would need a new patch every frame.
+#[derive(Debug, Clone)]
 pub(crate) struct ShadowAlpha {
     pub(crate) x0: i32,
     pub(crate) y0: i32,
@@ -76,6 +61,11 @@ pub(crate) fn shadow_alpha(
 ) -> Option<ShadowAlpha> {
     let masks = shadow_masks(rect, radius, shadow, transform, surface)?;
     let (w, h) = (masks.width, masks.height);
+    BLURS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    BLURRED_PIXELS.fetch_add(
+        u64::from(w) * u64::from(h),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let mut alpha = masks.caster;
 
     if let Some(box_radius) = masks.box_radius {
@@ -177,7 +167,18 @@ pub(crate) fn shadow_frame(
     // a card now has at most sixteen phases, and a scroll reuses them.
     let snapped = (snap_phase(origin.dx), snap_phase(origin.dy));
     let whole = (snapped.0.floor(), snapped.1.floor());
-    let canon_rect = Rect::new(0.0, 0.0, rect.right - rect.left, rect.bottom - rect.top);
+    // The size, **snapped to 1/64 of a unit**: `bottom - top` of the same
+    // card is 116.0 in one place and 115.99997 in another (float
+    // subtraction at different magnitudes), and a key compared by bit
+    // pattern took those for two shapes — every card a new patch, every
+    // frame, until this rounding (5.2 blurs a frame on the stress screen at a
+    // density of 2.625).
+    let canon_rect = Rect::new(
+        0.0,
+        0.0,
+        snap_size(rect.right - rect.left),
+        snap_size(rect.bottom - rect.top),
+    );
     let canon_transform = Transform::new(
         transform.a,
         transform.b,
@@ -187,19 +188,15 @@ pub(crate) fn shadow_frame(
         snapped.1 - whole.1,
     );
     let shift = (whole.0 as i32, whole.1 as i32);
-    // Free when the whole unclamped patch, put back where it belongs, is
-    // inside the surface grown by the blur's reach: then the clamp in
-    // `shadow_masks` does not change it.
+    // Free whenever the shadow fits the surface (`fits`), wherever it is:
+    // then `shadow_masks` never clamps it, and nothing about the surface
+    // decides its bytes.
     let canon = canon_transform.apply_rect(shadow.bounds(canon_rect));
-    let (sx0, sy0, sx1, sy1) = pixel_bounds(surface.inflate(reach(shadow, transform)));
     let free = origin.dx.is_finite()
         && origin.dy.is_finite()
         && whole.0.abs() < 1.0e7
         && whole.1.abs() < 1.0e7
-        && canon.left.floor() as i32 + shift.0 >= sx0
-        && canon.top.floor() as i32 + shift.1 >= sy0
-        && canon.right.ceil() as i32 + shift.0 <= sx1
-        && canon.bottom.ceil() as i32 + shift.1 <= sy1;
+        && fits(canon, surface, reach(shadow, transform));
     if free {
         let canon_surface = surface.translate(Offset::new(-whole.0, -whole.1));
         ShadowFrame {
@@ -222,6 +219,11 @@ pub(crate) fn shadow_frame(
             shift: (0, 0),
         }
     }
+}
+
+/// A shadow's size to the nearest 1/64 of a unit — see `shadow_frame`.
+fn snap_size(v: f32) -> f32 {
+    (v * 64.0).round() / 64.0
 }
 
 /// `v` to the nearest quarter: the sub-pixel phases a cached shadow keeps.
@@ -271,21 +273,32 @@ pub(crate) fn shadow_masks(
 
     let caster = rect.inflate(shadow.spread).translate(shadow.offset);
     let bounds_local = shadow.bounds(rect);
-    // **Clamped to the surface grown by the blur's reach (`reach`), not to
-    // the surface.** Three box passes of radius `r` read `3r` pixels each way,
-    // so a pixel inside the surface depends on caster coverage up to `3r`
-    // outside it. Clamped at the surface itself, the blur read transparent
-    // there instead, and a card scrolled half off the top had its shadow
-    // fade towards the screen's edge as if the card ended there. Grown by
-    // the reach, every pixel inside the surface is the shadow's true value;
-    // `shadow_alpha` crops the rest. Still bounded: a window-sized shadow
-    // costs the window plus a margin, never the whole caster.
-    let bounds_device = transform
-        .apply_rect(bounds_local)
-        .intersect(surface.inflate(reach(shadow, transform)));
-    if bounds_device.is_empty() {
+    // **The whole shadow, when it fits the surface; clamped to the surface
+    // grown by the blur's reach when it does not.**
+    //
+    // A shadow no bigger than the surface is computed whole, wherever it is
+    // — half off the screen included — so its bytes never depend on where
+    // the surface's edge falls across it, and the cache keeps it as it
+    // scrolls under that edge. Device Farm (2026-10-22, Galaxy A73, stress
+    // screen) is why: clamped near the edge, the cards entering and leaving
+    // were new patches every frame, 70.7 ms of a 180 ms CPU frame.
+    //
+    // A bigger one (a shadow under a whole scroll view's content) is clamped,
+    // so it costs the surface plus a margin and never the whole caster. The
+    // margin is the blur's reach: three box passes of radius `r` read `3r`
+    // pixels each way, so every pixel inside the surface is still the
+    // shadow's true value. (Clamped at the surface itself, as this once was,
+    // the blur read transparent there and a shadow faded towards the edge.)
+    let reach = reach(shadow, transform);
+    let whole = transform.apply_rect(bounds_local);
+    if whole.intersect(surface.inflate(reach)).is_empty() {
         return None;
     }
+    let bounds_device = if fits(whole, surface, reach) {
+        whole
+    } else {
+        whole.intersect(surface.inflate(reach))
+    };
     let x0 = bounds_device.left.floor() as i32;
     let y0 = bounds_device.top.floor() as i32;
     let w = (bounds_device.right.ceil() as i32 - x0).max(0) as u32;
@@ -343,23 +356,19 @@ fn shadow_box_radius(shadow: &Shadow, transform: Transform) -> Option<i32> {
     (sigma_device > 0.1).then(|| box_radius_for_sigma(sigma_device))
 }
 
-/// How far past the surface a shadow's masks are kept, in device pixels.
-///
-/// At least the blur's reach — three box passes of radius `r` read `3r`
-/// pixels, plus one for the edge pixel's own coverage — so every pixel
-/// inside the surface is exact. And [`SLACK`] beyond that, so a card keeps
-/// its cached patch while it scrolls well past the edge rather than only
-/// for its first few pixels: past the reach, the clamp would bite and make
-/// the patch depend on where the edge falls (a miss every frame).
+/// How far past a pixel the blur reads, in device pixels: three box passes
+/// of radius `r` read `3r`, plus one for the edge pixel's own coverage.
 fn reach(shadow: &Shadow, transform: Transform) -> f32 {
-    shadow_box_radius(shadow, transform).map_or(1.0, |r| (3 * r + 1) as f32) + SLACK
+    shadow_box_radius(shadow, transform).map_or(1.0, |r| (3 * r + 1) as f32)
 }
 
-/// See [`reach`]. Bounded on purpose: the clamp is also what keeps a
-/// shadow cast by a huge rectangle (a whole scroll view's content) from
-/// costing a patch the size of the content; it costs the surface plus this,
-/// on each side.
-const SLACK: f32 = 128.0;
+/// Whether a shadow's device bounds fit `surface` grown by `reach` on each
+/// side, in size — wherever they are. Such a shadow is computed whole and
+/// cached by its shape (`shadow_frame`); a bigger one is clamped.
+fn fits(bounds: Rect, surface: Rect, reach: f32) -> bool {
+    bounds.width() <= surface.width() + 2.0 * reach
+        && bounds.height() <= surface.height() + 2.0 * reach
+}
 
 /// The per-pass radius of the three-box approximation of a Gaussian of
 /// standard deviation `sigma` — shared by shadows, layer blurs, and the GPU
@@ -509,13 +518,13 @@ fn box_blur_vertical(src: &[f32], dst: &mut [f32], w: u32, h: u32, radius: i32) 
 /// that did not change.
 #[derive(Debug, Default)]
 pub(crate) struct ShadowCache {
-    entries: Vec<(ShadowKey, Target, i32, i32)>,
+    entries: Vec<(ShadowKey, ShadowAlpha)>,
     pixels: usize,
     hits: usize,
     misses: usize,
 }
 
-/// Everything [`render_shadow`] reads. Compared by bit pattern rather than by
+/// Everything [`shadow_alpha`] reads, and the tint. Compared by bit pattern rather than by
 /// `PartialEq` on floats, so that two keys are equal exactly when the
 /// arithmetic below them would be.
 #[derive(Debug, PartialEq, Eq)]
@@ -554,8 +563,12 @@ impl ShadowKey {
 
 /// How many patch pixels the cache may hold at once, at least.
 ///
-/// A patch is one [`Premul`] — sixteen bytes — per pixel, so this is a
-/// budget of about thirty megabytes. Firmly bounded, which is the property
+/// A patch is its coverage, one `f32` — four bytes — per pixel, so this is
+/// a budget of about thirty megabytes: the same memory as when patches were
+/// stored tinted at sixteen bytes a pixel and a quarter of the pixels, which
+/// a list of cards overran (two card heights at four sub-pixel phases beside
+/// an animated shadow, 466k pixels each at a density of 2.625 — every
+/// shadow missed every frame). Firmly bounded, which is the property
 /// that matters: a scene that animates a shadow's blur every frame must
 /// degrade to "no reuse", not to "no memory".
 ///
@@ -569,16 +582,16 @@ impl ShadowKey {
 /// frame: every shadow missed, every frame. Measured on Wright's settings
 /// dialog while scrolling at ratio 2: 209 ms a frame with the thrash, and the
 /// shadow's share of it gone with room for it. So the budget is also never
-/// less than one and a half surfaces — a window-sized shadow's patch is the
-/// window plus its blur margin, and the rest is room for the small ones beside
-/// it — and still bounded by what is on screen.
-const PIXEL_BUDGET: usize = 2_000_000;
+/// less than three surfaces — a window-sized shadow's patch is the window
+/// plus its blur margin, and the rest is room for the small ones beside it —
+/// and still bounded by what is on screen.
+const PIXEL_BUDGET: usize = 8_000_000;
 
-/// The budget for a surface: [`PIXEL_BUDGET`], or one and a half times the
-/// surface's pixel count when that is larger.
+/// The budget for a surface: [`PIXEL_BUDGET`], or three times the surface's
+/// pixel count when that is larger.
 fn budget_for(surface: Rect) -> usize {
     let area = (surface.width().max(0.0) * surface.height().max(0.0)) as usize;
-    PIXEL_BUDGET.max(area + area / 2)
+    PIXEL_BUDGET.max(3 * area)
 }
 
 impl ShadowCache {
@@ -603,7 +616,7 @@ impl ShadowCache {
         shadow: &Shadow,
         transform: Transform,
         surface: Rect,
-    ) -> Option<(&Target, i32, i32)> {
+    ) -> Option<(&ShadowAlpha, i32, i32)> {
         let frame = shadow_frame(rect, radius, shadow, transform, surface);
         let key = frame.key;
         if let Some(index) = self.entries.iter().position(|(k, ..)| *k == key) {
@@ -612,23 +625,22 @@ impl ShadowCache {
             self.entries.push(entry);
         } else {
             self.misses += 1;
-            let (patch, px0, py0) =
-                render_shadow(frame.rect, radius, shadow, frame.transform, frame.surface)?;
-            let cost = patch.pixels.len();
+            let alpha = shadow_alpha(frame.rect, radius, shadow, frame.transform, frame.surface)?;
+            let cost = alpha.alpha.len();
             // Evict oldest-first until this one fits. A single patch larger
             // than the whole budget is still stored — one frame's correctness
             // is not worth trading for a memory bound — and evicted on the
             // next miss.
             let budget = budget_for(surface);
             while self.pixels + cost > budget && !self.entries.is_empty() {
-                let (_, dropped, ..) = self.entries.remove(0);
-                self.pixels -= dropped.pixels.len();
+                let (_, dropped) = self.entries.remove(0);
+                self.pixels -= dropped.alpha.len();
             }
             self.pixels += cost;
-            self.entries.push((key, patch, px0, py0));
+            self.entries.push((key, alpha));
         }
-        let (_, patch, px0, py0) = self.entries.last().expect("just pushed");
-        Some((patch, *px0 + frame.shift.0, *py0 + frame.shift.1))
+        let (_, patch) = self.entries.last().expect("just pushed");
+        Some((patch, patch.x0 + frame.shift.0, patch.y0 + frame.shift.1))
     }
 }
 
@@ -683,13 +695,38 @@ mod tests {
         assert!(checked > 1000, "{checked}");
     }
 
+    /// A shadow bigger than the surface is clamped to it (grown by the blur's
+    /// reach), so its patch costs the surface and not the whole caster.
+    #[test]
+    fn a_shadow_bigger_than_the_surface_is_clamped_to_it() {
+        let surface = Rect::new(0.0, 0.0, 400.0, 300.0);
+        let content = Rect::new(0.0, -5000.0, 400.0, 5000.0);
+        let alpha = shadow_alpha(content, 0.0, &card_shadow(), Transform::IDENTITY, surface)
+            .expect("visible");
+        assert!(
+            alpha.height < 600,
+            "{} rows for a 300-row surface",
+            alpha.height
+        );
+    }
+
+    /// A card wholly off the surface, beyond the blur's reach, casts nothing
+    /// on it, and is not blurred.
+    #[test]
+    fn a_shadow_beyond_the_surface_is_not_computed() {
+        let surface = Rect::new(0.0, 0.0, 400.0, 300.0);
+        let far = Rect::new(40.0, 900.0, 360.0, 1000.0);
+        assert!(shadow_alpha(far, 8.0, &card_shadow(), Transform::IDENTITY, surface).is_none());
+    }
+
     /// A card crossing the surface's edge is still keyed by its shape: as it
     /// scrolls under the edge, its patch is reused.
     #[test]
     fn a_shadow_scrolling_under_the_edge_keeps_its_patch() {
         let surface = Rect::new(0.0, 0.0, 400.0, 800.0);
         let mut cache = ShadowCache::new();
-        for top in [10.0, 4.0, -2.0, -8.0] {
+        // Far past the edge too: the card is computed whole, wherever it is.
+        for top in [10.0, 4.0, -2.0, -8.0, -60.0, -100.0] {
             cache.patch(
                 Rect::new(40.0, top, 360.0, top + 120.0),
                 18.0,
@@ -698,7 +735,7 @@ mod tests {
                 surface,
             );
         }
-        assert_eq!(cache.stats(), (3, 1));
+        assert_eq!(cache.stats(), (5, 1));
     }
 
     /// The same card at another whole-pixel position — the next one down a
@@ -769,14 +806,13 @@ mod tests {
             .patch(rect, 10.0, &card_shadow(), transform, surface)
             .map(|(p, x, y)| (p.clone(), x, y))
             .expect("visible");
-        let (direct, dx, dy) =
-            render_shadow(rect, 10.0, &card_shadow(), transform, surface).expect("visible");
+        let direct = shadow_alpha(rect, 10.0, &card_shadow(), transform, surface).expect("visible");
         assert_eq!(
             (cx, cy, cached.width, cached.height),
-            (dx, dy, direct.width, direct.height)
+            (direct.x0, direct.y0, direct.width, direct.height)
         );
-        for (a, b) in cached.pixels.iter().zip(&direct.pixels) {
-            assert!((a.a - b.a).abs() < 1e-4, "{a:?} against {b:?}");
+        for (a, b) in cached.alpha.iter().zip(&direct.alpha) {
+            assert!((a - b).abs() < 1e-4, "{a} against {b}");
         }
     }
 }

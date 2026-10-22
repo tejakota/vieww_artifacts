@@ -1182,37 +1182,20 @@ impl NativeRenderer {
                     );
                     // A clip that carries no mask — no clip at all, or a plain
                     // rectangle, which the patch is already confined to —
-                    // leaves every pixel at full coverage, so the cached patch
-                    // composites straight through. Only a shape clip needs a
-                    // modified copy, and only then is one made.
-                    if resolved.has_mask() {
-                        let mut clipped = patch.clone();
-                        for y in 0..clipped.height as i32 {
-                            let row = y as u32 * clipped.width;
-                            for x in 0..clipped.width as i32 {
-                                let c = resolved.coverage_at(px0 + x, py0 + y);
-                                if c < 1.0 {
-                                    let i = (row + x as u32) as usize;
-                                    clipped.pixels[i] = clipped.pixels[i].scaled(c);
-                                }
-                            }
-                        }
-                        target.composite_layer_within(
-                            &clipped,
-                            px0 - origin.0,
-                            py0 - origin.1,
-                            pipeline,
-                            within,
-                        );
-                    } else {
-                        target.composite_layer_within(
-                            patch,
-                            px0 - origin.0,
-                            py0 - origin.1,
-                            pipeline,
-                            within,
-                        );
-                    }
+                    // leaves every pixel at full coverage; only a shape clip
+                    // scales the coverage, pixel by pixel.
+                    let clip_coverage = |x: i32, y: i32| resolved.coverage_at(px0 + x, py0 + y);
+                    target.composite_tinted_within(
+                        &patch.alpha,
+                        (patch.width, patch.height),
+                        (px0 - origin.0, py0 - origin.1),
+                        Premul::from_straight(shadow.color),
+                        resolved
+                            .has_mask()
+                            .then_some(&clip_coverage as &dyn Fn(i32, i32) -> f32),
+                        pipeline,
+                        within,
+                    );
                 }
                 report.shadows += 1;
                 report.translated_commands += 1;

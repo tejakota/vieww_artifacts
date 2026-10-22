@@ -729,41 +729,68 @@ impl Target {
         );
     }
 
-    /// [`Self::composite_layer`] with the normal blend at full alpha, writing
-    /// only inside `within` (this buffer's coordinates, half-open).
+    /// A cached shadow's coverage, tinted and composited source-over at
+    /// `(ox, oy)`, writing only inside `within` (this buffer's coordinates,
+    /// half-open) and scaled by `coverage` (patch-local) where a shape clip
+    /// asks.
     ///
-    /// For a cached shadow patch, which is the shadow's whole extent — the
-    /// same bytes wherever the card is — and is cut to the surface here,
-    /// where it is drawn, rather than when it was made.
-    pub(crate) fn composite_layer_within(
+    /// The shadow cache keeps coverage, one `f32` a pixel, rather than tinted
+    /// pixels at sixteen bytes: four times the shadows in the same memory,
+    /// which a scrolling list of cards needs (two card heights at four
+    /// sub-pixel phases, and an animated shadow beside them, overran a cache
+    /// of tinted patches and missed on every frame). Each row is tinted into
+    /// a scratch row (`tint.scaled(a)`, exactly what a tinted patch held) and
+    /// blended by the same row function a layer is, so the pixels are the
+    /// ones the tinted patch produced.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn composite_tinted_within(
         &mut self,
-        other: &Target,
-        ox: i32,
-        oy: i32,
+        alpha: &[f32],
+        (width, height): (u32, u32),
+        (ox, oy): (i32, i32),
+        tint: Premul,
+        coverage: Option<&dyn Fn(i32, i32) -> f32>,
         pipeline: ColorPipeline,
         within: (i32, i32, i32, i32),
     ) {
-        let Some((x_start, y_start, x_end, y_end)) = self.layer_window(other, ox, oy) else {
-            return;
-        };
-        let (x_start, y_start) = (x_start.max(within.0 - ox), y_start.max(within.1 - oy));
-        let (x_end, y_end) = (x_end.min(within.2 - ox), y_end.min(within.3 - oy));
+        let (wx0, wy0, wx1, wy1) = self.writable();
+        let x_start = (wx0 - ox).max(within.0 - ox).max(0);
+        let y_start = (wy0 - oy).max(within.1 - oy).max(0);
+        let x_end = (wx1 - ox).min(within.2 - ox).min(width as i32);
+        let y_end = (wy1 - oy).min(within.3 - oy).min(height as i32);
         if x_start >= x_end || y_start >= y_end {
             return;
         }
         self.mark_ink(x_start + ox, y_start + oy, x_end + ox, y_end + oy);
         let normal = matches!(pipeline, ColorPipeline::GammaSpace);
-        self.composite_layer_rows(
-            other,
-            (x_start, y_start, x_end, y_end),
-            ox,
-            oy,
-            BlendMode::Normal,
-            1.0,
-            pipeline,
-            normal,
-            normal,
-        );
+        let mut row: Vec<Premul> = Vec::with_capacity((x_end - x_start) as usize);
+        for y in y_start..y_end {
+            row.clear();
+            let src_row = y as usize * width as usize;
+            for x in x_start..x_end {
+                let mut pixel = tint.scaled(alpha[src_row + x as usize]);
+                if let Some(coverage) = coverage {
+                    let c = coverage(x, y);
+                    if c < 1.0 {
+                        pixel = pixel.scaled(c);
+                    }
+                }
+                row.push(pixel);
+            }
+            let dst_row = (y + oy) as usize * self.width as usize;
+            let dst = &mut self.pixels
+                [dst_row + (x_start + ox) as usize..dst_row + (x_end + ox) as usize];
+            if normal {
+                super::simd::over_layer_row(dst, &row, 1.0, true);
+            } else {
+                for (d, s) in dst.iter_mut().zip(&row) {
+                    if s.a <= 0.0 {
+                        continue;
+                    }
+                    *d = blend_with_pipeline(pipeline, BlendMode::Normal, *s, *d);
+                }
+            }
+        }
     }
 
     /// The part of `other` (in its own coordinates, half-open) that
