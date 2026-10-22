@@ -1,10 +1,12 @@
 //! Drives the real UI headlessly: the same signals, the same worker
 //! bridge, the same widget tree — no window, no clicks.
 //!
-//! One test owns `WRIGHT_HOME` (the process environment is shared), so
-//! everything that needs a home runs inside it, in order.
+//! `WRIGHT_HOME` is process-global and cargo runs these tests on parallel
+//! threads of one process, so every drive that touches the environment
+//! holds `HOME` for its whole run: one owner of `WRIGHT_HOME` at a time.
 
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use vieww::foundation::{KeyEvent, LogicalKey, NamedKey, ScrollEvent};
@@ -25,6 +27,18 @@ fn scroll(dx: f32, t: u64) -> ScrollEvent {
     ScrollEvent { position: Offset::new(600.0, 400.0), delta: Offset::new(dx, 0.0), timestamp: Duration::from_millis(t) }
 }
 
+/// The environment is process-global and the tests share it: whoever
+/// holds `HOME` owns `WRIGHT_HOME` for the length of a drive. Without
+/// it, whichever `set_var` landed last pointed every later
+/// `wright_home()` read — the store lists, the config, the engine's
+/// provider — at another test's home, and a finished test's teardown
+/// dropped the variable out from under a running one.
+static HOME: Mutex<()> = Mutex::new(());
+
+fn home_lock() -> MutexGuard<'static, ()> {
+    HOME.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 /// The four product-page screens (`apps/wrightsite/assets/`), captured from
 /// the real shell so the page cannot drift from the app: describe (Home with
 /// the request typed), the confirm gate (the plan card, before anything
@@ -32,6 +46,7 @@ fn scroll(dx: f32, t: u64) -> ScrollEvent {
 /// against the mock provider, offline; writes to `WRIGHT_UI_SHOTS`.
 #[test]
 fn the_site_screens() {
+    let _home = home_lock();
     let home = temp("site-shots");
     std::env::set_var("WRIGHT_HOME", &home);
     let mock = wright_engine::mock::MockProvider::start(0).unwrap();
@@ -137,7 +152,7 @@ fn the_site_screens() {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(saw_card, "the approval request reached the UI");
+    assert!(saw_card, "the approval request reached the UI (result: {:?})", s.result.get());
     let r = s.result.get().expect("the run finished");
     assert!(r.ok, "{}", r.headline);
 
@@ -150,6 +165,7 @@ fn the_site_screens() {
 
 #[test]
 fn the_shell_end_to_end() {
+    let _home = home_lock();
     let home = temp("home");
     std::env::set_var("WRIGHT_HOME", &home);
     let mock = wright_engine::mock::MockProvider::start(0).unwrap();
@@ -228,7 +244,7 @@ deliverable kind=\"message\" {{ check \"the hook got a hello\" }}\nmodels {{ tie
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(saw_card, "the approval request reached the UI");
+    assert!(saw_card, "the approval request reached the UI (result: {:?})", s.result.get());
     let r = s.result.get().expect("the run finished");
     assert!(r.ok, "{}", r.headline);
     assert!(s.events.get().iter().any(|e| e.kind == wright_core::events::EventKind::ApprovalResolved && e.note.contains("approved")));
@@ -464,6 +480,7 @@ fn scrolling_moves_the_page_as_one_piece() {
 #[test]
 #[ignore]
 fn scroll_frame_cost() {
+    let _home = home_lock();
     use vieww::paint::Damage;
     let home = temp("scrollbench");
     std::env::set_var("WRIGHT_HOME", &home);
@@ -529,6 +546,7 @@ fn pinching_opens_and_closes_the_overview() {
 
 #[test]
 fn speech_alone_starts_a_session_on_home() {
+    let _home = home_lock();
     // Voice-first (the memo's item 6): the mic is the main way to start
     // on Home. Driving the same path the mic worker takes — a transcript
     // lands in the inbox, the shell pumps — the session must begin from
