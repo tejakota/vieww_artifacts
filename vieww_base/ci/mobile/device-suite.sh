@@ -221,8 +221,15 @@ case "$frames" in ''|*[!0-9]*) frames=600 ;; esac
 seconds="${VIEWW_SUITE_SECONDS:-0}"
 case "$seconds" in ''|*[!0-9]*) seconds=0 ;; esac
 deadline=$(( $(date +%s) + 60 + frames / 4 + seconds ))
+# And as long as frames keep coming: the app logs `__VIEWW_PROGRESS__
+# frames=N` every 60 frames, and each new count moves the deadline to a
+# minute from now — up to a hard cap of fifteen minutes. The LG Stylo 5
+# drew the stress screen slower than any fixed allowance assumed, and a
+# pass that is progressing is not a pass that has hung.
+hard_deadline=$(( $(date +%s) + 900 ))
+progress=""
 log=""
-while [ "$(date +%s)" -lt "$deadline" ]; do
+while [ "$(date +%s)" -lt "$deadline" ] && [ "$(date +%s)" -lt "$hard_deadline" ]; do
     burst=0
     while [ "$taps" -lt "$max_taps" ] && [ "$burst" -lt 4 ]; do
         adb shell input tap "$tap_x" "$tap_y" >/dev/null 2>&1 || true
@@ -238,7 +245,14 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         field_tapped=1
     fi
 
-    log="$(adb logcat -d --pid="$pid" 2>/dev/null | tr -d '\r' | grep "__VIEWW_SUITE__" || true)"
+    log="$(adb logcat -d --pid="$pid" 2>/dev/null | tr -d '\r' | grep "__VIEWW_SUITE__\|__VIEWW_PROGRESS__" || true)"
+    latest="$(echo "$log" | grep -o "__VIEWW_PROGRESS__ frames=[0-9]*" | tail -1)"
+    if [ -n "$latest" ] && [ "$latest" != "$progress" ]; then
+        progress="$latest"
+        now=$(date +%s)
+        [ $(( now + 60 )) -gt "$deadline" ] && deadline=$(( now + 60 ))
+    fi
+    log="$(echo "$log" | grep "__VIEWW_SUITE__" || true)"
     if echo "$log" | grep -q "__VIEWW_SUITE__ result "; then
         break
     fi
@@ -249,7 +263,7 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     fi
     [ "$taps" -ge "$max_taps" ] && sleep 2
 done
-echo "device-suite: sent $taps tap(s) at ${tap_x},${tap_y} and $field_tapped at ${field_x},${field_y}"
+echo "device-suite: sent $taps tap(s) at ${tap_x},${tap_y} and $field_tapped at ${field_x},${field_y}; last progress: ${progress:-none}"
 
 # What the frame looked like, from whichever rasterizer drew it. The suite
 # checks behaviour, not pixels; a screenshot per run is what lets a CPU frame

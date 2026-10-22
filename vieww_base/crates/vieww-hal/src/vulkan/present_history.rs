@@ -60,6 +60,9 @@ pub(super) const PROBES: u32 = 6;
 /// no image at all (readback frames) — and then the copy is simply full.
 const HISTORY: usize = 32;
 
+/// In check mode, how often an image is also compared with its frame.
+const COMPARE_EVERY: u64 = 8;
+
 /// Above this share of the frame, one full copy beats several partial ones.
 const FULL_ABOVE: f64 = 0.6;
 
@@ -192,7 +195,12 @@ impl PresentHistory {
             region,
             read_before,
             read_after: reading,
-            compare_frame: self.check,
+            // The pixel-by-pixel comparison with the frame on every
+            // [`COMPARE_EVERY`]th frame; every image is still read and its
+            // hash checked on every frame. Comparing every frame converted
+            // and compared ~37 MB a frame on the LG Stylo 5, which then drew
+            // the demo too slowly to finish its pass (2026-10-22).
+            compare_frame: self.check && self.frame.is_multiple_of(COMPARE_EVERY),
         }
     }
 
@@ -530,8 +538,17 @@ mod tests {
             content.insert(index, n);
             h.verified(index, before, plan.read_after.then_some(n));
         }
+        // Frame 13: read before and after, partial, not a comparison frame.
         let plan = frame(&mut h, 0, Some(&[rect(0, 0, 10, 10)]));
-        assert!(plan.region.is_some() && plan.read_before && plan.read_after && plan.compare_frame);
+        assert!(plan.region.is_some() && plan.read_before && plan.read_after);
+        assert!(!plan.compare_frame);
+        // Frames 14, 15, 16: the sixteenth is compared with the image.
+        let mut compared = 0;
+        for index in [1, 2, 0] {
+            compared +=
+                usize::from(frame(&mut h, index, Some(&[rect(0, 0, 10, 10)])).compare_frame);
+        }
+        assert_eq!(compared, 1, "one frame in {COMPARE_EVERY}");
         h.frame_mismatch(3);
         assert_eq!(h.trust(), Trust::Refused);
     }

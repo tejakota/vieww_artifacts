@@ -6,7 +6,7 @@
         [--project-arn ARN]          default: $DEVICE_FARM_PROJECT_ARN
         [--devices "Pixel 8,Galaxy A14"]  name substrings; default: picked by tier
         [--count 3]                  phones when picking by tier (low ... high)
-        [--region us-west-2] [--timeout-min 90] [--video]
+        [--region us-west-2] [--timeout-min 120] [--video]
 
 What happens:
 
@@ -432,7 +432,7 @@ def main():
     parser.add_argument("--devices", default="")
     parser.add_argument("--count", type=int, default=3)
     parser.add_argument("--region", default=os.environ.get("DEVICE_FARM_REGION", "us-west-2"))
-    parser.add_argument("--timeout-min", type=int, default=90)
+    parser.add_argument("--timeout-min", type=int, default=120)
     parser.add_argument("--video", action="store_true")
     parser.add_argument("--run-name", default=os.environ.get("GITHUB_SHA", "local")[:12])
     args = parser.parse_args()
@@ -478,7 +478,7 @@ def main():
             }
         ),
         "--execution-configuration",
-        json.dumps({"jobTimeoutMinutes": 45, "videoCapture": bool(args.video)}),
+        json.dumps({"jobTimeoutMinutes": 75, "videoCapture": bool(args.video)}),
     )["run"]
     say(f"scheduled {run['arn']}")
     (out / "run-arn.txt").write_text(run["arn"] + "\n")

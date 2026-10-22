@@ -233,6 +233,22 @@ impl Watch {
                 format!("{} over {over:.0} s", thermal.join("; ")),
             );
         }
+        // **Shadows blurred**, across both renderers
+        // (`vieww_paint::native::shadow_blurs`): whether the shadow caches hold.
+        // A steady screen blurs none; a scroll should blur only what the cache
+        // has not seen — an animated shadow, a new shape.
+        let (blurs, pixels) = vieww_paint::native::shadow_blurs();
+        #[expect(clippy::cast_precision_loss, reason = "counts")]
+        let per_frame = blurs as f64 / log.frames().max(1) as f64;
+        #[expect(clippy::cast_precision_loss, reason = "counts")]
+        let megapixels = pixels as f64 / 1.0e6;
+        results.observe(
+            "shadow_blurs",
+            format!(
+                "{blurs} over {} frames ({per_frame:.2} a frame), {megapixels:.1} Mpx in all",
+                log.frames()
+            ),
+        );
         // **The first frames against the last**, on a run long enough for
         // that to differ: a phone that throttles shows it here as a slower,
         // later window.
@@ -893,6 +909,14 @@ impl DeviceSuite {
                 return;
             }
             watch.frame(log);
+            // Progress, so `ci/mobile/device-suite.sh` waits as long as frames
+            // keep coming rather than for a fixed time: a fixed deadline is
+            // either too short for the slowest screen on the slowest phone
+            // (the LG Stylo 5 drew the stress screen slower than 4 fps,
+            // 2026-10-22) or wasted on every other.
+            if log.frames().is_multiple_of(60) {
+                report!("__VIEWW_PROGRESS__ frames={}", log.frames());
+            }
             if !watch.done(log) {
                 return;
             }
