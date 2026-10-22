@@ -111,6 +111,12 @@ never ran) found and fixed:
   `--out`, `--key`, `--trust`) no longer read their value as a project
   directory; "1 sessions"; starter cards of even height; plan lines no
   longer carry the CLI's indentation into the window.
+- **The brand on the title bar, once.** The app's own strip carried the
+  mark and the name again directly under the system title bar, so the
+  top of the window read "wright" twice. The name and the logo now live
+  on the title bar itself — the title text, and the mark as the window's
+  icon beside it (Windows and X11 draw the icon in that bar; macOS takes
+  it to the Dock) — and the app bar under it starts with the page title.
 
 ### Governance, operations and proof (same release)
 

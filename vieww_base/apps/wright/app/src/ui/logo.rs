@@ -7,7 +7,8 @@
 //!       (7,19)  (17,19)
 //! ```
 //!
-//! Drawn, never loaded: the same painter makes the top-bar mark, the
+//! Drawn, never loaded: the same painter makes the window icon (the title
+//! bar's picture, beside the name — `shell::window_icon` renders it), the
 //! splash (where the stroke draws itself), the pale background watermark
 //! the splash settles into, and the app icon the installers ship
 //! (`wright ui --icon <png>`). One definition, so they cannot drift apart.
