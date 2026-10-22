@@ -168,15 +168,23 @@ pub(crate) fn shadow_frame(
     surface: Rect,
 ) -> ShadowFrame {
     let origin = transform.apply(Offset::new(rect.left, rect.top));
-    let whole = (origin.dx.floor(), origin.dy.floor());
+    // The sub-pixel phase, **rounded to a quarter pixel**. Exact phases made
+    // every frame of a scroll a miss on a phone: 6 points a frame at a
+    // density of 3.5 is 21 device pixels and a fraction, and the fraction
+    // was new every frame (Device Farm, S26 Ultra stress screen: shadows
+    // 33.7 ms of an 82 ms CPU frame, 18.6 ms of GPU-path planning). A blurred
+    // shadow moved by at most an eighth of a pixel is not a visible change;
+    // a card now has at most sixteen phases, and a scroll reuses them.
+    let snapped = (snap_phase(origin.dx), snap_phase(origin.dy));
+    let whole = (snapped.0.floor(), snapped.1.floor());
     let canon_rect = Rect::new(0.0, 0.0, rect.right - rect.left, rect.bottom - rect.top);
     let canon_transform = Transform::new(
         transform.a,
         transform.b,
         transform.c,
         transform.d,
-        origin.dx - whole.0,
-        origin.dy - whole.1,
+        snapped.0 - whole.0,
+        snapped.1 - whole.1,
     );
     let shift = (whole.0 as i32, whole.1 as i32);
     // Free when the whole unclamped patch, put back where it belongs, is
@@ -214,6 +222,11 @@ pub(crate) fn shadow_frame(
             shift: (0, 0),
         }
     }
+}
+
+/// `v` to the nearest quarter: the sub-pixel phases a cached shadow keeps.
+fn snap_phase(v: f32) -> f32 {
+    (v * 4.0).round() / 4.0
 }
 
 /// The surface a free [`ShadowKey`] carries in place of a real one: no real
@@ -693,7 +706,7 @@ mod tests {
     /// own place; a sub-pixel move is a different phase, and a miss.
     #[test]
     fn a_whole_pixel_move_is_a_cache_hit_at_the_new_place() {
-        let surface = Rect::new(0.0, 0.0, 400.0, 800.0);
+        let surface = Rect::new(0.0, 0.0, 400.0, 2000.0);
         let mut cache = ShadowCache::new();
         let at = |top: f32| Rect::new(40.0, top, 360.0, top + 120.0);
         let (_, x0, y0) = cache
@@ -730,6 +743,19 @@ mod tests {
             surface,
         );
         assert_eq!(cache.stats(), (2, 2), "half a pixel is another phase");
+        // A scroll step with a fraction in it — a phone's 6 points at a
+        // density of 3.5 — lands on one of four phases a pixel, not a new
+        // one every frame.
+        for step in 0..32 {
+            #[expect(clippy::cast_precision_loss, reason = "a small count")]
+            let top = 200.0 + step as f32 * 21.03;
+            cache.patch(at(top), 18.0, &card_shadow(), Transform::IDENTITY, surface);
+        }
+        let (hits, misses) = cache.stats();
+        assert!(
+            misses <= 2 + 4,
+            "{misses} misses over 32 fractional steps ({hits} hits)"
+        );
     }
 
     /// Caching by shape draws exactly what drawing in place draws.
