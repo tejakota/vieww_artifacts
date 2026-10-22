@@ -72,7 +72,8 @@ pub struct Admin {
 /// The system folder for this OS.
 pub fn system_dir() -> PathBuf {
     if cfg!(target_os = "windows") {
-        PathBuf::from(std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".into())).join("Wright")
+        PathBuf::from(std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".into()))
+            .join("Wright")
     } else if cfg!(target_os = "macos") {
         PathBuf::from("/Library/Application Support/Wright")
     } else {
@@ -87,7 +88,9 @@ pub fn dir() -> Option<PathBuf> {
     if sys.join("policy.kdl").exists() {
         return Some(sys);
     }
-    std::env::var_os("WRIGHT_POLICY_DIR").map(PathBuf::from).filter(|d| d.join("policy.kdl").exists())
+    std::env::var_os("WRIGHT_POLICY_DIR")
+        .map(PathBuf::from)
+        .filter(|d| d.join("policy.kdl").exists())
 }
 
 /// The policy in force: `Ok(None)` without one, `Err` (with the sentence
@@ -101,7 +104,9 @@ pub fn load() -> Result<Option<Policy>, String> {
 
 /// Load and check the policy in one folder.
 pub fn load_from(d: &Path) -> Result<Policy, String> {
-    let refuse = |why: String| format!("Your organization's policy ({}) cannot be trusted: {why}. Nothing runs until IT fixes it.", d.join("policy.kdl").display());
+    let refuse = |why: String| {
+        format!("Your organization's policy ({}) cannot be trusted: {why}. Nothing runs until IT fixes it.", d.join("policy.kdl").display())
+    };
     let text = std::fs::read_to_string(d.join("policy.kdl")).map_err(|e| refuse(e.to_string()))?;
     let admins = admins_in(d).map_err(refuse)?;
     let (body, sig, by) = split_signature(&text).map_err(refuse)?;
@@ -109,7 +114,8 @@ pub fn load_from(d: &Path) -> Result<Policy, String> {
         .iter()
         .find(|a| a.name == by)
         .ok_or_else(|| refuse(format!("it is signed by '{by}', who is not in admins.kdl")))?;
-    let key = hex32(&admin.key).ok_or_else(|| refuse(format!("{}'s key in admins.kdl is malformed", admin.name)))?;
+    let key = hex32(&admin.key)
+        .ok_or_else(|| refuse(format!("{}'s key in admins.kdl is malformed", admin.name)))?;
     let sig = hex64(&sig).ok_or_else(|| refuse("the signature is malformed".into()))?;
     if !ed25519::verify(&key, body.as_bytes(), &sig) {
         return Err(refuse(format!("it was changed after {by} signed it")));
@@ -122,18 +128,28 @@ pub fn load_from(d: &Path) -> Result<Policy, String> {
 
 /// The administrators listed in a folder's `admins.kdl`.
 pub fn admins_in(d: &Path) -> Result<Vec<Admin>, String> {
-    let text = std::fs::read_to_string(d.join("admins.kdl")).map_err(|_| "there is no admins.kdl beside it to say who may sign".to_string())?;
+    let text = std::fs::read_to_string(d.join("admins.kdl"))
+        .map_err(|_| "there is no admins.kdl beside it to say who may sign".to_string())?;
     let doc = parse_doc(&text).map_err(|e| format!("admins.kdl: {e}"))?;
     let mut out = Vec::new();
     for n in &doc {
         if n.name != "admin" {
-            return Err(format!("admins.kdl line {}: only `admin \"name\" key=\"...\"` lines belong here", n.line));
+            return Err(format!(
+                "admins.kdl line {}: only `admin \"name\" key=\"...\"` lines belong here",
+                n.line
+            ));
         }
-        let name = n.arg_str().ok_or(format!("admins.kdl line {}: an admin needs a name", n.line))?.to_string();
+        let name = n
+            .arg_str()
+            .ok_or(format!("admins.kdl line {}: an admin needs a name", n.line))?
+            .to_string();
         let key = n
             .prop_str("key")
             .and_then(crate::signing::normalize_key)
-            .ok_or(format!("admins.kdl line {}: '{name}' needs key=\"<64 hex or did:key>\"", n.line))?;
+            .ok_or(format!(
+                "admins.kdl line {}: '{name}' needs key=\"<64 hex or did:key>\"",
+                n.line
+            ))?;
         out.push(Admin { name, key });
     }
     if out.is_empty() {
@@ -153,8 +169,14 @@ pub fn split_signature(text: &str) -> Result<(String, String, String), String> {
         if t.trim_start().starts_with("signature ") {
             let doc = parse_doc(t.trim()).map_err(|e| format!("the signature line: {e}"))?;
             let n = doc.first().ok_or("an empty signature line")?;
-            let value = n.arg_str().ok_or("the signature line has no value")?.to_string();
-            let by = n.prop_str("by").ok_or("the signature line does not say by=\"who\"")?.to_string();
+            let value = n
+                .arg_str()
+                .ok_or("the signature line has no value")?
+                .to_string();
+            let by = n
+                .prop_str("by")
+                .ok_or("the signature line does not say by=\"who\"")?
+                .to_string();
             sig = Some((value, by));
         } else {
             body.push(t.to_string());
@@ -172,7 +194,11 @@ pub fn sign(text: &str, seed: &[u8; 32], by: &str) -> Result<String, String> {
     let body = match split_signature(text) {
         Ok((b, _, _)) => b,
         Err(_) => {
-            let mut lines: Vec<String> = text.replace("\r\n", "\n").lines().map(|l| l.trim_end().to_string()).collect();
+            let mut lines: Vec<String> = text
+                .replace("\r\n", "\n")
+                .lines()
+                .map(|l| l.trim_end().to_string())
+                .collect();
             while lines.last().is_some_and(|l| l.is_empty()) {
                 lines.pop();
             }
@@ -182,11 +208,18 @@ pub fn sign(text: &str, seed: &[u8; 32], by: &str) -> Result<String, String> {
     parse_rules(&body)?;
     let sig = ed25519::sign(seed, body.as_bytes());
     let hex: String = sig.iter().map(|b| format!("{b:02x}")).collect();
-    Ok(format!("{body}signature \"{hex}\" by=\"{}\"\n", by.replace('"', "")))
+    Ok(format!(
+        "{body}signature \"{hex}\" by=\"{}\"\n",
+        by.replace('"', "")
+    ))
 }
 
 fn list(v: Option<&str>) -> Vec<String> {
-    v.unwrap_or("").split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    v.unwrap_or("")
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 fn money(v: Option<&KdlValue>) -> Result<Option<u64>, String> {
@@ -207,7 +240,9 @@ pub fn parse_rules(body: &str) -> Result<Policy, String> {
     let doc = parse_doc(body).map_err(|e| e.to_string())?;
     let mut p = Policy::default();
     for n in &doc {
-        let flag = |k: &str| matches!(n.prop(k), Some(KdlValue::Bool(true))) || n.prop_str(k) == Some("true");
+        let flag = |k: &str| {
+            matches!(n.prop(k), Some(KdlValue::Bool(true))) || n.prop_str(k) == Some("true")
+        };
         match n.name.as_str() {
             "policy" => {
                 p.org = n.arg_str().unwrap_or("your organization").to_string();
@@ -245,14 +280,20 @@ pub fn host_allowed(patterns: &[String], host: &str) -> bool {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
     patterns.iter().any(|p| {
         let p = p.to_ascii_lowercase();
-        p == "*" || p == host || p.strip_prefix("*.").is_some_and(|suffix| host.ends_with(&format!(".{suffix}")))
+        p == "*"
+            || p == host
+            || p.strip_prefix("*.")
+                .is_some_and(|suffix| host.ends_with(&format!(".{suffix}")))
     })
 }
 
 impl Policy {
     /// The rules, one sentence each, for the window and `wright admin policy show`.
     pub fn sentences(&self) -> Vec<String> {
-        let mut out = vec![format!("{} policy, version {}, signed by {}.", self.org, self.version, self.signed_by)];
+        let mut out = vec![format!(
+            "{} policy, version {}, signed by {}.",
+            self.org, self.version, self.signed_by
+        )];
         let usd = |m: u64| format!("${:.2}", m as f64 / 1e6);
         if let Some(r) = self.max_per_run_micro_usd {
             out.push(format!("A run may spend at most {}.", usd(r)));
@@ -261,19 +302,43 @@ impl Policy {
             out.push(format!("A project may spend at most {} a day.", usd(d)));
         }
         if !self.forbid_tools.is_empty() {
-            out.push(format!("These tools are not allowed: {}.", self.forbid_tools.join(", ")));
+            out.push(format!(
+                "These tools are not allowed: {}.",
+                self.forbid_tools.join(", ")
+            ));
         }
         if let Some(h) = &self.allow_hosts {
-            out.push(format!("Agents may reach only: {}.", if h.is_empty() { "nothing on the network".into() } else { h.join(", ") }));
+            out.push(format!(
+                "Agents may reach only: {}.",
+                if h.is_empty() {
+                    "nothing on the network".into()
+                } else {
+                    h.join(", ")
+                }
+            ));
         }
         if let Some(v) = &self.allow_providers {
             out.push(format!("Models come only from: {}.", v.join(", ")));
         }
         if let Some(v) = &self.allow_workers {
-            out.push(format!("External coding agents allowed: {}.", if v.is_empty() { "none".into() } else { v.join(", ") }));
+            out.push(format!(
+                "External coding agents allowed: {}.",
+                if v.is_empty() {
+                    "none".into()
+                } else {
+                    v.join(", ")
+                }
+            ));
         }
         if let Some(v) = &self.allow_mcp {
-            out.push(format!("MCP servers allowed: {}.", if v.is_empty() { "none".into() } else { v.join(", ") }));
+            out.push(format!(
+                "MCP servers allowed: {}.",
+                if v.is_empty() {
+                    "none".into()
+                } else {
+                    v.join(", ")
+                }
+            ));
         }
         if self.require_tests {
             out.push("Every plan is tested and reviewed before anything is delivered.".into());
@@ -286,7 +351,9 @@ impl Policy {
 }
 
 fn hex32(h: &str) -> Option<[u8; 32]> {
-    let v = (0..32).map(|i| u8::from_str_radix(h.get(i * 2..i * 2 + 2)?, 16).ok()).collect::<Option<Vec<u8>>>()?;
+    let v = (0..32)
+        .map(|i| u8::from_str_radix(h.get(i * 2..i * 2 + 2)?, 16).ok())
+        .collect::<Option<Vec<u8>>>()?;
     v.try_into().ok()
 }
 
@@ -294,7 +361,9 @@ fn hex64(h: &str) -> Option<[u8; 64]> {
     if h.len() != 128 {
         return None;
     }
-    let v = (0..64).map(|i| u8::from_str_radix(h.get(i * 2..i * 2 + 2)?, 16).ok()).collect::<Option<Vec<u8>>>()?;
+    let v = (0..64)
+        .map(|i| u8::from_str_radix(h.get(i * 2..i * 2 + 2)?, 16).ok())
+        .collect::<Option<Vec<u8>>>()?;
     v.try_into().ok()
 }
 
@@ -308,15 +377,26 @@ mod tests {
         let d = std::env::temp_dir().join(format!("wright-policy-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        let pk: String = ed25519::public_key(&admin_seed).iter().map(|b| format!("{b:02x}")).collect();
-        std::fs::write(d.join("admins.kdl"), format!("admin \"IT security\" key=\"{pk}\"\n")).unwrap();
+        let pk: String = ed25519::public_key(&admin_seed)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        std::fs::write(
+            d.join("admins.kdl"),
+            format!("admin \"IT security\" key=\"{pk}\"\n"),
+        )
+        .unwrap();
         d
     }
 
     #[test]
     fn a_signed_policy_loads_and_says_its_rules() {
         let d = folder("ok", [3u8; 32]);
-        std::fs::write(d.join("policy.kdl"), sign(BODY, &[3u8; 32], "IT security").unwrap()).unwrap();
+        std::fs::write(
+            d.join("policy.kdl"),
+            sign(BODY, &[3u8; 32], "IT security").unwrap(),
+        )
+        .unwrap();
         let p = load_from(&d).unwrap();
         assert_eq!(p.org, "Acme IT");
         assert_eq!(p.max_per_run_micro_usd, Some(2_000_000));
@@ -324,7 +404,9 @@ mod tests {
         assert!(p.require_tests && p.require_admin_approval);
         assert!(p.sentences().iter().any(|s| s.contains("*.acme.com")));
         // Windows line ends do not break it.
-        let crlf = std::fs::read_to_string(d.join("policy.kdl")).unwrap().replace('\n', "\r\n");
+        let crlf = std::fs::read_to_string(d.join("policy.kdl"))
+            .unwrap()
+            .replace('\n', "\r\n");
         std::fs::write(d.join("policy.kdl"), crlf).unwrap();
         assert!(load_from(&d).is_ok());
     }
@@ -336,16 +418,31 @@ mod tests {
         std::fs::write(d.join("policy.kdl"), BODY).unwrap();
         assert!(load_from(&d).unwrap_err().contains("not signed"));
         // Signed by someone not in admins.kdl.
-        std::fs::write(d.join("policy.kdl"), sign(BODY, &[9u8; 32], "Mallory").unwrap()).unwrap();
+        std::fs::write(
+            d.join("policy.kdl"),
+            sign(BODY, &[9u8; 32], "Mallory").unwrap(),
+        )
+        .unwrap();
         assert!(load_from(&d).unwrap_err().contains("not in admins.kdl"));
         // Signed by a listed name but the wrong key.
-        std::fs::write(d.join("policy.kdl"), sign(BODY, &[9u8; 32], "IT security").unwrap()).unwrap();
+        std::fs::write(
+            d.join("policy.kdl"),
+            sign(BODY, &[9u8; 32], "IT security").unwrap(),
+        )
+        .unwrap();
         assert!(load_from(&d).unwrap_err().contains("changed after"));
         // Loosened after signing.
         let good = sign(BODY, &[3u8; 32], "IT security").unwrap();
-        std::fs::write(d.join("policy.kdl"), good.replace("max-per-run=\"2.00\"", "max-per-run=\"200.00\"")).unwrap();
+        std::fs::write(
+            d.join("policy.kdl"),
+            good.replace("max-per-run=\"2.00\"", "max-per-run=\"200.00\""),
+        )
+        .unwrap();
         let err = load_from(&d).unwrap_err();
-        assert!(err.contains("changed after") && err.contains("Nothing runs"), "{err}");
+        assert!(
+            err.contains("changed after") && err.contains("Nothing runs"),
+            "{err}"
+        );
         // No admins.kdl at all.
         std::fs::remove_file(d.join("admins.kdl")).unwrap();
         std::fs::write(d.join("policy.kdl"), good).unwrap();
@@ -357,7 +454,10 @@ mod tests {
         let p = vec!["*.acme.com".to_string(), "hn.algolia.com".to_string()];
         assert!(host_allowed(&p, "api.acme.com"));
         assert!(host_allowed(&p, "HN.algolia.com."));
-        assert!(!host_allowed(&p, "acme.com"), "a wildcard is for subdomains");
+        assert!(
+            !host_allowed(&p, "acme.com"),
+            "a wildcard is for subdomains"
+        );
         assert!(!host_allowed(&p, "evil-acme.com"));
         assert!(!host_allowed(&p, "acme.com.evil.net"));
         assert!(host_allowed(&["*".into()], "anything.example"));

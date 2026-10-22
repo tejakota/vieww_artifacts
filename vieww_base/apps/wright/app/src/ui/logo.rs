@@ -17,7 +17,13 @@ use vieww::foundation::StrokeStyle;
 use vieww::prelude::*;
 
 /// The W's corners on the 24-unit grid.
-pub const W: [(f32, f32); 5] = [(3.0, 6.0), (7.0, 19.0), (12.0, 9.0), (17.0, 19.0), (21.0, 6.0)];
+pub const W: [(f32, f32); 5] = [
+    (3.0, 6.0),
+    (7.0, 19.0),
+    (12.0, 9.0),
+    (17.0, 19.0),
+    (21.0, 6.0),
+];
 /// Stroke width on the same grid.
 pub const STROKE: f32 = 2.0;
 
@@ -34,7 +40,11 @@ pub struct Mark {
 
 impl Mark {
     pub const fn solid(color: Color) -> Self {
-        Mark { color, progress: 1.0, soft: 0.0 }
+        Mark {
+            color,
+            progress: 1.0,
+            soft: 0.0,
+        }
     }
 
     /// The mark, `side` pixels square.
@@ -45,8 +55,14 @@ impl Mark {
 
 /// The polyline up to `progress` of its length, in pixels.
 fn visible(progress: f32, scale: f32, origin: Offset) -> Vec<Offset> {
-    let pts: Vec<Offset> = W.iter().map(|&(x, y)| Offset::new(origin.dx + x * scale, origin.dy + y * scale)).collect();
-    let lens: Vec<f32> = pts.windows(2).map(|w| ((w[1].dx - w[0].dx).powi(2) + (w[1].dy - w[0].dy).powi(2)).sqrt()).collect();
+    let pts: Vec<Offset> = W
+        .iter()
+        .map(|&(x, y)| Offset::new(origin.dx + x * scale, origin.dy + y * scale))
+        .collect();
+    let lens: Vec<f32> = pts
+        .windows(2)
+        .map(|w| ((w[1].dx - w[0].dx).powi(2) + (w[1].dy - w[0].dy).powi(2)).sqrt())
+        .collect();
     let mut left = lens.iter().sum::<f32>() * progress.clamp(0.0, 1.0);
     let mut out = vec![pts[0]];
     for (i, len) in lens.iter().enumerate() {
@@ -54,7 +70,10 @@ fn visible(progress: f32, scale: f32, origin: Offset) -> Vec<Offset> {
             break;
         }
         let t = (left / len).min(1.0);
-        out.push(Offset::new(pts[i].dx + (pts[i + 1].dx - pts[i].dx) * t, pts[i].dy + (pts[i + 1].dy - pts[i].dy) * t));
+        out.push(Offset::new(
+            pts[i].dx + (pts[i + 1].dx - pts[i].dx) * t,
+            pts[i].dy + (pts[i + 1].dy - pts[i].dy) * t,
+        ));
         left -= len;
     }
     out
@@ -92,7 +111,12 @@ impl Painter for Mark {
             let alpha = 1.0 - (1.0 - f32::from(color.a) / 255.0).powf(1.0 / STEPS as f32);
             for k in (0..STEPS).rev() {
                 let w = width + 2.0 * reach * k as f32 / (STEPS - 1) as f32 - reach * 0.6;
-                book.stroke_styled(path.clone(), color.with_alpha((alpha * 255.0).round() as u8), w.max(width * 0.5), StrokeStyle::rounded());
+                book.stroke_styled(
+                    path.clone(),
+                    color.with_alpha((alpha * 255.0).round() as u8),
+                    w.max(width * 0.5),
+                    StrokeStyle::rounded(),
+                );
             }
         } else {
             book.stroke_styled(path, color, width, StrokeStyle::rounded());

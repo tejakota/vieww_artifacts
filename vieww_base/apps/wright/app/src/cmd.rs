@@ -51,7 +51,9 @@ fn split(args: &[String]) -> (Vec<&str>, Vec<&str>) {
 
 /// Flags followed by a value (`--key <hex>`): `split` keeps the value out
 /// of the positional arguments. Read the value with [`flag_values`].
-const VALUE_FLAGS: [&str; 8] = ["--key", "--trust", "--runs", "--at", "--port", "--out", "--bin", "--name"];
+const VALUE_FLAGS: [&str; 8] = [
+    "--key", "--trust", "--runs", "--at", "--port", "--out", "--bin", "--name",
+];
 
 /// Every value given for a repeatable flag (`--key a --key b`).
 fn flag_values<'a>(args: &'a [String], name: &str) -> Vec<&'a str> {
@@ -63,22 +65,38 @@ fn flag_values<'a>(args: &'a [String], name: &str) -> Vec<&'a str> {
 }
 
 fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
-    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str)
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
 }
 
 /// A project directory from an argument that may be a dir or a .kdl file.
 pub fn project_dir(arg: Option<&str>) -> PathBuf {
     let p = PathBuf::from(arg.unwrap_or("."));
     if p.extension().map(|e| e == "kdl").unwrap_or(false) {
-        p.parent().map(|d| if d.as_os_str().is_empty() { PathBuf::from(".") } else { d.to_path_buf() }).unwrap_or_else(|| ".".into())
+        p.parent()
+            .map(|d| {
+                if d.as_os_str().is_empty() {
+                    PathBuf::from(".")
+                } else {
+                    d.to_path_buf()
+                }
+            })
+            .unwrap_or_else(|| ".".into())
     } else {
         p
     }
 }
 
 fn read_blueprint_file(path: &Path) -> Result<Blueprint, String> {
-    let file = if path.is_dir() { path.join("blueprint.kdl") } else { path.to_path_buf() };
-    let src = std::fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
+    let file = if path.is_dir() {
+        path.join("blueprint.kdl")
+    } else {
+        path.to_path_buf()
+    };
+    let src = std::fs::read_to_string(&file)
+        .map_err(|e| format!("cannot read {}: {e}", file.display()))?;
     parse::blueprint(&src).map_err(|e| format!("{}: {e}", file.display()))
 }
 
@@ -137,14 +155,28 @@ pub fn plan(args: &[String]) -> i32 {
     };
 
     println!("WRIGHT PLAN — {}", bp.meta.name);
-    println!("  commit {}  ·  format {}  ·  confirmed {}", wright_core::hash::short(&canon::content_hash(&bp)), bp.meta.format, if bp.intent.confirmed.is_empty() { "(not yet)" } else { &bp.intent.confirmed });
+    println!(
+        "  commit {}  ·  format {}  ·  confirmed {}",
+        wright_core::hash::short(&canon::content_hash(&bp)),
+        bp.meta.format,
+        if bp.intent.confirmed.is_empty() {
+            "(not yet)"
+        } else {
+            &bp.intent.confirmed
+        }
+    );
     println!();
     println!("WHAT WILL HAPPEN (generated from the blueprint, not by a model)");
     for l in confirm::summary(&bp, &graph) {
         println!("  {} {}", if l.attention { "!" } else { "-" }, l.text);
     }
     println!();
-    println!("FIRING ORDER ({} tasks in {} stages, up to {} at once)", graph.tasks.len(), graph.stages.len(), graph.max_parallelism());
+    println!(
+        "FIRING ORDER ({} tasks in {} stages, up to {} at once)",
+        graph.tasks.len(),
+        graph.stages.len(),
+        graph.max_parallelism()
+    );
     let never = wright_engine::firing::never_cached_names(&bp);
     for (i, stage) in graph.stages.iter().enumerate() {
         let names: Vec<String> = stage
@@ -172,7 +204,10 @@ pub fn plan(args: &[String]) -> i32 {
     let dir = project_dir(pos.first().copied());
     if let Ok(store) = Store::open(&dir) {
         if let Some(last) = store.blueprint_history().last() {
-            if let Ok(prev) = store.blueprint_at(&last.hash).and_then(|t| parse::blueprint(&t).map_err(|e| e.to_string())) {
+            if let Ok(prev) = store
+                .blueprint_at(&last.hash)
+                .and_then(|t| parse::blueprint(&t).map_err(|e| e.to_string()))
+            {
                 let d = bpdiff::diff(&prev, &bp);
                 println!("REFIRE PREVIEW (vs. committed version {})", last.seq);
                 if d.is_empty() {
@@ -181,7 +216,10 @@ pub fn plan(args: &[String]) -> i32 {
                     println!("  {}", bpdiff::refire_plan(&d, &bp).sentence());
                 }
                 if !never.is_empty() {
-                    println!("  Always fresh (live data or delivery): {}.", never.into_iter().collect::<Vec<_>>().join(", "));
+                    println!(
+                        "  Always fresh (live data or delivery): {}.",
+                        never.into_iter().collect::<Vec<_>>().join(", ")
+                    );
                 }
             }
         }
@@ -196,7 +234,10 @@ fn approver_for(flags: &[&str], dir: &Path) -> Box<dyn Approver> {
         Box::new(AutoApprove)
     } else if flags.contains(&"--headless") {
         match Store::open(dir) {
-            Ok(store) => Box::new(StoreApprover { store, timeout: std::time::Duration::from_secs(600) }),
+            Ok(store) => Box::new(StoreApprover {
+                store,
+                timeout: std::time::Duration::from_secs(600),
+            }),
             Err(_) => Box::new(AutoDeny),
         }
     } else if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
@@ -212,7 +253,9 @@ fn report(summary: &wright_engine::RunSummary) {
     for (name, s) in &summary.tasks {
         let detail = match s {
             TaskStatus::Ran { cost_micro_usd } => format!("ran       {}", usd(*cost_micro_usd)),
-            TaskStatus::Cached { saved_micro_usd } => format!("cached    saved {}", usd(*saved_micro_usd)),
+            TaskStatus::Cached { saved_micro_usd } => {
+                format!("cached    saved {}", usd(*saved_micro_usd))
+            }
             TaskStatus::Skipped(r) => format!("skipped   {r}"),
             TaskStatus::Failed(r) => format!("FAILED    {r}"),
         };
@@ -227,7 +270,10 @@ fn report(summary: &wright_engine::RunSummary) {
 pub fn verify(args: &[String]) -> i32 {
     let (pos, _) = split(args);
     // Keys the person checked with the signer themselves, for this call.
-    let pins: Vec<String> = flag_values(args, "--key").into_iter().map(String::from).collect();
+    let pins: Vec<String> = flag_values(args, "--key")
+        .into_iter()
+        .map(String::from)
+        .collect();
     let target = pos.first().copied().unwrap_or(".");
     // A standard credential (receipt.vc.json)? Its proof and its issuer.
     if target.ends_with(".vc.json") && Path::new(target).is_file() {
@@ -251,7 +297,8 @@ pub fn verify(args: &[String]) -> i32 {
         // Receipts live in Wright's store, outside the project: verifying
         // one needs the project dir as the second argument.
         let project = pos.get(1).copied().unwrap_or(".");
-        let v = wright_engine::verify::receipt_file_pinned(&PathBuf::from(project), &receipt, &pins);
+        let v =
+            wright_engine::verify::receipt_file_pinned(&PathBuf::from(project), &receipt, &pins);
         print!("{}", v.report());
         return if v.ok { 0 } else { 1 };
     }
@@ -261,7 +308,11 @@ pub fn verify(args: &[String]) -> i32 {
         match wright_engine::verify::project_run_pinned(&dir, Some(run), &pins) {
             Ok(v) => {
                 print!("{}", v.report());
-                if v.ok { 0 } else { 1 }
+                if v.ok {
+                    0
+                } else {
+                    1
+                }
             }
             Err(e) => fail(e),
         }
@@ -270,7 +321,11 @@ pub fn verify(args: &[String]) -> i32 {
         match wright_engine::verify::project_run_pinned(&dir, None, &pins) {
             Ok(v) => {
                 print!("{}", v.report());
-                if v.ok { 0 } else { 1 }
+                if v.ok {
+                    0
+                } else {
+                    1
+                }
             }
             Err(e) => fail(e),
         }
@@ -324,7 +379,9 @@ pub fn handoff(args: &[String]) -> i32 {
 pub fn bench(args: &[String]) -> i32 {
     let (pos, _) = split(args);
     let dir = project_dir(pos.first().copied());
-    let runs: u32 = flag_value(args, "--runs").and_then(|v| v.parse().ok()).unwrap_or(3);
+    let runs: u32 = flag_value(args, "--runs")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
     println!("firing {runs} time(s) and measuring (each run's receipt stays, verify it):\n");
     match wright_engine::bench::run(&dir, runs) {
         Ok(r) => {
@@ -342,16 +399,29 @@ pub fn recipe(args: &[String]) -> i32 {
         println!("usage: wright recipe list | install <file.recipe.kdl> [target-dir] [--trust <publisher key>] | sign <file.recipe.kdl> | verify <file.recipe.kdl> [--trust <publisher key>]");
         return 2;
     };
-    let pins: Vec<String> = flag_values(args, "--trust").into_iter().map(String::from).collect();
+    let pins: Vec<String> = flag_values(args, "--trust")
+        .into_iter()
+        .map(String::from)
+        .collect();
     match cmd {
         "list" => {
             let (listed, problems) = wright_engine::recipe::list();
             if listed.is_empty() {
-                println!("no recipes in the gallery (looked in ./recipes and {}).", wright_home().join("recipes").display());
+                println!(
+                    "no recipes in the gallery (looked in ./recipes and {}).",
+                    wright_home().join("recipes").display()
+                );
             }
             for l in &listed {
-                let signed = if l.recipe.signature.is_some() { "signed" } else { "UNSIGNED" };
-                println!("[{signed}] {} — {} (v{}) by {}", l.recipe.id, l.recipe.description, l.recipe.version, l.recipe.publisher);
+                let signed = if l.recipe.signature.is_some() {
+                    "signed"
+                } else {
+                    "UNSIGNED"
+                };
+                println!(
+                    "[{signed}] {} — {} (v{}) by {}",
+                    l.recipe.id, l.recipe.description, l.recipe.version, l.recipe.publisher
+                );
                 println!("        {}", l.path.display());
             }
             for p in &problems {
@@ -363,11 +433,17 @@ pub fn recipe(args: &[String]) -> i32 {
             let Some(file) = pos.get(1).copied() else {
                 return fail("usage: wright recipe verify <file.recipe.kdl>");
             };
-            let r = match std::fs::read_to_string(file).map_err(|e| e.to_string()).and_then(|t| wright_core::recipe::Recipe::parse(&t)) {
+            let r = match std::fs::read_to_string(file)
+                .map_err(|e| e.to_string())
+                .and_then(|t| wright_core::recipe::Recipe::parse(&t))
+            {
                 Ok(r) => r,
                 Err(e) => return fail(e),
             };
-            match r.verify().and_then(|_| wright_engine::recipe::publisher_trusted(&r, &pins)) {
+            match r
+                .verify()
+                .and_then(|_| wright_engine::recipe::publisher_trusted(&r, &pins))
+            {
                 Ok(who) => {
                     println!("OK: recipe '{}' verifies: its signature covers its exact meaning, and the key is {who}.", r.id);
                     0
@@ -397,7 +473,10 @@ pub fn recipe(args: &[String]) -> i32 {
                 Ok(()) => {
                     println!("signed {} with this machine's publishing key.", file);
                     if let Ok(k) = wright_runtime::signing::SigningKey::resolve() {
-                        println!("people who install it pin this public key: {}", k.public_hex());
+                        println!(
+                            "people who install it pin this public key: {}",
+                            k.public_hex()
+                        );
                         println!("  wright trust add \"<your name>\" {}", k.public_hex());
                     }
                     0
@@ -405,7 +484,9 @@ pub fn recipe(args: &[String]) -> i32 {
                 Err(e) => fail(e),
             }
         }
-        other => fail(format!("unknown recipe command '{other}' (list | install | sign | verify)")),
+        other => fail(format!(
+            "unknown recipe command '{other}' (list | install | sign | verify)"
+        )),
     }
 }
 
@@ -443,13 +524,15 @@ pub fn trust(args: &[String]) -> i32 {
         Some("me") => match wright_runtime::signing::SigningKey::resolve() {
             Ok(k) => {
                 println!("{}", k.public_hex());
-                if let Some(pk) = wright_runtime::signing::normalize_key(&k.public_hex()).and_then(|h| {
-                    let mut b = [0u8; 32];
-                    for (i, x) in b.iter_mut().enumerate() {
-                        *x = u8::from_str_radix(&h[i * 2..i * 2 + 2], 16).ok()?;
-                    }
-                    Some(b)
-                }) {
+                if let Some(pk) =
+                    wright_runtime::signing::normalize_key(&k.public_hex()).and_then(|h| {
+                        let mut b = [0u8; 32];
+                        for (i, x) in b.iter_mut().enumerate() {
+                            *x = u8::from_str_radix(&h[i * 2..i * 2 + 2], 16).ok()?;
+                        }
+                        Some(b)
+                    })
+                {
                     println!("{}", wright_core::jcs::did_key(&pk));
                 }
                 0
@@ -466,7 +549,10 @@ pub fn trust(args: &[String]) -> i32 {
             let name = name.to_string();
             edit(&move |c: &mut Config| {
                 c.trusted.retain(|t| t.key != key);
-                c.trusted.push(wright_runtime::config::TrustedKey { name: name.clone(), key: key.clone() });
+                c.trusted.push(wright_runtime::config::TrustedKey {
+                    name: name.clone(),
+                    key: key.clone(),
+                });
                 Ok(())
             })
         }
@@ -484,7 +570,9 @@ pub fn trust(args: &[String]) -> i32 {
                 Ok(())
             })
         }
-        Some(other) => fail(format!("unknown trust command '{other}' (list | add | remove | me)")),
+        Some(other) => fail(format!(
+            "unknown trust command '{other}' (list | add | remove | me)"
+        )),
     }
 }
 
@@ -503,8 +591,17 @@ pub fn mcp(args: &[String]) -> i32 {
                 Err(e) => return fail(e),
             };
             let bin = flag_value(args, "--bin");
-            println!("installing {spec} into {} ...", wright_home().join("mcp").join(name).display());
-            let installed = match wright_tools::mcp_install::install(name, &source, bin, flags.contains(&"--allow-scripts"), &wright_home().join("mcp")) {
+            println!(
+                "installing {spec} into {} ...",
+                wright_home().join("mcp").join(name).display()
+            );
+            let installed = match wright_tools::mcp_install::install(
+                name,
+                &source,
+                bin,
+                flags.contains(&"--allow-scripts"),
+                &wright_home().join("mcp"),
+            ) {
                 Ok(i) => i,
                 Err(e) => return fail(e),
             };
@@ -532,7 +629,9 @@ pub fn mcp(args: &[String]) -> i32 {
         Some("list") | None => {
             let cfg = Config::load().unwrap_or_else(|_| Config::builtin());
             if cfg.mcp_servers.is_empty() {
-                println!("no MCP servers. Add one: wright mcp install <name> npm:<package>@<version>");
+                println!(
+                    "no MCP servers. Add one: wright mcp install <name> npm:<package>@<version>"
+                );
             }
             for m in &cfg.mcp_servers {
                 let state = match &m.tree {
@@ -559,7 +658,9 @@ pub fn mcp(args: &[String]) -> i32 {
 pub fn mcp_hash(args: &[String]) -> i32 {
     let (pos, _) = split(args);
     let Some(command) = pos.first().copied() else {
-        return fail("usage: wright mcp-hash <the program config.kdl runs | an installed server folder>");
+        return fail(
+            "usage: wright mcp-hash <the program config.kdl runs | an installed server folder>",
+        );
     };
     if Path::new(command).is_dir() {
         return match wright_tools::mcp::tree_pin(Path::new(command)) {
@@ -596,7 +697,11 @@ pub fn run(args: &[String]) -> i32 {
         (Ok((bp, graph, cfg)), false) => {
             let plan = wright_engine::cost::estimate(&bp, &graph, &cfg);
             println!("{}\n", plan.sentence);
-            if !yes && plan.builtin_possible && plan.est_micro_usd > 0 && std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+            if !yes
+                && plan.builtin_possible
+                && plan.est_micro_usd > 0
+                && std::io::IsTerminal::is_terminal(&std::io::stdin())
+            {
                 for (key, label) in wright_engine::cost::choices(&plan) {
                     println!("  [{key}] {label}");
                 }
@@ -608,7 +713,9 @@ pub fn run(args: &[String]) -> i32 {
                     // Run everything on the built-in model: drop every
                     // non-builtin provider, and the fallback does the rest.
                     let mut builtin_only = cfg.clone();
-                    builtin_only.providers.retain(|p| matches!(p.kind, wright_runtime::config::ProviderKind::Builtin));
+                    builtin_only.providers.retain(|p| {
+                        matches!(p.kind, wright_runtime::config::ProviderKind::Builtin)
+                    });
                     forced_config = Some(builtin_only);
                     println!("running on the built-in model: free, slower, nothing leaves this machine.\n");
                 }
@@ -632,14 +739,20 @@ pub fn run(args: &[String]) -> i32 {
     match fire(&dir, opts) {
         Ok(s) => {
             report(&s);
-            if s.ok { 0 } else { 1 }
+            if s.ok {
+                0
+            } else {
+                1
+            }
         }
         Err(e) => fail(e),
     }
 }
 
 /// Read+validate the blueprint and compile it, for the cost estimate.
-fn load_for_cost(dir: &Path) -> Result<(Blueprint, wright_core::compiler::TaskGraph, Config), String> {
+fn load_for_cost(
+    dir: &Path,
+) -> Result<(Blueprint, wright_core::compiler::TaskGraph, Config), String> {
     let bp = wright_engine::load_blueprint(dir)?;
     let graph = compiler::compile(&bp)?;
     Ok((bp, graph, Config::load()?))
@@ -662,7 +775,11 @@ pub fn resume(args: &[String]) -> i32 {
     match fire(&dir, opts) {
         Ok(s) => {
             report(&s);
-            if s.ok { 0 } else { 1 }
+            if s.ok {
+                0
+            } else {
+                1
+            }
         }
         Err(e) => fail(e),
     }
@@ -684,12 +801,18 @@ pub fn runs(args: &[String]) -> i32 {
         return 0;
     }
     for id in ids {
-        let Ok(log) = store.read_events(id) else { continue };
+        let Ok(log) = store.read_events(id) else {
+            continue;
+        };
         let first = log.events().first();
         let last = log.events().last();
-        let when = first.map(|e| wright_core::schedule::rfc3339_utc((e.at_ms / 1000) as i64)).unwrap_or_default();
+        let when = first
+            .map(|e| wright_core::schedule::rfc3339_utc((e.at_ms / 1000) as i64))
+            .unwrap_or_default();
         let headline = match last {
-            Some(e) if matches!(e.kind, EventKind::RunFinished | EventKind::RunFailed) => e.note.clone(),
+            Some(e) if matches!(e.kind, EventKind::RunFinished | EventKind::RunFailed) => {
+                e.note.clone()
+            }
             Some(_) => "(did not finish — `wright resume` can continue it)".into(),
             None => "(empty)".into(),
         };
@@ -715,7 +838,9 @@ pub fn replay(args: &[String]) -> i32 {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
-    let at = flag_value(args, "--at").and_then(|v| v.parse().ok()).unwrap_or(log.len() as u64);
+    let at = flag_value(args, "--at")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(log.len() as u64);
     let snap = log.snapshot_at(at);
     for e in snap.events() {
         print_event(e);
@@ -725,7 +850,10 @@ pub fn replay(args: &[String]) -> i32 {
     let mut spent = 0u64;
     for e in snap.events() {
         if e.kind == EventKind::TokensRecorded {
-            spent += e.data_value().and_then(|v| v.get("cost_micro_usd").and_then(|c| c.as_u64())).unwrap_or(0);
+            spent += e
+                .data_value()
+                .and_then(|v| v.get("cost_micro_usd").and_then(|c| c.as_u64()))
+                .unwrap_or(0);
         }
         if let Some(a) = &e.agent {
             let st = match e.kind {
@@ -741,7 +869,10 @@ pub fn replay(args: &[String]) -> i32 {
         }
     }
     println!();
-    println!("STATE AT EVENT {at} of {} (replayed from the log; nothing was re-run)", log.len());
+    println!(
+        "STATE AT EVENT {at} of {} (replayed from the log; nothing was re-run)",
+        log.len()
+    );
     for (card, st) in cards {
         println!("  {card:<12} {st}");
     }
@@ -761,7 +892,10 @@ pub fn approve(args: &[String]) -> i32 {
         let dir = project_dir(pos.get(3).copied());
         return match Store::open(&dir).and_then(|s| s.answer_approval(run, n, yes)) {
             Ok(()) => {
-                println!("request {run}-{n}: {}", if yes { "approved" } else { "denied" });
+                println!(
+                    "request {run}-{n}: {}",
+                    if yes { "approved" } else { "denied" }
+                );
                 0
             }
             Err(e) => fail(e),
@@ -781,7 +915,10 @@ pub fn approve(args: &[String]) -> i32 {
         for l in reason.lines().take(8) {
             println!("    {l}");
         }
-        println!("  answer: wright approve {run} {n} yes|no {}", dir.display());
+        println!(
+            "  answer: wright approve {run} {n} yes|no {}",
+            dir.display()
+        );
     }
     0
 }
@@ -790,7 +927,10 @@ pub fn approve(args: &[String]) -> i32 {
 pub fn diff(args: &[String]) -> i32 {
     let (pos, _) = split(args);
     let (old, new) = if pos.len() >= 2 {
-        match (read_blueprint_file(Path::new(pos[0])), read_blueprint_file(Path::new(pos[1]))) {
+        match (
+            read_blueprint_file(Path::new(pos[0])),
+            read_blueprint_file(Path::new(pos[1])),
+        ) {
             (Ok(a), Ok(b)) => (a, b),
             (Err(e), _) | (_, Err(e)) => return fail(e),
         }
@@ -808,7 +948,10 @@ pub fn diff(args: &[String]) -> i32 {
             println!("No committed version yet — the first firing runs everything.");
             return 0;
         };
-        match store.blueprint_at(&last.hash).and_then(|t| parse::blueprint(&t).map_err(|e| e.to_string())) {
+        match store
+            .blueprint_at(&last.hash)
+            .and_then(|t| parse::blueprint(&t).map_err(|e| e.to_string()))
+        {
             Ok(old) => (old, new),
             Err(e) => return fail(e),
         }
@@ -870,7 +1013,11 @@ pub fn new(args: &[String]) -> i32 {
     println!("wright> What should exist? (describe the outcome in your own words)");
     match interview::interview(&dir, &config, &mut TerminalInterview) {
         Ok(Some(bp)) => {
-            println!("\nWrote {}/blueprint.kdl ({}).", dir.display(), bp.intent.confirmed);
+            println!(
+                "\nWrote {}/blueprint.kdl ({}).",
+                dir.display(),
+                bp.intent.confirmed
+            );
             println!("Next: wright run {}", dir.display());
             0
         }
@@ -982,7 +1129,9 @@ pub fn spend(args: &[String]) -> i32 {
     };
     let mut rows = Vec::new();
     for run in store.runs() {
-        let Ok(log) = store.read_events(run) else { continue };
+        let Ok(log) = store.read_events(run) else {
+            continue;
+        };
         let finished = log.events().last().map(|e| e.at_ms).unwrap_or(0);
         rows.push((run, finished, wright_engine::spend::attribute(log.events())));
     }
@@ -1030,7 +1179,10 @@ pub fn receipt(args: &[String]) -> i32 {
     let text = match std::fs::read_to_string(&vc_path) {
         Ok(t) => t,
         Err(_) => {
-            let receipt = match std::fs::read_to_string(run_dir.join("receipt.json")).map_err(|e| e.to_string()).and_then(|t| wright_core::wire::json::parse(&t)) {
+            let receipt = match std::fs::read_to_string(run_dir.join("receipt.json"))
+                .map_err(|e| e.to_string())
+                .and_then(|t| wright_core::wire::json::parse(&t))
+            {
                 Ok(r) => r,
                 Err(e) => return fail(format!("run {run} has no readable receipt: {e}")),
             };
@@ -1038,10 +1190,19 @@ pub fn receipt(args: &[String]) -> i32 {
                 Ok(k) => k,
                 Err(e) => return fail(e),
             };
-            if receipt.get("signature").and_then(|s| s.str_of("public_key")) != Some(key.public_hex().as_str()) {
-                return fail(format!("run {run} was signed by another key; only its signer can issue its credential"));
+            if receipt
+                .get("signature")
+                .and_then(|s| s.str_of("public_key"))
+                != Some(key.public_hex().as_str())
+            {
+                return fail(format!(
+                    "run {run} was signed by another key; only its signer can issue its credential"
+                ));
             }
-            if !wright_engine::verify::project_run(&dir, Some(run)).map(|v| v.ok).unwrap_or(false) {
+            if !wright_engine::verify::project_run(&dir, Some(run))
+                .map(|v| v.ok)
+                .unwrap_or(false)
+            {
                 return fail(format!("run {run}'s receipt does not verify; a credential for it would vouch for something false"));
             }
             match wright_engine::credential::issue(&receipt, &key) {
@@ -1227,7 +1388,10 @@ pub fn start(_args: &[String]) -> i32 {
 
 /// `wright fleet` — everything scheduled, its state and its last run.
 pub fn fleet(_args: &[String]) -> i32 {
-    print!("{}", wright_engine::fleet::report(&wright_engine::fleet::rows()));
+    print!(
+        "{}",
+        wright_engine::fleet::report(&wright_engine::fleet::rows())
+    );
     0
 }
 
@@ -1238,7 +1402,10 @@ pub fn daemon() -> i32 {
             let opts = FireOptions {
                 trigger: Trigger::Schedule,
                 approver: match Store::open(project) {
-                    Ok(store) => Box::new(StoreApprover { store, timeout: std::time::Duration::from_secs(900) }),
+                    Ok(store) => Box::new(StoreApprover {
+                        store,
+                        timeout: std::time::Duration::from_secs(900),
+                    }),
                     Err(_) => Box::new(AutoDeny),
                 },
                 ..FireOptions::default()
@@ -1248,7 +1415,12 @@ pub fn daemon() -> i32 {
                 Err(e) => eprintln!("{}: {e}", project.display()),
             }
         },
-        |msg| println!("{} {msg}", wright_core::schedule::rfc3339_utc((wright_core::events::now_ms() / 1000) as i64)),
+        |msg| {
+            println!(
+                "{} {msg}",
+                wright_core::schedule::rfc3339_utc((wright_core::events::now_ms() / 1000) as i64)
+            )
+        },
     )
 }
 
@@ -1281,18 +1453,25 @@ pub fn secret(args: &[String]) -> i32 {
             }
             Err(e) => fail(e),
         },
-        _ => fail("usage: wright secret set <keychain:path>   |   wright secret env <keychain:path>"),
+        _ => {
+            fail("usage: wright secret set <keychain:path>   |   wright secret env <keychain:path>")
+        }
     }
 }
 
 /// `wright mock-provider [--port N]` — the offline model, for demos and CI.
 pub fn mock_provider(args: &[String]) -> i32 {
-    let port = flag_value(args, "--port").and_then(|p| p.parse().ok()).unwrap_or(7878);
+    let port = flag_value(args, "--port")
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(7878);
     match wright_engine::mock::MockProvider::start(port) {
         Ok(m) => {
             println!("mock provider listening on {}", m.base_url());
             println!("add to {}:", wright_home().join("config.kdl").display());
-            println!("  provider \"mock\" kind=\"openai\" base=\"{}\" models=\"*\"", m.base_url());
+            println!(
+                "  provider \"mock\" kind=\"openai\" base=\"{}\" models=\"*\"",
+                m.base_url()
+            );
             loop {
                 std::thread::park();
             }
@@ -1331,14 +1510,30 @@ pub fn export(args: &[String]) -> i32 {
         Ok(b) => b,
         Err(e) => return fail(e),
     };
-    let asked: Vec<Kind> = Kind::ALL.into_iter().filter(|k| flags.contains(&k.flag())).collect();
-    let kinds = if asked.is_empty() { export::available(&bp) } else { asked };
-    let out = out_arg.map(PathBuf::from).unwrap_or_else(|| export::default_out(&dir));
+    let asked: Vec<Kind> = Kind::ALL
+        .into_iter()
+        .filter(|k| flags.contains(&k.flag()))
+        .collect();
+    let kinds = if asked.is_empty() {
+        export::available(&bp)
+    } else {
+        asked
+    };
+    let out = out_arg
+        .map(PathBuf::from)
+        .unwrap_or_else(|| export::default_out(&dir));
     let mut failed = 0;
     for kind in kinds {
         match export::export(&dir, kind, &out) {
-            Ok(e) => println!("{:<16} {}
-{:<16} {} bytes · sha256 {}", kind.label(), e.path.display(), "", e.bytes, e.sha256),
+            Ok(e) => println!(
+                "{:<16} {}
+{:<16} {} bytes · sha256 {}",
+                kind.label(),
+                e.path.display(),
+                "",
+                e.bytes,
+                e.sha256
+            ),
             Err(err) => {
                 failed += 1;
                 eprintln!("{:<16} not made: {err}", kind.label());
@@ -1354,7 +1549,9 @@ pub fn export(args: &[String]) -> i32 {
 pub fn model(args: &[String]) -> i32 {
     use std::io::Write as _;
     use wright_runtime::local::{self, Kind};
-    let find = |id: &str| local::find(id).ok_or_else(|| format!("no built-in model '{id}' (wright model list)"));
+    let find = |id: &str| {
+        local::find(id).ok_or_else(|| format!("no built-in model '{id}' (wright model list)"))
+    };
     let pull = |m: &local::BuiltinModel| -> Result<(), String> {
         let mut shown = u32::MAX;
         local::pull(m, &mut |p| {
@@ -1364,7 +1561,10 @@ pub fn model(args: &[String]) -> i32 {
                 let _ = std::io::stdout().flush();
             }
         })?;
-        println!("\r  {:<80}", format!("{} ready: {}", m.id, m.path().display()));
+        println!(
+            "\r  {:<80}",
+            format!("{} ready: {}", m.id, m.path().display())
+        );
         Ok(())
     };
     let result: Result<(), String> = match args.first().map(String::as_str) {
@@ -1442,22 +1642,43 @@ pub fn doctor() -> i32 {
             failures += 1;
         }
     };
-    println!("wright {} doctor — {} / {}", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH);
+    println!(
+        "wright {} doctor — {} / {}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
     println!();
     let home = wright_home();
     line(
         "wright home",
-        std::fs::create_dir_all(&home).map(|_| home.display().to_string()).map_err(|e| format!("{}: {e}", home.display())),
+        std::fs::create_dir_all(&home)
+            .map(|_| home.display().to_string())
+            .map_err(|e| format!("{}: {e}", home.display())),
     );
     line(
         "blueprint machine",
         parse::blueprint(DOCTOR_BLUEPRINT)
             .map_err(|e| e.to_string())
-            .and_then(|bp| validate::validate(&bp).map_err(|e| e.join("; ")).map(|_| bp))
-            .and_then(|bp| compiler::compile(&bp).map(|g| format!("parse + validate + compile ({} tasks)", g.tasks.len()))),
+            .and_then(|bp| {
+                validate::validate(&bp)
+                    .map_err(|e| e.join("; "))
+                    .map(|_| bp)
+            })
+            .and_then(|bp| {
+                compiler::compile(&bp)
+                    .map(|g| format!("parse + validate + compile ({} tasks)", g.tasks.len()))
+            }),
     );
     let ex = Executor::new();
-    line("executor", if ex.block_on(async { 41 + 1 }) == 42 { Ok("block_on, spawn_blocking".into()) } else { Err("broken".into()) });
+    line(
+        "executor",
+        if ex.block_on(async { 41 + 1 }) == 42 {
+            Ok("block_on, spawn_blocking".into())
+        } else {
+            Err("broken".into())
+        },
+    );
     line("https", wright_runtime::net::https_backend());
     line(
         "extra CAs",
@@ -1467,23 +1688,52 @@ pub fn doctor() -> i32 {
         },
     );
     for (k, _) in Config::load().map(|c| c.env).unwrap_or_default() {
-        let state = if std::env::var_os(&k).is_some() { "set" } else { "NOT set (see the warning above)" };
+        let state = if std::env::var_os(&k).is_some() {
+            "set"
+        } else {
+            "NOT set (see the warning above)"
+        };
         println!("    env {k:<24} {state}");
     }
     for m in &wright_runtime::local::CATALOG {
         let state = if m.installed() {
             Ok(format!("{} ready ({}, {})", m.id, m.size_text(), m.license))
         } else if m.partial() > 0 {
-            Ok(format!("{}: {} of {} downloaded (wright model pull {} resumes)", m.id, wright_runtime::local::human_bytes(m.partial()), m.size_text(), m.id))
+            Ok(format!(
+                "{}: {} of {} downloaded (wright model pull {} resumes)",
+                m.id,
+                wright_runtime::local::human_bytes(m.partial()),
+                m.size_text(),
+                m.id
+            ))
         } else {
-            Ok(format!("{} downloads on first use ({}), or now: wright model pull {}", m.id, m.size_text(), m.id))
+            Ok(format!(
+                "{} downloads on first use ({}), or now: wright model pull {}",
+                m.id,
+                m.size_text(),
+                m.id
+            ))
         };
-        line(if m.kind == wright_runtime::local::Kind::Text { "built-in text" } else { "built-in speech" }, state);
+        line(
+            if m.kind == wright_runtime::local::Kind::Text {
+                "built-in text"
+            } else {
+                "built-in speech"
+            },
+            state,
+        );
     }
     line("sandbox", wright_tools::sandbox::capabilities());
-    line("time zones", wright_runtime::tz::load("Asia/Kolkata").map(|_| "system zone database".into()));
+    line(
+        "time zones",
+        wright_runtime::tz::load("Asia/Kolkata").map(|_| "system zone database".into()),
+    );
     let git = std::process::Command::new("git").arg("--version").output();
-    line("git", git.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).map_err(|_| "not installed (the git tool will refuse)".into()));
+    line(
+        "git",
+        git.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .map_err(|_| "not installed (the git tool will refuse)".into()),
+    );
     match Config::load() {
         Ok(cfg) => {
             line("config", Ok(cfg.source.clone()));
@@ -1500,8 +1750,18 @@ pub fn doctor() -> i32 {
         }
         Err(e) => line("config", Err(e)),
     }
-    println!("  tools              {} in the palette ({} implemented)", wright_core::palette::PALETTE.len(), wright_core::palette::PALETTE.iter().filter(|t| t.implemented).count());
-    println!("  workforce          {} system agents (2 built-in, run as code)", wright_agents::roster().len());
+    println!(
+        "  tools              {} in the palette ({} implemented)",
+        wright_core::palette::PALETTE.len(),
+        wright_core::palette::PALETTE
+            .iter()
+            .filter(|t| t.implemented)
+            .count()
+    );
+    println!(
+        "  workforce          {} system agents (2 built-in, run as code)",
+        wright_agents::roster().len()
+    );
     println!("  ui                 {}", crate::ui_status());
     let _ = (TaskKind::Project(String::new()), convention::LANGUAGES);
     println!();

@@ -26,10 +26,13 @@ use crate::num::{dot_f32, f16_to_f32, softmax_term};
 
 /// Languages in the model's token order (the token is `sot + 1 + index`).
 pub const LANGUAGES: [&str; 100] = [
-    "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "no", "th", "ur",
-    "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si",
-    "km", "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "haw", "ln", "ha",
-    "ba", "jw", "su", "yue",
+    "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it",
+    "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "no", "th", "ur",
+    "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn",
+    "et", "mk", "br", "eu", "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si",
+    "km", "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo",
+    "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "haw", "ln",
+    "ha", "ba", "jw", "su", "yue",
 ];
 
 #[derive(Debug, Clone)]
@@ -66,7 +69,11 @@ impl Specials {
     fn new(n_vocab: usize, space: Option<u32>) -> Specials {
         let multilingual = n_vocab >= 51865;
         let languages = if multilingual { n_vocab - 51765 - 1 } else { 0 };
-        let shift = if multilingual { 1 + languages as u32 - 99 } else { 0 };
+        let shift = if multilingual {
+            1 + languages as u32 - 99
+        } else {
+            0
+        };
         let m = u32::from(multilingual);
         Specials {
             eot: 50256 + m,
@@ -84,7 +91,10 @@ impl Specials {
     }
 
     pub fn language_token(&self, code: &str) -> Option<u32> {
-        LANGUAGES[..self.languages.min(LANGUAGES.len())].iter().position(|l| *l == code).map(|i| self.sot + 1 + i as u32)
+        LANGUAGES[..self.languages.min(LANGUAGES.len())]
+            .iter()
+            .position(|l| *l == code)
+            .map(|i| self.sot + 1 + i as u32)
     }
 }
 
@@ -154,7 +164,11 @@ const EPS: f32 = 1e-5;
 fn layer_norm(x: &mut [f32], w: &[f32], b: &[f32]) {
     let n = x.len() as f64;
     let mean = x.iter().map(|v| f64::from(*v)).sum::<f64>() / n;
-    let var = x.iter().map(|v| (f64::from(*v) - mean).powi(2)).sum::<f64>() / n;
+    let var = x
+        .iter()
+        .map(|v| (f64::from(*v) - mean).powi(2))
+        .sum::<f64>()
+        / n;
     let inv = 1.0 / (var as f32 + EPS).sqrt();
     let mean = mean as f32;
     for ((v, w), b) in x.iter_mut().zip(w).zip(b) {
@@ -179,9 +193,23 @@ struct Raw {
 impl Raw {
     fn floats(&self) -> Result<Vec<f32>, String> {
         match self.ttype {
-            0 => Ok(self.data.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect()),
-            1 => Ok(self.data.as_chunks::<2>().0.iter().map(|b| f16_to_f32(u16::from_le_bytes(*b))).collect()),
-            t => Err(format!("tensor type {t} is not supported (use an F16 or F32 Whisper file)")),
+            0 => Ok(self
+                .data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect()),
+            1 => Ok(self
+                .data
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| f16_to_f32(u16::from_le_bytes(*b)))
+                .collect()),
+            t => Err(format!(
+                "tensor type {t} is not supported (use an F16 or F32 Whisper file)"
+            )),
         }
     }
 }
@@ -193,16 +221,25 @@ struct Reader<'a> {
 
 impl Reader<'_> {
     fn take(&mut self, n: usize) -> Result<&[u8], String> {
-        let end = self.at.checked_add(n).filter(|e| *e <= self.b.len()).ok_or("the file ends early (truncated download?)")?;
+        let end = self
+            .at
+            .checked_add(n)
+            .filter(|e| *e <= self.b.len())
+            .ok_or("the file ends early (truncated download?)")?;
         let s = &self.b[self.at..end];
         self.at = end;
         Ok(s)
     }
     fn i32(&mut self) -> Result<i32, String> {
-        Ok(i32::from_le_bytes(self.take(4)?.try_into().map_err(|_| "i32")?))
+        Ok(i32::from_le_bytes(
+            self.take(4)?.try_into().map_err(|_| "i32")?,
+        ))
     }
     fn count(&mut self) -> Result<usize, String> {
-        usize::try_from(self.i32()?).ok().filter(|n| *n <= self.b.len()).ok_or_else(|| "implausible size in the model file".to_string())
+        usize::try_from(self.i32()?)
+            .ok()
+            .filter(|n| *n <= self.b.len())
+            .ok_or_else(|| "implausible size in the model file".to_string())
     }
 }
 
@@ -223,12 +260,33 @@ impl Whisper {
         for v in &mut h {
             *v = r.count()?;
         }
-        let hp = Hparams { n_vocab: h[0], audio_ctx: h[1], audio_state: h[2], audio_head: h[3], audio_layer: h[4], text_ctx: h[5], text_state: h[6], text_head: h[7], text_layer: h[8], n_mels: h[9] };
+        let hp = Hparams {
+            n_vocab: h[0],
+            audio_ctx: h[1],
+            audio_state: h[2],
+            audio_head: h[3],
+            audio_layer: h[4],
+            text_ctx: h[5],
+            text_state: h[6],
+            text_head: h[7],
+            text_layer: h[8],
+            n_mels: h[9],
+        };
         let (n_mel, n_fft) = (r.count()?, r.count()?);
         if n_mel != hp.n_mels || n_fft != audio::N_FFT / 2 + 1 {
-            return Err(format!("mel filters are {n_mel} x {n_fft}; expected {} x {}", hp.n_mels, audio::N_FFT / 2 + 1));
+            return Err(format!(
+                "mel filters are {n_mel} x {n_fft}; expected {} x {}",
+                hp.n_mels,
+                audio::N_FFT / 2 + 1
+            ));
         }
-        let filters: Vec<f32> = r.take(4 * n_mel * n_fft)?.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
+        let filters: Vec<f32> = r
+            .take(4 * n_mel * n_fft)?
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
         let n_words = r.count()?;
         let mut vocab = Vec::with_capacity(hp.n_vocab.max(n_words));
         for _ in 0..n_words {
@@ -250,12 +308,20 @@ impl Whisper {
             let size = match ttype {
                 0 => n * 4,
                 1 => n * 2,
-                t => return Err(format!("{name}: tensor type {t} is not supported (use an F16 or F32 Whisper file)")),
+                t => {
+                    return Err(format!(
+                        "{name}: tensor type {t} is not supported (use an F16 or F32 Whisper file)"
+                    ))
+                }
             };
             let data = r.take(size)?.to_vec();
             tensors.insert(name, Raw { ttype, dims, data });
         }
-        let get = |name: &str| tensors.get(name).ok_or_else(|| format!("the model file has no tensor '{name}'"));
+        let get = |name: &str| {
+            tensors
+                .get(name)
+                .ok_or_else(|| format!("the model file has no tensor '{name}'"))
+        };
         let vec = |name: &str| get(name)?.floats();
         let mat = |name: &str, rows: usize, cols: usize| -> Result<Matrix, String> {
             let t = get(name)?;
@@ -263,7 +329,11 @@ impl Whisper {
                 return Err(format!("{name} is {:?}, expected {rows} x {cols}", t.dims));
             }
             let w = t.floats()?;
-            Ok(if quantize && t.ttype == 1 && cols.is_multiple_of(32) { Matrix::quantized(&w, rows, cols) } else { Matrix::floats(w, rows, cols) })
+            Ok(if quantize && t.ttype == 1 && cols.is_multiple_of(32) {
+                Matrix::quantized(&w, rows, cols)
+            } else {
+                Matrix::floats(w, rows, cols)
+            })
         };
         let attn = |p: &str, d: usize| -> Result<Attn, String> {
             Ok(Attn {
@@ -289,10 +359,21 @@ impl Whisper {
             })
         };
         let (da, dt) = (hp.audio_state, hp.text_state);
-        let enc = (0..hp.audio_layer).map(|i| Ok((attn(&format!("encoder.blocks.{i}.attn"), da)?, mlp(&format!("encoder.blocks.{i}"), da)?))).collect::<Result<Vec<_>, String>>()?;
+        let enc = (0..hp.audio_layer)
+            .map(|i| {
+                Ok((
+                    attn(&format!("encoder.blocks.{i}.attn"), da)?,
+                    mlp(&format!("encoder.blocks.{i}"), da)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
         let dec = (0..hp.text_layer)
             .map(|i| {
-                Ok(DecoderLayer { attn: attn(&format!("decoder.blocks.{i}.attn"), dt)?, cross: attn(&format!("decoder.blocks.{i}.cross_attn"), dt)?, mlp: mlp(&format!("decoder.blocks.{i}"), dt)? })
+                Ok(DecoderLayer {
+                    attn: attn(&format!("decoder.blocks.{i}.attn"), dt)?,
+                    cross: attn(&format!("decoder.blocks.{i}.cross_attn"), dt)?,
+                    mlp: mlp(&format!("decoder.blocks.{i}"), dt)?,
+                })
             })
             .collect::<Result<Vec<_>, String>>()?;
         // Convolutions as matrices over [channel][tap] windows (3 taps).
@@ -301,9 +382,15 @@ impl Whisper {
         let space = vocab.iter().position(|t| t == b" ").map(|i| i as u32);
         let specials = Specials::new(hp.n_vocab, space);
         if (specials.beg as usize) >= hp.n_vocab {
-            return Err(format!("a vocabulary of {} is too small for Whisper's special tokens", hp.n_vocab));
+            return Err(format!(
+                "a vocabulary of {} is too small for Whisper's special tokens",
+                hp.n_vocab
+            ));
         }
-        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            .min(16);
         Ok(Whisper {
             specials,
             filters,
@@ -364,7 +451,8 @@ impl Whisper {
             let t = hp.audio_ctx;
             for (a, m) in &self.enc {
                 let mut h = x.clone();
-                h.chunks_mut(d).for_each(|r| layer_norm(r, &a.ln_w, &a.ln_b));
+                h.chunks_mut(d)
+                    .for_each(|r| layer_norm(r, &a.ln_w, &a.ln_b));
                 let q = affine(pool, &[], &a.q, &a.q_b, &h, t);
                 let k = affine(pool, &[], &a.k, &[], &h, t);
                 let v = affine(pool, &[], &a.v, &a.v_b, &h, t);
@@ -372,26 +460,46 @@ impl Whisper {
                 add(&mut x, &affine(pool, &[], &a.o, &a.o_b, &att, t));
                 self.mlp(pool, m, &mut x, t, d);
             }
-            x.chunks_mut(d).for_each(|r| layer_norm(r, &self.enc_ln_w, &self.enc_ln_b));
-            let cross = self.dec.iter().map(|l| (affine(pool, &[], &l.cross.k, &[], &x, t), affine(pool, &[], &l.cross.v, &l.cross.v_b, &x, t))).collect();
+            x.chunks_mut(d)
+                .for_each(|r| layer_norm(r, &self.enc_ln_w, &self.enc_ln_b));
+            let cross = self
+                .dec
+                .iter()
+                .map(|l| {
+                    (
+                        affine(pool, &[], &l.cross.k, &[], &x, t),
+                        affine(pool, &[], &l.cross.v, &l.cross.v_b, &x, t),
+                    )
+                })
+                .collect();
             Heard { cross }
         })
     }
 
     fn mlp<'a>(&'a self, pool: &Pool<'a>, m: &'a Mlp, x: &mut [f32], t: usize, d: usize) {
         let mut h = x.to_vec();
-        h.chunks_mut(d).for_each(|r| layer_norm(r, &m.ln_w, &m.ln_b));
+        h.chunks_mut(d)
+            .for_each(|r| layer_norm(r, &m.ln_w, &m.ln_b));
         let mut u = affine(pool, &[], &m.up, &m.up_b, &h, t);
         u.iter_mut().for_each(|v| *v = gelu(*v));
         add(x, &affine(pool, &[], &m.down, &m.down_b, &u, t));
     }
 
     pub fn start(&self) -> DecodeState {
-        DecodeState { k: vec![Vec::new(); self.dec.len()], v: vec![Vec::new(); self.dec.len()], pos: 0 }
+        DecodeState {
+            k: vec![Vec::new(); self.dec.len()],
+            v: vec![Vec::new(); self.dec.len()],
+            pos: 0,
+        }
     }
 
     /// Feed one token; the logits for the next.
-    pub fn step(&self, heard: &Heard, st: &mut DecodeState, token: u32) -> Result<Vec<f32>, String> {
+    pub fn step(
+        &self,
+        heard: &Heard,
+        st: &mut DecodeState,
+        token: u32,
+    ) -> Result<Vec<f32>, String> {
         let hp = &self.hp;
         let d = hp.text_state;
         if st.pos >= hp.text_ctx {
@@ -438,7 +546,11 @@ impl Whisper {
         let lang: Vec<f32> = (0..n).map(|i| logits[(s.sot + 1) as usize + i]).collect();
         let max = lang.iter().fold(f32::MIN, |m, v| m.max(*v));
         let sum: f32 = lang.iter().map(|v| (v - max).exp()).sum();
-        let mut out: Vec<(&'static str, f32)> = lang.iter().enumerate().map(|(i, v)| (LANGUAGES[i], (v - max).exp() / sum)).collect();
+        let mut out: Vec<(&'static str, f32)> = lang
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (LANGUAGES[i], (v - max).exp() / sum))
+            .collect();
         out.sort_by(|a, b| b.1.total_cmp(&a.1));
         Ok(out)
     }
@@ -453,7 +565,15 @@ impl Whisper {
                 logits[sp as usize] = f32::NEG_INFINITY;
             }
         }
-        for t in [s.not, s.sot, s.nosp, s.solm, s.translate, s.transcribe, s.prev] {
+        for t in [
+            s.not,
+            s.sot,
+            s.nosp,
+            s.solm,
+            s.translate,
+            s.transcribe,
+            s.prev,
+        ] {
             logits[t as usize] = f32::NEG_INFINITY;
         }
         for v in &mut logits[s.beg as usize..] {
@@ -466,7 +586,11 @@ impl Whisper {
 
     /// Speech to text. `language`: a code (`"en"`), or `None` to detect it
     /// from the first 30 seconds.
-    pub fn transcribe(&self, samples: &[f32], language: Option<&str>) -> Result<Transcript, String> {
+    pub fn transcribe(
+        &self,
+        samples: &[f32],
+        language: Option<&str>,
+    ) -> Result<Transcript, String> {
         let s = self.specials;
         let (mel, n_len) = self.mel(samples);
         let real_frames = samples.len() / audio::HOP;
@@ -486,7 +610,10 @@ impl Whisper {
             };
             let mut prompt = vec![s.sot];
             if s.languages > 0 {
-                prompt.push(s.language_token(&lang).ok_or_else(|| format!("'{lang}' is not a language this model knows"))?);
+                prompt.push(
+                    s.language_token(&lang)
+                        .ok_or_else(|| format!("'{lang}' is not a language this model knows"))?,
+                );
                 prompt.push(s.transcribe);
             }
             prompt.push(s.not);
@@ -498,7 +625,14 @@ impl Whisper {
             let limit = self.hp.text_ctx / 2;
             for n in 0..limit {
                 self.suppress(&mut logits, n == 0);
-                let next = logits.iter().enumerate().fold((0, f32::NEG_INFINITY), |b, (i, v)| if *v > b.1 { (i, *v) } else { b }).0 as u32;
+                let next = logits
+                    .iter()
+                    .enumerate()
+                    .fold(
+                        (0, f32::NEG_INFINITY),
+                        |b, (i, v)| if *v > b.1 { (i, *v) } else { b },
+                    )
+                    .0 as u32;
                 if next == s.eot {
                     break;
                 }
@@ -510,12 +644,23 @@ impl Whisper {
             }
             offset += WINDOW_FRAMES;
         }
-        let bytes: Vec<u8> = text.iter().filter(|t| **t < s.eot).flat_map(|t| self.vocab[*t as usize].clone()).collect();
-        Ok(Transcript { text: String::from_utf8_lossy(&bytes).trim().to_string(), language: detected.unwrap_or_else(|| "en".into()), tokens: text })
+        let bytes: Vec<u8> = text
+            .iter()
+            .filter(|t| **t < s.eot)
+            .flat_map(|t| self.vocab[*t as usize].clone())
+            .collect();
+        Ok(Transcript {
+            text: String::from_utf8_lossy(&bytes).trim().to_string(),
+            language: detected.unwrap_or_else(|| "en".into()),
+            tokens: text,
+        })
     }
 
     pub fn token_bytes(&self, t: u32) -> &[u8] {
-        self.vocab.get(t as usize).map(|v| v.as_slice()).unwrap_or(&[])
+        self.vocab
+            .get(t as usize)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }
 
@@ -565,10 +710,23 @@ fn im2col(x: &[f32], channels: usize, frames: usize, stride: usize) -> Vec<f32> 
 /// K and V (rows of `d` hold every head side by side), four queries at a
 /// time against each key row.
 #[allow(clippy::too_many_arguments)]
-fn attention(q: &[f32], k: &[f32], v: &[f32], tq: usize, tk: usize, d: usize, heads: usize, threads: usize) -> Vec<f32> {
+fn attention(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    tq: usize,
+    tk: usize,
+    d: usize,
+    heads: usize,
+    threads: usize,
+) -> Vec<f32> {
     let hd = d / heads;
     let scale = 1.0 / (hd as f32).sqrt();
-    let gather = |x: &[f32], n: usize, h: usize| -> Vec<f32> { (0..n).flat_map(|i| x[i * d + h * hd..][..hd].iter().copied()).collect() };
+    let gather = |x: &[f32], n: usize, h: usize| -> Vec<f32> {
+        (0..n)
+            .flat_map(|i| x[i * d + h * hd..][..hd].iter().copied())
+            .collect()
+    };
     let work = |hs: std::ops::Range<usize>| {
         let mut out = Vec::new();
         for h in hs {
@@ -587,7 +745,8 @@ fn attention(q: &[f32], k: &[f32], v: &[f32], tq: usize, tk: usize, d: usize, he
                 for p in 0..tk {
                     let kp = &kh[p * hd..(p + 1) * hd];
                     for j in 0..n {
-                        scores[j * tk + p] = dot_f32(&qh[(i0 + j) * hd..(i0 + j + 1) * hd], kp) * scale;
+                        scores[j * tk + p] =
+                            dot_f32(&qh[(i0 + j) * hd..(i0 + j + 1) * hd], kp) * scale;
                     }
                 }
                 for j in 0..n {
@@ -616,8 +775,13 @@ fn attention(q: &[f32], k: &[f32], v: &[f32], tq: usize, tk: usize, d: usize, he
         work(0..heads)
     } else {
         std::thread::scope(|s| {
-            let jobs: Vec<_> = ranges(heads, threads).into_iter().map(|hs| s.spawn(move || work(hs))).collect();
-            jobs.into_iter().flat_map(|j| j.join().expect("attention thread")).collect()
+            let jobs: Vec<_> = ranges(heads, threads)
+                .into_iter()
+                .map(|hs| s.spawn(move || work(hs)))
+                .collect();
+            jobs.into_iter()
+                .flat_map(|j| j.join().expect("attention thread"))
+                .collect()
         })
     };
     let mut out = vec![0.0f32; tq * d];
@@ -666,9 +830,15 @@ mod tests {
     #[test]
     fn one_query_matches_the_batched_path() {
         let (tk, d, heads) = (37, 16, 4);
-        let q: Vec<f32> = (0..2 * d).map(|i| ((i * 5 % 11) as f32 - 5.0) / 4.0).collect();
-        let k: Vec<f32> = (0..tk * d).map(|i| ((i * 3 % 7) as f32 - 3.0) / 3.0).collect();
-        let v: Vec<f32> = (0..tk * d).map(|i| ((i * 13 % 17) as f32 - 8.0) / 8.0).collect();
+        let q: Vec<f32> = (0..2 * d)
+            .map(|i| ((i * 5 % 11) as f32 - 5.0) / 4.0)
+            .collect();
+        let k: Vec<f32> = (0..tk * d)
+            .map(|i| ((i * 3 % 7) as f32 - 3.0) / 3.0)
+            .collect();
+        let v: Vec<f32> = (0..tk * d)
+            .map(|i| ((i * 13 % 17) as f32 - 8.0) / 8.0)
+            .collect();
         let batched = attention(&q, &k, &v, 2, tk, d, heads, 2);
         let one = attend_one(&q[d..], &k, &v, tk, d, heads);
         for (a, b) in batched[d..].iter().zip(&one) {
@@ -679,11 +849,17 @@ mod tests {
     #[test]
     fn special_tokens_follow_the_vocabulary_size() {
         let s = Specials::new(51865, Some(220));
-        assert_eq!((s.eot, s.sot, s.transcribe, s.not, s.beg, s.languages), (50257, 50258, 50359, 50363, 50364, 99));
+        assert_eq!(
+            (s.eot, s.sot, s.transcribe, s.not, s.beg, s.languages),
+            (50257, 50258, 50359, 50363, 50364, 99)
+        );
         assert_eq!(s.language_token("en"), Some(50259));
         // large-v3: one more language, everything after it moves by one.
         let s = Specials::new(51866, None);
-        assert_eq!((s.transcribe, s.beg, s.language_token("yue")), (50360, 50365, Some(50358)));
+        assert_eq!(
+            (s.transcribe, s.beg, s.language_token("yue")),
+            (50360, 50365, Some(50358))
+        );
         // English-only models have no language tokens.
         let s = Specials::new(51864, None);
         assert_eq!((s.eot, s.sot, s.languages), (50256, 50257, 0));

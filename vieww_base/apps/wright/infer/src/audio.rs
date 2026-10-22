@@ -25,7 +25,8 @@ pub fn wav_to_samples(bytes: &[u8]) -> Result<Vec<f32>, String> {
         return Err("not a WAV file".into());
     }
     let u16_at = |i: usize| u16::from_le_bytes([bytes[i], bytes[i + 1]]);
-    let u32_at = |i: usize| u32::from_le_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
+    let u32_at =
+        |i: usize| u32::from_le_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
     let mut at = 12;
     let mut fmt: Option<(u16, u16, u32, u16)> = None; // format, channels, rate, bits
     let mut data: Option<&[u8]> = None;
@@ -111,8 +112,13 @@ pub fn log_mel(samples: &[f32], filters: &[f32], n_mel: usize) -> (Vec<f32>, usi
     }
     let n_len = (padded.len() - N_FFT) / HOP;
     let real = n + pad; // past this, frames are silence
-    let hann: Vec<f32> = (0..N_FFT).map(|i| 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / N_FFT as f64).cos() as f32)).collect();
-    let (cos, sin): (Vec<f32>, Vec<f32>) = (0..N_FFT).map(|i| (2.0 * std::f64::consts::PI * i as f64 / N_FFT as f64).sin_cos()).map(|(s, c)| (c as f32, s as f32)).unzip();
+    let hann: Vec<f32> = (0..N_FFT)
+        .map(|i| 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / N_FFT as f64).cos() as f32))
+        .collect();
+    let (cos, sin): (Vec<f32>, Vec<f32>) = (0..N_FFT)
+        .map(|i| (2.0 * std::f64::consts::PI * i as f64 / N_FFT as f64).sin_cos())
+        .map(|(s, c)| (c as f32, s as f32))
+        .unzip();
     let floor = (1e-10f64).log10() as f32;
     let mut mel = vec![floor; n_mel * n_len];
     let mut frame = vec![0.0f32; N_FFT];
@@ -121,7 +127,11 @@ pub fn log_mel(samples: &[f32], filters: &[f32], n_mel: usize) -> (Vec<f32>, usi
         let off = i * HOP;
         let take = N_FFT.min(real - off);
         for j in 0..N_FFT {
-            frame[j] = if j < take { hann[j] * padded[off + j] } else { 0.0 };
+            frame[j] = if j < take {
+                hann[j] * padded[off + j]
+            } else {
+                0.0
+            };
         }
         for (k, p) in power.iter_mut().enumerate() {
             let (mut re, mut im) = (0.0f32, 0.0f32);
@@ -133,7 +143,11 @@ pub fn log_mel(samples: &[f32], filters: &[f32], n_mel: usize) -> (Vec<f32>, usi
             *p = re * re + im * im;
         }
         for j in 0..n_mel {
-            let sum: f64 = power.iter().zip(&filters[j * n_bins..(j + 1) * n_bins]).map(|(p, f)| f64::from(*p) * f64::from(*f)).sum();
+            let sum: f64 = power
+                .iter()
+                .zip(&filters[j * n_bins..(j + 1) * n_bins])
+                .map(|(p, f)| f64::from(*p) * f64::from(*f))
+                .sum();
             mel[j * n_len + i] = sum.max(1e-10).log10() as f32;
         }
     }
@@ -187,11 +201,15 @@ mod tests {
             filters[j * bins + 10 * j] = 1.0;
         }
         // 1 kHz = bin 25 (16000 / 400 = 40 Hz a bin)... use 1600 Hz = bin 40 = band 4.
-        let x: Vec<f32> = (0..16_000).map(|i| (2.0 * std::f32::consts::PI * 1600.0 * i as f32 / 16_000.0).sin()).collect();
+        let x: Vec<f32> = (0..16_000)
+            .map(|i| (2.0 * std::f32::consts::PI * 1600.0 * i as f32 / 16_000.0).sin())
+            .collect();
         let (mel, n_len) = log_mel(&x, &filters, n_mel);
         assert_eq!(n_len, (16_000 + 480_000) / HOP);
         let mid = 50;
-        let band = (0..n_mel).max_by(|a, b| mel[a * n_len + mid].total_cmp(&mel[b * n_len + mid])).unwrap();
+        let band = (0..n_mel)
+            .max_by(|a, b| mel[a * n_len + mid].total_cmp(&mel[b * n_len + mid]))
+            .unwrap();
         assert_eq!(band, 4);
         // Silence after the sound sits at the floor: (max - 8 + 4) / 4.
         let max = mel.iter().fold(f32::MIN, |m, v| m.max(*v));

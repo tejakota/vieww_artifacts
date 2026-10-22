@@ -29,7 +29,11 @@ impl Recording {
         let format = Arc::new(Mutex::new((1usize, 48_000u32)));
         let level = Arc::new(AtomicU32::new(0));
         let limit = 48_000 * 2 * wright_runtime::voice::MAX_SECONDS;
-        let (s, f, l) = (Arc::clone(&samples), Arc::clone(&format), Arc::clone(&level));
+        let (s, f, l) = (
+            Arc::clone(&samples),
+            Arc::clone(&format),
+            Arc::clone(&level),
+        );
         let stream = open_input(StreamConfig::default(), move || {
             let (s, f, l) = (Arc::clone(&s), Arc::clone(&f), Arc::clone(&l));
             Box::new(move |block: &[f32], info: &BlockInfo| {
@@ -48,10 +52,18 @@ impl Recording {
             })
         })
         .map_err(|errors| {
-            let why: Vec<String> = errors.iter().map(|(name, e)| format!("{name}: {e}")).collect();
+            let why: Vec<String> = errors
+                .iter()
+                .map(|(name, e)| format!("{name}: {e}"))
+                .collect();
             format!("no microphone could be opened ({})", why.join("; "))
         })?;
-        Ok(Recording { _stream: stream, samples, format, level })
+        Ok(Recording {
+            _stream: stream,
+            samples,
+            format,
+            level,
+        })
     }
 
     pub fn level(&self) -> f32 {

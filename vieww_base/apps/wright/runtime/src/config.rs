@@ -142,9 +142,17 @@ pub struct TrustedKey {
 /// Names that say "this value is a secret": they must be keychain refs.
 pub fn looks_secret(name: &str) -> bool {
     let n = name.to_ascii_uppercase();
-    ["KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "AUTH", "CREDENTIAL"]
-        .iter()
-        .any(|w| n.contains(w))
+    [
+        "KEY",
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "PASSWD",
+        "AUTH",
+        "CREDENTIAL",
+    ]
+    .iter()
+    .any(|w| n.contains(w))
 }
 
 /// A proxy URL with a password in it (`http://user:pass@host`) is a
@@ -167,7 +175,9 @@ pub fn valid_env_name(name: &str) -> bool {
 /// sentence for the person.
 pub fn check_env_pair(name: &str, value: &str) -> Result<(), String> {
     if !valid_env_name(name) {
-        return Err(format!("'{name}' is not a valid environment variable name (letters, digits and _ only)"));
+        return Err(format!(
+            "'{name}' is not a valid environment variable name (letters, digits and _ only)"
+        ));
     }
     if value.starts_with("keychain:") {
         return Ok(());
@@ -205,11 +215,16 @@ pub struct McpEntry {
 /// pinning their own bytes pins the launcher, not the server it
 /// downloads, so they are refused unless the pin covers an installed
 /// tree. `wright mcp install` freezes such a server instead.
-pub const MCP_LAUNCHERS: [&str; 10] = ["npx", "uvx", "pipx", "bunx", "pnpx", "pnpm", "yarn", "uv", "docker", "podman"];
+pub const MCP_LAUNCHERS: [&str; 10] = [
+    "npx", "uvx", "pipx", "bunx", "pnpx", "pnpm", "yarn", "uv", "docker", "podman",
+];
 
 fn launcher_name(command: &str) -> Option<&'static str> {
     let base = command.rsplit(['/', '\\']).next().unwrap_or(command);
-    let base = base.strip_suffix(".exe").or_else(|| base.strip_suffix(".cmd")).unwrap_or(base);
+    let base = base
+        .strip_suffix(".exe")
+        .or_else(|| base.strip_suffix(".cmd"))
+        .unwrap_or(base);
     MCP_LAUNCHERS.iter().copied().find(|l| *l == base)
 }
 
@@ -361,7 +376,9 @@ pub fn apply_to_process(cfg: &Config) -> Vec<String> {
         let path = expand_home(f);
         match check_ca_file(&path) {
             Ok(_) => set(CA_ENV, &path.to_string_lossy(), &mut ours),
-            Err(e) => problems.push(format!("the extra certificate authorities were not added: {e}")),
+            Err(e) => problems.push(format!(
+                "the extra certificate authorities were not added: {e}"
+            )),
         }
     }
     problems
@@ -766,7 +783,10 @@ impl Config {
     /// The name a pinned key was trusted under, if it is pinned.
     pub fn trusts(&self, public_hex: &str) -> Option<&str> {
         let k = public_hex.to_ascii_lowercase();
-        self.trusted.iter().find(|t| t.key == k).map(|t| t.name.as_str())
+        self.trusted
+            .iter()
+            .find(|t| t.key == k)
+            .map(|t| t.name.as_str())
     }
 
     /// The configured worker a blueprint names, or None with a plain
@@ -952,7 +972,13 @@ worker \"claude-code\" command=\"claude\" args=\"--print\" env=\"ANTHROPIC_API_K
         assert_eq!(cfg.ca_file.as_deref(), Some("/etc/ssl/corp.pem"));
         assert_eq!(cfg.env.len(), 2);
         assert_eq!(cfg.trusts(&key.to_uppercase()), Some("Wright gallery"));
-        assert_eq!(cfg.workers[0].env, vec![("ANTHROPIC_API_KEY".to_string(), "keychain:wright/anthropic".to_string())]);
+        assert_eq!(
+            cfg.workers[0].env,
+            vec![(
+                "ANTHROPIC_API_KEY".to_string(),
+                "keychain:wright/anthropic".to_string()
+            )]
+        );
         let back = Config::parse_file_only(&cfg.to_kdl(), "t").unwrap();
         assert_eq!(back.ca_file, cfg.ca_file);
         assert_eq!(back.env, cfg.env);
@@ -960,13 +986,22 @@ worker \"claude-code\" command=\"claude\" args=\"--print\" env=\"ANTHROPIC_API_K
         assert_eq!(back.workers, cfg.workers);
 
         // A secret-looking variable with a literal value is refused...
-        let err = Config::parse_file_only("env \"GITHUB_TOKEN\" value=\"ghp_abc\"\n", "t").unwrap_err();
+        let err =
+            Config::parse_file_only("env \"GITHUB_TOKEN\" value=\"ghp_abc\"\n", "t").unwrap_err();
         assert!(err.contains("keychain:"), "{err}");
         // ...so is a proxy URL carrying a password, whatever its name...
-        let err = Config::parse_file_only("env \"HTTPS_PROXY\" value=\"http://me:hunter2@proxy:3128\"\n", "t").unwrap_err();
+        let err = Config::parse_file_only(
+            "env \"HTTPS_PROXY\" value=\"http://me:hunter2@proxy:3128\"\n",
+            "t",
+        )
+        .unwrap_err();
         assert!(err.contains("keychain:"), "{err}");
         // ...and so is a worker sign-in given as a value.
-        let err = Config::parse_file_only("worker \"codex\" command=\"codex\" env=\"OPENAI_API_KEY=sk-123\"\n", "t").unwrap_err();
+        let err = Config::parse_file_only(
+            "worker \"codex\" command=\"codex\" env=\"OPENAI_API_KEY=sk-123\"\n",
+            "t",
+        )
+        .unwrap_err();
         assert!(err.contains("keychain:"), "{err}");
         assert!(Config::parse_file_only("env \"1BAD\" value=\"x\"\n", "t").is_err());
         assert!(Config::parse_file_only("trust \"x\" key=\"short\"\n", "t").is_err());
@@ -975,12 +1010,19 @@ worker \"claude-code\" command=\"claude\" args=\"--print\" env=\"ANTHROPIC_API_K
     #[test]
     fn a_config_file_does_not_hide_the_preconfigured_workers() {
         let cfg = Config::parse("worker \"claude-code\" command=\"/opt/claude\"\n", "t").unwrap();
-        assert_eq!(cfg.worker_for("claude-code").unwrap().command, "/opt/claude", "the file wins");
+        assert_eq!(
+            cfg.worker_for("claude-code").unwrap().command,
+            "/opt/claude",
+            "the file wins"
+        );
         for w in ["codex", "kimi-code", "zcode"] {
             assert!(cfg.worker_for(w).is_some(), "{w} is still there");
         }
         let empty = Config::parse("interview model=\"x\"\n", "t").unwrap();
-        assert!(empty.worker_for("claude-code").is_some(), "any config file at all used to drop them");
+        assert!(
+            empty.worker_for("claude-code").is_some(),
+            "any config file at all used to drop them"
+        );
     }
 
     #[test]
@@ -988,7 +1030,11 @@ worker \"claude-code\" command=\"claude\" args=\"--print\" env=\"ANTHROPIC_API_K
         let dir = std::env::temp_dir().join(format!("wright-ca-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let good = dir.join("corp.pem");
-        std::fs::write(&good, "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n").unwrap();
+        std::fs::write(
+            &good,
+            "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
         assert_eq!(check_ca_file(&good).unwrap(), 1);
         let der = dir.join("corp.cer");
         std::fs::write(&der, [0x30u8, 0x82, 0x01]).unwrap();
@@ -997,20 +1043,39 @@ worker \"claude-code\" command=\"claude\" args=\"--print\" env=\"ANTHROPIC_API_K
         assert_eq!(expand_home("/abs/x.pem"), PathBuf::from("/abs/x.pem"));
     }
 
-
     #[test]
     fn a_launcher_pin_is_refused_and_a_tree_pin_round_trips() {
         let h = "a".repeat(64);
-        let err = Config::parse_file_only(&format!("mcp \"time\" command=\"uvx\" args=\"mcp-server-time\" hash=\"blake3:{h}\"\n"), "t").unwrap_err();
-        assert!(err.contains("downloads the server each time") && err.contains("wright mcp install"), "{err}");
-        let err = Config::parse_file_only(&format!("mcp \"x\" command=\"/usr/local/bin/npx\" hash=\"blake3:{h}\"\n"), "t").unwrap_err();
+        let err = Config::parse_file_only(
+            &format!("mcp \"time\" command=\"uvx\" args=\"mcp-server-time\" hash=\"blake3:{h}\"\n"),
+            "t",
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("downloads the server each time") && err.contains("wright mcp install"),
+            "{err}"
+        );
+        let err = Config::parse_file_only(
+            &format!("mcp \"x\" command=\"/usr/local/bin/npx\" hash=\"blake3:{h}\"\n"),
+            "t",
+        )
+        .unwrap_err();
         assert!(err.contains("npx"), "{err}");
         let text = format!("mcp \"time\" command=\"/home/me/.wright/mcp/time/venv/bin/mcp-server-time\" hash=\"tree-blake3:{h}\" tree=\"/home/me/.wright/mcp/time\"\n");
         let cfg = Config::parse_file_only(&text, "t").unwrap();
-        assert_eq!(cfg.mcp_servers[0].tree.as_deref(), Some("/home/me/.wright/mcp/time"));
+        assert_eq!(
+            cfg.mcp_servers[0].tree.as_deref(),
+            Some("/home/me/.wright/mcp/time")
+        );
         let back = Config::parse_file_only(&cfg.to_kdl(), "t").unwrap();
         assert_eq!(back.mcp_servers, cfg.mcp_servers);
-        assert!(Config::parse_file_only(&format!("mcp \"x\" command=\"/a\" hash=\"tree-blake3:{h}\"\n"), "t").is_err(), "a tree pin needs its tree");
+        assert!(
+            Config::parse_file_only(
+                &format!("mcp \"x\" command=\"/a\" hash=\"tree-blake3:{h}\"\n"),
+                "t"
+            )
+            .is_err(),
+            "a tree pin needs its tree"
+        );
     }
-
 }

@@ -77,26 +77,61 @@ pub fn layer(ui: &Ui) -> WidgetNode {
     .into()
 }
 
-fn frame(ui: &Ui, p: &Pal, title: &str, meta: String, live: bool, content: WidgetNode) -> WidgetNode {
+fn frame(
+    ui: &Ui,
+    p: &Pal,
+    title: &str,
+    meta: String,
+    live: bool,
+    content: WidgetNode,
+) -> WidgetNode {
     let close = ui.clone();
     let peek = ui.engine.get() == EngineView::Peek;
     let mut head = vec![b(title.to_string(), 20.0, p.ink)];
     if live {
         let u = ui.clone();
-        head.push(Live::new("live-badge", move || {
-            let p = u.pal();
-            let pulse = (u.clock.get() * 3.0).sin() * 0.5 + 0.5;
-            row(6.0, vec![Container::new().width(7.0).height(7.0).radius(3.5).color(p.accent_ink.with_alpha((120.0 + 135.0 * pulse) as u8)).into(), b("LIVE", 11.0, p.accent_ink)])
-        }).into());
+        head.push(
+            Live::new("live-badge", move || {
+                let p = u.pal();
+                let pulse = (u.clock.get() * 3.0).sin() * 0.5 + 0.5;
+                row(
+                    6.0,
+                    vec![
+                        Container::new()
+                            .width(7.0)
+                            .height(7.0)
+                            .radius(3.5)
+                            .color(p.accent_ink.with_alpha((120.0 + 135.0 * pulse) as u8))
+                            .into(),
+                        b("LIVE", 11.0, p.accent_ink),
+                    ],
+                )
+            })
+            .into(),
+        );
     }
     head.push(t(meta, 12.5, p.muted));
     head.push(gap());
     if peek {
-        head.push(t("Let go of Space to hide · E keeps it open", 12.0, p.muted));
+        head.push(t(
+            "Let go of Space to hide · E keeps it open",
+            12.0,
+            p.muted,
+        ));
     } else {
-        head.push(tool_button(p, Glyph::Close, "Hide", None, false, move || close.set_engine(EngineView::Hidden)));
+        head.push(tool_button(
+            p,
+            Glyph::Close,
+            "Hide",
+            None,
+            false,
+            move || close.set_engine(EngineView::Hidden),
+        ));
     }
-    pad(EdgeInsets::only(28.0, 14.0, 28.0, 18.0), stretch(16.0, vec![row(12.0, head), grow(content)]))
+    pad(
+        EdgeInsets::only(28.0, 14.0, 28.0, 18.0),
+        stretch(16.0, vec![row(12.0, head), grow(content)]),
+    )
 }
 
 /// Where each card goes: steps left to right, wrapping into rows when the
@@ -131,15 +166,22 @@ fn graph(ui: &Ui, s: &Session, plan: &super::session::PlanView, width: f32) -> W
     let progress = Progress::of(&events);
     let (pos, node_w, height) = layout(&plan.stages, width);
     let clock = ui.clock.get();
-    let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
 
     // Edges: every card in a step feeds every card in the next.
     let mut edges = Vec::new();
-    let starts: Vec<usize> = plan.stages.iter().scan(0, |acc, st| {
-        let s0 = *acc;
-        *acc += st.len();
-        Some(s0)
-    }).collect();
+    let starts: Vec<usize> = plan
+        .stages
+        .iter()
+        .scan(0, |acc, st| {
+            let s0 = *acc;
+            *acc += st.len();
+            Some(s0)
+        })
+        .collect();
     for (i, stage) in plan.stages.iter().enumerate() {
         if i + 1 < plan.stages.len() {
             for a in 0..stage.len() {
@@ -147,18 +189,51 @@ fn graph(ui: &Ui, s: &Session, plan: &super::session::PlanView, width: f32) -> W
                     let from = pos[starts[i] + a];
                     let to = pos[starts[i + 1] + b2];
                     let target = progress.state(&plan.stages[i + 1][b2].name);
-                    edges.push(Edge { from, to, node_w, state: target });
+                    edges.push(Edge {
+                        from,
+                        to,
+                        node_w,
+                        state: target,
+                    });
                 }
             }
         }
     }
-    let mut layers = vec![at(0.0, 0.0, width, height, CustomPaint::sized(Size::new(width, height), Edges { edges, line: p.line_strong, flow: p.accent_ink, clock }))];
+    let mut layers = vec![at(
+        0.0,
+        0.0,
+        width,
+        height,
+        CustomPaint::sized(
+            Size::new(width, height),
+            Edges {
+                edges,
+                line: p.line_strong,
+                flow: p.accent_ink,
+                clock,
+            },
+        ),
+    )];
     let selected = ui.selected.get();
     for (idx, card) in plan.cards().enumerate() {
         let (x, y) = pos[idx];
         let state = progress.state(&card.name);
         let hot = recent_tools(&events, &card.name, now_ms);
-        layers.push(at(x, y, node_w, NODE_H, node(ui, &p, card, state, &hot, selected.as_deref() == Some(card.name.as_str()), node_w)));
+        layers.push(at(
+            x,
+            y,
+            node_w,
+            NODE_H,
+            node(
+                ui,
+                &p,
+                card,
+                state,
+                &hot,
+                selected.as_deref() == Some(card.name.as_str()),
+                node_w,
+            ),
+        ));
     }
     sized(width, height, Stack::new().children(layers))
 }
@@ -169,12 +244,24 @@ fn recent_tools(events: &[Event], agent: &str, now_ms: u64) -> Vec<String> {
         .iter()
         .rev()
         .take(40)
-        .filter(|e| e.kind == EventKind::ToolCalled && e.agent.as_deref() == Some(agent) && now_ms.saturating_sub(e.at_ms) < 1200)
+        .filter(|e| {
+            e.kind == EventKind::ToolCalled
+                && e.agent.as_deref() == Some(agent)
+                && now_ms.saturating_sub(e.at_ms) < 1200
+        })
         .filter_map(|e| e.note.split_whitespace().next().map(String::from))
         .collect()
 }
 
-fn node(ui: &Ui, p: &Pal, card: &Card, state: State, hot: &[String], selected: bool, width: f32) -> WidgetNode {
+fn node(
+    ui: &Ui,
+    p: &Pal,
+    card: &Card,
+    state: State,
+    hot: &[String],
+    selected: bool,
+    width: f32,
+) -> WidgetNode {
     let p = *p;
     let (pill_fg, pill_bg) = match state {
         State::Working => (p.accent_ink, p.accent_soft),
@@ -212,7 +299,11 @@ fn node(ui: &Ui, p: &Pal, card: &Card, state: State, hot: &[String], selected: b
                 .radius(corner::CHIP)
                 .border(Border::new(if on { p.accent } else { p.line }, 1.0))
                 .padding(EdgeInsets::symmetric(6.0, 1.0))
-                .child(mono(tool.clone(), 10.5, if on { p.on_accent } else { p.muted }))
+                .child(mono(
+                    tool.clone(),
+                    10.5,
+                    if on { p.on_accent } else { p.muted },
+                ))
                 .into()
         })
         .collect();
@@ -226,37 +317,106 @@ fn node(ui: &Ui, p: &Pal, card: &Card, state: State, hot: &[String], selected: b
     let body = Container::new()
         .color(p.surface)
         .radius(corner::CARD)
-        .border(Border::new(edge, if matches!(state, State::Working | State::Waiting) || selected { 2.0 } else { 1.0 }))
+        .border(Border::new(
+            edge,
+            if matches!(state, State::Working | State::Waiting) || selected {
+                2.0
+            } else {
+                1.0
+            },
+        ))
         .padding(EdgeInsets::all(11.0))
-        .child(fade(faded, stretch(4.0, vec![
-            row(6.0, vec![fill(card.name.clone(), 13.5, p.ink), pill(state.label(), pill_fg, pill_bg)]),
-            Text::new(format!("{} · {}", card.role, if card.model.is_empty() { "no model" } else { &card.model })).size(11.5).color(p.muted).max_lines(2).overflow(vieww::text::TextOverflow::Ellipsis).into(),
-            gap(),
-            row(4.0, chips),
-        ])));
+        .child(fade(
+            faded,
+            stretch(
+                4.0,
+                vec![
+                    row(
+                        6.0,
+                        vec![
+                            fill(card.name.clone(), 13.5, p.ink),
+                            pill(state.label(), pill_fg, pill_bg),
+                        ],
+                    ),
+                    Text::new(format!(
+                        "{} · {}",
+                        card.role,
+                        if card.model.is_empty() {
+                            "no model"
+                        } else {
+                            &card.model
+                        }
+                    ))
+                    .size(11.5)
+                    .color(p.muted)
+                    .max_lines(2)
+                    .overflow(vieww::text::TextOverflow::Ellipsis)
+                    .into(),
+                    gap(),
+                    row(4.0, chips),
+                ],
+            ),
+        ));
     let (sel, name) = (ui.selected.clone(), card.name.clone());
-    tap(body, move || sel.set(if sel.get().as_deref() == Some(name.as_str()) { None } else { Some(name.clone()) }))
+    tap(body, move || {
+        sel.set(if sel.get().as_deref() == Some(name.as_str()) {
+            None
+        } else {
+            Some(name.clone())
+        })
+    })
 }
 
-fn inspector(ui: &Ui, p: &Pal, s: &Session, card: &Card, events: &[Event], progress: &Progress) -> WidgetNode {
+fn inspector(
+    ui: &Ui,
+    p: &Pal,
+    s: &Session,
+    card: &Card,
+    events: &[Event],
+    progress: &Progress,
+) -> WidgetNode {
     let state = progress.state(&card.name);
     let close = ui.selected.clone();
     let start = progress.started_ms;
     let log: Vec<WidgetNode> = events
         .iter()
-        .filter(|e| e.agent.as_deref() == Some(card.name.as_str()) && e.kind != EventKind::TokensRecorded)
+        .filter(|e| {
+            e.agent.as_deref() == Some(card.name.as_str()) && e.kind != EventKind::TokensRecorded
+        })
         .rev()
         .take(14)
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
-        .map(|e| row(8.0, vec![SizedBox::width(52.0).child(mono(format!("+{:.1}s", e.at_ms.saturating_sub(start) as f64 / 1000.0), 11.0, p.muted)).into(), grow(copyable(e.note.clone(), 12.0, p.ink))]))
+        .map(|e| {
+            row(
+                8.0,
+                vec![
+                    SizedBox::width(52.0)
+                        .child(mono(
+                            format!("+{:.1}s", e.at_ms.saturating_sub(start) as f64 / 1000.0),
+                            11.0,
+                            p.muted,
+                        ))
+                        .into(),
+                    grow(copyable(e.note.clone(), 12.0, p.ink)),
+                ],
+            )
+        })
         .collect();
     // The whole log, for pasting into a bug report or a message.
     let full_log: String = events
         .iter()
-        .filter(|e| e.agent.as_deref() == Some(card.name.as_str()) && e.kind != EventKind::TokensRecorded)
-        .map(|e| format!("+{:.1}s  {}", e.at_ms.saturating_sub(start) as f64 / 1000.0, e.note))
+        .filter(|e| {
+            e.agent.as_deref() == Some(card.name.as_str()) && e.kind != EventKind::TokensRecorded
+        })
+        .map(|e| {
+            format!(
+                "+{:.1}s  {}",
+                e.at_ms.saturating_sub(start) as f64 / 1000.0,
+                e.note
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let time = match state {
@@ -265,44 +425,131 @@ fn inspector(ui: &Ui, p: &Pal, s: &Session, card: &Card, events: &[Event], progr
         other => other.label().to_string(),
     };
     let _ = s;
-    card_box(p, stretch(10.0, vec![
-        row(8.0, vec![fill(card.name.clone(), 16.0, p.ink), icon_button(p, Glyph::Close, "Close", false, move || close.set(None))]),
-        t(format!("{} · {}", card.role, if card.model.is_empty() { "no model" } else { &card.model }), 12.5, p.muted),
-        kv(p, "State", state.label()),
-        kv(p, "May touch", &card.touch),
-        kv(p, "Tools", &if card.tools.is_empty() { "none".to_string() } else { card.tools.join(", ") }),
-        kv(p, "Time", &time),
-        row(8.0, vec![t("Live log", 12.0, p.muted), gap(), if full_log.is_empty() { SizedBox::shrink().into() } else { copy_icon(p.muted, full_log) }]),
-        Container::new()
-            .color(p.surface2)
-            .radius(corner::FIELD)
-            .padding(EdgeInsets::all(10.0))
-            .child(if log.is_empty() { t("Nothing yet. Lines appear here as it works.", 12.0, p.muted) } else { stretch(5.0, log) })
-            .into(),
-    ]))
+    card_box(
+        p,
+        stretch(
+            10.0,
+            vec![
+                row(
+                    8.0,
+                    vec![
+                        fill(card.name.clone(), 16.0, p.ink),
+                        icon_button(p, Glyph::Close, "Close", false, move || close.set(None)),
+                    ],
+                ),
+                t(
+                    format!(
+                        "{} · {}",
+                        card.role,
+                        if card.model.is_empty() {
+                            "no model"
+                        } else {
+                            &card.model
+                        }
+                    ),
+                    12.5,
+                    p.muted,
+                ),
+                kv(p, "State", state.label()),
+                kv(p, "May touch", &card.touch),
+                kv(
+                    p,
+                    "Tools",
+                    &if card.tools.is_empty() {
+                        "none".to_string()
+                    } else {
+                        card.tools.join(", ")
+                    },
+                ),
+                kv(p, "Time", &time),
+                row(
+                    8.0,
+                    vec![
+                        t("Live log", 12.0, p.muted),
+                        gap(),
+                        if full_log.is_empty() {
+                            SizedBox::shrink().into()
+                        } else {
+                            copy_icon(p.muted, full_log)
+                        },
+                    ],
+                ),
+                Container::new()
+                    .color(p.surface2)
+                    .radius(corner::FIELD)
+                    .padding(EdgeInsets::all(10.0))
+                    .child(if log.is_empty() {
+                        t("Nothing yet. Lines appear here as it works.", 12.0, p.muted)
+                    } else {
+                        stretch(5.0, log)
+                    })
+                    .into(),
+            ],
+        ),
+    )
 }
 
 fn card_box(p: &Pal, child: WidgetNode) -> WidgetNode {
-    Container::new().color(p.surface).radius(corner::CARD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::all(16.0)).child(child).into()
+    Container::new()
+        .color(p.surface)
+        .radius(corner::CARD)
+        .border(Border::new(p.line, 1.0))
+        .padding(EdgeInsets::all(16.0))
+        .child(child)
+        .into()
 }
 
 fn kv(p: &Pal, k: &str, v: &str) -> WidgetNode {
-    row(8.0, vec![SizedBox::width(78.0).child(line(k.to_string(), 12.5, p.muted)).into(), grow(copyable(v.to_string(), 12.5, p.ink))])
+    row(
+        8.0,
+        vec![
+            SizedBox::width(78.0)
+                .child(line(k.to_string(), 12.5, p.muted))
+                .into(),
+            grow(copyable(v.to_string(), 12.5, p.ink)),
+        ],
+    )
 }
 
 fn ticker(p: &Pal, events: &[Event], progress: &Progress) -> WidgetNode {
-    let last: Vec<&Event> = events.iter().filter(|e| e.kind != EventKind::TokensRecorded).rev().take(3).collect();
+    let last: Vec<&Event> = events
+        .iter()
+        .filter(|e| e.kind != EventKind::TokensRecorded)
+        .rev()
+        .take(3)
+        .collect();
     let lines: Vec<WidgetNode> = last
         .iter()
         .rev()
         .enumerate()
         .map(|(i, e)| {
             let alpha = [0.45, 0.7, 1.0][i + 3 - last.len().min(3)];
-            fade(alpha, row(10.0, vec![
-                SizedBox::width(56.0).child(mono(format!("+{:.1}s", e.at_ms.saturating_sub(progress.started_ms) as f64 / 1000.0), 11.5, p.muted)).into(),
-                SizedBox::width(110.0).child(line(e.agent.clone().unwrap_or_else(|| "wright".into()), 12.0, p.ink)).into(),
-                fill(e.note.clone(), 12.0, p.muted),
-            ]))
+            fade(
+                alpha,
+                row(
+                    10.0,
+                    vec![
+                        SizedBox::width(56.0)
+                            .child(mono(
+                                format!(
+                                    "+{:.1}s",
+                                    e.at_ms.saturating_sub(progress.started_ms) as f64 / 1000.0
+                                ),
+                                11.5,
+                                p.muted,
+                            ))
+                            .into(),
+                        SizedBox::width(110.0)
+                            .child(line(
+                                e.agent.clone().unwrap_or_else(|| "wright".into()),
+                                12.0,
+                                p.ink,
+                            ))
+                            .into(),
+                        fill(e.note.clone(), 12.0, p.muted),
+                    ],
+                ),
+            )
         })
         .collect();
     sized(f32::INFINITY, 62.0, stretch(3.0, lines))
@@ -336,11 +583,21 @@ impl Edges {
         if bx > ax {
             let x1 = ax + e.node_w;
             let mx = (x1 + bx) / 2.0;
-            vec![Offset::new(x1, amid), Offset::new(mx, amid), Offset::new(mx, bmid), Offset::new(bx, bmid)]
+            vec![
+                Offset::new(x1, amid),
+                Offset::new(mx, amid),
+                Offset::new(mx, bmid),
+                Offset::new(bx, bmid),
+            ]
         } else {
             let y1 = ay + NODE_H;
             let my = by - GAP_Y * 0.8;
-            vec![Offset::new(ax + e.node_w / 2.0, y1), Offset::new(ax + e.node_w / 2.0, my), Offset::new(bx + e.node_w / 2.0, my), Offset::new(bx + e.node_w / 2.0, by)]
+            vec![
+                Offset::new(ax + e.node_w / 2.0, y1),
+                Offset::new(ax + e.node_w / 2.0, my),
+                Offset::new(bx + e.node_w / 2.0, my),
+                Offset::new(bx + e.node_w / 2.0, by),
+            ]
         }
     }
 }
@@ -357,12 +614,22 @@ fn dashes(out: &mut Vec<DrawInstruction>, pts: &[Offset], color: Color, phase: f
         if len < 0.01 {
             continue;
         }
-        let at = |d: f32| Offset::new(a.dx + (b.dx - a.dx) * d / len, a.dy + (b.dy - a.dy) * d / len);
+        let at = |d: f32| {
+            Offset::new(
+                a.dx + (b.dx - a.dx) * d / len,
+                a.dy + (b.dy - a.dy) * d / len,
+            )
+        };
         let mut start = ((base + phase) / PERIOD).floor() * PERIOD - phase;
         while start < base + len {
             let (s0, s1) = (start.max(base), (start + DASH).min(base + len));
             if s1 > s0 {
-                out.push(DrawInstruction::DrawLine { from: at(s0 - base), to: at(s1 - base), color, width: 2.0 });
+                out.push(DrawInstruction::DrawLine {
+                    from: at(s0 - base),
+                    to: at(s1 - base),
+                    color,
+                    width: 2.0,
+                });
             }
             start += PERIOD;
         }
@@ -376,15 +643,27 @@ impl CustomPainter for Edges {
         for e in &self.edges {
             let pts = Edges::path(e);
             match e.state {
-                State::Working | State::Waiting => dashes(&mut out, &pts, self.flow, self.clock * 28.0),
+                State::Working | State::Waiting => {
+                    dashes(&mut out, &pts, self.flow, self.clock * 28.0)
+                }
                 State::Done | State::Cached => {
                     for w in pts.windows(2) {
-                        out.push(DrawInstruction::DrawLine { from: w[0], to: w[1], color: self.flow.with_alpha(130), width: 1.6 });
+                        out.push(DrawInstruction::DrawLine {
+                            from: w[0],
+                            to: w[1],
+                            color: self.flow.with_alpha(130),
+                            width: 1.6,
+                        });
                     }
                 }
                 _ => {
                     for w in pts.windows(2) {
-                        out.push(DrawInstruction::DrawLine { from: w[0], to: w[1], color: self.line, width: 1.4 });
+                        out.push(DrawInstruction::DrawLine {
+                            from: w[0],
+                            to: w[1],
+                            color: self.line,
+                            width: 1.4,
+                        });
                     }
                 }
             }

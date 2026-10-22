@@ -89,7 +89,10 @@ pub fn run(permit: &Permit, input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, 
             let tree = std::path::Path::new(tree);
             // The command must BE part of the pinned tree, or the pin
             // covers files that never run.
-            let inside = match (std::fs::canonicalize(tree), exe.parent().and_then(|p| std::fs::canonicalize(p).ok())) {
+            let inside = match (
+                std::fs::canonicalize(tree),
+                exe.parent().and_then(|p| std::fs::canonicalize(p).ok()),
+            ) {
                 (Ok(t), Some(e)) => e.starts_with(&t),
                 _ => false,
             };
@@ -312,7 +315,10 @@ fn spawn_server(entry: &McpEntry, timeout: Duration) -> Result<std::process::Chi
         .env_clear()
         // PATH is not a secret, and an installed npm server starts through
         // `#!/usr/bin/env node`, which needs it.
-        .env("PATH", std::env::var_os("PATH").unwrap_or_else(|| "/usr/local/bin:/usr/bin:/bin".into()))
+        .env(
+            "PATH",
+            std::env::var_os("PATH").unwrap_or_else(|| "/usr/local/bin:/usr/bin:/bin".into()),
+        )
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -353,7 +359,11 @@ pub fn pin_of(exe: &std::path::Path) -> Result<String, String> {
 /// as it runs (`__pycache__`, `*.pyc`) are not the server and are left
 /// out, or the first call would break the pin.
 pub fn tree_pin(root: &std::path::Path) -> Result<String, String> {
-    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, Vec<u8>)>) -> Result<(), String> {
+    fn walk(
+        root: &std::path::Path,
+        dir: &std::path::Path,
+        out: &mut Vec<(String, Vec<u8>)>,
+    ) -> Result<(), String> {
         let mut entries: Vec<_> = std::fs::read_dir(dir)
             .map_err(|e| format!("{}: {e}", dir.display()))?
             .flatten()
@@ -365,11 +375,20 @@ pub fn tree_pin(root: &std::path::Path) -> Result<String, String> {
                 continue;
             }
             let path = e.path();
-            let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
-            let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let meta =
+                std::fs::symlink_metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             if meta.file_type().is_symlink() {
-                let target = std::fs::read_link(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                out.push((format!("L {rel}"), target.to_string_lossy().as_bytes().to_vec()));
+                let target =
+                    std::fs::read_link(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                out.push((
+                    format!("L {rel}"),
+                    target.to_string_lossy().as_bytes().to_vec(),
+                ));
             } else if meta.is_dir() {
                 walk(root, &path, out)?;
             } else {
@@ -575,15 +594,26 @@ for line in sys.stdin:
         // The program is untouched; a file it loads is not.
         std::fs::write(tree.join("lib").join("forecast.txt"), "exfiltrate").unwrap();
         let err = run(&permit("Looker"), &call("get_forecast", "{}"), &ctx).unwrap_err();
-        assert!(err.to_string().contains("changed since it was pinned"), "{err}");
+        assert!(
+            err.to_string().contains("changed since it was pinned"),
+            "{err}"
+        );
         // A command outside its pinned folder is refused: the pin would
         // cover files that never run.
         let elsewhere = tmp("elsewhere");
         let outside = stub_server(&elsewhere);
         entry.command = outside.command;
         entry.hash = tree_pin(&tree).unwrap();
-        let err = run(&permit("Looker"), &call("get_forecast", "{}"), &ctx_with(entry, &["get_forecast"])).unwrap_err();
-        assert!(err.to_string().contains("outside its pinned folder"), "{err}");
+        let err = run(
+            &permit("Looker"),
+            &call("get_forecast", "{}"),
+            &ctx_with(entry, &["get_forecast"]),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("outside its pinned folder"),
+            "{err}"
+        );
     }
 
     #[test]

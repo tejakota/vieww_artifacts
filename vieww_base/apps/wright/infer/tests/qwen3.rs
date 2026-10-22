@@ -25,15 +25,22 @@ fn greedy_text_matches_llama_cpp() {
         let file = format!("tiny-{q}");
         let expect = std::fs::read_to_string(dir.join(format!("{file}.expect"))).unwrap();
         let (prompt, want) = expect.split_once('\n').unwrap();
-        let llm = Llm::new(Model::load(&dir.join(format!("{file}.gguf"))).unwrap(), "tiny");
+        let llm = Llm::new(
+            Model::load(&dir.join(format!("{file}.gguf"))).unwrap(),
+            "tiny",
+        );
         let ids = llm.model.tokenizer.encode(prompt, false);
-        let (got, n, _) = llm.generate(&ids, 24, Sampler::greedy(), &mut |_| {}).unwrap();
+        let (got, n, _) = llm
+            .generate(&ids, 24, Sampler::greedy(), &mut |_| {})
+            .unwrap();
         assert_eq!(n, 24);
         assert_eq!(got, want.trim_end_matches('\n'), "{q}");
 
         // The cache: the same prompt again recomputes only its last token
         // and gives the same answer; a longer one extends it.
-        let (again, _, _) = llm.generate(&ids, 24, Sampler::greedy(), &mut |_| {}).unwrap();
+        let (again, _, _) = llm
+            .generate(&ids, 24, Sampler::greedy(), &mut |_| {})
+            .unwrap();
         assert_eq!(again, got, "{q}: a cached prefix changes nothing");
     }
 }
@@ -51,7 +58,12 @@ fn logits_match_llama_cpp_with_strong_attention() {
     let dir = PathBuf::from(dir);
     let text = std::fs::read_to_string(dir.join("strong-q8_0.logits")).unwrap();
     let mut lines = text.lines();
-    let ids: Vec<u32> = lines.next().unwrap().split(' ').map(|s| s.parse().unwrap()).collect();
+    let ids: Vec<u32> = lines
+        .next()
+        .unwrap()
+        .split(' ')
+        .map(|s| s.parse().unwrap())
+        .collect();
     let model = Model::load(&dir.join("strong-q8_0.gguf")).unwrap();
     let mut cache = model.cache(4096);
     let mut clear = 0;
@@ -59,10 +71,20 @@ fn logits_match_llama_cpp_with_strong_attention() {
         let f: Vec<f32> = line.split(' ').map(|s| s.parse().unwrap()).collect();
         let (pos, best, best_logit, margin) = (f[0], f[1] as usize, f[2], f[2] - f[4]);
         let l = model.forward(&mut cache, &[*tok]).unwrap();
-        let mine = l.iter().enumerate().fold((0, f32::MIN), |b, (i, v)| if *v > b.1 { (i, *v) } else { b });
-        assert!((mine.1 - best_logit).abs() < 0.015 * best_logit.abs(), "position {pos}: {} vs {best_logit}", mine.1);
+        let mine = l.iter().enumerate().fold(
+            (0, f32::MIN),
+            |b, (i, v)| if *v > b.1 { (i, *v) } else { b },
+        );
+        assert!(
+            (mine.1 - best_logit).abs() < 0.015 * best_logit.abs(),
+            "position {pos}: {} vs {best_logit}",
+            mine.1
+        );
         if margin > 0.5 {
-            assert_eq!(mine.0, best, "position {pos}: llama.cpp is sure (margin {margin})");
+            assert_eq!(
+                mine.0, best,
+                "position {pos}: llama.cpp is sure (margin {margin})"
+            );
             clear += 1;
         }
     }
@@ -76,6 +98,10 @@ fn logits_match_llama_cpp_with_strong_attention() {
     for t in &ids {
         last = model.forward(&mut single, &[*t]).unwrap();
     }
-    let worst = all.iter().zip(&last).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+    let worst = all
+        .iter()
+        .zip(&last)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0f32, f32::max);
     assert!(worst < 1e-3, "batched and one-by-one differ by {worst}");
 }

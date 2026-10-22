@@ -83,7 +83,12 @@ pub fn summary(bp: &Blueprint, graph: &TaskGraph) -> Vec<Line> {
         if !secrets.is_empty() {
             out.push(line(
                 format!("agent:{}", a.name),
-                format!("  {} may use the secret{} {} — no other agent can.", a.name, if secrets.len() == 1 { "" } else { "s" }, secrets.join(", ")),
+                format!(
+                    "  {} may use the secret{} {} — no other agent can.",
+                    a.name,
+                    if secrets.len() == 1 { "" } else { "s" },
+                    secrets.join(", ")
+                ),
                 true,
             ));
         }

@@ -31,8 +31,21 @@ pub fn install() {
 }
 
 fn model(id: &str, kind: Kind) -> Result<&'static BuiltinModel, String> {
-    let names = || local::CATALOG.iter().filter(|m| m.kind == kind).map(|m| m.id).collect::<Vec<_>>().join(", ");
-    local::find(id).filter(|m| m.kind == kind).ok_or_else(|| format!("'{id}' is not a built-in {} model (built in: {})", if kind == Kind::Text { "text" } else { "speech" }, names()))
+    let names = || {
+        local::CATALOG
+            .iter()
+            .filter(|m| m.kind == kind)
+            .map(|m| m.id)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    local::find(id).filter(|m| m.kind == kind).ok_or_else(|| {
+        format!(
+            "'{id}' is not a built-in {} model (built in: {})",
+            if kind == Kind::Text { "text" } else { "speech" },
+            names()
+        )
+    })
 }
 
 /// The file, downloading it first if need be; status lines go to `say`
@@ -60,7 +73,11 @@ impl Engine {
             }
         }
         let path = ensure(m, say)?;
-        say(format!("Loading the built-in model {} ({})", m.id, m.size_text()));
+        say(format!(
+            "Loading the built-in model {} ({})",
+            m.id,
+            m.size_text()
+        ));
         let llm = Arc::new(Llm::new(Model::load(&path)?, m.id));
         *slot = Some((m.id.to_string(), llm.clone()));
         Ok(llm)
@@ -81,7 +98,11 @@ impl Engine {
 }
 
 impl LocalBackend for Engine {
-    fn complete(&self, req: &CompletionRequest, on_delta: &mut dyn FnMut(&Delta)) -> Result<CompletionResponse, String> {
+    fn complete(
+        &self,
+        req: &CompletionRequest,
+        on_delta: &mut dyn FnMut(&Delta),
+    ) -> Result<CompletionResponse, String> {
         let m = model(&req.model, Kind::Text)?;
         let llm = self.llm(m, &mut |s| on_delta(&Delta::Status(s)))?;
         llm.complete(req, Sampler::qwen(), on_delta)

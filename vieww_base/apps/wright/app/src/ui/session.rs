@@ -76,6 +76,21 @@ pub struct ResultView {
     pub cost: f64,
 }
 
+/// The receipt's own words, as `wright verify` reads them: every check,
+/// its verdict and its sentence. Loaded beside the result so "trust is
+/// one glance away" is a place in the window, not a trip to the CLI.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReceiptView {
+    pub run: RunId,
+    /// Every check passed.
+    pub ok: bool,
+    /// (name, passed, the check's own sentence).
+    pub checks: Vec<(String, bool, String)>,
+    /// The whole report, one line per check plus the verdict — what
+    /// "Copy the report" puts on the pasteboard.
+    pub report: String,
+}
+
 /// Where an agent is, projected from the event list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
@@ -101,7 +116,10 @@ impl State {
         }
     }
     pub fn settled(self) -> bool {
-        matches!(self, State::Done | State::Cached | State::Skipped | State::Failed)
+        matches!(
+            self,
+            State::Done | State::Cached | State::Skipped | State::Failed
+        )
     }
 }
 
@@ -117,18 +135,30 @@ pub struct Progress {
 
 impl Progress {
     pub fn of(events: &[Event]) -> Progress {
-        let mut p = Progress { agents: BTreeMap::new(), times: BTreeMap::new(), spent: 0, tokens: (0, 0), started_ms: events.first().map(|e| e.at_ms).unwrap_or(0) };
+        let mut p = Progress {
+            agents: BTreeMap::new(),
+            times: BTreeMap::new(),
+            spent: 0,
+            tokens: (0, 0),
+            started_ms: events.first().map(|e| e.at_ms).unwrap_or(0),
+        };
         for e in events {
             if e.kind == EventKind::TokensRecorded {
                 let d = e.data_value();
-                let n = |k: &str| d.as_ref().and_then(|d| d.get(k).and_then(|c| c.as_u64())).unwrap_or(0);
+                let n = |k: &str| {
+                    d.as_ref()
+                        .and_then(|d| d.get(k).and_then(|c| c.as_u64()))
+                        .unwrap_or(0)
+                };
                 p.spent += n("cost_micro_usd");
                 p.tokens.0 += n("in");
                 p.tokens.1 += n("out");
             }
             let Some(a) = &e.agent else { continue };
             let st = match e.kind {
-                EventKind::AgentStarted | EventKind::ApprovalResolved | EventKind::AgentRetrying => State::Working,
+                EventKind::AgentStarted
+                | EventKind::ApprovalResolved
+                | EventKind::AgentRetrying => State::Working,
                 EventKind::AgentFinished => State::Done,
                 EventKind::AgentFailed => State::Failed,
                 EventKind::CacheHit => State::Cached,
@@ -153,7 +183,10 @@ impl Progress {
     }
 
     pub fn seconds(&self, agent: &str) -> f64 {
-        self.times.get(agent).map(|(a, b)| (b.saturating_sub(*a)) as f64 / 1000.0).unwrap_or(0.0)
+        self.times
+            .get(agent)
+            .map(|(a, b)| (b.saturating_sub(*a)) as f64 / 1000.0)
+            .unwrap_or(0.0)
     }
 }
 
@@ -173,7 +206,10 @@ fn touch_words(perm: PermissionSet, tools: &[String]) -> String {
     } else if has(PermissionSet::READ_FILES) {
         out.push("reads project files");
     }
-    if tools.iter().any(|t| t.contains("email") || t.contains("post") || t.contains("send")) {
+    if tools
+        .iter()
+        .any(|t| t.contains("email") || t.contains("post") || t.contains("send"))
+    {
         out.push("sends to the outside world (asks first)");
     }
     if out.is_empty() {
@@ -208,7 +244,11 @@ pub fn load_plan(project: &Path) -> Option<PlanView> {
                     Card {
                         name: t.name(),
                         role,
-                        model: t.model.as_ref().map(|m| m.primary.clone()).unwrap_or_default(),
+                        model: t
+                            .model
+                            .as_ref()
+                            .map(|m| m.primary.clone())
+                            .unwrap_or_default(),
                         tools: t.tools.clone(),
                         touch: touch_words(t.permissions, &t.tools),
                     }
@@ -224,7 +264,26 @@ pub fn load_plan(project: &Path) -> Option<PlanView> {
         stages,
         per_run: bp.guardrails.per_firing_micro_usd as f64 / 1e6,
         per_day: bp.guardrails.daily_micro_usd as f64 / 1e6,
-        commit: wright_core::hash::short(&wright_core::blueprint::canon::content_hash(&bp)).to_string(),
+        commit: wright_core::hash::short(&wright_core::blueprint::canon::content_hash(&bp))
+            .to_string(),
+    })
+}
+
+/// The receipt, in `wright verify`'s words — the same six checks the
+/// CLI prints, run over the same store, so the window and the terminal
+/// can never disagree about what the evidence says.
+pub fn load_receipt(project: &Path, run: RunId) -> Option<ReceiptView> {
+    let v = wright_engine::verify::project_run(project, Some(run)).ok()?;
+    let report = v.report();
+    Some(ReceiptView {
+        run: v.run.unwrap_or(run),
+        ok: v.ok,
+        checks: v
+            .checks
+            .into_iter()
+            .map(|c| (c.name.to_string(), c.ok, c.note))
+            .collect(),
+        report,
     })
 }
 
@@ -237,18 +296,27 @@ pub fn load_result(project: &Path, run: RunId) -> Option<ResultView> {
         ok: v.get("ok").and_then(|b| b.as_bool()).unwrap_or(false),
         headline: v.str_of("headline").unwrap_or("").to_string(),
         verdict: v.str_of("verdict").unwrap_or("no review").to_string(),
-        cost: v.get("cost_micro_usd").and_then(|c| c.as_u64()).unwrap_or(0) as f64 / 1e6,
+        cost: v
+            .get("cost_micro_usd")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0) as f64
+            / 1e6,
         ..ResultView::default()
     };
     for a in v.get("artifacts").and_then(|a| a.as_arr()).unwrap_or(&[]) {
         let name = a.str_of("name").unwrap_or("").to_string();
-        let size = std::fs::metadata(project.join("artifacts").join(&name)).map(|m| m.len()).unwrap_or(0);
+        let size = std::fs::metadata(project.join("artifacts").join(&name))
+            .map(|m| m.len())
+            .unwrap_or(0);
         r.artifacts.push((name, size));
     }
     if let Ok(log) = store.read_events(run) {
         for e in log.events() {
             if e.kind == EventKind::AgentFinished || e.kind == EventKind::CacheHit {
-                let report = e.data_value().and_then(|d| d.str_of("report").map(String::from)).unwrap_or_default();
+                let report = e
+                    .data_value()
+                    .and_then(|d| d.str_of("report").map(String::from))
+                    .unwrap_or_default();
                 match e.agent.as_deref() {
                     Some("Testwright") => r.tests = report,
                     Some("Reviewer") => r.review = report,
@@ -273,19 +341,26 @@ fn last_run(project: &Path) -> Option<RunId> {
 /// close loses nothing, and read back when the session opens — from Saved,
 /// or at the next launch.
 fn conversation_file(project: &Path) -> Option<PathBuf> {
-    Store::open(project).ok().map(|s| s.root().join("conversation.jsonl"))
+    Store::open(project)
+        .ok()
+        .map(|s| s.root().join("conversation.jsonl"))
 }
 
 /// The conversation, and how many of its messages came before the plan
 /// was written (a `{"plan":true}` line marks the moment): those drafted
 /// the plan, the rest asked for changes to it.
 pub fn load_conversation(project: &Path) -> (Vec<(bool, String)>, usize) {
-    let Some(text) = conversation_file(project).and_then(|f| std::fs::read_to_string(f).ok()) else { return (Vec::new(), 0) };
+    let Some(text) = conversation_file(project).and_then(|f| std::fs::read_to_string(f).ok())
+    else {
+        return (Vec::new(), 0);
+    };
     let (mut chat, mut drafted) = (Vec::new(), None);
     for v in text.lines().filter_map(|l| json::parse(l).ok()) {
         if v.get("plan").and_then(|p| p.as_bool()) == Some(true) {
             drafted.get_or_insert(chat.len());
-        } else if let (Some(you), Some(text)) = (v.get("you").and_then(|y| y.as_bool()), v.str_of("text")) {
+        } else if let (Some(you), Some(text)) =
+            (v.get("you").and_then(|y| y.as_bool()), v.str_of("text"))
+        {
             chat.push((you, text.to_string()));
         }
     }
@@ -306,31 +381,68 @@ pub fn saved_summary(project: &Path) -> SavedSummary {
     let (chat, _) = load_conversation(project);
     let one_line = |s: &str, n: usize| {
         let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
-        if s.chars().count() > n { format!("{}…", s.chars().take(n - 1).collect::<String>().trim_end()) } else { s }
+        if s.chars().count() > n {
+            format!("{}…", s.chars().take(n - 1).collect::<String>().trim_end())
+        } else {
+            s
+        }
     };
-    let folder = project.file_name().map(|n| n.to_string_lossy().replace('-', " ")).unwrap_or_default();
+    let folder = project
+        .file_name()
+        .map(|n| n.to_string_lossy().replace('-', " "))
+        .unwrap_or_default();
     let title = load_plan(project)
         .map(|p| p.name)
         .filter(|n| !n.is_empty())
-        .or_else(|| chat.iter().find(|(you, _)| *you).map(|(_, t)| one_line(t, 48)))
+        .or_else(|| {
+            chat.iter()
+                .find(|(you, _)| *you)
+                .map(|(_, t)| one_line(t, 48))
+        })
         .unwrap_or(folder);
-    let last = chat.last().map(|(you, t)| if *you { format!("You: {}", one_line(t, 90)) } else { one_line(t, 96) });
-    SavedSummary { title, last, messages: chat.len() }
+    let last = chat.last().map(|(you, t)| {
+        if *you {
+            format!("You: {}", one_line(t, 90))
+        } else {
+            one_line(t, 96)
+        }
+    });
+    SavedSummary {
+        title,
+        last,
+        messages: chat.len(),
+    }
 }
 
 fn mark_plan_written(project: &Path) {
     use std::io::Write as _;
-    if let Some(Ok(mut f)) = conversation_file(project).map(|p| std::fs::OpenOptions::new().create(true).append(true).open(p)) {
+    if let Some(Ok(mut f)) = conversation_file(project).map(|p| {
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+    }) {
         let _ = writeln!(f, "{{\"plan\":true}}");
     }
 }
 
 fn keep_conversation(project: &Path, messages: &[(bool, String)]) {
     use std::io::Write as _;
-    let Some(path) = conversation_file(project) else { return };
-    let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) else { return };
+    let Some(path) = conversation_file(project) else {
+        return;
+    };
+    let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    else {
+        return;
+    };
     for (you, text) in messages {
-        let line = json::to_string(&json::Value::obj(vec![("you", json::Value::Bool(*you)), ("text", json::Value::str(text.clone()))]));
+        let line = json::to_string(&json::Value::obj(vec![
+            ("you", json::Value::Bool(*you)),
+            ("text", json::Value::str(text.clone())),
+        ]));
         let _ = writeln!(f, "{line}");
     }
 }
@@ -417,7 +529,11 @@ impl ChannelIo {
 
 impl InterviewIo for ChannelIo {
     fn say(&mut self, text: &str) {
-        self.shared.chat.lock().unwrap_or_else(|p| p.into_inner()).push((false, text.to_string()));
+        self.shared
+            .chat
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push((false, text.to_string()));
         // The words are in the conversation now; nothing is half-written.
         self.live(|l| l.1.clear());
     }
@@ -446,7 +562,11 @@ impl InterviewIo for ChannelIo {
         }
     }
     fn confirm(&mut self, lines: &[Line]) -> bool {
-        *self.shared.confirm.lock().unwrap_or_else(|p| p.into_inner()) = Some(lines.to_vec());
+        *self
+            .shared
+            .confirm
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(lines.to_vec());
         self.idle();
         loop {
             match self.rx.recv() {
@@ -480,7 +600,13 @@ pub struct Composer {
 
 impl Composer {
     pub fn new(rt: &vieww::element::Runtime, id: u64) -> Composer {
-        Composer { id, prompt: rt.signal(TextEditingValue::new("")), files: rt.signal(Vec::new()), menu: rt.signal(false), voice: rt.signal(Voice::Idle) }
+        Composer {
+            id,
+            prompt: rt.signal(TextEditingValue::new("")),
+            files: rt.signal(Vec::new()),
+            menu: rt.signal(false),
+            voice: rt.signal(Voice::Idle),
+        }
     }
 
     pub fn attach(&self, paths: &[PathBuf]) {
@@ -496,7 +622,11 @@ impl Composer {
     /// Put transcribed speech at the end of what is already typed.
     pub fn insert_text(&self, text: &str) {
         let cur = self.prompt.get().text;
-        let joined = if cur.trim().is_empty() { text.to_string() } else { format!("{} {text}", cur.trim_end()) };
+        let joined = if cur.trim().is_empty() {
+            text.to_string()
+        } else {
+            format!("{} {text}", cur.trim_end())
+        };
         self.prompt.set(TextEditingValue::new(joined));
     }
 
@@ -512,7 +642,10 @@ impl Composer {
         }
         let mut notes = Vec::new();
         for f in &files {
-            let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let name = f
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
             if f.is_dir() {
                 notes.push(format!("the folder {}", f.display()));
             } else if let Some(dir) = project {
@@ -527,7 +660,11 @@ impl Composer {
         self.prompt.set(TextEditingValue::new(""));
         self.files.set(Vec::new());
         self.menu.set(false);
-        Some(if notes.is_empty() { text } else { format!("{text}\n\nAttached: {}", notes.join(", ")) })
+        Some(if notes.is_empty() {
+            text
+        } else {
+            format!("{text}\n\nAttached: {}", notes.join(", "))
+        })
     }
 }
 
@@ -561,6 +698,10 @@ pub struct Session {
     pub pending: Signal<Option<Pending>>,
     /// The interview is running (drafting or changing the plan).
     pub interviewing: Signal<bool>,
+    /// The last run's receipt, in verify's words; `None` until one is.
+    pub receipt: Signal<Option<ReceiptView>>,
+    /// The receipt overlay is open over this page.
+    pub receipt_open: Signal<bool>,
     shared: Arc<Shared>,
     last_poll: Rc<Cell<Instant>>,
 }
@@ -575,12 +716,17 @@ impl Session {
     pub fn open(rt: &vieww::element::Runtime, project: PathBuf, composer_id: u64) -> Session {
         let (conversation, drafted) = load_conversation(&project);
         let plan = load_plan(&project);
-        let (events, result) = match last_run(&project) {
+        let (events, result, receipt) = match last_run(&project) {
             Some(run) => (
-                Store::open(&project).ok().and_then(|s| s.read_events(run).ok()).map(|l| l.events().to_vec()).unwrap_or_default(),
+                Store::open(&project)
+                    .ok()
+                    .and_then(|s| s.read_events(run).ok())
+                    .map(|l| l.events().to_vec())
+                    .unwrap_or_default(),
                 load_result(&project, run),
+                load_receipt(&project, run),
             ),
-            None => (Vec::new(), None),
+            None => (Vec::new(), None, None),
         };
         Session {
             project: Rc::new(project),
@@ -601,6 +747,8 @@ impl Session {
             drafted: rt.signal(drafted),
             pending: rt.signal(None),
             interviewing: rt.signal(false),
+            receipt: rt.signal(receipt),
+            receipt_open: rt.signal(false),
             shared: Arc::new(Shared::default()),
             last_poll: Rc::new(Cell::new(Instant::now())),
         }
@@ -610,7 +758,11 @@ impl Session {
     pub fn title(&self) -> String {
         match self.plan.get() {
             Some(p) if !p.name.is_empty() => p.name,
-            _ => self.project.file_name().map(|n| n.to_string_lossy().replace('-', " ")).unwrap_or_else(|| "New session".into()),
+            _ => self
+                .project
+                .file_name()
+                .map(|n| n.to_string_lossy().replace('-', " "))
+                .unwrap_or_else(|| "New session".into()),
         }
     }
 
@@ -618,12 +770,27 @@ impl Session {
     pub fn status(&self) -> (String, Tone) {
         let waiting = self.approvals.get().len();
         if waiting > 0 {
-            return (format!("Waiting for you · {waiting} to approve"), Tone::Wait);
+            return (
+                format!("Waiting for you · {waiting} to approve"),
+                Tone::Wait,
+            );
         }
         if self.running.get() {
             let progress = Progress::of(&self.events.get());
-            let working: Vec<String> = progress.agents.iter().filter(|(_, (s, _))| *s == State::Working).map(|(n, _)| n.clone()).collect();
-            return (if working.is_empty() { "Running".into() } else { format!("Running · {} working", working.join(", ")) }, Tone::Live);
+            let working: Vec<String> = progress
+                .agents
+                .iter()
+                .filter(|(_, (s, _))| *s == State::Working)
+                .map(|(n, _)| n.clone())
+                .collect();
+            return (
+                if working.is_empty() {
+                    "Running".into()
+                } else {
+                    format!("Running · {} working", working.join(", "))
+                },
+                Tone::Live,
+            );
         }
         if self.interviewing.get() {
             return ("Drafting the plan with you".into(), Tone::Live);
@@ -638,14 +805,20 @@ impl Session {
 
     /// Share of agents settled in the current or last run, 0..1.
     pub fn done_share(&self) -> f32 {
-        let Some(plan) = self.plan.get() else { return 0.0 };
+        let Some(plan) = self.plan.get() else {
+            return 0.0;
+        };
         let p = Progress::of(&self.events.get());
         let total = plan.cards().count().max(1);
         plan.cards().filter(|c| p.state(&c.name).settled()).count() as f32 / total as f32
     }
 
     pub fn live_agents(&self) -> usize {
-        Progress::of(&self.events.get()).agents.values().filter(|(s, _)| matches!(s, State::Working | State::Waiting)).count()
+        Progress::of(&self.events.get())
+            .agents
+            .values()
+            .filter(|(s, _)| matches!(s, State::Working | State::Waiting))
+            .count()
     }
 
     /// Called before every frame: move worker results into signals.
@@ -659,19 +832,45 @@ impl Session {
             keep_conversation(&self.project, &new_chat);
             self.chat.update(|c| c.extend(new_chat));
         }
-        if let Some(live) = self.shared.live.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        if let Some(live) = self
+            .shared
+            .live
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
             let next = live.map(|(what, text)| {
                 let since = self.pending.get().map_or_else(Instant::now, |p| p.since);
-                Pending { what: if what.is_empty() { "Thinking".into() } else { what }, text, since }
+                Pending {
+                    what: if what.is_empty() {
+                        "Thinking".into()
+                    } else {
+                        what
+                    },
+                    text,
+                    since,
+                }
             });
             if next != self.pending.get() {
                 self.pending.set(next);
             }
         }
-        if let Some(lines) = self.shared.confirm.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        if let Some(lines) = self
+            .shared
+            .confirm
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
             self.confirm.set(Some(lines));
         }
-        if let Some(done) = self.shared.interview_done.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        if let Some(done) = self
+            .shared
+            .interview_done
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
             self.interviewing.set(false);
             self.pending.set(None);
             match done {
@@ -683,19 +882,38 @@ impl Session {
                     self.plan.set(load_plan(&self.project));
                     self.notice.set(String::new());
                 }
-                Ok(false) => self.notice.set("Nothing was written. Tell me what to change.".into()),
+                Ok(false) => self
+                    .notice
+                    .set("Nothing was written. Tell me what to change.".into()),
                 Err(e) => self.notice.set(format!("The interview stopped: {e}")),
             }
             self.confirm.set(None);
         }
-        if let Some(fin) = self.shared.finished.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        if let Some(fin) = self
+            .shared
+            .finished
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
             self.running.set(false);
             match fin {
-                Ok(r) => self.result.set(Some(r)),
+                Ok(r) => {
+                    // The receipt loads with the result it proves — the
+                    // window's evidence and the CLI's are one read.
+                    self.receipt.set(load_receipt(&self.project, r.run));
+                    self.result.set(Some(r));
+                }
                 Err(e) => self.notice.set(format!("The run did not start: {e}")),
             }
         }
-        if let Some(r) = self.shared.exported.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        if let Some(r) = self
+            .shared
+            .exported
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+        {
             self.exporting.set(None);
             self.exports.update(|v| {
                 v.insert(0, r);
@@ -730,11 +948,17 @@ impl Session {
             let opts = FireOptions {
                 trigger: Trigger::Manual,
                 approver: match Store::open(&project) {
-                    Ok(store) => Box::new(StoreApprover { store, timeout: Duration::from_secs(1800) }),
+                    Ok(store) => Box::new(StoreApprover {
+                        store,
+                        timeout: Duration::from_secs(1800),
+                    }),
                     Err(_) => Box::new(wright_engine::approve::AutoDeny),
                 },
                 listeners: vec![Box::new(move |e: &Event| {
-                    s2.events.lock().unwrap_or_else(|p| p.into_inner()).push(e.clone());
+                    s2.events
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .push(e.clone());
                     w2.wake();
                 })],
                 ..FireOptions::default()
@@ -748,7 +972,9 @@ impl Session {
     /// Send what is in the composer: to the interview (drafting or changing
     /// the plan). Returns false when there was nothing to send.
     pub fn send(&self) -> bool {
-        let Some(text) = self.composer.take_message(Some(&self.project)) else { return false };
+        let Some(text) = self.composer.take_message(Some(&self.project)) else {
+            return false;
+        };
         self.say(text);
         true
     }
@@ -758,31 +984,64 @@ impl Session {
         self.chat.update(|c| c.push((true, text.clone())));
         keep_conversation(&self.project, &[(true, text.clone())]);
         // Something is happening from this moment, before any model answers.
-        self.pending.set(Some(Pending { what: "Reading your message".into(), text: String::new(), since: Instant::now() }));
+        self.pending.set(Some(Pending {
+            what: "Reading your message".into(),
+            text: String::new(),
+            since: Instant::now(),
+        }));
         // An interview already waiting for an answer gets this one.
-        if let Some(tx) = self.shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+        if let Some(tx) = self
+            .shared
+            .to_interview
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+        {
             if tx.send(Reply::Text(text.clone())).is_ok() {
                 return;
             }
         }
         let (tx, rx) = channel::<Reply>();
-        *self.shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()) = Some(tx);
+        *self
+            .shared
+            .to_interview
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(tx);
         self.interviewing.set(true);
         // A conversation from before (a reopened session, or one whose
         // interview stopped) carries on rather than starting over: what was
         // said since the plan was written, or all of it if there is none.
         let chat = self.chat.get();
-        let from = if self.plan.get().is_some() { self.drafted.get().min(chat.len()) } else { 0 };
+        let from = if self.plan.get().is_some() {
+            self.drafted.get().min(chat.len())
+        } else {
+            0
+        };
         let mut earlier: Vec<(bool, String)> = chat[from..chat.len().saturating_sub(1)].to_vec();
         earlier.drain(..earlier.len().saturating_sub(40));
         let project = (*self.project).clone();
         let shared = Arc::clone(&self.shared);
         let wake = WakeHandle::current();
         std::thread::spawn(move || {
-            let mut io = ChannelIo { earlier, now: Default::default(), first: Some(text), rx, shared: Arc::clone(&shared), wake: wake.clone() };
-            let r = Config::load().and_then(|cfg| interview::interview(&project, &cfg, &mut io)).map(|bp| bp.is_some());
-            *shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()) = None;
-            *shared.interview_done.lock().unwrap_or_else(|p| p.into_inner()) = Some(r);
+            let mut io = ChannelIo {
+                earlier,
+                now: Default::default(),
+                first: Some(text),
+                rx,
+                shared: Arc::clone(&shared),
+                wake: wake.clone(),
+            };
+            let r = Config::load()
+                .and_then(|cfg| interview::interview(&project, &cfg, &mut io))
+                .map(|bp| bp.is_some());
+            *shared
+                .to_interview
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = None;
+            *shared
+                .interview_done
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = Some(r);
             wake.wake();
         });
     }
@@ -806,8 +1065,22 @@ impl Session {
 
     pub fn answer_confirm(&self, yes: bool) {
         self.confirm.set(None);
-        self.pending.set(Some(Pending { what: if yes { "Writing the blueprint".into() } else { "Noting what to change".into() }, text: String::new(), since: Instant::now() }));
-        if let Some(tx) = self.shared.to_interview.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+        self.pending.set(Some(Pending {
+            what: if yes {
+                "Writing the blueprint".into()
+            } else {
+                "Noting what to change".into()
+            },
+            text: String::new(),
+            since: Instant::now(),
+        }));
+        if let Some(tx) = self
+            .shared
+            .to_interview
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+        {
             let _ = tx.send(Reply::Confirm(yes));
         }
     }
@@ -817,13 +1090,16 @@ impl Session {
             let _ = store.answer_approval(run, n, yes);
         }
         self.card_drag.set(0.0);
-        self.approvals.update(|a| a.retain(|(r, k, _, _)| !(*r == run && *k == n)));
+        self.approvals
+            .update(|a| a.retain(|(r, k, _, _)| !(*r == run && *k == n)));
     }
 
     /// Spent today across runs (micro-USD), from the store's ledger.
     pub fn spent_today(&self) -> u64 {
         let day = wright_engine::firing::today_utc();
-        Store::open(&self.project).map(|s| s.spent_on(&day)).unwrap_or(0)
+        Store::open(&self.project)
+            .map(|s| s.spent_on(&day))
+            .unwrap_or(0)
     }
 }
 
@@ -848,25 +1124,48 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("wright-live-{}", std::process::id()));
         let s = Session::open(driver.elements().runtime(), dir, 1);
         let (_tx, rx) = channel::<Reply>();
-        let mut io = ChannelIo { earlier: vec![(true, "before".into())], now: Default::default(), first: None, rx, shared: Arc::clone(&s.shared), wake: WakeHandle(None) };
+        let mut io = ChannelIo {
+            earlier: vec![(true, "before".into())],
+            now: Default::default(),
+            first: None,
+            rx,
+            shared: Arc::clone(&s.shared),
+            wake: WakeHandle(None),
+        };
         assert_eq!(io.earlier(), vec![(true, "before".to_string())]);
         assert!(io.earlier().is_empty(), "handed over once");
 
         io.working("Thinking");
         s.pump();
-        assert_eq!(s.pending.get().map(|p| (p.what, p.text)), Some(("Thinking".into(), String::new())));
+        assert_eq!(
+            s.pending.get().map(|p| (p.what, p.text)),
+            Some(("Thinking".into(), String::new()))
+        );
         let since = s.pending.get().unwrap().since;
         io.partial("Which fol");
         s.pump();
         io.working("Drafting the plan");
         s.pump();
         let now = s.pending.get().unwrap();
-        assert_eq!((now.what.as_str(), now.text.as_str()), ("Drafting the plan", "Which fol"));
-        assert_eq!(now.since, since, "the clock runs from the first sign of work");
+        assert_eq!(
+            (now.what.as_str(), now.text.as_str()),
+            ("Drafting the plan", "Which fol")
+        );
+        assert_eq!(
+            now.since, since,
+            "the clock runs from the first sign of work"
+        );
         io.say("Which folder?");
         s.pump();
-        assert_eq!(s.chat.get().last(), Some(&(false, "Which folder?".to_string())));
-        assert_eq!(s.pending.get().map(|p| p.text), Some(String::new()), "said, so no longer half-written");
+        assert_eq!(
+            s.chat.get().last(),
+            Some(&(false, "Which folder?".to_string()))
+        );
+        assert_eq!(
+            s.pending.get().map(|p| p.text),
+            Some(String::new()),
+            "said, so no longer half-written"
+        );
         io.idle();
         s.pump();
         assert_eq!(s.pending.get(), None, "waiting for you");

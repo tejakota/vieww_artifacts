@@ -278,15 +278,19 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     let env = Arc::new(FiringEnv {
         gate: Gate::from_graph(&graph).with_identities(
             std::sync::Arc::new(wright_runtime::identity::Registry::new(
-                wright_runtime::signing::SigningKey::resolve()
-                    .map_err(|e| format!("cannot issue agent identities without a signing key: {e}"))?,
+                wright_runtime::signing::SigningKey::resolve().map_err(|e| {
+                    format!("cannot issue agent identities without a signing key: {e}")
+                })?,
             )),
             graph
                 .tasks
                 .iter()
                 .map(|t| {
                     let scope = match &t.kind {
-                        TaskKind::Project(n) => bp.agent(n).map(|a| wright_core::blueprint::secrets_for(&bp, a)).unwrap_or_default(),
+                        TaskKind::Project(n) => bp
+                            .agent(n)
+                            .map(|a| wright_core::blueprint::secrets_for(&bp, a))
+                            .unwrap_or_default(),
                         TaskKind::System(_) => Vec::new(),
                     };
                     (t.name(), scope)
@@ -612,7 +616,10 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
         ),
         // Where the money went, per agent, model and tool — from the
         // event log, signed with the rest (the receipt's `spend`).
-        ("spend", crate::spend::attribute(&env.spine.events()).to_value()),
+        (
+            "spend",
+            crate::spend::attribute(&env.spine.events()).to_value(),
+        ),
         // Every task-scoped identity: delegated by this machine's key,
         // attested by itself over its calls, revoked at its task's end.
         (
@@ -651,7 +658,10 @@ pub fn fire(project_dir: &Path, opts: FireOptions) -> Result<RunSummary, String>
     }
     write_atomic(&receipt_path, json::to_string(&receipt).as_bytes())?;
     if let Some(vc) = &credential {
-        write_atomic(&store.run_dir(run).join("receipt.vc.json"), json::to_string(vc).as_bytes())?;
+        write_atomic(
+            &store.run_dir(run).join("receipt.vc.json"),
+            json::to_string(vc).as_bytes(),
+        )?;
     }
 
     Ok(RunSummary {
@@ -846,7 +856,10 @@ fn run_worker_step(
             // the copy is handed over — the same approver every other
             // outbound step goes through (a person in the window, a file
             // under schedule, or a refusal when nobody can answer).
-            let n = env.approval_seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            let n = env
+                .approval_seq
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                + 1;
             let ask = crate::approve::Ask {
                 run: env.spine.run(),
                 n,
@@ -907,7 +920,10 @@ fn run_worker_step(
     let _ = env.spine.emit(
         EventKind::ToolCalled,
         me,
-        format!("worker {worker_name} — {}", if result.is_ok() { "ok" } else { "error" }),
+        format!(
+            "worker {worker_name} — {}",
+            if result.is_ok() { "ok" } else { "error" }
+        ),
         json::to_string(&Value::obj(vec![
             ("tool", Value::str("worker")),
             ("ok", Value::Bool(result.is_ok())),
@@ -987,8 +1003,13 @@ fn run_task(
 /// Issue the task's own identity: its card's grant, nothing more, valid
 /// until the firing's clock runs out.
 fn issue_identity(env: &FiringEnv, task: &Task) -> Result<(), String> {
-    let Some(r) = env.gate.identities() else { return Ok(()) };
-    let left = env.deadline.saturating_duration_since(Instant::now()).as_millis() as u64;
+    let Some(r) = env.gate.identities() else {
+        return Ok(());
+    };
+    let left = env
+        .deadline
+        .saturating_duration_since(Instant::now())
+        .as_millis() as u64;
     let p = task.permissions.bits();
     let words: Vec<&str> = [
         (PermissionSet::READ_FILES, "files-read"),
@@ -1010,7 +1031,11 @@ fn issue_identity(env: &FiringEnv, task: &Task) -> Result<(), String> {
         issued_ms: now_ms(),
         expires_ms: now_ms() + left,
     })?;
-    env.spine.note(EventKind::Note, Some(&task.name()), format!("acting as {did} (this task only)"));
+    env.spine.note(
+        EventKind::Note,
+        Some(&task.name()),
+        format!("acting as {did} (this task only)"),
+    );
     Ok(())
 }
 

@@ -23,7 +23,9 @@ use super::{engine, home, settings, EngineView, Ui};
 const OVERVIEW_GAP: f32 = 120.0;
 
 pub fn register(driver: &mut FrameDriver) {
-    driver.register::<Keys, RenderKeys>(|w| RenderKeys { handle: Rc::clone(&w.handle) });
+    driver.register::<Keys, RenderKeys>(|w| RenderKeys {
+        handle: Rc::clone(&w.handle),
+    });
 }
 
 pub fn root(ui: &Ui) -> WidgetNode {
@@ -39,7 +41,11 @@ pub fn root(ui: &Ui) -> WidgetNode {
         Live::new("root", move || frame(&ui3, &app)).into()
     })
     .into();
-    Keys { handle, child: body }.into()
+    Keys {
+        handle,
+        child: body,
+    }
+    .into()
 }
 
 /// The watermark's side: the mark, large, behind everything.
@@ -61,7 +67,11 @@ fn frame(ui: &Ui, app: &WidgetNode) -> WidgetNode {
             .build(move |t| splash_frame(&p, side, t, &app))
             .into();
     }
-    let mark = Mark { color: p.accent.with_alpha(p.watermark), progress: 1.0, soft: 1.0 };
+    let mark = Mark {
+        color: p.accent.with_alpha(p.watermark),
+        progress: 1.0,
+        soft: 1.0,
+    };
     // A repaint boundary: the blurred mark is recorded once and reused, so
     // nothing animating above it pays for the blur again.
     let watermark = RepaintBoundary::new().child(Center::new().child(mark.widget(side)));
@@ -81,20 +91,41 @@ fn splash_frame(p: &Pal, side: f32, t: f32, app: &WidgetNode) -> WidgetNode {
     let word = phase(t, 0.34, 0.44) * (1.0 - phase(t, 0.54, 0.60));
     let z = ease(phase(t, 0.58, 1.0));
     let alpha = mix(255.0, p.watermark as f32, z) as u8;
-    let mark = Mark { color: p.accent.with_alpha(alpha), progress: draw, soft: z };
+    let mark = Mark {
+        color: p.accent.with_alpha(alpha),
+        progress: draw,
+        soft: z,
+    };
     stack(vec![
         layer(Container::new().color(p.ground)),
         layer(fade(phase(t, 0.72, 1.0), app.clone())),
         layer(fade(1.0 - z, Container::new().color(p.ground))),
         layer(Center::new().child(mark.widget(mix(112.0, side, z)))),
-        layer(Center::new().child(shift(0.0, 92.0, fade(word, Text::new("wright").size(24.0).color(p.ink).weight(FontWeight::Bold))))),
+        layer(
+            Center::new().child(shift(
+                0.0,
+                92.0,
+                fade(
+                    word,
+                    Text::new("wright")
+                        .size(24.0)
+                        .color(p.ink)
+                        .weight(FontWeight::Bold),
+                ),
+            )),
+        ),
     ])
 }
 
 fn app(ui: &Ui) -> WidgetNode {
     let column: WidgetNode = Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .children(vec![top_bar(ui), stop_banner(ui), grow(stage(ui)), status_bar(ui)])
+        .children(vec![
+            top_bar(ui),
+            stop_banner(ui),
+            grow(stage(ui)),
+            status_bar(ui),
+        ])
         .into();
     let overlays: WidgetNode = {
         let ui = ui.clone();
@@ -133,12 +164,30 @@ pub(crate) fn top_bar(ui: &Ui) -> WidgetNode {
                     .width(if on { 20.0 } else { 7.0 })
                     .height(7.0)
                     .radius(3.5)
-                    .color(if on { p.accent } else if fresh { Color::rgba(0, 0, 0, 0) } else { p.line_strong })
-                    .border(Border::new(if fresh && !on { p.line_strong } else { Color::rgba(0, 0, 0, 0) }, 1.5));
-                tap(Container::new().padding(EdgeInsets::symmetric(3.0, 8.0)).child(dot), move || {
-                    go.set_overview(false);
-                    go.go(i);
-                })
+                    .color(if on {
+                        p.accent
+                    } else if fresh {
+                        Color::rgba(0, 0, 0, 0)
+                    } else {
+                        p.line_strong
+                    })
+                    .border(Border::new(
+                        if fresh && !on {
+                            p.line_strong
+                        } else {
+                            Color::rgba(0, 0, 0, 0)
+                        },
+                        1.5,
+                    ));
+                tap(
+                    Container::new()
+                        .padding(EdgeInsets::symmetric(3.0, 8.0))
+                        .child(dot),
+                    move || {
+                        go.set_overview(false);
+                        go.go(i);
+                    },
+                )
             })
             .collect();
         let live = ui.current_session().map(|s| s.live_agents()).unwrap_or(0);
@@ -147,22 +196,60 @@ pub(crate) fn top_bar(ui: &Ui) -> WidgetNode {
         let (a, b2, c, d) = (ui.clone(), ui.clone(), ui.clone(), ui.clone());
         Container::new()
             .padding(EdgeInsets::symmetric(16.0, 10.0))
-            .child(row(0.0, vec![
-                // Equal flanks: whatever the title weighs on the left and
-                // the toggles on the right, the dots keep the middle.
-                grow(SizedBox::width(300.0).child(
-                    Align::new(Alignment::CENTER_LEFT).child(line(title, 13.5, p.ink)),
-                )),
-                row(0.0, dots),
-                grow(Align::new(Alignment::CENTER_RIGHT).child(row(12.0, vec![
-                    tool_button(&p, Glyph::Sessions, "All sessions", None, overview_on, move || a.set_overview(!a.overview.get())),
-                    tool_button(&p, Glyph::Engine, "Engine", if live > 0 { Some(format!("{live} live")) } else { None }, engine_on, move || {
-                        b2.set_engine(if b2.engine.get() == EngineView::Hidden { EngineView::Open } else { EngineView::Hidden })
-                    }),
-                    icon_button(&p, Glyph::Gear, "Settings", false, move || c.open_settings()),
-                    icon_button(&p, Glyph::Help, "Gestures and shortcuts", false, move || d.help.set(!d.help.get())),
-                ]))),
-            ]))
+            .child(row(
+                0.0,
+                vec![
+                    // Equal flanks: whatever the title weighs on the left and
+                    // the toggles on the right, the dots keep the middle.
+                    grow(
+                        SizedBox::width(300.0).child(
+                            Align::new(Alignment::CENTER_LEFT).child(line(title, 13.5, p.ink)),
+                        ),
+                    ),
+                    row(0.0, dots),
+                    grow(Align::new(Alignment::CENTER_RIGHT).child(row(
+                        12.0,
+                        vec![
+                            tool_button(
+                                &p,
+                                Glyph::Sessions,
+                                "All sessions",
+                                None,
+                                overview_on,
+                                move || a.set_overview(!a.overview.get()),
+                            ),
+                            tool_button(
+                                &p,
+                                Glyph::Engine,
+                                "Engine",
+                                if live > 0 {
+                                    Some(format!("{live} live"))
+                                } else {
+                                    None
+                                },
+                                engine_on,
+                                move || {
+                                    b2.set_engine(if b2.engine.get() == EngineView::Hidden {
+                                        EngineView::Open
+                                    } else {
+                                        EngineView::Hidden
+                                    })
+                                },
+                            ),
+                            icon_button(&p, Glyph::Gear, "Settings", false, move || {
+                                c.open_settings()
+                            }),
+                            icon_button(
+                                &p,
+                                Glyph::Help,
+                                "Gestures and shortcuts",
+                                false,
+                                move || d.help.set(!d.help.get()),
+                            ),
+                        ],
+                    ))),
+                ],
+            ))
             .into()
     })
     .into()
@@ -204,15 +291,38 @@ fn status_bar(ui: &Ui) -> WidgetNode {
                 let (st, tone) = s.status();
                 (s.title(), st, tone, Some(s.spent_today()))
             }
-            None if ui.page.get() == 0 => ("Home".into(), format!("{} · {} saved", plural(ui.sessions.get().len(), "session"), ui.saved.get().len()), Tone::Quiet, None),
-            None => ("New session".into(), "Describe what should exist".into(), Tone::Quiet, None),
+            None if ui.page.get() == 0 => (
+                "Home".into(),
+                format!(
+                    "{} · {} saved",
+                    plural(ui.sessions.get().len(), "session"),
+                    ui.saved.get().len()
+                ),
+                Tone::Quiet,
+                None,
+            ),
+            None => (
+                "New session".into(),
+                "Describe what should exist".into(),
+                Tone::Quiet,
+                None,
+            ),
         };
         let dot: WidgetNode = {
             let u = ui.clone();
             Live::new("status-dot", move || {
                 let p = u.pal();
-                let pulse = if tone == Tone::Live { (u.clock.get() * 3.2).sin() * 0.5 + 0.5 } else { 1.0 };
-                Container::new().width(7.0).height(7.0).radius(3.5).color(tone_color(&p, tone).with_alpha((110.0 + 145.0 * pulse) as u8)).into()
+                let pulse = if tone == Tone::Live {
+                    (u.clock.get() * 3.2).sin() * 0.5 + 0.5
+                } else {
+                    1.0
+                };
+                Container::new()
+                    .width(7.0)
+                    .height(7.0)
+                    .radius(3.5)
+                    .color(tone_color(&p, tone).with_alpha((110.0 + 145.0 * pulse) as u8))
+                    .into()
             })
             .into()
         };
@@ -222,26 +332,58 @@ fn status_bar(ui: &Ui) -> WidgetNode {
             Container::new()
                 .color(p.accent)
                 .padding(EdgeInsets::symmetric(12.0, 0.0))
-                .child(Center::new().child(row(3.0, vec![Mark::solid(p.on_accent).widget(13.0), b("wright", 12.0, p.on_accent)])))
+                .child(Center::new().child(row(
+                    3.0,
+                    vec![
+                        Mark::solid(p.on_accent).widget(13.0),
+                        b("wright", 12.0, p.on_accent),
+                    ],
+                )))
                 .into(),
             line(where_, 12.0, p.ink),
             dot,
             fill(status, 12.0, p.muted),
         ];
         if let Some(micro) = spent {
-            items.push(t(format!("${:.4} today", micro as f64 / 1e6), 12.0, p.muted));
+            items.push(t(
+                format!("${:.4} today", micro as f64 / 1e6),
+                12.0,
+                p.muted,
+            ));
         }
         if ui.stopped.get().is_none() {
             let stop = ui.clone();
-            items.push(status_button(&p, Glyph::Stop, "Stop everything", move || stop.stop_everything("stopped from the window")));
+            items.push(status_button(
+                &p,
+                Glyph::Stop,
+                "Stop everything",
+                move || stop.stop_everything("stopped from the window"),
+            ));
         }
-        items.push(status_button(&p, Glyph::Theme, if mode == Mode::Dark { "Dark" } else { "Light" }, move || flip.set_look(flip.mode.get().flip(), flip.accent.get())));
-        items.push(status_button(&p, Glyph::Gear, "Settings", move || gear.open_settings()));
+        items.push(status_button(
+            &p,
+            Glyph::Theme,
+            if mode == Mode::Dark { "Dark" } else { "Light" },
+            move || flip.set_look(flip.mode.get().flip(), flip.accent.get()),
+        ));
+        items.push(status_button(&p, Glyph::Gear, "Settings", move || {
+            gear.open_settings()
+        }));
         Container::new()
             .height(26.0)
             .color(p.status)
             .border(Border::new(p.line, 1.0))
-            .child(Flex::row().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(12.0).children(items.into_iter().map(|w| Align::new(Alignment::CENTER_LEFT).child(w).into()).collect::<Vec<WidgetNode>>()))
+            .child(
+                Flex::row()
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .spacing(12.0)
+                    .children(
+                        items
+                            .into_iter()
+                            .map(|w| Align::new(Alignment::CENTER_LEFT).child(w).into())
+                            .collect::<Vec<WidgetNode>>(),
+                    ),
+            )
             .into()
     })
     .into()
@@ -255,7 +397,10 @@ fn status_button(p: &Pal, glyph: Glyph, label: &str, on_tap: impl Fn() + 'static
             .color(p.status.lerp(p.surface2, s.hover))
             .radius(corner::SMALL)
             .padding(EdgeInsets::symmetric(8.0, 3.0))
-            .child(row(5.0, vec![glyph.draw(12.0, p.muted), t(label.clone(), 12.0, p.muted)]))
+            .child(row(
+                5.0,
+                vec![glyph.draw(12.0, p.muted), t(label.clone(), 12.0, p.muted)],
+            ))
             .into()
     })
     .on_tap(on_tap)
@@ -276,12 +421,18 @@ fn stage(ui: &Ui) -> WidgetNode {
             let drag = ui.drag.get();
             let dragging = ui.dragging.get();
             let overview = if ui.overview.get() { 1.0 } else { 0.0 };
-            let engine_on = if ui.engine.get() == EngineView::Hidden { 0.0 } else { 1.0 };
+            let engine_on = if ui.engine.get() == EngineView::Hidden {
+                0.0
+            } else {
+                1.0
+            };
             let track: WidgetNode = {
                 let ui = ui.clone();
                 glide(overview, 520, false, move |o| {
                     let (ui, pages) = (ui.clone(), pages.clone());
-                    glide(-page * w + drag, 460, dragging, move |x| track(&ui, &pages, w, h, o, x))
+                    glide(-page * w + drag, 460, dragging, move |x| {
+                        track(&ui, &pages, w, h, o, x)
+                    })
                 })
             };
             let ui2 = ui.clone();
@@ -289,11 +440,24 @@ fn stage(ui: &Ui) -> WidgetNode {
                 // Behind the agents, the page goes soft: blurred and dimmed,
                 // so the boxes read cleanly instead of word-over-word with the
                 // conversation underneath. The blur grows with the fade-in.
-                let page: WidgetNode = Transformed::new(Transform::scale_around(Offset::new(w / 2.0, h / 2.0), 1.0 - 0.03 * e, 1.0 - 0.03 * e)).child(track.clone()).into();
-                let page: WidgetNode = if e > 0.01 { vieww::widget::Filtered::blur(10.0 * e).child(page).into() } else { page };
+                let page: WidgetNode = Transformed::new(Transform::scale_around(
+                    Offset::new(w / 2.0, h / 2.0),
+                    1.0 - 0.03 * e,
+                    1.0 - 0.03 * e,
+                ))
+                .child(track.clone())
+                .into();
+                let page: WidgetNode = if e > 0.01 {
+                    vieww::widget::Filtered::blur(10.0 * e).child(page).into()
+                } else {
+                    page
+                };
                 let mut layers = vec![layer(fade(1.0 - 0.88 * e, page))];
                 if e > 0.01 {
-                    layers.push(layer(fade(e, shift(0.0, 16.0 * (1.0 - e), engine::layer(&ui2)))));
+                    layers.push(layer(fade(
+                        e,
+                        shift(0.0, 16.0 * (1.0 - e), engine::layer(&ui2)),
+                    )));
                 }
                 Clip::rect().child(stack(layers)).into()
             })
@@ -301,7 +465,10 @@ fn stage(ui: &Ui) -> WidgetNode {
         .into()
     })
     .into();
-    GestureDetector::new().on_scroll(move |e: ScrollEvent| wheel.on_wheel(e)).child(body).into()
+    GestureDetector::new()
+        .on_scroll(move |e: ScrollEvent| wheel.on_wheel(e))
+        .child(body)
+        .into()
 }
 
 /// Every page at once, blended between the row (`o == 0`) and the
@@ -325,7 +492,13 @@ fn track(ui: &Ui, pages: &[WidgetNode], w: f32, h: f32, o: f32, x: f32) -> Widge
             if left > w || left + w < 0.0 {
                 continue; // off screen: nothing to draw
             }
-            layers.push(at(left, 0.0, w, h, fade(live, inert(o > 0.01 || i != current, page.clone()))));
+            layers.push(at(
+                left,
+                0.0,
+                w,
+                h,
+                fade(live, inert(o > 0.01 || i != current, page.clone())),
+            ));
         }
     }
     if o <= 0.01 {
@@ -340,20 +513,37 @@ fn track(ui: &Ui, pages: &[WidgetNode], w: f32, h: f32, o: f32, x: f32) -> Widge
         let from = (i as f32 * w + x, 0.0, w, h);
         let to = (tx + i as f32 * (w + OVERVIEW_GAP) * s, ty, w * s, h * s);
         let k = ease(o);
-        let (left, top, cw, ch) = (mix(from.0, to.0, k), mix(from.1, to.1, k), mix(from.2, to.2, k), mix(from.3, to.3, k));
+        let (left, top, cw, ch) = (
+            mix(from.0, to.0, k),
+            mix(from.1, to.1, k),
+            mix(from.2, to.2, k),
+            mix(from.3, to.3, k),
+        );
         let on = i == current;
         let card = Container::new()
             .color(p.ground)
             .radius(corner::PANEL)
-            .border(Border::new(if on { p.accent } else { p.line_strong }, if on { 2.5 } else { 1.0 }))
+            .border(Border::new(
+                if on { p.accent } else { p.line_strong },
+                if on { 2.5 } else { 1.0 },
+            ))
             .child(Clip::rounded(corner::PANEL).child(mini(ui, &p, i, k > 0.85)));
         let go = ui.clone();
         // Sized explicitly: a tap target loosens its child's constraints,
         // and a card of only layered children would shrink to nothing.
-        layers.push(at(left, top, cw, ch, fade(o.min(1.0), tap(sized(cw, ch, card), move || {
-            go.set_overview(false);
-            go.go(i);
-        }))));
+        layers.push(at(
+            left,
+            top,
+            cw,
+            ch,
+            fade(
+                o.min(1.0),
+                tap(sized(cw, ch, card), move || {
+                    go.set_overview(false);
+                    go.go(i);
+                }),
+            ),
+        ));
         let title = match i {
             0 => "Home".to_string(),
             k if k <= sessions.len() => sessions[k - 1].title(),
@@ -362,55 +552,146 @@ fn track(ui: &Ui, pages: &[WidgetNode], w: f32, h: f32, o: f32, x: f32) -> Widge
         let mut caption = vec![fill(title, 13.0, if on { p.ink } else { p.muted })];
         if i >= 1 && i <= sessions.len() {
             let close = ui.clone();
-            caption.push(icon_button(&p, Glyph::Close, "Close into Saved", false, move || close.close_session(i - 1)));
+            caption.push(icon_button(
+                &p,
+                Glyph::Close,
+                "Close into Saved",
+                false,
+                move || close.close_session(i - 1),
+            ));
         }
-        layers.push(at(left, top + ch + 8.0, cw, 30.0, fade(phase(o, 0.6, 1.0), row(6.0, caption))));
+        layers.push(at(
+            left,
+            top + ch + 8.0,
+            cw,
+            30.0,
+            fade(phase(o, 0.6, 1.0), row(6.0, caption)),
+        ));
     }
     let saved = ui.saved.get();
     if !saved.is_empty() {
-        let shelf = row(12.0, vec![b("SAVED", 11.0, p.muted), home::saved_chips(ui, &saved)]);
-        layers.push(at(0.0, h - 70.0, w, 60.0, fade(phase(o, 0.6, 1.0), Center::new().child(shelf))));
+        let shelf = row(
+            12.0,
+            vec![b("SAVED", 11.0, p.muted), home::saved_chips(ui, &saved)],
+        );
+        layers.push(at(
+            0.0,
+            h - 70.0,
+            w,
+            60.0,
+            fade(phase(o, 0.6, 1.0), Center::new().child(shelf)),
+        ));
     }
-    layers.push(at(0.0, 18.0, w, 24.0, fade(phase(o, 0.6, 1.0), Center::new().child(t("Click a session to open it · × closes it into Saved · Esc goes back", 12.5, p.muted)))));
+    layers.push(at(
+        0.0,
+        18.0,
+        w,
+        24.0,
+        fade(
+            phase(o, 0.6, 1.0),
+            Center::new().child(t(
+                "Click a session to open it · × closes it into Saved · Esc goes back",
+                12.5,
+                p.muted,
+            )),
+        ),
+    ));
     Stack::new().children(layers).into()
 }
 
 /// A page in miniature: what it is and where it stands, at a glance.
 fn mini(ui: &Ui, p: &Pal, i: usize, words: bool) -> WidgetNode {
     let sessions = ui.sessions.get();
-    let mark = Mark { color: p.accent.with_alpha(p.watermark), progress: 1.0, soft: 0.6 };
+    let mark = Mark {
+        color: p.accent.with_alpha(p.watermark),
+        progress: 1.0,
+        soft: 0.6,
+    };
     if !words {
         // In flight: just the mark, so nothing has to fit a moving box.
         return Center::new().child(mark.widget(150.0)).into();
     }
     let body: WidgetNode = match i {
-        0 => column(8.0, vec![
-            b("What should exist?", 16.0, p.ink),
-            Container::new().height(26.0).color(p.surface).radius(13.0).border(Border::new(p.line_strong, 1.0)).into(),
-            t(format!("{} · {} saved", plural(sessions.len(), "session"), ui.saved.get().len()), 11.0, p.muted),
-        ]),
+        0 => column(
+            8.0,
+            vec![
+                b("What should exist?", 16.0, p.ink),
+                Container::new()
+                    .height(26.0)
+                    .color(p.surface)
+                    .radius(13.0)
+                    .border(Border::new(p.line_strong, 1.0))
+                    .into(),
+                t(
+                    format!(
+                        "{} · {} saved",
+                        plural(sessions.len(), "session"),
+                        ui.saved.get().len()
+                    ),
+                    11.0,
+                    p.muted,
+                ),
+            ],
+        ),
         k if k <= sessions.len() => {
             let s = &sessions[k - 1];
             let (status, tone) = s.status();
-            let request = s.plan.get().map(|pl| pl.request).unwrap_or_else(|| s.chat.get().first().map(|c| c.1.clone()).unwrap_or_default());
+            let request = s.plan.get().map(|pl| pl.request).unwrap_or_else(|| {
+                s.chat
+                    .get()
+                    .first()
+                    .map(|c| c.1.clone())
+                    .unwrap_or_default()
+            });
             let share = s.done_share();
-            column(8.0, vec![
-                line(s.title(), 15.0, p.ink),
-                Container::new().color(p.bubble).radius(corner::FIELD).padding(EdgeInsets::symmetric(9.0, 5.0)).child(Text::new(request).size(10.5).color(p.ink).max_lines(2)).into(),
-                line(status, 11.0, tone_color(p, tone)),
-                Container::new().height(3.0).radius(1.5).color(p.surface2).alignment(Alignment::CENTER_LEFT).child(
-                    Container::new().width(160.0 * share).height(3.0).radius(1.5).color(tone_color(p, tone)),
-                ).into(),
-            ])
+            column(
+                8.0,
+                vec![
+                    line(s.title(), 15.0, p.ink),
+                    Container::new()
+                        .color(p.bubble)
+                        .radius(corner::FIELD)
+                        .padding(EdgeInsets::symmetric(9.0, 5.0))
+                        .child(Text::new(request).size(10.5).color(p.ink).max_lines(2))
+                        .into(),
+                    line(status, 11.0, tone_color(p, tone)),
+                    Container::new()
+                        .height(3.0)
+                        .radius(1.5)
+                        .color(p.surface2)
+                        .alignment(Alignment::CENTER_LEFT)
+                        .child(
+                            Container::new()
+                                .width(160.0 * share)
+                                .height(3.0)
+                                .radius(1.5)
+                                .color(tone_color(p, tone)),
+                        )
+                        .into(),
+                ],
+            )
         }
-        _ => column(8.0, vec![Glyph::Plus.draw(22.0, p.muted), b("A new session", 14.0, p.ink), t("Describe what should exist", 11.0, p.muted)]),
+        _ => column(
+            8.0,
+            vec![
+                Glyph::Plus.draw(22.0, p.muted),
+                b("A new session", 14.0, p.ink),
+                t("Describe what should exist", 11.0, p.muted),
+            ],
+        ),
     };
     // The mark sits behind the text as a non-layered child, so the card's
     // size comes from its own constraints (a stack of only layered children
     // can be laid out at zero size for a frame, and its text overflows).
     Stack::new()
         .fit(StackFit::Expand)
-        .children(vec![Center::new().child(mark.widget(150.0)).into(), pad(EdgeInsets::all(14.0), Align::new(Alignment::TOP_LEFT).child(body))])
+        .children(vec![
+            Center::new().child(mark.widget(150.0)).into(),
+            pad(
+                EdgeInsets::all(14.0),
+                Align::new(Alignment::TOP_LEFT).child(body),
+            ),
+        ])
         .into()
 }
 
@@ -418,7 +699,10 @@ fn mini(ui: &Ui, p: &Pal, i: usize, words: bool) -> WidgetNode {
 
 fn scrim(ui: &Ui, close: impl Fn() + 'static) -> WidgetNode {
     let _ = ui;
-    layer(tap(Container::new().color(Color::rgba(0, 0, 0, 110)), close))
+    layer(tap(
+        Container::new().color(Color::rgba(0, 0, 0, 110)),
+        close,
+    ))
 }
 
 fn overlays(ui: &Ui) -> WidgetNode {
@@ -428,24 +712,49 @@ fn overlays(ui: &Ui) -> WidgetNode {
     if ui.settings.get() {
         let close = ui.settings.clone();
         layers.push(scrim(ui, move || close.set(false)));
-        layers.push(layer(Center::new().child(sized((size.width - 80.0).min(1000.0), (size.height - 100.0).min(720.0), settings::page(ui)))));
+        layers.push(layer(Center::new().child(sized(
+            (size.width - 80.0).min(1000.0),
+            (size.height - 100.0).min(720.0),
+            settings::page(ui),
+        ))));
     }
     if ui.help.get() {
         let close = ui.help.clone();
         layers.push(scrim(ui, move || close.set(false)));
-        layers.push(layer(Center::new().child(sized(520.0, 470.0, help(ui, &p)))));
+        layers.push(layer(Center::new().child(sized(
+            520.0,
+            470.0,
+            help(ui, &p),
+        ))));
     }
     if let Some(toast) = ui.toast.get() {
         let mut items = vec![t(toast.text.clone(), 13.0, p.ground)];
         if let Some(path) = toast.undo.clone() {
             let u = ui.clone();
-            items.push(button(&p, "Undo", Look::Primary, true, move || u.reopen(&path)));
+            items.push(button(&p, "Undo", Look::Primary, true, move || {
+                u.reopen(&path)
+            }));
         }
         let close = ui.toast.clone();
-        items.push(tap(Glyph::Close.draw(14.0, p.ground), move || close.set(None)));
-        layers.push(Positioned::new().left(0.0).right(0.0).bottom(44.0).child(Center::new().child(
-            Container::new().color(p.ink).radius(corner::PILL).padding(EdgeInsets::only(18.0, 6.0, 12.0, 6.0)).child(row(12.0, items)),
-        )).into());
+        items.push(tap(Glyph::Close.draw(14.0, p.ground), move || {
+            close.set(None)
+        }));
+        layers.push(
+            Positioned::new()
+                .left(0.0)
+                .right(0.0)
+                .bottom(44.0)
+                .child(
+                    Center::new().child(
+                        Container::new()
+                            .color(p.ink)
+                            .radius(corner::PILL)
+                            .padding(EdgeInsets::only(18.0, 6.0, 12.0, 6.0))
+                            .child(row(12.0, items)),
+                    ),
+                )
+                .into(),
+        );
     }
     if layers.is_empty() {
         return inert(true, SizedBox::shrink());
@@ -457,7 +766,17 @@ fn help(ui: &Ui, p: &Pal) -> WidgetNode {
     let close = ui.help.clone();
     let replay = ui.clone();
     let list = ui.clone();
-    let entry = |k: &str, v: &str| -> WidgetNode { row(14.0, vec![SizedBox::width(150.0).child(b(k.to_string(), 13.5, p.ink)).into(), grow(para(v.to_string(), 13.5, p.muted))]) };
+    let entry = |k: &str, v: &str| -> WidgetNode {
+        row(
+            14.0,
+            vec![
+                SizedBox::width(150.0)
+                    .child(b(k.to_string(), 13.5, p.ink))
+                    .into(),
+                grow(para(v.to_string(), 13.5, p.muted)),
+            ],
+        )
+    };
     card(p, stretch(12.0, vec![
         b("Gestures and shortcuts", 18.0, p.ink),
         entry("Two-finger swipe", "Next or previous session. Arrow keys too."),
@@ -483,8 +802,16 @@ fn help(ui: &Ui, p: &Pal) -> WidgetNode {
 
 // ── headless ─────────────────────────────────────────────────────
 
-fn png(driver: &mut FrameDriver, renderer: &mut vieww::paint::native::NativeRenderer, size: Size, bg: Color, path: &Path) -> Result<(), String> {
-    let (bytes, _) = renderer.render_to_png(driver.scene(), size.width as u32, size.height as u32, bg).map_err(|e| format!("render: {e}"))?;
+fn png(
+    driver: &mut FrameDriver,
+    renderer: &mut vieww::paint::native::NativeRenderer,
+    size: Size,
+    bg: Color,
+    path: &Path,
+) -> Result<(), String> {
+    let (bytes, _) = renderer
+        .render_to_png(driver.scene(), size.width as u32, size.height as u32, bg)
+        .map_err(|e| format!("render: {e}"))?;
     std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
@@ -494,10 +821,20 @@ pub fn render_icon(path: &Path, side: u32, padded: bool) -> Result<(), String> {
     use vieww::paint::native::NativeRenderer;
     let size = Size::new(side as f32, side as f32);
     let mut driver = FrameDriver::new(size);
-    let tile_side = if padded { side as f32 * 0.8 } else { side as f32 };
+    let tile_side = if padded {
+        side as f32 * 0.8
+    } else {
+        side as f32
+    };
     driver.set_root(Center::new().child(logo::tile(tile_side, logo::ICON_GROUND, logo::ICON_INK)));
     driver.draw_frame_at(Duration::from_millis(16));
-    png(&mut driver, &mut NativeRenderer::new(), size, Color::rgba(0, 0, 0, 0), path)
+    png(
+        &mut driver,
+        &mut NativeRenderer::new(),
+        size,
+        Color::rgba(0, 0, 0, 0),
+        path,
+    )
 }
 
 /// The window's icon, in pixels the platform can draw beside the title:
@@ -511,12 +848,20 @@ pub fn window_icon() -> Option<vieww_platform_winit::WindowIcon> {
     const SIDE: u32 = 32;
     let size = Size::new(SIDE as f32, SIDE as f32);
     let mut driver = FrameDriver::new(size);
-    driver.set_root(Center::new().child(logo::tile(SIDE as f32, logo::ICON_GROUND, logo::ICON_INK)));
+    driver.set_root(Center::new().child(logo::tile(
+        SIDE as f32,
+        logo::ICON_GROUND,
+        logo::ICON_INK,
+    )));
     driver.draw_frame_at(Duration::from_millis(16));
     let (pixels, _) = NativeRenderer::new()
         .render_to_pixels(driver.scene(), SIDE, SIDE, Color::rgba(0, 0, 0, 0))
         .ok()?;
-    Some(vieww_platform_winit::WindowIcon::new(SIDE, SIDE, pixels.data().to_vec()))
+    Some(vieww_platform_winit::WindowIcon::new(
+        SIDE,
+        SIDE,
+        pixels.data().to_vec(),
+    ))
 }
 
 /// Every screen of the shell to PNG, headless. Uses `WRIGHT_HOME` like
@@ -527,7 +872,11 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     let size = Size::new(1280.0, 800.0);
     let mut driver = FrameDriver::new(size);
     register(&mut driver);
-    let ui = Ui::new(driver.elements().runtime(), project.map(Path::to_path_buf), Arc::new(AtomicBool::new(false)));
+    let ui = Ui::new(
+        driver.elements().runtime(),
+        project.map(Path::to_path_buf),
+        Arc::new(AtomicBool::new(false)),
+    );
     ui.go(0);
     driver.set_root(root(&ui));
     let mut renderer = NativeRenderer::new();
@@ -539,7 +888,13 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
             clock += 50;
             driver.draw_frame_at(Duration::from_millis(clock));
         }
-        png(driver, &mut renderer, size, ui.pal().ground, &dir.join(format!("{name}.png")))
+        png(
+            driver,
+            &mut renderer,
+            size,
+            ui.pal().ground,
+            &dir.join(format!("{name}.png")),
+        )
     };
     let mut n = 0;
     shot(&mut driver, "1-splash", 1700)?;
@@ -557,15 +912,30 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     }
     ui.set_overview(true);
     shot(&mut driver, "5-overview", 900)?;
+    n += 1;
     ui.set_overview(false);
     ui.open_settings();
     shot(&mut driver, "6-settings", 400)?;
+    n += 1;
     // A built-in model mid-download, as Settings shows it.
-    ui.form.pulls.set([(wright_runtime::local::TEXT_MODEL.to_string(), super::settings::Pull::Working { line: "Downloading the built-in model qwen3-1.7b (first use, once): 42% of 1.83 GB".into(), percent: 42 })].into_iter().collect());
+    ui.form.pulls.set(
+        [(
+            wright_runtime::local::TEXT_MODEL.to_string(),
+            super::settings::Pull::Working {
+                line: "Downloading the built-in model qwen3-1.7b (first use, once): 42% of 1.83 GB"
+                    .into(),
+                percent: 42,
+            },
+        )]
+        .into_iter()
+        .collect(),
+    );
     shot(&mut driver, "6-settings-download", 200)?;
+    n += 1;
     ui.form.pulls.set(Default::default());
     ui.open_agents_and_tools();
     shot(&mut driver, "6-settings-agents", 400)?;
+    n += 1;
     // Office machines: certificates and environment variables.
     ui.form.tab.set(super::settings::Tab::Network);
     ui.form.scroll.offset.set(0.0);
@@ -579,7 +949,7 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
     ui.settings.set(false);
     ui.mode.set(Mode::Light);
     shot(&mut driver, "7-light", 600)?;
-    n += 4;
+    n += 1;
     if let Some(s) = ui.sessions.get().first().cloned() {
         ui.mode.set(Mode::Dark);
         ui.go(1);
@@ -600,7 +970,24 @@ pub fn snapshots(project: Option<&Path>, dir: &Path) -> Result<usize, String> {
         ui.stopped.set(Some("a test of the stop banner".into()));
         shot(&mut driver, "10-stopped", 300)?;
         ui.stopped.set(None);
-        n += 4;
+        n += 3;
+        // The receipt, as the window proves a run: every check in
+        // verify's words, over the session page.
+        if s.receipt.get().is_some() {
+            s.receipt_open.set(true);
+            shot(&mut driver, "11-receipt", 500)?;
+            s.receipt_open.set(false);
+            n += 1;
+        }
+        // The shell's light side, seen on the pages that carry a run —
+        // the theme is one flip, and the evidence should hold in both.
+        ui.mode.set(Mode::Light);
+        shot(&mut driver, "12-light-session", 600)?;
+        ui.set_engine(EngineView::Open);
+        shot(&mut driver, "13-light-engine", 700)?;
+        ui.set_engine(EngineView::Hidden);
+        ui.mode.set(Mode::Dark);
+        n += 2;
     }
     match vieww::render::overflow::reported() {
         0 => Ok(n),

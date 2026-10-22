@@ -109,7 +109,14 @@ pub fn home(ui: &Ui) -> WidgetNode {
         stretch(18.0, items)
     })
     .into();
-    scroll_area(&ui2, &ui2.home_scroll, pad(EdgeInsets::only(32.0, 12.0, 32.0, 60.0), reading(720.0, content)))
+    scroll_area(
+        &ui2,
+        &ui2.home_scroll,
+        pad(
+            EdgeInsets::only(32.0, 12.0, 32.0, 60.0),
+            reading(720.0, content),
+        ),
+    )
 }
 
 /// The mic, as the main way to start (the memo's item 6): one big
@@ -127,25 +134,39 @@ fn speak_hero(ui: &Ui) -> WidgetNode {
             let u2 = u.clone();
             let c2 = c.clone();
             Pressable::sensed(move |s: Sense| {
-            let level = u.mic_level.get();
-            Container::new()
-                .width(520.0)
-                .color(p.accent_soft)
-                .radius(corner::CARD)
-                .border(Border::new(p.accent, 1.0 + s.hover))
-                .padding(EdgeInsets::all(14.0))
-                .child(row(12.0, vec![
-                    Glyph::Mic.draw(22.0, p.accent_ink),
-                    grow(column(3.0, vec![
-                        b("Listening — say what should exist.".to_string(), 15.0, p.ink),
-                        t("Tap to stop; Wright writes it down and starts.", 12.5, p.muted),
-                    ])),
-                    meter_bars(&p, level, u.clock.get()),
-                ]))
-                .into()
-        })
-        .on_tap(move || u2.stop_voice(&c2))
-        .into()
+                let level = u.mic_level.get();
+                Container::new()
+                    .width(520.0)
+                    .color(p.accent_soft)
+                    .radius(corner::CARD)
+                    .border(Border::new(p.accent, 1.0 + s.hover))
+                    .padding(EdgeInsets::all(14.0))
+                    .child(row(
+                        12.0,
+                        vec![
+                            Glyph::Mic.draw(22.0, p.accent_ink),
+                            grow(column(
+                                3.0,
+                                vec![
+                                    b(
+                                        "Listening — say what should exist.".to_string(),
+                                        15.0,
+                                        p.ink,
+                                    ),
+                                    t(
+                                        "Tap to stop; Wright writes it down and starts.",
+                                        12.5,
+                                        p.muted,
+                                    ),
+                                ],
+                            )),
+                            meter_bars(&p, level, u.clock.get()),
+                        ],
+                    ))
+                    .into()
+            })
+            .on_tap(move || u2.stop_voice(&c2))
+            .into()
         }
         Voice::Transcribing => {
             let u = u.clone();
@@ -155,10 +176,13 @@ fn speak_hero(ui: &Ui) -> WidgetNode {
                 .radius(corner::CARD)
                 .border(Border::new(p.line_strong, 1.5))
                 .padding(EdgeInsets::all(14.0))
-                .child(row(12.0, vec![
-                    Glyph::spinner(22.0, p.accent_ink, u.clock.get()),
-                    b("Writing it down...".to_string(), 15.0, p.ink),
-                ]))
+                .child(row(
+                    12.0,
+                    vec![
+                        Glyph::spinner(22.0, p.accent_ink, u.clock.get()),
+                        b("Writing it down...".to_string(), 15.0, p.ink),
+                    ],
+                ))
                 .into()
         }
         _ => {
@@ -213,11 +237,25 @@ pub fn saved_shelf(ui: &Ui, saved: &[std::path::PathBuf]) -> WidgetNode {
             let sum = super::session::saved_summary(path);
             let (u, path) = (ui.clone(), path.clone());
             Pressable::sensed(move |st: Sense| {
-                let mut rows = vec![row(6.0, vec![Glyph::Restore.draw(14.0, p.accent_ink), grow(line(sum.title.clone(), 14.0, p.ink))])];
+                let mut rows = vec![row(
+                    6.0,
+                    vec![
+                        Glyph::Restore.draw(14.0, p.accent_ink),
+                        grow(line(sum.title.clone(), 14.0, p.ink)),
+                    ],
+                )];
                 match &sum.last {
                     Some(last) => {
                         rows.push(line(last.clone(), 12.5, p.muted));
-                        rows.push(t(format!("{} message{} · open to continue", sum.messages, if sum.messages == 1 { "" } else { "s" }), 11.5, p.muted));
+                        rows.push(t(
+                            format!(
+                                "{} message{} · open to continue",
+                                sum.messages,
+                                if sum.messages == 1 { "" } else { "s" }
+                            ),
+                            11.5,
+                            p.muted,
+                        ));
                     }
                     None => rows.push(t("No conversation kept · open to continue", 12.0, p.muted)),
                 }
@@ -225,7 +263,14 @@ pub fn saved_shelf(ui: &Ui, saved: &[std::path::PathBuf]) -> WidgetNode {
                     .width(330.0)
                     .color(p.surface.lerp(p.surface2, st.hover))
                     .radius(corner::CARD)
-                    .border(Border::new(if st.hover > 0.0 { p.line_strong } else { p.line }, 1.0))
+                    .border(Border::new(
+                        if st.hover > 0.0 {
+                            p.line_strong
+                        } else {
+                            p.line
+                        },
+                        1.0,
+                    ))
                     .padding(EdgeInsets::all(14.0))
                     .child(stretch(5.0, rows))
                     .into()
@@ -253,7 +298,13 @@ pub fn saved_chips(ui: &Ui, saved: &[std::path::PathBuf]) -> WidgetNode {
                     .radius(16.0)
                     .border(Border::new(p.line_strong, 1.0))
                     .padding(EdgeInsets::only(10.0, 5.0, 12.0, 5.0))
-                    .child(row(6.0, vec![Glyph::Restore.draw(14.0, p.accent_ink), t(name.clone(), 12.5, p.ink)]))
+                    .child(row(
+                        6.0,
+                        vec![
+                            Glyph::Restore.draw(14.0, p.accent_ink),
+                            t(name.clone(), 12.5, p.ink),
+                        ],
+                    ))
                     .into()
             })
             .on_tap(move || u.reopen(&path))

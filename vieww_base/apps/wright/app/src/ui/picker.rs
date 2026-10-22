@@ -17,7 +17,12 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn lines(out: &[u8]) -> Vec<PathBuf> {
-    String::from_utf8_lossy(out).lines().map(str::trim).filter(|l| !l.is_empty()).map(PathBuf::from).collect()
+    String::from_utf8_lossy(out)
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
+        .collect()
 }
 
 /// Ask for files (`folder == false`) or one folder.
@@ -46,17 +51,30 @@ pub fn pick(folder: bool) -> Result<Vec<PathBuf>, String> {
             &["-e", "POSIX path of (choose folder)"]
         } else {
             &[
-                "-e", "set fs to choose file with multiple selections allowed",
-                "-e", "set out to \"\"",
-                "-e", "repeat with f in fs",
-                "-e", "set out to out & POSIX path of f & linefeed",
-                "-e", "end repeat",
-                "-e", "return out",
+                "-e",
+                "set fs to choose file with multiple selections allowed",
+                "-e",
+                "set out to \"\"",
+                "-e",
+                "repeat with f in fs",
+                "-e",
+                "set out to out & POSIX path of f & linefeed",
+                "-e",
+                "end repeat",
+                "-e",
+                "return out",
             ]
         };
-        let out = Command::new("osascript").args(script).output().map_err(|e| format!("could not open the file dialog: {e}"))?;
+        let out = Command::new("osascript")
+            .args(script)
+            .output()
+            .map_err(|e| format!("could not open the file dialog: {e}"))?;
         // Cancel exits non-zero with "User canceled" — that is an empty answer.
-        Ok(if out.status.success() { lines(&out.stdout) } else { Vec::new() })
+        Ok(if out.status.success() {
+            lines(&out.stdout)
+        } else {
+            Vec::new()
+        })
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
@@ -66,13 +84,28 @@ pub fn pick(folder: bool) -> Result<Vec<PathBuf>, String> {
             vec!["--file-selection", "--multiple", "--separator=\n"]
         };
         if let Ok(out) = Command::new("zenity").args(&zenity).output() {
-            return Ok(if out.status.success() { lines(&out.stdout) } else { Vec::new() });
+            return Ok(if out.status.success() {
+                lines(&out.stdout)
+            } else {
+                Vec::new()
+            });
         }
-        let kdialog: Vec<&str> = if folder { vec!["--getexistingdirectory", "."] } else { vec!["--getopenfilename", ".", "--multiple", "--separate-output"] };
+        let kdialog: Vec<&str> = if folder {
+            vec!["--getexistingdirectory", "."]
+        } else {
+            vec!["--getopenfilename", ".", "--multiple", "--separate-output"]
+        };
         if let Ok(out) = Command::new("kdialog").args(&kdialog).output() {
-            return Ok(if out.status.success() { lines(&out.stdout) } else { Vec::new() });
+            return Ok(if out.status.success() {
+                lines(&out.stdout)
+            } else {
+                Vec::new()
+            });
         }
-        Err("no file dialog found (install zenity or kdialog) — or drop files onto the window".into())
+        Err(
+            "no file dialog found (install zenity or kdialog) — or drop files onto the window"
+                .into(),
+        )
     }
 }
 

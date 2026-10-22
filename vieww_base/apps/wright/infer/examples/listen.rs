@@ -22,7 +22,14 @@ fn main() {
     let _ = w.encode(&mel, n_len, 0);
     println!("encode {:.2}s", t.elapsed().as_secs_f32());
     let t = Instant::now();
-    let out = w.transcribe(&samples, a.get(3).map(String::as_str)).unwrap_or_else(|e| panic!("{e}"));
-    println!("transcribe {:.2}s ({} tokens, {})", t.elapsed().as_secs_f32(), out.tokens.len(), out.language);
+    let out = w
+        .transcribe(&samples, a.get(3).map(String::as_str))
+        .unwrap_or_else(|e| panic!("{e}"));
+    println!(
+        "transcribe {:.2}s ({} tokens, {})",
+        t.elapsed().as_secs_f32(),
+        out.tokens.len(),
+        out.language
+    );
     println!("{}", out.text);
 }

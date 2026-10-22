@@ -23,12 +23,21 @@ pub fn t(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
 }
 
 pub fn b(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
-    Text::new(s).size(size).color(color).weight(FontWeight::Bold).into()
+    Text::new(s)
+        .size(size)
+        .color(color)
+        .weight(FontWeight::Bold)
+        .into()
 }
 
 /// One line that ends in an ellipsis instead of overflowing.
 pub fn line(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
-    Text::new(s).size(size).color(color).max_lines(1).overflow(vieww::text::TextOverflow::Ellipsis).into()
+    Text::new(s)
+        .size(size)
+        .color(color)
+        .max_lines(1)
+        .overflow(vieww::text::TextOverflow::Ellipsis)
+        .into()
 }
 
 /// Takes the rest of its row, one line, ellipsis.
@@ -43,7 +52,11 @@ pub fn para(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
 
 pub fn mono(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
     Text::new(s)
-        .style(TextStyle::new(size).family(vieww::foundation::FontFamily::Monospace).color(color))
+        .style(
+            TextStyle::new(size)
+                .family(vieww::foundation::FontFamily::Monospace)
+                .color(color),
+        )
         .max_lines(1)
         .overflow(vieww::text::TextOverflow::Ellipsis)
         .into()
@@ -52,16 +65,28 @@ pub fn mono(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
 // ── layout ───────────────────────────────────────────────────────
 
 pub fn column(spacing: f32, items: Vec<WidgetNode>) -> WidgetNode {
-    Flex::column().cross_axis_alignment(CrossAxisAlignment::Start).spacing(spacing).children(items).into()
+    Flex::column()
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .spacing(spacing)
+        .children(items)
+        .into()
 }
 
 /// A column whose children are as wide as it is.
 pub fn stretch(spacing: f32, items: Vec<WidgetNode>) -> WidgetNode {
-    Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(spacing).children(items).into()
+    Flex::column()
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .spacing(spacing)
+        .children(items)
+        .into()
 }
 
 pub fn row(spacing: f32, items: Vec<WidgetNode>) -> WidgetNode {
-    Flex::row().cross_axis_alignment(CrossAxisAlignment::Center).spacing(spacing).children(items).into()
+    Flex::row()
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .spacing(spacing)
+        .children(items)
+        .into()
 }
 
 pub fn grow(child: impl Into<WidgetNode>) -> WidgetNode {
@@ -92,11 +117,19 @@ pub fn fade(alpha: f32, child: impl Into<WidgetNode>) -> WidgetNode {
 }
 
 pub fn shift(dx: f32, dy: f32, child: impl Into<WidgetNode>) -> WidgetNode {
-    Transformed::translate(Offset::new(dx, dy)).child(child).into()
+    Transformed::translate(Offset::new(dx, dy))
+        .child(child)
+        .into()
 }
 
 pub fn at(left: f32, top: f32, w: f32, h: f32, child: impl Into<WidgetNode>) -> WidgetNode {
-    Positioned::new().left(left).top(top).width(w).height(h).child(child).into()
+    Positioned::new()
+        .left(left)
+        .top(top)
+        .width(w)
+        .height(h)
+        .child(child)
+        .into()
 }
 
 pub fn layer(child: impl Into<WidgetNode>) -> WidgetNode {
@@ -167,7 +200,14 @@ pub fn card(p: &Pal, child: impl Into<WidgetNode>) -> WidgetNode {
 
 pub fn tinted(fill: Color, edge: Color, child: impl Into<WidgetNode>) -> WidgetNode {
     Clip::rounded(corner::CARD)
-        .child(Container::new().color(fill).radius(corner::CARD).border(Border::new(edge, 1.0)).padding(EdgeInsets::symmetric(20.0, 18.0)).child(child))
+        .child(
+            Container::new()
+                .color(fill)
+                .radius(corner::CARD)
+                .border(Border::new(edge, 1.0))
+                .padding(EdgeInsets::symmetric(20.0, 18.0))
+                .child(child),
+        )
         .into()
 }
 
@@ -175,14 +215,21 @@ pub fn tinted(fill: Color, edge: Color, child: impl Into<WidgetNode>) -> WidgetN
 /// the room is smaller than the words it ends in an ellipsis instead of
 /// growing a second line out of its rounded box.
 pub fn pill(label: impl Into<String>, fg: Color, bg: Color) -> WidgetNode {
-    Container::new().color(bg).radius(corner::CHIP).padding(EdgeInsets::symmetric(10.0, 3.0)).child(line(label, 11.5, fg)).into()
+    Container::new()
+        .color(bg)
+        .radius(corner::CHIP)
+        .padding(EdgeInsets::symmetric(10.0, 3.0))
+        .child(line(label, 11.5, fg))
+        .into()
 }
 
 /// A box at least `min` wide, as wide as its content otherwise — the
 /// right way to line up a column of marks or labels (a fixed-size box
 /// lets anything longer than the guess spill out of it).
 pub fn at_least(min: f32, child: impl Into<WidgetNode>) -> WidgetNode {
-    Constrained::new(Constraints::new(min, f32::INFINITY, 0.0, f32::INFINITY)).child(child).into()
+    Constrained::new(Constraints::new(min, f32::INFINITY, 0.0, f32::INFINITY))
+        .child(child)
+        .into()
 }
 
 // ── copyable text ────────────────────────────────────────────────
@@ -247,7 +294,9 @@ pub fn copyable(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
                     on_change.set(Some((key, v.selection)));
                 }
             }))
-            .on_selection(Rc::new(move |range: vieww::foundation::TextSelection| on_select.set(Some((key, range)))))
+            .on_selection(Rc::new(move |range: vieww::foundation::TextSelection| {
+                on_select.set(Some((key, range)))
+            }))
             .into()
     })
     .into()
@@ -256,7 +305,13 @@ pub fn copyable(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
 /// One line of copyable monospace (a path, a hash, a command).
 pub fn copyable_mono(s: impl Into<String>, size: f32, color: Color) -> WidgetNode {
     let text: String = s.into();
-    row(6.0, vec![grow(mono(text.clone(), size, color)), copy_icon(color, text)])
+    row(
+        6.0,
+        vec![
+            grow(mono(text.clone(), size, color)),
+            copy_icon(color, text),
+        ],
+    )
 }
 
 /// A small "copy" affordance: puts `text` on the pasteboard.
@@ -293,7 +348,13 @@ pub enum Look {
 }
 
 /// A labelled button. `enabled == false` draws it faded and ignores taps.
-pub fn button(p: &Pal, label: &str, look: Look, enabled: bool, on_tap: impl Fn() + 'static) -> WidgetNode {
+pub fn button(
+    p: &Pal,
+    label: &str,
+    look: Look,
+    enabled: bool,
+    on_tap: impl Fn() + 'static,
+) -> WidgetNode {
     let p = *p;
     let label = label.to_string();
     let body = Pressable::sensed(move |s: Sense| {
@@ -302,8 +363,16 @@ pub fn button(p: &Pal, label: &str, look: Look, enabled: bool, on_tap: impl Fn()
             Look::Secondary => (p.surface2, p.ink, p.line_strong),
             Look::Quiet => (Color::rgba(0, 0, 0, 0), p.muted, Color::rgba(0, 0, 0, 0)),
         };
-        let bg = if s.hover > 0.0 && look != Look::Primary { p.surface2.lerp(p.line_strong, 0.35 * s.hover) } else { bg };
-        let bg = if look == Look::Primary { bg.lerp(Color::hex(0x000000), 0.12 * s.press) } else { bg };
+        let bg = if s.hover > 0.0 && look != Look::Primary {
+            p.surface2.lerp(p.line_strong, 0.35 * s.hover)
+        } else {
+            bg
+        };
+        let bg = if look == Look::Primary {
+            bg.lerp(Color::hex(0x000000), 0.12 * s.press)
+        } else {
+            bg
+        };
         Container::new()
             .color(bg)
             .radius(corner::PILL)
@@ -312,20 +381,46 @@ pub fn button(p: &Pal, label: &str, look: Look, enabled: bool, on_tap: impl Fn()
             .child(t(label.clone(), 13.0, fg))
             .into()
     });
-    let node: WidgetNode = if enabled { body.on_tap(on_tap).into() } else { body.into() };
+    let node: WidgetNode = if enabled {
+        body.on_tap(on_tap).into()
+    } else {
+        body.into()
+    };
     fade(if enabled { 1.0 } else { 0.45 }, inert(!enabled, node))
 }
 
 /// A square icon button with a tooltip-ish label for screen readers.
-pub fn icon_button(p: &Pal, glyph: Glyph, label: &str, active: bool, on_tap: impl Fn() + 'static) -> WidgetNode {
+pub fn icon_button(
+    p: &Pal,
+    glyph: Glyph,
+    label: &str,
+    active: bool,
+    on_tap: impl Fn() + 'static,
+) -> WidgetNode {
     let p = *p;
     let label = label.to_string();
     Semantics::new()
         .label(label)
         .child(
             Pressable::sensed(move |s: Sense| {
-                let (bg, fg) = if active { (p.accent, p.on_accent) } else { (p.surface2.lerp(p.line_strong, 0.4 * s.hover).with_alpha((s.hover * 255.0) as u8), p.ink) };
-                Container::new().width(32.0).height(32.0).radius(16.0).color(bg).alignment(Alignment::CENTER).child(glyph.draw(16.0, fg)).into()
+                let (bg, fg) = if active {
+                    (p.accent, p.on_accent)
+                } else {
+                    (
+                        p.surface2
+                            .lerp(p.line_strong, 0.4 * s.hover)
+                            .with_alpha((s.hover * 255.0) as u8),
+                        p.ink,
+                    )
+                };
+                Container::new()
+                    .width(32.0)
+                    .height(32.0)
+                    .radius(16.0)
+                    .color(bg)
+                    .alignment(Alignment::CENTER)
+                    .child(glyph.draw(16.0, fg))
+                    .into()
             })
             .on_tap(on_tap),
         )
@@ -333,23 +428,58 @@ pub fn icon_button(p: &Pal, glyph: Glyph, label: &str, active: bool, on_tap: imp
 }
 
 /// A labelled toolbar button: icon, word, optional badge.
-pub fn tool_button(p: &Pal, glyph: Glyph, label: &str, badge: Option<String>, active: bool, on_tap: impl Fn() + 'static) -> WidgetNode {
+pub fn tool_button(
+    p: &Pal,
+    glyph: Glyph,
+    label: &str,
+    badge: Option<String>,
+    active: bool,
+    on_tap: impl Fn() + 'static,
+) -> WidgetNode {
     let p = *p;
     let label = label.to_string();
     Pressable::sensed(move |s: Sense| {
-        let (bg, fg, edge) = if active { (p.accent, p.on_accent, p.accent) } else { (p.surface.lerp(p.surface2, s.hover), p.ink, p.line) };
+        let (bg, fg, edge) = if active {
+            (p.accent, p.on_accent, p.accent)
+        } else {
+            (p.surface.lerp(p.surface2, s.hover), p.ink, p.line)
+        };
         let mut items = vec![glyph.draw(15.0, fg), t(label.clone(), 12.5, fg)];
         if let Some(n) = &badge {
-            items.push(Container::new().color(if active { p.on_accent.with_alpha(60) } else { p.accent_soft }).radius(9.0).padding(EdgeInsets::symmetric(7.0, 1.0)).child(t(n.clone(), 10.5, if active { p.on_accent } else { p.accent_ink })).into());
+            items.push(
+                Container::new()
+                    .color(if active {
+                        p.on_accent.with_alpha(60)
+                    } else {
+                        p.accent_soft
+                    })
+                    .radius(9.0)
+                    .padding(EdgeInsets::symmetric(7.0, 1.0))
+                    .child(t(
+                        n.clone(),
+                        10.5,
+                        if active { p.on_accent } else { p.accent_ink },
+                    ))
+                    .into(),
+            );
         }
-        Container::new().color(bg).radius(16.0).border(Border::new(edge, 1.0)).padding(EdgeInsets::symmetric(14.0, 7.0)).child(row(7.0, items)).into()
+        Container::new()
+            .color(bg)
+            .radius(16.0)
+            .border(Border::new(edge, 1.0))
+            .padding(EdgeInsets::symmetric(14.0, 7.0))
+            .child(row(7.0, items))
+            .into()
     })
     .on_tap(on_tap)
     .into()
 }
 
 /// A tappable region with no look of its own.
-pub fn tap(child: impl Into<WidgetNode> + Clone + 'static, on_tap: impl Fn() + 'static) -> WidgetNode {
+pub fn tap(
+    child: impl Into<WidgetNode> + Clone + 'static,
+    on_tap: impl Fn() + 'static,
+) -> WidgetNode {
     let child: WidgetNode = child.into();
     Pressable::new(move |_| child.clone()).on_tap(on_tap).into()
 }
@@ -382,11 +512,27 @@ pub enum Glyph {
 
 impl Glyph {
     pub fn draw(self, side: f32, color: Color) -> WidgetNode {
-        CustomPaint::sized(Size::new(side, side), GlyphPainter { glyph: self, color, turn: 0.0 }).into()
+        CustomPaint::sized(
+            Size::new(side, side),
+            GlyphPainter {
+                glyph: self,
+                color,
+                turn: 0.0,
+            },
+        )
+        .into()
     }
     /// A spinner arc, rotated by `turn` (0..1).
     pub fn spinner(side: f32, color: Color, turn: f32) -> WidgetNode {
-        CustomPaint::sized(Size::new(side, side), GlyphPainter { glyph: Glyph::Queued, color, turn: turn + 10.0 }).into()
+        CustomPaint::sized(
+            Size::new(side, side),
+            GlyphPainter {
+                glyph: Glyph::Queued,
+                color,
+                turn: turn + 10.0,
+            },
+        )
+        .into()
     }
 }
 
@@ -400,10 +546,12 @@ struct GlyphPainter {
 
 fn arc(cx: f32, cy: f32, r: f32, from: f32, to: f32) -> Vec<(f32, f32)> {
     let n = 28;
-    (0..=n).map(|i| {
-        let a = from + (to - from) * i as f32 / n as f32;
-        (cx + r * a.cos(), cy + r * a.sin())
-    }).collect()
+    (0..=n)
+        .map(|i| {
+            let a = from + (to - from) * i as f32 / n as f32;
+            (cx + r * a.cos(), cy + r * a.sin())
+        })
+        .collect()
 }
 
 fn circle(r: f32) -> Vec<(f32, f32)> {
@@ -418,27 +566,61 @@ impl GlyphPainter {
             return vec![arc(12.0, 12.0, 8.0, start, start + 1.5 * PI)];
         }
         match self.glyph {
-            Glyph::Plus => vec![vec![(12.0, 5.0), (12.0, 19.0)], vec![(5.0, 12.0), (19.0, 12.0)]],
-            Glyph::Close => vec![vec![(6.0, 6.0), (18.0, 18.0)], vec![(18.0, 6.0), (6.0, 18.0)]],
-            Glyph::Send => vec![vec![(5.0, 12.0), (19.0, 12.0)], vec![(13.0, 6.0), (19.0, 12.0), (13.0, 18.0)]],
+            Glyph::Plus => vec![
+                vec![(12.0, 5.0), (12.0, 19.0)],
+                vec![(5.0, 12.0), (19.0, 12.0)],
+            ],
+            Glyph::Close => vec![
+                vec![(6.0, 6.0), (18.0, 18.0)],
+                vec![(18.0, 6.0), (6.0, 18.0)],
+            ],
+            Glyph::Send => vec![
+                vec![(5.0, 12.0), (19.0, 12.0)],
+                vec![(13.0, 6.0), (19.0, 12.0), (13.0, 18.0)],
+            ],
             Glyph::Mic => {
                 let mut capsule = arc(12.0, 7.0, 3.0, PI, TAU);
                 capsule.extend(arc(12.0, 12.0, 3.0, 0.0, PI));
                 capsule.push(capsule[0]);
-                vec![capsule, arc(12.0, 12.0, 6.5, 0.15, PI - 0.15), vec![(12.0, 18.5), (12.0, 21.0)]]
+                vec![
+                    capsule,
+                    arc(12.0, 12.0, 6.5, 0.15, PI - 0.15),
+                    vec![(12.0, 18.5), (12.0, 21.0)],
+                ]
             }
-            Glyph::Stop => vec![vec![(7.0, 7.0), (17.0, 7.0), (17.0, 17.0), (7.0, 17.0), (7.0, 7.0)]],
+            Glyph::Stop => vec![vec![
+                (7.0, 7.0),
+                (17.0, 7.0),
+                (17.0, 17.0),
+                (7.0, 17.0),
+                (7.0, 7.0),
+            ]],
             Glyph::Gear => {
                 let mut v = vec![circle(3.2), circle(7.0)];
                 for k in 0..8 {
                     let a = k as f32 * TAU / 8.0;
-                    v.push(vec![(12.0 + 7.0 * a.cos(), 12.0 + 7.0 * a.sin()), (12.0 + 9.5 * a.cos(), 12.0 + 9.5 * a.sin())]);
+                    v.push(vec![
+                        (12.0 + 7.0 * a.cos(), 12.0 + 7.0 * a.sin()),
+                        (12.0 + 9.5 * a.cos(), 12.0 + 9.5 * a.sin()),
+                    ]);
                 }
                 v
             }
             Glyph::Sessions => vec![
-                vec![(3.0, 5.0), (10.0, 5.0), (10.0, 19.0), (3.0, 19.0), (3.0, 5.0)],
-                vec![(14.0, 5.0), (21.0, 5.0), (21.0, 19.0), (14.0, 19.0), (14.0, 5.0)],
+                vec![
+                    (3.0, 5.0),
+                    (10.0, 5.0),
+                    (10.0, 19.0),
+                    (3.0, 19.0),
+                    (3.0, 5.0),
+                ],
+                vec![
+                    (14.0, 5.0),
+                    (21.0, 5.0),
+                    (21.0, 19.0),
+                    (14.0, 19.0),
+                    (14.0, 5.0),
+                ],
             ],
             Glyph::Engine => vec![
                 arc(5.0, 12.0, 2.5, 0.0, TAU),
@@ -451,13 +633,46 @@ impl GlyphPainter {
             Glyph::Waiting => vec![circle(9.0), vec![(12.0, 7.5), (12.0, 12.0), (15.0, 14.0)]],
             Glyph::Queued => vec![circle(9.0)],
             Glyph::Skipped => vec![circle(9.0), vec![(8.0, 12.0), (16.0, 12.0)]],
-            Glyph::Failed => vec![circle(9.0), vec![(9.0, 9.0), (15.0, 15.0)], vec![(15.0, 9.0), (9.0, 15.0)]],
-            Glyph::Cached => vec![arc(12.0, 12.0, 8.0, -PI * 0.25, PI * 1.5), vec![(17.0, 2.5), (17.7, 6.4), (13.8, 6.9)]],
-            Glyph::File => vec![vec![(6.0, 3.0), (14.0, 3.0), (18.0, 7.0), (18.0, 21.0), (6.0, 21.0), (6.0, 3.0)], vec![(14.0, 3.0), (14.0, 7.0), (18.0, 7.0)]],
-            Glyph::Folder => vec![vec![(3.0, 6.0), (9.0, 6.0), (11.0, 8.5), (21.0, 8.5), (21.0, 19.0), (3.0, 19.0), (3.0, 6.0)]],
+            Glyph::Failed => vec![
+                circle(9.0),
+                vec![(9.0, 9.0), (15.0, 15.0)],
+                vec![(15.0, 9.0), (9.0, 15.0)],
+            ],
+            Glyph::Cached => vec![
+                arc(12.0, 12.0, 8.0, -PI * 0.25, PI * 1.5),
+                vec![(17.0, 2.5), (17.7, 6.4), (13.8, 6.9)],
+            ],
+            Glyph::File => vec![
+                vec![
+                    (6.0, 3.0),
+                    (14.0, 3.0),
+                    (18.0, 7.0),
+                    (18.0, 21.0),
+                    (6.0, 21.0),
+                    (6.0, 3.0),
+                ],
+                vec![(14.0, 3.0), (14.0, 7.0), (18.0, 7.0)],
+            ],
+            Glyph::Folder => vec![vec![
+                (3.0, 6.0),
+                (9.0, 6.0),
+                (11.0, 8.5),
+                (21.0, 8.5),
+                (21.0, 19.0),
+                (3.0, 19.0),
+                (3.0, 6.0),
+            ]],
             Glyph::Theme => vec![circle(8.0), vec![(12.0, 4.0), (12.0, 20.0)]],
-            Glyph::Help => vec![circle(9.0), arc(12.0, 9.8, 2.6, PI, TAU + 0.6), vec![(13.6, 11.7), (12.0, 13.4), (12.0, 14.4)], vec![(12.0, 17.0), (12.0, 17.3)]],
-            Glyph::Restore => vec![arc(12.0, 12.0, 8.0, PI * 0.75, PI * 2.6), vec![(3.5, 9.0), (6.3, 12.6), (9.6, 10.0)]],
+            Glyph::Help => vec![
+                circle(9.0),
+                arc(12.0, 9.8, 2.6, PI, TAU + 0.6),
+                vec![(13.6, 11.7), (12.0, 13.4), (12.0, 14.4)],
+                vec![(12.0, 17.0), (12.0, 17.3)],
+            ],
+            Glyph::Restore => vec![
+                arc(12.0, 12.0, 8.0, PI * 0.75, PI * 2.6),
+                vec![(3.5, 9.0), (6.3, 12.6), (9.6, 10.0)],
+            ],
         }
     }
 }
@@ -468,12 +683,24 @@ impl CustomPainter for GlyphPainter {
         let w = 1.9 * s;
         let mut out = Vec::new();
         for path in self.strokes() {
-            let pts: Vec<Offset> = path.iter().map(|&(x, y)| Offset::new(x * s, y * s)).collect();
+            let pts: Vec<Offset> = path
+                .iter()
+                .map(|&(x, y)| Offset::new(x * s, y * s))
+                .collect();
             for seg in pts.windows(2) {
-                out.push(DrawInstruction::DrawLine { from: seg[0], to: seg[1], color: self.color, width: w });
+                out.push(DrawInstruction::DrawLine {
+                    from: seg[0],
+                    to: seg[1],
+                    color: self.color,
+                    width: w,
+                });
             }
             for p in &pts {
-                out.push(DrawInstruction::FillCircle { center: *p, radius: w / 2.0, color: self.color });
+                out.push(DrawInstruction::FillCircle {
+                    center: *p,
+                    radius: w / 2.0,
+                    color: self.color,
+                });
             }
         }
         out
@@ -500,7 +727,10 @@ pub struct Live {
 
 impl Live {
     pub fn new(name: &'static str, f: impl Fn() -> WidgetNode + 'static) -> Self {
-        Live { name, f: Rc::new(f) }
+        Live {
+            name,
+            f: Rc::new(f),
+        }
     }
 }
 
@@ -524,7 +754,12 @@ impl Widget for Live {
 vieww::widget::widget_node_from!(Live);
 
 /// Moves smoothly to `target`; `snap` jumps instead (a finger is dragging).
-pub fn glide(target: f32, ms: u64, snap: bool, build: impl Fn(f32) -> WidgetNode + 'static) -> WidgetNode {
+pub fn glide(
+    target: f32,
+    ms: u64,
+    snap: bool,
+    build: impl Fn(f32) -> WidgetNode + 'static,
+) -> WidgetNode {
     Animated::new(target)
         .duration(Duration::from_millis(if snap { 0 } else { ms }))
         .curve(Curve::EASE_OUT)
@@ -547,7 +782,10 @@ pub struct ScrollState {
 
 impl ScrollState {
     pub fn new(rt: &vieww::element::Runtime) -> ScrollState {
-        ScrollState { offset: rt.signal(0.0), extent: rt.signal((0.0, 0.0)) }
+        ScrollState {
+            offset: rt.signal(0.0),
+            extent: rt.signal((0.0, 0.0)),
+        }
     }
     fn max(&self) -> f32 {
         let (view, content) = self.extent.get();
@@ -576,7 +814,9 @@ pub fn scroll_area(ui: &super::Ui, state: &ScrollState, child: WidgetNode) -> Wi
         let at = state.at();
         let (wheel, ext) = (state.clone(), state.extent.clone());
         let body: WidgetNode = Scrollable::vertical(at)
-            .on_drag(Rc::new(move |d: vieww::foundation::DragDetails| wheel.by(-d.delta.dy)))
+            .on_drag(Rc::new(move |d: vieww::foundation::DragDetails| {
+                wheel.by(-d.delta.dy)
+            }))
             .on_extents(Rc::new(move |e: ScrollExtents| {
                 if ext.get() != (e.viewport, e.content) {
                     ext.set((e.viewport, e.content));
@@ -596,16 +836,29 @@ pub fn scroll_area(ui: &super::Ui, state: &ScrollState, child: WidgetNode) -> Wi
             .on_drag_update(move |d: vieww::foundation::DragDetails| drag.by(d.delta.dy * per_px))
             .child(Pressable::sensed(move |s: Sense| {
                 Container::new()
-                    .width(if s.hover > 0.0 || s.press > 0.0 { 8.0 } else { 6.0 })
+                    .width(if s.hover > 0.0 || s.press > 0.0 {
+                        8.0
+                    } else {
+                        6.0
+                    })
                     .height(thumb)
                     .radius(4.0)
-                    .color(p.ink.with_alpha(if s.press > 0.0 { 140 } else if s.hover > 0.0 { 110 } else { 60 }))
+                    .color(p.ink.with_alpha(if s.press > 0.0 {
+                        140
+                    } else if s.hover > 0.0 {
+                        110
+                    } else {
+                        60
+                    }))
                     .into()
             }))
             .into();
         Stack::new()
             .fit(StackFit::Expand)
-            .children(vec![body, Positioned::new().right(3.0).top(top).child(bar).into()])
+            .children(vec![
+                body,
+                Positioned::new().right(3.0).top(top).child(bar).into(),
+            ])
             .into()
     })
     .into()

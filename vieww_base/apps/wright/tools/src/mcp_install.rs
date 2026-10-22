@@ -36,7 +36,8 @@ impl Source {
         let exact = |v: &str| -> Result<String, String> {
             let ok = !v.is_empty()
                 && v.chars().next().is_some_and(|c| c.is_ascii_digit())
-                && v.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'));
+                && v.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'));
             if ok {
                 Ok(v.to_string())
             } else {
@@ -52,16 +53,26 @@ impl Source {
             if package.is_empty() || package.contains(char::is_whitespace) {
                 return Err(format!("'{package}' is not an npm package name"));
             }
-            return Ok(Source::Npm { package: package.into(), version: exact(version)? });
+            return Ok(Source::Npm {
+                package: package.into(),
+                version: exact(version)?,
+            });
         }
         if let Some(rest) = spec.strip_prefix("pypi:") {
-            let (package, version) = rest
-                .split_once("==")
-                .ok_or_else(|| format!("pypi:{rest} needs an exact version: pypi:{rest}==<version>"))?;
-            if package.is_empty() || !package.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) {
+            let (package, version) = rest.split_once("==").ok_or_else(|| {
+                format!("pypi:{rest} needs an exact version: pypi:{rest}==<version>")
+            })?;
+            if package.is_empty()
+                || !package
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+            {
                 return Err(format!("'{package}' is not a PyPI package name"));
             }
-            return Ok(Source::Pypi { package: package.into(), version: exact(version)? });
+            return Ok(Source::Pypi {
+                package: package.into(),
+                version: exact(version)?,
+            });
         }
         Err(format!("'{spec}': say where the server comes from — npm:<package>@<version> or pypi:<package>==<version>"))
     }
@@ -78,9 +89,21 @@ pub struct Installed {
 /// Install `source` as the server `name` under `root` (normally
 /// `<wright home>/mcp`). `bin` picks one of several executables a
 /// package offers; `allow_scripts` lets npm install scripts run.
-pub fn install(name: &str, source: &Source, bin: Option<&str>, allow_scripts: bool, root: &Path) -> Result<Installed, String> {
-    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
-        return Err(format!("'{name}' is not a server name (letters, digits, - and _)"));
+pub fn install(
+    name: &str,
+    source: &Source,
+    bin: Option<&str>,
+    allow_scripts: bool,
+    root: &Path,
+) -> Result<Installed, String> {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
+        return Err(format!(
+            "'{name}' is not a server name (letters, digits, - and _)"
+        ));
     }
     let final_dir = root.join(name);
     let staging = root.join(format!(".{name}.installing-{}", std::process::id()));
@@ -90,7 +113,11 @@ pub fn install(name: &str, source: &Source, bin: Option<&str>, allow_scripts: bo
         match source {
             Source::Npm { package, version } => {
                 let mut cmd = Command::new(if cfg!(windows) { "npm.cmd" } else { "npm" });
-                cmd.args(["install", "--prefix"]).arg(&staging).args(["--no-audit", "--no-fund", "--save-exact"]);
+                cmd.args(["install", "--prefix"]).arg(&staging).args([
+                    "--no-audit",
+                    "--no-fund",
+                    "--save-exact",
+                ]);
                 if !allow_scripts {
                     cmd.arg("--ignore-scripts");
                 }
@@ -104,12 +131,31 @@ pub fn install(name: &str, source: &Source, bin: Option<&str>, allow_scripts: bo
                 let mut mk = Command::new(if cfg!(windows) { "python" } else { "python3" });
                 mk.args(["-m", "venv"]).arg(&venv);
                 run(mk, "python -m venv")?;
-                let scripts = if cfg!(windows) { venv.join("Scripts") } else { venv.join("bin") };
-                let mut pip = Command::new(scripts.join(if cfg!(windows) { "python.exe" } else { "python" }));
-                pip.args(["-m", "pip", "install", "--disable-pip-version-check", "--no-input"]).arg(format!("{package}=={version}"));
+                let scripts = if cfg!(windows) {
+                    venv.join("Scripts")
+                } else {
+                    venv.join("bin")
+                };
+                let mut pip = Command::new(scripts.join(if cfg!(windows) {
+                    "python.exe"
+                } else {
+                    "python"
+                }));
+                pip.args([
+                    "-m",
+                    "pip",
+                    "install",
+                    "--disable-pip-version-check",
+                    "--no-input",
+                ])
+                .arg(format!("{package}=={version}"));
                 run(pip, "pip")?;
                 let exe = bin.unwrap_or(package);
-                let path = scripts.join(if cfg!(windows) { format!("{exe}.exe") } else { exe.to_string() });
+                let path = scripts.join(if cfg!(windows) {
+                    format!("{exe}.exe")
+                } else {
+                    exe.to_string()
+                });
                 if !path.exists() {
                     return Err(format!(
                         "{package} installed, but it has no `{exe}` program; name the one it has with --bin (its programs are in {})",
@@ -130,38 +176,75 @@ pub fn install(name: &str, source: &Source, bin: Option<&str>, allow_scripts: bo
     // Swap in the new install whole, then pin it where it will run from
     // (venv files name their own folder, so the pin is taken in place).
     let _ = std::fs::remove_dir_all(&final_dir);
-    std::fs::rename(&staging, &final_dir).map_err(|e| format!("move the install into {}: {e}", final_dir.display()))?;
+    std::fs::rename(&staging, &final_dir)
+        .map_err(|e| format!("move the install into {}: {e}", final_dir.display()))?;
     if matches!(source, Source::Pypi { .. }) {
         // A virtualenv records its own path; re-point it after the move.
         let cfg = final_dir.join("venv").join("pyvenv.cfg");
         if let Ok(text) = std::fs::read_to_string(&cfg) {
-            let fixed = text.replace(&staging.to_string_lossy().to_string(), &final_dir.to_string_lossy());
+            let fixed = text.replace(
+                &staging.to_string_lossy().to_string(),
+                &final_dir.to_string_lossy(),
+            );
             let _ = std::fs::write(&cfg, fixed);
         }
         rewrite_shebangs(&final_dir.join("venv").join("bin"), &staging, &final_dir);
     }
     let hash = tree_pin(&final_dir)?;
-    Ok(Installed { command: final_dir.join(rel), tree: final_dir, hash })
+    Ok(Installed {
+        command: final_dir.join(rel),
+        tree: final_dir,
+        hash,
+    })
 }
 
 /// npm: the package's own executable, through node_modules/.bin.
 fn npm_bin(prefix: &Path, package: &str, bin: Option<&str>) -> Result<PathBuf, String> {
-    let manifest = prefix.join("node_modules").join(package).join("package.json");
-    let text = std::fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
-    let v = wright_core::wire::json::parse(&text).map_err(|e| format!("{}: {e}", manifest.display()))?;
+    let manifest = prefix
+        .join("node_modules")
+        .join(package)
+        .join("package.json");
+    let text =
+        std::fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
+    let v = wright_core::wire::json::parse(&text)
+        .map_err(|e| format!("{}: {e}", manifest.display()))?;
     let names: Vec<String> = match v.get("bin") {
-        Some(wright_core::wire::json::Value::Str(_)) => vec![package.rsplit('/').next().unwrap_or(package).to_string()],
-        Some(wright_core::wire::json::Value::Obj(fields)) => fields.iter().map(|(k, _)| k.clone()).collect(),
+        Some(wright_core::wire::json::Value::Str(_)) => {
+            vec![package.rsplit('/').next().unwrap_or(package).to_string()]
+        }
+        Some(wright_core::wire::json::Value::Obj(fields)) => {
+            fields.iter().map(|(k, _)| k.clone()).collect()
+        }
         _ => Vec::new(),
     };
     let chosen = match (bin, names.as_slice()) {
         (Some(b), _) if names.iter().any(|n| n == b) => b.to_string(),
-        (Some(b), _) => return Err(format!("{package} has no program called '{b}' (it has: {})", names.join(", "))),
+        (Some(b), _) => {
+            return Err(format!(
+                "{package} has no program called '{b}' (it has: {})",
+                names.join(", ")
+            ))
+        }
         (None, [one]) => one.clone(),
-        (None, []) => return Err(format!("{package} declares no program to run; it is not a runnable MCP server")),
-        (None, many) => return Err(format!("{package} has several programs ({}); pick one with --bin", many.join(", "))),
+        (None, []) => {
+            return Err(format!(
+                "{package} declares no program to run; it is not a runnable MCP server"
+            ))
+        }
+        (None, many) => {
+            return Err(format!(
+                "{package} has several programs ({}); pick one with --bin",
+                many.join(", ")
+            ))
+        }
     };
-    let rel = PathBuf::from("node_modules").join(".bin").join(if cfg!(windows) { format!("{chosen}.cmd") } else { chosen });
+    let rel = PathBuf::from("node_modules")
+        .join(".bin")
+        .join(if cfg!(windows) {
+            format!("{chosen}.cmd")
+        } else {
+            chosen
+        });
     if !prefix.join(&rel).exists() {
         return Err(format!("npm did not create {}", rel.display()));
     }
@@ -170,11 +253,19 @@ fn npm_bin(prefix: &Path, package: &str, bin: Option<&str>) -> Result<PathBuf, S
 
 /// Console scripts in a moved virtualenv still name the old interpreter.
 fn rewrite_shebangs(bin: &Path, from: &Path, to: &Path) {
-    let (from, to) = (from.to_string_lossy().to_string(), to.to_string_lossy().to_string());
-    let Ok(entries) = std::fs::read_dir(bin) else { return };
+    let (from, to) = (
+        from.to_string_lossy().to_string(),
+        to.to_string_lossy().to_string(),
+    );
+    let Ok(entries) = std::fs::read_dir(bin) else {
+        return;
+    };
     for e in entries.flatten() {
         let p = e.path();
-        if std::fs::symlink_metadata(&p).map(|m| m.file_type().is_symlink()).unwrap_or(true) {
+        if std::fs::symlink_metadata(&p)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(true)
+        {
             continue;
         }
         if let Ok(text) = std::fs::read_to_string(&p) {
@@ -186,12 +277,22 @@ fn rewrite_shebangs(bin: &Path, from: &Path, to: &Path) {
 }
 
 fn run(mut cmd: Command, what: &str) -> Result<(), String> {
-    let out = cmd.output().map_err(|e| format!("could not run {what}: {e} — is it installed?"))?;
+    let out = cmd
+        .output()
+        .map_err(|e| format!("could not run {what}: {e} — is it installed?"))?;
     if out.status.success() {
         return Ok(());
     }
     let err = String::from_utf8_lossy(&out.stderr);
-    let tail: String = err.lines().rev().take(8).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+    let tail: String = err
+        .lines()
+        .rev()
+        .take(8)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
     Err(format!("{what} failed:\n{tail}"))
 }
 
@@ -203,13 +304,26 @@ mod tests {
     fn only_exact_versions_are_installed() {
         assert_eq!(
             Source::parse("npm:@modelcontextprotocol/server-everything@2025.1.14").unwrap(),
-            Source::Npm { package: "@modelcontextprotocol/server-everything".into(), version: "2025.1.14".into() }
+            Source::Npm {
+                package: "@modelcontextprotocol/server-everything".into(),
+                version: "2025.1.14".into()
+            }
         );
         assert_eq!(
             Source::parse("pypi:mcp-server-time==0.6.2").unwrap(),
-            Source::Pypi { package: "mcp-server-time".into(), version: "0.6.2".into() }
+            Source::Pypi {
+                package: "mcp-server-time".into(),
+                version: "0.6.2".into()
+            }
         );
-        for bad in ["npm:server-x", "npm:server-x@latest", "npm:server-x@^1.2.0", "pypi:mcp-server-time", "pypi:x>=1.0", "server-x"] {
+        for bad in [
+            "npm:server-x",
+            "npm:server-x@latest",
+            "npm:server-x@^1.2.0",
+            "pypi:mcp-server-time",
+            "pypi:x>=1.0",
+            "server-x",
+        ] {
             assert!(Source::parse(bad).is_err(), "{bad} must be refused");
         }
     }
@@ -238,8 +352,13 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(d.join("run"), std::fs::Permissions::from_mode(0o755)).unwrap();
-            assert_ne!(tree_pin(&d).unwrap(), a, "making a file executable changes what can run");
+            std::fs::set_permissions(d.join("run"), std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+            assert_ne!(
+                tree_pin(&d).unwrap(),
+                a,
+                "making a file executable changes what can run"
+            );
         }
     }
 }

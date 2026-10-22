@@ -142,9 +142,14 @@ impl Model {
     }
 
     pub fn from_gguf(g: Gguf) -> Result<Model, String> {
-        let arch = g.get("general.architecture").and_then(|m| m.as_str()).unwrap_or("");
+        let arch = g
+            .get("general.architecture")
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
         if arch != "qwen3" {
-            return Err(format!("this is a '{arch}' model; the built-in engine runs Qwen3 only"));
+            return Err(format!(
+                "this is a '{arch}' model; the built-in engine runs Qwen3 only"
+            ));
         }
         let int = |k: &str| g.int(&format!("qwen3.{k}")).map(|v| v as usize);
         let dim = int("embedding_length")?;
@@ -159,7 +164,9 @@ impl Model {
             head_dim: int("attention.key_length").unwrap_or(dim / heads),
             vocab: tokenizer.vocab_size(),
             rope_base: g.float("qwen3.rope.freq_base").unwrap_or(1_000_000.0) as f32,
-            eps: g.float("qwen3.attention.layer_norm_rms_epsilon").unwrap_or(1e-6) as f32,
+            eps: g
+                .float("qwen3.attention.layer_norm_rms_epsilon")
+                .unwrap_or(1e-6) as f32,
             max_context: int("context_length").unwrap_or(32_768),
         };
         if !cfg.heads.is_multiple_of(cfg.kv_heads) || !cfg.head_dim.is_multiple_of(2) {
@@ -184,10 +191,26 @@ impl Model {
             });
         }
         let embed = matrix(&g, "token_embd.weight", cfg.vocab, dim)?;
-        let out = if g.tensors.contains_key("output.weight") { matrix(&g, "output.weight", cfg.vocab, dim)? } else { matrix(&g, "token_embd.weight", cfg.vocab, dim)? };
+        let out = if g.tensors.contains_key("output.weight") {
+            matrix(&g, "output.weight", cfg.vocab, dim)?
+        } else {
+            matrix(&g, "token_embd.weight", cfg.vocab, dim)?
+        };
         let out_norm = floats(&g, "output_norm.weight")?;
-        let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
-        Ok(Model { cfg, tokenizer, file: g, embed, layers, out_norm, out, threads })
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            .min(16);
+        Ok(Model {
+            cfg,
+            tokenizer,
+            file: g,
+            embed,
+            layers,
+            out_norm,
+            out,
+            threads,
+        })
     }
 
     pub fn set_threads(&mut self, n: usize) {
@@ -196,7 +219,12 @@ impl Model {
 
     pub fn cache(&self, limit: usize) -> Cache {
         let n = self.cfg.layers;
-        Cache { tokens: Vec::new(), k: vec![Vec::new(); n], v: vec![Vec::new(); n], limit: limit.min(self.cfg.max_context) }
+        Cache {
+            tokens: Vec::new(),
+            k: vec![Vec::new(); n],
+            v: vec![Vec::new(); n],
+            limit: limit.min(self.cfg.max_context),
+        }
     }
 
     fn kv_dim(&self) -> usize {
@@ -207,7 +235,12 @@ impl Model {
     /// return the logits after the last one. Whatever prefix the cache
     /// already shares with `tokens` is kept.
     pub fn prefill(&self, cache: &mut Cache, tokens: &[u32]) -> Result<Vec<f32>, String> {
-        let mut keep = cache.tokens.iter().zip(tokens).take_while(|(a, b)| a == b).count();
+        let mut keep = cache
+            .tokens
+            .iter()
+            .zip(tokens)
+            .take_while(|(a, b)| a == b)
+            .count();
         // Something new must run to produce logits.
         if keep == tokens.len() {
             keep = keep.saturating_sub(1);
@@ -221,14 +254,23 @@ impl Model {
         with_pool(self.threads, |pool| self.forward_in(pool, cache, tokens))
     }
 
-    fn forward_in<'a>(&'a self, pool: &Pool<'a>, cache: &mut Cache, tokens: &[u32]) -> Result<Vec<f32>, String> {
+    fn forward_in<'a>(
+        &'a self,
+        pool: &Pool<'a>,
+        cache: &mut Cache,
+        tokens: &[u32],
+    ) -> Result<Vec<f32>, String> {
         let c = &self.cfg;
         let t = tokens.len();
         if t == 0 {
             return Err("nothing to run".into());
         }
         if cache.len() + t > cache.limit {
-            return Err(format!("the conversation is {} tokens; the built-in model holds {}", cache.len() + t, cache.limit));
+            return Err(format!(
+                "the conversation is {} tokens; the built-in model holds {}",
+                cache.len() + t,
+                cache.limit
+            ));
         }
         let start = cache.len();
         let (qd, kvd) = (c.heads * c.head_dim, self.kv_dim());
@@ -238,7 +280,11 @@ impl Model {
             if *tok as usize >= c.vocab {
                 return Err(format!("token {tok} is outside the vocabulary"));
             }
-            self.embed.row(&self.file.data, *tok as usize, &mut x[i * c.dim..(i + 1) * c.dim]);
+            self.embed.row(
+                &self.file.data,
+                *tok as usize,
+                &mut x[i * c.dim..(i + 1) * c.dim],
+            );
         }
         let mut h = vec![0.0f32; t * c.dim];
         for (li, l) in self.layers.iter().enumerate() {
@@ -307,7 +353,10 @@ impl Model {
                     let mut o = vec![0.0f32; t * hd];
                     for i in 0..t {
                         // The query as the cache stores keys: f16.
-                        let qi: Vec<f32> = q[i * qd + head * hd..][..hd].iter().map(|x| lut[usize::from(f32_to_f16(*x))]).collect();
+                        let qi: Vec<f32> = q[i * qd + head * hd..][..hd]
+                            .iter()
+                            .map(|x| lut[usize::from(f32_to_f16(*x))])
+                            .collect();
                         let n = start + i + 1;
                         let mut scores = Vec::with_capacity(n);
                         for p in 0..n {
@@ -338,7 +387,10 @@ impl Model {
             let first = ranges.next().unwrap_or(0..0);
             let jobs: Vec<_> = ranges.map(|heads| s.spawn(move || work(heads))).collect();
             let mut all = vec![Vec::new(); c.heads];
-            for (head, o) in work(first).into_iter().chain(jobs.into_iter().flat_map(|j| j.join().expect("attention thread"))) {
+            for (head, o) in work(first).into_iter().chain(
+                jobs.into_iter()
+                    .flat_map(|j| j.join().expect("attention thread")),
+            ) {
                 all[head] = o;
             }
             all

@@ -82,10 +82,9 @@ An agent that holds private data, untrusted input AND an outbound channel needs 
 fn system_prompt(models_hint: &str, config: &Config) -> String {
     let spec = wright_agents::spec(compiler::SystemKind::Interviewer);
     let mut tools = String::from("\nTOOL PALETTE\n");
-    for t in PALETTE
-        .iter()
-        .filter(|t| t.name != "write-output" && t.name != "worker" && t.name != "mcp-call" && t.implemented)
-    {
+    for t in PALETTE.iter().filter(|t| {
+        t.name != "write-output" && t.name != "worker" && t.name != "mcp-call" && t.implemented
+    }) {
         tools.push_str(&format!("- {}: {}\n", t.name, t.summary));
     }
     format!(
@@ -445,8 +444,18 @@ mod tests {
         assert!(none.contains("Never write a `worker` line"), "{none}");
         cfg.workers[0].command = "sh".into(); // on every PATH
         let one = hands_on_this_machine(&cfg);
-        assert!(one.contains(&format!("- {} (runs", cfg.workers[0].name)), "{one}");
-        assert!(one.contains("approval \\\"before-send\\\"") || one.contains("approval \"before-send\""), "{one}");
-        assert!(!one.contains("MCP SERVERS"), "no MCP section without servers");
+        assert!(
+            one.contains(&format!("- {} (runs", cfg.workers[0].name)),
+            "{one}"
+        );
+        assert!(
+            one.contains("approval \\\"before-send\\\"")
+                || one.contains("approval \"before-send\""),
+            "{one}"
+        );
+        assert!(
+            !one.contains("MCP SERVERS"),
+            "no MCP section without servers"
+        );
     }
 }

@@ -24,18 +24,23 @@
 //! PNG through the same widget tree; `wright ui --icon <png>` renders the
 //! app icon the installers ship.
 
-mod capture;
-mod engine;
-mod home;
-mod kit;
-mod logo;
-mod picker;
-mod session;
-mod settings;
-mod shell;
-mod store;
-mod theme;
-mod thread;
+// The modules are `pub` for one consumer: `examples/wright_film`, which
+// mounts this shell on its own FrameDriver and drives it with a
+// frame-indexed script — the pattern `viewwstudio` set for the launch
+// film's studio act. Within the app they are used through `ui::…` all
+// the same; the visibility is a door, not a second API.
+pub mod capture;
+pub mod engine;
+pub mod home;
+pub mod kit;
+pub mod logo;
+pub mod picker;
+pub mod session;
+pub mod settings;
+pub mod shell;
+pub mod store;
+pub mod theme;
+pub mod thread;
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
@@ -158,7 +163,11 @@ impl std::fmt::Debug for Ui {
 }
 
 impl Ui {
-    pub fn new(rt: &vieww::element::Runtime, project: Option<PathBuf>, live: Arc<AtomicBool>) -> Ui {
+    pub fn new(
+        rt: &vieww::element::Runtime,
+        project: Option<PathBuf>,
+        live: Arc<AtomicBool>,
+    ) -> Ui {
         let (mode, accent) = theme::load();
         let mut open = store::read_list("ui-open");
         let mut saved = store::read_list("ui-saved");
@@ -179,7 +188,10 @@ impl Ui {
             next_id.set(v + 1);
             v
         };
-        let sessions: Vec<Session> = open.iter().map(|p| Session::open(rt, p.clone(), id())).collect();
+        let sessions: Vec<Session> = open
+            .iter()
+            .map(|p| Session::open(rt, p.clone(), id()))
+            .collect();
         let ui = Ui {
             rt: rt.clone(),
             mode: rt.signal(mode),
@@ -272,7 +284,11 @@ impl Ui {
         if self.fresh.id == id {
             return Some(self.fresh.clone());
         }
-        self.sessions.get().into_iter().map(|s| s.composer).find(|c| c.id == id)
+        self.sessions
+            .get()
+            .into_iter()
+            .map(|s| s.composer)
+            .find(|c| c.id == id)
     }
 
     /// The page widgets, one per page, rebuilt only when sessions change.
@@ -329,7 +345,11 @@ impl Ui {
     }
 
     pub fn open_settings(&self) {
-        self.form.reload(self.current_session().map(|s| (*s.project).clone()).as_deref());
+        self.form.reload(
+            self.current_session()
+                .map(|s| (*s.project).clone())
+                .as_deref(),
+        );
         self.form.message.set(String::new());
         self.settings.set(true);
     }
@@ -340,7 +360,10 @@ impl Ui {
         match wright_runtime::killswitch::engage(reason, "window") {
             Ok(s) => {
                 self.stopped.set(Some(s.reason));
-                self.say("Stopped everything. Nothing runs until you start again.", None);
+                self.say(
+                    "Stopped everything. Nothing runs until you start again.",
+                    None,
+                );
             }
             Err(e) => self.say(format!("Could not stop: {e}"), None),
         }
@@ -365,13 +388,22 @@ impl Ui {
     }
 
     fn say(&self, text: impl Into<String>, undo: Option<PathBuf>) {
-        self.toast.set(Some(Toast { text: text.into(), undo, until: Instant::now() + Duration::from_secs(6) }));
+        self.toast.set(Some(Toast {
+            text: text.into(),
+            undo,
+            until: Instant::now() + Duration::from_secs(6),
+        }));
     }
 
     // ── sessions ─────────────────────────────────────────────────
 
     fn persist(&self) {
-        let open: Vec<PathBuf> = self.sessions.get().iter().map(|s| (*s.project).clone()).collect();
+        let open: Vec<PathBuf> = self
+            .sessions
+            .get()
+            .iter()
+            .map(|s| (*s.project).clone())
+            .collect();
         store::write_list("ui-open", &open);
         store::write_list("ui-saved", &self.saved.get());
     }
@@ -387,7 +419,9 @@ impl Ui {
             Ok(d) => d,
             Err(e) => return self.say(e, None),
         };
-        let Some(message) = c.take_message(Some(&dir)) else { return };
+        let Some(message) = c.take_message(Some(&dir)) else {
+            return;
+        };
         let s = Session::open(&self.rt, dir, self.new_id());
         self.sessions.update(|v| v.push(s.clone()));
         self.persist();
@@ -411,7 +445,10 @@ impl Ui {
         });
         let page = self.page.get();
         if page > i + 1 || page > self.sessions.get().len() {
-            self.page.set(page.saturating_sub(1).max(if self.sessions.get().is_empty() { 0 } else { 1 }));
+            self.page.set(
+                page.saturating_sub(1)
+                    .max(if self.sessions.get().is_empty() { 0 } else { 1 }),
+            );
         }
         self.persist();
         self.say(format!("{title} closed into Saved"), Some(path));
@@ -429,7 +466,8 @@ impl Ui {
             self.persist();
             return self.say(format!("{} no longer exists", path.display()), None);
         }
-        self.sessions.update(|v| v.push(Session::open(&self.rt, path.to_path_buf(), self.new_id())));
+        self.sessions
+            .update(|v| v.push(Session::open(&self.rt, path.to_path_buf(), self.new_id())));
         self.persist();
         self.overview.set(false);
         self.go(self.sessions.get().len());
@@ -446,7 +484,11 @@ impl Ui {
     /// Two fingers on a trackpad (or a sideways wheel): follow the fingers,
     /// then settle on a page.
     pub fn on_wheel(&self, e: ScrollEvent) {
-        if self.overview.get() || self.settings.get() || self.help.get() || self.engine.get() != EngineView::Hidden {
+        if self.overview.get()
+            || self.settings.get()
+            || self.help.get()
+            || self.engine.get() != EngineView::Hidden
+        {
             return;
         }
         let (dx, dy) = (e.delta.dx, e.delta.dy);
@@ -492,7 +534,9 @@ impl Ui {
         }
         let now = Instant::now();
         let (mut total, last, mut done) = self.inner.pinch.get();
-        if p.phase == PinchPhase::Started || last.is_none_or(|t| now.duration_since(t) > Duration::from_millis(350)) {
+        if p.phase == PinchPhase::Started
+            || last.is_none_or(|t| now.duration_since(t) > Duration::from_millis(350))
+        {
             (total, done) = (0.0, false);
         }
         total += p.delta;
@@ -506,7 +550,11 @@ impl Ui {
                 (done, changed) = (true, true);
             }
         }
-        self.inner.pinch.set(if p.phase == PinchPhase::Ended { (0.0, None, false) } else { (total, Some(now), done) });
+        self.inner.pinch.set(if p.phase == PinchPhase::Ended {
+            (0.0, None, false)
+        } else {
+            (total, Some(now), done)
+        });
         changed
     }
 
@@ -540,12 +588,16 @@ impl Ui {
                 *self.inner.recording.borrow_mut() = Some((c.id, r));
                 c.voice.set(Voice::Listening);
             }
-            Err(e) => c.voice.set(Voice::Failed(format!("The mic didn't start: {e}"))),
+            Err(e) => c
+                .voice
+                .set(Voice::Failed(format!("The mic didn't start: {e}"))),
         }
     }
 
     pub fn stop_voice(&self, c: &Composer) {
-        let Some((id, rec)) = self.inner.recording.borrow_mut().take() else { return };
+        let Some((id, rec)) = self.inner.recording.borrow_mut().take() else {
+            return;
+        };
         c.voice.set(Voice::Transcribing);
         self.mic_level.set(0.0);
         let speech = rec.finish();
@@ -553,11 +605,20 @@ impl Ui {
         let wake = WakeHandle::current();
         std::thread::spawn(move || {
             let r = if speech.len() < (wright_runtime::voice::RATE / 4) as usize {
-                Err("That was too short to hear anything — hold the mic a little longer.".to_string())
+                Err(
+                    "That was too short to hear anything — hold the mic a little longer."
+                        .to_string(),
+                )
             } else {
-                wright_runtime::config::Config::load().and_then(|cfg| wright_runtime::voice::transcribe(&cfg, &wright_runtime::voice::wav(&speech)))
+                wright_runtime::config::Config::load().and_then(|cfg| {
+                    wright_runtime::voice::transcribe(&cfg, &wright_runtime::voice::wav(&speech))
+                })
             };
-            inbox.voice.lock().unwrap_or_else(|p| p.into_inner()).push((id, r));
+            inbox
+                .voice
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push((id, r));
             wake.wake();
         });
     }
@@ -567,7 +628,11 @@ impl Ui {
         let (id, inbox, wake) = (c.id, Arc::clone(&self.inner.inbox), WakeHandle::current());
         std::thread::spawn(move || {
             let r = picker::pick(folder);
-            inbox.picked.lock().unwrap_or_else(|p| p.into_inner()).push((id, r));
+            inbox
+                .picked
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push((id, r));
             wake.wake();
         });
     }
@@ -581,7 +646,14 @@ impl Ui {
             s.pump();
         }
         self.form.pump();
-        let voice = std::mem::take(&mut *self.inner.inbox.voice.lock().unwrap_or_else(|p| p.into_inner()));
+        let voice = std::mem::take(
+            &mut *self
+                .inner
+                .inbox
+                .voice
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()),
+        );
         for (id, r) in voice {
             if let Some(c) = self.composer_by_id(id) {
                 match r {
@@ -600,12 +672,21 @@ impl Ui {
                             self.start_session_from(&c);
                         }
                     }
-                    Ok(_) => c.voice.set(Voice::Failed("No words came through — try again a little closer to the mic.".into())),
+                    Ok(_) => c.voice.set(Voice::Failed(
+                        "No words came through — try again a little closer to the mic.".into(),
+                    )),
                     Err(e) => c.voice.set(Voice::Failed(e)),
                 }
             }
         }
-        let picked = std::mem::take(&mut *self.inner.inbox.picked.lock().unwrap_or_else(|p| p.into_inner()));
+        let picked = std::mem::take(
+            &mut *self
+                .inner
+                .inbox
+                .picked
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()),
+        );
         for (id, r) in picked {
             match (self.composer_by_id(id), r) {
                 (Some(c), Ok(paths)) => c.attach(&paths),
@@ -626,7 +707,9 @@ impl Ui {
             // Only text fields have a caret; their placeholder is their label.
             let typing = focused.and_then(|id| {
                 let tree = driver.semantics();
-                tree.node(id).filter(|n| n.role == vieww::Role::TextField).map(|n| n.label.clone().unwrap_or_default())
+                tree.node(id)
+                    .filter(|n| n.role == vieww::Role::TextField)
+                    .map(|n| n.label.clone().unwrap_or_default())
             });
             if typing != self.typing.get() {
                 self.typing.set(typing);
@@ -661,7 +744,12 @@ impl Ui {
         if let Some((_, rec)) = self.inner.recording.borrow().as_ref() {
             self.mic_level.set(rec.level());
         }
-        let busy = self.sessions.get().iter().any(|s| s.running.get() || s.exporting.get().is_some() || s.pending.get().is_some() || s.status().1 == session::Tone::Live);
+        let busy = self.sessions.get().iter().any(|s| {
+            s.running.get()
+                || s.exporting.get().is_some()
+                || s.pending.get().is_some()
+                || s.status().1 == session::Tone::Live
+        });
         let live = busy
             || self.splash.get()
             || self.dragging.get()
@@ -679,7 +767,8 @@ impl Ui {
     /// Shortcuts. A text field takes typing first; only keys it did not
     /// want arrive here.
     pub fn handle_key(&self, e: &KeyEvent) -> bool {
-        let space = matches!(&e.key, LogicalKey::Named(NamedKey::Space)) || matches!(&e.key, LogicalKey::Character(c) if c == " ");
+        let space = matches!(&e.key, LogicalKey::Named(NamedKey::Space))
+            || matches!(&e.key, LogicalKey::Character(c) if c == " ");
         if !e.is_down() {
             if space && self.engine.get() == EngineView::Peek {
                 self.set_engine(EngineView::Hidden);
@@ -700,6 +789,12 @@ impl Ui {
                     self.help.set(false);
                 } else if self.settings.get() {
                     self.settings.set(false);
+                } else if self.current_session().is_some_and(|s| s.receipt_open.get()) {
+                    // The receipt's evidence reads best without the rest
+                    // of the window behind it; Esc puts the window back.
+                    if let Some(s) = self.current_session() {
+                        s.receipt_open.set(false);
+                    }
                 } else if self.selected.get().is_some() {
                     self.selected.set(None);
                 } else if self.engine.get() != EngineView::Hidden {
@@ -729,7 +824,12 @@ impl Ui {
                     (true, _, ",") => self.open_settings(),
                     (true, true, "t") => self.reopen_last(),
                     (true, false, "w") => {
-                        if let Some(i) = self.page.get().checked_sub(1).filter(|i| *i < self.sessions.get().len()) {
+                        if let Some(i) = self
+                            .page
+                            .get()
+                            .checked_sub(1)
+                            .filter(|i| *i < self.sessions.get().len())
+                        {
                             self.close_session(i);
                         }
                     }
@@ -793,10 +893,16 @@ pub fn main(args: &[String]) -> i32 {
         }
     };
     if let Some(path) = icon {
-        return done(shell::render_icon(&path, icon_size, padded).map(|_| format!("wrote {}", path.display())));
+        return done(
+            shell::render_icon(&path, icon_size, padded)
+                .map(|_| format!("wrote {}", path.display())),
+        );
     }
     match snapshot {
-        Some(dir) => done(shell::snapshots(project.as_deref(), &dir).map(|n| format!("wrote {n} screens to {}", dir.display()))),
+        Some(dir) => done(
+            shell::snapshots(project.as_deref(), &dir)
+                .map(|n| format!("wrote {n} screens to {}", dir.display())),
+        ),
         None => window(project),
     }
 }
@@ -829,7 +935,9 @@ fn window(project: Option<PathBuf>) -> i32 {
     // platforms that put a picture there (Windows and X11, in the bar;
     // macOS, the Dock). The shell's own top bar, one strip down, starts with
     // the page title — it does not repeat the brand.
-    let app = vieww_platform_winit::App::new().title("wright").size(Size::new(1280.0, 800.0));
+    let app = vieww_platform_winit::App::new()
+        .title("wright")
+        .size(Size::new(1280.0, 800.0));
     let app = match shell::window_icon() {
         Some(icon) => app.icon(icon),
         None => app,
@@ -852,7 +960,8 @@ fn window(project: Option<PathBuf>) -> i32 {
     // what makes cut, copy and paste work in every text field (and the
     // Copy buttons). Without this the fields had nowhere to send Ctrl+C.
     let registry = vieww_platform_winit::services::platform();
-    let clipboard: Option<Rc<dyn vieww::foundation::Clipboard>> = registry.get::<dyn vieww::foundation::Clipboard>();
+    let clipboard: Option<Rc<dyn vieww::foundation::Clipboard>> =
+        registry.get::<dyn vieww::foundation::Clipboard>();
     let services = vieww::foundation::SharedServices::new(registry);
     let ui: Rc<RefCell<Option<Ui>>> = Rc::new(RefCell::new(None));
     let for_hook = Rc::clone(&ui);

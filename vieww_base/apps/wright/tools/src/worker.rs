@@ -122,7 +122,8 @@ pub fn run(permit: &Permit, input: &Value, ctx: &ToolCtx) -> Result<ToolOutput, 
     // honest degraded path (still copy + scrubbed env + clock).
     let timeout = Duration::from_secs(ctx.worker_timeout_secs.max(1));
     let started = Instant::now();
-    let (stdout, isolation) = run_external(entry, &program, &worker_env, &prompt, &copy_dir, timeout)?;
+    let (stdout, isolation) =
+        run_external(entry, &program, &worker_env, &prompt, &copy_dir, timeout)?;
     let took = started.elapsed();
 
     // 3. The diff: copy vs original.
@@ -410,7 +411,14 @@ fn direct_run(
     #[cfg(windows)]
     {
         // Windows programs need these to start at all; neither is secret.
-        for k in ["SystemRoot", "PATHEXT", "COMSPEC", "USERPROFILE", "APPDATA", "LOCALAPPDATA"] {
+        for k in [
+            "SystemRoot",
+            "PATHEXT",
+            "COMSPEC",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+        ] {
             if let Some(v) = std::env::var_os(k) {
                 cmd.env(k, v);
             }
@@ -451,8 +459,18 @@ fn direct_run(
             String::from_utf8_lossy(&keep).into_owned()
         })
     };
-    let out_thread = drain(child.stdout.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>));
-    let err_thread = drain(child.stderr.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>));
+    let out_thread = drain(
+        child
+            .stdout
+            .take()
+            .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+    );
+    let err_thread = drain(
+        child
+            .stderr
+            .take()
+            .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+    );
     let start = Instant::now();
     loop {
         match child.try_wait() {
@@ -818,8 +836,19 @@ mod tests {
         let project = tmp_project("chatty");
         let entry = stub(&project, "i=0; while [ $i -lt 4000 ]; do echo 'a long line of worker chatter, the kind agents print'; i=$((i+1)); done; echo done > out.txt");
         let started = std::time::Instant::now();
-        let out = direct_run(&entry, Path::new(&entry.command), &[], &["go"], &project, Duration::from_secs(20)).unwrap();
-        assert!(started.elapsed().as_secs() < 10, "the worker stalled on a full pipe");
+        let out = direct_run(
+            &entry,
+            Path::new(&entry.command),
+            &[],
+            &["go"],
+            &project,
+            Duration::from_secs(20),
+        )
+        .unwrap();
+        assert!(
+            started.elapsed().as_secs() < 10,
+            "the worker stalled on a full pipe"
+        );
         assert!(out.contains("chatter"));
         assert!(project.join("out.txt").exists());
     }
@@ -827,13 +856,27 @@ mod tests {
     #[test]
     fn the_worker_gets_its_own_sign_in_and_nothing_else() {
         let project = tmp_project("env");
-        let mut entry = stub(&project, "echo \"K=$WORKER_TEST_TOKEN H=$WRIGHT_HOME\" > env.txt");
+        let mut entry = stub(
+            &project,
+            "echo \"K=$WORKER_TEST_TOKEN H=$WRIGHT_HOME\" > env.txt",
+        );
         entry.env = vec![("WORKER_TEST_TOKEN".into(), "plain-for-the-test".into())];
         let env = resolve_env(&entry).unwrap();
-        direct_run(&entry, Path::new(&entry.command), &env, &["go"], &project, Duration::from_secs(20)).unwrap();
+        direct_run(
+            &entry,
+            Path::new(&entry.command),
+            &env,
+            &["go"],
+            &project,
+            Duration::from_secs(20),
+        )
+        .unwrap();
         let seen = std::fs::read_to_string(project.join("env.txt")).unwrap();
         assert!(seen.contains("K=plain-for-the-test"), "{seen}");
-        assert!(seen.contains("H=\n") || seen.trim_end().ends_with("H="), "Wright's own environment must not leak: {seen}");
+        assert!(
+            seen.contains("H=\n") || seen.trim_end().ends_with("H="),
+            "Wright's own environment must not leak: {seen}"
+        );
     }
 
     #[test]

@@ -112,10 +112,18 @@ pub fn folder_name(name: &str, fallback: &str) -> String {
     let clean = |s: &str| -> String {
         let mapped: String = s
             .chars()
-            .map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.') { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.') {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let mut out = mapped.replace("..", "-");
-        out = out.trim_matches(|c: char| c == '.' || c == ' ' || c == '-').to_string();
+        out = out
+            .trim_matches(|c: char| c == '.' || c == ' ' || c == '-')
+            .to_string();
         out.chars().take(80).collect()
     };
     let a = clean(name);

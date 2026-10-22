@@ -24,7 +24,10 @@ pub fn file(name: &str) -> PathBuf {
 
 pub fn read_list(name: &str) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
-    for l in std::fs::read_to_string(file(name)).unwrap_or_default().lines() {
+    for l in std::fs::read_to_string(file(name))
+        .unwrap_or_default()
+        .lines()
+    {
         let p = PathBuf::from(l.trim());
         if !l.trim().is_empty() && p.is_dir() && !out.contains(&p) {
             out.push(p);
@@ -39,7 +42,11 @@ pub fn write_list(name: &str, paths: &[PathBuf]) {
 }
 
 fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_else(|_| ".".into()))
+    PathBuf::from(
+        std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".into()),
+    )
 }
 
 pub fn projects_dir() -> PathBuf {
@@ -74,14 +81,22 @@ pub fn new_project_dir(text: &str) -> Result<PathBuf, String> {
     let root = projects_dir();
     let base = slug(text);
     for n in 1..1000 {
-        let name = if n == 1 { base.clone() } else { format!("{base}-{n}") };
+        let name = if n == 1 {
+            base.clone()
+        } else {
+            format!("{base}-{n}")
+        };
         let dir = root.join(&name);
         if !dir.exists() {
-            std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+            std::fs::create_dir_all(&dir)
+                .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
             return Ok(dir);
         }
     }
-    Err(format!("{} already has 999 projects called '{base}'", root.display()))
+    Err(format!(
+        "{} already has 999 projects called '{base}'",
+        root.display()
+    ))
 }
 
 #[cfg(test)]
@@ -90,7 +105,10 @@ mod tests {
 
     #[test]
     fn a_description_becomes_a_folder_name() {
-        assert_eq!(slug("Every Monday, read the CSVs in ~/sales"), "every-monday-read-the");
+        assert_eq!(
+            slug("Every Monday, read the CSVs in ~/sales"),
+            "every-monday-read-the"
+        );
         assert_eq!(slug("  !!  "), "project");
     }
 }

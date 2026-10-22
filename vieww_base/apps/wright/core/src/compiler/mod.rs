@@ -486,7 +486,10 @@ models { tier cheap prefer=\"deepseek-v4-flash\" tier quality prefer=\"claude-op
         assert!(!bp.chips.tests);
         let g = compile(&bp).unwrap();
         let (rv, mailer) = (id_of(&g, "Reviewer"), id_of(&g, "Mailer"));
-        assert!(g.tasks[mailer].deps.contains(&rv), "Mailer waits for the Reviewer");
+        assert!(
+            g.tasks[mailer].deps.contains(&rv),
+            "Mailer waits for the Reviewer"
+        );
         assert!(g.by_name("Testwright").is_some());
 
         // A plan with nothing to deliver and no promise stays as light as

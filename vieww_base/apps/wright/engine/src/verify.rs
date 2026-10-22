@@ -102,7 +102,11 @@ pub fn project_run(project_dir: &Path, run: Option<u64>) -> Result<Verification,
 }
 
 /// [`project_run`], also trusting the public keys in `pins` (hex).
-pub fn project_run_pinned(project_dir: &Path, run: Option<u64>, pins: &[String]) -> Result<Verification, String> {
+pub fn project_run_pinned(
+    project_dir: &Path,
+    run: Option<u64>,
+    pins: &[String],
+) -> Result<Verification, String> {
     let store = Store::open(project_dir)?;
     let run = match run {
         Some(r) => r,
@@ -368,7 +372,10 @@ fn check_signature(v: &Value, checks: &mut Vec<Check>, pins: &[String]) -> bool 
 }
 
 fn check_identities(store: &Store, v: &Value, run: Option<u64>, checks: &mut Vec<Check>) -> bool {
-    let Some(list) = v.get("identities").and_then(|a| a.as_arr().map(|x| x.to_vec())) else {
+    let Some(list) = v
+        .get("identities")
+        .and_then(|a| a.as_arr().map(|x| x.to_vec()))
+    else {
         checks.push(Check {
             name: "identities",
             ok: true,
@@ -376,15 +383,26 @@ fn check_identities(store: &Store, v: &Value, run: Option<u64>, checks: &mut Vec
         });
         return true;
     };
-    let signer = v.get("signature").and_then(|s| s.str_of("public_key")).unwrap_or("");
-    let mut by_did: std::collections::BTreeMap<String, (String, u64)> = std::collections::BTreeMap::new();
+    let signer = v
+        .get("signature")
+        .and_then(|s| s.str_of("public_key"))
+        .unwrap_or("");
+    let mut by_did: std::collections::BTreeMap<String, (String, u64)> =
+        std::collections::BTreeMap::new();
     for id in &list {
         match wright_runtime::identity::verify_closed(id, signer) {
             Ok(agent) => {
-                by_did.insert(id.str_of("did").unwrap_or("").to_string(), (agent, id.get("calls").and_then(|n| n.as_u64()).unwrap_or(0)));
+                by_did.insert(
+                    id.str_of("did").unwrap_or("").to_string(),
+                    (agent, id.get("calls").and_then(|n| n.as_u64()).unwrap_or(0)),
+                );
             }
             Err(e) => {
-                checks.push(Check { name: "identities", ok: false, note: e });
+                checks.push(Check {
+                    name: "identities",
+                    ok: false,
+                    note: e,
+                });
                 return false;
             }
         }
@@ -396,18 +414,39 @@ fn check_identities(store: &Store, v: &Value, run: Option<u64>, checks: &mut Vec
             if e.kind != wright_core::events::EventKind::ToolCalled {
                 continue;
             }
-            let Some(did) = e.data_value().and_then(|d| d.str_of("identity").map(String::from)) else { continue };
+            let Some(did) = e
+                .data_value()
+                .and_then(|d| d.str_of("identity").map(String::from))
+            else {
+                continue;
+            };
             if did.is_empty() {
                 continue;
             }
             match by_did.get(&did) {
-                Some((agent, _)) if Some(agent.as_str()) == e.agent.as_deref() => *seen.entry(did).or_insert(0) += 1,
+                Some((agent, _)) if Some(agent.as_str()) == e.agent.as_deref() => {
+                    *seen.entry(did).or_insert(0) += 1
+                }
                 Some((agent, _)) => {
-                    checks.push(Check { name: "identities", ok: false, note: format!("a call by {} was made under {agent}'s identity", e.agent.as_deref().unwrap_or("?")) });
+                    checks.push(Check {
+                        name: "identities",
+                        ok: false,
+                        note: format!(
+                            "a call by {} was made under {agent}'s identity",
+                            e.agent.as_deref().unwrap_or("?")
+                        ),
+                    });
                     return false;
                 }
                 None => {
-                    checks.push(Check { name: "identities", ok: false, note: format!("a call in the log was made under {}, which this machine never issued", hash::short(&did)) });
+                    checks.push(Check {
+                        name: "identities",
+                        ok: false,
+                        note: format!(
+                            "a call in the log was made under {}, which this machine never issued",
+                            hash::short(&did)
+                        ),
+                    });
                     return false;
                 }
             }
@@ -416,7 +455,13 @@ fn check_identities(store: &Store, v: &Value, run: Option<u64>, checks: &mut Vec
     for (did, (agent, calls)) in &by_did {
         let logged = seen.get(did).copied().unwrap_or(0);
         if logged != *calls {
-            checks.push(Check { name: "identities", ok: false, note: format!("{agent}'s identity attests to {calls} call(s), but the log shows {logged}") });
+            checks.push(Check {
+                name: "identities",
+                ok: false,
+                note: format!(
+                    "{agent}'s identity attests to {calls} call(s), but the log shows {logged}"
+                ),
+            });
             return false;
         }
     }

@@ -42,7 +42,10 @@ pub fn issue(receipt: &Value, key: &SigningKey) -> Result<Value, String> {
     let pk = key_bytes(&key.public_hex())?;
     let did = jcs::did_key(&pk);
     let method = format!("{did}#{}", jcs::multibase_key(&pk));
-    let finished = receipt.get("finished_ms").and_then(|n| n.as_u64()).unwrap_or(0);
+    let finished = receipt
+        .get("finished_ms")
+        .and_then(|n| n.as_u64())
+        .unwrap_or(0);
     let run = receipt.get("run").and_then(|n| n.as_u64()).unwrap_or(0);
     // The subject is the receipt itself, minus Wright's own signature
     // block (this credential's proof replaces it).
@@ -58,10 +61,16 @@ pub fn issue(receipt: &Value, key: &SigningKey) -> Result<Value, String> {
         ("@context", Value::Arr(vec![Value::str(CONTEXT)])),
         (
             "type",
-            Value::Arr(vec![Value::str("VerifiableCredential"), Value::str("WrightRunReceipt")]),
+            Value::Arr(vec![
+                Value::str("VerifiableCredential"),
+                Value::str("WrightRunReceipt"),
+            ]),
         ),
         ("issuer", Value::str(did)),
-        ("validFrom", Value::str(rfc3339_utc((finished / 1000) as i64))),
+        (
+            "validFrom",
+            Value::str(rfc3339_utc((finished / 1000) as i64)),
+        ),
         ("credentialSubject", Value::Obj(subject)),
     ]);
     let mut proof = Value::obj(vec![
@@ -74,7 +83,10 @@ pub fn issue(receipt: &Value, key: &SigningKey) -> Result<Value, String> {
     ]);
     let data = hash_data(&doc, &proof)?;
     let sig = key.sign(&data);
-    proof.set("proofValue", Value::str(format!("z{}", jcs::base58_encode(&sig))));
+    proof.set(
+        "proofValue",
+        Value::str(format!("z{}", jcs::base58_encode(&sig))),
+    );
     doc.set("proof", proof);
     Ok(doc)
 }
@@ -92,19 +104,40 @@ pub struct Checked {
 /// Verify a credential: the proof over the exact canonical bytes, the
 /// issuer matching the key that signed, and the issuer trusted here.
 pub fn verify(doc: &Value, pins: &[String]) -> Result<Checked, String> {
-    let proof = doc.get("proof").ok_or("the credential carries no proof")?.clone();
-    if proof.str_of("cryptosuite") != Some(CRYPTOSUITE) || proof.str_of("type") != Some("DataIntegrityProof") {
-        return Err(format!("the proof is not a DataIntegrityProof using {CRYPTOSUITE}"));
+    let proof = doc
+        .get("proof")
+        .ok_or("the credential carries no proof")?
+        .clone();
+    if proof.str_of("cryptosuite") != Some(CRYPTOSUITE)
+        || proof.str_of("type") != Some("DataIntegrityProof")
+    {
+        return Err(format!(
+            "the proof is not a DataIntegrityProof using {CRYPTOSUITE}"
+        ));
     }
-    let method = proof.str_of("verificationMethod").ok_or("the proof names no verificationMethod")?;
-    let issuer = doc.str_of("issuer").ok_or("the credential names no issuer")?;
+    let method = proof
+        .str_of("verificationMethod")
+        .ok_or("the proof names no verificationMethod")?;
+    let issuer = doc
+        .str_of("issuer")
+        .ok_or("the credential names no issuer")?;
     if method.split('#').next() != Some(issuer) {
-        return Err(format!("the proof was made by {method}, which is not the issuer {issuer}"));
+        return Err(format!(
+            "the proof was made by {method}, which is not the issuer {issuer}"
+        ));
     }
     let pk = jcs::did_key_public(method)?;
-    let value = proof.str_of("proofValue").ok_or("the proof has no proofValue")?;
-    let sig_bytes = jcs::base58_decode(value.strip_prefix('z').ok_or("proofValue is not base58btc multibase")?)?;
-    let sig: [u8; 64] = sig_bytes.try_into().map_err(|_| "the signature is not 64 bytes".to_string())?;
+    let value = proof
+        .str_of("proofValue")
+        .ok_or("the proof has no proofValue")?;
+    let sig_bytes = jcs::base58_decode(
+        value
+            .strip_prefix('z')
+            .ok_or("proofValue is not base58btc multibase")?,
+    )?;
+    let sig: [u8; 64] = sig_bytes
+        .try_into()
+        .map_err(|_| "the signature is not 64 bytes".to_string())?;
     let mut config = proof.clone();
     if let Value::Obj(f) = &mut config {
         f.retain(|(k, _)| k != "proofValue");
@@ -127,7 +160,9 @@ pub fn verify(doc: &Value, pins: &[String]) -> Result<Checked, String> {
     }
     let data = hash_data(&unsigned, &config)?;
     if !wright_core::ed25519::verify(&pk, &data, &sig) {
-        return Err("the proof does NOT match the credential — it was changed after it was signed".into());
+        return Err(
+            "the proof does NOT match the credential — it was changed after it was signed".into(),
+        );
     }
     let hex: String = pk.iter().map(|b| format!("{b:02x}")).collect();
     let who = wright_runtime::signing::signer(&hex, pins)?;

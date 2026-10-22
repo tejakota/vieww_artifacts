@@ -89,9 +89,24 @@ pub fn bf16_to_f32(h: u16) -> f32 {
 pub fn to_f32(dtype: crate::gguf::DType, raw: &[u8]) -> Vec<f32> {
     use crate::gguf::DType;
     match dtype {
-        DType::F32 => raw.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect(),
-        DType::F16 => raw.as_chunks::<2>().0.iter().map(|b| f16_to_f32(u16::from_le_bytes(*b))).collect(),
-        DType::BF16 => raw.as_chunks::<2>().0.iter().map(|b| bf16_to_f32(u16::from_le_bytes(*b))).collect(),
+        DType::F32 => raw
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect(),
+        DType::F16 => raw
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| f16_to_f32(u16::from_le_bytes(*b)))
+            .collect(),
+        DType::BF16 => raw
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| bf16_to_f32(u16::from_le_bytes(*b)))
+            .collect(),
         DType::Q8_0 => raw
             .as_chunks::<34>()
             .0
@@ -136,7 +151,10 @@ impl QVec {
 /// no indexing: the compiler turns this into a few SIMD instructions.
 #[inline(always)]
 fn block_dot(w: &[u8; 32], x: &[i8; 32]) -> i32 {
-    w.iter().zip(x).map(|(a, b)| i32::from(*a as i8) * i32::from(*b)).sum()
+    w.iter()
+        .zip(x)
+        .map(|(a, b)| i32::from(*a as i8) * i32::from(*b))
+        .sum()
 }
 
 /// Dot product of one Q8_0 weight row (raw blocks) with a quantized vector.
@@ -202,8 +220,12 @@ mod tests {
 
     #[test]
     fn q8_dot_matches_float_dot() {
-        let w: Vec<f32> = (0..64).map(|i| ((i * 37 % 19) as f32 - 9.0) / 7.0).collect();
-        let x: Vec<f32> = (0..64).map(|i| ((i * 11 % 23) as f32 - 11.0) / 5.0).collect();
+        let w: Vec<f32> = (0..64)
+            .map(|i| ((i * 37 % 19) as f32 - 9.0) / 7.0)
+            .collect();
+        let x: Vec<f32> = (0..64)
+            .map(|i| ((i * 11 % 23) as f32 - 11.0) / 5.0)
+            .collect();
         // Weights as Q8_0 blocks.
         let qw = QVec::quantize(&w);
         let mut raw = Vec::new();
@@ -213,6 +235,9 @@ mod tests {
         }
         let exact = dot_f32(&w, &x);
         let approx = dot_q8(&raw, &QVec::quantize(&x));
-        assert!((exact - approx).abs() < 0.02 * exact.abs().max(1.0), "{exact} vs {approx}");
+        assert!(
+            (exact - approx).abs() < 0.02 * exact.abs().max(1.0),
+            "{exact} vs {approx}"
+        );
     }
 }

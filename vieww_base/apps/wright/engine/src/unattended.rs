@@ -94,8 +94,13 @@ pub fn road(project: &Path) -> Result<Road, String> {
     };
     for run in store.runs() {
         r.runs += 1;
-        let receipt = std::fs::read_to_string(store.run_dir(run).join("receipt.json")).unwrap_or_default();
-        if json::parse(&receipt).ok().and_then(|v| v.get("ok").and_then(|b| b.as_bool())) == Some(true) {
+        let receipt =
+            std::fs::read_to_string(store.run_dir(run).join("receipt.json")).unwrap_or_default();
+        if json::parse(&receipt)
+            .ok()
+            .and_then(|v| v.get("ok").and_then(|b| b.as_bool()))
+            == Some(true)
+        {
             r.passed += 1;
         }
         if let Ok(log) = store.read_events(run) {
