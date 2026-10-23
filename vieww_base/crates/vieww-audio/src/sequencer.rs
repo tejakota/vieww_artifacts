@@ -42,6 +42,12 @@ pub struct Note {
     pub velocity: u8,
     /// Channel (MPE: each note may have its own).
     pub channel: u8,
+    /// A fixed offset from the key, in cents (−4800..4800): a microtone,
+    /// or a swara's just intonation against the equal-tempered key. Sent
+    /// as an MPE pitch bend on the note's channel, ahead of its note-on,
+    /// so give each detuned note its own channel (MPE). Resolution on the
+    /// ±48-semitone MPE range is about 1.2 cents.
+    pub cents: f32,
     /// Pitch bend in semitones over the note.
     pub bend: Curve,
     /// Pressure 0..=1 over the note.
@@ -62,6 +68,7 @@ impl Note {
             key,
             velocity,
             channel: 0,
+            cents: 0.0,
             bend: Vec::new(),
             pressure: Vec::new(),
             timbre: Vec::new(),
@@ -73,6 +80,19 @@ impl Note {
     #[must_use]
     pub fn end(&self) -> f64 {
         self.start + self.length
+    }
+
+    /// The note's total bend at `rel` beats in — curve plus `cents` — as a
+    /// 14-bit MPE bend over ±48 semitones; `None` when there is neither.
+    fn bend_value(&self, rel: f64) -> Option<i16> {
+        let curve = curve_at(&self.bend, rel);
+        if curve.is_none() && self.cents == 0.0 {
+            return None;
+        }
+        let semis = curve.unwrap_or(0.0) + self.cents / 100.0;
+        #[expect(clippy::cast_possible_truncation, reason = "14-bit bend")]
+        let value = ((semis / 48.0).clamp(-1.0, 1.0) * 8191.0).round() as i16;
+        Some(value)
     }
 }
 
@@ -290,6 +310,17 @@ impl Clip {
                 continue;
             }
             if n.start >= a && n.start < b {
+                // The note's pitch offset lands before it sounds: a bend
+                // that arrives after the note-on is an audible scoop.
+                if let Some(value) = n.bend_value(0.0) {
+                    out.push(Timed {
+                        beat: at + n.start,
+                        event: Event::Midi(Message::PitchBend {
+                            channel: n.channel,
+                            value,
+                        }),
+                    });
+                }
                 out.push(Timed {
                     beat: at + n.start,
                     event: Event::Midi(Message::NoteOn {
@@ -336,9 +367,7 @@ impl Clip {
         let mut out = Vec::new();
         for n in self.notes.iter().filter(|n| n.start <= t && t < n.end()) {
             let rel = t - n.start;
-            if let Some(b) = curve_at(&n.bend, rel) {
-                #[expect(clippy::cast_possible_truncation, reason = "14-bit bend")]
-                let value = ((b / 48.0).clamp(-1.0, 1.0) * 8191.0).round() as i16;
+            if let Some(value) = n.bend_value(rel) {
                 out.push(Message::PitchBend {
                     channel: n.channel,
                     value,
@@ -882,6 +911,47 @@ impl Arpeggiator {
         }
         out.sort_by(|a, b| a.beat.total_cmp(&b.beat));
         out
+    }
+}
+
+#[cfg(test)]
+mod cents_tests {
+    use super::*;
+
+    #[test]
+    fn a_detuned_note_bends_before_it_sounds() {
+        let mut c = Clip::new(4.0);
+        let mut n = Note::new(1.0, 1.0, 64, 100);
+        n.channel = 2;
+        n.cents = -13.7; // a just major third against 12-TET
+        c.notes.push(n);
+        let ev = c.events(0.0, 4.0, 0.0);
+        let at_one: Vec<_> = ev.iter().filter(|e| e.beat == 1.0).collect();
+        let Event::Midi(Message::PitchBend { channel, value }) = at_one[0].event else {
+            panic!("the bend must come first: {at_one:?}");
+        };
+        assert_eq!(channel, 2);
+        let cents = f32::from(value) / 8191.0 * 4800.0;
+        assert!((cents + 13.7).abs() < 1.2, "{cents}");
+        assert!(matches!(
+            at_one[1].event,
+            Event::Midi(Message::NoteOn { .. })
+        ));
+        // Mid-note expression keeps the offset.
+        let mid = c.expression_at(1.5);
+        assert!(mid
+            .iter()
+            .any(|m| matches!(m, Message::PitchBend { value: v, .. } if *v == value)));
+    }
+
+    #[test]
+    fn an_undetuned_note_sends_no_bend() {
+        let mut c = Clip::new(4.0);
+        c.notes.push(Note::new(0.0, 1.0, 60, 100));
+        assert!(!c
+            .events(0.0, 4.0, 0.0)
+            .iter()
+            .any(|e| matches!(e.event, Event::Midi(Message::PitchBend { .. }))));
     }
 }
 

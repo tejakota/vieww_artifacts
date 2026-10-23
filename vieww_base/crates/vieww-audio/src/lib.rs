@@ -107,6 +107,7 @@ pub mod midi;
 pub mod midi_io;
 pub mod mixer;
 pub mod modulation;
+pub mod mts;
 pub mod parallel;
 pub mod player;
 pub mod preset;

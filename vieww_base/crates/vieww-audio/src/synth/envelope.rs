@@ -281,6 +281,36 @@ impl EnvelopeGen {
         }
     }
 
+    /// Make this an idle envelope of shape `adsr` — what
+    /// [`new`](Self::new)`(adsr.stages(), rate)` builds, but written into
+    /// this envelope's existing stage storage, so re-arming a voice for a
+    /// new note on the audio thread allocates nothing.
+    pub fn rearm_adsr(&mut self, adsr: Adsr) {
+        let fresh = |a, b, c| {
+            [
+                Stage::curved(1.0, adsr.attack, a),
+                Stage::curved(adsr.sustain, adsr.decay, b),
+                Stage::curved(0.0, adsr.release, c),
+            ]
+        };
+        self.desc.stages.clear();
+        self.desc
+            .stages
+            .extend(fresh(Curve::Linear, Curve::Linear, Curve::Linear));
+        self.desc.sustain = Some(1);
+        self.desc.loop_range = None;
+        self.desc.velocity = Velocity::default();
+        self.phase = Phase::Idle;
+        self.gated = false;
+        self.pos = 0;
+        self.len = 0;
+        self.from = 0.0;
+        self.level = 0.0;
+        self.level_scale = 1.0;
+        self.attack_scale = 1.0;
+        self.fade_k = f32::MAX;
+    }
+
     /// Start (or retrigger) at full velocity.
     pub fn gate_on(&mut self) {
         self.gate_on_velocity(1.0);

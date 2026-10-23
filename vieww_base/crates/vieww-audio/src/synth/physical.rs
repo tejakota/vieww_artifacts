@@ -44,15 +44,20 @@ pub struct KarplusStrong {
     hz: f32,
     energy: f32,
     damped: bool,
+    /// Pluck scratch (excitation, shaped excitation, old continuation),
+    /// sized once to the longest period so a pluck — a note-on, on the
+    /// audio thread — allocates nothing.
+    scratch: [Vec<f32>; 3],
 }
 
 impl KarplusStrong {
     /// A string at `rate`.
     #[must_use]
     pub fn new(rate: f32, seed: u64) -> Self {
+        let max = (rate / 20.0) as usize + 8;
         Self {
             rate,
-            line: DelayLine::new((rate / 20.0) as usize + 8),
+            line: DelayLine::new(max),
             len: 100,
             tune: Allpass1::default(),
             prev: 0.0,
@@ -64,6 +69,11 @@ impl KarplusStrong {
             hz: 440.0,
             energy: 0.0,
             damped: false,
+            scratch: [
+                Vec::with_capacity(max),
+                Vec::with_capacity(max),
+                Vec::with_capacity(max),
+            ],
         }
     }
 
@@ -95,7 +105,11 @@ impl KarplusStrong {
         let was_ringing = self.energy > 1e-3;
         self.retune(hz);
         let n = self.len;
-        let mut exc = vec![0.0f32; n];
+        // The retune keeps n under the line's (and so the scratch's)
+        // capacity: `clear` + `resize` within capacity never allocates.
+        let [mut exc, mut shaped, mut old] = std::mem::take(&mut self.scratch);
+        exc.clear();
+        exc.resize(n, 0.0);
         let mut lp = 0.0f32;
         let b = self.brightness.clamp(0.0, 1.0);
         for e in &mut exc {
@@ -113,7 +127,8 @@ impl KarplusStrong {
             reason = "index"
         )]
         let off = ((self.position.clamp(0.01, 0.99) * n as f32).round() as usize).clamp(1, n - 1);
-        let shaped: Vec<f32> = (0..n).map(|i| exc[i] - exc[(i + n - off) % n]).collect();
+        shaped.clear();
+        shaped.extend((0..n).map(|i| exc[i] - exc[(i + n - off) % n]));
         let peak = shaped.iter().fold(1e-6f32, |m, v| m.max(v.abs()));
         // A retrigger replaces the string's whole read window at once, and
         // the switch from the old string to the new excitation is a step of
@@ -135,7 +150,8 @@ impl KarplusStrong {
         } else {
             0
         };
-        let old: Vec<f32> = (0..fade_n).map(|i| self.line.tap(old_len - i)).collect();
+        old.clear();
+        old.extend((0..fade_n).map(|i| self.line.tap(old_len - i)));
         for (i, v) in shaped.iter().enumerate() {
             let mut s = v / peak * velocity;
             if i < fade_n {
@@ -146,6 +162,7 @@ impl KarplusStrong {
             }
             self.line.push(s);
         }
+        self.scratch = [exc, shaped, old];
         self.energy = 1.0;
         self.damped = false;
     }
@@ -462,7 +479,13 @@ impl Modal {
             res: vec![Resonator::default(); n],
             rate,
             hardness: 0.6,
-            strike: Vec::new(),
+            // The longest contact (3 ms, softest mallet) plus slack.
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "length"
+            )]
+            strike: Vec::with_capacity((0.003 * rate) as usize + 2),
             strike_pos: 0,
             hz: 440.0,
             level: 0.0,
@@ -576,13 +599,14 @@ impl Modal {
         let n = ((ms * 0.001 * self.rate) as usize).max(1);
         #[expect(clippy::cast_precision_loss, reason = "length")]
         let nf = n as f32;
-        self.strike = (0..n)
-            .map(|i| {
-                #[expect(clippy::cast_precision_loss, reason = "index")]
-                let x = (i as f32 + 0.5) / nf;
-                velocity * (std::f32::consts::PI * x).sin() / nf * 4.0
-            })
-            .collect();
+        // Refilled in place: the buffer was sized for the softest (longest)
+        // contact at construction, so a strike never allocates.
+        self.strike.clear();
+        self.strike.extend((0..n).map(|i| {
+            #[expect(clippy::cast_precision_loss, reason = "index")]
+            let x = (i as f32 + 0.5) / nf;
+            velocity * (std::f32::consts::PI * x).sin() / nf * 4.0
+        }));
         self.strike_pos = 0;
         self.level = velocity;
         // A struck note rings from its full level: a pending kill fade

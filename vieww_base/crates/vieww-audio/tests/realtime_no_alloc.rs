@@ -51,7 +51,7 @@ static GLOBAL: Counting = Counting;
 
 fn main() {
     rendering_allocates_nothing();
-    println!("realtime_no_alloc: the render path, mixer, parallel voices, disk stream, polyphony, every stereo effect and NaN recovery allocate nothing");
+    println!("realtime_no_alloc: the render path, mixer, parallel voices, disk stream, polyphony, every stereo effect, NaN recovery, the sampler and struck instruments allocate nothing");
 }
 
 fn rendering_allocates_nothing() {
@@ -109,6 +109,7 @@ fn rendering_allocates_nothing() {
     parallel_voices_allocate_nothing();
     disk_streaming_allocates_nothing();
     voices_and_every_effect_allocate_nothing();
+    sampler_and_struck_instruments_allocate_nothing();
 }
 
 fn mixer_allocates_nothing() {
@@ -216,7 +217,8 @@ fn disk_streaming_allocates_nothing() {
     assert!(got > 0);
 }
 
-/// Single-threaded polyphony (`Poly::render_into`), physical models, every
+/// Single-threaded polyphony (`Poly::render_into`) with note-ons, voice
+/// stealing and a tuning table, physical models, every
 /// stateful stereo effect, and the mixer's NaN-recovery path — an insert
 /// faulting and being reset mid-block must not allocate either.
 fn voices_and_every_effect_allocate_nothing() {
@@ -239,6 +241,14 @@ fn voices_and_every_effect_allocate_nothing() {
         poly.note_on(0, k, 0.8);
         strings.note_on(0, k, 0.8);
     }
+    // A tuned pool (19-EDO), built before arming: retuning on the audio
+    // thread must cost no allocation either.
+    strings.set_tuning(Some(vieww_audio::synth::tuning::TuningTable::from_tuning(
+        &vieww_audio::synth::tuning::EqualTemperament {
+            divisions: 19.0,
+            ..Default::default()
+        },
+    )));
     let ir: Vec<f32> = (0..4_096).map(|i| 0.4 * 0.999f32.powi(i)).collect();
     let mut fx: Vec<Box<dyn Stereo + Send>> = vec![
         Box::new(Freeverb::new(0.8, 0.3, rate)),
@@ -279,6 +289,14 @@ fn voices_and_every_effect_allocate_nothing() {
 
     ARMED.store(true, Ordering::SeqCst);
     for i in 0..190 {
+        // Note-ons every block: 16 voices, 24 keys cycling, so most
+        // presses steal — the path that used to build two Vecs.
+        let k = 40 + (i % 24) as u8;
+        poly.note_on(0, k, 0.7);
+        strings.note_on_pitch(0, k, f32::from(k) + 0.25, 0.7);
+        if i % 3 == 0 {
+            poly.note_off(0, k.saturating_sub(5));
+        }
         run(&mut poly, &mut strings, &mut fx, &mut m, i % 50 == 7);
     }
     ARMED.store(false, Ordering::SeqCst);
@@ -289,5 +307,75 @@ fn voices_and_every_effect_allocate_nothing() {
         "polyphony, an effect or a reset allocated"
     );
     assert!(out.iter().all(|v| v.is_finite()));
+    assert!(out.iter().any(|v| v.abs() > 1e-4), "and it produced sound");
+}
+
+/// Sampler note-ons and note-offs (zone selection, round robin, envelope
+/// re-arming, tuning) and modal strikes — every note event is audio-thread
+/// work in a live instrument.
+fn sampler_and_struck_instruments_allocate_nothing() {
+    use std::sync::Arc;
+    use vieww_audio::synth::physical::Modal;
+    use vieww_audio::synth::sampler::{Instrument, SampleData, Sampler, Zone};
+    use vieww_audio::synth::tuning::{EqualTemperament, TuningTable};
+    use vieww_audio::synth::voice::Poly;
+
+    let rate = 48_000.0;
+    let tone: Vec<f32> = (0..24_000)
+        .map(|i| (i as f32 * 220.0 * std::f32::consts::TAU / rate).sin() * 0.5)
+        .collect();
+    let data = Arc::new(SampleData::mono(tone, rate));
+    let mut zones = Vec::new();
+    for pos in 1..=3 {
+        let mut z = Zone::new(Arc::clone(&data), 57.0);
+        z.seq_length = 3;
+        z.seq_position = pos;
+        zones.push(z);
+    }
+    zones.push(Zone::new(Arc::clone(&data), 45.0));
+    let mut sampler = Sampler::new(
+        Instrument {
+            zones,
+            ..Instrument::default()
+        },
+        8,
+        rate,
+    );
+    sampler.set_tuning(Some(TuningTable::from_tuning(&EqualTemperament {
+        divisions: 22.0,
+        ..Default::default()
+    })));
+    let mut bells = Poly::new((0..6).map(|_| Modal::glockenspiel(rate)).collect(), rate);
+
+    // Warm-up: touch every key once so the round-robin table holds them.
+    for k in 0..128u8 {
+        sampler.note_on(0, k, 100);
+        sampler.note_off(0, k);
+    }
+    bells.note_on(0, 72, 0.8);
+    let mut out = vec![0.0f32; 2 * 256];
+
+    ARMED.store(true, Ordering::SeqCst);
+    for i in 0..400u32 {
+        let k = 48 + (i % 30) as u8;
+        sampler.note_on(0, k, 90);
+        if i % 2 == 0 {
+            sampler.note_off(0, k.saturating_sub(3));
+        }
+        bells.note_on(0, k + 12, 0.6);
+        for f in out.as_chunks_mut::<2>().0 {
+            let (l, r) = sampler.next_stereo();
+            let (bl, br) = bells.next_stereo();
+            f[0] = l + bl;
+            f[1] = r + br;
+        }
+    }
+    ARMED.store(false, Ordering::SeqCst);
+
+    assert_eq!(
+        ALLOCS.load(Ordering::SeqCst),
+        0,
+        "a sampler note event or a strike allocated"
+    );
     assert!(out.iter().any(|v| v.abs() > 1e-4), "and it produced sound");
 }

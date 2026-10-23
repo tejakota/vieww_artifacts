@@ -141,7 +141,10 @@ pub struct Poly<V: Voice> {
     clock: u64,
     pedal: [bool; 16],
     channel_expr: [Expression; 16],
-    mono_stack: Vec<(u8, u8, f32)>,
+    /// Held keys in mono modes: `(channel, key, pitch, velocity)`.
+    mono_stack: Vec<(u8, u8, f32, f32)>,
+    /// The tuning notes are played in; `None` is 12-TET at A4 = 440.
+    tuning: Option<Box<super::tuning::TuningTable>>,
 }
 
 impl<V: Voice> Poly<V> {
@@ -175,7 +178,10 @@ impl<V: Voice> Poly<V> {
             clock: 0,
             pedal: [false; 16],
             channel_expr: [Expression::default(); 16],
-            mono_stack: Vec::new(),
+            // Room for every key on every channel's worth of a hand: a
+            // push on the audio thread must not grow the stack.
+            mono_stack: Vec::with_capacity(128),
+            tuning: None,
         }
     }
 
@@ -284,39 +290,64 @@ impl<V: Voice> Poly<V> {
         self.mono_stack.clear();
     }
 
-    fn pick(&self, used: &[usize]) -> Option<usize> {
-        let free =
-            (0..self.slots.len()).find(|i| !used.contains(i) && !self.slots[*i].voice.is_active());
-        if free.is_some() {
-            return free;
-        }
-        let candidates: Vec<usize> = (0..self.slots.len())
-            .filter(|i| !used.contains(i))
-            .collect();
-        // Released voices go before held ones, whatever the policy.
-        let released: Vec<usize> = candidates
+    /// The slot for the next voice of a press: a free one, else one to
+    /// steal by policy, released voices before held ones. Slots already
+    /// claimed by this press (`age == clock`) are skipped. Allocates
+    /// nothing — it runs on the audio thread at every note-on.
+    fn pick(&self) -> Option<usize> {
+        let now = self.clock;
+        let open = |s: &Slot<V>| s.age != now;
+        if let Some(i) = self
+            .slots
             .iter()
-            .copied()
-            .filter(|i| !self.slots[*i].held)
-            .collect();
-        let pool = if released.is_empty() {
-            candidates
-        } else {
-            released
-        };
-        let by = |f: &dyn Fn(&Slot<V>) -> f32| {
-            pool.iter()
-                .copied()
-                .min_by(|a, b| f(&self.slots[*a]).total_cmp(&f(&self.slots[*b])))
-        };
-        match self.steal {
-            Steal::None => None,
-            #[expect(clippy::cast_precision_loss, reason = "age ordering only")]
-            Steal::Oldest => by(&|s| s.age as f32),
-            Steal::Quietest => by(&|s| s.voice.level()),
-            Steal::Lowest => by(&|s| s.target),
-            Steal::Highest => by(&|s| -s.target),
+            .position(|s| open(s) && !s.voice.is_active())
+        {
+            return Some(i);
         }
+        let any_released = self.slots.iter().any(|s| open(s) && !s.held);
+        let in_pool = |s: &Slot<V>| open(s) && (!any_released || !s.held);
+        #[expect(clippy::cast_precision_loss, reason = "age ordering only")]
+        let score = |s: &Slot<V>| -> f32 {
+            match self.steal {
+                Steal::None | Steal::Oldest => s.age as f32,
+                Steal::Quietest => s.voice.level(),
+                Steal::Lowest => s.target,
+                Steal::Highest => -s.target,
+            }
+        };
+        if self.steal == Steal::None {
+            return None;
+        }
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| in_pool(s))
+            .min_by(|(_, a), (_, b)| score(a).total_cmp(&score(b)))
+            .map(|(i, _)| i)
+    }
+
+    /// Play every note in `tuning` (see [`super::tuning`]); `None` returns
+    /// to 12-TET at A4 = 440. Takes effect on sounding notes at once.
+    /// Call off the audio thread — or hand over a table built there.
+    pub fn set_tuning(&mut self, tuning: Option<super::tuning::TuningTable>) {
+        self.tuning = tuning.map(Box::new);
+    }
+
+    /// The tuning in use, if not the default.
+    #[must_use]
+    pub fn tuning(&self) -> Option<&super::tuning::TuningTable> {
+        self.tuning.as_deref()
+    }
+
+    /// Press a note at a fractional `pitch` — a microtone, a swara between
+    /// keys — identified by `key` for its [`note_off`](Self::note_off).
+    /// The pitch passes through the tuning like any other.
+    pub fn note_on_pitch(&mut self, channel: u8, key: u8, pitch: f32, velocity: f32) {
+        if velocity <= 0.0 {
+            self.note_off(channel, key);
+            return;
+        }
+        self.press(channel, key, pitch, velocity);
     }
 
     /// Press a key.
@@ -325,14 +356,17 @@ impl<V: Voice> Poly<V> {
             self.note_off(channel, key);
             return;
         }
-        let pitch = f32::from(key);
+        self.press(channel, key, f32::from(key), velocity);
+    }
+
+    fn press(&mut self, channel: u8, key: u8, pitch: f32, velocity: f32) {
         match self.mode {
             Mode::Poly => self.start(channel, key, pitch, velocity, false),
             Mode::Mono | Mode::Legato => {
                 let legato = self.mode == Mode::Legato && !self.mono_stack.is_empty();
                 self.mono_stack
-                    .retain(|(c, k, _)| !(*c == channel && *k == key));
-                self.mono_stack.push((channel, key, velocity));
+                    .retain(|(c, k, _, _)| !(*c == channel && *k == key));
+                self.mono_stack.push((channel, key, pitch, velocity));
                 self.start(channel, key, pitch, velocity, legato);
             }
         }
@@ -358,18 +392,20 @@ impl<V: Voice> Poly<V> {
                         s.pitch = f64::from(pitch);
                     }
                     #[expect(clippy::cast_possible_truncation, reason = "pitch in f32 is ample")]
-                    s.voice.note_on(s.pitch as f32 + s.detune, velocity);
+                    let tuned = retuned(self.tuning.as_deref(), s.pitch as f32);
+                    s.voice.note_on(tuned + s.detune, velocity);
                 }
             }
             return;
         }
-        let mut used = Vec::with_capacity(n);
+        // Slots claimed by this press carry `age == clock` (set below), so
+        // `pick` skips them without a list — no allocation on note-on.
         for u in 0..n {
-            let Some(i) = self.pick(&used) else {
+            let Some(i) = self.pick() else {
                 return;
             };
-            used.push(i);
             let (d, p) = unison_slot(u, n, self.unison);
+            let tuned = retuned(self.tuning.as_deref(), pitch);
             let s = &mut self.slots[i];
             if s.voice.is_active() {
                 s.voice.kill();
@@ -383,7 +419,7 @@ impl<V: Voice> Poly<V> {
             s.pan = p;
             s.target = pitch;
             s.pitch = f64::from(pitch);
-            s.voice.note_on(pitch + d, velocity);
+            s.voice.note_on(tuned + d, velocity);
         }
     }
 
@@ -391,11 +427,11 @@ impl<V: Voice> Poly<V> {
     pub fn note_off(&mut self, channel: u8, key: u8) {
         if self.mode != Mode::Poly {
             self.mono_stack
-                .retain(|(c, k, _)| !(*c == channel && *k == key));
-            if let Some(&(c, k, v)) = self.mono_stack.last() {
-                // Return to the previous held key.
+                .retain(|(c, k, _, _)| !(*c == channel && *k == key));
+            if let Some(&(c, k, p, v)) = self.mono_stack.last() {
+                // Return to the previous held key, at its own pitch.
                 let legato = self.mode == Mode::Legato;
-                self.start(c, k, f32::from(k), v, legato);
+                self.start(c, k, p, v, legato);
                 return;
             }
         }
@@ -421,6 +457,7 @@ impl<V: Voice> Poly<V> {
             0.0
         };
         let master = self.channel_expr[0];
+        let tuning = self.tuning.as_deref();
         let mut l = 0.0;
         let mut r = 0.0;
         for s in &mut self.slots {
@@ -441,7 +478,8 @@ impl<V: Voice> Poly<V> {
             } else {
                 ch
             };
-            s.voice.set_pitch(pitch + s.detune + expr.bend);
+            s.voice
+                .set_pitch(retuned(tuning, pitch) + s.detune + expr.bend);
             s.voice.set_expression(expr);
             let v = s.voice.next();
             let (gl, gr) = super::equal_power(s.pan);
@@ -475,6 +513,12 @@ impl<V: Voice> Poly<V> {
         }
         out
     }
+}
+
+/// `pitch` through `tuning`, or unchanged under the default 12-TET.
+#[inline]
+fn retuned(tuning: Option<&super::tuning::TuningTable>, pitch: f32) -> f32 {
+    tuning.map_or(pitch, |t| t.retune(pitch))
 }
 
 fn unison_slot(u: usize, n: usize, uni: Unison) -> (f32, f32) {

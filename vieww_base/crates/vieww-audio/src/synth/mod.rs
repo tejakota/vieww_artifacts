@@ -35,6 +35,7 @@ pub mod physical;
 pub mod sampler;
 pub mod sf2;
 pub mod sfz;
+pub mod tuning;
 pub mod vector;
 pub mod voice;
 pub mod wavetable;

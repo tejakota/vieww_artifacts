@@ -264,13 +264,52 @@ pub struct Sampler {
     bend: [f32; 16],
     /// Pitch-bend range in semitones.
     pub bend_range: f32,
+    /// The tuning keys are played in; `None` is 12-TET.
+    tuning: Option<Box<super::tuning::TuningTable>>,
+    /// Zones chosen for the current key event — reused, so a note-on
+    /// allocates nothing.
+    selected: Vec<usize>,
+    /// Round-robin cycle lengths advanced by the current event (scratch).
+    advanced: Vec<u32>,
 }
 
 impl Sampler {
+    /// Play every key in `tuning` (see [`super::tuning`]): a zone's sample
+    /// sounds as recorded at its root key, and every other key is
+    /// resampled by the *tuned* distance from that root. `None` returns
+    /// to 12-TET. Affects notes started afterwards.
+    pub fn set_tuning(&mut self, tuning: Option<super::tuning::TuningTable>) {
+        self.tuning = tuning.map(Box::new);
+    }
+
+    /// Semitones (12-TET) between `key` and a zone's `root` under the
+    /// tuning — the distance a sample is resampled by.
+    fn key_offset(&self, key: u8, root: f32) -> f32 {
+        let k = f32::from(key);
+        self.tuning
+            .as_deref()
+            .map_or(k - root, |t| t.retune(k) - t.retune(root))
+    }
+
     /// A sampler with `polyphony` voices at `rate`.
     #[must_use]
+    ///
+    /// Note-on and note-off allocate nothing as long as `instrument`'s
+    /// zones are those it was built with: the scratch buffers and the
+    /// round-robin table are sized here.
     pub fn new(instrument: Instrument, polyphony: usize, rate: f32) -> Self {
         let ks = instrument.default_keyswitch;
+        let zones = instrument.zones.len();
+        let mut cycles: Vec<u32> = instrument
+            .zones
+            .iter()
+            .map(|z| z.seq_length)
+            .filter(|&n| n > 1)
+            .collect();
+        cycles.sort_unstable();
+        cycles.dedup();
+        let mut rr = std::collections::HashMap::new();
+        rr.reserve(128 * cycles.len());
         let proto = SVoice {
             zone: 0,
             key: 0,
@@ -293,11 +332,14 @@ impl Sampler {
             voices: vec![proto; polyphony.max(1)],
             rate,
             keyswitch: ks,
-            rr: std::collections::HashMap::new(),
+            rr,
             note_vel: [[0; 128]; 16],
             clock: 0,
             pedal: [false; 16],
             bend: [0.0; 16],
+            tuning: None,
+            selected: Vec::with_capacity(zones),
+            advanced: Vec::with_capacity(zones),
             bend_range: 2.0,
         }
     }
@@ -376,65 +418,75 @@ impl Sampler {
             })
             .unwrap_or(0);
         self.clock += 1;
-        let semis = (f32::from(key) - z.root) * z.keytrack / 100.0 + z.tune / 100.0;
+        let semis = self.key_offset(key, z.root) * z.keytrack / 100.0 + z.tune / 100.0;
         let inc =
             f64::from(2f32.powf(semis / 12.0)) * f64::from(z.sample.rate) / f64::from(self.rate);
         let v01 = f32::from(vel) / 127.0;
         let vel_gain = 1.0 - z.vel_track * (1.0 - v01 * v01);
         let (gl, gr) = super::equal_power(z.pan);
-        let mut env = EnvelopeGen::new(z.amp.stages(), self.rate);
-        env.gate_on();
         #[expect(clippy::cast_precision_loss, reason = "frame offsets")]
         let pos = z.offset as f64;
-        self.voices[slot] = SVoice {
-            zone: zi,
-            key,
-            channel,
-            pos,
-            inc,
-            forward: true,
-            held: z.trigger == Trigger::Attack,
-            sustained: false,
-            env,
-            gain: 10f32.powf(z.volume / 20.0) * vel_gain,
-            gl,
-            gr,
-            active: true,
-            age: self.clock,
-            bend: 0.0,
-        };
+        let (amp, held, gain) = (
+            z.amp,
+            z.trigger == Trigger::Attack,
+            10f32.powf(z.volume / 20.0) * vel_gain,
+        );
+        // Re-armed in place: a new `EnvelopeGen` would allocate its stage
+        // list on every note.
+        let age = self.clock;
+        let v = &mut self.voices[slot];
+        v.env.rearm_adsr(amp);
+        v.env.gate_on();
+        v.zone = zi;
+        v.key = key;
+        v.channel = channel;
+        v.pos = pos;
+        v.inc = inc;
+        v.forward = true;
+        v.held = held;
+        v.sustained = false;
+        v.gain = gain;
+        v.gl = gl;
+        v.gr = gr;
+        v.active = true;
+        v.age = age;
+        v.bend = 0.0;
     }
 
-    fn select(&mut self, key: u8, vel: u8, trig: Trigger) -> Vec<usize> {
+    /// Fill `self.selected` with the zones this key event plays.
+    fn select(&mut self, key: u8, vel: u8, trig: Trigger) {
         let sw = self.keyswitch;
-        let candidates: Vec<usize> = self
-            .instrument
-            .zones
-            .iter()
-            .enumerate()
-            .filter(|(_, z)| z.matches(key, vel, sw, trig))
-            .map(|(i, _)| i)
-            .collect();
+        self.selected.clear();
+        self.advanced.clear();
         // Round robin: per (key, cycle length), pick zones whose position
         // matches the counter.
-        let mut out = Vec::new();
-        let mut advanced = std::collections::HashSet::new();
-        for &i in &candidates {
-            let z = &self.instrument.zones[i];
+        for (i, z) in self.instrument.zones.iter().enumerate() {
+            if !z.matches(key, vel, sw, trig) {
+                continue;
+            }
             if z.seq_length <= 1 {
-                out.push(i);
+                self.selected.push(i);
                 continue;
             }
             let ctr = *self.rr.get(&(key, z.seq_length)).unwrap_or(&0);
             if ctr % z.seq_length + 1 == z.seq_position {
-                out.push(i);
+                self.selected.push(i);
             }
-            advanced.insert(z.seq_length);
+            if !self.advanced.contains(&z.seq_length) {
+                self.advanced.push(z.seq_length);
+            }
         }
-        for len in advanced {
+        for &len in &self.advanced {
             *self.rr.entry((key, len)).or_insert(0) += 1;
         }
-        out
+    }
+
+    /// Start every zone `select` chose.
+    fn start_selected(&mut self, channel: u8, key: u8, vel: u8) {
+        for i in 0..self.selected.len() {
+            let zi = self.selected[i];
+            self.start_zone(zi, channel, key, vel);
+        }
     }
 
     /// Key down.
@@ -450,9 +502,8 @@ impl Sampler {
             }
         }
         self.note_vel[usize::from(channel & 15)][usize::from(key & 127)] = vel;
-        for zi in self.select(key, vel, Trigger::Attack) {
-            self.start_zone(zi, channel, key, vel);
-        }
+        self.select(key, vel, Trigger::Attack);
+        self.start_selected(channel, key, vel);
     }
 
     /// Key up.
@@ -477,9 +528,8 @@ impl Sampler {
             }
         }
         let vel = self.note_vel[usize::from(channel & 15)][usize::from(key & 127)].max(1);
-        for zi in self.select(key, vel, Trigger::Release) {
-            self.start_zone(zi, channel, key, vel);
-        }
+        self.select(key, vel, Trigger::Release);
+        self.start_selected(channel, key, vel);
     }
 
     /// The next stereo frame.
@@ -669,6 +719,40 @@ mod tests {
         let (m, bin) = spectrum(&x, RATE);
         assert!(level_near(&m, bin, 750.0, 2) > 0.3, "an octave up");
         assert!(level_near(&m, bin, 375.0, 2) < 0.01);
+    }
+
+    #[test]
+    fn a_tuned_sampler_resamples_by_the_tuned_distance() {
+        // Middle C sample at its root; key 67 in a just scale (seven keys
+        // per octave on C) is G = 3/2 above, not 7 equal semitones.
+        use crate::synth::tuning::{ScaleTuning, TuningTable};
+        let inst = Instrument {
+            zones: vec![Zone::new(sine(400.0, 48_000), 60.0)],
+            ..Instrument::default()
+        };
+        let mut s = Sampler::new(inst, 8, RATE);
+        #[expect(clippy::cast_possible_truncation, reason = "cents")]
+        let cents: Vec<f32> = [
+            9.0f64 / 8.0,
+            5.0 / 4.0,
+            4.0 / 3.0,
+            3.0 / 2.0,
+            5.0 / 3.0,
+            15.0 / 8.0,
+        ]
+        .iter()
+        .map(|r| (1200.0 * r.log2()) as f32)
+        .collect();
+        s.set_tuning(Some(TuningTable::from_tuning(&ScaleTuning {
+            tonic_pitch: 60,
+            tonic_hz: 261.63,
+            cents,
+            period_cents: 1200.0,
+        })));
+        s.note_on(0, 64, 127); // the fifth degree: P
+        let x = mono(&mut s, 16_384);
+        let (m, bin) = spectrum(&x, RATE);
+        assert!(level_near(&m, bin, 600.0, 2) > 0.3, "400 Hz × 3/2");
     }
 
     #[test]
