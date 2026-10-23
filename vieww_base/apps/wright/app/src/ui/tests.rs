@@ -1132,3 +1132,227 @@ fn reading_text_can_be_selected_and_copied() {
     assert!(kit::copy_text("a whole plan"));
     assert_eq!(board.read_text().unwrap().as_deref(), Some("a whole plan"));
 }
+
+// ── the reply, rendered and interruptible ──────────────────────────────
+
+/// A reply with markdown in it renders as what the model meant, not as
+/// the asterisks it typed: the tree holds the framework's Markdown, and
+/// a reply with none renders the same way it always did.
+#[test]
+fn a_reply_renders_its_markdown() {
+    let _home = home_lock();
+    let home = temp("markdown");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(
+        driver.elements().runtime(),
+        None,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    let dir = temp("markdown-proj").canonicalize().unwrap();
+    let s = super::session::Session::open(driver.elements().runtime(), dir, 7_001);
+
+    // The smaller models answer in markdown whether or not they were
+    // asked to: a heading, a list, a code span.
+    s.chat.set(vec![
+        (true, "Make it weekly".into()),
+        (
+            false,
+            "# Done\n\nThe plan now runs **weekly**:\n\n- fetch on Mondays\n- email by 9\n\nRun `wright plan` to read it back.".into(),
+        ),
+    ]);
+    let tree = vieww::debug_tree(super::thread::page(&ui, &s));
+    assert!(
+        tree.contains("Markdown"),
+        "the reply went through the renderer"
+    );
+    assert!(
+        tree.contains("Copy"),
+        "the whole reply is still one Copy away"
+    );
+
+    // Plain prose is unchanged by the renderer: same page, no markdown
+    // in the text, the tree still builds (a paragraph is a Markdown
+    // block — what changed is nothing the eye can see).
+    s.chat.set(vec![
+        (true, "Make it weekly".into()),
+        (
+            false,
+            "Done. The plan now runs weekly and emails by nine.".into(),
+        ),
+    ]);
+    let plain = vieww::debug_tree(super::thread::page(&ui, &s));
+    assert!(plain.contains("Markdown"));
+}
+
+/// The send button is stop while a reply is on its way: the same circle,
+/// the opposite deed, and a tap ends the wait and swallows the rest of
+/// the stream — the worker's words are not kept, not shown, not written.
+#[test]
+fn the_send_button_becomes_stop_and_stops() {
+    let _home = home_lock();
+    let home = temp("stop");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(
+        driver.elements().runtime(),
+        None,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    let dir = temp("stop-proj").canonicalize().unwrap();
+    let s = super::session::Session::open(driver.elements().runtime(), dir, 7_002);
+
+    // Idle: the button says Send.
+    let tree = vieww::debug_tree(super::thread::page(&ui, &s));
+    assert!(tree.contains("Send"), "idle is send: {tree}");
+    assert!(!tree.contains("Stop"));
+
+    // A reply on its way: the same button says Stop.
+    s.pending.set(Some(super::session::Pending {
+        what: "Thinking".into(),
+        text: String::new(),
+        since: Instant::now(),
+    }));
+    let tree = vieww::debug_tree(super::thread::page(&ui, &s));
+    assert!(tree.contains("Stop"), "busy is stop: {tree}");
+
+    // The stop itself, driven through the worker bridge the window runs
+    // on: the spinner goes now, and what the model says next lands
+    // nowhere.
+    use wright_engine::interview::InterviewIo as _;
+    let (_tx, rx) = std::sync::mpsc::channel::<super::session::Reply>();
+    let shared = std::sync::Arc::clone(&s.shared);
+    let mut io = super::session::ChannelIo {
+        earlier: Vec::new(),
+        now: Default::default(),
+        first: None,
+        rx,
+        shared,
+        wake: super::session::WakeHandle(None),
+    };
+    io.working("Thinking");
+    io.partial("Half a sentence");
+    s.pump();
+    assert!(s.pending.get().is_some());
+    s.stop_reply();
+    assert!(s.pending.get().is_none(), "the wait ends on the tap");
+    assert!(!s.interviewing.get());
+    // The model finishes anyway — the words are dropped.
+    io.say("A full sentence that arrived too late");
+    io.partial("More words streaming in");
+    s.pump();
+    assert!(
+        s.pending.get().is_none(),
+        "a stopped stream does not bring the spinner back"
+    );
+    assert!(
+        !s.chat.get().iter().any(|(_, t)| t.contains("too late")),
+        "the late words are not kept: {:?}",
+        s.chat.get()
+    );
+    // And the interview's next question is the last: a stop ends it.
+    assert_eq!(io.ask(), None);
+    // When the interview then reports back, the notice is the stop's own
+    // one line — not the machine's "nothing was written" verdict, which
+    // describes the interview's choices rather than the person's.
+    *s.shared
+        .interview_done
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = Some(Ok(false));
+    s.pump();
+    assert_eq!(s.notice.get(), "Stopped — nothing further was written.");
+}
+
+/// Esc is the keyboard's stop: a pending reply is the deepest thing open
+/// on the page, and backing out of it is stopping it.
+#[test]
+fn esc_stops_a_reply_on_its_way() {
+    let _home = home_lock();
+    let home = temp("esc-stop");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(
+        driver.elements().runtime(),
+        None,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    let dir = temp("esc-stop-proj").canonicalize().unwrap();
+    ui.sessions.set(vec![super::session::Session::open(
+        driver.elements().runtime(),
+        dir,
+        7_003,
+    )]);
+    ui.go(1);
+    let s = ui.current_session().expect("the project is the open page");
+    s.pending.set(Some(super::session::Pending {
+        what: "Thinking".into(),
+        text: String::new(),
+        since: Instant::now(),
+    }));
+    assert!(ui.handle_key(&KeyEvent::down(
+        LogicalKey::Named(NamedKey::Escape),
+        Duration::ZERO
+    )));
+    assert!(s.pending.get().is_none(), "Esc stopped the reply");
+}
+
+/// A thread scrolled far from its end grows a one-tap way back: the
+/// jump-to-latest chip is there when the end is more than a screen away
+/// and is not when it is not.
+#[test]
+fn a_thread_far_from_its_end_offers_the_jump_back() {
+    let _home = home_lock();
+    let home = temp("jump");
+    std::env::set_var("WRIGHT_HOME", &home);
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(
+        driver.elements().runtime(),
+        None,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    let dir = temp("jump-proj").canonicalize().unwrap();
+    let s = super::session::Session::open(driver.elements().runtime(), dir, 7_004);
+
+    // Nothing to scroll: no chip.
+    let tree = vieww::debug_tree(super::thread::page(&ui, &s));
+    assert!(!tree.contains("Jump to the latest"));
+
+    // A long thread, scrolled to its top: the end is far, the chip is up.
+    let talk: Vec<(bool, String)> = (0..80)
+        .map(|i| {
+            (
+                i % 2 == 0,
+                format!("line {i} of a conversation long enough to scroll"),
+            )
+        })
+        .collect();
+    s.chat.set(talk);
+    s.scroll.extent.set((800.0, 6000.0));
+    s.scroll.offset.set(0.0);
+    let tree = vieww::debug_tree(super::thread::page(&ui, &s));
+    assert!(
+        tree.contains("Jump to the latest"),
+        "the chip is up when the end is far: {tree}"
+    );
+
+    // Back at the end: gone.
+    s.scroll.to_end();
+    let tree = vieww::debug_tree(super::thread::page(&ui, &s));
+    assert!(!tree.contains("Jump to the latest"));
+}

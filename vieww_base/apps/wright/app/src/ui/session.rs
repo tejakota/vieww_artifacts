@@ -463,20 +463,26 @@ pub struct Pending {
 
 /// The worker-thread side of a session.
 #[derive(Default)]
-pub struct Shared {
+pub(crate) struct Shared {
     events: Mutex<Vec<Event>>,
     chat: Mutex<Vec<(bool, String)>>,
     confirm: Mutex<Option<Vec<Line>>>,
     finished: Mutex<Option<Result<ResultView, String>>>,
-    interview_done: Mutex<Option<Result<bool, String>>>,
+    pub(crate) interview_done: Mutex<Option<Result<bool, String>>>,
     exported: Mutex<Option<Result<Exported, String>>>,
     to_interview: Mutex<Option<Sender<Reply>>>,
     /// What the interview is doing and its words so far (`working`,
     /// `partial`); `None` once it is waiting for you again.
     live: Mutex<Option<Option<(String, String)>>>,
+    /// Set by [`Session::stop_reply`]: the interview's further words are
+    /// swallowed and its next question ends it. The flag is read by the
+    /// worker's I/O (all it can reach) rather than signalled to the
+    /// engine, because the engine is mid-model-call and only its own
+    /// callbacks run between the model's chunks.
+    cancelled: std::sync::atomic::AtomicBool,
 }
 
-enum Reply {
+pub(crate) enum Reply {
     Text(String),
     Confirm(bool),
 }
@@ -501,19 +507,34 @@ impl WakeHandle {
 }
 
 /// Interview I/O over channels: the worker blocks, the UI answers.
-struct ChannelIo {
-    earlier: Vec<(bool, String)>,
+///
+/// `pub(crate)` for the UI's own tests, which drive the same bridge the
+/// window runs on.
+pub(crate) struct ChannelIo {
+    pub(crate) earlier: Vec<(bool, String)>,
     /// What is on screen while it works: (doing, written so far).
-    now: (String, String),
-    first: Option<String>,
-    rx: Receiver<Reply>,
-    shared: Arc<Shared>,
-    wake: WakeHandle,
+    pub(crate) now: (String, String),
+    pub(crate) first: Option<String>,
+    pub(crate) rx: Receiver<Reply>,
+    pub(crate) shared: Arc<Shared>,
+    pub(crate) wake: WakeHandle,
 }
 
 impl ChannelIo {
+    /// Whether the person stopped this reply.
+    fn cancelled(&self) -> bool {
+        self.shared
+            .cancelled
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Change what the screen shows while you wait.
     fn live(&mut self, change: impl FnOnce(&mut (String, String))) {
+        if self.cancelled() {
+            // Stopped: the screen is back to idle, whatever streams in.
+            self.idle();
+            return;
+        }
         change(&mut self.now);
         *self.shared.live.lock().unwrap_or_else(|p| p.into_inner()) = Some(Some(self.now.clone()));
         self.wake.wake();
@@ -529,6 +550,10 @@ impl ChannelIo {
 
 impl InterviewIo for ChannelIo {
     fn say(&mut self, text: &str) {
+        if self.cancelled() {
+            // The person stopped: the words are not kept, not shown.
+            return;
+        }
         self.shared
             .chat
             .lock()
@@ -549,6 +574,9 @@ impl InterviewIo for ChannelIo {
         self.live(|l| l.1 = text);
     }
     fn ask(&mut self) -> Option<String> {
+        if self.cancelled() {
+            return None;
+        }
         if let Some(f) = self.first.take() {
             return Some(f);
         }
@@ -562,6 +590,9 @@ impl InterviewIo for ChannelIo {
         }
     }
     fn confirm(&mut self, lines: &[Line]) -> bool {
+        if self.cancelled() {
+            return false;
+        }
         *self
             .shared
             .confirm
@@ -702,7 +733,7 @@ pub struct Session {
     pub receipt: Signal<Option<ReceiptView>>,
     /// The receipt overlay is open over this page.
     pub receipt_open: Signal<bool>,
-    shared: Arc<Shared>,
+    pub(crate) shared: Arc<Shared>,
     last_poll: Rc<Cell<Instant>>,
 }
 
@@ -728,7 +759,7 @@ impl Session {
             ),
             None => (Vec::new(), None, None),
         };
-        Session {
+        let s = Session {
             project: Rc::new(project),
             composer: Composer::new(rt, composer_id),
             chat: rt.signal(conversation),
@@ -751,7 +782,14 @@ impl Session {
             receipt_open: rt.signal(false),
             shared: Arc::new(Shared::default()),
             last_poll: Rc::new(Cell::new(Instant::now())),
-        }
+        };
+        // A conversation opens where it is: the latest words, the newest
+        // state — the reading position of every chat there is. The first
+        // layout reports the extent, the scroll clamps to its end, and
+        // the jump chip (the way back up is a scroll, as always) never
+        // has a reason to appear on open.
+        s.scroll.to_end();
+        s
     }
 
     /// The name people see: the blueprint's, else the folder's.
@@ -873,19 +911,31 @@ impl Session {
         {
             self.interviewing.set(false);
             self.pending.set(None);
-            match done {
-                Ok(true) => {
-                    if self.plan.get().is_none() {
-                        mark_plan_written(&self.project);
-                        self.drafted.set(self.chat.get().len());
+            // A stopped reply says so, briefly, and nothing else: the
+            // interview's own verdicts ("nothing was written") describe
+            // the machine's choices, not the person's.
+            let stopped = self
+                .shared
+                .cancelled
+                .swap(false, std::sync::atomic::Ordering::Relaxed);
+            if stopped {
+                self.notice
+                    .set("Stopped — nothing further was written.".into());
+            } else {
+                match done {
+                    Ok(true) => {
+                        if self.plan.get().is_none() {
+                            mark_plan_written(&self.project);
+                            self.drafted.set(self.chat.get().len());
+                        }
+                        self.plan.set(load_plan(&self.project));
+                        self.notice.set(String::new());
                     }
-                    self.plan.set(load_plan(&self.project));
-                    self.notice.set(String::new());
+                    Ok(false) => self
+                        .notice
+                        .set("Nothing was written. Tell me what to change.".into()),
+                    Err(e) => self.notice.set(format!("The interview stopped: {e}")),
                 }
-                Ok(false) => self
-                    .notice
-                    .set("Nothing was written. Tell me what to change.".into()),
-                Err(e) => self.notice.set(format!("The interview stopped: {e}")),
             }
             self.confirm.set(None);
         }
@@ -979,10 +1029,41 @@ impl Session {
         true
     }
 
+    /// Stop the reply on its way: the spinner goes, the half-written
+    /// words are dropped, and whatever the model was still streaming is
+    /// swallowed rather than landing after the person has moved on.
+    ///
+    /// The interview itself ends at its next question — the engine is
+    /// mid-model-call and only its callbacks run between chunks, so the
+    /// stop is read by the worker's I/O ([`ChannelIo`]), which every
+    /// stream passes through. A stop before any question was answered
+    /// leaves the plan untouched: nothing was written.
+    pub fn stop_reply(&self) {
+        self.shared
+            .cancelled
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        // Drop the line to the worker: its blocking read ends, the
+        // interview finishes on its own, `interview_done` arrives.
+        *self
+            .shared
+            .to_interview
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = None;
+        // The screen stops waiting now, not when the worker notices.
+        self.pending.set(None);
+        self.interviewing.set(false);
+        self.confirm.set(None);
+    }
+
     /// Send `text` as the user's message.
     pub fn say(&self, text: String) {
         self.chat.update(|c| c.push((true, text.clone())));
         keep_conversation(&self.project, &[(true, text.clone())]);
+        // A new message is a new conversation: a stop from the previous
+        // one must not swallow this reply.
+        self.shared
+            .cancelled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         // Something is happening from this moment, before any model answers.
         self.pending.set(Some(Pending {
             what: "Reading your message".into(),

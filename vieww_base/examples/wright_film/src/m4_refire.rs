@@ -208,10 +208,13 @@ fn chrome_receipt(_ctx: &crate::film::Ctx) -> WidgetNode {
 
 /// W12 · the end card — the mark, the thesis, the hold.
 ///
-/// The mark draws itself one last time and settles; the wordmark beside
-/// it; the thesis under both; the honest install line in mono; and a
-/// long hold on the quiet — the studio film's own ending grammar, with
-/// Wright's own one accent firing on the word that matters.
+/// The mark draws itself one last time and settles **dead centre** —
+/// the same axis the cold open put it on, so the film ends on the mark
+/// it began with, mirrored: opening and closing hold the one composition
+/// a brand owns, the mark alone in the middle of the frame. The wordmark
+/// settles under it; the thesis under both; the honest install line in
+/// mono; and a long hold on the quiet — the studio film's own ending
+/// grammar, with Wright's own one accent firing on the word that matters.
 pub(crate) fn the_endcard(ctx: &crate::film::Ctx) -> WidgetNode {
     let sec = ctx.sec;
     let mut stack = Stack::new();
@@ -224,27 +227,28 @@ pub(crate) fn the_endcard(ctx: &crate::film::Ctx) -> WidgetNode {
         }),
     )));
 
-    // The mark, centred, drawing itself over 2.2 s.
+    // The mark, centred on the film's own axis, drawing itself over 2.2 s
+    // — the cold open's own placement, held to the last frame.
     let mark_p = ease(sec, 2.2);
     stack = stack.push(Positioned::fill().child(Painting::sized(
         vieww_foundation::Size::new(W, H),
         PaintWith::new(move |book: &mut Sketchbook, _s| {
-            let side = 132.0;
-            let at = Offset::new(W * 0.5 - 620.0 - side * 0.5, 380.0);
-            crate::kit::draw_mark(book, at, side, mark_p, ACCENT, 9.0);
+            let side = 150.0;
+            let at = Offset::new(W * 0.5 - side * 0.5, 330.0);
+            crate::kit::draw_mark(book, at, side, mark_p, ACCENT, 10.0);
         }),
     )));
 
-    // The wordmark beside it.
+    // The wordmark under it, centred on the same axis.
     stack = stack.push(dlabel(
-        W * 0.5 - 440.0,
-        396.0,
-        600.0,
-        110.0,
+        W * 0.5 - 500.0,
+        540.0,
+        1000.0,
+        120.0,
         "wright",
-        88.0,
+        84.0,
         INK,
-        TextAlign::Left,
+        TextAlign::Center,
         ease(sec - 1.4, 1.0),
     ));
 
@@ -252,7 +256,7 @@ pub(crate) fn the_endcard(ctx: &crate::film::Ctx) -> WidgetNode {
     let t_a = ease(sec - 2.8, 1.2);
     stack = stack.push(dlabel(
         W * 0.5 - 800.0,
-        620.0,
+        700.0,
         1600.0,
         48.0,
         "You write it. Agents wright it. The artifact is wrought.",
@@ -266,7 +270,7 @@ pub(crate) fn the_endcard(ctx: &crate::film::Ctx) -> WidgetNode {
     let m_a = ease(sec - 4.6, 1.0);
     stack = stack.push(mlabel(
         W * 0.5 - 800.0,
-        720.0,
+        790.0,
         1600.0,
         40.0,
         "wright 1.0 · trust before reach · one dependency, and it is this repository's own",
@@ -286,7 +290,7 @@ pub(crate) fn the_endcard(ctx: &crate::film::Ctx) -> WidgetNode {
             }
             // A single hairline sweep under the thesis — the light rule
             // (no radial glows), one crisp accent line, drawn.
-            let y = 700.0;
+            let y = 766.0;
             let x = W * 0.5 + 330.0 + 60.0 * (1.0 - fire_a);
             book.line(
                 Offset::new(x - 120.0 * fire_a, y),
@@ -300,7 +304,7 @@ pub(crate) fn the_endcard(ctx: &crate::film::Ctx) -> WidgetNode {
     // The audience line, last, quietest.
     stack = stack.push(dlabel(
         W * 0.5 - 800.0,
-        840.0,
+        900.0,
         1600.0,
         36.0,
         "A film for everyone who has something that should exist.",

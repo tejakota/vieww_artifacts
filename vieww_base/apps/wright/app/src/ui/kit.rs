@@ -314,6 +314,47 @@ pub fn copyable_mono(s: impl Into<String>, size: f32, color: Color) -> WidgetNod
     )
 }
 
+// ── rendered markdown ────────────────────────────────────────────
+
+/// A reply's words, rendered: **bold**, `code`, headings, lists, quotes
+/// and fenced blocks — the framework's own [`Markdown`] widget, wearing
+/// Wright's palette.
+///
+/// Smaller models answer in markdown whether or not they were asked to,
+/// and a wall of `**asterisks**` where a sentence should be reads as a
+/// machine talking at you. This renders what they meant. Plain prose
+/// renders exactly as [`para`] would — same size, same ink — so nothing
+/// changes for the models that already write plainly.
+///
+/// The framework's widget reads its colours from the theme it is built
+/// under, and the app carries its own palette rather than a
+/// [`ThemeData`](vieww_widget::ThemeData) — so the one place the two
+/// meet, this function publishes the app's palette as the theme for the
+/// markdown's subtree. Inside it, `on_surface` *is* `p.ink` and
+/// `surface_variant` *is* `p.surface2`; the two systems cannot drift
+/// because this is the only bridge.
+pub fn markdown(p: &Pal, text: impl Into<String>) -> WidgetNode {
+    let scheme = ColorScheme {
+        primary: p.accent,
+        on_primary: p.on_accent,
+        surface: p.ground,
+        on_surface: p.ink,
+        surface_variant: p.surface2,
+        on_surface_variant: p.muted,
+        outline: p.line,
+        error: p.bad,
+        on_error: Color::WHITE,
+        success: p.good,
+        on_success: Color::BLACK,
+    };
+    // The body style the thread's replies already wore: 15 px, the
+    // paragraph's own line height, in the theme's ink.
+    let mut data = ThemeData::from_colors(scheme);
+    data.text = Typography::scale(p.ink);
+    data.text.body = TextStyle::new(15.0).color(p.ink).line_height(1.45);
+    Theme::new(data).child(Markdown::new(text)).into()
+}
+
 /// A small "copy" affordance: puts `text` on the pasteboard.
 pub fn copy_icon(color: Color, text: String) -> WidgetNode {
     Semantics::new()
@@ -508,6 +549,7 @@ pub enum Glyph {
     Theme,
     Help,
     Restore,
+    Down,
 }
 
 impl Glyph {
@@ -595,6 +637,7 @@ impl GlyphPainter {
                 (7.0, 17.0),
                 (7.0, 7.0),
             ]],
+            Glyph::Down => vec![vec![(6.0, 9.0), (12.0, 15.0), (18.0, 9.0)]],
             Glyph::Gear => {
                 let mut v = vec![circle(3.2), circle(7.0)];
                 for k in 0..8 {

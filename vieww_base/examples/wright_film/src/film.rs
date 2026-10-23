@@ -254,12 +254,16 @@ pub(crate) fn scenes() -> Vec<SceneDef> {
     ]
 }
 
-/// Where scene `i` starts, in whole frames from the top of the film.
+/// Where scene `i` starts, in whole frames from the top of the film —
+/// the keynote's own spine. (`master::Film` computes the same for every
+/// cut from its own list; this one stays for the film's own docs.)
+#[allow(dead_code)]
 pub(crate) fn scene_start(i: usize) -> usize {
     scenes()[..i].iter().map(SceneDef::frames).sum()
 }
 
 /// The film's whole length in frames — derived, never typed.
+#[allow(dead_code)]
 pub(crate) fn total_frames() -> usize {
     scenes().iter().map(SceneDef::frames).sum()
 }

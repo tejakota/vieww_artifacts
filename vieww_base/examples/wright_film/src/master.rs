@@ -45,14 +45,71 @@ pub(crate) fn work_root() -> PathBuf {
     wright_app::work_root()
 }
 
+/// A canvas and the frame the window sits in on it — the keynote's own
+/// values, or a social cut's own.
+#[derive(Clone, Copy)]
+pub(crate) struct Spec {
+    pub w: f32,
+    pub h: f32,
+    /// (scale, dx, dy) for the mounted window.
+    pub window: (f32, f32, f32),
+    /// Draw the act label chrome (the keynote's framing). The social
+    /// cuts go quieter — the footer's receipt is the only chrome.
+    pub act_chrome: bool,
+}
+
+impl Spec {
+    fn keynote() -> Spec {
+        Spec {
+            w: W,
+            h: H,
+            window: wright_app::window_place(),
+            act_chrome: true,
+        }
+    }
+}
+
+/// A film to render: its scenes, their frame starts, and the canvas.
+pub(crate) struct Film {
+    pub spec: Spec,
+    pub scenes: Vec<SceneDef>,
+    /// Where each scene starts, in whole frames — derived, never typed.
+    pub starts: Vec<usize>,
+}
+
+impl Film {
+    pub(crate) fn new(spec: Spec, scenes: Vec<SceneDef>) -> Film {
+        let starts = scenes
+            .iter()
+            .scan(0usize, |acc, s| {
+                let at = *acc;
+                *acc += s.frames();
+                Some(at)
+            })
+            .collect();
+        Film {
+            spec,
+            scenes,
+            starts,
+        }
+    }
+
+    /// The Wright act's script for scene `id` — the keynote's own, and
+    /// the square cut's own for its one window scene.
+    fn script_for(id: &str) -> Script {
+        match id {
+            "W06" => m2_run::w06_script(),
+            "W07" => m2_run::w07_script(),
+            "W08" => m2_run::w08_script(),
+            "W10" => crate::m3_proof::w10_script(),
+            "P3" => crate::socials::p3_script(),
+            _ => Script::default(),
+        }
+    }
+}
+
 /// The entrance dissolve, seconds — widened at the movement boundaries.
 const CUT_IN: f32 = 0.45;
-
-fn cut_len(si: usize) -> f32 {
-    let all = scenes();
-    let boundary = si == 0 || movement_of(all[si - 1].id) != movement_of(all[si].id);
-    CUT_IN * if boundary { 1.6 } else { 1.0 }
-}
 
 // ── the rig ─────────────────────────────────────────────────────────────────
 
@@ -70,16 +127,20 @@ struct Rig {
     /// The previous scene's final frame, RGBA at raster size — the A of
     /// the A→B dissolve.
     prev: Option<Vec<u8>>,
+    /// The canvas this rig draws on.
+    spec: Spec,
 }
 
 impl Rig {
-    fn new() -> Rig {
+    fn new(spec: Spec) -> Rig {
+        let size = Size::new(spec.w, spec.h);
         Rig {
-            ground: FrameDriver::new(Size::new(W, H)),
-            pure: FrameDriver::new(Size::new(W, H)),
-            chrome: FrameDriver::new(Size::new(W, H)),
+            ground: FrameDriver::new(size),
+            pure: FrameDriver::new(size),
+            chrome: FrameDriver::new(size),
             window: None,
             prev: None,
+            spec,
         }
     }
 
@@ -89,21 +150,20 @@ impl Rig {
         }
     }
 
-    /// The Wright act's script for scene `id`.
-    fn script_for(id: &str) -> Script {
-        match id {
-            "W06" => m2_run::w06_script(),
-            "W07" => m2_run::w07_script(),
-            "W08" => m2_run::w08_script(),
-            "W10" => crate::m3_proof::w10_script(),
-            _ => Script::default(),
-        }
+    /// How long scene `si` of `film` holds its entrance dissolve —
+    /// widened where one movement gives way to the next.
+    fn cut_len(film: &Film, si: usize) -> f32 {
+        let boundary =
+            si == 0 || movement_of(film.scenes[si - 1].id) != movement_of(film.scenes[si].id);
+        CUT_IN * if boundary { 1.6 } else { 1.0 }
     }
 
     /// Build frame `i` of scene `si`. The scene's own clock and the
     /// film's absolute clock both drive it.
-    fn build_frame(&mut self, s: &SceneDef, si: usize, i: usize, demo: &wright_app::Demo) {
-        let abs = (film::scene_start(si) as f32 + i as f32) / FPS;
+    fn build_frame(&mut self, film: &Film, si: usize, i: usize, demo: &wright_app::Demo) {
+        let s = &film.scenes[si];
+        let spec = self.spec;
+        let abs = (film.starts[si] as f32 + i as f32) / FPS;
         let sec = i as f32 / FPS;
         let ctx = film::Ctx {
             t: sec / s.seconds,
@@ -115,11 +175,11 @@ impl Rig {
         {
             let clock = abs;
             let is_wright = s.kind == Kind::Wright;
-            let win = wright_app::window_place();
-            let win_rect = wright_app::window_rect(win.0, win.1, win.2);
+            let win_rect = wright_app::window_rect(spec.window.0, spec.window.1, spec.window.2);
+            let (gw, gh) = (spec.w, spec.h);
             self.ground
                 .set_root(Positioned::fill().child(Painting::sized(
-                    Size::new(W, H),
+                    Size::new(gw, gh),
                     PaintWith::new(move |book: &mut Sketchbook, size| {
                         if is_wright {
                             m2_run::ground_under_window(
@@ -147,7 +207,7 @@ impl Rig {
             }
             Kind::Wright => {
                 self.ensure_window();
-                let script = Self::script_for(s.id);
+                let script = Film::script_for(s.id);
                 let mounted = self.window.as_mut().unwrap();
                 // The script is the scene's clock; the film's clock drives
                 // the window's own animations. Both are set per frame.
@@ -163,8 +223,9 @@ impl Rig {
             let label_a = 1.0f32;
             let footer = footer_text(s, demo);
             let is_wright = s.kind == Kind::Wright;
-            let win = wright_app::window_place();
-            let win_rect = wright_app::window_rect(win.0, win.1, win.2);
+            let win_rect = wright_app::window_rect(spec.window.0, spec.window.1, spec.window.2);
+            let act_chrome = spec.act_chrome;
+            let (cw, ch) = (spec.w, spec.h);
             let mut layers: Vec<WidgetNode> = Vec::new();
             if is_wright {
                 // The scene's own chrome (callouts, receipts).
@@ -178,36 +239,42 @@ impl Rig {
             self.chrome.set_root(
                 Stack::new()
                     .push(Positioned::fill().child(Painting::sized(
-                        Size::new(W, H),
+                        Size::new(cw, ch),
                         PaintWith::new(move |book: &mut Sketchbook, _size| {
                             if is_wright {
                                 m2_run::window_edge(book, win_rect);
                             }
-                            // The movement label's rule.
-                            book.rect(
-                                Rect::new(72.0, 88.0, 72.0 + 44.0 * label_a2, 89.5),
-                                Color {
-                                    a: (label_a2 * 255.0) as u8,
-                                    ..film::ACCENT
-                                },
-                            );
+                            if act_chrome {
+                                // The movement label's rule.
+                                book.rect(
+                                    Rect::new(72.0, 88.0, 72.0 + 44.0 * label_a2, 89.5),
+                                    Color {
+                                        a: (label_a2 * 255.0) as u8,
+                                        ..film::ACCENT
+                                    },
+                                );
+                            }
                         }),
                     )))
-                    .push(crate::kit::dlabel(
-                        72.0,
-                        44.0,
-                        700.0,
-                        36.0,
-                        title,
-                        16.0,
-                        film::INK,
-                        TextAlign::Left,
-                        label_a,
-                    ))
+                    .push(if act_chrome {
+                        crate::kit::dlabel(
+                            72.0,
+                            44.0,
+                            700.0,
+                            36.0,
+                            title,
+                            16.0,
+                            film::INK,
+                            TextAlign::Left,
+                            label_a,
+                        )
+                    } else {
+                        SizedBox::shrink().into()
+                    })
                     .push(crate::kit::mlabel(
-                        W - 1120.0,
-                        1028.0,
-                        1050.0,
+                        cw - (ch - 52.0).min(1120.0) - 20.0,
+                        ch - 52.0,
+                        (ch - 52.0).min(1120.0),
                         36.0,
                         footer,
                         15.5,
@@ -227,20 +294,20 @@ impl Rig {
     /// Compose this frame's final scene: ground + world + chrome, with
     /// the entrance dissolve's pixel blend over the previous scene's
     /// final frame.
-    fn compose(&mut self, s: &SceneDef, si: usize, i: usize) -> (Scene, Option<f32>) {
-        let abs = (film::scene_start(si) as f32 + i as f32) / FPS;
+    fn compose(&mut self, film: &Film, si: usize, i: usize) -> (Scene, Option<f32>) {
+        let s = &film.scenes[si];
+        let spec = self.spec;
         let sec = i as f32 / FPS;
         let mut frame = Scene::default();
-        let full = Rect::new(0.0, 0.0, W, H);
         frame.append(self.ground.scene(), Transform::IDENTITY);
         match s.kind {
             Kind::Pure => frame.append(self.pure.scene(), Transform::IDENTITY),
             Kind::Wright => {
                 // The window grows out of the previous scene's content
                 // box during the entrance dissolve, then holds.
-                let (scale, dx, dy) = wright_app::window_place();
-                let e = if sec < cut_len(si) {
-                    film::ease(sec, cut_len(si))
+                let (scale, dx, dy) = spec.window;
+                let e = if sec < Self::cut_len(film, si) {
+                    film::ease(sec, Self::cut_len(film, si))
                 } else {
                     1.0
                 };
@@ -260,14 +327,12 @@ impl Rig {
             }
         }
         frame.append(self.chrome.scene(), Transform::IDENTITY);
-        let _ = full;
         // The dissolve's weight, eased, while the entrance runs.
-        let cut = if sec < cut_len(si) && si > 0 {
-            Some(film::ease(sec, cut_len(si)))
+        let cut = if sec < Self::cut_len(film, si) && si > 0 {
+            Some(film::ease(sec, Self::cut_len(film, si)))
         } else {
             None
         };
-        let _ = abs;
         (frame, cut)
     }
 }
@@ -291,6 +356,10 @@ fn footer_text(s: &SceneDef, demo: &wright_app::Demo) -> String {
         "W10" => "delivered · and the receipt in the window".into(),
         "W11" => "one change · only what changed runs".into(),
         "W12" => "the hold".into(),
+        "P1" => "the question, squared".into(),
+        "P2" => "the request, typed".into(),
+        "P3" => format!("the real window · {} real events", demo.events.len()),
+        "P4" => "the mark, centred — the hold".into(),
         _ => s.name.into(),
     }
 }
@@ -336,13 +405,14 @@ fn finish(px: &mut [u8], w: usize, h: usize, cut: Option<f32>, frame: u32) {
 /// Walk every frame, count the command stream, sample raster times;
 /// write the manifest and the samples. `WF_ONLY=<ids>` splits the walk.
 pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
-    let all = scenes();
-    let n_total = film::total_frames();
+    let film = Film::new(Spec::keynote(), scenes());
+    let n_total =
+        film.starts.last().unwrap_or(&0) + film.scenes.last().map(|s| s.frames()).unwrap_or(0);
     let root = work_root();
     std::fs::create_dir_all(&root)?;
     println!(
         "wright_film census — {} scenes · {} frames · every number derived",
-        all.len(),
+        film.scenes.len(),
         n_total
     );
     let demo = wright_app::demo();
@@ -352,7 +422,8 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
             .map(|s| s.trim().to_ascii_uppercase())
             .collect()
     });
-    let mut rig = Rig::new();
+    let spec = Spec::keynote();
+    let mut rig = Rig::new(spec);
     let mut renderer = NativeRenderer::new();
     let mut shapes = 0u64;
     let mut glyph_runs = 0u64;
@@ -361,19 +432,19 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
     let mut rows: Vec<String> = Vec::new();
     let mut counted = 0u64;
 
-    for (si, s) in all.iter().enumerate() {
-        if only.as_ref().is_some_and(|o| !o.iter().any(|x| x == s.id)) {
+    for (si, s) in film.scenes.iter().enumerate() {
+        if only.as_ref().is_some_and(|o| !o.iter().any(|x| *x == s.id)) {
             continue;
         }
         let n = s.frames();
         let t0 = Instant::now();
         let sample_every = (n / 12).max(1);
         // The Wright act applies its script per frame.
-        let script = Rig::script_for(s.id);
+        let script = Film::script_for(s.id);
         for i in 0..n {
             let _ = &script;
-            rig.build_frame(s, si, i, demo);
-            let (frame, _) = rig.compose(s, si, i);
+            rig.build_frame(&film, si, i, demo);
+            let (frame, _) = rig.compose(&film, si, i);
             for c in frame.commands() {
                 match c {
                     Command::FillRect { .. }
@@ -386,9 +457,9 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
             }
             if i % sample_every == 0 {
                 let t = Instant::now();
-                let (f2, _) = rig.compose(s, si, i);
-                let mut px = render_rgba(&mut renderer, &f2);
-                finish(&mut px, W as usize, H as usize, None, i as u32);
+                let (f2, _) = rig.compose(&film, si, i);
+                let mut px = render_rgba(&mut renderer, &f2, spec.w as u32, spec.h as u32);
+                finish(&mut px, spec.w as usize, spec.h as usize, None, i as u32);
                 std::hint::black_box(&px);
                 let ms = t.elapsed().as_secs_f32() * 1000.0;
                 ms_samples.push(ms);
@@ -428,28 +499,80 @@ pub(crate) fn census() -> Result<(), Box<dyn std::error::Error>> {
 /// `WF_ONLY=<ids>` renders a subset (resume-friendly: a segment that
 /// already exists, with its sheet, is skipped).
 pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
+    let film = Film::new(Spec::keynote(), scenes());
+    render_film(&film, "", &only_env())?;
     let root = work_root();
-    let seg_dir = root.join("segments");
-    std::fs::create_dir_all(root.join("sheets"))?;
-    std::fs::create_dir_all(root.join("cut"))?;
-    std::fs::create_dir_all(&seg_dir)?;
 
-    let demo = wright_app::demo();
-    let only: Option<Vec<String>> = std::env::var("WF_ONLY").ok().map(|v| {
+    // The teaser: the film's own first movement + the run + the receipt
+    // + the end card — the 67-second door, cut from the keynote's own
+    // segments (the same frames, byte for byte; a door is not a
+    // re-render).
+    let teaser: Vec<SceneDef> = film
+        .scenes
+        .iter()
+        .filter(|s| ["W00", "W01", "W06", "W09", "W11", "W12"].contains(&s.id))
+        .cloned()
+        .collect();
+    let seg_dir = root.join("segments-");
+    let names: Vec<String> = teaser
+        .iter()
+        .map(|s| {
+            let i = scenes().iter().position(|x| x.id == s.id).unwrap();
+            format!("{:02}_{}.mp4", i + 1, s.name)
+        })
+        .collect();
+    concat_named(&seg_dir, &root.join("wright_teaser.mp4"), &names)?;
+    println!("  wright_teaser.mp4 → {}", root.display());
+    Ok(())
+}
+
+/// `WF_ONLY` — the scene ids to render (resume-friendly).
+fn only_env() -> Option<Vec<String>> {
+    std::env::var("WF_ONLY").ok().map(|v| {
         v.split(',')
             .map(|s| s.trim().to_ascii_uppercase())
             .collect()
-    });
-    let all = scenes();
+    })
+}
+
+/// Render every scene of `film` to its own segment (RGBA → x264), the
+/// picks to a contact sheet, and concat the segments into the film's
+/// named mp4. `prefix` keeps the social cuts' segments, sheets and
+/// dissolve frames out of the keynote's way. A segment that already
+/// exists, with its sheet, is skipped — the render is resumable.
+fn render_film(
+    film: &Film,
+    prefix: &str,
+    only: &Option<Vec<String>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = work_root();
+    let spec = film.spec;
+    let seg_dir = root.join(format!("segments-{prefix}"));
+    let cut_dir = root.join(format!("cut-{prefix}"));
+    std::fs::create_dir_all(root.join("sheets"))?;
+    std::fs::create_dir_all(&cut_dir)?;
+    std::fs::create_dir_all(&seg_dir)?;
+
+    let demo = wright_app::demo();
+    let all = &film.scenes;
     let mut renderer = NativeRenderer::new();
-    let mut rig = Rig::new();
+    let mut rig = Rig::new(spec);
     let t0 = Instant::now();
+    // `wright_film.mp4` for the keynote; the social cuts' own names —
+    // `wright_twitter-` → `wright_twitter.mp4` — one prefix, one door.
+    let out_name = if prefix.is_empty() {
+        "wright_film.mp4".to_string()
+    } else {
+        format!("{}.mp4", prefix.trim_end_matches('-'))
+    };
 
     for (si, s) in all.iter().enumerate() {
         let n = s.frames();
         let seg = seg_dir.join(format!("{:02}_{}.mp4", si + 1, s.name));
-        let sheet = root.join("sheets").join(format!("{}_{}.png", s.id, s.name));
-        let wanted = only.as_ref().is_none_or(|o| o.iter().any(|x| x == s.id));
+        let sheet = root
+            .join("sheets")
+            .join(format!("{}{}_{}.png", prefix, s.id, s.name));
+        let wanted = only.as_ref().is_none_or(|o| o.iter().any(|x| *x == s.id));
         if !wanted || seg.exists() && sheet.exists() {
             println!("  {} {} · skipping", s.id, s.name);
             continue;
@@ -458,9 +581,7 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
         // The A of this scene's entrance dissolve.
         if si > 0 {
             let prev = &all[si - 1];
-            let path = root
-                .join("cut")
-                .join(format!("{:02}_{}.png", si, prev.name));
+            let path = cut_dir.join(format!("{:02}_{}.png", si, prev.name));
             let px = std::fs::read(&path)
                 .ok()
                 .and_then(|b| image::load_from_memory(&b).ok())
@@ -472,7 +593,7 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
 
         let scene_dir = root
             .join("frames")
-            .join(format!("{:02}_{}", si + 1, s.name));
+            .join(format!("{prefix}{:02}_{}", si + 1, s.name));
         std::fs::remove_dir_all(&scene_dir).ok();
         std::fs::create_dir_all(&scene_dir)?;
         let scene_t0 = Instant::now();
@@ -487,7 +608,7 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
                 "-pix_fmt",
                 "rgba",
                 "-s",
-                &format!("{}x{}", W as u32, H as u32),
+                &format!("{}x{}", spec.w as u32, spec.h as u32),
                 "-framerate",
                 &format!("{FPS}"),
             ])
@@ -506,13 +627,13 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
         let mut stdin = ffmpeg.stdin.take().ok_or("no ffmpeg stdin")?;
 
         let picks = sheet_picks(n);
-        let script = Rig::script_for(s.id);
+        let script = Film::script_for(s.id);
         let mut last_buf: Option<Vec<u8>> = None;
         for i in 0..n {
             let _ = &script;
-            rig.build_frame(s, si, i, demo);
-            let (frame, cut) = rig.compose(s, si, i);
-            let mut buf = render_rgba(&mut renderer, &frame);
+            rig.build_frame(film, si, i, demo);
+            let (frame, cut) = rig.compose(film, si, i);
+            let mut buf = render_rgba(&mut renderer, &frame, spec.w as u32, spec.h as u32);
             // The dissolve: blend this frame over the previous scene's
             // final frame while the cut runs.
             if let (Some(e), Some(a)) = (cut, rig.prev.as_ref()) {
@@ -520,14 +641,14 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
             }
             finish(
                 &mut buf,
-                W as usize,
-                H as usize,
+                spec.w as usize,
+                spec.h as usize,
                 cut,
-                (film::scene_start(si) + i) as u32,
+                (film.starts[si] + i) as u32,
             );
             stdin.write_all(&buf)?;
             if let Some(k) = picks.iter().position(|p| *p == i) {
-                let img = image::RgbaImage::from_raw(W as u32, H as u32, buf.clone())
+                let img = image::RgbaImage::from_raw(spec.w as u32, spec.h as u32, buf.clone())
                     .ok_or("invalid frame")?;
                 img.save(scene_dir.join(format!("frame_{k:03}.png")))?;
             }
@@ -551,12 +672,9 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
         }
         if let Some(buf) = last_buf {
             if si + 1 < all.len() {
-                let img =
-                    image::RgbaImage::from_raw(W as u32, H as u32, buf).ok_or("invalid frame")?;
-                img.save(
-                    root.join("cut")
-                        .join(format!("{:02}_{}.png", si + 1, s.name)),
-                )?;
+                let img = image::RgbaImage::from_raw(spec.w as u32, spec.h as u32, buf)
+                    .ok_or("invalid frame")?;
+                img.save(cut_dir.join(format!("{:02}_{}.png", si + 1, s.name)))?;
             }
         }
         tile_sheet(&scene_dir, &sheet);
@@ -569,38 +687,32 @@ pub(crate) fn master() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Assemble — concat the segments (stream copy).
-    concat(&seg_dir, &root.join("wright_film.mp4"), &all)?;
-    // The teaser: the film's own first movement + the run + the receipt
-    // + the end card — the 60-second door.
-    let teaser: Vec<SceneDef> = all
+    // Assemble — concat the segments (stream copy). The names are this
+    // film's own indices: the keynote's scenes by their keynote
+    // position, a social cut's by its own.
+    let names: Vec<String> = all
         .iter()
-        .filter(|s| ["W00", "W01", "W06", "W09", "W11", "W12"].contains(&s.id))
-        .cloned()
+        .enumerate()
+        .map(|(i, s)| format!("{:02}_{}.mp4", i + 1, s.name))
         .collect();
-    concat(&seg_dir, &root.join("wright_teaser.mp4"), &teaser)?;
-    println!(
-        "\nmaster assembled — {:.1} min wall → {}",
-        t0.elapsed().as_secs_f32() / 60.0,
-        root.display()
-    );
+    concat_named(&seg_dir, &root.join(&out_name), &names)?;
+    println!("  {} → {}", out_name, root.display());
     Ok(())
 }
 
-/// Concat the named scenes' segments into one mp4 (stream copy).
-fn concat(
+/// Concat the named segments into one mp4 (stream copy).
+fn concat_named(
     seg_dir: &std::path::Path,
     out: &std::path::Path,
-    list: &[SceneDef],
+    names: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let list_path = seg_dir.join(format!(
         "list-{}.txt",
         out.file_name().unwrap().to_string_lossy()
     ));
     let mut body = String::new();
-    for s in list {
-        let i = scenes().iter().position(|x| x.id == s.id).unwrap();
-        body.push_str(&format!("file '{:02}_{}.mp4'\n", i + 1, s.name));
+    for n in names {
+        body.push_str(&format!("file '{n}'\n"));
     }
     std::fs::write(&list_path, body)?;
     let status = ProcCommand::new("ffmpeg")
@@ -613,18 +725,13 @@ fn concat(
     if !status.success() {
         return Err("concat failed".into());
     }
-    println!(
-        "  {} → {}",
-        out.file_name().unwrap().to_string_lossy(),
-        out.display()
-    );
     Ok(())
 }
 
 /// Render a scene's frame to raw RGBA.
-fn render_rgba(renderer: &mut NativeRenderer, frame: &Scene) -> Vec<u8> {
+fn render_rgba(renderer: &mut NativeRenderer, frame: &Scene, w: u32, h: u32) -> Vec<u8> {
     let (px, _) = renderer
-        .render_to_pixels(frame, W as u32, H as u32, film::ROOM)
+        .render_to_pixels(frame, w, h, film::ROOM)
         .expect("raster");
     px.data().to_vec()
 }
@@ -673,6 +780,31 @@ fn tile_sheet(dir: &std::path::Path, out: &std::path::Path) -> Option<()> {
     Some(())
 }
 
+// ── the social cuts ─────────────────────────────────────────────────────────
+
+/// Render one named social cut (see [`crate::socials`]) — the same
+/// harness, a different scene list and canvas, its own segments,
+/// sheets and dissolve frames.
+pub(crate) fn social(which: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let cut = crate::socials::cut(which)
+        .ok_or_else(|| format!("no cut {which} — try twitter | linkedin | instagram"))?;
+    println!(
+        "wright_film social · {} · {} scenes · {}×{}",
+        cut.id,
+        cut.scenes.len(),
+        cut.width,
+        cut.height
+    );
+    let spec = Spec {
+        w: cut.width,
+        h: cut.height,
+        window: cut.window,
+        act_chrome: cut.act_chrome,
+    };
+    let film = Film::new(spec, cut.scenes);
+    render_film(&film, &format!("{}-", cut.out), &None)
+}
+
 // ── the preview ─────────────────────────────────────────────────────────────
 
 /// One scene, previewed: frames to PNGs under `preview/<id>/` (every
@@ -683,23 +815,25 @@ pub(crate) fn preview(id: &str) -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .position(|s| s.id.eq_ignore_ascii_case(id) || s.name.eq_ignore_ascii_case(id))
         .ok_or_else(|| format!("no scene {id}"))?;
-    let s = &all[si];
-    let root = work_root().join("preview").join(s.id);
+    let root = work_root().join("preview").join(all[si].id);
     std::fs::create_dir_all(&root)?;
     let demo = wright_app::demo();
     let mut renderer = NativeRenderer::new();
-    let mut rig = Rig::new();
+    let spec = Spec::keynote();
+    let mut rig = Rig::new(spec);
+    let film = Film::new(spec, all.clone());
+    let s = &film.scenes[si];
     let n = s.frames();
-    let script = Rig::script_for(s.id);
+    let script = Film::script_for(s.id);
     let mut written = 0;
     let _ = &script;
     for i in 0..n {
         if i % 12 != 0 && i != n - 1 {
             continue;
         }
-        rig.build_frame(s, si, i, demo);
-        let (frame, _) = rig.compose(s, si, i);
-        let (png, _) = renderer.render_to_png(&frame, W as u32, H as u32, film::ROOM)?;
+        rig.build_frame(&film, si, i, demo);
+        let (frame, _) = rig.compose(&film, si, i);
+        let (png, _) = renderer.render_to_png(&frame, spec.w as u32, spec.h as u32, film::ROOM)?;
         std::fs::write(root.join(format!("f_{i:05}.png")), png)?;
         written += 1;
     }
@@ -717,6 +851,7 @@ pub(crate) fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         "census" => census(),
         "master" => master(),
+        "twitter" | "linkedin" | "instagram" => social(mode),
         other => preview(other),
     }
 }

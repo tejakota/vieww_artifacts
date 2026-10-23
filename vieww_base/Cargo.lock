@@ -6511,7 +6511,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wright"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "vieww",
  "vieww-platform-winit",
@@ -6525,18 +6525,18 @@ dependencies = [
 
 [[package]]
 name = "wright-agents"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "wright-core",
 ]
 
 [[package]]
 name = "wright-core"
-version = "1.0.1"
+version = "1.0.2"
 
 [[package]]
 name = "wright-engine"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "wright-agents",
  "wright-core",
@@ -6546,7 +6546,7 @@ dependencies = [
 
 [[package]]
 name = "wright-infer"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "wright-core",
  "wright-runtime",
@@ -6554,14 +6554,14 @@ dependencies = [
 
 [[package]]
 name = "wright-runtime"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "wright-core",
 ]
 
 [[package]]
 name = "wright-tools"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "wright-core",
  "wright-runtime",

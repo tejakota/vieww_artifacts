@@ -801,6 +801,16 @@ impl Ui {
                     self.set_engine(EngineView::Hidden);
                 } else if self.overview.get() {
                     self.set_overview(false);
+                } else if self
+                    .current_session()
+                    .is_some_and(|s| s.pending.get().is_some())
+                {
+                    // A reply on its way is the deepest thing open on the
+                    // page; backing out of it is stopping it. The composer's
+                    // stop button is the mouse path, this is the keyboard's.
+                    if let Some(s) = self.current_session() {
+                        s.stop_reply();
+                    }
                 } else {
                     return false;
                 }

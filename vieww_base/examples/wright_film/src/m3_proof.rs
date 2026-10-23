@@ -76,7 +76,11 @@ pub(crate) fn the_receipt(ctx: &crate::film::Ctx) -> WidgetNode {
 
     // The checks — the real ones, in the real order, each with its real
     // sentence. Passed checks tick in sequence; a failed one would wear
-    // the bad colour and say so (the film does not skip it).
+    // the bad colour and say so (the film does not skip it). The rows
+    // are pitched at 76 px so all six clear the verdict with room to
+    // breathe: the first cut of this scene stacked the verdict on the
+    // sixth check's own sentence, and two greens on one line is the
+    // film's worst kind of lie — one that is hard to read.
     let checks = &ctx.demo.receipt.checks;
     for (i, (name, ok, note)) in checks.iter().enumerate() {
         let at = 1.3 + i as f32 * 0.8;
@@ -84,7 +88,7 @@ pub(crate) fn the_receipt(ctx: &crate::film::Ctx) -> WidgetNode {
         if ca <= 0.01 {
             continue;
         }
-        let y = card.top + 140.0 + i as f32 * 92.0;
+        let y = card.top + 132.0 + i as f32 * 76.0;
         let color = if *ok { GOOD } else { BAD };
         let (name_s, note_s, ok_v, at_pt, frac) = (
             name.clone(),
@@ -115,7 +119,7 @@ pub(crate) fn the_receipt(ctx: &crate::film::Ctx) -> WidgetNode {
         // own copyable lines are.
         stack = stack.push(dlabel(
             card.left + 110.0,
-            y + 34.0,
+            y + 32.0,
             card.width() - 300.0,
             34.0,
             note_s,
@@ -126,7 +130,9 @@ pub(crate) fn the_receipt(ctx: &crate::film::Ctx) -> WidgetNode {
         ));
     }
 
-    // The verdict — the report's own last line.
+    // The verdict — the report's own last line, below every check
+    // (the card's floor, not the checks' ceiling: the two must never
+    // share a pixel).
     let verdict = ctx
         .demo
         .receipt
@@ -139,9 +145,9 @@ pub(crate) fn the_receipt(ctx: &crate::film::Ctx) -> WidgetNode {
     let va = ease(sec - (1.3 + checks.len() as f32 * 0.8 + 0.5), 1.0);
     stack = stack.push(dlabel(
         card.left + 48.0,
-        card.bottom - 150.0,
-        card.width() - 300.0,
-        66.0,
+        card.bottom - 132.0,
+        card.width() - 360.0,
+        84.0,
         verdict,
         21.0,
         GOOD,

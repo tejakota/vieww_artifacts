@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.0.2 — 2026-10-23 — the reply, rendered and interruptible
+
+The conversation was the last place the app talked down: replies
+arrived as walls of `**asterisks**` whenever a smaller model answered
+in markdown, and once you sent a message there was no way to stop what
+came back. Both fixed, plus the small courtesies a thread owes.
+
+- **Replies render their markdown.** The framework's own `Markdown`
+  widget, wearing the app's palette through a one-function bridge
+  (`kit::markdown` — the only place the app's `Pal` and vieww's
+  `ThemeData` meet): headings, lists, quotes, fenced code, `code
+  spans`, links. Plain prose renders exactly as before — same size,
+  same ink — so nothing changes for the models that already write
+  plainly, and the smaller ones stop shouting punctuation. The
+  half-written reply streams through the same renderer with a caret
+  riding the last word, so the preview is the thing itself. Copy keeps
+  the source, markdown and all.
+- **The send button becomes stop while a reply is on its way** — the
+  same circle, the same place, the opposite deed; the button you know
+  is the button that interrupts. A tap ends the wait, drops the
+  half-written words, and swallows whatever the model was still
+  streaming (the worker's I/O checks the stop between every callback,
+  so late words land nowhere). Esc is the keyboard's path to the same
+  stop — a reply on its way is the deepest thing open on the page.
+  The stop is one quiet line in the notice, never the machine's own
+  "nothing was written" verdict.
+- **A thread scrolled far from its end offers the jump back**: the
+  "Jump to the latest" chip appears when the end is more than a screen
+  away and leaves the moment it is not — the run pours in, you scroll
+  up to read, one tap returns.
+- **A session opens where it is**: the latest words, the newest
+  state — the reading position of every chat there is, instead of the
+  top of a conversation you have already had.
+- **The product film and its social cuts** (`wrightfilms/`): the
+  keynote's mixed-up frames fixed (the typed request no longer clips
+  its card, the receipt's verdict no longer sits on its sixth check,
+  the workforce cards keep their text inside their borders), the end
+  card holds the mark **dead centre** with the wordmark under it —
+  the same axis the cold open put it on — and the film now ships
+  three platform cuts (`wright_twitter.mp4` 0:41, `wright_linkedin.mp4`
+  1:01, `wright_instagram.mp4` 0:33 square with the real window framed
+  like a print), all from the keynote's own scene builders.
+
 ## 1.0.1 — 2026-10-23 — the receipt in the window
 
 Small on the outside, deliberate underneath: the evidence a receipt

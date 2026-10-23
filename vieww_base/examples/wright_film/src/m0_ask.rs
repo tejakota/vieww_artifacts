@@ -103,10 +103,13 @@ pub(crate) fn the_words(ctx: &crate::film::Ctx) -> WidgetNode {
     )));
 
     // The composer card, as Home wears it: surface, hairline, the prompt
-    // line, the caret — the film's own drawing of the real composer.
+    // line, the caret — the film's own drawing of the real composer. The
+    // card holds three lines of prompt: the request at this size wraps
+    // to three in the box it has, and a box that fits two was what
+    // clipped the request's last words at the card's right edge.
     let card_a = ease(sec, 0.8);
     let lift = ease(sec - type_end, 1.2) * 120.0;
-    let card = Rect::new(W * 0.5 - 620.0, 380.0 - lift, W * 0.5 + 620.0, 560.0 - lift);
+    let card = Rect::new(W * 0.5 - 620.0, 360.0 - lift, W * 0.5 + 620.0, 580.0 - lift);
     stack = stack.push(Positioned::fill().child(Painting::sized(
         vieww_foundation::Size::new(W, H),
         PaintWith::new(move |book: &mut Sketchbook, _s| {
@@ -127,9 +130,9 @@ pub(crate) fn the_words(ctx: &crate::film::Ctx) -> WidgetNode {
         card.left + 32.0,
         card.top + 28.0,
         1160.0,
-        64.0,
+        120.0,
         request,
-        30.0,
+        26.0,
         INK,
         typed_frac,
         card_a,

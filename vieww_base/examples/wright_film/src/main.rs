@@ -2,7 +2,10 @@
 //!
 //! ```console
 //! cargo run --release -p wright_film -- census        # pass 1: walk, count, sample
-//! cargo run --release -p wright_film -- master        # pass 2: segments → wright_film.mp4
+//! cargo run --release -p wright_film -- master        # pass 2: segments → wright_film.mp4 + wright_teaser.mp4
+//! cargo run --release -p wright_film -- twitter       # the 41-second cut for X
+//! cargo run --release -p wright_film -- linkedin      # the 61-second cut for LinkedIn
+//! cargo run --release -p wright_film -- instagram     # the 33-second square for the feed
 //! cargo run --release -p wright_film -- preview W06   # one scene, every 12th frame
 //! ```
 //!
@@ -25,6 +28,7 @@ mod m2_run;
 mod m3_proof;
 mod m4_refire;
 mod master;
+mod socials;
 mod wright_app;
 
 use std::process::ExitCode;

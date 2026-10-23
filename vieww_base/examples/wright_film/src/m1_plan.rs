@@ -39,15 +39,20 @@ fn agent_card(book: &mut Sketchbook, at: Offset, w: f32, a: f32, accent: bool) {
 }
 
 /// The card's text, as one positioned column over the canvas card.
+/// The meta and tools lines are mono at 13–14 px in a card 208 wide:
+/// the box keeps 18 px of air each side, so a line has ~172 px — about
+/// 21 characters. Every line below is written to that budget, because
+/// a mono line that runs past its card's edge reads as a bug in the
+/// card, not in the sentence.
 fn card_text(at: Offset, w: f32, a: f32, name: &str, meta: &str, tools: &str) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
     Stack::new()
         .push(dlabel(
-            at.dx + 22.0,
+            at.dx + 18.0,
             at.dy + 14.0,
-            w - 44.0,
+            w - 36.0,
             34.0,
             name,
             21.0,
@@ -56,23 +61,23 @@ fn card_text(at: Offset, w: f32, a: f32, name: &str, meta: &str, tools: &str) ->
             a,
         ))
         .push(mlabel(
-            at.dx + 22.0,
+            at.dx + 18.0,
             at.dy + 50.0,
-            w - 44.0,
+            w - 36.0,
             28.0,
             meta,
-            14.5,
+            14.0,
             MUTED,
             TextAlign::Left,
             a,
         ))
         .push(mlabel(
-            at.dx + 22.0,
+            at.dx + 18.0,
             at.dy + 84.0,
-            w - 44.0,
+            w - 36.0,
             28.0,
             tools,
-            13.5,
+            13.0,
             alpha(MUTED, 0.85),
             TextAlign::Left,
             a,
@@ -107,8 +112,9 @@ pub(crate) fn the_workforce(ctx: &crate::film::Ctx) -> WidgetNode {
     let x0 = 150.0;
     let y0 = 300.0;
     let cards: [(f32, &str, &str, &str, bool); 8] = [
-        // (stage, name, meta, tools, yours)
-        (0.0, "Shipwright", "built-in · lays the skeleton", "", false),
+        // (stage, name, meta, tools, yours) — every meta line inside the
+        // 21-character mono budget the card's width gives it.
+        (0.0, "Shipwright", "built-in · skeleton", "", false),
         (1.0, "Logwright", "chip: logging", "write-output", false),
         (1.0, "Fetcher", "yours · tier cheap", "http-read", true),
         (
@@ -121,19 +127,13 @@ pub(crate) fn the_workforce(ctx: &crate::film::Ctx) -> WidgetNode {
         (
             3.0,
             "Testwright",
-            "chip: tests · writes the checks",
+            "chip: tests · checks",
             "run-tests",
             false,
         ),
-        (4.0, "Reviewer", "APPROVE or REJECT — the bar", "", false),
-        (
-            5.0,
-            "Mailer",
-            "yours · asks before it sends",
-            "http-post",
-            true,
-        ),
-        (6.0, "Operator", "built-in · the schedule", "", false),
+        (4.0, "Reviewer", "APPROVE or REJECT", "", false),
+        (5.0, "Mailer", "yours · asks first", "http-post", true),
+        (6.0, "Operator", "built-in · schedule", "", false),
     ];
     let card_at = move |stage: f32, row: usize| -> Offset {
         Offset::new(x0 + stage * (col_w + gap), y0 + row as f32 * 176.0)
@@ -205,12 +205,12 @@ pub(crate) fn the_workforce(ctx: &crate::film::Ctx) -> WidgetNode {
             ("added by Wright", ACCENT)
         };
         stack = stack.push(mlabel(
-            at.dx + 14.0,
+            at.dx + 12.0,
             at.dy + 108.0,
-            col_w - 28.0,
+            col_w - 24.0,
             24.0,
             tag.0,
-            12.5,
+            12.0,
             tag.1,
             TextAlign::Left,
             ease(sec - arrive - 0.3, 0.6),

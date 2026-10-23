@@ -85,7 +85,7 @@ pub fn home(ui: &Ui) -> WidgetNode {
             Text::new("What should exist?").size(46.0).color(p.ink).weight(FontWeight::Bold).into(),
             para("Describe the outcome in your own words. Wright drafts a plan, shows what it will touch and what it costs, and runs nothing until you approve.", 16.0, p.muted),
             speak_hero(&ui),
-            composer(&ui, &ui.home, send, "Every Monday, read the CSVs in my sales folder and email me a one-page summary", true),
+            composer(&ui, &ui.home, send, "Every Monday, read the CSVs in my sales folder and email me a one-page summary", true, false, Rc::new(|| ())),
             // Stretch: the three cards stand as tall as the tallest, so a
             // shorter subtitle does not leave one card floating in the row.
             Flex::row().cross_axis_alignment(CrossAxisAlignment::Stretch).spacing(10.0).children(starters).into(),
@@ -338,7 +338,7 @@ pub fn fresh(ui: &Ui) -> WidgetNode {
                 Center::new().child(ring).into(),
                 Center::new().child(Text::new("A new session").size(30.0).color(p.ink).weight(FontWeight::Bold)).into(),
                 Center::new().child(t("Describe what should exist. It gets its own folder, its own plan and its own history.", 14.0, p.muted)).into(),
-                composer(&ui, &ui.fresh, send, "Describe what should exist", true),
+                composer(&ui, &ui.fresh, send, "Describe what should exist", true, false, Rc::new(|| ())),
             ])),
         )
     })

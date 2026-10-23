@@ -53,14 +53,62 @@ pub fn page(ui: &Ui, s: &Session) -> WidgetNode {
             } else {
                 "Describe what should exist"
             };
+            // The reply's own state drives the button: send when idle,
+            // stop while the words are on their way. Read here, inside
+            // the Live region, so the flip is the frame it happens in.
+            let busy = s.pending.get().is_some();
+            let stop: Rc<dyn Fn()> = {
+                let s = s.clone();
+                Rc::new(move || s.stop_reply())
+            };
             Container::new()
                 .color(p.ground.with_alpha(235))
                 .padding(EdgeInsets::only(24.0, 10.0, 24.0, 16.0))
                 .child(reading(
                     COLUMN,
-                    composer(&ui, &s.composer, send, hint, false),
+                    composer(&ui, &s.composer, send, hint, false, busy, stop),
                 ))
                 .into()
+        })
+        .into()
+    };
+    // The jump-to-latest chip: a thread that has scrolled up while a run
+    // or a reply pours in is a thread worth a one-tap way back. It is
+    // its own Live region on the two scroll signals, so it appears the
+    // moment the end is more than a screen away and leaves the moment it
+    // is not — the same threshold the eye would call "far from home".
+    let jump_node: WidgetNode = {
+        let (ui, s) = (ui.clone(), s.clone());
+        Live::new("thread-jump", move || {
+            let p = ui.pal();
+            let (view, content) = s.scroll.extent.get();
+            let away = content - view - s.scroll.at();
+            if away <= 480.0 {
+                return SizedBox::shrink().into();
+            }
+            let s2 = s.clone();
+            let chip = Pressable::sensed(move |sense: Sense| {
+                Container::new()
+                    .color(p.surface.lerp(p.line_strong, 0.4 * sense.hover))
+                    .radius(corner::PILL)
+                    .border(Border::new(p.line, 1.0))
+                    .shadow(Shadow::new(
+                        Color::rgba(0, 0, 0, 50),
+                        Offset::new(0.0, 4.0),
+                        12.0,
+                    ))
+                    .padding(EdgeInsets::symmetric(14.0, 7.0))
+                    .child(row(
+                        7.0,
+                        vec![
+                            Glyph::Down.draw(13.0, p.accent_ink),
+                            t("Jump to the latest", 12.5, p.ink),
+                        ],
+                    ))
+                    .into()
+            })
+            .on_tap(move || s2.scroll.to_end());
+            Align::new(Alignment::BOTTOM_CENTER).child(chip).into()
         })
         .into()
     };
@@ -80,6 +128,15 @@ pub fn page(ui: &Ui, s: &Session) -> WidgetNode {
     };
     stack(vec![
         layer(scroller),
+        // The chip floats over the thread, above where the composer
+        // rises, so it never covers the words it offers to return to.
+        Positioned::new()
+            .left(0.0)
+            .right(0.0)
+            .bottom(86.0)
+            .height(40.0)
+            .child(jump_node)
+            .into(),
         Positioned::new()
             .left(0.0)
             .right(0.0)
@@ -175,14 +232,23 @@ fn body(ui: &Ui, s: &Session) -> WidgetNode {
     stretch(16.0, items)
 }
 
-/// A reply on its way: the words so far, and under them a spinner with
-/// what Wright is doing and for how long — so the screen is never still
-/// while something is happening.
+/// A reply on its way: the words so far, rendered as they will land
+/// (markdown and all, the caret riding the last word), and under them a
+/// spinner with what Wright is doing and for how long — so the screen
+/// is never still while something is happening.
 fn pending(ui: &Ui, s: &Session) -> Option<WidgetNode> {
     let now = s.pending.get()?;
     let mut rows: Vec<WidgetNode> = Vec::new();
     if !now.text.trim().is_empty() {
-        rows.push(para(now.text.clone(), 15.0, ui.pal().ink));
+        // The half-written reply previews exactly as the finished one
+        // will: same renderer, same size — plus the caret, so the eye
+        // knows it is still being written. Structure appears as it
+        // becomes unambiguous (a heading once its line ends, a code
+        // block once its fence closes), which is how every editor that
+        // renders markdown live does it.
+        let mut body = now.text.clone();
+        body.push('▌');
+        rows.push(markdown(&ui.pal(), body));
     }
     let status: WidgetNode = {
         let (u, since, what) = (ui.clone(), now.since, now.what.clone());
@@ -204,12 +270,14 @@ fn pending(ui: &Ui, s: &Session) -> Option<WidgetNode> {
     Some(column(8.0, rows))
 }
 
-/// Wright's reply: selectable text, and a Copy for all of it.
+/// Wright's reply: rendered markdown — the smaller models answer in
+/// markdown whether or not anyone asked — and a Copy for all of it,
+/// source included.
 fn reply(p: &Pal, text: &str) -> WidgetNode {
     column(
         4.0,
         vec![
-            copyable(text.to_string(), 15.0, p.ink),
+            markdown(p, text.to_string()),
             copy_icon(p.muted, text.to_string()),
         ],
     )
@@ -1013,13 +1081,19 @@ pub fn human_size(n: u64) -> String {
 
 // ── the composer ─────────────────────────────────────────────────
 
-/// Where you type: `+` (files, folders), the text, the mic, send.
+/// Where you type: `+` (files, folders), the text, the mic, and send —
+/// which becomes stop while a reply is on its way. The same circle in
+/// the same place does the opposite thing at the opposite moment: the
+/// button you know is the button that interrupts, with no hunt for a
+/// separate control while words pour in.
 pub fn composer(
     ui: &Ui,
     c: &Composer,
     send: Rc<dyn Fn()>,
     placeholder: &str,
     big: bool,
+    busy: bool,
+    stop: Rc<dyn Fn()>,
 ) -> WidgetNode {
     let p = ui.pal();
     let mut items: Vec<WidgetNode> = Vec::new();
@@ -1115,20 +1189,37 @@ pub fn composer(
         .into()
     };
     let go = send.clone();
-    let send_btn = Semantics::new()
-        .label("Send".to_string())
+    let send_btn: WidgetNode = Semantics::new()
+        .label(if busy { "Stop" } else { "Send" }.to_string())
         .child(
             Pressable::sensed(move |s: Sense| {
                 Container::new()
                     .width(34.0)
                     .height(34.0)
                     .radius(17.0)
-                    .color(p.accent.lerp(Color::hex(0x000000), 0.15 * s.press))
+                    // While the reply streams, the circle breathes with
+                    // the work: pressed-dark on touch, a hair quieter
+                    // than the send blue so the state reads at a glance.
+                    .color(if busy {
+                        p.wait.lerp(Color::hex(0x000000), 0.10 * s.press)
+                    } else {
+                        p.accent.lerp(Color::hex(0x000000), 0.15 * s.press)
+                    })
                     .alignment(Alignment::CENTER)
-                    .child(Glyph::Send.draw(16.0, p.on_accent))
+                    .child(if busy {
+                        Glyph::Stop.draw(13.0, Color::WHITE)
+                    } else {
+                        Glyph::Send.draw(16.0, p.on_accent)
+                    })
                     .into()
             })
-            .on_tap(move || go()),
+            .on_tap(move || {
+                if busy {
+                    stop();
+                } else {
+                    go();
+                }
+            }),
         )
         .into();
     items.push(
