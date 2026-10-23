@@ -212,7 +212,7 @@ artifact to Test Lab's console as a **Game Loop** test.
 Canvas parity passes in Chromium, Firefox and WebKit in the `web` leg of
 `framework-checks.yml` (`verify_web.py` through Playwright). See TRACKER.
 
-## 1.7 The GPU 3D seam: unlit and Lambert passes, per-call bring-up
+## 1.7 The GPU 3D seam: unlit, Lambert and Phong passes, per-call bring-up
 
 **What.** `vieww-3d`'s `GpuRenderer` (behind the crate's `vulkan` feature) holds
 the CPU renderer's `(scene, camera) -> RGBA8` contract with two passes through
@@ -225,7 +225,18 @@ lavapipe (and, 2026-10-14, 7/7 on a real Intel HD 620 under Mesa):
   sphere, a rotated box, a coloured second light, a long cast shadow (lit and
   shadowed ground both asserted), and single-/double-sided back faces.
   Mutation-checked: disabling the shadow lookup fails it by 1,644 interior
-  pixels, not flipping back-face normals by 4,670.
+  pixels, not flipping back-face normals by 4,670;
+- **Phong + point/spot** (2026-10-23) — `Shading::Phong` under all five light
+  kinds: the CPU's Blinn-Phong term (`pow(max(n.hv, 0), max(shininess, 1)) *
+  specular` in white) per directional/point/spot light, the CPU's
+  `saturate(1 - (dist/range)^4)^2` falloff and its spot cone with the
+  outer/inner cosines precomputed at pack time so both renderers evaluate
+  identical numbers. `tests/gpu_lit.rs`'s point-light *fallback* test became
+  false by construction and is replaced by two parity tests (point+spot,
+  Phong specular); `pack_light` is unit-tested with the Lambert-era records
+  pinned unchanged; every embedded WGSL now parses and validates through
+  naga in a plain unit test (`vieww-shaders`'s library), so a shader typo
+  fails on every CI leg instead of only inside a hardware parity run.
 
 The lit pass decides back faces per triangle on the CPU while packing (cull
 single-sided, flip double-sided — the CPU rasterizer's rule, by the side of
@@ -236,20 +247,24 @@ one became a thin wrapper; its tests are unchanged and green). Anything
 outside the reach falls back to the CPU renderer for the whole frame; the
 module doc lists it.
 
-**Why not closed.** Phong/Standard/Toon/Normal shading, point and spot lights,
-image-based lighting and GI probes, textures and the transparent pass are not
-in the passes yet. The shadow map is rasterised on the CPU, not the GPU. And
-the whole pipeline — render pass, shaders, descriptor set — is still brought
-up and torn down per render; a cached-pipeline struct is the step the 2D path
-took with `SceneRenderer`.
+**Why not closed.** Standard/Toon/Normal shading, image-based lighting and GI
+probes, textures and the transparent pass are not in the passes yet. The
+shadow map is rasterised on the CPU, not the GPU. And the whole pipeline —
+render pass, shaders, descriptor set — is still brought up and torn down per
+render; a cached-pipeline struct is the step the 2D path took with
+`SceneRenderer`. The Phong/point/spot parity tests themselves still need a
+run on the CI runners' hardware (`cargo test -p vieww-3d --features vulkan
+-- --ignored --test-threads=1`) to attach evidence beside them.
 
 **Blocks.** Nothing; the CPU renderer remains the full-fidelity path.
 
-**Start.** Point and spot lights, then Phong (the shader's light loop already
-has the CPU's structure — add the cases with the CPU's formulas verbatim, and
-a parity scene each). A GPU-rendered shadow map has to reproduce the CPU's
-`raster_depth` sampling to keep shadow decisions identical, so measure first
-whether the CPU shadow pass matters next to the per-render bring-up.
+**Start.** Textures next: the 2D path's image residency and sampling logic is
+the seam to reuse, with a parity scene per texture mode. Then the transparent
+pass (depth writes off, the CPU's sort order as the oracle). A GPU-rendered
+shadow map has to reproduce the CPU's `raster_depth` sampling to keep shadow
+decisions identical, so measure first whether the CPU shadow pass matters
+next to the per-render bring-up — which is also the remaining argument for
+the cached-pipeline struct.
 
 ---
 
@@ -352,15 +367,42 @@ and then obeyed, both behind data:
   `ScenePlan::is_complete` passes). `is_complete` remains the per-frame
   fallback gate; a resolution-scaled frame is never planned for a decision
   (the plan would describe a picture nobody drew).
+- **Since 2026-10-23, the audit's planner fixes (this branch):** the log's
+  JSON line carries the mode its predictions were made under
+  (`"mode":"shadow"|"shadow-calibrated"|"authoritative"`), so a promotion
+  no longer silently changes what every later number means;
+  `MeasuredCostModel` is connected to the live loop for the first time —
+  the Vulkan backend's per-kind timestamp buckets (`GpuPassTimes`:
+  draw/layers/filters/shadows/blit) feed an EMA per kind of work through
+  `ShadowPlanner::note_gpu_pass_kind`, and an `Authoritative` planner
+  plans the frames it acts on through that measured history (the logged
+  predictions stay the raw model's — the module doc's own rule); a
+  `TimingRing` (240-frame window of predicted-vs-actual per executor)
+  guards actuation with a *recent* RMSE reading the lifetime gate cannot
+  have — a steady 20% device drift leaves the diluted gate `ready` and
+  the ring vetoes within sixteen frames, releasing when the record
+  recovers; `VIEWW_PLANNER_CALIBRATE=1` runs a one-time startup
+  micro-benchmark (`probe::calibrate_cpu_fill`) that replaces the
+  profile's round-number CPU throughput with a measurement of this
+  machine's own rasterizer and fills `cpu_cores` from the scheduler; and
+  `policy::hybrid_min_pixels(device)` derives the hybrid split threshold
+  from the GPU's own dispatch overhead × fill rate (800k pixels on the
+  discrete-desktop profile, 720k on the phone) instead of the 250,000
+  guess, clamped to keep the guess as floor and fallback.
 
 **Why not closed.** The gate has never been fed real frames. The checked-in
 receipts are raw-model runs (`receipts/2026-10-15-kabylake-*/baseline/`,
 11.5k GPU frames per OS, every one labeled `window`, every one on the GPU) —
 enough to *derive* a calibration, not enough to *test* one. No CPU-side
 shadow log from the gallery or the phone exists yet, so the CPU gate — the
-one actuation actually needs — has zero real samples. The per-command
-weights' within-band attribution is still an assumption for the same
-reason: the per-fixture gallery log was never checked in.
+one actuation actually needs — has zero real samples, and the startup
+calibration's `VIEWW_PLANNER_CALIBRATE` has no run recorded against it
+either. The per-command weights' within-band attribution is still an
+assumption for the same reason: the per-fixture gallery log was never
+checked in. And `Mixed` remains unactionable until a backend can execute a
+split frame — per-pass dispatch across `vieww_paint::native` and `vieww-gpu`
+with a merge is the remaining architectural step, larger than everything
+above put together.
 
 **Blocks.** Roadmap P2 — the hybrid engine making the live decision.
 

@@ -11,6 +11,88 @@ buried under a history that only grows, and every gap had to be rediscovered by
 reading to the bottom. The section is still here for continuity, and
 `PENDING.md` is the one to read if the question is "what should I work on".
 
+## 2026-10-23: The external audit's code-level fixes applied — a derived hybrid threshold, a calibrated DeviceProfile, the measured-cost loop connected with a freshness ring, Phong and point/spot lights on the GPU, and two named parity contracts
+
+**Context.** The external architecture audit's recreated plan (its Phase 0
+items 2–3, Phase 2 items 1–2, Phase 4 item 1, and the "two contracts"
+recommendation from the framework-comparison review), applied to the five
+code-level gaps its table names. Built and tested with the pinned 1.98.1.
+Every claim below is a test in this tree; the hardware-gated ones are
+`#[ignore]`d exactly like their siblings and wait for the CI runners.
+
+**What was built, and how each claim is checked.**
+
+- **The hybrid threshold is derived, not guessed.** `policy::hybrid_min_pixels(device)`
+  converts the GPU's dispatch overhead through its own fill rate into "pixels
+  filled during one dispatch" and requires two of those (at a
+  throughput-balancing split each side carries half the pass), clamped to
+  [250k, 4M]. `policy::tests::the_split_threshold_is_derived_from_the_dispatch_overhead`
+  pins the arithmetic and the direction on all three reference profiles;
+  `a_pass_above_the_derived_threshold_but_below_the_old_guess_stays_whole`
+  pins that a 500k-pixel tie the old guess split is now left whole.
+- **The profile is probed and calibrated at startup.** `probe::detect_cpu_cores`
+  is the scheduler's own answer; `probe::calibrate_cpu_fill` (behind the
+  planner's new opt-in `calibrate` feature, which only turns on
+  `vieww-paint/native`) runs a plain-fill micro-benchmark through the same
+  `NativeRenderer` the live CPU path uses — five timed runs after two
+  warmups, best sample — and keeps the guess on any implausible result, a
+  debug build, or a rasterizer error. Unit tests pin the plausible-band
+  rejection and the workload's shape; the windowed path wires it behind
+  `VIEWW_PLANNER_CALIBRATE=1` (off by default, read once per process).
+- **`MeasuredCostModel` is connected to the live loop.** The windowed path's
+  `record_shadow` feeds the Vulkan backend's own timestamp buckets
+  (`GpuPassTimes`: draw/layers/filters/shadows/blit) into
+  `ShadowPlanner::note_gpu_pass_kind` per GPU frame; an `Authoritative`
+  planner plans the frames it acts on through that history
+  (`plan_measured`/`MeasuredByKind`), while the logged predictions keep the
+  raw model's meaning — the shadow module's own "deliberately does not do"
+  rule, now honoured by construction. `measured_gpu_kinds_feed_the_plan_actuation_uses`
+  walks a planner to `Authoritative` and pins that a 50 ms `draw` sample
+  moves the acted-on plan's GPU prediction while the logged plan is
+  untouched; `zero_and_non_finite_samples_never_become_history` pins the
+  guard rails.
+- **A freshness ring guards actuation.** `TimingRing` holds the last 240
+  (predicted, actual) frames per executor; `plan_for_frame`'s new guard
+  refuses to act once the recent window's per-frame RMSE exceeds the gate's
+  own 5% bound. `the_ring_sees_a_drift_the_lifetime_gate_cannot` walks
+  warmup → actuation, a steady 1.2× device drift that leaves the lifetime
+  gate `ready` (asserted) while the ring vetoes within sixteen frames, then
+  recovery → the decision returns. The lifetime gate's answer only ever
+  improved; now the planner's does not.
+- **The shadow log carries its provenance.** Every JSON line gains
+  `"mode":"shadow"|"shadow-calibrated"|"authoritative"` — §2.3's own ask —
+  pinned in the fallback-reason test.
+- **Phong + point/spot lights render on the GPU lit pass.** `lit3d.wgsl`
+  grows the light record to five vec4s and a `phong()` loop that is the CPU
+  oracle's `shade()` term for term (the Blinn-Phong half-vector specular,
+  the `saturate(1 - (dist/range)^4)^2` falloff with the `powi`s unrolled,
+  the spot cone with outer/inner cosines precomputed at pack time);
+  `pack_light` is extracted and unit-tested with the Lambert-era records
+  pinned bit-for-bit (the parity suites' contract); the two spare vertex
+  floats carry `shininess`/`specular` through two new `R32_SFLOAT`
+  attributes. The old "point light falls back" hardware test became false
+  by construction and is replaced by two parity tests in `tests/gpu_lit.rs`
+  (point+spot, Phong specular). Offline, every embedded WGSL — the 3D
+  passes included, which had no offline check at all — now parses and
+  validates through naga in `vieww-shaders`'s library test, so a shader
+  typo fails every CI leg.
+- **Two named parity contracts.** `vieww-test-harness`'s new `parity`
+  module makes the framework review's recommendation enforceable:
+  `ParityContract::Deterministic` (zero tolerance, for goldens/export/
+  determinism) and `ParityContract::Performance` (interiors within the
+  documented per-channel `2`, disagreements only where the reference itself
+  has an edge — the hardware suites' rule, lifted into the harness).
+  `Frame::from_rgba` is the constructor a backend readback hands to either.
+  Tests pin: one unit of edge drift fails the reference contract, three
+  units of edge drift pass the performance contract, the same drift on
+  flat reference ground fails it, and mismatched sizes fail both.
+
+**What this deliberately did not do.** No backend can execute a `Mixed`
+(split) frame yet, so actuation stays whole-frame-CPU-only; the Metal and
+D3D12 `SceneRenderer` ports remain §1.2/§1.3's hardware-blocked items; and
+the parity tests for the new 3D reach need the CI runners' GPUs to attach
+evidence, exactly like the rest of those suites.
+
 ## 2026-10-19: Device Farm f91d07c, read and answered — two measurement bugs, a chooser that ignored the budget, tier-sized caches, Fixes 13/14/15 closed, and a CI workflow GitHub could not see
 
 **Context.** The first Device Farm run on main after the sixteen-fix batch
