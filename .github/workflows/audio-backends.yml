@@ -17,8 +17,10 @@ name: Audio backends
 #     captured back through a real driver, and every frame is checked
 #     (level, phase continuity, noise floor):
 #       - Linux: the kernel's snd-aloop card, every sample format and
-#         both directions of rate matching; snd-virmidi ports wired
-#         together for MIDI; PulseAudio's default sink into its monitor.
+#         both directions of rate matching, and snd-virmidi ports wired
+#         together for MIDI — in a VM on a stock kernel, since the
+#         runner's own has no sound drivers (ci/audio/vm-loopback.sh);
+#         PulseAudio's default sink into its monitor.
 #       - Windows: the VB-CABLE virtual cable, WASAPI shared and exclusive.
 #       - macOS: the BlackHole virtual device through Core Audio, and
 #         CoreMIDI virtual endpoints.
@@ -109,59 +111,45 @@ jobs:
         run: tail -n 50 "$RUNNER_TEMP"/*.log
 
   linux-alsa-loopback:
-    name: Linux (ALSA and MIDI through kernel loopbacks)
+    name: Linux (ALSA and MIDI through kernel loopbacks, in a VM)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
         run: |
           rustup toolchain install "$RUST_VERSION" --profile minimal
           rustup default "$RUST_VERSION"
-      # The runner's kernel ships the sound modules only in
-      # linux-modules-extra, which is not always published for the image's
-      # kernel; extract just kernel/sound from it (as Vim's CI does). When
-      # the package is missing this run says so and skips, never passes
-      # quietly: the test step is gated on the module having loaded.
-      - name: Load snd-aloop and snd-virmidi
-        id: modules
+      # The runner's Azure kernel is built without sound support: there is
+      # no snd-aloop to load, in any package (run 2026-10-23: kernel/sound
+      # absent from linux-modules-extra-*-azure). So the tests boot a stock
+      # Ubuntu kernel, which has it, in a virtme-ng VM over the runner's own
+      # filesystem — ci/audio/vm-loopback.sh, which runs the same by hand.
+      - name: Let the runner user use KVM
         run: |
-          KVER="$(uname -r)"
-          sudo apt-get update -q
-          sudo apt-get install -y -q alsa-utils
-          if ! sudo modprobe snd-aloop 2>/dev/null; then
-            if sudo apt-get install -d -y -q "linux-modules-extra-$KVER"; then
-              D="$(mktemp -d)"
-              sudo dpkg -x /var/cache/apt/archives/linux-modules-extra-"$KVER"*.deb "$D"
-              tar -cC "$D/lib/modules/$KVER" kernel/sound | sudo tar -xC "/lib/modules/$KVER"
-              sudo depmod
-            fi
-          fi
-          if sudo modprobe snd-aloop; then
-            sudo modprobe snd-virmidi midi_devs=2 || true
-            sleep 1
-            sudo chmod a+rw /dev/snd/*
-            echo "aloop=1" >> "$GITHUB_OUTPUT"
-            V="$(awk '/VirMIDI/ {print $1; exit}' /proc/asound/cards)"
-            if [ -n "$V" ] && aconnect "Virtual Raw MIDI $V-0:0" "Virtual Raw MIDI $V-1:0"; then
-              echo "midi_loop=hw:$V,0>hw:$V,1" >> "$GITHUB_OUTPUT"
-            fi
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
           else
-            echo "::warning::snd-aloop is unavailable for kernel $KVER on this image; ALSA loopback skipped this run"
+            echo "::warning::no /dev/kvm on this runner: the VM runs emulated (slower; a missed deadline is reported as one)"
           fi
-          cat /proc/asound/cards || true
-          aconnect -l || true
-      - name: ALSA loopback — every format, both directions of rate matching
-        if: steps.modules.outputs.aloop == '1'
-        env:
-          VIEWW_REQUIRE_LOOPBACK: "1"
-        run: cargo test --release -p vieww-audio --test device_loopback alsa -- --ignored --nocapture --test-threads=1
-      - name: MIDI round trip through two wired rawmidi ports
-        if: steps.modules.outputs.midi_loop != ''
-        env:
-          VIEWW_REQUIRE_LOOPBACK: "1"
-          VIEWW_MIDI_LOOP: ${{ steps.modules.outputs.midi_loop }}
-        run: cargo test --release -p vieww-audio --test device_loopback midi_port -- --ignored --nocapture
+      - name: Which stock kernel
+        id: kernel
+        run: |
+          sudo apt-get update -q
+          v="$(apt-cache search --names-only '^linux-modules-extra-[0-9.]+-[0-9]+-generic$' |
+               sed -E 's/^linux-modules-extra-([0-9.]+-[0-9]+)-generic.*/\1/' | sort -V | tail -1)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Cache the stock kernel packages
+        uses: actions/cache@v4
+        with:
+          path: ~/kpkg
+          key: ubuntu-stock-kernel-${{ steps.kernel.outputs.version }}
+      - name: Tools, kernel and its sound modules
+        run: ci/audio/vm-loopback.sh --setup
+      - name: ALSA (every format, rate matching both ways) and MIDI, in the VM
+        run: ci/audio/vm-loopback.sh
 
   windows-loopback:
     name: Windows (WASAPI shared and exclusive through VB-CABLE)
@@ -199,6 +187,7 @@ jobs:
         env:
           VIEWW_REQUIRE_LOOPBACK: "1"
           VIEWW_LOOP_BACKEND: wasapi-exclusive
+          VIEWW_AUDIO_DEBUG: "1"
         run: cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
       - name: MIDI ports list (WinMM)
         run: cargo test --release -p vieww-audio --lib midi_io -- --nocapture
