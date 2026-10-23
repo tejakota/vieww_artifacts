@@ -384,6 +384,7 @@ def summarize(rows, out, run):
                 ("gpu_overlap", "CPU/GPU overlap"),
                 ("raster_by_kind", "CPU raster by kind of work"),
                 ("partial_blit", "copies into the swapchain"),
+                ("shadow_blurs", "shadows blurred"),
                 ("cpu_time", "CPU time"),
                 ("thermal", "thermal"),
                 ("sustained", "over the run"),

@@ -88,7 +88,8 @@ declare -A failed=()
 # the rasterizers itself and keeps the faster. Its three cold starts double as
 # the calibration — the first forgets any earlier answer
 # (`debug.vieww.recalibrate=1`) and measures the CPU path, the second measures
-# the GPU path if the CPU was not comfortable, the third uses the answer — and
+# the GPU path (always, since 2026-10-23: a GPU twice as fast wins even against
+# a CPU path that settled), the third uses the answer — and
 # the suite then runs on whatever was chosen (`renderer_choice`). Diagnostic
 # for this round: it reports, it does not fail the job.
 #
@@ -263,7 +264,7 @@ for mode in cpu gpu auto cpuvk cpuhint gpuscale gpuserial cpubare cpunothreads c
             kv "${mode}_pss_over_time" "${series}MB (first to last: ${growth} MB)"
         fi
     fi
-    for key in frame_time frame_stages frame_stages_p95 gpu_passes gpu_overlap input_latency worst_frame startup_stages renderer_choice raster_by_core raster_by_kind partial_blit cpu_clocks cpu_time thermal sustained screen perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
+    for key in frame_time frame_stages frame_stages_p95 gpu_passes gpu_overlap input_latency worst_frame startup_stages renderer_choice raster_by_core raster_by_kind partial_blit shadow_blurs cpu_clocks cpu_time thermal sustained screen perf_hint pipeline_cache gpu_frames device gpu_scale cache_budgets quality_overlay; do
         value="$(grep -m1 -o "$key: .*" "$out/$mode-suite.log" | sed "s/^$key: //")"
         [ -n "$value" ] && kv "${mode}_${key}" "$value"
     done

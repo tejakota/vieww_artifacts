@@ -31,16 +31,25 @@
 //! So each launch measures the path it actually runs, and the result is kept
 //! in a small file:
 //!
-//! 1. **First launch:** the CPU path. If its median frame fits in
-//!    [`COMFORTABLE`] of the budget **and** no more than one frame in twenty
-//!    misses the budget (`crate::cadence::MAX_OVER_SHARE`), that is the
-//!    answer — the GPU is never loaded on this device, which is the lightest
-//!    outcome there is.
-//! 2. Otherwise **the next launch** runs the GPU path and measures it. The GPU
-//!    is kept if it is clearly faster ([`CLEARLY_FASTER`]), or if it is the
-//!    only one of the two inside the budget; otherwise a tie goes to the CPU,
-//!    which costs less memory.
+//! 1. **First launch:** the CPU path. It *settles* if its median frame fits
+//!    in [`COMFORTABLE`] of the budget **and** no more than one frame in
+//!    twenty misses the budget (`crate::cadence::MAX_OVER_SHARE`).
+//! 2. **The next launch** runs the GPU path and measures it — always, since
+//!    2026-10-23. The GPU is kept if it fits the budget in at most half the
+//!    CPU's time ([`MUCH_FASTER`]), whether or not the CPU settled. Against a
+//!    CPU that did not settle it is also kept if it is clearly faster
+//!    ([`CLEARLY_FASTER`]) or the only one of the two inside the budget.
+//!    Otherwise the CPU stays: it costs less memory.
 //! 3. Every launch after that uses the answer without measuring.
+//!
+//! Until 2026-10-23 a settled CPU was the answer and the GPU was never
+//! measured, to keep the GPU driver out of memory. Device Farm (42c6d92)
+//! showed what that cost on the Galaxy S26 Ultra: a CPU path at 5.5–7.7 ms
+//! using 6.2–8.5 ms of CPU a frame, beside a GPU path at 0.39 ms using
+//! 0.29 ms — twenty times less work for the battery — and the CPU path's
+//! pacing then failed the `auto` gate. The GPU path costs 120 MB more PSS
+//! there, which a phone of that tier can afford for that difference; a
+//! phone where the GPU is only a little faster keeps the lighter CPU path.
 //!
 //! The file is keyed by the app's version, an optional build id
 //! (`VIEWW_BUILD_ID` at compile time), the OS and kernel release and the
@@ -67,6 +76,12 @@ pub const COMFORTABLE: f64 = 0.60;
 /// path's: 15% faster, so noise between two launches does not load a GPU
 /// driver for nothing.
 pub const CLEARLY_FASTER: f64 = 0.85;
+
+/// The GPU is kept even against a CPU path that settled when its median frame
+/// fits the budget in at most this share of the CPU's: twice as fast. At that
+/// margin the GPU driver's memory buys a large cut in CPU work a frame, which
+/// is what a phone's battery pays for.
+pub const MUCH_FASTER: f64 = 0.5;
 
 /// Frames skipped before measuring: the first frames of a launch compile,
 /// warm caches and lay out for the first time.
@@ -99,8 +114,9 @@ pub(crate) enum Launch {
     Use(Rasterizer),
     /// Measure the CPU path (first launch).
     MeasureCpu,
-    /// Measure the GPU path, against the CPU median an earlier launch measured.
-    MeasureGpu { cpu: Duration },
+    /// Measure the GPU path, against the CPU median an earlier launch
+    /// measured — and whether that CPU path settled ([`after_cpu`]).
+    MeasureGpu { cpu: Duration, cpu_settled: bool },
 }
 
 impl Launch {
@@ -114,17 +130,10 @@ impl Launch {
     }
 }
 
-/// What a finished measurement decided.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Next {
-    /// Settled.
-    Final(Rasterizer),
-    /// The CPU is not comfortable; try the GPU next launch.
-    TryGpu,
-}
-
 /// After the CPU path's median and the share of its frames over the budget:
-/// keep it, or try the GPU next time.
+/// whether it *settles* — comfortable, and paced. The GPU is measured next
+/// launch either way (see the module docs); a settled CPU is kept unless the
+/// GPU is [`MUCH_FASTER`].
 ///
 /// **A median is not pacing.** The Galaxy S26 Ultra's first launch in Device
 /// Farm run 39538891917 measured a 3.52 ms CPU median — under 60% of its
@@ -136,13 +145,9 @@ pub(crate) enum Next {
 /// rest of the framework holds pacing to — no more than one in twenty over
 /// the budget (`crate::cadence::MAX_OVER_SHARE`, which drops the rate, and
 /// the device suite's `frames_inside_their_budget`).
-pub(crate) fn after_cpu(cpu: Duration, over_share: f64, budget: Duration) -> Next {
+pub(crate) fn after_cpu(cpu: Duration, over_share: f64, budget: Duration) -> bool {
     let comfortable = cpu.as_secs_f64() <= budget.as_secs_f64() * COMFORTABLE;
-    if comfortable && over_share <= crate::cadence::MAX_OVER_SHARE {
-        Next::Final(Rasterizer::Cpu)
-    } else {
-        Next::TryGpu
-    }
+    comfortable && over_share <= crate::cadence::MAX_OVER_SHARE
 }
 
 /// After the GPU path's median, given the CPU's, the frame budget and the
@@ -158,13 +163,24 @@ pub(crate) fn after_cpu(cpu: Duration, over_share: f64, budget: Duration) -> Nex
 /// misses a 120 Hz frame — and the `auto` pass then failed at 11.1 ms. The
 /// margin is there so launch-to-launch noise does not load a GPU driver for
 /// nothing; it is not a reason to prefer a path that misses the deadline.
+///
+/// Before either: a GPU that fits the budget in at most [`MUCH_FASTER`] of the
+/// CPU's time wins outright, even against a CPU path that settled. Against a
+/// settled CPU nothing less does — the lighter path stays.
 pub(crate) fn after_gpu(
     cpu: Duration,
+    cpu_settled: bool,
     gpu: Duration,
     gpu_share: f64,
     budget: Duration,
 ) -> Rasterizer {
     if gpu_share < 0.9 {
+        return Rasterizer::Cpu;
+    }
+    if gpu <= budget && gpu.as_secs_f64() <= cpu.as_secs_f64() * MUCH_FASTER {
+        return Rasterizer::Gpu;
+    }
+    if cpu_settled {
         return Rasterizer::Cpu;
     }
     let only_gpu_fits = gpu <= budget && cpu > budget;
@@ -281,23 +297,19 @@ impl Measuring {
         let over_share = self.samples.iter().filter(|work| **work > budget).count() as f64
             / self.samples.len() as f64;
         let record = match self.launch {
-            Launch::MeasureCpu => match after_cpu(median, over_share, budget) {
-                Next::Final(rasterizer) => Record {
-                    launch: Launch::Use(rasterizer),
-                    cpu: Some(median),
-                    gpu: None,
+            Launch::MeasureCpu => Record {
+                launch: Launch::MeasureGpu {
+                    cpu: median,
+                    cpu_settled: after_cpu(median, over_share, budget),
                 },
-                Next::TryGpu => Record {
-                    launch: Launch::MeasureGpu { cpu: median },
-                    cpu: Some(median),
-                    gpu: None,
-                },
+                cpu: Some(median),
+                gpu: None,
             },
-            Launch::MeasureGpu { cpu } => {
+            Launch::MeasureGpu { cpu, cpu_settled } => {
                 #[expect(clippy::cast_precision_loss, reason = "forty samples")]
                 let share = self.gpu_drawn as f64 / self.samples.len() as f64;
                 Record {
-                    launch: Launch::Use(after_gpu(cpu, median, share, budget)),
+                    launch: Launch::Use(after_gpu(cpu, cpu_settled, median, share, budget)),
                     cpu: Some(cpu),
                     gpu: Some(median),
                 }
@@ -332,9 +344,15 @@ fn render(key: &str, record: Record) -> String {
     let (state, cpu) = match record.launch {
         Launch::Use(rasterizer) => (rasterizer.name().to_string(), record.cpu),
         Launch::MeasureCpu => ("measure-cpu".to_string(), record.cpu),
-        Launch::MeasureGpu { cpu } => ("measure-gpu".to_string(), Some(cpu)),
+        Launch::MeasureGpu { cpu, .. } => ("measure-gpu".to_string(), Some(cpu)),
     };
     let mut text = format!("vieww-rasterizer 1\nkey={key}\nstate={state}\n");
+    if let Launch::MeasureGpu {
+        cpu_settled: true, ..
+    } = record.launch
+    {
+        text.push_str("cpu_settled=1\n");
+    }
     if let Some(cpu) = cpu {
         text.push_str(&format!("cpu_ms={:.3}\n", ms(cpu)));
     }
@@ -369,7 +387,10 @@ fn parse(text: &str, key: &str) -> Option<Record> {
     let launch = match *fields.get("state")? {
         "cpu" => Launch::Use(Rasterizer::Cpu),
         "gpu" => Launch::Use(Rasterizer::Gpu),
-        "measure-gpu" => Launch::MeasureGpu { cpu: cpu? },
+        "measure-gpu" => Launch::MeasureGpu {
+            cpu: cpu?,
+            cpu_settled: fields.get("cpu_settled") == Some(&"1"),
+        },
         _ => return None,
     };
     Some(Record { launch, cpu, gpu })
@@ -412,7 +433,7 @@ pub(crate) fn announce_launch(calibration: &Calibration, launch: Launch) {
             }
         }
         Launch::MeasureCpu => "cpu, measuring (first launch with this build here)".to_string(),
-        Launch::MeasureGpu { cpu } => format!(
+        Launch::MeasureGpu { cpu, .. } => format!(
             "gpu, measuring (the cpu path measured {:.2} ms last launch)",
             ms(cpu)
         ),
@@ -493,10 +514,8 @@ mod tests {
             ),
         ];
         for (phone, cpu, gpu, budget, expected) in phones {
-            let chosen = match after_cpu(ms(cpu), 0.0, ms(budget)) {
-                Next::Final(rasterizer) => rasterizer,
-                Next::TryGpu => after_gpu(ms(cpu), ms(gpu), 1.0, ms(budget)),
-            };
+            let settled = after_cpu(ms(cpu), 0.0, ms(budget));
+            let chosen = after_gpu(ms(cpu), settled, ms(gpu), 1.0, ms(budget));
             assert_eq!(chosen, expected, "{phone}");
         }
     }
@@ -506,64 +525,115 @@ mod tests {
     #[test]
     fn a_comfortable_median_with_frames_over_budget_still_tries_the_gpu() {
         // 3.52 ms against 8.33: comfortable by the median alone.
-        assert_eq!(
-            after_cpu(ms(3.52), 0.0, ms(HZ120)),
-            Next::Final(Rasterizer::Cpu)
-        );
+        assert!(after_cpu(ms(3.52), 0.0, ms(HZ120)));
         // One frame in twenty over the budget is the allowance...
-        assert_eq!(
-            after_cpu(ms(3.52), 0.05, ms(HZ120)),
-            Next::Final(Rasterizer::Cpu)
-        );
+        assert!(after_cpu(ms(3.52), 0.05, ms(HZ120)));
         // ...and more is not: the S26's suite had 17 of 240 (7%) over.
-        assert_eq!(after_cpu(ms(3.52), 0.07, ms(HZ120)), Next::TryGpu);
+        assert!(!after_cpu(ms(3.52), 0.07, ms(HZ120)));
         // Measured next launch, the GPU's 1.5 ms is clearly faster.
         assert_eq!(
-            after_gpu(ms(3.52), ms(1.5), 1.0, ms(HZ120)),
+            after_gpu(ms(3.52), false, ms(1.5), 1.0, ms(HZ120)),
             Rasterizer::Gpu
         );
     }
 
     #[test]
     fn a_gpu_that_cannot_draw_most_frames_is_not_chosen() {
-        assert_eq!(after_gpu(ms(20.0), ms(5.0), 0.5, ms(4.0)), Rasterizer::Cpu);
+        assert_eq!(
+            after_gpu(ms(20.0), false, ms(5.0), 0.5, ms(4.0)),
+            Rasterizer::Cpu
+        );
         // Not even when it is the only one inside the budget.
-        assert_eq!(after_gpu(ms(20.0), ms(5.0), 0.5, ms(HZ60)), Rasterizer::Cpu);
+        assert_eq!(
+            after_gpu(ms(20.0), false, ms(5.0), 0.5, ms(HZ60)),
+            Rasterizer::Cpu
+        );
     }
 
     #[test]
     fn a_near_tie_goes_to_the_lighter_cpu_path() {
         // Both miss the budget: the margin decides, and a tie stays on the CPU.
         assert_eq!(
-            after_gpu(ms(20.0), ms(18.0), 1.0, ms(HZ60)),
+            after_gpu(ms(20.0), false, ms(18.0), 1.0, ms(HZ60)),
             Rasterizer::Cpu
         );
         // Both fit: same.
-        assert_eq!(after_gpu(ms(10.0), ms(9.0), 1.0, ms(HZ60)), Rasterizer::Cpu);
+        assert_eq!(
+            after_gpu(ms(10.0), false, ms(9.0), 1.0, ms(HZ60)),
+            Rasterizer::Cpu
+        );
     }
 
     #[test]
     fn a_near_tie_goes_to_the_gpu_when_only_the_gpu_fits_the_budget() {
         assert_eq!(
-            after_gpu(ms(8.77), ms(8.19), 1.0, ms(HZ120)),
+            after_gpu(ms(8.77), false, ms(8.19), 1.0, ms(HZ120)),
             Rasterizer::Gpu
         );
         // And never the other way round: a GPU that misses is not preferred
         // to a CPU that fits.
-        assert_eq!(after_gpu(ms(8.0), ms(8.5), 1.0, ms(HZ120)), Rasterizer::Cpu);
+        assert_eq!(
+            after_gpu(ms(8.0), false, ms(8.5), 1.0, ms(HZ120)),
+            Rasterizer::Cpu
+        );
+    }
+
+    /// Device Farm 42c6d92 (2026-10-23): the Galaxy S26 Ultra's CPU path
+    /// settled at 3.94 ms against 8.33, so the GPU was never measured — and
+    /// it drew the same frames in 0.39 ms on a twentieth of the CPU time.
+    /// Measured now, a GPU twice as fast wins even against a settled CPU;
+    /// one only a little faster does not.
+    #[test]
+    fn a_much_faster_gpu_wins_even_against_a_settled_cpu() {
+        assert!(after_cpu(ms(3.94), 0.0, ms(HZ120)), "the CPU settles");
+        assert_eq!(
+            after_gpu(ms(3.94), true, ms(0.39), 1.0, ms(HZ120)),
+            Rasterizer::Gpu
+        );
+        // 30% faster is clearly faster, but not enough to load the driver
+        // when the CPU path settled.
+        assert_eq!(
+            after_gpu(ms(4.0), true, ms(2.8), 1.0, ms(HZ120)),
+            Rasterizer::Cpu
+        );
+        // And a much faster GPU that misses the budget does not count.
+        assert_eq!(
+            after_gpu(ms(40.0), true, ms(18.0), 1.0, ms(HZ60)),
+            Rasterizer::Cpu
+        );
+        // The file carries whether the CPU settled.
+        let record = Record {
+            launch: Launch::MeasureGpu {
+                cpu: ms(3.94),
+                cpu_settled: true,
+            },
+            cpu: Some(ms(3.94)),
+            gpu: None,
+        };
+        let back = parse(&render("k", record), "k").expect("parses");
+        assert!(matches!(
+            back.launch,
+            Launch::MeasureGpu {
+                cpu_settled: true,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn the_file_round_trips_and_a_foreign_key_is_a_first_launch() {
         let record = Record {
-            launch: Launch::MeasureGpu { cpu: ms(13.9) },
+            launch: Launch::MeasureGpu {
+                cpu: ms(13.9),
+                cpu_settled: false,
+            },
             cpu: Some(ms(13.9)),
             gpu: None,
         };
         let text = render("k1", record);
         let back = parse(&text, "k1").expect("parses");
         assert!(
-            matches!(back.launch, Launch::MeasureGpu { cpu } if (cpu.as_secs_f64() - 0.0139).abs() < 1e-6)
+            matches!(back.launch, Launch::MeasureGpu { cpu, cpu_settled: false } if (cpu.as_secs_f64() - 0.0139).abs() < 1e-6)
         );
         assert_eq!(parse(&text, "k2"), None);
         assert_eq!(parse("garbage", "k1"), None);

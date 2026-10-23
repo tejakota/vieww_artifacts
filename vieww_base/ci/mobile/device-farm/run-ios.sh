@@ -89,7 +89,8 @@ fi
 if [ "$legacy" = 1 ]; then
     status=0
     # `auto` (`VIEWW_GPU=auto`, `App::auto_rasterizer`) gets one launch here,
-    # so it measures the CPU path and settles only if that is comfortable.
+    # so it measures the CPU path and runs it; the GPU is measured only on a
+    # second launch, which this legacy loop does not make.
     for mode in cpu gpu auto; do
         gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
         log="$out/$mode-suite.log"
@@ -142,8 +143,9 @@ status=0
 # `auto` is `App::auto_rasterizer` (`VIEWW_GPU=auto`): the app measures the
 # rasterizers itself. Its three start-ups double as the calibration — the
 # first forgets any earlier answer (`VIEWW_RENDERER_RECALIBRATE=1`) and
-# measures the CPU path, the second the GPU path if the CPU was not
-# comfortable — and each runs six seconds past its first frame so the
+# measures the CPU path, the second the GPU path (always, since 2026-10-23:
+# a GPU twice as fast wins even against a settled CPU path) — and each runs
+# six seconds past its first frame so the
 # measurement finishes. Diagnostic for this round: it does not fail the job.
 for mode in cpu gpu auto; do
     gpu=0; [ "$mode" = gpu ] && gpu=1; [ "$mode" = auto ] && gpu=auto
