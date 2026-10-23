@@ -1,0 +1,62 @@
+{
+  "verdict": "keep-opt-in",
+  "promote_tiers": [],
+  "tiers": {
+    "high": {
+      "verdict": "no-change",
+      "why": "every device of this tier passes at full resolution"
+    },
+    "low": {
+      "verdict": "no-change",
+      "why": "every device of this tier passes at full resolution"
+    },
+    "medium": {
+      "verdict": "no-change",
+      "why": "every device of this tier passes at full resolution"
+    }
+  },
+  "devices": [
+    {
+      "role": "unneeded",
+      "device": "LMQ72016369b1d",
+      "tier": "low",
+      "budget_ms": 16.666668,
+      "cpu_median_ms": 35.263229,
+      "gpu_median_ms": 10.804791,
+      "gpuscale_median_ms": 9.102969,
+      "scale_engaged": 0.5,
+      "best_full_res_ms": 10.804791,
+      "why": "passes at full resolution (10.8 ms <= 16.7 ms)"
+    },
+    {
+      "role": "unneeded",
+      "device": "R5CT41WN9RD",
+      "tier": "medium",
+      "budget_ms": 8.333333,
+      "cpu_median_ms": 9.886563,
+      "gpu_median_ms": 1.163803,
+      "gpuscale_median_ms": 1.683438,
+      "scale_engaged": 0.75,
+      "best_full_res_ms": 1.163803,
+      "why": "passes at full resolution (1.2 ms <= 8.3 ms)"
+    },
+    {
+      "role": "unneeded",
+      "device": "R3GL10AJ4BM",
+      "tier": "high",
+      "budget_ms": 8.333333,
+      "cpu_median_ms": 5.667344,
+      "gpu_median_ms": 0.329324,
+      "gpuscale_median_ms": 0.407134,
+      "scale_engaged": null,
+      "best_full_res_ms": 0.329324,
+      "why": "passes at full resolution (0.3 ms <= 8.3 ms)"
+    }
+  ],
+  "rule": {
+    "candidate": "best of cpu/gpu median at full resolution misses the pass's own budget",
+    "test": "gpuscale median <= budget with the observed scale below 1.0",
+    "tier": "promoted only when every device of the tier in this run was a candidate and passed",
+    "source": "quality.rs: the scale is opt-in until the farm run earns the default"
+  }
+}

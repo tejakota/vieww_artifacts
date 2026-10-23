@@ -1,0 +1,21 @@
+Starting: Intent { cmp=dev.vieww.demo/android.app.NativeActivity }
+Status: ok
+Activity: dev.vieww.demo/android.app.NativeActivity
+ThisTime: 653
+TotalTime: 653
+WaitTime: 707
+Complete
+Starting: Intent { cmp=dev.vieww.demo/android.app.NativeActivity }
+Status: ok
+Activity: dev.vieww.demo/android.app.NativeActivity
+ThisTime: 632
+TotalTime: 632
+WaitTime: 692
+Complete
+Starting: Intent { cmp=dev.vieww.demo/android.app.NativeActivity }
+Status: ok
+Activity: dev.vieww.demo/android.app.NativeActivity
+ThisTime: 609
+TotalTime: 609
+WaitTime: 653
+Complete

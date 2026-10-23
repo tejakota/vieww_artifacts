@@ -1,0 +1,141 @@
+--------- beginning of main
+10-23 06:08:59.374 25514 25514 E dev.vieww.demo: Not starting debugger since process cannot load the jdwp agent.
+10-23 06:08:59.376 25514 25514 E USNET   : USNET: appName: dev.vieww.demo
+10-23 06:08:59.379 25514 25514 D ActivityThread: setConscryptValidator
+10-23 06:08:59.380 25514 25514 D ActivityThread: setConscryptValidator - put
+--------- beginning of system
+10-23 06:08:59.396 25514 25514 D ActivityThread: handleBindApplication()++ app=dev.vieww.demo
+10-23 06:08:59.397 25514 25514 D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10301; state: ENABLED
+10-23 06:08:59.412 25514 25514 V GraphicsEnvironment: ANGLE Developer option for 'dev.vieww.demo' set to: 'default'
+10-23 06:08:59.412 25514 25514 V GraphicsEnvironment: Updatable production driver is not supported on the device.
+10-23 06:08:59.414 25514 25514 D LoadedApk: LoadedApk::makeApplication() appContext.mOpPackageName=dev.vieww.demo appContext.mBasePackageName=dev.vieww.demo
+10-23 06:08:59.414 25514 25514 D NetworkSecurityConfig: No Network Security Config specified, using platform default
+10-23 06:08:59.416 25514 25514 D NetworkSecurityConfig: No Network Security Config specified, using platform default
+10-23 06:08:59.416 25514 25514 D ActivityThread: handleBindApplication() --
+10-23 06:08:59.421 25514 25537 D OpenGLRenderer: RenderThread::requireGlContext()
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: QUALCOMM build                   : cac6e6f805, I5187d04b75
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: Build Date                       : 11/22/21
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: OpenGL ES Shader Compiler Version: EV031.35.01.10
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: Local Branch                     : 
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: Remote Branch                    : 
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: Remote Branch                    : 
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: Reconstruct Branch               : 
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: Build Config                     : S P 10.0.7 AArch64
+10-23 06:08:59.421 25514 25537 I AdrenoGLES-0: Driver Path                      : /vendor/lib64/egl/libGLESv2_adreno.so
+10-23 06:08:59.427 25514 25537 I AdrenoGLES-0: PFP: 0x016dc094, ME: 0x00000000
+10-23 06:08:59.433 25514 25537 D OpenGLRenderer: RenderThread::setGrContext()
+10-23 06:08:59.435 25514 25514 I DecorView: [INFO] isPopOver=false, config=true
+10-23 06:08:59.435 25514 25514 I DecorView: updateCaptionType >> DecorView@b927783[], isFloating=false, isApplication=true, hasWindowControllerCallback=true, hasWindowDecorCaption=false
+10-23 06:08:59.435 25514 25514 D DecorView: setCaptionType = 0, this = DecorView@b927783[]
+10-23 06:08:59.436 25514 25514 I DecorView: getCurrentDensityDpi: from real metrics. densityDpi=450 msg=resources_loaded
+10-23 06:08:59.445 25514 25514 I android-activity: Creating: Activity = 0x1636, saved state size = 0
+10-23 06:08:59.447 25514 25542 I vieww   : android::demo: vieww starting
+10-23 06:08:59.692 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: setView = com.android.internal.policy.DecorView@b927783 TM=true
+10-23 06:08:59.704 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: Relayout returned: old=(0,0,1080,2400) new=(0,0,1080,2400) req=(1080,2400)0 dur=8 res=0x7 s={true -5476376664590510928} ch=true fn=-1
+10-23 06:08:59.705 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: ViewRootImpl >> surfaceCreated
+10-23 06:08:59.705 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: ViewRootImpl >> surfaceChanged W=1080, H=2400)
+10-23 06:08:59.706 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: [DP] dp(1) 1 android.view.ViewRootImpl.reportNextDraw:11410 android.view.ViewRootImpl.performTraversals:4185 android.view.ViewRootImpl.doTraversal:2911 
+10-23 06:08:59.706 25514 25514 D ViewRootImpl@b7b08df[NativeActivity]: Creating frameDrawingCallback nextDrawUseBlastSync=false reportNextDraw=true hasBlurUpdates=false
+10-23 06:08:59.708 25514 25514 D InsetsSourceConsumer: ensureControlAlpha: for ITYPE_NAVIGATION_BAR on dev.vieww.demo/android.app.NativeActivity
+10-23 06:08:59.709 25514 25514 D InsetsSourceConsumer: ensureControlAlpha: for ITYPE_STATUS_BAR on dev.vieww.demo/android.app.NativeActivity
+10-23 06:08:59.710 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: [DP] pdf(0) 1 android.view.ViewRootImpl$ViewRootHandler.handleMessageImpl:6605 android.view.ViewRootImpl$ViewRootHandler.handleMessage:6395 android.os.Handler.dispatchMessage:106 
+10-23 06:08:59.710 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: [DP] rdf()
+10-23 06:08:59.710 25514 25514 D ViewRootImpl@b7b08df[NativeActivity]: reportDrawFinished (fn: -1) 
+10-23 06:08:59.713 25514 25542 D vulkan  : searching for layers in '/data/app/~~qs_N6ej4VFwj08hTcczG6A==/dev.vieww.demo-OYOmNuH859JASfDFgJoyIQ==/lib/arm64'
+10-23 06:08:59.713 25514 25542 D vulkan  : searching for layers in '/data/app/~~qs_N6ej4VFwj08hTcczG6A==/dev.vieww.demo-OYOmNuH859JASfDFgJoyIQ==/base.apk!/lib/arm64-v8a'
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: ===== BEGIN DUMP OF OVERRIDDEN SETTINGS =====
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: ===== END DUMP OF OVERRIDDEN SETTINGS =====
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: QUALCOMM build          : cac6e6f805, I5187d04b75
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Build Date              : 11/22/21
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Shader Compiler Version : EV031.35.01.10
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Local Branch            : 
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Remote Branch           : 
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Remote Branch           : 
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Reconstruct Branch      : 
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Build Config            : S P 10.0.7 AArch64
+10-23 06:08:59.716 25514 25542 I AdrenoVK-0: Driver Path             : /vendor/lib64/hw/vulkan.adreno.so
+10-23 06:08:59.721 25514 25514 I ViewRootImpl@b7b08df[NativeActivity]: MSG_WINDOW_FOCUS_CHANGED 1 1
+10-23 06:08:59.723 25514 25514 D InputMethodManager: startInputInner - Id : 0
+10-23 06:08:59.723 25514 25514 I InputMethodManager: startInputInner - mService.startInputOrWindowGainedFocus
+10-23 06:08:59.724 25514 25542 I BufferQueueProducer: [ViewRootImpl@b7b08df[NativeActivity]#0(BLAST Consumer)0](id:63aa00000000,api:1,p:25514,c:25514) FrameBooster: VULKAN surface was catched
+10-23 06:08:59.724 25514 25542 D dev.vieww.demo: FrameBooster: InterpolationGui: UID 10301 detected as using Vulkan
+10-23 06:08:59.742 25514 25514 D InputMethodManager: startInputInner - Id : 0
+10-23 06:08:59.744 25514 25542 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu (calibrated earlier: cpu 10.86 ms, gpu 1.03 ms)
+10-23 06:08:59.750 25514 25542 I vieww   : vieww_platform_winit::insets: display refresh: 120.0Hz from Display.getRefreshRate()
+10-23 06:08:59.750 25514 25542 I vieww   : vieww_platform_winit::app: vieww: window#primary reports 120.0Hz; frame budget follows it, falling to 60 Hz while it cannot be held
+10-23 06:08:59.750 25514 25542 I vieww   : vieww_platform_winit::insets: window insets: bars [0, 98, 0, 135] ime [0, 0, 0, 0] physical at 2.8125x -> SystemInsets { safe_area: EdgeInsets { left: 0.0, top: 34.844444, right: 0.0, bottom: 48.0 }, keyboard: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } }
+10-23 06:08:59.760 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=0
+10-23 06:08:59.805 25514 25542 I BufferQueueProducer: [ViewRootImpl@b7b08df[NativeActivity]#0(BLAST Consumer)0](id:63aa00000000,api:1,p:25514,c:25514) queueBuffer: queued for the first time.
+10-23 06:08:59.807 25514 25542 I vieww   : vieww_platform_winit::a11y_android: a11y: host is the activity's content view
+10-23 06:08:59.807 25514 25542 I vieww   : vieww_platform_winit::a11y_android: a11y: the host sits at (0, 98) inside the window, so bounds are corrected by that much
+10-23 06:08:59.809 25514 25542 I vieww   : vieww_platform_winit::a11y_android: a11y: injected an AccessKit delegate into the activity's view
+10-23 06:08:59.823 25514 25542 I vieww   : android::device_tests: __VIEWW_TAPS__ button=184,566 field=244,835 menu=268,2130
+10-23 06:08:59.823 25514 25542 I vieww   : android::device_tests: __VIEWW_TAPS_PT__ scale=2.8125 button=65,201 field=87,297
+10-23 06:08:59.824 25514 25542 I BufferQueueProducer: [ViewRootImpl@b7b08df[NativeActivity]#0(BLAST Consumer)0](id:63aa00000000,api:1,p:25514,c:25514) FrameBooster: VULKAN surface was catched
+10-23 06:08:59.824 25514 25542 D dev.vieww.demo: FrameBooster: InterpolationGui: UID 10301 detected as using Vulkan
+10-23 06:08:59.868 25514 25542 I BufferQueueProducer: [ViewRootImpl@b7b08df[NativeActivity]#0(BLAST Consumer)0](id:63aa00000000,api:1,p:25514,c:25514) queueBuffer: queued for the first time.
+10-23 06:09:00.192 25514 25542 I vieww   : vieww_platform_winit::startup: vieww: pipeline cache started from 38141 bytes; saved 38141 bytes after the first GPU frame
+10-23 06:09:00.258 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=60
+10-23 06:09:00.331 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=120
+10-23 06:09:00.410 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=180
+10-23 06:09:00.487 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=240
+10-23 06:09:00.562 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=300
+10-23 06:09:00.639 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=360
+10-23 06:09:00.717 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=420
+10-23 06:09:00.799 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=480
+10-23 06:09:00.871 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=540
+10-23 06:09:00.940 25514 25542 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=600
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ begin
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   crash_reports_recovered_from_the_last_run: 0
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   crash_reports_have_somewhere_to_go: wrote and read one back in /data/user/0/dev.vieww.demo/files/crashes
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_platform_registered_a_clipboard: 4 service(s) registered
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   dlopen_from_a_writable_path: PERMITTED (the linker read the file and rejected its contents); dlopen said: dlopen failed: "/data/data/dev.vieww.demo/files/libvieww_probe.so" is too small to be an ELF executable: only found 28 bytes
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   dlopen_a_real_guest_library: not staged — found nothing at /storage/emulated/0/Android/data/dev.vieww.demo/files/libreload_guest.so or /data/local/tmp/libreload_guest.so. Run ci/mobile/reload-guest-android.sh to build and stage one; this is not a failure, only an unanswered question.
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   rasterizer: measured on this phone (debug.vieww.gpu=auto)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   view_metrics_reached_the_tree: 384x853.3333 logical
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_display_density_is_plausible: 2.8125x
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_safe_area_fits_inside_the_surface: l0 t34.844444 r0 b48
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   safe_area: l0 t34.844444 r0 b48 on a 384x853.3333 surface at 2.8125x
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } on a 853.3333-tall surface
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } at the moment of the report
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_platform_clipboard_round_trips: wrote and read back 33 bytes; restored what was there
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_semantic_click_activates_the_button: handled=true, taps 0 -> 1
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_tap_reached_a_handler: 1 tap
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   frames_were_presented: 600 frames
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_typical_frame_is_inside_its_budget: median 1.106094ms against a budget of 8.333333ms
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   frames_inside_their_budget: 0 of 240 frames over a budget of 8.333333ms (at most 1 in 20)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   no_frame_stalled: worst 2.373385ms against a stall line of 33.333332ms (max of 4x budget, 3x median), 0 of 240 over budget
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_time: median 1.106094ms, worst 2.373385ms, budget 8.333333ms (240 samples)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   startup_stages: before run 357 ms | app setup 0.3 | event loop started 0.0 | resumed 22.4 | window created 0.0 | present ready 39.5 | accessibility and show 0.0 | tree built 5.0 | window ready 0.8 | until first draw 0.0 | app before-frame hooks 9.6 | first build and layout 2.6 | first raster and present 44.3 = 481.6 ms from process start
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   renderer_choice: gpu (calibrated earlier: cpu 10.86 ms, gpu 1.03 ms)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_stages: medians ms: scale 0.02 plan 0.16 cpu 0.00 gpu_upload 0.41 gpu_record 0.07 gpu_submit 0.05 gpu_wait 0.01 gpu_readback 0.00 acquire 0.02 present 0.04
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_stages_p95: p95 ms: scale 0.02 plan 0.24 cpu 0.00 gpu_upload 0.89 gpu_record 0.12 gpu_submit 0.25 gpu_wait 0.34 gpu_readback 0.00 acquire 0.03 present 0.22
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   input_latency: no input reached this window
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   gpu_overlap: on: the app builds the next frame while the GPU draws this one
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   partial_blit: trusted: 588 partial and 12 full copies, 4.6% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   gpu_passes: medians ms: draw 0.12 layers 0.00 filters 0.00 shadows 0.00 blit 0.02 total 0.14; p95 ms: draw 0.25 layers 0.00 filters 0.00 shadows 0.00 blit 0.06 total 0.30
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   worst_frame: work 2.37 ms, outside the renderer 0.32 ms; stages ms: scale 0.01 plan 0.19 cpu 0.00 gpu_upload 1.37 gpu_record 0.15 gpu_submit 0.25 gpu_wait 0.01 gpu_readback 0.00 acquire 0.02 present 0.05
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cpu_clocks: cpu0 1.52/1.80 GHz | cpu1 1.52/1.80 GHz | cpu2 1.52/1.80 GHz | cpu3 1.52/1.80 GHz | cpu4 2.40/2.40 GHz | cpu5 2.40/2.40 GHz | cpu6 2.40/2.40 GHz | cpu7 0.81/2.40 GHz
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   pipeline_cache: started from 38141 bytes; saved 38141 bytes after the first GPU frame
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   device: tier medium, 7.1 GB, 8 cores, SM7325 (lahaina) (API 31)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cache_budgets: blur off (tier medium), fill off (tier medium), raster threads serial (tier medium)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   quality_overlay: tier medium · median 1.194753ms / p95 1.808698ms / worst 2.373385ms vs budget 8.333333ms · 0/240 over
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   damage_tracking_costs_a_fraction_of_a_full_repaint: 0.023 full repaints per frame over 600 frames, against a 2592000px surface
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   full_repaints: 3 of 600 frames cost a whole surface, 0 of those after the loop slept
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_full_repaint_counter_saw_the_first_frame: 3 full repaint(s) over 600 frames against a 2592000px surface
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_report: 600 frames in 1.13s — 528.5fps (median 1.15ms, worst 6.57ms over 240 continuous); work median 1.11ms, worst 2.37ms; 13 over a 8.33ms budget; rasterised 13.96 full repaints (3 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.02 plan 0.16 cpu 0.00 gpu[upload 0.41 record 0.07 submit 0.05 wait 0.01 readback 0.00] acquire 0.02 present 0.04 ms
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   gpu_frames: 600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cpu_time: process CPU 1.08 ms per frame over the last 240 frames, every thread (86% of one core)
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   thermal: status none -> none (worst none); headroom 0.53 -> 0.53 (highest 0.53; 1.0 is severe throttling); hottest zone 46.3 -> 42.8 °C (peak 46.3) over 1 s
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ --   shadow_blurs: 0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ end 17 checks, 0 failed
+10-23 06:09:00.943 25514 25542 I vieww   : android::device_tests: __VIEWW_SUITE__ result PASS
+10-23 06:09:04.235 25514 25542 I IMM_LC  : showSoftInput(View,I)
+10-23 06:09:04.235 25514 25542 I IMM_LC  : ssi() - flag : 1 view : dev.vieww.demo reason = SHOW_SOFT_INPUT
+10-23 06:09:04.235 25514 25542 I IMM_LC  : ssi() view is not EditText
+10-23 06:09:04.297 25514 25514 D InsetsController: show(ime(), fromIme=true)
+10-23 06:09:04.298 25514 25514 D InsetsSourceConsumer: setRequestedVisible: visible=true, type=19, host=dev.vieww.demo/android.app.NativeActivity, from=android.view.InsetsSourceConsumer.show:246 android.view.InsetsController.showDirectly:1489 android.view.InsetsController.controlAnimationUnchecked:1137 android.view.InsetsController.applyAnimation:1456 android.view.InsetsController.applyAnimation:1437 android.view.InsetsController.show:976 android.view.ViewRootImpl$ViewRootHandler.handleMessageImpl:6470 android.view.ViewRootImpl$ViewRootHandler.handleMessage:6395 android.os.Handler.dispatchMessage:106 android.os.Looper.loopOnce:226 
+10-23 06:09:04.309 25514 25542 I vieww   : vieww_platform_winit::insets: window insets: bars [0, 98, 0, 135] ime [0, 0, 0, 1008] physical at 2.8125x -> SystemInsets { safe_area: EdgeInsets { left: 0.0, top: 34.844444, right: 0.0, bottom: 48.0 }, keyboard: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 358.4 } }
+10-23 06:09:04.971 25514 25532 I dev.vieww.demo: Explicit concurrent copying GC freed 11474(433KB) AllocSpace objects, 0(0B) LOS objects, 74% free, 2076KB/8220KB, paused 27us,17us total 4.973ms

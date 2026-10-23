@@ -1,0 +1,493 @@
+[DEVICEFARM] Setting up your device. This usually takes 2-3 minutes.
+[DEVICEFARM] ########### Start executing testspec ###########
+ 
+ 
+[DEVICEFARM] ########### Entering phase install ###########
+ 
+[DeviceFarm] adb version
+Android Debug Bridge version 1.0.39
+Version 0.0.1-4500957
+Installed as /tmp/devicefarm-workspace/execution-847l9jqw/shared-c7xlb9_5/android-home-vtxcqqls/platform-tools/adb_binary
+ 
+[DEVICEFARM] ########### Entering phase pre_test ###########
+ 
+[DeviceFarm] adb devices -l
+List of devices attached
+R3GL10AJ4BM            device usb:1-1.2 product:m3quew model:SM_S948U1 device:m3q transport_id:2
+
+ 
+[DEVICEFARM] ########### Entering phase test ###########
+ 
+[DeviceFarm] bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-android.sh
+::warning::run-android: SM-S948U1 cpu passed — its known-failures.txt entry is stale
+device_name=R3GL10AJ4BM
+manufacturer=samsung
+model=SM-S948U1
+android=16
+sdk=36
+soc=SM8850 (canoe)
+abi=arm64-v8a
+cpu_cores=8
+mem_total_kb=11389632
+gpu=Qualcomm, Adreno (TM) 840, OpenGL ES 3.2 V@0842.19.3 (GIT@bacff47b1e, I498f01ff61, 1763652273) (Date:11/20/25)
+display=1080x2340
+density=450
+apk_bytes=2830752
+component=dev.vieww.demo/android.app.NativeActivity
+cpu_cold_start_ms=171 156 163 
+cpu_suite=PASS
+cpu_frame_time=median 5.667344ms, worst 13.133229ms, budget 8.333333ms (240 samples)
+cpu_frame_stages=medians ms: scale 0.01 plan 0.00 cpu 5.28 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.03 present 0.16
+cpu_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 6.51 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.05 present 0.31
+cpu_input_latency=input to present ms: median 9.8 p95 12.5 p99 13.9 worst 13.9 over 16 inputs in 9 frames; 0 unanswered within 1 s
+cpu_worst_frame=work 13.13 ms, outside the renderer 0.49 ms, on cpu0; stages ms: scale 0.05 plan 0.00 cpu 12.32 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.07 present 0.20
+cpu_startup_stages=before run 135 ms | app setup 0.0 | event loop started 0.0 | resumed 8.1 | window created 0.0 | present ready 0.5 | accessibility and show 0.0 | tree built 2.6 | window ready 0.3 | until first draw 0.0 | app before-frame hooks 64.8 | first build and layout 1.1 | first raster and present 17.1 = 229.7 ms from process start
+cpu_raster_by_core=cpu4 63 frames 5.27 ms | cpu1 43 frames 5.36 ms | cpu2 33 frames 5.24 ms | cpu5 31 frames 5.27 ms | cpu0 27 frames 5.40 ms | cpu7 26 frames 3.82 ms | cpu3 10 frames 5.39 ms | cpu6 7 frames 3.74 ms
+cpu_raster_by_kind=medians ms: text 0.00 shadows 0.00 paths 0.11 rects 4.75 images 0.00 layers 0.00 composite 0.00 total 4.86; p95 ms: text 0.00 shadows 0.00 paths 0.15 rects 5.52 images 0.00 layers 0.00 composite 0.00 total 5.67
+cpu_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+cpu_cpu_clocks=cpu0 2.50/3.63 GHz | cpu1 2.50/3.63 GHz | cpu2 2.50/3.63 GHz | cpu3 2.50/3.63 GHz | cpu4 2.50/3.63 GHz | cpu5 2.50/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+cpu_cpu_time=process CPU 6.42 ms per frame over the last 240 frames, every thread (69% of one core)
+cpu_thermal=status none -> none (worst none); headroom 0.40 -> 0.41 (highest 0.41; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 6 s
+cpu_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpu_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+cpu_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+cpu_quality_overlay=tier high · median 5.72784ms / p95 7.153803ms / worst 13.133229ms vs budget 8.333333ms · 5/240 over
+cpu_failed_checks=
+cpu_total_pss_kb=76139
+cpu_total_rss_kb=205632
+gpu_cold_start_ms=161 165 166 
+gpu_suite=PASS
+gpu_frame_time=median 329.324µs, worst 2.569895ms, budget 8.333333ms (240 samples)
+gpu_frame_stages=medians ms: scale 0.01 plan 0.08 cpu 0.00 gpu_upload 0.12 gpu_record 0.01 gpu_submit 0.02 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 0.01
+gpu_frame_stages_p95=p95 ms: scale 0.01 plan 0.10 cpu 0.00 gpu_upload 0.21 gpu_record 0.02 gpu_submit 0.03 gpu_wait 0.20 gpu_readback 0.00 acquire 0.00 present 0.01
+gpu_gpu_passes=medians ms: draw 0.02 layers 0.00 filters 0.00 shadows 0.00 blit 0.01 total 0.04; p95 ms: draw 0.11 layers 0.00 filters 0.00 shadows 0.00 blit 0.03 total 0.13
+gpu_gpu_overlap=on: the app builds the next frame while the GPU draws this one
+gpu_input_latency=no input reached this window
+gpu_worst_frame=work 2.57 ms, outside the renderer 0.06 ms; stages ms: scale 0.01 plan 0.08 cpu 0.00 gpu_upload 0.10 gpu_record 0.01 gpu_submit 0.02 gpu_wait 2.26 gpu_readback 0.00 acquire 0.00 present 0.01
+gpu_startup_stages=before run 136 ms | app setup 0.0 | event loop started 0.0 | resumed 10.7 | window created 0.0 | present ready 5.8 | accessibility and show 0.0 | tree built 2.6 | window ready 0.6 | until first draw 0.0 | app before-frame hooks 7.1 | first build and layout 0.9 | first raster and present 10.8 = 174.7 ms from process start
+gpu_partial_blit=trusted: 554 partial and 46 full copies, 8.6% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+gpu_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+gpu_cpu_clocks=cpu0 3.30/3.63 GHz | cpu1 3.30/3.63 GHz | cpu2 3.30/3.63 GHz | cpu3 3.30/3.63 GHz | cpu4 3.30/3.63 GHz | cpu5 3.30/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+gpu_cpu_time=process CPU 0.21 ms per frame over the last 240 frames, every thread (47% of one core)
+gpu_thermal=status none -> none (worst none); headroom 0.42 -> 0.42 (highest 0.42; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 0 s
+gpu_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+gpu_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpu_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+gpu_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+gpu_quality_overlay=tier high · median 430.971µs / p95 649.636µs / worst 2.569895ms vs budget 8.333333ms · 0/240 over
+gpu_failed_checks=
+gpu_total_pss_kb=200790
+gpu_total_rss_kb=331168
+auto_calibration=launch 1: 10-23 06:07:57.719 13234 13251 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu, measuring (first launch with this build here) 10-23 06:07:58.302 13234 13251 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer cpu for now; the gpu is measured next launch (measured: cpu 3.92 ms; budget 8.33 ms) launch 2: 10-23 06:08:06.392 13590 13608 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu, measuring (the cpu path measured 3.92 ms last launch) 10-23 06:08:06.600 13590 13608 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu (measured: cpu 3.92 ms, gpu 0.36 ms; budget 8.33 ms) launch 3: 10-23 06:08:15.099 13818 13835 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu (calibrated earlier: cpu 3.92 ms, gpu 0.36 ms) 
+auto_cold_start_ms=166 188 167 
+auto_suite=PASS
+auto_frame_time=median 314.167µs, worst 2.452449ms, budget 8.333333ms (240 samples)
+auto_frame_stages=medians ms: scale 0.01 plan 0.08 cpu 0.00 gpu_upload 0.12 gpu_record 0.01 gpu_submit 0.02 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 0.01
+auto_frame_stages_p95=p95 ms: scale 0.01 plan 0.09 cpu 0.00 gpu_upload 0.22 gpu_record 0.01 gpu_submit 0.03 gpu_wait 0.18 gpu_readback 0.00 acquire 0.00 present 0.01
+auto_gpu_passes=medians ms: draw 0.02 layers 0.00 filters 0.00 shadows 0.00 blit 0.01 total 0.03; p95 ms: draw 0.11 layers 0.00 filters 0.00 shadows 0.00 blit 0.02 total 0.13
+auto_gpu_overlap=on: the app builds the next frame while the GPU draws this one
+auto_input_latency=no input reached this window
+auto_worst_frame=work 2.45 ms, outside the renderer 0.06 ms; stages ms: scale 0.01 plan 0.08 cpu 0.00 gpu_upload 0.13 gpu_record 0.01 gpu_submit 0.02 gpu_wait 2.12 gpu_readback 0.00 acquire 0.00 present 0.01
+auto_startup_stages=before run 136 ms | app setup 0.1 | event loop started 0.0 | resumed 8.0 | window created 0.0 | present ready 5.8 | accessibility and show 0.0 | tree built 2.5 | window ready 0.5 | until first draw 0.0 | app before-frame hooks 15.8 | first build and layout 1.0 | first raster and present 10.7 = 180.4 ms from process start
+auto_renderer_choice=gpu (calibrated earlier: cpu 3.92 ms, gpu 0.36 ms)
+auto_partial_blit=trusted: 554 partial and 46 full copies, 8.6% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+auto_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+auto_cpu_clocks=cpu0 3.30/3.63 GHz | cpu1 3.30/3.63 GHz | cpu2 3.30/3.63 GHz | cpu3 3.30/3.63 GHz | cpu4 3.30/3.63 GHz | cpu5 3.30/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+auto_cpu_time=process CPU 0.25 ms per frame over the last 240 frames, every thread (60% of one core)
+auto_thermal=status none -> none (worst none); headroom 0.43 -> 0.43 (highest 0.43; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 0 s
+auto_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+auto_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+auto_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+auto_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+auto_quality_overlay=tier high · median 407.785µs / p95 628.021µs / worst 2.452449ms vs budget 8.333333ms · 0/240 over
+auto_failed_checks=
+auto_total_pss_kb=200634
+auto_total_rss_kb=331048
+cpuvk_cold_start_ms=162 169 167 
+cpuvk_suite=PASS
+cpuvk_frame_time=median 5.273906ms, worst 7.990937ms, budget 8.333333ms (240 samples)
+cpuvk_frame_stages=medians ms: scale 0.01 plan 0.00 cpu 3.53 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 1.45
+cpuvk_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 4.19 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 2.88
+cpuvk_input_latency=no input reached this window
+cpuvk_worst_frame=work 7.99 ms, outside the renderer 0.19 ms, on cpu1; stages ms: scale 0.02 plan 0.00 cpu 3.84 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 3.94
+cpuvk_startup_stages=before run 144 ms | app setup 0.0 | event loop started 0.0 | resumed 13.0 | window created 0.0 | present ready 5.6 | accessibility and show 0.0 | tree built 2.9 | window ready 0.5 | until first draw 0.0 | app before-frame hooks 7.0 | first build and layout 0.9 | first raster and present 17.7 = 191.7 ms from process start
+cpuvk_raster_by_core=cpu4 49 frames 3.52 ms | cpu5 46 frames 3.58 ms | cpu3 39 frames 3.64 ms | cpu1 35 frames 3.67 ms | cpu0 25 frames 3.68 ms | cpu6 21 frames 1.89 ms | cpu7 19 frames 2.13 ms | cpu2 6 frames 3.72 ms
+cpuvk_raster_by_kind=medians ms: text 0.00 shadows 0.00 paths 0.09 rects 3.09 images 0.00 layers 0.00 composite 0.00 total 3.18; p95 ms: text 0.00 shadows 0.00 paths 0.14 rects 3.68 images 0.00 layers 0.00 composite 0.00 total 3.82
+cpuvk_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+cpuvk_cpu_clocks=cpu0 2.00/3.63 GHz | cpu1 2.00/3.63 GHz | cpu2 2.00/3.63 GHz | cpu3 2.00/3.63 GHz | cpu4 2.00/3.63 GHz | cpu5 2.00/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+cpuvk_cpu_time=process CPU 4.33 ms per frame over the last 240 frames, every thread (81% of one core)
+cpuvk_thermal=status none -> none (worst none); headroom 0.46 -> 0.46 (highest 0.46; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 3 s
+cpuvk_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpuvk_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+cpuvk_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+cpuvk_quality_overlay=tier high · median 5.237802ms / p95 6.711354ms / worst 7.990937ms vs budget 8.333333ms · 0/240 over
+cpuvk_failed_checks=
+cpuvk_total_pss_kb=160694
+cpuvk_total_rss_kb=290604
+cpuhint_cold_start_ms=167 169 179 
+cpuhint_suite=PASS
+cpuhint_frame_time=median 4.818542ms, worst 11.737552ms, budget 8.333333ms (240 samples)
+cpuhint_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 4.35 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.03 present 0.18
+cpuhint_frame_stages_p95=p95 ms: scale 0.03 plan 0.00 cpu 5.96 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.05 present 0.32
+cpuhint_input_latency=input to present ms: median 10.0 p95 15.0 p99 16.7 worst 16.7 over 12 inputs in 8 frames; 0 unanswered within 1 s
+cpuhint_worst_frame=work 11.74 ms, outside the renderer 0.25 ms, on cpu4; stages ms: scale 0.01 plan 0.00 cpu 11.18 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.06 present 0.24
+cpuhint_startup_stages=before run 136 ms | app setup 0.1 | event loop started 0.0 | resumed 9.2 | window created 0.0 | present ready 0.4 | accessibility and show 0.0 | tree built 3.5 | window ready 0.7 | until first draw 0.0 | app before-frame hooks 7.0 | first build and layout 1.0 | first raster and present 14.9 = 172.1 ms from process start
+cpuhint_raster_by_core=cpu4 64 frames 4.28 ms | cpu1 43 frames 4.31 ms | cpu5 38 frames 4.14 ms | cpu0 30 frames 4.35 ms | cpu2 20 frames 4.92 ms | cpu6 18 frames 3.84 ms | cpu3 17 frames 5.32 ms | cpu7 10 frames 3.53 ms
+cpuhint_raster_by_kind=medians ms: text 0.00 shadows 0.00 paths 0.13 rects 3.73 images 0.00 layers 0.00 composite 0.00 total 3.86; p95 ms: text 0.00 shadows 0.00 paths 0.18 rects 5.19 images 0.00 layers 0.00 composite 0.00 total 5.37
+cpuhint_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+cpuhint_cpu_clocks=cpu0 2.50/3.63 GHz | cpu1 2.50/3.63 GHz | cpu2 2.50/3.63 GHz | cpu3 2.50/3.63 GHz | cpu4 2.50/3.63 GHz | cpu5 2.50/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+cpuhint_cpu_time=process CPU 5.62 ms per frame over the last 240 frames, every thread (67% of one core)
+cpuhint_thermal=status none -> none (worst none); headroom 0.48 -> 0.48 (highest 0.48; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 5 s
+cpuhint_perf_hint=on (target 8.33 ms)
+cpuhint_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpuhint_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+cpuhint_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+cpuhint_quality_overlay=tier high · median 4.974126ms / p95 6.572709ms / worst 11.737552ms vs budget 8.333333ms · 2/240 over
+cpuhint_failed_checks=
+cpuhint_total_pss_kb=76105
+cpuhint_total_rss_kb=205800
+gpuscale_cold_start_ms=164 170 170 
+gpuscale_suite=PASS
+gpuscale_frame_time=median 407.134µs, worst 2.646197ms, budget 8.333333ms (240 samples)
+gpuscale_frame_stages=medians ms: scale 0.01 plan 0.09 cpu 0.00 gpu_upload 0.13 gpu_record 0.01 gpu_submit 0.02 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 0.01
+gpuscale_frame_stages_p95=p95 ms: scale 0.01 plan 0.13 cpu 0.00 gpu_upload 0.29 gpu_record 0.02 gpu_submit 0.04 gpu_wait 0.20 gpu_readback 0.00 acquire 0.00 present 0.01
+gpuscale_gpu_passes=medians ms: draw 0.02 layers 0.00 filters 0.00 shadows 0.00 blit 0.01 total 0.03; p95 ms: draw 0.11 layers 0.00 filters 0.00 shadows 0.00 blit 0.23 total 0.34
+gpuscale_gpu_overlap=on: the app builds the next frame while the GPU draws this one
+gpuscale_input_latency=no input reached this window
+gpuscale_worst_frame=work 2.65 ms, outside the renderer 0.07 ms; stages ms: scale 0.01 plan 0.08 cpu 0.00 gpu_upload 0.19 gpu_record 0.01 gpu_submit 0.02 gpu_wait 2.25 gpu_readback 0.00 acquire 0.00 present 0.01
+gpuscale_startup_stages=before run 141 ms | app setup 0.0 | event loop started 0.0 | resumed 14.4 | window created 0.0 | present ready 6.8 | accessibility and show 0.0 | tree built 2.5 | window ready 0.4 | until first draw 0.0 | app before-frame hooks 51.7 | first build and layout 1.0 | first raster and present 12.0 = 229.5 ms from process start
+gpuscale_partial_blit=trusted: 553 partial and 47 full copies, 8.7% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+gpuscale_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+gpuscale_cpu_clocks=cpu0 3.30/3.63 GHz | cpu1 3.30/3.63 GHz | cpu2 3.30/3.63 GHz | cpu3 3.30/3.63 GHz | cpu4 3.30/3.63 GHz | cpu5 3.30/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+gpuscale_cpu_time=process CPU 0.25 ms per frame over the last 240 frames, every thread (48% of one core)
+gpuscale_thermal=status none -> none (worst none); headroom 0.48 -> 0.48 (highest 0.48; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 0 s
+gpuscale_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+gpuscale_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpuscale_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+gpuscale_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+gpuscale_quality_overlay=tier high · median 507.307µs / p95 1.216562ms / worst 2.646197ms vs budget 8.333333ms · 0/240 over
+gpuscale_failed_checks=
+gpuscale_total_pss_kb=200408
+gpuscale_total_rss_kb=330812
+gpuserial_cold_start_ms=159 164 155 
+gpuserial_suite=PASS
+gpuserial_frame_time=median 675.313µs, worst 3.242812ms, budget 8.333333ms (240 samples)
+gpuserial_frame_stages=medians ms: scale 0.01 plan 0.11 cpu 0.00 gpu_upload 0.15 gpu_record 0.01 gpu_submit 0.02 gpu_wait 0.16 gpu_readback 0.00 acquire 0.00 present 0.01
+gpuserial_frame_stages_p95=p95 ms: scale 0.02 plan 0.24 cpu 0.00 gpu_upload 0.88 gpu_record 0.04 gpu_submit 0.06 gpu_wait 0.40 gpu_readback 0.00 acquire 0.01 present 0.02
+gpuserial_gpu_passes=medians ms: draw 0.03 layers 0.00 filters 0.00 shadows 0.00 blit 0.01 total 0.04; p95 ms: draw 0.14 layers 0.00 filters 0.00 shadows 0.00 blit 0.03 total 0.17
+gpuserial_gpu_overlap=off: every GPU frame waited for before the next (VIEWW_GPU_OVERLAP=0)
+gpuserial_input_latency=no input reached this window
+gpuserial_worst_frame=work 3.24 ms, outside the renderer 0.16 ms; stages ms: scale 0.02 plan 0.21 cpu 0.00 gpu_upload 0.48 gpu_record 0.03 gpu_submit 0.05 gpu_wait 2.27 gpu_readback 0.00 acquire 0.00 present 0.02
+gpuserial_startup_stages=before run 143 ms | app setup 0.1 | event loop started 0.0 | resumed 12.2 | window created 0.0 | present ready 6.5 | accessibility and show 0.0 | tree built 2.5 | window ready 0.3 | until first draw 0.0 | app before-frame hooks 54.7 | first build and layout 0.9 | first raster and present 18.1 = 238.2 ms from process start
+gpuserial_partial_blit=trusted: 563 partial and 37 full copies, 7.8% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+gpuserial_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+gpuserial_cpu_clocks=cpu0 3.63/3.63 GHz | cpu1 3.63/3.63 GHz | cpu2 3.63/3.63 GHz | cpu3 3.63/3.63 GHz | cpu4 3.63/3.63 GHz | cpu5 3.63/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+gpuserial_cpu_time=process CPU 0.38 ms per frame over the last 240 frames, every thread (42% of one core)
+gpuserial_thermal=status none -> none (worst none); headroom 0.47 -> 0.47 (highest 0.47; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 1 s
+gpuserial_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+gpuserial_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpuserial_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+gpuserial_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+gpuserial_quality_overlay=tier high · median 890.293µs / p95 1.965625ms / worst 3.242812ms vs budget 8.333333ms · 0/240 over
+gpuserial_failed_checks=
+gpuserial_total_pss_kb=200477
+gpuserial_total_rss_kb=330896
+cpubare_cold_start_ms=172 166 168 
+cpubare_suite=PASS
+cpubare_frame_time=median 5.788698ms, worst 12.299896ms, budget 8.333333ms (240 samples)
+cpubare_frame_stages=medians ms: scale 0.01 plan 0.00 cpu 5.38 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.04 present 0.17
+cpubare_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 6.83 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.05 present 0.30
+cpubare_input_latency=input to present ms: median 9.5 p95 10.5 p99 10.8 worst 10.8 over 16 inputs in 10 frames; 0 unanswered within 1 s
+cpubare_worst_frame=work 12.30 ms, outside the renderer 0.55 ms, on cpu4; stages ms: scale 0.04 plan 0.00 cpu 11.21 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.10 present 0.40
+cpubare_startup_stages=before run 143 ms | app setup 0.1 | event loop started 0.0 | resumed 10.9 | window created 0.0 | present ready 0.4 | accessibility and show 0.0 | tree built 2.8 | window ready 0.3 | until first draw 0.0 | app before-frame hooks 67.0 | first build and layout 1.1 | first raster and present 15.2 = 241.0 ms from process start
+cpubare_raster_by_core=cpu4 78 frames 5.34 ms | cpu5 47 frames 5.38 ms | cpu1 35 frames 5.60 ms | cpu0 24 frames 5.63 ms | cpu7 24 frames 3.95 ms | cpu6 18 frames 4.17 ms | cpu2 11 frames 5.32 ms | cpu3 3 frames 6.18 ms
+cpubare_raster_by_kind=medians ms: text 0.00 shadows 0.00 paths 0.10 rects 4.86 images 0.00 layers 0.00 composite 0.00 total 4.96; p95 ms: text 0.00 shadows 0.00 paths 0.16 rects 5.62 images 0.00 layers 0.00 composite 0.00 total 5.78
+cpubare_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+cpubare_cpu_clocks=cpu0 2.50/3.63 GHz | cpu1 2.50/3.63 GHz | cpu2 2.50/3.63 GHz | cpu3 2.50/3.63 GHz | cpu4 2.50/3.63 GHz | cpu5 2.50/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+cpubare_cpu_time=process CPU 6.46 ms per frame over the last 240 frames, every thread (70% of one core)
+cpubare_thermal=status none -> none (worst none); headroom 0.48 -> 0.48 (highest 0.48; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 6 s
+cpubare_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpubare_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+cpubare_cache_budgets=blur off (VIEWW_BLUR_CACHE_MB=0), fill off (VIEWW_PATH_CACHE_MB=0), raster threads serial (VIEWW_RASTER_THREADS=0)
+cpubare_quality_overlay=tier high · median 5.777249ms / p95 7.518854ms / worst 12.299896ms vs budget 8.333333ms · 5/240 over
+cpubare_failed_checks=
+cpubare_total_pss_kb=79916
+cpubare_total_rss_kb=209432
+cpunothreads_cold_start_ms=160 157 170 
+cpunothreads_suite=PASS
+cpunothreads_frame_time=median 5.361094ms, worst 12.202135ms, budget 8.333333ms (240 samples)
+cpunothreads_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 4.94 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.03 present 0.17
+cpunothreads_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 6.32 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.06 present 0.30
+cpunothreads_input_latency=input to present ms: median 7.4 p95 14.8 p99 17.1 worst 17.1 over 14 inputs in 7 frames; 0 unanswered within 1 s
+cpunothreads_worst_frame=work 12.20 ms, outside the renderer 0.24 ms, on cpu4; stages ms: scale 0.01 plan 0.00 cpu 11.63 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.10 present 0.23
+cpunothreads_startup_stages=before run 143 ms | app setup 0.1 | event loop started 0.0 | resumed 15.5 | window created 0.0 | present ready 0.5 | accessibility and show 0.0 | tree built 4.5 | window ready 0.5 | until first draw 0.0 | app before-frame hooks 63.1 | first build and layout 1.4 | first raster and present 18.3 = 246.4 ms from process start
+cpunothreads_raster_by_core=cpu4 71 frames 5.00 ms | cpu5 47 frames 4.66 ms | cpu2 43 frames 5.11 ms | cpu0 20 frames 5.66 ms | cpu1 20 frames 5.22 ms | cpu7 19 frames 3.47 ms | cpu6 12 frames 4.29 ms | cpu3 8 frames 5.34 ms
+cpunothreads_raster_by_kind=medians ms: text 0.00 shadows 0.00 paths 0.12 rects 4.20 images 0.00 layers 0.00 composite 0.00 total 4.32; p95 ms: text 0.00 shadows 0.00 paths 0.20 rects 5.53 images 0.00 layers 0.00 composite 0.00 total 5.73
+cpunothreads_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+cpunothreads_cpu_clocks=cpu0 2.50/3.63 GHz | cpu1 2.50/3.63 GHz | cpu2 2.50/3.63 GHz | cpu3 2.50/3.63 GHz | cpu4 2.50/3.63 GHz | cpu5 2.50/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+cpunothreads_cpu_time=process CPU 6.04 ms per frame over the last 240 frames, every thread (67% of one core)
+cpunothreads_thermal=status none -> none (worst none); headroom 0.48 -> 0.48 (highest 0.48; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 5 s
+cpunothreads_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpunothreads_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+cpunothreads_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (VIEWW_RASTER_THREADS=0)
+cpunothreads_quality_overlay=tier high · median 5.334452ms / p95 6.74448ms / worst 12.202135ms vs budget 8.333333ms · 3/240 over
+cpunothreads_failed_checks=
+cpunothreads_total_pss_kb=76028
+cpunothreads_total_rss_kb=205728
+cpunofill_cold_start_ms=164 165 169 
+cpunofill_suite=PASS
+cpunofill_frame_time=median 5.016927ms, worst 11.936718ms, budget 8.333333ms (240 samples)
+cpunofill_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 4.42 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.04 present 0.16
+cpunofill_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 5.80 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 1.00 present 0.24
+cpunofill_input_latency=input to present ms: median 9.0 p95 10.4 p99 12.7 worst 12.7 over 14 inputs in 9 frames; 0 unanswered within 1 s
+cpunofill_worst_frame=work 11.94 ms, outside the renderer 0.25 ms, on cpu3; stages ms: scale 0.02 plan 0.00 cpu 11.43 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.05 present 0.19
+cpunofill_startup_stages=before run 141 ms | app setup 0.1 | event loop started 0.0 | resumed 9.0 | window created 0.0 | present ready 0.4 | accessibility and show 0.0 | tree built 3.4 | window ready 0.3 | until first draw 0.0 | app before-frame hooks 16.1 | first build and layout 1.2 | first raster and present 14.0 = 185.6 ms from process start
+cpunofill_raster_by_core=cpu4 59 frames 4.43 ms | cpu5 40 frames 4.41 ms | cpu1 36 frames 4.46 ms | cpu0 24 frames 4.20 ms | cpu2 21 frames 5.05 ms | cpu3 21 frames 4.97 ms | cpu7 21 frames 3.96 ms | cpu6 18 frames 3.79 ms
+cpunofill_raster_by_kind=medians ms: text 0.00 shadows 0.00 paths 0.12 rects 3.78 images 0.00 layers 0.00 composite 0.00 total 3.90; p95 ms: text 0.00 shadows 0.00 paths 0.18 rects 5.20 images 0.00 layers 0.00 composite 0.00 total 5.39
+cpunofill_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+cpunofill_cpu_clocks=cpu0 2.50/3.63 GHz | cpu1 2.50/3.63 GHz | cpu2 2.50/3.63 GHz | cpu3 2.50/3.63 GHz | cpu4 2.50/3.63 GHz | cpu5 2.50/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+cpunofill_cpu_time=process CPU 5.75 ms per frame over the last 240 frames, every thread (65% of one core)
+cpunofill_thermal=status none -> none (worst none); headroom 0.48 -> 0.49 (highest 0.49; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 5 s
+cpunofill_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpunofill_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+cpunofill_cache_budgets=blur 8 MiB (tier high), fill off (VIEWW_PATH_CACHE_MB=0), raster threads serial (tier high)
+cpunofill_quality_overlay=tier high · median 5.193324ms / p95 6.483906ms / worst 11.936718ms vs budget 8.333333ms · 2/240 over
+cpunofill_failed_checks=
+cpunofill_total_pss_kb=75828
+cpunofill_total_rss_kb=205432
+cpunoblur_cold_start_ms=170 175 163 
+cpunoblur_suite=PASS
+cpunoblur_frame_time=median 6.224948ms, worst 11.404584ms, budget 8.333333ms (240 samples)
+cpunoblur_frame_stages=medians ms: scale 0.02 plan 0.00 cpu 4.72 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.99 present 0.16
+cpunoblur_frame_stages_p95=p95 ms: scale 0.02 plan 0.00 cpu 6.09 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 3.45 present 0.28
+cpunoblur_input_latency=input to present ms: median 8.3 p95 10.4 p99 11.4 worst 11.4 over 16 inputs in 9 frames; 0 unanswered within 1 s
+cpunoblur_worst_frame=work 11.40 ms, outside the renderer 0.56 ms, on cpu1; stages ms: scale 0.03 plan 0.00 cpu 10.13 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.06 present 0.63
+cpunoblur_startup_stages=before run 146 ms | app setup 0.1 | event loop started 0.0 | resumed 10.7 | window created 0.0 | present ready 0.3 | accessibility and show 0.0 | tree built 3.8 | window ready 0.4 | until first draw 0.0 | app before-frame hooks 65.4 | first build and layout 1.7 | first raster and present 15.7 = 243.8 ms from process start
+cpunoblur_raster_by_core=cpu4 58 frames 4.83 ms | cpu5 47 frames 4.89 ms | cpu0 38 frames 4.55 ms | cpu1 38 frames 4.60 ms | cpu6 31 frames 4.01 ms | cpu3 18 frames 5.42 ms | cpu2 6 frames 4.64 ms | cpu7 4 frames 4.50 ms
+cpunoblur_raster_by_kind=medians ms: text 0.00 shadows 0.00 paths 0.11 rects 4.07 images 0.00 layers 0.00 composite 0.00 total 4.18; p95 ms: text 0.00 shadows 0.00 paths 0.19 rects 5.55 images 0.00 layers 0.00 composite 0.00 total 5.74
+cpunoblur_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+cpunoblur_cpu_clocks=cpu0 2.36/3.63 GHz | cpu1 2.36/3.63 GHz | cpu2 2.36/3.63 GHz | cpu3 2.36/3.63 GHz | cpu4 2.36/3.63 GHz | cpu5 2.36/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+cpunoblur_cpu_time=process CPU 5.92 ms per frame over the last 240 frames, every thread (65% of one core)
+cpunoblur_thermal=status none -> none (worst none); headroom 0.48 -> 0.48 (highest 0.48; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 6 s
+cpunoblur_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+cpunoblur_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+cpunoblur_cache_budgets=blur off (VIEWW_BLUR_CACHE_MB=0), fill off (tier high), raster threads serial (tier high)
+cpunoblur_quality_overlay=tier high · median 6.570024ms / p95 7.794374ms / worst 11.404584ms vs budget 8.333333ms · 3/240 over
+cpunoblur_failed_checks=
+cpunoblur_total_pss_kb=75864
+cpunoblur_total_rss_kb=205492
+stresscpu_suite=FAIL
+stresscpu_frame_time=median 57.363541ms, worst 72.016874ms, budget 16.666668ms (240 samples)
+stresscpu_frame_stages=medians ms: scale 0.00 plan 0.00 cpu 56.62 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.03 present 0.48
+stresscpu_frame_stages_p95=p95 ms: scale 0.00 plan 0.00 cpu 62.41 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.04 present 0.52
+stresscpu_input_latency=input to present ms: median 57.8 p95 116.6 p99 118.5 worst 119.1 over 82 inputs in 82 frames; 0 unanswered within 1 s
+stresscpu_worst_frame=work 72.02 ms, outside the renderer 0.19 ms, on cpu7; stages ms: scale 0.00 plan 0.00 cpu 71.31 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.03 present 0.49
+stresscpu_startup_stages=before run 144 ms | app setup 0.0 | event loop started 0.0 | resumed 13.4 | window created 0.0 | present ready 0.5 | accessibility and show 0.0 | tree built 3.3 | window ready 0.8 | until first draw 0.1 | app before-frame hooks 67.8 | first build and layout 2.7 | first raster and present 83.9 = 316.8 ms from process start
+stresscpu_raster_by_core=cpu6 126 frames 56.66 ms | cpu7 114 frames 56.53 ms
+stresscpu_raster_by_kind=medians ms: text 0.77 shadows 5.95 paths 3.56 rects 7.97 images 6.90 layers 23.23 composite 5.79 total 54.17; p95 ms: text 0.97 shadows 10.25 paths 3.93 rects 8.49 images 7.22 layers 25.25 composite 6.91 total 63.01
+stresscpu_shadow_blurs=882 over 600 frames (1.47 a frame), 322.8 Mpx in all
+stresscpu_cpu_clocks=cpu0 2.61/3.63 GHz | cpu1 2.61/3.63 GHz | cpu2 2.61/3.63 GHz | cpu3 2.61/3.63 GHz | cpu4 2.61/3.63 GHz | cpu5 2.61/3.63 GHz | cpu6 4.40/4.74 GHz | cpu7 4.40/4.74 GHz
+stresscpu_cpu_time=process CPU 58.00 ms per frame over the last 240 frames, every thread (96% of one core)
+stresscpu_thermal=status none -> none (worst none); headroom 0.49 -> 0.66 (highest 0.66; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 37 s
+stresscpu_screen=stress (debug.vieww.screen=stress)
+stresscpu_gpu_frames=0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+stresscpu_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+stresscpu_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+stresscpu_quality_overlay=tier high · median 57.999516ms / p95 63.092761ms / worst 72.016874ms vs budget 16.666668ms · 240/240 over
+stresscpu_failed_checks=frames_inside_their_budget the_typical_frame_is_inside_its_budget 
+stresscpu_cadence=frame rate changed 1 time(s), ending at 60 Hz
+stresscpu_total_pss_kb=212170
+stresscpu_total_rss_kb=343460
+stressgpu_suite=FAIL
+stressgpu_frame_time=median 22.791302ms, worst 91.712292ms, budget 16.666668ms (240 samples)
+stressgpu_frame_stages=medians ms: scale 0.00 plan 4.95 cpu 0.00 gpu_upload 0.50 gpu_record 0.05 gpu_submit 0.07 gpu_wait 13.77 gpu_readback 0.00 acquire 0.02 present 0.06
+stressgpu_frame_stages_p95=p95 ms: scale 0.02 plan 14.54 cpu 62.27 gpu_upload 3.11 gpu_record 0.20 gpu_submit 0.28 gpu_wait 25.31 gpu_readback 0.00 acquire 0.03 present 1.07
+stressgpu_gpu_passes=medians ms: draw 0.52 layers 1.16 filters 18.97 shadows 0.00 blit 0.10 total 20.75; p95 ms: draw 0.74 layers 2.18 filters 33.30 shadows 0.01 blit 0.17 total 36.41
+stressgpu_gpu_overlap=on: the app builds the next frame while the GPU draws this one
+stressgpu_input_latency=input to present ms: median 22.4 p95 77.5 p99 85.2 worst 146.1 over 82 inputs in 81 frames; 0 unanswered within 1 s
+stressgpu_worst_frame=work 91.71 ms, outside the renderer 0.72 ms, on cpu6; stages ms: scale 0.01 plan 20.00 cpu 69.96 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 1.03
+stressgpu_startup_stages=before run 135 ms | app setup 0.0 | event loop started 0.0 | resumed 12.3 | window created 0.0 | present ready 8.1 | accessibility and show 0.0 | tree built 2.6 | window ready 0.3 | until first draw 0.0 | app before-frame hooks 67.5 | first build and layout 2.5 | first raster and present 49.8 = 278.6 ms from process start
+stressgpu_raster_by_core=cpu6 27 frames 60.55 ms | cpu7 23 frames 59.84 ms
+stressgpu_partial_blit=trusted: 0 partial and 481 full copies, 100.0% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+stressgpu_shadow_blurs=1141 over 600 frames (1.90 a frame), 432.4 Mpx in all
+stressgpu_cpu_clocks=cpu0 2.61/3.63 GHz | cpu1 2.61/3.63 GHz | cpu2 2.61/3.63 GHz | cpu3 2.61/3.63 GHz | cpu4 2.61/3.63 GHz | cpu5 2.61/3.63 GHz | cpu6 4.19/4.74 GHz | cpu7 4.19/4.74 GHz
+stressgpu_cpu_time=process CPU 20.29 ms per frame over the last 240 frames, every thread (58% of one core)
+stressgpu_thermal=status none -> none (worst none); headroom 0.68 -> 0.72 (highest 0.72; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 20 s
+stressgpu_screen=stress (debug.vieww.screen=stress)
+stressgpu_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+stressgpu_gpu_frames=481 of 600 drawn by the GPU rasterizer (481 straight into the swapchain)
+stressgpu_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+stressgpu_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+stressgpu_quality_overlay=tier high · median 32.382673ms / p95 71.084635ms / worst 91.712292ms vs budget 16.666668ms · 216/240 over
+stressgpu_failed_checks=frames_inside_their_budget no_frame_stalled the_typical_frame_is_inside_its_budget 
+stressgpu_cadence=frame rate changed 1 time(s), ending at 60 Hz
+stressgpu_total_pss_kb=706718
+stressgpu_total_rss_kb=838836
+sustained_suite=FAIL
+sustained_pss_over_time=10s:665 20s:672 30s:674 40s:670 50s:665 60s:684 MB (first to last: +19.4 MB)
+sustained_frame_time=median 21.449271ms, worst 105.256302ms, budget 16.666668ms (240 samples)
+sustained_frame_stages=medians ms: scale 0.00 plan 5.00 cpu 0.00 gpu_upload 0.44 gpu_record 0.05 gpu_submit 0.07 gpu_wait 13.13 gpu_readback 0.00 acquire 0.01 present 0.05
+sustained_frame_stages_p95=p95 ms: scale 0.01 plan 15.17 cpu 73.65 gpu_upload 2.04 gpu_record 0.13 gpu_submit 0.14 gpu_wait 31.26 gpu_readback 0.00 acquire 0.02 present 1.29
+sustained_gpu_passes=medians ms: draw 0.46 layers 1.12 filters 17.86 shadows 0.00 blit 0.10 total 19.55; p95 ms: draw 1.01 layers 2.60 filters 41.03 shadows 0.01 blit 0.19 total 44.85
+sustained_gpu_overlap=on: the app builds the next frame while the GPU draws this one
+sustained_input_latency=input to present ms: median 21.5 p95 81.5 p99 88.2 worst 91.5 over 82 inputs in 82 frames; 0 unanswered within 1 s
+sustained_worst_frame=work 105.26 ms, outside the renderer 0.47 ms, on cpu7; stages ms: scale 0.00 plan 17.61 cpu 81.39 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 5.78
+sustained_startup_stages=before run 152 ms | app setup 0.1 | event loop started 0.0 | resumed 11.7 | window created 0.0 | present ready 6.4 | accessibility and show 0.0 | tree built 2.7 | window ready 0.5 | until first draw 0.0 | app before-frame hooks 50.8 | first build and layout 1.7 | first raster and present 38.1 = 264.6 ms from process start
+sustained_renderer_choice=gpu (calibrated earlier: cpu 3.92 ms, gpu 0.36 ms)
+sustained_raster_by_core=cpu7 38 frames 66.61 ms | cpu6 24 frames 69.60 ms
+sustained_partial_blit=trusted: 0 partial and 1287 full copies, 100.0% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+sustained_shadow_blurs=3143 over 1638 frames (1.92 a frame), 1191.4 Mpx in all
+sustained_cpu_clocks=cpu0 2.61/3.63 GHz | cpu1 2.61/3.63 GHz | cpu2 2.61/3.63 GHz | cpu3 2.61/3.63 GHz | cpu4 2.61/3.63 GHz | cpu5 2.61/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+sustained_cpu_time=process CPU 23.51 ms per frame over the last 131 frames, every thread (62% of one core)
+sustained_thermal=status none -> none (worst none); headroom 0.73 -> 0.77 (highest 0.77; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 60 s
+sustained_sustained=frames 361-600: median 20.91 ms, 214 of 240 over budget; last 240 of 1638 frames: median 21.45 ms, 210 over; 60 s
+sustained_screen=stress (debug.vieww.screen=stress)
+sustained_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+sustained_gpu_frames=1287 of 1638 drawn by the GPU rasterizer (1287 straight into the swapchain)
+sustained_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+sustained_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+sustained_quality_overlay=tier high · median 37.426558ms / p95 90.0225ms / worst 105.256302ms vs budget 16.666668ms · 210/240 over
+sustained_failed_checks=frames_inside_their_budget idle_frames_do_not_repaint_the_whole_surface no_frame_stalled the_typical_frame_is_inside_its_budget 
+sustained_cadence=frame rate changed 1 time(s), ending at 60 Hz
+sustained_total_pss_kb=694084
+sustained_total_rss_kb=826652
+gpucheck_suite=FAIL
+gpucheck_frame_time=median 11.988178ms, worst 60.009844ms, budget 16.666668ms (240 samples)
+gpucheck_frame_stages=medians ms: scale 0.01 plan 0.14 cpu 0.00 gpu_upload 0.49 gpu_record 0.07 gpu_submit 0.05 gpu_wait 0.00 gpu_readback 0.00 acquire 0.01 present 0.08
+gpucheck_frame_stages_p95=p95 ms: scale 0.03 plan 0.33 cpu 0.00 gpu_upload 0.83 gpu_record 0.14 gpu_submit 0.09 gpu_wait 2.30 gpu_readback 0.00 acquire 0.03 present 0.14
+gpucheck_gpu_passes=medians ms: draw 0.32 layers 0.00 filters 0.00 shadows 0.00 blit 1.86 total 2.18; p95 ms: draw 0.35 layers 0.00 filters 0.00 shadows 0.00 blit 4.01 total 4.36
+gpucheck_gpu_overlap=on: the app builds the next frame while the GPU draws this one
+gpucheck_input_latency=input to present ms: median 15.8 p95 50.9 p99 132.4 worst 132.4 over 40 inputs in 27 frames; 0 unanswered within 1 s
+gpucheck_worst_frame=work 60.01 ms, outside the renderer 55.15 ms; stages ms: scale 0.01 plan 0.14 cpu 0.00 gpu_upload 0.49 gpu_record 0.02 gpu_submit 0.02 gpu_wait 4.07 gpu_readback 0.00 acquire 0.01 present 0.09
+gpucheck_startup_stages=before run 139 ms | app setup 0.0 | event loop started 0.0 | resumed 9.2 | window created 0.0 | present ready 7.0 | accessibility and show 0.0 | tree built 2.4 | window ready 0.3 | until first draw 0.0 | app before-frame hooks 63.9 | first build and layout 1.1 | first raster and present 13.3 = 236.5 ms from process start
+gpucheck_partial_blit=trusted: 581 partial and 19 full copies, 8.3% of the frames' pixels copied; 592 image(s) kept their contents, 0 did not
+gpucheck_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+gpucheck_cpu_clocks=cpu0 2.11/3.63 GHz | cpu1 2.11/3.63 GHz | cpu2 2.11/3.63 GHz | cpu3 2.11/3.63 GHz | cpu4 2.11/3.63 GHz | cpu5 2.11/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+gpucheck_cpu_time=process CPU 15.25 ms per frame over the last 240 frames, every thread (71% of one core)
+gpucheck_thermal=status none -> none (worst none); headroom 0.77 -> 0.73 (highest 0.77; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 11 s
+gpucheck_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+gpucheck_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpucheck_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+gpucheck_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+gpucheck_quality_overlay=tier high · median 16.00558ms / p95 49.407917ms / worst 60.009844ms vs budget 16.666668ms · 44/240 over
+gpucheck_failed_checks=frames_inside_their_budget 
+gpucheck_cadence=frame rate changed 1 time(s), ending at 60 Hz
+gpucheck_total_pss_kb=218875
+gpucheck_total_rss_kb=350760
+gpufullcopy_suite=PASS
+gpufullcopy_frame_time=median 666.198µs, worst 3.076824ms, budget 8.333333ms (240 samples)
+gpufullcopy_frame_stages=medians ms: scale 0.01 plan 0.15 cpu 0.00 gpu_upload 0.20 gpu_record 0.01 gpu_submit 0.03 gpu_wait 0.13 gpu_readback 0.00 acquire 0.00 present 0.01
+gpufullcopy_frame_stages_p95=p95 ms: scale 0.02 plan 0.23 cpu 0.00 gpu_upload 0.45 gpu_record 0.02 gpu_submit 0.05 gpu_wait 1.29 gpu_readback 0.00 acquire 0.01 present 0.02
+gpufullcopy_gpu_passes=medians ms: draw 0.03 layers 0.00 filters 0.00 shadows 0.00 blit 0.23 total 0.26; p95 ms: draw 0.13 layers 0.00 filters 0.00 shadows 0.00 blit 0.28 total 0.41
+gpufullcopy_gpu_overlap=on: the app builds the next frame while the GPU draws this one
+gpufullcopy_input_latency=no input reached this window
+gpufullcopy_worst_frame=work 3.08 ms, outside the renderer 0.11 ms; stages ms: scale 0.02 plan 0.19 cpu 0.00 gpu_upload 0.33 gpu_record 0.03 gpu_submit 0.06 gpu_wait 2.30 gpu_readback 0.00 acquire 0.00 present 0.03
+gpufullcopy_startup_stages=before run 146 ms | app setup 0.0 | event loop started 0.0 | resumed 10.4 | window created 0.0 | present ready 6.2 | accessibility and show 0.0 | tree built 2.5 | window ready 0.5 | until first draw 0.0 | app before-frame hooks 64.7 | first build and layout 1.1 | first raster and present 11.0 = 242.1 ms from process start
+gpufullcopy_shadow_blurs=0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+gpufullcopy_cpu_clocks=cpu0 2.00/3.63 GHz | cpu1 2.00/3.63 GHz | cpu2 2.00/3.63 GHz | cpu3 2.00/3.63 GHz | cpu4 2.00/3.63 GHz | cpu5 2.00/3.63 GHz | cpu6 0.88/4.74 GHz | cpu7 0.88/4.74 GHz
+gpufullcopy_cpu_time=process CPU 0.42 ms per frame over the last 240 frames, every thread (50% of one core)
+gpufullcopy_thermal=status none -> none (worst none); headroom 0.73 -> 0.73 (highest 0.73; 1.0 is severe throttling); hottest zone 105.0 -> 105.0 °C (peak 105.0) over 1 s
+gpufullcopy_pipeline_cache=started from 38770 bytes; saved 38770 bytes after the first GPU frame
+gpufullcopy_gpu_frames=600 of 600 drawn by the GPU rasterizer (600 straight into the swapchain)
+gpufullcopy_device=tier high, 10.9 GB, 8 cores, SM8850 (canoe) (API 36)
+gpufullcopy_cache_budgets=blur 8 MiB (tier high), fill off (tier high), raster threads serial (tier high)
+gpufullcopy_quality_overlay=tier high · median 824.323µs / p95 1.98422ms / worst 3.076824ms vs budget 8.333333ms · 0/240 over
+gpufullcopy_failed_checks=
+gpufullcopy_total_pss_kb=160868
+gpufullcopy_total_rss_kb=291308
+gating_passes=auto cpu gpu (auto chose: gpu)
+cpu_known_failure_passed=listed in known-failures.txt but passed: delete the entry
+status=PASS
+ 
+[DEVICEFARM] ########### Entering phase post_test ###########
+ 
+[DeviceFarm] ls -la $DEVICEFARM_LOG_DIR/vieww || true
+total 4880
+drwxr-xr-x 2 device-farm root   4096 Oct 23 06:14 .
+drwxrwxrwx 3         995 1001     19 Oct 23 06:07 ..
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:08 auto-am-start.txt
+-rw-r--r-- 1 device-farm root    843 Oct 23 06:08 auto-calibration.txt
+-rw-r--r-- 1 device-farm root  37874 Oct 23 06:08 auto-logcat.txt
+-rw-r--r-- 1 device-farm root   3265 Oct 23 06:08 auto-meminfo.txt
+-rw-r--r-- 1 device-farm root 188638 Oct 23 06:08 auto-screen.png
+-rw-r--r-- 1 device-farm root   5895 Oct 23 06:08 auto-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:07 cpu-am-start.txt
+-rw-r--r-- 1 device-farm root  45040 Oct 23 06:07 cpu-logcat.txt
+-rw-r--r-- 1 device-farm root   3179 Oct 23 06:07 cpu-meminfo.txt
+-rw-r--r-- 1 device-farm root 135216 Oct 23 06:07 cpu-screen.png
+-rw-r--r-- 1 device-farm root   5964 Oct 23 06:07 cpu-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:10 cpubare-am-start.txt
+-rw-r--r-- 1 device-farm root  45109 Oct 23 06:10 cpubare-logcat.txt
+-rw-r--r-- 1 device-farm root   3181 Oct 23 06:10 cpubare-meminfo.txt
+-rw-r--r-- 1 device-farm root 135727 Oct 23 06:10 cpubare-screen.png
+-rw-r--r-- 1 device-farm root   6066 Oct 23 06:10 cpubare-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:09 cpuhint-am-start.txt
+-rw-r--r-- 1 device-farm root  45171 Oct 23 06:09 cpuhint-logcat.txt
+-rw-r--r-- 1 device-farm root   3179 Oct 23 06:09 cpuhint-meminfo.txt
+-rw-r--r-- 1 device-farm root 134402 Oct 23 06:09 cpuhint-screen.png
+-rw-r--r-- 1 device-farm root   6007 Oct 23 06:09 cpuhint-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:11 cpunoblur-am-start.txt
+-rw-r--r-- 1 device-farm root  45068 Oct 23 06:11 cpunoblur-logcat.txt
+-rw-r--r-- 1 device-farm root   3181 Oct 23 06:11 cpunoblur-meminfo.txt
+-rw-r--r-- 1 device-farm root 134698 Oct 23 06:11 cpunoblur-screen.png
+-rw-r--r-- 1 device-farm root   6027 Oct 23 06:11 cpunoblur-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:11 cpunofill-am-start.txt
+-rw-r--r-- 1 device-farm root  45072 Oct 23 06:11 cpunofill-logcat.txt
+-rw-r--r-- 1 device-farm root   3181 Oct 23 06:11 cpunofill-meminfo.txt
+-rw-r--r-- 1 device-farm root 134686 Oct 23 06:11 cpunofill-screen.png
+-rw-r--r-- 1 device-farm root   6030 Oct 23 06:11 cpunofill-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:10 cpunothreads-am-start.txt
+-rw-r--r-- 1 device-farm root  45076 Oct 23 06:10 cpunothreads-logcat.txt
+-rw-r--r-- 1 device-farm root   3181 Oct 23 06:10 cpunothreads-meminfo.txt
+-rw-r--r-- 1 device-farm root 135702 Oct 23 06:10 cpunothreads-screen.png
+-rw-r--r-- 1 device-farm root   6038 Oct 23 06:10 cpunothreads-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:08 cpuvk-am-start.txt
+-rw-r--r-- 1 device-farm root  37342 Oct 23 06:08 cpuvk-logcat.txt
+-rw-r--r-- 1 device-farm root   3265 Oct 23 06:08 cpuvk-meminfo.txt
+-rw-r--r-- 1 device-farm root 196289 Oct 23 06:08 cpuvk-screen.png
+-rw-r--r-- 1 device-farm root   5841 Oct 23 06:08 cpuvk-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:07 gpu-am-start.txt
+-rw-r--r-- 1 device-farm root  37675 Oct 23 06:07 gpu-logcat.txt
+-rw-r--r-- 1 device-farm root   3265 Oct 23 06:07 gpu-meminfo.txt
+-rw-r--r-- 1 device-farm root 189097 Oct 23 06:07 gpu-screen.png
+-rw-r--r-- 1 device-farm root   5955 Oct 23 06:07 gpu-suite.log
+-rw-r--r-- 1 device-farm root  47776 Oct 23 06:14 gpucheck-logcat.txt
+-rw-r--r-- 1 device-farm root   3267 Oct 23 06:14 gpucheck-meminfo.txt
+-rw-r--r-- 1 device-farm root 133555 Oct 23 06:14 gpucheck-screen.png
+-rw-r--r-- 1 device-farm root   6468 Oct 23 06:14 gpucheck-suite.log
+-rw-r--r-- 1 device-farm root  37488 Oct 23 06:14 gpufullcopy-logcat.txt
+-rw-r--r-- 1 device-farm root   3267 Oct 23 06:14 gpufullcopy-meminfo.txt
+-rw-r--r-- 1 device-farm root 189054 Oct 23 06:14 gpufullcopy-screen.png
+-rw-r--r-- 1 device-farm root   5882 Oct 23 06:14 gpufullcopy-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:09 gpuscale-am-start.txt
+-rw-r--r-- 1 device-farm root  37569 Oct 23 06:09 gpuscale-logcat.txt
+-rw-r--r-- 1 device-farm root   3265 Oct 23 06:09 gpuscale-meminfo.txt
+-rw-r--r-- 1 device-farm root 196615 Oct 23 06:09 gpuscale-screen.png
+-rw-r--r-- 1 device-farm root   5961 Oct 23 06:09 gpuscale-suite.log
+-rw-r--r-- 1 device-farm root    558 Oct 23 06:09 gpuserial-am-start.txt
+-rw-r--r-- 1 device-farm root  37575 Oct 23 06:10 gpuserial-logcat.txt
+-rw-r--r-- 1 device-farm root   3265 Oct 23 06:10 gpuserial-meminfo.txt
+-rw-r--r-- 1 device-farm root 190028 Oct 23 06:10 gpuserial-screen.png
+-rw-r--r-- 1 device-farm root   5968 Oct 23 06:10 gpuserial-suite.log
+-rw-r--r-- 1 device-farm root      8 Oct 23 06:07 install.log
+-rw-r--r-- 1 device-farm root  44398 Oct 23 06:14 result.txt
+-rw-r--r-- 1 device-farm root  45196 Oct 23 06:12 stresscpu-logcat.txt
+-rw-r--r-- 1 device-farm root   3181 Oct 23 06:12 stresscpu-meminfo.txt
+-rw-r--r-- 1 device-farm root 607537 Oct 23 06:12 stresscpu-screen.png
+-rw-r--r-- 1 device-farm root   6085 Oct 23 06:12 stresscpu-suite.log
+-rw-r--r-- 1 device-farm root  47749 Oct 23 06:12 stressgpu-logcat.txt
+-rw-r--r-- 1 device-farm root   3267 Oct 23 06:12 stressgpu-meminfo.txt
+-rw-r--r-- 1 device-farm root 621173 Oct 23 06:12 stressgpu-screen.png
+-rw-r--r-- 1 device-farm root   6493 Oct 23 06:12 stressgpu-suite.log
+-rw-r--r-- 1 device-farm root  51197 Oct 23 06:13 sustained-logcat.txt
+-rw-r--r-- 1 device-farm root   3267 Oct 23 06:13 sustained-meminfo.txt
+-rw-r--r-- 1 device-farm root     60 Oct 23 06:13 sustained-pss.txt
+-rw-r--r-- 1 device-farm root 596904 Oct 23 06:13 sustained-screen.png
+-rw-r--r-- 1 device-farm root   6668 Oct 23 06:13 sustained-suite.log
+ 
+[DEVICEFARM] ########### Finish executing testspec ###########
+ 
+[DEVICEFARM] ########### Setting upload permissions ###########
+ 
+ 
+[DEVICEFARM] Tearing down your device. Your tests report will come shortly.

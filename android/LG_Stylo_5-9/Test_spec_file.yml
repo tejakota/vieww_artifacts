@@ -1,0 +1,26 @@
+# AWS Device Farm custom test spec for vieww's Android device suite.
+# Uploaded by ci/mobile/device_farm.py as the run's test spec; the test package
+# (built by package.sh) is unpacked into $DEVICEFARM_TEST_PACKAGE_PATH.
+# No Appium session is started: the package is an Appium-Python-shaped zip only
+# because that is the upload type a custom spec rides on. The run itself is
+# adb, driving the same on-device suite as a phone on USB.
+version: 0.1
+
+android_test_host: amazon_linux_2
+
+phases:
+  install:
+    commands:
+      - adb version
+  pre_test:
+    commands:
+      - adb devices -l
+  test:
+    commands:
+      - bash $DEVICEFARM_TEST_PACKAGE_PATH/ci/mobile/device-farm/run-android.sh
+  post_test:
+    commands:
+      - ls -la $DEVICEFARM_LOG_DIR/vieww || true
+
+artifacts:
+  - $DEVICEFARM_LOG_DIR

@@ -1,0 +1,2 @@
+Now attempting to pull host machine customer files from $DEVICEFARM_LOG_DIR
+Successfully attached files from $DEVICEFARM_LOG_DIR

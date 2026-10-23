@@ -1,0 +1,50 @@
+Applications Memory Usage (in Kilobytes):
+Uptime: 6167680 Realtime: 6167680
+
+** MEMINFO in pid 3917 [dev.vieww.demo] **
+                   Pss  Private  Private  SwapPss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------
+  Native Heap   174772   174744        0       65   222208   195502    26705
+  Dalvik Heap     1435     1400        0       15    13405     1117    12288
+ Dalvik Other      244      244        0        0                           
+        Stack       32       32        0        0                           
+       Ashmem      113       88        8        0                           
+      Gfx dev    50564    32332    18232        0                           
+     .so mmap     8501      416     5824       31                           
+    .apk mmap      254        0        4        0                           
+    .dex mmap     1126        4      276        0                           
+    .oat mmap      783        0       80        0                           
+    .art mmap     1641      732      296        6                           
+   Other mmap        8        4        0        0                           
+   EGL mtrack    36992    36992        0        0                           
+    GL mtrack   229420   229420        0        0                           
+      Unknown      589      584        0        4                           
+        TOTAL   506595   476992    24720      121   235613   196619    38993
+ 
+ App Summary
+                       Pss(KB)
+                        ------
+           Java Heap:     2428
+         Native Heap:   174744
+                Code:     6604
+               Stack:       32
+            Graphics:   316976
+       Private Other:      928
+              System:     4883
+ 
+               TOTAL:   506595       TOTAL SWAP PSS:      121
+ 
+ Objects
+               Views:        7         ViewRootImpl:        1
+         AppContexts:        6           Activities:        1
+              Assets:        6        AssetManagers:        0
+       Local Binders:        7        Proxy Binders:       29
+       Parcel memory:        3         Parcel count:       13
+    Death Recipients:        0      OpenSSL Sockets:        0
+            WebViews:        0
+ 
+ SQL
+         MEMORY_USED:        0
+  PAGECACHE_OVERFLOW:        0          MALLOC_SIZE:        0
+ 

@@ -1,0 +1,133 @@
+--------- beginning of main
+10-23 06:09:20.331 18931 18931 E dev.vieww.demo: Not starting debugger since process cannot load the jdwp agent.
+10-23 06:09:20.389 18931 18931 E DisplayManagerHelper: ISmartCoverManager is null
+10-23 06:09:20.437 18931 18931 D PhoneWindow: windowLightStatusBar : false, disable View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+10-23 06:09:20.453 18931 18931 I android-activity: Creating: Activity = 0x2872, saved state size = 0
+10-23 06:09:20.459 18931 18953 I vieww   : android::demo: vieww starting
+10-23 06:09:20.877 18931 18931 D OpenGLRenderer: Skia GL Pipeline
+10-23 06:09:20.890 18931 18931 I TouchFilterInputStageHelper: [needTouchEventFilter] Displayid : 0
+10-23 06:09:20.895 18931 18931 D BezellessGripSuppressionFilter: getdisplaysize, x : 1080 y : 2160
+--------- beginning of system
+10-23 06:09:20.925 18931 18931 I Timeline: Timeline: Activity_idle id: android.os.BinderProxy@c653850 time:4300584
+10-23 06:09:20.928 18931 18953 D vulkan  : searching for layers in '/data/app/dev.vieww.demo-qwoVRRsMvB4xRY9RajO93Q==/lib/arm64'
+10-23 06:09:20.928 18931 18953 D vulkan  : searching for layers in '/data/app/dev.vieww.demo-qwoVRRsMvB4xRY9RajO93Q==/base.apk!/lib/arm64-v8a'
+10-23 06:09:20.939 18931 18953 I Adreno  : QUALCOMM build          : 50f1b2d, I1b05bd271c
+10-23 06:09:20.939 18931 18953 I Adreno  : Build Date              : 03/26/19
+10-23 06:09:20.939 18931 18953 I Adreno  : Shader Compiler Version : EV031.25.03.03
+10-23 06:09:20.939 18931 18953 I Adreno  : Local Branch            : 
+10-23 06:09:20.939 18931 18953 I Adreno  : Remote Branch           : 
+10-23 06:09:20.939 18931 18953 I Adreno  : Remote Branch           : 
+10-23 06:09:20.939 18931 18953 I Adreno  : Reconstruct Branch      : 
+10-23 06:09:20.939 18931 18953 I Adreno  : Build Config                     : S L 6.0.7 AArch64
+10-23 06:09:20.948 18931 18953 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+10-23 06:09:20.949 18931 18953 I chatty  : uid=10237(dev.vieww.demo) android_main identical 2 lines
+10-23 06:09:20.949 18931 18953 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+10-23 06:09:20.957 18931 18953 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:09:20.958 18931 18953 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:09:21.019 18931 18953 I vieww   : vieww_platform_winit::insets: display refresh: no display, or below API 30
+10-23 06:09:21.019 18931 18953 I vieww   : vieww_platform_winit::app: vieww: window#primary is on Android Device, which reports no refresh rate; keeping the current budget
+10-23 06:09:21.019 18931 18953 I vieww   : vieww_platform_winit::insets: window insets: device is below API 30, reporting none (asked once)
+10-23 06:09:21.037 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=0
+10-23 06:09:21.204 18931 18953 I vieww   : vieww_platform_winit::a11y_android: a11y: device is API 28, and the injected delegate needs 29; TalkBack will not see this tree
+10-23 06:09:21.210 18931 18953 I vieww   : android::device_tests: __VIEWW_TAPS__ button=172,437 field=227,688 menu=250,2010
+10-23 06:09:21.211 18931 18953 I vieww   : android::device_tests: __VIEWW_TAPS_PT__ scale=2.625 button=66,166 field=86,262
+10-23 06:09:21.220 18931 18953 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:09:21.221 18931 18953 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:09:23.778 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=60
+10-23 06:09:25.561 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:25.574 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:26.164 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=120
+10-23 06:09:26.898 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:26.912 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:28.234 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:28.257 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:28.547 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=180
+10-23 06:09:29.578 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:29.584 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:30.894 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:30.899 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=240
+10-23 06:09:30.903 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:32.238 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:32.254 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:33.518 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:33.526 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=300
+10-23 06:09:33.529 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:34.770 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:34.805 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:36.090 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:36.137 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:36.629 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=360
+10-23 06:09:37.720 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:37.737 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:38.810 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:38.855 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:39.207 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=420
+10-23 06:09:40.117 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:40.134 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:41.423 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:41.453 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:42.177 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=480
+10-23 06:09:43.078 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:43.098 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:44.381 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:44.391 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:44.817 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=540
+10-23 06:09:45.662 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:45.670 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:46.920 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:46.929 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:47.691 18931 18953 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=600
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ begin
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   crash_reports_recovered_from_the_last_run: 0
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   crash_reports_have_somewhere_to_go: wrote and read one back in /data/user/0/dev.vieww.demo/files/crashes
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_platform_registered_a_clipboard: 4 service(s) registered
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   dlopen_from_a_writable_path: PERMITTED (the linker read the file and rejected its contents); dlopen said: dlopen failed: "/data/data/dev.vieww.demo/files/libvieww_probe.so" is too small to be an ELF executable: only found 28 bytes
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   dlopen_a_real_guest_library: not staged — found nothing at /storage/emulated/0/Android/data/dev.vieww.demo/files/libreload_guest.so or /data/local/tmp/libreload_guest.so. Run ci/mobile/reload-guest-android.sh to build and stage one; this is not a failure, only an unanswered question.
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   present: debug.vieww.present=vulkan
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   rasterizer: CPU rasterizer (set debug.vieww.gpu=1 for the GPU path)
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   view_metrics_reached_the_tree: 411.42856x822.8571 logical
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_display_density_is_plausible: 2.625x
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_safe_area_fits_inside_the_surface: l0 t0 r0 b0
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   safe_area: l0 t0 r0 b0 on a 411.42856x822.8571 surface at 2.625x
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } on a 822.8571-tall surface
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } at the moment of the report
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_platform_clipboard_round_trips: wrote and read back 33 bytes; restored what was there
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_semantic_click_activates_the_button: handled=true, taps 0 -> 1
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_tap_reached_a_handler: 1 tap
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   frames_were_presented: 600 frames
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ FAIL the_typical_frame_is_inside_its_budget: median 46.51198ms against a budget of 16.666668ms
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ FAIL frames_inside_their_budget: 240 of 240 frames over a budget of 16.666668ms (at most 1 in 20)
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   no_frame_stalled: worst 80.39651ms against a stall line of 139.53594ms (max of 4x budget, 3x median), 240 of 240 over budget
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_time: median 46.51198ms, worst 80.39651ms, budget 16.666668ms (240 samples)
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   startup_stages: before run 584 ms | app setup 0.2 | event loop started 0.0 | resumed 37.8 | window created 0.1 | present ready 93.1 | accessibility and show 0.0 | tree built 13.3 | window ready 0.4 | until first draw 0.1 | app before-frame hooks 18.0 | first build and layout 6.2 | first raster and present 160.2 = 913.3 ms from process start
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_stages: medians ms: scale 0.07 plan 0.00 cpu 28.35 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 18.00
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_stages_p95: p95 ms: scale 0.16 plan 0.00 cpu 35.95 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 23.45
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   input_latency: input to present ms: median 56.9 p95 70.2 p99 80.5 worst 80.5 over 34 inputs in 34 frames; 0 unanswered within 1 s
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   raster_by_kind: medians ms: text 0.00 shadows 0.00 paths 0.53 rects 23.70 images 0.00 layers 0.00 composite 0.00 total 24.23; p95 ms: text 0.00 shadows 0.00 paths 0.77 rects 29.53 images 0.00 layers 0.00 composite 0.00 total 30.30
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   worst_frame: work 80.40 ms, outside the renderer 2.31 ms, on cpu0; stages ms: scale 0.20 plan 0.00 cpu 58.80 gpu_upload 0.00 gpu_record 0.00 gpu_submit 0.00 gpu_wait 0.00 gpu_readback 0.00 acquire 0.00 present 19.10
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   raster_by_core: cpu4 84 frames 28.77 ms | cpu5 54 frames 28.31 ms | cpu6 45 frames 28.08 ms | cpu7 43 frames 20.39 ms | cpu0 11 frames 28.42 ms | cpu2 2 frames 17.77 ms | cpu3 1 frames 16.80 ms
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cpu_clocks: cpu0 1.80/1.80 GHz | cpu1 1.80/1.80 GHz | cpu2 1.80/1.80 GHz | cpu3 1.80/1.80 GHz | cpu4 1.80/1.80 GHz | cpu5 1.80/1.80 GHz | cpu6 1.80/1.80 GHz | cpu7 1.80/1.80 GHz
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   device: tier low, 2.7 GB, 8 cores, msm8953 (API 28)
+10-23 06:09:47.694 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cache_budgets: blur off (tier low), fill off (tier low), raster threads up to 8 workers per large mask
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   quality_overlay: tier low · median 45.288476ms / p95 57.418229ms / worst 80.39651ms vs budget 16.666668ms · 240/240 over
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   damage_tracking_costs_a_fraction_of_a_full_repaint: 0.058 full repaints per frame over 600 frames, against a 2332800px surface
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   full_repaints: 1 of 600 frames cost a whole surface, 0 of those after the loop slept
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_full_repaint_counter_saw_the_first_frame: 1 full repaint(s) over 600 frames against a 2332800px surface
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_report: 600 frames in 26.49s — 22.6fps (median 46.84ms, worst 80.66ms over 240 continuous); work median 46.51ms, worst 80.40ms; 600 over a 16.67ms budget; rasterised 35.01 full repaints (1 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.07 plan 0.00 cpu 28.35 gpu[upload 0.00 record 0.00 submit 0.00 wait 0.00 readback 0.00] acquire 0.00 present 18.00 ms
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   gpu_frames: 0 of 600 drawn by the GPU rasterizer (0 straight into the swapchain)
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cpu_time: process CPU 33.00 ms per frame over the last 240 frames, every thread (72% of one core)
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   thermal: hottest zone 39.7 -> 40.1 °C (peak 41.7) over 27 s
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ --   shadow_blurs: 0 over 600 frames (0.00 a frame), 0.0 Mpx in all
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ end 17 checks, 2 failed
+10-23 06:09:47.695 18931 18953 I vieww   : android::device_tests: __VIEWW_SUITE__ result FAIL
+10-23 06:09:48.416 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:48.442 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:49.728 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:49.759 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:50.996 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:51.015 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:52.298 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:09:52.328 18931 18931 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:09:54.105 18931 18947 I dev.vieww.demo: Explicit concurrent copying GC freed 22730(7MB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1118KB/13MB, paused 149us total 22.418ms

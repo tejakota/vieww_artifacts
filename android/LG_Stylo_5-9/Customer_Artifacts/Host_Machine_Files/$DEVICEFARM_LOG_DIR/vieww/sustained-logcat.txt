@@ -1,0 +1,233 @@
+--------- beginning of main
+10-23 06:31:32.116  3917  3917 E dev.vieww.demo: Not starting debugger since process cannot load the jdwp agent.
+10-23 06:31:32.168  3917  3917 E DisplayManagerHelper: ISmartCoverManager is null
+10-23 06:31:32.215  3917  3917 D PhoneWindow: windowLightStatusBar : false, disable View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+10-23 06:31:32.229  3917  3917 I android-activity: Creating: Activity = 0x2876, saved state size = 0
+10-23 06:31:32.235  3917  3938 I vieww   : android::demo: vieww starting
+10-23 06:31:32.666  3917  3917 D OpenGLRenderer: Skia GL Pipeline
+10-23 06:31:32.679  3917  3917 I TouchFilterInputStageHelper: [needTouchEventFilter] Displayid : 0
+10-23 06:31:32.683  3917  3917 D BezellessGripSuppressionFilter: getdisplaysize, x : 1080 y : 2160
+--------- beginning of system
+10-23 06:31:32.711  3917  3917 I Timeline: Timeline: Activity_idle id: android.os.BinderProxy@c653850 time:5632369
+10-23 06:31:32.717  3917  3938 D vulkan  : searching for layers in '/data/app/dev.vieww.demo-qwoVRRsMvB4xRY9RajO93Q==/lib/arm64'
+10-23 06:31:32.717  3917  3938 D vulkan  : searching for layers in '/data/app/dev.vieww.demo-qwoVRRsMvB4xRY9RajO93Q==/base.apk!/lib/arm64-v8a'
+10-23 06:31:32.730  3917  3938 I Adreno  : QUALCOMM build          : 50f1b2d, I1b05bd271c
+10-23 06:31:32.730  3917  3938 I Adreno  : Build Date              : 03/26/19
+10-23 06:31:32.730  3917  3938 I Adreno  : Shader Compiler Version : EV031.25.03.03
+10-23 06:31:32.730  3917  3938 I Adreno  : Local Branch            : 
+10-23 06:31:32.730  3917  3938 I Adreno  : Remote Branch           : 
+10-23 06:31:32.730  3917  3938 I Adreno  : Remote Branch           : 
+10-23 06:31:32.730  3917  3938 I Adreno  : Reconstruct Branch      : 
+10-23 06:31:32.730  3917  3938 I Adreno  : Build Config                     : S L 6.0.7 AArch64
+10-23 06:31:32.739  3917  3938 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+10-23 06:31:32.739  3917  3938 I chatty  : uid=10237(dev.vieww.demo) android_main identical 1 line
+10-23 06:31:32.740  3917  3938 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+10-23 06:31:32.740  3917  3938 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+10-23 06:31:32.747  3917  3938 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:31:32.748  3917  3938 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:31:32.815  3917  3938 I vieww   : vieww_platform_winit::rasterizer_choice: vieww: rasterizer gpu (calibrated earlier: cpu 21.32 ms, gpu 6.57 ms)
+10-23 06:31:32.830  3917  3938 I vieww   : vieww_platform_winit::insets: display refresh: no display, or below API 30
+10-23 06:31:32.830  3917  3938 I vieww   : vieww_platform_winit::app: vieww: window#primary is on Android Device, which reports no refresh rate; keeping the current budget
+10-23 06:31:32.830  3917  3938 I vieww   : vieww_platform_winit::insets: window insets: device is below API 30, reporting none (asked once)
+10-23 06:31:32.845  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=0
+10-23 06:31:33.521  3917  3938 I vieww   : vieww_platform_winit::a11y_android: a11y: device is API 28, and the injected delegate needs 29; TalkBack will not see this tree
+10-23 06:31:33.527  3917  3938 I vieww   : android::device_tests: __VIEWW_TAPS__ button=161,209 field=217,418 menu=489,209
+10-23 06:31:33.527  3917  3938 I vieww   : android::device_tests: __VIEWW_TAPS_PT__ scale=2.625 button=61,80 field=83,159
+10-23 06:31:34.496  3917  3938 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:31:34.497  3917  3938 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+10-23 06:31:34.735  3917  3938 I vieww   : vieww_platform_winit::startup: vieww: pipeline cache started from 38581 bytes; saved 38581 bytes after the first GPU frame
+10-23 06:31:37.104  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:39.124  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:41.319  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:41.458  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:42.260  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 27300(9MB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 159us total 15.997ms
+10-23 06:31:43.680  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:43.837  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:46.381  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:47.308  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:49.426  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:49.436  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:51.567  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:51.670  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:52.581  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 4108(177KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 96us total 13.526ms
+10-23 06:31:53.674  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:54.542  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:55.706  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:55.856  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:31:57.896  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:31:58.772  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:01.005  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:01.650  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:02.939  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3394(160KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 61us total 13.328ms
+10-23 06:32:03.597  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:03.816  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:05.804  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:06.716  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:08.790  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:09.735  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:11.265  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:11.890  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:13.266  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3387(159KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 71us total 13.383ms
+10-23 06:32:13.885  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:14.807  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:16.821  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:17.032  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:19.050  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:19.966  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:22.183  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:22.839  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:23.606  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3388(160KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 102us total 13.233ms
+10-23 06:32:24.150  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:24.974  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:26.988  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:27.822  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=60
+10-23 06:32:27.825  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:29.857  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:30.784  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:32.918  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:33.581  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:33.886  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3386(160KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 65us total 14.220ms
+10-23 06:32:35.597  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:36.307  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:37.502  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:38.334  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:40.327  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:41.175  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:43.440  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:44.014  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:44.173  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3391(176KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 59us total 14.065ms
+10-23 06:32:46.033  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:46.906  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:48.903  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:49.766  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:51.765  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:52.665  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:54.488  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3551(176KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 59us total 13.269ms
+10-23 06:32:54.912  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:55.554  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:32:57.556  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:32:58.444  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:00.474  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:01.354  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:03.375  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:04.264  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:04.815  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3390(176KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 59us total 13.122ms
+10-23 06:33:06.568  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:07.157  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:08.354  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:09.246  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:11.249  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:12.123  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:14.178  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:14.879  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:15.120  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3384(160KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 67us total 19.643ms
+10-23 06:33:16.418  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:17.028  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:18.987  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:19.907  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:21.842  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=120
+10-23 06:33:21.909  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:22.791  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:24.756  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_DOWN
+10-23 06:33:24.935  3917  3917 I ViewRootImpl: ViewRoot's Touch Event : ACTION_UP
+10-23 06:33:25.428  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3386(160KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 55us total 14.572ms
+10-23 06:33:35.786  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(160KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 71us total 14.360ms
+10-23 06:33:46.082  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3353(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 54us total 13.892ms
+10-23 06:33:56.406  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 66us total 14.300ms
+10-23 06:34:06.744  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3352(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 81us total 14.117ms
+10-23 06:34:14.759  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=180
+10-23 06:34:17.055  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 53us total 12.974ms
+10-23 06:34:27.379  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3352(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 56us total 13.165ms
+10-23 06:34:37.707  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 62us total 13.923ms
+10-23 06:34:48.046  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3352(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 61us total 14.142ms
+10-23 06:34:58.404  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 63us total 13.428ms
+10-23 06:35:06.827  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=240
+10-23 06:35:08.741  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3352(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 85us total 14.471ms
+10-23 06:35:19.077  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 110us total 13.556ms
+10-23 06:35:29.394  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3352(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1133KB/13MB, paused 68us total 17.329ms
+10-23 06:35:39.726  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3412(159KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 62us total 14.499ms
+10-23 06:35:50.057  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3352(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 63us total 13.207ms
+10-23 06:36:00.236  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=300
+10-23 06:36:00.378  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 63us total 13.415ms
+10-23 06:36:10.703  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3352(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 81us total 13.716ms
+10-23 06:36:21.026  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3349(143KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 56us total 14.126ms
+10-23 06:36:31.404  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 68us total 13.568ms
+10-23 06:36:41.732  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 62us total 16.142ms
+10-23 06:36:52.071  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 57us total 13.284ms
+10-23 06:36:53.235  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=360
+10-23 06:37:02.396  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 60us total 13.164ms
+10-23 06:37:12.728  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 67us total 14.912ms
+10-23 06:37:23.065  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 69us total 14.452ms
+10-23 06:37:33.393  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 70us total 13.459ms
+10-23 06:37:43.727  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 58us total 14.401ms
+10-23 06:37:46.402  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=420
+10-23 06:37:54.029  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 57us total 13.245ms
+10-23 06:38:04.389  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 51us total 13.172ms
+10-23 06:38:14.705  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 75us total 14.328ms
+10-23 06:38:25.037  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 79us total 14.919ms
+10-23 06:38:35.418  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 55us total 13.238ms
+10-23 06:38:39.763  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=480
+10-23 06:38:45.756  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 70us total 16.746ms
+10-23 06:38:56.096  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 63us total 13.231ms
+10-23 06:39:06.427  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 62us total 14.664ms
+10-23 06:39:16.767  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 67us total 13.913ms
+10-23 06:39:27.104  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 61us total 13.395ms
+10-23 06:39:33.158  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=540
+10-23 06:39:37.430  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 55us total 13.259ms
+10-23 06:39:47.817  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 55us total 13.122ms
+10-23 06:39:58.165  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 67us total 13.785ms
+10-23 06:40:08.490  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 119us total 13.528ms
+10-23 06:40:18.826  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3350(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 65us total 13.440ms
+10-23 06:40:25.179  3917  3938 I vieww   : android::device_tests: __VIEWW_PROGRESS__ frames=600
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ begin
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   crash_reports_recovered_from_the_last_run: 0
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   crash_reports_have_somewhere_to_go: wrote and read one back in /data/user/0/dev.vieww.demo/files/crashes
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_platform_registered_a_clipboard: 4 service(s) registered
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   dlopen_from_a_writable_path: PERMITTED (the linker read the file and rejected its contents); dlopen said: dlopen failed: "/data/data/dev.vieww.demo/files/libvieww_probe.so" is too small to be an ELF executable: only found 28 bytes
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   dlopen_a_real_guest_library: not staged — found nothing at /storage/emulated/0/Android/data/dev.vieww.demo/files/libreload_guest.so or /data/local/tmp/libreload_guest.so. Run ci/mobile/reload-guest-android.sh to build and stage one; this is not a failure, only an unanswered question.
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   screen: stress (debug.vieww.screen=stress)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   seconds: debug.vieww.seconds=60
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   rasterizer: measured on this phone (debug.vieww.gpu=auto)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   view_metrics_reached_the_tree: 411.42856x822.8571 logical
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_display_density_is_plausible: 2.625x
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_safe_area_fits_inside_the_surface: l0 t0 r0 b0
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   safe_area: l0 t0 r0 b0 on a 411.42856x822.8571 surface at 2.625x
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_keyboard_inset_is_a_plausible_bottom_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } on a 822.8571-tall surface
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   keyboard_inset: EdgeInsets { left: 0.0, top: 0.0, right: 0.0, bottom: 0.0 } at the moment of the report
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_platform_clipboard_round_trips: wrote and read back 33 bytes; restored what was there
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_semantic_click_activates_the_button: handled=true, taps 0 -> 1
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_tap_reached_a_handler: 1 tap
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   a_modal_silences_the_screen_behind_it: 3 of 3 panel item(s) reachable, and nothing is behind the scrim (3 labelled node(s) in the tree)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   frames_were_presented: 600 frames
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ FAIL the_typical_frame_is_inside_its_budget: median 952.968905ms against a budget of 16.666668ms
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ FAIL frames_inside_their_budget: 240 of 240 frames over a budget of 16.666668ms (at most 1 in 20)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   no_frame_stalled: worst 1.023039531s against a stall line of 2.858906715s (max of 4x budget, 3x median), 240 of 240 over budget
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_time: median 952.968905ms, worst 1.023039531s, budget 16.666668ms (240 samples)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   startup_stages: before run 583 ms | app setup 0.2 | event loop started 0.0 | resumed 30.2 | window created 0.0 | present ready 120.9 | accessibility and show 0.0 | tree built 14.1 | window ready 0.4 | until first draw 0.1 | app before-frame hooks 15.3 | first build and layout 13.5 | first raster and present 662.2 = 1440.1 ms from process start
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   renderer_choice: gpu (calibrated earlier: cpu 21.32 ms, gpu 6.57 ms)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_stages: medians ms: scale 0.07 plan 96.48 cpu 0.00 gpu_upload 17.95 gpu_record 5.30 gpu_submit 0.57 gpu_wait 823.09 gpu_readback 0.00 acquire 0.56 present 0.52
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_stages_p95: p95 ms: scale 0.13 plan 167.95 cpu 774.28 gpu_upload 42.79 gpu_record 9.59 gpu_submit 1.00 gpu_wait 868.15 gpu_readback 0.00 acquire 0.92 present 23.81
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   input_latency: input to present ms: median 957.2 p95 986.9 p99 992.7 worst 999.7 over 69 inputs in 69 frames; 13 unanswered within 1 s
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   gpu_overlap: on: the app builds the next frame while the GPU draws this one
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   partial_blit: trusted: 0 partial and 496 full copies, 100.0% of the frames' pixels copied; 6 image(s) kept their contents, 0 did not
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   gpu_passes: medians ms: draw 72.31 layers 17.09 filters 829.84 shadows 16.27 blit 2.11 total 937.63; p95 ms: draw 102.24 layers 22.71 filters 833.23 shadows 18.45 blit 2.34 total 978.97
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   worst_frame: work 1023.04 ms, outside the renderer 3.81 ms; stages ms: scale 0.08 plan 152.34 cpu 0.00 gpu_upload 36.67 gpu_record 5.15 gpu_submit 0.72 gpu_wait 823.09 gpu_readback 0.00 acquire 0.67 present 0.51
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   raster_by_core: cpu4 22 frames 752.17 ms | cpu5 9 frames 768.17 ms | cpu7 6 frames 783.01 ms | cpu0 3 frames 734.15 ms | cpu6 3 frames 724.46 ms
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cpu_clocks: cpu0 1.40/1.80 GHz | cpu1 1.40/1.80 GHz | cpu2 1.40/1.80 GHz | cpu3 1.40/1.80 GHz | cpu4 1.40/1.80 GHz | cpu5 1.40/1.80 GHz | cpu6 1.40/1.80 GHz | cpu7 1.40/1.80 GHz
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   pipeline_cache: started from 38581 bytes; saved 38581 bytes after the first GPU frame
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   device: tier low, 2.7 GB, 8 cores, msm8953 (API 28)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cache_budgets: blur off (tier low), fill off (tier low), raster threads up to 8 workers per large mask
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   quality_overlay: tier low · median 874.888565ms / p95 997.566719ms / worst 1.023039531s vs budget 16.666668ms · 240/240 over
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   damage: 1.000 full repaints per frame over 600 frames, against a 2332800px surface (stress screen: the whole list moves every frame)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   full_repaints: 600 of 600 frames cost a whole surface, 0 of those after the loop slept
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   idle_frames_do_not_repaint_the_whole_surface: 0 idle full repaint(s) over 600 frames, against a budget of 12
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ ok   the_full_repaint_counter_saw_the_first_frame: 600 full repaint(s) over 600 frames against a 2332800px surface
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   frame_report: 600 frames in 531.64s — 1.1fps (median 961.54ms, worst 1028.49ms over 240 continuous); work median 952.97ms, worst 1023.04ms; 600 over a 16.67ms budget; rasterised 600.16 full repaints (600 frame(s) cost a whole surface, 0 of them idle); stage medians: scale 0.07 plan 96.48 cpu 0.00 gpu[upload 17.95 record 5.30 submit 0.57 wait 823.09 readback 0.00] acquire 0.56 present 0.52 ms
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   gpu_frames: 496 of 600 drawn by the GPU rasterizer (496 straight into the swapchain)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   cpu_time: process CPU 293.23 ms per frame over the last 539 frames, every thread (33% of one core)
+10-23 06:40:25.184  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   thermal: hottest zone 38.8 -> 37.0 °C (peak 38.8) over 532 s
+10-23 06:40:25.185  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   shadow_blurs: 1058 over 600 frames (1.76 a frame), 356.7 Mpx in all
+10-23 06:40:25.185  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ --   sustained: frames 361-600: median 952.97 ms, 240 of 240 over budget; last 240 of 600 frames: median 952.97 ms, 240 over; 532 s
+10-23 06:40:25.185  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ end 16 checks, 2 failed
+10-23 06:40:25.185  3917  3938 I vieww   : android::device_tests: __VIEWW_SUITE__ result FAIL
+10-23 06:40:28.168  3917  3948 I dev.vieww.demo: Explicit concurrent copying GC freed 3348(144KB) AllocSpace objects, 1(20KB) LOS objects, 91% free, 1117KB/13MB, paused 55us total 13.223ms
