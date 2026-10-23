@@ -1223,6 +1223,92 @@ fn a_reply_renders_its_markdown() {
     assert!(plain.contains("Markdown"));
 }
 
+/// The chat takes a chat app's share of the window: the thread and the
+/// composer under it widen with the pane (86% of it, up to a ceiling)
+/// instead of floating in a fixed reading column's margins. The probe is
+/// the first bubble — accent-tinted, right-aligned to the column's edge,
+/// and the only thing on a fresh thread — so the rightmost strong pixel
+/// in its band *is* the column's right edge. (The thread was a 760px
+/// column centred in the window: at the default 1280 that left 260px of
+/// dead margin each side, and more the wider the window grew.)
+#[test]
+fn the_chat_takes_a_chat_apps_share_of_the_window() {
+    let _home = home_lock();
+    let home = temp("chat-width");
+    std::env::set_var("WRIGHT_HOME", &home);
+
+    // The bubble's right edge at a given window size: the rightmost
+    // pixel that is clearly not the ground, in the band a fresh thread's
+    // one message occupies.
+    let right_edge = |w: u32, h: u32, tag: &str, id: u64| -> usize {
+        let size = Size::new(w as f32, h as f32);
+        let mut driver = FrameDriver::new(size);
+        shell::register(&mut driver);
+        let ui = Ui::new(
+            driver.elements().runtime(),
+            None,
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        );
+        let dir = temp(&format!("chat-width-{tag}")).canonicalize().unwrap();
+        let s = super::session::Session::open(driver.elements().runtime(), dir, id);
+        s.chat.set(vec![(
+            true,
+            "A message long enough to reach the bubble's own width cap, so its right edge is the \
+             column's right edge, however wide the window it sits in."
+                .into(),
+        )]);
+        driver.set_root(super::thread::page(&ui, &s));
+        ui.pump(&mut driver);
+        driver.draw_frame_at(Duration::from_millis(16));
+        ui.pump(&mut driver);
+        driver.draw_frame_at(Duration::from_millis(32));
+        let (pixels, _) = NativeRenderer::new()
+            .render_to_pixels(driver.scene(), w, h, ui.pal().ground)
+            .unwrap();
+        let data = pixels.data();
+        let ground = ui.pal().ground;
+        let (gr, gg, gb) = (ground.r as i32, ground.g as i32, ground.b as i32);
+        let mut rightmost = 0usize;
+        for y in 34..120usize {
+            for x in (0..w as usize).rev() {
+                let i = (y * w as usize + x) * 4;
+                if data[i + 3] == 255
+                    && (data[i] as i32 - gr).abs()
+                        + (data[i + 1] as i32 - gg).abs()
+                        + (data[i + 2] as i32 - gb).abs()
+                        > 60
+                {
+                    rightmost = rightmost.max(x);
+                    break;
+                }
+            }
+        }
+        assert!(
+            rightmost > 0,
+            "the bubble renders in the scanned band at {w}x{h}"
+        );
+        rightmost
+    };
+
+    // The default window: 86% of the pane past the gutters puts the
+    // column's edge near 1170. The old fixed column stopped at 1020,
+    // which is what this test is here to keep from coming back.
+    let at_1280 = right_edge(1280, 800, "1280", 7_003);
+    assert!(
+        (1140..=1200).contains(&at_1280),
+        "the chat's right edge at 1280 is {at_1280}, not a chat app's share of the pane"
+    );
+
+    // A wider window: the column stops at its ceiling (1160), so the
+    // edge lands near 1380 — wider than the pane's share would be, and
+    // narrower than filling the window outright would read.
+    let at_1600 = right_edge(1600, 900, "1600", 7_004);
+    assert!(
+        (1350..=1410).contains(&at_1600),
+        "the chat's right edge at 1600 is {at_1600}, not the column's ceiling"
+    );
+}
+
 /// The send button is stop while a reply is on its way: the same circle,
 /// the opposite deed, and a tap ends the wait and swallows the rest of
 /// the stream — the worker's words are not kept, not shown, not written.

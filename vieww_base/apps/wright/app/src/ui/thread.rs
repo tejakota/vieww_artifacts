@@ -20,8 +20,6 @@ use super::session::{Composer, Progress, Session, State, Tone, Voice};
 use super::theme::Pal;
 use super::{EngineView, Ui};
 
-const COLUMN: f32 = 760.0;
-
 pub fn page(ui: &Ui, s: &Session) -> WidgetNode {
     let content: WidgetNode = {
         let (ui, s) = (ui.clone(), s.clone());
@@ -32,7 +30,7 @@ pub fn page(ui: &Ui, s: &Session) -> WidgetNode {
         &s.scroll,
         pad(
             EdgeInsets::only(24.0, 28.0, 24.0, 150.0),
-            reading(COLUMN, content),
+            chat_column(content),
         ),
     );
     let composer_node: WidgetNode = {
@@ -64,10 +62,15 @@ pub fn page(ui: &Ui, s: &Session) -> WidgetNode {
             Container::new()
                 .color(p.ground.with_alpha(235))
                 .padding(EdgeInsets::only(24.0, 10.0, 24.0, 16.0))
-                .child(reading(
-                    COLUMN,
-                    composer(&ui, &s.composer, send, hint, false, busy, stop),
-                ))
+                .child(chat_column(composer(
+                    &ui,
+                    &s.composer,
+                    send,
+                    hint,
+                    false,
+                    busy,
+                    stop,
+                )))
                 .into()
         })
         .into()
@@ -286,7 +289,10 @@ fn reply(p: &Pal, text: &str) -> WidgetNode {
 fn bubble(p: &Pal, text: &str) -> WidgetNode {
     Align::new(Alignment::CENTER_RIGHT)
         .child(
-            Constrained::new(Constraints::new(0.0, 560.0, 0.0, f32::INFINITY)).child(
+            // The cap is a chat app's share of the column (~68% at a
+            // default window): room for a long message, while the reply
+            // across from it still owns its half of the conversation.
+            Constrained::new(Constraints::new(0.0, 720.0, 0.0, f32::INFINITY)).child(
                 Container::new()
                     .color(p.bubble)
                     .radius(20.0)

@@ -112,6 +112,28 @@ pub fn reading(max: f32, child: impl Into<WidgetNode>) -> WidgetNode {
         .into()
 }
 
+/// How much of the room the chat takes: a chat app's share of the pane,
+/// not a reading column's.
+const CHAT_FILL: f32 = 0.86;
+/// The ceiling on that share: past it a line of prose runs too long to
+/// follow, however wide the window grows.
+const CHAT_MAX: f32 = 1160.0;
+
+/// The chat column — the thread and the composer under it — at the
+/// width a chat app uses: most of the window, not a fixed reading
+/// measure floating in margins. A [`LayoutBuilder`] asks the pane how
+/// much room it has and sizes the column from the answer, so the
+/// conversation widens with the window and stops at the ceiling. No
+/// breakpoints: the width is geometry, used exactly, which is the case
+/// the builder rebuilds on every change by design.
+pub fn chat_column(child: impl Into<WidgetNode>) -> WidgetNode {
+    let child = child.into();
+    LayoutBuilder::new(move |c: Constraints| {
+        reading((c.max_width * CHAT_FILL).min(CHAT_MAX), child.clone())
+    })
+    .into()
+}
+
 pub fn fade(alpha: f32, child: impl Into<WidgetNode>) -> WidgetNode {
     Opacity::new(alpha).child(child).into()
 }
