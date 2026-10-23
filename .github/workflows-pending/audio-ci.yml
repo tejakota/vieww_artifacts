@@ -1,0 +1,123 @@
+# Audio and music gate — the one workflow that runs without being asked.
+#
+# Every other workflow here is manual (`workflow_dispatch`) by the repository
+# owner's choice of 2026-10-15, so nothing used to stop an audio regression
+# reaching `main`. This one is deliberately small: it runs only when audio or
+# music code changes, and only the crates involved — minutes, not the full
+# framework matrix.
+#
+#   * `test`  — the three crates' tests in release (the realtime no-alloc
+#               harness and the NaN-recovery suite included) and clippy with
+#               `-D warnings`, on every push to main and every pull request
+#               that touches them.
+#   * `fuzz`  — every vieww-audio decoder under cargo-fuzz, nightly, and
+#               BLOCKING: a crash fails the run and uploads the input. (The
+#               `audio-fuzz` leg in framework-checks.yml is the manual,
+#               report-only twin.)
+#
+# Mirrored byte-for-byte at vieww_base/.github/workflows/audio-ci.yml, like
+# the others: GitHub runs this root file.
+
+name: Audio CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "vieww_base/crates/vieww-audio/**"
+      - "vieww_base/crates/vieww-audio-plugin/**"
+      - "vieww_base/crates/vieww-music/**"
+      - "vieww_base/Cargo.toml"
+      - "vieww_base/Cargo.lock"
+      - ".github/workflows/audio-ci.yml"
+  pull_request:
+    paths:
+      - "vieww_base/crates/vieww-audio/**"
+      - "vieww_base/crates/vieww-audio-plugin/**"
+      - "vieww_base/crates/vieww-music/**"
+      - "vieww_base/Cargo.toml"
+      - "vieww_base/Cargo.lock"
+      - ".github/workflows/audio-ci.yml"
+  schedule:
+    - cron: "17 21 * * *" # 02:47 IST nightly: the fuzz job
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audio-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Must equal vieww_base/rust-toolchain.toml.
+  RUST_VERSION: "1.98.1"
+
+defaults:
+  run:
+    shell: bash
+    working-directory: vieww_base
+
+jobs:
+  test:
+    name: Audio and music crates (tests + clippy)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vieww_base/target
+          key: audio-ci-${{ runner.os }}-${{ hashFiles('vieww_base/Cargo.lock') }}
+      - name: Tests (release)
+        run: cargo test --release -p vieww-audio -p vieww-audio-plugin -p vieww-music
+      - name: Clippy
+        run: cargo clippy -p vieww-audio -p vieww-audio-plugin -p vieww-music --all-targets -- -D warnings
+
+  fuzz:
+    name: Audio decoders under cargo-fuzz (nightly, blocking)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FUZZ_SECONDS: "300"
+    defaults:
+      run:
+        shell: bash
+        working-directory: vieww_base/crates/vieww-audio
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nightly and cargo-fuzz
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo +nightly install cargo-fuzz --locked
+      - name: Seed each target's corpus
+        run: |
+          for t in $(cargo +nightly fuzz list); do
+            mkdir -p "fuzz/corpus/$t"
+            cp tests/fixtures/*.{wav,flac,mp3,ogg,aac,m4a,aiff} "fuzz/corpus/$t/" 2>/dev/null || true
+            cp tests/hostile/*.bin "fuzz/corpus/$t/"
+          done
+      - name: Fuzz every target
+        run: |
+          status=0
+          for t in $(cargo +nightly fuzz list); do
+            echo "::group::$t"
+            cargo +nightly fuzz run "$t" "fuzz/corpus/$t" -s none -- \
+              -max_total_time="$FUZZ_SECONDS" -rss_limit_mb=2048 -timeout=20 || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+      - name: Findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-fuzz-findings
+          path: vieww_base/crates/vieww-audio/fuzz/artifacts/

@@ -30,3 +30,23 @@ Place them all with
 
 then commit and push with a token that has `workflow` scope, or move the
 files in GitHub's web editor.
+
+# Waiting (2026-10-23): audio-ci.yml
+
+`audio-ci.yml` — the one workflow that runs **on push**, gating the audio and
+music crates (tests and clippy with `-D warnings`, nightly cargo-fuzz). The
+vieww-audio / vieww-music series of 2026-10-23 reached `main` without it: the
+push token lacked `workflow` scope, so the file rides here as an ordinary
+file, exactly as the five above once did. It is the only automated gate the
+audio crates have, so placing it is not optional housekeeping.
+
+Place it at **both** paths, mirrored byte-for-byte like `framework-checks.yml`:
+
+    .github/workflows/audio-ci.yml
+    vieww_base/.github/workflows/audio-ci.yml
+
+(via the web editor, or `restore.sh audio-ci.yml` under a workflow-scoped
+token — then mirror the `vieww_base` copy by hand; `restore.sh` only fills
+the root). The file's own `on:` block already covers both copies' contract:
+push and pull_request paths on the audio and music crates, a nightly fuzz
+schedule at 02:47 IST, and `workflow_dispatch`.
