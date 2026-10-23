@@ -62,6 +62,28 @@ pub(crate) fn draw_mark(
     );
 }
 
+/// Draw the shared W mark on a canvas' horizontal centre line. Opening,
+/// closing and social end cards use this helper so none can drift sideways
+/// as their mark size or output resolution changes.
+pub(crate) fn centered_mark(
+    book: &mut Sketchbook,
+    canvas_width: f32,
+    top: f32,
+    side: f32,
+    progress: f32,
+    color: Color,
+    width: f32,
+) {
+    draw_mark(
+        book,
+        Offset::new((canvas_width - side) * 0.5, top),
+        side,
+        progress,
+        color,
+        width,
+    );
+}
+
 // ── type ────────────────────────────────────────────────────────────────────
 
 /// A display label at a place, one line, horizontally aligned in its
@@ -88,6 +110,7 @@ pub(crate) fn dlabel(
         text,
         align,
         a,
+        true,
     )
 }
 
@@ -115,6 +138,7 @@ pub(crate) fn mlabel(
         text,
         align,
         a,
+        true,
     )
 }
 
@@ -128,10 +152,21 @@ fn at_place(
     text: impl Into<String>,
     align: TextAlign,
     a: f32,
+    single_line: bool,
 ) -> WidgetNode {
     if a <= 0.01 {
         return Stack::new().into();
     }
+    let text = Text::new(text.into()).style(style).align(align);
+    // Film layout is authored against fixed rectangles. A long dynamic
+    // label must not become a second line that collides with the next cue.
+    // Typed copy intentionally keeps its multi-line reveal affordance.
+    let text = if single_line {
+        text.max_lines(1)
+            .overflow(vieww_text::TextOverflow::Ellipsis)
+    } else {
+        text
+    };
     Positioned::new()
         .left(x)
         .top(y)
@@ -143,7 +178,7 @@ fn at_place(
                     .width(w)
                     .height(h)
                     .alignment(vieww_foundation::Alignment::CENTER_LEFT)
-                    .child(Text::new(text.into()).style(style).align(align)),
+                    .child(text),
             ),
         )
         .into()
@@ -177,6 +212,7 @@ pub(crate) fn typed_label(
         s,
         TextAlign::Left,
         a,
+        false,
     )
 }
 

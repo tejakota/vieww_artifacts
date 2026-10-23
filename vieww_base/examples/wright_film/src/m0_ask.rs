@@ -38,8 +38,7 @@ pub(crate) fn the_question(ctx: &crate::film::Ctx) -> WidgetNode {
         vieww_foundation::Size::new(W, H),
         PaintWith::new(move |book: &mut Sketchbook, _s| {
             let side = 168.0;
-            let at = Offset::new(W * 0.5 - side * 0.5, 300.0 - lift);
-            kit::draw_mark(book, at, side, mark_p, ACCENT, 11.0);
+            kit::centered_mark(book, W, 300.0 - lift, side, mark_p, ACCENT, 11.0);
         }),
     )));
 

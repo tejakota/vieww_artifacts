@@ -14,6 +14,13 @@ source of truth (the PDF is a v0.1 snapshot).*
 
 ---
 
+> **Platform note (October 2026 follow-up):** Linux commands use Landlock and
+> network namespaces. Windows POSIX shell/Git/test commands can use WSL 2 +
+> Bubblewrap when its namespace probe passes; otherwise they fail closed.
+> Windows-native worker CLIs run only against a throwaway workspace copy and
+> are reported as not OS-sandboxed. macOS remains fail-closed until a native
+> sandbox is implemented. See the Windows setup section in `README.md`.
+
 ## 1. The thesis
 
 Wright is an agent harness where the user never writes code. The UI is

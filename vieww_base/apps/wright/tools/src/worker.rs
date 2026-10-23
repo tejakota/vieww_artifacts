@@ -239,7 +239,14 @@ fn run_external(
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let program_str = program.to_string_lossy().to_string();
 
-    if sandbox::capabilities().is_ok() {
+    let sandbox_available = sandbox::capabilities().is_ok();
+    // The Windows WSL backend deliberately runs POSIX tools, not Windows PE
+    // executables. Passing a native .exe path into Bubblewrap would fail (or,
+    // worse, tempt a future change to execute it outside the namespace). Keep
+    // native workers on the existing workspace-copy fallback and report that
+    // it has no OS-level sandbox; shell, git and run-tests use WSL isolation.
+    let can_sandbox_worker = sandbox_available && !cfg!(windows);
+    if can_sandbox_worker {
         let mut policy = sandbox::Policy::new(copy_dir);
         policy.timeout = timeout;
         // A worker is a model client: it must reach its vendor.
@@ -283,7 +290,12 @@ fn run_external(
     // worker only ever sees the clone), plus a scrubbed environment and
     // the card's clock. The report names the isolation honestly.
     let out = direct_run(entry, program, worker_env, &arg_refs, copy_dir, timeout)?;
-    Ok((out, "isolated copy (no kernel sandbox on this machine)"))
+    let isolation = if cfg!(windows) && sandbox_available {
+        "native Windows worker (workspace copy only; no OS sandbox; WSL isolates POSIX tools)"
+    } else {
+        "workspace copy only (no OS sandbox on this machine)"
+    };
+    Ok((out, isolation))
 }
 
 /// Find the program a worker runs: a path as given, or the first match
@@ -777,7 +789,7 @@ mod tests {
             out.text
         );
         assert!(
-            out.text.contains("kernel sandbox") || out.text.contains("isolated copy"),
+            out.text.contains("kernel sandbox") || out.text.contains("workspace copy"),
             "the isolation is named: {}",
             out.text
         );

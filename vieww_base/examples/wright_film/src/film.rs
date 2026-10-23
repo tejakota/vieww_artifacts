@@ -83,7 +83,7 @@ pub(crate) const LINE: Color = Color::rgb(0x2D, 0x2D, 0x2D);
 // ── the scene registry ──────────────────────────────────────────────────────
 
 /// How a scene renders.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
     /// A pure widget tree — a function of the frame's ctx.
     Pure,

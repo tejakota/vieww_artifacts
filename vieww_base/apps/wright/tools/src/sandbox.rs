@@ -17,8 +17,10 @@
 //!   timeout), core dumps off, a file-size limit, and a scrubbed
 //!   environment (no inherited secrets, no API keys).
 //!
-//! macOS / Windows: not wired yet (Seatbelt / AppContainer are the plan);
-//! these tools refuse there rather than run unsandboxed.
+//! Windows uses WSL 2 + Bubblewrap (`sandbox_windows.rs`): the project is
+//! mounted as the only writable source tree, Windows drives and user homes
+//! are hidden, and commands still fail closed if the isolation runtime is not
+//! installed. macOS (Seatbelt) remains fail-closed until its backend exists.
 //!
 //! This is one of the files AGENTS.md allows `unsafe` in: the FFI and the
 //! `pre_exec` hook. Every block carries a SAFETY comment.
@@ -102,12 +104,13 @@ pub fn capabilities() -> Result<String, String> {
             if abi >= 4 { ", network rules" } else { "" }
         ))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
     {
-        Err(
-            "the process sandbox is Linux-only in v0.2; shell, git and run-tests will refuse"
-                .into(),
-        )
+        windows::capabilities()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        Err("the process sandbox is not available on this platform; shell, git and run-tests will refuse".into())
     }
 }
 
@@ -117,12 +120,23 @@ pub fn run(program: &str, args: &[&str], policy: &Policy) -> Result<RunOutput, S
     {
         linux::run(program, args, policy)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows::run(program, args, policy)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         let _ = (program, args, policy);
-        Err("sandboxed commands are Linux-only in Wright v0.2 (macOS Seatbelt and Windows AppContainer are planned); refusing to run unsandboxed".into())
+        Err(
+            "sandboxed commands are unavailable on this platform; refusing to run unsandboxed"
+                .into(),
+        )
     }
 }
+
+#[cfg(target_os = "windows")]
+#[path = "sandbox_windows.rs"]
+mod windows;
 
 #[cfg(target_os = "linux")]
 mod linux {

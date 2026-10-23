@@ -13,13 +13,14 @@ application**.
 | `wright_twitter.mp4` | The 41-second cut for **X** — the ask, the words, the gate, the mark (1920×1080) |
 | `wright_linkedin.mp4` | The 61-second cut for **LinkedIn** — the trust buyer's edit: the gate, the bounds, the receipt, the delivery, the refire (1920×1080) |
 | `wright_instagram.mp4` | The 33-second square for **the Instagram feed** — question, words, the real window framed like a print, the mark (1080×1080) |
-| `sheets/` | One 4×4 contact sheet per scene per cut — the reviewable set (13 keynote + 4 twitter + 6 linkedin + 4 instagram) |
+| `wright_reels.mp4` | The 33-second, natively composed **9:16 cut for Instagram Reels and YouTube Shorts** (1080×1920; not cropped from the master) |
+| `sheets/` | One 4×4 contact sheet per scene per cut — the reviewable set (13 keynote + 4 Twitter + 6 LinkedIn + 4 Instagram + 4 Reels/Shorts) |
 | `manifest.txt` | The census: frames, shapes, glyph runs, layers, median ms — every number derived, none typed |
 | `samples.txt` | The census's raster samples: `scene, draw commands, milliseconds` |
 
 Source: `vieww_base/examples/wright_film/` — `cargo run --release -p
 wright_film -- census`, then `-- master` (the keynote + teaser), then
-`-- twitter` / `-- linkedin` / `-- instagram` for the cuts (see its
+`-- twitter` / `-- linkedin` / `-- instagram` / `-- reels` for the cuts (see its
 `main.rs`). The output root is `WRIGHT_FILM_OUT` (default
 `wright_film_out/`); the render is resumable — a scene whose segment and
 sheet exist is skipped.
@@ -34,7 +35,7 @@ sheet exist is skipped.
 | IV · THE PROOF | W09–W10 | The receipt — `wright verify`'s six checks in their own words, read from the store at film start, sealed Ed25519. |
 | V · THE REFIRE | W11–W12 | "Make the summaries punchier" — three steps refire, the rest is cached, free. The end card holds. |
 
-## The short cuts — one film, three doors
+## The short cuts — one film, four doors
 
 The social cuts are not re-renders of a smaller film; they are the
 keynote's **own scene builders**, unretimed, on shorter shot lists — the
@@ -51,10 +52,11 @@ same frames the keynote holds, choosing what each platform stops for:
   scenes written for the 1080×1080 frame: the question, the typed
   request, **the real window framed like a print** (the same mounted
   shell as the keynote's Wright act, placed for the square), and the
-  mark centred. A vertical 9:16 cut is deliberately not here: a tall
-  frame has no room for a 1280×800 window, and cropping the keynote
-  into a slit would break the one thing this film holds — that what you
-  see is the product.
+  mark centred.
+- **Reels / YouTube Shorts (`wright_reels.mp4`, 0:33)** — a native
+  1080×1920 portrait composition, not a crop. The opening mark and end card
+  share the same horizontal centre; the actual application sits in a readable
+  922×576 panel with dedicated title and receipt safe areas.
 
 ## The honesty rules
 
@@ -62,7 +64,7 @@ same frames the keynote holds, choosing what each platform stops for:
   `wright::ui` shell (`Ui`, `shell::root`, the real signals) on its own
   `FrameDriver` and drives it with a frame-indexed script — the pattern
   `viewwstudio` set for the launch film's studio act. What you see is
-  the product. The Instagram cut's window scene does the same, smaller.
+  the product. The Instagram and Reels/Shorts cuts do the same, placed for their own canvases.
 - **The run is real.** Before the first frame, the film fires the
   repository's own HN-digest example through `wright_engine::fire`
   against the engine's mock provider (a local sink stands in for the

@@ -1505,6 +1505,7 @@ fn workspace(ui: &Ui, p: &Pal) -> WidgetNode {
     let daemon = f.clone();
     let home = wright_runtime::config::wright_home();
     let reveal = home.clone();
+    let reveal_ui = ui.clone();
     stretch(14.0, vec![
         section(p, "New projects", "Each new session gets its own folder here, named from your first words."),
         field(ui, p, "Projects folder", &f.projects_dir, "~/Wright", false),
@@ -1527,7 +1528,14 @@ fn workspace(ui: &Ui, p: &Pal) -> WidgetNode {
         })]),
         divider(p),
         section(p, "Wright's own records", "Run history, cache and receipts live outside your projects, here:"),
-        row(10.0, vec![grow(copyable_mono(home.display().to_string(), 12.5, p.ink)), button(p, "Open", Look::Quiet, true, move || super::picker::reveal(&reveal))]),
+        row(10.0, vec![
+            grow(copyable_mono(home.display().to_string(), 12.5, p.ink)),
+            button(p, "Open", Look::Quiet, true, move || {
+                if let Err(e) = super::picker::reveal(&reveal) {
+                    reveal_ui.say(format!("Could not open Wright's records: {e}"), None);
+                }
+            }),
+        ]),
     ])
 }
 

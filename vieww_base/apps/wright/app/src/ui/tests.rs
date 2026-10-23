@@ -209,6 +209,40 @@ fn the_site_screens() {
 }
 
 #[test]
+fn open_folder_follows_the_latest_successful_export() {
+    use wright_engine::export::{Exported, Kind};
+
+    let project = PathBuf::from("projects/demo");
+    let older = Exported {
+        kind: Kind::Zip,
+        path: PathBuf::from("Exports/demo/old.zip"),
+        bytes: 12,
+        sha256: "older".into(),
+    };
+    let latest = Exported {
+        kind: Kind::Zip,
+        path: PathBuf::from("Exports/demo/source.zip"),
+        bytes: 24,
+        sha256: "latest".into(),
+    };
+    let exports = vec![
+        Err("one export attempt failed".into()),
+        Ok(latest),
+        Ok(older),
+    ];
+
+    assert_eq!(
+        thread::folder_to_open(&project, &exports),
+        PathBuf::from("Exports/demo")
+    );
+    assert_eq!(
+        thread::folder_to_open(&project, &[]),
+        project,
+        "before the first export, the folder action still opens the project"
+    );
+}
+
+#[test]
 fn the_shell_end_to_end() {
     let _home = home_lock();
     let home = temp("home");

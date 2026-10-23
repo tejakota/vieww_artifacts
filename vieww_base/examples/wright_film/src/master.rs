@@ -103,6 +103,7 @@ impl Film {
             "W08" => m2_run::w08_script(),
             "W10" => crate::m3_proof::w10_script(),
             "P3" => crate::socials::p3_script(),
+            "R3" => crate::socials::r3_script(),
             _ => Script::default(),
         }
     }
@@ -360,6 +361,10 @@ fn footer_text(s: &SceneDef, demo: &wright_app::Demo) -> String {
         "P2" => "the request, typed".into(),
         "P3" => format!("the real window · {} real events", demo.events.len()),
         "P4" => "the mark, centred — the hold".into(),
+        "R1" => "the question, composed for portrait".into(),
+        "R2" => "plan · permissions · receipt".into(),
+        "R3" => format!("the real window · {} real events", demo.events.len()),
+        "R4" => "the mark, centred — the hold".into(),
         _ => s.name.into(),
     }
 }
@@ -786,8 +791,9 @@ fn tile_sheet(dir: &std::path::Path, out: &std::path::Path) -> Option<()> {
 /// harness, a different scene list and canvas, its own segments,
 /// sheets and dissolve frames.
 pub(crate) fn social(which: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let cut = crate::socials::cut(which)
-        .ok_or_else(|| format!("no cut {which} — try twitter | linkedin | instagram"))?;
+    let cut = crate::socials::cut(which).ok_or_else(|| {
+        format!("no cut {which} — try twitter | linkedin | instagram | reels (or shorts)")
+    })?;
     println!(
         "wright_film social · {} · {} scenes · {}×{}",
         cut.id,
@@ -851,7 +857,7 @@ pub(crate) fn run(mode: &str) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         "census" => census(),
         "master" => master(),
-        "twitter" | "linkedin" | "instagram" => social(mode),
+        "twitter" | "linkedin" | "instagram" | "reels" | "shorts" => social(mode),
         other => preview(other),
     }
 }

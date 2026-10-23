@@ -697,7 +697,11 @@ fn approval(
 }
 
 fn result_card(ui: &Ui, p: &Pal, s: &Session, r: &super::session::ResultView) -> WidgetNode {
-    let (again, folder, engine) = (s.clone(), s.project.clone(), ui.clone());
+    let (again, engine) = (s.clone(), ui.clone());
+    // Exports are newest-first. Reveal the directory containing the latest
+    // successful artifact, not the source project; before the first export,
+    // keep the familiar project-folder behaviour.
+    let folder = folder_to_open(&s.project, &s.exports.get());
     let (icon, title) = if r.ok {
         (Glyph::Done.draw(22.0, p.good), "Delivered and verified")
     } else {
@@ -820,9 +824,15 @@ fn result_card(ui: &Ui, p: &Pal, s: &Session, r: &super::session::ResultView) ->
                 s.exporting.get().is_none(),
                 move || menu.set(!menu.get()),
             ),
-            button(p, "Open the folder", Look::Secondary, true, move || {
-                super::picker::reveal(&folder)
-            }),
+            {
+                let (target, notice) = (folder.clone(), s.notice.clone());
+                button(p, "Open the folder", Look::Secondary, true, move || {
+                    match super::picker::reveal(&target) {
+                        Ok(()) => notice.set(String::new()),
+                        Err(e) => notice.set(format!("Could not open {}: {e}", target.display())),
+                    }
+                })
+            },
         ],
     ));
     items.push(row(
@@ -930,6 +940,22 @@ fn receipt_overlay(p: &Pal, s: &Session) -> WidgetNode {
         )),
         layer(Center::new().child(sized(620.0, 660.0, card(p, stretch(12.0, items))))),
     ])
+}
+
+/// The folder action follows the newest successful export. `exports` is
+/// newest-first; a failed attempt does not hide the last artifact that exists.
+pub(super) fn folder_to_open(
+    project: &std::path::Path,
+    exports: &[Result<wright_engine::export::Exported, String>],
+) -> std::path::PathBuf {
+    exports
+        .iter()
+        .find_map(|r| {
+            r.as_ref()
+                .ok()
+                .and_then(|e| e.path.parent().map(std::path::Path::to_path_buf))
+        })
+        .unwrap_or_else(|| project.to_path_buf())
 }
 
 /// What this project can be exported as. Packages are offered only with
@@ -1040,9 +1066,17 @@ fn export_status(ui: &Ui, p: &Pal, s: &Session) -> Vec<WidgetNode> {
                     vec![
                         Glyph::Done.draw(16.0, p.good),
                         fill(format!("{name} · {}", human_size(e.bytes)), 13.0, p.ink),
-                        button(p, "Show in folder", Look::Quiet, true, move || {
-                            super::picker::reveal(&dir)
-                        }),
+                        {
+                            let notice = s.notice.clone();
+                            button(p, "Show in folder", Look::Quiet, true, move || {
+                                match super::picker::reveal(&dir) {
+                                    Ok(()) => notice.set(String::new()),
+                                    Err(e) => {
+                                        notice.set(format!("Could not open {}: {e}", dir.display()))
+                                    }
+                                }
+                            })
+                        },
                     ],
                 )
             }
@@ -1200,11 +1234,9 @@ pub fn composer(
                     // While the reply streams, the circle breathes with
                     // the work: pressed-dark on touch, a hair quieter
                     // than the send blue so the state reads at a glance.
-                    .color(if busy {
-                        p.wait.lerp(Color::hex(0x000000), 0.10 * s.press)
-                    } else {
-                        p.accent.lerp(Color::hex(0x000000), 0.15 * s.press)
-                    })
+                    // Send and stop are the same action surface in two states;
+                    // keep the same blue so the control remains easy to find.
+                    .color(p.accent.lerp(Color::hex(0x000000), 0.15 * s.press))
                     .alignment(Alignment::CENTER)
                     .child(if busy {
                         Glyph::Stop.draw(13.0, Color::WHITE)

@@ -109,13 +109,29 @@ pub fn pick(folder: bool) -> Result<Vec<PathBuf>, String> {
     }
 }
 
-/// Open a folder in the system's file manager.
-pub fn reveal(dir: &std::path::Path) {
+/// Open a folder in the system's file manager, returning launch failures to
+/// the UI rather than silently leaving the button looking broken.
+pub fn reveal(dir: &std::path::Path) -> Result<(), String> {
+    // File-manager launchers interpret relative paths against the app's
+    // process working directory (which may be the install directory after
+    // a shortcut launch). Resolve exports before handing them to the OS.
+    let dir = dir
+        .canonicalize()
+        .map_err(|e| format!("could not resolve folder {}: {e}", dir.display()))?;
+    if !dir.is_dir() {
+        return Err(format!("{} is not an existing folder", dir.display()));
+    }
+
     #[cfg(target_os = "windows")]
-    let program = "explorer";
+    let program = "explorer.exe";
     #[cfg(target_os = "macos")]
     let program = "open";
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let program = "xdg-open";
-    let _ = Command::new(program).arg(dir).spawn();
+
+    Command::new(program)
+        .arg(&dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not start {program} for {}: {e}", dir.display()))
 }

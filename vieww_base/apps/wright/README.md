@@ -23,7 +23,7 @@ affected work runs again.
 | Task cache with freshness rules | ✅ | live-data and delivery steps are never served from cache |
 | Durable run store, resume after crash, receipts | ✅ | fsynced event log, BLAKE3 content-addressed objects |
 | Tools: files, edit, apply-patch, git, run-tests, shell, http | ✅ | `browser` refuses loudly (not implemented) |
-| Sandbox (Landlock + network namespace), Linux | ✅ | macOS/Windows: sandboxed tools refuse (W-5b) |
+| Command sandbox: Linux Landlock; Windows WSL 2 + Bubblewrap for POSIX shell/git/tests | Implemented; Windows runtime validation pending | Windows requires WSL 2 + Bubblewrap; native worker CLIs use the clearly labelled workspace-copy fallback (no OS sandbox); macOS sandboxed commands still fail closed |
 | TLS: OS OpenSSL via dlopen, Linux; HTTP CONNECT proxies | ✅ | macOS/Windows: through the system curl (ADR-023); native FFI is W-6b |
 | Built-in models: Qwen3-1.7B (text, tools), Whisper base (voice), run in-process | ✅ | checked against llama.cpp / whisper.cpp; `docs/MODELS.md` |
 | Schedules: cron + IANA time zones (TZif), background daemon | ✅ | systemd / launchd unit installer |
@@ -44,6 +44,37 @@ affected work runs again.
 **380+ tests passing (plus the live-network opt-in set), clippy clean. Twelve failures on kernels before 5.13 are the sandbox failing closed (Landlock needs 5.13+) — the same tests pass on 5.13+; the new trust suite (`engine/tests/trust.rs`) runs everywhere.** Eight of them compare the built-in engine with llama.cpp and whisper.cpp, or run the real models; they need fixtures (`scripts/models/`) and skip without them — CI provides them (`docs/MODELS.md`). The headless binary has **zero**
 external crates; the `ui` feature adds exactly one dependency — vieww, from
 the repository Wright lives in, by path (ADR-002, ADR-011).
+
+### Windows command isolation
+
+Wright never runs its shell, Git, or test commands unsandboxed. On Windows,
+those POSIX tools run through WSL 2 and Bubblewrap; the project directory is
+the only writable project tree. This backend must be available before those
+tools are enabled. From an elevated PowerShell, install WSL and Ubuntu if they
+are not already installed:
+
+```powershell
+wsl --install -d Ubuntu
+wsl --set-default Ubuntu
+```
+
+Finish the first Ubuntu launch and create its Linux user. In that Ubuntu
+terminal, install the isolation utilities and the project toolchains your tasks
+need (Windows-installed Rust, Node, Python, and their packages are not inherited
+inside WSL):
+
+```bash
+sudo apt update
+sudo apt install bubblewrap util-linux coreutils
+# Add the tools your projects need inside WSL as well, e.g. Rust/Cargo, Node, Python.
+```
+
+Keep the Wright project on a local Windows drive (for example, `C:\work\project`),
+then restart Wright and check `wright doctor`. If WSL 2, namespaces, or Bubblewrap
+are unavailable, Wright refuses the command and reports setup guidance; it does
+not fall back to an unrestricted shell. macOS still fails closed until its
+native sandbox is implemented. Windows-native agent CLIs are run only against a
+throwaway workspace copy and are reported as lacking OS-level isolation.
 
 ## Quick start (no key needed)
 

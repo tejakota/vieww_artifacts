@@ -6,6 +6,7 @@
 //! cargo run --release -p wright_film -- twitter       # the 41-second cut for X
 //! cargo run --release -p wright_film -- linkedin      # the 61-second cut for LinkedIn
 //! cargo run --release -p wright_film -- instagram     # the 33-second square for the feed
+//! cargo run --release -p wright_film -- reels         # the native 9:16 Reels / Shorts cut
 //! cargo run --release -p wright_film -- preview W06   # one scene, every 12th frame
 //! ```
 //!
@@ -36,7 +37,7 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     let mode = args.next().unwrap_or_else(|| {
-        eprintln!("wright_film — census | master | preview <scene>");
+        eprintln!("wright_film — census | master | twitter | linkedin | instagram | reels | shorts | preview <scene>");
         std::process::exit(2);
     });
     let rest = args.next().unwrap_or_default();

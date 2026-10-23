@@ -234,8 +234,7 @@ pub(crate) fn the_endcard(ctx: &crate::film::Ctx) -> WidgetNode {
         vieww_foundation::Size::new(W, H),
         PaintWith::new(move |book: &mut Sketchbook, _s| {
             let side = 150.0;
-            let at = Offset::new(W * 0.5 - side * 0.5, 330.0);
-            crate::kit::draw_mark(book, at, side, mark_p, ACCENT, 10.0);
+            crate::kit::centered_mark(book, W, 330.0, side, mark_p, ACCENT, 10.0);
         }),
     )));
 

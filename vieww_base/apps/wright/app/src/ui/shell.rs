@@ -179,15 +179,25 @@ pub(crate) fn top_bar(ui: &Ui) -> WidgetNode {
                         },
                         1.5,
                     ));
-                tap(
-                    Container::new()
-                        .padding(EdgeInsets::symmetric(3.0, 8.0))
-                        .child(dot),
-                    move || {
-                        go.set_overview(false);
-                        go.go(i);
-                    },
-                )
+                let label = if i == 0 {
+                    "Home page".to_string()
+                } else if fresh {
+                    "New session".to_string()
+                } else {
+                    format!("Session {}: {}", i, sessions[i - 1].title())
+                };
+                Semantics::new()
+                    .label(label)
+                    .child(tap(
+                        Container::new()
+                            .padding(EdgeInsets::symmetric(3.0, 8.0))
+                            .child(dot),
+                        move || {
+                            go.set_overview(false);
+                            go.go(i);
+                        },
+                    ))
+                    .into()
             })
             .collect();
         let live = ui.current_session().map(|s| s.live_agents()).unwrap_or(0);
@@ -779,14 +789,14 @@ fn help(ui: &Ui, p: &Pal) -> WidgetNode {
     };
     card(p, stretch(12.0, vec![
         b("Gestures and shortcuts", 18.0, p.ink),
-        entry("Two-finger swipe", "Next or previous session. Arrow keys too."),
-        entry("Swipe past the last", "Start a new session."),
-        entry("Pinch (or O)", "Fingers together: every session side by side. Apart: back to the one you were on. × closes one into Saved."),
+        entry("Two-finger swipe", "Swipe left or right to change page. Vertical scrolling stays in the conversation; arrow keys work too."),
+        entry("Swipe past the last", "The final dot opens a fresh session. The highlighted dot always follows your page."),
+        entry("Pinch (or O)", "Pinch in to see all sessions; pinch out to return to your page. × saves a session from the overview."),
         entry("Hold Space", "Peek at the live agents and tools. E keeps them open."),
-        entry("Drag an approval", "Right allows, left refuses. The buttons do the same."),
+        entry("Drag an approval", "Drag right to allow or left to refuse; the card previews the choice. The buttons do the same."),
         entry("+ in the composer", "Attach files or a folder, or drop them on the window."),
         entry("Ctrl/Cmd + Shift + T", "Reopen the last closed session."),
-        entry("Ctrl/Cmd + ,", "Settings. Esc backs out of anything."),
+        entry("Ctrl/Cmd + ,", "Open Settings. Esc backs out of an overlay; gestures resume when it closes."),
         entry("Agents & tools", "Wright's built-in agents and every tool a plan can grant, in Settings."),
         row(10.0, vec![
             button(p, "Agents & tools", Look::Secondary, true, move || list.open_agents_and_tools()),
