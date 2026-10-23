@@ -44,6 +44,7 @@ pub use quality::{
     QualityContract, QualityObservation, QualityReport, QualityViolation, RefreshRate,
 };
 pub use shadow::{
-    Calibration, Executor, PassSummary, PlannerMode, Recommendation, ShadowFrame, ShadowPlan,
-    ShadowPlanner, AUTHORITATIVE_MAX_RMSE, AUTHORITATIVE_MIN_FRAMES,
+    measured_kind, measured_kinds, Calibration, Executor, PassSummary, PlannerMode, RecentError,
+    Recommendation, ShadowFrame, ShadowPlan, ShadowPlanner, TimingRing, AUTHORITATIVE_MAX_RMSE,
+    AUTHORITATIVE_MIN_FRAMES, TIMING_RING_CAPACITY, TIMING_RING_MIN_SAMPLES,
 };

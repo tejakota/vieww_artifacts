@@ -1055,6 +1055,13 @@ impl NativeRenderer {
     }
 
     /// Plan `scene` in shadow and log what actually happened to it.
+    ///
+    /// On a GPU frame the backend's own timestamp-query buckets
+    /// ([`GpuPassTimes`], in `stages.gpu_passes`) are fed into the planner's
+    /// measured-cost history first — the connection the planner's audit asked
+    /// for: real per-kind GPU timings, per frame, from the live loop. They
+    /// only ever refine the plan an *authoritative* planner acts on (see
+    /// `ShadowPlanner::note_gpu_pass_kind`), never the logged predictions.
     fn record_shadow(
         &mut self,
         scene: &Scene,
@@ -1062,9 +1069,48 @@ impl NativeRenderer {
         executor: Executor,
         fallback: Option<String>,
     ) {
+        // Read before the mutable shadow borrow: the timings are this
+        // frame's, already settled in `stages`.
+        let gpu_kinds = self.stages.gpu_passes;
         let Some(shadow) = self.shadow.as_mut().filter(|s| !s.broken) else {
             return;
         };
+        // A bucket the timestamps did not touch is a zero: an absence, which
+        // `note_gpu_pass_kind` ignores rather than records as free work.
+        let note = |planner: &mut ShadowPlanner, kind: &'static str, ms: std::time::Duration| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a GPU timing in ms fits an f32"
+            )]
+            planner.note_gpu_pass_kind(kind, (ms.as_secs_f64() * 1000.0) as f32);
+        };
+        if let Some(kinds) = gpu_kinds {
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::DRAW,
+                kinds.draw,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::LAYERS,
+                kinds.layers,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::FILTERS,
+                kinds.filters,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::SHADOWS,
+                kinds.shadows,
+            );
+            note(
+                &mut shadow.planner,
+                vieww_render_planner::measured_kinds::BLIT,
+                kinds.blit,
+            );
+        }
         // A pending plan (authoritative mode planned this frame *before*
         // it drew, to decide who drew it) is the prediction to record —
         // replanning would measure the model against a different answer
