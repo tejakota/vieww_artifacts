@@ -35,7 +35,7 @@ pub use cost::{CostModel, ExecutorEstimate, HeuristicCostModel, MeasuredCostMode
 pub use frame_budget::FrameBudget;
 pub use hybrid::Split;
 pub use planner::{plan_frame, work_pixels, FramePlan};
-pub use policy::Placement;
+pub use policy::{hybrid_min_pixels, Placement, HYBRID_MIN_PIXELS};
 pub use quality::{
     QualityContract, QualityObservation, QualityReport, QualityViolation, RefreshRate,
 };
