@@ -342,7 +342,11 @@ impl WindowIcon {
             (width as usize) * (height as usize) * 4,
             "a {width}x{height} RGBA8 icon is width * height * 4 bytes"
         );
-        Self { width, height, rgba }
+        Self {
+            width,
+            height,
+            rgba,
+        }
     }
 }
 
@@ -2388,15 +2392,24 @@ impl<F: FnOnce(&mut FrameDriver)> Runner<F> {
         // `WindowIcon::new` already refused, so a rejection here is a platform
         // quirk, not bad application data: the window opens with the
         // platform's default icon rather than not at all.
-        let icon = self.shared.config.icon.as_ref().and_then(|icon| {
-            match winit::window::Icon::from_rgba(icon.rgba.clone(), icon.width, icon.height) {
-                Ok(icon) => Some(icon),
-                Err(error) => {
-                    trace_line(self.shared.now(), format_args!("window icon rejected: {error}"));
-                    None
-                }
-            }
-        });
+        let icon =
+            self.shared
+                .config
+                .icon
+                .as_ref()
+                .and_then(|icon| {
+                    match winit::window::Icon::from_rgba(icon.rgba.clone(), icon.width, icon.height)
+                    {
+                        Ok(icon) => Some(icon),
+                        Err(error) => {
+                            trace_line(
+                                self.shared.now(),
+                                format_args!("window icon rejected: {error}"),
+                            );
+                            None
+                        }
+                    }
+                });
         let attributes = Window::default_attributes()
             .with_title(title.to_owned())
             .with_window_icon(icon)
