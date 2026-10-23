@@ -67,8 +67,7 @@ pub fn hybrid_min_pixels(device: &DeviceProfile) -> f32 {
     if !overhead_pixels.is_finite() || overhead_pixels <= 0.0 {
         return HYBRID_MIN_PIXELS;
     }
-    (HYBRID_SPLIT_OVERHEAD_MULTIPLES * overhead_pixels)
-        .clamp(HYBRID_MIN_PIXELS, HYBRID_MAX_PIXELS)
+    (HYBRID_SPLIT_OVERHEAD_MULTIPLES * overhead_pixels).clamp(HYBRID_MIN_PIXELS, HYBRID_MAX_PIXELS)
 }
 
 /// Where a pass ends up.
@@ -292,7 +291,8 @@ mod tests {
         // Two overheads, one GPU: the pixels the GPU fills during its own
         // dispatch overhead, doubled — the old 250k guess only as a floor.
         let desktop = DeviceProfile::DESKTOP_DISCRETE;
-        let expect = 2.0 * (desktop.gpu_dispatch_overhead_ms / 1000.0)
+        let expect = 2.0
+            * (desktop.gpu_dispatch_overhead_ms / 1000.0)
             * desktop.gpu_fill_mpix_per_sec
             * 1_000_000.0;
         assert!((hybrid_min_pixels(&desktop) - expect).abs() < 1.0);
@@ -313,7 +313,10 @@ mod tests {
     fn a_profile_without_usable_gpu_numbers_keeps_the_fallback_threshold() {
         // No GPU: the old round number, and `decide` never reaches the
         // split anyway (no gpu estimate).
-        assert_eq!(hybrid_min_pixels(&DeviceProfile::CPU_ONLY_FALLBACK), HYBRID_MIN_PIXELS);
+        assert_eq!(
+            hybrid_min_pixels(&DeviceProfile::CPU_ONLY_FALLBACK),
+            HYBRID_MIN_PIXELS
+        );
         // A GPU with zero modeled overhead cannot justify splitting below
         // the floor either: the floor is what keeps unmeasured optimism
         // from making the policy more eager than the guess it replaced.

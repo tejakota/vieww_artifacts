@@ -37,9 +37,9 @@ pub use frame_budget::FrameBudget;
 pub use hybrid::Split;
 pub use planner::{plan_frame, work_pixels, FramePlan};
 pub use policy::{hybrid_min_pixels, Placement, HYBRID_MIN_PIXELS};
-pub use probe::{detect_cpu_cores, with_detected_cores};
 #[cfg(feature = "calibrate")]
 pub use probe::calibrate_cpu_fill;
+pub use probe::{detect_cpu_cores, with_detected_cores};
 pub use quality::{
     QualityContract, QualityObservation, QualityReport, QualityViolation, RefreshRate,
 };

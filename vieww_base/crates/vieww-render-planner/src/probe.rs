@@ -151,7 +151,7 @@ mod fill_benchmark {
         let rate = mpix / (best_ms / 1000.0);
         (rate.is_finite()
             && (MIN_PLAUSIBLE_MPIX_PER_SEC..=MAX_PLAUSIBLE_MPIX_PER_SEC).contains(&rate))
-            .then_some(rate)
+        .then_some(rate)
     }
 
     /// Time [`BENCH_RUNS`] plain-fill renders of `scene`, returning the best.

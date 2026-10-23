@@ -1557,7 +1557,12 @@ impl NativeRenderer {
         // gate a prediction for a picture nobody drew is how a gate rots.
         // The plan is stashed so `record_shadow` records the prediction
         // the decision was made on, not a second one.
-        let mut planner_cpu = false;
+        // The planner's actuation, when it has one: a whole-frame CPU
+        // recommendation, or — since the split-frame path landed — a
+        // `Mixed` one, with the CPU band's fraction read off the plan the
+        // decision was made on.
+        let mut planner_act: Option<Executor> = None;
+        let mut mixed_cpu_fraction: Option<f32> = None;
         if render_scale == 1.0 {
             if let Some(shadow) = self
                 .shadow
@@ -1568,13 +1573,16 @@ impl NativeRenderer {
                     .planner
                     .plan_for_frame(scene.as_ref(), extent.0, extent.1);
                 if let Some(plan) = plan {
-                    planner_cpu = act == Some(Executor::Cpu);
+                    if act == Some(Executor::Mixed) {
+                        mixed_cpu_fraction = Some(plan.mixed_cpu_fraction());
+                    }
+                    planner_act = act;
                     shadow.pending = Some((act, plan));
                 }
             }
         }
 
-        if planner_cpu {
+        if planner_act == Some(Executor::Cpu) {
             // The planner's decision, not a plan with gaps: the GPU
             // rasterizer is healthy, it was simply told this frame is not
             // worth its overhead. The fallback string says which, so a
@@ -1596,6 +1604,73 @@ impl NativeRenderer {
             let planning = Instant::now();
             let plan = planner.plan(scene.as_ref(), width, height);
             self.stages.plan = planning.elapsed();
+            // **The split frame: a `Mixed` recommendation, executed.** Both
+            // sides render the same frame; a row band decides whose pixels
+            // show — see `crate::mixed`. The GPU draws only its band,
+            // through the damage path; the CPU rasterises the frame as it
+            // always does and supplies the CPU band's rows. A plan with
+            // gaps cannot split (the GPU half would be missing pieces), so
+            // the whole-frame paths below still arbitrate.
+            if let Some(fraction) =
+                mixed_cpu_fraction.filter(|_| planner_act == Some(Executor::Mixed))
+            {
+                if plan.is_complete() {
+                    let bands = crate::mixed::Bands::from_fraction(physical_height, fraction);
+                    let rasterising = Instant::now();
+                    let report = self.cpu.render_in_place(
+                        scene.as_ref(),
+                        physical_width,
+                        physical_height,
+                        base,
+                    )?;
+                    self.stages.cpu_raster = rasterising.elapsed();
+                    self.stages.cpu_core = current_core();
+                    let band = bands.gpu_band(physical_width, physical_height);
+                    let damage: Option<Vec<PixelRect>> = band.map(|b| vec![b]);
+                    let (gpu_pixels, _redrawn) = renderer
+                        .render_planned_damaged(
+                            planner,
+                            &plan,
+                            physical_width,
+                            physical_height,
+                            base,
+                            damage.as_deref(),
+                        )
+                        .map_err(|error| NativeError::Render(error.to_string()))?;
+                    self.stages.gpu = renderer.last_timings();
+                    self.stages.gpu_passes = renderer.last_pass_times();
+                    let merged = crate::mixed::merge(
+                        self.cpu.last_frame(),
+                        &gpu_pixels,
+                        &bands,
+                        physical_width,
+                        physical_height,
+                    );
+                    let presenting = Instant::now();
+                    device
+                        .present_pixels(swapchain, &merged)
+                        .map_err(|error| NativeError::Present(error.to_string()))?;
+                    self.stages.present = presenting.elapsed();
+                    let reason = self.shadow.as_ref().map(|_| {
+                        format!(
+                            "split frame: cpu rows 0..{}, gpu rows {}..{physical_height}",
+                            bands.cpu_rows, bands.cpu_rows
+                        )
+                    });
+                    self.record_shadow(&scene, extent, Executor::Mixed, reason);
+                    // The GPU's own target does not hold this frame — its
+                    // CPU band is the renderer's retained previous content —
+                    // so the next GPU frame must not trust it for damage.
+                    self.gpu_frame_current = None;
+                    return Ok(PlannedFrame {
+                        report,
+                        drawn_on_gpu: false,
+                        presented_directly: false,
+                        stages: self.stages,
+                        gpu_redrawn: None,
+                    });
+                }
+            }
             if plan.is_complete() {
                 // Straight into the swapchain image when the frame is opaque
                 // and the driver can blit the scene's RGBA16F into the
@@ -1764,9 +1839,7 @@ const GPU_DAMAGE_MARGIN: i32 = 2;
 #[must_use]
 fn planner_calibration() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| {
-        std::env::var("VIEWW_PLANNER_CALIBRATE").is_ok_and(|v| v.trim() == "1")
-    })
+    *ON.get_or_init(|| std::env::var("VIEWW_PLANNER_CALIBRATE").is_ok_and(|v| v.trim() == "1"))
 }
 
 /// A damaged region from [`Changed::from_damage`], grown by

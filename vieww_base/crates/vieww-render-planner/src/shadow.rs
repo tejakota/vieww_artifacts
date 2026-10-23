@@ -55,7 +55,7 @@ use std::collections::VecDeque;
 use std::fmt::Write as _;
 
 use vieww_paint::Scene;
-use vieww_render_graph::{PassKind, PassDesc};
+use vieww_render_graph::{PassDesc, PassKind};
 use vieww_scene::SceneGraph;
 
 use crate::capabilities::DeviceProfile;
@@ -69,6 +69,11 @@ use crate::policy::Placement;
 pub enum Executor {
     Cpu,
     Gpu,
+    /// Both, in one frame: the split-frame path — some of the frame's rows
+    /// from the CPU rasterizer, the rest from the GPU, merged — which is
+    /// what a `Mixed` recommendation asked for and, since the split landed,
+    /// what the live path can actually do.
+    Mixed,
 }
 
 impl Executor {
@@ -77,6 +82,7 @@ impl Executor {
         match self {
             Self::Cpu => "cpu",
             Self::Gpu => "gpu",
+            Self::Mixed => "mixed",
         }
     }
 }
@@ -103,14 +109,17 @@ impl Recommendation {
         }
     }
 
-    /// Whether running the whole frame on `executor` is what this
-    /// recommendation asked for. `Mixed` never agrees: no whole-frame
-    /// executor does what it asked.
+    /// Whether running the frame on `executor` is what this recommendation
+    /// asked for. A `Mixed` recommendation agrees only with a split frame —
+    /// which, since the split-frame path landed, is an executor the live
+    /// path can actually be.
     #[must_use]
     pub const fn agrees_with(self, executor: Executor) -> bool {
         matches!(
             (self, executor),
-            (Self::Cpu, Executor::Cpu) | (Self::Gpu, Executor::Gpu)
+            (Self::Cpu, Executor::Cpu)
+                | (Self::Gpu, Executor::Gpu)
+                | (Self::Mixed, Executor::Mixed)
         )
     }
 }
@@ -169,6 +178,41 @@ impl ShadowPlan {
         match executor {
             Executor::Cpu => Some(self.all_cpu_ms),
             Executor::Gpu => self.all_gpu_ms,
+            // The plan's own mixed prediction: the per-pass costs under the
+            // placements it chose, summed — the number a split frame's
+            // wall time is held against.
+            Executor::Mixed => Some(self.frame_plan.predicted_ms),
+        }
+    }
+
+    /// The CPU's share of a mixed frame's predicted work, as a fraction in
+    /// `[0.05, 0.95]` — every pass weighted by its own predicted duration
+    /// under the placement it received (a `Hybrid` pass counts its split,
+    /// not as a whole unit either way). This is the number the live path's
+    /// split-frame execution partitions the frame's rows by: both sides
+    /// render the same scene, and this decides whose pixels each row uses.
+    #[must_use]
+    pub fn mixed_cpu_fraction(&self) -> f32 {
+        let mut cpu = 0.0;
+        let mut total = 0.0;
+        for pass in &self.passes {
+            let gpu_ms = pass.gpu_ms.unwrap_or(pass.cpu_ms);
+            let ms = match pass.placement {
+                Placement::Cpu => pass.cpu_ms,
+                Placement::Gpu => gpu_ms,
+                Placement::Hybrid(split) => {
+                    (split.cpu_fraction * pass.cpu_ms).max(split.gpu_fraction() * gpu_ms)
+                }
+            };
+            // `Placement::gpu_fraction`'s complement is the CPU share —
+            // a `Hybrid` pass contributes its own split, not a whole unit.
+            cpu += ms * (1.0 - pass.placement.gpu_fraction());
+            total += ms;
+        }
+        if total > 0.0 {
+            (cpu / total).clamp(0.05, 0.95)
+        } else {
+            0.5
         }
     }
 
@@ -369,6 +413,7 @@ pub struct TimingRing {
     capacity: usize,
     cpu: VecDeque<(f32, f32)>,
     gpu: VecDeque<(f32, f32)>,
+    mixed: VecDeque<(f32, f32)>,
 }
 
 impl TimingRing {
@@ -382,6 +427,7 @@ impl TimingRing {
             capacity: capacity.max(1),
             cpu: VecDeque::new(),
             gpu: VecDeque::new(),
+            mixed: VecDeque::new(),
         }
     }
 
@@ -389,6 +435,7 @@ impl TimingRing {
         match executor {
             Executor::Cpu => &mut self.cpu,
             Executor::Gpu => &mut self.gpu,
+            Executor::Mixed => &mut self.mixed,
         }
     }
 
@@ -396,6 +443,7 @@ impl TimingRing {
         match executor {
             Executor::Cpu => &self.cpu,
             Executor::Gpu => &self.gpu,
+            Executor::Mixed => &self.mixed,
         }
     }
 
@@ -435,13 +483,14 @@ impl TimingRing {
             reason = "a frame count is far below f64's exact range"
         )]
         let nf = n as f64;
-        let (sum, sq_sum) = window
-            .iter()
-            .filter(|(p, _)| *p > 0.0)
-            .fold((0.0_f64, 0.0_f64), |(s, q), (p, a)| {
-                let r = f64::from(*a) / f64::from(*p);
-                (s + r, q + r * r)
-            });
+        let (sum, sq_sum) =
+            window
+                .iter()
+                .filter(|(p, _)| *p > 0.0)
+                .fold((0.0_f64, 0.0_f64), |(s, q), (p, a)| {
+                    let r = f64::from(*a) / f64::from(*p);
+                    (s + r, q + r * r)
+                });
         let mean = sum / nf;
         let mean_sq = sq_sum / nf;
         let rmse = (mean_sq - 2.0 * mean + 1.0).max(0.0).sqrt();
@@ -499,6 +548,17 @@ impl Calibration {
         let Some(predicted) = frame.plan.predicted_for(frame.actual) else {
             return;
         };
+        // A split frame feeds no bucket here: these ratios are what
+        // `Calibration::calibrated` corrects the profile's whole-frame CPU
+        // and GPU numbers with, and a mixed frame is neither. The ring —
+        // `TimingRing`, the *recent* guard on actuation — takes mixed
+        // frames; this lifetime model deliberately does not.
+        if frame.actual == Executor::Mixed {
+            if frame.agrees() {
+                self.agreeing_frames += 1;
+            }
+            return;
+        }
         if predicted > 0.0 && frame.actual_ms.is_finite() {
             let ratio = f64::from(frame.actual_ms) / f64::from(predicted);
             if ratio.is_finite() {
@@ -511,6 +571,7 @@ impl Calibration {
                         self.gpu_ratio_sum += ratio;
                         self.gpu_ratio_sq_sum += ratio * ratio;
                     }
+                    Executor::Mixed => {}
                 }
             }
         }
@@ -531,6 +592,7 @@ impl Calibration {
                 self.gpu_overhead += f64::from(device.gpu_dispatch_overhead_ms) * passes;
                 self.gpu_frames += 1;
             }
+            Executor::Mixed => {}
         }
         if frame.agrees() {
             self.agreeing_frames += 1;
@@ -582,6 +644,9 @@ impl Calibration {
         let (frames, sum, sq_sum) = match executor {
             Executor::Cpu => (self.cpu_frames, self.cpu_ratio_sum, self.cpu_ratio_sq_sum),
             Executor::Gpu => (self.gpu_frames, self.gpu_ratio_sum, self.gpu_ratio_sq_sum),
+            // No lifetime buckets for split frames — see `record`. `None`
+            // says "cannot vouch", which is the conservative answer.
+            Executor::Mixed => return None,
         };
         if frames == 0 {
             return None;
@@ -608,9 +673,15 @@ impl Calibration {
     /// machine that feeds it.
     #[must_use]
     pub fn ready(&self, executor: Executor) -> bool {
+        if executor == Executor::Mixed {
+            // A split frame leans on both halves' models: it is ready when
+            // each whole-frame executor is.
+            return self.ready(Executor::Cpu) && self.ready(Executor::Gpu);
+        }
         let frames = match executor {
             Executor::Cpu => self.cpu_frames,
             Executor::Gpu => self.gpu_frames,
+            Executor::Mixed => return false,
         };
         match self.rmse_of_ratio(executor) {
             Some(rmse) => frames >= AUTHORITATIVE_MIN_FRAMES && rmse <= AUTHORITATIVE_MAX_RMSE,
@@ -992,12 +1063,26 @@ impl ShadowPlanner {
         let Some(plan) = plan else {
             return (None, None);
         };
+        // What an authoritative planner may act on, under its guards: a
+        // whole-frame CPU recommendation under the CPU gate; a `Mixed`
+        // recommendation under *both* gates — a split frame leans on both
+        // halves' models, so both must be recently sound. GPU needs no
+        // actuation: the live path already prefers the GPU whenever the
+        // scene plan is complete.
+        let recommendation = plan.recommendation();
         let act = if self.mode == PlannerMode::Authoritative
             && self.gate.ready(Executor::Cpu)
             && self.recent_record_is_sound(Executor::Cpu)
-            && plan.recommendation() == Recommendation::Cpu
+            && (recommendation == Recommendation::Cpu
+                || (recommendation == Recommendation::Mixed
+                    && self.gate.ready(Executor::Gpu)
+                    && self.recent_record_is_sound(Executor::Gpu)))
         {
-            Some(Executor::Cpu)
+            match recommendation {
+                Recommendation::Cpu => Some(Executor::Cpu),
+                Recommendation::Mixed => Some(Executor::Mixed),
+                Recommendation::Gpu => None,
+            }
         } else {
             None
         };
@@ -1383,7 +1468,14 @@ mod tests {
         for _ in 0..(2 * AUTHORITATIVE_MIN_FRAMES + 10) {
             let (act, planned) = shadow.plan_for_frame(&flat(), 400, 400);
             let planned = planned.unwrap();
-            shadow.observe(planned, "flat", (400, 400), Executor::Cpu, plan.all_cpu_ms, None);
+            shadow.observe(
+                planned,
+                "flat",
+                (400, 400),
+                Executor::Cpu,
+                plan.all_cpu_ms,
+                None,
+            );
             if act.is_some() {
                 acted += 1;
             }
@@ -1417,8 +1509,14 @@ mod tests {
             shadow.gate().ready(Executor::Cpu),
             "the premise: the lifetime gate itself never noticed"
         );
-        assert!(shadow.ring().recent_error(Executor::Cpu).unwrap().rmse_of_ratios
-            > AUTHORITATIVE_MAX_RMSE);
+        assert!(
+            shadow
+                .ring()
+                .recent_error(Executor::Cpu)
+                .unwrap()
+                .rmse_of_ratios
+                > AUTHORITATIVE_MAX_RMSE
+        );
         // ...and it takes the decision back once the record recovers: the
         // window must wash the drifted frames out, which costs at most the
         // ring's capacity in clean frames.
@@ -1426,13 +1524,23 @@ mod tests {
         for _ in 0..(TIMING_RING_CAPACITY + 2) {
             let (act, planned) = shadow.plan_for_frame(&flat(), 400, 400);
             let planned = planned.unwrap();
-            shadow.observe(planned, "flat", (400, 400), Executor::Cpu, plan.all_cpu_ms, None);
+            shadow.observe(
+                planned,
+                "flat",
+                (400, 400),
+                Executor::Cpu,
+                plan.all_cpu_ms,
+                None,
+            );
             if act.is_some() {
                 recovered = true;
                 break;
             }
         }
-        assert!(recovered, "the ring released its veto after the record recovered");
+        assert!(
+            recovered,
+            "the ring released its veto after the record recovered"
+        );
     }
 
     #[test]
@@ -1453,7 +1561,14 @@ mod tests {
             let (_, planned) = shadow.plan_for_frame(&glass(), 1000, 1000);
             let planned = planned.unwrap();
             let predicted = planned.all_gpu_ms.unwrap();
-            shadow.observe(planned, "glass", (1000, 1000), Executor::Gpu, predicted, None);
+            shadow.observe(
+                planned,
+                "glass",
+                (1000, 1000),
+                Executor::Gpu,
+                predicted,
+                None,
+            );
         }
         assert_eq!(shadow.mode(), PlannerMode::Authoritative);
         // The backend's timestamp bucket says drawing on this device is
@@ -1499,5 +1614,147 @@ mod tests {
         assert_eq!(measured_kind(PassKind::Filter), measured_kinds::FILTERS);
         assert_eq!(measured_kind(PassKind::Composite), measured_kinds::LAYERS);
         assert_eq!(measured_kind(PassKind::Blit), measured_kinds::BLIT);
+    }
+
+    // ── the split frame: `Executor::Mixed` ────────────────────────────────
+
+    /// A plan built by hand: the placements and per-pass estimates say
+    /// everything these tests need, without a scene whose recommendation
+    /// would depend on the cost model's constants.
+    fn hand_plan(placements: Vec<Placement>, cpu_ms: Vec<f32>, gpu_ms: Vec<f32>) -> ShadowPlan {
+        let passes: Vec<PassSummary> = placements
+            .iter()
+            .enumerate()
+            .map(|(i, placement)| PassSummary {
+                name: "p",
+                kind: PassKind::Raster,
+                pixels: 1000.0,
+                placement: *placement,
+                cpu_ms: cpu_ms[i],
+                gpu_ms: gpu_ms.get(i).copied(),
+            })
+            .collect();
+        let predicted_ms: f32 = passes
+            .iter()
+            .map(|p| match p.placement {
+                Placement::Cpu => p.cpu_ms,
+                Placement::Gpu => p.gpu_ms.unwrap_or(p.cpu_ms),
+                Placement::Hybrid(s) => {
+                    (s.cpu_fraction * p.cpu_ms).max(s.gpu_fraction() * p.gpu_ms.unwrap_or(p.cpu_ms))
+                }
+            })
+            .sum();
+        let all_cpu: f32 = cpu_ms.iter().sum();
+        let all_gpu: f32 = gpu_ms.iter().sum::<f32>();
+        ShadowPlan {
+            frame_plan: crate::planner::FramePlan {
+                // The tests read the plan's numbers, not its map; the map
+                // mirrors nothing but the passes here, and  cannot
+                // be built outside the graph anyway.
+                placements: std::collections::HashMap::new(),
+                predicted_ms,
+                deadline_ms: 16.0,
+            },
+            passes,
+            all_cpu_ms: all_cpu,
+            all_gpu_ms: Some(all_gpu),
+            pixels: 10_000.0,
+        }
+    }
+
+    #[test]
+    fn a_mixed_plan_predicts_its_own_split_time() {
+        let plan = hand_plan(
+            vec![Placement::Cpu, Placement::Gpu],
+            vec![4.0, 6.0],
+            vec![2.0, 1.0],
+        );
+        assert_eq!(plan.recommendation(), Recommendation::Mixed);
+        // The mixed prediction is the placements' own sum, not either
+        // whole-frame number.
+        assert_eq!(plan.predicted_for(Executor::Mixed), Some(4.0 + 1.0));
+        assert_eq!(plan.predicted_for(Executor::Cpu), Some(10.0));
+        assert_eq!(plan.predicted_for(Executor::Gpu), Some(3.0));
+        // And only a split frame executes what a Mixed recommendation
+        // asked for.
+        assert!(plan.recommendation().agrees_with(Executor::Mixed));
+        assert!(!plan.recommendation().agrees_with(Executor::Cpu));
+        assert!(!plan.recommendation().agrees_with(Executor::Gpu));
+    }
+
+    #[test]
+    fn the_split_fraction_weights_each_pass_by_its_own_placement() {
+        // Half the predicted work on each side, by duration: a 4 ms CPU
+        // pass and a GPU pass whose placement cost is 4 ms.
+        let plan = hand_plan(
+            vec![Placement::Cpu, Placement::Gpu],
+            vec![4.0, 10.0],
+            vec![9.0, 4.0],
+        );
+        let fraction = plan.mixed_cpu_fraction();
+        assert!(
+            (fraction - 0.5).abs() < 0.01,
+            "the CPU half of the predicted work is the CPU band, got {fraction}"
+        );
+        // An all-GPU plan's CPU fraction is the clamp's floor: a band of
+        // zero rows is degenerate, so the split never empties a side.
+        let all_gpu = hand_plan(
+            vec![Placement::Gpu, Placement::Gpu],
+            vec![10.0, 10.0],
+            vec![1.0, 1.0],
+        );
+        assert!((all_gpu.mixed_cpu_fraction() - 0.05).abs() < 1e-6);
+        // An all-CPU plan's is the ceiling, for the same reason.
+        let all_cpu = hand_plan(
+            vec![Placement::Cpu, Placement::Cpu],
+            vec![1.0, 1.0],
+            vec![9.0, 9.0],
+        );
+        assert!((all_cpu.mixed_cpu_fraction() - 0.95).abs() < 1e-6);
+        // A Hybrid pass contributes its split, not a whole unit: one pass,
+        // split 60/40 CPU/GPU by time, is a 60% CPU band.
+        let split = hand_plan(
+            vec![Placement::Hybrid(crate::hybrid::Split {
+                cpu_fraction: 0.6,
+            })],
+            vec![10.0],
+            vec![10.0],
+        );
+        assert!(
+            (split.mixed_cpu_fraction() - 0.6).abs() < 0.02,
+            "got {}",
+            split.mixed_cpu_fraction()
+        );
+    }
+
+    #[test]
+    fn split_frames_guard_the_ring_but_not_the_lifetime_calibration() {
+        let mut planner = ShadowPlanner::with_authoritative(DeviceProfile::DESKTOP_DISCRETE);
+        let plan = hand_plan(
+            vec![Placement::Cpu, Placement::Gpu],
+            vec![4.0, 6.0],
+            vec![2.0, 1.0],
+        );
+        let predicted = plan
+            .predicted_for(Executor::Mixed)
+            .expect("a mixed plan predicts");
+        planner.observe(plan, "split", (800, 600), Executor::Mixed, predicted, None);
+        // The lifetime calibration took no whole-frame bucket for the split
+        // frame: its CPU and GPU frame counts are what they were (zero —
+        // this fresh planner has seen no whole frames at all).
+        assert_eq!(planner.calibration().cpu_frames(), 0);
+        assert_eq!(planner.calibration().gpu_frames(), 0);
+        assert_eq!(planner.calibration().frames(), 0);
+        // The ring did take it: the *recent* guard on actuation is exactly
+        // where a split frame's prediction quality belongs.
+        let recent = planner.ring().recent_error(Executor::Mixed);
+        let recent = recent.expect("the split frame is in the ring");
+        assert_eq!(recent.samples, 1);
+        assert!(
+            recent.rmse_of_ratios.abs() < 1e-6,
+            "measured exactly the prediction"
+        );
+        // And its JSON name is what the log line says.
+        assert_eq!(Executor::Mixed.name(), "mixed");
     }
 }
