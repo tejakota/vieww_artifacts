@@ -15,15 +15,46 @@
 //! | Modulation | [`modulation`]: tempo-synced LFOs, mod matrix, macros, MIDI learn; [`automation`] lanes |
 //! | Effects | [`fx`]: SVF and ladder filters, EQs (parametric, graphic, dynamic, linear-phase), dynamics (compressor, limiter, gate, multiband, transient), reverbs (algorithmic, FDN, convolution), delays, modulation effects, distortion with oversampling |
 //! | Engine | [`graph`] (block-based node graph), [`mixer`] (tracks, buses, sends, sidechains, VCAs, delay compensation), [`parallel`] (multi-core rendering), [`stream`] (lock-free ring), [`resample`], [`channels`] (up to 7.1), [`simd`] |
-//! | Formats | [`wav`], [`codec`]: FLAC, MP3, Ogg Vorbis, AAC-LC (ADTS and MP4), AIFF — decoders verified against reference decodes; [`loader`] (background loading, disk streaming) |
-//! | Music | [`midi`] (SMF, clock, MTC), [`midi_io`], [`transport`] (tempo maps, bars and beats), [`sequencer`] (piano roll, step sequencer, clip launcher, arrangement, arpeggiator) |
+//! | Formats | [`wav`], [`codec`]: FLAC, MP3, Ogg Vorbis, AAC-LC (ADTS and MP4), AIFF — decoders verified against reference decodes; tag metadata read from all and written to WAV, FLAC, AIFF ([`codec::tags`]); [`loader`] (background loading, disk streaming) |
+//! | Music | [`midi`] (SMF, clock, MTC), [`midi_io`] (ports on Linux, Windows, macOS, iOS), [`transport`] (tempo maps, bars and beats), [`sequencer`] (piano roll, step sequencer, clip launcher, arrangement, arpeggiator), [`synth::tuning`] and [`mts`] (any tuning, MIDI Tuning Standard) |
 //! | Measurement | [`meter`] (EBU R128 loudness, true peak, VU, PPM, correlation), [`quality`] (THD+N, IMD, dynamic range, sweeps, latency), [`analysis`] |
 //! | State | [`preset`]: parameter metadata, presets in binary and text, banks, A/B, undo, morphing |
-//! | Devices | [`backend`] (PipeWire, JACK, PulseAudio, ALSA, Core Audio, WASAPI, AAudio, Web Audio — one callback interface, loaded at run time), [`device`], [`player`], [`spatial`] |
+//! | Devices | [`backend`] (PipeWire, JACK, PulseAudio, ALSA, Core Audio, WASAPI shared and exclusive, AAudio, Web Audio — one callback interface, loaded at run time; device lists and selection, latency and load telemetry, hot-plug recovery in [`backend::resilient`]), [`rt`] (real-time thread priority), [`device`] (native formats and rate matching), [`player`], [`spatial`] |
 //!
 //! The render paths are allocation-free (a counting-allocator test proves
 //! it for the graph, the mixer, multi-core voices and disk streaming), and
 //! every DSP result is a deterministic function of its inputs.
+//!
+//! # Failure policy
+//!
+//! What happens when something goes wrong while audio is playing — the
+//! contract every backend keeps, each point tested:
+//!
+//! - **A panicking callback** is caught at the stream boundary (the FFI
+//!   callback or the stream thread). The panic is reported once, the
+//!   stream outputs silence from then on, and
+//!   [`StreamStats::ended`](backend::StreamStats::ended) is set. It never
+//!   unwinds into C, never kills the device thread silently, never takes
+//!   the process down. Restart by opening a new stream (a
+//!   [`ResilientStream`](backend::resilient::ResilientStream) does not
+//!   resurrect a panicked closure: its state is suspect).
+//! - **Non-finite samples** (NaN, ±∞) are zeroed at the device boundary,
+//!   and the [`mixer`] resets an insert chain that produced them (counted
+//!   in its faults), so one bad filter state cannot poison a channel or
+//!   reach a speaker. Plugin hosts sanitise plugin output the same way.
+//! - **Device loss** (unplugging, a sound server restarting) ends the
+//!   stream with `ended` set — never a hang. A
+//!   [`ResilientStream`](backend::resilient::ResilientStream) reopens on
+//!   the same named device when it returns, or follows the default.
+//! - **Priority**: device threads are promoted to real-time scheduling
+//!   ([`rt`]); when the OS refuses, the stream still runs and
+//!   [`StreamStats::priority`](backend::StreamStats::priority) says so.
+//!   `VIEWW_AUDIO_NO_RT=1` opts out.
+//! - **Allocation**: the render paths do not allocate (the counting
+//!   allocator test), so no callback waits on the allocator's lock.
+//! - **Decoders and tag readers** never panic on hostile input (a fuzz
+//!   corpus and mutation tests); decoders return an error naming the
+//!   problem, tag readers return what they could read.
 //!
 //! # The rule that shapes everything here
 //!

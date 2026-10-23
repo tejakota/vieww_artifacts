@@ -3,7 +3,10 @@
 // and its message port, a fake wasm module renders a ramp into its memory,
 // and the test drives the audio thread by calling process() for 128-frame
 // quanta, checking that the output is the ramp, gap-free, with no
-// underruns once primed. Run: node web/test.mjs
+// underruns once primed — over each of the three transports: messages,
+// the shared ring filled on the page, and the shared ring filled by a
+// worker (simulated with a pair of message ports) while the page only
+// hosts the context. Run: node web/test.mjs
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import * as shim from "./vieww-audio.js";
@@ -29,6 +32,8 @@ const scope = {
     Processor = cls;
   },
   Float32Array,
+  Int32Array,
+  Atomics,
   Math,
 };
 vm.runInNewContext(shim.WORKLET_SOURCE, scope);
@@ -77,7 +82,7 @@ const CH = 2;
 shim.attach({
   memory,
   vieww_audio_render(handle, frames) {
-    assert.equal(handle, 7);
+    assert.ok([5, 7, 9].includes(handle), `render for stream ${handle}`);
     const v = new Float32Array(memory.buffer, SCRATCH, frames * CH);
     for (let i = 0; i < frames; i++) {
       v[i * CH] = counter;
@@ -147,6 +152,132 @@ assert.equal(log.captured.length, 128 * CH, "captured frames delivered (in 64-fr
 assert.equal(log.captured[2 * 5], 5 / 128);
 assert.equal(log.captured[2 * 5 + 1], -5 / 128);
 shim.vieww_audio_close(3);
+
+// ---- shared ring, filled on the page -------------------------------------------
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+globalThis.crossOriginIsolated = true;
+counter = 0;
+log.xrun = 0;
+assert.equal(shim.vieww_audio_open(9, 48000, CH, 128, 0, SCRATCH, 256 * CH), 48000);
+for (let k = 0; k < 6; k++) await tick();
+const po = lastNode.opts.processorOptions;
+assert.ok(po.sab instanceof SharedArrayBuffer, "the worklet got the ring");
+assert.ok(po.cap >= 2048 && (po.cap & (po.cap - 1)) === 0, "power-of-two capacity");
+expect = 0;
+// 400 quanta: 51 200 frames through a 2048-frame ring.
+for (let q = 0; q < 400; q++) {
+  lastNode.processor.process([], [[left, right]]);
+  for (let i = 0; i < 128; i++) {
+    assert.equal(left[i], expect, `ring quantum ${q} frame ${i}`);
+    assert.equal(right[i], -expect);
+    expect++;
+  }
+  if (q % 4 === 3) await wait(2); // the pump's timer
+}
+await wait(5);
+assert.equal(log.xrun, 0, "no underruns from the ring");
+// A janky page: no pump for 20 quanta. The cushion (1024 frames) covers
+// 8; the rest underrun, the worklet counts them, the pump reports them.
+for (let q = 0; q < 20; q++) lastNode.processor.process([], [[left, right]]);
+const lastBeforeGap = left;
+assert.ok(lastBeforeGap.every((v) => v === 0), "silence once the cushion is spent");
+await wait(5);
+assert.ok(log.xrun >= 10, `underruns reported (${log.xrun})`);
+// Recovery: nothing lost — the ramp continues where playback left it.
+lastNode.processor.process([], [[left, right]]);
+const resumed = left.find((v) => v !== 0);
+assert.equal(resumed, expect + 1024, "resumes after the frames the cushion played");
+shim.vieww_audio_close(9);
+
+// ---- shared ring capture ---------------------------------------------------------
+log.captured.length = 0;
+assert.equal(shim.vieww_audio_open(4, 48000, CH, 128, 1, SCRATCH, 64 * CH), 48000);
+for (let k = 0; k < 6; k++) await tick();
+for (let q = 0; q < 3; q++) lastNode.processor.process([[micL, micR]], []);
+await wait(5);
+assert.equal(log.captured.length, 3 * 128 * CH, "ring capture delivered every frame");
+assert.equal(log.captured[2 * 128 + 2 * 5], 5 / 128, "in order, interleaved");
+assert.equal(log.captured[2 * 128 + 2 * 5 + 1], -5 / 128);
+shim.vieww_audio_close(4);
+
+// ---- worker mode: the wasm in a worker, the context on the page --------------------
+function channel() {
+  const make = () => ({
+    listeners: [],
+    other: null,
+    addEventListener(_t, f) {
+      this.listeners.push(f);
+    },
+    removeEventListener(_t, f) {
+      this.listeners = this.listeners.filter((g) => g !== f);
+    },
+    postMessage(d) {
+      const o = this.other;
+      queueMicrotask(() => o.listeners.forEach((f) => f({ data: d })));
+    },
+  });
+  const insideWorker = make();
+  const workerHandle = make();
+  insideWorker.other = workerHandle;
+  workerHandle.other = insideWorker;
+  return [insideWorker, workerHandle];
+}
+const [insideWorker, workerHandle] = channel();
+const stopHosting = shim.hostAudio(workerHandle);
+shim.attach(
+  {
+    memory,
+    vieww_audio_render(handle, frames) {
+      const v = new Float32Array(memory.buffer, SCRATCH, frames * CH);
+      for (let i = 0; i < frames; i++) {
+        v[i * CH] = counter;
+        v[i * CH + 1] = -counter;
+        counter++;
+      }
+      log.render += frames;
+      return frames;
+    },
+    vieww_audio_capture() {},
+    vieww_audio_xrun() {
+      log.xrun++;
+    },
+    vieww_audio_ended() {
+      log.ended++;
+    },
+  },
+  { host: insideWorker },
+);
+counter = 0;
+log.xrun = 0;
+lastNode = null;
+assert.equal(shim.vieww_audio_open(5, 48000, CH, 128, 0, SCRATCH, 256 * CH), 48000, "a worker grants the requested rate");
+for (let k = 0; k < 8; k++) await tick();
+assert.ok(lastNode, "the page opened the context for the worker");
+assert.ok(lastNode.opts.processorOptions.sab instanceof SharedArrayBuffer);
+expect = 0;
+for (let q = 0; q < 200; q++) {
+  lastNode.processor.process([], [[left, right]]);
+  for (let i = 0; i < 128; i++) {
+    assert.equal(left[i], expect, `worker quantum ${q} frame ${i}`);
+    expect++;
+  }
+  if (q % 4 === 3) await wait(2);
+}
+await wait(5);
+assert.equal(log.xrun, 0, "no underruns with the worker rendering");
+// A rate the page's context will not run at ends the stream, honestly.
+const endedBefore = log.ended;
+assert.equal(shim.vieww_audio_open(6, 96000, CH, 128, 0, SCRATCH, 256 * CH), 96000);
+for (let k = 0; k < 8; k++) await tick();
+assert.equal(log.ended, endedBefore + 1, "mismatched rate → ended");
+shim.vieww_audio_close(5);
+shim.vieww_audio_close(6);
+// Without isolation a worker cannot share memory: refused, not faked.
+globalThis.crossOriginIsolated = false;
+assert.equal(shim.vieww_audio_open(8, 48000, CH, 128, 0, SCRATCH, 512), 0, "worker without isolation → 0");
+stopHosting();
+shim.attach({ memory }); // back to page mode (no host) for the last check
+globalThis.crossOriginIsolated = undefined;
 
 // ---- unavailable ------------------------------------------------------------
 delete globalThis.AudioContext;

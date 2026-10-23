@@ -40,27 +40,43 @@ const DEFAULT_POLL: Duration = Duration::from_millis(1_000);
 type Slot = Arc<Mutex<Option<RenderFn>>>;
 
 /// A forwarding closure: borrows the app's closure from `slot` for the
-/// life of one device stream.
-fn forwarder(slot: &Slot) -> RenderFn {
+/// life of one device stream. If the app's closure panics, `poisoned` is
+/// set and the closure is dropped instead of handed back: its state may be
+/// half-updated, so no later stream runs it.
+fn forwarder(slot: &Slot, poisoned: &Arc<AtomicBool>) -> RenderFn {
     struct Lease {
         slot: Slot,
         held: Option<RenderFn>,
+        poisoned: Arc<AtomicBool>,
     }
     impl Drop for Lease {
         fn drop(&mut self) {
             if let Some(f) = self.held.take() {
+                if self.poisoned.load(Ordering::Acquire) {
+                    return; // dropped here, never reused
+                }
                 if let Ok(mut s) = self.slot.lock() {
                     *s = Some(f);
                 }
             }
         }
     }
+    /// Set `poisoned` if dropped during an unwind out of the app's closure.
+    struct Unwinding<'a>(&'a AtomicBool);
+    impl Drop for Unwinding<'_> {
+        fn drop(&mut self) {
+            if std::thread::panicking() {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+    }
     let mut lease = Lease {
         slot: Arc::clone(slot),
         held: None,
+        poisoned: Arc::clone(poisoned),
     };
     Box::new(move |out: &mut [f32], info: &BlockInfo| {
-        if lease.held.is_none() {
+        if lease.held.is_none() && !lease.poisoned.load(Ordering::Acquire) {
             // First callback of this stream: take the closure (the previous
             // stream returned it when it was dropped).
             if let Ok(mut s) = lease.slot.try_lock() {
@@ -68,7 +84,10 @@ fn forwarder(slot: &Slot) -> RenderFn {
             }
         }
         match &mut lease.held {
-            Some(f) => f(out, info),
+            Some(f) => {
+                let _watch = Unwinding(&lease.poisoned);
+                f(out, info);
+            }
             None => out.fill(0.0),
         }
     })
@@ -98,6 +117,8 @@ struct State {
     reopens: AtomicU64,
     failed_opens: AtomicU64,
     following_default: AtomicBool,
+    /// The app's closure panicked: nothing more is opened.
+    poisoned: Arc<AtomicBool>,
     current: Mutex<Option<StreamStats>>,
 }
 
@@ -122,13 +143,16 @@ impl ResilientStream {
         render: RenderFn,
     ) -> Result<Self, BackendError> {
         let slot: Slot = Arc::new(Mutex::new(Some(render)));
+        let poisoned = Arc::new(AtomicBool::new(false));
+        let p2 = Arc::clone(&poisoned);
         let open_on = move |b: &dyn Backend, t: &Target, slot: &Slot| match t {
-            Target::Default => b.open_output(config, forwarder(slot)),
-            Target::Named { id, .. } => b.open_output_on(id, config, forwarder(slot)),
+            Target::Default => b.open_output(config, forwarder(slot, &p2)),
+            Target::Named { id, .. } => b.open_output_on(id, config, forwarder(slot, &p2)),
         };
         let first = open_on(backend.as_ref(), &target, &slot)?;
         let state = Arc::new(State {
             following_default: AtomicBool::new(target == Target::Default),
+            poisoned,
             ..State::default()
         });
         let st = Arc::clone(&state);
@@ -179,6 +203,11 @@ impl ResilientStream {
                                 }
                             }
                         }
+                    }
+                    if st.poisoned.load(Ordering::Acquire) {
+                        // The closure panicked: the stream stays ended
+                        // (silent), and nothing is reopened with it.
+                        continue;
                     }
                     if !(ended || moved) {
                         lost_for = Duration::ZERO;
@@ -231,6 +260,14 @@ impl ResilientStream {
     #[must_use]
     pub fn reopens(&self) -> u64 {
         self.state.reopens.load(Ordering::Relaxed)
+    }
+
+    /// Whether the render closure panicked. The stream is then silent for
+    /// good — the closure's state may be half-updated, so it is never run
+    /// again; open a new stream with a fresh closure.
+    #[must_use]
+    pub fn panicked(&self) -> bool {
+        self.state.poisoned.load(Ordering::Acquire)
     }
 
     /// Attempts to reopen that failed (the device was still gone).
@@ -300,12 +337,15 @@ mod tests {
         fn open_output(
             &self,
             config: StreamConfig,
-            mut render: RenderFn,
+            render: RenderFn,
         ) -> Result<DeviceStream, BackendError> {
             if !self.present.load(Ordering::Acquire) {
                 return Err(BackendError::Unavailable("unplugged".into()));
             }
             let counters = Arc::new(Counters::default());
+            // As every real backend does: a panic is caught, then silence
+            // and `ended`.
+            let mut render = super::super::isolate_render(render, &counters);
             let stop = Arc::new(AtomicBool::new(false));
             let (c2, s2, g, gen) = (
                 counters.clone(),
@@ -394,6 +434,53 @@ mod tests {
         assert_eq!(rs.reopens(), 2, "followed the default");
         assert!(rs.following_default());
         assert!(rs.stats().is_some_and(|s| s.callbacks > 0));
+    }
+
+    #[test]
+    fn a_panicked_closure_is_never_run_again() {
+        let fake = Fake::default();
+        fake.present.store(true, Ordering::Release);
+        *fake.default_id.lock().unwrap() = "speakers".into();
+        let default_id = fake.default_id.clone();
+        /// Counts its own drop: the closure's state, freed or kept.
+        struct Alive(Arc<AtomicU32>);
+        impl Drop for Alive {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        let dropped = Arc::new(AtomicU32::new(0));
+        let alive = Alive(dropped.clone());
+        let calls = Arc::new(AtomicU32::new(0));
+        let c2 = calls.clone();
+        let rs = ResilientStream::open(
+            Box::new(fake),
+            Target::Default,
+            StreamConfig::default(),
+            Box::new(move |_, _| {
+                let _keep = &alive;
+                assert!(
+                    c2.fetch_add(1, Ordering::Relaxed) < 20,
+                    "a bug in the app's render"
+                );
+            }),
+        )
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(rs.panicked());
+        let after = calls.load(Ordering::Relaxed);
+        // A default change would normally reopen; a poisoned stream stays
+        // ended and silent.
+        *default_id.lock().unwrap() = "headphones".into();
+        std::thread::sleep(Duration::from_millis(1_400));
+        assert_eq!(rs.reopens(), 0, "nothing reopened with a panicked closure");
+        assert_eq!(calls.load(Ordering::Relaxed), after, "never called again");
+        drop(rs);
+        assert_eq!(
+            dropped.load(Ordering::Relaxed),
+            1,
+            "its state was freed, once"
+        );
     }
 
     #[test]

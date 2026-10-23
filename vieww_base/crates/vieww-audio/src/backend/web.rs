@@ -11,8 +11,24 @@
 //! Browsers choose the context's real rate when asked for one they do not
 //! support; [`DeviceStream::config`] reports it.
 //!
-//! Callbacks run on the page's thread (wasm is single-threaded here), so
-//! a render callback should finish well inside a block's duration.
+//! Where the callbacks run depends on the page (the shim picks):
+//!
+//! - **In a Web Worker** — the app instantiates its wasm in a worker and
+//!   calls the shim's `attach` there, and `hostAudio(worker)` on the page.
+//!   The worker renders into a `SharedArrayBuffer` ring on its own timer;
+//!   the page only owns the `AudioContext`. Page layout, scripts and GC
+//!   cannot starve the audio. Needs cross-origin isolation (COOP/COEP).
+//! - **On the page, through the shared ring** (isolated, single-threaded):
+//!   a pump keeps a cushion of frames ahead of the worklet, which reads the
+//!   ring without allocating — no GC on the audio thread, no per-block
+//!   message round trip.
+//! - **On the page, through messages** (not isolated): blocks are
+//!   transferred to the worklet as it asks for them.
+//!
+//! In the page modes a render callback shares the page's thread, so it
+//! should finish well inside a block's duration and the page should not
+//! block for longer than the cushion; the worker mode has neither limit.
+//! `web/test.mjs` drives all three under Node with a simulated Web Audio.
 
 use std::cell::RefCell;
 use std::sync::Arc;
