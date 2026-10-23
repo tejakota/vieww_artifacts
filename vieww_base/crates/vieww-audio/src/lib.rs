@@ -202,6 +202,11 @@ impl Samples {
     /// How long the buffer sounds for.
     #[must_use]
     pub fn duration(&self) -> Duration {
+        // A zero rate has no duration; `from_secs_f32` panics on the
+        // infinite or NaN quotient it would otherwise produce.
+        if self.rate == 0 {
+            return Duration::ZERO;
+        }
         Duration::from_secs_f32(self.frames() as f32 / as_f32(self.rate))
     }
 
@@ -611,21 +616,17 @@ impl Mixer {
             let start = (source.at.as_secs_f32() * as_f32(self.rate)).round() as usize;
             match &source.kind {
                 SourceKind::Buffer(buffer) => {
-                    for (index, sample) in buffer.data.iter().enumerate() {
-                        // Stereo buffers downmix to the mean of each frame —
-                        // the one downmix with no phase surprises.
-                        let frame = index / buffer.channels as usize;
+                    // One mono value per *frame*: stereo frames downmix to
+                    // their mean — the one downmix with no phase surprises.
+                    // (Walking samples here added each stereo mean twice.)
+                    let ch = buffer.channels.max(1) as usize;
+                    for (frame, chunk) in buffer.data.chunks_exact(ch).enumerate() {
                         let out = start + frame;
-                        if out < frames {
-                            let mono = if buffer.channels == 2 {
-                                let left = buffer.data[frame * 2];
-                                let right = buffer.data[frame * 2 + 1];
-                                (left + right) * 0.5
-                            } else {
-                                *sample
-                            };
-                            data[out] = (data[out] + mono * source.gain).clamp(-1.0, 1.0);
+                        if out >= frames {
+                            break;
                         }
+                        let mono = chunk.iter().sum::<f32>() / ch as f32;
+                        data[out] += mono * source.gain;
                     }
                 }
                 SourceKind::Tone(tone) => {
@@ -638,13 +639,19 @@ impl Mixer {
                         let elapsed = Duration::from_secs_f32(
                             as_f32(self.rate).recip() * (frame - start) as f32,
                         );
-                        let value = tone.at(elapsed) * source.gain;
-                        *out = (*out + value).clamp(-1.0, 1.0);
+                        *out += tone.at(elapsed) * source.gain;
                     }
                 }
             }
         }
 
+        // Saturate once, after the whole sum: clamping inside the
+        // accumulation made the mix depend on the order sources were
+        // added. A non-finite sample (NaN from a source) becomes silence
+        // rather than reaching a device.
+        for v in &mut data {
+            *v = if v.is_finite() { v.clamp(-1.0, 1.0) } else { 0.0 };
+        }
         Samples::mono(data, self.rate)
     }
 }

@@ -184,7 +184,17 @@ pub(crate) fn isolate_render(render: RenderFn, counters: &Arc<Counters>) -> Rend
         }
         let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| render(out, info)));
         match ok {
-            Ok(()) => {}
+            Ok(()) => {
+                // The device boundary is the last place a non-finite sample
+                // can be stopped: a NaN or infinity handed to a float sink
+                // is, depending on the driver, silence, a full-scale burst
+                // or a muted endpoint. Zero it here, on every backend.
+                for s in out.iter_mut() {
+                    if !s.is_finite() {
+                        *s = 0.0;
+                    }
+                }
+            }
             Err(_) => {
                 flag.store(true, Ordering::Release);
                 out.fill(0.0);
