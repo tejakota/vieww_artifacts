@@ -1568,9 +1568,13 @@ impl VulkanDevice {
                     (1, vk::Format::R32G32B32_SFLOAT, 16),
                     (2, vk::Format::R32G32B32_SFLOAT, 32),
                     (3, vk::Format::R32G32B32_SFLOAT, 48),
-                    // The flags ride in the first two pads.
+                    // The flags and the Phong material ride in the record's
+                    // pads: shading kind and `receive` in the first two,
+                    // `shininess` and `specular` in the albedo/emissive `w`s.
                     (4, vk::Format::R32_SFLOAT, 12),
                     (5, vk::Format::R32_SFLOAT, 28),
+                    (6, vk::Format::R32_SFLOAT, 44),
+                    (7, vk::Format::R32_SFLOAT, 60),
                 ],
                 indices: &indices,
                 uniforms: bytemuck_cast_f32(uniforms),

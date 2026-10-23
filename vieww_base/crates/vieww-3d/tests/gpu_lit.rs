@@ -344,15 +344,18 @@ fn back_faces_are_culled_or_flipped_as_on_the_cpu() {
     }
 }
 
-/// What the lit pass does not cover falls back to the CPU renderer — at its
-/// own default settings — for the whole frame, so the image is the CPU's
-/// exactly.
 #[test]
 #[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
-fn a_point_light_falls_back_to_the_cpu_exactly() {
+fn point_and_spot_lights_match_the_cpu() {
     let Some((_lock, gpu)) = try_gpu() else {
         return;
     };
+    // The lit scene — Lambert materials under ambient, hemisphere and two
+    // directionals — plus a point light in front of the sphere and a spot
+    // over the boxes. Point and spot lights used to force the whole frame
+    // onto the CPU; they are in the lit pass now, so the claim this test
+    // pins is the same one every other test here pins: interiors match the
+    // oracle, including the falloff and cone arithmetic.
     let (mut scene, camera) = lit_scene();
     let mut lamp = Node::new(
         "lamp",
@@ -364,7 +367,81 @@ fn a_point_light_falls_back_to_the_cpu_exactly() {
     );
     lamp.position = Vec3::new(0.0, 2.0, 2.0);
     scene.add(lamp, None);
-    let (image, _) = gpu.render(&mut scene, &camera);
-    let (cpu, _) = Renderer::new(WIDTH, HEIGHT).render(&mut scene, &camera);
-    assert_eq!(image.pixels(), cpu.pixels());
+    let mut torch = Node::new(
+        "torch",
+        Content::Light(Light::Spot {
+            color: Rgb::new(0.6, 0.8, 1.0),
+            intensity: 3.0,
+            range: 8.0,
+            direction: Vec3::new(0.0, -1.0, -0.2),
+            angle: 0.6,
+            penumbra: 0.3,
+        }),
+    );
+    torch.position = Vec3::new(0.0, 4.0, 1.0);
+    scene.add(torch, None);
+    let cpu = on_cpu(&mut scene, &camera);
+    assert!(
+        lit_pixels(&cpu, [cpu[0], cpu[1], cpu[2]]) > 3000,
+        "the scene must draw"
+    );
+    assert_parity(&gpu, &mut scene, &camera, "point and spot lights");
+}
+
+#[test]
+#[ignore = "needs a Vulkan loader + ICD (lavapipe or a real GPU); run with `cargo test --features vulkan -- --ignored`"]
+fn phong_specular_matches_the_cpu() {
+    let Some((_lock, gpu)) = try_gpu() else {
+        return;
+    };
+    // A smooth Phong sphere and a rotated Phong box under a directional and
+    // a point light. The specular highlight is the part under test: the
+    // Blinn–Phong half-vector term the GPU must evaluate as the CPU oracle
+    // does — `pow(max(n . hv, 0), max(shininess, 1)) * specular` in white —
+    // and a highlight is exactly the kind of high-gradient interior region
+    // where a wrong exponent or half-vector would fail loudly.
+    let mut scene = Scene::new();
+    scene.background = Rgb::new(0.02, 0.03, 0.05);
+    light(
+        &mut scene,
+        "sun",
+        Light::Directional {
+            color: Rgb::WHITE,
+            intensity: 0.8,
+            direction: Vec3::new(-0.4, -1.0, -0.6),
+            shadow: false,
+        },
+    );
+    let mut lamp = Node::new(
+        "lamp",
+        Content::Light(Light::Point {
+            color: Rgb::new(1.0, 0.8, 0.5),
+            intensity: 2.5,
+            range: 12.0,
+        }),
+    );
+    lamp.position = Vec3::new(1.5, 2.0, 2.5);
+    scene.add(lamp, None);
+    mesh(
+        &mut scene,
+        "sphere",
+        geometry::sphere(0.8, 48, 32),
+        Material::phong(Color::rgb(200, 200, 210), 40.0),
+        Vec3::new(-0.9, 0.0, 0.0),
+    );
+    let box_id = mesh(
+        &mut scene,
+        "box",
+        geometry::box_mesh(0.9, 0.9, 0.9),
+        Material::phong(Color::rgb(60, 160, 90), 8.0),
+        Vec3::new(1.0, 0.1, 0.3),
+    );
+    scene.node_mut(box_id).rotation = Quat::from_euler(0.5, 0.7, 0.1);
+    let camera = Camera::perspective(Vec3::new(0.0, 1.2, 4.0), Vec3::ZERO, 0.9);
+    let cpu = on_cpu(&mut scene, &camera);
+    assert!(
+        lit_pixels(&cpu, [cpu[0], cpu[1], cpu[2]]) > 3000,
+        "the scene must draw"
+    );
+    assert_parity(&gpu, &mut scene, &camera, "phong specular");
 }

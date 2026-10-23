@@ -223,4 +223,34 @@ mod tests {
         assert_eq!(library.get("a").unwrap().wgsl.as_ref(), "// v2");
         assert_eq!(library.len(), 1);
     }
+
+    #[test]
+    fn every_embedded_wgsl_parses_and_validates() {
+        // The 3D passes (`UNLIT3D_WGSL`, `LIT3D_WGSL`) are not in the
+        // library's built-in list — they are handed straight to
+        // `render_3d_pass` — which left them with no offline check at all:
+        // a WGSL typo would surface only on a machine with a Vulkan loader,
+        // inside a hardware parity test. Naga's front end and validator run
+        // anywhere, so every shader this crate embeds is parsed here, every
+        // leg, hardware or not.
+        for (name, wgsl) in [
+            ("clear", CLEAR_WGSL),
+            ("solid", SOLID_WGSL),
+            ("scene", SCENE_WGSL),
+            ("post", POST_WGSL),
+            ("gradient", GRADIENT_WGSL),
+            ("image", IMAGE_WGSL),
+            ("text", TEXT_WGSL),
+            ("blur", BLUR_WGSL),
+            ("shadow", SHADOW_WGSL),
+            ("mask", MASK_WGSL),
+            ("composite", COMPOSITE_WGSL),
+            ("unlit3d", UNLIT3D_WGSL),
+            ("lit3d", LIT3D_WGSL),
+        ] {
+            crate::compiler::ParsedShader::parse(wgsl).unwrap_or_else(|e| {
+                panic!("{name}.wgsl does not parse and validate: {e}")
+            });
+        }
+    }
 }
