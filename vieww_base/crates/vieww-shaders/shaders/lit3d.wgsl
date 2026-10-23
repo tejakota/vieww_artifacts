@@ -20,9 +20,33 @@
 //            formulas verbatim (see `distance_falloff` and the spot branch),
 //            + emissive
 //
-// then the same sRGB encode `unlit3d.wgsl` uses. Image-based lighting, GI
-// probes, fog and skyboxes are not here: a scene that has them falls back to
-// the CPU for the whole frame (see `vieww-3d/src/gpu.rs`).
+// Textures multiply into `albedo` and set the starting alpha exactly as the
+// CPU's `shade` does — `albedo = albedo.mul(texel.rgb)`, `alpha = texel.a` —
+// sampled with the material's own filter (nearest or bilinear, repeat
+// addressing, v = 0 the top row) at mip level 0, which is the CPU's
+// `Texture::sample` arithmetic.
+//
+// Then the output is the shaded colour in LINEAR light, alpha `texel.a ×
+// opacity` alongside it, and nothing is sRGB-encoded here: the target holds
+// linear f16, the CPU oracle lerps linear colours before encoding once at
+// `to_image`, and the readback encodes the same way. Blending — when a
+// batch draws with it on — is straight-alpha source-over in that linear
+// space, which is `NativeTarget::lerp(color, a)` to the bit.
+//
+// # The transparent split
+//
+// The CPU's per-fragment rule is: `a >= 1.0` writes colour AND depth, `a <
+// 1.0` blends the colour and writes no depth. Fixed-function blending cannot
+// switch depth writes per fragment, so each batch draws TWICE — once with
+// `push.alpha_pass = 0` (keep `a >= 1.0`, depth writes on, blending off)
+// and once with `push.alpha_pass = 1` (keep `a < 1.0`, depth writes off,
+// blending on) — two disjoint fragment sets, the same pixels as the CPU's
+// single pass. A material that cannot produce one side of the split skips
+// that draw; see `vieww-3d/src/gpu.rs`.
+//
+// Image-based lighting, GI probes, fog and skyboxes are not here: a scene
+// that has them falls back to the CPU for the whole frame (see
+// `vieww-3d/src/gpu.rs`).
 //
 // # Shadows
 //
@@ -78,6 +102,23 @@ var<uniform> u: Uniforms;
 @group(0) @binding(1)
 var<storage, read> shadow_depth: array<f32>;
 
+// The batch's texture — the CPU oracle's own linear-light texels, uploaded
+// as RGBA16F. A batch without one binds a 1x1 dummy and marks its vertices
+// `has_map = 0`, so it is never sampled meaningfully.
+@group(0) @binding(2)
+var t_map: texture_2d<f32>;
+@group(0) @binding(3)
+var s_map: sampler;
+
+// The batch's half of the transparent split: 0 keeps `a >= 1.0` fragments
+// (depth writes, no blending), 1 keeps `a < 1.0` (blending, no depth
+// writes). See the module doc.
+struct Push {
+    alpha_pass: f32,
+};
+
+var<immediate> push: Push;
+
 struct VertexIn {
     @location(0) world: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -91,6 +132,12 @@ struct VertexIn {
     // spare floats (the pads of the albedo and emissive vec4s).
     @location(6) shininess: f32,
     @location(7) specular: f32,
+    // The material's texture coordinates — (0,0) when the mesh has none.
+    @location(8) uv: vec2<f32>,
+    // The transparent split's inputs: the material's opacity, and whether a
+    // texture is bound.
+    @location(9) opacity: f32,
+    @location(10) has_map: f32,
 };
 
 struct VertexOut {
@@ -101,6 +148,10 @@ struct VertexOut {
     @location(3) @interpolate(flat) emissive: vec3<f32>,
     // x = shading, y = receive, z = shininess, w = specular.
     @location(4) @interpolate(flat) flags: vec4<f32>,
+    // Perspective-correct texture coordinates.
+    @location(5) uv: vec2<f32>,
+    // x = the material's opacity, y = 1 if a texture is bound.
+    @location(6) @interpolate(flat) alpha: vec2<f32>,
 };
 
 @vertex
@@ -113,6 +164,8 @@ fn vs_main(v: VertexIn) -> VertexOut {
     out.albedo = v.albedo;
     out.emissive = v.emissive;
     out.flags = vec4<f32>(v.shading, v.receive, v.shininess, v.specular);
+    out.uv = v.uv;
+    out.alpha = vec2<f32>(v.opacity, v.has_map);
     return out;
 }
 
@@ -306,22 +359,37 @@ fn phong(
 
 @fragment
 fn fs_main(f: VertexOut) -> @location(0) vec4<f32> {
+    // The CPU's `shade`: a texture multiplies albedo and sets the starting
+    // alpha; `a = texel.a * opacity` is the write-or-blend decision.
+    var albedo = f.albedo;
+    var base_alpha = 1.0;
+    if (f.alpha.y > 0.5) {
+        let texel = textureSampleLevel(t_map, s_map, f.uv, 0.0);
+        albedo = albedo * texel.rgb;
+        base_alpha = texel.a;
+    }
+    let a = base_alpha * f.alpha.x;
+    // This batch's half of the transparent split — see the module doc.
+    if (push.alpha_pass < 0.5 && a < 1.0) {
+        discard;
+    }
+    if (push.alpha_pass > 0.5 && a >= 1.0) {
+        discard;
+    }
     var out: vec3<f32>;
     let shading = f.flags.x;
     if (shading > 1.5) {
         let n = normalize(f.normal);
         out = phong(
-            f.albedo, f.world, n, f.flags.y > 0.5, f.flags.z, f.flags.w,
+            albedo, f.world, n, f.flags.y > 0.5, f.flags.z, f.flags.w,
         ) + f.emissive;
     } else if (shading > 0.5) {
         let n = normalize(f.normal);
-        out = lambert(f.albedo, f.world, n, f.flags.y > 0.5) + f.emissive;
+        out = lambert(albedo, f.world, n, f.flags.y > 0.5) + f.emissive;
     } else {
-        out = f.albedo + f.emissive;
+        out = albedo + f.emissive;
     }
-    let c = clamp(out, vec3<f32>(0.0), vec3<f32>(1.0));
-    let linear = c * 12.92;
-    let gamma = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
-    let s = select(linear, gamma, c > vec3<f32>(0.0031308));
-    return vec4<f32>(s, 1.0);
+    // Linear and unclamped — the CPU's target holds the same raw values,
+    // and the shared readback encode clamps the way `to_image` does.
+    return vec4<f32>(out, a);
 }

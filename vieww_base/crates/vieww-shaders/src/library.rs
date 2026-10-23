@@ -248,9 +248,8 @@ mod tests {
             ("unlit3d", UNLIT3D_WGSL),
             ("lit3d", LIT3D_WGSL),
         ] {
-            crate::compiler::ParsedShader::parse(wgsl).unwrap_or_else(|e| {
-                panic!("{name}.wgsl does not parse and validate: {e}")
-            });
+            crate::compiler::ParsedShader::parse(wgsl)
+                .unwrap_or_else(|e| panic!("{name}.wgsl does not parse and validate: {e}"));
         }
     }
 }

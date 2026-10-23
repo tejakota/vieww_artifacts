@@ -683,6 +683,81 @@ pub fn half_to_f32(h: u16) -> f32 {
     }
 }
 
+/// An `f32` as IEEE 754 binary16, round-to-nearest-even — the upload
+/// counterpart of [`half_to_f32`], for the linear-light textures the 3D
+/// pass copies onto the GPU as RGBA16F (so the oracle's `f32` texels and
+/// the GPU's `f16` ones are the same numbers to both renderers' sampling,
+/// within half-float precision).
+#[must_use]
+pub fn f32_to_half(value: f32) -> u16 {
+    let bits = value.to_bits();
+    let sign = ((bits >> 16) & 0x8000) as u16;
+    let exponent = i32::try_from((bits >> 23) & 0xff).unwrap_or(0);
+    let mantissa = bits & 0x7f_ffff;
+    if exponent == 0xff {
+        // Inf or NaN: keep it being one.
+        return sign | 0x7c00 | u16::from(mantissa != 0);
+    }
+    // Re-bias from f32's 127 to f16's 15, with the f16's 10-bit mantissa.
+    let rebased = exponent - 127 + 15;
+    if rebased >= 0x1f {
+        // Overflow: infinity.
+        return sign | 0x7c00;
+    }
+    if rebased <= 0 {
+        // Subnormal (or zero): shift the mantissa right, rounding to
+        // nearest even through the guard bits.
+        let shift = u32::try_from(14 - rebased).unwrap_or(32);
+        if shift >= 32 {
+            return sign;
+        }
+        let kept = mantissa | 0x80_0000; // the implicit one back in
+        let half = kept >> shift;
+        let rest = kept & ((1 << shift) - 1);
+        let halfway = 1 << (shift - 1);
+        let rounded = half + u32::from(rest > halfway || (rest == halfway && half & 1 == 1));
+        return sign | (rounded as u16);
+    }
+    let kept = mantissa >> 13;
+    let rest = mantissa & 0x1fff;
+    let halfway = 0x1000;
+    let mut out = ((rebased as u32) << 10) | kept;
+    out += u32::from(rest > halfway || (rest == halfway && kept & 1 == 1));
+    sign | (out as u16)
+}
+
+#[cfg(test)]
+mod half_tests {
+    use super::*;
+
+    #[test]
+    fn halves_round_trip_through_the_values_that_matter() {
+        for value in [
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            0.5,
+            0.25,
+            0.003_130_8, // the sRGB knee
+            1.0 / 255.0,
+            254.0 / 255.0,
+            0.999_9,
+            3.0,   // albedo + emissive can exceed 1
+            100.0, // ...by a lot
+            f32::INFINITY,
+        ] {
+            let back = half_to_f32(f32_to_half(value));
+            assert!(
+                (value.is_infinite() && back.is_infinite())
+                    || (back - value).abs() <= value.abs() * 0.001,
+                "{value} -> {back}"
+            );
+        }
+        assert!(half_to_f32(f32_to_half(f32::NAN)).is_nan());
+    }
+}
+
 /// The damage a frame may actually redraw: `damage` clamped to the frame,
 /// or `None` (redraw everything) when the target does not hold the previous
 /// frame at this size and clear, or a top-level backdrop filter reaches

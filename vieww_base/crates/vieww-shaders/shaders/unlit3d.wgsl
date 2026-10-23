@@ -56,16 +56,12 @@ fn vs_main(v: VertexIn) -> VertexOut {
 
 @fragment
 fn fs_main(f: VertexOut) -> @location(0) vec4<f32> {
-    // The CPU resolve chain is: linear colour -> srgb() (12.92 below
-    // 0.0031308, else 1.055 * c^(1/2.4) - 0.055) -> * 255 rounded. The
-    // attachment is straight UNORM RGBA8 with blending off, so encoding here
-    // makes the readback land on the same bytes the oracle's `to_image`
-    // produces — the per-channel rounding difference between the CPU's
-    // floor(x * 255 + 0.5) and the hardware's round-to-nearest is at most
-    // one step, which the parity suite's tolerance absorbs.
-    let c = clamp(f.color, vec3<f32>(0.0), vec3<f32>(1.0));
-    let linear = c * 12.92;
-    let gamma = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
-    let s = select(linear, gamma, c > vec3<f32>(0.0031308));
-    return vec4<f32>(s, 1.0);
+    // Linear colour, alpha 1: the target holds linear f16 and the readback
+    // encodes — the CPU resolve chain is: linear colour -> srgb() (12.92
+    // below 0.0031308, else 1.055 * c^(1/2.4) - 0.055) -> * 255 rounded,
+    // which the shared encode does on the CPU exactly as `to_image` does.
+    // (The shader encoded when the target was UNORM RGBA8; the target moved
+    // to f16 so the lit pass could blend in linear space, and the encode
+    // moved with the readback.)
+    return vec4<f32>(f.color, 1.0);
 }

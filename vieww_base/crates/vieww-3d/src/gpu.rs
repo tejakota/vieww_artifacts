@@ -44,8 +44,16 @@
 //!
 //! The reach grows the way the 2D path's did — Phong and point/spot lights
 //! landed together because the specular term is meaningless without a light
-//! to reflect; textures are next, then the transparent pass, each with its
-//! own parity assertions.
+//! to reflect; textures and the transparent pass landed together the same
+//! way, because a texture's alpha channel is what makes a material
+//! translucent. A textured or translucent material now stays on the GPU:
+//! its texels (the oracle's own, uploaded as f16) multiply albedo and set
+//! alpha exactly as `shade` does, and the CPU's per-fragment
+//! write-or-blend rule is drawn as two passes per batch — `a >= 1.0`
+//! fragments with depth writes, `a < 1.0` fragments blended in linear
+//! light — two disjoint sets, the same pixels the oracle's single pass
+//! produces. Standard/Toon/Normal, wireframe, custom shaders, fog and
+//! skyboxes still fall back to the CPU for the whole frame.
 //!
 //! # What the stats mean here
 //!
@@ -188,11 +196,15 @@ impl GpuRenderer {
                 return true;
             }
             stats.triangles += mesh.indices.len() / 3;
+            // The CPU's own view depth — the negative view-space z of the
+            // bounds centre — so the transparent pass sorts the same list
+            // the same way here as `render_frame` does there.
+            let vd = -view.transform_point(c).z;
             items.push(Item {
                 model,
                 mesh,
                 material: material.clone(),
-                view_depth: 0.0,
+                view_depth: vd,
             });
             true
         };
@@ -311,9 +323,18 @@ impl GpuRenderer {
         }
 
         let bg = [scene.background.r, scene.background.g, scene.background.b];
-        let lit = items
-            .iter()
-            .any(|it| matches!(it.material.shading, Shading::Lambert | Shading::Phong { .. }));
+        // The lit pass is also where a texture or a translucent material
+        // draws: its shader samples, and its two-pass transparent split is
+        // the only thing that can express `texel.a * opacity` per fragment.
+        // The unlit pass stays what it always was: flat `Basic` colours,
+        // opaque, no map.
+        let lit = items.iter().any(|it| {
+            matches!(
+                it.material.shading,
+                Shading::Lambert | Shading::Phong { .. }
+            ) || it.material.map.is_some()
+                || it.material.opacity < 1.0
+        });
         let result = if lit {
             match self.lit_frame(gpu, scene, camera, &vp, &view, &items, &mut stats) {
                 Some(result) => result,
@@ -384,6 +405,7 @@ impl GpuRenderer {
         items: &[Item],
         stats: &mut RenderStats,
     ) -> Option<Result<Vec<u8>, vieww_hal::vulkan::VulkanError>> {
+        let _ = view;
         if scene.environment.is_some() || scene.gi.is_some() {
             return None;
         }
@@ -437,7 +459,10 @@ impl GpuRenderer {
         // needs no culling state and no facing test.
         let view_axis = Vec3::new(view.m[0][2], view.m[1][2], view.m[2][2]);
         let perspective = matches!(camera.projection, Projection::Perspective { .. });
-        let mut vertices: Vec<[f32; 16]> = Vec::new();
+        let mut vertices: Vec<[f32; 20]> = Vec::new();
+        // Each item's vertex range, in `items` order — the draws below
+        // address the geometry through these.
+        let mut ranges: Vec<(u32, u32)> = Vec::with_capacity(items.len());
         for it in items {
             let mesh = &it.mesh;
             let mat = &it.material;
@@ -446,13 +471,17 @@ impl GpuRenderer {
             // and specular scale riding in the record's two spare floats.
             let (kind, shininess, specular) = match mat.shading {
                 Shading::Lambert => (1.0, 0.0, 0.0),
-                Shading::Phong { shininess, specular } => (2.0, shininess, specular),
+                Shading::Phong {
+                    shininess,
+                    specular,
+                } => (2.0, shininess, specular),
                 Shading::Basic => (0.0, 0.0, 0.0),
                 _ => return None, // unreachable: `material_reachable` filtered it
             };
             let receive = if mat.receive_shadow { 1.0 } else { 0.0 };
             let normal_m = it.model.inverse().map_or(it.model, |m| m.transpose());
             let has_n = mesh.has_normals();
+            let has_uv = mesh.has_uvs();
             let world: Vec<Vec3> = mesh
                 .positions
                 .iter()
@@ -466,6 +495,7 @@ impl GpuRenderer {
             } else {
                 Vec::new()
             };
+            let first = vertices.len() as u32;
             for t in mesh.indices.as_chunks::<3>().0 {
                 let [a, b, c] = t.map(|i| i as usize);
                 let face_n = (world[b] - world[a]).cross(world[c] - world[a]).normalize();
@@ -489,6 +519,7 @@ impl GpuRenderer {
                         normals[i]
                     } * sign;
                     let p = world[i];
+                    let uv = if has_uv { mesh.uvs[i] } else { [0.0, 0.0] };
                     vertices.push([
                         p.x,
                         p.y,
@@ -506,13 +537,121 @@ impl GpuRenderer {
                         mat.emissive.g,
                         mat.emissive.b,
                         specular,
+                        uv[0],
+                        uv[1],
+                        mat.opacity,
+                        if mat.map.is_some() { 1.0 } else { 0.0 },
                     ]);
+                }
+            }
+            ranges.push((first, vertices.len() as u32 - first));
+        }
+
+        // --- the draw order: the CPU's own ------------------------------------
+        //
+        // Opaque items in scene order, then transparent ones sorted far to
+        // near — `render_frame`'s partition and sort, reproduced so equal
+        // depths tie the same way. Each item draws at most twice: the
+        // `a >= 1.0` half (depth writes, no blending) and the `a < 1.0`
+        // half (blending, no depth writes) — the CPU's per-fragment
+        // write-or-lerp rule, which fixed-function blending cannot switch
+        // per fragment, drawn as two disjoint fragment sets.
+        let (opaque, mut transparent): (Vec<&Item>, Vec<&Item>) =
+            items.iter().partition(|i| i.material.opacity >= 1.0);
+        transparent.sort_by(|a, b| b.view_depth.total_cmp(&a.view_depth));
+        stats.transparent = transparent.len();
+
+        #[derive(Clone, Copy, PartialEq)]
+        enum Half {
+            /// Keep `a >= 1.0`: write colour and depth.
+            Write,
+            /// Keep `a < 1.0`: blend, no depth write.
+            Blend,
+        }
+        // `a = texel.a * opacity` reaches 1.0 only when the opacity does,
+        // and can fall below it only through a texture's alpha.
+        let needs = |it: &Item, half: Half| match half {
+            Half::Write => it.material.opacity >= 1.0,
+            Half::Blend => it.material.opacity < 1.0 || it.material.map.is_some(),
+        };
+        let mut draws: Vec<(&Item, Half, u32, u32)> = Vec::new();
+        for it in opaque.iter().chain(transparent.iter()) {
+            let index = items
+                .iter()
+                .position(|x| std::ptr::eq(x, *it))
+                .expect("every drawn item is in the item list");
+            let (first, count) = ranges[index];
+            for half in [Half::Write, Half::Blend] {
+                if needs(it, half) {
+                    draws.push((it, half, first, count));
                 }
             }
         }
 
+        // --- batches: consecutive same-texture same-half draws share one -----
+        fn texture_of(it: &Item) -> Option<vieww_hal::vulkan::Texture3d<'_>> {
+            it.material
+                .map
+                .as_ref()
+                .map(|t| vieww_hal::vulkan::Texture3d {
+                    width: t.width,
+                    height: t.height,
+                    texels: t.texels(),
+                    nearest: t.filter == crate::scene::Filter::Nearest,
+                })
+        }
+        let same_texture = |a: Option<&vieww_hal::vulkan::Texture3d>,
+                            b: Option<&vieww_hal::vulkan::Texture3d>| {
+            match (a, b) {
+                (None, None) => true,
+                (Some(a), Some(b)) => {
+                    a.width == b.width
+                        && a.height == b.height
+                        && a.nearest == b.nearest
+                        && std::ptr::eq(a.texels.as_ptr(), b.texels.as_ptr())
+                }
+                _ => false,
+            }
+        };
+        let mut batches: Vec<vieww_hal::vulkan::Batch3d<'_>> = Vec::new();
+        for (it, half, first, count) in draws {
+            let (depth_write, blend, alpha_pass) = match half {
+                Half::Write => (true, false, 0.0),
+                Half::Blend => (false, true, 1.0),
+            };
+            let texture = texture_of(it);
+            let mergeable = matches!(batches.last_mut(), Some(b)
+                if b.depth_write == depth_write
+                    && b.blend == blend
+                    && b.first_index + b.index_count == first
+                    && same_texture(b.texture.as_ref(), texture.as_ref()));
+            if mergeable {
+                // The borrow checker cannot see through the `matches!`, so
+                // take the last again for the mutation.
+                let b = batches.last_mut().expect("mergeable");
+                b.index_count += count;
+            } else {
+                batches.push(vieww_hal::vulkan::Batch3d {
+                    first_index: first,
+                    index_count: count,
+                    depth_write,
+                    blend,
+                    alpha_pass,
+                    texture,
+                });
+            }
+        }
+
         let bg = [scene.background.r, scene.background.g, scene.background.b];
-        Some(gpu.render_lit3d_to_pixels(self.width, self.height, &vertices, &u, &depth, bg))
+        Some(gpu.render_lit3d_to_pixels(
+            self.width,
+            self.height,
+            &vertices,
+            &u,
+            &depth,
+            &batches,
+            bg,
+        ))
     }
 }
 
@@ -560,12 +699,7 @@ fn pack_light(l: &LightW) -> [f32; 20] {
             ..
         } => {
             out[0..4].copy_from_slice(&[color.r, color.g, color.b, 2.0]);
-            out[4..8].copy_from_slice(&[
-                l.direction.x,
-                l.direction.y,
-                l.direction.z,
-                intensity,
-            ]);
+            out[4..8].copy_from_slice(&[l.direction.x, l.direction.y, l.direction.z, intensity]);
             out[11] = if shadow { 1.0 } else { 0.0 };
         }
         Light::Point {
@@ -575,12 +709,7 @@ fn pack_light(l: &LightW) -> [f32; 20] {
         } => {
             out[0..4].copy_from_slice(&[color.r, color.g, color.b, 3.0]);
             out[7] = intensity;
-            out[12..16].copy_from_slice(&[
-                l.position.x,
-                l.position.y,
-                l.position.z,
-                range,
-            ]);
+            out[12..16].copy_from_slice(&[l.position.x, l.position.y, l.position.z, range]);
         }
         Light::Spot {
             color,
@@ -591,18 +720,8 @@ fn pack_light(l: &LightW) -> [f32; 20] {
             ..
         } => {
             out[0..4].copy_from_slice(&[color.r, color.g, color.b, 4.0]);
-            out[4..8].copy_from_slice(&[
-                l.direction.x,
-                l.direction.y,
-                l.direction.z,
-                intensity,
-            ]);
-            out[12..16].copy_from_slice(&[
-                l.position.x,
-                l.position.y,
-                l.position.z,
-                range,
-            ]);
+            out[4..8].copy_from_slice(&[l.direction.x, l.direction.y, l.direction.z, intensity]);
+            out[12..16].copy_from_slice(&[l.position.x, l.position.y, l.position.z, range]);
             out[16] = angle.cos();
             out[17] = (angle * (1.0 - penumbra)).cos();
         }
@@ -611,15 +730,15 @@ fn pack_light(l: &LightW) -> [f32; 20] {
 }
 
 /// Whether a material is inside the GPU passes' reach: `Basic` (the unlit
-/// pass, or the lit pass's unlit branch), `Lambert` or `Phong`, untextured,
-/// opaque, filled, with no custom shader.
+/// pass, or the lit pass's unlit branch), `Lambert` or `Phong` — textured,
+/// translucent or neither, since the lit pass samples the oracle's own
+/// texels and draws the transparent split — but filled, with no custom
+/// shader.
 fn material_reachable(mat: &Material) -> bool {
     matches!(
         mat.shading,
         Shading::Basic | Shading::Lambert | Shading::Phong { .. }
-    ) && mat.map.is_none()
-        && mat.opacity >= 1.0
-        && !mat.wireframe
+    ) && !mat.wireframe
         && mat.shader.is_none()
 }
 
@@ -655,17 +774,31 @@ mod tests {
     }
 
     #[test]
-    fn phong_materials_are_reachable_when_plain_and_opaque() {
+    fn phong_materials_are_reachable_textured_and_transparent_alike() {
         assert!(material_reachable(&Material::phong(Color::RED, 32.0)));
-        // The same exclusions the other shadings live by.
+        // Textured and translucent joined the reach with the transparent
+        // split: the lit pass samples the oracle's own texels and draws
+        // both halves of the per-fragment alpha rule.
         let mut textured = Material::phong(Color::RED, 32.0);
-        textured.map = Some(crate::scene::Texture::solid(2, 2, [255, 0, 0, 255]));
-        assert!(!material_reachable(&textured));
+        textured.map = Some(crate::scene::Texture::from_rgba8(
+            2,
+            2,
+            &[
+                255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
+            ],
+        ));
+        assert!(material_reachable(&textured));
         let mut transparent = Material::phong(Color::RED, 32.0);
         transparent.opacity = 0.5;
-        assert!(!material_reachable(&transparent));
-        assert!(!material_reachable(&Material::lambert(Color::RED).wireframe));
-        // Standard/Toon/Normal stay outside the reach.
+        assert!(material_reachable(&transparent));
+        // The exclusions that remain: wireframe, a custom shader, and the
+        // shadings the passes do not implement.
+        assert!(!material_reachable(
+            &Material::lambert(Color::RED).wireframe()
+        ));
+        let mut shaded = Material::lambert(Color::RED);
+        shaded.shader = Some(crate::shader::FragmentShader::new("test", |_f| [0.0; 4]));
+        assert!(!material_reachable(&shaded));
         assert!(!material_reachable(&Material {
             shading: Shading::Standard {
                 metallic: 0.0,
@@ -714,7 +847,7 @@ mod tests {
         assert_eq!(packed[4..8], [0.0, -1.0, 0.0, 4.0]);
         assert_eq!(packed[12..16], [0.0, 5.0, 0.0, 10.0]);
         assert!((packed[16] - 0.5_f32.cos()).abs() < 1e-6);
-        assert!((packed[17] - (0.5 * (1.0 - 0.25)).cos()).abs() < 1e-6);
+        assert!((packed[17] - (0.5f32 * (1.0 - 0.25)).cos()).abs() < 1e-6);
     }
 
     #[test]
@@ -776,7 +909,7 @@ mod tests {
             Node::new(
                 "sphere",
                 crate::scene::Content::mesh(
-                    crate::geometry::sphere_mesh(1.0, 24, 16),
+                    crate::geometry::sphere(1.0, 24, 16),
                     Material::phong(Color::rgb(200, 40, 40), 40.0),
                 ),
             ),
