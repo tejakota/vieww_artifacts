@@ -64,6 +64,25 @@ impl Frame {
         self.height
     }
 
+    /// A frame from raw straight-alpha RGBA8 bytes — the constructor a
+    /// non-CPU backend's readback uses, so its pixels can be held to either
+    /// [`ParityContract`](crate::parity::ParityContract) without going
+    /// through a `FrameDriver`. Top row first, four bytes per pixel, the
+    /// same layout [`data`](Self::data) hands back.
+    ///
+    /// # Panics
+    ///
+    /// If `data` is not exactly `width * height * 4` bytes.
+    #[must_use]
+    pub fn from_rgba(width: u32, height: u32, data: Vec<u8>) -> Self {
+        assert_eq!(
+            data.len(),
+            (width * height * 4) as usize,
+            "a {width}x{height} frame is width*height*4 bytes"
+        );
+        Self { data, width, height }
+    }
+
     /// The pixel at `(x, y)` as `(r, g, b, a)`.
     ///
     /// # Panics
