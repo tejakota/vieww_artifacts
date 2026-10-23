@@ -73,41 +73,73 @@ picked lavapipe and the numbers are not a GPU's. Then update the "unmeasured
 for speed" wording in `docs/guide/README.md`, `crates/vieww-hal/src/lib.rs`
 and `docs/GPU-RENDERER-STATUS.md`.
 
-## 1.2 macOS — the Metal backend runs; its scene renderer is not ported
+## 1.2 macOS — the Metal scene renderer is ported; it has not run
 
-**What.** `crates/vieww-hal/src/metal.rs` has `render_clear_to_pixels` and
-`render_mesh_to_pixels` (WGSL → MSL through `vieww-shaders`), and
-`tests/metal_smoke.rs` passes on the `framework-checks` macOS runner with
-`VIEWW_REQUIRE_HARDWARE=gpu` — so the generated MSL compiles and draws
-correctly on Apple's driver. `SceneRenderer` is not ported, so on macOS and
-iOS a vieww window renders through Vulkan on MoltenVK (as the simulator and
-the iPhone do), not native Metal.
+**What.** `crates/vieww-hal/src/metal/scene.rs` is
+`MetalSceneRenderer` (2026-10-24): the *shared* plan traversal
+(`vieww-hal::scene_exec`, the extraction `vulkan::scene`'s own `execute`
+now interprets too) on top of `MetalDevice::pipeline`/`render_target` and
+the blit readback, converted through the shared
+`straight_rgba8_from_rgba16f`. Premultiplied RGBA16F levels and scratch,
+the four atlases, the clear-colour contract, the retained-damage path —
+`vulkan::scene`'s contract, one definition of what a frame does. A damaged
+frame's region clears draw `clear.wgsl` under the scissor, because Metal
+has no `cmd_clear_attachments` inside an encoder. Deliberately simpler and
+documented as such: readback frames only (no swapchain path), whole-atlas
+uploads, `Instant`-based `FrameTimings` with no Metal timestamp queries.
 
-**Why not closed.** The scene path (`vulkan/scene.rs`) has no Metal twin; the
-runner's GPU is paravirtual, so no number from it is a performance claim.
+**Why not closed.** The port type-checks from Linux
+(`ci/check/cross-check.sh macos` — verified in this delivery) and
+`tests/metal_scene.rs` mirrors the Vulkan parity suites' claims (empty
+frame, geometry, translucent overlap, group opacity, the incomplete-plan
+refusal, reuse across sizes, the retained-damage contract byte for byte),
+but it has never *executed*: there is no software Metal, so the
+`framework-checks` macOS runner is the first place any of it runs. The
+runner's GPU is paravirtual, so no number from it will be a performance
+claim either. The window path still renders through MoltenVK until a winit
+surface lands for this backend.
 
 **Blocks.** Native Metal rendering (dropping the MoltenVK dependency).
 
-**Start.** Port `SceneRenderer` onto `MetalDevice::pipeline`/`render_target`/
-`read_texture`, passing `post.wgsl`'s `Edge` flag (§2.2).
+**Start.** Run `tests/metal_scene.rs` on the macOS runner
+(`cargo test -p vieww-hal --features metal -- --ignored --test-threads=1`),
+fix what the first real execution finds, then bring the compositor suite's
+scenes (`vulkan_compositor.rs`'s blend/blur/mask/shadow matrix) across as
+the port is validated.
 
-## 1.3 Windows — the D3D12 backend runs on WARP; its scene renderer is not ported
+## 1.3 Windows — the D3D12 scene renderer is ported; it has not run
 
-**What.** `crates/vieww-hal/src/d3d12.rs` has the same pair (naga HLSL via
-`d3dcompiler_47`, root constants, a fenced readback, a WARP fallback behind
-`VIEWW_D3D12_ALLOW_WARP=1`), and `tests/d3d12_smoke.rs` passes on the
-`framework-checks` Windows runner on WARP. `SceneRenderer` is not ported.
+**What.** `crates/vieww-hal/src/d3d12/scene.rs` is `D3d12SceneRenderer`
+(2026-10-24): the shared `scene_exec` traversal through this backend's own
+primitives — WGSL → HLSL and `d3dcompiler_47`, root signatures, committed
+resources, the fenced submit, the placed-footprint readback encoded row by
+row through the shared conversion. The binding model is the port's own
+half: one eight-descriptor shader-visible heap (four atlases, the post
+triplet every post pass rewrites with its `src`/`aux`/mask, the dummy),
+three root signatures (scene constants at `b0` plus the atlas table,
+`post.wgsl`'s immediates as 32 root-constant dwords at `b15` plus the
+triplet table, the clear's colour at `b0`), and per-target resource-state
+tracking. Deliberately as simple as the Metal port, and for the same
+documented reasons.
 
-**Why not closed.** The smoke suite has now passed on a **hardware** adapter
-too (2026-10-15, `ci/hardware/windows.ps1`, the Kaby Lake laptop under
-Windows 10 — receipts in `receipts/2026-10-15-kabylake-i5-7200u-windows/`),
-so bring-up is real. There is still nothing to *time*: `SceneRenderer` is not
-ported, so no D3D12 frame exists.
+**Why not closed.** The port type-checks from Linux
+(`ci/check/cross-check.sh windows`, with `--features d3d12,vulkan` —
+verified in this delivery, which also un-broke that gate on main: an
+`unused_mut` in `wright-tools` had it red on Windows), and
+`tests/d3d12_scene.rs` mirrors the Vulkan parity suites' claims — but it
+has never *executed*. The `framework-checks` Windows runner (WARP included;
+correctness evidence, never performance evidence) is where it first runs.
+No number from it will be a timing claim until the suite runs on a hardware
+adapter.
 
 **Blocks.** Windows GPU rendering. Windows also has a *separate* unsolved
 problem — see 3.3.
 
-**Start.** Port `SceneRenderer`; then run the suite on a Windows PC with a GPU.
+**Start.** Run `tests/d3d12_scene.rs` on the Windows runner
+(`VIEWW_D3D12_ALLOW_WARP=1 cargo test -p vieww-hal --features d3d12 --
+--ignored --test-threads=1`), fix what the first real execution finds, then
+run the same suite on the Kaby Lake laptop for the first real D3D12
+timings.
 
 ## 1.4 iOS — runs on a real iPhone; its numbers are not recorded
 
@@ -247,24 +279,42 @@ one became a thin wrapper; its tests are unchanged and green). Anything
 outside the reach falls back to the CPU renderer for the whole frame; the
 module doc lists it.
 
-**Why not closed.** Standard/Toon/Normal shading, image-based lighting and GI
-probes, textures and the transparent pass are not in the passes yet. The
-shadow map is rasterised on the CPU, not the GPU. And the whole pipeline —
-render pass, shaders, descriptor set — is still brought up and torn down per
-render; a cached-pipeline struct is the step the 2D path took with
-`SceneRenderer`. The Phong/point/spot parity tests themselves still need a
-run on the CI runners' hardware (`cargo test -p vieww-3d --features vulkan
--- --ignored --test-threads=1`) to attach evidence beside them.
+**Why not closed.** Standard/Toon/Normal shading, image-based lighting and
+GI probes are not in the passes yet. The shadow map is rasterised on the
+CPU, not the GPU. And the whole pipeline — render pass, shaders, descriptor
+sets, per-batch pipelines — is still brought up and torn down per render; a
+cached-pipeline struct is the step the 2D path took with `SceneRenderer`.
+The parity tests themselves still need a run on the CI runners' hardware
+(`cargo test -p vieww-3d --features vulkan -- --ignored --test-threads=1`)
+to attach evidence beside them.
+
+**2026-10-24: textures and the transparent pass are in.** The lit pass now
+samples the oracle's own linear texels (uploaded as f16 through the shared
+`f32_to_half`, so both renderers sample one texture) with the material's own
+filter, and multiplies albedo / sets alpha exactly as `shade` does. The
+transparent pass is the CPU's per-fragment rule drawn as two disjoint draws
+per batch — `a >= 1.0` writes colour and depth, `a < 1.0` blends in linear
+light and writes no depth — with the batches in the CPU's own order (opaque
+in scene order, transparent far to near by the CPU's own `view_depth`). To
+blend in the oracle's space the colour target moved to linear RGBA16F and
+the sRGB encode moved to the CPU readback, where it is `to_image`'s own
+arithmetic. `tests/gpu_textured.rs` (bilinear and nearest checkers, a
+textured `Basic` material, an alpha cutout whose holes must not write
+depth) and `tests/gpu_transparent.rs` (a pane blending over an opaque box,
+stacked panes in depth order, the no-depth-write property) pin the new
+reach, with anti-vacuity checks that each scene actually exercises the
+property under test — all `#[ignore]`d for the runners. Also fixed here:
+two latent bugs in `gpu.rs`'s tests that never compiled in a build without
+`--features vulkan` (`gpu.rs` is feature-gated): `geometry::sphere_mesh` is
+`geometry::sphere`, `Texture::solid` is `from_rgba8`.
 
 **Blocks.** Nothing; the CPU renderer remains the full-fidelity path.
 
-**Start.** Textures next: the 2D path's image residency and sampling logic is
-the seam to reuse, with a parity scene per texture mode. Then the transparent
-pass (depth writes off, the CPU's sort order as the oracle). A GPU-rendered
-shadow map has to reproduce the CPU's `raster_depth` sampling to keep shadow
-decisions identical, so measure first whether the CPU shadow pass matters
-next to the per-render bring-up — which is also the remaining argument for
-the cached-pipeline struct.
+**Start.** The runners' hardware run, to attach evidence beside the six
+parity files. A GPU-rendered shadow map has to reproduce the CPU's
+`raster_depth` sampling to keep shadow decisions identical, so measure
+first whether the CPU shadow pass matters next to the per-render bring-up —
+which is also the remaining argument for the cached-pipeline struct.
 
 ---
 
