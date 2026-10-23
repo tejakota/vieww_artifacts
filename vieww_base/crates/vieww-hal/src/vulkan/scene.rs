@@ -2247,20 +2247,9 @@ impl SceneRenderer {
             std::ptr::copy_nonoverlapping(ptr, half.as_mut_ptr(), texels * 4);
             self.device.unmap_memory(self.readback.memory);
         }
-        let mut out = vec![0u8; texels * 4];
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let byte = |v: f32| (v * 255.0 + 0.5) as u8;
-        for (pixel, slot) in half
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .zip(out.as_chunks_mut::<4>().0)
-        {
-            let [r, g, b, a] = [pixel[0], pixel[1], pixel[2], pixel[3]].map(half_to_f32);
-            let inv = if a > 0.0 { 1.0 / a } else { 0.0 };
-            slot.copy_from_slice(&[byte(r * inv), byte(g * inv), byte(b * inv), byte(a)]);
-        }
-        Ok(out)
+        // The shared readback conversion — see `scene_exec`'s module doc for
+        // why "what a finished frame reads back as" is one definition.
+        Ok(crate::scene_exec::straight_rgba8_from_rgba16f(&half))
     }
 }
 
@@ -2867,22 +2856,9 @@ fn pick_memory_type(
         .ok_or_else(|| VulkanError::Vulkan("no suitable memory type".into()))
 }
 
-/// IEEE 754 binary16 → `f32`.
-fn half_to_f32(h: u16) -> f32 {
-    let sign = if h & 0x8000 == 0 { 1.0 } else { -1.0 };
-    let exponent = i32::from((h >> 10) & 0x1f);
-    let mantissa = f32::from(h & 0x3ff);
-    match exponent {
-        0 => sign * mantissa * 2f32.powi(-24),
-        31 if mantissa == 0.0 => sign * f32::INFINITY,
-        31 => f32::NAN,
-        e => sign * (1.0 + mantissa / 1024.0) * 2f32.powi(e - 15),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::half_to_f32;
+    use crate::scene_exec::half_to_f32;
 
     #[test]
     fn damage_becomes_disjoint_and_keeps_its_union() {

@@ -35,8 +35,20 @@
 //! `tests/metal_smoke.rs` is the same set of claims `vulkan_smoke.rs` and
 //! `vulkan_mesh_smoke.rs` make, against the runner's GPU. There is no
 //! software Metal, so the CI runner is the first place any of this executes.
+//!
+//! The scene renderer ([`scene`](self::scene)) is verified the same way, in
+//! layers: the plan-to-ops traversal it executes is
+//! [`crate::scene_exec`], pure logic with its own tests on every platform;
+//! the pixel-level claims (`tests/metal_scene.rs`) mirror the Vulkan
+//! parity suites — the same scenes, compared against `vieww_paint`'s CPU
+//! rasterizer — and run on the runner's GPU.
 
 use super::{sealed, AdapterInfo, Device as HalDevice};
+
+/// The Metal scene renderer — [`crate::scene_exec`]'s op stream on this
+/// backend, the port of `vulkan::scene::SceneRenderer` PENDING 1.2 asks for.
+pub mod scene;
+
 use metal::{
     Buffer, CommandQueue, CompileOptions, Device, MTLBlendFactor, MTLBlendOperation, MTLBlitOption,
     MTLClearColor, MTLIndexType, MTLLoadAction, MTLOrigin, MTLPixelFormat, MTLPrimitiveType,
@@ -44,6 +56,7 @@ use metal::{
     MTLVertexStepFunction, RenderPassDescriptor, RenderPipelineDescriptor, RenderPipelineState,
     Texture, TextureDescriptor, TextureRef, VertexDescriptor,
 };
+pub use scene::{FrameTimings, MetalSceneRenderer};
 use vieww_foundation::Color;
 use vieww_shaders::{msl_slots, ParsedShader, ShaderStage};
 

@@ -640,6 +640,49 @@ fn filter_passes(
     }
 }
 
+/// Convert a frame of premultiplied RGBA16F texels into the straight-alpha
+/// RGBA8 bytes every backend's readback hands back — `half_to_f32`,
+/// unpremultiply, `v * 255 + 0.5`, alpha unchanged.
+///
+/// The readback conversion is shared for the same reason the traversal is:
+/// the target format is part of the contract, so "what the CPU receives for
+/// a finished frame" is one definition, not one per backend.
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub fn straight_rgba8_from_rgba16f(pixels: &[u16]) -> Vec<u8> {
+    let mut out = vec![0u8; pixels.len()];
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let byte = |v: f32| (v * 255.0 + 0.5) as u8;
+    for (pixel, slot) in pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(out.as_chunks_mut::<4>().0)
+    {
+        let [r, g, b, a] = [pixel[0], pixel[1], pixel[2], pixel[3]].map(half_to_f32);
+        let inv = if a > 0.0 { 1.0 / a } else { 0.0 };
+        slot.copy_from_slice(&[byte(r * inv), byte(g * inv), byte(b * inv), byte(a)]);
+    }
+    out
+}
+
+/// An IEEE 754 binary16 as an `f32` — the readback conversion's core, and
+/// (through it) the only half-float arithmetic any backend needs. Verbatim
+/// the arithmetic `vulkan::scene`'s readback always used, so the shared
+/// conversion changes nobody's bytes.
+#[must_use]
+pub fn half_to_f32(h: u16) -> f32 {
+    let sign = if h & 0x8000 == 0 { 1.0 } else { -1.0 };
+    let exponent = i32::from((h >> 10) & 0x1f);
+    let mantissa = f32::from(h & 0x3ff);
+    match exponent {
+        0 => sign * mantissa * 2f32.powi(-24),
+        31 if mantissa == 0.0 => sign * f32::INFINITY,
+        31 => f32::NAN,
+        e => sign * (1.0 + mantissa / 1024.0) * 2f32.powi(e - 15),
+    }
+}
+
 /// The damage a frame may actually redraw: `damage` clamped to the frame,
 /// or `None` (redraw everything) when the target does not hold the previous
 /// frame at this size and clear, or a top-level backdrop filter reaches
