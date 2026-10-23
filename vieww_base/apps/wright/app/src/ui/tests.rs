@@ -1390,3 +1390,54 @@ fn a_thread_far_from_its_end_offers_the_jump_back() {
     let tree = vieww::debug_tree(super::thread::page(&ui, &s));
     assert!(!tree.contains("Jump to the latest"));
 }
+
+/// The top bar's centre belongs to the pager alone: the dots stay on the
+/// window's centre line while the session, engine, settings and help
+/// controls hug the bar's right edge. (The toggles' row once filled its
+/// flank but packed from the start, so the buttons crowded the pager and
+/// the right quarter of the bar sat empty.)
+#[test]
+fn the_toggles_hug_the_right_edge_of_the_top_bar() {
+    let size = Size::new(1280.0, 800.0);
+    let mut driver = FrameDriver::new(size);
+    shell::register(&mut driver);
+    let ui = Ui::new(
+        driver.elements().runtime(),
+        None,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
+    driver.set_root(shell::root(&ui));
+    ui.splash.set(false);
+    ui.pump(&mut driver);
+    driver.draw_frame_at(Duration::from_millis(16));
+    let (pixels, _) = NativeRenderer::new()
+        .render_to_pixels(driver.scene(), 1280, 800, ui.pal().ground)
+        .unwrap();
+    let data = pixels.data();
+    // The strip's own background, read from the padding left of the title
+    // on each scanned row, so the bar's paint can change without breaking
+    // the test's meaning.
+    let mut rightmost = 0usize;
+    for y in 6..45usize {
+        let i = (y * 1280 + 4) * 4;
+        let (r0, g0, b0) = (data[i] as i32, data[i + 1] as i32, data[i + 2] as i32);
+        for x in (0..1280usize).rev() {
+            let i = (y * 1280 + x) * 4;
+            if data[i + 3] == 255
+                && (data[i] as i32 - r0).abs()
+                    + (data[i + 1] as i32 - g0).abs()
+                    + (data[i + 2] as i32 - b0).abs()
+                    > 60
+            {
+                rightmost = rightmost.max(x);
+                break;
+            }
+        }
+    }
+    // 1280 − 16 px of bar padding − the last icon's width leaves the
+    // rightmost glyph near 1254; the broken layout stopped near 965.
+    assert!(
+        rightmost >= 1230,
+        "the top bar's rightmost control ends at {rightmost}, not at the right edge"
+    );
+}

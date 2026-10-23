@@ -122,6 +122,13 @@ pub fn reveal(dir: &std::path::Path) -> Result<(), String> {
         return Err(format!("{} is not an existing folder", dir.display()));
     }
 
+    // Windows: `canonicalize` hands back a `\\?\`-prefixed verbatim path.
+    // The kernel accepts those; explorer.exe does not — it silently opens
+    // Documents (or nothing) instead of the folder, which reads as a dead
+    // button. Give the launcher the plain form.
+    #[cfg(target_os = "windows")]
+    let dir = plain_windows_path(&dir);
+
     #[cfg(target_os = "windows")]
     let program = "explorer.exe";
     #[cfg(target_os = "macos")]
@@ -134,4 +141,48 @@ pub fn reveal(dir: &std::path::Path) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("could not start {program} for {}: {e}", dir.display()))
+}
+
+/// `\\?\UNC\host\share\…` → `\\host\share\…`, `\\?\C:\…` → `C:\…`; other
+/// paths pass through unchanged. Only used for display and launching, never
+/// for the existence checks above, which are happy with the verbatim form.
+#[cfg(target_os = "windows")]
+fn plain_windows_path(p: &std::path::Path) -> PathBuf {
+    let s = p.as_os_str().to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest.to_string());
+    }
+    p.to_path_buf()
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::plain_windows_path;
+    use std::path::PathBuf;
+
+    fn shown(p: &str) -> String {
+        plain_windows_path(&PathBuf::from(p))
+            .as_os_str()
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    /// `canonicalize` returns verbatim paths; the file manager must not see
+    /// them. (This is the "Open the folder button does nothing after an
+    /// export" bug: the button worked, explorer refused the path.)
+    #[test]
+    fn verbatim_paths_become_plain_launcher_paths() {
+        assert_eq!(
+            shown(r"\\?\C:\Users\me\Wright\Exports\demo"),
+            r"C:\Users\me\Wright\Exports\demo"
+        );
+        assert_eq!(
+            shown(r"\\?\UNC\server\share\Exports"),
+            r"\\server\share\Exports"
+        );
+        assert_eq!(shown(r"C:\plain\path"), r"C:\plain\path");
+    }
 }

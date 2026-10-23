@@ -217,47 +217,53 @@ pub(crate) fn top_bar(ui: &Ui) -> WidgetNode {
                         ),
                     ),
                     row(0.0, dots),
-                    grow(Align::new(Alignment::CENTER_RIGHT).child(row(
-                        12.0,
-                        vec![
-                            tool_button(
-                                &p,
-                                Glyph::Sessions,
-                                "All sessions",
-                                None,
-                                overview_on,
-                                move || a.set_overview(!a.overview.get()),
-                            ),
-                            tool_button(
-                                &p,
-                                Glyph::Engine,
-                                "Engine",
-                                if live > 0 {
-                                    Some(format!("{live} live"))
-                                } else {
-                                    None
-                                },
-                                engine_on,
-                                move || {
-                                    b2.set_engine(if b2.engine.get() == EngineView::Hidden {
-                                        EngineView::Open
+                    // The toggles hug the window's right edge, not the dots:
+                    // the row fills its flank and packs from the end, so the
+                    // centre belongs to the pager alone.
+                    grow(
+                        Flex::row()
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .spacing(12.0)
+                            .main_axis_alignment(MainAxisAlignment::End)
+                            .children(vec![
+                                tool_button(
+                                    &p,
+                                    Glyph::Sessions,
+                                    "All sessions",
+                                    None,
+                                    overview_on,
+                                    move || a.set_overview(!a.overview.get()),
+                                ),
+                                tool_button(
+                                    &p,
+                                    Glyph::Engine,
+                                    "Engine",
+                                    if live > 0 {
+                                        Some(format!("{live} live"))
                                     } else {
-                                        EngineView::Hidden
-                                    })
-                                },
-                            ),
-                            icon_button(&p, Glyph::Gear, "Settings", false, move || {
-                                c.open_settings()
-                            }),
-                            icon_button(
-                                &p,
-                                Glyph::Help,
-                                "Gestures and shortcuts",
-                                false,
-                                move || d.help.set(!d.help.get()),
-                            ),
-                        ],
-                    ))),
+                                        None
+                                    },
+                                    engine_on,
+                                    move || {
+                                        b2.set_engine(if b2.engine.get() == EngineView::Hidden {
+                                            EngineView::Open
+                                        } else {
+                                            EngineView::Hidden
+                                        })
+                                    },
+                                ),
+                                icon_button(&p, Glyph::Gear, "Settings", false, move || {
+                                    c.open_settings()
+                                }),
+                                icon_button(
+                                    &p,
+                                    Glyph::Help,
+                                    "Gestures and shortcuts",
+                                    false,
+                                    move || d.help.set(!d.help.get()),
+                                ),
+                            ]),
+                    ),
                 ],
             ))
             .into()
