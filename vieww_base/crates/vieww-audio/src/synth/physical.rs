@@ -48,6 +48,9 @@ pub struct KarplusStrong {
     /// sized once to the longest period so a pluck — a note-on, on the
     /// audio thread — allocates nothing.
     scratch: [Vec<f32>; 3],
+    /// While bent off its plucked pitch: the loop's read distance in
+    /// samples (fractional), else `None`.
+    bent: Option<f32>,
 }
 
 impl KarplusStrong {
@@ -74,6 +77,7 @@ impl KarplusStrong {
                 Vec::with_capacity(max),
                 Vec::with_capacity(max),
             ],
+            bent: None,
         }
     }
 
@@ -165,11 +169,29 @@ impl KarplusStrong {
         self.scratch = [exc, shaped, old];
         self.energy = 1.0;
         self.damped = false;
+        self.bent = None;
+    }
+
+    /// Bend the sounding string to `hz` — what a player does by pulling
+    /// the string across a fret (a veena's gamakas, a guitar bend). The
+    /// loop then reads the line at a fractional (Hermite) tap, so the
+    /// pitch glides without steps; back at the plucked pitch, the exact
+    /// all-pass tuning resumes.
+    pub fn bend_to(&mut self, hz: f32) {
+        let hz = hz.clamp(20.0, self.rate / 4.0);
+        self.bent = if (hz / self.hz - 1.0).abs() < 1e-5 {
+            None
+        } else {
+            Some(self.rate / hz - 0.5)
+        };
     }
 
     /// The next sample.
     pub fn tick(&mut self) -> f32 {
-        let out = self.line.tap(self.len);
+        let out = match self.bent {
+            Some(d) => self.line.tap_frac(d),
+            None => self.line.tap(self.len),
+        };
         let avg = 0.5 * (out + self.prev);
         self.prev = out;
         let loss = if self.damped {
@@ -177,7 +199,11 @@ impl KarplusStrong {
         } else {
             self.loss
         };
-        let v = self.tune.process(avg) * loss;
+        let v = if self.bent.is_some() {
+            avg * loss
+        } else {
+            self.tune.process(avg) * loss
+        };
         self.line.push(v);
         self.energy = self.energy * 0.9995 + out.abs() * 0.0005;
         out
@@ -191,9 +217,9 @@ impl Voice for KarplusStrong {
     fn note_off(&mut self) {
         self.damped = true;
     }
-    fn set_pitch(&mut self, _pitch: f32) {
-        // A plucked string's length is fixed once plucked; bends would need
-        // a modulated delay, and a fixed pitch is the honest model.
+    fn set_pitch(&mut self, pitch: f32) {
+        // A bend: the string pulled sideways. See `bend_to`.
+        self.bend_to(pitch_to_hz(pitch));
     }
     fn is_active(&self) -> bool {
         self.energy > 1e-4
@@ -211,6 +237,158 @@ impl Voice for KarplusStrong {
         // loop down over a few tens of milliseconds (the muted loss is
         // the release loss to the fortieth power per pass), which is also
         // simply what a hand laid on a string does.
+        self.damped = true;
+    }
+}
+
+/// The tambura: a long, slow-decaying plucked string over a *jawari* — the
+/// broad curved bridge whose grazing contact gives the drone its buzz.
+///
+/// The string is a Karplus–Strong loop tuned like [`KarplusStrong`]; the
+/// jawari is a one-sided contact in the loop: when the string swings past
+/// the bridge (`threshold` below rest), the excess is folded back. Folding
+/// keeps most of the energy while moving it to higher partials, so the
+/// sound brightens and blooms at every swing instead of dulling as a plain
+/// plucked string does — the tambura's *jivari* ("aliveness"). The thread
+/// a player slides under the strings to set the buzz is
+/// [`jawari`](Self::jawari): 0 is a plain string, 1 the brightest.
+#[derive(Debug, Clone)]
+pub struct Tambura {
+    rate: f32,
+    line: DelayLine,
+    len: usize,
+    tune: Allpass1,
+    prev: f32,
+    loss: f32,
+    rng: Rng,
+    /// Buzz amount 0..=1.
+    pub jawari: f32,
+    /// Decay to −60 dB of the plain string, seconds. The buzz moves energy
+    /// into upper partials that the string damps faster, so with the
+    /// jawari on, the sound dies sooner than this.
+    pub decay: f32,
+    energy: f32,
+    damped: bool,
+    /// DC blocker state: the one-sided bridge pushes the string's mean
+    /// up every pass, and without this the loop drifts off the bridge and
+    /// the buzz dies within a second.
+    dc_x: f32,
+    dc_y: f32,
+}
+
+impl Tambura {
+    /// A tambura string at `rate`.
+    #[must_use]
+    pub fn new(rate: f32, seed: u64) -> Self {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "line length"
+        )]
+        let max = (rate / 20.0) as usize + 8;
+        Self {
+            rate,
+            line: DelayLine::new(max),
+            len: 100,
+            tune: Allpass1::default(),
+            prev: 0.0,
+            loss: 0.999,
+            rng: Rng::new(seed),
+            jawari: 0.6,
+            decay: 9.0,
+            energy: 0.0,
+            damped: false,
+            dc_x: 0.0,
+            dc_y: 0.0,
+        }
+    }
+
+    /// Pluck at `hz` with `velocity`: a soft (finger) pluck, low-passed
+    /// noise along the string.
+    pub fn pluck(&mut self, hz: f32, velocity: f32) {
+        let hz = hz.clamp(20.0, self.rate / 4.0);
+        let period = self.rate / hz;
+        // The loop's DC blocker leads in phase; its phase delay at this
+        // pitch (negative) shortens the loop, so the delay line makes up
+        // for it: H(z) = (1 − z⁻¹)/(1 − R z⁻¹),
+        // arg H = π/2 − ω/2 − atan2(R sin ω, 1 − R cos ω).
+        let w = std::f32::consts::TAU / period;
+        let r = 0.9993f32;
+        let arg = std::f32::consts::FRAC_PI_2 - w / 2.0 - (r * w.sin()).atan2(1.0 - r * w.cos());
+        let dc_delay = -arg / w;
+        let want = period - 0.5 - dc_delay;
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "period"
+        )]
+        let n = ((want - 0.1).floor() as usize).max(2);
+        #[expect(clippy::cast_precision_loss, reason = "period")]
+        let d = want - n as f32;
+        self.len = n;
+        self.tune.a = (1.0 - d) / (1.0 + d);
+        self.loss = 0.001f32.powf(1.0 / (hz * self.decay.max(0.1)));
+        // A finger pluck: a smooth triangle-ish shape plus a little noise,
+        // no allocation (written straight into the line).
+        let mut lp = 0.0f32;
+        for i in 0..n {
+            #[expect(clippy::cast_precision_loss, reason = "index")]
+            let x = i as f32 / n as f32;
+            let tri = if x < 0.3 { x / 0.3 } else { (1.0 - x) / 0.7 };
+            lp += 0.3 * (self.rng.bipolar() - lp);
+            self.line.push((tri - 0.5 + 0.15 * lp) * velocity);
+        }
+        self.prev = 0.0;
+        self.energy = 1.0;
+        self.damped = false;
+    }
+
+    /// The next sample.
+    pub fn tick(&mut self) -> f32 {
+        let out = self.line.tap(self.len);
+        let avg = 0.5 * (out + self.prev);
+        self.prev = out;
+        let loss = if self.damped {
+            self.loss.powi(40)
+        } else {
+            self.loss
+        };
+        let mut v = self.tune.process(avg) * loss;
+        // DC block (a ~5 Hz high-pass inside the loop).
+        let y = v - self.dc_x + 0.9993 * self.dc_y;
+        self.dc_x = v;
+        self.dc_y = y;
+        v = y;
+        // The jawari: one-sided contact with a bridge just below rest.
+        let j = self.jawari.clamp(0.0, 1.0);
+        if j > 0.0 {
+            let threshold = 0.02 + 0.2 * (1.0 - j);
+            if v < -threshold {
+                v = -threshold - (v + threshold) * 0.98;
+            }
+        }
+        self.line.push(v);
+        self.energy = self.energy * 0.9995 + out.abs() * 0.0005;
+        out
+    }
+}
+
+impl Voice for Tambura {
+    fn note_on(&mut self, pitch: f32, velocity: f32) {
+        self.pluck(pitch_to_hz(pitch), velocity);
+    }
+    fn note_off(&mut self) {}
+    fn set_pitch(&mut self, _pitch: f32) {}
+    fn is_active(&self) -> bool {
+        self.energy > 1e-4
+    }
+    fn next(&mut self) -> f32 {
+        self.tick()
+    }
+    fn level(&self) -> f32 {
+        self.energy
+    }
+    fn kill(&mut self) {
         self.damped = true;
     }
 }
@@ -800,6 +978,86 @@ impl MassSpring {
 mod tests {
     use super::*;
     use crate::fft::{Complex, Plan};
+
+    /// Share of spectral energy above `hz` in `x`.
+    fn high_share(x: &[f32], hz: f64) -> f64 {
+        let (m, bin) = super::super::testing::spectrum(x, 48_000.0);
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "test"
+        )]
+        let k = (hz / bin) as usize;
+        let total: f64 = m.iter().map(|v| v * v).sum();
+        m[k..].iter().map(|v| v * v).sum::<f64>() / total.max(1e-30)
+    }
+
+    #[test]
+    fn a_plucked_string_bends_smoothly_and_returns() {
+        let mut k = KarplusStrong::new(48_000.0, 9);
+        k.note_on(57.0, 1.0); // A3
+        let a: Vec<f32> = (0..24_000).map(|_| k.tick()).collect();
+        // Bend up a whole tone, as a veena's string is pulled.
+        let mut b = Vec::new();
+        for i in 0..24_000 {
+            #[expect(clippy::cast_precision_loss, reason = "test")]
+            let p = 57.0 + 2.0 * (i as f32 / 2_400.0).min(1.0);
+            k.set_pitch(p);
+            b.push(k.tick());
+        }
+        k.set_pitch(57.0);
+        let c: Vec<f32> = (0..24_000).map(|_| k.tick()).collect();
+        let f = |x: &[f32]| crate::quality::estimate_frequency(x, 48_000.0);
+        let cents = |x: f64, y: f64| 1200.0 * (x / y).log2();
+        let (fa, fb, fc) = (f(&a[4_000..]), f(&b[8_000..]), f(&c[4_000..]));
+        assert!(
+            (cents(fb, fa) - 200.0).abs() < 5.0,
+            "bent {}",
+            cents(fb, fa)
+        );
+        assert!(cents(fc, fa).abs() < 3.0, "back {}", cents(fc, fa));
+        // No clicks: sample-to-sample steps during the glide stay small.
+        let step = b[..4_000]
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0, f32::max);
+        let step_a = a[20_000..]
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0, f32::max);
+        assert!(step < step_a * 2.0 + 0.05, "{step} vs {step_a}");
+    }
+
+    #[test]
+    fn a_tambura_buzzes_rings_and_stays_in_tune() {
+        use super::super::testing::rms;
+        let render = |jawari: f32| {
+            let mut t = Tambura::new(48_000.0, 5);
+            t.jawari = jawari;
+            t.note_on(48.0, 1.0); // C3
+            (0..48_000 * 4).map(|_| t.tick()).collect::<Vec<f32>>()
+        };
+        let buzz = render(0.8);
+        let plain = render(0.0);
+        // In tune: the strongest low partial is the fundamental.
+        let f = crate::quality::estimate_frequency(&plain[24_000..56_768], 48_000.0);
+        let c3 = f64::from(pitch_to_hz(48.0));
+        assert!((1200.0 * (f / c3).log2()).abs() < 5.0, "{f} vs {c3}");
+        // Rings: still clearly sounding three seconds in. (The buzz moves
+        // energy into upper partials, which the string damps faster, so a
+        // buzzing string decays faster than a plain one — about −30 dB at
+        // 3 s against −21 dB; a drone is re-plucked every second or two.)
+        assert!(rms(&buzz[144_000..150_000]) > rms(&buzz[2_000..8_000]) * 0.02);
+        assert!(rms(&plain[144_000..150_000]) > rms(&plain[2_000..8_000]) * 0.07);
+        // Buzzes: far more energy above 2 kHz than the plain string, a
+        // second in (when a plain pluck has long gone dull).
+        let (b, p) = (
+            high_share(&buzz[48_000..64_384], 2_000.0),
+            high_share(&plain[48_000..64_384], 2_000.0),
+        );
+        assert!(b > p * 3.0, "jawari {b} vs plain {p}");
+        assert!(buzz.iter().all(|v| v.is_finite() && v.abs() < 4.0));
+    }
 
     #[test]
     fn a_mass_spring_tuned_past_stability_stays_finite_and_bounded() {

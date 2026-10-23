@@ -255,12 +255,22 @@ impl<V: Voice> Poly<V> {
         }
     }
 
+    /// Set `channel`'s pitch bend to `semitones` exactly — the float
+    /// spelling of a MIDI pitch-bend message, without its 14-bit steps
+    /// (1.2 cents on an MPE ±48 range). For pitch curves computed in code:
+    /// gamakas, glissandi, vibrato.
+    pub fn set_channel_bend(&mut self, channel: u8, semitones: f32) {
+        self.channel_expr[usize::from(channel & 15)].bend = semitones;
+    }
+
     /// Sustain pedal down/up on `channel` (all channels in MPE mode).
     pub fn pedal(&mut self, channel: u8, down: bool) {
-        let chans: Vec<usize> = if self.mpe {
-            (0..16).collect()
+        // A range, not a list: the pedal is audio-thread MIDI.
+        let chans = if self.mpe {
+            0..16
         } else {
-            vec![usize::from(channel & 15)]
+            let c = usize::from(channel & 15);
+            c..c + 1
         };
         for c in chans {
             self.pedal[c] = down;

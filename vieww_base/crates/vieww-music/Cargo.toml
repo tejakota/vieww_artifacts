@@ -1,0 +1,18 @@
+[package]
+name = "vieww-music"
+description = "Music as math and code: tunings and exact ratios, Carnatic ragas, talas and gamakas, Western harmony and rock grooves, rendered to audio by vieww-audio."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords = ["music", "carnatic", "tuning", "harmony", "audio"]
+categories = ["multimedia::audio"]
+
+[dependencies]
+# The only dependency, and like it, free of third-party code: the engine
+# that turns a score into sound. Music theory itself needs nothing.
+vieww-audio.workspace = true
+
+[lints]
+workspace = true

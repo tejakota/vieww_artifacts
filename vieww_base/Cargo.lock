@@ -5481,6 +5481,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "vieww-music"
+version = "0.1.0"
+dependencies = [
+ "vieww-audio",
+]
+
+[[package]]
 name = "vieww-network"
 version = "0.1.0"
 dependencies = [

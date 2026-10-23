@@ -1,7 +1,7 @@
 //! Tunings: what frequency a pitch number sounds at.
 //!
-//! Every voice in this crate turns a pitch into Hz through
-//! [`pitch_to_hz`](super::voice::pitch_to_hz): twelve equal steps to the
+//! Every voice in this crate turns a pitch into Hz through the function
+//! [`pitch_to_hz`], which knows one tuning: twelve equal steps to the
 //! octave, A4 = 440 Hz, MIDI key 69. That is one tuning among many — just
 //! intonation, the Carnatic swara ratios, 22 shrutis, 19-, 31- or 53-EDO,
 //! a Scala file — and none of the others can be reached from it.

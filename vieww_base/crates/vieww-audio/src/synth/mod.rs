@@ -31,6 +31,7 @@ pub mod fm;
 pub mod granular;
 pub mod noise;
 pub mod osc;
+pub mod percussion;
 pub mod physical;
 pub mod sampler;
 pub mod sf2;

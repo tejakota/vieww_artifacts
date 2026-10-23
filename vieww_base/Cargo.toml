@@ -10,6 +10,7 @@ members = [
     "crates/vieww-animation",
     "crates/vieww-audio",
     "crates/vieww-audio-plugin",
+    "crates/vieww-music",
     "crates/vieww-video",
     "crates/vieww-mesh",
     "crates/vieww-3d",
@@ -177,6 +178,7 @@ vieww-text = { path = "crates/vieww-text", version = "0.1.0" }
 vieww-animation = { path = "crates/vieww-animation", version = "0.1.0" }
 vieww-audio = { path = "crates/vieww-audio", version = "0.1.0" }
 vieww-audio-plugin = { path = "crates/vieww-audio-plugin", version = "0.1.0" }
+vieww-music = { path = "crates/vieww-music", version = "0.1.0" }
 vieww-video = { path = "crates/vieww-video", version = "0.1.0" }
 vieww-mesh = { path = "crates/vieww-mesh", version = "0.1.0" }
 vieww-3d = { path = "crates/vieww-3d", version = "0.1.0" }
