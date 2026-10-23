@@ -53,6 +53,7 @@ members = [
     "crates/vieww-build",
     "crates/vieww-cli",
     "examples/film_lab",
+    "examples/wright_film",
     "examples/keynote",
     "examples/guide-counter",
     "examples/reload-guest",
@@ -84,7 +85,12 @@ members = [
 
 # The fuzz harness builds with sanitizers and its own pinned profile;
 # it carries its own workspace table instead.
-exclude = ["crates/vieww-audio/fuzz"]
+# `apps/wright` is its own workspace (it has its own members, its own
+# version line, and its own release train), nested inside this tree. The
+# exclude is what lets `examples/wright_film` depend on the app crate by
+# path: without it, cargo resolves the wright packages' workspace
+# inheritance against THIS workspace and the build refuses to start.
+exclude = ["crates/vieww-audio/fuzz", "apps/wright"]
 
 [workspace.package]
 # 0.1.0, up from 0.0.1, and the difference is a claim rather than a counter.

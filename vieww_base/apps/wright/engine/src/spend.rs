@@ -56,20 +56,29 @@ pub fn attribute(events: &[Event]) -> Spend {
     let mut agents: BTreeMap<String, AgentSpend> = BTreeMap::new();
     let mut models: BTreeMap<String, ModelSpend> = BTreeMap::new();
     fn get<'a>(agents: &'a mut BTreeMap<String, AgentSpend>, name: &str) -> &'a mut AgentSpend {
-        agents.entry(name.to_string()).or_insert_with(|| AgentSpend {
-            agent: name.to_string(),
-            ..AgentSpend::default()
-        })
+        agents
+            .entry(name.to_string())
+            .or_insert_with(|| AgentSpend {
+                agent: name.to_string(),
+                ..AgentSpend::default()
+            })
     }
     let mut total = 0u64;
     let mut saved = 0u64;
     for e in events {
         let who = e.agent.clone().unwrap_or_else(|| "wright".into());
         let data = e.data_value();
-        let n = |k: &str| data.as_ref().and_then(|v| v.get(k).and_then(|x| x.as_u64())).unwrap_or(0);
+        let n = |k: &str| {
+            data.as_ref()
+                .and_then(|v| v.get(k).and_then(|x| x.as_u64()))
+                .unwrap_or(0)
+        };
         match e.kind {
             EventKind::TokensRecorded => {
-                let model = data.as_ref().and_then(|v| v.str_of("model").map(String::from)).unwrap_or_default();
+                let model = data
+                    .as_ref()
+                    .and_then(|v| v.str_of("model").map(String::from))
+                    .unwrap_or_default();
                 let cost = n("cost_micro_usd");
                 total += cost;
                 let a = get(&mut agents, &who);
@@ -81,7 +90,10 @@ pub fn attribute(events: &[Event]) -> Spend {
                 if !model.is_empty() && !a.models.contains(&model) {
                     a.models.push(model.clone());
                 }
-                let m = models.entry(model.clone()).or_insert_with(|| ModelSpend { model, ..ModelSpend::default() });
+                let m = models.entry(model.clone()).or_insert_with(|| ModelSpend {
+                    model,
+                    ..ModelSpend::default()
+                });
                 m.calls += 1;
                 m.tokens_in += n("in");
                 m.tokens_out += n("out");
@@ -113,7 +125,10 @@ pub fn attribute(events: &[Event]) -> Spend {
     }
     Spend {
         agents: agents.into_values().collect(),
-        models: models.into_values().filter(|m| !m.model.is_empty()).collect(),
+        models: models
+            .into_values()
+            .filter(|m| !m.model.is_empty())
+            .collect(),
         total_micro_usd: total,
         saved_micro_usd: saved,
     }
@@ -139,7 +154,12 @@ impl Spend {
                                 ("tokens_in", Value::int(a.tokens_in as i64)),
                                 ("tokens_cached", Value::int(a.tokens_cached as i64)),
                                 ("tokens_out", Value::int(a.tokens_out as i64)),
-                                ("models", Value::Arr(a.models.iter().map(|m| Value::str(m.clone())).collect())),
+                                (
+                                    "models",
+                                    Value::Arr(
+                                        a.models.iter().map(|m| Value::str(m.clone())).collect(),
+                                    ),
+                                ),
                                 (
                                     "tools",
                                     Value::Arr(
@@ -183,7 +203,11 @@ impl Spend {
     /// Lines for `wright explain`: the costliest agent first.
     pub fn lines(&self) -> Vec<String> {
         let mut agents: Vec<&AgentSpend> = self.agents.iter().collect();
-        agents.sort_by(|a, b| b.cost_micro_usd.cmp(&a.cost_micro_usd).then(a.agent.cmp(&b.agent)));
+        agents.sort_by(|a, b| {
+            b.cost_micro_usd
+                .cmp(&a.cost_micro_usd)
+                .then(a.agent.cmp(&b.agent))
+        });
         agents
             .iter()
             .map(|a| {
@@ -196,10 +220,22 @@ impl Spend {
                     a.model_calls,
                     a.tokens_in,
                     a.tokens_out,
-                    if a.models.is_empty() { String::new() } else { format!(" on {}", a.models.join(", ")) },
+                    if a.models.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" on {}", a.models.join(", "))
+                    },
                     tools,
-                    if failed > 0 { format!(" ({failed} failed)") } else { String::new() },
-                    if a.saved_micro_usd > 0 { format!(", cache saved ${:.4}", a.saved_micro_usd as f64 / 1e6) } else { String::new() },
+                    if failed > 0 {
+                        format!(" ({failed} failed)")
+                    } else {
+                        String::new()
+                    },
+                    if a.saved_micro_usd > 0 {
+                        format!(", cache saved ${:.4}", a.saved_micro_usd as f64 / 1e6)
+                    } else {
+                        String::new()
+                    },
                 )
             })
             .collect()
@@ -259,22 +295,79 @@ mod tests {
     #[test]
     fn cost_lands_on_the_agent_that_spent_it() {
         let events = vec![
-            ev(EventKind::TokensRecorded, "Fetcher", "", r#"{"in":100,"cached":20,"out":10,"model":"m-1","cost_micro_usd":300}"#),
-            ev(EventKind::TokensRecorded, "Fetcher", "", r#"{"in":50,"cached":0,"out":5,"model":"m-1","cost_micro_usd":150}"#),
-            ev(EventKind::TokensRecorded, "Writer", "", r#"{"in":10,"cached":0,"out":90,"model":"m-2","cost_micro_usd":1000}"#),
-            ev(EventKind::ToolCalled, "Fetcher", "http-read GET x — ok (3 ms)", r#"{"tool":"http-read","ok":true,"ms":3}"#),
-            ev(EventKind::ToolCalled, "Fetcher", "http-read GET y — error: 404", ""),
-            ev(EventKind::CacheHit, "Summarizer", "", r#"{"saved_micro_usd":700}"#),
+            ev(
+                EventKind::TokensRecorded,
+                "Fetcher",
+                "",
+                r#"{"in":100,"cached":20,"out":10,"model":"m-1","cost_micro_usd":300}"#,
+            ),
+            ev(
+                EventKind::TokensRecorded,
+                "Fetcher",
+                "",
+                r#"{"in":50,"cached":0,"out":5,"model":"m-1","cost_micro_usd":150}"#,
+            ),
+            ev(
+                EventKind::TokensRecorded,
+                "Writer",
+                "",
+                r#"{"in":10,"cached":0,"out":90,"model":"m-2","cost_micro_usd":1000}"#,
+            ),
+            ev(
+                EventKind::ToolCalled,
+                "Fetcher",
+                "http-read GET x — ok (3 ms)",
+                r#"{"tool":"http-read","ok":true,"ms":3}"#,
+            ),
+            ev(
+                EventKind::ToolCalled,
+                "Fetcher",
+                "http-read GET y — error: 404",
+                "",
+            ),
+            ev(
+                EventKind::CacheHit,
+                "Summarizer",
+                "",
+                r#"{"saved_micro_usd":700}"#,
+            ),
         ];
         let s = attribute(&events);
         assert_eq!(s.total_micro_usd, 1450);
         assert_eq!(s.saved_micro_usd, 700);
         let f = s.agents.iter().find(|a| a.agent == "Fetcher").unwrap();
-        assert_eq!((f.model_calls, f.tokens_in, f.tokens_cached, f.tokens_out, f.cost_micro_usd), (2, 150, 20, 15, 450));
-        assert_eq!(f.tools.get("http-read"), Some(&(2, 1)), "an old-style error line still counts as failed");
-        assert_eq!(s.models.iter().map(|m| m.cost_micro_usd).sum::<u64>(), 1450, "models add up to the total");
-        assert!(s.lines()[0].starts_with("Writer"), "costliest first: {:?}", s.lines());
+        assert_eq!(
+            (
+                f.model_calls,
+                f.tokens_in,
+                f.tokens_cached,
+                f.tokens_out,
+                f.cost_micro_usd
+            ),
+            (2, 150, 20, 15, 450)
+        );
+        assert_eq!(
+            f.tools.get("http-read"),
+            Some(&(2, 1)),
+            "an old-style error line still counts as failed"
+        );
+        assert_eq!(
+            s.models.iter().map(|m| m.cost_micro_usd).sum::<u64>(),
+            1450,
+            "models add up to the total"
+        );
+        assert!(
+            s.lines()[0].starts_with("Writer"),
+            "costliest first: {:?}",
+            s.lines()
+        );
         let csv = csv(&[(1, 0, s)]);
-        assert!(csv.lines().nth(1).unwrap().starts_with("1,1970-01-01T00:00:00Z,Fetcher,m-1,2,150,20,15,0.000450"), "{csv}");
+        assert!(
+            csv.lines()
+                .nth(1)
+                .unwrap()
+                .starts_with("1,1970-01-01T00:00:00Z,Fetcher,m-1,2,150,20,15,0.000450"),
+            "{csv}"
+        );
     }
 }

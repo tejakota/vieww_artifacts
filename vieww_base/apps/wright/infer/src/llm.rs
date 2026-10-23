@@ -9,7 +9,9 @@
 
 use std::sync::Mutex;
 
-use wright_runtime::models::{Block, CompletionRequest, CompletionResponse, Delta, StopReason, Usage};
+use wright_runtime::models::{
+    Block, CompletionRequest, CompletionResponse, Delta, StopReason, Usage,
+};
 
 use crate::chat;
 use crate::qwen3::{Cache, Model};
@@ -29,23 +31,60 @@ pub struct Llm {
 impl Llm {
     pub fn new(model: Model, name: impl Into<String>) -> Llm {
         let cache = Mutex::new(model.cache(CONTEXT));
-        let stops = ["<|im_end|>", "<|endoftext|>"].iter().filter_map(|s| model.tokenizer.id(s)).chain([model.tokenizer.eos]).collect();
-        Llm { model, name: name.into(), cache, stops }
+        let stops = ["<|im_end|>", "<|endoftext|>"]
+            .iter()
+            .filter_map(|s| model.tokenizer.id(s))
+            .chain([model.tokenizer.eos])
+            .collect();
+        Llm {
+            model,
+            name: name.into(),
+            cache,
+            stops,
+        }
     }
 
     /// Generate an answer. `on_delta` sees text as it is written.
-    pub fn complete(&self, req: &CompletionRequest, sampler: Sampler, on_delta: &mut dyn FnMut(&Delta)) -> Result<CompletionResponse, String> {
+    pub fn complete(
+        &self,
+        req: &CompletionRequest,
+        sampler: Sampler,
+        on_delta: &mut dyn FnMut(&Delta),
+    ) -> Result<CompletionResponse, String> {
         // Template markup may hold control tokens; content never does.
-        let ids: Vec<u32> = chat::prompt(req).parts.iter().flat_map(|(text, control)| self.model.tokenizer.encode(text, *control)).collect();
+        let ids: Vec<u32> = chat::prompt(req)
+            .parts
+            .iter()
+            .flat_map(|(text, control)| self.model.tokenizer.encode(text, *control))
+            .collect();
         let (out, n_out, stop) = self.generate(&ids, req.max_tokens as usize, sampler, on_delta)?;
         let blocks = chat::parse(&out);
-        let stop = if blocks.iter().any(|b| matches!(b, Block::ToolUse { .. })) { StopReason::ToolUse } else { stop };
-        Ok(CompletionResponse { blocks, usage: Usage { input_tokens: ids.len() as u64, output_tokens: n_out, cached_input_tokens: 0 }, stop, model: self.name.clone() })
+        let stop = if blocks.iter().any(|b| matches!(b, Block::ToolUse { .. })) {
+            StopReason::ToolUse
+        } else {
+            stop
+        };
+        Ok(CompletionResponse {
+            blocks,
+            usage: Usage {
+                input_tokens: ids.len() as u64,
+                output_tokens: n_out,
+                cached_input_tokens: 0,
+            },
+            stop,
+            model: self.name.clone(),
+        })
     }
 
     /// Token-level generation: the text written, how many tokens, and why
     /// it stopped.
-    pub fn generate(&self, prompt: &[u32], max_tokens: usize, mut sampler: Sampler, on_delta: &mut dyn FnMut(&Delta)) -> Result<(String, u64, StopReason), String> {
+    pub fn generate(
+        &self,
+        prompt: &[u32],
+        max_tokens: usize,
+        mut sampler: Sampler,
+        on_delta: &mut dyn FnMut(&Delta),
+    ) -> Result<(String, u64, StopReason), String> {
         let mut cache = self.cache.lock().unwrap_or_else(|p| p.into_inner());
         let mut logits = self.model.prefill(&mut cache, prompt)?;
         let mut bytes = Vec::new();
@@ -101,7 +140,11 @@ fn valid_prefix(bytes: &[u8]) -> &str {
 fn tool_name_so_far(text: &str) -> Option<String> {
     let body = &text[text.find("<tool_call>")?..];
     let after = &body[body.find("\"name\"")? + 6..];
-    let after = after.trim_start().strip_prefix(':')?.trim_start().strip_prefix('"')?;
+    let after = after
+        .trim_start()
+        .strip_prefix(':')?
+        .trim_start()
+        .strip_prefix('"')?;
     let end = after.find('"')?;
     Some(after[..end].to_string())
 }
@@ -112,7 +155,10 @@ mod tests {
 
     #[test]
     fn tool_names_are_spotted_early() {
-        assert_eq!(tool_name_so_far("ok <tool_call>\n{\"name\": \"files-read\", \"argu"), Some("files-read".into()));
+        assert_eq!(
+            tool_name_so_far("ok <tool_call>\n{\"name\": \"files-read\", \"argu"),
+            Some("files-read".into())
+        );
         assert_eq!(tool_name_so_far("<tool_call>\n{\"name\": \"files-r"), None);
         assert_eq!(valid_prefix(&[b'a', 0xe2, 0x82]), "a");
     }

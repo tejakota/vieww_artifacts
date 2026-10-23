@@ -1,0 +1,7 @@
+frames=8340
+shapes=5418359
+glyph_runs=323442
+layers=12193
+median_ms=153.21
+spine_events=68
+receipt_checks=6

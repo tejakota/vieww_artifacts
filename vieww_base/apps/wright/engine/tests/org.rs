@@ -35,7 +35,10 @@ const ADMIN: [u8; 32] = [42u8; 32];
 
 #[test]
 fn a_signed_policy_governs_plans_network_and_unattended_runs() {
-    if wright_runtime::policy::system_dir().join("policy.kdl").exists() {
+    if wright_runtime::policy::system_dir()
+        .join("policy.kdl")
+        .exists()
+    {
         eprintln!("skipped: this machine has a real organization policy");
         return;
     }
@@ -52,7 +55,11 @@ fn a_signed_policy_governs_plans_network_and_unattended_runs() {
     // ── the policy, signed by the administrator ─────────────────
     let pdir = dir("policy");
     let admin_pk = wright_runtime::signing::to_hex(&wright_core::ed25519::public_key(&ADMIN));
-    std::fs::write(pdir.join("admins.kdl"), format!("admin \"IT security\" key=\"{admin_pk}\"\n")).unwrap();
+    std::fs::write(
+        pdir.join("admins.kdl"),
+        format!("admin \"IT security\" key=\"{admin_pk}\"\n"),
+    )
+    .unwrap();
     let body = "policy \"Acme IT\" version=1\n\
 budget max-per-run=\"0.50\"\n\
 tools forbid=\"shell\"\n\
@@ -79,7 +86,10 @@ deliverable kind=\"report\" {{ check \"a note exists\" }}\n"
     std::fs::write(project.join("blueprint.kdl"), bp("1000000", "", "")).unwrap();
     let project = project.canonicalize().unwrap();
     let err = fire(&project, opts(&cfg)).expect_err("refused");
-    assert!(err.contains("Acme IT") && err.contains("$0.50") && err.contains("tested"), "{err}");
+    assert!(
+        err.contains("Acme IT") && err.contains("$0.50") && err.contains("tested"),
+        "{err}"
+    );
 
     // Within the rules, it fires.
     std::fs::write(project.join("blueprint.kdl"), bp("400000", " tests on", "")).unwrap();
@@ -100,33 +110,59 @@ deliverable kind=\"report\" {{ check \"a note exists\" }}\n"
     .unwrap();
     let run = fire(&fenced, opts(&cfg)).unwrap();
     let log = std::fs::read_to_string(run.receipt.with_file_name("events.jsonl")).unwrap();
-    assert!(log.contains("not on your organization's network allow-list"), "the request was refused at the tool");
+    assert!(
+        log.contains("not on your organization's network allow-list"),
+        "the request was refused at the tool"
+    );
 
     // ── unattended runs wait for the administrator ──────────────
     unattended::approve(&project, "test").unwrap();
     let why = scheduler::hold_reason(&scheduler::entry_for(&project).unwrap()).expect("held");
     assert!(why.contains("Acme IT's approval"), "{why}");
     org::approve(&project, &ADMIN, "IT security").unwrap();
-    assert!(scheduler::hold_reason(&scheduler::entry_for(&project).unwrap()).is_none(), "approved by both");
+    assert!(
+        scheduler::hold_reason(&scheduler::entry_for(&project).unwrap()).is_none(),
+        "approved by both"
+    );
     // A forged approval (a key not in admins.kdl) is not one.
     org::approve(&project, &[7u8; 32], "IT security").unwrap();
-    assert!(org::approval(&project).unwrap_err().contains("changed after it was signed"));
+    assert!(org::approval(&project)
+        .unwrap_err()
+        .contains("changed after it was signed"));
     org::approve(&project, &ADMIN, "IT security").unwrap();
     // A changed plan needs a new approval.
     let text = std::fs::read_to_string(project.join("blueprint.kdl")).unwrap();
-    std::fs::write(project.join("blueprint.kdl"), text.replace("a short note", "a longer note")).unwrap();
-    assert!(org::approval(&project).unwrap_err().contains("plan changed"));
+    std::fs::write(
+        project.join("blueprint.kdl"),
+        text.replace("a short note", "a longer note"),
+    )
+    .unwrap();
+    assert!(org::approval(&project)
+        .unwrap_err()
+        .contains("plan changed"));
 
     // ── fleet verification finds an edited receipt ──────────────
     let checks = org::fleet_verify(&[]);
-    assert!(checks.iter().any(|c| c.project == project && c.ok), "{checks:?}");
+    assert!(
+        checks.iter().any(|c| c.project == project && c.ok),
+        "{checks:?}"
+    );
     let receipt = std::fs::read_to_string(&first.receipt).unwrap();
-    std::fs::write(&first.receipt, receipt.replace("Morning note", "Mourning note")).unwrap();
+    std::fs::write(
+        &first.receipt,
+        receipt.replace("Morning note", "Mourning note"),
+    )
+    .unwrap();
     let checks = org::fleet_verify(&[]);
-    let bad = checks.iter().find(|c| c.project == project && c.run == first.run).unwrap();
+    let bad = checks
+        .iter()
+        .find(|c| c.project == project && c.run == first.run)
+        .unwrap();
     assert!(!bad.ok);
     assert!(org::fleet_report(&checks, false).contains("do NOT"));
-    assert!(org::fleet_report(&checks, true).lines().all(|l| l.starts_with('{')));
+    assert!(org::fleet_report(&checks, true)
+        .lines()
+        .all(|l| l.starts_with('{')));
 
     // ── a loosened policy stops everything ──────────────────────
     std::fs::write(pdir.join("policy.kdl"), signed.replace("0.50", "50.00")).unwrap();

@@ -627,11 +627,18 @@ fn interviewer(c: &Convo<'_>) -> (String, Vec<(String, Value)>) {
     let worker = sys
         .split("WORKERS ON THIS MACHINE")
         .nth(1)
-        .and_then(|rest| rest.lines().find_map(|l| l.strip_prefix("- ").and_then(|l| l.split(" (runs").next())))
+        .and_then(|rest| {
+            rest.lines()
+                .find_map(|l| l.strip_prefix("- ").and_then(|l| l.split(" (runs").next()))
+        })
         .map(str::to_string);
     let coding = ["code", "program", "tool", "script", "cli", "app", "fix"]
         .iter()
-        .any(|w| wish.to_lowercase().split(|c: char| !c.is_alphanumeric()).any(|word| word == *w));
+        .any(|w| {
+            wish.to_lowercase()
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|word| word == *w)
+        });
     if let (Some(worker), true) = (worker, coding) {
         let kdl = format!(
             "meta {{\n  name \"{name}\"\n  format 1\n}}\nintent {{\n  summary \"{wish}\"\n  confirmed \"\"\n}}\nproject {{\n  language \"python\"\n}}\n\

@@ -118,7 +118,10 @@ impl SigningKey {
     /// A fixed key, for tests.
     #[cfg(test)]
     pub fn for_tests(seed: [u8; 32]) -> SigningKey {
-        SigningKey { seed, provenance: Provenance::Ephemeral }
+        SigningKey {
+            seed,
+            provenance: Provenance::Ephemeral,
+        }
     }
 
     /// Resolve the machine's key: env override, then the OS keychain,
@@ -203,21 +206,33 @@ impl SigningKey {
     /// This machine's key if it already has one — never generating one
     /// (verifying a receipt must not mint a key as a side effect).
     pub fn existing() -> Option<SigningKey> {
-        if std::env::var("WRIGHT_EPHEMERAL_SIGNING").map(|v| v == "1").unwrap_or(false) {
+        if std::env::var("WRIGHT_EPHEMERAL_SIGNING")
+            .map(|v| v == "1")
+            .unwrap_or(false)
+        {
             return SigningKey::resolve().ok();
         }
         if let Ok(name) = secrets::env_name(KEY_REF) {
             if let Ok(v) = std::env::var(&name) {
-                return from_hex(v.trim()).ok().map(|seed| SigningKey { seed, provenance: Provenance::Env });
+                return from_hex(v.trim()).ok().map(|seed| SigningKey {
+                    seed,
+                    provenance: Provenance::Env,
+                });
             }
         }
         if let Ok(v) = secrets::resolve(KEY_REF) {
             if let Ok(seed) = from_hex(v.expose()) {
-                return Some(SigningKey { seed, provenance: Provenance::OsKeychain });
+                return Some(SigningKey {
+                    seed,
+                    provenance: Provenance::OsKeychain,
+                });
             }
         }
         let text = std::fs::read_to_string(file_path()).ok()?;
-        from_hex(text.trim()).ok().map(|seed| SigningKey { seed, provenance: Provenance::LocalGenerated })
+        from_hex(text.trim()).ok().map(|seed| SigningKey {
+            seed,
+            provenance: Provenance::LocalGenerated,
+        })
     }
 }
 
@@ -231,7 +246,10 @@ impl SigningKey {
 /// signing key.
 pub fn signer(public_hex: &str, pinned_now: &[String]) -> Result<String, String> {
     let k = public_hex.trim().to_ascii_lowercase();
-    if pinned_now.iter().any(|p| normalize_key(p).is_some_and(|p| p == k)) {
+    if pinned_now
+        .iter()
+        .any(|p| normalize_key(p).is_some_and(|p| p == k))
+    {
         return Ok("the key you named with --key".into());
     }
     if let Ok(cfg) = crate::config::Config::load() {
@@ -295,8 +313,19 @@ pub fn new_admin_key() -> Result<([u8; 32], String), String> {
     use std::io::Write;
     o.open(&p)
         .and_then(|mut f| f.write_all(to_hex(&seed).as_bytes()))
-        .map_err(|e| format!("cannot write {}: {e} (an administrator key already there is never overwritten)", p.display()))?;
-    Ok((seed, format!("{} (readable only by you; no keychain was available)", p.display())))
+        .map_err(|e| {
+            format!(
+                "cannot write {}: {e} (an administrator key already there is never overwritten)",
+                p.display()
+            )
+        })?;
+    Ok((
+        seed,
+        format!(
+            "{} (readable only by you; no keychain was available)",
+            p.display()
+        ),
+    ))
 }
 
 /// A key as people pass it around — 64 hex characters, or a `did:key`
@@ -304,7 +333,9 @@ pub fn new_admin_key() -> Result<([u8; 32], String), String> {
 pub fn normalize_key(k: &str) -> Option<String> {
     let k = k.trim();
     if k.starts_with("did:key:") {
-        return wright_core::jcs::did_key_public(k).ok().map(|pk| to_hex(&pk));
+        return wright_core::jcs::did_key_public(k)
+            .ok()
+            .map(|pk| to_hex(&pk));
     }
     (k.len() == 64 && k.bytes().all(|b| b.is_ascii_hexdigit())).then(|| k.to_ascii_lowercase())
 }
@@ -439,7 +470,10 @@ mod tests {
         let stranger = to_hex(&ed25519::public_key(&[9u8; 32]));
         let why = signer(&stranger, &[]).unwrap_err();
         assert!(why.contains("not one this machine trusts"), "{why}");
-        assert!(signer(&stranger, std::slice::from_ref(&stranger)).is_ok(), "--key pins it");
+        assert!(
+            signer(&stranger, std::slice::from_ref(&stranger)).is_ok(),
+            "--key pins it"
+        );
         let did = wright_core::jcs::did_key(&ed25519::public_key(&[9u8; 32]));
         assert!(signer(&stranger, &[did]).is_ok(), "a did:key pins it too");
         assert!(normalize_key("not a key").is_none());

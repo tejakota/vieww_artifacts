@@ -4,3 +4,7 @@ shared-target/
 /keynote/frames/
 /keynote/segments/
 /keynote/preview/
+
+# The Wright film's render scratch (demo home, segments, frames, cut) —
+# the curated artifacts live in /wrightfilms/.
+/vieww_base/wright_film_out/

@@ -6510,6 +6510,83 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
+name = "wright"
+version = "1.0.2"
+dependencies = [
+ "vieww",
+ "vieww-platform-winit",
+ "wright-agents",
+ "wright-core",
+ "wright-engine",
+ "wright-infer",
+ "wright-runtime",
+ "wright-tools",
+]
+
+[[package]]
+name = "wright-agents"
+version = "1.0.2"
+dependencies = [
+ "wright-core",
+]
+
+[[package]]
+name = "wright-core"
+version = "1.0.2"
+
+[[package]]
+name = "wright-engine"
+version = "1.0.2"
+dependencies = [
+ "wright-agents",
+ "wright-core",
+ "wright-runtime",
+ "wright-tools",
+]
+
+[[package]]
+name = "wright-infer"
+version = "1.0.2"
+dependencies = [
+ "wright-core",
+ "wright-runtime",
+]
+
+[[package]]
+name = "wright-runtime"
+version = "1.0.2"
+dependencies = [
+ "wright-core",
+]
+
+[[package]]
+name = "wright-tools"
+version = "1.0.2"
+dependencies = [
+ "wright-core",
+ "wright-runtime",
+]
+
+[[package]]
+name = "wright_film"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "vieww",
+ "vieww-animation",
+ "vieww-effects",
+ "vieww-foundation",
+ "vieww-paint",
+ "vieww-render",
+ "vieww-text",
+ "vieww-widget",
+ "wright",
+ "wright-core",
+ "wright-engine",
+ "wright-runtime",
+]
+
+[[package]]
 name = "wrightsite"
 version = "0.1.0"
 dependencies = [

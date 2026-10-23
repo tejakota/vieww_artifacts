@@ -13,7 +13,7 @@ affected work runs again.
 > Working name. *Wright* (Old English: maker): you write it, agents wright it,
 > the artifact is wrought. See `docs/DECISIONS.md` ADR-008.
 
-## Status: v1.0 — trust before reach, recipes at the end
+## Status: v1.0.1 — trust before reach, recipes at the end — the receipt in the window
 
 | Area | v0.2 | Notes |
 |---|---|---|
@@ -132,6 +132,7 @@ instead (`wright secret env <ref>` prints the variable name).
 | Speak | the mic — transcribed on this machine by the built-in Whisper (or any speech model you set) |
 | Settings | ⚙, or Ctrl/Cmd+, — models & keys, defaults, appearance, workspace, project |
 | Export | **Export** on the result: the source as a .zip, or the package (wheel, crate, web build) once a run has passed its checks |
+| Prove it | **See the receipt** on the result: `wright verify`'s six checks in their own words, the verdict, the report to copy — the same store the CLI reads |
 
 ## The commands
 
@@ -152,7 +153,7 @@ wright secret set <ref>     put a key in the OS keychain
 wright model ...            the built-in models: list | pull [id] | rm <id> | ask | listen
 wright where [dir]          where the project's history lives
 wright doctor               what works on this machine
-wright ui [dir]             the window (--snapshot <dir>: every screen as PNG;
+wright ui [dir]             the window (--snapshot <dir>: all 18 screens as PNG, receipt and light mode included;
                             --icon <png> [--size N] [--padded]: the app icon)
 ```
 

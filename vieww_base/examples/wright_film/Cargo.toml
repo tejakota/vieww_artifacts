@@ -1,0 +1,29 @@
+[package]
+name = "wright_film"
+description = "wrightfilms — the Wright product film: every frame rendered by vieww itself, headless, and movement III rides the ACTUAL wright shell on the film's own FrameDriver."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+vieww = { workspace = true, features = ["native"] }
+vieww-animation.workspace = true
+vieww-foundation.workspace = true
+vieww-paint = { workspace = true, features = ["native"] }
+vieww-render.workspace = true
+vieww-widget.workspace = true
+vieww-effects.workspace = true
+vieww-text.workspace = true
+# The film's subject and its engine: the real app crate (ui feature) for
+# the mounted window, the engine crates for the honest demo firing the
+# window projects — the mock provider, `fire`, `verify`'s own words.
+wright = { path = "../../apps/wright/app", features = ["ui"] }
+wright-core = { path = "../../apps/wright/core" }
+wright-engine = { path = "../../apps/wright/engine" }
+wright-runtime = { path = "../../apps/wright/runtime" }
+
+[lints]
+workspace = true

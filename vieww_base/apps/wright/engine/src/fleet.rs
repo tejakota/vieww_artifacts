@@ -61,12 +61,23 @@ fn row(e: &scheduler::Entry) -> Row {
         .unwrap_or_else(|err| err);
     let name = crate::load_blueprint(&dir)
         .map(|bp| bp.meta.name)
-        .unwrap_or_else(|_| dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+        .unwrap_or_else(|_| {
+            dir.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default()
+        });
     let store = Store::open(&dir).ok();
-    let firing_now = store.as_ref().is_some_and(|s| lock_alive(&s.root().join("firing.lock")));
-    let waiting_on_you = store.as_ref().map(|s| s.pending_approvals().len()).unwrap_or(0);
+    let firing_now = store
+        .as_ref()
+        .is_some_and(|s| lock_alive(&s.root().join("firing.lock")));
+    let waiting_on_you = store
+        .as_ref()
+        .map(|s| s.pending_approvals().len())
+        .unwrap_or(0);
     let last = store.as_ref().and_then(|s| last_run(&dir, s));
-    let trust = crate::unattended::current(&dir).ok().map(|a| crate::unattended::describe(&a));
+    let trust = crate::unattended::current(&dir)
+        .ok()
+        .map(|a| crate::unattended::describe(&a));
     Row {
         name,
         cron: e.cron.clone(),
@@ -86,13 +97,18 @@ fn last_run(dir: &Path, store: &Store) -> Option<LastRun> {
     let run = *store.runs().last()?;
     let text = std::fs::read_to_string(store.run_dir(run).join("receipt.json")).ok()?;
     let v = json::parse(&text).ok()?;
-    let verified = crate::verify::project_run(dir, Some(run)).map(|v| v.ok).unwrap_or(false);
+    let verified = crate::verify::project_run(dir, Some(run))
+        .map(|v| v.ok)
+        .unwrap_or(false);
     Some(LastRun {
         run,
         ok: v.get("ok").and_then(|b| b.as_bool()).unwrap_or(false),
         headline: v.str_of("headline").unwrap_or("").to_string(),
         finished_ms: v.get("finished_ms").and_then(|n| n.as_u64()).unwrap_or(0),
-        cost_micro_usd: v.get("cost_micro_usd").and_then(|n| n.as_u64()).unwrap_or(0),
+        cost_micro_usd: v
+            .get("cost_micro_usd")
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0),
         verified,
     })
 }
@@ -118,7 +134,9 @@ pub fn report(rows: &[Row]) -> String {
         None => out.push_str("Running. `wright stop \"why\"` stops everything at once.\n\n"),
     }
     if rows.is_empty() {
-        out.push_str("Nothing is scheduled. A plan with a schedule registers itself on its first run.\n");
+        out.push_str(
+            "Nothing is scheduled. A plan with a schedule registers itself on its first run.\n",
+        );
         return out;
     }
     for r in rows {
@@ -130,7 +148,14 @@ pub fn report(rows: &[Row]) -> String {
                 Some(why) => format!("{} — {why}", r.state.as_str()),
             }
         };
-        out.push_str(&format!("{}  [{} {}]\n  {}\n  {}\n", r.name, r.cron, r.tz, r.dir.display(), state));
+        out.push_str(&format!(
+            "{}  [{} {}]\n  {}\n  {}\n",
+            r.name,
+            r.cron,
+            r.tz,
+            r.dir.display(),
+            state
+        ));
         match &r.last {
             Some(l) => out.push_str(&format!(
                 "  last: run {} {} — {} — ${:.4} — receipt {}\n",
@@ -138,12 +163,20 @@ pub fn report(rows: &[Row]) -> String {
                 if l.ok { "passed" } else { "FAILED" },
                 l.headline,
                 l.cost_micro_usd as f64 / 1e6,
-                if l.verified { "verifies" } else { "DOES NOT VERIFY" }
+                if l.verified {
+                    "verifies"
+                } else {
+                    "DOES NOT VERIFY"
+                }
             )),
             None => out.push_str("  last: never run\n"),
         }
         if r.waiting_on_you > 0 {
-            out.push_str(&format!("  {} approval(s) waiting on you: wright approve {}\n", r.waiting_on_you, r.dir.display()));
+            out.push_str(&format!(
+                "  {} approval(s) waiting on you: wright approve {}\n",
+                r.waiting_on_you,
+                r.dir.display()
+            ));
         }
         if let Some(t) = &r.trust {
             out.push_str(&format!("  {t}\n"));

@@ -40,3 +40,12 @@ wright-infer = { workspace = true }
 # over path-length limits in the film folders.)
 vieww = { path = "../../../crates/vieww", features = ["native"], optional = true }
 vieww-platform-winit = { path = "../../../crates/vieww-platform-winit", optional = true }
+
+# The library: the same modules the binary dispatches over, addressable
+# by path. `examples/wright_film` mounts the real shell (feature `ui`)
+# on its own FrameDriver — the pattern `viewwstudio` set for the studio
+# act of `film_lab`'s product film. A lib target adds no code; it only
+# names the door.
+[lib]
+name = "wright"
+path = "src/lib.rs"

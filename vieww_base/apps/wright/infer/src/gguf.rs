@@ -73,7 +73,11 @@ impl DType {
             1 => DType::F16,
             8 => DType::Q8_0,
             30 => DType::BF16,
-            other => return Err(format!("tensor type {other} is not supported (use an F32, F16, BF16 or Q8_0 file)")),
+            other => {
+                return Err(format!(
+                    "tensor type {other} is not supported (use an F32, F16, BF16 or Q8_0 file)"
+                ))
+            }
         })
     }
 
@@ -116,21 +120,32 @@ struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     fn take(&mut self, n: usize) -> Result<&'a [u8], String> {
-        let end = self.at.checked_add(n).filter(|e| *e <= self.b.len()).ok_or("the file ends early (truncated download?)")?;
+        let end = self
+            .at
+            .checked_add(n)
+            .filter(|e| *e <= self.b.len())
+            .ok_or("the file ends early (truncated download?)")?;
         let s = &self.b[self.at..end];
         self.at = end;
         Ok(s)
     }
     fn u32(&mut self) -> Result<u32, String> {
-        Ok(u32::from_le_bytes(self.take(4)?.try_into().map_err(|_| "u32")?))
+        Ok(u32::from_le_bytes(
+            self.take(4)?.try_into().map_err(|_| "u32")?,
+        ))
     }
     fn u64(&mut self) -> Result<u64, String> {
-        Ok(u64::from_le_bytes(self.take(8)?.try_into().map_err(|_| "u64")?))
+        Ok(u64::from_le_bytes(
+            self.take(8)?.try_into().map_err(|_| "u64")?,
+        ))
     }
     fn len(&mut self) -> Result<usize, String> {
         let n = self.u64()?;
         // No real metadata item is bigger than the file it is in.
-        usize::try_from(n).ok().filter(|n| *n <= self.b.len()).ok_or_else(|| format!("implausible length {n}"))
+        usize::try_from(n)
+            .ok()
+            .filter(|n| *n <= self.b.len())
+            .ok_or_else(|| format!("implausible length {n}"))
     }
     fn string(&mut self) -> Result<String, String> {
         let n = self.len()?;
@@ -140,11 +155,17 @@ impl<'a> Reader<'a> {
         Ok(match ty {
             0 => Meta::Int(i64::from(self.take(1)?[0])),
             1 => Meta::Int(i64::from(self.take(1)?[0] as i8)),
-            2 => Meta::Int(i64::from(u16::from_le_bytes(self.take(2)?.try_into().map_err(|_| "u16")?))),
-            3 => Meta::Int(i64::from(i16::from_le_bytes(self.take(2)?.try_into().map_err(|_| "i16")?))),
+            2 => Meta::Int(i64::from(u16::from_le_bytes(
+                self.take(2)?.try_into().map_err(|_| "u16")?,
+            ))),
+            3 => Meta::Int(i64::from(i16::from_le_bytes(
+                self.take(2)?.try_into().map_err(|_| "i16")?,
+            ))),
             4 => Meta::Int(i64::from(self.u32()?)),
             5 => Meta::Int(i64::from(self.u32()? as i32)),
-            6 => Meta::Float(f64::from(f32::from_le_bytes(self.take(4)?.try_into().map_err(|_| "f32")?))),
+            6 => Meta::Float(f64::from(f32::from_le_bytes(
+                self.take(4)?.try_into().map_err(|_| "f32")?,
+            ))),
             7 => Meta::Bool(self.take(1)?[0] != 0),
             8 => Meta::Str(self.string()?),
             9 => {
@@ -161,7 +182,9 @@ impl<'a> Reader<'a> {
             }
             10 => Meta::Int(self.u64()? as i64),
             11 => Meta::Int(self.u64()? as i64),
-            12 => Meta::Float(f64::from_le_bytes(self.take(8)?.try_into().map_err(|_| "f64")?)),
+            12 => Meta::Float(f64::from_le_bytes(
+                self.take(8)?.try_into().map_err(|_| "f64")?,
+            )),
             other => return Err(format!("unknown metadata type {other}")),
         })
     }
@@ -205,22 +228,42 @@ impl Gguf {
             let offset = r.len()?;
             infos.push((name, dims, dtype, offset));
         }
-        let align = meta.get("general.alignment").and_then(Meta::as_int).unwrap_or(32).max(1) as usize;
+        let align = meta
+            .get("general.alignment")
+            .and_then(Meta::as_int)
+            .unwrap_or(32)
+            .max(1) as usize;
         let base = r.at.div_ceil(align) * align;
         let mut tensors = BTreeMap::new();
         for (name, dims, dtype, offset) in infos {
             let n: usize = dims.iter().product();
             if dtype == DType::Q8_0 && !n.is_multiple_of(32) {
-                return Err(format!("{name}: {n} elements is not a whole number of Q8_0 blocks"));
+                return Err(format!(
+                    "{name}: {n} elements is not a whole number of Q8_0 blocks"
+                ));
             }
             let len = dtype.bytes(n);
             let start = base.checked_add(offset).ok_or("offset overflow")?;
             if start.checked_add(len).is_none_or(|e| e > data.len()) {
-                return Err(format!("{name} runs past the end of the file (truncated download?)"));
+                return Err(format!(
+                    "{name} runs past the end of the file (truncated download?)"
+                ));
             }
-            tensors.insert(name, TensorInfo { dtype, dims, start, len });
+            tensors.insert(
+                name,
+                TensorInfo {
+                    dtype,
+                    dims,
+                    start,
+                    len,
+                },
+            );
         }
-        Ok(Gguf { meta, tensors, data })
+        Ok(Gguf {
+            meta,
+            tensors,
+            data,
+        })
     }
 
     pub fn get(&self, key: &str) -> Option<&Meta> {
@@ -228,15 +271,22 @@ impl Gguf {
     }
 
     pub fn int(&self, key: &str) -> Result<i64, String> {
-        self.get(key).and_then(Meta::as_int).ok_or_else(|| format!("the model file has no '{key}'"))
+        self.get(key)
+            .and_then(Meta::as_int)
+            .ok_or_else(|| format!("the model file has no '{key}'"))
     }
 
     pub fn float(&self, key: &str) -> Result<f64, String> {
-        self.get(key).and_then(Meta::as_float).ok_or_else(|| format!("the model file has no '{key}'"))
+        self.get(key)
+            .and_then(Meta::as_float)
+            .ok_or_else(|| format!("the model file has no '{key}'"))
     }
 
     pub fn tensor(&self, name: &str) -> Result<(&TensorInfo, &[u8]), String> {
-        let t = self.tensors.get(name).ok_or_else(|| format!("the model file has no tensor '{name}'"))?;
+        let t = self
+            .tensors
+            .get(name)
+            .ok_or_else(|| format!("the model file has no tensor '{name}'"))?;
         Ok((t, &self.data[t.start..t.start + t.len]))
     }
 }

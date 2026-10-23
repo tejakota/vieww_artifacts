@@ -1,5 +1,90 @@
 # Changelog
 
+## 1.0.2 — 2026-10-23 — the reply, rendered and interruptible
+
+The conversation was the last place the app talked down: replies
+arrived as walls of `**asterisks**` whenever a smaller model answered
+in markdown, and once you sent a message there was no way to stop what
+came back. Both fixed, plus the small courtesies a thread owes.
+
+- **Replies render their markdown.** The framework's own `Markdown`
+  widget, wearing the app's palette through a one-function bridge
+  (`kit::markdown` — the only place the app's `Pal` and vieww's
+  `ThemeData` meet): headings, lists, quotes, fenced code, `code
+  spans`, links. Plain prose renders exactly as before — same size,
+  same ink — so nothing changes for the models that already write
+  plainly, and the smaller ones stop shouting punctuation. The
+  half-written reply streams through the same renderer with a caret
+  riding the last word, so the preview is the thing itself. Copy keeps
+  the source, markdown and all.
+- **The send button becomes stop while a reply is on its way** — the
+  same circle, the same place, the opposite deed; the button you know
+  is the button that interrupts. A tap ends the wait, drops the
+  half-written words, and swallows whatever the model was still
+  streaming (the worker's I/O checks the stop between every callback,
+  so late words land nowhere). Esc is the keyboard's path to the same
+  stop — a reply on its way is the deepest thing open on the page.
+  The stop is one quiet line in the notice, never the machine's own
+  "nothing was written" verdict.
+- **A thread scrolled far from its end offers the jump back**: the
+  "Jump to the latest" chip appears when the end is more than a screen
+  away and leaves the moment it is not — the run pours in, you scroll
+  up to read, one tap returns.
+- **A session opens where it is**: the latest words, the newest
+  state — the reading position of every chat there is, instead of the
+  top of a conversation you have already had.
+- **The product film and its social cuts** (`wrightfilms/`): the
+  keynote's mixed-up frames fixed (the typed request no longer clips
+  its card, the receipt's verdict no longer sits on its sixth check,
+  the workforce cards keep their text inside their borders), the end
+  card holds the mark **dead centre** with the wordmark under it —
+  the same axis the cold open put it on — and the film now ships
+  three platform cuts (`wright_twitter.mp4` 0:41, `wright_linkedin.mp4`
+  1:01, `wright_instagram.mp4` 0:33 square with the real window framed
+  like a print), all from the keynote's own scene builders.
+
+## 1.0.1 — 2026-10-23 — the receipt in the window
+
+Small on the outside, deliberate underneath: the evidence a receipt
+carries now opens inside the window, the run card stops saying
+"0.0s" eight times, and the headless screenshot story finally tells
+the truth about how many screens it wrote. Plus the one change
+nothing sees and everything depends on: the app is a library too, so
+the product film can mount the real shell.
+
+- **"See the receipt"** on the result card opens the receipt over the
+  session page: every one of `wright verify`'s six checks with its own
+  sentence, the verdict, and "Copy the report" — the CLI's evidence,
+  read from the same store, in the window where the work happened.
+  The UI constitution says trust is always one glance away; this is
+  the glance. Esc backs out of it like anything else. It loads with
+  the result (and after a firing, not only at open), and the button
+  stays disabled when there is no receipt to read.
+- **The result card's buttons found their registers**: what to do with
+  the work (Run again · Export · Open the folder) on one row, how to
+  trust it (See the receipt · How it was built) on the next — one row
+  of six overflowed the reading column by its last word.
+- **The run card stops whispering "0.0s"** — a step that took no
+  measurable time says nothing (the icon already says done), agent
+  names went semibold so they stop blending into their notes, and
+  step meta is monospace now, like every other number in the house.
+- **Truncations say their size**: the confirm gate's sixteen lines
+  and the result's six artifacts each close with "… and N more",
+  pointing at the Copy button and the folder that hold the rest.
+- **`wright ui --snapshot` counts what it writes.** The count once
+  rose in lumps and could say 9 over a directory of 10; it is now
+  the number of PNGs on disk (pinned by the test that lists them).
+  The tour also grew three screens: `11-receipt` (the overlay),
+  `12-light-session` and `13-light-engine` — the light theme had
+  only ever been photographed on Home, never on the pages that
+  carry a run.
+- **The app crate is a library** (`wright::cmd`, and `wright::ui`
+  behind the `ui` feature). The binary dispatches over it, unchanged;
+  the library is the door `examples/wright_film` uses to mount the
+  real shell on a film's own FrameDriver — the pattern
+  `viewwstudio` set for the studio act of the launch film. Headless
+  builds stay std-only: the lib target adds no code, only a name.
+
 ## 1.0.0 — 2026-10-22 — trust before reach, agents as workers, recipes at the end
 
 The release the strategy memo ordered, whole: the memo set out four

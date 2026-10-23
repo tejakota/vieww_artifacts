@@ -52,9 +52,15 @@ impl Claims {
             ("issuer", Value::str(issuer_did)),
             ("agent", Value::str(self.agent.clone())),
             ("run", Value::int(self.run as i64)),
-            ("tools", Value::Arr(self.tools.iter().map(|t| Value::str(t.clone())).collect())),
+            (
+                "tools",
+                Value::Arr(self.tools.iter().map(|t| Value::str(t.clone())).collect()),
+            ),
             ("permissions", Value::str(self.permissions.clone())),
-            ("secrets", Value::Arr(self.secrets.iter().map(|t| Value::str(t.clone())).collect())),
+            (
+                "secrets",
+                Value::Arr(self.secrets.iter().map(|t| Value::str(t.clone())).collect()),
+            ),
             ("issued_ms", Value::int(self.issued_ms as i64)),
             ("expires_ms", Value::int(self.expires_ms as i64)),
         ])
@@ -130,7 +136,12 @@ pub struct Registry {
 impl Registry {
     pub fn new(machine: SigningKey) -> Registry {
         let issuer_did = jcs::did_key(&ed25519::public_key(&machine.seed_for_signing()));
-        Registry { machine, issuer_did, live: Mutex::new(BTreeMap::new()), closed: Mutex::new(Vec::new()) }
+        Registry {
+            machine,
+            issuer_did,
+            live: Mutex::new(BTreeMap::new()),
+            closed: Mutex::new(Vec::new()),
+        }
     }
 
     /// Issue an identity for one task. Replaces nothing: a task that
@@ -143,11 +154,23 @@ impl Registry {
         let seed = crate::signing::random_seed()?;
         let did = jcs::did_key(&ed25519::public_key(&seed));
         let claims_value = claims.to_value(&did, &self.issuer_did);
-        let delegation = to_hex64(&self.machine.sign(jcs::canonicalize(&claims_value)?.as_bytes()));
+        let delegation = to_hex64(
+            &self
+                .machine
+                .sign(jcs::canonicalize(&claims_value)?.as_bytes()),
+        );
         let agent = claims.agent.clone();
         live.insert(
             agent,
-            Live { did: did.clone(), seed, claims, claims_value, delegation, chain: hash::blake3_hex(did.as_bytes()), calls: 0 },
+            Live {
+                did: did.clone(),
+                seed,
+                claims,
+                claims_value,
+                delegation,
+                chain: hash::blake3_hex(did.as_bytes()),
+                calls: 0,
+            },
         );
         Ok(did)
     }
@@ -165,7 +188,8 @@ impl Registry {
     /// May this agent's identity use the secret `name`?
     pub fn may_use_secret(&self, agent: &str, name: &str) -> bool {
         let live = self.live.lock().unwrap_or_else(|p| p.into_inner());
-        live.get(agent).is_some_and(|l| l.claims.secrets.iter().any(|s| s == name))
+        live.get(agent)
+            .is_some_and(|l| l.claims.secrets.iter().any(|s| s == name))
     }
 
     /// Record one call against the agent's identity (the chain covers
@@ -180,30 +204,49 @@ impl Registry {
 
     /// End the task: the identity attests to its calls, then is revoked.
     pub fn revoke(&self, agent: &str) {
-        let Some(l) = self.live.lock().unwrap_or_else(|p| p.into_inner()).remove(agent) else {
+        let Some(l) = self
+            .live
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent)
+        else {
             return;
         };
         let revoked_ms = now_ms();
         let body = attestation_body(&l.did, l.calls, &l.chain, revoked_ms);
-        let attestation = jcs::canonicalize(&body).map(|b| to_hex64(&ed25519::sign(&l.seed, b.as_bytes()))).unwrap_or_default();
-        self.closed.lock().unwrap_or_else(|p| p.into_inner()).push(Closed {
-            did: l.did.clone(),
-            claims: l.claims_value.clone(),
-            delegation: l.delegation.clone(),
-            calls: l.calls,
-            calls_digest: l.chain.clone(),
-            revoked_ms,
-            attestation,
-        });
+        let attestation = jcs::canonicalize(&body)
+            .map(|b| to_hex64(&ed25519::sign(&l.seed, b.as_bytes())))
+            .unwrap_or_default();
+        self.closed
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(Closed {
+                did: l.did.clone(),
+                claims: l.claims_value.clone(),
+                delegation: l.delegation.clone(),
+                calls: l.calls,
+                calls_digest: l.chain.clone(),
+                revoked_ms,
+                attestation,
+            });
     }
 
     /// Revoke everything still live (the end of a firing) and return all.
     pub fn close_all(&self) -> Vec<Closed> {
-        let agents: Vec<String> = self.live.lock().unwrap_or_else(|p| p.into_inner()).keys().cloned().collect();
+        let agents: Vec<String> = self
+            .live
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .keys()
+            .cloned()
+            .collect();
         for a in agents {
             self.revoke(&a);
         }
-        self.closed.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.closed
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 }
 
@@ -233,18 +276,29 @@ pub fn verify_closed(v: &Value, issuer_hex: &str) -> Result<String, String> {
     }
     let issuer = unhex::<32>(issuer_hex).ok_or("the receipt's signer key is malformed")?;
     if claims.str_of("issuer") != Some(jcs::did_key(&issuer).as_str()) {
-        return Err(format!("{agent}: delegated by someone other than the receipt's signer"));
+        return Err(format!(
+            "{agent}: delegated by someone other than the receipt's signer"
+        ));
     }
-    let deleg = unhex::<64>(v.str_of("delegation").unwrap_or("")).ok_or_else(|| format!("{agent}: malformed delegation"))?;
+    let deleg = unhex::<64>(v.str_of("delegation").unwrap_or(""))
+        .ok_or_else(|| format!("{agent}: malformed delegation"))?;
     if !ed25519::verify(&issuer, jcs::canonicalize(claims)?.as_bytes(), &deleg) {
         return Err(format!("{agent}: the delegation does not match its claims"));
     }
     let pk = jcs::did_key_public(did)?;
     let n = |k: &str| v.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
-    let body = attestation_body(did, n("calls"), v.str_of("calls_digest").unwrap_or(""), n("revoked_ms"));
-    let att = unhex::<64>(v.str_of("attestation").unwrap_or("")).ok_or_else(|| format!("{agent}: malformed attestation"))?;
+    let body = attestation_body(
+        did,
+        n("calls"),
+        v.str_of("calls_digest").unwrap_or(""),
+        n("revoked_ms"),
+    );
+    let att = unhex::<64>(v.str_of("attestation").unwrap_or(""))
+        .ok_or_else(|| format!("{agent}: malformed attestation"))?;
     if !ed25519::verify(&pk, jcs::canonicalize(&body)?.as_bytes(), &att) {
-        return Err(format!("{agent}: the identity's attestation does not match its calls"));
+        return Err(format!(
+            "{agent}: the identity's attestation does not match its calls"
+        ));
     }
     Ok(agent)
 }
@@ -275,9 +329,16 @@ mod tests {
         assert!(did.starts_with("did:key:z6Mk"));
         assert_eq!(r.check("Mailer").unwrap(), did);
         r.issue(claims("Fetcher", &[])).unwrap();
-        assert_ne!(r.check("Fetcher").unwrap(), did, "every task its own identity");
+        assert_ne!(
+            r.check("Fetcher").unwrap(),
+            did,
+            "every task its own identity"
+        );
         assert!(r.may_use_secret("Mailer", "smtp"));
-        assert!(!r.may_use_secret("Fetcher", "smtp"), "no shared credentials");
+        assert!(
+            !r.may_use_secret("Fetcher", "smtp"),
+            "no shared credentials"
+        );
         r.record("Mailer", "http-post", "abc", true);
         r.revoke("Mailer");
         assert!(r.check("Mailer").is_err(), "revoked at the end of its task");
@@ -286,7 +347,10 @@ mod tests {
         assert_eq!(closed.len(), 2);
         let mailer = closed.iter().find(|c| c.did == did).unwrap();
         assert_eq!(mailer.calls, 1);
-        assert_eq!(verify_closed(&mailer.to_value(), &issuer).unwrap(), "Mailer");
+        assert_eq!(
+            verify_closed(&mailer.to_value(), &issuer).unwrap(),
+            "Mailer"
+        );
         // A widened scope breaks the delegation...
         let mut forged = mailer.to_value();
         if let Some(Value::Obj(c)) = forged.get("claims").cloned().map(|mut c| {
@@ -295,11 +359,15 @@ mod tests {
         }) {
             forged.set("claims", Value::Obj(c));
         }
-        assert!(verify_closed(&forged, &issuer).unwrap_err().contains("delegation"));
+        assert!(verify_closed(&forged, &issuer)
+            .unwrap_err()
+            .contains("delegation"));
         // ...and a hidden call breaks the attestation.
         let mut hidden = mailer.to_value();
         hidden.set("calls", Value::int(0));
-        assert!(verify_closed(&hidden, &issuer).unwrap_err().contains("attestation"));
+        assert!(verify_closed(&hidden, &issuer)
+            .unwrap_err()
+            .contains("attestation"));
         // Another machine's identities are not this receipt's.
         assert!(verify_closed(&mailer.to_value(), &"00".repeat(32)).is_err());
     }

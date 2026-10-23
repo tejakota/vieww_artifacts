@@ -43,7 +43,10 @@ fn write(v: &Value, out: &mut String) -> Result<(), String> {
             sorted.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
             for w in sorted.windows(2) {
                 if w[0].0 == w[1].0 {
-                    return Err(format!("duplicate member '{}' cannot be canonicalized", w[0].0));
+                    return Err(format!(
+                        "duplicate member '{}' cannot be canonicalized",
+                        w[0].0
+                    ));
                 }
             }
             out.push('{');
@@ -105,7 +108,11 @@ pub fn number(x: f64) -> Result<String, String> {
         format!("0.{}{digits}", "0".repeat((-n) as usize))
     } else {
         let sign = if n > 0 { "+" } else { "-" };
-        let tail = if k == 1 { String::new() } else { format!(".{}", &digits[1..]) };
+        let tail = if k == 1 {
+            String::new()
+        } else {
+            format!(".{}", &digits[1..])
+        };
         format!("{}{tail}e{sign}{}", &digits[..1], (n - 1).abs())
     };
     Ok(if neg { format!("-{body}") } else { body })
@@ -232,10 +239,24 @@ mod tests {
             Value::Obj(f) => f.into_iter().map(|(k, _)| k).collect(),
             _ => unreachable!(),
         };
-        assert_eq!(keys, vec!["\r", "1", "\u{80}", "\u{f6}", "\u{20ac}", "\u{1F600}", "\u{fb33}"]);
+        assert_eq!(
+            keys,
+            vec![
+                "\r",
+                "1",
+                "\u{80}",
+                "\u{f6}",
+                "\u{20ac}",
+                "\u{1F600}",
+                "\u{fb33}"
+            ]
+        );
         // Escapes exactly as JSON.stringify; no whitespace anywhere.
         let v = json::parse(r#"{ "b": [1, true, null], "a": "x\"\\\n\u0001 é" }"#).unwrap();
-        assert_eq!(canonicalize(&v).unwrap(), "{\"a\":\"x\\\"\\\\\\n\\u0001\u{2028}é\",\"b\":[1,true,null]}");
+        assert_eq!(
+            canonicalize(&v).unwrap(),
+            "{\"a\":\"x\\\"\\\\\\n\\u0001\u{2028}é\",\"b\":[1,true,null]}"
+        );
     }
 
     #[test]

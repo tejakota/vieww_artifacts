@@ -139,7 +139,11 @@ mod tests {
         assert!(current_at(&p).is_none());
         let s = engage_at(&p, "a bad digest went out", "cli").unwrap();
         assert!(p.exists());
-        assert_eq!(engage_at(&p, "again", "cli").unwrap(), s, "the first reason stands");
+        assert_eq!(
+            engage_at(&p, "again", "cli").unwrap(),
+            s,
+            "the first reason stands"
+        );
         assert_eq!(current_at(&p).unwrap().reason, "a bad digest went out");
         assert!(release_at(&p).unwrap());
         assert!(!release_at(&p).unwrap(), "releasing twice is harmless");

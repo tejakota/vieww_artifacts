@@ -22,13 +22,20 @@ fn main() {
     }
     let np: usize = a.get(2).and_then(|s| s.parse().ok()).unwrap_or(200);
     let nd: usize = a.get(3).and_then(|s| s.parse().ok()).unwrap_or(32);
-    println!("load {:.2}s ({:.2} GB)", t0.elapsed().as_secs_f32(), m.weight_bytes() as f32 / 1e9);
+    println!(
+        "load {:.2}s ({:.2} GB)",
+        t0.elapsed().as_secs_f32(),
+        m.weight_bytes() as f32 / 1e9
+    );
     let ids: Vec<u32> = (0..np as u32).map(|i| 1000 + i).collect();
     let mut c = m.cache(np + nd + 1);
     let t = Instant::now();
     let mut l = m.forward(&mut c, &ids).unwrap();
     let pf = t.elapsed().as_secs_f32();
-    println!("prefill {np} tokens: {pf:.2}s ({:.1} tok/s)", np as f32 / pf);
+    println!(
+        "prefill {np} tokens: {pf:.2}s ({:.1} tok/s)",
+        np as f32 / pf
+    );
     let t = Instant::now();
     let mut s = Sampler::greedy();
     for _ in 0..nd {

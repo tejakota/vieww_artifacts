@@ -26,20 +26,29 @@ impl Mode {
 pub const DEFAULT_ACCENT: Color = Color::hex(0x0078D4);
 
 /// Accent swatches offered first in Settings (any colour can be picked).
-pub const SWATCHES: [u32; 8] = [0x0078D4, 0x0E7C86, 0x5B5FC7, 0x8B5CF6, 0x2D9D4F, 0xD97706, 0xD6336C, 0x5F6B7A];
+pub const SWATCHES: [u32; 8] = [
+    0x0078D4, 0x0E7C86, 0x5B5FC7, 0x8B5CF6, 0x2D9D4F, 0xD97706, 0xD6336C, 0x5F6B7A,
+];
 
 /// The saved look: `~/.wright/ui-theme` holds e.g. `dark #0078D4`.
 pub fn load() -> (Mode, Color) {
     let text = std::fs::read_to_string(super::store::file("ui-theme")).unwrap_or_default();
     let mut parts = text.split_whitespace();
-    let mode = if parts.next() == Some("light") { Mode::Light } else { Mode::Dark };
+    let mode = if parts.next() == Some("light") {
+        Mode::Light
+    } else {
+        Mode::Dark
+    };
     let accent = parts.next().and_then(parse_hex).unwrap_or(DEFAULT_ACCENT);
     (mode, accent)
 }
 
 pub fn save(mode: Mode, accent: Color) {
     let m = if mode == Mode::Light { "light" } else { "dark" };
-    let _ = std::fs::write(super::store::file("ui-theme"), format!("{m} {}\n", hex(accent)));
+    let _ = std::fs::write(
+        super::store::file("ui-theme"),
+        format!("{m} {}\n", hex(accent)),
+    );
 }
 
 pub fn hex(c: Color) -> String {
@@ -75,15 +84,27 @@ pub fn palette(mode: Mode, accent: Color) -> Pal {
     };
     let lum = luminance(accent);
     p.accent = accent;
-    p.on_accent = if lum > 165.0 { Color::hex(0x111111) } else { white };
+    p.on_accent = if lum > 165.0 {
+        Color::hex(0x111111)
+    } else {
+        white
+    };
     match mode {
         Mode::Dark => {
-            p.accent_ink = if lum < 150.0 { accent.lerp(white, ((150.0 - lum) / 150.0).clamp(0.2, 0.55)) } else { accent };
+            p.accent_ink = if lum < 150.0 {
+                accent.lerp(white, ((150.0 - lum) / 150.0).clamp(0.2, 0.55))
+            } else {
+                accent
+            };
             p.accent_soft = p.ground.lerp(accent, 0.26);
             p.bubble = p.ground.lerp(accent, 0.30);
         }
         Mode::Light => {
-            p.accent_ink = if lum > 110.0 { accent.lerp(black, ((lum - 110.0) / 145.0).clamp(0.15, 0.5)) } else { accent };
+            p.accent_ink = if lum > 110.0 {
+                accent.lerp(black, ((lum - 110.0) / 145.0).clamp(0.15, 0.5))
+            } else {
+                accent
+            };
             p.accent_soft = white.lerp(accent, 0.12);
             p.bubble = white.lerp(accent, 0.16);
         }

@@ -298,12 +298,20 @@ mod tests {
         let e = load();
         assert_eq!(e.len(), 1, "same project registers once");
         assert_eq!(e[0].cron, "30 9 * * *");
-        assert_eq!(e[0].state, State::Awaiting, "a new schedule waits for a go-ahead");
+        assert_eq!(
+            e[0].state,
+            State::Awaiting,
+            "a new schedule waits for a go-ahead"
+        );
         assert!(hold_reason(&e[0]).unwrap().contains("go-ahead"));
         assert!(set_state(p, State::Paused).unwrap());
         assert_eq!(entry_for(p).unwrap().state, State::Paused);
         register(p, "30 9 * * *", "UTC").unwrap();
-        assert_eq!(entry_for(p).unwrap().state, State::Paused, "re-registering keeps the person's choice");
+        assert_eq!(
+            entry_for(p).unwrap().state,
+            State::Paused,
+            "re-registering keeps the person's choice"
+        );
         assert!(unregister(p).unwrap());
         assert!(load().is_empty());
         std::env::remove_var("WRIGHT_HOME");

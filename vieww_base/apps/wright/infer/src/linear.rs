@@ -38,11 +38,19 @@ pub struct Matrix {
 impl Matrix {
     /// Q8_0 blocks already in the file (`rows * cols / 32` blocks at `start`).
     pub fn q8_in_file(start: usize, rows: usize, cols: usize) -> Matrix {
-        Matrix { mat: Mat::Q8File { start }, rows, cols }
+        Matrix {
+            mat: Mat::Q8File { start },
+            rows,
+            cols,
+        }
     }
 
     pub fn floats(w: Vec<f32>, rows: usize, cols: usize) -> Matrix {
-        Matrix { mat: Mat::F32(w), rows, cols }
+        Matrix {
+            mat: Mat::F32(w),
+            rows,
+            cols,
+        }
     }
 
     /// Floats quantized to Q8_0 rows (`cols` must be a multiple of 32).
@@ -55,7 +63,11 @@ impl Matrix {
                 raw.extend(b.iter().map(|v| *v as u8));
             }
         }
-        Matrix { mat: Mat::Q8(raw), rows, cols }
+        Matrix {
+            mat: Mat::Q8(raw),
+            rows,
+            cols,
+        }
     }
 
     fn q8_row<'a>(&'a self, file: &'a [u8], r: usize) -> &'a [u8] {
@@ -116,7 +128,10 @@ pub fn with_pool<'a, R>(threads: usize, f: impl FnOnce(&Pool<'a>) -> R) -> R {
                 }
             });
         }
-        f(&Pool { tx, workers: threads.max(1) - 1 })
+        f(&Pool {
+            tx,
+            workers: threads.max(1) - 1,
+        })
     })
 }
 
@@ -129,7 +144,9 @@ impl Pool<'_> {
 /// Split `0..n` into `parts` nearly equal ranges.
 pub fn ranges(n: usize, parts: usize) -> Vec<Range<usize>> {
     let parts = parts.clamp(1, n.max(1));
-    (0..parts).map(|p| n * p / parts..n * (p + 1) / parts).collect()
+    (0..parts)
+        .map(|p| n * p / parts..n * (p + 1) / parts)
+        .collect()
 }
 
 /// `x` is `t` rows of `m.cols`; returns `t` rows of `m.rows`. `file` is
@@ -194,7 +211,14 @@ fn rows(file: &[u8], m: &Matrix, input: &Input, range: Range<usize>, t: usize) -
 }
 
 /// `matmul`, then add `bias` to every output row.
-pub fn affine<'a>(pool: &Pool<'a>, file: &'a [u8], m: &'a Matrix, bias: &[f32], x: &[f32], t: usize) -> Vec<f32> {
+pub fn affine<'a>(
+    pool: &Pool<'a>,
+    file: &'a [u8],
+    m: &'a Matrix,
+    bias: &[f32],
+    x: &[f32],
+    t: usize,
+) -> Vec<f32> {
     let mut y = matmul(pool, file, m, x, t);
     if !bias.is_empty() {
         for row in y.chunks_mut(m.rows) {
@@ -219,21 +243,34 @@ mod tests {
     #[test]
     fn threaded_products_match_the_obvious_loop() {
         let (rows, cols, t) = (37, 64, 5);
-        let w: Vec<f32> = (0..rows * cols).map(|i| ((i * 31 % 17) as f32 - 8.0) / 9.0).collect();
-        let x: Vec<f32> = (0..t * cols).map(|i| ((i * 7 % 13) as f32 - 6.0) / 5.0).collect();
+        let w: Vec<f32> = (0..rows * cols)
+            .map(|i| ((i * 31 % 17) as f32 - 8.0) / 9.0)
+            .collect();
+        let x: Vec<f32> = (0..t * cols)
+            .map(|i| ((i * 7 % 13) as f32 - 6.0) / 5.0)
+            .collect();
         let mut want = Vec::new();
         for i in 0..t {
             for r in 0..rows {
-                want.push((0..cols).map(|c| w[r * cols + c] * x[i * cols + c]).sum::<f32>());
+                want.push(
+                    (0..cols)
+                        .map(|c| w[r * cols + c] * x[i * cols + c])
+                        .sum::<f32>(),
+                );
             }
         }
         for threads in [1, 3] {
             let f = Matrix::floats(w.clone(), rows, cols);
             let q = Matrix::quantized(&w, rows, cols);
-            let (got_f, got_q) = with_pool(threads, |p| (matmul(p, &[], &f, &x, t), matmul(p, &[], &q, &x, t)));
+            let (got_f, got_q) = with_pool(threads, |p| {
+                (matmul(p, &[], &f, &x, t), matmul(p, &[], &q, &x, t))
+            });
             for ((a, b), c) in want.iter().zip(&got_f).zip(&got_q) {
                 assert!((a - b).abs() < 1e-4, "{a} vs {b}");
-                assert!((a - c).abs() < 0.05 * a.abs().max(1.0), "{a} vs quantized {c}");
+                assert!(
+                    (a - c).abs() < 0.05 * a.abs().max(1.0),
+                    "{a} vs quantized {c}"
+                );
             }
         }
     }

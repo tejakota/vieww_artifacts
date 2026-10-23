@@ -202,7 +202,11 @@ impl Gate {
 
     /// Require a live task-scoped identity for every call, and scope
     /// secrets per agent (`scope`: agent -> the secrets it may use).
-    pub fn with_identities(mut self, registry: std::sync::Arc<crate::identity::Registry>, scope: HashMap<String, Vec<String>>) -> Self {
+    pub fn with_identities(
+        mut self,
+        registry: std::sync::Arc<crate::identity::Registry>,
+        scope: HashMap<String, Vec<String>>,
+    ) -> Self {
         self.identities = Some(registry);
         self.secret_scope = scope;
         self
@@ -221,7 +225,9 @@ impl Gate {
     fn identity_for(&self, agent: &str) -> Result<(Option<String>, Option<Vec<String>>), String> {
         match &self.identities {
             None => Ok((None, None)),
-            Some(r) => r.check(agent).map(|did| (Some(did), Some(self.secrets_of(agent)))),
+            Some(r) => r
+                .check(agent)
+                .map(|did| (Some(did), Some(self.secrets_of(agent)))),
         }
     }
 

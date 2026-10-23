@@ -40,7 +40,8 @@ fn byte_map() -> [char; 256] {
     let mut map = ['\0'; 256];
     let mut next = 256u32;
     for b in 0..=255u8 {
-        let printable = (b'!'..=b'~').contains(&b) || (0xA1..=0xAC).contains(&b) || (0xAE..=0xFF).contains(&b);
+        let printable =
+            (b'!'..=b'~').contains(&b) || (0xA1..=0xAC).contains(&b) || (0xAE..=0xFF).contains(&b);
         map[b as usize] = if printable {
             char::from(b)
         } else {
@@ -54,21 +55,42 @@ fn byte_map() -> [char; 256] {
 
 impl Tokenizer {
     pub fn from_gguf(g: &Gguf) -> Result<Tokenizer, String> {
-        let model = g.get("tokenizer.ggml.model").and_then(Meta::as_str).unwrap_or("");
+        let model = g
+            .get("tokenizer.ggml.model")
+            .and_then(Meta::as_str)
+            .unwrap_or("");
         if model != "gpt2" {
-            return Err(format!("tokenizer '{model}' is not supported (byte-level BPE, 'gpt2', only)"));
+            return Err(format!(
+                "tokenizer '{model}' is not supported (byte-level BPE, 'gpt2', only)"
+            ));
         }
-        let tokens: Vec<String> =
-            g.get("tokenizer.ggml.tokens").and_then(Meta::as_array).ok_or("the model file has no tokenizer.ggml.tokens")?.iter().map(|m| m.as_str().unwrap_or("").to_string()).collect();
-        let types: Vec<i64> = g.get("tokenizer.ggml.token_type").and_then(Meta::as_array).map(|a| a.iter().map(|m| m.as_int().unwrap_or(1)).collect()).unwrap_or_default();
-        let merges = g.get("tokenizer.ggml.merges").and_then(Meta::as_array).ok_or("the model file has no tokenizer.ggml.merges")?;
+        let tokens: Vec<String> = g
+            .get("tokenizer.ggml.tokens")
+            .and_then(Meta::as_array)
+            .ok_or("the model file has no tokenizer.ggml.tokens")?
+            .iter()
+            .map(|m| m.as_str().unwrap_or("").to_string())
+            .collect();
+        let types: Vec<i64> = g
+            .get("tokenizer.ggml.token_type")
+            .and_then(Meta::as_array)
+            .map(|a| a.iter().map(|m| m.as_int().unwrap_or(1)).collect())
+            .unwrap_or_default();
+        let merges = g
+            .get("tokenizer.ggml.merges")
+            .and_then(Meta::as_array)
+            .ok_or("the model file has no tokenizer.ggml.merges")?;
         let mut ranks = HashMap::with_capacity(merges.len());
         for (i, m) in merges.iter().enumerate() {
             if let Some((a, b)) = m.as_str().and_then(|s| s.split_once(' ')) {
                 ranks.insert((a.to_string(), b.to_string()), i as u32);
             }
         }
-        let ids: HashMap<String, u32> = tokens.iter().enumerate().map(|(i, t)| (t.clone(), i as u32)).collect();
+        let ids: HashMap<String, u32> = tokens
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (t.clone(), i as u32))
+            .collect();
         let mut specials: Vec<(String, u32, bool)> = types
             .iter()
             .enumerate()
@@ -78,9 +100,24 @@ impl Tokenizer {
             .collect();
         specials.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then(a.1.cmp(&b.1)));
         let byte_to_char = byte_map();
-        let char_to_byte = byte_to_char.iter().enumerate().map(|(b, c)| (*c, b as u8)).collect();
-        let eos = g.get("tokenizer.ggml.eos_token_id").and_then(Meta::as_int).unwrap_or(0) as u32;
-        Ok(Tokenizer { tokens, ids, ranks, specials, byte_to_char, char_to_byte, eos })
+        let char_to_byte = byte_to_char
+            .iter()
+            .enumerate()
+            .map(|(b, c)| (*c, b as u8))
+            .collect();
+        let eos = g
+            .get("tokenizer.ggml.eos_token_id")
+            .and_then(Meta::as_int)
+            .unwrap_or(0) as u32;
+        Ok(Tokenizer {
+            tokens,
+            ids,
+            ranks,
+            specials,
+            byte_to_char,
+            char_to_byte,
+            eos,
+        })
     }
 
     pub fn vocab_size(&self) -> usize {
@@ -126,7 +163,10 @@ impl Tokenizer {
 
     fn encode_plain(&self, text: &str, out: &mut Vec<u32>) {
         for piece in pretokenize(text) {
-            let mapped: String = piece.bytes().map(|b| self.byte_to_char[b as usize]).collect();
+            let mapped: String = piece
+                .bytes()
+                .map(|b| self.byte_to_char[b as usize])
+                .collect();
             if let Some(id) = self.ids.get(&mapped) {
                 out.push(*id);
                 continue;
@@ -136,7 +176,10 @@ impl Tokenizer {
                     Some(id) => out.push(*id),
                     // A symbol with no token: fall back to its single
                     // characters (every byte has one in a byte-level vocab).
-                    None => out.extend(sym.chars().filter_map(|c| self.ids.get(&c.to_string()).copied())),
+                    None => out.extend(
+                        sym.chars()
+                            .filter_map(|c| self.ids.get(&c.to_string()).copied()),
+                    ),
                 }
             }
         }
@@ -169,7 +212,9 @@ impl Tokenizer {
         if self.specials.iter().any(|(_, sid, _)| *sid == id) {
             return t.as_bytes().to_vec();
         }
-        t.chars().map(|c| self.char_to_byte.get(&c).copied().unwrap_or(b'?')).collect()
+        t.chars()
+            .map(|c| self.char_to_byte.get(&c).copied().unwrap_or(b'?'))
+            .collect()
     }
 
     pub fn decode(&self, ids: &[u32]) -> String {
@@ -230,7 +275,11 @@ pub fn pretokenize(text: &str) -> Vec<&str> {
             }
             // 4.  ?[^\s\p{L}\p{N}]+[\r\n]*
             let punct = |x: char| !x.is_whitespace() && !is_letter(x) && !is_number(x);
-            let start = if c == ' ' && at(i + 1).is_some_and(punct) { i + 1 } else { i };
+            let start = if c == ' ' && at(i + 1).is_some_and(punct) {
+                i + 1
+            } else {
+                i
+            };
             if at(start).is_some_and(punct) {
                 let mut j = start;
                 while at(j).is_some_and(punct) {
@@ -273,11 +322,18 @@ mod tests {
     #[test]
     fn pieces_follow_the_qwen_regex() {
         assert_eq!(pretokenize("Hello world"), ["Hello", " world"]);
-        assert_eq!(pretokenize("I'm 2024!"), ["I", "'m", " ", "2", "0", "2", "4", "!"]);
+        assert_eq!(
+            pretokenize("I'm 2024!"),
+            ["I", "'m", " ", "2", "0", "2", "4", "!"]
+        );
         assert_eq!(pretokenize("a  b"), ["a", " ", " b"]);
         assert_eq!(pretokenize("a\n\n b"), ["a", "\n\n", " b"]);
         assert_eq!(pretokenize("  "), ["  "]);
         assert_eq!(pretokenize("x ..."), ["x", " ..."]);
-        assert_eq!(pretokenize("मैं"), ["म", "ैं"], "combining marks are not letters: they group like punctuation");
+        assert_eq!(
+            pretokenize("मैं"),
+            ["म", "ैं"],
+            "combining marks are not letters: they group like punctuation"
+        );
     }
 }

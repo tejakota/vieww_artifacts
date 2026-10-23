@@ -59,7 +59,10 @@ deliverable kind=\"report\" { check \"a note exists\" }\n";
     // ── the kill switch: nothing starts ──────────────────────────
     killswitch::engage("testing the switch", "test").unwrap();
     let err = fire(&project, opts(&cfg)).expect_err("a stopped Wright fires nothing");
-    assert!(err.contains("Wright is stopped") && err.contains("testing the switch"), "{err}");
+    assert!(
+        err.contains("Wright is stopped") && err.contains("testing the switch"),
+        "{err}"
+    );
     assert!(fleet::report(&fleet::rows()).starts_with("STOPPED"));
     killswitch::release().unwrap();
 
@@ -67,12 +70,19 @@ deliverable kind=\"report\" { check \"a note exists\" }\n";
     let first = fire(&project, opts(&cfg)).unwrap();
     assert!(first.ok, "{first:?}");
     let entry = scheduler::entry_for(&project).expect("the Operator registered the schedule");
-    assert_eq!(entry.state, State::Awaiting, "a new schedule waits for the person's go-ahead");
+    assert_eq!(
+        entry.state,
+        State::Awaiting,
+        "a new schedule waits for the person's go-ahead"
+    );
     assert!(scheduler::hold_reason(&entry).unwrap().contains("go-ahead"));
 
     // The fleet lists it, its last run, and that its receipt verifies.
     let rows = fleet::rows();
-    let row = rows.iter().find(|r| r.dir == project).expect("in the fleet");
+    let row = rows
+        .iter()
+        .find(|r| r.dir == project)
+        .expect("in the fleet");
     assert_eq!(row.name, "Morning note");
     let last = row.last.as_ref().expect("the last run is shown");
     assert!(last.ok && last.verified, "{last:?}");
@@ -85,22 +95,41 @@ deliverable kind=\"report\" { check \"a note exists\" }\n";
     assert!(a.at_ms >= a.road.started_ms);
     assert!(unattended::describe(&a).starts_with("trusted to run unattended after"));
     let line = wright_engine::bench::trust_line(&project);
-    assert!(line.contains("to the go-ahead to run unattended") && line.contains("1 run(s) before it (1 passed)"), "{line}");
+    assert!(
+        line.contains("to the go-ahead to run unattended")
+            && line.contains("1 run(s) before it (1 passed)"),
+        "{line}"
+    );
     let entry = scheduler::entry_for(&project).unwrap();
     assert_eq!(entry.state, State::Active);
-    assert!(scheduler::hold_reason(&entry).is_none(), "approved: it will fire");
+    assert!(
+        scheduler::hold_reason(&entry).is_none(),
+        "approved: it will fire"
+    );
 
     // Pause holds it; the kill switch holds everything.
     scheduler::set_state(&project, State::Paused).unwrap();
-    assert_eq!(scheduler::hold_reason(&scheduler::entry_for(&project).unwrap()).as_deref(), Some("paused"));
+    assert_eq!(
+        scheduler::hold_reason(&scheduler::entry_for(&project).unwrap()).as_deref(),
+        Some("paused")
+    );
     scheduler::set_state(&project, State::Active).unwrap();
     killswitch::engage("", "test").unwrap();
-    assert!(scheduler::hold_reason(&scheduler::entry_for(&project).unwrap()).unwrap().contains("stopped"));
+    assert!(
+        scheduler::hold_reason(&scheduler::entry_for(&project).unwrap())
+            .unwrap()
+            .contains("stopped")
+    );
     killswitch::release().unwrap();
 
     // ── an approval is for one plan ─────────────────────────────
-    std::fs::write(project.join("blueprint.kdl"), blueprint.replace("a short note", "a longer note")).unwrap();
-    let why = scheduler::hold_reason(&scheduler::entry_for(&project).unwrap()).expect("a changed plan waits");
+    std::fs::write(
+        project.join("blueprint.kdl"),
+        blueprint.replace("a short note", "a longer note"),
+    )
+    .unwrap();
+    let why = scheduler::hold_reason(&scheduler::entry_for(&project).unwrap())
+        .expect("a changed plan waits");
     assert!(why.contains("plan changed"), "{why}");
     let again = unattended::approve(&project, "test").unwrap();
     assert_eq!(again.road.changes, 1, "the change is on the road");

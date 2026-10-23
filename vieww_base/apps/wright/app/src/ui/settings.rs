@@ -51,7 +51,17 @@ pub enum Tab {
 }
 
 impl Tab {
-    const ALL: [Tab; 9] = [Tab::Models, Tab::AgentsTools, Tab::Defaults, Tab::Appearance, Tab::Network, Tab::Fleet, Tab::Organization, Tab::Workspace, Tab::Project];
+    const ALL: [Tab; 9] = [
+        Tab::Models,
+        Tab::AgentsTools,
+        Tab::Defaults,
+        Tab::Appearance,
+        Tab::Network,
+        Tab::Fleet,
+        Tab::Organization,
+        Tab::Workspace,
+        Tab::Project,
+    ];
     fn label(self) -> &'static str {
         match self {
             Tab::Models => "Models & keys",
@@ -183,8 +193,12 @@ impl Form {
         self.interview.set(tv(merged.interview_model.clone()));
         self.voice.set(tv(merged.voice_model.clone()));
         self.config.set(Some(merged));
-        self.projects_dir.set(tv(super::store::projects_dir().display().to_string()));
-        self.ca_path.set(tv(Config::load_file().ok().and_then(|c| c.ca_file).unwrap_or_default()));
+        self.projects_dir
+            .set(tv(super::store::projects_dir().display().to_string()));
+        self.ca_path.set(tv(Config::load_file()
+            .ok()
+            .and_then(|c| c.ca_file)
+            .unwrap_or_default()));
         self.fleet.set(wright_engine::fleet::rows());
         self.policy.set(match wright_runtime::policy::load() {
             Ok(Some(p)) => Some(Ok(p.sentences())),
@@ -193,9 +207,20 @@ impl Form {
         });
         if let Some(bp) = project.and_then(|p| wright_engine::load_blueprint(p).ok()) {
             let m = &bp.models;
-            self.tiers.set([tv(m.cheap.prefer.clone()), tv(m.cheap.fallback.clone()), tv(m.quality.prefer.clone()), tv(m.quality.fallback.clone())]);
-            self.per_run.set(tv(format!("{:.2}", bp.guardrails.per_firing_micro_usd as f64 / 1e6)));
-            self.per_day.set(tv(format!("{:.2}", bp.guardrails.daily_micro_usd as f64 / 1e6)));
+            self.tiers.set([
+                tv(m.cheap.prefer.clone()),
+                tv(m.cheap.fallback.clone()),
+                tv(m.quality.prefer.clone()),
+                tv(m.quality.fallback.clone()),
+            ]);
+            self.per_run.set(tv(format!(
+                "{:.2}",
+                bp.guardrails.per_firing_micro_usd as f64 / 1e6
+            )));
+            self.per_day.set(tv(format!(
+                "{:.2}",
+                bp.guardrails.daily_micro_usd as f64 / 1e6
+            )));
         }
     }
 
@@ -206,9 +231,15 @@ impl Form {
         }
         let shared = Arc::clone(&self.pulled);
         let set = move |state: Pull| {
-            shared.lock().unwrap_or_else(|p| p.into_inner()).insert(m.id.to_string(), state);
+            shared
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(m.id.to_string(), state);
         };
-        set(Pull::Working { line: format!("Starting the download of {}…", m.id), percent: 0 });
+        set(Pull::Working {
+            line: format!("Starting the download of {}…", m.id),
+            percent: 0,
+        });
         self.pump();
         let wake = WakeHandle::current();
         std::thread::spawn(move || {
@@ -216,7 +247,10 @@ impl Form {
             let r = local::pull(m, &mut |p| {
                 if p.percent() != last {
                     last = p.percent();
-                    set(Pull::Working { line: local::progress_line(m, p), percent: p.percent() });
+                    set(Pull::Working {
+                        line: local::progress_line(m, p),
+                        percent: p.percent(),
+                    });
                     wake.wake();
                 }
             });
@@ -230,7 +264,11 @@ impl Form {
 
     /// Bring download progress from the worker threads into view.
     pub fn pump(&self) {
-        let now = self.pulled.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let now = self
+            .pulled
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
         if now != self.pulls.get() {
             self.pulls.set(now);
         }
@@ -285,7 +323,11 @@ pub fn page(ui: &Ui) -> WidgetNode {
                 let on = tb == tab;
                 Pressable::sensed(move |s: Sense| {
                     Container::new()
-                        .color(if on { p.accent_soft } else { p.surface.lerp(p.surface2, s.hover) })
+                        .color(if on {
+                            p.accent_soft
+                        } else {
+                            p.surface.lerp(p.surface2, s.hover)
+                        })
                         .radius(corner::SMALL)
                         .padding(EdgeInsets::symmetric(12.0, 8.0))
                         .child(t(tb.label(), 13.5, if on { p.ink } else { p.muted }))
@@ -318,50 +360,97 @@ pub fn page(ui: &Ui) -> WidgetNode {
             .color(p.surface)
             .radius(corner::PANEL)
             .border(Border::new(p.line_strong, 1.0))
-            .shadow(Shadow::new(Color::rgba(0, 0, 0, 90), Offset::new(0.0, 20.0), 60.0))
+            .shadow(Shadow::new(
+                Color::rgba(0, 0, 0, 90),
+                Offset::new(0.0, 20.0),
+                60.0,
+            ))
             .padding(EdgeInsets::all(22.0))
-            .child(stretch(16.0, vec![
-                row(10.0, vec![Glyph::Gear.draw(20.0, p.accent_ink), b("Settings", 20.0, p.ink), gap(), t("Esc closes", 12.0, p.muted), icon_button(&p, Glyph::Close, "Close settings", false, move || close.set(false))]),
-                grow(Flex::row().cross_axis_alignment(CrossAxisAlignment::Start).spacing(22.0).children(vec![
-                    SizedBox::width(170.0).child(column(4.0, tabs)).into(),
-                    grow(scroll_area(&ui, &f.scroll, pad(EdgeInsets::only(0.0, 0.0, 14.0, 0.0), body))),
-                ])),
-                if msg.is_empty() { SizedBox::shrink().into() } else { copyable(msg, 12.5, p.muted) },
-            ]))
+            .child(stretch(
+                16.0,
+                vec![
+                    row(
+                        10.0,
+                        vec![
+                            Glyph::Gear.draw(20.0, p.accent_ink),
+                            b("Settings", 20.0, p.ink),
+                            gap(),
+                            t("Esc closes", 12.0, p.muted),
+                            icon_button(&p, Glyph::Close, "Close settings", false, move || {
+                                close.set(false)
+                            }),
+                        ],
+                    ),
+                    grow(
+                        Flex::row()
+                            .cross_axis_alignment(CrossAxisAlignment::Start)
+                            .spacing(22.0)
+                            .children(vec![
+                                SizedBox::width(170.0).child(column(4.0, tabs)).into(),
+                                grow(scroll_area(
+                                    &ui,
+                                    &f.scroll,
+                                    pad(EdgeInsets::only(0.0, 0.0, 14.0, 0.0), body),
+                                )),
+                            ]),
+                    ),
+                    if msg.is_empty() {
+                        SizedBox::shrink().into()
+                    } else {
+                        copyable(msg, 12.5, p.muted)
+                    },
+                ],
+            ))
             .into()
     })
     .into()
 }
 
-fn field(ui: &Ui, p: &Pal, label: &str, value: &Signal<TextEditingValue>, placeholder: &str, secret: bool) -> WidgetNode {
+fn field(
+    ui: &Ui,
+    p: &Pal,
+    label: &str,
+    value: &Signal<TextEditingValue>,
+    placeholder: &str,
+    secret: bool,
+) -> WidgetNode {
     let v = value.clone();
     // Stretch, not start: a text box fills the room it was given (a box
     // that shrinks to the placeholder's width cuts off what is typed).
-    stretch(5.0, vec![
-        t(label.to_string(), 12.0, p.muted),
-        Container::new()
-            .color(p.surface2)
-            .radius(corner::FIELD)
-            .border(Border::new(p.line_strong, 1.0))
-            .padding(EdgeInsets::symmetric(12.0, 8.0))
-            .child(
-                TextField::new(value.get())
-                    .show_cursor(ui.is_typing_in(placeholder))
-                    .single_line()
-                    .obscure(secret)
-                    .placeholder(placeholder.to_string())
-                    .placeholder_color(p.muted)
-                    .size(13.5)
-                    .color(p.ink)
-                    .cursor(p.accent_ink, 2.0)
-                    .on_changed(std::rc::Rc::new(move |x: TextEditingValue| v.set(x))),
-            )
-            .into(),
-    ])
+    stretch(
+        5.0,
+        vec![
+            t(label.to_string(), 12.0, p.muted),
+            Container::new()
+                .color(p.surface2)
+                .radius(corner::FIELD)
+                .border(Border::new(p.line_strong, 1.0))
+                .padding(EdgeInsets::symmetric(12.0, 8.0))
+                .child(
+                    TextField::new(value.get())
+                        .show_cursor(ui.is_typing_in(placeholder))
+                        .single_line()
+                        .obscure(secret)
+                        .placeholder(placeholder.to_string())
+                        .placeholder_color(p.muted)
+                        .size(13.5)
+                        .color(p.ink)
+                        .cursor(p.accent_ink, 2.0)
+                        .on_changed(std::rc::Rc::new(move |x: TextEditingValue| v.set(x))),
+                )
+                .into(),
+        ],
+    )
 }
 
 fn section(p: &Pal, title: &str, sub: &str) -> WidgetNode {
-    column(4.0, vec![b(title.to_string(), 15.0, p.ink), para(sub.to_string(), 12.5, p.muted)])
+    column(
+        4.0,
+        vec![
+            b(title.to_string(), 15.0, p.ink),
+            para(sub.to_string(), 12.5, p.muted),
+        ],
+    )
 }
 
 /// The built-in models: what they are, whether they are here, and the
@@ -378,34 +467,82 @@ fn builtin(ui: &Ui, p: &Pal, cfg: &Config) -> Vec<WidgetNode> {
         let installed = m.installed();
         let pull = pulls.get(m.id).cloned();
         let badge = match (&pull, installed) {
-            (Some(Pull::Working { percent, .. }), _) => pill(format!("Downloading {percent}%"), p.accent_ink, p.accent_soft),
+            (Some(Pull::Working { percent, .. }), _) => pill(
+                format!("Downloading {percent}%"),
+                p.accent_ink,
+                p.accent_soft,
+            ),
             (_, true) => pill("Ready", p.good, p.good_soft),
             (Some(Pull::Failed(_)), _) => pill("Download failed", p.wait, p.wait_soft),
-            _ if m.partial() > 0 => pill(format!("{} of {}", local::human_bytes(m.partial()), m.size_text()), p.wait, p.wait_soft),
+            _ if m.partial() > 0 => pill(
+                format!("{} of {}", local::human_bytes(m.partial()), m.size_text()),
+                p.wait,
+                p.wait_soft,
+            ),
             _ => pill("Downloads on first use", p.muted, p.surface2),
         };
         let mut actions = Vec::new();
         let working = matches!(pull, Some(Pull::Working { .. }));
         if !installed {
             let form = f.clone();
-            actions.push(button(p, if m.partial() > 0 { "Resume download" } else { "Download now" }, Look::Secondary, !working, move || form.pull(m)));
+            actions.push(button(
+                p,
+                if m.partial() > 0 {
+                    "Resume download"
+                } else {
+                    "Download now"
+                },
+                Look::Secondary,
+                !working,
+                move || form.pull(m),
+            ));
         } else {
-            let (form, project) = (f.clone(), ui.current_session().map(|s| (*s.project).clone()));
+            let (form, project) = (
+                f.clone(),
+                ui.current_session().map(|s| (*s.project).clone()),
+            );
             actions.push(button(p, "Remove", Look::Quiet, true, move || {
                 match local::remove(m) {
-                    Ok(()) => form.message.set(format!("Removed {}. It downloads again when it is next needed.", m.id)),
+                    Ok(()) => form.message.set(format!(
+                        "Removed {}. It downloads again when it is next needed.",
+                        m.id
+                    )),
                     Err(e) => form.message.set(format!("Not removed: {e}")),
                 }
-                form.pulled.lock().unwrap_or_else(|p| p.into_inner()).remove(m.id);
+                form.pulled
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .remove(m.id);
                 form.pump();
                 form.reload(project.as_deref());
             }));
         }
-        let kind = if m.kind == local::Kind::Text { "text and tool calls" } else { "speech to text" };
+        let kind = if m.kind == local::Kind::Text {
+            "text and tool calls"
+        } else {
+            "speech to text"
+        };
         let mut block = vec![
-            row(10.0, vec![b(m.id.to_string(), 14.0, p.ink), badge, gap(), row(8.0, actions)]),
+            row(
+                10.0,
+                vec![
+                    b(m.id.to_string(), 14.0, p.ink),
+                    badge,
+                    gap(),
+                    row(8.0, actions),
+                ],
+            ),
             para(m.about.to_string(), 12.5, p.muted),
-            mono(format!("{kind}  ·  {}  ·  {}  ·  sha256 {}…", m.size_text(), m.license, &m.sha256[..12]), 11.5, p.muted),
+            mono(
+                format!(
+                    "{kind}  ·  {}  ·  {}  ·  sha256 {}…",
+                    m.size_text(),
+                    m.license,
+                    &m.sha256[..12]
+                ),
+                11.5,
+                p.muted,
+            ),
         ];
         match &pull {
             Some(Pull::Working { line, percent }) => {
@@ -415,23 +552,46 @@ fn builtin(ui: &Ui, p: &Pal, cfg: &Config) -> Vec<WidgetNode> {
             Some(Pull::Failed(e)) => block.push(copyable(e.clone(), 11.5, p.wait)),
             _ => {}
         }
-        rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::CARD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::all(14.0)).child(stretch(6.0, block)).into());
+        rows.push(
+            Container::new()
+                .color(p.surface2.with_alpha(110))
+                .radius(corner::CARD)
+                .border(Border::new(p.line, 1.0))
+                .padding(EdgeInsets::all(14.0))
+                .child(stretch(6.0, block))
+                .into(),
+        );
     }
     let on = cfg.falls_back_to_builtin();
     let (form_on, form_off) = (f.clone(), f.clone());
     let project = ui.current_session().map(|s| (*s.project).clone());
     let project2 = project.clone();
-    rows.push(row(10.0, vec![
-        t("When a model has no key:", 12.5, p.ink),
-        button(p, "Use the built-in model", if on { Look::Primary } else { Look::Secondary }, true, move || {
-            form_on.edit_file(|c| c.builtin_fallback = Some(true));
-            form_on.reload(project.as_deref());
-        }),
-        button(p, "Stop and ask for a key", if on { Look::Secondary } else { Look::Primary }, true, move || {
-            form_off.edit_file(|c| c.builtin_fallback = Some(false));
-            form_off.reload(project2.as_deref());
-        }),
-    ]));
+    rows.push(row(
+        10.0,
+        vec![
+            t("When a model has no key:", 12.5, p.ink),
+            button(
+                p,
+                "Use the built-in model",
+                if on { Look::Primary } else { Look::Secondary },
+                true,
+                move || {
+                    form_on.edit_file(|c| c.builtin_fallback = Some(true));
+                    form_on.reload(project.as_deref());
+                },
+            ),
+            button(
+                p,
+                "Stop and ask for a key",
+                if on { Look::Secondary } else { Look::Primary },
+                true,
+                move || {
+                    form_off.edit_file(|c| c.builtin_fallback = Some(false));
+                    form_off.reload(project2.as_deref());
+                },
+            ),
+        ],
+    ));
     rows
 }
 
@@ -443,16 +603,27 @@ fn progress_bar(p: &Pal, done: f32) -> WidgetNode {
         .radius(corner::SMALL)
         .height(6.0)
         .child(Flex::row().children(vec![
-            Flexible::expanded((done * 1000.0).round().max(1.0) as u16).child(Container::new().color(p.accent).radius(corner::SMALL).height(6.0)).into(),
-            Flexible::expanded(((1.0 - done) * 1000.0).round().max(1.0) as u16).child(SizedBox::shrink()).into(),
-        ]))
+                Flexible::expanded((done * 1000.0).round().max(1.0) as u16)
+                    .child(
+                        Container::new()
+                            .color(p.accent)
+                            .radius(corner::SMALL)
+                            .height(6.0),
+                    )
+                    .into(),
+                Flexible::expanded(((1.0 - done) * 1000.0).round().max(1.0) as u16)
+                    .child(SizedBox::shrink())
+                    .into(),
+            ]))
         .into()
 }
 
 fn models(ui: &Ui, p: &Pal) -> WidgetNode {
     let f = &ui.form;
     let cfg = f.config.get().unwrap_or_else(Config::builtin);
-    let mine: Vec<String> = Config::load_file().map(|c| c.providers.iter().map(|p| p.name.clone()).collect()).unwrap_or_default();
+    let mine: Vec<String> = Config::load_file()
+        .map(|c| c.providers.iter().map(|p| p.name.clone()).collect())
+        .unwrap_or_default();
     let keys = f.keys.get();
     let editing = f.key_for.get();
     let mut seen = Vec::new();
@@ -464,7 +635,11 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
             continue;
         }
         seen.push(prov.name.clone());
-        let state = keys.iter().find(|(n, _)| n == &prov.name).map(|(_, s)| s.clone()).unwrap_or(KeyState::NotNeeded);
+        let state = keys
+            .iter()
+            .find(|(n, _)| n == &prov.name)
+            .map(|(_, s)| s.clone())
+            .unwrap_or(KeyState::NotNeeded);
         let badge = match &state {
             KeyState::Ready => pill("Key ready", p.good, p.good_soft),
             KeyState::Missing(_) => pill("Key missing", p.wait, p.wait_soft),
@@ -473,10 +648,20 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
         let mut actions = vec![];
         if prov.key.is_some() {
             let (kf, kv, name) = (f.key_for.clone(), f.key_value.clone(), prov.name.clone());
-            actions.push(button(p, if state == KeyState::Ready { "Replace key" } else { "Set key" }, Look::Secondary, true, move || {
-                kv.set(tv(""));
-                kf.set(Some(name.clone()));
-            }));
+            actions.push(button(
+                p,
+                if state == KeyState::Ready {
+                    "Replace key"
+                } else {
+                    "Set key"
+                },
+                Look::Secondary,
+                true,
+                move || {
+                    kv.set(tv(""));
+                    kf.set(Some(name.clone()));
+                },
+            ));
         }
         if mine.contains(&prov.name) {
             let (form, name) = (f.clone(), prov.name.clone());
@@ -487,8 +672,25 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
             }));
         }
         let mut block = vec![
-            row(10.0, vec![b(prov.name.clone(), 14.0, p.ink), badge, if mine.contains(&prov.name) { pill("yours", p.accent_ink, p.accent_soft) } else { SizedBox::shrink().into() }, gap(), row(8.0, actions)]),
-            copyable_mono(format!("{}  ·  {}", prov.base_url, prov.models.join(", ")), 11.5, p.muted),
+            row(
+                10.0,
+                vec![
+                    b(prov.name.clone(), 14.0, p.ink),
+                    badge,
+                    if mine.contains(&prov.name) {
+                        pill("yours", p.accent_ink, p.accent_soft)
+                    } else {
+                        SizedBox::shrink().into()
+                    },
+                    gap(),
+                    row(8.0, actions),
+                ],
+            ),
+            copyable_mono(
+                format!("{}  ·  {}", prov.base_url, prov.models.join(", ")),
+                11.5,
+                p.muted,
+            ),
         ];
         if let KeyState::Missing(why) = &state {
             block.push(copyable(why.clone(), 11.5, p.muted));
@@ -497,22 +699,35 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
             let (form, reference) = (f.clone(), prov.key.clone().unwrap_or_default());
             let cancel = f.key_for.clone();
             let project = ui.current_session().map(|s| (*s.project).clone());
-            block.push(row(10.0, vec![
-                grow(field(ui, p, "Paste the key", &f.key_value, "sk-…", true)),
-                button(p, "Save to keychain", Look::Primary, true, move || {
-                    let value = form.key_value.get().text.trim().to_string();
-                    form.key_value.set(tv(""));
-                    match wright_runtime::secrets::store(&reference, &value) {
-                        Ok(()) => form.message.set(format!("Saved {reference} to the keychain.")),
-                        Err(e) => form.message.set(format!("Not saved: {e}")),
-                    }
-                    form.key_for.set(None);
-                    form.reload(project.as_deref());
-                }),
-                button(p, "Cancel", Look::Quiet, true, move || cancel.set(None)),
-            ]));
+            block.push(row(
+                10.0,
+                vec![
+                    grow(field(ui, p, "Paste the key", &f.key_value, "sk-…", true)),
+                    button(p, "Save to keychain", Look::Primary, true, move || {
+                        let value = form.key_value.get().text.trim().to_string();
+                        form.key_value.set(tv(""));
+                        match wright_runtime::secrets::store(&reference, &value) {
+                            Ok(()) => form
+                                .message
+                                .set(format!("Saved {reference} to the keychain.")),
+                            Err(e) => form.message.set(format!("Not saved: {e}")),
+                        }
+                        form.key_for.set(None);
+                        form.reload(project.as_deref());
+                    }),
+                    button(p, "Cancel", Look::Quiet, true, move || cancel.set(None)),
+                ],
+            ));
         }
-        rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::CARD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::all(14.0)).child(stretch(6.0, block)).into());
+        rows.push(
+            Container::new()
+                .color(p.surface2.with_alpha(110))
+                .radius(corner::CARD)
+                .border(Border::new(p.line, 1.0))
+                .padding(EdgeInsets::all(14.0))
+                .child(stretch(6.0, block))
+                .into(),
+        );
     }
 
     // Add a provider (a local server, a gateway, another vendor).
@@ -522,43 +737,110 @@ fn models(ui: &Ui, p: &Pal) -> WidgetNode {
     let project = ui.current_session().map(|s| (*s.project).clone());
     rows.push(divider(p));
     rows.push(section(p, "Add a provider", "A local server (Ollama, vLLM, LM Studio), a gateway, or another vendor. Most speak the OpenAI format."));
-    rows.push(row(10.0, vec![
-        button(p, "OpenAI-compatible", if anthropic { Look::Secondary } else { Look::Primary }, true, move || kind_o.set(false)),
-        button(p, "Anthropic", if anthropic { Look::Primary } else { Look::Secondary }, true, move || kind_a.set(true)),
-    ]));
-    rows.push(row(10.0, vec![
-        grow(field(ui, p, "Name", &f.new_name, "local", false)),
-        grow(field(ui, p, "Address", &f.new_base, "http://127.0.0.1:11434/v1", false)),
-    ]));
-    rows.push(field(ui, p, "Models it serves (patterns, comma separated)", &f.new_models, "llama*, qwen*", false));
-    rows.push(row(10.0, vec![
-        button(p, "Add provider", Look::Primary, true, move || {
-            let name = form.new_name.get().text.trim().to_string();
-            let base = form.new_base.get().text.trim().to_string();
-            let models: Vec<String> = form.new_models.get().text.split(',').map(|m| m.trim().to_string()).filter(|m| !m.is_empty()).collect();
-            if name.is_empty() || base.is_empty() {
-                form.message.set("A provider needs a name and an address.".into());
-                return;
-            }
-            let local = base.contains("127.0.0.1") || base.contains("localhost");
-            let entry = ProviderEntry {
-                name: name.clone(),
-                kind: if form.new_anthropic.get() { ProviderKind::Anthropic } else { ProviderKind::OpenAi },
-                base_url: base,
-                key: if local { None } else { Some(format!("keychain:wright/{name}")) },
-                models: if models.is_empty() { vec!["*".into()] } else { models },
-            };
-            form.edit_file(move |c| {
-                c.providers.retain(|x| x.name != entry.name);
-                c.providers.insert(0, entry);
-            });
-            for s in [&form.new_name, &form.new_base, &form.new_models] {
-                s.set(tv(""));
-            }
-            form.reload(project.as_deref());
-        }),
-        t("Local addresses need no key; anything else gets a keychain entry to fill in.", 12.0, p.muted),
-    ]));
+    rows.push(row(
+        10.0,
+        vec![
+            button(
+                p,
+                "OpenAI-compatible",
+                if anthropic {
+                    Look::Secondary
+                } else {
+                    Look::Primary
+                },
+                true,
+                move || kind_o.set(false),
+            ),
+            button(
+                p,
+                "Anthropic",
+                if anthropic {
+                    Look::Primary
+                } else {
+                    Look::Secondary
+                },
+                true,
+                move || kind_a.set(true),
+            ),
+        ],
+    ));
+    rows.push(row(
+        10.0,
+        vec![
+            grow(field(ui, p, "Name", &f.new_name, "local", false)),
+            grow(field(
+                ui,
+                p,
+                "Address",
+                &f.new_base,
+                "http://127.0.0.1:11434/v1",
+                false,
+            )),
+        ],
+    ));
+    rows.push(field(
+        ui,
+        p,
+        "Models it serves (patterns, comma separated)",
+        &f.new_models,
+        "llama*, qwen*",
+        false,
+    ));
+    rows.push(row(
+        10.0,
+        vec![
+            button(p, "Add provider", Look::Primary, true, move || {
+                let name = form.new_name.get().text.trim().to_string();
+                let base = form.new_base.get().text.trim().to_string();
+                let models: Vec<String> = form
+                    .new_models
+                    .get()
+                    .text
+                    .split(',')
+                    .map(|m| m.trim().to_string())
+                    .filter(|m| !m.is_empty())
+                    .collect();
+                if name.is_empty() || base.is_empty() {
+                    form.message
+                        .set("A provider needs a name and an address.".into());
+                    return;
+                }
+                let local = base.contains("127.0.0.1") || base.contains("localhost");
+                let entry = ProviderEntry {
+                    name: name.clone(),
+                    kind: if form.new_anthropic.get() {
+                        ProviderKind::Anthropic
+                    } else {
+                        ProviderKind::OpenAi
+                    },
+                    base_url: base,
+                    key: if local {
+                        None
+                    } else {
+                        Some(format!("keychain:wright/{name}"))
+                    },
+                    models: if models.is_empty() {
+                        vec!["*".into()]
+                    } else {
+                        models
+                    },
+                };
+                form.edit_file(move |c| {
+                    c.providers.retain(|x| x.name != entry.name);
+                    c.providers.insert(0, entry);
+                });
+                for s in [&form.new_name, &form.new_base, &form.new_models] {
+                    s.set(tv(""));
+                }
+                form.reload(project.as_deref());
+            }),
+            t(
+                "Local addresses need no key; anything else gets a keychain entry to fill in.",
+                12.0,
+                p.muted,
+            ),
+        ],
+    ));
     stretch(12.0, rows)
 }
 
@@ -574,10 +856,23 @@ fn agents_and_tools(ui: &Ui, p: &Pal) -> WidgetNode {
         "Built in, always there. You never write these: Wright brings each one in when a plan needs it, and every one follows a fixed contract. The agents of your own project are the ones your plan names; they appear on the plan card and in the Engine view (hold Space).",
     )];
     for a in wright_agents::WORKFORCE {
-        rows.push(card(p, column(4.0, vec![
-            row(8.0, vec![b(a.name, 14.0, p.ink), gap(), pill(format!("joins at {}", a.injected_by), p.muted, p.surface2)]),
-            para(a.duty, 13.0, p.muted),
-        ])));
+        rows.push(card(
+            p,
+            column(
+                4.0,
+                vec![
+                    row(
+                        8.0,
+                        vec![
+                            b(a.name, 14.0, p.ink),
+                            gap(),
+                            pill(format!("joins at {}", a.injected_by), p.muted, p.surface2),
+                        ],
+                    ),
+                    para(a.duty, 13.0, p.muted),
+                ],
+            ),
+        ));
     }
     rows.push(divider(p));
     rows.push(section(
@@ -588,7 +883,11 @@ fn agents_and_tools(ui: &Ui, p: &Pal) -> WidgetNode {
     for tool in PALETTE {
         let (effect, fg, bg) = match tool.effect {
             Effect::None => ("only reads", p.good, p.good_soft),
-            Effect::Workspace => ("changes the project (undoable)", p.accent_ink, p.accent_soft),
+            Effect::Workspace => (
+                "changes the project (undoable)",
+                p.accent_ink,
+                p.accent_soft,
+            ),
             Effect::World => ("touches the world · asks first", p.wait, p.wait_soft),
         };
         let needs: Vec<&str> = tool
@@ -614,10 +913,30 @@ fn agents_and_tools(ui: &Ui, p: &Pal) -> WidgetNode {
     }
     if let Some(plan) = ui.current_session().and_then(|s| s.plan.get()) {
         rows.push(divider(p));
-        rows.push(section(p, &format!("In this project: {}", plan.name), "The agents this plan names, and the tools each one was given."));
+        rows.push(section(
+            p,
+            &format!("In this project: {}", plan.name),
+            "The agents this plan names, and the tools each one was given.",
+        ));
         for c in plan.cards() {
-            let tools = if c.tools.is_empty() { "no tools".to_string() } else { c.tools.join(", ") };
-            rows.push(column(3.0, vec![row(8.0, vec![b(c.name.clone(), 13.5, p.ink), pill(c.role, p.muted, p.surface2)]), t(format!("{} · {tools}", c.model), 12.0, p.muted)]));
+            let tools = if c.tools.is_empty() {
+                "no tools".to_string()
+            } else {
+                c.tools.join(", ")
+            };
+            rows.push(column(
+                3.0,
+                vec![
+                    row(
+                        8.0,
+                        vec![
+                            b(c.name.clone(), 13.5, p.ink),
+                            pill(c.role, p.muted, p.surface2),
+                        ],
+                    ),
+                    t(format!("{} · {tools}", c.model), 12.0, p.muted),
+                ],
+            ));
         }
     }
     stretch(12.0, rows)
@@ -682,40 +1001,88 @@ fn network(ui: &Ui, p: &Pal) -> WidgetNode {
     )];
     let typed = f.ca_path.get().text.trim().to_string();
     let status: WidgetNode = if typed.is_empty() {
-        t("No extra certificates. This computer's own trust store is used.", 12.5, p.muted)
+        t(
+            "No extra certificates. This computer's own trust store is used.",
+            12.5,
+            p.muted,
+        )
     } else {
         match check_ca_file(&expand_home(&typed)) {
-            Ok(n) => row(8.0, vec![pill(format!("{n} certificate{}", if n == 1 { "" } else { "s" }), p.good, p.good_soft), grow(t("found in this file", 12.5, p.muted))]),
+            Ok(n) => row(
+                8.0,
+                vec![
+                    pill(
+                        format!("{n} certificate{}", if n == 1 { "" } else { "s" }),
+                        p.good,
+                        p.good_soft,
+                    ),
+                    grow(t("found in this file", 12.5, p.muted)),
+                ],
+            ),
             Err(e) => copyable(e, 12.5, p.wait),
         }
     };
     let (choose, save, clear) = (f.clone(), f.clone(), f.clone());
     let project = ui.current_session().map(|s| (*s.project).clone());
     let project2 = project.clone();
-    rows.push(row(10.0, vec![
-        grow(field(ui, p, "Certificate file (paste a path, or choose one)", &f.ca_path, "/path/to/company-root.pem", false)),
-        button(p, "Choose file…", Look::Secondary, true, move || choose.choose_ca_file()),
-    ]));
+    rows.push(row(
+        10.0,
+        vec![
+            grow(field(
+                ui,
+                p,
+                "Certificate file (paste a path, or choose one)",
+                &f.ca_path,
+                "/path/to/company-root.pem",
+                false,
+            )),
+            button(p, "Choose file…", Look::Secondary, true, move || {
+                choose.choose_ca_file()
+            }),
+        ],
+    ));
     rows.push(status);
-    rows.push(row(10.0, vec![
-        button(p, "Save certificates", Look::Primary, !typed.is_empty(), move || {
-            let path = save.ca_path.get().text.trim().to_string();
-            if let Err(e) = check_ca_file(&expand_home(&path)) {
-                save.message.set(format!("Not saved: {e}"));
-                return;
-            }
-            save.edit_file(|c| c.ca_file = Some(path.clone()));
-            apply_now(&save);
-            save.reload(project.as_deref());
-        }),
-        button(p, "Remove", Look::Quiet, file_cfg.ca_file.is_some(), move || {
-            clear.edit_file(|c| c.ca_file = None);
-            apply_now(&clear);
-            clear.reload(project2.as_deref());
-        }),
-    ]));
+    rows.push(row(
+        10.0,
+        vec![
+            button(
+                p,
+                "Save certificates",
+                Look::Primary,
+                !typed.is_empty(),
+                move || {
+                    let path = save.ca_path.get().text.trim().to_string();
+                    if let Err(e) = check_ca_file(&expand_home(&path)) {
+                        save.message.set(format!("Not saved: {e}"));
+                        return;
+                    }
+                    save.edit_file(|c| c.ca_file = Some(path.clone()));
+                    apply_now(&save);
+                    save.reload(project.as_deref());
+                },
+            ),
+            button(
+                p,
+                "Remove",
+                Look::Quiet,
+                file_cfg.ca_file.is_some(),
+                move || {
+                    clear.edit_file(|c| c.ca_file = None);
+                    apply_now(&clear);
+                    clear.reload(project2.as_deref());
+                },
+            ),
+        ],
+    ));
     if std::env::var_os(rc::CA_ENV).is_some() && file_cfg.ca_file.is_none() {
-        rows.push(t(format!("{} is set in your environment, so that file is in use for this session.", rc::CA_ENV), 12.0, p.muted));
+        rows.push(t(
+            format!(
+                "{} is set in your environment, so that file is in use for this session.",
+                rc::CA_ENV
+            ),
+            12.0,
+            p.muted,
+        ));
     }
 
     rows.push(divider(p));
@@ -725,62 +1092,115 @@ fn network(ui: &Ui, p: &Pal) -> WidgetNode {
         "For Wright and every program it runs: a proxy (HTTPS_PROXY, NO_PROXY), a package mirror (PIP_INDEX_URL, npm_config_registry), a model mirror (WRIGHT_MODEL_MIRROR). A variable you already set in your own shell wins over these. Values whose names say they are secret (…KEY, …TOKEN, …SECRET, …PASSWORD), and proxy addresses with a password in them, go to the system keychain, not to a file.",
     ));
     for (k, v) in &file_cfg.env {
-        let shown = if v.starts_with("keychain:") { format!("from the keychain ({v})") } else { v.clone() };
+        let shown = if v.starts_with("keychain:") {
+            format!("from the keychain ({v})")
+        } else {
+            v.clone()
+        };
         let (form, name) = (f.clone(), k.clone());
         let project = ui.current_session().map(|s| (*s.project).clone());
         let live = std::env::var_os(k).is_some();
-        rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::FIELD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::symmetric(12.0, 8.0)).child(row(10.0, vec![
-            b(k.clone(), 13.0, p.ink),
-            grow(line(shown, 12.5, p.muted)),
-            if live { pill("in effect", p.good, p.good_soft) } else { pill("not set", p.wait, p.wait_soft) },
-            button(p, "Remove", Look::Quiet, true, move || {
-                form.edit_file(|c| c.env.retain(|(n, _)| n != &name));
-                apply_now(&form);
-                form.reload(project.as_deref());
-            }),
-        ])).into());
+        rows.push(
+            Container::new()
+                .color(p.surface2.with_alpha(110))
+                .radius(corner::FIELD)
+                .border(Border::new(p.line, 1.0))
+                .padding(EdgeInsets::symmetric(12.0, 8.0))
+                .child(row(
+                    10.0,
+                    vec![
+                        b(k.clone(), 13.0, p.ink),
+                        grow(line(shown, 12.5, p.muted)),
+                        if live {
+                            pill("in effect", p.good, p.good_soft)
+                        } else {
+                            pill("not set", p.wait, p.wait_soft)
+                        },
+                        button(p, "Remove", Look::Quiet, true, move || {
+                            form.edit_file(|c| c.env.retain(|(n, _)| n != &name));
+                            apply_now(&form);
+                            form.reload(project.as_deref());
+                        }),
+                    ],
+                ))
+                .into(),
+        );
     }
     let add = f.clone();
     let project3 = ui.current_session().map(|s| (*s.project).clone());
-    rows.push(row(10.0, vec![
-        SizedBox::width(220.0).child(field(ui, p, "Name", &f.env_name, "HTTPS_PROXY", false)).into(),
-        grow(field(ui, p, "Value", &f.env_value, "http://proxy.example.com:3128", rc::looks_secret(f.env_name.get().text.trim()))),
-    ]));
-    rows.push(row(10.0, vec![button(p, "Add variable", Look::Primary, true, move || {
-        let name = add.env_name.get().text.trim().to_string();
-        let value = add.env_value.get().text.trim().to_string();
-        if name.is_empty() {
-            add.message.set("A variable needs a name.".into());
-            return;
-        }
-        let stored = match store_env_value(&name, &value) {
-            Ok(v) => v,
-            Err(e) => {
-                add.message.set(format!("Not saved: {e}"));
+    rows.push(row(
+        10.0,
+        vec![
+            SizedBox::width(220.0)
+                .child(field(ui, p, "Name", &f.env_name, "HTTPS_PROXY", false))
+                .into(),
+            grow(field(
+                ui,
+                p,
+                "Value",
+                &f.env_value,
+                "http://proxy.example.com:3128",
+                rc::looks_secret(f.env_name.get().text.trim()),
+            )),
+        ],
+    ));
+    rows.push(row(
+        10.0,
+        vec![button(p, "Add variable", Look::Primary, true, move || {
+            let name = add.env_name.get().text.trim().to_string();
+            let value = add.env_value.get().text.trim().to_string();
+            if name.is_empty() {
+                add.message.set("A variable needs a name.".into());
                 return;
             }
-        };
-        add.edit_file(|c| {
-            c.env.retain(|(n, _)| n != &name);
-            c.env.push((name.clone(), stored.clone()));
-        });
-        add.env_name.set(tv(""));
-        add.env_value.set(tv(""));
-        apply_now(&add);
-        add.reload(project3.as_deref());
-    })]));
+            let stored = match store_env_value(&name, &value) {
+                Ok(v) => v,
+                Err(e) => {
+                    add.message.set(format!("Not saved: {e}"));
+                    return;
+                }
+            };
+            add.edit_file(|c| {
+                c.env.retain(|(n, _)| n != &name);
+                c.env.push((name.clone(), stored.clone()));
+            });
+            add.env_name.set(tv(""));
+            add.env_value.set(tv(""));
+            apply_now(&add);
+            add.reload(project3.as_deref());
+        })],
+    ));
 
     rows.push(divider(p));
-    rows.push(section(p, "In effect now", "What Wright sees in this session. Passwords inside proxy addresses are hidden."));
-    for k in ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", rc::CA_ENV, "SSL_CERT_FILE", "WRIGHT_MODEL_MIRROR", "WRIGHT_HOME"] {
-        let v = std::env::var(k).or_else(|_| std::env::var(k.to_ascii_lowercase())).ok();
-        rows.push(row(10.0, vec![
-            SizedBox::width(190.0).child(mono(k.to_string(), 12.0, p.ink)).into(),
-            grow(match v {
-                Some(v) => copyable_mono(hide_password(&v), 12.0, p.muted),
-                None => t("not set", 12.0, p.muted),
-            }),
-        ]));
+    rows.push(section(
+        p,
+        "In effect now",
+        "What Wright sees in this session. Passwords inside proxy addresses are hidden.",
+    ));
+    for k in [
+        "HTTPS_PROXY",
+        "HTTP_PROXY",
+        "NO_PROXY",
+        rc::CA_ENV,
+        "SSL_CERT_FILE",
+        "WRIGHT_MODEL_MIRROR",
+        "WRIGHT_HOME",
+    ] {
+        let v = std::env::var(k)
+            .or_else(|_| std::env::var(k.to_ascii_lowercase()))
+            .ok();
+        rows.push(row(
+            10.0,
+            vec![
+                SizedBox::width(190.0)
+                    .child(mono(k.to_string(), 12.0, p.ink))
+                    .into(),
+                grow(match v {
+                    Some(v) => copyable_mono(hide_password(&v), 12.0, p.muted),
+                    None => t("not set", 12.0, p.muted),
+                }),
+            ],
+        ));
     }
     stretch(12.0, rows)
 }
@@ -805,9 +1225,13 @@ pub fn store_env_value(name: &str, value: &str) -> Result<String, String> {
     if !wright_runtime::config::valid_env_name(name) {
         return check_env_pair(name, value).map(|_| value.to_string());
     }
-    let secret = !value.starts_with("keychain:") && (looks_secret(name) || check_env_pair(name, value).is_err());
+    let secret = !value.starts_with("keychain:")
+        && (looks_secret(name) || check_env_pair(name, value).is_err());
     if secret {
-        let reference = format!("keychain:wright/env-{}", name.to_ascii_lowercase().replace('_', "-"));
+        let reference = format!(
+            "keychain:wright/env-{}",
+            name.to_ascii_lowercase().replace('_', "-")
+        );
         wright_runtime::secrets::store(&reference, value)?;
         return Ok(reference);
     }
@@ -892,13 +1316,19 @@ fn fleet(ui: &Ui, p: &Pal) -> WidgetNode {
         }
         if r.trust.is_none() {
             let (d, fm, rf) = (dir.clone(), form.clone(), refresh);
-            actions.push(button(p, "Let it run unattended", Look::Primary, true, move || {
-                let m = match wright_engine::unattended::approve(&d, "window") {
-                    Ok(a) => wright_engine::unattended::describe(&a),
-                    Err(e) => format!("Not yet: {e}"),
-                };
-                rf(&fm, m);
-            }));
+            actions.push(button(
+                p,
+                "Let it run unattended",
+                Look::Primary,
+                true,
+                move || {
+                    let m = match wright_engine::unattended::approve(&d, "window") {
+                        Ok(a) => wright_engine::unattended::describe(&a),
+                        Err(e) => format!("Not yet: {e}"),
+                    };
+                    rf(&fm, m);
+                },
+            ));
         } else {
             let (d, fm, rf) = (dir.clone(), form.clone(), refresh);
             actions.push(button(p, "Take it back", Look::Quiet, true, move || {
@@ -910,8 +1340,26 @@ fn fleet(ui: &Ui, p: &Pal) -> WidgetNode {
             }));
         }
         let mut block = vec![
-            row(10.0, vec![b(r.name.clone(), 14.0, p.ink), pill(label, fg, bg), gap(), row(8.0, actions)]),
-            copyable_mono(format!("{} {} · next {} · {}", r.cron, r.tz, r.next, r.dir.display()), 11.5, p.muted),
+            row(
+                10.0,
+                vec![
+                    b(r.name.clone(), 14.0, p.ink),
+                    pill(label, fg, bg),
+                    gap(),
+                    row(8.0, actions),
+                ],
+            ),
+            copyable_mono(
+                format!(
+                    "{} {} · next {} · {}",
+                    r.cron,
+                    r.tz,
+                    r.next,
+                    r.dir.display()
+                ),
+                11.5,
+                p.muted,
+            ),
         ];
         if let Some(why) = &r.held {
             block.push(copyable(why.clone(), 12.5, p.wait));
@@ -924,7 +1372,11 @@ fn fleet(ui: &Ui, p: &Pal) -> WidgetNode {
                     if l.ok { "passed" } else { "failed" },
                     l.headline,
                     l.cost_micro_usd as f64 / 1e6,
-                    if l.verified { "verifies" } else { "does NOT verify" }
+                    if l.verified {
+                        "verifies"
+                    } else {
+                        "does NOT verify"
+                    }
                 ),
                 12.5,
                 if l.ok && l.verified { p.ink } else { p.bad },
@@ -935,9 +1387,24 @@ fn fleet(ui: &Ui, p: &Pal) -> WidgetNode {
             block.push(copyable(tr.clone(), 12.5, p.good));
         }
         if r.waiting_on_you > 0 {
-            block.push(t(format!("{} approval(s) waiting on you in its session.", r.waiting_on_you), 12.5, p.wait));
+            block.push(t(
+                format!(
+                    "{} approval(s) waiting on you in its session.",
+                    r.waiting_on_you
+                ),
+                12.5,
+                p.wait,
+            ));
         }
-        rows.push(Container::new().color(p.surface2.with_alpha(110)).radius(corner::CARD).border(Border::new(p.line, 1.0)).padding(EdgeInsets::all(14.0)).child(stretch(6.0, block)).into());
+        rows.push(
+            Container::new()
+                .color(p.surface2.with_alpha(110))
+                .radius(corner::CARD)
+                .border(Border::new(p.line, 1.0))
+                .padding(EdgeInsets::all(14.0))
+                .child(stretch(6.0, block))
+                .into(),
+        );
     }
     stretch(12.0, rows)
 }
@@ -952,16 +1419,35 @@ fn organization(ui: &Ui, p: &Pal) -> WidgetNode {
     )];
     match f.policy.get() {
         None => {
-            rows.push(t(format!("No organization policy on this computer (IT installs one in {}).", wright_runtime::policy::system_dir().display()), 13.0, p.muted));
+            rows.push(t(
+                format!(
+                    "No organization policy on this computer (IT installs one in {}).",
+                    wright_runtime::policy::system_dir().display()
+                ),
+                13.0,
+                p.muted,
+            ));
             rows.push(t("For administrators, from a terminal:", 12.5, p.muted));
-            for c in ["wright admin keygen --name \"IT security\"", "wright admin policy init policy.kdl", "wright admin policy sign policy.kdl --name \"IT security\"", "wright admin approve <project> --name \"IT security\"", "wright admin fleet-verify <projects folder> --json"] {
+            for c in [
+                "wright admin keygen --name \"IT security\"",
+                "wright admin policy init policy.kdl",
+                "wright admin policy sign policy.kdl --name \"IT security\"",
+                "wright admin approve <project> --name \"IT security\"",
+                "wright admin fleet-verify <projects folder> --json",
+            ] {
                 rows.push(copyable_mono(c, 12.0, p.ink));
             }
         }
         Some(Err(e)) => rows.push(copyable(e, 13.0, p.bad)),
         Some(Ok(lines)) => {
             for l in lines {
-                rows.push(row(8.0, vec![Glyph::Done.draw(14.0, p.good), grow(copyable(l, 13.0, p.ink))]));
+                rows.push(row(
+                    8.0,
+                    vec![
+                        Glyph::Done.draw(14.0, p.good),
+                        grow(copyable(l, 13.0, p.ink)),
+                    ],
+                ));
             }
         }
     }
@@ -972,7 +1458,11 @@ fn organization(ui: &Ui, p: &Pal) -> WidgetNode {
             let cfg = Config::load().unwrap_or_else(|_| Config::builtin());
             rows.push(match wright_engine::org::enforce(&bp, &cfg) {
                 Ok(None) => t("No policy to check it against.", 12.5, p.muted),
-                Ok(Some(pol)) => t(format!("{}'s policy allows this plan.", pol.org), 12.5, p.good),
+                Ok(Some(pol)) => t(
+                    format!("{}'s policy allows this plan.", pol.org),
+                    12.5,
+                    p.good,
+                ),
                 Err(e) => copyable(e, 12.5, p.bad),
             });
             if let Err(e) = wright_engine::org::approval(&s.project) {
@@ -983,13 +1473,28 @@ fn organization(ui: &Ui, p: &Pal) -> WidgetNode {
     rows.push(divider(p));
     rows.push(section(p, "Every receipt on this computer", "Each run of every project here and every scheduled one, through all six checks: signature and signer, the event log, artifacts, inputs, the plan, and the agents' identities."));
     let go = f.clone();
-    rows.push(row(10.0, vec![button(p, "Verify every receipt", Look::Secondary, true, move || {
-        go.verified.set(Some(wright_engine::org::fleet_verify(&[super::store::projects_dir()])));
-    })]));
+    rows.push(row(
+        10.0,
+        vec![button(
+            p,
+            "Verify every receipt",
+            Look::Secondary,
+            true,
+            move || {
+                go.verified.set(Some(wright_engine::org::fleet_verify(&[
+                    super::store::projects_dir(),
+                ])));
+            },
+        )],
+    ));
     if let Some(checks) = f.verified.get() {
         let report = wright_engine::org::fleet_report(&checks, false);
         let all_ok = checks.iter().all(|c| c.ok);
-        rows.push(copyable(report.trim_end().to_string(), 12.5, if all_ok { p.good } else { p.bad }));
+        rows.push(copyable(
+            report.trim_end().to_string(),
+            12.5,
+            if all_ok { p.good } else { p.bad },
+        ));
     }
     stretch(12.0, rows)
 }
@@ -1028,30 +1533,51 @@ fn workspace(ui: &Ui, p: &Pal) -> WidgetNode {
 
 fn project(ui: &Ui, p: &Pal) -> WidgetNode {
     let Some(s) = ui.current_session() else {
-        return section(p, "No project open", "Open a session to change its models and limits.");
+        return section(
+            p,
+            "No project open",
+            "Open a session to change its models and limits.",
+        );
     };
     if s.plan.get().is_none() {
-        return section(p, "No blueprint yet", "Describe the project first; its models and limits appear here once the plan exists.");
+        return section(
+            p,
+            "No blueprint yet",
+            "Describe the project first; its models and limits appear here once the plan exists.",
+        );
     }
     let f = ui.form.clone();
     let tiers = f.tiers.get();
     let tier_field = |i: usize, label: &str, ph: &str| -> WidgetNode {
         let sig = f.tiers.clone();
         let v = tiers[i].clone();
-        stretch(5.0, vec![
-            t(label.to_string(), 12.0, p.muted),
-            Container::new()
-                .color(p.surface2)
-                .radius(corner::FIELD)
-                .border(Border::new(p.line_strong, 1.0))
-                .padding(EdgeInsets::symmetric(12.0, 8.0))
-                .child(TextField::new(v).show_cursor(ui.is_typing_in(ph)).single_line().placeholder(ph.to_string()).placeholder_color(p.muted).size(13.5).color(p.ink).cursor(p.accent_ink, 2.0).on_changed(std::rc::Rc::new(move |x: TextEditingValue| {
-                    let mut all = sig.get();
-                    all[i] = x;
-                    sig.set(all);
-                })))
-                .into(),
-        ])
+        stretch(
+            5.0,
+            vec![
+                t(label.to_string(), 12.0, p.muted),
+                Container::new()
+                    .color(p.surface2)
+                    .radius(corner::FIELD)
+                    .border(Border::new(p.line_strong, 1.0))
+                    .padding(EdgeInsets::symmetric(12.0, 8.0))
+                    .child(
+                        TextField::new(v)
+                            .show_cursor(ui.is_typing_in(ph))
+                            .single_line()
+                            .placeholder(ph.to_string())
+                            .placeholder_color(p.muted)
+                            .size(13.5)
+                            .color(p.ink)
+                            .cursor(p.accent_ink, 2.0)
+                            .on_changed(std::rc::Rc::new(move |x: TextEditingValue| {
+                                let mut all = sig.get();
+                                all[i] = x;
+                                sig.set(all);
+                            })),
+                    )
+                    .into(),
+            ],
+        )
     };
     let (form, dir, sess) = (f.clone(), (*s.project).clone(), s.clone());
     stretch(14.0, vec![
@@ -1076,9 +1602,18 @@ fn project(ui: &Ui, p: &Pal) -> WidgetNode {
 }
 
 /// Write new model tiers and limits into a project's blueprint.
-pub fn save_project(dir: &Path, tiers: [String; 4], per_run: &str, per_day: &str) -> Result<String, String> {
+pub fn save_project(
+    dir: &Path,
+    tiers: [String; 4],
+    per_run: &str,
+    per_day: &str,
+) -> Result<String, String> {
     let money = |s: &str, what: &str| -> Result<u64, String> {
-        let v: f64 = s.trim().trim_start_matches('$').parse().map_err(|_| format!("{what} must be a number of dollars, like 1.50"))?;
+        let v: f64 = s
+            .trim()
+            .trim_start_matches('$')
+            .parse()
+            .map_err(|_| format!("{what} must be a number of dollars, like 1.50"))?;
         if !(0.0..=10_000.0).contains(&v) {
             return Err(format!("{what} must be between 0 and 10000"));
         }

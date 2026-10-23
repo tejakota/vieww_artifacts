@@ -19,7 +19,12 @@ pub struct Sampler {
 
 impl Sampler {
     pub fn new(temperature: f32, top_k: usize, top_p: f32, seed: u64) -> Sampler {
-        Sampler { temperature, top_k: top_k.max(1), top_p, state: seed | 1 }
+        Sampler {
+            temperature,
+            top_k: top_k.max(1),
+            top_p,
+            state: seed | 1,
+        }
     }
 
     pub fn greedy() -> Sampler {
@@ -28,7 +33,10 @@ impl Sampler {
 
     /// Qwen3's recommended non-thinking settings, seeded from the clock.
     pub fn qwen() -> Sampler {
-        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(7);
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(7);
         Sampler::new(0.7, 20, 0.8, seed)
     }
 
@@ -42,18 +50,32 @@ impl Sampler {
     }
 
     pub fn sample(&mut self, logits: &[f32]) -> u32 {
-        let argmax = || logits.iter().enumerate().fold((0, f32::NEG_INFINITY), |b, (i, v)| if *v > b.1 { (i, *v) } else { b }).0 as u32;
+        let argmax = || {
+            logits
+                .iter()
+                .enumerate()
+                .fold(
+                    (0, f32::NEG_INFINITY),
+                    |b, (i, v)| if *v > b.1 { (i, *v) } else { b },
+                )
+                .0 as u32
+        };
         if self.temperature <= 0.0 || self.top_k == 1 {
             return argmax();
         }
         // The k best, most likely first.
         let mut idx: Vec<u32> = (0..logits.len() as u32).collect();
         let k = self.top_k.min(idx.len());
-        idx.select_nth_unstable_by(k - 1, |a, b| logits[*b as usize].total_cmp(&logits[*a as usize]));
+        idx.select_nth_unstable_by(k - 1, |a, b| {
+            logits[*b as usize].total_cmp(&logits[*a as usize])
+        });
         idx.truncate(k);
         idx.sort_by(|a, b| logits[*b as usize].total_cmp(&logits[*a as usize]));
         let max = logits[idx[0] as usize];
-        let mut probs: Vec<f32> = idx.iter().map(|i| ((logits[*i as usize] - max) / self.temperature).exp()).collect();
+        let mut probs: Vec<f32> = idx
+            .iter()
+            .map(|i| ((logits[*i as usize] - max) / self.temperature).exp())
+            .collect();
         let sum: f32 = probs.iter().sum();
         probs.iter_mut().for_each(|p| *p /= sum);
         // Nucleus: the smallest prefix reaching top_p.
@@ -101,6 +123,11 @@ mod tests {
             seen[s.sample(&logits) as usize] += 1;
         }
         assert_eq!(seen[7] + seen[42], 500);
-        assert!(seen[7] > 0 && seen[42] > 0, "both are drawn: {} / {}", seen[7], seen[42]);
+        assert!(
+            seen[7] > 0 && seen[42] > 0,
+            "both are drawn: {} / {}",
+            seen[7],
+            seen[42]
+        );
     }
 }

@@ -50,23 +50,9 @@
 //!                               fleet-verify [folders] [--json]
 //!   wright doctor               what works on this machine
 
-mod cmd;
-#[cfg(feature = "ui")]
-mod ui;
-
-/// One line about the UI for `wright doctor`.
-pub fn ui_status() -> String {
-    #[cfg(feature = "ui")]
-    {
-        "vieww shell built in (`wright ui`)".into()
-    }
-    #[cfg(not(feature = "ui"))]
-    {
-        "not built in (build with --features ui)".into()
-    }
-}
-
 fn main() {
+    use wright::cmd;
+
     // Office machines first, before any thread exists: the config's `env`
     // lines (proxies, mirrors) and its extra certificate authorities
     // (`tls ca-file`) go into this process's environment, so every
@@ -133,7 +119,7 @@ fn main() {
 fn open_ui(args: &[String]) -> i32 {
     #[cfg(feature = "ui")]
     {
-        ui::main(args)
+        wright::ui::main(args)
     }
     #[cfg(not(feature = "ui"))]
     {
@@ -144,7 +130,10 @@ fn open_ui(args: &[String]) -> i32 {
 }
 
 fn help() {
-    println!("wright {} — describe it, it's wrought.\n", env!("CARGO_PKG_VERSION"));
+    println!(
+        "wright {} — describe it, it's wrought.\n",
+        env!("CARGO_PKG_VERSION")
+    );
     let doc = include_str!("main.rs");
     for l in doc.lines().skip(2).take_while(|l| l.starts_with("//!")) {
         println!("{}", l.trim_start_matches("//!"));
