@@ -378,6 +378,13 @@ fn resolve_env(entry: &WorkerEntry) -> Result<Vec<(String, String)>, ToolError> 
 
 /// A directory only this user can enter.
 fn private_dir(dir: &Path) -> Result<(), String> {
+    #[cfg_attr(
+        not(unix),
+        expect(
+            unused_mut,
+            reason = "only the unix mode call below mutates the builder"
+        )
+    )]
     let mut b = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {

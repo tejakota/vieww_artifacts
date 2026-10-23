@@ -37,11 +37,24 @@
 //! Type-checked from Linux by `ci/check/cross-check.sh windows`, and run by
 //! `tests/d3d12_smoke.rs` on the Windows leg of
 //! `.github/workflows/framework-checks.yml`.
+//!
+//! The scene renderer ([`scene`](self::scene)) is verified the same way, in
+//! layers: the plan-to-ops traversal it executes is
+//! [`crate::scene_exec`], pure logic with its own tests on every platform;
+//! the pixel-level claims (`tests/d3d12_scene.rs`) mirror the Vulkan
+//! parity suites — the same scenes, against `vieww_paint`'s CPU rasterizer —
+//! and run on the Windows runner, on WARP or a hardware adapter.
 
 use std::mem::ManuallyDrop;
 use std::sync::Mutex;
 
 use super::{sealed, AdapterInfo, Device as HalDevice};
+
+/// The D3D12 scene renderer — [`crate::scene_exec`]'s op stream on this
+/// backend, the port of `vulkan::scene::SceneRenderer` PENDING 1.3 asks for.
+pub mod scene;
+
+pub use scene::{D3d12SceneRenderer, FrameTimings};
 use vieww_foundation::Color;
 use vieww_shaders::{hlsl_slots, ParsedShader, ShaderStage};
 use windows::core::{Interface, PCSTR};
