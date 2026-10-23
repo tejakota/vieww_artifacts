@@ -112,6 +112,13 @@ pub struct AdapterInfo {
 #[cfg(feature = "vulkan")]
 pub mod vulkan;
 
+/// The backend-agnostic execution of a `vieww_gpu::ScenePlan`: the
+/// plan-to-operations traversal every backend's scene renderer interprets —
+/// Vulkan's own since it was extracted, and the Metal and D3D12 ports' from
+/// their first line. Pure logic over the plan, so its tests run on every
+/// platform with no GPU at all.
+pub mod scene_exec;
+
 /// The Metal backend (spec §4.3) — macOS and iOS.
 ///
 /// Gated twice: here to Apple targets, and the `metal` crate to the same
