@@ -31,22 +31,31 @@ Place them all with
 then commit and push with a token that has `workflow` scope, or move the
 files in GitHub's web editor.
 
-# Waiting (2026-10-23): audio-ci.yml
+# Waiting (2026-10-23): audio-ci.yml, and two root copies behind
 
-`audio-ci.yml` — the one workflow that runs **on push**, gating the audio and
-music crates (tests and clippy with `-D warnings`, nightly cargo-fuzz). The
-vieww-audio / vieww-music series of 2026-10-23 reached `main` without it: the
-push token lacked `workflow` scope, so the file rides here as an ordinary
-file, exactly as the five above once did. It is the only automated gate the
-audio crates have, so placing it is not optional housekeeping.
+`audio-ci.yml` — the audio and music gate. The vieww-audio / vieww-music
+series of 2026-10-23 reached `main` without it: the push token lacked
+`workflow` scope, so the file rides here as an ordinary file, exactly as the
+five above once did. The device-loopback commit of the same day then made it
+**manual-only** (no push, pull_request or schedule trigger — the owner's
+2026-10-15 rule for every workflow in this repository), so the copy here is
+the manual-only version, and it is now mode 644.
 
-Place it at **both** paths, mirrored byte-for-byte like `framework-checks.yml`:
+Place it at **both** paths (via the web editor, or `restore.sh audio-ci.yml`
+under a workflow-scoped token — then mirror by hand; `restore.sh` only fills
+the root):
 
-    .github/workflows/audio-ci.yml
-    vieww_base/.github/workflows/audio-ci.yml
+| Path | Content |
+|---|---|
+| `.github/workflows/audio-ci.yml` | **this directory's copy, verbatim** (blob `ccf6503`) |
+| `vieww_base/.github/workflows/audio-ci.yml` | the same file, except its header comment is the two-line short form (blob `bbd0c17`; the author's own divergence, one comment's worth — paste from the session hand-off) |
 
-(via the web editor, or `restore.sh audio-ci.yml` under a workflow-scoped
-token — then mirror the `vieww_base` copy by hand; `restore.sh` only fills
-the root). The file's own `on:` block already covers both copies' contract:
-push and pull_request paths on the audio and music crates, a nightly fuzz
-schedule at 02:47 IST, and `workflow_dispatch`.
+Two more root copies are one web edit behind this directory:
+
+| Path | Replace with |
+|---|---|
+| `.github/workflows/audio-backends.yml` | this directory's `audio-backends.yml` (blob `67f083d`; adds snd-aloop / snd-virmidi, PulseAudio loopback, VB-CABLE, BlackHole legs) |
+| `.github/workflows/hardware.yml` | this directory's `hardware.yml` (blob `44f4f2d`; adds the `audio` step for the real sound cards) |
+
+Until the first table's files are placed, the audio crates have no automated
+gate at all — every audio workflow is manual, by design.
