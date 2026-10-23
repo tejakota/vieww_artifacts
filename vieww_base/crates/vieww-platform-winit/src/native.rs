@@ -1031,14 +1031,27 @@ impl NativeRenderer {
     }
 
     /// The planner's assumed profile for this window's device.
+    ///
+    /// `VIEWW_PLANNER_CALIBRATE=1` (read once per process) additionally runs
+    /// [`vieww_render_planner::probe::calibrate_cpu_fill`]: a one-time,
+    /// single-digit-millisecond startup micro-benchmark that replaces the
+    /// profile's round-number CPU fill throughput with a measurement of this
+    /// machine's own rasterizer, and fills `cpu_cores` from the scheduler.
+    /// The GPU fields stay as `profile_for` guessed them — the shadow log's
+    /// own `Calibration` is the measured path for those, and this function
+    /// is called once per window, not per frame.
     fn planner_profile(&self) -> DeviceProfile {
         use vieww_hal::Device as _;
         // On the CPU present path no device was opened to ask; plan as this
         // kind of machine's usual GPU, which is what the log is for.
-        self.device.as_ref().map_or_else(
+        let mut profile = self.device.as_ref().map_or_else(
             || profile_for(""),
             |device| profile_for(&device.info().device_type),
-        )
+        );
+        if planner_calibration() {
+            profile = vieww_render_planner::probe::calibrate_cpu_fill(profile);
+        }
+        profile
     }
 
     /// Plan `scene` in shadow and log what actually happened to it.
@@ -1695,6 +1708,20 @@ pub fn gpu_overlap() -> bool {
 /// coverage reaching a pixel past it. Redrawing a pixel that did not change
 /// is always correct; missing one that did leaves a stale edge.
 const GPU_DAMAGE_MARGIN: i32 = 2;
+
+/// Whether the planner's profile is calibrated against this machine at
+/// startup (`VIEWW_PLANNER_CALIBRATE=1`): a one-time CPU fill micro-benchmark
+/// plus core-count detection, replacing the profile's round-number guesses
+/// with measured numbers — see `planner_profile`. Off by default, like every
+/// planner diagnostic, because the benchmark costs time and the guesses are
+/// what every existing log was recorded against. Read once per process.
+#[must_use]
+fn planner_calibration() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var("VIEWW_PLANNER_CALIBRATE").is_ok_and(|v| v.trim() == "1")
+    })
+}
 
 /// A damaged region from [`Changed::from_damage`], grown by
 /// [`GPU_DAMAGE_MARGIN`]; the renderer clamps it to its frame.

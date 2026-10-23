@@ -9,6 +9,16 @@ readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+default = []
+# `probe::calibrate_cpu_fill` measures this machine's CPU raster throughput
+# at startup, which needs the CPU rasterizer itself — `vieww-paint`'s
+# `native` feature and its font/png dependencies. Off by default so the
+# planner stays as light for its other consumers (the web legs) as it was;
+# the windowed platform (`vieww-platform-winit`) turns it on, because it is
+# the only caller of the calibration.
+calibrate = ["vieww-paint/native"]
+
 [dependencies]
 vieww-foundation.workspace = true
 vieww-scene.workspace = true
