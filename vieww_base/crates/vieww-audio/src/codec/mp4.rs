@@ -36,7 +36,7 @@ fn be64(b: &[u8], i: usize) -> Option<u64> {
 }
 
 /// Iterate boxes in `b`: (type, body, body offset within `b`).
-fn boxes(b: &[u8]) -> Vec<([u8; 4], &[u8])> {
+pub(super) fn boxes(b: &[u8]) -> Vec<([u8; 4], &[u8])> {
     let mut out = Vec::new();
     let mut at = 0;
     while at + 8 <= b.len() {
@@ -63,7 +63,7 @@ fn boxes(b: &[u8]) -> Vec<([u8; 4], &[u8])> {
     out
 }
 
-fn child<'a>(b: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
+pub(super) fn child<'a>(b: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
     boxes(b)
         .into_iter()
         .find(|(k, _)| k == kind)

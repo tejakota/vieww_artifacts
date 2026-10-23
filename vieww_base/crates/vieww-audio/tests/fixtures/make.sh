@@ -43,3 +43,18 @@ ff -i source16.wav -c:a pcm_s24be src24.aiff
 for f in src.mp3 src_mono_vbr.mp3 src.ogg src.m4a src_mono.aac src_mono_pns.aac; do
   ff -i "$f" -f s16le -c:a pcm_s16le "$f.ref"
 done
+# Tagged files, one per container, for the tag readers (tests/tags.rs):
+# a tenth of a second each, with Unicode text and a custom key.
+ff -t 0.1 -i source16.wav -c:a pcm_s16le tagsrc.wav
+meta=(-metadata "title=Vātāpi Gaṇapatim" -metadata artist=Ensemble -metadata album=Kritis
+      -metadata date=2026 -metadata genre=Carnatic -metadata track=3/8
+      -metadata "comment=tagged by ffmpeg" -metadata RAGA=Hamsadhwani)
+ff -i tagsrc.wav "${meta[@]}" -c:a libmp3lame -b:a 64k -id3v2_version 4 -write_id3v1 1 tags24.mp3
+ff -i tagsrc.wav "${meta[@]}" -c:a libmp3lame -b:a 64k -id3v2_version 3 tags23.mp3
+ff -i tagsrc.wav "${meta[@]}" -c:a flac tags.flac
+ff -i tagsrc.wav "${meta[@]}" -c:a libvorbis tags.ogg
+ff -i tagsrc.wav "${meta[@]}" -c:a libopus -b:a 32k tags.opus
+ff -i tagsrc.wav "${meta[@]}" -c:a aac -b:a 64k tags.m4a
+ff -i tagsrc.wav "${meta[@]}" -c:a pcm_s16le tags.wav
+ff -i tagsrc.wav "${meta[@]}" -c:a pcm_s16be -write_id3v2 1 tags.aiff
+rm tagsrc.wav

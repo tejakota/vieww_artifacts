@@ -141,6 +141,7 @@ impl Riff {
 #[must_use]
 pub fn twelve_bar_song(key: u8, bpm: f64, choruses: usize, riff: &Riff) -> Score {
     let mut s = Score::new("12-bar rock", bpm);
+    s.tags.set("GENRE", "Rock");
     let chords = twelve_bar(key);
     let bar = 4.0;
     // Gains balance the parts by measured level (the plucked string is

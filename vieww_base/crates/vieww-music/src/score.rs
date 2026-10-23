@@ -175,6 +175,9 @@ pub struct Score {
     pub tuning: ScoreTuning,
     /// The parts.
     pub parts: Vec<Part>,
+    /// Metadata written into rendered files besides the title (which is
+    /// always written): `GENRE`, `RAGA`, `TALA`, `COMPOSER`, anything.
+    pub tags: vieww_audio::codec::tags::Tags,
 }
 
 /// The MPE member channels: 1–15 (channel 0 is the zone's master).
@@ -189,6 +192,7 @@ impl Score {
             bpm,
             tuning: ScoreTuning::default(),
             parts: Vec::new(),
+            tags: vieww_audio::codec::tags::Tags::new(),
         }
     }
 

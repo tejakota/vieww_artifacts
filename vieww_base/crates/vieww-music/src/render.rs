@@ -23,6 +23,7 @@
 //! Rendering is offline and deterministic: the same score gives the same
 //! samples, bit for bit, on the same platform.
 
+use vieww_audio::codec::tags;
 use vieww_audio::fx::dynamics::Limiter;
 use vieww_audio::fx::reverb::Freeverb;
 use vieww_audio::mixer::{Channel, Mixer, Tap};
@@ -384,7 +385,25 @@ pub fn exact_true_peak_db(interleaved: &[f32], rate: u32) -> f64 {
 /// # Errors
 /// The encoder's error, if the buffer cannot be written.
 pub fn render_wav(score: &Score, settings: Settings) -> Result<Vec<u8>, vieww_audio::PcmError> {
-    vieww_audio::write_wav(&render(score, settings))
+    let wav = vieww_audio::write_wav(&render(score, settings))?;
+    // Tagging a WAV the encoder just wrote cannot fail; if it somehow
+    // did, the untagged file is still the right audio.
+    Ok(tags::write_wav(&wav, &file_tags(score)).unwrap_or(wav))
+}
+
+/// The tags a rendered file carries: the score's title, its own
+/// [`tags`](Score::tags), and the encoder.
+#[must_use]
+pub fn file_tags(score: &Score) -> tags::Tags {
+    let mut t = tags::Tags::new().with("TITLE", &score.title);
+    for (k, v) in score.tags.iter() {
+        t.push(k, v);
+    }
+    t.set(
+        "ENCODER",
+        concat!("vieww-music ", env!("CARGO_PKG_VERSION")),
+    );
+    t
 }
 
 /// Render `score` and encode it as a 16-bit FLAC file's bytes (lossless,
@@ -397,14 +416,15 @@ pub fn render_flac(
     settings: Settings,
 ) -> Result<Vec<u8>, vieww_audio::codec::CodecError> {
     let s = render(score, settings);
-    vieww_audio::codec::flac::encode(
+    let flac = vieww_audio::codec::flac::encode(
         &vieww_audio::codec::Decoded {
             data: s.data,
             channels: s.channels,
             rate: s.rate,
         },
         16,
-    )
+    )?;
+    tags::write_flac(&flac, &file_tags(score))
 }
 
 #[cfg(test)]
@@ -545,5 +565,30 @@ mod tests {
         assert_eq!(render(&sc, s).data, render(&sc, s).data);
         let wav = render_wav(&sc, s).unwrap();
         assert_eq!(&wav[..4], b"RIFF");
+    }
+
+    #[test]
+    fn rendered_files_carry_their_tags() {
+        use vieww_audio::codec::tags;
+        let (score, _) = crate::pieces::carnatic(15);
+        let short = Settings {
+            tail: 0.0,
+            ..Settings::default()
+        };
+        let mut brief = score.clone();
+        for p in &mut brief.parts {
+            p.events.retain(|e| e.start < 2.0);
+        }
+        let t = tags::read(&render_flac(&brief, short).unwrap());
+        assert_eq!(t.title(), Some("Mayamalavagowla in Adi tala"));
+        assert_eq!(t.get("RAGA"), Some("Mayamalavagowla"));
+        assert_eq!(t.get("MELAKARTA"), Some("15"));
+        assert_eq!(t.genre(), Some("Carnatic"));
+        assert!(t
+            .get("ENCODER")
+            .is_some_and(|e| e.starts_with("vieww-music")));
+        let w = tags::read(&render_wav(&brief, short).unwrap());
+        assert_eq!(w.title(), t.title());
+        assert_eq!(w.genre(), Some("Carnatic"));
     }
 }

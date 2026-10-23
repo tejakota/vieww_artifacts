@@ -51,7 +51,7 @@ static GLOBAL: Counting = Counting;
 
 fn main() {
     rendering_allocates_nothing();
-    println!("realtime_no_alloc: the render path, mixer, parallel voices, disk stream, polyphony, every stereo effect, NaN recovery, the sampler and struck instruments allocate nothing");
+    println!("realtime_no_alloc: the render path, mixer, parallel voices, disk stream, polyphony, every stereo effect, NaN recovery, the sampler, struck instruments and rate-matched device output allocate nothing");
 }
 
 fn rendering_allocates_nothing() {
@@ -110,6 +110,7 @@ fn rendering_allocates_nothing() {
     disk_streaming_allocates_nothing();
     voices_and_every_effect_allocate_nothing();
     sampler_and_struck_instruments_allocate_nothing();
+    rate_matched_device_output_allocates_nothing();
 }
 
 fn mixer_allocates_nothing() {
@@ -378,4 +379,40 @@ fn sampler_and_struck_instruments_allocate_nothing() {
         "a sampler note event or a strike allocated"
     );
     assert!(out.iter().any(|v| v.abs() > 1e-4), "and it produced sound");
+}
+
+/// The ALSA stream's per-block work when the device runs at another rate:
+/// sinc conversion into a reserved buffer, then encoding to the device's
+/// format.
+fn rate_matched_device_output_allocates_nothing() {
+    use vieww_audio::device::{encode_samples, PcmFormat};
+    use vieww_audio::resample::{Quality, Resampler};
+    use vieww_audio::wav::Dither;
+
+    let (frames, ch) = (256usize, 2usize);
+    let block: Vec<f32> = (0..frames * ch)
+        .map(|i| (i as f32 * 0.01).sin() * 0.5)
+        .collect();
+    for (from, to) in [(48_000, 44_100), (44_100, 48_000), (48_000, 96_000)] {
+        let mut conv = Resampler::new(from, to, ch, Quality::Sinc(16));
+        let mut out = Vec::with_capacity(frames * ch * (to / from + 2) as usize + 64);
+        let mut bytes = vec![0u8; out.capacity() * 4];
+        let mut dither = Dither::new(9);
+        for _ in 0..64 {
+            out.clear();
+            conv.process(&block, &mut out);
+        }
+        ARMED.store(true, Ordering::SeqCst);
+        for _ in 0..1_000 {
+            out.clear();
+            conv.process(&block, &mut out);
+            for fmt in PcmFormat::PREFERENCE {
+                let n = out.len() * fmt.bytes();
+                encode_samples(&out, fmt, &mut bytes[..n], &mut dither);
+            }
+        }
+        ARMED.store(false, Ordering::SeqCst);
+        let n = ALLOCS.swap(0, Ordering::SeqCst);
+        assert_eq!(n, 0, "{from}→{to}: {n} allocations converting and encoding");
+    }
 }

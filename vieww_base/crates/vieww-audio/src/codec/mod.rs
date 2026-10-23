@@ -14,6 +14,10 @@
 //! tested against files made by an independent encoder (ffmpeg with LAME,
 //! libvorbis, its FLAC and AAC encoders) and against that tool's own decode
 //! of the same file — see `tests/fixtures/make.sh`.
+//!
+//! [`tags`] reads title, artist and the rest from every one of these
+//! containers (ID3, Vorbis comments, RIFF INFO, AIFF text, MP4 atoms) and
+//! writes them to WAV, FLAC and AIFF.
 
 pub mod aac;
 mod aac_tables;
@@ -25,6 +29,7 @@ pub mod mp3;
 mod mp3_tables;
 pub mod mp4;
 pub mod ogg;
+pub mod tags;
 pub mod vorbis;
 
 /// A decoded stream.

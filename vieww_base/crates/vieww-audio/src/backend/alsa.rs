@@ -1,9 +1,14 @@
 //! ALSA through the kernel directly — the backend that needs no server and
 //! no library at all (see [`device`](crate::device) for the ioctls).
 //!
-//! A stream thread renders a block, converts it to `S16_LE` with the SIMD
-//! kernels and writes it; the kernel's blocking write paces the thread.
-//! Capture is the mirror image. Hardware access is exclusive: on a desktop
+//! A stream thread renders a block, encodes it to the best sample format
+//! the device takes (32-bit float down to dithered 16-bit, see
+//! [`PcmFormat`](crate::device::PcmFormat)) and writes it; the kernel's
+//! blocking write paces the thread. When the device cannot run at the
+//! requested rate it is opened at the nearest standard one and the stream
+//! converts with the 16-tap sinc [`Resampler`](crate::resample::Resampler):
+//! the render closure always sees the rate it asked for. Capture is the
+//! mirror image. Hardware access is exclusive: on a desktop
 //! with a sound server running, the server holds the device and this
 //! backend reports it busy — which is why it comes last in the order.
 
@@ -133,6 +138,7 @@ impl Backend for Alsa {
         let (c2, s2) = (counters.clone(), stop.clone());
         let frames = config.block.max(64) as usize;
         let rate = config.rate;
+        let device_rate = out.rate();
         let thread = std::thread::Builder::new()
             .name("vieww-alsa".into())
             .spawn(move || {
@@ -142,11 +148,17 @@ impl Backend for Alsa {
                 ));
                 let n = frames * usize::from(ch);
                 let mut f = vec![0.0f32; n];
-                let mut q = vec![0i16; n];
-                // The device takes 16-bit samples: dither the reduction
-                // (`wav::Dither`), or quiet passages round into distortion.
-                let mut dither = crate::wav::Dither::new(0x5EED_A15A);
-                let lsb = crate::wav::SampleFormat::I16.lsb().unwrap_or(0.0);
+                // Rate matching, when the device runs at another rate.
+                let mut conv = (device_rate != rate).then(|| {
+                    crate::resample::Resampler::new(
+                        rate,
+                        device_rate,
+                        usize::from(ch),
+                        crate::resample::Quality::Sinc(16),
+                    )
+                });
+                let mut converted =
+                    Vec::with_capacity(n * (device_rate / rate.max(1) + 2) as usize + 64);
                 let mut done = 0u64;
                 while !s2.load(Ordering::Acquire) {
                     f.fill(0.0);
@@ -160,11 +172,15 @@ impl Backend for Alsa {
                             time: done as f64 / f64::from(rate),
                         },
                     );
-                    for v in &mut f {
-                        *v += dither.tpdf() * lsb;
-                    }
-                    crate::simd::f32_to_i16(&f, &mut q);
-                    if out.write(&q).is_err() {
+                    let written = match &mut conv {
+                        Some(c) => {
+                            converted.clear();
+                            c.process(&f, &mut converted);
+                            out.write_f32(&converted)
+                        }
+                        None => out.write_f32(&f),
+                    };
+                    if written.is_err() {
                         c2.ended.store(true, Ordering::Release);
                         return;
                     }
@@ -174,7 +190,7 @@ impl Backend for Alsa {
                     // DAC, every 64 blocks.
                     if c2.callbacks.load(Ordering::Relaxed) % 64 == 1 {
                         if let Some(d) = out.delay() {
-                            c2.set_latency_frames(d, rate);
+                            c2.set_latency_frames(d, device_rate);
                         }
                     }
                 }
@@ -218,6 +234,7 @@ impl Backend for Alsa {
         let (c2, s2) = (counters.clone(), stop.clone());
         let frames = config.block.max(64) as usize;
         let rate = config.rate;
+        let device_rate = input.rate();
         let thread = std::thread::Builder::new()
             .name("vieww-alsa-in".into())
             .spawn(move || {
@@ -225,22 +242,51 @@ impl Backend for Alsa {
                 let _rt = crate::rt::promote_audio_thread(std::time::Duration::from_secs_f64(
                     frames as f64 / f64::from(rate.max(1)),
                 ));
-                let n = frames * usize::from(ch);
-                let mut q = vec![0i16; n];
+                let ch = usize::from(ch);
+                let n = frames * ch;
                 let mut f = vec![0.0f32; n];
+                // Device-rate blocks in, converted, delivered in blocks of
+                // exactly `frames` at the requested rate.
+                let mut conv = (device_rate != rate).then(|| {
+                    crate::resample::Resampler::new(
+                        device_rate,
+                        rate,
+                        ch,
+                        crate::resample::Quality::Sinc(16),
+                    )
+                });
+                let dev_n = (frames * device_rate as usize / rate.max(1) as usize).max(1) * ch;
+                let mut raw = vec![0.0f32; dev_n];
+                let mut pending: Vec<f32> = Vec::with_capacity(4 * n + dev_n * 2);
                 let mut done = 0u64;
                 while !s2.load(Ordering::Acquire) {
-                    if input.read(&mut q).is_err() {
-                        c2.ended.store(true, Ordering::Release);
-                        return;
-                    }
-                    crate::simd::i16_to_f32(&q, &mut f);
+                    let block: &[f32] = match &mut conv {
+                        None => {
+                            if input.read_f32(&mut f).is_err() {
+                                c2.ended.store(true, Ordering::Release);
+                                return;
+                            }
+                            &f
+                        }
+                        Some(c) => {
+                            while pending.len() < n {
+                                if input.read_f32(&mut raw).is_err() {
+                                    c2.ended.store(true, Ordering::Release);
+                                    return;
+                                }
+                                c.process(&raw, &mut pending);
+                            }
+                            f.copy_from_slice(&pending[..n]);
+                            pending.drain(..n);
+                            &f
+                        }
+                    };
                     #[expect(clippy::cast_precision_loss, reason = "stream time")]
                     capture(
-                        &f,
+                        block,
                         &BlockInfo {
                             frames,
-                            channels: usize::from(ch),
+                            channels: ch,
                             rate,
                             time: done as f64 / f64::from(rate),
                         },

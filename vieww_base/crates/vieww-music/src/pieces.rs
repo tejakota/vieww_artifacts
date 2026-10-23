@@ -61,6 +61,12 @@ pub fn carnatic(seed: u64) -> (Score, CarnaticPlan) {
     let tala = Tala::adi();
     let tonic = 61.0f32; // C#4
     let mut score = Score::new("Mayamalavagowla in Adi tala", 72.0);
+    score.tags.set("GENRE", "Carnatic");
+    score.tags.set("RAGA", &raga.name);
+    score
+        .tags
+        .set("MELAKARTA", &raga.melakarta.number().to_string());
+    score.tags.set("TALA", &tala.name());
     score.tuning = ScoreTuning::Scale(chromatic_just(61, 277.18, &JUST_CHROMATIC));
     let cycle = f64::from(tala.aksharas());
 
@@ -221,6 +227,7 @@ pub fn chorale(just: bool) -> Score {
         },
         66.0,
     );
+    s.tags.set("GENRE", "Classical");
     if just {
         s.tuning = ScoreTuning::Scale(chromatic_just(62, 293.66, &JUST_CHROMATIC));
     }
