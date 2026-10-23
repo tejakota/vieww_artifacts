@@ -90,13 +90,7 @@ impl Bands {
 /// raster, the GPU's readback (whose non-band rows are the renderer's
 /// retained previous frame and are simply not used).
 #[must_use]
-pub(crate) fn merge(
-    cpu: &[u8],
-    gpu: &[u8],
-    bands: &Bands,
-    width: u32,
-    height: u32,
-) -> Vec<u8> {
+pub(crate) fn merge(cpu: &[u8], gpu: &[u8], bands: &Bands, width: u32, height: u32) -> Vec<u8> {
     let row = width as usize * 4;
     debug_assert_eq!(cpu.len(), row * height as usize, "the CPU frame is whole");
     debug_assert_eq!(gpu.len(), row * height as usize, "the GPU frame is whole");
