@@ -116,6 +116,10 @@ pub struct Stats {
     pub delivered: AtomicU64,
     /// Blocks the render thread produced.
     pub rendered_blocks: AtomicU64,
+    /// The render thread could not be started: every pull will be
+    /// silence. Set only by [`Stream::start`]; [`Stream::try_start`]
+    /// returns the error instead.
+    pub spawn_failed: AtomicBool,
 }
 
 /// A render thread feeding a ring, and the device-side reader.
@@ -133,12 +137,44 @@ impl Stream {
     /// blocks of `block_frames × channels`, keeping up to `buffer_frames`
     /// ahead of the device. `render` runs on its own thread and is handed a
     /// preallocated block — it should not allocate.
-    pub fn start<F>(
+    ///
+    /// A failure to start the thread is recorded in
+    /// [`Stats::spawn_failed`] rather than lost; prefer
+    /// [`try_start`](Self::try_start), which returns it.
+    pub fn start<F>(channels: usize, block_frames: usize, buffer_frames: usize, render: F) -> Self
+    where
+        F: FnMut(&mut [f32]) + Send + 'static,
+    {
+        match Self::try_start(channels, block_frames, buffer_frames, render) {
+            Ok(s) => s,
+            Err(_) => {
+                let ch = channels.max(1);
+                let (_, consumer) = ring(buffer_frames.max(block_frames) * ch);
+                let stats = Arc::new(Stats::default());
+                stats.spawn_failed.store(true, Ordering::Release);
+                Self {
+                    consumer,
+                    stats,
+                    stop: Arc::new(AtomicBool::new(true)),
+                    thread: None,
+                    channels: ch,
+                }
+            }
+        }
+    }
+
+    /// [`start`](Self::start), returning the error when the operating
+    /// system refuses the render thread instead of a stream that would
+    /// only ever play silence.
+    ///
+    /// # Errors
+    /// The thread could not be spawned.
+    pub fn try_start<F>(
         channels: usize,
         block_frames: usize,
         buffer_frames: usize,
         mut render: F,
-    ) -> Self
+    ) -> std::io::Result<Self>
     where
         F: FnMut(&mut [f32]) + Send + 'static,
     {
@@ -171,15 +207,14 @@ impl Stream {
                         std::thread::sleep(Duration::from_micros(200));
                     }
                 }
-            })
-            .ok();
-        Self {
+            })?;
+        Ok(Self {
             consumer,
             stats,
             stop,
-            thread,
+            thread: Some(thread),
             channels: ch,
-        }
+        })
     }
 
     /// The device side: fill `out` (interleaved). Never blocks: missing

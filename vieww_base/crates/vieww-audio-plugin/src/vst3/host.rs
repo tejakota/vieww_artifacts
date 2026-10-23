@@ -1471,6 +1471,7 @@ impl Instance<'_> {
             }
         }
         let _ = null::<u8>();
+        crate::sanitize_outputs(&mut outs);
         outs
     }
 

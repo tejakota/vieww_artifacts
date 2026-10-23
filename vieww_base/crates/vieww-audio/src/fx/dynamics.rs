@@ -244,6 +244,18 @@ impl Processor for Dynamics {
 }
 
 impl super::Stereo for Dynamics {
+    fn reset(&mut self) {
+        self.rms = 0.0;
+        self.gr_db = 0.0;
+        self.last_gr = 0.0;
+        self.look_l.clear();
+        self.look_r.clear();
+        if let Some((a, b)) = &mut self.sc_hp {
+            a.reset();
+            b.reset();
+        }
+    }
+
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         self.process_stereo_keyed(l, r, None)
     }
@@ -443,6 +455,29 @@ impl Processor for Limiter {
 }
 
 impl super::Stereo for Limiter {
+    fn reset(&mut self) {
+        for a in &mut self.audio {
+            *a = (0.0, 0.0);
+        }
+        for r in self.req.iter_mut().chain(self.mins.iter_mut()) {
+            *r = 1.0;
+        }
+        #[expect(clippy::cast_precision_loss, reason = "short windows")]
+        let sum = self.len as f64;
+        self.sum = sum;
+        self.env = 1.0;
+        self.gain = 1.0;
+        if let Some(tp) = &mut self.tp {
+            for d in &mut tp.det {
+                d.reset();
+            }
+            for h in &mut tp.hold {
+                *h = (0.0, 0.0);
+            }
+            tp.prev = 0.0;
+        }
+    }
+
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         self.process_frame(l, r)
     }

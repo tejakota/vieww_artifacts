@@ -201,6 +201,11 @@ pub struct OnePole {
 }
 
 impl OnePole {
+    /// Clear state.
+    pub const fn clear(&mut self) {
+        self.z = 0.0;
+    }
+
     /// A smoother with corner `cutoff` Hz.
     #[must_use]
     pub fn new(cutoff: f32, rate: f32) -> Self {
@@ -309,6 +314,11 @@ pub struct DelayLine {
 }
 
 impl DelayLine {
+    /// Clear the line to silence, keeping its length.
+    pub fn clear(&mut self) {
+        self.buf.fill(0.0);
+    }
+
     /// A line holding up to `max` samples.
     #[must_use]
     pub fn new(max: usize) -> Self {
@@ -375,6 +385,12 @@ pub struct Comb {
 }
 
 impl Comb {
+    /// Clear state.
+    pub fn clear(&mut self) {
+        self.line.clear();
+        self.store = 0.0;
+    }
+
     /// A comb of `len` samples.
     #[must_use]
     pub fn new(len: usize, feedback: f32, damp: f32) -> Self {
@@ -407,6 +423,11 @@ pub struct SchroederAllpass {
 }
 
 impl SchroederAllpass {
+    /// Clear state.
+    pub fn clear(&mut self) {
+        self.line.clear();
+    }
+
     /// A diffuser.
     #[must_use]
     pub fn new(len: usize, gain: f32) -> Self {

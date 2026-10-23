@@ -152,6 +152,17 @@ pub struct Convolver {
 }
 
 impl Convolver {
+    /// Clear every buffer to silence, keeping the partitioned IR.
+    pub fn clear(&mut self) {
+        for p in &mut self.fdl {
+            p.fill(crate::fft::Complex::ZERO);
+        }
+        self.prev.fill(0.0);
+        self.input.fill(0.0);
+        self.output.fill(0.0);
+        self.acc.fill(crate::fft::Complex::ZERO);
+    }
+
     /// A convolver for kernel `h` processing in blocks of `block` samples
     /// (a power of two; this is also its latency).
     ///

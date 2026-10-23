@@ -12,7 +12,11 @@ fn probe_stereo_downmix_equal_channels() {
     m.add_buffer(&buf, Duration::ZERO, 1.0).unwrap();
     let out = m.render();
     eprintln!("stereo [0.25,0.25] -> mono {:?}", &out.data[..3]);
-    assert!((out.data[10] - 0.25).abs() < 1e-6, "expected 0.25, got {}", out.data[10]);
+    assert!(
+        (out.data[10] - 0.25).abs() < 1e-6,
+        "expected 0.25, got {}",
+        out.data[10]
+    );
 }
 
 /// P2: a mix must not depend on the order sources were added.
@@ -37,7 +41,10 @@ fn probe_mix_is_order_independent() {
 #[test]
 fn probe_zero_rate_duration_does_not_panic() {
     let r = std::panic::catch_unwind(|| Samples::mono(vec![0.0; 10], 0).duration());
-    eprintln!("Samples::mono(.., rate 0).duration() panicked: {}", r.is_err());
+    eprintln!(
+        "Samples::mono(.., rate 0).duration() panicked: {}",
+        r.is_err()
+    );
     assert!(r.is_ok(), "duration() panics on rate 0");
 }
 
@@ -47,7 +54,8 @@ fn probe_nan_is_not_propagated_by_mixer() {
     let mut data = vec![0.1; 100];
     data[50] = f32::NAN;
     let mut m = Mixer::new(8_000);
-    m.add_buffer(&Samples::mono(data, 8_000), Duration::ZERO, 1.0).unwrap();
+    m.add_buffer(&Samples::mono(data, 8_000), Duration::ZERO, 1.0)
+        .unwrap();
     let out = m.render();
     let nans = out.data.iter().filter(|x| !x.is_finite()).count();
     eprintln!("non-finite samples in mixer output: {nans}");
@@ -57,13 +65,13 @@ fn probe_nan_is_not_propagated_by_mixer() {
 /// P5: one NaN through a stateful insert in the DAW mixer must not poison
 /// every later block (a reverb's feedback loop holds whatever it is given).
 #[test]
-#[ignore = "open finding: a NaN in a stateful insert poisons the channel until reset"]
 fn probe_advanced_mixer_recovers_after_one_nan() {
     use vieww_audio::fx::reverb::Freeverb;
     use vieww_audio::mixer::Mixer as Daw;
     let mut m = Daw::new(48_000);
     let t = m.add_track("a");
-    m.add_insert(t, Box::new(Freeverb::new(0.8, 0.3, 48_000.0)), None).unwrap();
+    m.add_insert(t, Box::new(Freeverb::new(0.8, 0.3, 48_000.0)), None)
+        .unwrap();
     let mut input = vec![0.1f32; 256 * 2];
     input[10] = f32::NAN;
     let mut out = vec![0.0f32; 256 * 2];
@@ -73,8 +81,15 @@ fn probe_advanced_mixer_recovers_after_one_nan() {
         m.process(&[&clean], &mut out); // ~1 s of clean input
     }
     let bad = out.iter().filter(|x| !x.is_finite()).count();
-    eprintln!("non-finite samples after 1 s of clean input following one NaN: {bad}/{}", out.len());
+    eprintln!(
+        "non-finite samples after 1 s of clean input following one NaN: {bad}/{}",
+        out.len()
+    );
     assert_eq!(bad, 0, "one NaN poisoned the mixer permanently");
+    assert!(
+        out.iter().any(|x| x.abs() > 1e-4),
+        "the channel must still sound"
+    );
 }
 
 /// P6: does the DAW mixer master bus clip or limit over-range sums? (record only)
@@ -86,7 +101,9 @@ fn probe_advanced_mixer_headroom() {
     m.add_track("b");
     let x = vec![0.8f32; 128];
     let mut out = vec![0.0f32; 128];
-    for _ in 0..50 { m.process(&[&x, &x], &mut out); }
+    for _ in 0..50 {
+        m.process(&[&x, &x], &mut out);
+    }
     eprintln!("two tracks at 0.8 -> master sample {}", out[64]);
 }
 
@@ -103,21 +120,31 @@ fn probe_cpu_headroom() {
     let rate = 48_000.0;
     for nv in [8usize, 32, 64] {
         let mut p = Poly::new((0..nv).map(|_| SubtractiveVoice::new(rate)).collect(), rate);
-        for k in 0..nv { p.note_on(0, 36 + (k as u8 % 48), 0.8); }
+        for k in 0..nv {
+            p.note_on(0, 36 + (k as u8 % 48), 0.8);
+        }
         let mut m = Daw::new(48_000);
         let t = m.add_track("pad");
-        m.add_insert(t, Box::new(Freeverb::new(0.8, 0.3, rate)), None).unwrap();
+        m.add_insert(t, Box::new(Freeverb::new(0.8, 0.3, rate)), None)
+            .unwrap();
         let (mut inb, mut out) = (vec![0.0f32; 256], vec![0.0f32; 256]);
         let blocks = 48_000 * 10 / 128;
         let (mut worst, t0) = (0f64, Instant::now());
         for _ in 0..blocks {
             let b = Instant::now();
-            for f in 0..128 { let (l, r) = p.next_stereo(); inb[2*f] = l; inb[2*f+1] = r; }
+            for f in 0..128 {
+                let (l, r) = p.next_stereo();
+                inb[2 * f] = l;
+                inb[2 * f + 1] = r;
+            }
             m.process(&[&inb], &mut out);
             worst = worst.max(b.elapsed().as_secs_f64());
         }
         let total = t0.elapsed().as_secs_f64();
-        eprintln!("{nv:>2} voices + reverb: {:.1}x realtime, worst block {:.3} ms of 2.667 ms budget",
-            10.0 / total, worst * 1e3);
+        eprintln!(
+            "{nv:>2} voices + reverb: {:.1}x realtime, worst block {:.3} ms of 2.667 ms budget",
+            10.0 / total,
+            worst * 1e3
+        );
     }
 }

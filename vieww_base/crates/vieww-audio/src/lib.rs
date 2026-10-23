@@ -193,6 +193,31 @@ impl Samples {
         }
     }
 
+    /// A mono buffer, validated: refuses a zero rate and non-finite
+    /// samples instead of carrying them into a mix.
+    ///
+    /// # Errors
+    /// [`SamplesError::ZeroRate`] or [`SamplesError::NonFinite`] (with the
+    /// index of the first bad sample).
+    pub fn try_mono(data: Vec<f32>, rate: u32) -> Result<Self, SamplesError> {
+        validate(&data, rate)?;
+        Ok(Self::mono(data, rate))
+    }
+
+    /// A stereo buffer, validated: as [`try_mono`](Self::try_mono), and
+    /// refuses half a frame where [`stereo`](Self::stereo) panics.
+    ///
+    /// # Errors
+    /// [`SamplesError::HalfFrame`], [`SamplesError::ZeroRate`] or
+    /// [`SamplesError::NonFinite`].
+    pub fn try_stereo(data: Vec<f32>, rate: u32) -> Result<Self, SamplesError> {
+        if !data.len().is_multiple_of(2) {
+            return Err(SamplesError::HalfFrame);
+        }
+        validate(&data, rate)?;
+        Ok(Self::stereo(data, rate))
+    }
+
     /// The number of frames (a frame is one sample per channel).
     #[must_use]
     pub fn frames(&self) -> usize {
@@ -499,6 +524,39 @@ struct Source {
     gain: f32,
 }
 
+/// Why [`Samples::try_mono`] or [`Samples::try_stereo`] refused a buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SamplesError {
+    /// A rate of zero: no duration, and no frame can be placed in time.
+    ZeroRate,
+    /// A stereo buffer with an odd number of samples.
+    HalfFrame,
+    /// A NaN or infinite sample, at this index.
+    NonFinite(usize),
+}
+
+impl std::fmt::Display for SamplesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ZeroRate => f.write_str("a sample rate of zero"),
+            Self::HalfFrame => f.write_str("a stereo buffer ending in half a frame"),
+            Self::NonFinite(i) => write!(f, "a non-finite sample at index {i}"),
+        }
+    }
+}
+
+impl std::error::Error for SamplesError {}
+
+fn validate(data: &[f32], rate: u32) -> Result<(), SamplesError> {
+    if rate == 0 {
+        return Err(SamplesError::ZeroRate);
+    }
+    match data.iter().position(|v| !v.is_finite()) {
+        Some(i) => Err(SamplesError::NonFinite(i)),
+        None => Ok(()),
+    }
+}
+
 /// What a source contributes.
 #[derive(Debug, Clone)]
 enum SourceKind {
@@ -650,7 +708,11 @@ impl Mixer {
         // added. A non-finite sample (NaN from a source) becomes silence
         // rather than reaching a device.
         for v in &mut data {
-            *v = if v.is_finite() { v.clamp(-1.0, 1.0) } else { 0.0 };
+            *v = if v.is_finite() {
+                v.clamp(-1.0, 1.0)
+            } else {
+                0.0
+            };
         }
         Samples::mono(data, self.rate)
     }
@@ -852,6 +914,50 @@ mod tests {
         let mixed = mixer.render();
         assert_eq!(mixed.channels, 1);
         assert!(mixed.peak() < 0.001, "the mean of +0.5 and -0.5 is silence");
+    }
+
+    #[test]
+    fn validated_constructors_refuse_bad_buffers() {
+        assert_eq!(
+            Samples::try_mono(vec![0.1; 4], 0),
+            Err(SamplesError::ZeroRate)
+        );
+        assert_eq!(
+            Samples::try_mono(vec![0.1, f32::NAN, 0.2], 8_000),
+            Err(SamplesError::NonFinite(1))
+        );
+        assert_eq!(
+            Samples::try_stereo(vec![0.1; 3], 8_000),
+            Err(SamplesError::HalfFrame)
+        );
+        assert!(Samples::try_stereo(vec![0.1; 4], 8_000).is_ok());
+        assert_eq!(Samples::mono(vec![0.0; 10], 0).duration(), Duration::ZERO);
+    }
+
+    #[test]
+    fn a_mixer_downmixes_equal_stereo_channels_at_their_level() {
+        // The opposite-polarity test above cannot see a doubled mean;
+        // equal channels can.
+        let buffer = Samples::stereo(vec![0.25; 200], 8_000);
+        let mut mixer = Mixer::new(8_000);
+        mixer.add_buffer(&buffer, Duration::ZERO, 1.0).unwrap();
+        let mixed = mixer.render();
+        assert!((mixed.peak() - 0.25).abs() < 1e-6, "got {}", mixed.peak());
+    }
+
+    #[test]
+    fn a_mix_does_not_depend_on_source_order() {
+        let pos = Samples::mono(vec![0.8; 100], 8_000);
+        let neg = Samples::mono(vec![-0.8; 100], 8_000);
+        let render = |order: [&Samples; 3]| {
+            let mut m = Mixer::new(8_000);
+            for s in order {
+                m.add_buffer(s, Duration::ZERO, 1.0).unwrap();
+            }
+            m.render().data[50]
+        };
+        assert_eq!(render([&pos, &pos, &neg]), render([&neg, &pos, &pos]));
+        assert!((render([&pos, &pos, &neg]) - 0.8).abs() < 1e-6);
     }
 
     #[test]

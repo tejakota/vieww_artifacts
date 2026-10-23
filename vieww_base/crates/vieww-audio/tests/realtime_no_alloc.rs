@@ -51,7 +51,7 @@ static GLOBAL: Counting = Counting;
 
 fn main() {
     rendering_allocates_nothing();
-    println!("realtime_no_alloc: the render path, mixer, parallel voices and disk stream allocate nothing");
+    println!("realtime_no_alloc: the render path, mixer, parallel voices, disk stream, polyphony, every stereo effect and NaN recovery allocate nothing");
 }
 
 fn rendering_allocates_nothing() {
@@ -108,6 +108,7 @@ fn rendering_allocates_nothing() {
     mixer_allocates_nothing();
     parallel_voices_allocate_nothing();
     disk_streaming_allocates_nothing();
+    voices_and_every_effect_allocate_nothing();
 }
 
 fn mixer_allocates_nothing() {
@@ -213,4 +214,80 @@ fn disk_streaming_allocates_nothing() {
     std::fs::remove_file(&path).ok();
     assert_eq!(ALLOCS.load(Ordering::SeqCst), 0, "disk streaming allocated");
     assert!(got > 0);
+}
+
+/// Single-threaded polyphony (`Poly::render_into`), physical models, every
+/// stateful stereo effect, and the mixer's NaN-recovery path — an insert
+/// faulting and being reset mid-block must not allocate either.
+fn voices_and_every_effect_allocate_nothing() {
+    use vieww_audio::fx::delay::{DelayTime, StereoDelay};
+    use vieww_audio::fx::dynamics::{Dynamics, Limiter};
+    use vieww_audio::fx::modfx::Chorus;
+    use vieww_audio::fx::reverb::{ConvolutionReverb, Fdn, Freeverb};
+    use vieww_audio::fx::Stereo;
+    use vieww_audio::mixer::Mixer;
+    use vieww_audio::synth::physical::KarplusStrong;
+    use vieww_audio::synth::voice::{Poly, SubtractiveVoice};
+
+    let rate = 48_000.0;
+    let mut poly = Poly::new((0..16).map(|_| SubtractiveVoice::new(rate)).collect(), rate);
+    let mut strings = Poly::new(
+        (0..6u64).map(|i| KarplusStrong::new(rate, i + 1)).collect(),
+        rate,
+    );
+    for k in [48u8, 52, 55, 60] {
+        poly.note_on(0, k, 0.8);
+        strings.note_on(0, k, 0.8);
+    }
+    let ir: Vec<f32> = (0..4_096).map(|i| 0.4 * 0.999f32.powi(i)).collect();
+    let mut fx: Vec<Box<dyn Stereo + Send>> = vec![
+        Box::new(Freeverb::new(0.8, 0.3, rate)),
+        Box::new(Fdn::new(2.0, 6_000.0, 0.01, rate)),
+        Box::new(ConvolutionReverb::new(&ir, &ir, 256)),
+        Box::new(StereoDelay::new(DelayTime::Ms(120.0), 0.6, 1.0, rate)),
+        Box::new(Chorus::new(3, 0.5, rate)),
+        Box::new(Dynamics::compressor(-18.0, 4.0, 0.005, 0.1, rate)),
+        Box::new(Limiter::true_peak(-1.0, 0.005, 0.1, rate)),
+    ];
+    let mut m = Mixer::new(48_000);
+    let t = m.add_track("glitchy");
+    m.add_insert(t, Box::new(Freeverb::new(0.8, 0.3, rate)), None)
+        .unwrap();
+
+    let mut buf = vec![0.0f32; 2 * 256];
+    let mut out = vec![0.0f32; 2 * 256];
+    let mut run = |poly: &mut Poly<SubtractiveVoice>,
+                   strings: &mut Poly<KarplusStrong>,
+                   fx: &mut [Box<dyn Stereo + Send>],
+                   m: &mut Mixer,
+                   poison: bool| {
+        poly.render_into(&mut buf);
+        strings.render_into(&mut out);
+        for (b, o) in buf.iter_mut().zip(&out) {
+            *b += *o;
+        }
+        for e in fx.iter_mut() {
+            e.run_stereo(&mut buf);
+            if poison {
+                e.process_stereo(f32::NAN, f32::NAN);
+                e.reset();
+            }
+        }
+        m.process(&[&buf], &mut out);
+    };
+    run(&mut poly, &mut strings, &mut fx, &mut m, false); // warm-up
+
+    ARMED.store(true, Ordering::SeqCst);
+    for i in 0..190 {
+        run(&mut poly, &mut strings, &mut fx, &mut m, i % 50 == 7);
+    }
+    ARMED.store(false, Ordering::SeqCst);
+
+    assert_eq!(
+        ALLOCS.load(Ordering::SeqCst),
+        0,
+        "polyphony, an effect or a reset allocated"
+    );
+    assert!(out.iter().all(|v| v.is_finite()));
+    assert!(out.iter().any(|v| v.abs() > 1e-4), "and it produced sound");
 }

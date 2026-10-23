@@ -940,3 +940,29 @@ mod tests {
         assert_eq!(tiny[0], 0);
     }
 }
+
+/// Zero every non-finite sample a hosted plugin returned.
+///
+/// A plugin is someone else's code: a NaN or infinity from one would
+/// otherwise reach every effect, bus and device downstream. Returns how
+/// many samples were replaced, so a host can flag the plugin.
+pub fn sanitize_outputs(outs: &mut [Vec<f32>]) -> usize {
+    let mut n = 0;
+    for s in outs.iter_mut().flatten() {
+        if !s.is_finite() {
+            *s = 0.0;
+            n += 1;
+        }
+    }
+    n
+}
+
+#[cfg(test)]
+mod sanitize_tests {
+    #[test]
+    fn non_finite_plugin_output_becomes_silence() {
+        let mut outs = vec![vec![0.5, f32::NAN], vec![f32::INFINITY, -0.25]];
+        assert_eq!(super::sanitize_outputs(&mut outs), 2);
+        assert_eq!(outs, vec![vec![0.5, 0.0], vec![0.0, -0.25]]);
+    }
+}

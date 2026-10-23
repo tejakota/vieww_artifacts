@@ -453,7 +453,19 @@ impl<V: Voice> Poly<V> {
         (l * norm, r * norm)
     }
 
-    /// Render `frames` stereo frames, interleaved.
+    /// Render into `out`, interleaved stereo (`out.len() / 2` frames).
+    /// Allocates nothing: the realtime spelling of [`render`](Self::render).
+    pub fn render_into(&mut self, out: &mut [f32]) {
+        for f in out.as_chunks_mut::<2>().0 {
+            let (l, r) = self.next_stereo();
+            f[0] = l;
+            f[1] = r;
+        }
+    }
+
+    /// Render `frames` stereo frames, interleaved, into a new buffer.
+    /// Allocates: for offline use. On an audio thread use
+    /// [`render_into`](Self::render_into).
     pub fn render(&mut self, frames: usize) -> Vec<f32> {
         let mut out = Vec::with_capacity(frames * 2);
         for _ in 0..frames {

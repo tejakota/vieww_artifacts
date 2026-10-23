@@ -109,6 +109,15 @@ impl StereoDelay {
 }
 
 impl Stereo for StereoDelay {
+    fn reset(&mut self) {
+        for l in &mut self.lines {
+            l.clear();
+        }
+        for f in self.hp.iter_mut().chain(self.lp.iter_mut()) {
+            f.reset();
+        }
+    }
+
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         let target = self.target_samples();
         self.current = target + (self.current - target) * self.glide;

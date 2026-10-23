@@ -80,6 +80,15 @@ impl Freeverb {
 }
 
 impl Stereo for Freeverb {
+    fn reset(&mut self) {
+        for c in self.combs.iter_mut().flatten() {
+            c.clear();
+        }
+        for a in self.alls.iter_mut().flatten() {
+            a.clear();
+        }
+    }
+
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         let input = (l + r) * 0.015;
         let mut out = [0.0f32; 2];
@@ -198,6 +207,16 @@ impl Fdn {
 }
 
 impl Stereo for Fdn {
+    fn reset(&mut self) {
+        for l in &mut self.lines {
+            l.clear();
+        }
+        for d in &mut self.damping {
+            d.clear();
+        }
+        self.pre.clear();
+    }
+
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         let mono = (l + r) * 0.5;
         self.pre.push(mono);
@@ -271,6 +290,13 @@ impl ConvolutionReverb {
 }
 
 impl Stereo for ConvolutionReverb {
+    fn reset(&mut self) {
+        self.left.clear();
+        self.right.clear();
+        self.dry_l.clear();
+        self.dry_r.clear();
+    }
+
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         let wl = self.left.process(l);
         let wr = self.right.process(r);

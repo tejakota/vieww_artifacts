@@ -42,6 +42,13 @@ pub trait Stereo {
         0
     }
 
+    /// Return to silence: clear every delay line, filter and envelope so
+    /// the next frame is processed as if the effect were new. Parameters
+    /// are kept. The mixer calls this when an insert's output stops being
+    /// finite, because a NaN in a feedback loop circulates forever.
+    /// Stateless effects need not override it.
+    fn reset(&mut self) {}
+
     /// Process an interleaved stereo buffer in place.
     fn run_stereo(&mut self, buf: &mut [f32]) {
         for f in buf.as_chunks_mut::<2>().0 {

@@ -802,6 +802,7 @@ impl Instance<'_> {
             }
         });
         self.steady += i64::from(frames);
+        crate::sanitize_outputs(&mut outs);
         (outs, status)
     }
 

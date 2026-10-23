@@ -78,6 +78,10 @@ impl Chorus {
 }
 
 impl Stereo for Chorus {
+    fn reset(&mut self) {
+        self.line.clear();
+    }
+
     fn process_stereo(&mut self, l: f32, r: f32) -> (f32, f32) {
         let mono = (l + r) * 0.5;
         self.line.push(mono);

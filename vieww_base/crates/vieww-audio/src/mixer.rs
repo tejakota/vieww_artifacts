@@ -211,6 +211,9 @@ struct Slot {
     /// replaced — served a channel's second keyed insert the first one's
     /// key, whatever its own said.
     key_buf: Vec<f32>,
+    /// How many times this insert produced a non-finite sample and was
+    /// reset (see `run_inserts`).
+    faults: u64,
 }
 
 impl std::fmt::Debug for Slot {
@@ -578,6 +581,7 @@ impl Mixer {
             bypass: false,
             bypass_delay: Comp::default(),
             key_buf: vec![0.0; MAX_BLOCK * 2],
+            faults: 0,
         });
         let idx = n.inserts.len() - 1;
         self.rebuild().map(|()| idx).inspect_err(|_| {
@@ -628,6 +632,21 @@ impl Mixer {
             .get_mut(slot)
             .ok_or(MixerError::NoSuch("insert"))?
             .fx)
+    }
+
+    /// How many times an insert produced a non-finite sample and was
+    /// reset to silence. Zero in a healthy mix; anything else names an
+    /// effect (often a hosted plugin) that misbehaves.
+    ///
+    /// # Errors
+    /// No such channel or slot.
+    pub fn insert_faults(&self, ch: Channel, slot: usize) -> Result<u64, MixerError> {
+        Ok(self
+            .node(ch)?
+            .inserts
+            .get(slot)
+            .ok_or(MixerError::NoSuch("insert"))?
+            .faults)
     }
 
     /// Validate the graph and recompute order, compensation and solo
@@ -970,6 +989,21 @@ impl Mixer {
 
 /// Frame `i` of an input buffer, as stereo.
 fn read_input(src: &[f32], mono: bool, i: usize) -> (f32, f32) {
+    let (l, r) = read_input_raw(src, mono, i);
+    // Bad input never enters a channel: it would reach every insert,
+    // send and bus downstream before anything could stop it.
+    (finite_or_zero(l), finite_or_zero(r))
+}
+
+const fn finite_or_zero(v: f32) -> f32 {
+    if v.is_finite() {
+        v
+    } else {
+        0.0
+    }
+}
+
+fn read_input_raw(src: &[f32], mono: bool, i: usize) -> (f32, f32) {
     if mono {
         let v = src.get(i).copied().unwrap_or(0.0);
         (v, v)
@@ -1014,6 +1048,15 @@ fn run_inserts(node: &mut Node, n: usize, offset: usize, inputs: &[&[f32]], mono
             } else {
                 s.fx.process_stereo(l, r)
             };
+            // A non-finite sample in an effect with feedback circulates
+            // forever: one NaN would silence this channel for good. Clear
+            // the insert back to silence and count it, so the channel
+            // recovers on the next frame and the fault stays visible.
+            if !(l.is_finite() && r.is_finite()) {
+                s.fx.reset();
+                s.faults = s.faults.saturating_add(1);
+                (l, r) = (0.0, 0.0);
+            }
         }
         node.pre[f * 2] = l;
         node.pre[f * 2 + 1] = r;
