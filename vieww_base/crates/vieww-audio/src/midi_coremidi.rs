@@ -49,6 +49,7 @@ unsafe extern "C" {
     fn MIDIObjectGetIntegerProperty(obj: Ref, prop: CfString, out: *mut i32) -> OsStatus;
     fn MIDISend(port: Ref, dest: Ref, list: *const u8) -> OsStatus;
     static kMIDIPropertyDisplayName: CfString;
+    static kMIDIPropertyName: CfString;
     static kMIDIPropertyUniqueID: CfString;
 }
 
@@ -103,33 +104,41 @@ fn status(s: OsStatus, what: &str) -> std::io::Result<()> {
     }
 }
 
-fn describe(endpoint: Ref) -> MidiPort {
-    let mut id = 0i32;
+/// A string property of a MIDI object, if it has one.
+fn string_property(obj: Ref, prop: CfString) -> Option<String> {
     let mut cf: CfString = std::ptr::null();
-    let mut name = String::new();
-    // SAFETY: property reads on a live endpoint; the returned string is
+    // SAFETY: a property read on a live object; the returned string is
     // ours to release, and the buffer is sized as passed.
     unsafe {
-        MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &raw mut id);
-        if MIDIObjectGetStringProperty(endpoint, kMIDIPropertyDisplayName, &raw mut cf) == 0
-            && !cf.is_null()
-        {
-            let mut buf = [0 as c_char; 512];
-            if CFStringGetCString(cf, buf.as_mut_ptr(), 512, UTF8) != 0 {
-                name = std::ffi::CStr::from_ptr(buf.as_ptr())
-                    .to_string_lossy()
-                    .into_owned();
-            }
-            CFRelease(cf);
+        if MIDIObjectGetStringProperty(obj, prop, &raw mut cf) != 0 || cf.is_null() {
+            return None;
         }
+        let mut buf = [0 as c_char; 512];
+        let ok = CFStringGetCString(cf, buf.as_mut_ptr(), 512, UTF8) != 0;
+        CFRelease(cf);
+        ok.then(|| {
+            std::ffi::CStr::from_ptr(buf.as_ptr())
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter(|s| !s.is_empty())
     }
+}
+
+fn describe(endpoint: Ref) -> MidiPort {
+    let mut id = 0i32;
+    // SAFETY: an integer property read on a live endpoint.
+    unsafe { MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &raw mut id) };
+    // SAFETY: reading the framework's property-name constants.
+    let (display, plain) = unsafe { (kMIDIPropertyDisplayName, kMIDIPropertyName) };
+    // Hardware endpoints have a display name ("Device Port"); virtual ones
+    // an app creates often have only a name.
+    let name = string_property(endpoint, display)
+        .or_else(|| string_property(endpoint, plain))
+        .unwrap_or_else(|| format!("endpoint {id}"));
     MidiPort {
         id: id.to_string(),
-        name: if name.is_empty() {
-            format!("endpoint {id}")
-        } else {
-            name
-        },
+        name,
     }
 }
 

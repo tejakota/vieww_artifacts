@@ -556,9 +556,16 @@ fn open(
         };
         if !started {
             handle.stop();
-            return Err(BackendError::Refused(format!(
-                "pw_stream_connect failed ({r})"
-            )));
+            let msg = format!("pw_stream_connect failed ({r})");
+            // No daemon behind the socket (it crashed, or a stale socket
+            // survived it): -EHOSTDOWN, -ECONNREFUSED, -ENOENT, -EPIPE,
+            // -ECONNRESET. The audio system is not there — "unavailable",
+            // as when the socket is missing — not a refusal of this stream.
+            return Err(if matches!(r, -112 | -111 | -2 | -32 | -104) {
+                BackendError::Unavailable(msg)
+            } else {
+                BackendError::Refused(msg)
+            });
         }
         // Wait for the connection to settle.
         let t0 = Instant::now();

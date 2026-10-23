@@ -14,6 +14,7 @@ name: Hardware (self-hosted Linux and Windows)
 #            |                                      | window (start-up, RSS, idle,
 #            |                                      | fps, stages, RAPL energy),
 #            |                                      | size, stress p95 x5, desktop
+#            |                                      | audio on the real sound card
 #   windows  | self-hosted, Windows, X64,           | the same, plus D3D12 on a
 #            |   vieww-windows                      | hardware adapter and the
 #            |                                      | studio's remote preview
@@ -38,13 +39,13 @@ on:
         type: boolean
         default: true
       linux_steps:
-        description: "Linux steps (space-separated): env gpu nvidia gallery baseline size stress desktop"
+        description: "Linux steps (space-separated): env gpu nvidia gallery baseline size stress desktop audio"
         type: string
-        default: "env gpu nvidia gallery baseline size stress desktop"
+        default: "env gpu nvidia gallery baseline size stress desktop audio"
       windows_steps:
-        description: "Windows steps (comma-separated): env,gpu,d3d12,gallery,baseline,size,stress,desktop,remote"
+        description: "Windows steps (comma-separated): env,gpu,d3d12,gallery,baseline,size,stress,desktop,remote,audio"
         type: string
-        default: "env,gpu,d3d12,gallery,baseline,size,stress,desktop,remote"
+        default: "env,gpu,d3d12,gallery,baseline,size,stress,desktop,remote,audio"
       launches:
         description: "Baseline launches per path (CPU and GPU)"
         type: string

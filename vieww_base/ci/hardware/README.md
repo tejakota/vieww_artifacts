@@ -9,6 +9,20 @@ pushes it, it waits in `.github/workflows-pending/` (`restore.sh hardware.yml`):
 |---|---|---|---|
 | `linux.sh` | your Linux PC/laptop with its GPU | no | Vulkan suites on the real driver, GPU census with receipts, the `baseline` window (start-up, RSS, idle, fps, frame stages, RAPL energy), shipped size, stress p95 ×5, desktop suite |
 | `windows.ps1` | your Windows PC with its GPU | no | the same (energy excepted), plus D3D12 on a hardware adapter and the studio's remote preview |
+
+Both also have an `audio` step: vieww-audio on the machine's **real sound
+card** — what CI's virtual devices (`audio-backends.yml`) cannot prove. It
+lists devices and soaks the default output under full-core load (silent by
+default: `VIEWW_HW_AUDIO_GAIN=0` streams every frame without sound;
+`VIEWW_HW_AUDIO_SOAK=86400` makes it the 24-hour soak). Two optional
+cables close the rest, each enabled by an environment variable on the
+runner (put it in the runner's `.env` file, next to `run.sh`/`run.cmd`):
+
+| Cable | Variable | Then checked |
+|---|---|---|
+| line out → line in (or a USB interface's out → in), both the defaults | `VIEWW_HW_AUDIO_LOOP=pipewire` (Linux: the backend; Windows: `1`) | every frame of a two-tone signal comes back: level, phase continuity (no dropped frames), noise floor — shared and exclusive on Windows |
+| MIDI out → MIDI in | `VIEWW_MIDI_LOOP='<out id>><in id>'` | notes, controllers, pitch bend and SysEx round trip in order |
+
 | `close-remaining.sh` | the Linux machine **with the Redmi on USB** | **yes** | the phone's device suite on CPU and GPU (now with `frame_stages`), TalkBack by ear, Maestro, the two-monitor refresh check |
 
 Each writes a results directory with `summary.txt`, one log per step, receipts

@@ -540,9 +540,15 @@ pub fn backends() -> Vec<Box<dyn Backend>> {
     v
 }
 
-/// A backend by name.
+/// A backend by name (including the opt-in `wasapi-exclusive` on
+/// Windows).
 #[must_use]
 pub fn backend(name: &str) -> Option<Box<dyn Backend>> {
+    // Opt-in backends, not in the default order but reachable by name.
+    #[cfg(windows)]
+    if name == "wasapi-exclusive" {
+        return Some(Box::new(wasapi::WasapiExclusive));
+    }
     backends().into_iter().find(|b| b.name() == name)
 }
 

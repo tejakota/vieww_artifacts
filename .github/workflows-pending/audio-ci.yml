@@ -20,26 +20,10 @@
 
 name: Audio CI
 
+# Manual only (Actions → this workflow → Run workflow), like every workflow
+# in this repository by the owner's choice (2026-10-15): no push,
+# pull_request or schedule trigger. The fuzz job runs when started by hand.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "vieww_base/crates/vieww-audio/**"
-      - "vieww_base/crates/vieww-audio-plugin/**"
-      - "vieww_base/crates/vieww-music/**"
-      - "vieww_base/Cargo.toml"
-      - "vieww_base/Cargo.lock"
-      - ".github/workflows/audio-ci.yml"
-  pull_request:
-    paths:
-      - "vieww_base/crates/vieww-audio/**"
-      - "vieww_base/crates/vieww-audio-plugin/**"
-      - "vieww_base/crates/vieww-music/**"
-      - "vieww_base/Cargo.toml"
-      - "vieww_base/Cargo.lock"
-      - ".github/workflows/audio-ci.yml"
-  schedule:
-    - cron: "17 21 * * *" # 02:47 IST nightly: the fuzz job
   workflow_dispatch:
 
 permissions:

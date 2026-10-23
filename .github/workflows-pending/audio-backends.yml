@@ -13,6 +13,18 @@ name: Audio backends
 #     the web shim's logic runs under Node with a simulated Web Audio.
 #   * Every backend also type-checks and lints on Linux via
 #     --cfg vieww_check_all.
+#   * Loopback (tests/device_loopback.rs): a known signal is played and
+#     captured back through a real driver, and every frame is checked
+#     (level, phase continuity, noise floor):
+#       - Linux: the kernel's snd-aloop card, every sample format and
+#         both directions of rate matching; snd-virmidi ports wired
+#         together for MIDI; PulseAudio's default sink into its monitor.
+#       - Windows: the VB-CABLE virtual cable, WASAPI shared and exclusive.
+#       - macOS: the BlackHole virtual device through Core Audio, and
+#         CoreMIDI virtual endpoints.
+#     Virtual devices exercise the real OS audio stacks, not real sound
+#     cards: those are the self-hosted `hardware.yml` machines' `audio`
+#     step (ci/hardware/README.md).
 
 # Manual only (Actions → this workflow → Run workflow): no push or
 # pull_request trigger, by the repository owner's choice (2026-10-15).
@@ -84,9 +96,146 @@ jobs:
         run: |
           cargo clippy -p vieww-audio --lib --tests -- -D warnings
           cargo test -p vieww-audio --lib backend::
+      - name: Live tests (load, hot-plug) and a PulseAudio loopback
+        env:
+          VIEWW_REQUIRE_LOOPBACK: "1"
+          VIEWW_LOOP_BACKEND: pulse
+        run: |
+          cargo test --release -p vieww-audio --test live_backends -- --ignored --nocapture --test-threads=1
+          pactl set-default-source null.monitor
+          cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
       - name: Server logs
         if: failure()
         run: tail -n 50 "$RUNNER_TEMP"/*.log
+
+  linux-alsa-loopback:
+    name: Linux (ALSA and MIDI through kernel loopbacks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+      # The runner's kernel ships the sound modules only in
+      # linux-modules-extra, which is not always published for the image's
+      # kernel; extract just kernel/sound from it (as Vim's CI does). When
+      # the package is missing this run says so and skips, never passes
+      # quietly: the test step is gated on the module having loaded.
+      - name: Load snd-aloop and snd-virmidi
+        id: modules
+        run: |
+          KVER="$(uname -r)"
+          sudo apt-get update -q
+          sudo apt-get install -y -q alsa-utils
+          if ! sudo modprobe snd-aloop 2>/dev/null; then
+            if sudo apt-get install -d -y -q "linux-modules-extra-$KVER"; then
+              D="$(mktemp -d)"
+              sudo dpkg -x /var/cache/apt/archives/linux-modules-extra-"$KVER"*.deb "$D"
+              tar -cC "$D/lib/modules/$KVER" kernel/sound | sudo tar -xC "/lib/modules/$KVER"
+              sudo depmod
+            fi
+          fi
+          if sudo modprobe snd-aloop; then
+            sudo modprobe snd-virmidi midi_devs=2 || true
+            sleep 1
+            sudo chmod a+rw /dev/snd/*
+            echo "aloop=1" >> "$GITHUB_OUTPUT"
+            V="$(awk '/VirMIDI/ {print $1; exit}' /proc/asound/cards)"
+            if [ -n "$V" ] && aconnect "Virtual Raw MIDI $V-0:0" "Virtual Raw MIDI $V-1:0"; then
+              echo "midi_loop=hw:$V,0>hw:$V,1" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "::warning::snd-aloop is unavailable for kernel $KVER on this image; ALSA loopback skipped this run"
+          fi
+          cat /proc/asound/cards || true
+          aconnect -l || true
+      - name: ALSA loopback — every format, both directions of rate matching
+        if: steps.modules.outputs.aloop == '1'
+        env:
+          VIEWW_REQUIRE_LOOPBACK: "1"
+        run: cargo test --release -p vieww-audio --test device_loopback alsa -- --ignored --nocapture --test-threads=1
+      - name: MIDI round trip through two wired rawmidi ports
+        if: steps.modules.outputs.midi_loop != ''
+        env:
+          VIEWW_REQUIRE_LOOPBACK: "1"
+          VIEWW_MIDI_LOOP: ${{ steps.modules.outputs.midi_loop }}
+        run: cargo test --release -p vieww-audio --test device_loopback midi_port -- --ignored --nocapture
+
+  windows-loopback:
+    name: Windows (WASAPI shared and exclusive through VB-CABLE)
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+      # VB-CABLE: a virtual cable whose render side ("CABLE Input") plays
+      # into its capture side ("CABLE Output"). Hosted runners have no
+      # other endpoint, so it becomes both defaults. Installed by the
+      # LABSN sound-ci-helpers script, as Mozilla's cubeb CI does.
+      - name: Install VB-CABLE
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/LABSN/sound-ci-helpers "$env:RUNNER_TEMP\sch"
+          powershell -ExecutionPolicy Bypass -File "$env:RUNNER_TEMP\sch\windows\setup_sound.ps1"
+          Get-PnpDevice -Class AudioEndpoint | Format-Table -AutoSize
+      - name: Allow microphone access (capture)
+        shell: pwsh
+        run: |
+          New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy\" -Force | Out-Null
+          New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" -Name "LetAppsAccessMicrophone" -Value 1 -PropertyType DWord -Force
+      - name: Endpoints list and open by id
+        run: cargo test --release -p vieww-audio --lib backend::wasapi -- --nocapture
+      - name: Loopback, shared mode
+        env:
+          VIEWW_REQUIRE_LOOPBACK: "1"
+          VIEWW_LOOP_BACKEND: wasapi
+        run: cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
+      - name: Loopback, exclusive mode
+        env:
+          VIEWW_REQUIRE_LOOPBACK: "1"
+          VIEWW_LOOP_BACKEND: wasapi-exclusive
+        run: cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
+      - name: MIDI ports list (WinMM)
+        run: cargo test --release -p vieww-audio --lib midi_io -- --nocapture
+
+  macos-loopback:
+    name: macOS (Core Audio through BlackHole, CoreMIDI virtual ports)
+    # macos-14: the TCC grant below is the layout this image uses (as in
+    # Mozilla's cubeb CI); a newer image may need its columns updated.
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+      - name: Install BlackHole and make it both defaults
+        run: |
+          brew install switchaudio-osx blackhole-2ch
+          sudo kill -9 "$(pgrep coreaudiod)"
+          sleep 10
+          SwitchAudioSource -s "BlackHole 2ch" -t input
+          SwitchAudioSource -s "BlackHole 2ch" -t output
+          SwitchAudioSource -a
+      - name: Allow microphone access (capture)
+        run: >-
+          sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+          "INSERT OR IGNORE INTO access VALUES ('kTCCServiceMicrophone','/usr/local/opt/runner/provisioner/provisioner',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,1687786159,NULL,NULL,'UNUSED',1687786159);"
+      - name: Devices list and open by UID
+        run: cargo test --release -p vieww-audio --lib backend::coreaudio -- --nocapture
+      - name: Loopback through BlackHole
+        env:
+          VIEWW_REQUIRE_LOOPBACK: "1"
+          VIEWW_LOOP_BACKEND: coreaudio
+        run: cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
+      - name: CoreMIDI virtual endpoints round trip
+        run: cargo test --release -p vieww-audio --test device_loopback coremidi -- --ignored --nocapture
 
   desktop:
     name: ${{ matrix.os }} (native backend)

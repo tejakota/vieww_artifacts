@@ -24,6 +24,11 @@
 #   stress    §1.1  the animation stress suite five times on this fixed
 #                   machine: one reproducible p95, with its spread
 #   desktop   —     the on-desktop suite (`ci/certify/desktop-suite.sh`)
+#   audio     —     vieww-audio on this machine's real sound card: device
+#                   lists, the live backend tests under full-core load,
+#                   a soak on the default output; with a loopback cable,
+#                   a playback-to-capture check of every frame; with a MIDI
+#                   cable, a MIDI round trip (see Environment)
 #
 # Environment:
 #   VIEWW_HW_OUT=dir         results directory (default hardware-results/linux-<stamp>)
@@ -31,6 +36,14 @@
 #   VIEWW_HW_DROP_CACHES=1   drop the page cache before each launch (needs
 #                            passwordless sudo) — a true cold start; otherwise
 #                            the start-up figures are warm-cache and say so
+#
+#   VIEWW_HW_AUDIO_SOAK=600  seconds of the default-output soak (86400 = 24 h)
+#   VIEWW_HW_AUDIO_GAIN=0    level played (0 = silent: the device still streams
+#                            every frame; 0.2 to hear it)
+#   VIEWW_HW_AUDIO_LOOP=pipewire  backend whose DEFAULT output is wired by a
+#                            cable to its DEFAULT input (line out → line in)
+#   VIEWW_MIDI_LOOP='<out id>><in id>'  a MIDI cable between two ports
+#                            (ids from `midi_io::input_ports`/`output_ports`)
 #
 # Needs: the pinned toolchain, a Vulkan driver, a graphical session (DISPLAY or
 # WAYLAND_DISPLAY) for the window steps, python3 for the summaries. For energy:
@@ -55,7 +68,7 @@ launches="${VIEWW_HW_LAUNCHES:-5}"
 failed=0
 
 steps=("$@")
-[ ${#steps[@]} -eq 0 ] && steps=(env gpu nvidia gallery baseline size stress desktop)
+[ ${#steps[@]} -eq 0 ] && steps=(env gpu nvidia gallery baseline size stress desktop audio)
 want() { local s; for s in "${steps[@]}"; do [ "$s" = "$1" ] && return 0; done; return 1; }
 
 # run NAME CMD... — run, tee to NAME.log, record pass/fail.
@@ -235,6 +248,32 @@ if want desktop; then
         run desktop ci/certify/desktop-suite.sh --log "$out/desktop-app.log"
     else
         skip desktop "no DISPLAY or WAYLAND_DISPLAY"
+    fi
+fi
+
+if want audio; then
+    if [ -d /dev/snd ] && ls /dev/snd/pcmC* >/dev/null 2>&1; then
+        note "sound cards: $(grep -E '^ *[0-9]+ \[' /proc/asound/cards | sed 's/  */ /g' | tr '\n' ';')"
+        run audio-devices cargo test --release -p vieww-audio --lib backend:: -- --nocapture
+        run audio-live env VIEWW_LIVE_GAIN="${VIEWW_HW_AUDIO_GAIN:-0}" VIEWW_SOAK_SECS=10 \
+            cargo test --release -p vieww-audio --test live_backends -- --ignored --nocapture --test-threads=1
+        run audio-soak env VIEWW_REQUIRE_LOOPBACK=1 VIEWW_LIVE_GAIN="${VIEWW_HW_AUDIO_GAIN:-0}" \
+            VIEWW_SOAK_SECS="${VIEWW_HW_AUDIO_SOAK:-600}" \
+            cargo test --release -p vieww-audio --test device_loopback default_output_soak -- --ignored --nocapture
+        if [ -n "${VIEWW_HW_AUDIO_LOOP:-}" ]; then
+            run audio-loopback env VIEWW_REQUIRE_LOOPBACK=1 VIEWW_LOOP_BACKEND="$VIEWW_HW_AUDIO_LOOP" \
+                cargo test --release -p vieww-audio --test device_loopback default_device -- --ignored --nocapture
+        else
+            skip audio-loopback "VIEWW_HW_AUDIO_LOOP not set (needs a line-out → line-in cable)"
+        fi
+        if [ -n "${VIEWW_MIDI_LOOP:-}" ]; then
+            run audio-midi env VIEWW_REQUIRE_LOOPBACK=1 \
+                cargo test --release -p vieww-audio --test device_loopback midi_port -- --ignored --nocapture
+        else
+            skip audio-midi "VIEWW_MIDI_LOOP not set (needs a MIDI cable between two ports)"
+        fi
+    else
+        skip audio "no ALSA sound card (/dev/snd/pcmC*)"
     fi
 fi
 

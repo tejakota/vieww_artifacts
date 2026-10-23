@@ -673,6 +673,33 @@ impl AlsaOutput {
         }
     }
 
+    /// As [`open_with_period`](Self::open_with_period), but only in one of
+    /// `formats` (best first, as [`PcmFormat::PREFERENCE`] orders them) —
+    /// to pin a format, as the loopback tests do for each in turn.
+    ///
+    /// # Errors
+    /// As [`open`](Self::open), including when the device takes none of
+    /// `formats`.
+    pub fn open_with_formats(
+        card: u32,
+        device: u32,
+        rate: u32,
+        channels: u32,
+        period: u32,
+        formats: &[PcmFormat],
+    ) -> Result<Self, String> {
+        #[cfg(target_os = "linux")]
+        {
+            alsa::Pcm::open_dir(card, device, rate, channels, false, period, formats, false)
+                .map(Self::from_pcm)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (card, device, rate, channels, period, formats);
+            Err("ALSA exists only on Linux".into())
+        }
+    }
+
     /// Open card/device for `rate` Hz, `channels` channels, `S16_LE`.
     ///
     /// # Errors
@@ -864,6 +891,36 @@ impl AlsaInput {
         #[cfg(not(target_os = "linux"))]
         {
             let _ = (card, device, rate, channels, period);
+            Err("ALSA exists only on Linux".into())
+        }
+    }
+
+    /// As [`open_with_period`](Self::open_with_period), but only in one of
+    /// `formats`.
+    ///
+    /// # Errors
+    /// As [`open`](Self::open), including when the device takes none of
+    /// `formats`.
+    pub fn open_with_formats(
+        card: u32,
+        device: u32,
+        rate: u32,
+        channels: u32,
+        period: u32,
+        formats: &[PcmFormat],
+    ) -> Result<Self, String> {
+        #[cfg(target_os = "linux")]
+        {
+            alsa::Pcm::open_dir(card, device, rate, channels, true, period, formats, false).map(
+                |pcm| Self {
+                    pcm,
+                    bytes: Vec::new(),
+                },
+            )
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (card, device, rate, channels, period, formats);
             Err("ALSA exists only on Linux".into())
         }
     }

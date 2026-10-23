@@ -22,6 +22,14 @@
 #   stress    —     the animation stress suite five times: one reproducible p95
 #   desktop   —     the on-desktop suite, through Git Bash
 #   remote    §3.3  the studio's out-of-process preview tests
+#   audio     —     vieww-audio on this PC's real sound card: WASAPI endpoint
+#                   lists, a soak on the default output under full-core load
+#                   (shared, then exclusive); with a loopback cable, every
+#                   frame checked both ways; with a MIDI cable, a WinMM round
+#                   trip. Environment: VIEWW_HW_AUDIO_SOAK (seconds, default
+#                   600), VIEWW_HW_AUDIO_GAIN (default 0 = silent but
+#                   streamed), VIEWW_HW_AUDIO_LOOP=1 (line out wired to line
+#                   in, both defaults), VIEWW_MIDI_LOOP='<out id>><in id>'
 #
 # Needs: the pinned Rust toolchain (MSVC), Visual Studio Build Tools, the GPU
 # vendor's driver (it ships the Vulkan driver; the Vulkan SDK adds vulkaninfo),
@@ -34,7 +42,7 @@
 # any step failed; a step this machine cannot run is SKIP, never PASS.
 
 param(
-  [string[]]$Steps = @('env','gpu','d3d12','gallery','baseline','size','stress','desktop','remote'),
+  [string[]]$Steps = @('env','gpu','d3d12','gallery','baseline','size','stress','desktop','remote','audio'),
   [string]$OutDir = '',
   [int]$Launches = 5
 )
@@ -314,4 +322,32 @@ Write-Host '================ summary ================'
 Get-Content $Summary
 Write-Host ''
 Write-Host "results: $OutDir"
+# ── audio on the real sound card ──────────────────────────────────────────────
+if (Want 'audio') {
+  $soak = if ($env:VIEWW_HW_AUDIO_SOAK) { $env:VIEWW_HW_AUDIO_SOAK } else { '600' }
+  $gain = if ($env:VIEWW_HW_AUDIO_GAIN) { $env:VIEWW_HW_AUDIO_GAIN } else { '0' }
+  $endpoints = @(Get-PnpDevice -Class AudioEndpoint -Status OK -ErrorAction SilentlyContinue)
+  if ($endpoints.Count -eq 0) {
+    Skip-Step 'audio' 'no active audio endpoint'
+  } else {
+    Say ("      audio endpoints: " + (($endpoints | ForEach-Object { $_.FriendlyName }) -join '; '))
+    Run-Step 'audio-devices' @{} 'cargo' @('test','--release','-p','vieww-audio','--lib','backend::wasapi','--','--nocapture') | Out-Null
+    foreach ($b in @('wasapi','wasapi-exclusive')) {
+      Run-Step "audio-soak-$b" @{ VIEWW_REQUIRE_LOOPBACK = '1'; VIEWW_SOAK_BACKEND = $b; VIEWW_SOAK_SECS = $soak; VIEWW_LIVE_GAIN = $gain } 'cargo' @('test','--release','-p','vieww-audio','--test','device_loopback','default_output_soak','--','--ignored','--nocapture') | Out-Null
+    }
+    if ($env:VIEWW_HW_AUDIO_LOOP) {
+      foreach ($b in @('wasapi','wasapi-exclusive')) {
+        Run-Step "audio-loopback-$b" @{ VIEWW_REQUIRE_LOOPBACK = '1'; VIEWW_LOOP_BACKEND = $b } 'cargo' @('test','--release','-p','vieww-audio','--test','device_loopback','default_device','--','--ignored','--nocapture') | Out-Null
+      }
+    } else {
+      Skip-Step 'audio-loopback' 'VIEWW_HW_AUDIO_LOOP not set (needs a line-out to line-in cable)'
+    }
+    if ($env:VIEWW_MIDI_LOOP) {
+      Run-Step 'audio-midi' @{ VIEWW_REQUIRE_LOOPBACK = '1' } 'cargo' @('test','--release','-p','vieww-audio','--test','device_loopback','midi_port','--','--ignored','--nocapture') | Out-Null
+    } else {
+      Skip-Step 'audio-midi' 'VIEWW_MIDI_LOOP not set (needs a MIDI cable between two ports)'
+    }
+  }
+}
+
 if ($script:Failed) { exit 1 } else { exit 0 }

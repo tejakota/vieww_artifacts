@@ -6,6 +6,10 @@
 //!
 //! `VIEWW_SOAK_SECS=10 cargo test --release -p vieww-audio --test live_backends -- --ignored --nocapture`
 //!
+//! `VIEWW_LIVE_GAIN` (default 0.2) scales what is played — 0 streams
+//! silence, every frame still rendered and delivered (unattended runs on a
+//! desktop's real speakers).
+//!
 //! For each Linux server backend: a 16-voice synth through a reverb is
 //! played for `VIEWW_SOAK_SECS` (default 5) seconds while every core is
 //! saturated by spinning threads, and the stream's own statistics are
@@ -37,6 +41,10 @@ fn run(backend: &dyn Backend) {
         poly.note_on(0, 36 + k * 2, 0.6);
     }
     let mut verb = Freeverb::new(0.8, 0.3, rate);
+    let gain: f32 = std::env::var("VIEWW_LIVE_GAIN")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.2);
     let nonfinite = Arc::new(Mutex::new(0usize));
     let nf = Arc::clone(&nonfinite);
     let render = Box::new(move |out: &mut [f32], info: &BlockInfo| {
@@ -44,9 +52,9 @@ fn run(backend: &dyn Backend) {
         for f in out.chunks_mut(ch) {
             let (l, r) = poly.next_stereo();
             let (l, r) = verb.process_stereo(l, r);
-            f[0] = l * 0.2;
+            f[0] = l * gain;
             if ch > 1 {
-                f[1] = r * 0.2;
+                f[1] = r * gain;
             }
         }
         if out.iter().any(|v| !v.is_finite()) {

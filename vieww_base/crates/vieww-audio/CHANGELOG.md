@@ -59,9 +59,19 @@ the crate is unpublished, so there are no version tags yet.
 - Tag readers against ffmpeg-tagged fixtures; tag writers read back by
   ffprobe.
 - Web transports driven under Node with a simulated Web Audio.
+- `tests/device_loopback.rs`: play a two-tone signal, capture it back,
+  check every 10 ms window's level, phase (dropped frames) and noise
+  floor; ALSA through `snd-aloop` in every format and both directions of
+  rate matching; MIDI ports wired together; a default-device loopback for
+  any backend; CoreMIDI virtual endpoints; a soak on the default output.
+  Run by `audio-backends.yml` (Linux kernel loopbacks, Windows VB-CABLE,
+  macOS BlackHole; manual-only) and by the self-hosted `hardware.yml`
+  machines' new `audio` step on real sound cards.
 
-### Not verified here
+### Not yet run
 Windows (WASAPI exclusive, WinMM) and Apple (Core Audio device
 selection, CoreMIDI) code is compile-checked with clippy for those
-targets and has layout tests, but has not run on those systems. ALSA
-format negotiation is unit-tested; no ALSA hardware was available.
+targets and has layout tests; the jobs above run it on those systems the
+first time `audio-backends.yml` is started. ALSA format negotiation is
+unit-tested here and loopback-tested by that job. Real sound cards: the
+`hardware.yml` `audio` step.
