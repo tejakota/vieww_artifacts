@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use super::{
     isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
-    DeviceStream, RenderFn, StreamConfig, StreamImpl,
+    DeviceInfo, DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 type OsStatus = i32;
@@ -378,12 +378,250 @@ unsafe fn select_default_input(unit: AudioUnit) -> Result<(), String> {
     }
 }
 
-fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, BackendError> {
+/// macOS device discovery and timing, through the HAL's property API.
+#[cfg(target_os = "macos")]
+mod hal {
+    use super::{fourcc, K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL, K_AUDIO_OBJECT_SYSTEM_OBJECT};
+    use super::{status, AudioObjectGetPropertyData, AudioObjectPropertyAddress, DeviceInfo};
+    use std::ffi::{c_char, c_void};
+
+    const DEVICES: u32 = fourcc(b"dev#");
+    const DEFAULT_OUTPUT: u32 = fourcc(b"dOut");
+    const NAME: u32 = fourcc(b"lnam");
+    const UID: u32 = fourcc(b"uid ");
+    const STREAM_CONFIGURATION: u32 = fourcc(b"slay");
+    const LATENCY: u32 = fourcc(b"ltnc");
+    const SAFETY_OFFSET: u32 = fourcc(b"saft");
+    const BUFFER_FRAME_SIZE: u32 = fourcc(b"fsiz");
+    const NOMINAL_SAMPLE_RATE: u32 = fourcc(b"nsrt");
+    const SCOPE_OUTPUT: u32 = fourcc(b"outp");
+    const SCOPE_INPUT: u32 = fourcc(b"inpt");
+    const UTF8: u32 = 0x0800_0100;
+
+    #[link(name = "CoreAudio", kind = "framework")]
+    unsafe extern "C" {
+        fn AudioObjectGetPropertyDataSize(
+            object: u32,
+            address: *const AudioObjectPropertyAddress,
+            qualifier_size: u32,
+            qualifier: *const c_void,
+            size: *mut u32,
+        ) -> i32;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFStringGetCString(s: *const c_void, buf: *mut c_char, len: isize, encoding: u32) -> u8;
+        fn CFRelease(p: *const c_void);
+    }
+
+    fn addr(selector: u32, scope: u32) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress {
+            selector,
+            scope,
+            element: 0,
+        }
+    }
+
+    /// A fixed-size property.
+    fn get<T: Copy>(object: u32, selector: u32, scope: u32, zero: T) -> Option<T> {
+        let a = addr(selector, scope);
+        let mut v = zero;
+        let mut size = u32::try_from(size_of::<T>()).ok()?;
+        // SAFETY: a valid address and an out-buffer of `size` bytes.
+        let st = unsafe {
+            AudioObjectGetPropertyData(
+                object,
+                &raw const a,
+                0,
+                std::ptr::null(),
+                &raw mut size,
+                (&raw mut v).cast(),
+            )
+        };
+        status(st, "property").ok().map(|()| v)
+    }
+
+    /// A variable-size property, as bytes.
+    fn get_bytes(object: u32, selector: u32, scope: u32) -> Option<Vec<u8>> {
+        let a = addr(selector, scope);
+        let mut size = 0u32;
+        // SAFETY: a valid address and size out-pointer.
+        let st = unsafe {
+            AudioObjectGetPropertyDataSize(object, &raw const a, 0, std::ptr::null(), &raw mut size)
+        };
+        status(st, "property size").ok()?;
+        let mut buf = vec![0u8; size as usize];
+        // SAFETY: a buffer of `size` bytes.
+        let st = unsafe {
+            AudioObjectGetPropertyData(
+                object,
+                &raw const a,
+                0,
+                std::ptr::null(),
+                &raw mut size,
+                buf.as_mut_ptr().cast(),
+            )
+        };
+        status(st, "property").ok()?;
+        buf.truncate(size as usize);
+        Some(buf)
+    }
+
+    /// A `CFStringRef` property, as a Rust string (the reference released).
+    fn get_string(object: u32, selector: u32) -> Option<String> {
+        let cf: *const c_void = get(
+            object,
+            selector,
+            K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            std::ptr::null(),
+        )?;
+        if cf.is_null() {
+            return None;
+        }
+        let mut buf = [0 as c_char; 512];
+        // SAFETY: a live CFString we own (released below) and a buffer of
+        // the stated length.
+        let ok = unsafe {
+            let ok = CFStringGetCString(cf, buf.as_mut_ptr(), 512, UTF8);
+            CFRelease(cf);
+            ok
+        };
+        if ok == 0 {
+            return None;
+        }
+        // SAFETY: NUL-terminated by CFStringGetCString.
+        Some(
+            unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) }
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+
+    /// Channels in a scope: the sum over the `AudioBufferList` the stream
+    /// configuration property returns (u32 count, then {u32 channels,
+    /// u32 bytes, pointer} per buffer).
+    fn channels(device: u32, scope: u32) -> u16 {
+        let Some(b) = get_bytes(device, STREAM_CONFIGURATION, scope) else {
+            return 0;
+        };
+        let word = |at: usize| {
+            b.get(at..at + 4)
+                .map_or(0, |w| u32::from_ne_bytes([w[0], w[1], w[2], w[3]]))
+        };
+        let n = word(0) as usize;
+        let stride = 8 + size_of::<usize>();
+        let first = 8; // the count, padded to the buffers' pointer alignment
+        let total: u32 = (0..n).map(|i| word(first + i * stride)).sum();
+        u16::try_from(total).unwrap_or(u16::MAX)
+    }
+
+    fn ids() -> Vec<u32> {
+        get_bytes(
+            K_AUDIO_OBJECT_SYSTEM_OBJECT,
+            DEVICES,
+            K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+        )
+        .map(|b| {
+            b.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|w| u32::from_ne_bytes(*w))
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+
+    pub(super) fn default_output() -> Option<u32> {
+        get(
+            K_AUDIO_OBJECT_SYSTEM_OBJECT,
+            DEFAULT_OUTPUT,
+            K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            0u32,
+        )
+        .filter(|d| *d != 0)
+    }
+
+    pub(super) fn devices() -> Vec<DeviceInfo> {
+        let default = default_output().unwrap_or(0);
+        ids()
+            .into_iter()
+            .filter_map(|d| {
+                let outputs = channels(d, SCOPE_OUTPUT);
+                if outputs == 0 {
+                    return None;
+                }
+                let uid = get_string(d, UID)?;
+                Some(DeviceInfo {
+                    name: get_string(d, NAME).unwrap_or_else(|| uid.clone()),
+                    id: uid,
+                    outputs: Some(outputs),
+                    inputs: Some(channels(d, SCOPE_INPUT)),
+                    is_default: d == default,
+                })
+            })
+            .collect()
+    }
+
+    /// The default output's UID.
+    pub(super) fn default_uid() -> Option<String> {
+        default_output().and_then(|d| get_string(d, UID))
+    }
+
+    /// The device whose UID is `uid`.
+    pub(super) fn by_uid(uid: &str) -> Option<u32> {
+        ids()
+            .into_iter()
+            .find(|&d| get_string(d, UID).as_deref() == Some(uid))
+    }
+
+    /// Output latency in nanoseconds: the device's own latency, its
+    /// safety offset and its buffer, at its nominal rate.
+    pub(super) fn latency_ns(device: u32) -> Option<u64> {
+        let frames = u64::from(get(device, LATENCY, SCOPE_OUTPUT, 0u32).unwrap_or(0))
+            + u64::from(get(device, SAFETY_OFFSET, SCOPE_OUTPUT, 0u32).unwrap_or(0))
+            + u64::from(get(
+                device,
+                BUFFER_FRAME_SIZE,
+                K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+                0u32,
+            )?);
+        let rate = get(
+            device,
+            NOMINAL_SAMPLE_RATE,
+            K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            0f64,
+        )?;
+        (rate > 0.0).then(|| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_precision_loss,
+                reason = "a latency"
+            )]
+            let ns = (frames as f64 / rate * 1e9) as u64;
+            ns
+        })
+    }
+}
+
+fn open(
+    config: StreamConfig,
+    callback: Callback,
+    device: Option<u32>,
+) -> Result<DeviceStream, BackendError> {
     let capture = matches!(callback, Callback::Capture(_));
     let ch = config.channels.clamp(1, 32);
+    // A named output device needs the HAL unit (the default-output unit
+    // follows the system default and cannot be pointed elsewhere).
+    let sub = if device.is_some() && !capture && !cfg!(target_os = "ios") {
+        K_AUDIO_UNIT_SUBTYPE_HAL_OUTPUT
+    } else {
+        subtype(capture)
+    };
     let desc = AudioComponentDescription {
         component_type: K_AUDIO_UNIT_TYPE_OUTPUT,
-        component_sub_type: subtype(capture),
+        component_sub_type: sub,
         component_manufacturer: K_AUDIO_UNIT_MANUFACTURER_APPLE,
         component_flags: 0,
         component_flags_mask: 0,
@@ -480,6 +718,17 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                     "SetInputCallback",
                 )?;
             } else {
+                #[cfg(not(target_os = "ios"))]
+                if let Some(d) = device {
+                    set(
+                        unit,
+                        K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE,
+                        K_AUDIO_UNIT_SCOPE_GLOBAL,
+                        0,
+                        &d,
+                        "CurrentDevice",
+                    )?;
+                }
                 set(
                     unit,
                     K_AUDIO_UNIT_PROPERTY_STREAM_FORMAT,
@@ -526,6 +775,17 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                 BackendError::Refused(e)
             });
         }
+        #[cfg(target_os = "macos")]
+        if !capture {
+            if let Some(ns) = device
+                .or_else(hal::default_output)
+                .and_then(hal::latency_ns)
+            {
+                counters
+                    .latency_ns
+                    .store(ns, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
         Ok(DeviceStream::new(
             "coreaudio",
             StreamConfig {
@@ -553,7 +813,56 @@ impl Backend for CoreAudio {
         config: StreamConfig,
         render: RenderFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Render(render))
+        open(config, Callback::Render(render), None)
+    }
+
+    /// macOS: every device with output channels; ids are device UIDs,
+    /// stable across reboots. iOS has no devices to choose (the session's
+    /// route decides).
+    fn devices(&self) -> Result<Vec<DeviceInfo>, BackendError> {
+        #[cfg(target_os = "macos")]
+        {
+            Ok(hal::devices())
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Ok(Vec::new())
+        }
+    }
+
+    /// macOS: the default output's UID. The default-output unit follows
+    /// the default itself, but a stream on a named device does not, and a
+    /// device that vanishes ends the stream; the supervisor watches this.
+    fn default_device_id(&self) -> Option<String> {
+        #[cfg(target_os = "macos")]
+        {
+            hal::default_uid()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
+    }
+
+    fn open_output_on(
+        &self,
+        device: &str,
+        config: StreamConfig,
+        render: RenderFn,
+    ) -> Result<DeviceStream, BackendError> {
+        #[cfg(target_os = "macos")]
+        {
+            let id = hal::by_uid(device)
+                .ok_or_else(|| BackendError::Refused(format!("no Core Audio device {device:?}")))?;
+            open(config, Callback::Render(render), Some(id))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (config, render);
+            Err(BackendError::Refused(format!(
+                "no device selection on this platform ({device:?})"
+            )))
+        }
     }
 
     fn open_input(
@@ -561,7 +870,7 @@ impl Backend for CoreAudio {
         config: StreamConfig,
         capture: CaptureFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Capture(capture))
+        open(config, Callback::Capture(capture), None)
     }
 }
 

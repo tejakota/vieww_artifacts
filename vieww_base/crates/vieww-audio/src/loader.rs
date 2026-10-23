@@ -418,6 +418,9 @@ impl DiskStream {
         let thread = std::thread::Builder::new()
             .name("vieww-disk-stream".into())
             .spawn(move || {
+                // Feeds a real-time reader but blocks on disk: elevated,
+                // never real-time.
+                let _rt = crate::rt::promote_helper_thread();
                 reader(f, producer, &s2, info, data_off, frames, cap);
             })
             .ok();

@@ -18,7 +18,7 @@ use std::sync::Arc;
 use super::dl::Library;
 use super::{
     isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
-    DeviceStream, RenderFn, StreamConfig, StreamImpl,
+    DeviceInfo, DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 const PORT_IS_INPUT: u64 = 0x1;
@@ -51,7 +51,20 @@ struct Api {
         unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char, u64) -> *mut *const c_char,
     connect: unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> c_int,
     free: unsafe extern "C" fn(*mut c_void),
+    /// `jack_port_get_latency_range` (JACK ≥ 0.120 / 1.9.8).
+    latency_range: Option<unsafe extern "C" fn(*mut c_void, c_int, *mut LatencyRange)>,
 }
+
+/// `jack_latency_range_t`.
+#[repr(C)]
+#[derive(Default)]
+struct LatencyRange {
+    min: u32,
+    max: u32,
+}
+
+const PLAYBACK_LATENCY: c_int = 1;
+const CAPTURE_LATENCY: c_int = 0;
 
 impl Api {
     fn load() -> Result<Self, String> {
@@ -82,6 +95,7 @@ impl Api {
                 get_ports: lib.get(c"jack_get_ports")?,
                 connect: lib.get(c"jack_connect")?,
                 free: lib.get(c"jack_free")?,
+                latency_range: lib.get(c"jack_port_get_latency_range").ok(),
                 _lib: lib,
             })
         }
@@ -173,6 +187,24 @@ unsafe extern "C" fn process(nframes: u32, arg: *mut c_void) -> c_int {
     }
     s.frames_done += n as u64;
     s.counters.block(n);
+    // Latency: the port's own range (the graph downstream of it, i.e. the
+    // driver's buffering) plus this cycle. The server recomputes ranges
+    // after graph changes, so it is read every 64 cycles, not once.
+    if let (Some(lr), Some(&p)) = (s.api.latency_range, s.ports.first()) {
+        if s.counters.callbacks.load(Ordering::Relaxed) % 64 == 1 {
+            let mut r = LatencyRange::default();
+            let mode = if matches!(s.callback, Callback::Capture(_)) {
+                CAPTURE_LATENCY
+            } else {
+                PLAYBACK_LATENCY
+            };
+            // SAFETY: a registered port and a valid out-pointer; allowed
+            // from the process callback.
+            unsafe { lr(p, mode, &raw mut r) };
+            s.counters
+                .set_latency_frames(u64::from(r.max) + u64::from(nframes), s.rate);
+        }
+    }
     0
 }
 
@@ -225,7 +257,12 @@ fn cstr(p: *const c_char) -> String {
 }
 
 impl Jack {
-    fn open(&self, config: StreamConfig, callback: Callback) -> Result<DeviceStream, BackendError> {
+    fn open(
+        &self,
+        config: StreamConfig,
+        callback: Callback,
+        target: Option<&str>,
+    ) -> Result<DeviceStream, BackendError> {
         let api = Arc::new(Api::load().map_err(BackendError::Unavailable)?);
         let name = CString::new(self.client_name.as_str())
             .map_err(|e| BackendError::Refused(e.to_string()))?;
@@ -239,6 +276,31 @@ impl Jack {
             )));
         }
         let input = matches!(callback, Callback::Capture(_));
+        // A named device: an explicit list of ports, or a client whose
+        // physical ports to use. Resolved before anything is registered,
+        // so an unknown name refuses instead of playing somewhere else.
+        let targets: Option<Vec<String>> = match target {
+            None => None,
+            Some(t) if t.contains(':') => Some(t.split(',').map(|p| p.trim().to_owned()).collect()),
+            Some(t) => {
+                let want = PORT_IS_PHYSICAL | if input { PORT_IS_OUTPUT } else { PORT_IS_INPUT };
+                // SAFETY: a live client; the list is freed with jack_free.
+                let all = unsafe { port_list(&api, client, want) };
+                Some(
+                    all.into_iter()
+                        .filter(|p| p.split_once(':').is_some_and(|(c, _)| c == t))
+                        .collect(),
+                )
+            }
+        };
+        if targets.as_ref().is_some_and(Vec::is_empty) {
+            // SAFETY: a live client, closed once.
+            unsafe { (api.client_close)(client) };
+            return Err(BackendError::Refused(format!(
+                "no JACK device {:?}",
+                target.unwrap_or_default()
+            )));
+        }
         let ch = usize::from(config.channels.clamp(1, 64));
         let flag = if input { PORT_IS_INPUT } else { PORT_IS_OUTPUT };
         let mut ports = Vec::with_capacity(ch);
@@ -295,7 +357,22 @@ impl Jack {
                 "the server refused activation".into(),
             ));
         }
-        if self.autoconnect {
+        if let Some(targets) = &targets {
+            // SAFETY: a live, active client; valid port names.
+            unsafe {
+                for (&p, other) in ports.iter().zip(targets) {
+                    let Ok(other) = CString::new(other.as_str()) else {
+                        continue;
+                    };
+                    let mine = (api.port_name)(p);
+                    if input {
+                        (api.connect)(client, other.as_ptr(), mine);
+                    } else {
+                        (api.connect)(client, mine, other.as_ptr());
+                    }
+                }
+            }
+        } else if self.autoconnect {
             // Physical playback ports are inputs; capture ports outputs.
             let want = PORT_IS_PHYSICAL | if input { PORT_IS_OUTPUT } else { PORT_IS_INPUT };
             // SAFETY: a live client; the list is freed with jack_free.
@@ -376,7 +453,7 @@ impl Backend for Jack {
         config: StreamConfig,
         render: RenderFn,
     ) -> Result<DeviceStream, BackendError> {
-        self.open(config, Callback::Render(render))
+        self.open(config, Callback::Render(render), None)
     }
 
     fn open_input(
@@ -384,8 +461,88 @@ impl Backend for Jack {
         config: StreamConfig,
         capture: CaptureFn,
     ) -> Result<DeviceStream, BackendError> {
-        self.open(config, Callback::Capture(capture))
+        self.open(config, Callback::Capture(capture), None)
     }
+
+    /// One device per client that owns physical ports (`system` is the
+    /// sound card), with its playback and capture port counts.
+    fn devices(&self) -> Result<Vec<DeviceInfo>, BackendError> {
+        let api = Api::load().map_err(BackendError::Unavailable)?;
+        let name = CString::new(format!("{}-list", self.client_name)).unwrap_or_default();
+        let mut status = 0;
+        // SAFETY: as in `open`.
+        let client = unsafe { (api.client_open)(name.as_ptr(), NO_START_SERVER, &raw mut status) };
+        if client.is_null() {
+            return Err(BackendError::Unavailable("no JACK server running".into()));
+        }
+        // SAFETY: a live client, closed once after both lists.
+        let (play, rec) = unsafe {
+            let play = port_list(&api, client, PORT_IS_PHYSICAL | PORT_IS_INPUT);
+            let rec = port_list(&api, client, PORT_IS_PHYSICAL | PORT_IS_OUTPUT);
+            (api.client_close)(client);
+            (play, rec)
+        };
+        let mut out: Vec<DeviceInfo> = Vec::new();
+        let client_of = |p: &str| p.split_once(':').map_or(p, |(c, _)| c).to_owned();
+        for (list, playback) in [(&play, true), (&rec, false)] {
+            for p in list {
+                let c = client_of(p);
+                let d = match out.iter_mut().find(|d| d.id == c) {
+                    Some(d) => d,
+                    None => {
+                        out.push(DeviceInfo {
+                            id: c.clone(),
+                            name: c.clone(),
+                            outputs: Some(0),
+                            inputs: Some(0),
+                            is_default: c == "system",
+                        });
+                        out.last_mut().expect("just pushed")
+                    }
+                };
+                let slot = if playback {
+                    &mut d.outputs
+                } else {
+                    &mut d.inputs
+                };
+                *slot = slot.map(|n| n.saturating_add(1));
+            }
+        }
+        Ok(out)
+    }
+
+    /// `device` is a client from [`devices`](Backend::devices) (its
+    /// physical ports in order), or explicit ports, comma-separated:
+    /// `"system:playback_3,system:playback_4"`.
+    fn open_output_on(
+        &self,
+        device: &str,
+        config: StreamConfig,
+        render: RenderFn,
+    ) -> Result<DeviceStream, BackendError> {
+        self.open(config, Callback::Render(render), Some(device))
+    }
+}
+
+/// The names of the ports matching `flags`, audio only.
+///
+/// # Safety
+/// `client` must be a live client of `api`.
+unsafe fn port_list(api: &Api, client: *mut c_void, flags: u64) -> Vec<String> {
+    let mut out = Vec::new();
+    // SAFETY: the caller's live client; the list is freed with jack_free.
+    unsafe {
+        let list = (api.get_ports)(client, null(), AUDIO_TYPE.as_ptr(), flags);
+        if !list.is_null() {
+            let mut i = 0;
+            while !(*list.add(i)).is_null() {
+                out.push(cstr(*list.add(i)));
+                i += 1;
+            }
+            (api.free)(list.cast());
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -393,6 +550,39 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
     use std::time::Duration;
+
+    #[test]
+    fn lists_devices_and_routes_to_named_ports_or_refuses_cleanly() {
+        let cfg = StreamConfig {
+            rate: 48_000,
+            channels: 2,
+            block: 256,
+        };
+        let jack = Jack::default();
+        match jack.devices() {
+            Ok(devs) => {
+                let sys = devs
+                    .iter()
+                    .find(|d| d.id == "system")
+                    .expect("the dummy driver's system ports");
+                assert!(sys.is_default && sys.outputs.unwrap_or(0) >= 2, "{devs:?}");
+                // By client, and by explicit ports (reversed: R then L).
+                for target in ["system", "system:playback_2,system:playback_1"] {
+                    let s = jack
+                        .open_output_on(target, cfg, Box::new(|_, _| {}))
+                        .expect("a listed device opens");
+                    assert!(s.wait_for(5, Duration::from_secs(5)), "{target}");
+                }
+                let mut ports = jack.ports().expect("listing");
+                ports.sort();
+                assert!(ports.iter().any(|p| p.starts_with("system:playback")));
+                assert!(jack
+                    .open_output_on("no-such-card", cfg, Box::new(|_, _| {}))
+                    .is_err());
+            }
+            Err(e) => assert!(matches!(e, BackendError::Unavailable(_)), "{e:?}"),
+        }
+    }
 
     // These run against a real server when one is reachable (the CI job
     // starts `jackd -d dummy`); otherwise they check the refusal.

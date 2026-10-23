@@ -21,7 +21,7 @@ use std::thread::JoinHandle;
 
 use super::{
     isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
-    DeviceStream, RenderFn, StreamConfig, StreamImpl,
+    DeviceInfo, DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 #[repr(C)]
@@ -104,18 +104,71 @@ struct UnknownVtbl {
     release: unsafe extern "system" fn(This) -> u32,
 }
 
+/// `IMMDeviceEnumerator` (mmdeviceapi.h), methods in declaration order.
 #[repr(C)]
 struct DeviceEnumeratorVtbl {
     unknown: UnknownVtbl,
     enum_audio_endpoints: unsafe extern "system" fn(This, i32, u32, *mut *mut c_void) -> Hresult,
     get_default_audio_endpoint: unsafe extern "system" fn(This, i32, i32, *mut This) -> Hresult,
+    get_device: unsafe extern "system" fn(This, *const u16, *mut This) -> Hresult,
 }
 
+/// `IMMDevice`, in declaration order.
 #[repr(C)]
 struct DeviceVtbl {
     unknown: UnknownVtbl,
     activate: unsafe extern "system" fn(This, *const Guid, u32, *mut c_void, *mut This) -> Hresult,
+    open_property_store: unsafe extern "system" fn(This, u32, *mut This) -> Hresult,
+    get_id: unsafe extern "system" fn(This, *mut *mut u16) -> Hresult,
 }
+
+/// `IMMDeviceCollection`.
+#[repr(C)]
+struct DeviceCollectionVtbl {
+    unknown: UnknownVtbl,
+    get_count: unsafe extern "system" fn(This, *mut u32) -> Hresult,
+    item: unsafe extern "system" fn(This, u32, *mut This) -> Hresult,
+}
+
+/// `IPropertyStore` (propsys.h).
+#[repr(C)]
+struct PropertyStoreVtbl {
+    unknown: UnknownVtbl,
+    get_count: unsafe extern "system" fn(This, *mut u32) -> Hresult,
+    get_at: unsafe extern "system" fn(This, u32, *mut PropertyKey) -> Hresult,
+    get_value: unsafe extern "system" fn(This, *const PropertyKey, *mut PropVariant) -> Hresult,
+}
+
+/// `PROPERTYKEY`.
+#[repr(C)]
+struct PropertyKey {
+    fmtid: Guid,
+    pid: u32,
+}
+
+/// `PROPVARIANT`, sized for 64-bit (24 bytes; over-sized and harmless on
+/// 32-bit). Only the string arm is read.
+#[repr(C)]
+struct PropVariant {
+    vt: u16,
+    _reserved: [u16; 3],
+    pwsz: *mut u16,
+    _rest: u64,
+}
+
+/// `PKEY_Device_FriendlyName` (functiondiscoverykeys_devpkey.h).
+const PKEY_DEVICE_FRIENDLY_NAME: PropertyKey = PropertyKey {
+    fmtid: Guid(
+        0xa45c_254e,
+        0xdf1c,
+        0x4efd,
+        [0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0],
+    ),
+    pid: 14,
+};
+const VT_LPWSTR: u16 = 31;
+const DEVICE_STATE_ACTIVE: u32 = 1;
+const STGM_READ: u32 = 0;
 
 #[repr(C)]
 struct AudioClientVtbl {
@@ -176,6 +229,8 @@ unsafe extern "system" {
         iid: *const Guid,
         out: *mut This,
     ) -> Hresult;
+    fn CoTaskMemFree(p: *mut c_void);
+    fn PropVariantClear(v: *mut PropVariant) -> Hresult;
 }
 
 #[cfg_attr(windows, link(name = "kernel32"))]
@@ -258,6 +313,8 @@ struct Session {
     service: Com,
     event: *mut c_void,
     buffer_frames: u32,
+    /// `GetStreamLatency` plus the buffer, nanoseconds (0 = unknown).
+    latency_ns: u64,
 }
 
 impl Drop for Session {
@@ -271,7 +328,210 @@ impl Drop for Session {
     }
 }
 
-unsafe fn session(config: StreamConfig, capture: bool) -> Result<Session, String> {
+/// A NUL-terminated UTF-16 string from COM, copied; the original freed.
+///
+/// # Safety
+/// `p` is null or a `CoTaskMemAlloc`ed, NUL-terminated wide string.
+unsafe fn take_wide(p: *mut u16) -> String {
+    if p.is_null() {
+        return String::new();
+    }
+    // SAFETY: the caller's contract.
+    unsafe {
+        let mut n = 0;
+        while *p.add(n) != 0 {
+            n += 1;
+        }
+        let s = String::from_utf16_lossy(std::slice::from_raw_parts(p, n));
+        CoTaskMemFree(p.cast());
+        s
+    }
+}
+
+/// An endpoint's id string.
+///
+/// # Safety
+/// `d` is a live `IMMDevice`.
+unsafe fn device_id(d: This) -> String {
+    let mut id = null_mut();
+    // SAFETY: a live device; the string is ours to free.
+    unsafe {
+        if (vt!(d, DeviceVtbl).get_id)(d, &raw mut id) < 0 {
+            return String::new();
+        }
+        take_wide(id)
+    }
+}
+
+/// An endpoint's friendly name ("Speakers (Realtek High Definition
+/// Audio)").
+///
+/// # Safety
+/// `d` is a live `IMMDevice`.
+unsafe fn device_name(d: This) -> String {
+    // SAFETY: a live device; the store and the variant are released.
+    unsafe {
+        let mut store = null_mut();
+        if (vt!(d, DeviceVtbl).open_property_store)(d, STGM_READ, &raw mut store) < 0
+            || store.is_null()
+        {
+            return String::new();
+        }
+        let store = Com(store);
+        let mut v = PropVariant {
+            vt: 0,
+            _reserved: [0; 3],
+            pwsz: null_mut(),
+            _rest: 0,
+        };
+        let mut name = String::new();
+        if (vt!(store.0, PropertyStoreVtbl).get_value)(
+            store.0,
+            &PKEY_DEVICE_FRIENDLY_NAME,
+            &raw mut v,
+        ) >= 0
+            && v.vt == VT_LPWSTR
+            && !v.pwsz.is_null()
+        {
+            let mut n = 0;
+            while *v.pwsz.add(n) != 0 {
+                n += 1;
+            }
+            name = String::from_utf16_lossy(std::slice::from_raw_parts(v.pwsz, n));
+        }
+        PropVariantClear(&raw mut v);
+        name
+    }
+}
+
+/// The active render endpoints, on a private MTA thread (the caller's own
+/// COM apartment is left alone).
+fn list_devices() -> Result<Vec<DeviceInfo>, BackendError> {
+    let worker = std::thread::spawn(|| -> Result<Vec<DeviceInfo>, String> {
+        // SAFETY: COM initialised for this thread, used, uninitialised.
+        unsafe {
+            let hr = CoInitializeEx(null_mut(), COINIT_MULTITHREADED);
+            if hr < 0 {
+                return Err(format!("CoInitializeEx failed ({hr:#x})"));
+            }
+            let result = (|| {
+                let mut e = null_mut();
+                check(
+                    CoCreateInstance(
+                        &CLSID_MM_DEVICE_ENUMERATOR,
+                        null_mut(),
+                        CLSCTX_ALL,
+                        &IID_IMM_DEVICE_ENUMERATOR,
+                        &raw mut e,
+                    ),
+                    "CoCreateInstance(MMDeviceEnumerator)",
+                )?;
+                let e = Com(e);
+                let default = {
+                    let mut d = null_mut();
+                    if (vt!(e.0, DeviceEnumeratorVtbl).get_default_audio_endpoint)(
+                        e.0, E_RENDER, E_CONSOLE, &raw mut d,
+                    ) >= 0
+                    {
+                        let d = Com(d);
+                        device_id(d.0)
+                    } else {
+                        String::new()
+                    }
+                };
+                let mut c = null_mut();
+                check(
+                    (vt!(e.0, DeviceEnumeratorVtbl).enum_audio_endpoints)(
+                        e.0,
+                        E_RENDER,
+                        DEVICE_STATE_ACTIVE,
+                        &raw mut c,
+                    ),
+                    "EnumAudioEndpoints",
+                )?;
+                let c = Com(c);
+                let mut n = 0u32;
+                check(
+                    (vt!(c.0, DeviceCollectionVtbl).get_count)(c.0, &raw mut n),
+                    "GetCount",
+                )?;
+                let mut out = Vec::new();
+                for i in 0..n {
+                    let mut d = null_mut();
+                    if (vt!(c.0, DeviceCollectionVtbl).item)(c.0, i, &raw mut d) < 0 {
+                        continue;
+                    }
+                    let d = Com(d);
+                    let id = device_id(d.0);
+                    let name = device_name(d.0);
+                    out.push(DeviceInfo {
+                        is_default: id == default,
+                        name: if name.is_empty() { id.clone() } else { name },
+                        id,
+                        outputs: None,
+                        inputs: Some(0),
+                    });
+                }
+                Ok(out)
+            })();
+            CoUninitialize();
+            result
+        }
+    });
+    match worker.join() {
+        Ok(Ok(v)) => Ok(v),
+        Ok(Err(e)) => Err(BackendError::Unavailable(e)),
+        Err(_) => Err(BackendError::Unavailable(
+            "the WASAPI listing thread panicked".into(),
+        )),
+    }
+}
+
+/// The default render endpoint's id, from the calling thread (COM joined
+/// for the call and left again).
+fn default_endpoint_id() -> Option<String> {
+    // SAFETY: COM initialised (or found initialised) for the call and the
+    // reference released; every pointer checked.
+    unsafe {
+        let hr = CoInitializeEx(null_mut(), COINIT_MULTITHREADED);
+        // S_OK / S_FALSE add a reference to release; RPC_E_CHANGED_MODE
+        // (the thread is already single-threaded) adds none but COM works.
+        let release = hr >= 0;
+        let id = (|| {
+            let mut e = null_mut();
+            if CoCreateInstance(
+                &CLSID_MM_DEVICE_ENUMERATOR,
+                null_mut(),
+                CLSCTX_ALL,
+                &IID_IMM_DEVICE_ENUMERATOR,
+                &raw mut e,
+            ) < 0
+            {
+                return None;
+            }
+            let e = Com(e);
+            let mut d = null_mut();
+            if (vt!(e.0, DeviceEnumeratorVtbl).get_default_audio_endpoint)(
+                e.0, E_RENDER, E_CONSOLE, &raw mut d,
+            ) < 0
+            {
+                return None;
+            }
+            let d = Com(d);
+            Some(device_id(d.0)).filter(|s| !s.is_empty())
+        })();
+        if release {
+            CoUninitialize();
+        }
+        id
+    }
+}
+
+unsafe fn session(
+    config: StreamConfig,
+    capture: bool,
+    device: Option<&[u16]>,
+) -> Result<Session, String> {
     // SAFETY: the WASAPI setup sequence, each pointer checked before use.
     unsafe {
         let mut e = null_mut();
@@ -287,15 +547,21 @@ unsafe fn session(config: StreamConfig, capture: bool) -> Result<Session, String
         )?;
         let enumerator = Com(e);
         let mut d = null_mut();
-        check(
-            (vt!(e, DeviceEnumeratorVtbl).get_default_audio_endpoint)(
-                e,
-                if capture { E_CAPTURE } else { E_RENDER },
-                E_CONSOLE,
-                &raw mut d,
-            ),
-            "GetDefaultAudioEndpoint",
-        )?;
+        match device {
+            Some(id) => check(
+                (vt!(e, DeviceEnumeratorVtbl).get_device)(e, id.as_ptr(), &raw mut d),
+                "GetDevice (no such endpoint)",
+            )?,
+            None => check(
+                (vt!(e, DeviceEnumeratorVtbl).get_default_audio_endpoint)(
+                    e,
+                    if capture { E_CAPTURE } else { E_RENDER },
+                    E_CONSOLE,
+                    &raw mut d,
+                ),
+                "GetDefaultAudioEndpoint",
+            )?,
+        }
         let device = Com(d);
         let mut c = null_mut();
         check(
@@ -349,6 +615,7 @@ unsafe fn session(config: StreamConfig, capture: bool) -> Result<Session, String
             service: Com(null_mut()),
             event,
             buffer_frames: 0,
+            latency_ns: 0,
         };
         check(
             (vt!(c, AudioClientVtbl).set_event_handle)(c, event),
@@ -358,6 +625,15 @@ unsafe fn session(config: StreamConfig, capture: bool) -> Result<Session, String
             (vt!(c, AudioClientVtbl).get_buffer_size)(c, &raw mut s.buffer_frames),
             "GetBufferSize",
         )?;
+        // The engine's own latency (100 ns units) plus our buffer: what a
+        // sample written now waits before it is heard.
+        let mut hns_latency = 0i64;
+        if (vt!(c, AudioClientVtbl).get_stream_latency)(c, &raw mut hns_latency) >= 0 {
+            let engine = u64::try_from(hns_latency).unwrap_or(0).saturating_mul(100);
+            let buffer = u64::from(s.buffer_frames).saturating_mul(1_000_000_000)
+                / u64::from(config.rate.max(1));
+            s.latency_ns = engine.saturating_add(buffer);
+        }
         let mut svc = null_mut();
         let iid = if capture {
             &IID_IAUDIO_CAPTURE_CLIENT
@@ -373,7 +649,12 @@ unsafe fn session(config: StreamConfig, capture: bool) -> Result<Session, String
     }
 }
 
-fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, BackendError> {
+fn open(
+    config: StreamConfig,
+    callback: Callback,
+    device: Option<&str>,
+) -> Result<DeviceStream, BackendError> {
+    let device: Option<Vec<u16>> = device.map(|d| d.encode_utf16().chain(Some(0)).collect());
     let capture = matches!(callback, Callback::Capture(_));
     let counters = Arc::new(Counters::default());
     // The render loop lives on a plain thread here rather than an FFI
@@ -393,6 +674,8 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
     let thread = std::thread::Builder::new()
         .name("vieww-wasapi".into())
         .spawn(move || {
+            // MMCSS "Pro Audio" — the class Windows' own audio engine uses.
+            let _rt = crate::rt::promote_audio_thread(std::time::Duration::from_millis(10));
             // SAFETY: COM initialised for this thread and uninitialised at
             // its end; every object lives inside `session`.
             unsafe {
@@ -402,7 +685,7 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                         .ok();
                     return;
                 }
-                let sess = match session(config, capture) {
+                let sess = match session(config, capture, device.as_deref()) {
                     Ok(s) => s,
                     Err(e) => {
                         tx.send(Err(e)).ok();
@@ -420,6 +703,7 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                     CoUninitialize();
                     return;
                 }
+                c2.latency_ns.store(sess.latency_ns, Ordering::Relaxed);
                 tx.send(Ok(sess.buffer_frames)).ok();
                 while !s2.load(Ordering::Acquire) {
                     if WaitForSingleObject(sess.event, 2_000) != WAIT_OBJECT_0 {
@@ -556,6 +840,8 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
             if e.contains("GetDefaultAudioEndpoint") || e.contains("CoCreateInstance") {
                 Err(BackendError::Unavailable(e))
             } else {
+                // A named endpoint that does not exist ("GetDevice") is a
+                // refusal too: never a silent fall-back to the default.
                 Err(BackendError::Refused(e))
             }
         }
@@ -577,7 +863,7 @@ impl Backend for Wasapi {
         config: StreamConfig,
         render: RenderFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Render(render))
+        open(config, Callback::Render(render), None)
     }
 
     fn open_input(
@@ -585,7 +871,29 @@ impl Backend for Wasapi {
         config: StreamConfig,
         capture: CaptureFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Capture(capture))
+        open(config, Callback::Capture(capture), None)
+    }
+
+    /// The active render endpoints with their friendly names; ids are
+    /// endpoint id strings (`{0.0.0.00000000}.{…}`).
+    fn devices(&self) -> Result<Vec<DeviceInfo>, BackendError> {
+        list_devices()
+    }
+
+    /// WASAPI streams stay on the endpoint they opened; following a new
+    /// default (headphones plugged in, an output picked in Settings) is
+    /// the supervisor's job, and this is what it watches.
+    fn default_device_id(&self) -> Option<String> {
+        default_endpoint_id()
+    }
+
+    fn open_output_on(
+        &self,
+        device: &str,
+        config: StreamConfig,
+        render: RenderFn,
+    ) -> Result<DeviceStream, BackendError> {
+        open(config, Callback::Render(render), Some(device))
     }
 }
 
@@ -602,6 +910,53 @@ mod tests {
         assert_eq!(size_of::<Guid>(), 16);
         assert_eq!(channel_mask(2), 3);
         assert_eq!(channel_mask(6), 0x3F);
+    }
+
+    #[test]
+    fn the_property_structs_have_the_sdk_layout() {
+        assert_eq!(size_of::<PropertyKey>(), 20);
+        assert_eq!(std::mem::offset_of!(PropVariant, pwsz), 8);
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!(size_of::<PropVariant>(), 24);
+        // Vtable slots: IMMDevice::GetId is the 6th method (3 + Activate,
+        // OpenPropertyStore, GetId); IMMDeviceEnumerator::GetDevice the 6th.
+        let p = size_of::<usize>();
+        assert_eq!(std::mem::offset_of!(DeviceVtbl, get_id), 5 * p);
+        assert_eq!(
+            std::mem::offset_of!(DeviceEnumeratorVtbl, get_device),
+            5 * p
+        );
+        assert_eq!(std::mem::offset_of!(PropertyStoreVtbl, get_value), 5 * p);
+        assert_eq!(std::mem::offset_of!(DeviceCollectionVtbl, item), 4 * p);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn lists_endpoints_and_opens_one_by_id_or_refuses_cleanly() {
+        match Wasapi.devices() {
+            Ok(list) => {
+                if let Some(d) = list.first() {
+                    assert!(!d.id.is_empty());
+                    let s = Wasapi.open_output_on(
+                        &d.id,
+                        StreamConfig::default(),
+                        Box::new(|b, _| b.fill(0.0)),
+                    );
+                    if let Ok(s) = s {
+                        assert!(s.wait_for(5, std::time::Duration::from_secs(10)));
+                        assert!(s.latency().is_some(), "WASAPI reports its latency");
+                    }
+                }
+                assert!(Wasapi
+                    .open_output_on(
+                        "{no-such-endpoint}",
+                        StreamConfig::default(),
+                        Box::new(|_, _| {})
+                    )
+                    .is_err());
+            }
+            Err(e) => assert!(!e.to_string().is_empty()),
+        }
     }
 
     #[test]

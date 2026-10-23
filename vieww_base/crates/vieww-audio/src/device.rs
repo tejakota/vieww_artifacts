@@ -129,6 +129,9 @@ mod alsa {
     const DRAIN: u64 = ioc(0, 0x44, 0);
     const WRITEI: u64 = ioc(1, 0x50, std::mem::size_of::<Xferi>() as u64);
     const READI: u64 = ioc(2, 0x51, std::mem::size_of::<Xferi>() as u64);
+    /// `SNDRV_PCM_IOCTL_DELAY`: frames between the application pointer
+    /// and the DAC, as an `snd_pcm_sframes_t` (a C `long`).
+    const DELAY: u64 = ioc(2, 0x21, std::mem::size_of::<std::ffi::c_long>() as u64);
 
     // Parameter indices.
     const ACCESS: usize = 0;
@@ -319,6 +322,15 @@ mod alsa {
             Ok(())
         }
 
+        /// Frames queued between what was just written and the DAC — the
+        /// device's own latency figure.
+        pub(super) fn delay(&self) -> Option<u64> {
+            let mut d: std::ffi::c_long = 0;
+            // SAFETY: an open PCM and a `long` out-pointer.
+            let r = unsafe { ioctl(self.file.as_raw_fd(), DELAY, std::ptr::addr_of_mut!(d)) };
+            (r >= 0).then(|| u64::try_from(d).unwrap_or(0))
+        }
+
         pub(super) fn drain(&mut self) {
             // SAFETY: DRAIN takes no argument.
             unsafe { ioctl(self.file.as_raw_fd(), DRAIN) };
@@ -337,6 +349,9 @@ mod alsa {
             assert_eq!(WRITEI, 0x4018_4150);
             assert_eq!(READI, 0x8018_4151);
             assert_eq!(PREPARE, 0x4140);
+            // _IOR('A', 0x21, long): 0x80084121 on 64-bit.
+            #[cfg(target_pointer_width = "64")]
+            assert_eq!(DELAY, 0x8008_4121);
         }
     }
 }
@@ -432,6 +447,20 @@ impl AlsaOutput {
     pub fn drain(&mut self) {
         #[cfg(target_os = "linux")]
         self.pcm.drain();
+    }
+
+    /// Frames between the last write and the DAC, as the kernel reports
+    /// them (`None` if it will not say).
+    #[must_use]
+    pub fn delay(&self) -> Option<u64> {
+        #[cfg(target_os = "linux")]
+        {
+            self.pcm.delay()
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            None
+        }
     }
 
     /// Stream samples and drain.

@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use super::dl::Library;
 use super::{
     isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
-    DeviceStream, RenderFn, StreamConfig, StreamImpl,
+    DeviceInfo, DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 // SPA constants (spa/utils/type.h, spa/param/*.h), printed from the headers.
@@ -202,6 +202,26 @@ struct Api {
     stream_dequeue_buffer: unsafe extern "C" fn(*mut c_void) -> *mut PwBuffer,
     stream_queue_buffer: unsafe extern "C" fn(*mut c_void, *mut PwBuffer) -> c_int,
     stream_destroy: unsafe extern "C" fn(*mut c_void),
+    /// `pw_stream_get_time_n` (PipeWire ≥ 0.3.50): the stream's timing,
+    /// sized by the caller so older and newer `pw_time` layouts both work.
+    stream_get_time_n: Option<unsafe extern "C" fn(*mut c_void, *mut PwTime, usize) -> c_int>,
+}
+
+/// The head of `struct pw_time` — the fields every 0.3/1.x version lays
+/// out first, in this order.
+#[repr(C)]
+#[derive(Default)]
+struct PwTime {
+    now: i64,
+    rate_num: u32,
+    rate_denom: u32,
+    ticks: u64,
+    /// Delay to the device, in `rate` units.
+    delay: i64,
+    /// Samples queued in the stream, not yet handed to the graph.
+    queued: u64,
+    /// Samples buffered in the stream's converter/resampler (≥ 0.3.50).
+    buffered: u64,
 }
 
 impl Api {
@@ -224,6 +244,7 @@ impl Api {
                 stream_get_state: lib.get(c"pw_stream_get_state")?,
                 stream_dequeue_buffer: lib.get(c"pw_stream_dequeue_buffer")?,
                 stream_queue_buffer: lib.get(c"pw_stream_queue_buffer")?,
+                stream_get_time_n: lib.get(c"pw_stream_get_time_n").ok(),
                 stream_destroy: lib.get(c"pw_stream_destroy")?,
                 _lib: lib,
             })
@@ -333,6 +354,27 @@ unsafe extern "C" fn on_process(data: *mut c_void) {
         (s.api.stream_queue_buffer)(s.stream, b);
         s.frames_done += frames as u64;
         s.counters.block(frames);
+        // Latency: the graph's delay to the device plus what this stream
+        // still holds, every 64 cycles (a lock-free read of shared state,
+        // documented as callable from `process`).
+        if let Some(get_time) = s.api.stream_get_time_n {
+            if s.counters.callbacks.load(Ordering::Relaxed) % 64 == 1 {
+                let mut t = PwTime::default();
+                if get_time(s.stream, &raw mut t, size_of::<PwTime>()) == 0 && t.rate_denom > 0 {
+                    #[expect(clippy::cast_sign_loss, reason = "clamped non-negative")]
+                    let delay_ns = (t.delay.max(0) as u128 * u128::from(t.rate_num) * 1_000_000_000
+                        / u128::from(t.rate_denom)) as u64;
+                    let held = t
+                        .queued
+                        .saturating_add(t.buffered)
+                        .saturating_add(frames as u64);
+                    let held_ns = held.saturating_mul(1_000_000_000) / u64::from(s.rate.max(1));
+                    s.counters
+                        .latency_ns
+                        .store(delay_ns.saturating_add(held_ns), Ordering::Relaxed);
+                }
+            }
+        }
     }
 }
 
@@ -399,7 +441,15 @@ fn daemon_socket_present() -> bool {
     std::path::Path::new(&dir).join("pipewire-0").exists()
 }
 
-fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, BackendError> {
+fn open(
+    config: StreamConfig,
+    callback: Callback,
+    target: Option<&str>,
+) -> Result<DeviceStream, BackendError> {
+    let target = target
+        .map(CString::new)
+        .transpose()
+        .map_err(|_| BackendError::Refused("a device name with a NUL byte".into()))?;
     if !daemon_socket_present() {
         return Err(BackendError::Unavailable(
             "no PipeWire daemon socket".into(),
@@ -453,6 +503,17 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
             c"Music".as_ptr(),
             c"node.latency".as_ptr(),
             latency.as_ptr(),
+            // A named device: `target.object` (PipeWire ≥ 0.3.44) and the
+            // older `node.target`, both by node name. A null key ends the
+            // list early when there is no target.
+            if target.is_some() {
+                c"target.object".as_ptr()
+            } else {
+                std::ptr::null::<c_char>()
+            },
+            target.as_ref().map_or(std::ptr::null(), |t| t.as_ptr()),
+            c"node.target".as_ptr(),
+            target.as_ref().map_or(std::ptr::null(), |t| t.as_ptr()),
             std::ptr::null::<c_char>(),
         );
         (api.thread_loop_lock)(lp);
@@ -544,7 +605,7 @@ impl Backend for PipeWire {
         config: StreamConfig,
         render: RenderFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Render(render))
+        open(config, Callback::Render(render), None)
     }
 
     fn open_input(
@@ -552,7 +613,32 @@ impl Backend for PipeWire {
         config: StreamConfig,
         capture: CaptureFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Capture(capture))
+        open(config, Callback::Capture(capture), None)
+    }
+
+    /// The sinks, as `pipewire-pulse` (PipeWire's PulseAudio server, on
+    /// every PipeWire desktop) lists them: their ids are PipeWire node
+    /// names, which is what [`open_output_on`](Backend::open_output_on)
+    /// targets.
+    fn devices(&self) -> Result<Vec<DeviceInfo>, BackendError> {
+        if !daemon_socket_present() {
+            return Err(BackendError::Unavailable(
+                "no PipeWire daemon socket".into(),
+            ));
+        }
+        super::pulse::Pulse.devices()
+    }
+
+    /// `device` is a node name (`alsa_output.pci-0000_00_1f.3.analog-stereo`).
+    /// PipeWire treats the target as a preference: if the node is gone, the
+    /// session manager routes to the default instead.
+    fn open_output_on(
+        &self,
+        device: &str,
+        config: StreamConfig,
+        render: RenderFn,
+    ) -> Result<DeviceStream, BackendError> {
+        open(config, Callback::Render(render), Some(device))
     }
 }
 

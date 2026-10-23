@@ -138,6 +138,13 @@ impl<J: Render + 'static> Pool<J> {
                 std::thread::Builder::new()
                     .name(format!("vieww-render-{k}"))
                     .spawn(move || {
+                        // Workers render inside the callback's deadline,
+                        // so they get its class (time constraint sized for
+                        // `max_block` at 48 kHz on Apple platforms).
+                        #[expect(clippy::cast_precision_loss, reason = "a block length")]
+                        let _rt = crate::rt::promote_audio_thread(
+                            std::time::Duration::from_secs_f64(max_block as f64 / 48_000.0),
+                        );
                         let mut seen = 0;
                         loop {
                             let mut spins = 0u32;

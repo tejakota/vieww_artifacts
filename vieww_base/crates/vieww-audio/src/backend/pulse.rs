@@ -17,7 +17,7 @@ use std::thread::JoinHandle;
 use super::dl::Library;
 use super::{
     isolate_capture, isolate_render, Backend, BackendError, BlockInfo, CaptureFn, Counters,
-    DeviceStream, RenderFn, StreamConfig, StreamImpl,
+    DeviceInfo, DeviceStream, RenderFn, StreamConfig, StreamImpl,
 };
 
 const PA_STREAM_PLAYBACK: c_int = 1;
@@ -57,6 +57,8 @@ struct Api {
     read: unsafe extern "C" fn(*mut c_void, *mut c_void, usize, *mut c_int) -> c_int,
     flush: unsafe extern "C" fn(*mut c_void, *mut c_int) -> c_int,
     free: unsafe extern "C" fn(*mut c_void),
+    /// `pa_simple_get_latency`: microseconds from now to the speaker.
+    latency: Option<unsafe extern "C" fn(*mut c_void, *mut c_int) -> u64>,
     strerror: Option<unsafe extern "C" fn(c_int) -> *const c_char>,
 }
 
@@ -73,6 +75,7 @@ impl Api {
                 read: lib.get(c"pa_simple_read")?,
                 flush: lib.get(c"pa_simple_flush")?,
                 free: lib.get(c"pa_simple_free")?,
+                latency: lib.get(c"pa_simple_get_latency").ok(),
                 strerror,
                 _lib: lib,
             })
@@ -124,7 +127,15 @@ enum Callback {
     Capture(CaptureFn),
 }
 
-fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, BackendError> {
+fn open(
+    config: StreamConfig,
+    callback: Callback,
+    device: Option<&str>,
+) -> Result<DeviceStream, BackendError> {
+    let device = device
+        .map(CString::new)
+        .transpose()
+        .map_err(|_| BackendError::Refused("a device name with a NUL byte".into()))?;
     let api = Arc::new(Api::load().map_err(BackendError::Unavailable)?);
     let ch = config.channels.clamp(1, 32);
     let spec = SampleSpec {
@@ -156,7 +167,7 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
             } else {
                 PA_STREAM_PLAYBACK
             },
-            null(),
+            device.as_ref().map_or(null(), |d| d.as_ptr()),
             stream_name.as_ptr(),
             &raw const spec,
             null(),
@@ -183,6 +194,10 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
     let thread = std::thread::Builder::new()
         .name("vieww-pulse".into())
         .spawn(move || {
+            #[expect(clippy::cast_precision_loss, reason = "a block length")]
+            let _rt = crate::rt::promote_audio_thread(std::time::Duration::from_secs_f64(
+                frames as f64 / f64::from(rate.max(1)),
+            ));
             let h = handle;
             let chn = usize::from(ch);
             let mut buf = vec![0.0f32; frames * chn];
@@ -224,6 +239,24 @@ fn open(config: StreamConfig, callback: Callback) -> Result<DeviceStream, Backen
                 }
                 done += frames as u64;
                 c2.block(frames);
+                // The server's own figure, a few times a second (it is a
+                // round trip to the server, so not every block) — and only
+                // once playback is running: before the prebuffer (two
+                // blocks) is full the server has no timing to report, and
+                // `pa_simple_get_latency` blocks until its next periodic
+                // update — a stall of up to two seconds at start.
+                if let (Callback::Render(_), Some(lat)) = (&callback, a2.latency) {
+                    let n = c2.callbacks.load(Ordering::Relaxed);
+                    if n >= 16 && n % 16 == 0 {
+                        let mut e = 0;
+                        // SAFETY: a live stream and error pointer.
+                        let us = unsafe { lat(h.0, &raw mut e) };
+                        if e == 0 && us > 0 && us != u64::MAX {
+                            c2.latency_ns
+                                .store(us.saturating_mul(1_000), Ordering::Relaxed);
+                        }
+                    }
+                }
             }
             // SAFETY: the stream thread owns the handle; free it once.
             unsafe {
@@ -259,7 +292,7 @@ impl Backend for Pulse {
         config: StreamConfig,
         render: RenderFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Render(render))
+        open(config, Callback::Render(render), None)
     }
 
     fn open_input(
@@ -267,7 +300,207 @@ impl Backend for Pulse {
         config: StreamConfig,
         capture: CaptureFn,
     ) -> Result<DeviceStream, BackendError> {
-        open(config, Callback::Capture(capture))
+        open(config, Callback::Capture(capture), None)
+    }
+
+    fn devices(&self) -> Result<Vec<DeviceInfo>, BackendError> {
+        list::sinks()
+    }
+
+    fn open_output_on(
+        &self,
+        device: &str,
+        config: StreamConfig,
+        render: RenderFn,
+    ) -> Result<DeviceStream, BackendError> {
+        open(config, Callback::Render(render), Some(device))
+    }
+}
+
+/// Listing sinks needs libpulse's asynchronous API (the simple API cannot
+/// enumerate): a private main loop, a context, one `get_sink_info_list`
+/// and one `get_server_info` (for the default sink), iterated to
+/// completion. Only the leading fields of `pa_sink_info` and
+/// `pa_server_info` are read — the ones every libpulse since 0.9 lays out
+/// identically (later versions append fields; they never reorder).
+mod list {
+    use super::{BackendError, DeviceInfo, Library};
+    use std::ffi::{c_char, c_int, c_void, CStr};
+    use std::ptr::{null, null_mut};
+
+    /// The head of `pa_sink_info`.
+    #[repr(C)]
+    struct SinkInfoHead {
+        name: *const c_char,
+        index: u32,
+        description: *const c_char,
+        sample_format: c_int,
+        sample_rate: u32,
+        sample_channels: u8,
+    }
+
+    /// The head of `pa_server_info`.
+    #[repr(C)]
+    struct ServerInfoHead {
+        user_name: *const c_char,
+        host_name: *const c_char,
+        server_version: *const c_char,
+        server_name: *const c_char,
+        sample_format: c_int,
+        sample_rate: u32,
+        sample_channels: u8,
+        default_sink_name: *const c_char,
+    }
+
+    type SinkCb = unsafe extern "C" fn(*mut c_void, *const SinkInfoHead, c_int, *mut c_void);
+    type ServerCb = unsafe extern "C" fn(*mut c_void, *const ServerInfoHead, *mut c_void);
+
+    struct Fns {
+        _lib: Library,
+        ml_new: unsafe extern "C" fn() -> *mut c_void,
+        ml_api: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+        ml_iterate: unsafe extern "C" fn(*mut c_void, c_int, *mut c_int) -> c_int,
+        ml_free: unsafe extern "C" fn(*mut c_void),
+        ctx_new: unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void,
+        ctx_connect:
+            unsafe extern "C" fn(*mut c_void, *const c_char, c_int, *const c_void) -> c_int,
+        ctx_state: unsafe extern "C" fn(*mut c_void) -> c_int,
+        ctx_disconnect: unsafe extern "C" fn(*mut c_void),
+        ctx_unref: unsafe extern "C" fn(*mut c_void),
+        sinks: unsafe extern "C" fn(*mut c_void, SinkCb, *mut c_void) -> *mut c_void,
+        server: unsafe extern "C" fn(*mut c_void, ServerCb, *mut c_void) -> *mut c_void,
+        op_state: unsafe extern "C" fn(*mut c_void) -> c_int,
+        op_unref: unsafe extern "C" fn(*mut c_void),
+    }
+
+    const READY: c_int = 4;
+    const FAILED: c_int = 5;
+    const TERMINATED: c_int = 6;
+    const OP_RUNNING: c_int = 0;
+    const NOAUTOSPAWN: c_int = 1;
+
+    fn load() -> Result<Fns, String> {
+        let lib = Library::open(&["libpulse.so.0", "libpulse.so"])?;
+        // SAFETY: libpulse's documented signatures.
+        unsafe {
+            Ok(Fns {
+                ml_new: lib.get(c"pa_mainloop_new")?,
+                ml_api: lib.get(c"pa_mainloop_get_api")?,
+                ml_iterate: lib.get(c"pa_mainloop_iterate")?,
+                ml_free: lib.get(c"pa_mainloop_free")?,
+                ctx_new: lib.get(c"pa_context_new")?,
+                ctx_connect: lib.get(c"pa_context_connect")?,
+                ctx_state: lib.get(c"pa_context_get_state")?,
+                ctx_disconnect: lib.get(c"pa_context_disconnect")?,
+                ctx_unref: lib.get(c"pa_context_unref")?,
+                sinks: lib.get(c"pa_context_get_sink_info_list")?,
+                server: lib.get(c"pa_context_get_server_info")?,
+                op_state: lib.get(c"pa_operation_get_state")?,
+                op_unref: lib.get(c"pa_operation_unref")?,
+                _lib: lib,
+            })
+        }
+    }
+
+    fn text(p: *const c_char) -> String {
+        if p.is_null() {
+            String::new()
+        } else {
+            // SAFETY: libpulse hands NUL-terminated strings valid for the
+            // callback's duration; copied here.
+            unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
+        }
+    }
+
+    unsafe extern "C" fn on_sink(
+        _c: *mut c_void,
+        i: *const SinkInfoHead,
+        eol: c_int,
+        ud: *mut c_void,
+    ) {
+        if eol != 0 || i.is_null() {
+            return;
+        }
+        // SAFETY: `ud` is the `Vec` passed below, alive until the operation
+        // completes; `i` is valid for this call.
+        let (out, i) = unsafe { (&mut *ud.cast::<Vec<DeviceInfo>>(), &*i) };
+        let name = text(i.description);
+        out.push(DeviceInfo {
+            id: text(i.name),
+            name: if name.is_empty() { text(i.name) } else { name },
+            outputs: Some(u16::from(i.sample_channels)),
+            inputs: Some(0),
+            is_default: false,
+        });
+    }
+
+    unsafe extern "C" fn on_server(_c: *mut c_void, i: *const ServerInfoHead, ud: *mut c_void) {
+        if i.is_null() {
+            return;
+        }
+        // SAFETY: as in `on_sink`.
+        let (out, i) = unsafe { (&mut *ud.cast::<String>(), &*i) };
+        *out = text(i.default_sink_name);
+    }
+
+    pub(super) fn sinks() -> Result<Vec<DeviceInfo>, BackendError> {
+        let f = load().map_err(BackendError::Unavailable)?;
+        let mut sinks: Vec<DeviceInfo> = Vec::new();
+        let mut default = String::new();
+        // SAFETY: the documented libpulse sequence on a private main loop;
+        // every object is released before return, and the callbacks' user
+        // data outlive the operations that use them.
+        let result = unsafe {
+            let ml = (f.ml_new)();
+            if ml.is_null() {
+                return Err(BackendError::Unavailable("pa_mainloop_new failed".into()));
+            }
+            let ctx = (f.ctx_new)((f.ml_api)(ml), c"vieww".as_ptr());
+            let mut ok = !ctx.is_null() && (f.ctx_connect)(ctx, null(), NOAUTOSPAWN, null()) >= 0;
+            // Connect: a bounded number of blocking iterations.
+            let mut spins = 0;
+            while ok {
+                let st = (f.ctx_state)(ctx);
+                if st == READY {
+                    break;
+                }
+                if st == FAILED || st == TERMINATED || spins > 1_000 {
+                    ok = false;
+                    break;
+                }
+                (f.ml_iterate)(ml, 1, null_mut());
+                spins += 1;
+            }
+            if ok {
+                for op in [
+                    (f.sinks)(ctx, on_sink, std::ptr::from_mut(&mut sinks).cast()),
+                    (f.server)(ctx, on_server, std::ptr::from_mut(&mut default).cast()),
+                ] {
+                    if op.is_null() {
+                        continue;
+                    }
+                    let mut n = 0;
+                    while (f.op_state)(op) == OP_RUNNING && n < 10_000 {
+                        (f.ml_iterate)(ml, 1, null_mut());
+                        n += 1;
+                    }
+                    (f.op_unref)(op);
+                }
+            }
+            if !ctx.is_null() {
+                (f.ctx_disconnect)(ctx);
+                (f.ctx_unref)(ctx);
+            }
+            (f.ml_free)(ml);
+            ok
+        };
+        if !result {
+            return Err(BackendError::Unavailable("no PulseAudio server".into()));
+        }
+        for s in &mut sinks {
+            s.is_default = s.id == default;
+        }
+        Ok(sinks)
     }
 }
 
@@ -275,6 +508,50 @@ impl Backend for Pulse {
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
+
+    // Lists the server's sinks and plays on a chosen one — with CI's null
+    // sink, `null` — or, with no server, refuses both cleanly.
+    #[test]
+    fn lists_and_opens_a_named_sink_or_refuses_cleanly() {
+        let cfg = StreamConfig {
+            rate: 48_000,
+            channels: 2,
+            block: 480,
+        };
+        match Pulse.devices() {
+            Ok(sinks) => {
+                assert!(!sinks.is_empty(), "a running server has a sink");
+                assert_eq!(
+                    sinks.iter().filter(|s| s.is_default).count(),
+                    1,
+                    "{sinks:?}"
+                );
+                let pick = &sinks[0];
+                assert!(!pick.id.is_empty() && !pick.name.is_empty());
+                let stream = Pulse
+                    .open_output_on(&pick.id, cfg, Box::new(|_, _| {}))
+                    .expect("a listed sink opens");
+                assert!(
+                    stream.wait_for(10, Duration::from_secs(10)),
+                    "{:?}",
+                    stream.stats()
+                );
+                drop(stream);
+                assert!(
+                    Pulse
+                        .open_output_on("no-such-sink-vieww", cfg, Box::new(|_, _| {}))
+                        .is_err(),
+                    "an unknown sink is refused, not swapped for the default"
+                );
+            }
+            Err(e) => {
+                assert!(matches!(e, BackendError::Unavailable(_)), "{e:?}");
+                assert!(Pulse
+                    .open_output_on("null", cfg, Box::new(|_, _| {}))
+                    .is_err());
+            }
+        }
+    }
 
     // Against a real server when one is running (CI starts PulseAudio with
     // a null sink), else the refusal.

@@ -27,7 +27,8 @@
 //! | Web | Web Audio |
 
 #[cfg(all(any(unix, windows), not(target_os = "ios")))]
-mod dl;
+pub(crate) mod dl;
+pub mod resilient;
 
 #[cfg(any(target_os = "android", all(unix, vieww_check_all)))]
 pub mod aaudio;
@@ -46,7 +47,7 @@ pub mod wasapi;
 #[cfg(any(target_arch = "wasm32", vieww_check_all))]
 pub mod web;
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 
 /// What to ask an audio system for.
@@ -81,6 +82,22 @@ pub struct BlockInfo {
     pub rate: u32,
     /// Stream time of the block's first frame, in seconds.
     pub time: f64,
+}
+
+/// A device a backend can open: an output, an input, or both.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceInfo {
+    /// What [`Backend::open_output_on`] takes to open this device — a
+    /// backend's own spelling (`hw:1,0`, a sink name, an endpoint id).
+    pub id: String,
+    /// A name to show a person.
+    pub name: String,
+    /// Output channels, if known (0 = not an output).
+    pub outputs: Option<u16>,
+    /// Input channels, if known (0 = not an input).
+    pub inputs: Option<u16>,
+    /// Whether the system uses it when no device is named.
+    pub is_default: bool,
 }
 
 /// A render callback: fill the interleaved block (it arrives zeroed).
@@ -119,10 +136,29 @@ pub struct Counters {
     pub xruns: AtomicU64,
     /// Set when the stream ended on its own (server shut down, device lost).
     pub ended: AtomicBool,
+    /// The scheduling class the callback thread runs in, as the OS
+    /// reports it on the first callback ([`crate::rt::Level`] as a byte).
+    pub priority: AtomicU8,
+    /// Whether `priority` has been recorded yet.
+    pub priority_known: AtomicBool,
+    /// Total nanoseconds spent inside the render callback.
+    pub render_ns: AtomicU64,
+    /// The longest single render, nanoseconds.
+    pub render_max_ns: AtomicU64,
+    /// The highest load seen: render time over the block's duration, in
+    /// thousandths (1000 = the whole budget used).
+    pub load_peak_milli: AtomicU64,
+    /// Renders that took longer than their block lasts — each a certain
+    /// underrun on a device that waits for nobody.
+    pub late: AtomicU64,
+    /// Output latency as the audio system reports it, nanoseconds: how
+    /// long a sample rendered now takes to reach the device. 0 = not
+    /// reported.
+    pub latency_ns: AtomicU64,
 }
 
 /// A snapshot of [`Counters`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct StreamStats {
     /// Callbacks run.
     pub callbacks: u64,
@@ -132,6 +168,20 @@ pub struct StreamStats {
     pub xruns: u64,
     /// Ended on its own.
     pub ended: bool,
+    /// The callback thread's scheduling class (`None` before the first
+    /// callback).
+    pub priority: Option<crate::rt::Level>,
+    /// Mean render time per callback.
+    pub render_mean: std::time::Duration,
+    /// Longest render.
+    pub render_max: std::time::Duration,
+    /// Peak load: the longest render as a fraction of its block's
+    /// duration (1.0 = the whole budget).
+    pub load_peak: f64,
+    /// Renders that overran their block's duration.
+    pub late: u64,
+    /// Output latency as the audio system reports it, if it does.
+    pub latency: Option<std::time::Duration>,
 }
 
 impl Counters {
@@ -142,11 +192,51 @@ impl Counters {
     }
 
     fn snapshot(&self) -> StreamStats {
+        let callbacks = self.callbacks.load(Ordering::Relaxed);
+        let total = self.render_ns.load(Ordering::Relaxed);
+        #[expect(clippy::cast_precision_loss, reason = "a ratio")]
+        let load_peak = self.load_peak_milli.load(Ordering::Relaxed) as f64 / 1000.0;
         StreamStats {
-            callbacks: self.callbacks.load(Ordering::Relaxed),
+            callbacks,
             frames: self.frames.load(Ordering::Relaxed),
             xruns: self.xruns.load(Ordering::Relaxed),
             ended: self.ended.load(Ordering::Relaxed),
+            priority: self
+                .priority_known
+                .load(Ordering::Acquire)
+                .then(|| crate::rt::Level::from_u8(self.priority.load(Ordering::Relaxed))),
+            render_mean: std::time::Duration::from_nanos(total.checked_div(callbacks).unwrap_or(0)),
+            render_max: std::time::Duration::from_nanos(self.render_max_ns.load(Ordering::Relaxed)),
+            load_peak,
+            late: self.late.load(Ordering::Relaxed),
+            latency: match self.latency_ns.load(Ordering::Relaxed) {
+                0 => None,
+                ns => Some(std::time::Duration::from_nanos(ns)),
+            },
+        }
+    }
+
+    /// Record the latency the audio system reports, in frames at `rate`.
+    pub fn set_latency_frames(&self, frames: u64, rate: u32) {
+        if rate > 0 {
+            self.latency_ns.store(
+                frames.saturating_mul(1_000_000_000) / u64::from(rate),
+                Ordering::Relaxed,
+            );
+        }
+    }
+
+    /// Record one render of `ns` nanoseconds for a block of `frames` at
+    /// `rate`. Lock-free and allocation-free: called on the audio thread.
+    pub fn render_timed(&self, ns: u64, frames: usize, rate: u32) {
+        self.render_ns.fetch_add(ns, Ordering::Relaxed);
+        self.render_max_ns.fetch_max(ns, Ordering::Relaxed);
+        let budget_ns = (frames as u64).saturating_mul(1_000_000_000) / u64::from(rate.max(1));
+        if let Some(milli) = ns.saturating_mul(1000).checked_div(budget_ns) {
+            self.load_peak_milli.fetch_max(milli, Ordering::Relaxed);
+            if ns > budget_ns {
+                self.late.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 }
@@ -174,6 +264,9 @@ pub(crate) fn isolate_render(render: RenderFn, counters: &Arc<Counters>) -> Rend
     let dead = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&dead);
     let mut render = render;
+    // A promotion made from inside the callback, kept for the stream's
+    // life (on Windows, dropping it would revert MMCSS).
+    let mut _held: Option<crate::rt::Promotion> = None;
     Box::new(move |out, info| {
         // Subnormals off for the block, the thread's own mode back after —
         // see `crate::denormal`. Two register moves per callback.
@@ -182,7 +275,34 @@ pub(crate) fn isolate_render(render: RenderFn, counters: &Arc<Counters>) -> Rend
             out.fill(0.0);
             return;
         }
+        if !counters.priority_known.load(Ordering::Relaxed) {
+            // Once, on the callback's own thread: what the OS says it is —
+            // an OS-owned real-time thread (Core Audio, JACK, AAudio) and
+            // one this crate promoted alike. A library-owned thread left
+            // at normal priority (PipeWire's data thread when neither
+            // RTKit nor an rtprio limit granted it) is promoted here, once;
+            // the promotion's small setup allocation happens on this first
+            // callback only, never in steady state.
+            let mut level = crate::rt::current_level();
+            if level == crate::rt::Level::Normal && info.rate > 0 {
+                #[expect(clippy::cast_precision_loss, reason = "a block length")]
+                let period =
+                    std::time::Duration::from_secs_f64(info.frames as f64 / f64::from(info.rate));
+                let p = crate::rt::promote_audio_thread(period);
+                level = crate::rt::current_level();
+                _held = Some(p);
+            }
+            counters.priority.store(level.as_u8(), Ordering::Relaxed);
+            counters.priority_known.store(true, Ordering::Release);
+        }
+        let started = std::time::Instant::now();
         let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| render(out, info)));
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a render takes far less than 584 years"
+        )]
+        let ns = started.elapsed().as_nanos() as u64;
+        counters.render_timed(ns, info.frames, info.rate);
         match ok {
             Ok(()) => {
                 // The device boundary is the last place a non-finite sample
@@ -287,6 +407,15 @@ impl DeviceStream {
         self.counters.snapshot()
     }
 
+    /// Output latency as the audio system reports it — what an app shows
+    /// as "7.4 ms", and what it compensates by when it lines audio up with
+    /// pictures or recorded input. `None` until the backend has a figure,
+    /// or on a backend that cannot report one.
+    #[must_use]
+    pub fn latency(&self) -> Option<std::time::Duration> {
+        self.stats().latency
+    }
+
     /// Wait until at least `callbacks` callbacks have run, up to `timeout`.
     #[must_use]
     pub fn wait_for(&self, callbacks: u64, timeout: std::time::Duration) -> bool {
@@ -314,6 +443,44 @@ impl Drop for DeviceStream {
 
 /// An audio system.
 pub trait Backend: Send + Sync {
+    /// The devices this backend can open, for a settings page or to pick
+    /// a particular interface. Empty when the backend cannot list them
+    /// (its default device still opens through
+    /// [`open_output`](Self::open_output)).
+    ///
+    /// # Errors
+    /// The audio system is unavailable.
+    fn devices(&self) -> Result<Vec<DeviceInfo>, BackendError> {
+        Ok(Vec::new())
+    }
+
+    /// The id of the device the system currently uses by default, when the
+    /// backend can tell — what [`resilient::ResilientStream`] watches to
+    /// follow a default that moves (headphones plugged in, an output picked
+    /// in the system's settings). `None`: no notion of a default here.
+    fn default_device_id(&self) -> Option<String> {
+        None
+    }
+
+    /// Open playback on a particular device — a [`DeviceInfo::id`] from
+    /// [`devices`](Self::devices) — instead of the default.
+    ///
+    /// # Errors
+    /// No such device, the device refused, or this backend cannot address
+    /// devices (the default answer).
+    fn open_output_on(
+        &self,
+        device: &str,
+        config: StreamConfig,
+        render: RenderFn,
+    ) -> Result<DeviceStream, BackendError> {
+        let _ = (device, config, render);
+        Err(BackendError::Refused(format!(
+            "{} cannot open a named device",
+            self.name()
+        )))
+    }
+
     /// Its name (`"jack"`, `"wasapi"` …).
     fn name(&self) -> &'static str;
 
@@ -396,6 +563,22 @@ pub fn open_output(
         }
     }
     Err(errors)
+}
+
+/// Every device every available backend can list, with the backend's name.
+/// Backends that are unavailable or cannot list are skipped.
+#[must_use]
+pub fn devices() -> Vec<(&'static str, DeviceInfo)> {
+    backends()
+        .into_iter()
+        .flat_map(|b| {
+            let name = b.name();
+            b.devices()
+                .unwrap_or_default()
+                .into_iter()
+                .map(move |d| (name, d))
+        })
+        .collect()
 }
 
 /// Open capture on the first backend that accepts it.

@@ -120,6 +120,21 @@ pub struct Stats {
     /// silence. Set only by [`Stream::start`]; [`Stream::try_start`]
     /// returns the error instead.
     pub spawn_failed: AtomicBool,
+    /// The render thread's scheduling class once it is running
+    /// ([`crate::rt::Level`] as a byte; see [`Stats::priority`]).
+    pub priority_level: std::sync::atomic::AtomicU8,
+    /// Whether `priority_level` has been set.
+    pub priority_known: AtomicBool,
+}
+
+impl Stats {
+    /// The render thread's scheduling class, once it has started.
+    #[must_use]
+    pub fn priority(&self) -> Option<crate::rt::Level> {
+        self.priority_known
+            .load(Ordering::Acquire)
+            .then(|| crate::rt::Level::from_u8(self.priority_level.load(Ordering::Relaxed)))
+    }
 }
 
 /// A render thread feeding a ring, and the device-side reader.
@@ -186,6 +201,14 @@ impl Stream {
         let thread = std::thread::Builder::new()
             .name("vieww-audio-render".into())
             .spawn(move || {
+                // Real-time class for the render (the time constraint on
+                // Apple platforms assumes 48 kHz; the stream is rate-blind).
+                #[expect(clippy::cast_precision_loss, reason = "a block length")]
+                let rt = crate::rt::promote_audio_thread(Duration::from_secs_f64(
+                    block_frames.max(1) as f64 / 48_000.0,
+                ));
+                s2.priority_level.store(rt.level.as_u8(), Ordering::Relaxed);
+                s2.priority_known.store(true, Ordering::Release);
                 let mut block = vec![0.0f32; block_frames.max(1) * ch];
                 let mut pending = 0usize; // samples of `block` not yet pushed
                 let mut offset = 0usize;

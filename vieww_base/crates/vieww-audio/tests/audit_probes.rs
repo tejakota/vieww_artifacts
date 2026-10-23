@@ -107,44 +107,88 @@ fn probe_advanced_mixer_headroom() {
     eprintln!("two tracks at 0.8 -> master sample {}", out[64]);
 }
 
-/// P7: CPU headroom. Renders 10 s of a 32-voice subtractive pad through a
-/// DAW-mixer track with a Freeverb insert; prints real-time factor and the
-/// worst single 128-frame block (2.67 ms budget at 48 kHz).
+/// P7: deadline headroom, with and without real-time priority, under
+/// load: one busy-spinning thread per core competes with the render.
+/// Blocks are paced in real time, as a device drives a callback: each is
+/// due at `start + k × 2.67 ms`; the render sleeps until then, renders,
+/// and the block misses if it finishes after its own deadline (the next
+/// block's due time). Running flat out instead would trip Linux's RT
+/// throttling (95% of each second) and measure the throttle, not audio.
 #[test]
 #[ignore = "benchmark: timing-dependent, run with --ignored --nocapture"]
 fn probe_cpu_headroom() {
-    use std::time::Instant;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
     use vieww_audio::fx::reverb::Freeverb;
     use vieww_audio::mixer::Mixer as Daw;
+    use vieww_audio::rt::promote_audio_thread;
     use vieww_audio::synth::voice::{Poly, SubtractiveVoice};
-    let rate = 48_000.0;
-    for nv in [8usize, 32, 64] {
-        let mut p = Poly::new((0..nv).map(|_| SubtractiveVoice::new(rate)).collect(), rate);
-        for k in 0..nv {
-            p.note_on(0, 36 + (k as u8 % 48), 0.8);
-        }
-        let mut m = Daw::new(48_000);
-        let t = m.add_track("pad");
-        m.add_insert(t, Box::new(Freeverb::new(0.8, 0.3, rate)), None)
-            .unwrap();
-        let (mut inb, mut out) = (vec![0.0f32; 256], vec![0.0f32; 256]);
-        let blocks = 48_000 * 10 / 128;
-        let (mut worst, t0) = (0f64, Instant::now());
-        for _ in 0..blocks {
-            let b = Instant::now();
-            for f in 0..128 {
-                let (l, r) = p.next_stereo();
-                inb[2 * f] = l;
-                inb[2 * f + 1] = r;
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let cores = std::thread::available_parallelism().map_or(2, std::num::NonZero::get);
+    let load: Vec<_> = (0..cores)
+        .map(|_| {
+            let stop = Arc::clone(&stop);
+            std::thread::spawn(move || {
+                let mut x = 0u64;
+                while !stop.load(Ordering::Relaxed) {
+                    x = x.wrapping_mul(6364136223846793005).wrapping_add(1);
+                }
+                x
+            })
+        })
+        .collect();
+    for rt in [false, true] {
+        let (worst, misses, blocks, how) = std::thread::spawn(move || {
+            let how = if rt {
+                let p = promote_audio_thread(Duration::from_micros(2_667));
+                format!("{:?} ({})", p.level, p.detail)
+            } else {
+                "normal priority".to_owned()
+            };
+            let rate = 48_000.0;
+            let mut p = Poly::new((0..16).map(|_| SubtractiveVoice::new(rate)).collect(), rate);
+            for k in 0..16u8 {
+                p.note_on(0, 36 + k * 2, 0.8);
             }
-            m.process(&[&inb], &mut out);
-            worst = worst.max(b.elapsed().as_secs_f64());
-        }
-        let total = t0.elapsed().as_secs_f64();
+            let mut m = Daw::new(48_000);
+            let t = m.add_track("pad");
+            m.add_insert(t, Box::new(Freeverb::new(0.8, 0.3, rate)), None)
+                .unwrap();
+            let (mut inb, mut out) = (vec![0.0f32; 256], vec![0.0f32; 256]);
+            let blocks = 48_000 * 10 / 128;
+            let period = Duration::from_nanos(2_666_667);
+            let mut worst = 0f64;
+            let mut misses = 0;
+            let start = Instant::now();
+            for k in 0..blocks {
+                let due = start + period * k;
+                let now = Instant::now();
+                if due > now {
+                    std::thread::sleep(due - now);
+                }
+                p.render_into(&mut inb);
+                m.process(&[&inb], &mut out);
+                // Lateness: how far past its due time the block finished,
+                // counted against one period of budget.
+                let e = due.elapsed().as_secs_f64();
+                worst = worst.max(e);
+                if e > period.as_secs_f64() {
+                    misses += 1;
+                }
+            }
+            (worst, misses, blocks, how)
+        })
+        .join()
+        .unwrap();
         eprintln!(
-            "{nv:>2} voices + reverb: {:.1}x realtime, worst block {:.3} ms of 2.667 ms budget",
-            10.0 / total,
+            "{how}: worst block finished {:.3} ms after due (budget 2.667 ms); {misses}/{blocks} blocks late",
             worst * 1e3
         );
+    }
+    stop.store(true, Ordering::Relaxed);
+    for l in load {
+        let _ = l.join();
     }
 }

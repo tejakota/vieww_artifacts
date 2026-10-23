@@ -114,6 +114,7 @@ pub mod preset;
 pub mod quality;
 pub mod resample;
 pub mod rng;
+pub mod rt;
 pub mod sequencer;
 pub mod simd;
 pub mod spatial;

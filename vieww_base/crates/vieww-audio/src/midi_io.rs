@@ -43,6 +43,8 @@ impl MidiInput {
         std::thread::Builder::new()
             .name("vieww-midi-in".into())
             .spawn(move || {
+                // Arrival timestamps are only as good as the wake-up.
+                let _rt = crate::rt::promote_helper_thread();
                 let mut parser = Parser::new();
                 let mut buf = [0u8; 256];
                 loop {
