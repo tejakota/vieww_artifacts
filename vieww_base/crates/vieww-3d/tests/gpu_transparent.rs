@@ -158,8 +158,14 @@ fn a_translucent_pane_blends_over_the_opaque_scene_like_the_cpu() {
         .zip(opaque_image.pixels().as_chunks::<4>().0)
         .filter(|(a, b)| a != b)
         .count();
+    // The CPU oracle blends 1170 pixels of this 160x120 frame (about 6%).
+    // That count is the CPU renderer's alone, so it is the same on every
+    // machine; the floor sits below it with room for a rounding change and
+    // far above the zero a pane that stopped blending would give. (It was
+    // 1500, which this scene never reaches — unseen while the test could
+    // only run where a Vulkan device exists.)
     assert!(
-        blended > 1500,
+        blended > 1000,
         "the pane must actually blend ({blended} px differ from the opaque pane)"
     );
 

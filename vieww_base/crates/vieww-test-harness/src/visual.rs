@@ -80,7 +80,11 @@ impl Frame {
             (width * height * 4) as usize,
             "a {width}x{height} frame is width*height*4 bytes"
         );
-        Self { data, width, height }
+        Self {
+            data,
+            width,
+            height,
+        }
     }
 
     /// The pixel at `(x, y)` as `(r, g, b, a)`.

@@ -11,6 +11,10 @@
 //                                  * (intensity * exposure)
 //              Directional  (color * intensity) * (exposure * visibility)
 //                                  * (albedo * max(n . -dir, 0))
+//              Point        color * (intensity * fall / (1 + dist^2 * 0.02))
+//                                  * exposure * (albedo * max(n . l, 0))
+//              Spot         color * (intensity * fall * cone^2)
+//                                  * exposure * (albedo * max(n . l, 0))
 //            + emissive
 //   Phong    the same sum with, per directional/point/spot light, the CPU's
 //              spec = pow(max(n . halfvector, 0), max(shininess, 1)) * specular
@@ -258,17 +262,47 @@ fn lambert(albedo: vec3<f32>, p: vec3<f32>, n: vec3<f32>, receive: bool) -> vec3
             total = total + albedo * (ground + (sky - ground) * k) * (intensity * exposure);
             continue;
         }
-        let dir = l.dir_intensity.xyz;
-        var vis = 1.0;
-        if (l.ground_shadow.w > 0.5 && u.params.z > 0.5 && receive) {
-            let ndl0 = max(dot(n, -dir), 0.0);
-            vis = visibility(p, 0.002 + 0.01 * (1.0 - ndl0));
-        }
-        let ndl = max(dot(n, -dir), 0.0);
-        if (ndl <= 0.0 || vis <= 0.0) {
+        if (kind < 2.5) {
+            let dir = l.dir_intensity.xyz;
+            var vis = 1.0;
+            if (l.ground_shadow.w > 0.5 && u.params.z > 0.5 && receive) {
+                let ndl0 = max(dot(n, -dir), 0.0);
+                vis = visibility(p, 0.002 + 0.01 * (1.0 - ndl0));
+            }
+            let ndl = max(dot(n, -dir), 0.0);
+            if (ndl <= 0.0 || vis <= 0.0) {
+                continue;
+            }
+            let radiance = (color * intensity) * (exposure * vis);
+            total = total + radiance * (albedo * ndl);
             continue;
         }
-        let radiance = (color * intensity) * (exposure * vis);
+        // Point and spot lights reach Lambert materials too — the CPU's
+        // `shade` gives every lit shading the same radiance per light kind
+        // and only the per-shading contribution differs (`albedo * ndl`
+        // here). Without these branches a point light (its `dir_intensity`
+        // xyz is zero) lit nothing and a spot was drawn as an unbounded
+        // directional. The arithmetic is the CPU's, in its order:
+        // `color.scale(intensity * fall / (1 + dist^2 * 0.02))` for a point,
+        // `color.scale(intensity * fall * cone * cone)` for a spot, then
+        // `.scale(exposure)`.
+        let d = l.pos_range.xyz - p;
+        let dist = length(d);
+        let ld = normalize(d);
+        let fall = distance_falloff(dist, l.pos_range.w);
+        var scale = intensity * fall / (1.0 + dist * dist * 0.02);
+        if (kind > 3.5) {
+            let cos = dot(-ld, l.dir_intensity.xyz);
+            let outer = l.cone.x;
+            let inner = l.cone.y;
+            let cone = clamp((cos - outer) / max(inner - outer, 1e-4), 0.0, 1.0);
+            scale = intensity * fall * cone * cone;
+        }
+        let ndl = max(dot(n, ld), 0.0);
+        if (ndl <= 0.0) {
+            continue;
+        }
+        let radiance = (color * scale) * exposure;
         total = total + radiance * (albedo * ndl);
     }
     return total;

@@ -32,14 +32,12 @@
 //! assert_eq!(report.frames_drawn, 1);
 //! ```
 
-mod report;
 pub mod parity;
+mod report;
 pub mod suite_report;
 pub mod visual;
 
-pub use parity::{
-    ParityContract, PERFORMANCE_EDGE_GRADIENT, PERFORMANCE_INTERIOR_TOLERANCE,
-};
+pub use parity::{ParityContract, PERFORMANCE_EDGE_GRADIENT, PERFORMANCE_INTERIOR_TOLERANCE};
 pub use report::FrameReport;
 pub use suite_report::{TestEntry, TestReport, TestStatus};
 pub use visual::{

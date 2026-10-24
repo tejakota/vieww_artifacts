@@ -242,11 +242,6 @@ fn as_bytes<T: Copy>(values: &[T]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(values.as_ptr().cast(), std::mem::size_of_val(values)) }
 }
 
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "lengths were just checked to fit u64; pixel coords are non-negative in-frame"
-)]
 fn len64(bytes: &[u8]) -> u64 {
     bytes.len() as u64
 }
@@ -318,8 +313,13 @@ impl MetalSceneRenderer {
             levels: Vec::new(),
             scratch: Vec::new(),
             dummy: new_target(device.raw(), 1, 1, TARGET_FORMAT),
-            atlases: [0; 4].map(|_| AtlasTexture {
-                texture: new_target(device.raw(), 1, 1, TARGET_FORMAT),
+            // Each placeholder in its own slot's format: the 1x1 upload below
+            // blits one texel of *that* format, and `upload_atlas` only
+            // recreates a texture whose size changed — a placeholder in the
+            // target format would take an R8 or RGBA8 row into an RGBA16F
+            // texture (a bytes-per-row below the texel size Metal requires).
+            atlases: Slot::ALL.map(|slot| AtlasTexture {
+                texture: new_target(device.raw(), 1, 1, atlas_format(slot)),
                 version: None,
                 width: 1,
                 height: 1,
@@ -483,13 +483,12 @@ impl MetalSceneRenderer {
                 None => attachment.set_load_action(MTLLoadAction::Load),
             }
             attachment.set_store_action(MTLStoreAction::Store);
-            let encoder = commands.new_render_command_encoder(&pass);
-            #[expect(clippy::cast_precision_loss, reason = "frame extents")]
+            let encoder = commands.new_render_command_encoder(pass);
             encoder.set_viewport(MTLViewport {
                 originX: 0.0,
                 originY: 0.0,
-                width: width as f64,
-                height: height as f64,
+                width: f64::from(width),
+                height: f64::from(height),
                 znear: 0.0,
                 zfar: 1.0,
             });
@@ -698,7 +697,7 @@ impl MetalSceneRenderer {
         attachment.set_load_action(MTLLoadAction::Clear);
         attachment.set_clear_color(MTLClearColor::new(0.0, 0.0, 0.0, 0.0));
         attachment.set_store_action(MTLStoreAction::Store);
-        let encoder = commands.new_render_command_encoder(&pass);
+        let encoder = commands.new_render_command_encoder(pass);
         encoder.end_encoding();
         commands.commit();
         commands.wait_until_completed();

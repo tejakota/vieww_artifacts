@@ -93,7 +93,9 @@ impl ParityContract {
     pub const fn tolerance(&self) -> u8 {
         match *self {
             Self::Deterministic => 0,
-            Self::Performance { per_channel_tolerance } => per_channel_tolerance,
+            Self::Performance {
+                per_channel_tolerance,
+            } => per_channel_tolerance,
         }
     }
 
@@ -123,7 +125,9 @@ impl ParityContract {
                     diffs.first().map_or((0, 0, 0, 0), |d| d.right),
                 );
             }
-            Self::Performance { per_channel_tolerance } => {
+            Self::Performance {
+                per_channel_tolerance,
+            } => {
                 let offenders = interior_mismatches(actual, reference, per_channel_tolerance);
                 assert!(
                     offenders.is_empty(),
@@ -252,7 +256,10 @@ mod tests {
     fn the_performance_tolerance_is_the_number_the_suites_use() {
         assert_eq!(ParityContract::performance().tolerance(), 2);
         assert_eq!(
-            ParityContract::Performance { per_channel_tolerance: 5 }.tolerance(),
+            ParityContract::Performance {
+                per_channel_tolerance: 5
+            }
+            .tolerance(),
             5
         );
         assert_eq!(ParityContract::reference().tolerance(), 0);
@@ -263,7 +270,8 @@ mod tests {
         let small = frame(2, 2, |_, _| [0, 0, 0, 255]);
         let big = frame(4, 4, |_, _| [0, 0, 0, 255]);
         for contract in [ParityContract::reference(), ParityContract::performance()] {
-            let result = std::panic::catch_unwind(|| contract.assert_matches(&small, &big, "sizes"));
+            let result =
+                std::panic::catch_unwind(|| contract.assert_matches(&small, &big, "sizes"));
             assert!(result.is_err());
         }
     }

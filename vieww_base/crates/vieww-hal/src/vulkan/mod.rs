@@ -2073,11 +2073,18 @@ impl VulkanDevice {
             .pool_sizes(&pool_sizes)
             .max_sets(set_count);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }?;
+        // The pipeline layout takes the one set layout; the allocation takes
+        // it once *per set*: Vulkan allocates exactly as many sets as
+        // `set_layouts` has entries, so a one-element array here would
+        // allocate one set, and the per-batch binds below would index past
+        // it on the first multi-batch pass (any texture or translucency).
         let set_layouts = [set_layout];
+        let set_alloc_layouts = vec![set_layout; set_count as usize];
         let set_alloc = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(descriptor_pool)
-            .set_layouts(&set_layouts);
+            .set_layouts(&set_alloc_layouts);
         let descriptor_sets = unsafe { device.allocate_descriptor_sets(&set_alloc)? };
+        debug_assert_eq!(descriptor_sets.len(), pass.batches.len().max(1));
 
         let buffer_infos = [vk::DescriptorBufferInfo {
             buffer: ubo,

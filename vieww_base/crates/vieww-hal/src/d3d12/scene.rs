@@ -19,10 +19,11 @@
 //! `b15` and its three textures are `t0..t2`; `clear.wgsl`'s colour uniform
 //! is `b0`. So:
 //!
-//! * **One shader-visible SRV heap**, laid out once: slots 0-3 the four
-//!   atlases, one slot per render target's resource, a three-slot "post
-//!   triplet" that every post pass rewrites with its `src`, `aux` and the
-//!   mask atlas, and one slot for the dummy.
+//! * **One shader-visible SRV heap**: slots 0-3 the four atlases, slot 4
+//!   the dummy, then one three-slot triplet *per post pass of the frame*
+//!   (its `src`, `aux` and the mask atlas). Descriptors are read when the
+//!   GPU executes a draw, not when it is recorded, so post passes cannot
+//!   share a triplet; the heap is rebuilt larger when a frame needs more.
 //! * **Three root signatures**: the scene's (root constants at `b0`, one
 //!   descriptor table `t1..t4`), the post's (root constants at `b15`, one
 //!   table `t0..t2`), and the clear's (root constants at `b0`). Root
@@ -103,9 +104,11 @@ pub struct D3d12SceneRenderer {
     post_replace_pso: ID3D12PipelineState,
     post_over_pso: ID3D12PipelineState,
     clear_pso: ID3D12PipelineState,
-    /// The one shader-visible heap: atlases, target SRVs, the post triplet,
-    /// the dummy.
+    /// The one shader-visible heap: the atlases, the dummy, and one triplet
+    /// per post pass (see [`TRIPLETS_BASE`]).
     heap: ID3D12DescriptorHeap,
+    /// How many post-pass triplets `heap` has room for.
+    heap_posts: u32,
     increment: u32,
     /// The targets' RTVs. Replaced with the targets, so no RTV ever outlives
     /// its heap.
@@ -130,22 +133,29 @@ struct AtlasResource {
 }
 
 /// One render target: the resource, its RTV handle (in the renderer's own
-/// heap) and its tracked resource state. Targets have no heap slots of
-/// their own — every post pass rewrites the triplet with its `src` and
-/// `aux` instead, which is why the heap stays eight descriptors wide.
+/// heap) and its tracked resource state. Targets have no SRV slots of their
+/// own — each post pass writes its `src` and `aux` into its own triplet.
 struct TargetResource {
     resource: ID3D12Resource,
     rtv: D3D12_CPU_DESCRIPTOR_HANDLE,
     state: D3D12_RESOURCE_STATES,
 }
 
-// The heap, laid out once: [0..4) the atlases, then the post triplet, then
-// the dummy — eight descriptors in all, because targets carry no slots of
-// their own (see `TargetResource`).
+// The heap: [0..4) the atlases, [4] the dummy, then one `src, aux, masks`
+// triplet *per post pass of the frame*. A shader-visible descriptor is read
+// when the GPU executes the draw, not when the list records it, so one
+// shared triplet rewritten per pass would hand every post pass in the list
+// the last pass's textures. The triplet region grows (the heap is rebuilt)
+// when a frame has more post passes than it holds.
 const ATLAS_SLOTS: u32 = 4;
-const TRIPLET: u32 = ATLAS_SLOTS;
-const DUMMY_SLOT: u32 = TRIPLET + 3;
-const HEAP_DESCRIPTORS: u32 = DUMMY_SLOT + 1;
+const DUMMY_SLOT: u32 = ATLAS_SLOTS;
+const TRIPLETS_BASE: u32 = DUMMY_SLOT + 1;
+/// Post passes the first heap has room for; a frame with more rebuilds it.
+const INITIAL_POST_CAPACITY: u32 = 64;
+
+const fn heap_descriptors(posts: u32) -> u32 {
+    TRIPLETS_BASE + 3 * posts
+}
 
 const TARGET_FORMAT: DXGI_FORMAT = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
@@ -193,18 +203,13 @@ const fn bytes_per_texel(format: DXGI_FORMAT) -> u32 {
     }
 }
 
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "lengths are checked; scissor coordinates are in-frame"
-)]
 fn len32(bytes: &[u8]) -> u32 {
     u32::try_from(bytes.len()).unwrap_or(u32::MAX)
 }
 
 /// `bytes` rounded up to D3D12's 256-byte row-pitch alignment.
 const fn row_pitch(bytes: u32) -> u32 {
-    (bytes + 255) / 256 * 256
+    bytes.div_ceil(256) * 256
 }
 
 /// An SRV over a whole 2D resource, written into `slot` of the renderer's
@@ -342,14 +347,7 @@ impl D3d12SceneRenderer {
         let fence: ID3D12Fence = unsafe { raw.CreateFence(0, D3D12_FENCE_FLAG_NONE)? };
 
         // ── the one heap ──────────────────────────────────────────────────
-        let heap_desc = D3D12_DESCRIPTOR_HEAP_DESC {
-            Type: D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            NumDescriptors: HEAP_DESCRIPTORS,
-            Flags: D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-            NodeMask: 0,
-        };
-        // SAFETY: as above.
-        let heap: ID3D12DescriptorHeap = unsafe { raw.CreateDescriptorHeap(&heap_desc)? };
+        let heap = shader_visible_heap(&raw, INITIAL_POST_CAPACITY)?;
         let increment =
             unsafe { raw.GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
 
@@ -492,6 +490,12 @@ impl D3d12SceneRenderer {
         )?;
 
         // ── the atlases and the dummy ─────────────────────────────────────
+        // A zero size marks "never uploaded": the 1x1 placeholder upload
+        // below then takes `upload_atlas`'s fresh-resource path — a resource
+        // still in COPY_DEST (the state it was created in), and its SRV
+        // written — instead of the path for a resident atlas, which starts
+        // with a PIXEL_SHADER_RESOURCE -> COPY_DEST barrier this resource
+        // was never in, and writes no SRV.
         let slot_resource = |slot: Slot| -> Result<AtlasResource, D3d12Error> {
             Ok(AtlasResource {
                 resource: committed(
@@ -501,8 +505,8 @@ impl D3d12SceneRenderer {
                     D3D12_RESOURCE_STATE_COPY_DEST,
                 )?,
                 version: None,
-                width: 1,
-                height: 1,
+                width: 0,
+                height: 0,
             })
         };
         let atlases: [AtlasResource; 4] = [
@@ -531,11 +535,14 @@ impl D3d12SceneRenderer {
             post_over_pso,
             clear_pso,
             heap,
+            heap_posts: INITIAL_POST_CAPACITY,
             increment,
             rtv_heap: {
+                // A placeholder until the first frame's targets; a heap must
+                // hold at least one descriptor to be created at all.
                 let desc = D3D12_DESCRIPTOR_HEAP_DESC {
                     Type: D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
-                    NumDescriptors: 0,
+                    NumDescriptors: 1,
                     Flags: D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
                     NodeMask: 0,
                 };
@@ -573,15 +580,58 @@ impl D3d12SceneRenderer {
             renderer.finish(&list)?;
             drop(allocator);
         }
+        renderer.write_static_srvs();
+        Ok(renderer)
+    }
+
+    /// Write the descriptors that live in the heap between frames — the four
+    /// atlases and the dummy — from the resources this renderer holds now.
+    /// Called when a heap is (re)built; `upload_atlas` keeps an atlas's slot
+    /// current after that.
+    fn write_static_srvs(&self) {
+        for slot in Slot::ALL {
+            srv(
+                &self.device,
+                &self.heap,
+                self.increment,
+                slot.heap_slot(),
+                &self.atlases[slot.index()].resource,
+                atlas_format(slot),
+            );
+        }
         srv(
-            &renderer.device,
-            &renderer.heap,
-            renderer.increment,
+            &self.device,
+            &self.heap,
+            self.increment,
             DUMMY_SLOT,
-            &renderer.dummy,
+            &self.dummy,
             TARGET_FORMAT,
         );
-        Ok(renderer)
+    }
+
+    /// Make room in the shader-visible heap for `posts` post-pass triplets,
+    /// rebuilding it (and rewriting its static descriptors) when the current
+    /// one is too small. Every earlier list has been waited for, so the old
+    /// heap has no GPU reader left when it is dropped.
+    fn ensure_post_capacity(&mut self, posts: u32) -> Result<(), D3d12Error> {
+        if posts <= self.heap_posts {
+            return Ok(());
+        }
+        let capacity = posts.next_power_of_two().max(INITIAL_POST_CAPACITY);
+        self.heap = shader_visible_heap(&self.device, capacity)?;
+        self.heap_posts = capacity;
+        self.write_static_srvs();
+        Ok(())
+    }
+
+    /// The resource a post pass *reads* as `target` — a level, a scratch, or
+    /// the 1x1 transparent dummy that every pass with nothing to read binds
+    /// (a plain composite's `aux`, a shadow tint's `src`).
+    fn read_resource(&self, target: TargetId) -> &ID3D12Resource {
+        match target {
+            TargetId::Dummy => &self.dummy,
+            other => &self.target_resource(other).resource,
+        }
     }
 
     /// Execute `plan` at `width x height` over `clear`, with `planner`'s
@@ -665,6 +715,12 @@ impl D3d12SceneRenderer {
 
         let started = Instant::now();
         self.ensure_targets(width, height, plan.target_depth + 1)?;
+        let posts = exec
+            .ops
+            .iter()
+            .filter(|op| matches!(op, SceneOp::Post { .. }))
+            .count();
+        self.ensure_post_capacity(u32::try_from(posts).unwrap_or(u32::MAX))?;
         let vertex_bytes: &[u8] = plain_bytes(&plan.vertices);
         let index_bytes: &[u8] = plain_bytes(&plan.indices);
         let vertices = self.upload_buffer(vertex_bytes)?;
@@ -684,6 +740,8 @@ impl D3d12SceneRenderer {
         let mut bound: Bound = Bound::None;
         let mut open: Option<TargetId> = None;
         let mut states = self.target_states();
+        // Which triplet the next post pass writes — see `TRIPLETS_BASE`.
+        let mut post_index = 0u32;
 
         let viewport_rect = D3D12_VIEWPORT {
             TopLeftX: 0.0,
@@ -806,29 +864,32 @@ impl D3d12SceneRenderer {
                             );
                         }
                         self.bind_target(&list, &mut states, &mut open, pass.into);
-                        // The triplet: src, aux, masks — written on the CPU,
-                        // read by the GPU when the finished list executes.
+                        // This pass's own triplet: src, aux, masks — written
+                        // on the CPU now, read by the GPU when the finished
+                        // list executes, so no later pass may reuse it.
+                        let triplet = TRIPLETS_BASE + 3 * post_index;
+                        post_index += 1;
                         srv(
                             &self.device,
                             &self.heap,
                             self.increment,
-                            TRIPLET,
-                            &self.target_resource(pass.src).resource,
+                            triplet,
+                            self.read_resource(pass.src),
                             TARGET_FORMAT,
                         );
                         srv(
                             &self.device,
                             &self.heap,
                             self.increment,
-                            TRIPLET + 1,
-                            &self.target_resource(pass.aux).resource,
+                            triplet + 1,
+                            self.read_resource(pass.aux),
                             TARGET_FORMAT,
                         );
                         srv(
                             &self.device,
                             &self.heap,
                             self.increment,
-                            TRIPLET + 2,
+                            triplet + 2,
                             &self.atlases[Slot::Masks.index()].resource,
                             atlas_format(Slot::Masks),
                         );
@@ -845,7 +906,7 @@ impl D3d12SceneRenderer {
                         // SAFETY: as above.
                         list.SetGraphicsRootDescriptorTable(
                             1,
-                            gpu_handle(&self.heap, self.increment, TRIPLET),
+                            gpu_handle(&self.heap, self.increment, triplet),
                         );
                         list.SetGraphicsRoot32BitConstants(
                             0,
@@ -951,7 +1012,7 @@ impl D3d12SceneRenderer {
     fn bind_target(
         &self,
         list: &ID3D12GraphicsCommandList,
-        states: &mut Vec<D3D12_RESOURCE_STATES>,
+        states: &mut [D3D12_RESOURCE_STATES],
         open: &mut Option<TargetId>,
         target: TargetId,
     ) {
@@ -970,7 +1031,7 @@ impl D3d12SceneRenderer {
     fn transition_state(
         &self,
         list: &ID3D12GraphicsCommandList,
-        states: &mut Vec<D3D12_RESOURCE_STATES>,
+        states: &mut [D3D12_RESOURCE_STATES],
         target: TargetId,
         state: D3D12_RESOURCE_STATES,
     ) {
@@ -1057,9 +1118,7 @@ impl D3d12SceneRenderer {
                 .GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV)
         };
         let (list, allocator) = self.begin()?;
-        let mut fresh = 0u32;
         while self.levels.len() < depth {
-            let level = self.levels.len();
             let level_resource = committed(
                 &self.device,
                 D3D12_HEAP_TYPE_DEFAULT,
@@ -1085,29 +1144,42 @@ impl D3d12SceneRenderer {
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
                 );
             }
-            let rtv = |offset: u32| D3D12_CPU_DESCRIPTOR_HANDLE {
-                ptr: unsafe { rtv_heap.GetCPUDescriptorHandleForHeapStart() }.ptr
-                    + offset as usize * rtv_increment as usize,
-            };
-            for resource in [&level_resource, &scratch_resource] {
-                // SAFETY: a live resource and a handle inside this
-                // renderer's RTV heap.
-                unsafe {
-                    self.device
-                        .CreateRenderTargetView(resource, None, rtv(fresh));
-                }
-                fresh += 1;
-            }
+            // Handles are (re)assigned for every target below, once the
+            // new heap is the only one.
             self.levels.push(TargetResource {
                 resource: level_resource,
-                rtv: rtv(2 * level as u32),
+                rtv: D3D12_CPU_DESCRIPTOR_HANDLE::default(),
                 state: D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
             });
             self.scratch.push(TargetResource {
                 resource: scratch_resource,
-                rtv: rtv(2 * level as u32 + 1),
+                rtv: D3D12_CPU_DESCRIPTOR_HANDLE::default(),
                 state: D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
             });
+        }
+        // Every target's RTV lives in the heap just created — the targets
+        // kept from a smaller depth included: their old handles pointed into
+        // the heap this one replaced, which is gone. `L[n]` at `2n`, `S[n]`
+        // at `2n + 1`.
+        let rtv = |offset: usize| D3D12_CPU_DESCRIPTOR_HANDLE {
+            ptr: unsafe { rtv_heap.GetCPUDescriptorHandleForHeapStart() }.ptr
+                + offset * rtv_increment as usize,
+        };
+        for (n, (level, scratch)) in self
+            .levels
+            .iter_mut()
+            .zip(self.scratch.iter_mut())
+            .enumerate()
+        {
+            for (target, offset) in [(level, 2 * n), (scratch, 2 * n + 1)] {
+                target.rtv = rtv(offset);
+                // SAFETY: a live resource and a handle inside this
+                // renderer's RTV heap.
+                unsafe {
+                    self.device
+                        .CreateRenderTargetView(&target.resource, None, target.rtv);
+                }
+            }
         }
         self.finish(&list)?;
         drop(allocator);
@@ -1436,6 +1508,22 @@ fn committed(
         )?;
     }
     resource.ok_or_else(|| D3d12Error::Api("CreateCommittedResource returned nothing".into()))
+}
+
+/// The shader-visible CBV/SRV/UAV heap, with room for the static slots and
+/// `posts` post-pass triplets.
+fn shader_visible_heap(
+    device: &ID3D12Device,
+    posts: u32,
+) -> Result<ID3D12DescriptorHeap, D3d12Error> {
+    let desc = D3D12_DESCRIPTOR_HEAP_DESC {
+        Type: D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        NumDescriptors: heap_descriptors(posts),
+        Flags: D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+        NodeMask: 0,
+    };
+    // SAFETY: a creation call on a live device.
+    Ok(unsafe { device.CreateDescriptorHeap(&desc)? })
 }
 
 /// One root-constants parameter at `register`.
